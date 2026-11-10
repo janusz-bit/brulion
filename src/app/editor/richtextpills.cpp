@@ -21,6 +21,70 @@ namespace {
 /// The anchor name of a page's app icon (InlineRenderer, markdown/inlinerenderer.h).
 constexpr QStringView IconAnchorPrefix = u"brulion-icon:";
 
+/// A shape's kind: "icon", "pill" or "box" (see `pills`).
+QString kindOf(const RichTextPills::Pill &p)
+{
+    if (!p.icon.isEmpty())
+        return u"icon"_s;
+    return p.round ? u"pill"_s : u"box"_s;
+}
+
+RichTextPill typed(const RichTextPills::Pill &p)
+{
+    return RichTextPill{p.rect.x(), p.rect.y(), p.rect.width(), p.rect.height(), p.color, kindOf(p), p.icon};
+}
+
+/// A tinted run of a block's text.
+struct Span {
+    int from = 0;
+    int to = 0;
+    QColor color;
+    bool round = false;
+    QFont font;
+    QString icon;
+    QString href; ///< an icon's link
+};
+
+/// The block's tinted spans: adjacent fragments of one colour are one span.
+QList<Span> tintedSpans(const QTextBlock &block, const QFont &base)
+{
+    QList<Span> spans;
+    for (QTextBlock::iterator it = block.begin(); !it.atEnd(); ++it) {
+        const QTextFragment fragment = it.fragment();
+        if (!fragment.isValid())
+            continue;
+        const QTextCharFormat f = fragment.charFormat();
+        const QVariant tint = f.property(RichTextPills::TintColorProperty);
+        if (!tint.isValid())
+            continue;
+        QColor color = tint.value<QColor>();
+        const bool round = f.property(RichTextPills::TintRoundProperty).toBool();
+        // A page's app icon (InlineRenderer's iconLink): drawn in the link's colour.
+        QString icon;
+        const QStringList names = f.anchorNames();
+        for (const QString &name : names) {
+            if (name.startsWith(IconAnchorPrefix)) {
+                icon = name.sliced(IconAnchorPrefix.size());
+                color = f.foreground().color();
+                break;
+            }
+        }
+        Span *last = !spans.isEmpty() && spans.last().to == fragment.position() ? &spans.last() : nullptr;
+        if (last && icon.isEmpty() && !last->icon.isEmpty() && last->href == f.anchorHref() && color.alpha() == 0) {
+            // Qt names only the anchor's first character: the rest of the icon's room (its other
+            // no-break spaces, the same link, still transparent) is the icon's too.
+            last->to += fragment.length();
+        } else if (last && icon.isEmpty() && last->icon.isEmpty() && last->color == color) {
+            last->to += fragment.length();
+            last->round = last->round && round;
+        } else {
+            spans.append({fragment.position(), fragment.position() + fragment.length(), color, round,
+                          f.font().resolve(base), icon, icon.isEmpty() ? QString() : f.anchorHref()});
+        }
+    }
+    return spans;
+}
+
 } // namespace
 
 RichTextPills::RichTextPills(QObject *parent)
@@ -41,10 +105,7 @@ void RichTextPills::classBegin()
 void RichTextPills::componentComplete()
 {
     m_deferred = false;
-    if (m_ownsText)
-        reload();
-    else
-        process();
+    process();
 }
 
 void RichTextPills::setHtml(const QString &html)
@@ -105,10 +166,7 @@ void RichTextPills::setLineHeight(qreal px)
     if (qFuzzyCompare(m_lineHeight + 1, px + 1))
         return;
     m_lineHeight = px;
-    if (m_ownsText)
-        reload(); // (the line height decides where the text is cut)
-    else
-        process();
+    process(); // (`html`: set again, the line height decides where the text is cut)
     Q_EMIT lineHeightChanged();
 }
 
@@ -120,19 +178,6 @@ void RichTextPills::setInset(qreal px)
     refresh();
     Q_EMIT insetChanged();
 }
-
-namespace {
-
-RichTextPill typed(const RichTextPills::Pill &p)
-{
-    return RichTextPill{p.rect.x(), p.rect.y(), p.rect.width(), p.rect.height(), p.color,
-                        !p.icon.isEmpty() ? u"icon"_s
-                        : p.round         ? u"pill"_s
-                                          : u"box"_s,
-                        p.icon};
-}
-
-} // namespace
 
 QList<RichTextPill> RichTextPills::shapes() const
 {
@@ -154,9 +199,7 @@ QVariantList RichTextPills::pills() const
                 {u"width"_s, p.rect.width()},
                 {u"height"_s, p.rect.height()},
                 {u"color"_s, p.color},
-                {u"kind"_s, !p.icon.isEmpty() ? u"icon"_s
-                            : p.round         ? u"pill"_s
-                                              : u"box"_s},
+                {u"kind"_s, kindOf(p)},
                 {u"icon"_s, p.icon},
         });
     }
@@ -176,36 +219,21 @@ void RichTextPills::attach(QTextDocument *document)
     detach();
     m_document = document;
     if (document) {
-        // The document's own change signal: InlineRenderer's HTML set by the TextEdit (setHtml, one
-        // signal for the whole text) is handled before the TextEdit paints it.
-        m_connections.append(connect(document, &QTextDocument::contentsChange, this,
-                                     [this](int, int, int) { onContentsChange(); }));
-        // A new width, font or text lays the document out again: the rectangles follow.
         QAbstractTextDocumentLayout *layout = document->documentLayout();
-        m_connections.append(connect(layout, &QAbstractTextDocumentLayout::documentSizeChanged, this,
-                                     [this](const QSizeF &) { refresh(); }));
-        m_connections.append(connect(layout, &QAbstractTextDocumentLayout::update, this,
-                                     [this](const QRectF &) { refresh(); }));
-        m_connections.append(connect(document, &QObject::destroyed, this, [this] {
-            m_connections.clear();
-            if (!m_pills.isEmpty()) {
-                m_pills.clear();
-                m_plainShapes.clear();
-                m_iconShapes.clear();
-                Q_EMIT pillsChanged();
-            }
-        }));
+        m_connections = {
+                // The document's own change signal: InlineRenderer's HTML set by the TextEdit (setHtml,
+                // one signal for the whole text) is handled before the TextEdit paints it.
+                connect(document, &QTextDocument::contentsChange, this, &RichTextPills::process),
+                // A new width, font or text lays the document out again: the rectangles follow.
+                connect(layout, &QAbstractTextDocumentLayout::documentSizeChanged, this, &RichTextPills::refresh),
+                connect(layout, &QAbstractTextDocumentLayout::update, this, &RichTextPills::refresh),
+                connect(document, &QObject::destroyed, this,
+                        [this] {
+                            m_connections.clear();
+                            setPills({});
+                        }),
+        };
     }
-    if (m_ownsText)
-        reload();
-    else
-        process();
-}
-
-void RichTextPills::onContentsChange()
-{
-    if (m_changing)
-        return;
     process();
 }
 
@@ -215,19 +243,13 @@ void RichTextPills::reload()
     if (!doc || m_deferred || m_changing)
         return;
     m_changing = true;
-    if (doc->isUndoRedoEnabled())
-        doc->setUndoRedoEnabled(false);
     // The TextEdit's own font and width (it may set them on the document after this object).
     if (m_fontSet && doc->defaultFont() != m_font)
         doc->setDefaultFont(m_font);
     if (m_width > 0 && !qFuzzyCompare(doc->textWidth(), m_width))
         doc->setTextWidth(m_width);
     doc->setHtml(m_html);
-    QTextCursor edit(doc);
-    edit.beginEditBlock();
-    applyLineHeight();
-    takeBrushes();
-    edit.endEditBlock();
+    restyle();
     const bool cut = m_maxLines > 0 && cutToLines();
     m_changing = false;
     if (cut != m_truncated) {
@@ -312,20 +334,24 @@ void RichTextPills::process()
         reload();
         return;
     }
-    QTextDocument *doc = m_document;
-    if (doc && !m_changing) {
+    if (m_document && !m_changing) {
         m_changing = true;
-        // The rendered text has no undo history: format changes must not fill one.
-        if (doc->isUndoRedoEnabled())
-            doc->setUndoRedoEnabled(false);
-        QTextCursor edit(doc);
-        edit.beginEditBlock();
-        applyLineHeight();
-        takeBrushes();
-        edit.endEditBlock(); // one contentsChange: the TextEdit repaints those blocks
+        restyle();
         m_changing = false;
     }
     refresh();
+}
+
+void RichTextPills::restyle()
+{
+    // The rendered text has no undo history: format changes must not fill one.
+    if (m_document->isUndoRedoEnabled())
+        m_document->setUndoRedoEnabled(false);
+    QTextCursor edit(m_document);
+    edit.beginEditBlock();
+    applyLineHeight();
+    takeBrushes();
+    edit.endEditBlock(); // one contentsChange: the TextEdit repaints those blocks
 }
 
 void RichTextPills::applyLineHeight()
@@ -386,59 +412,12 @@ void RichTextPills::refresh()
         m_computing = true;
         QAbstractTextDocumentLayout *layout = doc->documentLayout();
         const QFont base = doc->defaultFont();
-        struct Span {
-            int from;
-            int to;
-            QColor color;
-            bool round;
-            QFont font;
-            QString icon;
-            QString href; ///< an icon's link
-        };
         for (QTextBlock block = doc->begin(); block.isValid(); block = block.next()) {
-            // The block's tinted spans: adjacent fragments of one colour are one span.
-            QList<Span> spans;
-            for (QTextBlock::iterator it = block.begin(); !it.atEnd(); ++it) {
-                const QTextFragment fragment = it.fragment();
-                if (!fragment.isValid())
-                    continue;
-                const QTextCharFormat f = fragment.charFormat();
-                const QVariant tint = f.property(TintColorProperty);
-                if (!tint.isValid())
-                    continue;
-                QColor color = tint.value<QColor>();
-                const bool round = f.property(TintRoundProperty).toBool();
-                // A page's app icon (InlineRenderer's iconLink): drawn in the link's colour.
-                QString icon;
-                for (const QString &name : f.anchorNames()) {
-                    if (name.startsWith(IconAnchorPrefix)) {
-                        icon = name.sliced(IconAnchorPrefix.size());
-                        color = f.foreground().color();
-                        break;
-                    }
-                }
-                // Qt names only the anchor's first character: the rest of the icon's room (its
-                // other no-break spaces, the same link, still transparent) is the icon's too.
-                if (icon.isEmpty() && !spans.isEmpty() && !spans.last().icon.isEmpty()
-                    && spans.last().to == fragment.position() && spans.last().href == f.anchorHref()
-                    && color.alpha() == 0) {
-                    spans.last().to += fragment.length();
-                    continue;
-                }
-                if (!spans.isEmpty() && spans.last().to == fragment.position() && spans.last().color == color
-                    && spans.last().icon == icon && icon.isEmpty()) {
-                    spans.last().to += fragment.length();
-                    spans.last().round = spans.last().round && round;
-                } else {
-                    spans.append({fragment.position(), fragment.position() + fragment.length(), color, round,
-                                  f.font().resolve(base), icon, icon.isEmpty() ? QString() : f.anchorHref()});
-                }
-            }
-            if (spans.isEmpty())
-                continue;
-            for (const Span &span : std::as_const(spans)) {
+            const QList<Span> spans = tintedSpans(block, base);
+            for (const Span &span : spans) {
                 const QFontMetricsF metrics(span.font);
-                for (const detail::LineSegment &segment : detail::lineSegments(layout, block, span.from, span.to)) {
+                const QList<detail::LineSegment> segments = detail::lineSegments(layout, block, span.from, span.to);
+                for (const detail::LineSegment &segment : segments) {
                     const QPointF origin = block.layout()->position();
                     // Centred on the span's glyphs, not on the fixed-height line box.
                     const qreal baseline = segment.line.y() + segment.line.ascent();
@@ -452,14 +431,19 @@ void RichTextPills::refresh()
         }
         m_computing = false;
     }
-    if (out != m_pills) {
-        m_pills = out;
-        m_plainShapes.clear();
-        m_iconShapes.clear();
-        for (const Pill &p : std::as_const(m_pills))
-            (p.icon.isEmpty() ? m_plainShapes : m_iconShapes).append(typed(p));
-        Q_EMIT pillsChanged();
-    }
+    setPills(std::move(out));
+}
+
+void RichTextPills::setPills(QList<Pill> pills)
+{
+    if (pills == m_pills)
+        return;
+    m_pills = std::move(pills);
+    m_plainShapes.clear();
+    m_iconShapes.clear();
+    for (const Pill &p : std::as_const(m_pills))
+        (p.icon.isEmpty() ? m_plainShapes : m_iconShapes).append(typed(p));
+    Q_EMIT pillsChanged();
 }
 
 } // namespace brulion::editor

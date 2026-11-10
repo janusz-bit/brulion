@@ -38,7 +38,6 @@ BDialog {
         copied()
     }
 
-    /// What one part of the query means.
     /// The key of a part ("tag" of "tag:dom"; "" for a word).
     function keyOf(part: string): string {
         const colon = Js.indexOf(part, ":")
@@ -52,6 +51,7 @@ BDialog {
     function unquoted(s: string): string {
         return Js.replaceRegExp(s, "^\"|\"$", "g", "")
     }
+    /// What one part of the query means.
     function explain(key: string, value: string): string {
         switch (key) {
         case "type": return qsTr("only tasks (not blocks or pages)")
@@ -79,6 +79,18 @@ BDialog {
             return qsTr("sort order")
         }
         return qsTr("containing “%1” (letters with or without Polish diacritics)").arg(value)
+    }
+
+    component CodeText: Text {
+        font.family: Theme.fontMono
+        font.pixelSize: Theme.textSm
+        color: Theme.link
+    }
+    component SmallText: Text {
+        font.family: Theme.fontUi
+        font.pixelSize: Theme.textSm
+        color: Theme.fg
+        wrapMode: Text.Wrap
     }
 
     Text {
@@ -129,34 +141,24 @@ BDialog {
 
         Repeater {
             model: control.parts
-            delegate: Text {
-                id: partLabel
+            delegate: CodeText {
                 required property string modelData
                 required property int index
                 Layout.row: index
                 Layout.column: 0
                 Layout.alignment: Qt.AlignTop
                 text: modelData
-                font.family: Theme.fontMono
-                font.pixelSize: Theme.textSm
-                color: Theme.link
             }
         }
         Repeater {
             model: control.parts
-            delegate: Text {
+            delegate: SmallText {
                 required property string modelData
                 required property int index
                 Layout.row: index
                 Layout.column: 1
                 Layout.fillWidth: true
-                readonly property string partKey: control.keyOf(modelData)
-                readonly property string partValue: control.valueOf(modelData)
-                text: control.explain(partKey, partValue)
-                font.family: Theme.fontUi
-                font.pixelSize: Theme.textSm
-                color: Theme.fg
-                wrapMode: Text.Wrap
+                text: control.explain(control.keyOf(modelData), control.valueOf(modelData))
             }
         }
     }
@@ -184,21 +186,15 @@ BDialog {
                     required property string text
                     Layout.fillWidth: true
                     spacing: Theme.space2
-                    Text {
+                    CodeText {
                         Layout.alignment: Qt.AlignTop
                         text: example.code
-                        font.family: Theme.fontMono
-                        font.pixelSize: Theme.textSm
-                        color: Theme.link
                     }
-                    Text {
+                    SmallText {
                         Layout.fillWidth: true
                         Layout.alignment: Qt.AlignTop
                         text: "— " + example.text
-                        font.family: Theme.fontUi
-                        font.pixelSize: Theme.textSm
                         color: Theme.fgMuted
-                        wrapMode: Text.Wrap
                     }
                 }
             }

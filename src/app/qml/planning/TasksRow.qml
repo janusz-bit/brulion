@@ -147,6 +147,10 @@ T.ItemDelegate {
             control.openTagPage(tag)
             return
         }
+        control.followLinkAt(x, y)
+    }
+    /// The link at (x, y) of the text, followed.
+    function followLinkAt(x: real, y: real): void {
         const link = label.linkAt(x, y)
         if (link !== "")
             control.linkActivated(link)
@@ -158,9 +162,7 @@ T.ItemDelegate {
             control._tagOpened = false // the gesture that opened the link's menu
             return
         }
-        const link = label.linkAt(x, y)
-        if (link !== "")
-            control.linkActivated(link)
+        control.followLinkAt(x, y)
     }
     // What openMenuAt() found (mapFromItem's and childAt()'s results read through typed properties).
     property point _chipsPoint
@@ -207,7 +209,7 @@ T.ItemDelegate {
     leftPadding: sideMargin + indent + (Theme.touchUi ? 2 : 4)
     rightPadding: sideMargin + (Theme.touchUi ? 10 : 8)
     topPadding: Theme.touchUi ? 4 : 5
-    bottomPadding: Theme.touchUi ? 6 : 6
+    bottomPadding: 6
     focusPolicy: Qt.StrongFocus
     hoverEnabled: !Theme.touchUi
 
@@ -364,71 +366,64 @@ T.ItemDelegate {
                 // The Flow's own height comes with its next polish: the same lines here (a child
                 // goes to the next line when it does not fit; hidden chips take no room).
                 height: {
-                    let x = 0
+                    let used = 0
                     let line = 0
                     let total = 0
                     for (let i = 0; i < chips.children.length; ++i) {
                         const c = chips.children[i]
                         if (!c.visible)
                             continue
-                        if (x > 0 && x + c.width > chips.width) {
+                        if (used > 0 && used + c.width > chips.width) {
                             total += line + chips.spacing
-                            x = 0
+                            used = 0
                             line = 0
                         }
-                        x += c.width + chips.spacing
+                        used += c.width + chips.spacing
                         line = Math.max(line, c.height)
                     }
                     return total + line
                 }
 
-                BChip {
+                TaskChip {
                     visible: control.statusLabel !== ""
-                    size: "small"
                     variant: control.status === "doing" ? "reminder" : "neutral"
                     iconName: control.status === "doing" ? "clock" : control.status === "deferred" ? "hourglass" : "x"
                     text: control.statusLabel
                 }
-                BChip {
+                TaskChip {
                     objectName: "taskChip_due" // (its token menu: openMenuAt())
                     visible: control.dueLabel !== ""
-                    size: "small"
                     variant: control.closed ? "done" : control.overdue ? "overdue" : "due"
                     text: control.overdue ? qsTr("%1, overdue").arg(control.dueLabel) : control.dueLabel
                 }
-                BChip {
+                TaskChip {
                     objectName: "taskChip_scheduled" // (its token menu: openMenuAt())
                     visible: control.scheduledLabel !== ""
-                    size: "small"
                     variant: control.closed ? "done" : "scheduled"
                     text: control.scheduledLabel
                 }
-                BChip {
+                TaskChip {
                     objectName: "taskChip_start" // (its token menu: openMenuAt())
                     visible: control.startLabel !== ""
-                    size: "small"
                     variant: "neutral"
                     iconName: "calendar-clock"
                     text: qsTr("from %1").arg(control.startLabel)
                 }
-                BChip {
+                TaskChip {
                     objectName: "taskChip_reminder" // (its token menu: openMenuAt())
                     visible: control.reminderLabel !== "" && !control.closed
-                    size: "small"
                     variant: control.reminderAlarm ? "alarm" : "reminder"
                     text: control.reminderLabel
                 }
-                BChip {
+                TaskChip {
                     objectName: "taskChip_recurrence" // (its token menu: openMenuAt())
                     visible: control.recurrenceLabel !== ""
-                    size: "small"
                     variant: "recurrence"
                     text: control.recurrenceLabel
                 }
-                BChip {
+                TaskChip {
                     objectName: "taskBlockedChip"
                     visible: control.blocked && !control.closed
-                    size: "small"
                     variant: "overdue"
                     iconName: "lock"
                     interactive: true
@@ -437,28 +432,25 @@ T.ItemDelegate {
                     width: Math.min(implicitWidth, control.availableWidth - 40)
                     onClicked: control.linkActivated("taskdep:" + control.blockedById)
                 }
-                BChip {
+                TaskChip {
                     objectName: "taskDependencyProblemChip"
                     visible: control.dependencyProblem !== ""
-                    size: "small"
                     variant: "neutral"
                     iconName: "triangle-alert"
                     text: control.dependencyProblem === "cycle" ? qsTr("Dependency cycle") : qsTr("Missing dependency")
                 }
-                BChip {
+                TaskChip {
                     objectName: "taskBlockingChip"
                     visible: control.blockingCount > 0 && !control.closed
-                    size: "small"
                     variant: "neutral"
                     iconName: "link"
                     text: qsTr("Blocks %n task(s)", "", control.blockingCount)
                 }
-                BChip {
+                TaskChip {
                     objectName: "taskProgressChip"
                     // With subtasks listed under it: the button that folds them.
                     readonly property bool folds: control.subtaskCount > 0
                     visible: control.progress !== "" || folds
-                    size: "small"
                     variant: control.progressComplete ? "done" : "neutral"
                     iconName: !folds ? "list-checks" : control.folded ? "chevron-right" : "chevron-down"
                     text: control.progress !== "" ? control.progress : qsTr("%n subtask(s)", "", control.subtaskCount)
@@ -468,18 +460,16 @@ T.ItemDelegate {
                                      : control.folded ? qsTr("Show subtasks, %1").arg(text) : qsTr("Hide subtasks, %1").arg(text)
                     onClicked: control.foldToggled()
                 }
-                BChip {
+                TaskChip {
                     objectName: "taskTimeChip"
                     visible: control.timeLabel !== ""
-                    size: "small"
                     variant: control.clockRunning ? "reminder" : "neutral"
                     iconName: "clock"
                     text: control.timeLabel
                 }
-                BChip {
+                TaskChip {
                     objectName: "taskChip_priority" // (its token menu: openMenuAt())
                     visible: control.priorityLabel !== ""
-                    size: "small"
                     variant: control.priority >= 4 && !control.closed ? "overdue" : "neutral"
                     iconName: control.priority >= 3 ? "arrow-up" : "arrow-down"
                     text: control.priorityLabel
@@ -498,6 +488,11 @@ T.ItemDelegate {
                 }
             }
         }
+    }
+
+    /// A chip of the row.
+    component TaskChip: BChip {
+        size: "small"
     }
 
     background: Rectangle {

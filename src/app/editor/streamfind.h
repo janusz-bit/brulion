@@ -35,6 +35,8 @@
 #include <QTimer>
 #include <QVariantMap>
 
+#include <optional>
+
 namespace brulion::editor {
 
 class StreamFind : public QObject {
@@ -121,10 +123,6 @@ private:
         int links = 0;
         int frontmatter = 0;
     };
-    struct CachedText {
-        QString text;
-        bool ok = false;
-    };
     struct UndoFile {
         QString path;
         QString before;
@@ -139,9 +137,14 @@ private:
     void schedule();
     void recount();
     QString activePath() const;
+    /// The bar's query or options are not those m_days were counted for.
+    bool queryChanged() const;
     PageController *attached(const QString &path) const;
-    /// The text of a day not written in: its attached controller's, else its file's (cached).
-    QString textOf(const QString &path, bool *ok);
+    /// The row of the day at `path` in m_days; -1 when it is not searched.
+    int dayIndex(const QString &path) const;
+    /// The text of a day not written in: its attached controller's, else its file's (cached);
+    /// nullopt when the file cannot be read.
+    std::optional<QString> textOf(const QString &path);
     void countDay(Day &day, const QString &text) const;
     /// Go on to the nearest day after (`forward`) / before the day written in that has a match.
     void moveToDay(bool forward);
@@ -155,7 +158,7 @@ private:
     QMetaObject::Connection m_hostConnection;
     QList<QPointer<PageController>> m_pages;
     QHash<PageController *, QList<QMetaObject::Connection>> m_pageConnections;
-    QHash<QString, CachedText> m_cache;
+    QHash<QString, std::optional<QString>> m_cache; ///< file texts (nullopt: unreadable)
     int m_dayLimit = DefaultDayLimit;
     QList<Day> m_days; ///< the days searched, top to bottom (the day written in: counted by m_find)
     QString m_query;   ///< what m_days were counted for

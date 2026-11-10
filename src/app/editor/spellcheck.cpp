@@ -48,6 +48,21 @@ private:
 
 namespace {
 
+/// Words whose last suggestions are kept; more and the cache starts again.
+constexpr qsizetype MaxCachedSuggestions = 100;
+
+/// The primary languages of locale names ("pl_PL" → "pl"), each once, in order.
+QStringList primaryLanguages(const QStringList &names)
+{
+    QStringList out;
+    for (const QString &name : names) {
+        const QString language = spell::primaryLanguage(name);
+        if (!language.isEmpty() && !out.contains(language))
+            out.append(language);
+    }
+    return out;
+}
+
 QStringList sortedUnique(QStringList words)
 {
     words.removeAll(QString());
@@ -61,17 +76,13 @@ QStringList sortedUnique(QStringList words)
 
 } // namespace
 
-SpellCheck::SpellCheck(QStringList availableLanguages, BackendFactory factory, QString engine, QObject *parent)
+SpellCheck::SpellCheck(const QStringList &availableLanguages, BackendFactory factory, QString engine, QObject *parent)
     : QObject(parent)
+    , m_available(primaryLanguages(availableLanguages))
     , m_factory(std::move(factory))
     , m_engine(std::move(engine))
     , m_systemLanguage(QLocale::system().name())
 {
-    for (const QString &l : availableLanguages) {
-        const QString p = spell::primaryLanguage(l);
-        if (!p.isEmpty() && !m_available.contains(p))
-            m_available.append(p);
-    }
     // The words of one highlighting pass (a block, a page) go out together.
     m_flushTimer.setSingleShot(true);
     m_flushTimer.setInterval(0);
@@ -92,8 +103,7 @@ void SpellCheck::stopWorker()
     // dropped by their generation.
     m_thread->quit();
     m_thread->wait();
-    delete m_thread;
-    m_thread = nullptr;
+    m_thread.reset();
     m_worker = nullptr;
 }
 
@@ -101,20 +111,16 @@ void SpellCheck::useWordLists(const QVariantMap &lists)
 {
     stopWorker();
     QHash<QString, QStringList> words;
-    QStringList available;
-    for (auto it = lists.cbegin(); it != lists.cend(); ++it) {
-        const QString language = spell::primaryLanguage(it.key());
-        if (language.isEmpty())
-            continue;
-        words.insert(language, it.value().toStringList());
-        available.append(language);
+    for (auto [name, list] : lists.asKeyValueRange()) {
+        if (const QString language = spell::primaryLanguage(name); !language.isEmpty())
+            words.insert(language, list.toStringList());
     }
     m_factory = [words](const QString &language) -> std::unique_ptr<spell::SpellBackend> {
         if (!words.contains(language))
             return nullptr;
         return std::make_unique<spell::WordListBackend>(language, words.value(language));
     };
-    m_available = available;
+    m_available = primaryLanguages(lists.keys());
     m_engine = u"wordlist"_s;
     m_storeWords = false;
     m_personal.clear();
@@ -208,6 +214,7 @@ void SpellCheck::updateLanguages()
 void SpellCheck::setPersonalWords(const QStringList &input)
 {
     QStringList words;
+    words.reserve(input.size());
     for (const QString &w : input)
         words.append(dictionaryForm(w));
     words = sortedUnique(words);
@@ -282,11 +289,11 @@ void SpellCheck::ensureWorker()
 {
     if (m_thread)
         return;
-    m_thread = new QThread;
+    m_thread = std::make_unique<QThread>();
     m_thread->setObjectName(u"SpellCheck"_s);
-    m_worker = new SpellWorker(m_factory);
-    m_worker->moveToThread(m_thread);
-    connect(m_thread, &QThread::finished, m_worker, &QObject::deleteLater);
+    m_worker = new SpellWorker(m_factory); // deleted on its thread when the thread finishes
+    m_worker->moveToThread(m_thread.get());
+    connect(m_thread.get(), &QThread::finished, m_worker, &QObject::deleteLater);
     m_thread->start(QThread::LowPriority);
 }
 
@@ -308,9 +315,9 @@ void SpellCheck::configure(bool forget)
     if (forget) {
         m_verdicts.clear();
     } else {
-        for (auto it = m_verdicts.cbegin(); it != m_verdicts.cend(); ++it) {
-            if (!it.value() && !m_inFlight.contains(it.key()))
-                again.append(it.key());
+        for (auto [word, right] : std::as_const(m_verdicts).asKeyValueRange()) {
+            if (!right && !m_inFlight.contains(word))
+                again.append(word);
         }
     }
     m_suggestions.clear();
@@ -355,13 +362,9 @@ void SpellCheck::onChecked(int generation, const QStringList &words, const QList
     for (qsizetype i = 0; i < words.size(); ++i) {
         m_inFlight.remove(words[i]);
         const bool r = right.value(i, true);
-        const auto it = m_verdicts.find(words[i]);
-        if (it == m_verdicts.end()) {
-            m_verdicts.insert(words[i], r);
-        } else if (it.value() != r) {
-            it.value() = r;
+        if (const auto it = m_verdicts.constFind(words[i]); it != m_verdicts.cend() && *it != r)
             changed = true;
-        }
+        m_verdicts.insert(words[i], r);
     }
     Q_EMIT checked(changed);
 }
@@ -390,7 +393,7 @@ void SpellCheck::requestSuggestions(const QString &word)
 void SpellCheck::onSuggested(int generation, const QString &word, const QStringList &suggestions)
 {
     if (generation == m_generation) {
-        if (m_suggestions.size() > 100)
+        if (m_suggestions.size() > MaxCachedSuggestions)
             m_suggestions.clear();
         m_suggestions.insert(word, suggestions);
     }

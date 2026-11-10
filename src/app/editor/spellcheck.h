@@ -74,7 +74,8 @@ public:
 
     /// `available`: the languages backends can be made for; `factory` makes them (on the worker
     /// thread).
-    SpellCheck(QStringList availableLanguages, BackendFactory factory, QString engine = {}, QObject *parent = nullptr);
+    SpellCheck(const QStringList &availableLanguages, BackendFactory factory, QString engine = {},
+               QObject *parent = nullptr);
     ~SpellCheck() override;
 
     /// The app's: the platform's backends (made on first use; a child of the application).
@@ -169,8 +170,8 @@ private:
     int m_generation = 0;
     bool m_storeWords = true;
     QTimer m_flushTimer;
-    QThread *m_thread = nullptr;
-    SpellWorker *m_worker = nullptr;
+    std::unique_ptr<QThread> m_thread;
+    SpellWorker *m_worker = nullptr; ///< deleted on m_thread when it finishes
 };
 
 } // namespace brulion::editor

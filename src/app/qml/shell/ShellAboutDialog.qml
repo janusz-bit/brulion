@@ -5,8 +5,6 @@ import Brulion
 
 // ShellAboutDialog — name, version, licence (AGPL-3.0-or-later), source code, credits.
 BDialog {
-    id: dialog
-
     title: qsTr("About Brulion")
     showReject: false
     acceptText: qsTr("Close")

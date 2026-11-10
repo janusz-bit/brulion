@@ -40,11 +40,10 @@ PropertySource sourceFor(const markdown::PageProperties &props, const QString &s
 {
     if (const auto named = markdown::parsePropertySource(source))
         return *named;
-    for (const markdown::PageProperty &p : props.items) {
-        if (p.source == PropertySource::Yaml ? p.key == key : nfcLower(p.key) == nfcLower(key))
-            return p.source;
-    }
-    return props.addTarget();
+    const auto it = std::ranges::find_if(props.items, [&](const markdown::PageProperty &p) {
+        return p.source == PropertySource::Yaml ? p.key == key : nfcLower(p.key) == nfcLower(key);
+    });
+    return it != props.items.cend() ? it->source : props.addTarget();
 }
 
 /// A sentence for a field's error or a toast: why an edit was refused ("" when it was not).
@@ -113,6 +112,21 @@ std::optional<PropertyType> listKind(const QString &kind)
     return std::nullopt;
 }
 
+/// A value from QML: a JS array arrives as a QJSValue — the list it holds.
+QVariant fromQml(const QVariant &value)
+{
+    return value.metaType() == QMetaType::fromType<QJSValue>() ? value.value<QJSValue>().toVariant() : value;
+}
+
+/// editResult() of setting or adding property `key` as `type` in `source` (a key with a fixed type
+/// is checked as that type).
+QVariantMap keyEditResult(PropertyEditStatus status, const QString &key, const QString &type, PropertySource source)
+{
+    const auto fixed = markdown::fixedPropertyType(key);
+    return editResult(status, reasonFor(status, fixed ? markdown::propertyTypeName(*fixed) : type,
+                                        markdown::checkPropertyKey(key, source)));
+}
+
 } // namespace
 
 void PageController::updatePageProperties()
@@ -121,22 +135,18 @@ void PageController::updatePageProperties()
     // page's properties, as the edits (readPageProperties() of the text) and the index see them:
     // more `key::` blocks after a blank line are shown as property rows but are the page's text.
     // In source mode the source text (called after an edit made there and when the mode changes).
-    QString propertyText;
     const markdown::BlockDocument &doc = m_model->document();
-    int rows = 0;
+    QString propertyText = m_sourceMode ? m_sourceText : QString();
+    int rows = 0;     // the leading frontmatter rows (none in source mode)
     int yamlRow = -1; // the rows of the two blocks
     int logseqRow = -1;
-    if (m_sourceMode) {
-        propertyText = m_sourceText;
-    } else {
-        while (rows < doc.count() && doc.at(rows).kind == BlockKind::Frontmatter) {
-            const bool yaml = markdown::findFrontmatter(doc.at(rows).body).has_value();
-            if (yaml ? rows > 0 : logseqRow >= 0)
-                break;
-            propertyText += doc.at(rows).body + u'\n';
-            (yaml ? yamlRow : logseqRow) = rows;
-            ++rows;
-        }
+    while (!m_sourceMode && rows < doc.count() && doc.at(rows).kind == BlockKind::Frontmatter) {
+        const bool yaml = markdown::findFrontmatter(doc.at(rows).body).has_value();
+        if (yaml ? rows > 0 : logseqRow >= 0)
+            break;
+        propertyText += doc.at(rows).body + u'\n';
+        (yaml ? yamlRow : logseqRow) = rows;
+        ++rows;
     }
     QVariantMap map = m_pageProperties;
     if (!m_pagePropertiesRead || propertyText != m_pagePropertiesText) {
@@ -148,29 +158,26 @@ void PageController::updatePageProperties()
         QVariantList aliases;
         QSet<QString> seenTags;
         QSet<QString> seenAliases;
+        m_lookProperties.clear();
         for (const markdown::PageProperty &p : props.items) {
             items.append(pagePropertyMap(p));
+            // The look's properties (keys lower case, as parseNote() keeps them): lists by their items.
+            if (const QString key = p.key.toLower(); !m_lookProperties.contains(key))
+                m_lookProperties.insert(key, p.type == PropertyType::List ? QVariant(p.items) : p.value);
             const auto fixed = markdown::fixedPropertyType(p.key);
             if (!fixed || p.type != *fixed)
                 continue;
             QVariantList &list = *fixed == PropertyType::Tags ? tags : aliases;
             QSet<QString> &seen = *fixed == PropertyType::Tags ? seenTags : seenAliases;
             for (const QString &name : p.items) {
-                if (seen.contains(nfcLower(name)))
-                    continue;
-                seen.insert(nfcLower(name));
-                list.append(QVariantMap{{u"name"_s, name},
-                                        {u"source"_s, markdown::propertySourceName(p.source)},
-                                        {u"property"_s, p.key},
-                                        {u"editable"_s, p.editable}});
+                if (const QString folded = nfcLower(name); !seen.contains(folded)) {
+                    seen.insert(folded);
+                    list.append(QVariantMap{{u"name"_s, name},
+                                            {u"source"_s, markdown::propertySourceName(p.source)},
+                                            {u"property"_s, p.key},
+                                            {u"editable"_s, p.editable}});
+                }
             }
-        }
-        // The look's properties (keys lower case, as parseNote() keeps them): lists by their items.
-        m_lookProperties.clear();
-        for (const markdown::PageProperty &p : props.items) {
-            const QString key = p.key.toLower();
-            if (!m_lookProperties.contains(key))
-                m_lookProperties.insert(key, p.type == PropertyType::List ? QVariant(p.items) : p.value);
         }
         updateLook();
         map = {{u"items"_s, items},
@@ -183,18 +190,14 @@ void PageController::updatePageProperties()
                {u"editable"_s, !props.yaml || props.yaml->editable},
                {u"problem"_s, props.yaml ? props.yaml->problem : QString()}};
     }
-    int visibleRow = -1;
-    for (int i = 0; i < rows && !m_sourceMode; ++i) {
-        if (m_model->isRowVisible(i)) {
-            visibleRow = i;
-            break;
-        }
-    }
-    map.insert(u"visibleRow"_s, visibleRow);
+    int shown = 0;
+    while (shown < rows && !m_model->isRowVisible(shown))
+        ++shown;
+    map.insert(u"visibleRow"_s, shown < rows ? shown : -1);
     // The add row of the block new properties go to, when it is shown (a frontmatter holding only
     // `brulion` is hidden: then the draft adds, also above shown `key::` lines).
     const int addRow = map.value(u"addTarget"_s).toString() == u"logseq" ? logseqRow : yamlRow;
-    map.insert(u"addRow"_s, addRow >= 0 && !m_sourceMode && m_model->isRowVisible(addRow) ? addRow : -1);
+    map.insert(u"addRow"_s, addRow >= 0 && m_model->isRowVisible(addRow) ? addRow : -1);
     if (map == m_pageProperties)
         return;
     m_pageProperties = map;
@@ -209,14 +212,12 @@ void PageController::updateLook()
                       {u"url"_s, QString()},  {u"state"_s, QString()}, {u"host"_s, QString()},
                       {u"error"_s, QString()}};
     if (c.kind == markdown::PageCover::Kind::File) {
-        cover.insert(u"kind"_s, u"file"_s);
         const QString path = m_host ? m_host->resolveLink(c.target, m_path) : QString();
-        if (path.isEmpty() || !paths::isPicturePath(path) || !m_host->canDecodePicture(path)) {
-            cover.insert(u"state"_s, u"missing"_s);
-        } else {
-            cover.insert(u"state"_s, u"ready"_s);
+        const bool ready = !path.isEmpty() && paths::isPicturePath(path) && m_host->canDecodePicture(path);
+        cover.insert(u"kind"_s, u"file"_s);
+        cover.insert(u"state"_s, ready ? u"ready"_s : u"missing"_s);
+        if (ready)
             cover.insert(u"url"_s, m_host->assetUrl(path).toString());
-        }
     } else if (c.kind == markdown::PageCover::Kind::Web) {
         // QML loads nothing from the network: the host's cached copy, once the user allowed it.
         cover.insert(u"kind"_s, u"web"_s);
@@ -226,7 +227,7 @@ void PageController::updateLook()
         cover.insert(u"error"_s, picture.value(u"error"_s).toString());
         cover.insert(u"host"_s, QUrl(c.target).host());
     }
-    const QVariantMap map{{u"icon"_s, editor::pageIconMap(editor::availablePageIcon(look.icon))}, {u"cover"_s, cover}};
+    const QVariantMap map{{u"icon"_s, pageIconMap(availablePageIcon(look.icon))}, {u"cover"_s, cover}};
     if (map == m_look)
         return;
     m_look = map;
@@ -235,37 +236,35 @@ void PageController::updateLook()
 
 namespace {
 
+/// The first property named `key` in any case (either block), or nullptr.
+const markdown::PageProperty *findAnyCase(const markdown::PageProperties &props, QStringView key)
+{
+    const auto it = std::ranges::find_if(
+            props.items, [&](const markdown::PageProperty &p) { return p.key.compare(key, Qt::CaseInsensitive) == 0; });
+    return it != props.items.cend() ? &*it : nullptr;
+}
+
 /// Set `key` where the page has it (any case: the key as written), else where new properties go.
-markdown::PropertyEditResult setLookProperty(const QString &content, const QString &key, const QVariant &value,
+markdown::PropertyEditResult setLookProperty(const QString &content, QStringView key, const QVariant &value,
                                              PropertyType type)
 {
     const markdown::PageProperties props = markdown::readPageProperties(content);
-    PropertySource source = props.addTarget();
-    QString written = key;
-    for (const markdown::PageProperty &p : props.items) {
-        if (p.key.compare(key, Qt::CaseInsensitive) == 0) {
-            source = p.source;
-            written = p.key;
-            break;
-        }
-    }
-    return markdown::setPageProperty(content, source, written, value, type);
+    if (const markdown::PageProperty *p = findAnyCase(props, key))
+        return markdown::setPageProperty(content, p->source, p->key, value, type);
+    return markdown::setPageProperty(content, props.addTarget(), key.toString(), value, type);
 }
 
 /// Remove every property named one of `keys` (any case, either block); Unchanged when none.
-markdown::PropertyEditResult removeLookProperties(const QString &content, const QStringList &keys)
+markdown::PropertyEditResult removeLookProperties(const QString &content, std::initializer_list<QStringView> keys)
 {
     markdown::PropertyEditResult out{content, PropertyEditStatus::Unchanged};
-    for (const QString &key : keys) {
+    for (const QStringView key : keys) {
         for (int guard = 0; guard < 8; ++guard) {
             const markdown::PageProperties props = markdown::readPageProperties(out.content);
-            const auto it =
-                    std::find_if(props.items.cbegin(), props.items.cend(), [&](const markdown::PageProperty &p) {
-                        return p.key.compare(key, Qt::CaseInsensitive) == 0;
-                    });
-            if (it == props.items.cend())
+            const markdown::PageProperty *p = findAnyCase(props, key);
+            if (!p)
                 break;
-            const markdown::PropertyEditResult r = markdown::removePageProperty(out.content, it->source, it->key);
+            const markdown::PropertyEditResult r = markdown::removePageProperty(out.content, p->source, p->key);
             if (r.status != PropertyEditStatus::Changed)
                 return {content, r.status};
             out = r;
@@ -290,9 +289,8 @@ QVariantMap PageController::setPageIcon(const QString &kind, const QString &name
         return editResult(PropertyEditStatus::InvalidValue, tr("Not an emoji or an icon of the app"));
     const PropertyEditStatus status = applyPropertyEdit([&](const QString &content) {
         if (value.isEmpty())
-            return removeLookProperties(content,
-                                        {markdown::PageIconKey.toString(), markdown::PageIconFallbackKey.toString()});
-        return setLookProperty(content, markdown::PageIconKey.toString(), value, PropertyType::Text);
+            return removeLookProperties(content, {markdown::PageIconKey, markdown::PageIconFallbackKey});
+        return setLookProperty(content, markdown::PageIconKey, value, PropertyType::Text);
     });
     return editResult(status, reasonFor(status, u"text"_s, {}));
 }
@@ -320,9 +318,8 @@ QVariantMap PageController::setPageCover(const QString &given)
     }
     const PropertyEditStatus status = applyPropertyEdit([&](const QString &content) {
         if (value.isEmpty())
-            return removeLookProperties(content,
-                                        {markdown::PageCoverKey.toString(), markdown::PageCoverPositionKey.toString()});
-        return setLookProperty(content, markdown::PageCoverKey.toString(), value, PropertyType::Text);
+            return removeLookProperties(content, {markdown::PageCoverKey, markdown::PageCoverPositionKey});
+        return setLookProperty(content, markdown::PageCoverKey, value, PropertyType::Text);
     });
     return editResult(status, reasonFor(status, u"text"_s, {}));
 }
@@ -333,7 +330,7 @@ QVariantMap PageController::setPageCoverPosition(double position)
         return readOnlyResult();
     const QString value = markdown::coverPositionValue(position);
     const PropertyEditStatus status = applyPropertyEdit([&](const QString &content) {
-        return setLookProperty(content, markdown::PageCoverPositionKey.toString(), value, PropertyType::Number);
+        return setLookProperty(content, markdown::PageCoverPositionKey, value, PropertyType::Number);
     });
     return editResult(status, reasonFor(status, u"number"_s, {}));
 }
@@ -364,44 +361,34 @@ PageController::applyPropertyEdit(const std::function<markdown::PropertyEditResu
     return r.status;
 }
 
-QVariantMap PageController::setPageProperty(const QString &source, const QString &key, const QVariant &given,
+QVariantMap PageController::setPageProperty(const QString &source, const QString &key, const QVariant &value,
                                             const QString &type)
 {
     if (refusesEdit())
         return readOnlyResult();
-    // A JS array from QML arrives as a QJSValue: the list it holds.
-    const QVariant value =
-            given.metaType() == QMetaType::fromType<QJSValue>() ? given.value<QJSValue>().toVariant() : given;
     const QString k = key.trimmed();
     PropertySource resolved = PropertySource::Yaml;
     const PropertyEditStatus status = applyPropertyEdit([&](const QString &content) {
         resolved = sourceFor(markdown::readPageProperties(content), source, k);
-        const PropertyType t = markdown::parsePropertyType(type).value_or(PropertyType::Text);
-        return markdown::setPageProperty(content, resolved, k, value, t);
+        return markdown::setPageProperty(content, resolved, k, fromQml(value),
+                                         markdown::parsePropertyType(type).value_or(PropertyType::Text));
     });
-    const auto fixed = markdown::fixedPropertyType(k);
-    const QString t = fixed ? markdown::propertyTypeName(*fixed) : type;
-    return editResult(status, reasonFor(status, t, markdown::checkPropertyKey(k, resolved)));
+    return keyEditResult(status, k, type, resolved);
 }
 
-QVariantMap PageController::addPageProperty(const QString &source, const QString &key, const QVariant &given,
+QVariantMap PageController::addPageProperty(const QString &source, const QString &key, const QVariant &value,
                                             const QString &type)
 {
     if (refusesEdit())
         return readOnlyResult();
-    const QVariant value =
-            given.metaType() == QMetaType::fromType<QJSValue>() ? given.value<QJSValue>().toVariant() : given;
     const QString k = key.trimmed();
     PropertySource resolved = PropertySource::Yaml;
     const PropertyEditStatus status = applyPropertyEdit([&](const QString &content) {
-        const markdown::PageProperties props = markdown::readPageProperties(content);
-        resolved = markdown::parsePropertySource(source).value_or(props.addTarget());
-        const PropertyType t = markdown::parsePropertyType(type).value_or(PropertyType::Text);
-        return markdown::addPageProperty(content, resolved, k, value, t);
+        resolved = markdown::parsePropertySource(source).value_or(markdown::readPageProperties(content).addTarget());
+        return markdown::addPageProperty(content, resolved, k, fromQml(value),
+                                         markdown::parsePropertyType(type).value_or(PropertyType::Text));
     });
-    const auto fixed = markdown::fixedPropertyType(k);
-    const QString t = fixed ? markdown::propertyTypeName(*fixed) : type;
-    return editResult(status, reasonFor(status, t, markdown::checkPropertyKey(k, resolved)));
+    return keyEditResult(status, k, type, resolved);
 }
 
 QVariantMap PageController::removePageProperty(const QString &source, const QString &key)
@@ -459,11 +446,10 @@ QVariantMap PageController::addPageListItem(const QString &kind, const QString &
 {
     if (refusesEdit())
         return readOnlyResult();
-    const auto k = listKind(kind);
-    if (!k)
-        return editResult(PropertyEditStatus::InvalidValue, reasonFor(PropertyEditStatus::InvalidValue, kind, {}));
-    const PropertyEditStatus status =
-            applyPropertyEdit([&](const QString &content) { return markdown::addPageListItem(content, *k, item); });
+    PropertyEditStatus status = PropertyEditStatus::InvalidValue;
+    if (const auto k = listKind(kind))
+        status =
+                applyPropertyEdit([&](const QString &content) { return markdown::addPageListItem(content, *k, item); });
     return editResult(status, reasonFor(status, kind, {}));
 }
 
@@ -471,11 +457,10 @@ QVariantMap PageController::removePageListItem(const QString &kind, const QStrin
 {
     if (refusesEdit())
         return readOnlyResult();
-    const auto k = listKind(kind);
-    if (!k)
-        return editResult(PropertyEditStatus::NotFound, reasonFor(PropertyEditStatus::NotFound, kind, {}));
-    const PropertyEditStatus status =
-            applyPropertyEdit([&](const QString &content) { return markdown::removePageListItem(content, *k, item); });
+    PropertyEditStatus status = PropertyEditStatus::NotFound;
+    if (const auto k = listKind(kind))
+        status = applyPropertyEdit(
+                [&](const QString &content) { return markdown::removePageListItem(content, *k, item); });
     return editResult(status, reasonFor(status, kind, {}));
 }
 
@@ -485,11 +470,11 @@ QVariantList PageController::suggestPropertyKeys(const QString &prefix, int limi
     if (!m_host || limit <= 0)
         return out;
     QSet<QString> own{nfcLower(markdown::NoteModeKey.toString())};
-    for (const QVariant &v : m_pageProperties.value(u"items"_s).toList())
+    for (const QVariantList properties = m_pageProperties.value(u"items"_s).toList(); const QVariant &v : properties)
         own.insert(nfcLower(v.toMap().value(u"key"_s).toString()));
     const QString typed = text::foldKey(prefix.trimmed());
     QVariantList contains;
-    for (const QVariant &v : m_host->propertyKeys()) {
+    for (const QVariantList keys = m_host->propertyKeys(); const QVariant &v : keys) {
         const QVariantMap k = v.toMap();
         const QString key = k.value(u"key"_s).toString();
         if (own.contains(nfcLower(key)))
@@ -502,11 +487,7 @@ QVariantList PageController::suggestPropertyKeys(const QString &prefix, int limi
         if (out.size() >= limit)
             return out;
     }
-    for (const QVariant &k : std::as_const(contains)) {
-        if (out.size() >= limit)
-            break;
-        out.append(k);
-    }
+    out.append(contains.first(std::min(limit - out.size(), contains.size())));
     return out;
 }
 
@@ -517,13 +498,14 @@ QVariantList PageController::suggestPropertyValues(const QString &key, const QSt
         return out;
     // What the property holds already is not offered again.
     QSet<QString> held;
-    for (const QVariant &v : m_pageProperties.value(u"items"_s).toList()) {
+    for (const QVariantList properties = m_pageProperties.value(u"items"_s).toList(); const QVariant &v : properties) {
         const QVariantMap p = v.toMap();
         if (nfcLower(p.value(u"key"_s).toString()) != nfcLower(key))
             continue;
-        for (const QString &item : p.value(u"items"_s).toStringList())
+        const QStringList items = p.value(u"items"_s).toStringList();
+        for (const QString &item : items)
             held.insert(nfcLower(item));
-        if (p.value(u"items"_s).toStringList().isEmpty() && !p.value(u"empty"_s).toBool())
+        if (items.isEmpty() && !p.value(u"empty"_s).toBool())
             held.insert(nfcLower(p.value(u"value"_s).toString()));
     }
     const auto add = [&](const QVariantMap &m) {
@@ -536,7 +518,7 @@ QVariantList PageController::suggestPropertyValues(const QString &key, const QSt
         QString query = typed.mid(2);
         if (query.endsWith(u"]]"))
             query.chop(2);
-        for (const QVariant &v : m_host->suggestPages(query, limit)) {
+        for (const QVariantList pages = m_host->suggestPages(query, limit); const QVariant &v : pages) {
             const QVariantMap page = v.toMap();
             const QString path = page.value(u"path"_s).toString();
             const QString target = m_host->linkTarget(path, m_path);
@@ -554,13 +536,14 @@ QVariantList PageController::suggestPropertyValues(const QString &key, const QSt
         return out;
     if (fixed == PropertyType::Tags) {
         const QString tag = typed.startsWith(u'#') ? typed.mid(1) : typed;
-        for (const QVariant &v : m_host->suggestTags(tag, limit + int(held.size()))) {
+        for (const QVariantList tags = m_host->suggestTags(tag, limit + int(held.size())); const QVariant &v : tags) {
             const QVariantMap t = v.toMap();
             add({{u"value"_s, t.value(u"tag"_s)}, {u"count"_s, t.value(u"count"_s)}, {u"kind"_s, u"tag"_s}});
         }
         return out;
     }
-    for (const QVariant &v : m_host->propertyValues(key, typed, limit + int(held.size()))) {
+    const QVariantList values = m_host->propertyValues(key, typed, limit + int(held.size()));
+    for (const QVariant &v : values) {
         const QVariantMap m = v.toMap();
         add({{u"value"_s, m.value(u"value"_s)}, {u"count"_s, m.value(u"count"_s)}, {u"kind"_s, u"value"_s}});
     }
@@ -572,12 +555,11 @@ QString PageController::notebookPropertyType(const QString &key) const
     if (!m_host)
         return {};
     if (!m_notebookTypes) {
-        QHash<QString, QString> types;
-        for (const QVariant &v : m_host->propertyKeys()) {
+        m_notebookTypes.emplace();
+        for (const QVariantList keys = m_host->propertyKeys(); const QVariant &v : keys) {
             const QVariantMap k = v.toMap();
-            types.insert(nfcLower(k.value(u"key"_s).toString()), k.value(u"type"_s).toString());
+            m_notebookTypes->insert(nfcLower(k.value(u"key"_s).toString()), k.value(u"type"_s).toString());
         }
-        m_notebookTypes = types;
     }
     return m_notebookTypes->value(nfcLower(key.trimmed()));
 }

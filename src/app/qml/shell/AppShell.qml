@@ -60,7 +60,6 @@ FocusScope {
             shell._lastNavigationBar = shell.SafeArea.margins.bottom
     }
     onSafeChanged: noteNavigationBar()
-    readonly property var route: AppController.currentRoute
     /// The current route's view and path ("" when it has none).
     readonly property string currentView: AppController.currentView
     readonly property string routePath: routeTitles.field(AppController.currentRoute, "path")
@@ -198,11 +197,6 @@ FocusScope {
 
     // Titles of routes and pages (also the tab bar's, the tab switcher's, a page window's).
     ShellRouteTitles { id: routeTitles }
-    /// A page's title as people read it: daily notes by their date ("Wednesday, October 14,
-    /// 2026"), not by their file name ("2026-10-14").
-    function pageLabel(path: string): string {
-        return routeTitles.pageLabel(path)
-    }
 
     function openPalette(query: string): void {
         palette.open()
@@ -294,18 +288,13 @@ FocusScope {
     function revealInTree(path: string): void {
         if (path === "")
             return
-        if (Theme.narrow) {
+        if (Theme.narrow)
             drawer.open()
-            const sidebar = drawerSidebar.item as ShellSidebar
-            if (sidebar)
-                sidebar.reveal(path, true)
-        } else {
-            if (!shell.sidebarVisible)
-                shell.toggleSidebar()
-            const sidebar = sidebarLoader.item as ShellSidebar
-            if (sidebar)
-                sidebar.reveal(path, true)
-        }
+        else if (!shell.sidebarVisible)
+            shell.toggleSidebar()
+        const sidebar = (Theme.narrow ? drawerSidebar.item : sidebarLoader.item) as ShellSidebar
+        if (sidebar)
+            sidebar.reveal(path, true)
     }
     function openAbout(): void { about.open() }
     function confirmDelete(path: string): void {
@@ -849,10 +838,9 @@ FocusScope {
         }
         // A page or folder of the tree from a view (All pages, the page's menu, the palette).
         function onItemActionRequested(action: string, path: string) {
-            const isDir = AppController.routeFlag(Workspace.folderInfo(path), "exists")
             switch (action) {
-            case "move": shell.openMove(path, isDir); break
-            case "rename": shell.openRename(path, isDir); break
+            case "move": shell.openMove(path, shell.isFolder(path)); break
+            case "rename": shell.openRename(path, shell.isFolder(path)); break
             case "delete": shell.confirmDelete(path); break
             case "newPage": shell.openNewPage(path); break
             case "newFolder": shell.openNewFolder(path); break
@@ -924,7 +912,7 @@ FocusScope {
     function shortcutEnabled(id: string): bool {
         switch (id) {
         case "panel.toggle": return !Theme.narrow || contextDrawer.available
-        case "page.rename": return shell.currentView === "page"
+        case "page.rename":
         case "page.print": return shell.currentView === "page"
         }
         return true

@@ -5,7 +5,7 @@
 
 #include <QTimer>
 
-#include <memory>
+#include <algorithm>
 
 using namespace Qt::StringLiterals;
 
@@ -16,11 +16,10 @@ namespace {
 /// Recount the other days this long after a change (a day's edit, a file synced in, new days).
 constexpr int RecountDelayMs = 150;
 
-QString oneLine(const QString &text)
+QString oneLine(QString text)
 {
-    QString line = text;
-    line.replace(u'\r', u' ').replace(u'\n', u' ');
-    return line;
+    text.replace(u'\r', u' ').replace(u'\n', u' ');
+    return text;
 }
 
 } // namespace
@@ -83,7 +82,7 @@ void StreamFind::setFind(NoteFind *find)
                 connect(m_find, &NoteFind::matchesChanged, this,
                         [this] {
                             // A new query or new options: every day again (a day's edit: its own count).
-                            if (m_dirty || m_find->appliedQuery() != m_query || m_find->options() != m_options)
+                            if (m_dirty || queryChanged())
                                 recount();
                             else
                                 Q_EMIT changed();
@@ -125,10 +124,10 @@ void StreamFind::attach(PageController *page)
 
 void StreamFind::detach(PageController *page)
 {
-    const auto it = m_pageConnections.find(page);
-    if (it == m_pageConnections.end())
+    const auto it = m_pageConnections.constFind(page);
+    if (it == m_pageConnections.cend())
         return;
-    for (const QMetaObject::Connection &c : std::as_const(*it))
+    for (const QMetaObject::Connection &c : *it)
         disconnect(c);
     m_pageConnections.erase(it);
     m_pages.removeIf([page](const QPointer<PageController> &p) { return p.isNull() || p.data() == page; });
@@ -145,9 +144,20 @@ PageController *StreamFind::attached(const QString &path) const
     return nullptr;
 }
 
+int StreamFind::dayIndex(const QString &path) const
+{
+    const auto it = std::ranges::find(m_days, path, &Day::path);
+    return it == m_days.cend() ? -1 : int(it - m_days.cbegin());
+}
+
 QString StreamFind::activePath() const
 {
     return m_find && m_find->controller() ? m_find->controller()->path() : QString();
+}
+
+bool StreamFind::queryChanged() const
+{
+    return m_find && (m_find->appliedQuery() != m_query || m_find->options() != m_options);
 }
 
 void StreamFind::schedule()
@@ -161,40 +171,28 @@ void StreamFind::refresh()
 {
     if (m_find)
         m_find->refresh();
-    if (m_dirty || m_timer.isActive()
-        || (m_find && (m_find->appliedQuery() != m_query || m_find->options() != m_options)))
+    if (m_dirty || m_timer.isActive() || queryChanged())
         recount();
 }
 
 void StreamFind::onFileChanged(const QString &path)
 {
     m_cache.remove(path);
-    for (const Day &d : std::as_const(m_days)) {
-        if (d.path == path) {
-            schedule();
-            return;
-        }
-    }
+    if (dayIndex(path) >= 0)
+        schedule();
 }
 
-QString StreamFind::textOf(const QString &path, bool *ok)
+std::optional<QString> StreamFind::textOf(const QString &path)
 {
-    if (PageController *page = attached(path); page && page->loaded()) {
-        *ok = true;
+    if (PageController *page = attached(path); page && page->loaded())
         return page->sourceMode() ? page->sourceText() : page->text();
-    }
-    if (const auto it = m_cache.constFind(path); it != m_cache.cend()) {
-        *ok = it->ok;
-        return it->text;
-    }
-    CachedText cached;
-    if (m_host)
-        cached.text = m_host->read(path, &cached.ok);
-    if (!cached.ok)
-        cached.text.clear();
-    m_cache.insert(path, cached);
-    *ok = cached.ok;
-    return cached.text;
+    if (const auto it = m_cache.constFind(path); it != m_cache.cend())
+        return *it;
+    bool ok = false;
+    const QString text = m_host ? m_host->read(path, &ok) : QString();
+    const std::optional<QString> result = ok ? std::optional(text) : std::nullopt;
+    m_cache.insert(path, result);
+    return result;
 }
 
 void StreamFind::countDay(Day &day, const QString &text) const
@@ -235,22 +233,21 @@ void StreamFind::recount()
     const QString active = activePath();
     qsizetype searched = 0;
     // Texts of days that left the stream go from the cache.
-    QHash<QString, CachedText> kept;
+    QHash<QString, std::optional<QString>> kept;
     for (int r = 0; r < limit; ++r) {
         Day day;
         day.path = m_model->data(m_model->index(r, 0), pathRole).toString();
         if (day.path != active && !m_query.isEmpty() && !day.path.isEmpty()) {
-            bool ok = false;
-            const QString text = textOf(day.path, &ok);
+            const std::optional<QString> text = textOf(day.path);
             if (const auto it = m_cache.constFind(day.path); it != m_cache.cend())
                 kept.insert(day.path, *it);
-            searched += text.size();
+            searched += text ? text->size() : 0;
             if (searched > MaxSearchedChars) {
                 m_limited = true;
                 break;
             }
-            if (ok)
-                countDay(day, text);
+            if (text)
+                countDay(day, *text);
         }
         m_days.append(day);
     }
@@ -263,11 +260,8 @@ int StreamFind::countIn(const QString &path) const
 {
     if (m_find && path == activePath())
         return m_find->count();
-    for (const Day &d : m_days) {
-        if (d.path == path)
-            return d.matches;
-    }
-    return 0;
+    const int i = dayIndex(path);
+    return i < 0 ? 0 : m_days.at(i).matches;
 }
 
 int StreamFind::count() const
@@ -338,13 +332,8 @@ void StreamFind::moveToDay(bool forward)
         return;
     if (m_dirty || m_timer.isActive())
         recount();
-    const QString active = activePath();
     const int n = int(m_days.size());
-    int activeRow = -1;
-    for (int i = 0; i < n && activeRow < 0; ++i) {
-        if (m_days.at(i).path == active)
-            activeRow = i;
-    }
+    const int activeRow = dayIndex(activePath());
     for (int step = 1; step <= n; ++step) {
         int i = 0;
         if (activeRow < 0)
@@ -362,19 +351,19 @@ void StreamFind::moveToDay(bool forward)
         const QString path = m_days.at(i).path;
         // Once that day's controller is the bar's (the view switches the day written in): its first
         // match going down, its last going up. Queued: the bar's editor follows the day too.
-        QPointer<NoteFind> find = m_find;
-        auto connection = std::make_shared<QMetaObject::Connection>();
-        *connection = connect(m_find, &NoteFind::controllerChanged, this, [this, find, path, forward, connection] {
-            disconnect(*connection);
-            QTimer::singleShot(0, this, [find, path, forward] {
-                if (find && find->controller() && find->controller()->path() == path)
-                    find->enter(forward);
-            });
-        });
+        const QMetaObject::Connection connection = connect(
+                m_find, &NoteFind::controllerChanged, this,
+                [this, find = m_find, path, forward] {
+                    QTimer::singleShot(0, this, [find, path, forward] {
+                        if (find && find->controller() && find->controller()->path() == path)
+                            find->enter(forward);
+                    });
+                },
+                Qt::SingleShotConnection);
         Q_EMIT dayRequested(i, path);
         // The view could not switch (no such day on screen): nothing waits for it.
         if (activePath() != path)
-            disconnect(*connection);
+            disconnect(connection);
         return;
     }
     // Only this day has matches, or none at all.
@@ -463,8 +452,8 @@ QVariantMap StreamFind::replaceAll(const QString &replacement)
         }
     }
     if (count > 0) {
-        m_undoEdits = edits;
-        m_undoFiles = files;
+        m_undoEdits = std::move(edits);
+        m_undoFiles = std::move(files);
         out[u"token"_s] = ++m_token;
     }
     out[u"count"_s] = count;

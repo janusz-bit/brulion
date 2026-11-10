@@ -18,6 +18,7 @@
 #include <QRegularExpression>
 
 #include <algorithm>
+#include <ranges>
 
 using namespace Qt::StringLiterals;
 
@@ -89,6 +90,40 @@ QVariantMap failure(const QString &reason)
     return {{u"ok"_s, false}, {u"reason"_s, reason}, {u"count"_s, 0}};
 }
 
+QVariantMap statsMap(stats::TextStats s, qsizetype length)
+{
+    return {{u"words"_s, s.words},
+            {u"characters"_s, s.characters},
+            {u"charactersNoSpaces"_s, s.charactersNoSpaces},
+            {u"readingMinutes"_s, s.readingMinutes},
+            {u"length"_s, qlonglong(length)}};
+}
+
+/// Text that may carry block ids (`^id`, `id::`): the cheap test before looking for them.
+bool mayHaveBlockIds(const QString &text)
+{
+    return text.contains(u'^') || text.contains(u"::");
+}
+
+/// The rows of the page's own properties (the frontmatter at its top): never part of a range,
+/// never replaced by a paste.
+int pinnedRows(const BlockDocument &doc)
+{
+    int pinned = 0;
+    while (pinned < doc.count() && doc.at(pinned).kind == BlockKind::Frontmatter)
+        ++pinned;
+    return pinned;
+}
+
+/// Append `range` to the ascending `runs`, joined to the last run when it goes on from it.
+void addRun(QList<RowRange> &runs, RowRange range)
+{
+    if (!runs.isEmpty() && runs.constLast().first + runs.constLast().count == range.first)
+        runs.last().count += range.count;
+    else
+        runs.append(range);
+}
+
 } // namespace
 
 // --- State ------------------------------------------------------------------------------------------
@@ -98,8 +133,7 @@ RowRange PageController::rangeOf(int anchor, int focus) const
     if (!validRow(anchor) || !validRow(focus))
         return {};
     const BlockDocument &doc = m_model->document();
-    const int first = std::min(anchor, focus);
-    const int last = std::max(anchor, focus);
+    const auto [first, last] = std::minmax(anchor, focus);
     // Subtrees nest: a row inside an earlier row's subtree ends within it.
     int end = first;
     for (int r = first; r <= last; ++r) {
@@ -168,7 +202,7 @@ void PageController::updateSelection()
             m_anchorUid = m_selectedUid = m_pickedUids.value(0, 0);
             m_pickedUids.clear();
         } else if (!m_pickedUids.contains(m_selectedUid)) {
-            m_anchorUid = m_selectedUid = m_pickedUids.last();
+            m_anchorUid = m_selectedUid = m_pickedUids.constLast();
         }
     }
     // An end that is gone (deleted, an undo, an external change) takes the other one's place.
@@ -219,22 +253,15 @@ void PageController::updateSelection()
 
 void PageController::selectRange(int anchor, int focus)
 {
+    if (anchor != focus && validRow(anchor) && validRow(focus)) {
+        // The frontmatter and page properties are never part of a range (they stay at the top).
+        const int pinned = pinnedRows(m_model->document());
+        anchor = std::max(anchor, pinned);
+        focus = std::max(focus, pinned);
+    }
     if (!validRow(anchor) || !validRow(focus)) {
         clearSelection();
         return;
-    }
-    if (anchor != focus) {
-        // The frontmatter and page properties are never part of a range (they stay at the top).
-        const BlockDocument &doc = m_model->document();
-        int pinned = 0;
-        while (pinned < doc.count() && doc.at(pinned).kind == BlockKind::Frontmatter)
-            ++pinned;
-        anchor = std::max(anchor, pinned);
-        focus = std::max(focus, pinned);
-        if (!validRow(anchor) || !validRow(focus)) {
-            clearSelection();
-            return;
-        }
     }
     if (m_editingUid)
         stopEditing();
@@ -275,7 +302,7 @@ QString PageController::toggleSelected(int row)
         for (int p = doc.parent(clicked); p >= 0; p = doc.parent(p)) {
             if (picks.contains(m_model->uidAt(p))) {
                 if (!m_selectedUid && picks.size() == 1) {
-                    m_anchorUid = m_selectedUid = picks.first();
+                    m_anchorUid = m_selectedUid = picks.constFirst();
                     updateSelection();
                 }
                 return u"inParent"_s;
@@ -295,7 +322,7 @@ QString PageController::toggleSelected(int row)
         m_anchorUid = m_selectedUid = picks.value(0, 0);
     } else {
         m_pickedUids = picks;
-        m_anchorUid = m_selectedUid = result == u"added" ? uid : picks.last();
+        m_anchorUid = m_selectedUid = result == u"added" ? uid : picks.constLast();
     }
     updateSelection();
     return result;
@@ -324,28 +351,21 @@ bool PageController::extendSelection(int step)
     const auto selectable = [&](int r) { return r >= 0 && m_model->document().at(r).kind != BlockKind::Frontmatter; };
     int target = -1;
     if (step > 0) {
-        if (focus >= anchor) {
-            // Down past what is selected (the selected subtrees, folded children too).
-            target = m_model->nextVisibleRow(current.first + current.count - 1);
-        } else {
-            target = m_model->nextVisibleRow(focus); // the top end comes down
-        }
+        // Down past what is selected (the selected subtrees, folded children too), or the top end
+        // comes down.
+        target = m_model->nextVisibleRow(focus >= anchor ? current.last() : focus);
     } else if (focus <= anchor) {
         target = m_model->previousVisibleRow(std::min(focus, current.first));
-        if (!selectable(target))
-            target = -1;
     } else {
         // The bottom end goes up until the selection changes (a row inside a selected parent's
         // subtree changes nothing); past the anchor it extends above it.
         target = focus;
         do {
             target = m_model->previousVisibleRow(target);
-        } while (target >= 0 && selectable(target) && rangeOf(anchor, target).count == current.count
-                 && rangeOf(anchor, target).first == current.first);
-        if (!selectable(target))
-            target = -1;
+        } while (selectable(target) && rangeOf(anchor, target) == current);
     }
-    if (target < 0)
+    // Up never onto the page's properties.
+    if (target < 0 || (step <= 0 && !selectable(target)))
         return false;
     selectRange(anchor, target);
     return true;
@@ -416,18 +436,6 @@ QString PageController::selectionMarkdown() const
     return markdown::blocksMarkdown(m_model->document(), tops);
 }
 
-namespace {
-
-QVariantMap statsMap(const stats::TextStats &s, qsizetype length)
-{
-    return {{QStringLiteral("words"), s.words}, {QStringLiteral("characters"), s.characters},
-                                                 {QStringLiteral("charactersNoSpaces"), s.charactersNoSpaces},
-                                                  {QStringLiteral("readingMinutes"), s.readingMinutes},
-                                                   {QStringLiteral("length"), qlonglong(length)}};
-}
-
-} // namespace
-
 QVariantMap PageController::pageStats() const
 {
     if (!m_loaded)
@@ -463,22 +471,21 @@ QVariantMap PageController::writeClipboard(const QString &text, const LazyHtmlMi
     QClipboard *clipboard = qGuiApp ? QGuiApplication::clipboard() : nullptr;
     if (!clipboard)
         return failure(u"noClipboard"_s);
-    QMimeData *mime = nullptr;
-    if (html && clipboardReadsAtOnce()) {
-        // Android, the browser and Windows take every flavour now: the formatted one only while both fit (the
-        // Markdown alone is never cut short).
-        mime = new QMimeData;
-        mime->setText(text);
-        const QString rendered = html();
-        if (!rendered.isEmpty() && bytes + rendered.toUtf8().size() <= ClipboardLimit)
-            mime->setHtml(rendered);
-    } else if (html) {
+    QMimeData *mime = nullptr; // the clipboard takes it
+    if (html && !clipboardReadsAtOnce()) {
         // Linux desktops (X11, Wayland): rendered when an application asks for it (a paste into a mail or office app);
         // their clipboards take megabytes, so the HTML has no limit of its own.
         mime = new LazyHtmlMimeData(text, html);
     } else {
         mime = new QMimeData;
         mime->setText(text);
+        // Android, the browser and Windows take every flavour now: the formatted one only while both fit (the
+        // Markdown alone is never cut short).
+        if (html) {
+            const QString rendered = html();
+            if (!rendered.isEmpty() && bytes + rendered.toUtf8().size() <= ClipboardLimit)
+                mime->setHtml(rendered);
+        }
     }
     clipboard->setMimeData(mime);
     // X11 / Wayland: the primary selection too (a middle click pastes it).
@@ -564,24 +571,16 @@ int PageController::deleteSelection()
     const int zoom = zoomBlock();
     const bool removesZoom = zoom >= 0 && selectionRowList().contains(zoom);
     const int prev = m_model->previousVisibleRow(tops.first());
-    // The runs of selected rows, the last one first (the rows before it keep their places).
+    // The runs of selected rows, removed the last one first (the rows before it keep their places).
     QList<RowRange> runs;
-    {
-        const BlockDocument &doc = m_model->document();
-        for (const int top : tops) {
-            const RowRange sub = doc.subtreeRange(top);
-            if (!runs.isEmpty() && runs.last().first + runs.last().count == sub.first)
-                runs.last().count += sub.count;
-            else
-                runs.append(sub);
-        }
-    }
+    for (const int top : tops)
+        addRun(runs, m_model->document().subtreeRange(top));
     beginCommand();
     ++m_selectionHold; // from the deleted blocks to the one before them, nothing empty between
     EditResult r;
     bool changed = false;
-    for (auto run = runs.crbegin(); run != runs.crend(); ++run) {
-        r = applyOp([&](BlockDocument &d) { return d.removeRange(run->first, run->last()); });
+    for (const RowRange &run : std::views::reverse(std::as_const(runs))) {
+        r = applyOp([&](BlockDocument &d) { return d.removeRange(run.first, run.last()); });
         changed = changed || r.changed();
     }
     int focusRow = -1;
@@ -606,15 +605,11 @@ int PageController::deleteSelection()
 bool PageController::canIndentSelection() const
 {
     const QList<int> tops = selectionTops();
-    if (tops.isEmpty())
-        return false;
     const BlockDocument &doc = m_model->document();
     const int zoom = zoomBlock();
-    for (const int t : tops) {
-        if (t == zoom || (documentMode() && doc.at(t).kind != BlockKind::ListItem))
-            return false;
-    }
-    return true;
+    return !tops.isEmpty() && std::ranges::none_of(tops, [&](int t) {
+        return t == zoom || (documentMode() && doc.at(t).kind != BlockKind::ListItem);
+    });
 }
 
 bool PageController::indentSelection()
@@ -657,11 +652,10 @@ bool PageController::outdentSelection()
         return false;
     const BlockDocument &doc = m_model->document();
     const int zoom = zoomBlock();
-    for (const int t : doc.rangeTops(range.first, range.last())) {
-        // Out of the zoomed subtree, or the zoomed block itself: not here.
-        if (t == zoom || (zoom >= 0 && doc.parent(t) == zoom))
-            return false;
-    }
+    // Out of the zoomed subtree, or the zoomed block itself: not here.
+    if (std::ranges::any_of(doc.rangeTops(range.first, range.last()),
+                            [&](int t) { return t == zoom || (zoom >= 0 && doc.parent(t) == zoom); }))
+        return false;
     beginCommand();
     const EditResult r = applyOp([&](BlockDocument &d) { return d.outdentRange(range.first, range.last()); });
     endCommand(currentFocus());
@@ -750,11 +744,7 @@ void PageController::recordCut(const QString &text, const QSet<QString> &ids)
 bool PageController::hasBlockId(const QString &id) const
 {
     const BlockDocument &doc = m_model->document();
-    for (int i = 0; i < doc.count(); ++i) {
-        if (doc.at(i).blockId == id)
-            return true;
-    }
-    return false;
+    return std::ranges::any_of(std::views::iota(0, doc.count()), [&](int i) { return doc.at(i).blockId == id; });
 }
 
 QSet<QString> PageController::cutIdsFor(const QString &text) const
@@ -763,38 +753,23 @@ QSet<QString> PageController::cutIdsFor(const QString &text) const
     if (cut.text.isEmpty() || cut.ids.isEmpty() || normalizedPaste(text) != cut.text)
         return {};
     // The cut page has them again (the cut was undone): a paste is a copy. Asked while it shows
-    // that page, else its saved file (it was saved when it closed).
-    const PageController *source = cut.source.data();
-    const bool live = source && source->m_path == cut.path;
-    QString saved;
-    bool savedRead = false;
-    QSet<QString> freed;
-    for (const QString &id : cut.ids) {
-        bool back = false;
-        if (live) {
-            back = source->hasBlockId(id);
-        } else if (m_host && !cut.path.isEmpty()) {
-            if (!savedRead) {
-                bool ok = false;
-                saved = m_host->read(cut.path, &ok);
-                savedRead = true;
-                if (!ok)
-                    saved.clear();
-            }
-            back = !saved.isEmpty() && markdown::blockIdsOf(saved).contains(id);
-        }
-        if (!back)
-            freed.insert(id);
+    // that page, else its saved file (it was saved when it closed), read and parsed once.
+    QSet<QString> freed = cut.ids;
+    if (const PageController *source = cut.source.data(); source && source->m_path == cut.path) {
+        freed.removeIf([source](const QString &id) { return source->hasBlockId(id); });
+    } else if (m_host && !cut.path.isEmpty()) {
+        bool ok = false;
+        const QString saved = m_host->read(cut.path, &ok);
+        const QStringList savedIds = ok ? markdown::blockIdsOf(saved) : QStringList();
+        for (const QString &id : savedIds)
+            freed.remove(id);
     }
     return freed;
 }
 
 QString PageController::withoutTakenIds(const QString &text, const QSet<QString> &freed, bool indexed)
 {
-    if (!text.contains(u'^') && !text.contains(u"::"))
-        return text;
-    const QStringList ids = markdown::blockIdsOf(text);
-    if (ids.isEmpty())
+    if (!mayHaveBlockIds(text) || markdown::blockIdsOf(text).isEmpty())
         return text;
     QSet<QString> here;
     const BlockDocument &doc = m_model->document();
@@ -836,29 +811,18 @@ QVariantMap PageController::replaceSelection(const QString &pasted)
     const auto yaml = [](const markdown::BlockEntry &e) {
         return e.kind == BlockKind::Frontmatter && e.body.startsWith(u"---"_s);
     };
-    {
-        const BlockDocument probe(text);
-        bool any = false;
-        for (int k = 0; k < probe.count() && !any; ++k)
-            any = !yaml(probe.at(k));
-        if (!any)
-            return result(-1, 0);
-    }
+    if (const BlockDocument probe(text);
+        std::ranges::all_of(std::views::iota(0, probe.count()), [&](int k) { return yaml(probe.at(k)); }))
+        return result(-1, 0);
     const BlockDocument &doc = m_model->document();
     // The page's own properties are never replaced: selected, the paste goes in below them.
-    int pinned = 0;
-    while (pinned < doc.count() && doc.at(pinned).kind == BlockKind::Frontmatter)
-        ++pinned;
+    const int pinned = pinnedRows(doc);
     // The runs of replaced rows (a selection with gaps has several: the paste goes where the first
     // one was).
     QList<RowRange> runs;
     for (const int r : selected) {
-        if (r < pinned)
-            continue;
-        if (!runs.isEmpty() && runs.last().first + runs.last().count == r)
-            ++runs.last().count;
-        else
-            runs.append({r, 1});
+        if (r >= pinned)
+            addRun(runs, {r, 1});
     }
     const bool removes = !runs.isEmpty();
     const int first = removes ? runs.first().first : std::max(selected.first(), pinned);
@@ -875,12 +839,12 @@ QVariantMap PageController::replaceSelection(const QString &pasted)
     const bool intoList = hasNext && doc.at(first).kind == BlockKind::ListItem;
     const int prev = first - 1;
     // Every id of the vault known before the command (completing the index signals).
-    if (m_host && (text.contains(u'^') || text.contains(u"::")))
+    if (m_host && mayHaveBlockIds(text))
         m_host->finishIndexing();
     beginCommand();
     ++m_selectionHold; // from the replaced blocks to the pasted ones, nothing empty between
-    for (auto run = runs.crbegin(); run != runs.crend(); ++run)
-        applyOp([&](BlockDocument &d) { return d.removeRange(run->first, run->last()); });
+    for (const RowRange &run : std::views::reverse(std::as_const(runs)))
+        applyOp([&](BlockDocument &d) { return d.removeRange(run.first, run.last()); });
     text = withoutTakenIds(text, freed, true);
     const BlockDocument pasteDoc(text);
     int after = prev;
@@ -923,18 +887,21 @@ QString PageController::clipboardText() const
     const QString text = mime->hasText() ? mime->text() : QString();
     // HTML from another app (a browser, an office suite) whose text is not Markdown: its structure
     // (lists, headings, links, emphasis) as Markdown. Not this app's own copy: its text is the
-    // Markdown (the last one compared as pasted: line breaks may have changed on the way).
-    if (mime->hasHtml() && m_host && !isOwnCopy(text) && !looksLikeMarkdown(text) && !isOwnHtml(mime->html())) {
-        const QString converted = m_host->htmlToMarkdown(mime->html());
-        if (!converted.trimmed().isEmpty())
-            return converted;
+    // Markdown (the last one compared as pasted: line breaks may have changed on the way). The
+    // HTML is read once: on X11 every read is a transfer from the application that owns it.
+    if (mime->hasHtml() && m_host && !isOwnCopy(text) && !looksLikeMarkdown(text)) {
+        if (const QString html = mime->html(); !isOwnHtml(html)) {
+            const QString converted = m_host->htmlToMarkdown(html);
+            if (!converted.trimmed().isEmpty())
+                return converted;
+        }
     }
     return text;
 }
 
 bool PageController::isPictureAddress(const QString &text)
 {
-    if (text.isEmpty() || std::any_of(text.cbegin(), text.cend(), [](QChar c) { return c.isSpace(); }))
+    if (text.isEmpty() || std::ranges::any_of(text, [](QChar c) { return c.isSpace(); }))
         return false;
     const QUrl url = webpicture::webUrl(text);
     return url.isValid() && paths::isPicturePath(url.path());
@@ -944,11 +911,8 @@ void PageController::notePastedPictures(QVariantMap &out, const QStringList &bef
 {
     if (isOwnCopy(pasted))
         return; // moved or copied in this app: nothing new to offer
-    QStringList added;
-    for (const QString &url : webPictureUrls()) {
-        if (!before.contains(url))
-            added.append(url);
-    }
+    QStringList added = webPictureUrls();
+    added.removeIf([&before](const QString &url) { return before.contains(url); });
     if (!added.isEmpty())
         out.insert(u"webPictures"_s, added);
 }

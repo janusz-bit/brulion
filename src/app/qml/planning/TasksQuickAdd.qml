@@ -18,6 +18,8 @@ ColumnLayout {
     readonly property var parsed: parsedHolder.map
     /// Something was typed and understood.
     readonly property bool ok: Js.trim(field.text) !== "" && parsedHolder.map.ok === true
+    /// The text has no date: a plain task for today's journal.
+    readonly property bool dateless: parsedHolder.map.kind === "task"
 
     signal submitted(string line, var parsed)
 
@@ -29,12 +31,12 @@ ColumnLayout {
     }
     function focusField(): void { field.forceActiveFocus() }
 
+    spacing: Theme.space1
+
     MapHolder {
         id: parsedHolder
         map: root.actions.parseQuickAdd(Js.trim(field.text) !== "" ? field.text : "")
     }
-
-    spacing: Theme.space1
 
     BTextField {
         id: field
@@ -66,15 +68,15 @@ ColumnLayout {
             color: Theme.fgFaint
         }
         BChip {
-            visible: parsedHolder.map.kind !== "task"
+            visible: !root.dateless
             size: "small"
             variant: parsedHolder.map.kind === "reminder" ? "reminder" : "due"
             text: AppController.routeText(parsedHolder.map, "when")
         }
         Text {
             Layout.fillWidth: true
-            text: parsedHolder.map.kind === "task" ? qsTr("Without a date — goes into today's journal")
-                                                   : qsTr("“%1” — into today's journal").arg(AppController.routeText(parsedHolder.map, "text"))
+            text: root.dateless ? qsTr("Without a date — goes into today's journal")
+                                : qsTr("“%1” — into today's journal").arg(AppController.routeText(parsedHolder.map, "text"))
             font.family: Theme.fontUi
             font.pixelSize: Theme.textSm
             color: Theme.fgMuted

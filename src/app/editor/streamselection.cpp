@@ -52,7 +52,7 @@ std::pair<int, int> visibleEdges(const BlockListModel *model)
 QString stemOf(const QString &path)
 {
     QString stem = path.mid(path.lastIndexOf(u'/') + 1);
-    if (stem.endsWith(u".md"_s, Qt::CaseInsensitive))
+    if (stem.endsWith(u".md", Qt::CaseInsensitive))
         stem.chop(3);
     return stem;
 }
@@ -83,16 +83,9 @@ void StreamSelection::setHost(EditorHost *host)
         // A day not attached changed on disk (sync): its count is read again.
         connect(host, &EditorHost::fileChanged, this, [this](const QString &path) {
             const QString prefix = path + u'\n';
-            bool dropped = false;
-            for (auto it = m_fileCounts.begin(); it != m_fileCounts.end();) {
-                if (it.key().startsWith(prefix)) {
-                    it = m_fileCounts.erase(it);
-                    dropped = true;
-                } else {
-                    ++it;
-                }
-            }
-            if (dropped && m_active)
+            const qsizetype dropped = m_fileCounts.removeIf(
+                    [&prefix](QHash<QString, int>::iterator it) { return it.key().startsWith(prefix); });
+            if (dropped > 0 && m_active)
                 update();
         });
     }
@@ -126,7 +119,7 @@ void StreamSelection::setModel(QAbstractItemModel *model)
 
 void StreamSelection::setLocale(const QString &locale)
 {
-    const bool english = locale.startsWith(u"en"_s);
+    const bool english = locale.startsWith(u"en");
     if (english == m_english)
         return;
     m_english = english;
@@ -216,16 +209,15 @@ void StreamSelection::attach(PageController *page)
     if (!page || m_pages.contains(page))
         return;
     m_pages.append(page);
-    connect(page, &PageController::selectionChanged, this, [this, page] { pageChanged(page); });
-    connect(page, &PageController::editingRowChanged, this, [this, page] { pageChanged(page); });
+    const auto changed = [this, page] { pageChanged(page); };
+    connect(page, &PageController::selectionChanged, this, changed);
+    connect(page, &PageController::editingRowChanged, this, changed);
     // Loaded later (a day created while scrolling): its part of the span then.
     connect(page, &PageController::loadingChanged, this, [this, page] {
-        if (!m_active || !page->loaded() || page->loading())
-            return;
-        ++m_applying;
-        applyTo(page);
-        --m_applying;
-        update();
+        if (m_active && page->loaded() && !page->loading()) {
+            applyTo(page);
+            update();
+        }
     });
     connect(page, &PageController::pathChanged, this, [this] {
         if (m_active) {
@@ -233,17 +225,12 @@ void StreamSelection::attach(PageController *page)
             update();
         }
     });
-    connect(page, &QObject::destroyed, this, [this, page] {
+    connect(page, &QObject::destroyed, this, [this] {
         m_pages.removeAll(nullptr);
-        if (m_tools == page)
-            m_tools = nullptr;
         update();
     });
-    if (m_active && page->loaded() && !page->loading()) {
-        ++m_applying;
+    if (m_active && page->loaded() && !page->loading())
         applyTo(page);
-        --m_applying;
-    }
     update();
 }
 
@@ -252,8 +239,7 @@ void StreamSelection::detach(PageController *page)
     if (!page || !m_pages.contains(page))
         return;
     disconnect(page, nullptr, this, nullptr);
-    m_pages.removeAll(page);
-    m_pages.removeAll(nullptr);
+    m_pages.removeIf([page](const QPointer<PageController> &p) { return !p || p == page; });
     update();
 }
 
@@ -270,28 +256,30 @@ void StreamSelection::applyTo(PageController *page)
     if (!page || !page->loaded())
         return;
     const auto [anchor, focus] = rowsIn(page);
+    ++m_applying;
     if (anchor < 0)
         page->clearSelection();
     else
         page->selectRange(anchor, focus);
+    --m_applying;
 }
 
 void StreamSelection::apply()
 {
-    ++m_applying;
     for (const QPointer<PageController> &page : std::as_const(m_pages))
         applyTo(page);
-    --m_applying;
 }
 
-void StreamSelection::end(PageController *except)
+void StreamSelection::end(PageController *keep, int row)
 {
     m_active = false;
     ++m_applying;
     for (const QPointer<PageController> &page : std::as_const(m_pages)) {
-        if (page && page != except)
+        if (page && page != keep)
             page->clearSelection();
     }
+    if (keep && row >= 0)
+        keep->selectRange(m_anchorRow, row);
     --m_applying;
     m_fileCounts.clear();
     update();
@@ -306,17 +294,7 @@ void StreamSelection::collapseTo(int row)
 {
     // Back in the anchor page: that page alone, from the anchor to `row`.
     PageController *anchorPage = attached(m_anchorPath);
-    m_active = false;
-    ++m_applying;
-    for (const QPointer<PageController> &page : std::as_const(m_pages)) {
-        if (page && page != anchorPage)
-            page->clearSelection();
-    }
-    if (anchorPage)
-        anchorPage->selectRange(m_anchorRow, row);
-    --m_applying;
-    m_fileCounts.clear();
-    update();
+    end(anchorPage, row);
     if (anchorPage)
         Q_EMIT focusMoved(anchorPage, anchorPage->selectedRow(), true);
 }
@@ -346,14 +324,11 @@ bool StreamSelection::extendTo(PageController *page, int row)
         for (const QPointer<PageController> &other : std::as_const(m_pages)) {
             if (!other || other == page || indexOf(other->path()) < 0)
                 continue;
-            if (other->selectionCount() > 0 && other->selectionAnchorRow() >= 0) {
+            // Its selection's anchor end, else the block being edited.
+            const bool selected = other->selectionCount() > 0 && other->selectionAnchorRow() >= 0;
+            fromRow = selected ? other->selectionAnchorRow() : other->editingRow();
+            if (fromRow >= 0) {
                 from = other;
-                fromRow = other->selectionAnchorRow();
-                break;
-            }
-            if (other->editingRow() >= 0) {
-                from = other;
-                fromRow = other->editingRow();
                 break;
             }
         }
@@ -449,11 +424,9 @@ bool StreamSelection::extendBy(PageController *page, int step)
 
 bool StreamSelection::othersSelected(PageController *page) const
 {
-    for (const QPointer<PageController> &other : m_pages) {
-        if (other && other != page && other->selectionCount() > 0)
-            return true;
-    }
-    return false;
+    return std::ranges::any_of(m_pages, [page](const QPointer<PageController> &other) {
+        return other && other != page && other->selectionCount() > 0;
+    });
 }
 
 StreamSelection::Part StreamSelection::partOf(const QString &path, bool withText) const
@@ -569,25 +542,29 @@ QVariantMap StreamSelection::copy(bool plainText)
 void StreamSelection::update()
 {
     int count = 0;
-    PageController *tools = nullptr;
     const auto [lo, hi] = bounds();
-    for (int i = lo; lo >= 0 && i <= hi; ++i) {
-        const QString &path = m_paths.at(i);
-        if (PageController *page = attached(path); page && page->loaded()) {
-            count += page->selectionCount();
-            continue;
+    if (lo >= 0) {
+        const int anchorIndex = indexOf(m_anchorPath);
+        const int focusIndex = indexOf(m_focusPath);
+        for (int i = lo; i <= hi; ++i) {
+            const QString &path = m_paths.at(i);
+            if (PageController *page = attached(path); page && page->loaded()) {
+                count += page->selectionCount();
+                continue;
+            }
+            // The rows of its ends and the direction decide what a page selects (rowsIn()).
+            const QString key = path + u'\n' + QString::number(i == anchorIndex ? m_anchorRow : -1) + u','
+                                + QString::number(i == focusIndex ? m_focusRow : -1)
+                                + (anchorIndex < focusIndex ? u'v' : u'^');
+            int n = m_fileCounts.value(key, -1);
+            if (n < 0) {
+                n = partOf(path, false).count;
+                m_fileCounts.insert(key, n);
+            }
+            count += n;
         }
-        // The rows of its ends and the direction decide what a page selects (rowsIn()).
-        const auto [first, last] = std::pair<int, int>{i == indexOf(m_anchorPath) ? m_anchorRow : -1,
-                                                       i == indexOf(m_focusPath) ? m_focusRow : -1};
-        const bool down = indexOf(m_anchorPath) < indexOf(m_focusPath);
-        const QString key = path + u'\n' + QString::number(first) + u',' + QString::number(last)
-                            + (down ? u'v' : u'^');
-        auto it = m_fileCounts.constFind(key);
-        if (it == m_fileCounts.cend())
-            it = m_fileCounts.insert(key, partOf(path, false).count);
-        count += it.value();
     }
+    PageController *tools = nullptr;
     if (m_active) {
         tools = attached(m_focusPath);
         if (!tools)

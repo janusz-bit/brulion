@@ -166,11 +166,15 @@ Q_SIGNALS:
     void truncatedChanged();
 
 private:
-    void onContentsChange();
-    /// Fixed line heights and the brushes taken off (one edit block), then refresh().
+    /// A change of the document or of a setting: restyle() (`html`: reload()), then refresh();
+    /// nothing during our own changes.
     void process();
+    /// Fixed line heights and the brushes taken off, in one edit block (no undo history).
+    void restyle();
     void applyLineHeight();
     void takeBrushes();
+    /// The rectangles (pillsChanged() when they differ) and their typed lists.
+    void setPills(QList<Pill> pills);
     void detach();
     /// `html` mode: the text set on the document again, its tints taken off, cut to
     /// maximumLineCount lines, the rectangles recomputed.

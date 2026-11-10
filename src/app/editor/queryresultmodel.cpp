@@ -16,7 +16,9 @@
 #include <QDate>
 #include <QUrl>
 
+#include <algorithm>
 #include <cstdlib>
+#include <ranges>
 
 using namespace Qt::StringLiterals;
 
@@ -30,6 +32,17 @@ constexpr int ShowMoreStep = 50;
 bool isOpenStatus(const QString &status)
 {
     return status == u"todo" || status == u"doing";
+}
+
+/// `key` of a host item's `task` or `reminder` map (queryhost.h).
+QVariant itemField(const QVariantMap &item, const QString &map, const QString &key)
+{
+    return item.value(map).toMap().value(key);
+}
+
+QString itemTaskStatus(const QVariantMap &item)
+{
+    return itemField(item, u"task"_s, u"status"_s).toString();
 }
 
 } // namespace
@@ -62,23 +75,21 @@ int QueryResultModel::rowCount(const QModelIndex &parent) const
 
 QHash<int, QByteArray> QueryResultModel::roleNames() const
 {
-    return {{KindRole, "kind"},     {LabelRole, "label"},       {CountRole, "count"},
-            {PathRole, "path"},     {TitleRole, "title"},       {FolderRole, "folder"},
-            {LineRole, "line"},     {TextRole, "text"},         {HtmlRole, "html"},
-            {StatusRole, "status"}, {IsTaskRole, "isTask"},     {BlockIdRole, "blockId"},
-            {DueRole, "due"},       {OverdueRole, "overdue"},   {ReminderRole, "reminder"},
-            {AlarmRole, "alarm"},   {ShowPageRole, "showPage"}, {JournalRole, "journal"},
-            {RawRole, "raw"},       {CellsRole, "cells"}};
+    static const QHash<int, QByteArray> names{
+            {KindRole, "kind"},         {LabelRole, "label"},     {CountRole, "count"},       {PathRole, "path"},
+            {TitleRole, "title"},       {FolderRole, "folder"},   {LineRole, "line"},         {TextRole, "text"},
+            {HtmlRole, "html"},         {StatusRole, "status"},   {IsTaskRole, "isTask"},     {BlockIdRole, "blockId"},
+            {DueRole, "due"},           {OverdueRole, "overdue"}, {ReminderRole, "reminder"}, {AlarmRole, "alarm"},
+            {ShowPageRole, "showPage"}, {JournalRole, "journal"}, {RawRole, "raw"},           {CellsRole, "cells"}};
+    return names;
 }
 
 QVariant QueryResultModel::data(const QModelIndex &index, int role) const
 {
     if (!index.isValid() || index.row() < 0 || index.row() >= m_rows.size())
         return {};
-    Row &r = const_cast<Row &>(m_rows[index.row()]); // html is rendered lazily
+    const Row &r = m_rows.at(index.row());
     const QVariantMap &item = r.item;
-    const QVariantMap task = item.value(u"task"_s).toMap();
-    const QVariantMap reminder = item.value(u"reminder"_s).toMap();
     switch (role) {
     case KindRole: return r.group ? u"group"_s : u"item"_s;
     case LabelRole: return r.group ? item.value(u"label"_s) : QVariant(QString());
@@ -92,7 +103,8 @@ QVariant QueryResultModel::data(const QModelIndex &index, int role) const
         // Dataview rows: their cells as plain text (screen readers, tests).
         if (item.contains(u"cells"_s)) {
             QStringList plain;
-            for (const QString &cell : item.value(u"cells"_s).toStringList())
+            const QStringList cells = item.value(u"cells"_s).toStringList();
+            for (const QString &cell : cells)
                 plain.append(markdown::stripInlineMarkup(cell).simplified());
             return plain.join(u" · "_s);
         }
@@ -105,7 +117,8 @@ QVariant QueryResultModel::data(const QModelIndex &index, int role) const
             r.html = renderItem(item);
             r.cells.clear();
             if (m_type == u"table") {
-                for (const QString &cell : item.value(u"cells"_s).toStringList())
+                const QStringList cells = item.value(u"cells"_s).toStringList();
+                for (const QString &cell : cells)
                     r.cells.append(renderMarkdown(cell));
             }
             r.htmlValid = true;
@@ -114,20 +127,21 @@ QVariant QueryResultModel::data(const QModelIndex &index, int role) const
     case StatusRole: return r.status;
     case IsTaskRole: return !r.group && !r.status.isEmpty();
     case BlockIdRole: return item.value(u"blockId"_s).toString();
-    case DueRole: return task.value(u"due"_s).toString();
+    case DueRole: return itemField(item, u"task"_s, u"due"_s).toString();
     case OverdueRole: {
-        const QString due = task.value(u"due"_s).toString();
+        const QString due = itemField(item, u"task"_s, u"due"_s).toString();
         if (due.isEmpty() || !isOpenStatus(r.status) || !m_controller)
             return false;
         const QDate date = QDate::fromString(due.left(10), u"yyyy-MM-dd"_s);
         return date.isValid() && date < m_controller->currentDateTime().date();
     }
-    case ReminderRole: return reminder.value(u"at"_s).toString();
-    case AlarmRole: return reminder.value(u"alarm"_s).toBool();
+    case ReminderRole: return itemField(item, u"reminder"_s, u"at"_s).toString();
+    case AlarmRole: return itemField(item, u"reminder"_s, u"alarm"_s).toBool();
     case ShowPageRole:
         // Items of this page need no page name; grouped by page, the header names it; Dataview's
         // LIST and TABLE rows name their page themselves.
-        return !r.group && !m_groupedByPage && !item.contains(u"cells"_s) && !(m_controller && item.value(u"path"_s).toString() == m_controller->path());
+        return !r.group && !m_groupedByPage && !item.contains(u"cells"_s)
+               && !(m_controller && item.value(u"path"_s).toString() == m_controller->path());
     case JournalRole: {
         // "YYYY-MM-DD" when the item's page is a daily note (shown as a date), else "".
         const auto date = markdown::journalDateFromPath(item.value(u"path"_s).toString(), m_config);
@@ -145,8 +159,8 @@ QVariantMap QueryResultModel::get(int row) const
         return out;
     const QModelIndex idx = index(row);
     const QHash<int, QByteArray> names = roleNames();
-    for (auto it = names.constBegin(); it != names.constEnd(); ++it)
-        out.insert(QString::fromLatin1(it.value()), data(idx, it.key()));
+    for (const auto &[role, name] : names.asKeyValueRange())
+        out.insert(QString::fromLatin1(name), data(idx, role));
     return out;
 }
 
@@ -166,7 +180,11 @@ void QueryResultModel::setController(PageController *controller)
         connect(m_controller, &PageController::todayChanged, this, &QueryResultModel::invalidateHtml);
         connect(m_controller, &PageController::paletteChanged, this, &QueryResultModel::invalidateHtml);
         connect(m_controller, &PageController::localeChanged, this, &QueryResultModel::invalidateHtml);
-        connect(m_controller, &QObject::destroyed, this, [this] { setController(nullptr); });
+        // Not setController(nullptr): the QPointer is null already when destroyed() comes.
+        connect(m_controller, &QObject::destroyed, this, [this] {
+            connectHost();
+            Q_EMIT controllerChanged();
+        });
     }
     connectHost();
     Q_EMIT controllerChanged();
@@ -260,8 +278,8 @@ void QueryResultModel::hold(QObject *holder)
 
 void QueryResultModel::release(QObject *holder)
 {
-    const auto it = m_holders.find(holder);
-    if (it == m_holders.end())
+    const auto it = m_holders.constFind(holder);
+    if (it == m_holders.cend())
         return;
     disconnect(it.value());
     m_holders.erase(it);
@@ -336,8 +354,7 @@ void QueryResultModel::refresh()
         // Statuses shown ahead of the index are confirmed (or corrected) by the new run.
         for (int k = 0; k < m_rows.size(); ++k) {
             Row &row = m_rows[k];
-            const QString status = row.item.value(u"task"_s).toMap().value(u"status"_s).toString();
-            if (!row.group && row.status != status) {
+            if (const QString status = itemTaskStatus(row.item); !row.group && row.status != status) {
                 row.status = status;
                 Q_EMIT dataChanged(index(k), index(k), {StatusRole, IsTaskRole, OverdueRole});
             }
@@ -362,54 +379,40 @@ void QueryResultModel::rebuildRows()
     beginResetModel();
     m_rows.clear();
     // Grouped by page: the group header names the page, the items need not repeat it.
-    m_groupedByPage = !m_groups.isEmpty();
-    for (const QVariant &g : std::as_const(m_groups)) {
+    m_groupedByPage = !m_groups.isEmpty() && std::ranges::all_of(std::as_const(m_groups), [](const QVariant &g) {
         const QVariantMap group = g.toMap();
-        for (const QVariant &i : group.value(u"items"_s).toList()) {
-            if (i.toMap().value(u"path"_s).toString() != group.value(u"key"_s).toString()) {
-                m_groupedByPage = false;
-                break;
-            }
-        }
-    }
-    const auto addItem = [this](const QVariantMap &item) {
-        Row row;
-        row.item = item;
-        row.status = item.value(u"task"_s).toMap().value(u"status"_s).toString();
-        m_rows.append(row);
-    };
+        const QString key = group.value(u"key"_s).toString();
+        const QVariantList items = group.value(u"items"_s).toList();
+        return std::ranges::all_of(items,
+                                   [&key](const QVariant &i) { return i.toMap().value(u"path"_s).toString() == key; });
+    });
+    // A row for each item, maxItems in all (a group's header comes before its items).
     int shown = 0;
-    if (!m_groups.isEmpty()) {
-        for (const QVariant &g : std::as_const(m_groups)) {
-            if (shown >= m_maxItems)
-                break;
-            const QVariantMap group = g.toMap();
-            const QVariantList groupItems = group.value(u"items"_s).toList();
-            Row header;
-            header.group = true;
-            header.item = {{u"key"_s, group.value(u"key"_s)}, {u"label"_s, group.value(u"label"_s)}};
-            if (m_groupedByPage && !groupItems.isEmpty()) {
-                const QVariantMap first = groupItems.first().toMap();
-                header.item.insert(u"path"_s, first.value(u"path"_s));
-                header.item.insert(u"title"_s, first.value(u"title"_s));
-                header.item.insert(u"folder"_s, first.value(u"folder"_s));
-            }
-            header.count = int(groupItems.size());
-            m_rows.append(header);
-            for (const QVariant &i : groupItems) {
-                if (shown >= m_maxItems)
-                    break;
-                addItem(i.toMap());
-                ++shown;
-            }
-        }
-    } else {
-        for (const QVariant &i : std::as_const(m_items)) {
-            if (shown >= m_maxItems)
-                break;
-            addItem(i.toMap());
+    const auto addItems = [this, &shown](const QVariantList &items) {
+        for (const QVariant &i : items | std::views::take(m_maxItems - shown)) {
+            Row &row = m_rows.emplaceBack();
+            row.item = i.toMap();
+            row.status = itemTaskStatus(row.item);
             ++shown;
         }
+    };
+    if (m_groups.isEmpty())
+        addItems(m_items);
+    for (const QVariant &g : std::as_const(m_groups)) {
+        if (shown >= m_maxItems)
+            break;
+        const QVariantMap group = g.toMap();
+        const QVariantList groupItems = group.value(u"items"_s).toList();
+        Row &header = m_rows.emplaceBack();
+        header.group = true;
+        header.item = {{u"key"_s, group.value(u"key"_s)}, {u"label"_s, group.value(u"label"_s)}};
+        if (m_groupedByPage && !groupItems.isEmpty()) {
+            const QVariantMap first = groupItems.constFirst().toMap();
+            for (const QString &key : {u"path"_s, u"title"_s, u"folder"_s})
+                header.item.insert(key, first.value(key));
+        }
+        header.count = int(groupItems.size());
+        addItems(groupItems);
     }
     endResetModel();
 }
@@ -490,7 +493,8 @@ int QueryResultModel::currentLine(const Row &row) const
     const QString raw = row.item.value(u"raw"_s).toString();
     const QVariantMap result = runHost(queries);
     QVariantList items = result.value(u"items"_s).toList();
-    for (const QVariant &g : result.value(u"groups"_s).toList())
+    const QVariantList groups = result.value(u"groups"_s).toList();
+    for (const QVariant &g : groups)
         items.append(g.toMap().value(u"items"_s).toList());
     int best = -1;
     bool bestSameRaw = false;
@@ -523,17 +527,8 @@ bool QueryResultModel::writeStatus(Row &row, const QString &status)
 
 bool QueryResultModel::toggleTask(int row)
 {
-    if (row < 0 || row >= m_rows.size() || !m_controller)
-        return false;
-    Row &r = m_rows[row];
-    if (r.group || r.status.isEmpty())
-        return false;
-    const QString next = PageController::toggledStatus(r.status);
-    if (!writeStatus(r, next))
-        return false;
-    Q_EMIT dataChanged(index(row), index(row), {LineRole, StatusRole, IsTaskRole, OverdueRole});
-    m_timer.start();
-    return true;
+    // (A task's toggled status is never the one it has: setTaskStatus() writes it.)
+    return row >= 0 && row < m_rows.size() && setTaskStatus(row, PageController::toggledStatus(m_rows.at(row).status));
 }
 
 bool QueryResultModel::setTaskStatus(int row, const QString &status)
@@ -554,7 +549,7 @@ QVariantMap QueryResultModel::open(int row, bool newPane)
 {
     if (row < 0 || row >= m_rows.size() || !m_controller)
         return {};
-    const Row &r = m_rows[row];
+    const Row &r = m_rows.at(row);
     const QString path = r.item.value(u"path"_s).toString();
     if (path.isEmpty())
         return {};
@@ -571,7 +566,7 @@ QVariantMap QueryResultModel::activateLink(int row, const QString &url, bool new
         return open(row, newPane);
     // `[[#Heading]]`, `[[#^id]]` in an item of another page name that page, not the query's.
     if (url.startsWith(u"page:#"_s) && row >= 0 && row < m_rows.size()) {
-        const QString path = m_rows[row].item.value(u"path"_s).toString();
+        const QString path = m_rows.at(row).item.value(u"path"_s).toString();
         if (!path.isEmpty() && path != m_controller->path()) {
             const QString page = QString::fromLatin1(QUrl::toPercentEncoding(paths::stripMarkdownExtension(path)));
             return m_controller->activateLink(-1, u"page:"_s + page + url.mid(5), newPane);

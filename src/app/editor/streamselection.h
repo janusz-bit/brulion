@@ -140,11 +140,13 @@ private:
     /// The same for page `path` whose blocks to select run from `first` to `last`.
     std::pair<int, int> rowsIn(const QString &path, int first, int last) const;
     void apply();
+    /// `page`'s part of the span (its selection signals meanwhile are the span's own: `applying`).
     void applyTo(PageController *page);
     void collapseTo(int row);
     void setFocus(const QString &path, int row, bool reveal);
-    /// The span ends; every attached page but `except` loses its selection.
-    void end(PageController *except);
+    /// The span ends; every attached page but `keep` loses its selection, and `keep` selects from
+    /// the anchor to `row` when `row` >= 0 (collapseTo()).
+    void end(PageController *keep, int row = -1);
     void update();
     void pageChanged(PageController *page);
     Part partOf(const QString &path, bool withText) const;
@@ -169,7 +171,7 @@ private:
     QPointer<PageController> m_tools;
     /// Block counts of pages in the span that are not attached (read once per ends and direction;
     /// dropped when the file changes: EditorHost::fileChanged).
-    mutable QHash<QString, int> m_fileCounts;
+    QHash<QString, int> m_fileCounts;
 };
 
 } // namespace brulion::editor

@@ -15,10 +15,7 @@ namespace brulion::editor {
 
 RichTextLinks::RichTextLinks(QObject *parent) : QObject(parent) { }
 
-RichTextLinks::~RichTextLinks()
-{
-    detach();
-}
+RichTextLinks::~RichTextLinks() = default; // (QObject drops the document's connections to this)
 
 void RichTextLinks::setEnabled(bool on)
 {
@@ -132,10 +129,9 @@ void RichTextLinks::attach(QTextDocument *document)
     m_document = document;
     if (document) {
         // A new text, width or font lays the document out again: the links follow.
-        QAbstractTextDocumentLayout *layout = document->documentLayout();
-        m_connections.append(connect(layout, &QAbstractTextDocumentLayout::documentSizeChanged, this,
-                                     [this](const QSizeF &) { refresh(); }));
-        m_connections.append(connect(document, &QTextDocument::contentsChanged, this, [this] { refresh(); }));
+        m_connections.append(connect(document->documentLayout(), &QAbstractTextDocumentLayout::documentSizeChanged,
+                                     this, &RichTextLinks::refresh));
+        m_connections.append(connect(document, &QTextDocument::contentsChanged, this, &RichTextLinks::refresh));
         m_connections.append(connect(document, &QObject::destroyed, this, [this] {
             m_connections.clear();
             if (!m_links.isEmpty()) {
@@ -190,15 +186,12 @@ void RichTextLinks::refresh()
         if (QTextDocument *doc = source()) {
             out = linksOf(doc, m_lineHeight);
             if (m_maxHeight > 0) {
-                for (auto it = out.begin(); it != out.end();) {
-                    it->rects.removeIf([this](const QRectF &r) { return r.top() >= m_maxHeight - 0.5; });
-                    if (it->rects.isEmpty()) {
-                        it = out.erase(it);
-                    } else {
-                        it->rect = it->rects.constFirst();
-                        ++it;
-                    }
+                for (Link &link : out) {
+                    link.rects.removeIf([this](const QRectF &r) { return r.top() >= m_maxHeight - 0.5; });
+                    if (!link.rects.isEmpty())
+                        link.rect = link.rects.constFirst();
                 }
+                out.removeIf([](const Link &link) { return link.rects.isEmpty(); });
             }
         }
         m_computing = false;
@@ -206,7 +199,7 @@ void RichTextLinks::refresh()
         m_own.reset(); // nothing kept while off
     }
     if (out != m_links) {
-        m_links = out;
+        m_links = std::move(out);
         Q_EMIT linksChanged();
     }
 }
@@ -220,8 +213,8 @@ QList<RichTextLinks::Link> RichTextLinks::linksOf(QTextDocument *document, qreal
     struct Anchor {
         QString href;
         QString text;
-        int from;
-        int to;
+        int from = 0;
+        int to = 0;
     };
     for (QTextBlock block = document->begin(); block.isValid(); block = block.next()) {
         // The block's anchors: adjacent fragments with one href are one link.
@@ -231,9 +224,9 @@ QList<RichTextLinks::Link> RichTextLinks::linksOf(QTextDocument *document, qreal
             if (!fragment.isValid())
                 continue;
             const QTextCharFormat f = fragment.charFormat();
-            if (!f.isAnchor() || f.anchorHref().isEmpty() || f.anchorHref().startsWith(u"task:"))
+            const QString href = f.isAnchor() ? f.anchorHref() : QString();
+            if (href.isEmpty() || href.startsWith(u"task:"))
                 continue;
-            const QString href = f.anchorHref();
             if (!anchors.isEmpty() && anchors.last().to == fragment.position() && anchors.last().href == href) {
                 anchors.last().to += fragment.length();
                 anchors.last().text += fragment.text();
@@ -241,8 +234,6 @@ QList<RichTextLinks::Link> RichTextLinks::linksOf(QTextDocument *document, qreal
                 anchors.append({href, fragment.text(), fragment.position(), fragment.position() + fragment.length()});
             }
         }
-        if (anchors.isEmpty())
-            continue;
         for (const Anchor &a : std::as_const(anchors)) {
             Link link;
             link.href = a.href;
@@ -257,7 +248,7 @@ QList<RichTextLinks::Link> RichTextLinks::linksOf(QTextDocument *document, qreal
             if (link.rects.isEmpty())
                 continue;
             link.rect = link.rects.constFirst();
-            out.append(link);
+            out.append(std::move(link));
         }
     }
     return out;

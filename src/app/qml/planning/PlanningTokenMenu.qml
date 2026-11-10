@@ -43,8 +43,10 @@ Item {
     property bool targetOccurrence: false
     property string targetDate
     property string targetTime
-    property DateChipMenu dateMenu: null
-    property LinkMenu linkMenu: null
+    /// The time of an occurrence (a calendar entry of a recurring reminder): the reminder's, 09:00 for none.
+    readonly property string occurrenceTime: targetTime !== "" ? targetTime : "09:00"
+    property DateChipMenu dateMenu
+    property LinkMenu linkMenu
     // The link whose menu is open (see openLink()).
     property string linkUrl
     property string linkFromPath
@@ -114,12 +116,12 @@ Item {
     /// When the open token's occurrence (a calendar entry of a recurring reminder) rings:
     /// "YYYY-MM-DD HH:mm".
     function occurrenceAt(): string {
-        return targetDate + " " + (targetTime !== "" ? targetTime : "09:00")
+        return targetDate + " " + occurrenceTime
     }
 
     /// The link menu of `url` (a tag:, page:, part: — a path part of a link —, block: or ext: link
-    /// of a task's text written on `fromPath`); `filter(tag)`, when given, makes "Filter by tag"
-    /// its first item.
+    /// of a task's text written on `fromPath`); `filterable` makes "Filter by tag" the first item of
+    /// a tag's menu.
     function openLink(url: string, fromPath: string, item: Item, x: real, y: real, filterable: bool): bool {
         if (!actions)
             return false
@@ -175,17 +177,12 @@ Item {
         case "blockRecurrenceChange":
             dialogs.pickRecurrenceWith("planning", targetRule, "blockRecurrence")
             break
-        case "shift":
-        case "move":
-            // One time of a recurring reminder (the calendar's other dates): snoozed, the series stays.
-            if (targetKind === "reminder" && targetOccurrence) {
-                snoozeOccurrence(action === "shift", 0 + a, 0 + b)
-                break
-            }
-            run(action, a, b)
-            break
         default:
-            run(action, a, b)
+            // One time of a recurring reminder (the calendar's other dates): snoozed, the series stays.
+            if ((action === "shift" || action === "move") && targetKind === "reminder" && targetOccurrence)
+                snoozeOccurrence(action === "shift", 0 + a, 0 + b)
+            else
+                run(action, a, b)
             break
         }
     }
@@ -194,7 +191,7 @@ Item {
         if (shift)
             snooze(DatesHelper.addMinutes(occurrenceAt(), minutes))
         else
-            snooze(DatesHelper.addDays(DatesHelper.today, days) + " " + (targetTime !== "" ? targetTime : "09:00"))
+            snooze(DatesHelper.addDays(DatesHelper.today, days) + " " + occurrenceTime)
     }
     /// The open link in a new tab or window (OpenIn).
     function openLinkIn(target: string): void {

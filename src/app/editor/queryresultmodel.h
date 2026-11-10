@@ -191,10 +191,11 @@ private:
         bool group = false;
         QVariantMap item; ///< the host's item map (items) / { key, label } (groups)
         int count = 0;
-        QString status;   ///< task status shown (follows toggles before the index does)
-        QString html;
-        bool htmlValid = false;
-        QStringList cells; ///< TABLE cells rendered (with htmlValid)
+        QString status; ///< task status shown (follows toggles before the index does)
+        // Rendered when data() is first asked for them.
+        mutable QString html;
+        mutable bool htmlValid = false;
+        mutable QStringList cells; ///< TABLE cells rendered (with htmlValid)
     };
 
     void schedule();

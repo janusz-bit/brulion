@@ -20,30 +20,10 @@ ColumnLayout {
 
     spacing: Theme.space2
 
-    readonly property list<var> statusChoices: [
-        { value: "all", text: qsTr("All tasks") },
-        { value: "open", text: qsTr("Open") },
-        { value: "todo", text: qsTr("To do") },
-        { value: "doing", text: qsTr("In progress") },
-        { value: "deferred", text: qsTr("Waiting") },
-        { value: "done", text: qsTr("Done") },
-        { value: "cancelled", text: qsTr("Cancelled") }
-    ]
-    readonly property list<var> priorityChoices: [
-        { value: "", text: qsTr("Any priority") },
-        { value: "highest", text: qsTr("Highest") },
-        { value: "high", text: qsTr("High") },
-        { value: "medium", text: qsTr("Medium") },
-        { value: "none", text: qsTr("Normal (none)") },
-        { value: "low", text: qsTr("Low") },
-        { value: "lowest", text: qsTr("Lowest") }
-    ]
-    readonly property list<var> sortChoices: [
-        { value: "due", text: qsTr("By date") },
-        { value: "priority", text: qsTr("By priority") },
-        { value: "page", text: qsTr("By page") },
-        { value: "created", text: qsTr("Newest first") }
-    ]
+    // The values of the filter menus (their texts: statusLabel(), priorityLabel(), sortLabel()).
+    readonly property list<string> statusChoices: ["all", "open", "todo", "doing", "deferred", "done", "cancelled"]
+    readonly property list<string> priorityChoices: ["", "highest", "high", "medium", "none", "low", "lowest"]
+    readonly property list<string> sortChoices: ["due", "priority", "page", "created"]
     /// The text of the choice `value` of statusChoices, priorityChoices or sortChoices.
     function statusLabel(value: string): string {
         switch (value) {
@@ -84,6 +64,28 @@ ColumnLayout {
     }
     function withoutMd(name: string): string {
         return Js.endsWith(name, ".md") ? Js.slice(name, 0, -3) : name
+    }
+
+    /// A filter chip: selected with an × to remove it when `filter` is set (it shows `shown`), else
+    /// the `fallback` name of the filter.
+    component FilterChip: BChip {
+        property string filter
+        property string shown: filter
+        property string fallback
+        interactive: true
+        removable: filter !== ""
+        selected: filter !== ""
+        text: filter !== "" ? shown : fallback
+    }
+    /// Fills `menu` with the items of the Instantiator.
+    component MenuFiller: Instantiator {
+        required property BMenu menu
+        onObjectAdded: (index, object) => menu.insertItem(index, object as Item)
+        onObjectRemoved: (index, object) => menu.removeItem(object as Item)
+    }
+    component ChoiceItem: BMenuItem {
+        required property string modelData
+        checkable: true
     }
 
     RowLayout {
@@ -131,50 +133,44 @@ ColumnLayout {
             text: root.statusLabel(root.tasks.statusFilter)
             onClicked: statusMenu.popup(statusChip, 0, statusChip.height)
         }
-        BChip {
+        FilterChip {
             id: tagChip
-            interactive: true
-            removable: root.tasks.tagFilter !== ""
-            selected: root.tasks.tagFilter !== ""
+            filter: root.tasks.tagFilter
+            fallback: qsTr("Tag")
             iconName: "hash"
-            text: root.tasks.tagFilter !== "" ? root.tasks.tagFilter : qsTr("Tag")
             onClicked: {
                 tagPalette.items = root.tasks.paletteChoices("tag")
                 tagPalette.open()
             }
             onRemoveClicked: root.tasks.tagFilter = ""
         }
-        BChip {
-            interactive: true
-            removable: root.tasks.pageFilter !== ""
-            selected: root.tasks.pageFilter !== ""
+        FilterChip {
+            filter: root.tasks.pageFilter
+            shown: root.pageTitle(filter)
+            fallback: qsTr("Page")
             iconName: "file-text"
-            text: root.tasks.pageFilter !== "" ? root.pageTitle(root.tasks.pageFilter) : qsTr("Page")
             onClicked: {
                 pagePalette.items = root.tasks.paletteChoices("page")
                 pagePalette.open()
             }
             onRemoveClicked: root.tasks.pageFilter = ""
         }
-        BChip {
-            interactive: true
-            removable: root.tasks.folderFilter !== ""
-            selected: root.tasks.folderFilter !== ""
+        FilterChip {
+            filter: root.tasks.folderFilter
+            fallback: qsTr("Folder")
             iconName: "folder"
-            text: root.tasks.folderFilter !== "" ? root.tasks.folderFilter : qsTr("Folder")
             onClicked: {
                 folderPalette.items = root.tasks.paletteChoices("folder")
                 folderPalette.open()
             }
             onRemoveClicked: root.tasks.folderFilter = ""
         }
-        BChip {
+        FilterChip {
             id: priorityChip
-            interactive: true
-            removable: root.tasks.priorityFilter !== ""
-            selected: root.tasks.priorityFilter !== ""
+            filter: root.tasks.priorityFilter
+            shown: root.priorityLabel(filter)
+            fallback: qsTr("Priority")
             iconName: "arrow-up"
-            text: root.tasks.priorityFilter !== "" ? root.priorityLabel(root.tasks.priorityFilter) : qsTr("Priority")
             onClicked: priorityMenu.popup(priorityChip, 0, priorityChip.height)
             onRemoveClicked: root.tasks.priorityFilter = ""
         }
@@ -199,50 +195,38 @@ ColumnLayout {
     BMenu {
         id: statusMenu
     }
-    Instantiator {
+    MenuFiller {
+        menu: statusMenu
         model: root.statusChoices
-        delegate: BMenuItem {
-            id: choiceItem
-            required text
-            required property string value
-            checkable: true
-            checked: root.tasks.statusFilter === choiceItem.value
-            onTriggered: root.tasks.statusFilter = choiceItem.value
+        delegate: ChoiceItem {
+            text: root.statusLabel(modelData)
+            checked: root.tasks.statusFilter === modelData
+            onTriggered: root.tasks.statusFilter = modelData
         }
-        onObjectAdded: (index, object) => statusMenu.insertItem(index, object as Item)
-        onObjectRemoved: (index, object) => statusMenu.removeItem(object as Item)
     }
     BMenu {
         id: priorityMenu
     }
-    Instantiator {
+    MenuFiller {
+        menu: priorityMenu
         model: root.priorityChoices
-        delegate: BMenuItem {
-            id: choiceItem
-            required text
-            required property string value
-            checkable: true
-            checked: root.tasks.priorityFilter === choiceItem.value
-            onTriggered: root.tasks.priorityFilter = choiceItem.value
+        delegate: ChoiceItem {
+            text: root.priorityLabel(modelData)
+            checked: root.tasks.priorityFilter === modelData
+            onTriggered: root.tasks.priorityFilter = modelData
         }
-        onObjectAdded: (index, object) => priorityMenu.insertItem(index, object as Item)
-        onObjectRemoved: (index, object) => priorityMenu.removeItem(object as Item)
     }
     BMenu {
         id: sortMenu
     }
-    Instantiator {
+    MenuFiller {
+        menu: sortMenu
         model: root.sortChoices
-        delegate: BMenuItem {
-            id: choiceItem
-            required text
-            required property string value
-            checkable: true
-            checked: root.tasks.sortKey === choiceItem.value
-            onTriggered: root.tasks.sortKey = choiceItem.value
+        delegate: ChoiceItem {
+            text: root.sortLabel(modelData)
+            checked: root.tasks.sortKey === modelData
+            onTriggered: root.tasks.sortKey = modelData
         }
-        onObjectAdded: (index, object) => sortMenu.insertItem(index, object as Item)
-        onObjectRemoved: (index, object) => sortMenu.removeItem(object as Item)
     }
 
     BPalette {

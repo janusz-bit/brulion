@@ -67,19 +67,55 @@ QSize svgSize(QIODevice *device)
     const qint64 start = device->pos();
     if (std::optional<QByteArray> root = svgRootOnly(device)) {
         QBuffer buffer(&*root);
-        buffer.open(QIODevice::ReadOnly);
-        QImageReader reader(&buffer, "svg");
-        const QSize size = readerSize(reader);
-        // Empty: the size comes from the drawing's bounds (no viewBox, no absolute width and
-        // height) — only the whole document has it.
-        if (size.isValid())
-            return size;
+        if (buffer.open(QIODevice::ReadOnly)) {
+            QImageReader reader(&buffer, "svg");
+            // Empty: the size comes from the drawing's bounds (no viewBox, no absolute width and
+            // height) — only the whole document has it.
+            if (const QSize size = readerSize(reader); size.isValid())
+                return size;
+        }
     }
     if (device->size() - start > MaxFullSvgBytes || !device->seek(start))
         return {};
     QImageReader reader(device, "svg");
     return readerSize(reader);
 }
+
+/// What was read from local files, per file, while its modification time and size stay the same
+/// (at most MaxEntries files, then it starts again). The editor's thread only in the app; guarded
+/// anyway (tests, a future indexer thread).
+template<typename Value>
+class FileCache {
+public:
+    /// The cached value of `file` (`info`), else `read()` — cached.
+    template<typename Read>
+    Value get(const QFileInfo &info, const QString &file, Read read)
+    {
+        const QDateTime modified = info.lastModified();
+        {
+            const QMutexLocker lock(&m_mutex);
+            const auto it = m_entries.constFind(file);
+            if (it != m_entries.constEnd() && it->modified == modified && it->bytes == info.size())
+                return it->value;
+        }
+        Value value = read();
+        const QMutexLocker lock(&m_mutex);
+        if (m_entries.size() > MaxEntries)
+            m_entries.clear();
+        m_entries.insert(file, Entry{modified, info.size(), value});
+        return value;
+    }
+
+private:
+    static constexpr qsizetype MaxEntries = 2000;
+    struct Entry {
+        QDateTime modified;
+        qint64 bytes = -1;
+        Value value = {};
+    };
+    QMutex m_mutex;
+    QHash<QString, Entry> m_entries;
+};
 
 } // namespace
 
@@ -105,28 +141,11 @@ QSize localPictureSize(const QString &file)
     const QFileInfo info(file);
     if (!info.isFile())
         return {};
-    struct Entry {
-        QDateTime modified;
-        qint64 bytes = -1;
-        QSize size;
-    };
-    // The editor's thread only in the app; guarded anyway (tests, a future indexer thread).
-    static QMutex mutex;
-    static QHash<QString, Entry> cache;
-    const QDateTime modified = info.lastModified();
-    {
-        const QMutexLocker lock(&mutex);
-        const auto it = cache.constFind(file);
-        if (it != cache.constEnd() && it->modified == modified && it->bytes == info.size())
-            return it->size;
-    }
-    QFile f(file);
-    const QSize size = f.open(QIODevice::ReadOnly) ? pictureSize(&f, file) : QSize();
-    const QMutexLocker lock(&mutex);
-    if (cache.size() > 2000)
-        cache.clear();
-    cache.insert(file, Entry{modified, info.size(), size});
-    return size;
+    static FileCache<QSize> cache;
+    return cache.get(info, file, [&file] {
+        QFile f(file);
+        return f.open(QIODevice::ReadOnly) ? pictureSize(&f, file) : QSize();
+    });
 }
 
 bool localFileIsDrawing(const QString &file)
@@ -136,28 +155,12 @@ bool localFileIsDrawing(const QString &file)
     const QFileInfo info(file);
     if (!info.isFile())
         return false;
-    struct Entry {
-        QDateTime modified;
-        qint64 bytes = -1;
-        bool drawing = false;
-    };
-    static QMutex mutex;
-    static QHash<QString, Entry> cache;
-    const QDateTime modified = info.lastModified();
-    {
-        const QMutexLocker lock(&mutex);
-        const auto it = cache.constFind(file);
-        if (it != cache.constEnd() && it->modified == modified && it->bytes == info.size())
-            return it->drawing;
-    }
-    QFile f(file);
-    const bool drawing = f.open(QIODevice::ReadOnly)
-                         && brulion::drawing::looksLikeDrawingFile(file, f.read(brulion::drawing::HeadBytes));
-    const QMutexLocker lock(&mutex);
-    if (cache.size() > 2000)
-        cache.clear();
-    cache.insert(file, Entry{modified, info.size(), drawing});
-    return drawing;
+    static FileCache<bool> cache;
+    return cache.get(info, file, [&file] {
+        QFile f(file);
+        return f.open(QIODevice::ReadOnly)
+               && brulion::drawing::looksLikeDrawingFile(file, f.read(brulion::drawing::HeadBytes));
+    });
 }
 
 QString drawingExportOf(const QString &file)
@@ -166,9 +169,10 @@ QString drawingExportOf(const QString &file)
         return {};
     // "Szkic.excalidraw.md" → "Szkic.excalidraw.svg", "Szkic.svg" (the plugin's two naming
     // settings); "Plan.md" → "Plan.svg".
+    constexpr QLatin1StringView Excalidraw = ".excalidraw"_L1;
     QStringList stems{file.chopped(3)};
-    if (hasSuffix(stems.first(), ".excalidraw"_L1))
-        stems.append(stems.first().chopped(11));
+    if (hasSuffix(stems.constFirst(), Excalidraw))
+        stems.append(stems.constFirst().chopped(Excalidraw.size()));
     for (const QString &stem : std::as_const(stems)) {
         for (const QLatin1StringView ext : {".svg"_L1, ".png"_L1}) {
             const QString candidate = stem + ext;
@@ -184,40 +188,26 @@ QSize localDrawingSize(const QString &file)
     const QFileInfo info(file);
     if (!info.isFile() || info.size() > brulion::drawing::MaxSceneBytes)
         return {};
-    struct Entry {
-        QDateTime modified;
-        qint64 bytes = -1;
+    struct Preview {
         QSize size;
         bool foreign = false; ///< a drawing Brulion does not draw (its export may stand for it)
     };
-    static QMutex mutex;
-    static QHash<QString, Entry> cache;
-    const QDateTime modified = info.lastModified();
-    std::optional<Entry> entry;
-    {
-        const QMutexLocker lock(&mutex);
-        const auto it = cache.constFind(file);
-        if (it != cache.constEnd() && it->modified == modified && it->bytes == info.size())
-            entry = *it;
-    }
-    if (!entry) {
-        entry = Entry{modified, info.size(), {}, false};
+    static FileCache<Preview> cache;
+    const Preview preview = cache.get(info, file, [&file] {
+        Preview out;
         QFile f(file);
-        if (f.open(QIODevice::ReadOnly)) {
-            const std::optional<brulion::drawing::DrawingFile> read =
-                    brulion::drawing::readDrawingFile(f.read(brulion::drawing::MaxSceneBytes));
-            if (read && read->format != brulion::drawing::FileFormat::Svg) {
-                entry->foreign = !brulion::drawing::editable(read->drawing);
-                const QRectF rect = brulion::drawing::pictureRect(brulion::drawing::previewDrawing(read->drawing));
-                entry->size = QSize(int(std::ceil(rect.width())), int(std::ceil(rect.height())));
-            }
+        if (!f.open(QIODevice::ReadOnly))
+            return out;
+        const std::optional<brulion::drawing::DrawingFile> read =
+                brulion::drawing::readDrawingFile(f.read(brulion::drawing::MaxSceneBytes));
+        if (read && read->format != brulion::drawing::FileFormat::Svg) {
+            out.foreign = !brulion::drawing::editable(read->drawing);
+            const QRectF rect = brulion::drawing::pictureRect(brulion::drawing::previewDrawing(read->drawing));
+            out.size = QSize(int(std::ceil(rect.width())), int(std::ceil(rect.height())));
         }
-        const QMutexLocker lock(&mutex);
-        if (cache.size() > 2000)
-            cache.clear();
-        cache.insert(file, *entry);
-    }
-    if (entry->foreign) {
+        return out;
+    });
+    if (preview.foreign) {
         // A drawing Brulion does not draw: the plugin's export beside it is its preview (looked up
         // every time: it may come or go without the drawing changing).
         const QString exportFile = drawingExportOf(file);
@@ -226,7 +216,7 @@ QSize localDrawingSize(const QString &file)
                 return own;
         }
     }
-    return entry->size;
+    return preview.size;
 }
 
 bool canDecodePictureFormat(const QString &fileName)

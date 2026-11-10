@@ -196,13 +196,13 @@ class PageController : public QObject {
     Q_PROPERTY(bool readOnly READ readOnly WRITE setReadOnly NOTIFY readOnlyChanged FINAL)
     /// The page's properties (see "Page properties" in the file comment): { items: [{ key, source
     /// ("yaml" | "logseq"), type, value (one line), raw (the typed value), items, empty, editable,
-    /// multiline, linkDate }], tags: [{ name, source, property }], aliases: [{ name, source,
-    /// property }] (the page's tags and aliases from its properties, for the page header), canAdd,
-    /// addTarget ("yaml" | "logseq": where a new property goes), hasYaml, hasLogseq, editable (the
-    /// YAML block can be edited safely), problem ("" | "notMapping" | "indented"), visibleRow (the
-    /// first shown properties row; -1: none), addRow (the shown row of the block new properties go
-    /// to; -1: none — that block is hidden, a `brulion`-only frontmatter, or there is none: the
-    /// editor's draft row adds the property) }.
+    /// multiline, linkDate }], tags: [{ name, source, property, editable }], aliases (the same; the
+    /// page's tags and aliases from its properties, for the page header), canAdd, addTarget
+    /// ("yaml" | "logseq": where a new property goes), hasYaml, hasLogseq, editable (the YAML block
+    /// can be edited safely), problem ("" | "notMapping" | "indented"), visibleRow (the first shown
+    /// properties row; -1: none), addRow (the shown row of the block new properties go to; -1:
+    /// none — that block is hidden, a `brulion`-only frontmatter, or there is none: the editor's
+    /// draft row adds the property) }.
     Q_PROPERTY(QVariantMap pageProperties READ pageProperties NOTIFY pagePropertiesChanged FINAL)
     /// The page's look (docs/UI.md "Page icon and cover"), from its properties as they are now:
     /// { icon: { kind: "emoji" | "app" | "" (none), name } (an app icon only when this build has it),
@@ -376,7 +376,7 @@ public:
     /// Value suggestions for property `key`: after "[[" pages (written "[[<link target>]]"); tags
     /// for tags / tag; none for aliases; else the values the notebook has for the key
     /// (EditorHost::propertyValues()). Values the property holds already are left out:
-    /// [{ value, count, kind: "value" | "page" | "tag", title? }].
+    /// [{ value, count, kind: "value" | "page" | "tag", title and path (a page) }].
     Q_INVOKABLE QVariantList suggestPropertyValues(const QString &key, const QString &prefix, int limit = 12) const;
     /// The type `key` has in the notebook ("" unknown) — the type of an empty value. Cached until
     /// the host's index changes.
@@ -559,8 +559,9 @@ public:
     /// when it is not empty, else the selected blocks; {} when nothing is selected.
     Q_INVOKABLE QVariantMap selectionStats(const QString &editSelection = QString()) const;
     /// Copy the selection: Markdown as text/plain plus the host's text/html (EditorHost::renderHtml,
-    /// rendered when another application asks for it: writeClipboard()), or `plainText`; on Linux also the primary selection. Returns { ok, count (visible blocks),
-    /// reason: "empty" | "tooLarge" | "noClipboard" }.
+    /// rendered when another application asks for it: writeClipboard()), or `plainText`; on Linux
+    /// also the primary selection. Returns { ok, count (visible blocks), reason: "empty" |
+    /// "tooLarge" | "noClipboard" }.
     Q_INVOKABLE QVariantMap copySelection(bool plainText = false);
     /// Copy, then delete the selection (one undo step). The cut blocks' ids are kept by the next
     /// paste of this text (a move). copySelection()'s result plus { row } (selected afterwards).
@@ -639,7 +640,8 @@ public:
     /// step, ensureBlockRef()); the heading and page kinds change nothing. Returns { ok, text,
     /// reason }; reason when not ok: "noPage" (no path), "noRow", "notHeading", "sourceMode" (the
     /// blocks are not being edited), "readOnly" (a new id is needed but allowNewBlockIds is
-    /// false), "readingMode" (a new id is needed but the page is readOnly), "noId" (the block cannot carry an id: frontmatter, an unclosed code fence).
+    /// false), "readingMode" (a new id is needed but the page is readOnly), "noId" (the block
+    /// cannot carry an id: frontmatter, an unclosed code fence).
     Q_INVOKABLE QVariantMap linkText(int row, const QString &kind);
     /// linkText() put on the clipboard. Not ok with reason "noClipboard" (and the text) when the
     /// platform has no clipboard or it did not take the text — success is never claimed then.
@@ -942,7 +944,7 @@ public:
     /// of pickImageInBrowser()), linked asynchronously by fileLinkReceiver(). False elsewhere — QML
     /// uses FilePicker and insertFileLinks().
     Q_INVOKABLE bool pickFileLinksInBrowser(int row, int from, int to);
-    /// What a browser pick for "/Plik…" does with the picked files (pickFileLinksInBrowser();
+    /// What a browser pick for "/File…" does with the picked files (pickFileLinksInBrowser();
     /// tests): as pictureReceiver(), each read one imported (the same file reused) and all linked.
     std::function<void(const QList<platform::PickedFile> &)> fileLinkReceiver(int row, int from, int to);
 
@@ -1088,12 +1090,15 @@ private:
     static QVariantMap readOnlyResult();
     void onFileChanged(const QString &path);
     void onEditsDiscarded(const QString &path);
+    void onWebPictureChanged(const QString &url);
     /// Tell the hosts which file this editor shows (EditorHost::editorOpened/editorClosed).
     void showFile(EditorHost *host, const QString &path);
     void markDirty();
     void setDirty(bool dirty);
     void setConflict(bool conflict, const QString &remote = QString());
     QDate today() const;
+    /// What the token edits need besides the text (today, the default reminder time, journals).
+    markdown::TokenEditContext tokenEditContext() const;
     Focus currentFocus() const;
     /// Start/finish a compound command (one undo step).
     void beginCommand();
@@ -1207,6 +1212,14 @@ private:
     void closeLoneFence(quint64 uid);
     /// Insert embeds of stored attachments (see insertAttachment()).
     QVariantMap insertEmbeds(int row, int from, int to, const QStringList &paths, bool newBlock = false);
+    /// Insert `inserted` (embeds) into [from, to) of a text row with blanks around it, else as a
+    /// block of its own after the row (at the end for -1); { row, cursor }.
+    QVariantMap insertEmbedText(int row, int from, int to, const QString &inserted, bool newBlock);
+    /// insertWebPicture(); `inPlace`: [from, to) holds the address already (urlToPicture()), it is
+    /// replaced in any block showing pictures (a quote, a callout too), never moved to a new block.
+    QVariantMap placeWebPicture(int row, int from, int to, const QString &url, bool download, bool inPlace);
+    /// Store the ready (or failed) picture `url` of m_webDownloads.
+    void finishWebDownload(const QString &url, bool ready);
     /// Read and store files as attachments (attachmentFailed() for each one that fails).
     QStringList storeFiles(const QList<QUrl> &urls);
     /// Insert links to stored files (see insertFileLinks()).
@@ -1266,8 +1279,6 @@ private:
     };
     QHash<int, ForeignEdit> m_foreignEdits;
     int m_nextForeignEdit = 1;
-    /// What the token edits need besides the text (today, the default reminder time, journals).
-    markdown::TokenEditContext tokenEditContext() const;
     int m_nextTrackHandle = 1;
     bool m_conflict = false;
     QString m_conflictText;
@@ -1302,15 +1313,6 @@ private:
     QStringList m_webDownloads;
     int m_webStored = 0;
     QStringList m_webFailed;
-    void onWebPictureChanged(const QString &url);
-    /// Insert `inserted` (embeds) into [from, to) of a text row with blanks around it, else as a
-    /// block of its own after the row (at the end for -1); { row, cursor }.
-    QVariantMap insertEmbedText(int row, int from, int to, const QString &inserted, bool newBlock);
-    /// insertWebPicture(); `inPlace`: [from, to) holds the address already (urlToPicture()), it is
-    /// replaced in any block showing pictures (a quote, a callout too), never moved to a new block.
-    QVariantMap placeWebPicture(int row, int from, int to, const QString &url, bool download, bool inPlace);
-    /// Store the ready (or failed) picture `url` of m_webDownloads.
-    void finishWebDownload(const QString &url, bool ready);
     markdown::BlockDocument::Version m_commandBefore;
     Focus m_commandFocusBefore;
     bool m_typingOpen = false;
