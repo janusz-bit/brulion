@@ -19,11 +19,9 @@ std::optional<WidgetAction> widgetActionFromJson(const QJsonObject &json)
     if (action.id.isEmpty())
         return std::nullopt;
     const QString kind = json.value(u"kind"_s).toString(u"task"_s);
-    if (kind == u"task")
-        action.kind = WidgetAction::Kind::Task;
-    else if (kind == u"note")
+    if (kind == u"note")
         action.kind = WidgetAction::Kind::Note;
-    else
+    else if (kind != u"task")
         return std::nullopt;
     action.text = json.value(u"text"_s).toString();
     action.date = planning::parseIsoDate(json.value(u"date"_s).toString());
@@ -54,12 +52,12 @@ QList<WidgetAction> widgetActions(const QJsonArray &array)
 {
     QList<WidgetAction> out;
     QSet<QString> seen;
-    for (const QJsonValue &value : array) {
-        const auto action = widgetActionFromJson(value.toObject());
+    for (const auto &value : array) {
+        auto action = widgetActionFromJson(value.toObject());
         if (!action || seen.contains(action->id))
             continue;
         seen.insert(action->id);
-        out.append(*action);
+        out.append(std::move(*action));
     }
     return out;
 }

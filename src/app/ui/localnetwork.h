@@ -33,6 +33,9 @@ protected:
 /// the factory must outlive the engine).
 class LocalOnlyNetworkFactory : public QQmlNetworkAccessManagerFactory {
 public:
+    LocalOnlyNetworkFactory() = default;
+    Q_DISABLE_COPY_MOVE(LocalOnlyNetworkFactory)
+
     QNetworkAccessManager *create(QObject *parent) override;
 };
 

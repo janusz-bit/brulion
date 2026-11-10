@@ -82,11 +82,14 @@ public:
     /// decodeURIComponent(s): every %XX decoded as UTF-8. Malformed escapes stay as they are
     /// (JavaScript throws a URIError).
     Q_INVOKABLE QString decodeURIComponent(const QString &s) const;
+    /// format.arg(a, b) (QML's String.prototype.arg) in one pass: a "%2" inside `a` (note text)
+    /// stays as it is, which format.arg(a).arg(b) would replace with `b`.
+    Q_INVOKABLE QString arg2(const QString &format, const QString &a, const QString &b) const;
 
     // --- Numbers ---
     /// Number(s): trimmed decimal (or 0x/0o/0b) literal, "" → 0, "Infinity", otherwise NaN.
     Q_INVOKABLE double toNumber(const QString &s) const;
-    /// parseInt(s, 10): the leading decimal integer, NaN when there is none.
+    /// parseInt(s): the leading integer (hexadecimal after "0x"), NaN when there is none.
     Q_INVOKABLE double parseInt(const QString &s) const;
     /// parseFloat(s): the leading decimal number, NaN when there is none.
     Q_INVOKABLE double parseFloat(const QString &s) const;
@@ -117,7 +120,8 @@ public:
     /// with JavaScript's patterns $$, $&, $`, $', $1…$99 (like the QML engine, not $<name>).
     Q_INVOKABLE QString replaceRegExp(const QString &s, const QString &pattern, const QString &flags,
                                       const QString &replacement) const;
-    /// s.split(/pattern/flags) (capture groups are not inserted)
+    /// s.split(/pattern/flags): as in JavaScript, the groups a separator captured come between
+    /// the parts around it.
     Q_INVOKABLE QStringList splitRegExp(const QString &s, const QString &pattern, const QString &flags) const;
 
     // --- Lists (results are new lists; the arguments stay unchanged) ---
@@ -149,6 +153,8 @@ public:
     Q_INVOKABLE QStringList reversedStrings(const QStringList &list) const;
     /// The non-empty strings of `list` (list.filter(s => s !== "")).
     Q_INVOKABLE QStringList nonEmptyStrings(const QStringList &list) const;
+    /// The non-empty strings of `parts` joined with `separator`.
+    Q_INVOKABLE QString joinNonEmpty(const QStringList &parts, const QString &separator) const;
     /// Each string trimmed (list.map(s => s.trim())).
     Q_INVOKABLE QStringList trimmedStrings(const QStringList &list) const;
     /// The strings as a list of values (a list<string> where a list<var> is wanted).

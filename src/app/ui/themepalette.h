@@ -184,15 +184,15 @@ public:
     explicit ThemeColors(QObject *parent = nullptr);
 
     bool dark() const { return m_dark; }
-    void setDark(bool dark);
+    void setDark(bool dark) { setInput(m_dark, dark); }
     QString lightSurface() const { return m_lightSurface; }
-    void setLightSurface(const QString &name);
+    void setLightSurface(const QString &name) { setInput(m_lightSurface, name); }
     QString darkSurface() const { return m_darkSurface; }
-    void setDarkSurface(const QString &name);
+    void setDarkSurface(const QString &name) { setInput(m_darkSurface, name); }
     QString accentName() const { return m_accentName; }
-    void setAccentName(const QString &name);
+    void setAccentName(const QString &name) { setInput(m_accentName, name); }
     QString customAccent() const { return m_customAccent; }
-    void setCustomAccent(const QString &color);
+    void setCustomAccent(const QString &color) { setInput(m_customAccent, color); }
 
     QVariantMap map() const { return m_map; }
     QString bg() const { return token(u"bg"); }
@@ -228,6 +228,16 @@ Q_SIGNALS:
     void colorsChanged();
 
 private:
+    /// `input` = `value`: a change emits inputsChanged, then the colours follow (update()).
+    template<typename T>
+    void setInput(T &input, const T &value)
+    {
+        if (input == value)
+            return;
+        input = value;
+        Q_EMIT inputsChanged();
+        update();
+    }
     QString token(QStringView name) const;
     void update();
 

@@ -56,14 +56,16 @@ QString typeName(const QObject *object)
     return name;
 }
 
-QString collapsed(const QString &text)
+/// A Text, TextEdit or TextInput.
+bool isTextItem(const QObject *object)
 {
-    return text.simplified();
+    return object->inherits("QQuickText") || object->inherits("QQuickTextEdit") || object->inherits("QQuickTextInput");
 }
 
-QString firstChars(const QString &text, qsizetype n)
+/// The item's own rectangle in the window.
+QRectF sceneRect(const QQuickItem *item)
 {
-    return text.size() > n ? text.left(n) : text;
+    return item->mapRectToScene(QRectF(0, 0, item->width(), item->height()));
 }
 
 bool isAncestor(const QQuickItem *ancestor, const QQuickItem *item)
@@ -96,21 +98,20 @@ QString innerText(const QQuickItem *item, int depth = 0)
 {
     if (!item || depth > 6)
         return {};
-    for (const QQuickItem *child : item->childItems()) {
+    const QList<QQuickItem *> children = item->childItems();
+    for (const QQuickItem *child : children) {
         if (!child->isVisible())
             continue;
-        if (child->inherits("QQuickText") || child->inherits("QQuickTextEdit") || child->inherits("QQuickTextInput")) {
-            const QString t = collapsed(child->property("text").toString());
-            if (!t.isEmpty() && !Qt::mightBeRichText(t))
-                return t;
-            if (!t.isEmpty()) {
+        if (isTextItem(child)) {
+            if (const QString t = child->property("text").toString().simplified(); !t.isEmpty()) {
+                if (!Qt::mightBeRichText(t))
+                    return t;
                 QTextDocument doc;
                 doc.setHtml(t);
-                return collapsed(doc.toPlainText());
+                return doc.toPlainText().simplified();
             }
         }
-        const QString inner = innerText(child, depth + 1);
-        if (!inner.isEmpty())
+        if (QString inner = innerText(child, depth + 1); !inner.isEmpty())
             return inner;
     }
     return {};
@@ -139,23 +140,22 @@ bool tapsOnItsText(const QQuickItem *item, const QRectF &scene)
     if (qstrcmp(item->metaObject()->className(), "QQuickItem") != 0 || !item->parentItem())
         return false;
     const auto isText = [](const QQuickItem *t) {
-        return t && (t->inherits("QQuickText") || (t->inherits("QQuickTextEdit") && t->property("readOnly").toBool()));
+        return t->inherits("QQuickText") || (t->inherits("QQuickTextEdit") && t->property("readOnly").toBool());
     };
-    for (const QQuickItem *sibling : item->parentItem()->childItems()) {
+    const auto covers = [&](const QQuickItem *t) { return isText(t) && sameRect(sceneRect(t), scene); };
+    const QList<QQuickItem *> siblings = item->parentItem()->childItems();
+    for (const QQuickItem *sibling : siblings) {
         if (sibling == item || !sibling->isVisible())
             continue;
-        const QQuickItem *text = sibling;
-        if (sibling->inherits("QQuickLoader"))
-            text = qobject_cast<const QQuickItem *>(sibling->property("item").value<QObject *>());
-        QList<const QQuickItem *> candidates{text};
-        if (text && !isText(text)) {
-            for (const QQuickItem *child : text->childItems())
-                candidates.append(child);
-        }
-        for (const QQuickItem *t : std::as_const(candidates)) {
-            if (isText(t) && sameRect(t->mapRectToScene(QRectF(0, 0, t->width(), t->height())), scene))
-                return true;
-        }
+        const QQuickItem *text =
+                sibling->inherits("QQuickLoader")
+                        ? qobject_cast<const QQuickItem *>(sibling->property("item").value<QObject *>())
+                        : sibling;
+        if (!text)
+            continue;
+        const QList<QQuickItem *> children = isText(text) ? QList<QQuickItem *>() : text->childItems();
+        if (covers(text) || std::ranges::any_of(children, covers))
+            return true;
     }
     return false;
 }
@@ -164,11 +164,32 @@ QString targetLabel(const QQuickItem *item)
 {
     for (const char *prop : { "text", "label", "title" }) {
         const QVariant v = item->property(prop);
-        if (v.metaType().id() == QMetaType::QString && !v.toString().trimmed().isEmpty())
-            return firstChars(collapsed(v.toString()), 60);
+        const QString t = v.typeId() == QMetaType::QString ? v.toString().simplified() : QString();
+        if (!t.isEmpty())
+            return t.left(60);
     }
-    const QString name = collapsed(accessibleName(item));
-    return firstChars(name.isEmpty() ? innerText(item) : name, 60);
+    const QString name = accessibleName(item).simplified();
+    return (name.isEmpty() ? innerText(item) : name).left(60);
+}
+
+/// What kind of target `item` is ("" for none): a control, a mouse area taking a button, an
+/// editable field, or an item with an enabled tap handler.
+QString targetKind(const QQuickItem *item, bool enabled)
+{
+    if (item->inherits("QQuickAbstractButton") || item->inherits("QQuickComboBox") || item->inherits("QQuickSlider")
+        || item->inherits("QQuickSpinBox"))
+        return u"button"_s;
+    if (item->inherits("QQuickMouseArea")) {
+        if (enabled && item->property("acceptedButtons").toInt() != 0 && !insideScrollBar(item))
+            return u"mouse"_s;
+    } else if ((item->inherits("QQuickTextInput") || item->inherits("QQuickTextEdit"))
+               && !item->property("readOnly").toBool()) {
+        return u"field"_s;
+    }
+    const auto tapHandler = [](const QObject *child) {
+        return child->inherits("QQuickTapHandler") && child->property("enabled").toBool();
+    };
+    return enabled && std::ranges::any_of(item->children(), tapHandler) ? u"tap"_s : QString();
 }
 
 /// One run of characters of a rich text with the same colours.
@@ -192,18 +213,20 @@ QList<Run> colourRuns(const QTextDocument *doc, const QColor &color, const QColo
             continue;
         QList<QColor> fg(n, color);
         QList<std::optional<QColor>> bg(n);
-        auto apply = [&](qsizetype start, qsizetype length, const QTextCharFormat &format) {
-            const qsizetype end = std::min(n, start + length);
-            for (qsizetype i = std::max<qsizetype>(0, start); i < end; ++i) {
-                const bool anchor = format.isAnchor() || !format.anchorHref().isEmpty();
-                const bool own = format.foreground().style() != Qt::NoBrush;
-                if (anchor && linkColor.isValid() && (!own || format.foreground().color() == paletteLink))
-                    fg[i] = linkColor;
-                else if (own)
-                    fg[i] = format.foreground().color();
-                if (format.background().style() != Qt::NoBrush)
-                    bg[i] = format.background().color();
-            }
+        const auto apply = [&](qsizetype start, qsizetype length, const QTextCharFormat &format) {
+            const qsizetype from = std::max<qsizetype>(0, start);
+            const qsizetype count = std::min(n, start + length) - from;
+            if (count <= 0)
+                return;
+            const QBrush foreground = format.foreground();
+            const bool own = foreground.style() != Qt::NoBrush;
+            const bool anchor = format.isAnchor() || !format.anchorHref().isEmpty();
+            if (anchor && linkColor.isValid() && (!own || foreground.color() == paletteLink))
+                std::fill_n(fg.begin() + from, count, linkColor);
+            else if (own)
+                std::fill_n(fg.begin() + from, count, foreground.color());
+            if (const QBrush background = format.background(); background.style() != Qt::NoBrush)
+                std::fill_n(bg.begin() + from, count, background.color());
         };
         for (auto it = block.begin(); !it.atEnd(); ++it) {
             const QTextFragment fragment = it.fragment();
@@ -211,18 +234,19 @@ QList<Run> colourRuns(const QTextDocument *doc, const QColor &color, const QColo
                 apply(fragment.position() - block.position(), fragment.length(), fragment.charFormat());
         }
         if (const QTextLayout *layout = block.layout()) {
-            for (const QTextLayout::FormatRange &range : layout->formats())
+            const QList<QTextLayout::FormatRange> formats = layout->formats();
+            for (const QTextLayout::FormatRange &range : formats)
                 apply(range.start, range.length, range.format);
         }
         for (qsizetype i = 0; i < n;) {
             qsizetype j = i + 1;
-            while (j < n && fg[j] == fg[i] && bg[j] == bg[i])
+            while (j < n && fg.at(j) == fg.at(i) && bg.at(j) == bg.at(i))
                 ++j;
-            Run run{ text.mid(i, j - i), fg[i], bg[i] };
+            Run run{text.mid(i, j - i), fg.at(i), bg.at(i)};
             if (!runs.isEmpty() && runs.last().color == run.color && runs.last().bg == run.bg)
                 runs.last().text += u' ' + run.text;
             else
-                runs.append(run);
+                runs.append(std::move(run));
             i = j;
         }
     }
@@ -233,18 +257,12 @@ QList<Run> colourRuns(const QTextDocument *doc, const QColor &color, const QColo
 /// one line's height (Text.FixedHeight: lineHeight px; else the font's line spacing × lineHeight).
 int textLines(const QQuickItem *item, const QFont &font)
 {
-    const QVariant counted = item->property("lineCount");
     double line = QFontMetricsF(font).lineSpacing();
-    const QVariant lineHeight = item->property("lineHeight");
-    if (lineHeight.isValid() && lineHeight.toDouble() > 0) {
-        if (item->property("lineHeightMode").toInt() == 1) // Text.FixedHeight
-            line = lineHeight.toDouble();
-        else
-            line *= lineHeight.toDouble();
-    }
+    if (const double lineHeight = item->property("lineHeight").toDouble(); lineHeight > 0)
+        line = item->property("lineHeightMode").toInt() == 1 /* Text.FixedHeight */ ? lineHeight : line * lineHeight;
     const double contentHeight = item->property("contentHeight").toDouble();
     const int estimated = line > 0 ? int(std::lround(contentHeight / line)) : 1;
-    return std::max({ 1, counted.isValid() ? counted.toInt() : 1, estimated });
+    return std::max({1, item->property("lineCount").toInt(), estimated});
 }
 
 struct Record {
@@ -276,25 +294,17 @@ public:
         if (alpha <= 0.01)
             return;
         const bool overlay = inOverlay || item->inherits("QQuickOverlay");
-        QRectF childClip = clip;
-        if (item->clip())
-            childClip = clip.intersected(item->mapRectToScene(item->clipRect()));
-
-        QList<QQuickItem *> children = item->childItems();
-        std::ranges::stable_sort(children, [](const QQuickItem *a, const QQuickItem *b) { return a->z() < b->z(); });
+        const QRectF childClip = item->clip() ? clip.intersected(item->mapRectToScene(item->clipRect())) : clip;
+        // The children by z (none when they are clipped away); negative z: painted before the item.
+        QList<QQuickItem *> children = childClip.isEmpty() ? QList<QQuickItem *>() : item->childItems();
+        std::ranges::stable_sort(children, {}, &QQuickItem::z);
         auto it = children.cbegin();
-        // Negative z: painted before the item itself.
-        for (; it != children.cend() && (*it)->z() < 0; ++it) {
-            if (!childClip.isEmpty())
-                visit(*it, alpha, childClip, overlay, targetAncestor);
-        }
+        for (; it != children.cend() && (*it)->z() < 0; ++it)
+            visit(*it, alpha, childClip, overlay, targetAncestor);
         const int paint = m_paint++;
         const std::optional<QRectF> target = record(item, alpha, clip, overlay, paint, targetAncestor);
-        const QRectF *childTarget = target ? &*target : targetAncestor;
-        for (; it != children.cend(); ++it) {
-            if (!childClip.isEmpty())
-                visit(*it, alpha, childClip, overlay, childTarget);
-        }
+        for (; it != children.cend(); ++it)
+            visit(*it, alpha, childClip, overlay, target ? &*target : targetAncestor);
     }
 
     QJsonObject result(QQuickWindow *window, const QObject *theme)
@@ -311,9 +321,8 @@ public:
         QJsonObject tokens;
         if (theme) {
             for (const char *name : { "fg", "fgMuted", "fgFaint", "bg", "bgElevated", "bgSunken", "accent", "link" }) {
-                const QVariant v = theme->property(name);
-                if (v.canConvert<QColor>() && v.value<QColor>().isValid())
-                    tokens.insert(QString::fromLatin1(name), hexColor(v.value<QColor>()));
+                if (const QColor c = theme->property(name).value<QColor>(); c.isValid())
+                    tokens.insert(QString::fromLatin1(name), hexColor(c));
             }
         }
         return {
@@ -331,7 +340,7 @@ public:
     }
 
 private:
-    /// Records `item` as a text, a target and/or a box; returns its rectangle when it is a target
+    /// Records `item` as a text, a box and/or a target; returns its rectangle when it is a target
     /// (the nearest target ancestor of its children).
     std::optional<QRectF> record(QQuickItem *item, double alpha, const QRectF &clip, bool overlay, int paint,
                                  const QRectF *targetAncestor)
@@ -339,97 +348,69 @@ private:
         const QRectF visible = clip.intersected(m_window);
         if (visible.isEmpty())
             return std::nullopt;
-        const QRectF scene = item->mapRectToScene(QRectF(0, 0, item->width(), item->height()));
+        const QRectF scene = sceneRect(item);
         // MouseArea's own `enabled` hides QQuickItem's (isEnabled() stays true when it is off).
         const bool enabled = item->isEnabled() && item->property("enabled").toBool();
-
-        if (item->inherits("QQuickText") || item->inherits("QQuickTextEdit") || item->inherits("QQuickTextInput"))
+        if (isTextItem(item))
             recordText(item, alpha, visible, paint, enabled);
+        if (item->inherits("QQuickRectangle"))
+            recordBox(item, scene.intersected(visible), alpha, overlay, paint);
+        // The whole hit area (a row scrolled half out of the view is still as large), when any of
+        // it is visible.
+        const QString kind = targetKind(item, enabled);
+        if (kind.isEmpty() || scene.isEmpty() || !scene.intersects(visible))
+            return std::nullopt;
+        if (!targetAncestor || !sameRect(scene, *targetAncestor)) {
+            m_targets.append(Record{
+                    .json = {{u"type"_s, typeName(item)},
+                             {u"name"_s, item->objectName()},
+                             {u"kind"_s, kind},
+                             {u"label"_s, targetLabel(item)},
+                             {u"rect"_s, rectJson(scene)},
+                             {u"enabled"_s, enabled},
+                             {u"inline"_s, kind == u"tap" && tapsOnItsText(item, scene)}},
+                    .item = item,
+                    .rect = scene,
+                    .paint = paint,
+            });
+        }
+        return scene;
+    }
 
-        std::optional<QRectF> target;
-        QString kind;
-        if (item->inherits("QQuickAbstractButton") || item->inherits("QQuickComboBox") || item->inherits("QQuickSlider")
-            || item->inherits("QQuickSpinBox")) {
-            kind = u"button"_s;
-        } else if (item->inherits("QQuickMouseArea")) {
-            if (enabled && item->property("acceptedButtons").toInt() != 0 && !insideScrollBar(item))
-                kind = u"mouse"_s;
-        } else if ((item->inherits("QQuickTextInput") || item->inherits("QQuickTextEdit"))
-                   && !item->property("readOnly").toBool()) {
-            kind = u"field"_s;
+    void recordBox(QQuickItem *item, const QRectF &rect, double alpha, bool overlay, int paint)
+    {
+        const QColor color = item->property("color").value<QColor>();
+        double borderWidth = 0;
+        QColor borderColor;
+        if (const QObject *border = item->property("border").value<QObject *>()) {
+            borderWidth = border->property("width").toDouble();
+            borderColor = border->property("color").value<QColor>();
+            if (!borderColor.isValid() || borderColor.alphaF() < 0.05)
+                borderWidth = 0;
         }
-        if (kind.isEmpty() && enabled) {
-            for (const QObject *child : item->children()) {
-                if (child->inherits("QQuickTapHandler") && child->property("enabled").toBool()) {
-                    kind = u"tap"_s;
-                    break;
-                }
-            }
-        }
-        if (!kind.isEmpty()) {
-            // The whole hit area (a row scrolled half out of the view is still as large), when any
-            // of it is visible.
-            const QRectF hit = scene.intersects(visible) ? scene : QRectF();
-            if (!hit.isEmpty() && !(targetAncestor && sameRect(hit, *targetAncestor))) {
-                Record r;
-                r.item = item;
-                r.rect = hit;
-                r.paint = paint;
-                r.json = {
-                    { u"type"_s, typeName(item) },
-                    { u"name"_s, item->objectName() },
-                    { u"kind"_s, kind },
-                    { u"label"_s, targetLabel(item) },
-                    { u"rect"_s, rectJson(hit) },
-                    { u"enabled"_s, enabled },
-                    { u"inline"_s, kind == u"tap" && tapsOnItsText(item, scene) },
-                };
-                m_targets.append(r);
-                target = hit;
-            } else if (!hit.isEmpty()) {
-                target = hit;
-            }
-        }
-
-        if (item->inherits("QQuickRectangle")) {
-            const QColor color = item->property("color").value<QColor>();
-            double borderWidth = 0;
-            QColor borderColor;
-            if (const QObject *border = item->property("border").value<QObject *>()) {
-                borderWidth = border->property("width").toDouble();
-                borderColor = border->property("color").value<QColor>();
-                if (!borderColor.isValid() || borderColor.alphaF() < 0.05)
-                    borderWidth = 0;
-            }
-            const QRectF rect = scene.intersected(visible);
-            if (!rect.isEmpty() && (color.alphaF() >= 0.05 || borderWidth > 0)) {
-                BoxRecord b;
-                b.item = item;
-                b.rect = rect;
-                b.alpha = color.alphaF() * alpha;
-                b.overlay = overlay;
-                b.paint = paint;
-                b.json = {
-                    { u"type"_s, typeName(item) },
-                    { u"rect"_s, rectJson(rect) },
-                    { u"color"_s, hexColor(color) },
-                    { u"alpha"_s, round2(alpha) },
-                    { u"border"_s, round2(borderWidth) },
-                    { u"borderColor"_s, borderWidth > 0 ? hexColor(borderColor) : QString() },
-                    { u"radius"_s, round2(item->property("radius").toDouble()) },
-                    { u"paint"_s, paint },
-                };
-                m_boxes.append(b);
-            }
-        }
-        return target;
+        if (rect.isEmpty() || !(color.alphaF() >= 0.05 || borderWidth > 0))
+            return;
+        m_boxes.append(BoxRecord{
+                .json = {{u"type"_s, typeName(item)},
+                         {u"rect"_s, rectJson(rect)},
+                         {u"color"_s, hexColor(color)},
+                         {u"alpha"_s, round2(alpha)},
+                         {u"border"_s, round2(borderWidth)},
+                         {u"borderColor"_s, borderWidth > 0 ? hexColor(borderColor) : QString()},
+                         {u"radius"_s, round2(item->property("radius").toDouble())},
+                         {u"paint"_s, paint}},
+                .item = item,
+                .rect = rect,
+                .alpha = color.alphaF() * alpha,
+                .overlay = overlay,
+                .paint = paint,
+        });
     }
 
     void recordText(QQuickItem *item, double alpha, const QRectF &visible, int paint, bool enabled)
     {
         const bool input = item->inherits("QQuickTextInput");
-        const bool edit = item->inherits("QQuickTextEdit");
-        QString raw = item->property(input ? "displayText" : "text").toString();
+        const QString raw = item->property(input ? "displayText" : "text").toString();
         if (raw.trimmed().isEmpty())
             return;
         const QRectF rect = item->mapRectToScene(item->boundingRect()).intersected(visible);
@@ -441,38 +422,36 @@ private:
         // Rich text: its colour runs (links, chips, highlighting).
         QList<Run> runs;
         QString plain = raw;
-        if (edit) {
+        const auto readRich = [&](const QTextDocument *doc) {
+            runs = colourRuns(doc, color, linkColor);
+            plain = doc->toPlainText();
+        };
+        if (item->inherits("QQuickTextEdit")) {
             const auto *document = qobject_cast<QQuickTextDocument *>(item->property("textDocument").value<QObject *>());
-            if (document && document->textDocument()) {
-                runs = colourRuns(document->textDocument(), color, linkColor);
-                plain = document->textDocument()->toPlainText();
-            }
+            if (document && document->textDocument())
+                readRich(document->textDocument());
         } else if (!input) {
             const int format = item->property("textFormat").toInt();
-            const bool rich = format == Qt::RichText || format == 4 /* Text.StyledText */
-                || (format == Qt::AutoText && Qt::mightBeRichText(raw));
-            if (rich) {
+            if (format == Qt::RichText || format == 4 /* Text.StyledText */
+                || (format == Qt::AutoText && Qt::mightBeRichText(raw))) {
                 QTextDocument doc;
                 doc.setHtml(raw);
-                runs = colourRuns(&doc, color, linkColor);
-                plain = doc.toPlainText();
+                readRich(&doc);
             }
         }
-        plain = collapsed(plain);
+        plain = plain.simplified();
         if (plain.isEmpty())
             return;
         // Fragments only when the text is not of one colour.
         QJsonArray fragments;
-        const bool mixed = std::any_of(runs.cbegin(), runs.cend(),
-                                       [&](const Run &r) { return r.color != color || r.bg.has_value(); });
+        const bool mixed = std::ranges::any_of(std::as_const(runs),
+                                               [&](const Run &r) { return r.color != color || r.bg.has_value(); });
         if (mixed) {
             for (const Run &r : std::as_const(runs)) {
-                const QString t = collapsed(r.text);
+                const QString t = r.text.simplified();
                 if (t.isEmpty())
                     continue;
-                QJsonObject f{ { u"text"_s, firstChars(t, 40) },
-                               { u"chars"_s, int(t.size()) },
-                               { u"color"_s, hexColor(r.color) } };
+                QJsonObject f{{u"text"_s, t.left(40)}, {u"chars"_s, int(t.size())}, {u"color"_s, hexColor(r.color)}};
                 if (r.bg)
                     f.insert(u"bg"_s, hexColor(*r.bg));
                 fragments.append(f);
@@ -481,51 +460,42 @@ private:
 
         const QFont font = item->property("font").value<QFont>();
         const double px = font.pixelSize() > 0 ? font.pixelSize() : font.pointSizeF() * 96.0 / 72.0;
-        bool placeholder = false;
-        if (const QQuickItem *parent = item->parentItem()) {
-            if ((parent->inherits("QQuickTextInput") || parent->inherits("QQuickTextEdit"))
-                && parent->property("text").toString().isEmpty()
-                && parent->property("placeholderText").toString() == item->property("text").toString())
-                placeholder = true;
-        }
-        Record r;
-        r.item = item;
-        r.rect = rect;
-        r.paint = paint;
-        r.json = {
-            { u"type"_s, typeName(item) },
-            { u"name"_s, item->objectName() },
-            { u"text"_s, firstChars(plain, 80) },
-            { u"chars"_s, int(plain.size()) },
-            { u"rect"_s, rectJson(rect) },
-            { u"color"_s, hexColor(color) },
-            { u"alpha"_s, round2(alpha) },
-            { u"px"_s, round2(px) },
-            { u"weight"_s, font.weight() },
-            { u"family"_s, QFontInfo(font).family() },
-            { u"lines"_s, textLines(item, font) },
-            { u"enabled"_s, enabled },
-            { u"placeholder"_s, placeholder },
-            { u"paint"_s, paint },
-            { u"fragments"_s, fragments },
-        };
-        m_texts.append(r);
+        const QQuickItem *parent = item->parentItem();
+        const bool placeholder = parent && (parent->inherits("QQuickTextInput") || parent->inherits("QQuickTextEdit"))
+                                 && parent->property("text").toString().isEmpty()
+                                 && parent->property("placeholderText").toString() == item->property("text").toString();
+        m_texts.append(Record{
+                .json = {{u"type"_s, typeName(item)},
+                         {u"name"_s, item->objectName()},
+                         {u"text"_s, plain.left(80)},
+                         {u"chars"_s, int(plain.size())},
+                         {u"rect"_s, rectJson(rect)},
+                         {u"color"_s, hexColor(color)},
+                         {u"alpha"_s, round2(alpha)},
+                         {u"px"_s, round2(px)},
+                         {u"weight"_s, font.weight()},
+                         {u"family"_s, QFontInfo(font).family()},
+                         {u"lines"_s, textLines(item, font)},
+                         {u"enabled"_s, enabled},
+                         {u"placeholder"_s, placeholder},
+                         {u"paint"_s, paint},
+                         {u"fragments"_s, fragments}},
+                .item = item,
+                .rect = rect,
+                .paint = paint,
+        });
     }
 
     void markOccluded(QList<Record> &records) const
     {
         for (Record &r : records) {
             const QPointF centre = r.rect.center();
-            bool occluded = false;
-            for (const BoxRecord &b : m_boxes) {
-                if (b.paint <= r.paint || b.alpha < (b.overlay ? 0.3 : 0.9) || !b.rect.contains(centre))
-                    continue;
-                // Its own background (a child) or a container (an ancestor) does not hide it.
-                if (b.item == r.item || isAncestor(b.item, r.item) || isAncestor(r.item, b.item))
-                    continue;
-                occluded = true;
-                break;
-            }
+            // An opaque box painted later over its centre; its own background (a child) or a
+            // container (an ancestor) does not hide it.
+            const bool occluded = std::ranges::any_of(m_boxes, [&](const BoxRecord &b) {
+                return b.paint > r.paint && b.alpha >= (b.overlay ? 0.3 : 0.9) && b.rect.contains(centre)
+                       && b.item != r.item && !isAncestor(b.item, r.item) && !isAncestor(r.item, b.item);
+            });
             r.json.insert(u"occluded"_s, occluded);
         }
     }
@@ -551,24 +521,20 @@ QJsonObject layoutDump(QQuickWindow *window, const QObject *theme)
 
 bool writeLayoutDump(QQuickWindow *window, const QString &path, const QObject *theme, QString *error)
 {
-    if (!window) {
+    const auto fail = [error](const QString &message) {
         if (error)
-            *error = u"no window"_s;
+            *error = message;
         return false;
-    }
+    };
+    if (!window)
+        return fail(u"no window"_s);
     const QJsonObject dump = layoutDump(window, theme);
     QSaveFile file(path);
-    if (!file.open(QIODevice::WriteOnly)) {
-        if (error)
-            *error = u"%1: %2"_s.arg(path, file.errorString());
-        return false;
-    }
+    if (!file.open(QIODevice::WriteOnly))
+        return fail(u"%1: %2"_s.arg(path, file.errorString()));
     file.write(QJsonDocument(dump).toJson(QJsonDocument::Indented));
-    if (!file.commit()) {
-        if (error)
-            *error = u"%1: %2"_s.arg(path, file.errorString());
-        return false;
-    }
+    if (!file.commit())
+        return fail(u"%1: %2"_s.arg(path, file.errorString()));
     return true;
 }
 

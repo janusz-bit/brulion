@@ -9,8 +9,8 @@ import Brulion
 // title, folder, last change, backlinks, tags. Wide windows show columns (click a column to sort
 // by it, again to reverse); phones show two-line rows and a sort menu. The filter finds titles,
 // aliases and folders without Polish letters ("lodz" → "Łódź"); "Journals" adds the daily
-// notes (the journals folder itself always lists them, without that chip). route.path lists one folder (the top bar's breadcrumb and the sidebar's "Show folder
-// pages" lead here): its pages, with those of its subfolders unless "With subfolders" is off
+// notes (the journals folder itself always lists them, without that chip). route.path lists one
+// folder (the top bar's breadcrumb and the sidebar's "Show folder pages" lead here): its pages, with those of its subfolders unless "With subfolders" is off
 // (remembered per device), and its subfolders as rows above them (at the root: the top-level
 // folders) — a phone's folder browser; the top bar's breadcrumb goes back up. "New page"
 // creates a page (in that folder). The rows' menus move and rename pages and folders through the
@@ -24,8 +24,11 @@ FocusScope {
 
     property var route: ({})
     readonly property string folder: AppController.routeText(route, "path")
+    /// The filter text, trimmed.
+    readonly property string filterText: Js.trim(filterField.text)
+    readonly property bool filtering: filterText !== ""
     /// The folder's direct subfolders: [{ path, name, pages }] (Workspace.subfolders).
-    readonly property list<var> subfolders: Workspace.revision >= 0 && Workspace.journalCount >= 0 && Js.trim(filterField.text) === ""
+    readonly property list<var> subfolders: Workspace.revision >= 0 && Workspace.journalCount >= 0 && !filtering
                                             ? Workspace.subfolders(root.folder) : []
     /// No highlighted matches (a daily note's title).
     readonly property list<var> noMatches: []
@@ -62,6 +65,9 @@ FocusScope {
             // Newest and most linked first; names A–Z.
             pages.descending = key === "modified" || key === "backlinks" || key === "tags"
         }
+        saveSort()
+    }
+    function saveSort(): void {
         AppSettings.setValue("allPages/sort", pages.sortKey + (pages.descending ? ":desc" : ":asc"))
     }
     /// Open row `row`'s page: here, in the side panel (`newPane`), or in `target` ("tab": a new tab).
@@ -126,14 +132,12 @@ FocusScope {
     }
 
     ColumnLayout {
-        id: column
         anchors.fill: parent
         anchors.topMargin: Theme.compact ? Theme.space3 : Theme.space5
         spacing: Theme.space2
 
         // ---- Filter, sort, journals, new page --------------------------------------------------------
         Flow {
-            id: toolbar
             Layout.fillWidth: true
             Layout.leftMargin: root.toolbarMargin
             Layout.rightMargin: root.toolbarMargin
@@ -205,7 +209,7 @@ FocusScope {
             Layout.fillWidth: true
             Layout.leftMargin: root.toolbarMargin + 2
             Layout.rightMargin: root.toolbarMargin
-            text: Js.trim(filterField.text) !== "" ? qsTr("%1 of %n page(s)", "", pages.totalCount).arg(pages.count)
+            text: root.filtering ? qsTr("%1 of %n page(s)", "", pages.totalCount).arg(pages.count)
                                                  : qsTr("%n page(s)", "", pages.totalCount)
             variant: "caption"
             color: Theme.fgFaint
@@ -363,8 +367,7 @@ FocusScope {
                 required property list<string> tags
                 required property list<var> titleMatches
 
-                readonly property string journal: row.journalDate
-                readonly property string shownTitle: journal !== "" ? DatesHelper.formatLong(journal) : row.title
+                readonly property string shownTitle: journalDate !== "" ? DatesHelper.formatLong(journalDate) : row.title
                 /// The page's own icon (docs/UI.md "Page icon and cover"), following its edits.
                 readonly property var pageIcon: Workspace.revision >= 0 ? Workspace.pageIconOf(row.path) : ({})
 
@@ -426,14 +429,14 @@ FocusScope {
                                 spacing: Theme.space2
                                 BPageIcon {
                                     icon: row.pageIcon
-                                    fallback: row.journal !== "" ? "calendar-days" : "file-text"
+                                    fallback: row.journalDate !== "" ? "calendar-days" : "file-text"
                                     size: Theme.iconSizeSm
                                     color: Theme.fgFaint
                                 }
                                 ContentHighlightText {
                                     Layout.fillWidth: true
                                     source: row.shownTitle
-                                    positions: row.journal !== "" ? root.noMatches : row.titleMatches
+                                    positions: row.journalDate !== "" ? root.noMatches : row.titleMatches
                                     font.weight: Theme.weightMedium
                                 }
                             }
@@ -490,7 +493,7 @@ FocusScope {
                             ContentHighlightText {
                                 Layout.fillWidth: true
                                 source: row.shownTitle
-                                positions: row.journal !== "" ? root.noMatches : row.titleMatches
+                                positions: row.journalDate !== "" ? root.noMatches : row.titleMatches
                                 font.weight: Theme.weightMedium
                                 font.pixelSize: Theme.textMd
                             }
@@ -514,17 +517,17 @@ FocusScope {
                 anchors.centerIn: parent
                 width: Math.min(parent.width - 2 * Theme.space6, implicitWidth)
                 visible: pages.count === 0 && Workspace.ready && root.subfolders.length === 0
-                iconName: Js.trim(filterField.text) !== "" ? "search" : "files"
-                title: Js.trim(filterField.text) !== "" ? qsTr("No page matches “%1”").arg(Js.trim(filterField.text))
+                iconName: root.filtering ? "search" : "files"
+                title: root.filtering ? qsTr("No page matches “%1”").arg(root.filterText)
                                                       : root.folder !== "" ? qsTr("This folder has no pages") : qsTr("No pages yet")
-                description: Js.trim(filterField.text) !== ""
+                description: root.filtering
                              ? qsTr("The filter looks at titles, aliases and folders. Full-text search finds words inside notes.")
                              : qsTr("Pages are Markdown files in the notebook folder. Create one, or link to a new page with [[Name]] anywhere.")
-                actionText: Js.trim(filterField.text) !== "" ? qsTr("Search inside notes") : qsTr("New page")
-                actionIcon: Js.trim(filterField.text) !== "" ? "search" : "plus"
+                actionText: root.filtering ? qsTr("Search inside notes") : qsTr("New page")
+                actionIcon: root.filtering ? "search" : "plus"
                 onActionTriggered: {
-                    if (Js.trim(filterField.text) !== "")
-                        AppController.search(Js.trim(filterField.text))
+                    if (root.filtering)
+                        AppController.search(root.filterText)
                     else
                         newPage.openIn(root.folder)
                 }
@@ -561,7 +564,7 @@ FocusScope {
             iconName: pages.descending ? "arrow-up" : "arrow-down"
             onTriggered: {
                 pages.descending = !pages.descending
-                AppSettings.setValue("allPages/sort", pages.sortKey + (pages.descending ? ":desc" : ":asc"))
+                root.saveSort()
             }
         }
     }

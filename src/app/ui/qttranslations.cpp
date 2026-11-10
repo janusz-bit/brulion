@@ -5,6 +5,8 @@
 #include <QLibraryInfo>
 #include <QTranslator>
 
+#include <algorithm>
+
 using namespace Qt::StringLiterals;
 
 namespace brulion::ui {
@@ -23,7 +25,7 @@ QStringList QtTranslations::catalogs()
 
 int QtTranslations::setLanguage(const QString &language)
 {
-    for (Loaded &l : m_loaded)
+    for (const Loaded &l : m_loaded)
         QCoreApplication::removeTranslator(l.translator.get());
     m_loaded.clear();
     // Qt's source texts are English: nothing to load for it.
@@ -31,7 +33,7 @@ int QtTranslations::setLanguage(const QString &language)
         return 0;
     const QString lang = language.left(2);
     const QStringList folders{u":/i18n/qt"_s, QLibraryInfo::path(QLibraryInfo::TranslationsPath)};
-    for (const QString &name : catalogs()) {
+    for (const QStringList names = catalogs(); const QString &name : names) {
         for (const QString &folder : folders) {
             const QString file = folder + u'/' + name + u'_' + lang + u".qm"_s;
             if (!QFileInfo::exists(file))
@@ -49,11 +51,8 @@ int QtTranslations::setLanguage(const QString &language)
 
 QString QtTranslations::loadedFrom(const QString &name) const
 {
-    for (const Loaded &l : m_loaded) {
-        if (l.name == name)
-            return l.file;
-    }
-    return {};
+    const auto it = std::ranges::find(m_loaded, name, &Loaded::name);
+    return it != m_loaded.end() ? it->file : QString();
 }
 
 } // namespace brulion::ui

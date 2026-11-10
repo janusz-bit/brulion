@@ -194,7 +194,6 @@ FocusScope {
                     selectionBar: true
                     onClicked: root.select(v.index)
                 }
-
             }
             Rectangle {
                 visible: root.wide
@@ -268,7 +267,6 @@ FocusScope {
                     Layout.fillHeight: true
                     BEmptyState {
                         anchors.centerIn: parent
-                        visible: history.count > 0
                         compact: true
                         iconName: "git-compare"
                         title: qsTr("Choose a version")

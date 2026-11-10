@@ -23,15 +23,12 @@ QStringList installBundledFonts()
 {
     static const QStringList families = [] {
         QStringList out;
-        for (const QString &file : bundledFontFiles()) {
-            const int id = QFontDatabase::addApplicationFont(file);
-            if (id < 0)
-                continue;
-            for (const QString &family : QFontDatabase::applicationFontFamilies(id)) {
-                if (!out.contains(family))
-                    out.append(family);
-            }
+        const QStringList files = bundledFontFiles();
+        for (const QString &file : files) {
+            if (const int id = QFontDatabase::addApplicationFont(file); id >= 0)
+                out += QFontDatabase::applicationFontFamilies(id);
         }
+        out.removeDuplicates(); // each family once, where it first came
         return out;
     }();
     return families;

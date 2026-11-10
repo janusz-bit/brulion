@@ -8,10 +8,15 @@
 #include <chrono>
 
 using namespace Qt::StringLiterals;
+using namespace std::chrono_literals;
 
 namespace brulion::ui {
 
 namespace {
+
+using Freq = dates::RecurrenceRule::Freq;
+
+constexpr Freq kFreqs[] = {Freq::Day, Freq::Week, Freq::Month, Freq::Year};
 
 QString g_defaultLocale = u"pl"_s;
 QString g_defaultFixedNow;
@@ -31,35 +36,29 @@ QDate parseDate(const QString &text)
     return dates::parseIsoDate(QStringView(text).trimmed()).value_or(QDate());
 }
 
-QString freqName(dates::RecurrenceRule::Freq f)
+QString freqName(Freq f)
 {
     switch (f) {
-    case dates::RecurrenceRule::Freq::Day: return u"day"_s;
-    case dates::RecurrenceRule::Freq::Week: return u"week"_s;
-    case dates::RecurrenceRule::Freq::Month: return u"month"_s;
-    case dates::RecurrenceRule::Freq::Year: return u"year"_s;
+    case Freq::Day: return u"day"_s;
+    case Freq::Week: return u"week"_s;
+    case Freq::Month: return u"month"_s;
+    case Freq::Year: return u"year"_s;
     }
     return {};
 }
 
 std::optional<dates::RecurrenceRule> ruleFromMap(const QVariantMap &map)
 {
-    dates::RecurrenceRule rule;
-    const QString freq = map.value(u"freq"_s).toString();
-    if (freq == u"day")
-        rule.freq = dates::RecurrenceRule::Freq::Day;
-    else if (freq == u"week")
-        rule.freq = dates::RecurrenceRule::Freq::Week;
-    else if (freq == u"month")
-        rule.freq = dates::RecurrenceRule::Freq::Month;
-    else if (freq == u"year")
-        rule.freq = dates::RecurrenceRule::Freq::Year;
-    else
+    const auto freq = std::ranges::find(kFreqs, map.value(u"freq"_s).toString(), freqName);
+    if (freq == std::ranges::end(kFreqs))
         return std::nullopt;
+    dates::RecurrenceRule rule;
+    rule.freq = *freq;
     bool ok = false;
     const int interval = map.value(u"interval"_s, 1).toInt(&ok);
     rule.interval = ok ? interval : 1;
-    for (const QVariant &d : map.value(u"weekdays"_s).toList())
+    const QVariantList weekdays = map.value(u"weekdays"_s).toList();
+    for (const QVariant &d : weekdays)
         rule.weekdays.append(d.toInt());
     const int monthDay = map.value(u"monthDay"_s).toInt();
     if (monthDay > 0)
@@ -72,13 +71,10 @@ std::optional<dates::RecurrenceRule> ruleFromMap(const QVariantMap &map)
 
 QVariantMap ruleToMap(const dates::RecurrenceRule &rule)
 {
-    QVariantList weekdays;
-    for (int d : rule.weekdays)
-        weekdays.append(d);
     return {
             {u"freq"_s, freqName(rule.freq)},
             {u"interval"_s, rule.interval},
-            {u"weekdays"_s, weekdays},
+            {u"weekdays"_s, QVariantList(rule.weekdays.cbegin(), rule.weekdays.cend())},
             {u"monthDay"_s, rule.monthDay.value_or(0)},
             {u"lastDayOfMonth"_s, rule.lastDayOfMonth},
             {u"weekdaysOnly"_s, rule.weekdaysOnly},
@@ -159,8 +155,7 @@ void DatesHelper::scheduleMidnight()
     const QDateTime now = QDateTime::currentDateTime();
     const QDateTime next(now.date().addDays(1), QTime(0, 0, 1));
     // Re-check at least hourly: the clock or the time zone may jump (suspend, travel).
-    const qint64 ms = std::clamp<qint64>(now.msecsTo(next), 1000, 3600 * 1000);
-    m_midnight.start(std::chrono::milliseconds(ms));
+    m_midnight.start(std::clamp<std::chrono::milliseconds>(std::chrono::milliseconds(now.msecsTo(next)), 1s, 1h));
 }
 
 bool DatesHelper::english(const QString &locale) const
@@ -273,11 +268,8 @@ QVariantMap DatesHelper::parseRule(const QString &text) const
 
 QStringList DatesHelper::nextOccurrences(const QVariant &rule, const QString &fromSpec, int count) const
 {
-    std::optional<dates::RecurrenceRule> parsed;
-    if (rule.typeId() == QMetaType::QString)
-        parsed = dates::parseRecurrence(rule.toString());
-    else
-        parsed = ruleFromMap(rule.toMap());
+    const auto parsed =
+            rule.typeId() == QMetaType::QString ? dates::parseRecurrence(rule.toString()) : ruleFromMap(rule.toMap());
     const auto from = dates::parseDateSpec(fromSpec);
     QStringList out;
     if (!parsed || !from)
@@ -296,14 +288,12 @@ QStringList DatesHelper::nextOccurrences(const QVariant &rule, const QString &fr
 QStringList DatesHelper::weekdayNames(const QString &form, const QString &locale) const
 {
     const auto loc = toUiLocale(english(locale));
+    const bool narrow = form == u"narrow";
+    const auto nameForm = narrow || form == u"full" ? dates::NameForm::Nominative : dates::NameForm::Short;
     QStringList out;
     for (int d = 1; d <= 7; ++d) {
-        if (form == u"narrow") {
-            out.append(dates::weekdayName(d, loc, dates::NameForm::Nominative).left(1).toUpper());
-        } else {
-            out.append(
-                    dates::weekdayName(d, loc, form == u"full" ? dates::NameForm::Nominative : dates::NameForm::Short));
-        }
+        const QString name = dates::weekdayName(d, loc, nameForm);
+        out.append(narrow ? name.left(1).toUpper() : name);
     }
     return out;
 }
@@ -360,8 +350,7 @@ QString DatesHelper::addMinutes(const QString &spec, int minutes) const
     const auto parsed = dates::parseDateSpec(spec);
     if (!parsed)
         return {};
-    const QDateTime dt = parsed->toLocalDateTime().addSecs(qint64(minutes) * 60);
-    return dt.toString(u"yyyy-MM-dd HH:mm"_s);
+    return parsed->toLocalDateTime().addSecs(qint64(minutes) * 60).toString(u"yyyy-MM-dd HH:mm"_s);
 }
 
 int DatesHelper::dayOfWeek(const QString &date) const
@@ -394,9 +383,7 @@ QString DatesHelper::normalizeTime(const QString &text) const
     const auto m = re.match(text.trimmed());
     if (!m.hasMatch())
         return {};
-    const int h = m.captured(1).toInt();
-    const int min = m.captured(2).isEmpty() ? 0 : m.captured(2).toInt();
-    const QTime time(h, min);
+    const QTime time(m.capturedView(1).toInt(), m.capturedView(2).toInt()); // no minutes: 0
     return time.isValid() ? time.toString(u"HH:mm"_s) : QString();
 }
 
@@ -437,7 +424,6 @@ QString DatesHelper::repeatKind(const QString &text) const
     const auto r = dates::parseRecurrence(text);
     if (!r)
         return u"none"_s;
-    using Freq = dates::RecurrenceRule::Freq;
     if (r->interval == 1 && !r->whenDone && !r->monthDay.value_or(0) && !r->lastDayOfMonth) {
         if (r->freq == Freq::Day)
             return r->weekdaysOnly ? u"weekdays"_s : u"daily"_s;
@@ -472,22 +458,19 @@ QList<int> DatesHelper::ruleWeekdays(const QString &text) const
 QVariantMap DatesHelper::makeRule(const QString &freq, int interval, const QList<int> &weekdays,
                                   bool weekdaysOnly) const
 {
-    QVariantList days;
-    for (int d : weekdays)
-        days.append(d);
-    return {{u"freq"_s, freq}, {u"interval"_s, interval}, {u"weekdays"_s, days}, {u"weekdaysOnly"_s, weekdaysOnly}};
+    return {{u"freq"_s, freq},
+            {u"interval"_s, interval},
+            {u"weekdays"_s, QVariantList(weekdays.cbegin(), weekdays.cend())},
+            {u"weekdaysOnly"_s, weekdaysOnly}};
 }
 
 QStringList DatesHelper::weekdayNamesFrom(int weekStart, const QString &form, const QString &locale) const
 {
     const QStringList names = weekdayNames(form, locale);
-    QStringList out;
-    if (names.size() != 7)
-        return out;
-    // JavaScript's names[(weekStart - 1 + i) % 7] (a weekStart out of 1 … 7 wraps the same way).
-    for (int i = 0; i < 7; ++i)
-        out.append(names.at(((((weekStart - 1 + i) % 7) + 7) % 7)));
-    return out;
+    // names[(weekStart - 1 + i) mod 7] for i = 0 … 6: a weekStart out of 1 … 7 wraps (with no
+    // overflow near INT_MIN / INT_MAX).
+    const int first = (weekStart % 7 + 6) % 7;
+    return names.sliced(first) + names.first(first);
 }
 
 QList<int> DatesHelper::toggledWeekday(const QList<int> &days, int day) const

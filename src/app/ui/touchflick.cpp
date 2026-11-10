@@ -92,8 +92,7 @@ private:
         // At the window, position() is in the window's (= the Qt Quick scene's) coordinates.
         const QPointF pos = point.position();
         const auto t = qint64(event->timestamp());
-        switch (event->type()) {
-        case QEvent::TouchBegin: {
+        if (event->type() == QEvent::TouchBegin) {
             m_active = true;
             m_releasing = false;
             m_single = event->pointCount() == 1;
@@ -102,47 +101,44 @@ private:
             m_pointId = point.id();
             m_samples.press(t, pos);
             m_catching.clear();
-            for (const QPointer<TouchFlick> &flick : listeners()) {
+            // A copy: a listener's reaction (moving the content) may create or destroy others.
+            const QList<QPointer<TouchFlick>> flicks(m_flicks.cbegin(), m_flicks.cend());
+            for (const QPointer<TouchFlick> &flick : flicks) {
                 if (flick && flick->touchPressed(window, pos) && m_single)
                     m_catching.append(flick);
             }
-            break;
+            return;
         }
-        case QEvent::TouchUpdate:
-            if (!m_active || window != m_window || device != m_device)
-                return;
-            if (event->pointCount() != 1 || point.id() != m_pointId) {
-                m_single = false;
-                endCatches();
-                return;
-            }
-            if (point.state() != QEventPoint::State::Updated)
-                return;
-            m_samples.move(t, pos, point.velocity());
-            // Every move until each catch is over: with touch compression (Qt Quick's default)
-            // the moves that arrive within one frame reach Flickable as one, so the move it skips
-            // can be the sum of several (a slow frame while the fling ran into new rows).
-            if (!m_catching.isEmpty()) {
-                const QList<QPointer<TouchFlick>> catching = m_catching;
-                for (const QPointer<TouchFlick> &flick : catching) {
-                    if (!flick || !flick->touchMoved(window, pos))
-                        m_catching.removeAll(flick);
-                }
-            }
-            break;
-        case QEvent::TouchEnd:
-            if (!m_active || window != m_window || device != m_device)
-                return;
+        // A move or the release of the stroke that press began.
+        if (!m_active || window != m_window || device != m_device)
+            return;
+        const bool samePoint = event->pointCount() == 1 && point.id() == m_pointId;
+        if (event->type() == QEvent::TouchEnd) {
             m_active = false;
             endCatches();
-            if (!m_single || event->pointCount() != 1 || point.id() != m_pointId)
+            if (!m_single || !samePoint)
                 return;
             m_samples.release(t, pos);
             // Flickable starts its flick while this release is delivered, right after this filter.
             m_releasing = true;
             QMetaObject::invokeMethod(this, [this] { m_releasing = false; }, Qt::QueuedConnection);
-            break;
-        default: break;
+            return;
+        }
+        if (!samePoint) {
+            m_single = false;
+            endCatches();
+            return;
+        }
+        if (point.state() != QEventPoint::State::Updated)
+            return;
+        m_samples.move(t, pos, point.velocity());
+        // Every move until each catch is over: with touch compression (Qt Quick's default)
+        // the moves that arrive within one frame reach Flickable as one, so the move it skips
+        // can be the sum of several (a slow frame while the fling ran into new rows).
+        const QList<QPointer<TouchFlick>> catching = m_catching;
+        for (const QPointer<TouchFlick> &flick : catching) {
+            if (!flick || !flick->touchMoved(window, pos))
+                m_catching.removeAll(flick);
         }
     }
 
@@ -160,9 +156,6 @@ private:
                 flick->touchCatchEnded();
         }
     }
-
-    // A copy: a listener's reaction (moving the content) may create or destroy others.
-    QList<QPointer<TouchFlick>> listeners() const { return {m_flicks.cbegin(), m_flicks.cend()}; }
 
     TouchVelocityEstimator m_samples;
     QPointer<QWindow> m_window;

@@ -35,14 +35,14 @@ enum class FallbackFontPolicy {
 
 /// What happened to one bundled font.
 struct FallbackFontReport {
-    QString family;           ///< "Brulion Emoji", "Brulion Math"
-    QString probe;            ///< the characters it is for: brulionEmoji(), brulionSymbols()
-    QString missingBefore;    ///< probe characters drawn as boxes before (when `checked`)
-    QString missingAfter;     ///< … and afterwards: empty when the fallback works
-    bool checked = false;     ///< the probe was laid out before installing (the emoji font's)
-    bool installed = false;   ///< an application fallback family (Common/Latin; the browser: all)
-    bool emojiFamily = false; ///< also the application emoji family (Qt >= 6.9)
-    bool loaded = false;      ///< an application font (false: not needed, or not in this build)
+    QString family = {};        ///< "Brulion Emoji", "Brulion Math"
+    QString probe = {};         ///< the characters it is for: brulionEmoji(), brulionSymbols()
+    QString missingBefore = {}; ///< probe characters drawn as boxes before (when `checked`)
+    QString missingAfter = {};  ///< … and afterwards: empty when the fallback works
+    bool checked = false;       ///< the probe was laid out before installing (the emoji font's)
+    bool installed = false;     ///< an application fallback family (Common/Latin; the browser: all)
+    bool emojiFamily = false;   ///< also the application emoji family (Qt >= 6.9)
+    bool loaded = false;        ///< an application font (false: not needed, or not in this build)
 };
 
 /// The emoji Brulion writes into notes or shows (reminders, alarms, the task fields):

@@ -75,13 +75,14 @@ public:
     /// with the conflict's own terminator ("\r\n" files stay "\r\n").
     Q_INVOKABLE QString resolveHunks(const QVariantList &hunks, const QVariantList &choices) const;
 
-    /// Escaped rich text (white-space preserved) of `segments` with changed parts highlighted.
     /// The indexes of the "conflict" hunks in `hunks` (conflictHunks()'s shape).
     Q_INVOKABLE QList<int> conflictIndexes(const QVariantList &hunks) const;
     /// resolveHunks() with the choices as two lists, one entry per conflict: the choice ("" counts
     /// as "ours") and the manual text.
     Q_INVOKABLE QString resolveHunksWith(const QVariantList &hunks, const QStringList &choices,
                                          const QStringList &texts) const;
+    /// Escaped rich text (white-space preserved) of `segments` with the changed parts on the
+    /// `highlight` background colour.
     Q_INVOKABLE QString segmentsHtml(const QVariantList &segments, const QString &highlight) const;
 
 private:

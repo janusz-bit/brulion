@@ -20,11 +20,6 @@ void Later::restart()
     Q_EMIT runningChanged();
 }
 
-void Later::start()
-{
-    restart();
-}
-
 void Later::stop()
 {
     if (!m_pending)

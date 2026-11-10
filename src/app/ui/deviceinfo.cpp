@@ -126,15 +126,14 @@ QStringList DeviceInfo::fontFamilies(bool fixedOnly) const
 
 bool DeviceInfo::hasFontFamily(const QString &family) const
 {
-    return !family.trimmed().isEmpty() && QFontDatabase::hasFamily(family.trimmed());
+    const QString name = family.trimmed();
+    return !name.isEmpty() && QFontDatabase::hasFamily(name);
 }
 
 bool DeviceInfo::hasTouchScreen() const
 {
     const auto devices = QInputDevice::devices();
-    return std::any_of(devices.cbegin(), devices.cend(), [](const QInputDevice *device) {
-        return device->type() == QInputDevice::DeviceType::TouchScreen;
-    });
+    return std::ranges::find(devices, QInputDevice::DeviceType::TouchScreen, &QInputDevice::type) != devices.end();
 }
 
 } // namespace brulion::ui

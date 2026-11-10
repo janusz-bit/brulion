@@ -17,7 +17,6 @@
 
 #include <algorithm>
 #include <cstdio>
-#include <cstring>
 
 using namespace Qt::StringLiterals;
 
@@ -54,23 +53,22 @@ void applyDefaultLocale(const QString &language)
 void DevTools::applyEarlyArguments(int argc, char **argv)
 {
     for (int i = 1; i < argc; ++i) {
-        const char *arg = argv[i];
-        const char *value = nullptr;
-        if (std::strcmp(arg, "--open") == 0)
+        const QByteArrayView arg(argv[i]);
+        if (arg == "--open")
             break; // files from here on (main.cpp, notebook::splitOpenArguments)
-        if (std::strcmp(arg, "--scale") == 0 && i + 1 < argc)
-            value = argv[i + 1];
-        else if (std::strncmp(arg, "--scale=", 8) == 0)
-            value = arg + 8;
-        if (value) {
-            const QByteArray factor(value);
-            bool ok = false;
-            const double f = factor.toDouble(&ok);
-            if (ok && f >= 0.5 && f <= 6.0)
-                qputenv("QT_SCALE_FACTOR", factor);
-            else
-                std::fprintf(stderr, "brulion: ignoring invalid --scale %s\n", value);
-        }
+        QByteArray factor;
+        if (arg == "--scale" && i + 1 < argc)
+            factor = argv[i + 1];
+        else if (arg.startsWith("--scale="))
+            factor = arg.sliced(8).toByteArray();
+        else
+            continue;
+        bool ok = false;
+        const double f = factor.toDouble(&ok);
+        if (ok && f >= 0.5 && f <= 6.0)
+            qputenv("QT_SCALE_FACTOR", factor);
+        else
+            std::fprintf(stderr, "brulion: ignoring invalid --scale %s\n", factor.constData());
     }
 }
 
@@ -85,8 +83,7 @@ DevTools::DevTools(const QStringList &arguments, QObject *parent) : QObject(pare
     m_touch = arguments.contains(u"--touch"_s);
     m_reducedMotion = arguments.contains(u"--reduced-motion"_s);
     m_testSlowdown = std::max(1, qEnvironmentVariableIntValue("BRULION_TEST_SLOWDOWN"));
-    if (std::any_of(arguments.cbegin(), arguments.cend(),
-                    [](const QString &arg) { return arg.startsWith(u"--scroll-probe"_s); }))
+    if (std::ranges::any_of(arguments, [](const QString &arg) { return arg.startsWith(u"--scroll-probe"_s); }))
         m_probeArguments = arguments;
 
     const QString theme = valueAfter(arguments, u"--theme"_s);
@@ -139,18 +136,16 @@ DevTools::~DevTools()
         g_instance = nullptr;
 }
 
-DevTools *DevTools::create(QQmlEngine *qmlEngine, QJSEngine *jsEngine)
+DevTools *DevTools::create(QQmlEngine *, QJSEngine *)
 {
-    Q_UNUSED(qmlEngine);
     if (g_instance) {
         QJSEngine::setObjectOwnership(g_instance, QJSEngine::CppOwnership);
         return g_instance;
     }
     // No instance from main() (e.g. QML tooling): defaults, owned by this engine only.
     auto *tools = new DevTools(QStringList{});
-    g_instance = nullptr;
+    g_instance = nullptr; // its constructor registered it: another engine must not share (and delete) it
     QJSEngine::setObjectOwnership(tools, QJSEngine::JavaScriptOwnership);
-    Q_UNUSED(jsEngine);
     return tools;
 }
 
@@ -172,7 +167,8 @@ void DevTools::attach(QQmlApplicationEngine *engine)
 {
     m_engine = engine;
     connect(engine, &QQmlApplicationEngine::objectCreated, this, [this](QObject *object, const QUrl &) {
-        auto *window = qobject_cast<QQuickWindow *>(object);
+        // A QPointer: a window deleted before the delayed shot fails it rather than being used.
+        const QPointer<QQuickWindow> window = qobject_cast<QQuickWindow *>(object);
         if (!window)
             return;
         if (m_size.isValid())
@@ -181,7 +177,7 @@ void DevTools::attach(QQmlApplicationEngine *engine)
             // In front, as a user sees it: an X server without a window manager (Xvfb) never
             // activates a window by itself, and an inactive app pauses the graph's layout.
             window->requestActivate();
-            QTimer::singleShot(m_delayMs, this, [this, object] { takeScreenshot(object); });
+            QTimer::singleShot(m_delayMs, this, [this, window] { takeScreenshot(window); });
         }
     });
     // --scroll-probe: frame-by-frame measurements of scrolling (scrollprobe.h).
@@ -197,9 +193,8 @@ void DevTools::holdScreenshot(bool hold)
         m_screenshotReleased = true;
 }
 
-void DevTools::takeScreenshot(QObject *root)
+void DevTools::takeScreenshot(const QPointer<QQuickWindow> &window)
 {
-    auto *window = qobject_cast<QQuickWindow *>(root);
     if (!window) {
         std::fprintf(stderr, "brulion: --screenshot: no window\n");
         QCoreApplication::exit(1);
@@ -212,7 +207,7 @@ void DevTools::takeScreenshot(QObject *root)
         if (!m_screenshotHeld)
             m_screenshotReleased = false;
         m_screenshotHeldMs += kPollMs;
-        QTimer::singleShot(kPollMs, this, [this, root] { takeScreenshot(root); });
+        QTimer::singleShot(kPollMs, this, [this, window] { takeScreenshot(window); });
         return;
     }
     if (m_screenshotHeld)

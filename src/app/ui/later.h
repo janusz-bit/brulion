@@ -28,7 +28,7 @@ public:
     /// triggered() once the event loop is back (once, however often it is asked for meanwhile).
     Q_INVOKABLE void restart();
     /// The same as restart() (Timer's name).
-    Q_INVOKABLE void start();
+    Q_INVOKABLE void start() { restart(); }
     /// A pending call does not happen.
     Q_INVOKABLE void stop();
 

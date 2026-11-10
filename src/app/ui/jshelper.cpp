@@ -1,18 +1,17 @@
 #include "jshelper.h"
 
 #include <QDateTime>
-
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonValue>
 #include <QLocale>
-#include <QSet>
 #include <QUrl>
 
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
 #include <limits>
+#include <numeric>
 
 using namespace Qt::StringLiterals;
 
@@ -29,38 +28,40 @@ bool isJsSpace(QChar c)
     return c.isSpace() || c.unicode() == 0xFEFF;
 }
 
-qsizetype jsTrimStartIndex(const QString &s)
+qsizetype jsTrimStartIndex(QStringView s)
 {
-    qsizetype i = 0;
-    while (i < s.size() && isJsSpace(s.at(i)))
-        ++i;
-    return i;
+    return std::ranges::find_if_not(s, isJsSpace) - s.begin();
 }
 
-qsizetype jsTrimEndIndex(const QString &s)
+qsizetype jsTrimEndIndex(QStringView s)
 {
-    qsizetype e = s.size();
-    while (e > 0 && isJsSpace(s.at(e - 1)))
-        --e;
-    return e;
+    return std::ranges::find_if_not(s.rbegin(), s.rend(), isJsSpace).base() - s.begin();
+}
+
+/// The value of an ASCII digit or letter as a digit of base 36 (a and A = 10 … z and Z = 35);
+/// 99, more than any base allows, for every other character.
+int digitValue(char16_t c)
+{
+    if (c >= u'0' && c <= u'9')
+        return c - u'0';
+    if (c >= u'a' && c <= u'z')
+        return c - u'a' + 10;
+    if (c >= u'A' && c <= u'Z')
+        return c - u'A' + 10;
+    return 99;
 }
 
 /// A relative index of slice() / splice(): negative counts from the end, clamped to [0, size].
 qsizetype relativeIndex(qsizetype i, qsizetype size)
 {
-    if (i < 0)
-        return std::max<qsizetype>(0, size + i);
-    return std::min(i, size);
+    return i < 0 ? std::max<qsizetype>(0, size + i) : std::min(i, size);
 }
 
 QString padding(qsizetype count, const QString &fill)
 {
     if (count <= 0 || fill.isEmpty())
         return {};
-    QString out;
-    out.reserve(count);
-    while (out.size() < count)
-        out += fill;
+    QString out = fill.repeated((count + fill.size() - 1) / fill.size());
     out.truncate(count);
     return out;
 }
@@ -121,28 +122,23 @@ QString expandReplacement(const QString &replacement, const QRegularExpressionMa
             out += u'$';
             ++i;
         } else if (n == u'&') {
-            out += m.captured(0);
+            out += m.capturedView(0);
             ++i;
         } else if (n == u'`') {
-            out += s.left(m.capturedStart(0));
+            out += QStringView(s).left(m.capturedStart(0));
             ++i;
         } else if (n == u'\'') {
-            out += s.mid(m.capturedEnd(0));
+            out += QStringView(s).mid(m.capturedEnd(0));
             ++i;
-        } else if (n.isDigit() && n.unicode() < 0x80) {
-            int index = n.digitValue();
-            int used = 1;
-            if (i + 2 < replacement.size() && replacement.at(i + 2).isDigit()
-                && replacement.at(i + 2).unicode() < 0x80) {
-                const int two = index * 10 + replacement.at(i + 2).digitValue();
-                if (two >= 1 && two <= groups) {
-                    index = two;
-                    used = 2;
-                }
-            }
-            if (index >= 1 && index <= groups) {
-                out += m.captured(index);
-                i += used;
+        } else if (const int first = digitValue(n.unicode()); first < 10) {
+            // $nn when group nn exists, else $n (ECMAScript's GetSubstitution).
+            const int second = i + 2 < replacement.size() ? digitValue(replacement.at(i + 2).unicode()) : 99;
+            if (const int two = first * 10 + second; second < 10 && two >= 1 && two <= groups) {
+                out += m.capturedView(two);
+                i += 2;
+            } else if (first >= 1 && first <= groups) {
+                out += m.capturedView(first);
+                ++i;
             } else {
                 out += c;
             }
@@ -160,36 +156,27 @@ QString jsNumberToString(double x)
         return u"NaN"_s;
     if (x == 0)
         return u"0"_s;
+    if (x < 0)
+        return u'-' + jsNumberToString(-x);
     if (std::isinf(x))
-        return x < 0 ? u"-Infinity"_s : u"Infinity"_s;
-    QString sign;
-    if (x < 0) {
-        sign = u"-"_s;
-        x = -x;
-    }
+        return u"Infinity"_s;
     // "d.ddde±XX": the digits and the exponent of the shortest representation.
     const QString e = QString::number(x, 'e', QLocale::FloatingPointShortest);
     const qsizetype ePos = e.indexOf(u'e');
     QString digits = e.left(ePos);
     digits.remove(u'.');
-    const int exponent = e.mid(ePos + 1).toInt();
     const int k = int(digits.size());
-    const int n = exponent + 1;
-    QString out;
-    if (k <= n && n <= 21) {
-        out = digits + QString(n - k, u'0');
-    } else if (0 < n && n <= 21) {
-        out = digits.left(n) + u'.' + digits.mid(n);
-    } else if (-6 < n && n <= 0) {
-        out = u"0."_s + QString(-n, u'0') + digits;
-    } else {
-        const int shown = n - 1;
-        out = digits.left(1);
-        if (k > 1)
-            out += u'.' + digits.mid(1);
-        out += u'e' + QString(shown < 0 ? u"-"_s : u"+"_s) + QString::number(std::abs(shown));
-    }
-    return sign + out;
+    const int n = QStringView(e).sliced(ePos + 1).toInt() + 1;
+    if (k <= n && n <= 21)
+        return digits + QString(n - k, u'0');
+    if (0 < n && n <= 21)
+        return digits.left(n) + u'.' + digits.mid(n);
+    if (-6 < n && n <= 0)
+        return u"0."_s + QString(-n, u'0') + digits;
+    QString out = digits.left(1);
+    if (k > 1)
+        out += u'.' + digits.mid(1);
+    return out + (n > 0 ? u"e+"_s : u"e-"_s) + QString::number(std::abs(n - 1));
 }
 
 } // namespace
@@ -310,14 +297,8 @@ QString JsHelper::trimEnd(const QString &s) const
 
 QStringList JsHelper::split(const QString &s, const QString &separator) const
 {
-    if (separator.isEmpty()) {
-        QStringList out;
-        out.reserve(s.size());
-        for (const QChar c : s)
-            out.append(QString(c));
-        return out;
-    }
-    return s.split(separator, Qt::KeepEmptyParts);
+    // An empty separator: Qt's parts are "", every UTF-16 code unit and "" again.
+    return s.split(separator, separator.isEmpty() ? Qt::SkipEmptyParts : Qt::KeepEmptyParts);
 }
 
 QString JsHelper::replace(const QString &s, const QString &search, const QString &replacement) const
@@ -371,24 +352,24 @@ QString JsHelper::encodeURIComponent(const QString &s) const
 QString JsHelper::decodeURIComponent(const QString &s) const
 {
     // (QByteArray::fromPercentEncoding() also decodes escapes without two hex digits.)
-    const auto hex = [](char c) {
-        return c >= '0' && c <= '9'   ? c - '0'
-               : c >= 'a' && c <= 'f' ? c - 'a' + 10
-               : c >= 'A' && c <= 'F' ? c - 'A' + 10
-                                      : -1;
-    };
     const QByteArray in = s.toUtf8();
+    const auto hex = [&in](qsizetype at) { return digitValue(uchar(in.at(at))); };
     QByteArray out;
     out.reserve(in.size());
     for (qsizetype i = 0; i < in.size(); ++i) {
-        if (in.at(i) == '%' && i + 2 < in.size() && hex(in.at(i + 1)) >= 0 && hex(in.at(i + 2)) >= 0) {
-            out.append(char(hex(in.at(i + 1)) * 16 + hex(in.at(i + 2))));
+        if (in.at(i) == '%' && i + 2 < in.size() && hex(i + 1) < 16 && hex(i + 2) < 16) {
+            out.append(char(hex(i + 1) * 16 + hex(i + 2)));
             i += 2;
         } else {
             out.append(in.at(i));
         }
     }
     return QString::fromUtf8(out);
+}
+
+QString JsHelper::arg2(const QString &format, const QString &a, const QString &b) const
+{
+    return format.arg(a, b);
 }
 
 // --- Numbers ---
@@ -404,21 +385,15 @@ double JsHelper::toNumber(const QString &s) const
         return -std::numeric_limits<double>::infinity();
     if (t.size() > 2 && t.at(0) == u'0') {
         int base = 0;
-        const QChar p = t.at(1).toLower();
-        if (p == u'x')
-            base = 16;
-        else if (p == u'o')
-            base = 8;
-        else if (p == u'b')
-            base = 2;
+        switch (t.at(1).toLower().unicode()) {
+        case u'x': base = 16; break;
+        case u'o': base = 8; break;
+        case u'b': base = 2; break;
+        }
         if (base) {
             double value = 0;
             for (qsizetype i = 2; i < t.size(); ++i) {
-                const int d = t.at(i).isDigit() && t.at(i).unicode() < 0x80
-                                      ? t.at(i).digitValue()
-                                      : (t.at(i).toLower() >= u'a' && t.at(i).toLower() <= u'z'
-                                                 ? t.at(i).toLower().unicode() - 'a' + 10
-                                                 : 99);
+                const int d = digitValue(t.at(i).unicode());
                 if (d >= base)
                     return kNaN;
                 value = value * base + d;
@@ -429,24 +404,18 @@ double JsHelper::toNumber(const QString &s) const
     static const QRegularExpression decimal(u"^[+-]?(?:[0-9]+\\.?[0-9]*|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?$"_s);
     if (!decimal.match(t).hasMatch())
         return kNaN;
-    bool ok = false;
-    const double value = QLocale::c().toDouble(t, &ok);
-    if (ok)
-        return value;
-    // QLocale refuses overflow ("1e400"): JavaScript gives ±Infinity, an underflow 0.
-    const double strtodValue = std::strtod(t.toLatin1().constData(), nullptr);
-    return strtodValue;
+    // An overflow ("1e400") gives ±Infinity and an underflow 0, as in JavaScript: QLocale returns
+    // them (and reports a failure). Not std::strtod(): it reads the decimal point of the locale
+    // Qt applies from the environment on Unix ("1.5e400" was 1 under pl_PL).
+    return QLocale::c().toDouble(t);
 }
 
 double JsHelper::parseInt(const QString &s) const
 {
     qsizetype i = jsTrimStartIndex(s);
-    double sign = 1;
-    if (i < s.size() && (s.at(i) == u'+' || s.at(i) == u'-')) {
-        if (s.at(i) == u'-')
-            sign = -1;
+    const double sign = i < s.size() && s.at(i) == u'-' ? -1 : 1;
+    if (i < s.size() && (s.at(i) == u'+' || s.at(i) == u'-'))
         ++i;
-    }
     int base = 10;
     if (i + 1 < s.size() && s.at(i) == u'0' && (s.at(i + 1) == u'x' || s.at(i + 1) == u'X')) {
         base = 16;
@@ -455,14 +424,7 @@ double JsHelper::parseInt(const QString &s) const
     double value = 0;
     bool any = false;
     for (; i < s.size(); ++i) {
-        const char16_t c = s.at(i).unicode();
-        int d = 99;
-        if (c >= u'0' && c <= u'9')
-            d = c - u'0';
-        else if (c >= u'a' && c <= u'z')
-            d = c - u'a' + 10;
-        else if (c >= u'A' && c <= u'Z')
-            d = c - u'A' + 10;
+        const int d = digitValue(s.at(i).unicode());
         if (d >= base)
             break;
         value = value * base + d;
@@ -493,14 +455,11 @@ bool JsHelper::isFinite(double x) const
 
 QString JsHelper::toFixed(double x, int digits) const
 {
-    digits = std::clamp(digits, 0, 100);
     if (std::isnan(x))
         return u"NaN"_s;
     if (std::abs(x) >= 1e21)
         return jsNumberToString(x);
-    if (x == 0)
-        x = 0; // -0 prints as "0"
-    return QString::number(x, 'f', digits);
+    return QString::number(x == 0 ? 0.0 : x, 'f', std::clamp(digits, 0, 100)); // -0 prints as "0"
 }
 
 QString JsHelper::numberToString(double x) const
@@ -523,8 +482,7 @@ double JsHelper::dateNow() const
 const QRegularExpression &JsHelper::regExp(const QString &pattern, const QString &flags) const
 {
     const QString key = flags + u'/' + pattern;
-    auto it = m_regExps.constFind(key);
-    if (it != m_regExps.constEnd())
+    if (const auto it = m_regExps.constFind(key); it != m_regExps.constEnd())
         return *it;
     QRegularExpression::PatternOptions options = QRegularExpression::NoPatternOption;
     if (flags.contains(u'i'))
@@ -554,9 +512,8 @@ QStringList JsHelper::match(const QString &s, const QString &pattern, const QStr
     const QRegularExpression &re = regExp(pattern, flags);
     QStringList out;
     if (flags.contains(u'g')) {
-        QRegularExpressionMatchIterator it = re.globalMatch(s);
-        while (it.hasNext())
-            out.append(it.next().captured(0));
+        for (const QRegularExpressionMatch &m : re.globalMatch(s))
+            out.append(m.captured(0));
         return out;
     }
     const QRegularExpressionMatch m = re.match(s);
@@ -703,14 +660,8 @@ QStringList JsHelper::sortedStrings(const QStringList &list) const
 
 QStringList JsHelper::uniqueStrings(const QStringList &list) const
 {
-    QStringList out;
-    QSet<QString> seen;
-    for (const QString &s : list) {
-        if (!seen.contains(s)) {
-            seen.insert(s);
-            out.append(s);
-        }
-    }
+    QStringList out = list;
+    out.removeDuplicates(); // keeps the first of each
     return out;
 }
 
@@ -723,12 +674,14 @@ QStringList JsHelper::reversedStrings(const QStringList &list) const
 
 QStringList JsHelper::nonEmptyStrings(const QStringList &list) const
 {
-    QStringList out;
-    for (const QString &s : list) {
-        if (!s.isEmpty())
-            out.append(s);
-    }
+    QStringList out = list;
+    out.removeIf([](const QString &s) { return s.isEmpty(); });
     return out;
+}
+
+QString JsHelper::joinNonEmpty(const QStringList &parts, const QString &separator) const
+{
+    return nonEmptyStrings(parts).join(separator);
 }
 
 QStringList JsHelper::trimmedStrings(const QStringList &list) const
@@ -742,26 +695,18 @@ QStringList JsHelper::trimmedStrings(const QStringList &list) const
 
 QVariantList JsHelper::fromStrings(const QStringList &strings) const
 {
-    QVariantList out;
-    out.reserve(strings.size());
-    for (const QString &s : strings)
-        out.append(s);
-    return out;
+    return QVariantList(strings.cbegin(), strings.cend());
 }
 
 QVariantList JsHelper::filled(int count, const QVariant &value) const
 {
-    QVariantList out;
-    for (int i = 0; i < count; ++i)
-        out.append(value);
-    return out;
+    return QVariantList(std::max(count, 0), value);
 }
 
 QList<int> JsHelper::range(int count) const
 {
-    QList<int> out;
-    for (int i = 0; i < count; ++i)
-        out.append(i);
+    QList<int> out(std::max(count, 0));
+    std::iota(out.begin(), out.end(), 0);
     return out;
 }
 
@@ -775,8 +720,7 @@ QStringList JsHelper::keys(const QVariantMap &map) const
 QVariantMap JsHelper::merged(const QVariantMap &map, const QVariantMap &changes) const
 {
     QVariantMap out = map;
-    for (auto it = changes.constBegin(); it != changes.constEnd(); ++it)
-        out.insert(it.key(), it.value());
+    out.insert(changes); // the values of `changes` win
     return out;
 }
 
@@ -803,10 +747,8 @@ QString JsHelper::stringify(const QVariant &value) const
 {
     if (!value.isValid())
         return {};
-    const QJsonDocument doc(QJsonArray{QJsonValue::fromVariant(value)});
-    const QByteArray json = doc.toJson(QJsonDocument::Compact);
-    // "[…]" → "…"
-    return QString::fromUtf8(json.mid(1, json.size() - 2));
+    const QByteArray json = QJsonDocument(QJsonArray{QJsonValue::fromVariant(value)}).toJson(QJsonDocument::Compact);
+    return QString::fromUtf8(QByteArrayView(json).sliced(1, json.size() - 2)); // "[…]" → "…"
 }
 
 } // namespace brulion::ui

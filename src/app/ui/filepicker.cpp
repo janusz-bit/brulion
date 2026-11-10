@@ -24,6 +24,9 @@
 #include <QStyleFactory>
 #endif
 
+#include <type_traits>
+#include <utility>
+
 using namespace Qt::StringLiterals;
 
 namespace brulion::ui {
@@ -34,6 +37,16 @@ FilePicker::BackendFactory &backendFactory()
 {
     static FilePicker::BackendFactory factory;
     return factory;
+}
+
+/// `member = value` when they differ; whether it changed (the caller signals it then).
+template<typename T>
+bool assignIfChanged(T &member, const std::type_identity_t<T> &value)
+{
+    if (member == value)
+        return false;
+    member = value;
+    return true;
 }
 
 /// Whether a picker can start in `folder`: an existing local folder; Android's document URLs
@@ -79,26 +92,19 @@ public:
 
     bool show(const FilePickerRequest &request, QWindow *parent) override
     {
-        const QSharedPointer<QFileDialogOptions> options = QFileDialogOptions::create();
+        // A QSharedPointer: what QPlatformFileDialogHelper::setOptions() takes.
+        const auto options = QFileDialogOptions::create();
         switch (request.mode) {
-        case FilePicker::OpenFile:
-            options->setFileMode(QFileDialogOptions::ExistingFile);
-            options->setAcceptMode(QFileDialogOptions::AcceptOpen);
-            break;
-        case FilePicker::OpenFiles:
-            options->setFileMode(QFileDialogOptions::ExistingFiles);
-            options->setAcceptMode(QFileDialogOptions::AcceptOpen);
-            break;
+        case FilePicker::OpenFile: options->setFileMode(QFileDialogOptions::ExistingFile); break;
+        case FilePicker::OpenFiles: options->setFileMode(QFileDialogOptions::ExistingFiles); break;
         case FilePicker::OpenFolder:
             options->setFileMode(QFileDialogOptions::Directory);
-            options->setAcceptMode(QFileDialogOptions::AcceptOpen);
             options->setOption(QFileDialogOptions::ShowDirsOnly);
             break;
-        case FilePicker::SaveFile:
-            options->setFileMode(QFileDialogOptions::AnyFile);
-            options->setAcceptMode(QFileDialogOptions::AcceptSave);
-            break;
+        case FilePicker::SaveFile: options->setFileMode(QFileDialogOptions::AnyFile); break;
         }
+        options->setAcceptMode(request.mode == FilePicker::SaveFile ? QFileDialogOptions::AcceptSave
+                                                                    : QFileDialogOptions::AcceptOpen);
         options->setWindowTitle(request.title);
         if (!request.nameFilters.isEmpty()) {
             options->setNameFilters(request.nameFilters);
@@ -203,10 +209,9 @@ public:
 
     void hide() override
     {
-        QFileDialog *dialog = m_dialog.data();
+        QFileDialog *dialog = std::exchange(m_dialog, nullptr);
         if (!dialog)
             return;
-        m_dialog.clear();
         disconnect(dialog, nullptr, this, nullptr);
         dialog->setAttribute(Qt::WA_DeleteOnClose, false);
         dialog->hide();
@@ -280,7 +285,7 @@ QPalette widgetDialogPalette(bool dark, const QVariantMap &colors)
             return QColor(rgb->r, rgb->g, rgb->b);
         const Rgb h{highlight.red(), highlight.green(), highlight.blue()};
         const Rgb ink{0x2b, 0x0a, 0x05};
-        return contrast(h, {255, 255, 255}) >= contrast(h, ink) ? QColor(Qt::white) : QColor(0x2b0a05);
+        return contrast(h, {255, 255, 255}) >= contrast(h, ink) ? QColor(Qt::white) : QColor(ink.r, ink.g, ink.b);
     }();
     QPalette p;
     p.setColor(QPalette::Window, color(u"bg"_s));
@@ -413,59 +418,44 @@ void FilePicker::releaseBackend()
 
 void FilePicker::setVisible(bool visible)
 {
-    if (m_visible == visible)
-        return;
-    m_visible = visible;
-    Q_EMIT visibleChanged();
+    if (assignIfChanged(m_visible, visible))
+        Q_EMIT visibleChanged();
 }
 
 void FilePicker::setFileMode(Mode mode)
 {
-    if (m_mode == mode)
-        return;
-    m_mode = mode;
-    Q_EMIT optionsChanged();
+    if (assignIfChanged(m_mode, mode))
+        Q_EMIT optionsChanged();
 }
 
 void FilePicker::setTitle(const QString &title)
 {
-    if (m_title == title)
-        return;
-    m_title = title;
-    Q_EMIT optionsChanged();
+    if (assignIfChanged(m_title, title))
+        Q_EMIT optionsChanged();
 }
 
 void FilePicker::setNameFilters(const QStringList &filters)
 {
-    if (m_nameFilters == filters)
-        return;
-    m_nameFilters = filters;
-    Q_EMIT optionsChanged();
+    if (assignIfChanged(m_nameFilters, filters))
+        Q_EMIT optionsChanged();
 }
 
 void FilePicker::setDefaultSuffix(const QString &suffix)
 {
-    if (m_defaultSuffix == suffix)
-        return;
-    m_defaultSuffix = suffix;
-    Q_EMIT optionsChanged();
+    if (assignIfChanged(m_defaultSuffix, suffix))
+        Q_EMIT optionsChanged();
 }
 
 void FilePicker::setCurrentFolder(const QUrl &folder)
 {
-    if (m_currentFolder == folder)
-        return;
-    m_currentFolder = folder;
-    Q_EMIT optionsChanged();
+    if (assignIfChanged(m_currentFolder, folder))
+        Q_EMIT optionsChanged();
 }
 
 void FilePicker::setSelectedFile(const QUrl &file)
 {
-    const QList<QUrl> selected = file.isEmpty() ? QList<QUrl>() : QList<QUrl>{file};
-    if (m_selected == selected)
-        return;
-    m_selected = selected;
-    Q_EMIT selectedFilesChanged();
+    if (assignIfChanged(m_selected, file.isEmpty() ? QList<QUrl>() : QList<QUrl>{file}))
+        Q_EMIT selectedFilesChanged();
 }
 
 bool FilePicker::available()
@@ -479,18 +469,14 @@ bool FilePicker::available()
 
 void FilePicker::setDark(bool dark)
 {
-    if (m_dark == dark)
-        return;
-    m_dark = dark;
-    Q_EMIT optionsChanged();
+    if (assignIfChanged(m_dark, dark))
+        Q_EMIT optionsChanged();
 }
 
 void FilePicker::setColors(const QVariantMap &colors)
 {
-    if (m_colors == colors)
-        return;
-    m_colors = colors;
-    Q_EMIT optionsChanged();
+    if (assignIfChanged(m_colors, colors))
+        Q_EMIT optionsChanged();
 }
 
 QWindow *FilePicker::parentWindow() const
@@ -512,17 +498,16 @@ void FilePicker::setParentWindow(QWindow *window)
 
 FilePickerRequest FilePicker::request() const
 {
-    FilePickerRequest r;
-    r.mode = m_mode;
-    r.title = m_title;
-    r.nameFilters = cleanNameFilters(m_nameFilters);
-    r.defaultSuffix = m_defaultSuffix;
-    r.folder = m_currentFolder;
-    if (m_mode == SaveFile)
-        r.initialFile = selectedFile();
-    r.dark = m_dark;
-    r.colors = m_colors;
-    return r;
+    return {
+            .mode = m_mode,
+            .title = m_title,
+            .nameFilters = cleanNameFilters(m_nameFilters),
+            .defaultSuffix = m_defaultSuffix,
+            .folder = m_currentFolder,
+            .initialFile = m_mode == SaveFile ? selectedFile() : QUrl(),
+            .dark = m_dark,
+            .colors = m_colors,
+    };
 }
 
 void FilePicker::setBackendFactoryForTests(BackendFactory factory)
@@ -547,11 +532,8 @@ QUrl FilePicker::withDefaultSuffix(const QUrl &file, const QString &suffix)
 
 QStringList FilePicker::cleanNameFilters(const QStringList &filters)
 {
-    QStringList out;
-    for (const QString &f : filters) {
-        if (!f.trimmed().isEmpty())
-            out.append(f);
-    }
+    QStringList out = filters;
+    out.removeIf([](const QString &f) { return QStringView(f).trimmed().isEmpty(); });
     return out;
 }
 

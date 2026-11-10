@@ -23,8 +23,7 @@ class QtTranslations {
 public:
     QtTranslations();
     ~QtTranslations();
-    QtTranslations(const QtTranslations &) = delete;
-    QtTranslations &operator=(const QtTranslations &) = delete;
+    Q_DISABLE_COPY_MOVE(QtTranslations)
 
     /// Qt's catalogs used by the app ("qtbase", "qtdeclarative").
     static QStringList catalogs();

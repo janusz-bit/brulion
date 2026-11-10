@@ -41,7 +41,7 @@ FocusScope {
     property string focusPath
     readonly property string focusTitle: focusPath !== "" ? Workspace.pageTitle(focusPath) : ""
     /// The card shows the selected node (search, tap) with its buttons.
-    readonly property string cardId: graph.selectedId !== "" ? graph.selectedId : ""
+    readonly property string cardId: graph.selectedId
 
     function flag(value: var): bool {
         return value === true || value === "true"

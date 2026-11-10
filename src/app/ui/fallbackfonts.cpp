@@ -6,6 +6,8 @@
 #include <QJsonArray>
 #include <QTextLayout>
 
+#include <algorithm>
+
 using namespace Qt::StringLiterals;
 
 namespace brulion::ui {
@@ -27,15 +29,10 @@ bool drawsAll(const QString &text, const QFont &font)
     layout.createLine();
     layout.endLayout();
     const QList<QGlyphRun> runs = layout.glyphRuns();
-    if (runs.isEmpty())
-        return false;
-    for (const QGlyphRun &run : runs) {
-        // Glyph 0 is .notdef in every TrueType/OpenType font: the box Qt draws when no font of
-        // the fallback chain has the character.
-        if (run.glyphIndexes().contains(0u))
-            return false;
-    }
-    return true;
+    // Glyph 0 is .notdef in every TrueType/OpenType font: the box Qt draws when no font of the
+    // fallback chain has the character.
+    return !runs.isEmpty()
+           && std::ranges::none_of(runs, [](const QGlyphRun &run) { return run.glyphIndexes().contains(0u); });
 }
 
 /// Pins the families Brulion's text asks for to the fonts Qt resolves them to now. A name that
@@ -71,56 +68,11 @@ bool load(const QString &resource, const QString &family)
     return false;
 }
 
-} // namespace
-
-QString brulionEmoji()
+/// installFallbackFonts() without its once-per-process guard.
+QList<FallbackFontReport> install(FallbackFontPolicy policy, const QFont &font)
 {
-    // Reminders and alarms (⏰ ⏰! 🔔), the task fields of the Tasks-plugin syntax (docs/SYNTAX.md):
-    // dates, recurrence, priorities, done/cancelled, ids and dependencies, created; attachments
-    // and images in rendered notes; the page icon dialog's common emoji (docs/UI.md "Page icon and
-    // cover"). tst_fallback_fonts checks that src/ uses no other emoji.
-    return u"⏰🔔📅⏳🛫✅❌🔁🔂🔺⏫🔼🔽⏬➕🆔🏁📆📎🖼🗓⛔⌛"
-           u"📝📚📖📓📄📁📂✔⭐🌟✨💡🔥❤💯🎯🏆🚩🚀✈🚗🚲🏠🏢🏫🏥🌍🌱🌳🌸🌹🍀☀🌙⛅❄⚡🌈🍎🍕🍰☕🍷🎉🎁🎂🎓🎨🎵🎮🎬📷💻📱🖥🔧🔨🛠⚙🔑🔒📦📌📍🔖🏷💼💰💳📈📊📋🧾✉📧📞💬💭📢🧠💪🧘🏃🩺🐱🐶👪👶😀😊😎🤔🙏👍👋🧳🛒🧹🤖🔍🗂🔴🟠🟡🟢🔵🟣"_s;
-}
-
-QString brulionSymbols()
-{
-    return u"⧉⌢⌣⎰⎱⟮⟯⨄⨆⨿𝒜"_s;
-}
-
-QString missingCharacters(const QString &text, const QFont &font)
-{
-    // One layout of the whole text first: the usual answer, nothing, costs a single pass.
-    if (text.trimmed().isEmpty() || drawsAll(text, font))
-        return {};
-    QString missing;
-    for (qsizetype i = 0; i < text.size();) {
-        const qsizetype length =
-                text.at(i).isHighSurrogate() && i + 1 < text.size() && text.at(i + 1).isLowSurrogate() ? 2 : 1;
-        const QString character = text.mid(i, length);
-        i += length;
-        if (character.trimmed().isEmpty() || missing.contains(character))
-            continue;
-        if (!drawsAll(character, font))
-            missing += character;
-    }
-    return missing;
-}
-
-QList<FallbackFontReport> installFallbackFonts(FallbackFontPolicy policy, const QFont &font)
-{
-    static bool done = false;
-    static QList<FallbackFontReport> reports;
-    if (done)
-        return reports;
-    done = true;
-
-    FallbackFontReport emoji;
-    emoji.family = EmojiFamily;
-    emoji.probe = brulionEmoji();
-    FallbackFontReport math;
-    math.family = MathFamily;
-    math.probe = brulionSymbols();
+    FallbackFontReport emoji{.family = EmojiFamily, .probe = brulionEmoji()};
+    FallbackFontReport math{.family = MathFamily, .probe = brulionSymbols()};
 
     // The emoji decide (Linux: a system emoji font must keep drawing them).
     emoji.checked = true;
@@ -133,8 +85,7 @@ QList<FallbackFontReport> installFallbackFonts(FallbackFontPolicy policy, const 
         // Math only becomes an application font (~1 ms): fontconfig's fallback lists include
         // application fonts, so it draws what no system font has. No fallback families, no pins.
         math.loaded = load(MathResource, MathFamily);
-        reports = {emoji, math};
-        return reports;
+        return {emoji, math};
     }
 
     const QString defaultFamily = QFontInfo(font).family();
@@ -179,7 +130,46 @@ QList<FallbackFontReport> installFallbackFonts(FallbackFontPolicy policy, const 
         if (report->installed)
             report->missingAfter = missingCharacters(report->probe, font);
     }
-    reports = {emoji, math};
+    return {emoji, math};
+}
+
+} // namespace
+
+QString brulionEmoji()
+{
+    // Reminders and alarms (⏰ ⏰! 🔔), the task fields of the Tasks-plugin syntax (docs/SYNTAX.md):
+    // dates, recurrence, priorities, done/cancelled, ids and dependencies, created; attachments
+    // and images in rendered notes; the page icon dialog's common emoji (docs/UI.md "Page icon and
+    // cover"). tst_fallback_fonts checks that src/ uses no other emoji.
+    return u"⏰🔔📅⏳🛫✅❌🔁🔂🔺⏫🔼🔽⏬➕🆔🏁📆📎🖼🗓⛔⌛"
+           u"📝📚📖📓📄📁📂✔⭐🌟✨💡🔥❤💯🎯🏆🚩🚀✈🚗🚲🏠🏢🏫🏥🌍🌱🌳🌸🌹🍀☀🌙⛅❄⚡🌈🍎🍕🍰☕🍷🎉🎁🎂🎓🎨🎵🎮🎬📷💻📱🖥🔧🔨🛠⚙🔑🔒📦📌📍🔖🏷💼💰💳📈📊📋🧾✉📧📞💬💭📢🧠💪🧘🏃🩺🐱🐶👪👶😀😊😎🤔🙏👍👋🧳🛒🧹🤖🔍🗂🔴🟠🟡🟢🔵🟣"_s;
+}
+
+QString brulionSymbols()
+{
+    return u"⧉⌢⌣⎰⎱⟮⟯⨄⨆⨿𝒜"_s;
+}
+
+QString missingCharacters(const QString &text, const QFont &font)
+{
+    // One layout of the whole text first: the usual answer, nothing, costs a single pass.
+    if (text.trimmed().isEmpty() || drawsAll(text, font))
+        return {};
+    QString missing;
+    for (qsizetype i = 0; i < text.size();) {
+        const qsizetype length =
+                text.at(i).isHighSurrogate() && i + 1 < text.size() && text.at(i + 1).isLowSurrogate() ? 2 : 1;
+        const QString character = text.mid(i, length);
+        i += length;
+        if (!character.trimmed().isEmpty() && !missing.contains(character) && !drawsAll(character, font))
+            missing += character;
+    }
+    return missing;
+}
+
+QList<FallbackFontReport> installFallbackFonts(FallbackFontPolicy policy, const QFont &font)
+{
+    static const QList<FallbackFontReport> reports = install(policy, font);
     return reports;
 }
 

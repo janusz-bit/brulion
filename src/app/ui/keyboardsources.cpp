@@ -168,8 +168,7 @@ void connectKeyboardSources(KeyboardInsets *insets, QQmlApplicationEngine *engin
                              return;
                          *window = w;
                          insets->setWindowHeight(w->height());
-                         QObject::connect(w, &QWindow::heightChanged, insets,
-                                          [insets](int height) { insets->setWindowHeight(height); });
+                         QObject::connect(w, &QWindow::heightChanged, insets, &KeyboardInsets::setWindowHeight);
                          QObject::connect(w, &QWindow::yChanged, insets, readInputMethod);
                          readInputMethod();
                      });
@@ -275,7 +274,7 @@ void connectGestureSources(GestureInsets *insets, QQmlApplicationEngine *engine)
         const QRectF r = insets->exclusion();
         QList<QRect> rects;
         if (!r.isEmpty())
-            rects.append(QRectF(r.x() * dpr, r.y() * dpr, r.width() * dpr, r.height() * dpr).toAlignedRect());
+            rects.append(QRectF(r.topLeft() * dpr, r.size() * dpr).toAlignedRect());
         platform::AndroidBridge::instance()->setGestureExclusion(rects);
     });
 #else

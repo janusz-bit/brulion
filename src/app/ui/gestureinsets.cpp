@@ -44,17 +44,16 @@ GestureInsets *GestureInsets::instance()
 
 void GestureInsets::setPlatformInsets(qreal left, qreal right)
 {
-    const qreal oldLeft = this->left();
-    const qreal oldRight = this->right();
     const qreal l = sanitized(left);
     const qreal r = sanitized(right);
-    if (l != m_platformLeft || r != m_platformRight) {
-        qCDebug(brulion::logging::lcPlatform).noquote()
-                << u"System gesture insets: left %1 px, right %2 px"_s.arg(qRound(l)).arg(qRound(r));
-    }
+    if (l == m_platformLeft && r == m_platformRight)
+        return;
+    qCDebug(brulion::logging::lcPlatform).noquote()
+            << u"System gesture insets: left %1 px, right %2 px"_s.arg(qRound(l)).arg(qRound(r));
     m_platformLeft = l;
     m_platformRight = r;
-    apply(oldLeft, oldRight, m_simulated);
+    if (!m_simulated) // else left() and right() stay the simulated values
+        Q_EMIT changed();
 }
 
 void GestureInsets::simulate(qreal left, qreal right)
@@ -65,7 +64,8 @@ void GestureInsets::simulate(qreal left, qreal right)
     m_simulated = !(off(left) && off(right));
     m_simulatedLeft = m_simulated ? sanitized(left) : 0;
     m_simulatedRight = m_simulated ? sanitized(right) : 0;
-    apply(oldLeft, oldRight, oldSimulated);
+    if (oldLeft != this->left() || oldRight != this->right() || oldSimulated != m_simulated)
+        Q_EMIT changed();
 }
 
 void GestureInsets::setExclusion(const QRectF &rect)
@@ -81,12 +81,6 @@ void GestureInsets::setExclusion(const QRectF &rect)
         return;
     m_exclusion = r;
     Q_EMIT exclusionChanged();
-}
-
-void GestureInsets::apply(qreal oldLeft, qreal oldRight, bool oldSimulated)
-{
-    if (oldLeft != left() || oldRight != right() || oldSimulated != m_simulated)
-        Q_EMIT changed();
 }
 
 } // namespace brulion::ui

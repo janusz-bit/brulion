@@ -184,7 +184,6 @@ FocusScope {
                 spacing: 0
 
                 BCheckBox {
-                    id: box
                     Layout.leftMargin: Theme.space2
                     Accessible.name: qsTr("Select %1").arg(entry.title)
                     onToggled: root.setTicked(entry.path, checked)

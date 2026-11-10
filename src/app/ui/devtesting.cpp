@@ -20,8 +20,172 @@ using namespace Qt::StringLiterals;
 namespace brulion::ui {
 
 namespace {
-QVariant valueAtPath(const QVariant &value, const QString &path);
-int lengthAtPath(const QVariant &value, const QString &path);
+
+/// `value` with a JavaScript value (a QJSValue passed as var) converted to a plain QVariant.
+QVariant unwrapped(const QVariant &value)
+{
+    return value.metaType() == QMetaType::fromType<QJSValue>() ? value.value<QJSValue>().toVariant() : value;
+}
+
+/// DevTest::valueAt(). A missing key, index or property gives an invalid value, which the next
+/// step returns (as does the end of the path).
+QVariant valueAtPath(const QVariant &value, const QString &path)
+{
+    QVariant at = value;
+    const QStringList steps = path.isEmpty() ? QStringList() : path.split(u'.');
+    for (const QString &step : steps) {
+        at = unwrapped(at);
+        if (at.canConvert<QObject *>() && at.value<QObject *>()) {
+            at = at.value<QObject *>()->property(step.toUtf8().constData());
+        } else if (at.metaType() == QMetaType::fromType<QVariantMap>()) {
+            at = at.toMap().value(step);
+        } else if (at.canConvert<QVariantList>() && at.metaType() != QMetaType::fromType<QString>()) {
+            bool isIndex = false;
+            const int index = step.toInt(&isIndex);
+            if (!isIndex)
+                return {};
+            at = at.toList().value(index);
+        } else {
+            return {};
+        }
+    }
+    return at;
+}
+
+int lengthAtPath(const QVariant &value, const QString &path)
+{
+    const QVariant at = valueAtPath(value, path);
+    if (at.metaType() == QMetaType::fromType<QString>())
+        return int(at.toString().size());
+    return at.canConvert<QVariantList>() ? int(at.toList().size()) : 0;
+}
+
+bool ownsProperty(const QObject *item, const char *name)
+{
+    return item->metaObject()->indexOfProperty(name) >= 0;
+}
+
+/// `name` is a property, a function or a signal of `object` (object[name] !== undefined).
+bool ownsMember(const QObject *object, const QByteArray &name)
+{
+    const QMetaObject *meta = object->metaObject();
+    if (meta->indexOfProperty(name.constData()) >= 0)
+        return true;
+    for (int i = 0; i < meta->methodCount(); ++i) {
+        if (meta->method(i).nameView() == name)
+            return true;
+    }
+    return false;
+}
+
+bool ownsMembers(const QObject *object, const QList<QByteArray> &names)
+{
+    return std::ranges::all_of(names, [&](const QByteArray &name) { return ownsMember(object, name); });
+}
+
+QList<QByteArray> utf8(const QStringList &names)
+{
+    QList<QByteArray> out;
+    out.reserve(names.size());
+    for (const QString &name : names)
+        out.append(name.toUtf8());
+    return out;
+}
+
+/// A number as JavaScript writes it ("44", "43.5").
+QString jsNumber(double value)
+{
+    return QString::number(value, 'g', QLocale::FloatingPointShortest);
+}
+
+/// The first item under `item` (depth first, itself included) for which `match` holds; an item
+/// for which `descend` is false is skipped with its children.
+template<typename Match, typename Descend>
+QQuickItem *firstWhere(QQuickItem *item, const Match &match, const Descend &descend)
+{
+    if (!item || !descend(item))
+        return nullptr;
+    if (match(item))
+        return item;
+    const QList<QQuickItem *> children = item->childItems();
+    for (QQuickItem *child : children) {
+        if (QQuickItem *found = firstWhere(child, match, descend))
+            return found;
+    }
+    return nullptr;
+}
+
+/// Every item under `item` (depth first; itself only if `self`) for which `match` holds.
+template<typename Match>
+void collectWhere(QQuickItem *item, const Match &match, bool self, QList<QQuickItem *> &out)
+{
+    if (!item)
+        return;
+    if (self && match(item))
+        out.append(item);
+    const QList<QQuickItem *> children = item->childItems();
+    for (QQuickItem *child : children)
+        collectWhere(child, match, true, out);
+}
+
+template<typename Match>
+QList<QQuickItem *> allWhere(QQuickItem *root, bool withRoot, const Match &match)
+{
+    QList<QQuickItem *> found;
+    collectWhere(root, match, withRoot, found);
+    return found;
+}
+
+constexpr auto everyItem = [](QQuickItem *) { return true; };
+constexpr auto shownItem = [](QQuickItem *item) { return item->isVisible(); };
+
+auto namedAs(const QString &name)
+{
+    return [name](QQuickItem *item) { return item->objectName() == name; };
+}
+
+auto withMember(const QString &name)
+{
+    return [key = name.toUtf8()](QQuickItem *item) { return ownsMember(item, key); };
+}
+
+/// A circle on a BTimePicker's face (a number, or the chosen value's bubble), in the face's
+/// coordinates.
+struct Circle {
+    QString label;
+    bool outer = false;
+    double x = 0, y = 0, r = 0, textWidth = 0, font = 0;
+};
+
+/// Hours: "<number>→<labelAt()>" for each point just inside a number, towards a neighbour, that
+/// labelAt() of the BTimePicker (`picker`) gives another number for.
+QStringList wrongHourPresses(const QJSValue &picker, const QList<Circle> &numbers)
+{
+    const auto numberOf = [&](int value) -> const Circle * {
+        const QString label = picker.property(u"pad"_s).callWithInstance(picker, {value}).toString();
+        const auto it = std::ranges::find(numbers, label, &Circle::label);
+        return it == numbers.cend() ? nullptr : &*it;
+    };
+    QStringList wrong;
+    for (int h = 0; h < 24; ++h) {
+        const Circle *n = numberOf(h);
+        if (!n)
+            continue;
+        for (const int side : {-1, 1}) {
+            const Circle *next = numberOf((h % 12 + 12 + side) % 12 + (h >= 12 ? 12 : 0));
+            if (!next)
+                continue;
+            const double d = std::hypot(next->x - n->x, next->y - n->y);
+            const double x = n->x + (next->x - n->x) / d * (n->r - 1);
+            const double y = n->y + (next->y - n->y) / d * (n->r - 1);
+            const QJSValue at = picker.property(u"labelAt"_s).callWithInstance(picker, {x, y});
+            if (!at.isNumber() || at.toNumber() != h)
+                wrong.append(n->label + u"→"_s + at.toString());
+        }
+    }
+    return wrong;
+}
+
 } // namespace
 
 // --- DevEvents --------------------------------------------------------------------------------
@@ -52,7 +216,7 @@ bool DevEvents::available()
 
 bool DevEvents::call(const char *function, const QList<QJSValue> &arguments)
 {
-    QJSValue events = testEvent();
+    const QJSValue events = testEvent();
     if (events.isUndefined())
         return false;
     const QJSValue result = events.property(QString::fromLatin1(function)).callWithInstance(events, arguments);
@@ -99,12 +263,12 @@ bool DevEvents::mouseWheel(QObject *item, qreal x, qreal y, int buttons, int mod
 
 void DevEvents::touch(const char *point, QObject *item, qreal x, qreal y)
 {
-    QJSValue events = testEvent();
+    const QJSValue events = testEvent();
     QJSEngine *engine = qjsEngine(this);
     if (events.isUndefined() || !engine)
         return;
     const QJSValue target = engine->toScriptValue(item);
-    QJSValue sequence = events.property(u"touchEvent"_s).callWithInstance(events, {target});
+    const QJSValue sequence = events.property(u"touchEvent"_s).callWithInstance(events, {target});
     if (sequence.isError() || !sequence.isQObject()) {
         qWarning("DevEvents: touchEvent: %s", qPrintable(sequence.toString()));
         return;
@@ -167,107 +331,26 @@ QObject *DevRecord::objectAt(const QString &path) const
 
 // --- DevTest -----------------------------------------------------------------------------------
 
-namespace {
-
-void collectNamed(QQuickItem *item, const QString &name, QList<QQuickItem *> &out, bool firstOnly)
-{
-    if (!item || (firstOnly && !out.isEmpty()))
-        return;
-    if (item->objectName() == name) {
-        out.append(item);
-        if (firstOnly)
-            return;
-    }
-    const QList<QQuickItem *> children = item->childItems();
-    for (QQuickItem *child : children)
-        collectNamed(child, name, out, firstOnly);
-}
-
-} // namespace
-
 DevTest::DevTest(QObject *parent) : QObject(parent) { }
 
 QQuickItem *DevTest::findItem(QQuickItem *root, const QString &name) const
 {
-    QList<QQuickItem *> found;
-    collectNamed(root, name, found, true);
-    return found.isEmpty() ? nullptr : found.first();
+    return firstWhere(root, namedAs(name), everyItem);
 }
 
 int DevTest::countNamed(QQuickItem *root, const QString &name) const
 {
-    QList<QQuickItem *> found;
-    collectNamed(root, name, found, false);
-    return int(found.size());
+    return int(allWhere(root, true, namedAs(name)).size());
 }
 
 QQuickItem *DevTest::namedAt(QQuickItem *root, const QString &name, int index) const
 {
-    QList<QQuickItem *> found;
-    collectNamed(root, name, found, false);
-    return index >= 0 && index < found.size() ? found.at(index) : nullptr;
+    return allWhere(root, true, namedAs(name)).value(index);
 }
-QQuickItem *DevTest::firstWhere(QQuickItem *item, const std::function<bool(QQuickItem *)> &match,
-                                const std::function<bool(QQuickItem *)> &descend)
-{
-    if (!item || !descend(item))
-        return nullptr;
-    if (match(item))
-        return item;
-    const QList<QQuickItem *> children = item->childItems();
-    for (QQuickItem *child : children) {
-        if (QQuickItem *found = firstWhere(child, match, descend))
-            return found;
-    }
-    return nullptr;
-}
-
-namespace {
-
-bool ownsProperty(const QObject *item, const char *name)
-{
-    return item->metaObject()->indexOfProperty(name) >= 0;
-}
-
-/// `name` is a property, a function or a signal of `object` (object[name] !== undefined).
-bool ownsMember(const QObject *object, const QByteArray &name)
-{
-    const QMetaObject *meta = object->metaObject();
-    if (meta->indexOfProperty(name.constData()) >= 0)
-        return true;
-    for (int i = 0; i < meta->methodCount(); ++i) {
-        if (meta->method(i).name() == name)
-            return true;
-    }
-    return false;
-}
-
-bool ownsMembers(const QObject *object, const QList<QByteArray> &names)
-{
-    return std::all_of(names.cbegin(), names.cend(), [&](const QByteArray &name) { return ownsMember(object, name); });
-}
-
-QList<QByteArray> utf8(const QStringList &names)
-{
-    QList<QByteArray> out;
-    for (const QString &name : names)
-        out.append(name.toUtf8());
-    return out;
-}
-
-/// A number as JavaScript writes it ("44", "43.5").
-QString jsNumber(double value)
-{
-    return QString::number(value, 'g', QLocale::FloatingPointShortest);
-}
-
-} // namespace
 
 QQuickItem *DevTest::findShown(QQuickItem *root, const QString &name) const
 {
-    return firstWhere(
-            root, [&](QQuickItem *item) { return item->objectName() == name; },
-            [](QQuickItem *item) { return item->isVisible(); });
+    return firstWhere(root, namedAs(name), shownItem);
 }
 
 QQuickItem *DevTest::findRendered(QQuickItem *root) const
@@ -279,7 +362,7 @@ QQuickItem *DevTest::findRendered(QQuickItem *root) const
                 return ownsProperty(item, "textFormat") && item->property("textFormat").toInt() == 1
                        && ownsMember(item, "linkAt");
             },
-            [](QQuickItem *item) { return item->isVisible(); });
+            shownItem);
 }
 
 QString DevTest::linkAt(QQuickItem *text, qreal x, qreal y) const
@@ -297,7 +380,7 @@ QQuickItem *DevTest::findText(QQuickItem *root, const QString &text) const
             [&](QQuickItem *item) {
                 return ownsProperty(item, "textFormat") && item->property("text").toString() == text;
             },
-            [](QQuickItem *) { return true; });
+            everyItem);
 }
 
 QQuickItem *DevTest::findTextContaining(QQuickItem *root, const QString &needle) const
@@ -307,7 +390,7 @@ QQuickItem *DevTest::findTextContaining(QQuickItem *root, const QString &needle)
             [&](QQuickItem *item) {
                 return ownsProperty(item, "textFormat") && item->property("text").toString().contains(needle);
             },
-            [](QQuickItem *item) { return item->isVisible(); });
+            shownItem);
 }
 
 QQuickItem *DevTest::findWhere(QQuickItem *root, const QString &name, const QVariant &value, bool visibleOnly) const
@@ -319,14 +402,13 @@ QQuickItem *DevTest::findWhere(QQuickItem *root, const QString &name, const QVar
                 return ownsProperty(item, key.constData()) && item->property(key.constData()) == value
                        && (!visibleOnly || item->isVisible());
             },
-            [](QQuickItem *) { return true; });
+            everyItem);
 }
 
 QQuickItem *DevTest::findWithMembers(QQuickItem *root, const QStringList &names) const
 {
     const QList<QByteArray> keys = utf8(names);
-    return firstWhere(
-            root, [&](QQuickItem *item) { return ownsMembers(item, keys); }, [](QQuickItem *) { return true; });
+    return firstWhere(root, [&](QQuickItem *item) { return ownsMembers(item, keys); }, everyItem);
 }
 
 int DevTest::countWithMembers(QObject *object, const QStringList &names) const
@@ -337,7 +419,7 @@ int DevTest::countWithMembers(QObject *object, const QStringList &names) const
     QList<QObject *> found;
     for (const char *list : {"resources", "data"}) {
         const QQmlListReference items(object, list);
-        for (qsizetype i = 0; items.isValid() && i < items.count(); ++i) {
+        for (qsizetype i = 0; items.isValid() && i < items.size(); ++i) {
             QObject *o = items.at(i);
             if (o && ownsMembers(o, keys) && !found.contains(o))
                 found.append(o);
@@ -352,17 +434,11 @@ QString DevTest::clockNumbers(QQuickItem *clock, int textSm) const
     auto *face = clock ? clock->property("focusItem").value<QQuickItem *>() : nullptr;
     if (!engine || !face)
         return u"no clock"_s;
-    QJSValue picker = engine->toScriptValue(clock);
+    const QJSValue picker = engine->toScriptValue(clock);
     const double center = clock->property("center").toDouble();
     const double outerRadius = clock->property("outerRadius").toDouble();
 
-    // The circles, as BTimePicker draws them (in the face's coordinates).
-    struct Circle {
-        QString label;
-        bool bubble = false;
-        bool outer = false;
-        double x = 0, y = 0, r = 0, textWidth = 0, font = 0;
-    };
+    // The circles, as BTimePicker draws them.
     QList<Circle> numbers;
     std::optional<Circle> bubble;
     const QList<QQuickItem *> children = face->childItems();
@@ -388,7 +464,6 @@ QString DevTest::clockNumbers(QQuickItem *clock, int textSm) const
         c.y = item->y() + item->height() / 2;
         const QString shown = text ? text->property("text").toString() : QString();
         c.label = isBubble ? u"bubble "_s + shown : text ? shown : u"?"_s;
-        c.bubble = isBubble;
         c.outer = std::abs(std::hypot(c.x - center, c.y - center) - outerRadius) < 0.5;
         c.r = item->width() / 2;
         c.textWidth = text ? text->property("contentWidth").toDouble() : 0;
@@ -402,6 +477,9 @@ QString DevTest::clockNumbers(QQuickItem *clock, int textSm) const
     QStringList overlaps;
     QStringList cramped;
     const auto fits = [](const Circle &n, double minFont) { return n.textWidth <= 2 * n.r - 2 && n.font >= minFont; };
+    const auto overlap = [&](const Circle &p, const Circle &q, double d) {
+        overlaps.append(u"%1/%2 %3 < %4"_s.arg(p.label, q.label, QString::number(d, 'f', 1), jsNumber(p.r + q.r)));
+    };
     for (qsizetype i = 0; i < numbers.size(); ++i) {
         const Circle &a = numbers.at(i);
         if (!fits(a, a.outer ? textSm : std::min(textSm, 12)))
@@ -411,48 +489,18 @@ QString DevTest::clockNumbers(QQuickItem *clock, int textSm) const
             const Circle &b = numbers.at(j);
             const double d = std::hypot(a.x - b.x, a.y - b.y);
             if (d < a.r + b.r - 0.01)
-                overlaps.append(
-                        u"%1/%2 %3 < %4"_s.arg(a.label, b.label, QString::number(d, 'f', 1), jsNumber(a.r + b.r)));
+                overlap(a, b, d);
         }
         const double toBubble = bubble ? std::hypot(a.x - bubble->x, a.y - bubble->y) : 0;
         if (bubble && toBubble > 0.5 && toBubble < a.r + bubble->r - 0.01)
-            overlaps.append(u"%1/%2 %3 < %4"_s.arg(bubble->label, a.label, QString::number(toBubble, 'f', 1),
-                                                   jsNumber(a.r + bubble->r)));
+            overlap(*bubble, a, toBubble);
     }
     if (bubble && !fits(*bubble, 10))
         cramped.append(u"%1 (%2 px text in %3)"_s.arg(bubble->label, QString::number(bubble->textWidth, 'f', 1),
                                                       jsNumber(2 * bubble->r)));
     QStringList wrong;
-    if (clock->property("mode").toString() == u"hour") {
-        const auto pad = [&](int value) {
-            return picker.property(u"pad"_s).callWithInstance(picker, {value}).toString();
-        };
-        const auto labelAt = [&](double x, double y) {
-            return picker.property(u"labelAt"_s).callWithInstance(picker, {x, y});
-        };
-        const auto numberLabelled = [&](const QString &label) -> const Circle * {
-            for (const Circle &n : numbers) {
-                if (n.label == label)
-                    return &n;
-            }
-            return nullptr;
-        };
-        for (int h = 0; h < 24; ++h) {
-            const Circle *n = numberLabelled(pad(h));
-            for (const int side : {-1, 1}) {
-                const int other = (h % 12 + 12 + side) % 12 + (h >= 12 ? 12 : 0);
-                const Circle *next = numberLabelled(pad(other));
-                if (!n || !next)
-                    continue;
-                const double d = std::hypot(next->x - n->x, next->y - n->y);
-                const double x = n->x + (next->x - n->x) / d * (n->r - 1);
-                const double y = n->y + (next->y - n->y) / d * (n->r - 1);
-                const QJSValue at = labelAt(x, y);
-                if (!at.isNumber() || at.toNumber() != h)
-                    wrong.append(n->label + u"→"_s + at.toString());
-            }
-        }
-    }
+    if (clock->property("mode").toString() == u"hour")
+        wrong = wrongHourPresses(picker, numbers);
     QString report = QString::number(numbers.size()) + u" numbers"_s;
     if (!overlaps.isEmpty())
         report += u", overlapping "_s + overlaps.join(u',');
@@ -463,33 +511,14 @@ QString DevTest::clockNumbers(QQuickItem *clock, int textSm) const
     return report;
 }
 
-namespace {
-
-void collectWithMember(QQuickItem *item, const QByteArray &name, bool self, QList<QQuickItem *> &out)
-{
-    if (!item)
-        return;
-    if (self && ownsMember(item, name))
-        out.append(item);
-    const QList<QQuickItem *> children = item->childItems();
-    for (QQuickItem *child : children)
-        collectWithMember(child, name, true, out);
-}
-
-} // namespace
-
 int DevTest::countWithMember(QQuickItem *root, const QString &name, bool withRoot) const
 {
-    QList<QQuickItem *> found;
-    collectWithMember(root, name.toUtf8(), withRoot, found);
-    return int(found.size());
+    return int(allWhere(root, withRoot, withMember(name)).size());
 }
 
 QQuickItem *DevTest::withMemberAt(QQuickItem *root, const QString &name, bool withRoot, int index) const
 {
-    QList<QQuickItem *> found;
-    collectWithMember(root, name.toUtf8(), withRoot, found);
-    return index >= 0 && index < found.size() ? found.at(index) : nullptr;
+    return allWhere(root, withRoot, withMember(name)).value(index);
 }
 
 int DevTest::childCount(QQuickItem *item) const
@@ -499,8 +528,7 @@ int DevTest::childCount(QQuickItem *item) const
 
 QQuickItem *DevTest::childAt(QQuickItem *item, int index) const
 {
-    const QList<QQuickItem *> children = item ? item->childItems() : QList<QQuickItem *>();
-    return index >= 0 && index < children.size() ? children.at(index) : nullptr;
+    return item ? item->childItems().value(index) : nullptr;
 }
 
 QVariant DevTest::property(QObject *item, const QString &name) const
@@ -510,7 +538,7 @@ QVariant DevTest::property(QObject *item, const QString &name) const
 
 QObject *DevTest::objectProperty(QObject *item, const QString &name) const
 {
-    return item ? item->property(name.toUtf8().constData()).value<QObject *>() : nullptr;
+    return property(item, name).value<QObject *>();
 }
 
 void DevTest::setProperty(QObject *item, const QString &name, const QVariant &value) const
@@ -521,53 +549,8 @@ void DevTest::setProperty(QObject *item, const QString &name, const QVariant &va
 
 bool DevTest::hasProperty(QObject *item, const QString &name) const
 {
-    return item && item->metaObject()->indexOfProperty(name.toUtf8().constData()) >= 0;
+    return item && ownsProperty(item, name.toUtf8().constData());
 }
-
-namespace {
-
-QVariant valueAtPath(const QVariant &value, const QString &path)
-{
-    QVariant at = value;
-    const QStringList steps = path.isEmpty() ? QStringList() : path.split(u'.');
-    for (const QString &step : steps) {
-        if (at.metaType() == QMetaType::fromType<QJSValue>())
-            at = at.value<QJSValue>().toVariant();
-        if (at.canConvert<QObject *>() && at.value<QObject *>()) {
-            at = at.value<QObject *>()->property(step.toUtf8().constData());
-        } else if (at.metaType() == QMetaType::fromType<QVariantMap>()) {
-            const QVariantMap map = at.toMap();
-            if (!map.contains(step))
-                return {};
-            at = map.value(step);
-        } else if (at.canConvert<QVariantList>() && at.metaType() != QMetaType::fromType<QString>()) {
-            bool isIndex = false;
-            const int index = step.toInt(&isIndex);
-            const QVariantList list = at.toList();
-            if (!isIndex || index < 0 || index >= list.size())
-                return {};
-            at = list.at(index);
-        } else {
-            return {};
-        }
-    }
-    return at;
-}
-
-int lengthAtPath(const QVariant &value, const QString &path)
-{
-    const QVariant at = valueAtPath(value, path);
-    if (!at.isValid())
-        return 0;
-    if (at.metaType() == QMetaType::fromType<QString>())
-        return int(at.toString().size());
-    if (at.metaType() == QMetaType::fromType<QStringList>() || at.metaType() == QMetaType::fromType<QVariantList>()
-        || at.canConvert<QVariantList>())
-        return int(at.toList().size());
-    return 0;
-}
-
-} // namespace
 
 QVariant DevTest::valueAt(const QVariant &value, const QString &path) const
 {
@@ -622,13 +605,11 @@ int DevTest::accessibleRole(QQuickItem *item) const
 
 QString DevTest::linesWithout(const QString &text, const QStringList &prefixes) const
 {
-    QStringList kept;
-    const QStringList lines = text.split(u'\n');
-    for (const QString &line : lines) {
-        if (std::none_of(prefixes.cbegin(), prefixes.cend(), [&](const QString &p) { return line.startsWith(p); }))
-            kept.append(line);
-    }
-    return kept.join(u'\n');
+    QStringList lines = text.split(u'\n');
+    lines.removeIf([&](const QString &line) {
+        return std::ranges::any_of(prefixes, [&](const QString &prefix) { return line.startsWith(prefix); });
+    });
+    return lines.join(u'\n');
 }
 
 bool DevTest::sameWithoutLines(const QString &a, const QString &b, const QStringList &prefixes) const
@@ -638,13 +619,9 @@ bool DevTest::sameWithoutLines(const QString &a, const QString &b, const QString
 
 int DevTest::indexWithObject(const QVariant &list, const QString &key, QObject *object) const
 {
-    const QVariantList entries =
-            (list.metaType() == QMetaType::fromType<QJSValue>() ? list.value<QJSValue>().toVariant() : list).toList();
+    const QVariantList entries = listOf(list);
     for (qsizetype i = 0; i < entries.size(); ++i) {
-        const QVariant entry = entries.at(i).metaType() == QMetaType::fromType<QJSValue>()
-                                       ? entries.at(i).value<QJSValue>().toVariant()
-                                       : entries.at(i);
-        if (entry.toMap().value(key).value<QObject *>() == object)
+        if (unwrapped(entries.at(i)).toMap().value(key).value<QObject *>() == object)
             return int(i);
     }
     return -1;
@@ -652,7 +629,7 @@ int DevTest::indexWithObject(const QVariant &list, const QString &key, QObject *
 
 QVariantList DevTest::listOf(const QVariant &value) const
 {
-    return (value.metaType() == QMetaType::fromType<QJSValue>() ? value.value<QJSValue>().toVariant() : value).toList();
+    return unwrapped(value).toList();
 }
 
 QVariantList DevTest::rowsContaining(const QVariant &list, const QString &key, const QString &text) const
@@ -660,8 +637,7 @@ QVariantList DevTest::rowsContaining(const QVariant &list, const QString &key, c
     QVariantList out;
     const QVariantList rows = listOf(list);
     for (const QVariant &row : rows) {
-        const QVariant map =
-                row.metaType() == QMetaType::fromType<QJSValue>() ? row.value<QJSValue>().toVariant() : row;
+        const QVariant map = unwrapped(row);
         if (text.isEmpty() || map.toMap().value(key).toString().contains(text))
             out.append(map);
     }
@@ -681,7 +657,7 @@ QString DevTest::callCatching(QObject *object, const QString &function) const
     QJSEngine *engine = object ? qjsEngine(object) : nullptr;
     if (!engine)
         return u"no QML engine for %1()"_s.arg(function);
-    QJSValue self = engine->toScriptValue(object);
+    const QJSValue self = engine->toScriptValue(object);
     const QJSValue fn = self.property(function);
     if (!fn.isCallable())
         return u"%1 is not a function"_s.arg(function);

@@ -3,10 +3,13 @@
 #include <QMetaMethod>
 #include <QQuickItem>
 #include <QQuickWindow>
+#include <QVarLengthArray>
 #include <QVariant>
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
+#include <utility>
 
 namespace brulion::ui {
 
@@ -29,6 +32,17 @@ QMetaMethod methodOf(const QMetaObject *mo, const char *signature)
     return index >= 0 ? mo->method(index) : QMetaMethod();
 }
 
+/// `sender`'s `signal` connected to `receiver`'s `slot` (normalized signatures), when the sender
+/// has that signal (a view or a model of another kind may lack it: no warning then).
+QMetaObject::Connection connectIfAny(QObject *sender, const char *signal, QObject *receiver, const char *slot)
+{
+    const int index = sender->metaObject()->indexOfSignal(signal);
+    if (index < 0)
+        return {};
+    const QMetaObject *mo = receiver->metaObject();
+    return QObject::connect(sender, sender->metaObject()->method(index), receiver, mo->method(mo->indexOfSlot(slot)));
+}
+
 /// A unit's span in content coordinates (the header, a row, the footer).
 struct Segment {
     qreal unit = 0;
@@ -38,19 +52,9 @@ struct Segment {
     bool openBelow = false;
 };
 
-QList<Segment> segments(const RowEdges &e)
-{
-    QList<Segment> out;
-    out.reserve(e.rows.size() + 2);
-    const int h = e.hasHeader ? 1 : 0;
-    if (e.hasHeader)
-        out.append({0, e.headerTop, e.headerBottom});
-    for (const RowSpan &r : e.rows)
-        out.append({qreal(h + r.index), r.top, r.bottom, r.openAbove, r.openBelow});
-    if (e.hasFooter)
-        out.append({qreal(h + e.count), e.footerTop, e.footerBottom});
-    return out;
-}
+// The header, the rows at the view's edges and their neighbours, the footer: on the stack, as
+// refresh() needs them every frame while the list moves.
+using Segments = QVarLengthArray<Segment, 8>;
 
 bool changed(qreal a, qreal b)
 {
@@ -60,47 +64,46 @@ bool changed(qreal a, qreal b)
 // Rounding of item geometry: spans may overlap by this much.
 constexpr qreal Overlap = 0.5;
 
-} // namespace
-
-// ---- RowFraction --------------------------------------------------------------------------------
-
-bool RowFraction::valid(const RowEdges &e)
+/// The units' spans in order when the edges are usable (RowFraction::valid), else nullopt.
+std::optional<Segments> usableSegments(const RowEdges &e)
 {
     if (e.count < 0 || !finite(e.viewTop) || !finite(e.viewBottom) || !(e.viewBottom > e.viewTop))
-        return false;
+        return std::nullopt;
     const auto ok = [](qreal top, qreal bottom) { return finite(top) && finite(bottom) && bottom > top; };
-    if (e.hasHeader && !ok(e.headerTop, e.headerBottom))
-        return false;
-    if (e.hasFooter && !ok(e.footerTop, e.footerBottom))
-        return false;
+    if ((e.hasHeader && !ok(e.headerTop, e.headerBottom)) || (e.hasFooter && !ok(e.footerTop, e.footerBottom)))
+        return std::nullopt;
+    Segments s;
+    const int h = e.hasHeader ? 1 : 0;
+    if (e.hasHeader)
+        s.append({0, e.headerTop, e.headerBottom});
     int last = -1;
     for (const RowSpan &r : e.rows) {
         if (r.index <= last || r.index >= e.count || !ok(r.top, r.bottom))
-            return false;
+            return std::nullopt;
         last = r.index;
+        s.append({qreal(h + r.index), r.top, r.bottom, r.openAbove, r.openBelow});
     }
-    const QList<Segment> s = segments(e);
+    if (e.hasFooter)
+        s.append({qreal(h + e.count), e.footerTop, e.footerBottom});
     for (qsizetype i = 1; i < s.size(); ++i) {
-        if (s.at(i).top < s.at(i - 1).bottom - Overlap)
-            return false;
+        if (s[i].top < s[i - 1].bottom - Overlap)
+            return std::nullopt;
     }
-    return true;
+    return s;
 }
 
-std::optional<qreal> RowFraction::unitAt(const RowEdges &e, qreal y)
+/// RowFraction::unitAt over the spans of usable edges.
+std::optional<qreal> unitIn(const Segments &s, const RowEdges &e, qreal y)
 {
-    if (!finite(y) || !valid(e))
-        return std::nullopt;
-    const QList<Segment> s = segments(e);
-    if (s.isEmpty())
+    if (!finite(y) || s.isEmpty())
         return std::nullopt;
     for (qsizetype i = 0; i < s.size(); ++i) {
-        const Segment &seg = s.at(i);
+        const Segment &seg = s[i];
         if (y < seg.top) {
             // In the gap before this unit: its top boundary, when nothing can lie between.
             if (i == 0)
                 return seg.unit == 0 || seg.openAbove ? std::optional<qreal>(seg.unit) : std::nullopt;
-            const Segment &prev = s.at(i - 1);
+            const Segment &prev = s[i - 1];
             if (prev.unit + 1 == seg.unit || (seg.openAbove && !prev.openBelow))
                 return seg.unit;
             if (prev.openBelow && !seg.openAbove)
@@ -110,15 +113,32 @@ std::optional<qreal> RowFraction::unitAt(const RowEdges &e, qreal y)
         if (y < seg.bottom)
             return seg.unit + (y - seg.top) / (seg.bottom - seg.top);
     }
-    const qreal units = e.units();
-    const Segment &last = s.constLast();
-    return last.unit + 1 == units || last.openBelow ? std::optional<qreal>(last.unit + 1) : std::nullopt;
+    const Segment &last = s.back();
+    return last.unit + 1 == e.units() || last.openBelow ? std::optional<qreal>(last.unit + 1) : std::nullopt;
+}
+
+} // namespace
+
+// ---- RowFraction --------------------------------------------------------------------------------
+
+bool RowFraction::valid(const RowEdges &e)
+{
+    return usableSegments(e).has_value();
+}
+
+std::optional<qreal> RowFraction::unitAt(const RowEdges &e, qreal y)
+{
+    const std::optional<Segments> s = usableSegments(e);
+    return s ? unitIn(*s, e, y) : std::nullopt;
 }
 
 std::optional<qreal> RowFraction::visibleUnits(const RowEdges &e)
 {
-    const std::optional<qreal> top = unitAt(e, e.viewTop);
-    const std::optional<qreal> bottom = unitAt(e, e.viewBottom);
+    const std::optional<Segments> s = usableSegments(e);
+    if (!s)
+        return std::nullopt;
+    const std::optional<qreal> top = unitIn(*s, e, e.viewTop);
+    const std::optional<qreal> bottom = unitIn(*s, e, e.viewBottom);
     if (!top || !bottom)
         return std::nullopt;
     return std::max<qreal>(0, *bottom - *top);
@@ -126,14 +146,15 @@ std::optional<qreal> RowFraction::visibleUnits(const RowEdges &e)
 
 std::optional<qreal> RowFraction::progress(const RowEdges &e)
 {
-    if (e.count <= 0 || !valid(e))
+    const std::optional<Segments> s = e.count > 0 ? usableSegments(e) : std::nullopt;
+    if (!s)
         return std::nullopt;
     if (e.atBeginning)
         return 0;
     if (e.atEnd)
         return 1;
-    const std::optional<qreal> top = unitAt(e, e.viewTop);
-    const std::optional<qreal> bottom = unitAt(e, e.viewBottom);
+    const std::optional<qreal> top = unitIn(*s, e, e.viewTop);
+    const std::optional<qreal> bottom = unitIn(*s, e, e.viewBottom);
     if (!top || !bottom)
         return std::nullopt;
     const qreal above = std::max<qreal>(0, *top);
@@ -212,24 +233,14 @@ void RowScroll::setView(QQuickItem *view)
 
 void RowScroll::connectView()
 {
-    const QMetaMethod slot = metaObject()->method(metaObject()->indexOfSlot("schedule()"));
-    const auto follow = [this, &slot](QObject *object, const char *signal) {
-        const int index = object->metaObject()->indexOfSignal(signal);
-        if (index >= 0)
-            m_connections.append(connect(object, object->metaObject()->method(index), this, slot));
-    };
     for (const char *signal : {"contentYChanged()", "heightChanged()", "contentHeightChanged()", "originYChanged()",
                                "countChanged()", "movingChanged()", "topMarginChanged()", "bottomMarginChanged()",
                                "headerItemChanged()", "footerItemChanged()"})
-        follow(m_view, signal);
+        m_connections.append(connectIfAny(m_view, signal, this, "schedule()"));
     m_connections.append(connect(m_view, &QQuickItem::windowChanged, this, &RowScroll::attachWindow));
     attachWindow(m_view->window());
     // A model with hidden rows (the editor's folded blocks): its shown rows are the units.
-    const int modelChanged = m_view->metaObject()->indexOfSignal("modelChanged()");
-    if (modelChanged >= 0) {
-        const QMetaMethod rebind = metaObject()->method(metaObject()->indexOfSlot("rebindModel()"));
-        m_connections.append(connect(m_view, m_view->metaObject()->method(modelChanged), this, rebind));
-    }
+    m_connections.append(connectIfAny(m_view, "modelChanged()", this, "rebindModel()"));
     bindModel();
 }
 
@@ -260,12 +271,8 @@ void RowScroll::bindModel()
                    methodOf(mo, "visibleRowAt(int)")};
     m_hidden = m_modelMeta.visibleCount.isValid() && m_modelMeta.visibleRowsBefore.isValid()
                && m_modelMeta.visibleRowAt.isValid();
-    if (m_hidden) {
-        const int index = mo->indexOfSignal("visibleCountChanged()");
-        if (index >= 0)
-            m_modelConnection = connect(m_model, mo->method(index), this,
-                                        metaObject()->method(metaObject()->indexOfSlot("schedule()")));
-    }
+    if (m_hidden)
+        m_modelConnection = connectIfAny(m_model, "visibleCountChanged()", this, "schedule()");
 }
 
 void RowScroll::setDragging(bool dragging)
@@ -326,10 +333,9 @@ int RowScroll::rowOfUnit(int unit) const
     return row;
 }
 
-int RowScroll::rowAt(qreal y, qreal viewTop, qreal viewBottom) const
+int RowScroll::rowAt(qreal y, qreal viewTop, qreal viewBottom, int count) const
 {
-    const int count = m_view ? m_viewMeta.count.read(m_view).toInt() : 0;
-    if (count <= 0 || !m_viewMeta.indexAt.isValid())
+    if (!m_view || count <= 0 || !m_viewMeta.indexAt.isValid())
         return -1;
     const auto indexAt = [this](qreal x, qreal py) {
         int index = -1;
@@ -338,9 +344,8 @@ int RowScroll::rowAt(qreal y, qreal viewTop, qreal viewBottom) const
         return index;
     };
     const qreal w = m_view->width();
-    const QList<qreal> xs{w / 2, 1, std::max<qreal>(1, w - 1)};
     int hint = -1;
-    for (const qreal x : xs) {
+    for (const qreal x : {w / 2, qreal(1), std::max<qreal>(1, w - 1)}) {
         if ((hint = indexAt(x, y)) >= 0)
             break;
     }
@@ -349,23 +354,22 @@ int RowScroll::rowAt(qreal y, qreal viewTop, qreal viewBottom) const
     // In a gap (spacing, a section header): any created row of the view to walk from.
     for (qreal py = viewTop; hint < 0 && py <= viewBottom; py += 24)
         hint = indexAt(w / 2, py);
-    QQuickItem *item = hint >= 0 ? itemAt(hint) : nullptr;
+    const QQuickItem *item = hint >= 0 ? itemAt(hint) : nullptr;
     if (!item)
         return -1;
     // The row whose span holds y: the last created row starting at or above it.
     while (hint > 0 && item->y() > y) {
-        QQuickItem *prev = itemAt(hint - 1);
+        const QQuickItem *prev = itemAt(hint - 1);
         if (!prev)
             break;
         --hint;
         item = prev;
     }
     while (hint + 1 < count) {
-        QQuickItem *next = itemAt(hint + 1);
+        const QQuickItem *next = itemAt(hint + 1);
         if (!next || next->y() > y)
             break;
         ++hint;
-        item = next;
     }
     m_lastRow = hint;
     return hint;
@@ -373,19 +377,17 @@ int RowScroll::rowAt(qreal y, qreal viewTop, qreal viewBottom) const
 
 std::optional<RowSpan> RowScroll::span(int row, int count) const
 {
-    QQuickItem *item = itemAt(row);
+    const QQuickItem *item = itemAt(row);
     // A hidden row (zero height) is no unit.
     if (!item || !(item->height() > 0))
         return std::nullopt;
-    RowSpan s;
-    s.index = unitOfRow(row);
-    s.top = item->y();
     // The delegate only: spacing and a section header are the gap to the next row, a boundary
     // whether or not the row on its other side is created (it is not once its end left the view).
-    s.bottom = item->y() + item->height();
-    s.openAbove = shownRow(row - 1, -1, count) < 0;
-    s.openBelow = shownRow(row + 1, 1, count) < 0;
-    return s;
+    return RowSpan{.index = unitOfRow(row),
+                   .top = item->y(),
+                   .bottom = item->y() + item->height(),
+                   .openAbove = shownRow(row - 1, -1, count) < 0,
+                   .openBelow = shownRow(row + 1, 1, count) < 0};
 }
 
 int RowScroll::shownRow(int row, int step, int count) const
@@ -397,11 +399,11 @@ int RowScroll::shownRow(int row, int step, int count) const
         const int unit = unitOfRow(row);
         const int first = rowOfUnit(unit); // the first shown row at or after `row`
         const int shown = step > 0 || first == row ? first : rowOfUnit(unit - 1);
-        QQuickItem *item = shown >= 0 && shown < count ? itemAt(shown) : nullptr;
+        const QQuickItem *item = shown >= 0 && shown < count ? itemAt(shown) : nullptr;
         return item && item->height() > 0 ? shown : -1;
     }
     for (; row >= 0 && row < count; row += step) {
-        QQuickItem *item = itemAt(row);
+        const QQuickItem *item = itemAt(row);
         if (!item)
             return -1;
         if (item->height() > 0)
@@ -435,6 +437,7 @@ RowEdges RowScroll::edges() const
         e.footerBottom = footer->y() + footer->height();
     }
     // Keeps e.rows sorted and without duplicates (the edges' rows and their neighbours).
+    e.rows.reserve(4);
     const auto add = [&e](const RowSpan &s) {
         const auto it = std::ranges::lower_bound(e.rows, s.index, {}, &RowSpan::index);
         if (it == e.rows.end() || it->index != s.index)
@@ -443,7 +446,7 @@ RowEdges RowScroll::edges() const
     for (const qreal y : {e.viewTop, e.viewBottom}) {
         if ((e.hasHeader && y < e.headerBottom) || (e.hasFooter && y >= e.footerTop))
             continue;
-        const int at = rowAt(y, e.viewTop, e.viewBottom);
+        const int at = rowAt(y, e.viewTop, e.viewBottom, count);
         if (at < 0)
             continue;
         // The shown row at or above y (folded rows have no height), else the first one below it.
@@ -509,9 +512,11 @@ void RowScroll::scrollTo(qreal position)
     if (!m_view || !finite(position))
         return;
     m_pendingScroll = position;
-    if (m_lastScroll.isValid() && m_lastScroll.elapsed() < ScrollIntervalMs) {
+    // Read once: a second read can be past the interval, and a negative one starts no timer.
+    const qint64 since = m_lastScroll.isValid() ? m_lastScroll.elapsed() : ScrollIntervalMs;
+    if (since < ScrollIntervalMs) {
         if (!m_scrollTimer.isActive())
-            m_scrollTimer.start(int(ScrollIntervalMs - m_lastScroll.elapsed()));
+            m_scrollTimer.start(std::chrono::milliseconds(ScrollIntervalMs - since));
         return;
     }
     applyScroll();
@@ -521,8 +526,7 @@ void RowScroll::applyScroll()
 {
     if (!m_pendingScroll || !m_view)
         return;
-    const qreal position = *m_pendingScroll;
-    m_pendingScroll.reset();
+    const qreal position = *std::exchange(m_pendingScroll, std::nullopt);
     m_lastScroll.start();
     const qreal t = m_size < 1 ? std::clamp<qreal>(position / (1 - m_size), 0, 1) : 0;
     if (t <= 0) {
@@ -546,22 +550,19 @@ void RowScroll::applyScroll()
     refresh();
 }
 
-void RowScroll::place(const RowFraction::Target &target, const RowEdges &shape)
+void RowScroll::place(RowFraction::Target target, const RowEdges &shape)
 {
     QQuickItem *v = m_view;
-    const int count = v->property("count").toInt();
+    const int count = m_viewMeta.count.read(v).toInt();
     if (target.row < 0) {
         QMetaObject::invokeMethod(v, "positionViewAtBeginning");
-        auto *header = v->property("headerItem").value<QQuickItem *>();
+        const auto *header = m_viewMeta.headerItem.read(v).value<QQuickItem *>();
         if (header && target.fraction > 0)
-            v->setProperty("contentY", real(m_viewMeta.contentY) + target.fraction * header->height());
+            m_viewMeta.contentY.write(v, real(m_viewMeta.contentY) + target.fraction * header->height());
         return;
     }
-    if (target.row >= shape.count) {
-        QMetaObject::invokeMethod(v, "positionViewAtEnd");
-        return;
-    }
-    const int row = rowOfUnit(target.row);
+    // The footer, or a unit without a row: the end.
+    const int row = target.row < shape.count ? rowOfUnit(target.row) : -1;
     if (row < 0 || row >= count) {
         QMetaObject::invokeMethod(v, "positionViewAtEnd");
         return;
@@ -577,7 +578,7 @@ void RowScroll::place(const RowFraction::Target &target, const RowEdges &shape)
     if (y >= maxY)
         QMetaObject::invokeMethod(v, "positionViewAtEnd");
     else
-        v->setProperty("contentY", std::max(y, real(m_viewMeta.originY) - topMargin));
+        m_viewMeta.contentY.write(v, std::max(y, real(m_viewMeta.originY) - topMargin));
 }
 
 } // namespace brulion::ui

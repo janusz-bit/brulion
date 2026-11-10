@@ -6,6 +6,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <iterator>
+#include <utility>
 
 using namespace Qt::StringLiterals;
 
@@ -20,9 +22,27 @@ bool finite(qreal v)
     return std::isfinite(v);
 }
 
+/// A finite number above 0.
+bool positive(qreal v)
+{
+    return finite(v) && v > 0;
+}
+
+/// A device pixel ratio; an invalid one (not finite, not above 0) counts as 1.
+qreal pixelRatio(qreal dpr)
+{
+    return positive(dpr) ? dpr : 1;
+}
+
 // A pinch-zoomed page shrinks the visual viewport too (a desktop touchpad, two fingers on a
 // phone): no keyboard. A little above 1: browsers round the scale.
 constexpr qreal kMaxScale = 1.01;
+
+/// A sample with a visual viewport (height and scale above 0) of a page that is not pinch-zoomed.
+bool usableViewport(const ViewportSample &sample)
+{
+    return positive(sample.height) && positive(sample.scale) && sample.scale <= kMaxScale;
+}
 
 // Two readings of the viewports' geometry the browser build tells apart (it reports changes of
 // half a pixel and more).
@@ -47,65 +67,51 @@ qreal keyboardOverlap(const QRectF &keyboard, bool nativePixels, qreal dpr, cons
 {
     if (!visible || window.isEmpty())
         return 0;
-    if (!finite(keyboard.x()) || !finite(keyboard.y()) || !finite(keyboard.width()) || !finite(keyboard.height()))
+    if (!finite(keyboard.x()) || !finite(keyboard.y()) || keyboard.y() < 0 || !positive(keyboard.width())
+        || !positive(keyboard.height()))
         return 0;
-    if (keyboard.width() <= 0 || keyboard.height() <= 0 || keyboard.y() < 0)
+    const qreal ratio = nativePixels ? pixelRatio(dpr) : 1;
+    const QRectF kb(keyboard.x() / ratio, keyboard.y() / ratio, keyboard.width() / ratio, keyboard.height() / ratio);
+    const QRectF win(window); // its right() and bottom() are the edges (QRect's are one pixel short)
+    if (kb.right() <= win.left() || kb.left() >= win.right() || kb.bottom() <= win.top()) // beside or above it
         return 0;
-    const qreal ratio = nativePixels && finite(dpr) && dpr > 0 ? dpr : 1;
-    const QRectF kb = nativePixels ? QRectF(keyboard.x() / ratio, keyboard.y() / ratio, keyboard.width() / ratio,
-                                            keyboard.height() / ratio)
-                                   : keyboard;
-    // QRect's right()/bottom() are one pixel short of the edge: use x + width, y + height.
-    const qreal left = window.x();
-    const qreal right = window.x() + window.width();
-    const qreal top = window.y();
-    const qreal bottom = window.y() + window.height();
-    if (kb.right() <= left || kb.left() >= right || kb.bottom() <= top) // beside or above the window
-        return 0;
-    if (kb.top() >= bottom) // below it (the window was resized above the keyboard)
+    if (kb.top() >= win.bottom()) // below it (the window was resized above the keyboard)
         return 0;
     // Everything from the keyboard's top down counts (also below a keyboard that ends above the
     // window's bottom: what sits on the keyboard goes above its top).
-    return std::clamp<qreal>(bottom - std::max(kb.top(), top), 0, window.height());
+    return std::clamp<qreal>(win.bottom() - std::max(kb.top(), win.top()), 0, win.height());
 }
 
 qreal viewportOverlap(const ViewportSample &sample, qreal windowHeight)
 {
-    if (!finite(sample.height) || sample.height <= 0 || !finite(sample.offsetTop) || !finite(sample.scale)
-        || sample.scale <= 0 || sample.scale > kMaxScale)
+    if (!usableViewport(sample) || !finite(sample.offsetTop))
         return 0;
-    const qreal container = finite(sample.containerHeight) && sample.containerHeight > 0 ? sample.containerHeight
-                            : finite(windowHeight) && windowHeight > 0                   ? windowHeight
-                            : finite(sample.innerHeight) && sample.innerHeight > 0       ? sample.innerHeight
-                                                                                         : 0;
-    if (container <= 0)
+    // The container's height: its own, else Qt's window's, else innerHeight.
+    const qreal heights[] = {sample.containerHeight, windowHeight, sample.innerHeight};
+    const auto container = std::ranges::find_if(heights, positive);
+    if (container == std::end(heights))
         return 0;
     const qreal top = std::max<qreal>(0, sample.offsetTop);
-    const qreal overlap = std::clamp<qreal>(container - (top + sample.height), 0, container);
+    const qreal overlap = std::clamp<qreal>(*container - (top + sample.height), 0, *container);
     return overlap < ViewportKeyboard::MinOverlap ? 0 : overlap;
 }
 
 ViewportKeyboard::State ViewportKeyboard::update(const ViewportSample &sample, qreal windowHeight)
 {
-    State state;
-    state.overlap = viewportOverlap(sample, windowHeight);
     // The page the browser shrank itself (interactive-widget=resizes-content): the visual
     // viewport is the whole page, so the keyboard shows as a shrink against the tallest seen.
-    const bool usable = finite(sample.height) && sample.height > 0 && finite(sample.scale) && sample.scale > 0
-                        && sample.scale <= kMaxScale;
-    if (usable) {
+    bool shrunk = false;
+    if (usableViewport(sample)) {
         qreal &tallest = m_tallest[widthKey(sample.innerWidth)];
         tallest = std::max(tallest, sample.height);
         // Qt's <input> focused starts it; a focus passing between Qt's elements (Enter: the next
         // block) does not end it while the page stays shrunk and the samples have not settled. A
         // settled sample without the focus does (the editing is over; a split screen keeps the
         // page shrunk with no keyboard).
-        if (sample.touch && (sample.editing || (m_shrunk && !sample.settled)) && tallest - sample.height >= MinKeyboard)
-            state.shown = true;
+        shrunk = sample.touch && (sample.editing || (m_shrunk && !sample.settled))
+                 && tallest - sample.height >= MinKeyboard;
     }
-    m_shrunk = state.shown;
-    if (state.overlap > 0)
-        state.shown = true;
+    m_shrunk = shrunk;
     if (sample.settled) {
         m_settled = sample;
         m_hasSettled = true;
@@ -113,8 +119,8 @@ ViewportKeyboard::State ViewportKeyboard::update(const ViewportSample &sample, q
     } else if (!m_hasSettled || !sameGeometry(sample, m_settled)) {
         m_moving = true;
     }
-    state.animating = m_moving && !sample.settled;
-    return state;
+    const qreal overlap = viewportOverlap(sample, windowHeight);
+    return {.overlap = overlap, .shown = shrunk || overlap > 0, .animating = m_moving && !sample.settled};
 }
 
 qreal ViewportKeyboard::tallest(qreal innerWidth) const
@@ -152,15 +158,12 @@ QString KeyboardInsets::sourceName() const
 
 qreal KeyboardInsets::toLogical(qreal nativePixels, qreal dpr)
 {
-    if (!finite(nativePixels) || nativePixels <= 0)
-        return 0;
-    const qreal ratio = finite(dpr) && dpr > 0 ? dpr : 1;
-    return nativePixels / ratio;
+    return positive(nativePixels) ? nativePixels / pixelRatio(dpr) : 0;
 }
 
 qreal KeyboardInsets::clampOverlap(qreal overlap) const
 {
-    if (!finite(overlap) || overlap <= 0)
+    if (!positive(overlap))
         return 0;
     return m_windowHeight > 0 ? std::min(overlap, m_windowHeight) : overlap;
 }
@@ -205,8 +208,7 @@ void KeyboardInsets::setViewportSample(const ViewportSample &sample)
 
 void KeyboardInsets::applyPlatform(qreal overlap, bool shown, bool animating, const QString &how)
 {
-    const bool first = !m_hasPlatform;
-    m_hasPlatform = true;
+    const bool first = !std::exchange(m_hasPlatform, true);
     m_platform = {clampOverlap(overlap), shown, animating};
     if (first) {
         qCInfo(brulion::logging::lcPlatform).noquote()
@@ -232,7 +234,7 @@ void KeyboardInsets::setInputMethodState(qreal overlap, bool shown)
 
 void KeyboardInsets::setWindowHeight(qreal height)
 {
-    const qreal h = finite(height) && height > 0 ? height : 0;
+    const qreal h = positive(height) ? height : 0;
     if (h == m_windowHeight)
         return;
     m_windowHeight = h;
@@ -266,12 +268,9 @@ void KeyboardInsets::update()
         source = Source::InputMethod;
     }
 
-    const State previous = m_current;
-    const Source previousSource = m_source;
-    const bool previousSlides = m_slidesOver;
-    m_current = next;
-    m_source = source;
-    m_slidesOver = slides;
+    const State previous = std::exchange(m_current, next);
+    const Source previousSource = std::exchange(m_source, source);
+    const bool previousSlides = std::exchange(m_slidesOver, slides);
     if (!qFuzzyCompare(1 + previous.overlap, 1 + next.overlap))
         Q_EMIT overlapChanged();
     if (previous.shown != next.shown)

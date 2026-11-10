@@ -5,6 +5,7 @@
 #include <QHash>
 
 #include <algorithm>
+#include <functional>
 #include <vector>
 
 using namespace Qt::StringLiterals;
@@ -13,36 +14,40 @@ namespace brulion::ui {
 
 namespace {
 
-/// Myers' greedy O(ND) algorithm on a[0..n) / b[0..m) (no common prefix/suffix expected).
-/// Appends ops with indices shifted by `aOff`/`bOff`. Returns false when the edit distance
-/// exceeds `maxCost` (nothing appended then).
-bool myers(const int *a, int n, const int *b, int m, int aOff, int bOff, int maxCost, QList<DiffOp> &out)
+/// Myers' move into diagonal `k` at step `d`, given `furthest[k]`, the furthest x on each
+/// diagonal after step d - 1: down from diagonal k + 1 (an insertion), else right from k - 1
+/// (a deletion).
+bool movesDown(const int *furthest, int k, int d)
 {
-    const int max = n + m;
-    const int limit = std::min(max, maxCost);
-    const int offset = limit + 1;
-    std::vector<int> v(size_t(2 * limit + 3), 0);
-    std::vector<std::vector<int>> trace; // trace[d][k + d] = furthest x on diagonal k after step d
+    return k == -d || (k != d && furthest[k - 1] < furthest[k + 1]);
+}
+
+/// Myers' greedy O(ND) algorithm on a[0..n) / b[0..m) (no common prefix/suffix expected).
+/// Appends ops with indices shifted by `offset`. Returns false when the edit distance exceeds
+/// `maxCost` (nothing appended then).
+bool myers(const int *a, int n, const int *b, int m, int offset, int maxCost, QList<DiffOp> &out)
+{
+    const int limit = std::min(n + m, maxCost);
+    std::vector<int> v(size_t(limit) * 2 + 3, 0);
+    // furthest[k]: the furthest x on diagonal k (-limit - 1 … limit + 1).
+    int *const furthest = v.data() + limit + 1;
+    std::vector<std::vector<int>> trace; // trace[d][k + d] = furthest[k] after step d
     int found = -1;
     for (int d = 0; d <= limit && found < 0; ++d) {
         for (int k = -d; k <= d; k += 2) {
-            int x;
-            if (k == -d || (k != d && v[size_t(offset + k - 1)] < v[size_t(offset + k + 1)]))
-                x = v[size_t(offset + k + 1)]; // down: insertion
-            else
-                x = v[size_t(offset + k - 1)] + 1; // right: deletion
+            int x = movesDown(furthest, k, d) ? furthest[k + 1] : furthest[k - 1] + 1;
             int y = x - k;
             while (x < n && y < m && a[x] == b[y]) {
                 ++x;
                 ++y;
             }
-            v[size_t(offset + k)] = x;
+            furthest[k] = x;
             if (x >= n && y >= m) {
                 found = d;
                 break;
             }
         }
-        trace.emplace_back(v.begin() + (offset - d), v.begin() + (offset + d + 1));
+        trace.emplace_back(furthest - d, furthest + d + 1);
     }
     if (found < 0)
         return false;
@@ -51,27 +56,26 @@ bool myers(const int *a, int n, const int *b, int m, int aOff, int bOff, int max
     int x = n;
     int y = m;
     for (int d = found; d > 0; --d) {
-        const std::vector<int> &prev = trace[size_t(d - 1)];
-        auto at = [&prev, d](int k) { return prev[size_t(k + d - 1)]; };
+        const int *const before = trace[size_t(d) - 1].data() + (d - 1); // furthest[] after step d - 1
         const int k = x - y;
-        const bool down = k == -d || (k != d && at(k - 1) < at(k + 1));
+        const bool down = movesDown(before, k, d);
         const int prevK = down ? k + 1 : k - 1;
-        const int prevX = at(prevK);
+        const int prevX = before[prevK];
         const int prevY = prevX - prevK;
         while (x > prevX && y > prevY) {
-            reversed.append({DiffOp::Equal, aOff + x - 1, bOff + y - 1});
+            reversed.append({DiffOp::Equal, offset + x - 1, offset + y - 1});
             --x;
             --y;
         }
         if (down)
-            reversed.append({DiffOp::Insert, -1, bOff + y - 1});
+            reversed.append({DiffOp::Insert, -1, offset + y - 1});
         else
-            reversed.append({DiffOp::Delete, aOff + x - 1, -1});
+            reversed.append({DiffOp::Delete, offset + x - 1, -1});
         x = prevX;
         y = prevY;
     }
     while (x > 0 && y > 0) {
-        reversed.append({DiffOp::Equal, aOff + x - 1, bOff + y - 1});
+        reversed.append({DiffOp::Equal, offset + x - 1, offset + y - 1});
         --x;
         --y;
     }
@@ -83,18 +87,11 @@ bool myers(const int *a, int n, const int *b, int m, int aOff, int bOff, int max
 /// Within each run of non-equal ops, put deletions before insertions (stable).
 void orderRegions(QList<DiffOp> &ops)
 {
-    qsizetype i = 0;
-    while (i < ops.size()) {
-        if (ops.at(i).kind == DiffOp::Equal) {
-            ++i;
-            continue;
-        }
-        qsizetype j = i;
-        while (j < ops.size() && ops.at(j).kind != DiffOp::Equal)
-            ++j;
-        std::stable_partition(ops.begin() + i, ops.begin() + j,
-                              [](const DiffOp &op) { return op.kind == DiffOp::Delete; });
-        i = j;
+    const auto isEqual = [](DiffOp op) { return op.kind == DiffOp::Equal; };
+    for (auto it = ops.begin(); it != ops.end();) {
+        const auto run = std::find_if_not(it, ops.end(), isEqual);
+        it = std::find_if(run, ops.end(), isEqual);
+        std::stable_partition(run, it, [](DiffOp op) { return op.kind == DiffOp::Delete; });
     }
 }
 
@@ -108,21 +105,15 @@ QList<text::Line> linesOf(QStringView s)
     return lines;
 }
 
-/// Stable small integer for `key` (QHash::emplace would overwrite existing values).
-int internId(QHash<QString, int> &ids, const QString &key)
-{
-    auto it = ids.constFind(key);
-    if (it == ids.cend())
-        it = ids.insert(key, int(ids.size()));
-    return it.value();
-}
-
-QList<int> intern(const QList<text::Line> &lines, QHash<QString, int> &ids)
+/// A stable small integer for the string (`proj`) of each of `items`: its id in `ids`, a new
+/// one (the count so far) for a string seen first.
+template<typename List, typename Proj = std::identity>
+QList<int> intern(const List &items, QHash<QString, int> &ids, Proj proj = {})
 {
     QList<int> out;
-    out.reserve(lines.size());
-    for (const text::Line &l : lines)
-        out.append(internId(ids, l.text));
+    out.reserve(items.size());
+    for (const auto &item : items)
+        out.append(*ids.tryEmplace(std::invoke(proj, item), int(ids.size())).iterator);
     return out;
 }
 
@@ -181,12 +172,8 @@ Segments wordSegments(const QString &oldLine, const QString &newLine)
     const QStringList oldTokens = tokenize(oldLine);
     const QStringList newTokens = tokenize(newLine);
     QHash<QString, int> ids;
-    QList<int> a;
-    QList<int> b;
-    for (const QString &t : oldTokens)
-        a.append(internId(ids, t));
-    for (const QString &t : newTokens)
-        b.append(internId(ids, t));
+    const QList<int> a = intern(oldTokens, ids);
+    const QList<int> b = intern(newTokens, ids);
     const QList<DiffOp> ops = diffSequences(a, b, 400);
     QList<bool> oldChanged(oldTokens.size(), true);
     QList<bool> newChanged(newTokens.size(), true);
@@ -202,7 +189,7 @@ Segments wordSegments(const QString &oldLine, const QString &newLine)
     const qsizetype longest = std::max(oldLine.trimmed().size(), newLine.trimmed().size());
     if (longest == 0 || same * 5 < longest * 2) // less than 40 % in common
         return {};
-    return {mergeSegments(oldTokens, oldChanged), mergeSegments(newTokens, newChanged)};
+    return {mergeSegments(oldTokens, std::move(oldChanged)), mergeSegments(newTokens, std::move(newChanged))};
 }
 
 /// A changed region: indices of deleted old lines and inserted new lines.
@@ -240,28 +227,25 @@ QVariantList collapse(const QVariantList &rows, int context)
 {
     if (context < 0)
         return rows;
+    const auto isEqual = [](const QVariant &row) { return row.toMap().value(u"kind"_s).toString() == u"equal"; };
     QVariantList out;
-    qsizetype i = 0;
     const qsizetype n = rows.size();
-    while (i < n) {
-        const QVariantMap row = rows.at(i).toMap();
-        if (row.value(u"kind"_s).toString() != u"equal") {
-            out.append(row);
+    for (qsizetype i = 0; i < n;) {
+        if (!isEqual(rows.at(i))) {
+            out.append(rows.at(i));
             ++i;
             continue;
         }
         qsizetype j = i;
-        while (j < n && rows.at(j).toMap().value(u"kind"_s).toString() == u"equal")
+        while (j < n && isEqual(rows.at(j)))
             ++j;
         const qsizetype keepBefore = i == 0 ? 0 : context; // after the previous change
         const qsizetype keepAfter = j == n ? 0 : context;  // before the next change
         const qsizetype hidden = (j - i) - keepBefore - keepAfter;
         if (hidden < 2) {
-            for (qsizetype k = i; k < j; ++k)
-                out.append(rows.at(k));
+            out.append(rows.sliced(i, j - i));
         } else {
-            for (qsizetype k = i; k < i + keepBefore; ++k)
-                out.append(rows.at(k));
+            out.append(rows.sliced(i, keepBefore));
             const QVariantMap first = rows.at(i + keepBefore).toMap();
             out.append(QVariantMap{
                     {u"kind"_s, u"skip"_s},
@@ -271,8 +255,7 @@ QVariantList collapse(const QVariantList &rows, int context)
                     {u"oldNo"_s, 0},
                     {u"newNo"_s, 0},
             });
-            for (qsizetype k = j - keepAfter; k < j; ++k)
-                out.append(rows.at(k));
+            out.append(rows.sliced(j - keepAfter, keepAfter));
         }
         i = j;
     }
@@ -305,6 +288,15 @@ void appendPiece(QString &out, const QString &piece, const QString &eol)
     out += piece;
 }
 
+/// The lines of `lines` at `indexes`, terminators included.
+QString joinedLines(const QList<text::Line> &lines, const QList<int> &indexes)
+{
+    QString out;
+    for (int i : indexes)
+        out += lines.at(i).text + lines.at(i).eol;
+    return out;
+}
+
 } // namespace
 
 QList<DiffOp> diffSequences(const QList<int> &a, const QList<int> &b, int maxCost)
@@ -323,13 +315,9 @@ QList<DiffOp> diffSequences(const QList<int> &a, const QList<int> &b, int maxCos
         ops.append({DiffOp::Equal, i, i});
     const int an = n - pre - suf;
     const int bm = m - pre - suf;
-    if (an == 0) {
-        for (int j = 0; j < bm; ++j)
-            ops.append({DiffOp::Insert, -1, pre + j});
-    } else if (bm == 0) {
-        for (int i = 0; i < an; ++i)
-            ops.append({DiffOp::Delete, pre + i, -1});
-    } else if (!myers(a.constData() + pre, an, b.constData() + pre, bm, pre, pre, std::max(1, maxCost), ops)) {
+    // Only deletions or insertions in the middle, or more changes than maxCost: one block of each.
+    if (an == 0 || bm == 0
+        || !myers(a.constData() + pre, an, b.constData() + pre, bm, pre, std::max(1, maxCost), ops)) {
         for (int i = 0; i < an; ++i)
             ops.append({DiffOp::Delete, pre + i, -1});
         for (int j = 0; j < bm; ++j)
@@ -344,8 +332,8 @@ QList<DiffOp> diffSequences(const QList<int> &a, const QList<int> &b, int maxCos
 QList<DiffOp> diffLines(QStringView oldText, QStringView newText)
 {
     QHash<QString, int> ids;
-    const QList<int> a = intern(linesOf(oldText), ids);
-    const QList<int> b = intern(linesOf(newText), ids);
+    const QList<int> a = intern(linesOf(oldText), ids, &text::Line::text);
+    const QList<int> b = intern(linesOf(newText), ids, &text::Line::text);
     return diffSequences(a, b);
 }
 
@@ -423,25 +411,22 @@ QVariantList DiffHelper::splitRows(const QString &oldText, const QString &newTex
                     const bool hasNew = p < r.inserted.size();
                     const int o = hasOld ? r.deleted.at(p) : -1;
                     const int n = hasNew ? r.inserted.at(p) : -1;
-                    QVariantMap row{
+                    const QString left = hasOld ? oldLines.at(o).text : QString();
+                    const QString right = hasNew ? newLines.at(n).text : QString();
+                    const Segments s = hasOld && hasNew ? wordSegments(left, right) : Segments();
+                    rows.append(QVariantMap{
                             {u"kind"_s, hasOld && hasNew ? u"change"_s
                                         : hasOld         ? u"delete"_s
                                                          : u"insert"_s},
                             {u"oldNo"_s, o + 1},
                             {u"newNo"_s, n + 1},
-                            {u"left"_s, hasOld ? oldLines.at(o).text : QString()},
-                            {u"right"_s, hasNew ? newLines.at(n).text : QString()},
-                            {u"leftText"_s, hasOld ? oldLines.at(o).text : QString()},
-                            {u"rightText"_s, hasNew ? newLines.at(n).text : QString()},
-                            {u"leftSegments"_s, QVariantList()},
-                            {u"rightSegments"_s, QVariantList()},
-                    };
-                    if (hasOld && hasNew) {
-                        const Segments s = wordSegments(oldLines.at(o).text, newLines.at(n).text);
-                        row.insert(u"leftSegments"_s, s.oldSegs);
-                        row.insert(u"rightSegments"_s, s.newSegs);
-                    }
-                    rows.append(row);
+                            {u"left"_s, left},
+                            {u"right"_s, right},
+                            {u"leftText"_s, left},
+                            {u"rightText"_s, right},
+                            {u"leftSegments"_s, s.oldSegs},
+                            {u"rightSegments"_s, s.newSegs},
+                    });
                 }
             });
     return collapse(rows, context);
@@ -462,31 +447,24 @@ QVariantList DiffHelper::viewRows(const QString &oldText, const QString &newText
             {u"leftSegments"_s, QVariantList()},
             {u"rightSegments"_s, QVariantList()},
     };
+    // Every row is a map: completed in place (no copy of it).
     for (QVariant &r : rows) {
-        QVariantMap row = r.toMap();
+        QVariantMap *row = get_if<QVariantMap>(&r);
         for (const auto &[key, value] : defaults) {
-            if (!row.contains(key))
-                row.insert(key, value);
+            if (row && !row->contains(key))
+                row->insert(key, value);
         }
-        r = row;
     }
     return rows;
 }
 
 QVariantMap DiffHelper::stats(const QString &oldText, const QString &newText) const
 {
-    int added = 0;
-    int removed = 0;
-    int unchanged = 0;
-    for (const DiffOp &op : cachedDiff(oldText, newText)) {
-        if (op.kind == DiffOp::Insert)
-            ++added;
-        else if (op.kind == DiffOp::Delete)
-            ++removed;
-        else
-            ++unchanged;
-    }
-    return {{u"added"_s, added}, {u"removed"_s, removed}, {u"unchanged"_s, unchanged}};
+    const QList<DiffOp> ops = cachedDiff(oldText, newText);
+    const auto count = [&ops](DiffOp::Kind kind) { return int(std::ranges::count(ops, kind, &DiffOp::kind)); };
+    return {{u"added"_s, count(DiffOp::Insert)},
+            {u"removed"_s, count(DiffOp::Delete)},
+            {u"unchanged"_s, count(DiffOp::Equal)}};
 }
 
 QVariantList DiffHelper::conflictHunks(const QString &ours, const QString &theirs) const
@@ -494,32 +472,21 @@ QVariantList DiffHelper::conflictHunks(const QString &ours, const QString &their
     const QList<text::Line> oursLines = linesOf(ours);
     const QList<text::Line> theirsLines = linesOf(theirs);
     QVariantList hunks;
-    QString same;
-    int sameLines = 0;
+    QList<int> same; // the unchanged lines (of ours) since the last conflict
     auto flushSame = [&] {
-        if (sameLines > 0)
-            hunks.append(QVariantMap{{u"kind"_s, u"same"_s}, {u"text"_s, same}, {u"lines"_s, sameLines}});
+        if (!same.isEmpty())
+            hunks.append(QVariantMap{
+                    {u"kind"_s, u"same"_s}, {u"text"_s, joinedLines(oursLines, same)}, {u"lines"_s, int(same.size())}});
         same.clear();
-        sameLines = 0;
     };
     walk(
-            cachedDiff(ours, theirs),
-            [&](int o, int) {
-                same += oursLines.at(o).text + oursLines.at(o).eol;
-                ++sameLines;
-            },
+            cachedDiff(ours, theirs), [&](int o, int) { same.append(o); },
             [&](const Region &r) {
                 flushSame();
-                QString o;
-                QString t;
-                for (int i : r.deleted)
-                    o += oursLines.at(i).text + oursLines.at(i).eol;
-                for (int i : r.inserted)
-                    t += theirsLines.at(i).text + theirsLines.at(i).eol;
                 hunks.append(QVariantMap{
                         {u"kind"_s, u"conflict"_s},
-                        {u"ours"_s, o},
-                        {u"theirs"_s, t},
+                        {u"ours"_s, joinedLines(oursLines, r.deleted)},
+                        {u"theirs"_s, joinedLines(theirsLines, r.inserted)},
                         {u"oursLine"_s, r.deleted.isEmpty() ? 0 : r.deleted.first() + 1},
                         {u"theirsLine"_s, r.inserted.isEmpty() ? 0 : r.inserted.first() + 1},
                 });

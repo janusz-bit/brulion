@@ -14,6 +14,9 @@
 #include <QFileInfo>
 #include <QJsonArray>
 
+#include <ranges>
+#include <utility>
+
 using namespace Qt::StringLiterals;
 
 namespace brulion::widgets {
@@ -49,7 +52,9 @@ QJsonArray pagesJson(const QList<PageRef> &pages, int max)
     return out;
 }
 
-QJsonObject tasksJson(VaultIndex *index, const SnapshotOptions &options, QDate today, QJsonArray *tasks)
+/// The open tasks the widgets list (overdue, or filed at most taskDays ahead; at most maxTasks) and
+/// the counts of the overdue, today and tomorrow sections (every task in them).
+std::pair<QJsonArray, QJsonObject> tasksJson(VaultIndex *index, const SnapshotOptions &options, QDate today)
 {
     using Model = planning::TaskListModel;
     Model model;
@@ -65,6 +70,7 @@ QJsonObject tasksJson(VaultIndex *index, const SnapshotOptions &options, QDate t
     model.componentComplete();
 
     const QDate last = today.addDays(options.taskDays);
+    QJsonArray tasks;
     QHash<QString, int> counts;
     for (int row = 0; row < model.rowCount(); ++row) {
         const QModelIndex idx = model.index(row);
@@ -74,6 +80,8 @@ QJsonObject tasksJson(VaultIndex *index, const SnapshotOptions &options, QDate t
         if (section == u"noDate" || section == u"done")
             continue;
         ++counts[section];
+        if (tasks.size() >= options.maxTasks)
+            continue; // still counted
         const QString path = model.data(idx, Model::PathRole).toString();
         const int line = model.data(idx, Model::LineRole).toInt();
         const Block *block = taskBlock(*index, path, line);
@@ -85,15 +93,10 @@ QJsonObject tasksJson(VaultIndex *index, const SnapshotOptions &options, QDate t
                 Model::filingDate(*block->task, today, next ? std::optional<QDate>(next->at.date) : std::nullopt);
         if (section != u"overdue" && (!filed || *filed > last))
             continue;
-        if (tasks->size() >= options.maxTasks)
-            continue;
         QJsonArray reminders;
-        for (const Reminder &r : block->reminders) {
-            if (reminders.size() >= MaxTaskReminders)
-                break;
+        for (const Reminder &r : block->reminders | std::views::take(MaxTaskReminders))
             reminders.append(QJsonObject{{u"at"_s, r.at.toString()}, {u"alarm"_s, r.alarm}});
-        }
-        tasks->append(QJsonObject{
+        tasks.append(QJsonObject{
                 {u"key"_s, model.data(idx, Model::KeyRole).toString()},
                 {u"text"_s, model.data(idx, Model::TextRole).toString()},
                 {u"status"_s, model.data(idx, Model::StatusRole).toString()},
@@ -111,9 +114,9 @@ QJsonObject tasksJson(VaultIndex *index, const SnapshotOptions &options, QDate t
                 {u"section"_s, section},
         });
     }
-    return QJsonObject{{u"overdue"_s, counts.value(u"overdue"_s)},
-                       {u"today"_s, counts.value(u"today"_s)},
-                       {u"tomorrow"_s, counts.value(u"tomorrow"_s)}};
+    return {std::move(tasks), QJsonObject{{u"overdue"_s, counts.value(u"overdue"_s)},
+                                          {u"today"_s, counts.value(u"today"_s)},
+                                          {u"tomorrow"_s, counts.value(u"tomorrow"_s)}}};
 }
 
 QJsonObject calendarJson(VaultIndex *index, const SnapshotOptions &options, QDate today)
@@ -190,8 +193,7 @@ QJsonObject buildSnapshot(const VaultIndex &constIndex, const SnapshotOptions &o
     // The models only read the index (they keep a QPointer to watch it while they live).
     auto *index = const_cast<VaultIndex *>(&constIndex);
     const QDate today = options.now.date();
-    QJsonArray tasks;
-    const QJsonObject counts = tasksJson(index, options, today, &tasks);
+    const auto [tasks, counts] = tasksJson(index, options, today);
 
     QJsonArray capture;
     for (const CaptureDay &day : options.captureDays) {

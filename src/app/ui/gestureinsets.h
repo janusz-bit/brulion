@@ -64,8 +64,6 @@ Q_SIGNALS:
     void exclusionChanged();
 
 private:
-    void apply(qreal oldLeft, qreal oldRight, bool oldSimulated);
-
     qreal m_platformLeft = 0;
     qreal m_platformRight = 0;
     qreal m_simulatedLeft = 0;

@@ -44,7 +44,7 @@ struct Hsl {
     double l = 0;
 };
 
-Hsl toHsl(const Rgb &c)
+Hsl toHsl(Rgb c)
 {
     const double r = c.r / 255.0, g = c.g / 255.0, b = c.b / 255.0;
     const double mx = std::max({r, g, b}), mn = std::min({r, g, b});
@@ -96,7 +96,7 @@ Rgb fromHsl(const Hsl &c)
 }
 
 /// `c` with its HSL lightness moved by `delta`.
-Rgb shifted(const Rgb &c, double delta)
+Rgb shifted(Rgb c, double delta)
 {
     Hsl h = toHsl(c);
     h.l = std::clamp(h.l + delta, 0.0, 1.0);
@@ -106,7 +106,7 @@ Rgb shifted(const Rgb &c, double delta)
 /// `start`, made darker (`darker`) or lighter step by step until `ok` holds (at the latest
 /// black or white, which pass every check the callers make).
 template<typename Ok>
-Rgb adjustUntil(const Rgb &start, bool darker, Ok ok)
+Rgb adjustUntil(Rgb start, bool darker, Ok ok)
 {
     if (ok(start))
         return start;
@@ -230,19 +230,19 @@ Rgb accentBase(QStringView name, bool dark)
 Accent deriveAccent(const Rgb &base, bool dark, const Surface &s)
 {
     const QList<Rgb> surfaces = textSurfaces(s);
-    const auto passes = [&](const Rgb &c, double ratio, const QList<Rgb> &on) {
-        return std::all_of(on.cbegin(), on.cend(), [&](const Rgb &bg) { return contrast(c, bg) >= ratio; });
+    const auto passes = [](Rgb c, double ratio, const QList<Rgb> &on) {
+        return std::ranges::all_of(on, [&](Rgb bg) { return contrast(c, bg) >= ratio; });
     };
     Accent a;
     // Marks: 3:1 on the surfaces (light surfaces: darker; dark ones: lighter).
-    a.accent = adjustUntil(base, !dark, [&](const Rgb &c) { return passes(c, 3.0, surfaces); });
+    a.accent = adjustUntil(base, !dark, [&](Rgb c) { return passes(c, 3.0, surfaces); });
     // Text: 4.5:1 on the surfaces and on the accent's tint over each of them (badges, chips).
     QList<Rgb> tinted = surfaces;
     for (const Rgb &bg : surfaces)
         tinted.append(over(a.accent, accentBgAlpha(dark), bg));
-    a.accentText = adjustUntil(a.accent, !dark, [&](const Rgb &c) { return passes(c, 4.5, tinted); });
+    a.accentText = adjustUntil(a.accent, !dark, [&](Rgb c) { return passes(c, 4.5, tinted); });
     // Solid fills carry white text in both modes.
-    a.accentSolid = adjustUntil(a.accent, true, [&](const Rgb &c) { return contrast(kWhite, c) >= 4.5; });
+    a.accentSolid = adjustUntil(a.accent, true, [](Rgb c) { return contrast(kWhite, c) >= 4.5; });
     a.accentHover = shifted(a.accent, dark ? 0.05 : -0.05);
     a.onAccent = kWhite;
     return a;
@@ -296,7 +296,7 @@ QVariantMap paletteMap(bool dark, QStringView lightSurface, QStringView darkSurf
     const Accent a = accent(accentName, customAccent, dark, s);
     const TextColors t = textColors(dark);
     QVariantMap m;
-    const auto put = [&m](const char *name, const Rgb &c) { m.insert(QString::fromLatin1(name), toHex(c)); };
+    const auto put = [&m](const char *name, Rgb c) { m.insert(QString::fromLatin1(name), toHex(c)); };
     put("bg", s.bg);
     put("bgElevated", s.bgElevated);
     put("bgElevated2", s.bgElevated2);
@@ -410,51 +410,6 @@ QString ThemePalette::colorText(double r, double g, double b, double a) const
 
 ThemeColors::ThemeColors(QObject *parent) : QObject(parent)
 {
-    update();
-}
-
-void ThemeColors::setDark(bool dark)
-{
-    if (m_dark == dark)
-        return;
-    m_dark = dark;
-    Q_EMIT inputsChanged();
-    update();
-}
-
-void ThemeColors::setLightSurface(const QString &name)
-{
-    if (m_lightSurface == name)
-        return;
-    m_lightSurface = name;
-    Q_EMIT inputsChanged();
-    update();
-}
-
-void ThemeColors::setDarkSurface(const QString &name)
-{
-    if (m_darkSurface == name)
-        return;
-    m_darkSurface = name;
-    Q_EMIT inputsChanged();
-    update();
-}
-
-void ThemeColors::setAccentName(const QString &name)
-{
-    if (m_accentName == name)
-        return;
-    m_accentName = name;
-    Q_EMIT inputsChanged();
-    update();
-}
-
-void ThemeColors::setCustomAccent(const QString &color)
-{
-    if (m_customAccent == color)
-        return;
-    m_customAccent = color;
-    Q_EMIT inputsChanged();
     update();
 }
 

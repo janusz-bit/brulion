@@ -39,6 +39,8 @@
 // standard set. Unknown arguments are ignored (other subsystems have their own).
 #pragma once
 
+#include "qttranslations.h"
+
 #include <QObject>
 #include <QPointer>
 #include <QSize>
@@ -49,8 +51,7 @@
 class QJSEngine;
 class QQmlApplicationEngine;
 class QQmlEngine;
-#include "qttranslations.h"
-
+class QQuickWindow;
 class QTranslator;
 
 namespace brulion::ui {
@@ -135,7 +136,7 @@ Q_SIGNALS:
     void languageChanged();
 
 private:
-    void takeScreenshot(QObject *root);
+    void takeScreenshot(const QPointer<QQuickWindow> &window);
 
     bool m_gallery = false;
     QString m_section;
@@ -164,7 +165,7 @@ private:
     QPointer<QQmlApplicationEngine> m_engine;
     /// The arguments, kept when they ask for the scroll probe (scrollprobe.h).
     QStringList m_probeArguments;
-    QTranslator *m_translator = nullptr;
+    QPointer<QTranslator> m_translator;
     bool m_translatorInstalled = false;
     QtTranslations m_qtTranslations;
 };

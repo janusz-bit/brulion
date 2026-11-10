@@ -22,8 +22,6 @@
 #include <QVariantMap>
 #include <QtQml/qqmlregistration.h>
 
-#include <functional>
-
 class QJSValue;
 class QQuickItem;
 
@@ -246,12 +244,6 @@ public:
     /// exception it threw as text ("TypeError: …") — a self-test step that fails with an error
     /// is counted and the next one runs.
     Q_INVOKABLE QString callCatching(QObject *object, const QString &function) const;
-
-private:
-    /// The first item under `item` (depth first, itself included) for which `match` holds; with
-    /// `descend` false for an item, its children are not looked at.
-    static QQuickItem *firstWhere(QQuickItem *item, const std::function<bool(QQuickItem *)> &match,
-                                  const std::function<bool(QQuickItem *)> &descend);
 };
 
 } // namespace brulion::ui

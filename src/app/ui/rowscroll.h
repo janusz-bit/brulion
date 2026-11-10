@@ -165,9 +165,9 @@ private:
     void connectView();
     void bindModel();
     void applyScroll();
-    void place(const RowFraction::Target &target, const RowEdges &shape);
-    /// The created row whose span holds y (-1: none).
-    int rowAt(qreal y, qreal viewTop, qreal viewBottom) const;
+    void place(RowFraction::Target target, const RowEdges &shape);
+    /// The created row whose span holds y (-1: none); `count`: the view's.
+    int rowAt(qreal y, qreal viewTop, qreal viewBottom, int count) const;
     /// The span of a created row, its index in units; nullopt for a hidden (zero-height) row.
     std::optional<RowSpan> span(int row, int count) const;
     /// From `row` in `step` (-1, 1) over created rows: the first shown one (-1: none, or a row
@@ -183,7 +183,7 @@ private:
     // The view's and the model's properties and methods, looked up once for each: refresh() runs
     // every frame while the list moves, and finding them by name every time (QObject::property,
     // QMetaObject::invokeMethod) was most of its cost. (Moving the view, at most once a frame while
-    // the bar is dragged, still calls by name.)
+    // the bar is dragged, still calls its methods by name.)
     struct ViewMeta {
         QMetaProperty count, contentY, contentHeight, originY, topMargin, bottomMargin, atYBeginning, atYEnd;
         QMetaProperty headerItem, footerItem, moving;

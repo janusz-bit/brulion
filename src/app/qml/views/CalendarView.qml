@@ -154,6 +154,28 @@ FocusScope {
         return s.length > 0 ? Js.toUpperCase(Js.charAt(s, 0)) + Js.sliceFrom(s, 1) : ""
     }
 
+    /// The add dialog for `kind` ("task" | "reminder"); the day sheet makes way for it.
+    function addFor(kind: string, date: string): void {
+        daySheet.close()
+        addDialog.openFor(kind, date)
+    }
+    /// A day's panel wired to this view (the side column, below the month, the phone's sheet).
+    component DayPanel: CalendarDayPanel {
+        calendar: cal
+        date: cal.anchorDate
+        onItemOpened: (entry) => root.openEntry(entry)
+        onItemToggled: (entry) => root.toggleEntry(entry)
+        onItemStatusRequested: (entry, status) => root.setEntryStatus(entry, status)
+        onItemMenuRequested: (entry, item, x, y) => root.openEntryMenu(entry, item, x, y)
+        onJournalOpened: (date) => root.openJournal(date)
+        onAddTaskRequested: (date) => root.addFor("task", date)
+        onAddReminderRequested: (date) => root.addFor("reminder", date)
+        onAllOverdueRequested: {
+            daySheet.close()
+            AppController.navigate({ view: "tasks" })
+        }
+    }
+
     // Deferred calls (instead of Qt.callLater) and what the toasts' buttons do.
     QtObject {
         id: later
@@ -288,7 +310,7 @@ FocusScope {
                     Layout.preferredHeight: 1
                     color: Theme.border
                 }
-                CalendarDayPanel {
+                DayPanel {
                     visible: root.stackedDay
                     Layout.fillWidth: true
                     Layout.fillHeight: true
@@ -296,16 +318,6 @@ FocusScope {
                     Layout.rightMargin: Theme.space2
                     Layout.topMargin: Theme.space3
                     bottomMargin: Theme.space4
-                    calendar: cal
-                    date: cal.anchorDate
-                    onItemOpened: (entry) => root.openEntry(entry)
-                    onItemToggled: (entry) => root.toggleEntry(entry)
-                    onItemStatusRequested: (entry, status) => root.setEntryStatus(entry, status)
-                    onItemMenuRequested: (entry, item, x, y) => root.openEntryMenu(entry, item, x, y)
-                    onJournalOpened: (date) => root.openJournal(date)
-                    onAddTaskRequested: (date) => addDialog.openFor("task", date)
-                    onAddReminderRequested: (date) => addDialog.openFor("reminder", date)
-                    onAllOverdueRequested: AppController.navigate({ view: "tasks" })
                 }
             }
             Rectangle {
@@ -320,19 +332,9 @@ FocusScope {
                 Layout.fillHeight: true
                 color: Theme.bgElevated
 
-                CalendarDayPanel {
+                DayPanel {
                     anchors.fill: parent
                     anchors.margins: Theme.space3
-                    calendar: cal
-                    date: cal.anchorDate
-                    onItemOpened: (entry) => root.openEntry(entry)
-                    onItemToggled: (entry) => root.toggleEntry(entry)
-                    onItemStatusRequested: (entry, status) => root.setEntryStatus(entry, status)
-                    onItemMenuRequested: (entry, item, x, y) => root.openEntryMenu(entry, item, x, y)
-                    onJournalOpened: (date) => root.openJournal(date)
-                    onAddTaskRequested: (date) => addDialog.openFor("task", date)
-                    onAddReminderRequested: (date) => addDialog.openFor("reminder", date)
-                    onAllOverdueRequested: AppController.navigate({ view: "tasks" })
                 }
             }
         }
@@ -391,30 +393,11 @@ FocusScope {
         showFooter: false
         preferredWidth: Theme.dialogWidth
 
-        CalendarDayPanel {
+        DayPanel {
             Layout.fillWidth: true
             Layout.preferredHeight: implicitHeight
             scrollable: false
             showHeading: false
-            calendar: cal
-            date: cal.anchorDate
-            onItemOpened: (entry) => root.openEntry(entry)
-            onItemToggled: (entry) => root.toggleEntry(entry)
-            onItemStatusRequested: (entry, status) => root.setEntryStatus(entry, status)
-            onItemMenuRequested: (entry, item, x, y) => root.openEntryMenu(entry, item, x, y)
-            onJournalOpened: (date) => root.openJournal(date)
-            onAddTaskRequested: (date) => {
-                daySheet.close()
-                addDialog.openFor("task", date)
-            }
-            onAddReminderRequested: (date) => {
-                daySheet.close()
-                addDialog.openFor("reminder", date)
-            }
-            onAllOverdueRequested: {
-                daySheet.close()
-                AppController.navigate({ view: "tasks" })
-            }
         }
     }
 

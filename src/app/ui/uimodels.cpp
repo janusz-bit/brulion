@@ -2,6 +2,8 @@
 
 #include "texthelper.h"
 
+#include "text/text.h"
+
 #include <QLocale>
 #include <QMetaType>
 
@@ -47,18 +49,35 @@ bool isUndefined(const QVariant &v)
     return !v.isValid();
 }
 
+bool isJsValue(const QVariant &v)
+{
+    return v.metaType().name() == QByteArrayView("QJSValue");
+}
+
 bool isObject(const QVariant &v)
 {
-    return v.metaType().id() == QMetaType::QVariantMap || v.metaType().name() == QByteArrayView("QJSValue");
+    return v.metaType().id() == QMetaType::QVariantMap || isJsValue(v);
+}
+
+/// UiModels::stringField() of an object already converted (objectOf(): once per row).
+QString textOf(const QVariantMap &object, const QString &key)
+{
+    const QVariant v = object.value(key);
+    return isUndefined(v) || isNull(v) ? QString() : jsString(v);
+}
+
+/// BBreadcrumb's { title, icon } (strings) of an object row.
+QVariantMap crumbOf(const QVariant &row)
+{
+    const QVariantMap object = objectOf(row);
+    return {{u"title"_s, textOf(object, u"title"_s)}, {u"icon"_s, textOf(object, u"icon"_s)}};
 }
 
 } // namespace
 
 QVariantMap objectOf(const QVariant &value)
 {
-    if (value.metaType().id() == QMetaType::QVariantMap)
-        return value.toMap();
-    if (isObject(value) && value.canConvert<QVariantMap>())
+    if (value.metaType().id() == QMetaType::QVariantMap || (isJsValue(value) && value.canConvert<QVariantMap>()))
         return value.toMap();
     return {};
 }
@@ -117,8 +136,7 @@ bool UiModels::strictEquals(const QVariant &a, const QVariant &b) const
 
 QString UiModels::stringField(const QVariant &object, const QString &key) const
 {
-    const QVariant v = objectOf(object).value(key);
-    return isUndefined(v) || isNull(v) ? QString() : jsString(v);
+    return textOf(objectOf(object), key);
 }
 
 bool UiModels::boolField(const QVariant &object, const QString &key) const
@@ -135,13 +153,14 @@ double UiModels::numberField(const QVariant &object, const QString &key, double 
 QStringList UiModels::stringListField(const QVariant &object, const QString &key) const
 {
     const QVariant v = objectOf(object).value(key);
-    QStringList out;
     if (v.metaType().id() == QMetaType::QStringList)
         return v.toStringList();
-    if (v.metaType().id() != QMetaType::QVariantList
-        && !(v.metaType().name() == QByteArrayView("QJSValue") && v.canConvert<QVariantList>()))
-        return out;
-    for (const QVariant &item : v.toList())
+    if (v.metaType().id() != QMetaType::QVariantList && !(isJsValue(v) && v.canConvert<QVariantList>()))
+        return {};
+    const QVariantList items = v.toList();
+    QStringList out;
+    out.reserve(items.size());
+    for (const QVariant &item : items)
         out.append(jsString(item));
     return out;
 }
@@ -164,10 +183,10 @@ QVariantList UiModels::withDefaults(const QVariantList &rows, const QVariantMap 
     out.reserve(rows.size());
     for (const QVariant &r : rows) {
         QVariantMap row = objectOf(r);
-        for (auto it = defaults.cbegin(); it != defaults.cend(); ++it) {
-            const auto found = row.constFind(it.key());
+        for (auto [key, value] : defaults.asKeyValueRange()) {
+            const auto found = row.constFind(key);
             if (found == row.cend() || isUndefined(*found) || isNull(*found))
-                row.insert(it.key(), it.value());
+                row.insert(key, value);
         }
         out.append(row);
     }
@@ -182,8 +201,8 @@ QVariantList UiModels::segmentRows(const QVariantList &model) const
         if (isObject(m)) {
             const QVariantMap o = objectOf(m);
             out.append(QVariantMap{{u"value"_s, o.value(u"value"_s)},
-                                   {u"text"_s, stringField(m, u"text"_s)},
-                                   {u"iconName"_s, stringField(m, u"icon"_s)}});
+                                   {u"text"_s, textOf(o, u"text"_s)},
+                                   {u"iconName"_s, textOf(o, u"icon"_s)}});
         } else {
             out.append(QVariantMap{{u"value"_s, m}, {u"text"_s, jsString(m)}, {u"iconName"_s, QString()}});
         }
@@ -193,32 +212,26 @@ QVariantList UiModels::segmentRows(const QVariantList &model) const
 
 int UiModels::indexOfValue(const QVariantList &rows, const QVariant &value) const
 {
-    for (int i = 0; i < rows.size(); ++i) {
-        if (jsStrictEquals(objectOf(rows.at(i)).value(u"value"_s), value))
-            return i;
-    }
-    return -1;
+    const auto it = std::ranges::find_if(
+            rows, [&value](const QVariant &row) { return jsStrictEquals(objectOf(row).value(u"value"_s), value); });
+    return it == rows.cend() ? -1 : int(it - rows.cbegin());
 }
 
 QVariantList UiModels::crumbRows(const QVariantList &model) const
 {
     QVariantList out;
     out.reserve(model.size());
-    for (const QVariant &m : model) {
-        if (isObject(m))
-            out.append(QVariantMap{{u"title"_s, stringField(m, u"title"_s)}, {u"icon"_s, stringField(m, u"icon"_s)}});
-        else
-            out.append(QVariantMap{{u"title"_s, jsString(m)}, {u"icon"_s, QString()}});
-    }
+    for (const QVariant &m : model)
+        out.append(isObject(m) ? crumbOf(m) : QVariantMap{{u"title"_s, jsString(m)}, {u"icon"_s, QString()}});
     return out;
 }
 
 QVariantList UiModels::shownCrumbs(const QVariantList &rows, int visibleTail, bool collapsed) const
 {
-    const auto part = [this](const QVariant &row, int index) {
-        return QVariantMap{{u"title"_s, stringField(row, u"title"_s)},
-                           {u"icon"_s, stringField(row, u"icon"_s)},
-                           {u"partIndex"_s, index}};
+    const auto part = [](const QVariant &row, int index) {
+        QVariantMap shown = crumbOf(row);
+        shown.insert(u"partIndex"_s, index);
+        return shown;
     };
     QVariantList out;
     const int n = int(rows.size());
@@ -251,12 +264,9 @@ QVariantList UiModels::rowsByKey(const QVariantList &rows, const QString &key, c
 {
     QVariantList out;
     for (const QString &value : values) {
-        for (const QVariant &row : rows) {
-            if (stringField(row, key) == value) {
-                out.append(row);
-                break;
-            }
-        }
+        const auto it = std::ranges::find_if(rows, [&](const QVariant &row) { return stringField(row, key) == value; });
+        if (it != rows.cend())
+            out.append(*it);
     }
     return out;
 }
@@ -281,10 +291,10 @@ void PaletteFilter::setItems(const QVariantList &items)
     m_subtitles.clear();
     m_titles.reserve(m_items.size());
     m_subtitles.reserve(m_items.size());
-    UiModels fields;
     for (const QVariant &item : std::as_const(m_items)) {
-        m_titles.append(fields.stringField(item, u"title"_s));
-        m_subtitles.append(fields.stringField(item, u"subtitle"_s));
+        const QVariantMap object = objectOf(item);
+        m_titles.append(textOf(object, u"title"_s));
+        m_subtitles.append(textOf(object, u"subtitle"_s));
     }
     Q_EMIT itemsChanged();
     update();
@@ -297,53 +307,15 @@ void PaletteFilter::setExtras(const QVariantList &extras)
     update();
 }
 
-void PaletteFilter::setQuery(const QString &query)
-{
-    if (m_query == query)
-        return;
-    m_query = query;
-    Q_EMIT queryChanged();
-    update();
-}
-
-void PaletteFilter::setMaxResults(int maxResults)
-{
-    if (m_maxResults == maxResults)
-        return;
-    m_maxResults = maxResults;
-    Q_EMIT maxResultsChanged();
-    update();
-}
-
-void PaletteFilter::setMarkColor(const QString &color)
-{
-    if (m_markColor == color)
-        return;
-    m_markColor = color;
-    Q_EMIT markColorChanged();
-    update();
-}
-
-void PaletteFilter::setDefaultIcon(const QString &icon)
-{
-    if (m_defaultIcon == icon)
-        return;
-    m_defaultIcon = icon;
-    Q_EMIT defaultIconChanged();
-    update();
-}
-
 void PaletteFilter::update()
 {
-    UiModels fields;
-    const auto row = [this, &fields](const QVariant &item, const QString &markup) {
-        const QString icon = fields.stringField(item, u"icon"_s);
-        return QVariantMap{{u"text"_s, fields.stringField(item, u"title"_s)},
-                           {u"titleMarkup"_s, markup},
-                           {u"subtitle"_s, fields.stringField(item, u"subtitle"_s)},
-                           {u"iconName"_s, icon.isEmpty() ? m_defaultIcon : icon},
-                           {u"iconEmoji"_s, fields.stringField(item, u"emoji"_s)},
-                           {u"shortcut"_s, fields.stringField(item, u"shortcut"_s)}};
+    const auto row = [this](const QVariant &item, const QString &markup) {
+        const QVariantMap object = objectOf(item);
+        const QString icon = textOf(object, u"icon"_s);
+        return QVariantMap{
+                {u"text"_s, textOf(object, u"title"_s)},        {u"titleMarkup"_s, markup},
+                {u"subtitle"_s, textOf(object, u"subtitle"_s)}, {u"iconName"_s, icon.isEmpty() ? m_defaultIcon : icon},
+                {u"iconEmoji"_s, textOf(object, u"emoji"_s)},   {u"shortcut"_s, textOf(object, u"shortcut"_s)}};
     };
     m_rows.clear();
     m_sources.clear();
@@ -366,20 +338,22 @@ int PaletteFilter::sourceIndex(int row) const
     return row >= 0 && row < m_sources.size() ? m_sources.at(row) : INT_MIN;
 }
 
-QString PaletteFilter::itemString(int row, const QString &key) const
+QVariant PaletteFilter::sourceItem(int row) const
 {
     const int source = sourceIndex(row);
     if (source == INT_MIN)
         return {};
-    return UiModels().stringField(source >= 0 ? m_items.at(source) : m_extras.at(-1 - source), key);
+    return source >= 0 ? m_items.at(source) : m_extras.at(-1 - source);
+}
+
+QString PaletteFilter::itemString(int row, const QString &key) const
+{
+    return textOf(objectOf(sourceItem(row)), key);
 }
 
 bool PaletteFilter::itemBool(int row, const QString &key) const
 {
-    const int source = sourceIndex(row);
-    if (source == INT_MIN)
-        return false;
-    return UiModels().boolField(source >= 0 ? m_items.at(source) : m_extras.at(-1 - source), key);
+    return jsTruthy(objectOf(sourceItem(row)).value(key));
 }
 
 bool PaletteFilter::isExtra(int row) const
@@ -390,13 +364,8 @@ bool PaletteFilter::isExtra(int row) const
 
 bool PaletteFilter::hasTitle(const QString &title) const
 {
-    TextHelper text;
-    const QString folded = text.fold(title);
-    for (const QString &t : m_titles) {
-        if (text.fold(t) == folded)
-            return true;
-    }
-    return false;
+    const QString folded = text::foldKey(title);
+    return std::ranges::any_of(m_titles, [&folded](const QString &t) { return text::foldKey(t) == folded; });
 }
 
 // ---- ToastListModel -------------------------------------------------------------------------
@@ -425,11 +394,12 @@ QVariant ToastListModel::data(const QModelIndex &index, int role) const
 
 QHash<int, QByteArray> ToastListModel::roleNames() const
 {
-    return {{ToastIdRole, "toastId"},
-            {TextRole, "text"},
-            {KindRole, "kind"},
-            {ActionTextRole, "actionText"},
-            {TimeoutRole, "timeout"}};
+    static const QHash<int, QByteArray> names{{ToastIdRole, "toastId"},
+                                              {TextRole, "text"},
+                                              {KindRole, "kind"},
+                                              {ActionTextRole, "actionText"},
+                                              {TimeoutRole, "timeout"}};
+    return names;
 }
 
 void ToastListModel::prepend(int toastId, const QString &text, const QString &kind, const QString &actionText,
@@ -453,11 +423,8 @@ void ToastListModel::removeAt(int row)
 
 int ToastListModel::indexOf(int toastId) const
 {
-    for (int i = 0; i < m_toasts.size(); ++i) {
-        if (m_toasts.at(i).id == toastId)
-            return i;
-    }
-    return -1;
+    const auto it = std::ranges::find(m_toasts, toastId, &Toast::id);
+    return it == m_toasts.cend() ? -1 : int(it - m_toasts.cbegin());
 }
 
 int ToastListModel::idAt(int row) const

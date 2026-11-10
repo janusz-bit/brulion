@@ -27,10 +27,17 @@
 #include <QJSEngine>
 #include <QtQml/qqmlregistration.h>
 
-class QJSEngine;
 class QQmlEngine;
 
 namespace brulion::ui {
+
+/// `object` (an instance main() created before the engine) as a singleton the engine does not own.
+template<typename T>
+T *cppOwned(T *object)
+{
+    QJSEngine::setObjectOwnership(object, QJSEngine::CppOwnership);
+    return object;
+}
 
 struct DatesHelperForeign {
     Q_GADGET
@@ -127,11 +134,8 @@ public:
     /// (QML tooling: no keyboard reported).
     static KeyboardInsets *create(QQmlEngine *, QJSEngine *)
     {
-        if (KeyboardInsets *insets = KeyboardInsets::instance()) {
-            QJSEngine::setObjectOwnership(insets, QJSEngine::CppOwnership);
-            return insets;
-        }
-        return new KeyboardInsets;
+        KeyboardInsets *insets = KeyboardInsets::instance();
+        return insets ? cppOwned(insets) : new KeyboardInsets;
     }
 };
 
@@ -145,11 +149,8 @@ public:
     /// (QML tooling: no gesture zones).
     static GestureInsets *create(QQmlEngine *, QJSEngine *)
     {
-        if (GestureInsets *insets = GestureInsets::instance()) {
-            QJSEngine::setObjectOwnership(insets, QJSEngine::CppOwnership);
-            return insets;
-        }
-        return new GestureInsets;
+        GestureInsets *insets = GestureInsets::instance();
+        return insets ? cppOwned(insets) : new GestureInsets;
     }
 };
 
@@ -174,12 +175,7 @@ struct SmoothScrollForeign {
     QML_SINGLETON
 public:
     /// The application's filter (installed by main(), else on first use here).
-    static SmoothScroll *create(QQmlEngine *, QJSEngine *)
-    {
-        SmoothScroll *scroll = SmoothScroll::instance();
-        QJSEngine::setObjectOwnership(scroll, QJSEngine::CppOwnership);
-        return scroll;
-    }
+    static SmoothScroll *create(QQmlEngine *, QJSEngine *) { return cppOwned(SmoothScroll::instance()); }
 };
 
 struct FilePickerForeign {

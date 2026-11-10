@@ -114,13 +114,13 @@ public:
     QVariantList extras() const { return m_extras; }
     void setExtras(const QVariantList &extras);
     QString query() const { return m_query; }
-    void setQuery(const QString &query);
+    void setQuery(const QString &query) { setInput(m_query, query, &PaletteFilter::queryChanged); }
     int maxResults() const { return m_maxResults; }
-    void setMaxResults(int maxResults);
+    void setMaxResults(int maxResults) { setInput(m_maxResults, maxResults, &PaletteFilter::maxResultsChanged); }
     QString markColor() const { return m_markColor; }
-    void setMarkColor(const QString &color);
+    void setMarkColor(const QString &color) { setInput(m_markColor, color, &PaletteFilter::markColorChanged); }
     QString defaultIcon() const { return m_defaultIcon; }
-    void setDefaultIcon(const QString &icon);
+    void setDefaultIcon(const QString &icon) { setInput(m_defaultIcon, icon, &PaletteFilter::defaultIconChanged); }
 
     QVariantList rows() const { return m_rows; }
     int count() const { return int(m_rows.size()); }
@@ -149,7 +149,19 @@ Q_SIGNALS:
     void rowsChanged();
 
 private:
+    /// `input` = `value`: a change emits `changed`, then the rows follow (update()).
+    template<typename T>
+    void setInput(T &input, const T &value, void (PaletteFilter::*changed)())
+    {
+        if (input == value)
+            return;
+        input = value;
+        Q_EMIT(this->*changed)();
+        update();
+    }
     void update();
+    /// The item (or extra) row `row` shows; invalid out of range.
+    QVariant sourceItem(int row) const;
 
     QVariantList m_items;
     QVariantList m_extras;
