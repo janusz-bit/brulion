@@ -16,6 +16,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <memory>
 #include <optional>
 #include <utility>
 
@@ -205,7 +206,7 @@ public:
     }
     QList<QPointer<QObject>> held;
 };
-DeferredDeleteHold *deferredDeleteHold = nullptr;
+std::unique_ptr<DeferredDeleteHold> deferredDeleteHold;
 int passDepth = 0;
 } // namespace
 
@@ -688,14 +689,14 @@ QString DevTest::callCatching(QObject *object, const QString &function) const
     // field: deleteLater) was deleted inside the pass, and a collection later in it (making a
     // menu) read the freed object and crashed the app. Such objects go once the pass returned.
     if (passDepth++ == 0) {
-        deferredDeleteHold = new DeferredDeleteHold;
-        QCoreApplication::instance()->installEventFilter(deferredDeleteHold);
+        deferredDeleteHold = std::make_unique<DeferredDeleteHold>();
+        QCoreApplication::instance()->installEventFilter(deferredDeleteHold.get());
     }
     const QJSValue result = fn.callWithInstance(self);
     if (--passDepth == 0) {
-        QCoreApplication::instance()->removeEventFilter(deferredDeleteHold);
+        QCoreApplication::instance()->removeEventFilter(deferredDeleteHold.get());
         const QList<QPointer<QObject>> held = std::exchange(deferredDeleteHold->held, {});
-        delete std::exchange(deferredDeleteHold, nullptr);
+        deferredDeleteHold.reset();
         for (const QPointer<QObject> &heldObject : held)
             delete heldObject.data();
     }
