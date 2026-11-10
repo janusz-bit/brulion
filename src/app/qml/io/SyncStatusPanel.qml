@@ -14,18 +14,28 @@ IoCard {
     id: panel
 
     readonly property WorkspaceSync sync: Workspace.sync
-    readonly property string syncState: sync ? sync.state : "disabled"
+    readonly property string syncState: sync.state
     readonly property bool syncing: syncState === "syncing"
-    readonly property bool hasReport: !!sync && sync.lastReport.finished !== undefined && sync.lastReport.finished !== ""
+    readonly property bool hasReport: sync.lastReport.finished !== undefined && sync.lastReport.finished !== ""
     property bool showErrors: false
-    readonly property bool hasLastRun: !!sync && sync.lastRun.number !== undefined
+    readonly property bool hasLastRun: sync.lastRun.number !== undefined
     /// Seconds until the planned retry (ticks while shown).
     property int retryIn: 0
+    readonly property int errorCount: reportErrors().length
 
     signal showConflicts()
 
+    /// A small muted wrapped line; hidden while empty.
+    component Note: BText {
+        Layout.fillWidth: true
+        visible: text !== ""
+        variant: "small"
+        color: Theme.fgMuted
+        wrapMode: Text.Wrap
+    }
+
     function updateRetry(): void {
-        retryIn = !!sync && sync.retrying && sync.nextSyncMs > 0 ? Math.max(0, Math.round((sync.nextSyncMs - Js.dateNow()) / 1000)) : 0
+        retryIn = sync.retrying && sync.nextSyncMs > 0 ? Math.max(0, Math.round((sync.nextSyncMs - Js.dateNow()) / 1000)) : 0
     }
     function countdownText(seconds: int): string {
         if (seconds >= 120)
@@ -37,12 +47,12 @@ IoCard {
         interval: 1000
         repeat: true
         triggeredOnStart: true
-        running: panel.visible && !!panel.sync && panel.sync.retrying && !panel.syncing
+        running: panel.visible && panel.sync.retrying && !panel.syncing
         onTriggered: panel.updateRetry()
     }
 
     function nextText(): string {
-        if (!sync || sync.nextSync === "")
+        if (sync.nextSync === "")
             return ""
         return DatesHelper.formatHuman(Js.slice(Js.replace(sync.nextSync, "T", " "), 0, 16))
     }
@@ -52,9 +62,6 @@ IoCard {
             return []
         return panel.sync.lastReport.errors
     }
-    function errorCount(): int {
-        return panel.reportErrors().length
-    }
     function shownErrors(): list<var> {
         return panel.showErrors && panel.hasReport ? panel.reportErrors().slice(0, 20) : []
     }
@@ -63,7 +70,7 @@ IoCard {
         if (!panel.hasReport)
             return []
         const r = panel.sync.lastReport
-        const errors = panel.errorCount()
+        const errors = panel.errorCount
         return [
             { label: qsTr("Sent"), value: r.uploaded, icon: "upload", tone: "" },
             { label: qsTr("Downloaded"), value: r.downloaded, icon: "download", tone: "" },
@@ -86,16 +93,14 @@ IoCard {
              : syncState === "idle" ? Theme.successText : Theme.fgMuted
     // Problems that need the user (password, folder, storage) are red; passing ones (network)
     // only amber — Brulion retries by itself.
-    readonly property bool needsUser: syncState === "error" && !passingError(sync ? sync.lastErrorCode : "")
+    readonly property bool needsUser: syncState === "error" && !passingError(sync.lastErrorCode)
     tone: syncState === "error" ? (needsUser ? "danger" : "warning") : "default"
     title: qsTr("Nextcloud")
-    subtitle: !sync ? ""
-            : sync.statusText !== "" ? sync.statusText
-            : qsTr("Not set up. Fill in the form below to start.")
+    subtitle: sync.statusText !== "" ? sync.statusText : qsTr("Not set up. Fill in the form below to start.")
 
     trailing: [
         BButton {
-            visible: !!panel.sync && panel.sync.active && !Theme.compact
+            visible: panel.sync.active && !Theme.compact
             text: qsTr("Sync now")
             iconName: "refresh-cw"
             variant: "primary"
@@ -137,7 +142,7 @@ IoCard {
         variant: "muted"
         wrapMode: Text.Wrap
         text: {
-            switch (panel.sync ? panel.sync.lastErrorCode : "") {
+            switch (panel.sync.lastErrorCode) {
             case "auth": return qsTr("Enter a new app password below and save. Brulion keeps trying with the old one until then.")
             case "network":
             case "timeout":
@@ -156,7 +161,7 @@ IoCard {
     // A failed run waits for its retry: say when, and offer it now.
     RowLayout {
         Layout.fillWidth: true
-        visible: !!panel.sync && panel.sync.retrying && !panel.syncing && panel.syncState !== "offline"
+        visible: panel.sync.retrying && !panel.syncing && panel.syncState !== "offline"
         spacing: Theme.space2
         BIcon { Layout.alignment: Qt.AlignVCenter; name: "clock"; size: Theme.iconSizeSm; color: Theme.fgMuted }
         BText {
@@ -185,8 +190,7 @@ IoCard {
             implicitWidth: 8
             implicitHeight: 8
             radius: 4
-            color: !panel.hasLastRun ? Theme.fgMuted
-                 : panel.sync.lastRun.tone === "danger" ? Theme.dangerText
+            color: panel.sync.lastRun.tone === "danger" ? Theme.dangerText
                  : panel.sync.lastRun.tone === "warning" ? Theme.warningText
                  : panel.sync.lastRun.tone === "success" ? Theme.successText : Theme.fgMuted
         }
@@ -222,14 +226,9 @@ IoCard {
     }
 
     // ---- When ------------------------------------------------------------------------------
-    BText {
-        Layout.fillWidth: true
-        visible: text !== ""
-        variant: "small"
-        color: Theme.fgMuted
-        wrapMode: Text.Wrap
+    Note {
         text: {
-            if (!panel.sync || !panel.sync.active)
+            if (!panel.sync.active)
                 return ""
             const last = panel.sync.lastSyncText !== "" ? qsTr("Last synced %1").arg(panel.sync.lastSyncText) : ""
             const next = panel.nextText()
@@ -293,39 +292,20 @@ IoCard {
         }
     }
 
-    BText {
-        Layout.fillWidth: true
-        visible: panel.hasReport && (panel.sync.lastReport.deletedLocal > 0 || panel.sync.lastReport.deletedRemote > 0)
-        variant: "small"
-        color: Theme.fgMuted
-        wrapMode: Text.Wrap
-        text: panel.hasReport ? qsTr("Deleted: %1 on this device, %2 on the server (they are in the trash or the server's deleted files).")
-                                .arg("" + panel.sync.lastReport.deletedLocal).arg("" + panel.sync.lastReport.deletedRemote) : ""
+    Note {
+        text: panel.hasReport && (panel.sync.lastReport.deletedLocal > 0 || panel.sync.lastReport.deletedRemote > 0)
+              ? qsTr("Deleted: %1 on this device, %2 on the server (they are in the trash or the server's deleted files).")
+                .arg("" + panel.sync.lastReport.deletedLocal).arg("" + panel.sync.lastReport.deletedRemote)
+              : ""
     }
-
-    BText {
-        readonly property string folders: panel.hasReport && panel.sync
-            ? panel.sync.folderCountsText(panel.sync.lastReport.foldersCreated || 0, panel.sync.lastReport.foldersDeleted || 0,
-                                          panel.sync.lastReport.foldersMoved || 0, panel.sync.lastReport.foldersMovedHere || 0)
-            : ""
-        Layout.fillWidth: true
-        visible: folders !== ""
-        variant: "small"
-        color: Theme.fgMuted
-        wrapMode: Text.Wrap
-        text: folders
+    Note {
+        text: panel.hasReport
+              ? panel.sync.folderCountsText(panel.sync.lastReport.foldersCreated || 0, panel.sync.lastReport.foldersDeleted || 0,
+                                            panel.sync.lastReport.foldersMoved || 0, panel.sync.lastReport.foldersMovedHere || 0)
+              : ""
     }
-
-    BText {
-        readonly property string files: panel.hasReport && panel.sync
-            ? panel.sync.fileMovesText(panel.sync.lastReport.filesMoved || 0, panel.sync.lastReport.filesMovedHere || 0)
-            : ""
-        Layout.fillWidth: true
-        visible: files !== ""
-        variant: "small"
-        color: Theme.fgMuted
-        wrapMode: Text.Wrap
-        text: files
+    Note {
+        text: panel.hasReport ? panel.sync.fileMovesText(panel.sync.lastReport.filesMoved || 0, panel.sync.lastReport.filesMovedHere || 0) : ""
     }
 
     RowLayout {
@@ -347,11 +327,11 @@ IoCard {
 
     // Files that failed (usually few; at most 20 shown).
     BButton {
-        visible: panel.errorCount() > 0
+        visible: panel.errorCount > 0
         variant: "ghost"
         size: "small"
         iconName: panel.showErrors ? "chevron-down" : "chevron-right"
-        text: qsTr("%n file(s) could not be synced", "", panel.errorCount())
+        text: qsTr("%n file(s) could not be synced", "", panel.errorCount)
         onClicked: panel.showErrors = !panel.showErrors
     }
     Repeater {
@@ -390,7 +370,7 @@ IoCard {
     // Phones: the main action at the end of the card, full width.
     BButton {
         Layout.fillWidth: true
-        visible: !!panel.sync && panel.sync.active && Theme.compact
+        visible: panel.sync.active && Theme.compact
         text: qsTr("Sync now")
         iconName: "refresh-cw"
         variant: "primary"

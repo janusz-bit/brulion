@@ -32,8 +32,8 @@ BDialog {
         }
         return out
     }
-    function toneColor(tone: string): color {
-        switch (tone) {
+    readonly property color outcomeColor: {
+        switch (known ? runInfo.details.tone : "") {
         case "success": return Theme.successText
         case "warning": return Theme.warningText
         case "danger": return Theme.dangerText
@@ -49,6 +49,19 @@ BDialog {
         case 4: return Theme.marginRed
         default: return Theme.fgFaint
         }
+    }
+
+    /// A section heading and a small wrapped line of the details.
+    component Heading: BText {
+        Layout.fillWidth: true
+        Layout.topMargin: Theme.space2
+        variant: "label"
+        Accessible.role: Accessible.Heading
+    }
+    component Note: BText {
+        Layout.fillWidth: true
+        variant: "small"
+        wrapMode: Text.Wrap
     }
 
     title: qsTr("Sync #%1").arg(number)
@@ -102,13 +115,13 @@ BDialog {
             implicitWidth: 10
             implicitHeight: 10
             radius: 5
-            color: dialog.toneColor(dialog.known ? runInfo.details.tone : "")
+            color: dialog.outcomeColor
         }
         BText {
             Layout.fillWidth: true
             text: dialog.known ? runInfo.details.outcomeText : ""
             variant: "label"
-            color: dialog.toneColor(dialog.known ? runInfo.details.tone : "")
+            color: dialog.outcomeColor
             wrapMode: Text.Wrap
         }
     }
@@ -129,13 +142,9 @@ BDialog {
     }
 
     // ---- Phases ------------------------------------------------------------------------------
-    BText {
-        Layout.fillWidth: true
-        Layout.topMargin: Theme.space2
+    Heading {
         visible: runInfo.phases.length > 0
         text: qsTr("Where the time went")
-        variant: "label"
-        Accessible.role: Accessible.Heading
     }
     Row {
         id: phaseBar
@@ -175,11 +184,8 @@ BDialog {
                 radius: 2
                 color: dialog.phaseColor(phaseRow.index)
             }
-            BText {
-                Layout.fillWidth: true
+            Note {
                 text: phaseRow.text + (phaseRow.detailText !== "" ? " · " + phaseRow.detailText : "")
-                variant: "small"
-                wrapMode: Text.Wrap
             }
             BText {
                 text: phaseRow.durationText
@@ -190,19 +196,12 @@ BDialog {
     }
 
     // ---- What changed --------------------------------------------------------------------------
-    BText {
-        Layout.fillWidth: true
-        Layout.topMargin: Theme.space2
+    Heading {
         visible: dialog.known
         text: qsTr("Changes")
-        variant: "label"
-        Accessible.role: Accessible.Heading
     }
-    BText {
-        Layout.fillWidth: true
+    Note {
         visible: dialog.known
-        wrapMode: Text.Wrap
-        variant: "small"
         text: dialog.known
               ? qsTr("Sent %1 · downloaded %2 · merged %3 · deleted %4 here and %5 on the server · conflicts %6 · errors %7")
                 .arg("" + runInfo.counts.uploaded).arg("" + runInfo.counts.downloaded).arg("" + runInfo.counts.merged)
@@ -210,42 +209,25 @@ BDialog {
                 .arg("" + runInfo.counts.fileErrors)
               : ""
     }
-    BText {
-        readonly property string folders: dialog.known && Workspace.sync
-            ? Workspace.sync.folderCountsText(runInfo.counts.foldersCreated || 0, runInfo.counts.foldersDeleted || 0,
-                                              runInfo.counts.foldersMoved || 0, runInfo.counts.foldersMovedHere || 0)
-            : ""
-        Layout.fillWidth: true
-        visible: folders !== ""
-        wrapMode: Text.Wrap
-        variant: "small"
-        text: folders
+    Note {
+        visible: text !== ""
+        text: dialog.known
+              ? Workspace.sync.folderCountsText(runInfo.counts.foldersCreated || 0, runInfo.counts.foldersDeleted || 0,
+                                                runInfo.counts.foldersMoved || 0, runInfo.counts.foldersMovedHere || 0)
+              : ""
     }
-    BText {
-        readonly property string files: dialog.known && Workspace.sync
-            ? Workspace.sync.fileMovesText(runInfo.counts.filesMoved || 0, runInfo.counts.filesMovedHere || 0)
-            : ""
-        Layout.fillWidth: true
-        visible: files !== ""
-        wrapMode: Text.Wrap
-        variant: "small"
-        text: files
+    Note {
+        visible: text !== ""
+        text: dialog.known ? Workspace.sync.fileMovesText(runInfo.counts.filesMoved || 0, runInfo.counts.filesMovedHere || 0) : ""
     }
 
     // ---- Requests ------------------------------------------------------------------------------
-    BText {
-        Layout.fillWidth: true
-        Layout.topMargin: Theme.space2
+    Heading {
         visible: dialog.known && runInfo.stats.requests > 0
         text: qsTr("Requests to the server")
-        variant: "label"
-        Accessible.role: Accessible.Heading
     }
-    BText {
-        Layout.fillWidth: true
+    Note {
         visible: dialog.known && runInfo.stats.requests > 0
-        variant: "small"
-        wrapMode: Text.Wrap
         text: dialog.known
               ? dialog.joinNonEmpty([runInfo.stats.requestsText,
                                      runInfo.stats.averageText !== "" ? qsTr("average %1").arg(runInfo.stats.averageText) : "",
@@ -271,13 +253,9 @@ BDialog {
     }
 
     // ---- Files that failed -----------------------------------------------------------------------
-    BText {
-        Layout.fillWidth: true
-        Layout.topMargin: Theme.space2
+    Heading {
         visible: runInfo.errors.length > 0
         text: qsTr("Files that could not be synced")
-        variant: "label"
-        Accessible.role: Accessible.Heading
     }
     Repeater {
         model: runInfo.errors
@@ -318,13 +296,9 @@ BDialog {
     }
 
     // ---- Conflicts ---------------------------------------------------------------------------
-    BText {
-        Layout.fillWidth: true
-        Layout.topMargin: Theme.space2
+    Heading {
         visible: runInfo.conflicts.length > 0
         text: qsTr("Conflicts (both versions kept)")
-        variant: "label"
-        Accessible.role: Accessible.Heading
     }
     Repeater {
         model: runInfo.conflicts

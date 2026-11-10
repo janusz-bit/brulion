@@ -47,6 +47,17 @@ QString loadError(QPdfDocument::Error error)
     return u"The PDF cannot be read"_s;
 }
 
+/// pdfium's boxes of a selection (a glyph or a run of glyphs each) merged into one rectangle per line.
+QList<QRectF> lineRects(const QPdfSelection &selection)
+{
+    const QList<QPolygonF> bounds = selection.bounds();
+    QList<QRectF> boxes;
+    boxes.reserve(bounds.size());
+    for (const QPolygonF &polygon : bounds)
+        boxes.append(polygon.boundingRect());
+    return pdfRangeRects(boxes, {0, boxes.size()});
+}
+
 class QtPdfReader final : public PdfReader {
 public:
     explicit QtPdfReader(std::unique_ptr<QPdfDocument> doc) : m_doc(std::move(doc)) { }
@@ -86,19 +97,16 @@ public:
 
     QList<PdfTextHit> find(int page, QStringView query, int maxHits) override
     {
-        QList<PdfTextHit> out;
         const QString text = pageText(page);
-        for (const PdfTextRange &range : findPdfText(text, query, std::min(maxHits, MaxPdfHitsPerPage))) {
-            PdfTextHit hit;
-            hit.start = int(range.start);
-            hit.length = int(range.length);
-            const QPdfSelection selection = m_doc->getSelectionAtIndex(page - 1, hit.start, hit.length);
-            // pdfium gives a box per glyph: one rectangle per line.
-            QList<QRectF> boxes;
-            for (const QPolygonF &polygon : selection.bounds())
-                boxes.append(polygon.boundingRect());
-            hit.rects = pdfRangeRects(boxes, {0, boxes.size()});
-            out.append(hit);
+        const QList<PdfTextRange> ranges = findPdfText(text, query, std::min(maxHits, MaxPdfHitsPerPage));
+        QList<PdfTextHit> out;
+        out.reserve(ranges.size());
+        for (const PdfTextRange &range : ranges) {
+            const int start = int(range.start);
+            const int length = int(range.length);
+            out.append(PdfTextHit{.start = start,
+                                  .length = length,
+                                  .rects = lineRects(m_doc->getSelectionAtIndex(page - 1, start, length))});
         }
         return out;
     }
@@ -176,13 +184,11 @@ public:
                 continue;
             }
             // One entry per rectangle (a link may cover the ends of two lines).
-            for (const QRectF &rect : link.rectangles()) {
-                const QRectF r = rect.normalized();
-                if (r.isEmpty() || !std::isfinite(r.x()) || !std::isfinite(r.y()) || !std::isfinite(r.width())
-                    || !std::isfinite(r.height()) || out.size() >= MaxPdfLinksPerPage)
-                    continue;
-                entry.rect = r;
-                out.append(entry);
+            const QList<QRectF> rects = link.rectangles();
+            for (const QRectF &rect : rects) {
+                entry.rect = rect.normalized();
+                if (pdfUsableBox(entry.rect) && out.size() < MaxPdfLinksPerPage)
+                    out.append(entry);
             }
         }
         return out;
@@ -192,8 +198,7 @@ public:
     void detachFromThread() override { m_doc->moveToThread(nullptr); }
 
 private:
-    /// The page's text and its lines (getAllText()'s rectangles — a few glyphs each — merged into
-    /// one per line), kept for the last page asked.
+    /// The page's text and its lines (lineRects() of all of it), kept for the last page asked.
     void loadLines(int page)
     {
         if (page == m_linesPage)
@@ -201,10 +206,7 @@ private:
         m_linesPage = page;
         const QPdfSelection all = m_doc->getAllText(page - 1);
         m_text = all.text();
-        QList<QRectF> boxes;
-        for (const QPolygonF &polygon : all.bounds())
-            boxes.append(polygon.boundingRect());
-        m_lines = pdfRangeRects(boxes, {0, boxes.size()});
+        m_lines = lineRects(all);
         m_textTop = std::numeric_limits<qreal>::infinity();
         m_textBottom = -std::numeric_limits<qreal>::infinity();
         for (const QRectF &line : std::as_const(m_lines)) {
@@ -223,18 +225,13 @@ private:
 
     PdfTextSelection selection(const QPdfSelection &selected) const
     {
-        PdfTextSelection out;
-        if (!selected.isValid() || selected.text().isEmpty() || selected.startIndex() < 0)
-            return out;
-        out.start = selected.startIndex();
-        out.length = int(selected.text().size());
-        out.text = pdfCopyText(selected.text());
-        // pdfium gives a box per run of glyphs: one rectangle per line.
-        QList<QRectF> boxes;
-        for (const QPolygonF &polygon : selected.bounds())
-            boxes.append(polygon.boundingRect());
-        out.rects = pdfRangeRects(boxes, {0, boxes.size()});
-        return out;
+        const QString picked = selected.text();
+        if (!selected.isValid() || picked.isEmpty() || selected.startIndex() < 0)
+            return {};
+        return {.start = selected.startIndex(),
+                .length = int(picked.size()),
+                .text = pdfCopyText(picked),
+                .rects = lineRects(selected)};
     }
 
     /// A destination (0-based page, a location in points) as a page (1-based) and a top (a

@@ -38,6 +38,9 @@ ColumnLayout {
     readonly property string original: resolverObject.conflict.original ? "" + resolverObject.conflict.original : ""
     readonly property string copyPath: resolverObject.conflict.copy ? "" + resolverObject.conflict.copy : ""
     readonly property string conflictTitle: resolverObject.conflict.title ? "" + resolverObject.conflict.title : ""
+    /// The note (or drawing) was deleted on this device while it changed elsewhere / still exists.
+    readonly property bool originalDeleted: resolverObject.conflict.originalExists === false
+    readonly property bool originalKept: resolverObject.conflict.originalExists === true
     readonly property bool textConflict: resolverObject.loaded && resolverObject.text && !resolverObject.identical
     readonly property bool cleanMerge: textConflict && resolverObject.clean && !view.manual
 
@@ -114,7 +117,7 @@ ColumnLayout {
             }
         }
         BButton {
-            visible: !Theme.compact && resolverObject.conflict.originalExists === true && resolverObject.text
+            visible: !Theme.compact && view.originalKept && resolverObject.text
             text: qsTr("Open the note")
             iconName: "external-link"
             size: "small"
@@ -122,7 +125,7 @@ ColumnLayout {
             onClicked: AppController.openPage(view.original)
         }
         BButton {
-            visible: !Theme.compact && resolverObject.conflict.originalExists === true && resolverObject.drawing
+            visible: !Theme.compact && view.originalKept && resolverObject.drawing
             text: qsTr("Open the drawing")
             iconName: "pen-tool"
             size: "small"
@@ -135,11 +138,11 @@ ColumnLayout {
     // card of a drawing what merging does).
     BText {
         Layout.fillWidth: true
-        visible: resolverObject.loaded && (!Theme.compact || resolverObject.conflict.originalExists === false
+        visible: resolverObject.loaded && (!Theme.compact || view.originalDeleted
                                            || (!resolverObject.text && !drawingScroll.visible && !notesView.visible))
         variant: "muted"
         wrapMode: Text.Wrap
-        text: resolverObject.conflict.originalExists === false
+        text: view.originalDeleted
               ? (resolverObject.drawing
                  ? qsTr("The drawing was deleted on this device while it changed on another one. The other version is in the copy.")
                  : qsTr("The note was deleted on this device while it changed on another one. The other version is in the copy."))
@@ -232,7 +235,6 @@ ColumnLayout {
                         anchors.margins: Theme.space3
                         spacing: Theme.space2
                         Image {
-                            id: picture
                             Layout.fillWidth: true
                             Layout.preferredHeight: status === Image.Ready ? Math.min(180, implicitHeight) : 0
                             visible: side.picture && status === Image.Ready
@@ -260,7 +262,7 @@ ColumnLayout {
         Layout.fillWidth: true
         Layout.fillHeight: true
         visible: resolverObject.loaded && resolverObject.drawing && !resolverObject.identical
-                 && !resolverObject.copyIsOlder && !resolverObject.notesOnly && resolverObject.conflict.originalExists !== false
+                 && !resolverObject.copyIsOlder && !resolverObject.notesOnly && !view.originalDeleted
         contentWidth: width
         contentHeight: drawingCard.implicitHeight
         clip: true
@@ -545,15 +547,15 @@ ColumnLayout {
         spacing: Theme.space2
         BButton {
             //: Polish: "Zachowaj moją" (keep my version of the note)
-            text: resolverObject.conflict.originalExists === false ? qsTr("Keep it deleted") : qsTr("Keep mine")
+            text: view.originalDeleted ? qsTr("Keep it deleted") : qsTr("Keep mine")
             iconName: "check"
             onClicked: resolverObject.keepMine()
         }
         BButton {
             //: Polish: "Zachowaj kopię"
-            text: resolverObject.conflict.originalExists === false ? qsTr("Restore from the copy") : qsTr("Keep the copy")
+            text: view.originalDeleted ? qsTr("Restore from the copy") : qsTr("Keep the copy")
             iconName: "copy"
-            onClicked: resolverObject.conflict.originalExists === false ? resolverObject.keepCopy() : keepCopyDialog.open()
+            onClicked: view.originalDeleted ? resolverObject.keepCopy() : keepCopyDialog.open()
         }
     }
 

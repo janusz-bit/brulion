@@ -16,6 +16,8 @@ IoCard {
 
     readonly property NextcloudSetup setup: setupObject
     property bool showPassword: false
+    /// How the last connection test went: "success" | "warning" (the folder is missing) | "danger".
+    readonly property string resultTone: setup.testResult.ok ? "success" : setup.testResult.code === "no-folder" ? "warning" : "danger"
 
     iconName: "server"
     title: qsTr("Nextcloud account")
@@ -56,29 +58,35 @@ IoCard {
         }
     }
 
-    // In the browser the server must allow this page (CORS).
-    Rectangle {
-        Layout.fillWidth: true
-        visible: form.setup.browser
-        implicitHeight: corsColumn.implicitHeight + 2 * Theme.space3
+    /// A tinted box around a column of content.
+    component Box: Rectangle {
+        default property alias content: column.data
+        property alias spacing: column.spacing
+        implicitHeight: column.implicitHeight + 2 * Theme.space3
         radius: Theme.radius
-        color: Theme.infoBg
         ColumnLayout {
-            id: corsColumn
+            id: column
             anchors.fill: parent
             anchors.margins: Theme.space3
-            spacing: Theme.space1
-            BText {
-                Layout.fillWidth: true
-                text: qsTr("In the browser")
-                variant: "label"
-            }
-            BText {
-                Layout.fillWidth: true
-                wrapMode: Text.Wrap
-                variant: "small"
-                text: qsTr("A web page may only talk to a server that allows it (CORS). Easiest: open Brulion from the same address as your Nextcloud (on NixOS: services.brulion-web), or use the app for Linux or Android.")
-            }
+        }
+    }
+
+    // In the browser the server must allow this page (CORS).
+    Box {
+        Layout.fillWidth: true
+        visible: form.setup.browser
+        color: Theme.infoBg
+        spacing: Theme.space1
+        BText {
+            Layout.fillWidth: true
+            text: qsTr("In the browser")
+            variant: "label"
+        }
+        BText {
+            Layout.fillWidth: true
+            wrapMode: Text.Wrap
+            variant: "small"
+            text: qsTr("A web page may only talk to a server that allows it (CORS). Easiest: open Brulion from the same address as your Nextcloud (on NixOS: services.brulion-web), or use the app for Linux or Android.")
         }
     }
 
@@ -103,7 +111,6 @@ IoCard {
             help: form.setup.urlWarning !== "" ? form.setup.urlWarning
                                                : qsTr("The address you open Nextcloud with in a browser.")
             BTextField {
-                id: urlField
                 Layout.fillWidth: true
                 text: form.setup.url
                 placeholderText: qsTr("https://cloud.example.com")
@@ -139,7 +146,6 @@ IoCard {
             //: Polish: "Hasło aplikacji" (Nextcloud's own name for it)
             label: qsTr("App password")
             BTextField {
-                id: passwordField
                 Layout.fillWidth: true
                 text: form.setup.password
                 echoMode: form.showPassword ? TextInput.Normal : TextInput.Password
@@ -161,37 +167,30 @@ IoCard {
             }
         }
         // How to get an app password.
-        Rectangle {
+        Box {
             Layout.columnSpan: Theme.compact ? 1 : 2
             Layout.fillWidth: true
-            implicitHeight: helpColumn.implicitHeight + 2 * Theme.space3
-            radius: Theme.radius
             color: Theme.bgSunken
-            ColumnLayout {
-                id: helpColumn
-                anchors.fill: parent
-                anchors.margins: Theme.space3
+            spacing: Theme.space2
+            RowLayout {
+                Layout.fillWidth: true
                 spacing: Theme.space2
-                RowLayout {
+                BIcon { Layout.alignment: Qt.AlignTop; name: "info"; size: Theme.iconSize; color: Theme.infoText }
+                BText {
                     Layout.fillWidth: true
-                    spacing: Theme.space2
-                    BIcon { Layout.alignment: Qt.AlignTop; name: "info"; size: Theme.iconSize; color: Theme.infoText }
-                    BText {
-                        Layout.fillWidth: true
-                        wrapMode: Text.Wrap
-                        variant: "small"
-                        text: qsTr("Use an app password, not your account password: in Nextcloud open Settings → Security, type a name such as “Brulion – phone” under “Devices & sessions” and click “Create new app password”. You can revoke it there at any time.")
-                    }
+                    wrapMode: Text.Wrap
+                    variant: "small"
+                    text: qsTr("Use an app password, not your account password: in Nextcloud open Settings → Security, type a name such as “Brulion – phone” under “Devices & sessions” and click “Create new app password”. You can revoke it there at any time.")
                 }
-                BButton {
-                    visible: form.setup.securityUrl !== ""
-                    Layout.leftMargin: Theme.iconSize + Theme.space2
-                    text: qsTr("Open the security settings")
-                    iconName: "external-link"
-                    size: "small"
-                    variant: "ghost"
-                    onClicked: Qt.openUrlExternally(form.setup.securityUrl)
-                }
+            }
+            BButton {
+                visible: form.setup.securityUrl !== ""
+                Layout.leftMargin: Theme.iconSize + Theme.space2
+                text: qsTr("Open the security settings")
+                iconName: "external-link"
+                size: "small"
+                variant: "ghost"
+                onClicked: Qt.openUrlExternally(form.setup.securityUrl)
             }
         }
         Field {
@@ -259,10 +258,9 @@ IoCard {
 
     // ---- Test result ---------------------------------------------------------------------------
     BCard {
-        id: result
         Layout.fillWidth: true
         visible: form.setup.testResult.title !== undefined
-        tone: form.setup.testResult.ok ? "success" : form.setup.testResult.code === "no-folder" ? "warning" : "danger"
+        tone: form.resultTone
         padding: Theme.space3
         contentItem: ColumnLayout {
             spacing: Theme.space2
@@ -271,9 +269,9 @@ IoCard {
                 spacing: Theme.space2
                 BIcon {
                     Layout.alignment: Qt.AlignTop
-                    name: form.setup.testResult.ok ? "circle-check" : form.setup.testResult.code === "no-folder" ? "folder" : "circle-alert"
+                    name: form.resultTone === "success" ? "circle-check" : form.resultTone === "warning" ? "folder" : "circle-alert"
                     size: Theme.iconSize
-                    color: form.setup.testResult.ok ? Theme.successText : form.setup.testResult.code === "no-folder" ? Theme.warningText : Theme.dangerText
+                    color: form.resultTone === "success" ? Theme.successText : form.resultTone === "warning" ? Theme.warningText : Theme.dangerText
                 }
                 ColumnLayout {
                     Layout.fillWidth: true

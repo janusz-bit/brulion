@@ -14,8 +14,12 @@ ColumnLayout {
 
     readonly property WorkspaceSync sync: Workspace.sync
     readonly property bool running: !!sync && sync.live.running === true
-
+    readonly property bool stalled: running && sync.live.stalled
+    readonly property string detailText: running ? sync.live.detailText : ""
+    readonly property string stallText: running ? sync.live.stallText : ""
     /// The files the stalled run waits for.
+    readonly property list<string> waiting: waitingFor()
+
     function waitingFor(): list<string> {
         if (!live.running)
             return []
@@ -41,12 +45,12 @@ ColumnLayout {
         spacing: Theme.space2
         BSpinner {
             Layout.alignment: Qt.AlignVCenter
-            running: live.running && !live.sync.live.stalled
+            running: live.running && !live.stalled
             visible: running
         }
         BIcon {
             Layout.alignment: Qt.AlignVCenter
-            visible: live.running && live.sync.live.stalled
+            visible: live.stalled
             name: "triangle-alert"
             size: Theme.iconSize
             color: Theme.warningText
@@ -57,11 +61,11 @@ ColumnLayout {
             variant: "label"
             wrapMode: Text.Wrap
             Accessible.role: Accessible.StaticText
-            Accessible.name: text + (live.running && live.sync.live.detailText !== "" ? ", " + live.sync.live.detailText : "")
+            Accessible.name: text + (live.detailText !== "" ? ", " + live.detailText : "")
         }
         BText {
             visible: text !== "" && !Theme.compact
-            text: live.running ? live.sync.live.detailText : ""
+            text: live.detailText
             variant: "small"
             color: Theme.fgMuted
         }
@@ -70,7 +74,7 @@ ColumnLayout {
     BText {
         Layout.fillWidth: true
         visible: Theme.compact && text !== ""
-        text: live.running ? live.sync.live.detailText : ""
+        text: live.detailText
         variant: "small"
         color: Theme.fgMuted
         wrapMode: Text.Wrap
@@ -107,9 +111,7 @@ ColumnLayout {
                 return ""
             const run = live.sync.live
             // The elapsed time always comes first.
-            const rest = live.joinNonEmpty([run.bytesText, run.triggerText, run.number > 0 ? "#" + run.number : ""])
-            const elapsed = "" + run.elapsedText
-            return rest === "" ? elapsed : elapsed + " · " + rest
+            return live.joinNonEmpty(["" + run.elapsedText, run.bytesText, run.triggerText, run.number > 0 ? "#" + run.number : ""])
         }
     }
 
@@ -125,12 +127,12 @@ ColumnLayout {
     // The server stopped answering: say so instead of spinning silently.
     Rectangle {
         Layout.fillWidth: true
-        visible: live.running && live.sync.live.stalled
+        visible: live.stalled
         implicitHeight: stallColumn.implicitHeight + 2 * Theme.space3
         radius: Theme.radius
         color: Theme.warningBg
         Accessible.role: Accessible.AlertMessage
-        Accessible.name: live.running ? live.sync.live.stallText : ""
+        Accessible.name: live.stallText
         ColumnLayout {
             id: stallColumn
             anchors.fill: parent
@@ -138,13 +140,13 @@ ColumnLayout {
             spacing: Theme.space1
             BText {
                 Layout.fillWidth: true
-                text: live.running ? live.sync.live.stallText : ""
+                text: live.stallText
                 wrapMode: Text.Wrap
             }
             BText {
                 Layout.fillWidth: true
-                visible: live.running && live.waitingFor().length > 0
-                text: live.running ? qsTr("Waiting for: %1").arg(live.waitingFor().join(", ")) : ""
+                visible: live.waiting.length > 0
+                text: qsTr("Waiting for: %1").arg(live.waiting.join(", "))
                 variant: "small"
                 color: Theme.fgMuted
                 wrapMode: Text.Wrap

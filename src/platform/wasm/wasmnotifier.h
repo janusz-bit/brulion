@@ -7,8 +7,6 @@
 
 namespace brulion::platform {
 
-struct WasmNotifierJs;
-
 /// Reminders in the browser build: the web Notification API.
 ///
 /// Browsers can only notify while the page (or the installed PWA) is open — there is no
@@ -74,9 +72,6 @@ Q_SIGNALS:
     void permissionChanged(brulion::platform::WasmNotifier::Permission permission);
     /// The user clicked a notification (the page has been focused).
     void activated(const QString &id, const QString &path, int line);
-
-private:
-    friend struct WasmNotifierJs;
 };
 
 } // namespace brulion::platform

@@ -158,12 +158,10 @@ public:
                 }
             }
         }
+        out.reserve(ranges.size());
         for (const PdfTextRange &range : ranges) {
-            PdfTextHit hit;
-            hit.start = int(range.start);
-            hit.length = int(range.length);
-            hit.rects = rects.value(hit.start);
-            out.append(hit);
+            const int start = int(range.start);
+            out.append(PdfTextHit{.start = start, .length = int(range.length), .rects = rects.value(start)});
         }
         return out;
     }

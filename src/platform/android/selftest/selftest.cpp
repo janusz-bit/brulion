@@ -30,6 +30,7 @@
 
 using namespace Qt::StringLiterals;
 using brulion::platform::AndroidBridge;
+namespace platform = brulion::platform;
 
 namespace {
 
@@ -123,15 +124,15 @@ int main(int argc, char *argv[])
             painter.setFont(font);
             painter.drawText(QPointF(60, 500), u"Zażółć gęślą jaźń"_s);
         }
-        const brulion::platform::PdfInfo info = brulion::platform::pdfInfo(pdf);
+        const platform::PdfInfo info = platform::pdfInfo(pdf);
         // The count and the first page's size only (the page picker).
-        const brulion::platform::PdfInfo first = brulion::platform::pdfInfo(pdf, false);
+        const platform::PdfInfo first = platform::pdfInfo(pdf, false);
         const QSizeF firstSize = first.pagePoints.value(0);
         QString error;
-        const QImage page = brulion::platform::renderPdfPage(pdf, 1, 842, &error);
+        const QImage page = platform::renderPdfPage(pdf, 1, 842, &error);
         qCWarning(lcSelfTest,
                   "SELFTEST pdf backend=%s pages=%d first=%dx%d width=%d height=%d centre=%s corner=%s error=%s",
-                  qUtf8Printable(brulion::platform::pdfBackendName()), info.pages,
+                  qUtf8Printable(platform::pdfBackendName()), info.pages,
                   first.pages == 1 && first.pagePoints.size() == 1 ? qRound(firstSize.width()) : -1,
                   qRound(firstSize.height()), page.width(), page.height(),
                   qUtf8Printable(page.isNull() ? QString() : page.pixelColor(200, 200).name()),
@@ -139,7 +140,7 @@ int main(int argc, char *argv[])
                   qUtf8Printable(error.isEmpty() ? info.error : error));
         // The PDF viewer's reader (a PdfRenderer session): a part of the page drawn on its own
         // equals the whole page's crop; text where Android has the APIs (15+, API 35).
-        const std::unique_ptr<brulion::platform::PdfReader> reader = brulion::platform::PdfReader::open(pdf);
+        const std::unique_ptr<platform::PdfReader> reader = platform::PdfReader::open(pdf);
         const QSize full(595, 842);
         const QRect clip(150, 150, 100, 100);
         const QImage whole = reader ? reader->render(1, full).convertToFormat(QImage::Format_RGB32) : QImage();
@@ -157,20 +158,18 @@ int main(int argc, char *argv[])
             }
             difference = sum / (3.0 * part.width() * part.height());
         }
-        const QList<brulion::platform::PdfTextHit> found =
-                reader ? reader->find(1, u"GESLA"_s) : QList<brulion::platform::PdfTextHit>();
+        const auto found = reader ? reader->find(1, u"GESLA"_s) : QList<platform::PdfTextHit>();
         const int hits = reader ? int(found.size()) : -1;
         const bool inText = !found.isEmpty() && !found.first().rects.isEmpty()
                             && found.first().rects.first().intersects(QRectF(40, 460, 400, 60));
         qCWarning(lcSelfTest, "SELFTEST pdf-reader region=%d text=%d hits=%d rect=%d api=%d", difference <= 6,
-                  brulion::platform::pdfTextAvailable(), hits, inText,
-                  QNativeInterface::QAndroidApplication::sdkVersion());
+                  platform::pdfTextAvailable(), hits, inText, QNativeInterface::QAndroidApplication::sdkVersion());
         // More sessions than PdfPages.MAX_SESSIONS (16): the oldest is closed under its reader,
         // which then fails and says it is lost (the pool drops it); the newest still draws.
-        std::vector<std::unique_ptr<brulion::platform::PdfReader>> many;
+        std::vector<std::unique_ptr<platform::PdfReader>> many;
         for (int i = 0; i < 17; ++i)
-            many.push_back(brulion::platform::PdfReader::open(pdf));
-        const bool allOpen = std::all_of(many.begin(), many.end(), [](const auto &r) { return r != nullptr; });
+            many.push_back(platform::PdfReader::open(pdf));
+        const bool allOpen = std::ranges::all_of(many, [](const auto &r) { return r != nullptr; });
         const bool oldestFails = allOpen && many.front()->render(1, QSize(60, 84)).isNull();
         qCWarning(lcSelfTest, "SELFTEST pdf-sessions opened=%d oldest-lost=%d newest-draws=%d", allOpen,
                   oldestFails && many.front()->lost(),

@@ -41,6 +41,11 @@ void quietPoppler()
     });
 }
 
+/// The most outline entries one outline() lets poppler read (MaxPdfOutlineItems caps only the ones
+/// kept): poppler reads a list of children anew for each entry naming it, so a hostile outline whose
+/// entries all share their children has far more entries to read than objects. Above any real one.
+constexpr qsizetype MaxOutlineEntriesRead = 20 * MaxPdfOutlineItems;
+
 class PopplerReader final : public PdfReader {
 public:
     explicit PopplerReader(std::unique_ptr<Poppler::Document> doc) : m_doc(std::move(doc)) { }
@@ -81,15 +86,13 @@ public:
 
     QList<PdfTextHit> find(int page, QStringView query, int maxHits) override
     {
-        QList<PdfTextHit> out;
         load(page);
-        for (const PdfTextRange &range : findPdfText(m_text, query, std::min(maxHits, MaxPdfHitsPerPage))) {
-            PdfTextHit hit;
-            hit.start = int(range.start);
-            hit.length = int(range.length);
-            hit.rects = pdfRangeRects(m_boxes, range);
-            out.append(hit);
-        }
+        const QList<PdfTextRange> ranges = findPdfText(m_text, query, std::min(maxHits, MaxPdfHitsPerPage));
+        QList<PdfTextHit> out;
+        out.reserve(ranges.size());
+        for (const PdfTextRange &range : ranges)
+            out.append(PdfTextHit{
+                    .start = int(range.start), .length = int(range.length), .rects = pdfRangeRects(m_boxes, range)});
         return out;
     }
 
@@ -110,7 +113,9 @@ public:
     QList<PdfOutlineItem> outline() override
     {
         QList<PdfOutlineItem> out;
-        addOutline(m_doc->outline(), 0, out);
+        const QList<Poppler::OutlineItem> items = m_doc->outline();
+        qsizetype entriesRead = items.size();
+        addOutline(items, 0, out, entriesRead);
         return out;
     }
 
@@ -127,26 +132,23 @@ public:
             if (out.size() >= MaxPdfLinksPerPage)
                 break;
             const QRectF area = link->linkArea().normalized();
-            if (area.isEmpty() || !std::isfinite(area.x()) || !std::isfinite(area.y()) || !std::isfinite(area.width())
-                || !std::isfinite(area.height()))
+            if (!pdfUsableBox(area))
                 continue;
-            PdfLink out1;
-            out1.rect = QRectF(area.x() * points.width(), area.y() * points.height(), area.width() * points.width(),
-                               area.height() * points.height());
+            PdfLink entry;
+            entry.rect = QRectF(area.x() * points.width(), area.y() * points.height(), area.width() * points.width(),
+                                area.height() * points.height());
             if (link->linkType() == Poppler::Link::Goto) {
                 const auto *go = static_cast<const Poppler::LinkGoto *>(link.get());
-                if (go->isExternal())
-                    continue; // another file
-                if (!target(go->destination(), out1.page, out1.top))
-                    continue;
+                if (go->isExternal() || !target(go->destination(), entry.page, entry.top))
+                    continue; // another file, or no page of this one
             } else if (link->linkType() == Poppler::Link::Browse) {
-                out1.url = static_cast<const Poppler::LinkBrowse *>(link.get())->url();
-                if (!pdfLinkUrlAllowed(out1.url))
+                entry.url = static_cast<const Poppler::LinkBrowse *>(link.get())->url();
+                if (!pdfLinkUrlAllowed(entry.url))
                     continue;
             } else {
                 continue; // launch, JavaScript, forms, media: never
             }
-            out.append(out1);
+            out.append(entry);
         }
         return out;
     }
@@ -178,37 +180,39 @@ private:
         return true;
     }
 
-    void addOutline(const QVector<Poppler::OutlineItem> &items, int level, QList<PdfOutlineItem> &out)
+    /// `items` and, under each, its children appended to `out`, depth first; `entriesRead` counts the
+    /// entries poppler has read (MaxOutlineEntriesRead).
+    void addOutline(const QList<Poppler::OutlineItem> &items, int level, QList<PdfOutlineItem> &out,
+                    qsizetype &entriesRead)
     {
         for (const Poppler::OutlineItem &item : items) {
             if (out.size() >= MaxPdfOutlineItems)
                 return;
             if (item.isNull())
                 continue;
-            PdfOutlineItem entry;
-            entry.title = pdfCleanTitle(item.name());
-            entry.level = level;
+            PdfOutlineItem entry{.title = pdfCleanTitle(item.name()), .level = level};
             if (item.externalFileName().isEmpty()) {
-                if (const QSharedPointer<const Poppler::LinkDestination> d = item.destination())
+                if (const auto d = item.destination())
                     target(*d, entry.page, entry.top);
             }
             if (!entry.title.isEmpty() || entry.page > 0)
                 out.append(entry);
-            if (level + 1 < MaxPdfOutlineDepth && item.hasChildren())
-                addOutline(item.children(), level + 1, out);
+            if (level + 1 < MaxPdfOutlineDepth && entriesRead < MaxOutlineEntriesRead && item.hasChildren()) {
+                const QList<Poppler::OutlineItem> children = item.children();
+                entriesRead += children.size();
+                addOutline(children, level + 1, out, entriesRead);
+            }
         }
     }
 
     PdfTextSelection selection(PdfTextRange range) const
     {
-        PdfTextSelection out;
         if (range.length <= 0 || range.start < 0 || range.start + range.length > m_text.size())
-            return out;
-        out.start = int(range.start);
-        out.length = int(range.length);
-        out.text = pdfCopyText(QStringView(m_text).sliced(range.start, range.length));
-        out.rects = pdfRangeRects(m_boxes, range);
-        return out;
+            return {};
+        return {.start = int(range.start),
+                .length = int(range.length),
+                .text = pdfCopyText(QStringView(m_text).sliced(range.start, range.length)),
+                .rects = pdfRangeRects(m_boxes, range)};
     }
 
     /// The page's text and a box for each of its units (kept for the last page asked: a search
@@ -223,8 +227,7 @@ private:
         const std::unique_ptr<Poppler::Page> p = pageAt(page);
         if (!p)
             return;
-        const std::vector<std::unique_ptr<Poppler::TextBox>> words = p->textList();
-        for (const std::unique_ptr<Poppler::TextBox> &word : words) {
+        for (const std::unique_ptr<Poppler::TextBox> &word : p->textList()) {
             const QString text = word->text();
             const QRectF wordBox = word->boundingBox();
             // charBoundingBox() counts characters (code points); a pair of surrogates shares one.

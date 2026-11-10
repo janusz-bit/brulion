@@ -2,6 +2,7 @@
 
 #include <QStringDecoder>
 
+#include <algorithm>
 #include <array>
 
 using namespace Qt::StringLiterals;
@@ -69,11 +70,11 @@ bool zipNamesItself(QByteArrayView head, QByteArrayView mimeType)
 bool matches(const Entry &entry, QByteArrayView head)
 {
     switch (entry.check) {
-    case Check::Pdf: return head.first(std::min<qsizetype>(head.size(), 1024)).indexOf("%PDF-") >= 0;
+    case Check::Pdf: return head.first(std::min<qsizetype>(head.size(), 1024)).contains("%PDF-");
     case Check::Ooxml:
         // A zip with its content types and its main part's folder among its first entries.
-        return startsWith(head, ZipLocal) && head.indexOf("[Content_Types].xml") >= 0
-               && head.indexOf(QByteArrayView(entry.detail)) >= 0;
+        return startsWith(head, ZipLocal) && head.contains("[Content_Types].xml")
+               && head.contains(QByteArrayView(entry.detail));
     case Check::OpenDocument: return zipNamesItself(head, QByteArrayView(entry.detail));
     case Check::Epub: return zipNamesItself(head, "application/epub+zip");
     case Check::Ole2: return startsWith(head, QByteArrayView("\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1", 8));
@@ -110,15 +111,11 @@ ExternalFileType externalFileType(QStringView fileName, QByteArrayView head)
     if (dot <= 0 || dot + 1 >= fileName.size())
         return {};
     const QString extension = fileName.sliced(dot + 1).toString().toLower();
-    head = head.first(std::min(head.size(), ExternalFileHeadBytes));
-    for (const Entry &entry : entries) {
-        if (extension != QLatin1StringView(entry.extension))
-            continue;
-        if (!matches(entry, head))
-            return {};
-        return {QString::fromLatin1(entry.mimeType), QString::fromLatin1(entry.kind)};
-    }
-    return {};
+    const auto entry = std::ranges::find_if(
+            entries, [&extension](const Entry &e) { return extension == QLatin1StringView(e.extension); });
+    if (entry == entries.end() || !matches(*entry, head.first(std::min(head.size(), ExternalFileHeadBytes))))
+        return {};
+    return {QString::fromLatin1(entry->mimeType), QString::fromLatin1(entry->kind)};
 }
 
 } // namespace brulion::platform

@@ -11,7 +11,7 @@ using namespace Qt::StringLiterals;
 
 namespace brulion::platform {
 
-QSize pdfPagePixels(const QSizeF &points, int maxSide)
+QSize pdfPagePixels(QSizeF points, int maxSide)
 {
     if (!(points.width() > 0) || !(points.height() > 0) || !std::isfinite(points.width())
         || !std::isfinite(points.height()))
@@ -22,7 +22,7 @@ QSize pdfPagePixels(const QSizeF &points, int maxSide)
                  std::clamp(int(std::lround(points.height() * k)), 1, side));
 }
 
-double pdfRenderDpi(const QSizeF &points, const QSize &pixels)
+double pdfRenderDpi(QSizeF points, QSize pixels)
 {
     if (!(points.width() > 0) || !(points.height() > 0) || !std::isfinite(points.width())
         || !std::isfinite(points.height()) || pixels.isEmpty())
@@ -33,7 +33,7 @@ double pdfRenderDpi(const QSizeF &points, const QSize &pixels)
     return std::min(dpi, 72.0 * MaxPdfPageSide / std::max(points.width(), points.height()));
 }
 
-QRect PdfReader::clipOf(const QSize &full, const QRect &clip)
+QRect PdfReader::clipOf(QSize full, QRect clip)
 {
     if (full.isEmpty() || std::max(full.width(), full.height()) > MaxPdfFullSide)
         return {};
@@ -44,7 +44,7 @@ QRect PdfReader::clipOf(const QSize &full, const QRect &clip)
     return wanted;
 }
 
-QImage PdfReader::onWhite(const QImage &rendered, const QSize &size)
+QImage PdfReader::onWhite(const QImage &rendered, QSize size)
 {
     if (rendered.isNull() || size.isEmpty())
         return {};
@@ -61,19 +61,13 @@ QImage PdfReader::onWhite(const QImage &rendered, const QSize &size)
     return out;
 }
 
-PdfTextSelection PdfReader::selectText(int page, QPointF from, QPointF to)
+PdfTextSelection PdfReader::selectText(int, QPointF, QPointF)
 {
-    Q_UNUSED(page);
-    Q_UNUSED(from);
-    Q_UNUSED(to);
     return {};
 }
 
-PdfTextSelection PdfReader::selectRange(int page, int start, int length)
+PdfTextSelection PdfReader::selectRange(int, int, int)
 {
-    Q_UNUSED(page);
-    Q_UNUSED(start);
-    Q_UNUSED(length);
     return {};
 }
 
@@ -82,9 +76,8 @@ QList<PdfOutlineItem> PdfReader::outline()
     return {};
 }
 
-QList<PdfLink> PdfReader::links(int page)
+QList<PdfLink> PdfReader::links(int)
 {
-    Q_UNUSED(page);
     return {};
 }
 

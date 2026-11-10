@@ -15,11 +15,8 @@ void openFiles(const QStringList &nameFilters, bool multiple, qint64 maxFileByte
     // Shared by Qt's three callbacks, which it keeps (copies) for as long as the pick runs.
     auto collector = std::make_shared<PickCollector>(maxFileBytes, maxTotalBytes, std::move(done));
     // Qt's filter list: entries separated by ";;" (QWasmLocalFileAccess makeFilterList).
-    QStringList filters;
-    for (const QString &f : nameFilters) {
-        if (!f.trimmed().isEmpty())
-            filters.append(f);
-    }
+    QStringList filters = nameFilters;
+    filters.removeIf([](const QString &f) { return f.trimmed().isEmpty(); });
     QWasmLocalFileAccess::openFiles(
             filters.join(u";;"_s).toStdString(),
             multiple ? QWasmLocalFileAccess::FileSelectMode::MultipleFiles

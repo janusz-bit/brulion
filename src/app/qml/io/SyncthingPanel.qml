@@ -13,6 +13,7 @@ ColumnLayout {
     id: panel
 
     readonly property WorkspaceSync sync: Workspace.sync
+    readonly property string stState: sync.syncthing.state || ""
     readonly property bool shared: !!sync.syncthing.folder || (sync.syncthing.folderId || "") !== ""
     property bool showTemplate: false
     property bool showKey: false
@@ -38,9 +39,9 @@ ColumnLayout {
     IoCard {
         visible: !AppController.isWasm
         iconName: "folder-sync"
-        iconColor: panel.sync.syncthing.state === "idle" ? Theme.successText
-                 : panel.sync.syncthing.state === "offline" || panel.sync.syncthing.state === "not-shared" ? Theme.warningText
-                 : panel.sync.syncthing.state === "error" ? Theme.dangerText : Theme.fgMuted
+        iconColor: panel.stState === "idle" ? Theme.successText
+                 : panel.stState === "offline" || panel.stState === "not-shared" ? Theme.warningText
+                 : panel.stState === "error" ? Theme.dangerText : Theme.fgMuted
         title: "Syncthing"
         subtitle: panel.sync.syncthing.text ? "" + panel.sync.syncthing.text : (panel.shared
                   ? qsTr("This notebook folder is shared with Syncthing.")
@@ -49,7 +50,7 @@ ColumnLayout {
             BBadge {
                 visible: text !== ""
                 text: {
-                    switch (panel.sync.syncthing.state || "") {
+                    switch (panel.stState) {
                     case "idle": return qsTr("Up to date")
                     case "syncing":
                     case "sync-preparing": return qsTr("Syncing")
@@ -62,7 +63,7 @@ ColumnLayout {
                     }
                 }
                 variant: {
-                    switch (panel.sync.syncthing.state || "") {
+                    switch (panel.stState) {
                     case "idle": return "success"
                     case "syncing":
                     case "sync-preparing":
@@ -79,19 +80,19 @@ ColumnLayout {
                 iconName: "refresh-cw"
                 label: qsTr("Check now")
                 size: "small"
-                onClicked: Workspace.sync.refreshSyncthing()
+                onClicked: panel.sync.refreshSyncthing()
             }
         ]
 
         BProgressBar {
             Layout.fillWidth: true
-            visible: panel.sync.syncthing.state === "syncing" || panel.sync.syncthing.state === "sync-preparing"
+            visible: panel.stState === "syncing" || panel.stState === "sync-preparing"
             value: (panel.sync.syncthing.completion || 0) / 100
         }
         Flow {
             Layout.fillWidth: true
-            visible: !!panel.sync.syncthing.enabled && panel.sync.syncthing.state !== "offline" && panel.sync.syncthing.state !== "not-shared"
-                     && panel.sync.syncthing.state !== "unknown"
+            visible: !!panel.sync.syncthing.enabled && panel.stState !== "offline" && panel.stState !== "not-shared"
+                     && panel.stState !== "unknown"
             spacing: Theme.space2
             BChip {
                 visible: (panel.sync.syncthing.folderLabel || "") !== ""
@@ -111,7 +112,7 @@ ColumnLayout {
         }
         BText {
             Layout.fillWidth: true
-            visible: (panel.sync.syncthing.error || "") !== "" && panel.sync.syncthing.state === "offline"
+            visible: (panel.sync.syncthing.error || "") !== "" && panel.stState === "offline"
             text: panel.sync.syncthing.error || ""
             variant: "small"
             color: Theme.fgFaint

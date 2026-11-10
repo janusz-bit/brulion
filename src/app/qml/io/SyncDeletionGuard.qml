@@ -16,6 +16,7 @@ IoCard {
     readonly property list<var> deletions: sync ? sync.pendingDeletions : []
     readonly property int localCount: IoLists.countWhere(deletions, "action", "delete-local")
     readonly property int remoteCount: deletions.length - localCount
+    readonly property int rowHeight: 36
 
     visible: !!sync && sync.needsConfirmation
     tone: "warning"
@@ -35,7 +36,7 @@ IoCard {
 
     Rectangle {
         Layout.fillWidth: true
-        implicitHeight: Math.min(list.contentHeight, 8 * 36) + 2
+        implicitHeight: Math.min(list.contentHeight, 8 * guard.rowHeight) + 2
         radius: Theme.radius
         color: Theme.bgElevated
         border.width: 1
@@ -55,7 +56,7 @@ IoCard {
                 required property string path
                 required property string action
                 width: ListView.view.width
-                height: 36
+                height: guard.rowHeight
                 spacing: Theme.space2
                 BIcon {
                     Layout.leftMargin: Theme.space3

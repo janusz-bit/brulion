@@ -76,6 +76,12 @@ QList<PdfTextRange> findPdfText(QStringView text, QStringView query, int maxHits
     return out;
 }
 
+bool pdfUsableBox(const QRectF &box)
+{
+    return !box.isEmpty() && std::isfinite(box.x()) && std::isfinite(box.y()) && std::isfinite(box.width())
+           && std::isfinite(box.height());
+}
+
 QList<QRectF> pdfRangeRects(const QList<QRectF> &boxes, PdfTextRange range)
 {
     QList<QRectF> out;
@@ -84,8 +90,7 @@ QList<QRectF> pdfRangeRects(const QList<QRectF> &boxes, PdfTextRange range)
     QRectF line;
     for (qsizetype i = from; i < to; ++i) {
         const QRectF box = boxes.at(i);
-        if (box.isEmpty() || !std::isfinite(box.x()) || !std::isfinite(box.y()) || !std::isfinite(box.width())
-            || !std::isfinite(box.height()))
+        if (!pdfUsableBox(box))
             continue;
         if (line.isNull()) {
             line = box;

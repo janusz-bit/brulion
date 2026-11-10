@@ -41,7 +41,8 @@ QStringList spellDictionaryDirs(const QString &dicPathVariable, QChar listSepara
         if (!dirs.contains(clean))
             dirs.append(clean);
     };
-    for (const QString &d : dicPathVariable.split(listSeparator, Qt::SkipEmptyParts))
+    const QStringList listed = dicPathVariable.split(listSeparator, Qt::SkipEmptyParts);
+    for (const QString &d : listed)
         add(d);
     if (!appDir.isEmpty()) {
         add(appDir + u"/dictionaries"_s);
@@ -68,7 +69,7 @@ QList<SpellDictionary> findSpellDictionaries(const QStringList &dirs)
     using Key = std::tuple<int, QString, qsizetype>;
     QMap<QString, std::pair<Key, SpellDictionary>> best;
     for (qsizetype i = 0; i < dirs.size(); ++i) {
-        const QDir dir(dirs[i]);
+        const QDir dir(dirs.at(i));
         if (!dir.exists())
             continue;
         const QFileInfoList affs = dir.entryInfoList({u"*.aff"_s}, QDir::Files | QDir::Readable, QDir::Name);

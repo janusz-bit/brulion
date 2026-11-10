@@ -6,17 +6,9 @@
 #include <cmath>
 #include <limits>
 
-using namespace Qt::StringLiterals;
-
 namespace brulion::platform {
 
 namespace {
-
-bool usable(const QRectF &box)
-{
-    return !box.isEmpty() && std::isfinite(box.x()) && std::isfinite(box.y()) && std::isfinite(box.width())
-           && std::isfinite(box.height());
-}
 
 /// How far `v` lies outside [lo, hi] (0 inside).
 qreal outside(qreal v, qreal lo, qreal hi)
@@ -30,6 +22,19 @@ bool isControl(QChar c)
     return cat == QChar::Other_Control || cat == QChar::Other_Format || c.unicode() == 0x2028 || c.unicode() == 0x2029;
 }
 
+bool wordUnit(QChar c)
+{
+    return c.isLetterOrNumber() || c.isMark() || c.isSurrogate() || c == u'_';
+}
+
+/// An apostrophe or a hyphen between two units of a word ("rock'n'roll", "biało-czerwony").
+bool joiner(QStringView text, qsizetype i)
+{
+    const QChar c = text.at(i);
+    const bool joins = c == u'\'' || c == u'-' || c.unicode() == 0x2019 || c.unicode() == 0x2010;
+    return joins && i > 0 && i + 1 < text.size() && wordUnit(text.at(i - 1)) && wordUnit(text.at(i + 1));
+}
+
 } // namespace
 
 qsizetype pdfNearestBox(const QList<QRectF> &boxes, QPointF point)
@@ -41,7 +46,7 @@ qsizetype pdfNearestBox(const QList<QRectF> &boxes, QPointF point)
     qreal bestDx = std::numeric_limits<qreal>::infinity();
     for (qsizetype i = 0; i < boxes.size(); ++i) {
         const QRectF &box = boxes.at(i);
-        if (!usable(box))
+        if (!pdfUsableBox(box))
             continue;
         const qreal dy = outside(point.y(), box.top(), box.bottom());
         const qreal dx = outside(point.x(), box.left(), box.right());
@@ -66,7 +71,7 @@ qsizetype pdfCaretAt(const QList<QRectF> &boxes, QPointF point)
     qreal top = std::numeric_limits<qreal>::infinity();
     qreal bottom = -std::numeric_limits<qreal>::infinity();
     for (const QRectF &box : boxes) {
-        if (usable(box)) {
+        if (pdfUsableBox(box)) {
             top = std::min(top, box.top());
             bottom = std::max(bottom, box.bottom());
         }
@@ -97,23 +102,6 @@ PdfTextRange pdfRangeBetween(const QList<QRectF> &boxes, QPointF from, QPointF t
         return {};
     return {std::min(a, b), std::abs(b - a)};
 }
-
-namespace {
-
-bool wordUnit(QChar c)
-{
-    return c.isLetterOrNumber() || c.isMark() || c.isSurrogate() || c == u'_';
-}
-
-/// An apostrophe or a hyphen between two units of a word ("rock'n'roll", "biało-czerwony").
-bool joiner(QStringView text, qsizetype i)
-{
-    const QChar c = text.at(i);
-    const bool joins = c == u'\'' || c == u'-' || c.unicode() == 0x2019 || c.unicode() == 0x2010;
-    return joins && i > 0 && i + 1 < text.size() && wordUnit(text.at(i - 1)) && wordUnit(text.at(i + 1));
-}
-
-} // namespace
 
 PdfTextRange pdfWordAt(QStringView text, qsizetype index)
 {
@@ -208,19 +196,18 @@ QString pdfCleanTitle(QStringView title)
 
 bool pdfLinkUrlAllowed(QStringView url)
 {
-    if (url.isEmpty() || url.size() > MaxPdfUrlLength)
+    const auto forbidden = [](QChar c) {
+        return c.unicode() <= 0x20 || c.unicode() == 0x7f || c.isSpace() || isControl(c) || c.isSurrogate();
+    };
+    if (url.isEmpty() || url.size() > MaxPdfUrlLength || std::ranges::any_of(url, forbidden))
         return false;
-    for (const QChar c : url) {
-        if (c.unicode() <= 0x20 || c.unicode() == 0x7f || c.isSpace() || isControl(c) || c.isSurrogate())
-            return false;
-    }
     const QUrl parsed(url.toString(), QUrl::StrictMode);
     if (!parsed.isValid())
         return false;
     const QString scheme = parsed.scheme().toLower();
-    if (scheme == u"http"_s || scheme == u"https"_s)
+    if (scheme == u"http" || scheme == u"https")
         return !parsed.host().isEmpty();
-    if (scheme == u"mailto"_s) {
+    if (scheme == u"mailto") {
         const QString address = parsed.path();
         return address.contains(u'@') && !address.startsWith(u'@') && !address.endsWith(u'@');
     }

@@ -158,19 +158,12 @@ EM_JS(int, brulion_shell_watch_viewport, (), {
 
 namespace brulion::platform {
 
-namespace {
-
-std::function<void(const BrowserViewport &)> &viewportCallback()
-{
-    static std::function<void(const BrowserViewport &)> callback;
-    return callback;
-}
-
-} // namespace
-
 /// JavaScript -> C++ (registered with embind as Module.brulionViewportEvent).
 struct WasmShellJs
 {
+    /// watchVisualViewport()'s callback.
+    static inline std::function<void(const BrowserViewport &)> viewportCallback;
+
     static void viewportEvent(emscripten::val reading)
     {
         if (reading.isNull() || reading.isUndefined())
@@ -196,8 +189,8 @@ struct WasmShellJs
         QMetaObject::invokeMethod(
                 QCoreApplication::instance(),
                 [viewport] {
-                    if (viewportCallback())
-                        viewportCallback()(viewport);
+                    if (viewportCallback)
+                        viewportCallback(viewport);
                 },
                 Qt::QueuedConnection);
     }
@@ -205,7 +198,7 @@ struct WasmShellJs
 
 void watchVisualViewport(std::function<void(const BrowserViewport &viewport)> callback)
 {
-    viewportCallback() = std::move(callback);
+    WasmShellJs::viewportCallback = std::move(callback);
     brulion_shell_watch_viewport();
 }
 

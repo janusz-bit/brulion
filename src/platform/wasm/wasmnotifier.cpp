@@ -285,9 +285,12 @@ bool WasmNotifier::takeLaunchActivation(Activation *activation)
     char *json = brulion_notifier_take_launch();
     if (!json)
         return false;
-    const QJsonObject object = QJsonDocument::fromJson(QByteArray(json)).object();
+    const QJsonDocument document = QJsonDocument::fromJson(QByteArray(json));
     std::free(json);
+    if (!document.isObject())
+        return false;
     if (activation) {
+        const QJsonObject object = document.object();
         activation->id = object.value(QLatin1String("id")).toString();
         activation->path = object.value(QLatin1String("path")).toString();
         const double line = object.value(QLatin1String("line")).toDouble(-1);

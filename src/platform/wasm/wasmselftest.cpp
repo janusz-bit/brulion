@@ -6,8 +6,8 @@
 
 #include <QCoreApplication>
 #include <QCryptographicHash>
-#include <QEvent>
 #include <QDir>
+#include <QEvent>
 #include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -68,10 +68,8 @@ void runStorageSelfTest(WasmStorage *storage)
     bool written = true;
     for (const QString &mount : storage->mountPoints() + storage->cacheMountPoints()) {
         const QString path = mount + u"/.brulion-selftest"_s;
-        int previous = 0;
         QFile in(path);
-        if (in.open(QIODevice::ReadOnly))
-            previous = QString::fromUtf8(in.readAll()).trimmed().toInt();
+        const int previous = in.open(QIODevice::ReadOnly) ? in.readAll().trimmed().toInt() : 0;
         in.close();
         QSaveFile out(path);
         const bool ok = out.open(QIODevice::WriteOnly)
@@ -96,8 +94,7 @@ void runStorageSelfTest(WasmStorage *storage)
         result.insert(u"flushed"_s, flushed);
         if (!note.isEmpty())
             result.insert(u"note"_s, note);
-        brulion_selftest_publish("brulionSelfTest",
-                                 QJsonDocument(result).toJson(QJsonDocument::Compact).constData());
+        publishSelfTestResult("brulionSelfTest", result);
     };
 
     if (!storage->isBackedByIndexedDb()) {
@@ -123,7 +120,6 @@ public:
         QCoreApplication::instance()->installEventFilter(this);
     }
 
-protected:
     bool eventFilter(QObject *, QEvent *event) override
     {
         if (m_action && (event->type() == QEvent::MouseButtonRelease || event->type() == QEvent::TouchEnd)) {
@@ -157,7 +153,7 @@ void runFilePickerSelfTest(bool pick, bool save)
     }
     new OnNextRelease([save] {
         constexpr qint64 MiB = 1024 * 1024;
-        wasm::openFiles({ u"Notatki (*.md *.txt)"_s }, true, MiB, MiB + MiB / 2, [save](const QList<PickedFile> &picked) {
+        wasm::openFiles({u"Notatki (*.md *.txt)"_s}, true, MiB, MiB + MiB / 2, [save](const QList<PickedFile> &picked) {
             QJsonArray files;
             for (const PickedFile &f : picked) {
                 files.append(QJsonObject{
@@ -172,7 +168,7 @@ void runFilePickerSelfTest(bool pick, bool save)
                 });
             }
             publishSelfTestResult("brulionPickSelfTest",
-                                  QJsonObject{ { u"cancelled"_s, picked.isEmpty() }, { u"files"_s, files } });
+                                  QJsonObject{{u"cancelled"_s, picked.isEmpty()}, {u"files"_s, files}});
             if (save)
                 startSaveSelfTest();
         });
@@ -182,28 +178,19 @@ void runFilePickerSelfTest(bool pick, bool save)
 void runNotifierSelfTest()
 {
     auto *notifier = new WasmNotifier(QCoreApplication::instance());
-    const auto permissionName = [](WasmNotifier::Permission p) {
-        return QString::fromLatin1(QMetaEnum::fromType<WasmNotifier::Permission>().valueToKey(
-                                       static_cast<int>(p)))
-            .toLower();
-    };
     auto result = std::make_shared<QJsonObject>();
-    const auto publish = [result] {
-        brulion_selftest_publish("brulionNotifySelfTest",
-                                 QJsonDocument(*result).toJson(QJsonDocument::Compact).constData());
-    };
+    const auto publish = [result] { publishSelfTestResult("brulionNotifySelfTest", *result); };
 
     const WasmNotifier::Permission permission = notifier->permission();
-    result->insert(u"permission"_s, permissionName(permission));
+    result->insert(u"permission"_s,
+                   QString::fromLatin1(QMetaEnum::fromType<WasmNotifier::Permission>().valueToKey(int(permission)))
+                           .toLower());
     bool shown = false;
     if (permission == WasmNotifier::Permission::Granted) {
         QObject::connect(notifier, &WasmNotifier::activated, notifier,
                          [result, publish](const QString &id, const QString &path, int line) {
-                             result->insert(u"activated"_s, QJsonObject{
-                                                                {u"id"_s, id},
-                                                                {u"path"_s, path},
-                                                                {u"line"_s, line},
-                                                            });
+                             result->insert(u"activated"_s,
+                                            QJsonObject{{u"id"_s, id}, {u"path"_s, path}, {u"line"_s, line}});
                              publish();
                          });
         shown = notifier->showNow(u"selftest"_s, u"Brulion"_s,

@@ -79,7 +79,7 @@ private:
     QSettings *m_run = nullptr;
     QSettings *m_approved = nullptr;
     QString m_exePath;
-    Availability m_availability;
+    Availability m_availability = Availability::Unsupported;
 };
 
 } // namespace brulion::platform

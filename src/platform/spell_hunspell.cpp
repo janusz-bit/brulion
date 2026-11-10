@@ -18,7 +18,6 @@
 #include <hunspell.hxx>
 
 #include <memory>
-#include <mutex>
 #include <string>
 
 using namespace Qt::StringLiterals;
@@ -41,11 +40,10 @@ QStringList builtInDirs()
 #endif
 }
 
-QList<SpellDictionary> dictionaries()
+/// The dictionaries found (looked for once; a reference, so iterating it never copies the list).
+const QList<SpellDictionary> &dictionaries()
 {
-    static std::once_flag once;
-    static QList<SpellDictionary> found;
-    std::call_once(once, [] {
+    static const QList<SpellDictionary> found = [] {
 #ifdef Q_OS_WIN
         const QChar separator = u';';
         const bool system = false;
@@ -56,14 +54,14 @@ QList<SpellDictionary> dictionaries()
         QStringList dataDirs = qEnvironmentVariable("XDG_DATA_DIRS").split(separator, Qt::SkipEmptyParts);
         dataDirs += QStandardPaths::standardLocations(QStandardPaths::GenericDataLocation);
         const QString appDir = QCoreApplication::instance() ? QCoreApplication::applicationDirPath() : QString();
-        const QStringList dirs = spellDictionaryDirs(qEnvironmentVariable("DICPATH"), separator, appDir, builtInDirs(),
-                                                     dataDirs, system);
-        found = findSpellDictionaries(dirs);
+        QList<SpellDictionary> list = findSpellDictionaries(spellDictionaryDirs(
+                qEnvironmentVariable("DICPATH"), separator, appDir, builtInDirs(), dataDirs, system));
         QStringList names;
-        for (const SpellDictionary &d : std::as_const(found))
+        for (const SpellDictionary &d : std::as_const(list))
             names.append(d.name);
         qCInfo(lcSpell) << "Hunspell dictionaries:" << (names.isEmpty() ? u"none"_s : names.join(u", "_s));
-    });
+        return list;
+    }();
     return found;
 }
 

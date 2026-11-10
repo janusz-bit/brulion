@@ -7,8 +7,6 @@
 
 namespace brulion::platform {
 
-struct WasmShareJs;
-
 /// Shares another tab of this browser hands over (docs/WEB.md "Sharing to Brulion").
 ///
 /// The browser version is in the system's share sheet once installed as an app
@@ -37,9 +35,6 @@ public:
 Q_SIGNALS:
     /// The share target's query another tab handed over ("share-title=…&share-text=…").
     void received(const QString &query);
-
-private:
-    friend struct WasmShareJs;
 };
 
 } // namespace brulion::platform

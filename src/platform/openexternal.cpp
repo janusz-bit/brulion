@@ -6,11 +6,12 @@
 namespace brulion::platform {
 
 namespace {
+using Hook = std::function<OpenResult(const QString &, const QString &)>;
 std::mutex s_hookLock;
-std::function<OpenResult(const QString &, const QString &)> s_hook;
+Hook s_hook;
 } // namespace
 
-void setOpenFileHook(std::function<OpenResult(const QString &, const QString &)> hook)
+void setOpenFileHook(Hook hook)
 {
     const std::lock_guard lock(s_hookLock);
     s_hook = std::move(hook);
@@ -19,11 +20,9 @@ void setOpenFileHook(std::function<OpenResult(const QString &, const QString &)>
 OpenResult openFileExternally(const QString &absolutePath, const QString &mimeType, const QString &displayName,
                               const QByteArray &bytes)
 {
-    std::function<OpenResult(const QString &, const QString &)> hook;
-    {
-        const std::lock_guard lock(s_hookLock);
-        hook = s_hook;
-    }
+    std::unique_lock lock(s_hookLock);
+    const Hook hook = s_hook;
+    lock.unlock();
     if (hook)
         return hook(absolutePath, mimeType);
     return detail::openFileExternallyNow(absolutePath, mimeType, displayName, bytes);

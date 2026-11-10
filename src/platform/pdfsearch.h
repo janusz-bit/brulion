@@ -28,6 +28,9 @@ struct PdfTextRange {
 /// nothing (empty, only spaces / marks) finds nothing.
 QList<PdfTextRange> findPdfText(QStringView text, QStringView query, int maxHits);
 
+/// `box` (from a PDF) may be used: not empty, every coordinate finite.
+bool pdfUsableBox(const QRectF &box);
+
 /// The rectangles of `range` from per-unit boxes (`boxes` — one per unit of the text, as a backend
 /// gives them; empty boxes, its synthetic spaces and line breaks, skipped): consecutive boxes merged
 /// while their vertical centres lie within half the taller one's height — one rectangle per line.

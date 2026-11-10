@@ -184,18 +184,18 @@ protected:
     PdfReader() = default;
     /// render()'s checks shared by the backends: `clip` (empty: the whole page) within `full`, the
     /// sizes in bounds. The rectangle to draw; empty when nothing may be drawn.
-    static QRect clipOf(const QSize &full, const QRect &clip);
+    static QRect clipOf(QSize full, QRect clip);
     /// `rendered` (any format) painted on white into a picture of `size`, scaled when it differs.
-    static QImage onWhite(const QImage &rendered, const QSize &size);
+    static QImage onWhite(const QImage &rendered, QSize size);
 };
 
 /// The pixel size of a page of `points` with its long side `maxSide` (at least 1 × 1; empty for an
 /// empty page size). Shared by the backends.
-QSize pdfPagePixels(const QSizeF &points, int maxSide);
+QSize pdfPagePixels(QSizeF points, int maxSide);
 /// The resolution (dots per inch) that draws a page of `points` at `pixels` (pdfPagePixels()): each
 /// side at least as many pixels, the drawn picture's long side at most MaxPdfPageSide — so memory
 /// follows the size asked for, never the page's own (a hostile 20000-pt page drawn for a 230 px
 /// thumbnail). 0 for an empty page or size. The poppler backend renders at it.
-double pdfRenderDpi(const QSizeF &points, const QSize &pixels);
+double pdfRenderDpi(QSizeF points, QSize pixels);
 
 } // namespace brulion::platform

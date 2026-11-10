@@ -6,12 +6,8 @@
 
 namespace brulion::platform::detail {
 
-OpenResult openFileExternallyNow(const QString &absolutePath, const QString &mimeType, const QString &displayName,
-                                 const QByteArray &bytes)
+OpenResult openFileExternallyNow(const QString &absolutePath, const QString &, const QString &, const QByteArray &)
 {
-    Q_UNUSED(mimeType);
-    Q_UNUSED(displayName);
-    Q_UNUSED(bytes);
     return QDesktopServices::openUrl(QUrl::fromLocalFile(absolutePath)) ? OpenResult::Opened : OpenResult::Failed;
 }
 

@@ -11,29 +11,33 @@ namespace brulion::platform {
 
 namespace {
 
-QString windowsPath(QString path)
-{
-    return path.replace(u'/', u'\\');
-}
-
 /// For comparing: forward slashes, resolved, lower case.
-QString comparable(const QString &path)
+QString comparable(QString path)
 {
-    QString p = path;
-    p.replace(u'\\', u'/');
-    return QDir::cleanPath(p).toCaseFolded();
+    return QDir::cleanPath(path.replace(u'\\', u'/')).toCaseFolded();
 }
 
-/// What follows the program in a command (trimmed).
-QString autostartArguments(const QString &command)
+/// A Run command: the program it starts and what follows it (trimmed).
+struct RunCommand {
+    QString program;
+    QString arguments;
+};
+
+/// The program is the quoted text at the command's start or its first word; both "" when the quote
+/// is not closed.
+RunCommand splitCommand(const QString &command)
 {
     const QString trimmed = command.trimmed();
     if (trimmed.startsWith(u'"')) {
         const qsizetype end = trimmed.indexOf(u'"', 1);
-        return end < 0 ? QString() : trimmed.mid(end + 1).trimmed();
+        if (end < 0)
+            return {};
+        return {trimmed.mid(1, end - 1).trimmed(), trimmed.mid(end + 1).trimmed()};
     }
     const qsizetype space = trimmed.indexOf(u' ');
-    return space < 0 ? QString() : trimmed.mid(space + 1).trimmed();
+    if (space < 0)
+        return {trimmed, QString()};
+    return {trimmed.left(space), trimmed.mid(space + 1).trimmed()};
 }
 
 /// A StartupApproved value as QSettings reads it: bytes (INI), or the registry's REG_BINARY data
@@ -59,35 +63,24 @@ QByteArray approvedBytes(const QVariant &value)
 
 QString autostartCommand(const QString &exePath)
 {
-    return u'"' + windowsPath(exePath) + u"\" --hidden"_s;
+    return u'"' + QString(exePath).replace(u'/', u'\\') + u"\" --hidden"_s;
 }
 
 QString autostartProgram(const QString &command)
 {
-    const QString trimmed = command.trimmed();
-    if (trimmed.startsWith(u'"')) {
-        const qsizetype end = trimmed.indexOf(u'"', 1);
-        return end < 0 ? QString() : trimmed.mid(1, end - 1).trimmed();
-    }
-    const qsizetype space = trimmed.indexOf(u' ');
-    return space < 0 ? trimmed : trimmed.left(space);
+    return splitCommand(command).program;
 }
 
 bool autostartTargets(const QString &command, const QString &exePath)
 {
     const QString program = autostartProgram(command);
-    if (program.isEmpty() || exePath.trimmed().isEmpty())
-        return false;
-    return comparable(program) == comparable(exePath);
+    return !program.isEmpty() && !exePath.trimmed().isEmpty() && comparable(program) == comparable(exePath);
 }
 
 bool isBrulionAutostartCommand(const QString &command)
 {
-    const QString program = autostartProgram(command);
-    if (program.isEmpty())
-        return false;
-    const QString name = comparable(program).section(u'/', -1);
-    return name == u"brulion.exe" && autostartArguments(command) == u"--hidden";
+    const auto [program, arguments] = splitCommand(command);
+    return !program.isEmpty() && comparable(program).section(u'/', -1) == u"brulion.exe" && arguments == u"--hidden";
 }
 
 bool startupApprovedDisabled(const QByteArray &value)
@@ -136,9 +129,7 @@ QString Autostart::command() const
 
 bool Autostart::enabled() const
 {
-    if (m_availability != Availability::Available)
-        return false;
-    return autostartTargets(command(), m_exePath)
+    return m_availability == Availability::Available && autostartTargets(command(), m_exePath)
            && !startupApprovedDisabled(approvedBytes(m_approved->value(valueName())));
 }
 
@@ -172,11 +163,10 @@ bool Autostart::refresh(const std::function<bool(const QString &path)> &exists)
     if (m_availability != Availability::Available)
         return false;
     const QString current = command();
-    if (current.isEmpty() || !isBrulionAutostartCommand(current) || autostartTargets(current, m_exePath))
+    if (!isBrulionAutostartCommand(current) || autostartTargets(current, m_exePath))
         return false;
     const QString program = autostartProgram(current);
-    const bool there = exists ? exists(program) : QFileInfo::exists(program);
-    if (there)
+    if (exists ? exists(program) : QFileInfo::exists(program))
         return false;
     m_run->setValue(valueName(), autostartCommand(m_exePath));
     m_run->sync();

@@ -27,6 +27,12 @@ enum JsOp { OpLoad = 1, OpFlush = 2, OpPersist = 3, OpCacheFailed = 4, OpEstimat
 
 WasmStorage::Estimate g_estimate;
 
+/// `paths` as the JSON array the JavaScript side parses.
+QByteArray jsonArray(const QStringList &paths)
+{
+    return QJsonDocument(QJsonArray::fromStringList(paths)).toJson(QJsonDocument::Compact);
+}
+
 } // namespace
 
 /// Bridge for JavaScript -> C++ calls (registered with embind as Module.brulionStorageEvent).
@@ -434,21 +440,16 @@ QStringList WasmStorage::normalizeMountPoints(const QStringList &paths)
 {
     QStringList cleaned;
     for (const QString &path : paths) {
-        if (!path.startsWith(QLatin1Char('/')))
-            continue;
         const QString clean = QDir::cleanPath(path);
-        if (clean == QLatin1String("/") || cleaned.contains(clean))
-            continue;
-        cleaned.append(clean);
+        if (path.startsWith(QLatin1Char('/')) && clean != QLatin1String("/") && !cleaned.contains(clean))
+            cleaned.append(clean);
     }
     // Shorter paths first, so a nested path always meets its parent before itself.
-    std::stable_sort(cleaned.begin(), cleaned.end(),
-                     [](const QString &a, const QString &b) { return a.size() < b.size(); });
+    std::ranges::stable_sort(cleaned, [](const QString &a, const QString &b) { return a.size() < b.size(); });
     QStringList result;
     for (const QString &path : std::as_const(cleaned)) {
-        const bool nested = std::any_of(result.cbegin(), result.cend(), [&path](const QString &m) {
-            return path.startsWith(m + QLatin1Char('/'));
-        });
+        const bool nested = std::ranges::any_of(
+                std::as_const(result), [&path](const QString &m) { return path.startsWith(m + QLatin1Char('/')); });
         if (!nested)
             result.append(path);
     }
@@ -466,25 +467,16 @@ void WasmStorage::start(const QStringList &mountPoints, const QStringList &cache
     // Cache mounts must not nest in the others (nor the others in them): a cache file inside
     // another mount would share its database and transaction again.
     const QStringList all = normalizeMountPoints(m_mountPoints + cacheMountPoints);
-    m_cacheMountPoints.clear();
-    for (const QString &path : all) {
-        if (!m_mountPoints.contains(path))
-            m_cacheMountPoints.append(path);
-    }
+    m_cacheMountPoints = all;
+    m_cacheMountPoints.removeIf([this](const QString &path) { return m_mountPoints.contains(path); });
     for (const QString &path : std::as_const(m_mountPoints)) {
         if (!all.contains(path))
             qCWarning(lcWasmStorage) << "mount point" << path << "lies inside a cache mount";
     }
     qCDebug(lcWasmStorage) << "mounting IndexedDB storage on" << m_mountPoints << "and the caches"
                            << m_cacheMountPoints;
-    const QByteArray json =
-        QJsonDocument(QJsonArray::fromStringList(m_mountPoints)).toJson(QJsonDocument::Compact);
-    const QByteArray cacheJson =
-        QJsonDocument(QJsonArray::fromStringList(m_cacheMountPoints)).toJson(QJsonDocument::Compact);
-    const QByteArray keptJson =
-        QJsonDocument(QJsonArray::fromStringList({backupsRoot()})).toJson(QJsonDocument::Compact);
-    brulion_storage_start(json.constData(), cacheJson.constData(), keptJson.constData(), m_flushDelay,
-                          m_maxFlushDelay);
+    brulion_storage_start(jsonArray(m_mountPoints).constData(), jsonArray(m_cacheMountPoints).constData(),
+                          jsonArray({backupsRoot()}).constData(), m_flushDelay, m_maxFlushDelay);
 }
 
 void WasmStorage::dropCacheFiles(const QString &mountPoint)
@@ -588,9 +580,10 @@ void WasmStorage::handleJsEvent(int op, bool ok, const QString &message)
         break;
     }
     case OpEstimate: {
+        // Bytes; -1 (unknown) for anything but a whole number a qint64 holds.
         const QJsonObject estimate = QJsonDocument::fromJson(message.toUtf8()).object();
-        g_estimate.usage = qint64(estimate.value(QStringLiteral("usage")).toDouble(-1));
-        g_estimate.quota = qint64(estimate.value(QStringLiteral("quota")).toDouble(-1));
+        g_estimate.usage = estimate.value(QStringLiteral("usage")).toInteger(-1);
+        g_estimate.quota = estimate.value(QStringLiteral("quota")).toInteger(-1);
         qCDebug(lcWasmStorage) << "storage estimate: usage" << g_estimate.usage << "quota" << g_estimate.quota;
         break;
     }

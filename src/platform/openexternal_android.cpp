@@ -5,11 +5,9 @@
 
 namespace brulion::platform::detail {
 
-OpenResult openFileExternallyNow(const QString &absolutePath, const QString &mimeType, const QString &displayName,
-                                 const QByteArray &bytes)
+OpenResult openFileExternallyNow(const QString &absolutePath, const QString &mimeType, const QString &,
+                                 const QByteArray &)
 {
-    Q_UNUSED(displayName);
-    Q_UNUSED(bytes);
     switch (AndroidBridge::viewFile(absolutePath, mimeType)) {
     case AndroidBridge::ViewResult::Started:
     case AndroidBridge::ViewResult::Copying: return OpenResult::Opened;

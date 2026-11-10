@@ -1,5 +1,7 @@
 #include "pickedfiles.h"
 
+#include <algorithm>
+#include <iterator>
 #include <limits>
 #include <utility>
 
@@ -23,7 +25,7 @@ char *PickCollector::accept(quint64 size, const QString &name)
         return nullptr;
     PickedFile &file = m_files.emplace_back();
     file.name = name;
-    file.size = size > quint64(std::numeric_limits<qint64>::max()) ? std::numeric_limits<qint64>::max() : qint64(size);
+    file.size = qint64(std::min<quint64>(size, std::numeric_limits<qint64>::max()));
     // As FileGatherer: a file too large by itself is skipped, then the first one over the total
     // stops the reading (QByteArray's limit too: 2 GB on 32-bit wasm).
     if (m_stopped) {
@@ -59,10 +61,7 @@ void PickCollector::finishIfComplete()
     if (m_finished || m_expected < 0 || m_processed < m_expected)
         return;
     m_finished = true;
-    QList<PickedFile> files;
-    files.reserve(qsizetype(m_files.size()));
-    for (PickedFile &f : m_files)
-        files.append(std::move(f));
+    const QList<PickedFile> files(std::make_move_iterator(m_files.begin()), std::make_move_iterator(m_files.end()));
     m_files.clear();
     if (m_done)
         m_done(files);

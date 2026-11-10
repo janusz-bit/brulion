@@ -46,7 +46,7 @@ ColumnLayout {
             ShellSettingRow {
                 visible: !AppController.isWasm
                 title: "Syncthing"
-                description: !!section.sync && section.sync.syncthing.text ? "" + section.sync.syncthing.text
+                description: section.sync.syncthing.text ? "" + section.sync.syncthing.text
                              : Workspace.syncthingFolder ? qsTr("This notebook folder is shared with Syncthing.")
                              : qsTr("Not shared. Syncthing keeps a folder the same on all devices, without a server.")
                 BBadge {
@@ -57,21 +57,21 @@ ColumnLayout {
             }
             ShellSettingRow {
                 title: "Nextcloud"
-                description: !!section.sync && section.sync.statusText !== "" ? section.sync.statusText
+                description: section.sync.statusText !== "" ? section.sync.statusText
                              : qsTr("Not set up. Fill in the account below.")
                 BButton {
-                    visible: !!section.sync && section.sync.active
+                    visible: section.sync.active
                     text: qsTr("Sync now")
                     iconName: "refresh-cw"
                     size: "small"
-                    busy: !!section.sync && section.sync.state === "syncing"
+                    busy: section.sync.state === "syncing"
                     onClicked: section.sync.syncNow()
                 }
             }
             ShellSettingRow {
-                visible: !!section.sync && section.sync.conflictCount > 0
+                visible: section.sync.conflictCount > 0
                 title: qsTr("Conflicts")
-                description: qsTr("%n note(s) changed on two devices at once.", "", section.sync ? section.sync.conflictCount : 0)
+                description: qsTr("%n note(s) changed on two devices at once.", "", section.sync.conflictCount)
                 BButton {
                     text: qsTr("Merge")
                     iconName: "git-merge"

@@ -33,10 +33,8 @@ bool pdfPasswordAvailable()
     return false;
 }
 
-std::unique_ptr<PdfReader> PdfReader::open(const QString &file, PdfInfo *info, const QString &password)
+std::unique_ptr<PdfReader> PdfReader::open(const QString &, PdfInfo *info, const QString &)
 {
-    Q_UNUSED(file);
-    Q_UNUSED(password);
     if (info) {
         *info = PdfInfo();
         info->error = u"This build has no PDF renderer"_s;

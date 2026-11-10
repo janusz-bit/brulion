@@ -38,10 +38,6 @@
 #include <QUrl>
 #include <QWindow>
 
-#include <algorithm>
-#include <cmath>
-#include <utility>
-
 #ifdef Q_OS_ANDROID
 #include "android/androidbridge.h"
 #include <QJniEnvironment>
@@ -54,11 +50,17 @@
 #include "wasm/wasmstorage.h"
 #endif
 
+#include <algorithm>
+#include <cmath>
+#include <type_traits>
+#include <utility>
+
 #ifndef BRULION_VERSION
 #define BRULION_VERSION "0.0.0"
 #endif
 
 using namespace Qt::StringLiterals;
+using namespace std::chrono_literals;
 
 namespace brulion::shell {
 
@@ -67,6 +69,9 @@ using logging::lcApp;
 namespace {
 
 AppController *g_instance = nullptr;
+
+/// The tray calendar's distance from the taskbar and the screen's sides, as Windows' own flyouts.
+constexpr int kTrayPopupMargin = 8;
 
 QString argValue(const QStringList &args, const QString &option)
 {
@@ -87,7 +92,7 @@ bool isActivationToken(const QString &token)
 {
     if (token.isEmpty() || token.size() > 512)
         return false;
-    return std::all_of(token.cbegin(), token.cend(), [](QChar c) { return c.unicode() > 0x20 && c.unicode() < 0x7f; });
+    return std::ranges::all_of(token, [](QChar c) { return c.unicode() > 0x20 && c.unicode() < 0x7f; });
 }
 
 QString cleanLocalPath(const QString &raw)
@@ -100,6 +105,42 @@ QString cleanLocalPath(const QString &raw)
     if (path.isEmpty())
         return {};
     return QDir::cleanPath(QDir::fromNativeSeparators(path));
+}
+
+/// The folder of the documentation notebook in `language` inside the app data folder `dataDir`.
+QString docsNotebookPath(const QString &dataDir, const QString &language)
+{
+    return QDir::cleanPath(dataDir + u'/' + notebook::docsNotebookFolder(language));
+}
+
+/// `vault` (the notebook a route belongs to; "" for any) is the notebook at `root`.
+bool sameNotebook(const QString &vault, const QString &root)
+{
+    return vault.isEmpty() || (!root.isEmpty() && Vault::idForPath(vault) == Vault::idForPath(root));
+}
+
+/// `route`'s `key` after `oldPath` became `newPath`: that path or one inside it (a folder's).
+/// Whether it changed.
+bool rebasePath(QVariantMap &route, const QString &key, const QString &oldPath, const QString &newPath)
+{
+    const QString value = route.value(key).toString();
+    if (value == oldPath)
+        route.insert(key, newPath);
+    else if (value.startsWith(oldPath + u'/'))
+        route.insert(key, QString(newPath + value.mid(oldPath.size())));
+    else
+        return false;
+    return true;
+}
+
+/// `member = value` when they differ; whether it changed (the caller signals it then).
+template<typename T>
+bool assignIfChanged(T &member, const std::type_identity_t<T> &value)
+{
+    if (member == value)
+        return false;
+    member = value;
+    return true;
 }
 
 } // namespace
@@ -123,7 +164,7 @@ AppController::AppController(const Options &options, QObject *parent)
     m_commands = std::make_unique<CommandModel>(this);
     m_tabsSaveTimer = new QTimer(this);
     m_tabsSaveTimer->setSingleShot(true);
-    m_tabsSaveTimer->setInterval(500);
+    m_tabsSaveTimer->setInterval(500ms);
     connect(m_tabsSaveTimer, &QTimer::timeout, this, &AppController::saveTabs);
     m_syncStatus = { { u"state"_s, u"disabled"_s }, { u"text"_s, QString() }, { u"lastSync"_s, QString() } };
 
@@ -138,8 +179,7 @@ AppController::AppController(const Options &options, QObject *parent)
         m_localeOverride.clear();
         Q_EMIT notebookPathsChanged();
     });
-    connect(m_workspace.get(), &Workspace::navigationRequested, this,
-            [this](const QVariantMap &route, bool newPane) { navigate(route, newPane); });
+    connect(m_workspace.get(), &Workspace::navigationRequested, this, &AppController::navigate);
     connect(m_workspace.get(), &Workspace::errorOccurred, this,
             [this](const QString &message) { toast(message, u"error"_s); });
     connect(m_workspace.get(), &Workspace::noticeOccurred, this,
@@ -157,8 +197,7 @@ AppController::AppController(const Options &options, QObject *parent)
     // written against one language's sample notes).
     for (const auto &[option, value] : {std::pair{u"--locale"_s, &m_localeOverride},
                                         std::pair{u"--sample-language"_s, &m_sampleLanguage}}) {
-        const QString language = argValue(args, option);
-        if (language == u"pl" || language == u"en")
+        if (const QString language = argValue(args, option); language == u"pl" || language == u"en")
             *value = language;
     }
     m_devOnboarding = args.contains(u"--onboarding"_s);
@@ -265,10 +304,8 @@ void AppController::start()
     m_updates->start();
     // The documentation is never a recent notebook (the switcher opens it), but 0.3.0–0.3.5 listed
     // it there: the start screen and the switcher would offer it until it was opened again.
-    if (!docsVaultPath().isEmpty()) {
-        for (const QString &language : {u"en"_s, u"pl"_s})
-            m_settings->forgetRecentVault(QDir::cleanPath(m_dataDir + u'/' + notebook::docsNotebookFolder(language)));
-    }
+    for (const QString &language : {u"en"_s, u"pl"_s})
+        m_settings->forgetRecentVault(docsNotebookPath(m_dataDir, language));
 #ifdef Q_OS_WASM
     platform::WasmNotifier::Activation activation;
     if (platform::WasmNotifier::takeLaunchActivation(&activation) && !activation.path.isEmpty())
@@ -518,7 +555,7 @@ int AppController::openTab(const QVariantMap &route, bool background)
         return 0;
     }
     // From a page's own window: the new tab is in the main window.
-    if (!background && m_tabs.tab(before.active) && m_tabs.tab(before.active)->windowed)
+    if (const Tab *from = m_tabs.tab(before.active); !background && from && from->windowed)
         Q_EMIT showWindowRequested();
     endTabs(before);
     return id;
@@ -577,17 +614,17 @@ bool AppController::selectTab(int id)
 bool AppController::selectTabAt(int index)
 {
     const QList<int> bar = m_tabs.bar();
-    return selectTab(index >= 0 && index < bar.size() ? bar.at(index) : bar.value(bar.size() - 1));
+    return selectTab(bar.value(index, bar.value(bar.size() - 1)));
 }
 
 bool AppController::nextTab()
 {
-    return m_tabs.bar().size() > 1 && selectTab(m_tabs.neighbour(1));
+    return tabCount() > 1 && selectTab(m_tabs.neighbour(1));
 }
 
 bool AppController::previousTab()
 {
-    return m_tabs.bar().size() > 1 && selectTab(m_tabs.neighbour(-1));
+    return tabCount() > 1 && selectTab(m_tabs.neighbour(-1));
 }
 
 bool AppController::moveTab(int from, int to)
@@ -725,42 +762,32 @@ bool AppController::handleBackKey()
 
 void AppController::setSidePanelVisible(bool visible)
 {
-    if (m_sidePanelVisible == visible)
-        return;
-    m_sidePanelVisible = visible;
-    Q_EMIT sidePanelVisibleChanged();
+    if (assignIfChanged(m_sidePanelVisible, visible))
+        Q_EMIT sidePanelVisibleChanged();
 }
 
 void AppController::setSidePanelAllowed(bool allowed)
 {
-    if (m_sidePanelAllowed == allowed)
-        return;
-    m_sidePanelAllowed = allowed;
-    Q_EMIT sidePanelAllowedChanged();
+    if (assignIfChanged(m_sidePanelAllowed, allowed))
+        Q_EMIT sidePanelAllowedChanged();
 }
 
 void AppController::setStatusBarShown(bool shown)
 {
-    if (m_statusBarShown == shown)
-        return;
-    m_statusBarShown = shown;
-    Q_EMIT statusBarShownChanged();
+    if (assignIfChanged(m_statusBarShown, shown))
+        Q_EMIT statusBarShownChanged();
 }
 
 void AppController::setSourceModeShown(bool shown)
 {
-    if (m_sourceModeShown == shown)
-        return;
-    m_sourceModeShown = shown;
-    Q_EMIT sourceModeShownChanged();
+    if (assignIfChanged(m_sourceModeShown, shown))
+        Q_EMIT sourceModeShownChanged();
 }
 
 void AppController::clearSidePanelRoute()
 {
-    if (m_sideRoute.isEmpty())
-        return;
-    m_sideRoute.clear();
-    Q_EMIT sidePanelRouteChanged();
+    if (assignIfChanged(m_sideRoute, {}))
+        Q_EMIT sidePanelRouteChanged();
 }
 
 void AppController::openPage(const QString &path, int line, bool newPane)
@@ -778,11 +805,7 @@ void AppController::openJournal(const QString &date)
         return;
     // Looking at a day never creates its note: the editor creates it with the first change, from
     // the journal template (PageController::startNewPage), like the journal stream.
-    const QString path = m_workspace->journalFileFor(date);
-    QVariantMap route{ { u"view"_s, u"journal"_s }, { u"date"_s, date } };
-    if (!path.isEmpty())
-        route.insert(u"path"_s, path);
-    navigate(route);
+    navigate({{u"view"_s, u"journal"_s}, {u"date"_s, date}, {u"path"_s, m_workspace->journalFileFor(date)}});
 }
 
 void AppController::openToday()
@@ -803,9 +826,6 @@ void AppController::openRoute(const QVariantMap &route, const QString &vault)
         qCWarning(lcApp) << "Ignoring an invalid route from outside" << route;
         return;
     }
-    const auto sameNotebook = [&](const QString &root) {
-        return vault.isEmpty() || (!root.isEmpty() && Vault::idForPath(vault) == Vault::idForPath(root));
-    };
     // Still opening: once the notebook is ready (finishOpening() checks the notebook then).
     if (m_status == u"boot" || m_status == u"loading") {
         m_routeAfterOpen = r;
@@ -814,7 +834,7 @@ void AppController::openRoute(const QVariantMap &route, const QString &vault)
     }
     if (m_status != u"ready")
         return;
-    if (!sameNotebook(m_workspace->rootPath())) {
+    if (!sameNotebook(vault, m_workspace->rootPath())) {
         refuseOtherNotebookRoute(vault);
         return;
     }
@@ -835,9 +855,8 @@ void AppController::openPeriodicNote(const QString &period, const QString &date,
         return;
     const QDate start = periodic::shiftPeriod(*p, day, offset);
     const QVariantMap note = m_workspace->periodicNote(periodic::periodName(*p), start.toString(Qt::ISODate));
-    const QString path = note.value(u"path"_s).toString();
-    if (!path.isEmpty())
-        navigate({{u"view"_s, u"page"_s}, {u"path"_s, path}});
+    if (const QString path = note.value(u"path"_s).toString(); !path.isEmpty())
+        openPage(path);
 }
 
 QString AppController::today(int offsetDays) const
@@ -872,45 +891,26 @@ void AppController::applyPendingNotification()
 {
     if (m_pendingNotePath.isEmpty())
         return;
-    const QString path = m_pendingNotePath;
-    const int line = m_pendingNoteLine;
-    if (inDocsVault()) {
-        // The documentation arms no reminders: this one belongs to the user's notebook (Android
-        // kept its alarms armed while the documentation was open), also when the documentation
-        // has a page of the same name ("Tasks.md"). Open it there, never the documentation's.
-        const QString back = lastUserVault();
-        if (!back.isEmpty() && openRecentVault(back))
-            return; // applied once that notebook is ready
-        m_pendingNotePath.clear();
-        m_pendingNoteLine = -1;
-        if (back.isEmpty()) // else openRecentVault() said that its folder is gone
-            toast(tr("The note of this reminder no longer exists."), u"warning"_s);
-        return;
-    }
-    m_pendingNotePath.clear();
-    m_pendingNoteLine = -1;
-    if (m_workspace->exists(path))
+    // The documentation arms no reminders: this one belongs to the user's notebook (Android kept
+    // its alarms armed while the documentation was open), also when the documentation has a page
+    // of the same name ("Tasks.md"). Open it there, never the documentation's.
+    const bool docs = inDocsVault();
+    const QString back = docs ? lastUserVault() : QString();
+    if (!back.isEmpty() && openRecentVault(back))
+        return; // applied once that notebook is ready
+    const QString path = std::exchange(m_pendingNotePath, {});
+    const int line = std::exchange(m_pendingNoteLine, -1);
+    if (!docs && m_workspace->exists(path))
         openPage(path, line);
-    else
+    else if (back.isEmpty()) // else openRecentVault() said that its folder is gone
         toast(tr("The note of this reminder no longer exists."), u"warning"_s);
 }
 
 void AppController::onPathRenamed(const QString &oldPath, const QString &newPath)
 {
-    const auto rewrite = [&](QVariantMap &route) {
-        const QString path = route.value(u"path"_s).toString();
-        if (path == oldPath) {
-            route.insert(u"path"_s, newPath);
-            return true;
-        }
-        if (path.startsWith(oldPath + u'/')) {
-            route.insert(u"path"_s, QString(newPath + path.mid(oldPath.size())));
-            return true;
-        }
-        return false;
-    };
+    const auto rewrite = [&](QVariantMap &route) { return rebasePath(route, u"path"_s, oldPath, newPath); };
     const TabsSnapshot before = beginTabs();
-    m_tabs.transform([&](QVariantMap &route) { rewrite(route); });
+    m_tabs.transform(rewrite);
     endTabs(before, false);
     if (rewrite(m_sideRoute))
         Q_EMIT sidePanelRouteChanged();
@@ -920,25 +920,14 @@ void AppController::onFolderRenamed(const QString &oldPath, const QString &newPa
 {
     // Pages and other files moved with the folder already (onPathRenamed); routes naming the
     // folder itself: All pages {path}, search {folder}, import/export {folder}.
-    const auto rebase = [&](QVariantMap &route, const QString &key) {
-        const QString value = route.value(key).toString();
-        if (value == oldPath)
-            route.insert(key, newPath);
-        else if (value.startsWith(oldPath + u'/'))
-            route.insert(key, QString(newPath + value.mid(oldPath.size())));
-        else
-            return false;
-        return true;
-    };
     const auto rewrite = [&](QVariantMap &route) {
-        const QString view = route.value(u"view"_s).toString();
-        bool changed = rebase(route, u"folder"_s);
-        if (view == u"allPages")
-            changed = rebase(route, u"path"_s) || changed;
+        bool changed = rebasePath(route, u"folder"_s, oldPath, newPath);
+        if (route.value(u"view"_s).toString() == u"allPages")
+            changed = rebasePath(route, u"path"_s, oldPath, newPath) || changed;
         return changed;
     };
     const TabsSnapshot before = beginTabs();
-    m_tabs.transform([&](QVariantMap &route) { rewrite(route); });
+    m_tabs.transform(rewrite);
     endTabs(before, false);
     if (rewrite(m_sideRoute))
         Q_EMIT sidePanelRouteChanged();
@@ -1042,10 +1031,8 @@ void AppController::setAutostart(std::unique_ptr<platform::Autostart> autostart)
 
 void AppController::setTrayAvailable(bool available)
 {
-    if (m_trayAvailable == available)
-        return;
-    m_trayAvailable = available;
-    Q_EMIT trayAvailableChanged();
+    if (assignIfChanged(m_trayAvailable, available))
+        Q_EMIT trayAvailableChanged();
 }
 
 // ---- Vaults -----------------------------------------------------------------------------------
@@ -1168,16 +1155,13 @@ QString AppController::docsVaultPath() const
 {
     // Each language's documentation has its own folder (the other one stays as it was). In the
     // browser too: the app data folder is kept in IndexedDB like the notebook's (docs/WEB.md).
-    return QDir::cleanPath(m_dataDir + u'/' + notebook::docsNotebookFolder(notebooksLanguage()));
+    return docsNotebookPath(m_dataDir, notebooksLanguage());
 }
 
 void AppController::openDocsVault()
 {
-    if (docsVaultPath().isEmpty())
-        return;
     // Always the table of contents, not the journal: this notebook is for reading.
-    m_routeAfterOpen =
-            normalizeRoute({{u"view"_s, u"page"_s}, {u"path"_s, docsWelcomePage(notebooksLanguage())}});
+    m_routeAfterOpen = normalizeRoute({{u"view"_s, u"page"_s}, {u"path"_s, docsWelcomePage(notebooksLanguage())}});
     m_routeAfterOpenVault.clear();
     setStatus(u"loading"_s);
     scheduleOpening(docsVaultPath(), true);
@@ -1255,7 +1239,7 @@ void AppController::scheduleOpening(const QString &path, bool seedDemo)
     // Whichever comes first: the window's first frame (QQuickWindow::frameSwapped, emitted by
     // the render thread; connected by name: this library does not link Qt Quick) or a timeout
     // for a window that is never exposed (minimised, on a hidden workspace).
-    constexpr int kFirstFrameTimeoutMs = 1000;
+    constexpr auto kFirstFrameTimeout = 1s;
     auto done = std::make_shared<bool>(false);
     const auto once = [done, open] {
         if (!std::exchange(*done, true))
@@ -1268,7 +1252,7 @@ void AppController::scheduleOpening(const QString &path, bool seedDemo)
         const QMetaMethod slot = staticMetaObject.method(staticMetaObject.indexOfSlot("onFirstFrame()"));
         m_frameConnection = connect(window, frameSwapped, this, slot, Qt::QueuedConnection);
     }
-    QTimer::singleShot(kFirstFrameTimeoutMs, this, once);
+    QTimer::singleShot(kFirstFrameTimeout, this, once);
 }
 
 void AppController::onFirstFrame()
@@ -1331,8 +1315,7 @@ void AppController::finishOpening(const QString &path, bool seedDemo)
     }
     // Also when its folder was opened as a notebook by another spelling (a relative path).
     if (const QString language = docs ? docsLanguage(path) : docsLanguage(m_workspace->rootPath()); !language.isEmpty())
-        m_settings->forgetRecentVault( // listed by 0.3.0–0.3.5
-                QDir::cleanPath(m_dataDir + u'/' + notebook::docsNotebookFolder(language)));
+        m_settings->forgetRecentVault(docsNotebookPath(m_dataDir, language)); // listed by 0.3.0–0.3.5
     else
         m_settings->addRecentVault(m_workspace->rootPath());
     // The notebook's tabs as they were left on this device (not for --route: screenshots and
@@ -1351,8 +1334,7 @@ void AppController::finishOpening(const QString &path, bool seedDemo)
     const QVariantMap first = initialRoute();
     const QString afterVault = std::exchange(m_routeAfterOpenVault, {});
     const QVariantMap after = std::exchange(m_routeAfterOpen, {});
-    const bool afterHere =
-            afterVault.isEmpty() || Vault::idForPath(afterVault) == Vault::idForPath(m_workspace->rootPath());
+    const bool afterHere = sameNotebook(afterVault, m_workspace->rootPath());
     if (!after.isEmpty() && !afterHere)
         refuseOtherNotebookRoute(afterVault); // asked for (app open) while this notebook was opening
     if (!after.isEmpty() && afterHere) {
@@ -1374,14 +1356,11 @@ void AppController::finishOpening(const QString &path, bool seedDemo)
     Q_EMIT currentRouteChanged();
     Q_EMIT historyChanged();
     applyPendingNotification();
+    // The dialogs (share, quick capture) once the shell that owns them exists for "ready".
     if (m_share)
-        // After the shell (which owns the dialog) has been created for "ready".
-        QTimer::singleShot(0, this, [this] { applyPendingShare(); });
-    if (m_startCapture) {
-        // After the shell (which owns the dialog) has been created for "ready".
-        m_startCapture = false;
-        QTimer::singleShot(0, this, [this] { quickCapture(); });
-    }
+        QTimer::singleShot(0, this, &AppController::applyPendingShare);
+    if (std::exchange(m_startCapture, false))
+        QTimer::singleShot(0, this, &AppController::quickCapture);
 }
 
 void AppController::applyIntroNotebookConfig(bool special)
@@ -1389,7 +1368,7 @@ void AppController::applyIntroNotebookConfig(bool special)
     const QVariantMap config = m_settings->newNotebookConfig();
     if (special || config.isEmpty())
         return;
-    Vault *vault = m_workspace->vault();
+    const Vault *vault = m_workspace->vault();
     const bool fresh = vault && vault->markdownFiles().isEmpty() && !vault->exists(vaultConfigPath())
             && vault->configAdoptedFromObsidian().isEmpty();
     if (fresh && !m_workspace->setConfig(config))
@@ -1433,15 +1412,11 @@ void AppController::retryOpenVault()
 {
     if (m_failedPath.isEmpty()) {
         openVault(m_settings->currentVault());
-        return;
-    }
-    const QString path = m_failedPath;
-    const bool seed = m_failedSeedDemo;
-    if (seed) {
+    } else if (m_failedSeedDemo) {
         setStatus(u"loading"_s);
-        scheduleOpening(path, true);
+        scheduleOpening(m_failedPath, true);
     } else {
-        openVault(path);
+        openVault(m_failedPath);
     }
 }
 
@@ -1628,8 +1603,7 @@ void AppController::showTrayCalendar(const QRect &icon, const QPoint &cursor, bo
 
 QPoint AppController::trayPopupPosition(int width, int height) const
 {
-    // 8 px from the taskbar and the screen's sides, as Windows' own flyouts.
-    return trayPopupPositionOnScreen(m_trayIcon, m_trayCursor, QSize(width, height), 8);
+    return trayPopupPositionOnScreen(m_trayIcon, m_trayCursor, QSize(width, height), kTrayPopupMargin);
 }
 
 void AppController::trayPopupHidItself()
@@ -1687,18 +1661,14 @@ bool AppController::handleInstanceMessage(const QByteArray &verb, const QJsonObj
 
 void AppController::setRemoteControl(const QVariantMap &status)
 {
-    if (status == m_remoteControl)
-        return;
-    m_remoteControl = status;
-    Q_EMIT remoteControlChanged();
+    if (assignIfChanged(m_remoteControl, status))
+        Q_EMIT remoteControlChanged();
 }
 
 void AppController::quit()
 {
-    if (!m_quitting) {
-        m_quitting = true;
+    if (assignIfChanged(m_quitting, true))
         Q_EMIT quittingChanged();
-    }
     saveTabs();
     m_settings->sync();
     Q_EMIT quitRequested();
@@ -1764,18 +1734,14 @@ void AppController::requestItemAction(const QString &action, const QString &path
 
 void AppController::setSyncAvailable(bool available)
 {
-    if (m_syncAvailable == available)
-        return;
-    m_syncAvailable = available;
-    Q_EMIT syncStatusChanged();
+    if (assignIfChanged(m_syncAvailable, available))
+        Q_EMIT syncStatusChanged();
 }
 
 void AppController::setSyncStatus(const QVariantMap &status)
 {
-    if (m_syncStatus == status)
-        return;
-    m_syncStatus = status;
-    Q_EMIT syncStatusChanged();
+    if (assignIfChanged(m_syncStatus, status))
+        Q_EMIT syncStatusChanged();
 }
 
 void AppController::requestSync()
@@ -1800,7 +1766,7 @@ QDateTime AppController::now() const
 QString AppController::routeText(const QVariantMap &route, const QString &key) const
 {
     const QVariant value = route.value(key);
-    if (!value.isValid() || value.isNull())
+    if (value.isNull()) // also the invalid value of a missing key
         return {};
     switch (value.typeId()) {
     case QMetaType::Double:
@@ -1818,7 +1784,7 @@ QString AppController::routeText(const QVariantMap &route, const QString &key) c
 int AppController::routeInt(const QVariantMap &route, const QString &key, int fallback) const
 {
     const QVariant value = route.value(key);
-    if (!value.isValid() || value.isNull())
+    if (value.isNull())
         return fallback;
     bool ok = false;
     const int n = value.toInt(&ok);
@@ -1828,7 +1794,7 @@ int AppController::routeInt(const QVariantMap &route, const QString &key, int fa
 bool AppController::routeFlag(const QVariantMap &route, const QString &key) const
 {
     const QVariant value = route.value(key);
-    if (!value.isValid() || value.isNull())
+    if (value.isNull())
         return false;
     switch (value.typeId()) {
     case QMetaType::Bool: return value.toBool();
@@ -1883,7 +1849,7 @@ void AppController::hostToastActionTriggered(int hostId)
         return;
     }
     if (m_functionToasts.contains(id)) {
-        QJSValue onAction = m_functionToasts.take(id);
+        const QJSValue onAction = m_functionToasts.take(id);
         if (onAction.isCallable())
             onAction.call();
         return;
@@ -1913,14 +1879,8 @@ QStringList AppController::folderChain(const QString &folder) const
     QStringList out;
     if (folder.isEmpty())
         return out;
-    qsizetype from = 0;
-    while (true) {
-        const qsizetype slash = folder.indexOf(u'/', from);
-        if (slash < 0)
-            break;
+    for (qsizetype slash = folder.indexOf(u'/'); slash >= 0; slash = folder.indexOf(u'/', slash + 1))
         out.append(folder.left(slash));
-        from = slash + 1;
-    }
     out.append(folder);
     return out;
 }
@@ -1928,9 +1888,7 @@ QStringList AppController::folderChain(const QString &folder) const
 QStringList AppController::routeStrings(const QVariantMap &route, const QString &key) const
 {
     const QVariant value = route.value(key);
-    if (!value.isValid() || value.isNull())
-        return {};
-    return value.toStringList();
+    return value.isNull() ? QStringList() : value.toStringList();
 }
 
 QVariantList AppController::folderChoices(const QString &query, const QString &ownFolder, const QString &currentFolder,
@@ -1944,9 +1902,7 @@ QVariantList AppController::folderChoices(const QString &query, const QString &o
 QVariantList AppController::routeList(const QVariantMap &route, const QString &key) const
 {
     const QVariant value = route.value(key);
-    if (!value.isValid() || value.isNull())
-        return {};
-    return value.toList();
+    return value.isNull() ? QVariantList() : value.toList();
 }
 
 void AppController::placeTrayPopup(QWindow *popup) const
@@ -1957,7 +1913,7 @@ void AppController::placeTrayPopup(QWindow *popup) const
     // corner instead (traywindow.h), set up once — before its first show.
     if (platform::trayPopupAnchorable()) {
         if (!popup->property("brulionLayerShell").toBool())
-            popup->setProperty("brulionLayerShell", platform::anchorTrayPopup(popup, 8));
+            popup->setProperty("brulionLayerShell", platform::anchorTrayPopup(popup, kTrayPopupMargin));
         return;
     }
     popup->setPosition(trayPopupPosition(popup->width(), popup->height()));
@@ -1981,9 +1937,8 @@ QVariantMap AppController::routeWith(const QVariantMap &base, const QVariantMap 
 {
     QVariantMap out = base;
     for (const QString &key : keys) {
-        const auto it = route.constFind(key);
-        if (it != route.constEnd())
-            out.insert(key, it.value());
+        if (const auto it = route.constFind(key); it != route.constEnd())
+            out.insert(key, *it);
     }
     return out;
 }

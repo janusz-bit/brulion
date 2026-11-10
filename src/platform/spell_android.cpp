@@ -94,11 +94,12 @@ QStringList spellLanguages()
     const QJniObject c = context();
     if (!c.isValid())
         return {};
+    const QJsonArray languages = jsonArray(QJniObject::callStaticObjectMethod(
+            kClass, "spellLanguages", "(Landroid/content/Context;)Ljava/lang/String;", c.object()));
     QStringList out;
-    for (const QJsonValue &v : jsonArray(QJniObject::callStaticObjectMethod(
-                 kClass, "spellLanguages", "(Landroid/content/Context;)Ljava/lang/String;", c.object()))) {
-        if (v.isString() && !v.toString().isEmpty())
-            out.append(v.toString());
+    for (const QJsonValue &v : languages) {
+        if (const QString language = v.toString(); !language.isEmpty()) // ("" for a non-string)
+            out.append(language);
     }
     return out;
 }

@@ -58,7 +58,8 @@ QString localPathOfDocument(const QUrl &url, const QString &primaryStorage)
             return inside(primaryStorage, relative);
         if (volume == u"home")
             return primaryStorage.isEmpty() ? QString() : inside(primaryStorage + u"/Documents"_s, relative);
-        static const QRegularExpression card(u"^[0-9A-Za-z][0-9A-Za-z-]*$"_s);
+        // \z: "$" also matches before a final line break.
+        static const QRegularExpression card(u"^[0-9A-Za-z][0-9A-Za-z-]*\\z"_s);
         return card.match(volume).hasMatch() ? inside(u"/storage/"_s + volume, relative) : QString();
     }
     if (authority == u"com.android.providers.downloads.documents" && id.startsWith(u"raw:/"_s)) {
@@ -71,7 +72,7 @@ QString localPathOfDocument(const QUrl &url, const QString &primaryStorage)
 
 QString primaryStorageOf(const QString &path)
 {
-    static const QRegularExpression primary(u"^(/storage/emulated/[0-9]+)(?:/|$)"_s);
+    static const QRegularExpression primary(u"^(/storage/emulated/[0-9]+)(?:/|\\z)"_s);
     const QRegularExpressionMatch m = primary.match(path);
     return m.hasMatch() ? m.captured(1) : QString();
 }
