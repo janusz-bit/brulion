@@ -102,11 +102,12 @@ Value arithmetic(const QString &op, const Value &a, const Value &b, Context &ctx
     if (op == u"+") {
         if (a.is(T::Number) && b.is(T::Number))
             return Value::number(a.asNumber() + b.asNumber());
-        // (Texts and lists are checked before they are joined: `x + x` doubles them.)
+        // (Texts and lists are checked before they are joined, `x + x` doubles them, and paid for:
+        // reduce() can join them again and again.)
         if (a.is(T::String) || b.is(T::String)) {
             const QString left = toText(a, ctx), right = toText(b, ctx);
             checkSize(1, left.size() + right.size());
-            return Value::string(left + right);
+            return ctx.text(left + right);
         }
         if (a.is(T::Date) && b.is(T::Duration))
             return Value::date(shifted(a.asDate(), b.asDuration()));
@@ -116,7 +117,7 @@ Value arithmetic(const QString &op, const Value &a, const Value &b, Context &ctx
             return Value::duration(sum(a.asDuration(), b.asDuration(), 1));
         if (a.is(T::List) && b.is(T::List)) {
             checkSize(a.extent().items + b.extent().items, a.extent().chars + b.extent().chars);
-            return Value::list(a.asList() + b.asList());
+            return ctx.list(a.asList() + b.asList());
         }
         return Value();
     }
@@ -299,7 +300,7 @@ Value fieldOf(const Value &value, const QString &key, Context &ctx)
                 out.append(v);
             }
         }
-        return Value::list(out);
+        return ctx.list(out);
     }
     case Value::Type::Date: return dateField(value.asDate(), key);
     case Value::Type::Duration: return durationField(value.asDuration(), key);
@@ -350,8 +351,10 @@ Value evaluate(const Expr &e, Context &ctx, const Value &row, const Bound &bound
     case Expr::Kind::Index: {
         const Value base = evaluate(*e.args.at(0), ctx, row, bound);
         const Value index = evaluate(*e.args.at(1), ctx, row, bound);
-        if (index.is(Value::Type::String))
+        if (index.is(Value::Type::String)) {
+            ctx.stepText(index.asString().size());
             return fieldOf(base, canonicalKey(index.asString()), ctx);
+        }
         if (index.is(Value::Type::Number) && base.is(Value::Type::List)) {
             const double n = index.asNumber();
             const ValueList &list = base.asList();
@@ -398,7 +401,7 @@ Value evaluate(const Expr &e, Context &ctx, const Value &row, const Bound &bound
             return callFunction(f.asFunction(), args, ctx);
         throw EvalError{messages::notAFunction(e.name)};
     }
-    case Expr::Kind::List: return Value::list(evaluateAll(e.args, ctx, row, bound));
+    case Expr::Kind::List: return ctx.list(evaluateAll(e.args, ctx, row, bound));
     case Expr::Kind::Lambda: return Value::function(std::make_shared<Function>(e.params, e.args.at(0), row, bound));
     }
     return Value();
@@ -468,15 +471,18 @@ QString toText(const Value &value, Context &ctx, int depth)
             target += u'#' + l.subpath;
         return u"[["_s + target + (l.display.isEmpty() ? QString() : u'|' + l.display) + u"]]"_s;
     }
-    // (Each text checked while it grows: a page object holds a whole note, a list can hold it often.)
+    // (Each text checked while it grows, a page object holds a whole note and a list can hold it
+    // often, and paid for: a step a part, and the characters joined.)
     case Value::Type::List: {
         QStringList parts;
         qint64 length = 0;
         for (const Value &v : value.asList()) {
+            ctx.step();
             parts.append(toText(v, ctx, depth + 1));
             length += parts.constLast().size() + 2;
             checkSize(1, length);
         }
+        ctx.stepText(length);
         return parts.join(u", "_s);
     }
     case Value::Type::Object: {
@@ -485,10 +491,12 @@ QString toText(const Value &value, Context &ctx, int depth)
         const Object &o = value.asObject();
         const QStringList keys = o.keys();
         for (const QString &k : keys) {
+            ctx.step();
             parts.append(k + u": "_s + toText(o.field(k).value_or(Value()), ctx, depth + 1));
             length += parts.constLast().size() + 2;
             checkSize(1, length);
         }
+        ctx.stepText(length);
         return u"{ "_s + parts.join(u", "_s) + u" }"_s;
     }
     case Value::Type::Function: return u"<function>"_s;

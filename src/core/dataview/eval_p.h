@@ -31,6 +31,21 @@ inline void checkSize(qint64 items, qint64 chars = 0)
         throwTooLarge();
 }
 
+/// The values a builder keeps while it works — map()'s results, the keys of sort(), SORT and
+/// GROUP BY — counted as they come like the parts of one value: past the limits an EvalError
+/// before their memory is spent.
+class Kept {
+public:
+    void add(const Value &value)
+    {
+        m_extent.add(value.extent());
+        checkSize(m_extent.items, m_extent.chars);
+    }
+
+private:
+    Extent m_extent{1, 1, 0};
+};
+
 /// Names and their values, the latest last: lambda parameters, FLATTEN and GROUP BY names.
 using Bound = QList<std::pair<QString, Value>>;
 
@@ -48,6 +63,22 @@ public:
         m_steps += n;
         if (m_steps > m_options.maxSteps)
             throwTooCostly();
+    }
+    /// Characters of text copied, built or read for one step (a list costs a step per value): a
+    /// query copying a long text or a large list again and again runs out of steps, not of time.
+    static constexpr qsizetype CharsPerStep = 64;
+    void stepText(qsizetype chars) { step(chars / CharsPerStep); }
+    /// A list or a text an expression builds, paid for in steps (a value each, CharsPerStep
+    /// characters each).
+    Value list(ValueList items)
+    {
+        step(items.size());
+        return Value::list(std::move(items));
+    }
+    Value text(const QString &s)
+    {
+        stepText(s.size());
+        return Value::string(s);
     }
     /// Starts a call of a lambda whose body is `levels` deep (Expr::depth), which ends with the
     /// returned guard. The bodies being evaluated inside one another nest at most MaxCallDepth

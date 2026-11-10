@@ -1565,9 +1565,13 @@ error: an expression or a `FROM` source is at most 256 levels deep (each operato
 calls, lists and lambdas at most 64 levels; lambdas calling lambdas go at most 64 levels of their
 bodies deep; a value a query builds (`reduce()`, `map()`, `+` of lists, …) nests lists, objects
 and lambdas at most 64 levels and holds at most 1 000 000 values and 10 000 000 characters of text
-in all — as does a text made by `+`, `join()` or `string()`; a query makes at most 100 000 rows. A
-value shown whole stops 64 levels down (`…` below): a task object's children go as deep as the
-note's outline.
+in all — so do a text made by `+`, `join()` or `string()` and what a step keeps while it works (the
+values `map()` makes, the keys of `sort()`, `SORT` and `GROUP BY`); a query makes at most 100 000
+rows and does a bounded amount of work, copying and building lists and texts included (a step per
+value and per 64 characters: copying a large list again and again stops as too costly); the rows
+shown — only they are evaluated for their columns — hold at most 1 000 000 cells, labels and tasks
+with 10 000 000 characters in all. A value shown whole stops 64 levels down (`…` below): a task
+object's children go as deep as the note's outline.
 
 **Results** show values as the editor renders text: links as links, lists joined with `, `,
 dates as `2026-10-15` (`2026-10-15 09:30` with a time), durations in words, a missing value as

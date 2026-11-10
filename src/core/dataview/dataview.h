@@ -39,8 +39,10 @@
 // Limits — a query comes from any note, imports and sync too: expressions and FROM sources at most
 // MaxExpressionDepth deep and MaxExpressionNesting nested (else parseQuery() fails), the values a
 // query builds at most MaxValueDepth deep and MaxValueItems / MaxTextLength large (value.h), at
-// most MaxRows rows and Options::maxSteps steps (else runQuery() fails). Stack: the deepest query
-// they allow needs about 256 KiB (optimized build); run queries on a thread with at least 512 KiB.
+// most MaxRows rows and Options::maxSteps steps (copies and texts built count), and the rows shown
+// (the only ones evaluated for their columns) at most MaxValueItems cells and MaxTextLength
+// characters in all (else runQuery() fails). Stack: the deepest query they allow needs about
+// 256 KiB (optimized build); run queries on a thread with at least 512 KiB.
 #pragma once
 
 #include "dataview/value.h"
@@ -103,10 +105,11 @@ struct Options {
     /// A file's size and modification time (`file.size`, `file.mtime`, `file.ctime`); without it
     /// (or for a file it does not know) the size of the indexed text and no times.
     std::function<std::optional<FileStat>(const VaultPath &path)> stat;
-    /// Rows returned without LIMIT.
+    /// Rows returned without LIMIT (the only ones whose columns are evaluated).
     int defaultLimit = DefaultRowLimit;
     /// Steps an evaluation may take before the query stops with an error (a guard against
-    /// queries that would freeze the app).
+    /// queries that would freeze the app): one per expression evaluated, value of a list built or
+    /// copied and Context::CharsPerStep characters of text (dataview/eval_p.h).
     qint64 maxSteps = 20000000;
 };
 
@@ -136,7 +139,7 @@ struct Result {
 };
 
 /// Run a parsed query against the index. Returns the Result or a translated message (an
-/// expression too costly, too many rows).
+/// expression too costly, too many rows, a value or the results too large).
 std::variant<Result, QString> runQuery(const Query &query, const VaultIndex &index, const Options &options);
 
 /// A value as Markdown for a result cell: links as [[links]] (the shortest target), dates ISO

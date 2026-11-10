@@ -124,6 +124,14 @@ QString valueTooLarge(qint64 items, qint64 chars)
             .arg(chars);
 }
 
+QString resultTooLarge(qint64 items, qint64 chars)
+{
+    return QCoreApplication::translate("brulion::Dataview",
+                                       "The results are too large: more than %1 items or %2 characters.")
+            .arg(items)
+            .arg(chars);
+}
+
 QString badDate(const QString &text)
 {
     return QCoreApplication::translate("brulion::Dataview", "Cannot read the date “%1”. Examples: date(today), date(2026-10-15), date(\"2026-10-15 09:30\").")

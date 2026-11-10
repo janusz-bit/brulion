@@ -69,12 +69,12 @@ dataview::Result run(const VaultIndex &index, const QString &source, const datav
 }
 
 /// The message the query fails with, parsing or running; "" when it runs.
-QString failure(const VaultIndex &index, const QString &source)
+QString failure(const VaultIndex &index, const QString &source, const dataview::Options &o = options())
 {
     const auto parsed = dataview::parseQuery(source);
     if (const auto *error = std::get_if<QString>(&parsed))
         return *error;
-    const auto result = dataview::runQuery(std::get<dataview::Query>(parsed), index, options());
+    const auto result = dataview::runQuery(std::get<dataview::Query>(parsed), index, o);
     const auto *error = std::get_if<QString>(&result);
     return error ? *error : QString();
 }
@@ -559,6 +559,102 @@ private Q_SLOTS:
         QFETCH(QString, message);
         const QString error = failure(m_index, u"LIST WITHOUT ID "_s + expr + u"\nFROM \"Projekty/Dom\""_s);
         QVERIFY2(error.contains(message), qPrintable(error));
+    }
+
+    void copyingIsWork_data()
+    {
+        QTest::addColumn<QString>("expr");
+        QTest::addColumn<qint64>("maxSteps");
+        // 100 000 one-letter texts, and reduce() copying what it made again and again (a list or a
+        // text one longer each time: the square of the items, 5·10^9 copies). Copies cost steps, so
+        // each stops with the error of a query too costly — soon, not after minutes. (The others
+        // with a tenth of the steps, for a quicker test.)
+        const QString many = u"flat(map(slice(%1, 0, 10), (x) => %1))"_s.arg(Letters);
+        const QString lists = u"map(%1, (x) => list(x))"_s.arg(many);
+        const qint64 all = dataview::Options().maxSteps, tenth = all / 10;
+        QTest::newRow("list grown by one") << u"length(reduce(%1, (a, b) => a + b))"_s.arg(lists) << all;
+        QTest::newRow("list sorted again") << u"length(reduce(%1, (a, b) => sort(a + b)))"_s.arg(lists) << tenth;
+        QTest::newRow("list sliced again") << u"length(reduce(%1, (a, b) => slice(a + b, 0)))"_s.arg(lists) << tenth;
+        QTest::newRow("list reversed again") << u"length(reduce(%1, (a, b) => reverse(a + b)))"_s.arg(lists) << tenth;
+        QTest::newRow("text grown by one") << u"length(reduce(%1, (a, b) => a + b))"_s.arg(many) << tenth;
+        QTest::newRow("text split again")
+                << u"length(reduce(%1, (a, b) => join(split(a + b, \"\"), \"\")))"_s.arg(many) << tenth;
+        QTest::newRow("text upper again") << u"length(reduce(%1, (a, b) => upper(a + b)))"_s.arg(many) << tenth;
+    }
+    void copyingIsWork()
+    {
+        QFETCH(QString, expr);
+        QFETCH(qint64, maxSteps);
+        auto o = options();
+        o.maxSteps = maxSteps;
+        QElapsedTimer timer;
+        timer.start();
+        const QString error = failure(m_index, u"LIST WITHOUT ID "_s + expr + u"\nFROM \"Projekty/Dom\""_s, o);
+        QVERIFY2(error.contains(u"takes too long"_s), qPrintable(error));
+        QVERIFY2(timer.elapsed() < 5000 * BRULION_TEST_SLOWDOWN, qPrintable(QString::number(timer.elapsed())));
+    }
+
+    void keptValuesStayBounded()
+    {
+        // A list of 10 000 new values for each of 10 000 items or 150 rows, all kept until the end
+        // (map()'s results, the keys sorted or grouped by): too large, not 10^8 values in memory.
+        VaultIndex index;
+        for (int i = 0; i < 150; ++i)
+            index.update(u"Strona %1.md"_s.arg(i), u"# Strona %1\n\nTreść ąę."_s.arg(i));
+        const QString big = u"split(padleft(\"\", 10000, \"ą\"), \"\")"_s;
+        const QStringList sources{u"LIST WITHOUT ID length(map(%1, (x) => %2))"_s.arg(Letters, big),
+                                  u"LIST WITHOUT ID length(sort(%1, (x) => %2))"_s.arg(Letters, big),
+                                  u"LIST SORT list(file.name, %1)"_s.arg(big),
+                                  u"LIST GROUP BY list(file.name, %1)"_s.arg(big)};
+        for (const QString &source : sources) {
+            const QString error = failure(index, source);
+            QVERIFY2(error.contains(u"A value is too large"_s), qPrintable(source.left(40) + u": "_s + error));
+        }
+    }
+
+    void resultSizeIsBounded()
+    {
+        // What a result shows holds at most MaxValueItems cells, labels and tasks with MaxTextLength
+        // characters in all: a page shown whole in many cells of many rows is an error, not gigabytes.
+        VaultIndex index;
+        QString tasks;
+        for (int i = 0; i < 200; ++i)
+            tasks += u"- [ ] zadanie %1 ąćęłńóśźż\n"_s.arg(i);
+        index.update(u"Duża.md"_s, tasks);
+        dataview::Options o = options();
+        o.currentPath = u"Duża.md"_s;
+        const QString rows = u" FLATTEN split(padleft(\"\", 50, \"x\"), \"\") AS x"_s;
+        const QString error = failure(index, u"TABLE this, this, this"_s + rows, o);
+        QCOMPARE(error, u"The results are too large: more than 1000000 items or 10000000 characters."_s);
+        QVERIFY(failure(index, u"TABLE this, this, this"_s + rows + u" LIMIT 10"_s, o).isEmpty());
+        // Only the rows shown are made, all of them are counted (3000 cells of 10 000 characters would
+        // be too many).
+        const auto r = run(index,
+                           u"TABLE WITHOUT ID padleft(x, 10000, \"ż\") "
+                           u"FLATTEN split(padleft(\"\", 3000, \"x\"), \"\") AS x"_s,
+                           o);
+        QCOMPARE(r.rows.size(), dataview::DefaultRowLimit);
+        QCOMPARE(r.total, 3000);
+    }
+
+    void manyFieldsStayFast()
+    {
+        // A synced note repeating one key 50 000 times next to 10 000 other keys: its fields are read
+        // in one pass (copying the key's list on every repeat took the square of that).
+        QString note = u"# Pola\n\n"_s;
+        for (int i = 0; i < 50000; ++i)
+            note += u"nastrój:: %1\n"_s.arg(i % 10);
+        note += u"\n"_s;
+        for (int i = 0; i < 10000; ++i)
+            note += u"klucz-%1:: ż%1\n"_s.arg(i);
+        VaultIndex index;
+        index.update(u"Pola.md"_s, note);
+        QElapsedTimer timer;
+        timer.start();
+        const auto r = run(index, u"TABLE WITHOUT ID length(nastrój), nastrój[49999], klucz-9999"_s);
+        QCOMPARE(r.rows.size(), 1);
+        QCOMPARE(r.rows.at(0).cells, (QStringList{u"50000"_s, u"9"_s, u"ż9999"_s}));
+        QVERIFY2(timer.elapsed() < 3000 * BRULION_TEST_SLOWDOWN, qPrintable(QString::number(timer.elapsed())));
     }
 
     void fieldOfAListStaysBounded()

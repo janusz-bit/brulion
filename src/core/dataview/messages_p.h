@@ -29,6 +29,7 @@ QString tooDeep();
 QString tooLong(int max);
 QString valueTooDeep(int max);
 QString valueTooLarge(qint64 items, qint64 chars);
+QString resultTooLarge(qint64 items, qint64 chars);
 QString badDate(const QString &text);
 QString badDuration(const QString &text);
 QString tooCostly();

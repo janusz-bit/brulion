@@ -19,6 +19,9 @@ namespace {
 
 using Fields = QList<std::pair<QString, Value>>;
 
+/// Fields searched for one step: reading a field of a note holding thousands is paid for.
+constexpr qsizetype FieldsPerStep = 8;
+
 /// The value of `key` in `fields`, or nullopt.
 std::optional<Value> fieldIn(const Fields &fields, const QString &key)
 {
@@ -28,21 +31,65 @@ std::optional<Value> fieldIn(const Fields &fields, const QString &key)
     return it->second;
 }
 
-/// Add `value` under `key`; a key written again holds a list of every value.
-void addField(Fields &fields, const QString &key, const Value &value)
-{
-    const auto it = std::ranges::find(fields, key, &Fields::value_type::first);
-    if (it == fields.end()) {
-        fields.append({key, value});
-        return;
+/// Gathers fields in the order first written; a key written again holds a list of every value.
+/// In one pass: copying a key's list on every repeat, or searching all keys for each, would take
+/// the square of a note's lines (a note synced from anywhere can repeat a key 10^5 times).
+class FieldsBuilder {
+public:
+    void add(const QString &key, const Value &value)
+    {
+        const qsizetype at = indexOf(key);
+        if (at < 0) {
+            if (!m_at.isEmpty())
+                m_at.insert(key, m_fields.size());
+            m_fields.append({key, value});
+            return;
+        }
+        auto all = m_repeated.find(at);
+        if (all == m_repeated.end()) {
+            all = m_repeated.insert(at, {});
+            spread(m_fields.at(at).second, *all);
+        }
+        spread(value, *all);
     }
-    ValueList items = it->second.is(Value::Type::List) ? it->second.asList() : ValueList{it->second};
-    if (value.is(Value::Type::List))
-        items.append(value.asList());
-    else
-        items.append(value);
-    it->second = Value::list(std::move(items));
-}
+    /// The fields (once).
+    Fields take()
+    {
+        for (auto all = m_repeated.cbegin(); all != m_repeated.cend(); ++all)
+            m_fields[all.key()].second = Value::list(*all);
+        return std::move(m_fields);
+    }
+
+private:
+    static void spread(const Value &value, ValueList &into)
+    {
+        if (value.is(Value::Type::List))
+            into.append(value.asList());
+        else
+            into.append(value);
+    }
+    /// The field of `key`, or -1: searched while there are few, through a hash from IndexFrom on.
+    qsizetype indexOf(const QString &key)
+    {
+        if (m_at.isEmpty()) {
+            if (m_fields.size() < IndexFrom) {
+                for (qsizetype i = 0; i < m_fields.size(); ++i) {
+                    if (m_fields.at(i).first == key)
+                        return i;
+                }
+                return -1;
+            }
+            for (qsizetype i = 0; i < m_fields.size(); ++i)
+                m_at.insert(m_fields.at(i).first, i);
+        }
+        return m_at.value(key, -1);
+    }
+
+    static constexpr qsizetype IndexFrom = 16;
+    Fields m_fields;
+    QHash<qsizetype, ValueList> m_repeated; ///< every value of a key written again, lists spread
+    QHash<QString, qsizetype> m_at;         ///< from IndexFrom keys on
+};
 
 /// Keys whose text values are names: tags (written with '#') and aliases.
 bool isNamesKey(const QString &key)
@@ -130,14 +177,14 @@ QStringView lineBody(QStringView line)
 /// `(key:: value)` inside a line, in the order written.
 Fields inlineFields(const Block &block, const LinkResolver &resolve)
 {
-    Fields out;
     const QStringView raw = block.raw;
     // (Leading `key:: value` lines are a frontmatter block too; YAML is read from the note's data.)
     if (block.kind == BlockKind::Code || block.kind == BlockKind::Html
         || (block.kind == BlockKind::Frontmatter && raw.trimmed().startsWith(u"---")))
-        return out;
+        return {};
     if (!raw.contains(u"::"))
-        return out;
+        return {};
+    FieldsBuilder out;
     // (The value keeps its trailing blanks, parseFieldValue() trims it: a lazy value before `\s*$`
     // would make a long run of blanks inside a line quadratic.)
     static const QRegularExpression whole(u"^([^\\s:\\[\\]()][^:\\[\\]()]{0,80}?)::(?:\\s+(.*))?$"_s);
@@ -155,7 +202,7 @@ Fields inlineFields(const Block &block, const LinkResolver &resolve)
         if (m.hasMatch() && !body.startsWith(u'[') && !body.startsWith(u'(')) {
             const QString key = canonicalKey(m.capturedView(1));
             if (!key.isEmpty() && key != u"collapsed" && !(key == u"id" && !block.id.isEmpty()))
-                addField(out, key, parseFieldValue(key, m.capturedView(2), resolve));
+                out.add(key, parseFieldValue(key, m.capturedView(2), resolve));
             continue;
         }
         auto it = bracket.globalMatchView(line);
@@ -164,10 +211,10 @@ Fields inlineFields(const Block &block, const LinkResolver &resolve)
             const bool square = b.capturedStart(1) >= 0;
             const QString key = canonicalKey(b.capturedView(square ? 1 : 3));
             if (!key.isEmpty())
-                addField(out, key, parseFieldValue(key, b.capturedView(square ? 2 : 4), resolve));
+                out.add(key, parseFieldValue(key, b.capturedView(square ? 2 : 4), resolve));
         }
     }
-    return out;
+    return out.take();
 }
 
 LinkResolver resolverFor(Context *ctx, const VaultPath &from)
@@ -187,7 +234,9 @@ ValueList linksIn(Context &ctx, const VaultPath &path, int from, int to)
 {
     ValueList out;
     QSet<QString> seen;
-    for (const QList<ResolvedLink> links = ctx.index().outgoingLinks(path); const ResolvedLink &l : links) {
+    const QList<ResolvedLink> links = ctx.index().outgoingLinks(path);
+    ctx.step(links.size()); // (a task's links are looked for among all of the note's, on every read)
+    for (const ResolvedLink &l : links) {
         if (from >= 0 && (l.link.line < from || l.link.line > to))
             continue;
         LinkValue v;
@@ -392,6 +441,7 @@ public:
                 m_file = Value::object(std::make_shared<FileObject>(m_ctx, m_path, m_note, m_self));
             return m_file;
         }
+        m_ctx->step(fields().size() / FieldsPerStep);
         return fieldIn(fields(), key);
     }
 
@@ -400,18 +450,18 @@ private:
     {
         if (m_fields)
             return *m_fields;
-        Fields out;
+        FieldsBuilder out;
         const LinkResolver resolve = resolverFor(m_ctx, m_path);
         for (auto [name, value] : m_note->frontmatter.asKeyValueRange()) {
             if (const QString key = canonicalKey(name); !key.isEmpty())
-                addField(out, key, fromYaml(name, value, resolve));
+                out.add(key, fromYaml(name, value, resolve));
         }
         for (const Block &b : m_note->blocks) {
             m_ctx->step();
             for (const Fields own = inlineFields(b, resolve); const auto &[k, v] : own)
-                addField(out, k, v);
+                out.add(k, v);
         }
-        return m_fields.emplace(std::move(out));
+        return m_fields.emplace(out.take());
     }
 
     Context *m_ctx;
@@ -444,6 +494,7 @@ public:
 
     std::optional<Value> field(const QString &key) const override
     {
+        m_ctx->step(own().size() / FieldsPerStep);
         if (auto v = fieldIn(own(), key))
             return v;
         const Block &b = block();
@@ -489,7 +540,7 @@ public:
                 if (c >= 0 && c < m_note->blocks.size() && m_note->blocks.at(c).kind == BlockKind::ListItem)
                     out.append(m_ctx->item(m_path, c));
             }
-            return Value::list(out);
+            return m_ctx->list(out); // (made again on every read)
         }
         if (key == u"task")
             return Value::boolean(t != nullptr);
@@ -541,6 +592,7 @@ private:
             if (i < 0 || i >= m_note->blocks.size())
                 continue;
             const Block &b = m_note->blocks.at(i);
+            m_ctx->step(); // (the whole subtree, on every read)
             if (b.task ? b.task->status != TaskStatus::Done : i == m_index)
                 return false;
             pending.append(b.children.constData(), b.children.size());
@@ -555,6 +607,7 @@ private:
         for (const Heading &h : m_note->headings) {
             if (h.line > line)
                 break;
+            m_ctx->step();
             heading = h.text;
         }
         return LinkValue{m_path, QString(), heading, false, true};
