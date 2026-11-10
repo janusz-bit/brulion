@@ -9,7 +9,8 @@
 // pages named like dates resolving as [[links]] do, the notebook and language taken as the app
 // takes them, messages in the system's language (Polish or English; the machine's fields and MCP
 // English), `app open` against a stand-in app, and the MCP server (initialize, tools/list,
-// tools/call, errors, the warm index seeing a file written meanwhile).
+// tools/call, errors, a request line over the 16 MiB limit, the warm index seeing a file written
+// meanwhile).
 #include "appmessage.h"
 #include "controlprotocol.h"
 #include "controlserver.h"
@@ -1754,6 +1755,22 @@ private Q_SLOTS:
         QVERIFY(reply.value(u"result"_s).toObject().value(u"isError"_s).toBool());
         reply = request(R"({"jsonrpc":"2.0","id":9,"method":"ping"})");
         QCOMPARE(reply.value(u"id"_s).toInt(), 9);
+        // A request line of up to 16 MiB is read; a longer one is refused (Invalid Request, no id:
+        // it was not read) and skipped to its end, and the server goes on.
+        constexpr qsizetype kMaxLine = 16 * 1024 * 1024; // mcp.cpp, kMaxLineBytes
+        // (No raw strings: moc loses its way in one with an odd number of quotes.)
+        const QByteArray head = "{\"jsonrpc\":\"2.0\",\"id\":10,\"method\":\"ping\",\"params\":{\"zażółć\":\"";
+        const QByteArray tail = "\"}}";
+        QByteArray longest = head + QByteArray(kMaxLine - head.size() - tail.size(), 'x') + tail;
+        QCOMPARE(longest.size(), kMaxLine);
+        reply = request(longest);
+        QCOMPARE(reply.value(u"id"_s).toInt(), 10);
+        reply = request(longest.insert(head.size(), 'x'));
+        QCOMPARE(reply.value(u"error"_s).toObject().value(u"code"_s).toInt(), -32600);
+        QVERIFY(reply.contains(u"id"_s) && reply.value(u"id"_s).isNull());
+        QVERIFY(reply.value(u"error"_s).toObject().value(u"message"_s).toString().contains(u"16777216"_s));
+        reply = request(R"({"jsonrpc":"2.0","id":11,"method":"ping"})");
+        QCOMPARE(reply.value(u"id"_s).toInt(), 11);
         p.closeWriteChannel();
         QVERIFY(p.waitForFinished(kTimeoutMs));
         QCOMPARE(p.exitCode(), 0);

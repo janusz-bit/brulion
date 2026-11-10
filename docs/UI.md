@@ -3386,8 +3386,10 @@ why — and be able to send us the log (docs/ARCHITECTURE.md "Logging").
   notebook opened and folder, a toast too, and the overview's Nextcloud card offers "Choose
   another folder" (the Nextcloud tab, whose form shows the error under the folder). "Sign out"
   switches sync off in every notebook (the dialog says so), saving another server or user in all
-  the others. The switch and folder of 0.3.0 and older go to the notebook they belong to
-  (AppSettings).
+  the others. An app password whose owner-only file cannot be written is an error toast ("The app
+  password could not be saved.") and "Save" changes nothing, the typed password staying for
+  another try; one "Sign out" cannot delete is a toast too. The switch and folder of 0.3.0 and
+  older go to the notebook they belong to (AppSettings).
 * **Live progress** (`qml/io/SyncLiveProgress.qml` in the Nextcloud tab's status card, from
   `Workspace.sync.live`, at most four updates a second and once a second for the elapsed time;
   no timer while idle): the phase in words ("Checking files on the server…", "Sending and

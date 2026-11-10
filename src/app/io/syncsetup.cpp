@@ -514,12 +514,11 @@ bool NextcloudSetup::save()
         return false;
     // The other notebooks synced with the saved account: never with another one by themselves.
     const bool otherAccount = !sameAccount() && !(m_url.trimmed().isEmpty() && m_settings->nextcloudUrl().isEmpty());
-    if (!m_password.isEmpty() && !m_settings->setNextcloudPassword(m_password))
+    if (!m_password.isEmpty() && !storePassword(m_password))
         return false;
     // Another server or user without a new password (only possible while switched off): the
     // stored one belonged to the old account and must not reach the new one later.
-    if (m_password.isEmpty() && hasStoredPassword() && !storedPasswordApplies()
-        && !m_settings->setNextcloudPassword(QString()))
+    if (m_password.isEmpty() && hasStoredPassword() && !storedPasswordApplies() && !storePassword(QString()))
         return false;
     m_password.clear();
     if (otherAccount)
@@ -543,8 +542,17 @@ void NextcloudSetup::disconnectAccount()
     // The password is the account's, shared by the notebooks: every one of them stops (they
     // would start again with whatever account is signed in next).
     m_settings->disableNextcloudEverywhere();
-    m_settings->setNextcloudPassword(QString());
+    storePassword(QString());
     reload();
+}
+
+bool NextcloudSetup::storePassword(const QString &password)
+{
+    if (m_settings->setNextcloudPassword(password))
+        return true;
+    Q_EMIT errorOccurred(password.isEmpty() ? tr("The saved app password could not be deleted.")
+                                            : tr("The app password could not be saved."));
+    return false;
 }
 
 sync::HttpTransport *NextcloudSetup::transport()

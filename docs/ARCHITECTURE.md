@@ -533,10 +533,14 @@ app; these guards keep data from being lost:
   mode / blocked storage is reported before the user writes anything.
 * **Rendering**: note text reaches QML only through the escaping `InlineRenderer` (or
   `TextHelper`/`DiffHelper` escaping); the calculator never evaluates note text as script.
-  Behind that, the QML engine's network access manager serves local URLs only (`file:`,
-  `qrc:`, `data:`; `LocalOnlyNetworkFactory` in `src/app/ui/localnetwork.h`; any other URL gets
-  a transparent pixel, never a request): nothing in QML loads from the network, so even a
-  rich-text `<img>` that slipped through cannot make a synced or imported note contact a server.
+  Behind that, the QML engine's network access manager serves local URLs only (`file:` of this
+  machine, `qrc:`, `data:`; `LocalOnlyNetworkFactory` in `src/app/ui/localnetwork.h`; any other
+  URL — also `file://server/share/…`, a UNC path that Windows would connect to — gets a
+  transparent pixel, never a request): nothing in QML loads from the network, so even a rich-text
+  `<img>` with a web address that slipped through cannot make a synced or imported note contact a
+  server. Qt Quick reads `file:` URLs itself (Image, rich text), never through that manager: the
+  pictures of a notebook on `\\server\share` show, and that no `file:` URL comes from note text
+  is the renderers' job (the Workspace builds picture URLs from vault paths).
   Pictures from the internet (`![x](https://…)`) are fetched by the Workspace itself
   (`workspacepictures.cpp`, core `webpicture`) only when the user allows it — "Show" on the
   picture, the device setting `webPicturesShown` (off by default) or "Save to notebook" — and

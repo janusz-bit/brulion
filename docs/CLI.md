@@ -327,7 +327,9 @@ client asks for them; one constant in `src/cli/mcp.cpp`).
   `brulion_task_add`, `brulion_task_set`, `brulion_journal_append`, `brulion_query`, …). Their
   input schemas are the commands' arguments; tools that write also take `dryRun`.
 * Results: the same envelope as above, as `structuredContent` and as JSON text; `isError` when it
-  failed. Bad JSON, unknown methods and unknown tools are JSON-RPC errors.
+  failed. Bad JSON, unknown methods and unknown tools are JSON-RPC errors. A request line longer
+  than 16 MiB (far above any tool call a model writes) is refused as Invalid Request with a null
+  `id` and skipped to its end without being kept in memory; the server goes on.
 * English whatever the system's language: descriptions, messages and errors ("Language" above).
 * `--read-only` offers only the tools that read; destructive tools are offered only with
   `--allow-destructive`; the tools that drive the running app (`brulion_app_state`,

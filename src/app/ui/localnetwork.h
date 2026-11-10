@@ -4,6 +4,10 @@
 // own (Text { textFormat: RichText }); the HTML comes from our renderers, which escape everything
 // of the note, but a hole there would make a synced or imported note a tracking beacon. So the
 // engine gets an access manager that refuses every URL that is not local: defence in depth.
+// Qt Quick reads file: URLs itself (Image's pixmap reader, rich text's QTextDocument), never through
+// this manager, so the vault's pictures (file URLs the Workspace builds from vault paths) show from a
+// notebook on \\server\share too; that no file URL of another machine comes from note text is the
+// renderers' job.
 #pragma once
 
 #include <QtQml/qtqmlglobal.h>
@@ -14,15 +18,16 @@
 
 namespace brulion::ui {
 
-/// A QNetworkAccessManager for local URLs only: file:, qrc:, data: and Android's assets: and
-/// content: are served as usual; any other request (http:, https:, ftp:, …) is never sent — it is
-/// answered at once with a transparent 1×1 PNG (not an error: Qt Quick's rich text can crash
-/// when several of its pictures fail) and a warning in the log.
+/// A QNetworkAccessManager for local URLs only: file: of this machine (no host but localhost, no
+/// UNC path), qrc:, data: and Android's assets: and content: are served as usual; any other request
+/// (http:, https:, ftp:, file://server/share/…) is never sent — it is answered at once with a
+/// transparent 1×1 PNG (not an error: Qt Quick's rich text can crash when several of its pictures
+/// fail) and a warning in the log.
 class LocalOnlyNetworkAccessManager : public QNetworkAccessManager {
 public:
     using QNetworkAccessManager::QNetworkAccessManager;
 
-    /// Is `url` served (a local scheme)?
+    /// Is `url` served (a local scheme; a file: URL of this machine)?
     static bool isLocal(const QUrl &url);
 
 protected:

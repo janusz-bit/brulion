@@ -1,8 +1,11 @@
 // LocalOnlyNetworkFactory (src/app/ui/localnetwork.h): the QML engine's access manager serves
 // local URLs only. A local server stands in for a tracker: refused requests and rich text with a
 // remote <img> must never reach it, while data: and file: URLs (the vault's pictures) still load.
+// A file: URL of another machine (a host, a UNC path) is refused; Image still reads one itself.
 #include "localnetwork.h"
 
+#include <QDir>
+#include <QFileInfo>
 #include <QGuiApplication>
 #include <QImage>
 #include <QNetworkReply>
@@ -84,6 +87,17 @@ private Q_SLOTS:
         QTest::addColumn<QString>("url");
         QTest::addColumn<bool>("local");
         QTest::newRow("file") << u"file:///home/ja/notatki/assets/łąka.png"_s << true;
+        QTest::newRow("file, windows drive") << u"file:///C:/Users/ja/Notatki/łąka.png"_s << true;
+        QTest::newRow("file at localhost") << u"file://LocalHost/home/ja/notatki/łąka.png"_s << true;
+        QTest::newRow("file relative") << u"file:assets/łąka.png"_s << true;
+        // Another machine (a UNC path on Windows: SMB to it, the user's NTLM hash).
+        QTest::newRow("file of a server") << u"file://serwer/udział/łąka.png"_s << false;
+        QTest::newRow("file of a server, upper case") << u"FILE://Serwer.lan/udział/łąka.png"_s << false;
+        QTest::newRow("file of an address") << u"file://192.168.1.20/udział/łąka.png"_s << false;
+        QTest::newRow("file, four slashes") << u"file:////serwer/udział/łąka.png"_s << false;
+        QTest::newRow("file, localhost then a server") << u"file://localhost//serwer/udział/łąka.png"_s << false;
+        QTest::newRow("file, encoded backslashes") << u"file:///%5C%5Cserwer%5Cudział%5Cłąka.png"_s << false;
+        QTest::newRow("file, backslashes") << u"file:\\\\serwer\\udział\\łąka.png"_s << false;
         QTest::newRow("resources") << u"qrc:/icons/sigma.svg"_s << true;
         QTest::newRow("data (pictures in the browser)") << u"data:image/png;base64,AAAA"_s << true;
         QTest::newRow("android assets") << u"assets:/qml/Main.qml"_s << true;
@@ -212,6 +226,47 @@ private Q_SLOTS:
             QTRY_COMPARE_WITH_TIMEOUT(scene->object->property("status").toInt(), 1 /* Image.Ready */, 5000);
             QCOMPARE(scene->object->property("implicitWidth").toReal(), 1.0);
         }
+    }
+
+    // A file: URL with a host is refused by the manager (it reads no file: the blank pixel). Qt
+    // Quick reads file: URLs itself, without the manager, so a notebook on \\server\share keeps its
+    // pictures (the Workspace's URLs for it have the server as host). Stand-in for the share: the
+    // temporary folder's first part as the host ("//tmp/x" is "/tmp/x" here).
+    void fileUrlWithAHost()
+    {
+#ifdef Q_OS_WIN
+        QSKIP("a host in a file: URL is a real server on Windows");
+#endif
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QString file = QDir::cleanPath(dir.filePath(u"łąka.png"_s));
+        QImage picture(3, 2, QImage::Format_ARGB32);
+        picture.fill(Qt::darkGreen);
+        QVERIFY(picture.save(file, "PNG"));
+        const qsizetype slash = file.indexOf(u'/', 1); // "/tmp/x/łąka.png" as file://tmp/x/łąka.png
+        QUrl shared;
+        shared.setScheme(u"file"_s);
+        shared.setHost(file.mid(1, slash - 1));
+        shared.setPath(file.mid(slash));
+        if (slash < 2 || shared.host().isEmpty() || !QFileInfo::exists(shared.toLocalFile()))
+            QSKIP("the temporary folder cannot be named as a host here");
+        QVERIFY(!LocalOnlyNetworkAccessManager::isLocal(shared));
+
+        LocalOnlyNetworkFactory factory;
+        std::unique_ptr<QNetworkAccessManager> nam(factory.create(nullptr));
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(u"^QML asked for file://.*\\.png"_s));
+        std::unique_ptr<QNetworkReply> reply(nam->get(QNetworkRequest(shared)));
+        QSignalSpy finished(reply.get(), &QNetworkReply::finished);
+        QVERIFY(finished.wait(2000));
+        QCOMPARE(QImage::fromData(reply->readAll()).size(), QSize(1, 1));
+
+        QQmlEngine engine;
+        engine.setNetworkAccessManagerFactory(&factory);
+        const auto scene = show(engine, "Image { asynchronous: true }");
+        QVERIFY(scene);
+        scene->object->setProperty("source", shared);
+        QTRY_COMPARE_WITH_TIMEOUT(scene->object->property("status").toInt(), 1 /* Image.Ready */, 5000);
+        QCOMPARE(scene->object->property("implicitWidth").toReal(), 3.0);
     }
 };
 

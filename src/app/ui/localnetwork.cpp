@@ -62,12 +62,27 @@ private:
     qint64 m_pos = 0;
 };
 
+bool isSeparator(QChar c)
+{
+    return c == u'/' || c == u'\\';
+}
+
 } // namespace
 
 bool LocalOnlyNetworkAccessManager::isLocal(const QUrl &url)
 {
     const QString scheme = url.scheme().toLower();
-    return scheme == u"file" || scheme == u"qrc" || scheme == u"data" || scheme == u"assets" || scheme == u"content";
+    if (scheme == u"file") {
+        // Only a file of this machine. A host other than localhost (file://server/share/x) or a path
+        // starting with two separators (file:////server/share/x, also with backslashes) is a UNC
+        // path to QUrl::toLocalFile(): on Windows opening it connects to that server (SMB, handing
+        // it the user's NTLM hash); elsewhere it is not the file named either.
+        const QString host = url.host();
+        const QString path = url.path();
+        const bool unc = path.size() >= 2 && isSeparator(path.at(0)) && isSeparator(path.at(1));
+        return (host.isEmpty() || host.compare(u"localhost", Qt::CaseInsensitive) == 0) && !unc;
+    }
+    return scheme == u"qrc" || scheme == u"data" || scheme == u"assets" || scheme == u"content";
 }
 
 QNetworkReply *LocalOnlyNetworkAccessManager::createRequest(Operation op, const QNetworkRequest &request,

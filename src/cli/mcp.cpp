@@ -1,7 +1,7 @@
 // `brulion-cli mcp`: the commands as Model Context Protocol tools — JSON-RPC 2.0, one message per
-// line on standard input / output (the MCP stdio transport), tools only. The notebook stays open,
-// watched and indexed between calls. `--app-control` adds the tools that drive the running app
-// (commands_app.cpp; a screenshot comes back as an image too).
+// line on standard input / output (the MCP stdio transport; requests up to 16 MiB), tools only.
+// The notebook stays open, watched and indexed between calls. `--app-control` adds the tools that
+// drive the running app (commands_app.cpp; a screenshot comes back as an image too).
 #include "cli_p.h"
 
 #include "vault/vault.h"
@@ -38,6 +38,10 @@ constexpr int kMethodNotFound = -32601;
 constexpr int kInvalidParams = -32602;
 constexpr qint64 kRescanIntervalMs = 10 * 1000;    // for in-place edits that watchers do not report
 constexpr qint64 kMaxImageBytes = 8 * 1024 * 1024; // the largest screenshot sent as a picture
+// The longest request line read. A request is a tool call the agent's model wrote: at most some
+// 128 000 tokens, about 0.5 MB of text, 3 MB if the client escapes every character as \uXXXX (a
+// whole page for `page write`). A longer line is refused, skipped to its end without being kept.
+constexpr size_t kMaxLineBytes = 16 * 1024 * 1024;
 
 class McpServer {
     Q_DECLARE_TR_FUNCTIONS(brulion::cli)
@@ -127,6 +131,13 @@ public:
             return;
         }
         sendError(id, kMethodNotFound, tr("Method not found: %1").arg(method));
+    }
+
+    /// A line longer than kMaxLineBytes (skipped unread): its id is unknown.
+    void refuseLongLine()
+    {
+        sendError(QJsonValue(), kInvalidRequest,
+                  tr("The request is longer than %1 bytes").arg(QString::number(kMaxLineBytes)));
     }
 
 private:
@@ -264,21 +275,36 @@ int serveMcp(Context &context, bool readOnly, bool allowDestructive, bool appCon
     // the vault's watcher and timers keep running between requests.
     QCoreApplication *app = QCoreApplication::instance();
     std::thread reader([app, &server] {
-        // A line to the main thread, waiting until it is handled.
-        const auto deliver = [app, &server](const std::string &line) {
+        // A line to the main thread, waiting until it is handled (one over the limit: refused).
+        const auto deliver = [app, &server](const std::string &line, bool tooLong) {
             const QByteArray bytes = QByteArray::fromStdString(line);
-            QMetaObject::invokeMethod(app, [&server, bytes] { server.handle(bytes); }, Qt::BlockingQueuedConnection);
+            QMetaObject::invokeMethod(
+                    app,
+                    [&server, bytes, tooLong] {
+                        if (tooLong)
+                            server.refuseLongLine();
+                        else
+                            server.handle(bytes);
+                    },
+                    Qt::BlockingQueuedConnection);
         };
         std::string line;
+        bool tooLong = false; // the rest of the line is skipped
         int c = 0;
         while ((c = std::fgetc(stdin)) != EOF) {
-            if (c == '\n')
-                deliver(std::exchange(line, {}));
-            else
+            if (c == '\n') {
+                deliver(std::exchange(line, {}), std::exchange(tooLong, false));
+            } else if (tooLong) {
+                continue;
+            } else if (line.size() == kMaxLineBytes) {
+                tooLong = true;
+                std::string().swap(line); // its memory freed now
+            } else {
                 line.push_back(char(c));
+            }
         }
-        if (!line.empty())
-            deliver(line);
+        if (!line.empty() || tooLong)
+            deliver(line, tooLong);
         QMetaObject::invokeMethod(app, [] { QCoreApplication::quit(); }, Qt::QueuedConnection);
     });
     const int code = QCoreApplication::exec();
