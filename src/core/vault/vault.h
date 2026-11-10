@@ -9,7 +9,9 @@
 //         (the same before and after open() creates a missing vault folder).
 //     open(&error)            create the folder if missing, scan it, load .brulion/config.json
 //                             (can be called again to reload; does not emit changed())
-//     id(), rootPath(), absolutePath(p), errorString()
+//     id(), rootPath(), absolutePath(p), reaches(p), errorString()
+//     setFollowsOutsideLinks(on) (default off) / followsOutsideLinks() — symlinked folders,
+//     skippedOutsideLinks() (the last full scan left one out)
 //     config(), configWarnings(), saveConfig(cfg)            + signal configChanged()
 //     configAdoptedFromObsidian()  keys taken from .obsidian/ while config.json is missing
 //     files() (sorted, non-ignored), markdownFiles(), folders(), exists(p), stat(p)
@@ -40,13 +42,18 @@
 // Semantics
 //  * Tracked paths: everything paths::isIgnored() lets through plus ".brulion/config.json"
 //    (which exists()/stat() know but files() does not list). Ignored paths can be read and
-//    written but produce no changes. Symlinked folders are followed when they point outside
-//    the vault (an "assets" link to a photo folder); links into the vault (duplicates) and
-//    loops are not. Symlinked files are never followed, wherever they point (outside the vault
-//    or into it): they are not listed (trash() included), exists()/stat() do not know them,
-//    reads fail and writes are refused — a sync peer (Syncthing syncs symlinks) or a checkout
-//    could plant "x.md -> ~/.ssh/id_rsa", which would be indexed, uploaded by sync and written
-//    through. Moving or deleting a symlink moves or removes the link, never what it points to.
+//    written but produce no changes.
+//  * Symlinks: a sync peer (Syncthing syncs symlinks) or a checkout can plant "x.md ->
+//    ~/.ssh/id_rsa" or "assets -> ~/Documents", whose files would be indexed, uploaded by sync
+//    and written through. So symlinked files are never followed, wherever they point (outside
+//    the vault or into it), and symlinked folders only when they point outside the vault and
+//    setFollowsOutsideLinks() is on (an "assets" link to a photo folder; off by default — the
+//    app keeps it per device, never in the synced config; switching it on an open vault rescans,
+//    so the linked files come or go as changes); links into the vault (duplicates) and loops
+//    never. What is not followed is not the vault's: not listed (trash() included),
+//    unknown to exists()/stat(), and nothing at or below it is read, written, moved or deleted
+//    through the link (reaches() is false). Moving or deleting a symlink moves or removes the
+//    link, never what it points to.
 //  * Paths are normalised with paths::normalize (NFC); files stored with other Unicode
 //    normalisation (NFD names copied from macOS) are found and written under their real name,
 //    also after another program re-spells a known entry and in the (untracked) trash.
@@ -212,6 +219,19 @@ public:
     QString deviceStatePath() const;
     /// File system path of a vault path (respects the on-disk spelling of known entries).
     QString absolutePath(const VaultPath &path) const;
+    /// False when what is at `path` on disk is not the vault's: a link to a file, or anything in a
+    /// linked folder the vault does not follow (see the semantics). Looks at the disk; true where
+    /// nothing is yet. For code that reads files by their absolutePath() (pictures, files opened
+    /// with Brulion).
+    bool reaches(const VaultPath &path) const;
+    /// Follow symlinked folders that point outside the vault (default off; see the semantics).
+    /// Takes effect at open(); on an open vault it rescans, so their files come or go as changes.
+    void setFollowsOutsideLinks(bool follow);
+    bool followsOutsideLinks() const;
+    /// The last full scan (open(), rescan()) left out a symlinked folder pointing outside the vault
+    /// because followsOutsideLinks() is off (the app's one-time check of devices that used such
+    /// links before they became a setting).
+    bool skippedOutsideLinks() const;
     /// Description of the last failed operation.
     QString errorString() const;
 

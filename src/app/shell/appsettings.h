@@ -151,6 +151,11 @@ class AppSettings : public QObject {
     Q_PROPERTY(QString currentVault READ currentVault NOTIFY currentVaultChanged FINAL)
     /// [{ path, name, lastOpened (ISO date-time) }], most recent first, at most 8.
     Q_PROPERTY(QVariantList recentVaults READ recentVaults NOTIFY recentVaultsChanged FINAL)
+    /// Follow symlinked folders that point outside the notebook, in every notebook opened on this
+    /// device (Vault::setFollowsOutsideLinks through the Workspace; default off). Device-local,
+    /// never in the synced .brulion/config.json: a sync peer must not be able to switch it on.
+    Q_PROPERTY(bool followsOutsideLinks READ followsOutsideLinks WRITE setFollowsOutsideLinks NOTIFY
+                       followsOutsideLinksChanged FINAL)
 
     // ---- Application --------------------------------------------------------------------
     /// Desktop: closing the window keeps Brulion running in the system tray (reminders fire).
@@ -302,6 +307,15 @@ public:
     QString currentVault() const;
     void setCurrentVault(const QString &path);
     QVariantList recentVaults() const;
+    bool followsOutsideLinks() const;
+    void setFollowsOutsideLinks(bool on);
+    /// The one-time check of devices that followed folder links to outside before that became the
+    /// setting above: while it was never chosen here (no key), each notebook's first open asks
+    /// once. Switched on (and stored) only when this device knew the notebook before — `knownBefore`
+    /// (its device state folder had content: nothing a sync peer can create) or one of the recent
+    /// notebooks — and its folder has such a link (`outsideLinks`, Vault::skippedOutsideLinks()).
+    /// Checked for good either way: a link planted later, or a notebook new here, never turns it on.
+    void checkOutsideLinksOnce(const QString &notebook, bool knownBefore, bool outsideLinks);
     /// Put `path` first in the recent list (and make it current).
     void addRecentVault(const QString &path);
     Q_INVOKABLE void forgetRecentVault(const QString &path);
@@ -433,6 +447,7 @@ Q_SIGNALS:
     void typewriterScrollingChanged();
     void currentVaultChanged();
     void recentVaultsChanged();
+    void followsOutsideLinksChanged();
     void closeToTrayChanged();
     void trayClickChanged();
     void remindersEnabledChanged();

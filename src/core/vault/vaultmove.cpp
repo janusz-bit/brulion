@@ -328,6 +328,8 @@ bool Vault::removePermanently(const VaultPath &path, ChangeSource source)
     d->resolveSpelling(p); // e.g. NFD names in the trash — before the check, which looks at them
     if (d->throughTrashLink(p))
         return d->fail(tr("Cannot delete %1: it lies behind a link in the trash").arg(p));
+    if (d->behindUnfollowedLink(p)) // not the vault's (another folder's, linked into it)
+        return d->fail(tr("Cannot delete %1").arg(p));
     const QFileInfo info(d->absPath(p));
     bool ok = true;
     if (info.isDir() && !info.isSymLink())

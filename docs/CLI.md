@@ -56,7 +56,10 @@ standard input with `--stdin`.
    the app itself starts next time); with none, exit 5 `no_vault`.
 
 The folder must exist: `brulion-cli init <folder>` is the only command that creates one (a
-mistyped path never becomes an empty notebook). Device state — the version history and the lock —
+mistyped path never becomes an empty notebook). Folder links that point outside the notebook are
+followed only as the app on this device follows them (`vaults/followOutsideLinks` of `Brulion.ini`,
+read only, off by default: Settings → Notebook), so a command sees and writes the files the app does.
+Device state — the version history and the lock —
 lives where the app keeps it for that folder (`~/.local/share/Brulion/Brulion/vaults/<id>`), so on
 one computer the app's history shows the command line's changes; `--state-dir` chooses another,
 `--no-history` none. The index cache lives there too (`index-cache.bin`, docs/PERFORMANCE.md L2):

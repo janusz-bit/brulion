@@ -93,6 +93,7 @@ bool Notebook::open(const QString &rawRoot, const Options &options, QString *err
     if (!info.isDir())
         return failed(OpenError::NotAFolder, u"%1 is not a folder"_s.arg(root));
     auto vault = std::make_unique<Vault>(root, options.stateDir);
+    vault->setFollowsOutsideLinks(options.followOutsideLinks);
     if (options.clock)
         vault->setClock(options.clock);
     vault->setHistoryReason(options.historyReason);

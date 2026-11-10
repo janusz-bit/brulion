@@ -221,10 +221,11 @@ private Q_SLOTS:
     {
         // A link to a file (a sync peer's — Syncthing syncs symlinks — or a checkout's) is not
         // followed, wherever it points: it would be indexed, uploaded by sync and written through.
-        // Not even inside a linked folder, which is followed.
+        // Not even inside a linked folder that is followed (the device allows it here).
         BRULION_SKIP_WITHOUT_SYMLINKS();
         QFETCH(bool, intoTheVault);
         Fixture f;
+        f.followOutsideLinks = true;
         f.write(u"Notatka.md"_s, "moja notatka");
         f.write(u"zastąpiona.md"_s, "stara treść");
         f.write(u".trash/usunięta.md"_s, "usunięta");
@@ -268,6 +269,74 @@ private Q_SLOTS:
         QVERIFY(f.vault->rescan().isEmpty());
         QCOMPARE(f.changes(), QStringList{u"delete:zastąpiona.md@external"_s});
         QCOMPARE(readBehind(target.absolutePath(), target.fileName()), secret);
+    }
+
+    void outsideFolderLinksOnlyWhereTheDeviceAllowsThem()
+    {
+        // A synced "Dokumenty -> ~/Documents" (Syncthing syncs symlinks) must not make another
+        // folder's files notes — listed, indexed, uploaded by sync, written or deleted through the
+        // link: a folder link pointing outside is followed only when the device allows it.
+        BRULION_SKIP_WITHOUT_SYMLINKS();
+        Fixture f;
+        f.write(u"a.md"_s, "notatka");
+        const QString outside = f.tmp.path() + u"/Dokumenty"_s;
+        writeBehind(outside, u"plan.md"_s, "tajny plan zażółć");
+        writeBehind(outside, u"Podatki/zeznanie.pdf"_s, "%PDF");
+        const QStringList theirs{u"Podatki/zeznanie.pdf"_s, u"plan.md"_s};
+        QVERIFY(QFile::link(outside, f.root() + u"/Dokumenty"_s));
+        QVERIFY(f.open());
+        QVERIFY(!f.vault->followsOutsideLinks());
+        QVERIFY(f.vault->skippedOutsideLinks()); // (the app's one-time check of earlier users)
+        QCOMPARE(f.files(), QStringList{u"a.md"_s});
+        QVERIFY(f.folders().isEmpty());
+        QVERIFY(!f.vault->reaches(u"Dokumenty"_s) && !f.vault->reaches(u"Dokumenty/plan.md"_s));
+        QVERIFY(f.vault->reaches(u"a.md"_s) && f.vault->reaches(u"nowa.md"_s));
+        bool ok = true;
+        QVERIFY(f.vault->readText(u"Dokumenty/plan.md"_s, &ok).isEmpty());
+        QVERIFY(!ok);
+        QVERIFY(f.vault->errorString().contains(u"Dokumenty/plan.md"_s));
+        QVERIFY(f.vault->readBinary(u"Dokumenty/Podatki/zeznanie.pdf"_s, &ok).isEmpty());
+        QVERIFY(!ok);
+        QVERIFY(!f.vault->writeText(u"Dokumenty/plan.md"_s, u"nadpisany"_s));
+        QVERIFY(!f.vault->writeText(u"Dokumenty/nowy.md"_s, u"nowy"_s));
+        QCOMPARE(f.vault->writeTextIfUnchanged(u"Dokumenty/plan.md"_s, u"nadpisany"_s, u"tajny plan zażółć"_s),
+                 WriteOutcome::Failed);
+        QVERIFY(!f.vault->rename(u"Dokumenty/plan.md"_s, u"plan.md"_s));
+        QVERIFY(!f.vault->rename(u"a.md"_s, u"Dokumenty/a.md"_s));
+        QVERIFY(!f.vault->removePermanently(u"Dokumenty/plan.md"_s));
+        QVERIFY(f.vault->remove(u"Dokumenty/plan.md"_s)); // not the vault's: nothing to delete
+        f.vault->processPendingEvents();
+        QVERIFY(f.vault->rescan().isEmpty());
+        QVERIFY(f.changes().isEmpty());
+        QCOMPARE(diskFiles(outside), theirs);
+        QCOMPARE(readBehind(outside, u"plan.md"_s), "tajny plan zażółć"_ba);
+        QCOMPARE(f.read(u"a.md"_s), "notatka"_ba);
+        // Allowed: the linked files come as changes, and go again when it is switched off.
+        f.vault->setFollowsOutsideLinks(true);
+        QCOMPARE(sorted(f.changes()), (QStringList{u"create:Dokumenty/Podatki/zeznanie.pdf@external"_s,
+                                                   u"create:Dokumenty/plan.md@external"_s}));
+        QCOMPARE(f.text(u"Dokumenty/plan.md"_s), u"tajny plan zażółć"_s);
+        QVERIFY(f.vault->reaches(u"Dokumenty/plan.md"_s));
+        QVERIFY(!f.vault->skippedOutsideLinks());
+        QCOMPARE(f.folders(), (QStringList{u"Dokumenty"_s, u"Dokumenty/Podatki"_s}));
+        f.spy->clear();
+        f.vault->setFollowsOutsideLinks(false);
+        QCOMPARE(sorted(f.changes()), (QStringList{u"delete:Dokumenty/Podatki/zeznanie.pdf@external"_s,
+                                                   u"delete:Dokumenty/plan.md@external"_s}));
+        QVERIFY(f.vault->scanStatus().isOk());
+        QCOMPARE(f.files(), QStringList{u"a.md"_s});
+        QVERIFY(f.folders().isEmpty());
+        QCOMPARE(diskFiles(outside), theirs);
+        // Allowed before open(): listed at once.
+        f.followOutsideLinks = true;
+        QVERIFY(f.open());
+        QCOMPARE(f.files(), (QStringList{u"Dokumenty/Podatki/zeznanie.pdf"_s, u"Dokumenty/plan.md"_s, u"a.md"_s}));
+        // A link into the vault (a duplicate) is none to outside.
+        Fixture g;
+        g.write(u"Projekty/a.md"_s, "a");
+        QVERIFY(QFile::link(g.root() + u"/Projekty"_s, g.root() + u"/kopia"_s));
+        QVERIFY(g.open());
+        QVERIFY(!g.vault->skippedOutsideLinks());
     }
 
     void trashOperationsNeverGoThroughLinks()

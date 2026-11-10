@@ -424,10 +424,11 @@ private Q_SLOTS:
 #ifndef Q_OS_UNIX
         QSKIP("symbolic links");
 #else
-        // The notebook follows a folder linked from outside: its files' real paths are outside the
-        // notebook, yet they are its pages. A folder starting with "." holds pages too; a link to
-        // another folder of the notebook is not followed (its page is the real one), nor is a link
-        // to a file (no page: the vault never follows those).
+        // The notebook follows a folder linked from outside where the device allows it (by default
+        // its files are no pages: offered as a copy): their real paths are outside the notebook,
+        // yet they are its pages. A folder starting with "." holds pages too; a link to another
+        // folder of the notebook is not followed (its page is the real one), nor is a link to a
+        // file (no page: the vault never follows those).
         const QString root = m_tmp.filePath(u"dowiązania"_s);
         const QString outside = outsideFolder(
                 u"Dokumenty"_s, {{u"Praca/Plan.md"_s, "# Plan\n- zażółć\n"}, {u"Notatka.md"_s, "# Notatka\n"}});
@@ -438,6 +439,14 @@ private Q_SLOTS:
         QVERIFY(QFile::link(root + u"/Projekty"_s, root + u"/Alias"_s));
         auto app = openApp(u"dowiązania"_s);
         QCOMPARE(app->workspace()->rootPath(), QDir::cleanPath(root));
+        {
+            QSignalSpy offered(app.get(), &AppController::uiActionRequested);
+            QVERIFY(!app->workspace()->exists(u"Praca/Plan.md"_s));
+            app->receiveShare(openedShare({root + u"/Praca/Plan.md"_s}));
+            QCOMPARE(shareRequests(offered), 1);
+            app->dismissShare();
+        }
+        app->settings()->setFollowsOutsideLinks(true); // Settings → Notebook
         // What the notebook itself has (the premise).
         QTRY_VERIFY(app->workspace()->exists(u"Praca/Plan.md"_s));
         QVERIFY(!app->workspace()->exists(u"Skrót.md"_s));

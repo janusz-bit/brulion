@@ -172,6 +172,9 @@ notebook::Notebook *Context::notebook(std::optional<Error> *error)
     options.stateDir = stateDir();
     options.watch = serving;
     options.historyReason = u"cli"_s;
+    // Folder links to outside: as the app on this device follows them (read only — its one-time
+    // check of earlier users is the app's), so a command never writes or misses what the app keeps.
+    options.followOutsideLinks = appSettingsValue(u"vaults/followOutsideLinks"_s).toBool();
     // The index is read on worker threads (docs/PERFORMANCE.md, L1): as the app,
     // clamp(cores - 1, 1, 4) parse workers and one for the full-text index; BRULION_INDEX_THREADS
     // overrides (0 = on this thread).

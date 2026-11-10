@@ -1095,6 +1095,33 @@ private Q_SLOTS:
         QDir(docs).removeRecursively();
     }
 
+    // Folder links to outside the notebook: followed as the app on this device follows them
+    // (AppSettings' followsOutsideLinks, read only), so a command sees and writes the same files.
+    void outsideFolderLinksAsTheApp()
+    {
+#ifndef Q_OS_UNIX
+        QSKIP("symbolic links");
+#else
+        const QString dir = vault({{u"Dom.md"_s, "- dom\n"}});
+        const QString outside = m_tmp.filePath(u"poza notatnikiem"_s);
+        writeFile(outside + u"/Plan.md"_s, "- plan zażółć\n");
+        QVERIFY(QFile::link(outside, dir + u"/Dokumenty"_s));
+        Run r = run(dir, {u"page"_s, u"list"_s});
+        QCOMPARE(r.code, 0);
+        QCOMPARE(r.result().value(u"total"_s).toInt(), 1); // the default: not followed
+        r = run(dir, {u"page"_s, u"append"_s, u"Dokumenty/Plan.md"_s, u"- dopisane"_s});
+        QVERIFY(r.code != 0);
+        QCOMPARE(readFile(outside + u"/Plan.md"_s), "- plan zażółć\n"_ba);
+        {
+            QSettings settings(settingsFile(), QSettings::IniFormat);
+            settings.setValue(u"vaults/followOutsideLinks"_s, true);
+        }
+        r = run(dir, {u"page"_s, u"list"_s});
+        QCOMPARE(r.result().value(u"total"_s).toInt(), 2);
+        QFile::remove(settingsFile());
+#endif
+    }
+
     // The documentation of either language (an English one, and a Polish one left from before
     // the UI language changed) is never the user's notebook.
     void documentationOfEitherLanguageIsNoNotebook()

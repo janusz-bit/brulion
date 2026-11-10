@@ -1104,6 +1104,15 @@ Item {
                     onClicked: AppController.closeVault()
                 }
             }
+            // This device's (AppSettings), never .brulion/config.json: a sync peer must not be able
+            // to switch it on (Vault::setFollowsOutsideLinks; docs/UI.md, the settings view).
+            SettingSwitch {
+                objectName: "settingsFollowOutsideLinks"
+                text: qsTr("Follow links to folders outside the notebook")
+                description: qsTr("On this device only. A synced or copied link can point to any folder of yours: its files would be listed, synced and editable here.")
+                checked: AppSettings.followsOutsideLinks
+                onToggled: AppSettings.followsOutsideLinks = checked
+            }
             ShellSettingRow {
                 title: qsTr("Default mode of new pages")
                 description: qsTr("For pages that do not choose a mode themselves. The new-page dialog starts with it.")

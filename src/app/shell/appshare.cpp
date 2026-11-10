@@ -81,10 +81,10 @@ constexpr Qt::CaseSensitivity FileNameCase = Qt::CaseSensitive;
 /// The page of the open notebook an opened file (absolute, clean) already is, "" when it is none.
 /// Tried in turn: both paths with symbolic links resolved (a link to the notebook, a folder linked
 /// to another place in it), then the path as given against the notebook's folder as given and
-/// resolved — a page in a folder linked from outside (the vault follows such links) resolves to a
-/// path outside the notebook. A link to a file is no page (the vault never follows those). A page
-/// the notebook knows wins, spelled as it knows it; else the first one (a file it has not seen yet),
-/// only while the file exists.
+/// resolved — a page in a folder linked from outside (followed only where the device allows it:
+/// Vault::followsOutsideLinks()) resolves to a path outside the notebook. A link to a file is no
+/// page (the vault never follows those). A page the notebook knows wins, spelled as it knows it;
+/// else the first one the vault reaches (a file it has not seen yet), only while the file exists.
 QString notebookPageOf(const QString &file, const Vault &vault)
 {
     const QFileInfo info(file);
@@ -108,7 +108,9 @@ QString notebookPageOf(const QString &file, const Vault &vault)
         if (known && !known->isDir)
             return known->path;
     }
-    return pages.value(0);
+    const auto unseen =
+            std::ranges::find_if(std::as_const(pages), [&vault](const QString &page) { return vault.reaches(page); });
+    return unseen == pages.cend() ? QString() : *unseen;
 }
 
 } // namespace

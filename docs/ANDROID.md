@@ -222,8 +222,10 @@ How it works:
   failed, when it concerns a notebook other than the current target, or when the app came to the
   screen or started in the meantime (`BackgroundCheck.verdict`).
 * The app passes what to check through `AndroidBridge::setBackgroundCheck`:
-  `{root, stateDir, vault, ringMinutes, language, intervalMinutes, nextcloud: {davUrl, user,
-  device}}`. The app password is not in it: the background process reads it from the app's file
+  `{root, stateDir, vault, ringMinutes, language, intervalMinutes, followOutsideLinks, nextcloud:
+  {davUrl, user, device}}` (`followOutsideLinks`: the device's setting for folder links to outside
+  the notebook; a target an older version left without it keeps following them, so its sync takes
+  none of their files for deleted). The app password is not in it: the background process reads it from the app's file
   `secrets/nextcloud-password`. The app sends the target when its reminders start and when a
   setting the target uses changes. Closing the app, or opening the documentation or another
   notebook, leaves the target (the alarms of that notebook stay set). Turning reminders off,

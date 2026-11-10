@@ -139,8 +139,13 @@ void VaultPrivate::listChildren(const VaultPath &dir, const QString &dirRel, boo
                 continue;
             const QString rel = folder.rel.isEmpty() ? name : folder.rel + u'/' + name;
             if (info.isDir()) {
-                if (info.isSymLink() && !followsLink(info, folder.rel))
-                    continue; // a link into the vault (duplicates) or a loop
+                if (info.isSymLink() && !followsLink(info, folder.rel)) {
+                    // A link into the vault (duplicates), a loop, or one to outside the device does
+                    // not follow (noted for the app's one-time check: Vault::skippedOutsideLinks()).
+                    out.outsideLinkSkipped =
+                            out.outsideLinkSkipped || (!followOutsideLinks && leadsOutside(info, folder.rel));
+                    continue;
+                }
                 if (path == vaultutil::configFolder()) {
                     todo.append(Folder{path, rel, false}); // ignored, but its config.json is tracked
                     continue;
@@ -524,7 +529,7 @@ void VaultPrivate::verifyListing(DiskListing &listing) const
         if (listing.dirs.contains(dir) || !listing.coversDir(dir))
             continue;
         const QFileInfo info(absPath(dir));
-        if (info.isSymLink() && !info.exists())
+        if (followOutsideLinks && info.isSymLink() && !info.exists())
             listing.unreadable.insert(dir); // a linked folder whose target is unmounted
         else if (isDirOnDisk(dir) && !caseVariantListed(dir))
             listing.unreadable.insert(paths::dirname(dir));
@@ -533,14 +538,17 @@ void VaultPrivate::verifyListing(DiskListing &listing) const
         const VaultPath &path = it.key();
         if (listing.files.contains(path) || !listing.coversFile(path))
             continue;
-        // A file replaced by a link is gone (links to files are not listed), not a gap.
-        if (const QFileInfo info(absPath(path)); info.isFile() && !info.isSymLink() && !caseVariantListed(path))
+        // Gone for the vault, not a gap: a file replaced by a link, or one in a linked folder no
+        // longer followed (diskStat() sees neither, nor does the listing).
+        if (const std::optional<FileStat> st = diskStat(path); st && !st->isDir && !caseVariantListed(path))
             listing.unreadable.insert(paths::dirname(path));
     }
 }
 
 void VaultPrivate::noteListing(const DiskListing &listing, bool full)
 {
+    if (full)
+        outsideLinksSkipped = listing.outsideLinkSkipped;
     QSet<VaultPath> folders = listing.unreadable;
     if (!full) {
         // A partial scan vouches only for the folders it listed.

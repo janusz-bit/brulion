@@ -417,8 +417,19 @@ app; these guards keep data from being lost:
 * **Links and sizes in the vault** (`src/core/vault/vault.h`, "Semantics"): a symlink to a file is
   never followed, wherever it points — not listed, read or written, so a link planted by a sync peer
   or a checkout (`x.md → ~/.ssh/id_rsa`) is neither indexed nor uploaded nor written through;
-  folder links are followed only when they point outside the vault, and no trash operation or
-  `rename()` goes through one inside `.trash/`. Every read is bounded whatever size the file reports
+  folder links only when they point outside the vault and the device allows it
+  (`Vault::setFollowsOutsideLinks`, off by default; Settings → Notebook, `AppSettings.followsOutsideLinks`,
+  device-local — never `.brulion/config.json`, which a sync peer could change; brulion-cli and
+  the background check read it), so a planted `assets → ~/Documents` makes no notes either. Devices
+  that followed such links before keep them, so their sync does not take the files for deleted: while
+  the setting was never chosen, a notebook's first open checks once and switches it on only when this
+  device knew the notebook before (state in its device folder, or a recent notebook) and it has such
+  a link — a new device or a link planted after the check never does (`AppSettings::checkOutsideLinksOnce`,
+  before the index and sync see the vault; a background target of an older version keeps following
+  them). What is not followed is not the vault's: nothing in it is read, written, moved or deleted
+  (`Vault::reaches()`, also for pictures, PDFs and drawings read by their file), and no trash
+  operation or `rename()` goes through a link inside `.trash/`. Every read is
+  bounded whatever size the file reports
   (`/proc` files report none): scans read text files up to 16 MB, `readText()` / `readBinary()`
   up to 1 GiB.
 * **Sync guards** (`SyncEngine`): a **mass-deletion guard** holds back every deletion of a run

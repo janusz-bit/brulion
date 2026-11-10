@@ -114,6 +114,8 @@ private Q_SLOTS:
         QVERIFY(t.isValid());
         QCOMPARE(Target::fromJson(t.toJson()), std::optional<Target>(t));
         QVERIFY(!t.toJson().contains(u"nextcloud"_s));
+        t.followOutsideLinks = true; // the device's setting (AppSettings::followsOutsideLinks)
+        QCOMPARE(Target::fromJson(t.toJson()), std::optional<Target>(t));
 
         t.nextcloud = Target::Nextcloud{u"https://chmura.example.pl/remote.php/dav/files/jan/Brulion"_s, u"jan"_s,
                                         u"Telefon Łucji"_s};
@@ -139,6 +141,9 @@ private Q_SLOTS:
         QCOMPARE(t->language, u"pl"_s);
         QCOMPARE(t->intervalMinutes, 15);
         QVERIFY(!t->nextcloud);
+        // Kept from a version before the setting: its folder links to outside stay followed, so its
+        // sync takes none of their files for deleted before the app opens and settles the setting.
+        QVERIFY(t->followOutsideLinks);
 
         const std::optional<Target> off = Target::fromJson(QJsonObject{
                 {u"root"_s, u"/n"_s}, {u"stateDir"_s, u"/s"_s}, {u"vault"_s, u"v"_s}, {u"intervalMinutes"_s, 0}});

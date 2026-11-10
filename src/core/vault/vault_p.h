@@ -44,6 +44,7 @@ struct DiskListing {
     QSet<VaultPath> checkedFiles; ///< files stat-ed individually
     /// Folders that could not be listed (completely): nothing at or below them is covered.
     QSet<VaultPath> unreadable;
+    bool outsideLinkSkipped = false; ///< a folder link to outside was left out (followOutsideLinks off)
 
     /// True when the listing shows every child of `dir`: the folder was listed, lies in a
     /// listed tree, or is gone from a folder that was listed — and neither it nor a folder
@@ -121,7 +122,13 @@ public:
     std::optional<FileStat> diskStat(const VaultPath &path) const;
     void resolveSpelling(const VaultPath &path);
     bool isDirOnDisk(const VaultPath &path) const;
+    /// A symlinked folder the vault follows: leadsOutside() and followOutsideLinks.
     bool followsLink(const QFileInfo &link, const QString &parentRel) const;
+    /// The link points to a folder outside the vault, neither into it nor above itself (a loop).
+    bool leadsOutside(const QFileInfo &link, const QString &parentRel) const;
+    /// True when a folder above `path` is a symlinked folder the vault does not follow: what lies
+    /// there is not the vault's (never listed, stat-ed, read, written or deleted through it).
+    bool behindUnfollowedLink(const VaultPath &path) const;
     bool existsOnDisk(const VaultPath &path) const;
 
     // --- known entries (vault.cpp)
@@ -257,6 +264,8 @@ public:
     QString id;
     QString canonicalRoot; ///< root with symlinks resolved (set by open())
     QString storageId;     ///< storage identity of the root at open() ("" = unknown)
+    bool followOutsideLinks = false;  ///< Vault::setFollowsOutsideLinks()
+    bool outsideLinksSkipped = false; ///< Vault::skippedOutsideLinks()
     VaultScanStatus scanStatus;
     QElapsedTimer storageChecked; ///< last successful requireStorage() check
     bool isOpen = false;

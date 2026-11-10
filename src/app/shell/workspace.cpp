@@ -194,9 +194,17 @@ Workspace::~Workspace()
 bool Workspace::open(const QString &rootPath, const QString &deviceStatePath, QString *error)
 {
     close();
+    // Before the vault writes anything there: whether this device kept state of the notebook from
+    // earlier opens (History, LocalStore, the index cache) — for the check below.
+    const bool knownBefore = !deviceStatePath.isEmpty() && !QDir(deviceStatePath).isEmpty();
     auto vault = std::make_unique<Vault>(rootPath, deviceStatePath);
+    vault->setFollowsOutsideLinks(m_followsOutsideLinks); // before the first listing
     if (!vault->open(error))
         return false;
+    if (m_outsideLinksCheck) {
+        m_outsideLinksCheck(vault->rootPath(), knownBefore, vault->skippedOutsideLinks());
+        vault->setFollowsOutsideLinks(m_followsOutsideLinks); // switched on: rescans, nobody listens yet
+    }
     m_vault = std::move(vault);
     if (m_clock)
         m_vault->setClock(m_clock);
@@ -327,6 +335,13 @@ void Workspace::close()
         Q_EMIT indexProgressChanged();
     }
     setReady(wasReady);
+}
+
+void Workspace::setFollowsOutsideLinks(bool follow)
+{
+    m_followsOutsideLinks = follow;
+    if (m_vault)
+        m_vault->setFollowsOutsideLinks(follow); // rescans: changed() updates the index
 }
 
 bool Workspace::isOpen() const
@@ -744,7 +759,7 @@ bool Workspace::isDrawing(const QString &rawPath) const
 
 QSize Workspace::drawingSize(const QString &path) const
 {
-    if (!m_vault || path.isEmpty())
+    if (!m_vault || path.isEmpty() || !m_vault->reaches(path))
         return {};
     return editor::localDrawingSize(m_vault->absolutePath(paths::normalize(path)));
 }
@@ -999,6 +1014,10 @@ QUrl Workspace::assetUrl(const QString &path) const
     if (!m_vault || path.isEmpty())
         return {};
     const QString key = paths::normalize(path);
+    // A picture by its file: URL is read by Qt, not by the vault — never what the vault does not
+    // reach (a link to a file, a linked folder it does not follow).
+    if (!m_vault->reaches(key))
+        return {};
     if (!m_dataUrlAssets) {
         QUrl url = QUrl::fromLocalFile(m_vault->absolutePath(key));
         // A drawing changes under the same name (the drawing editor's saves): its version in the
@@ -1030,7 +1049,7 @@ QUrl Workspace::assetUrl(const QString &path) const
 
 QUrl Workspace::drawingUrl(const QString &path, bool dark) const
 {
-    if (!m_vault || path.isEmpty())
+    if (!m_vault || path.isEmpty() || !m_vault->reaches(path))
         return {};
     // The vault's own file (in the browser too: IDBFS is a folder of files there), read by the
     // image provider "drawing" (src/app/drawing/drawingimageprovider.h, the URL's format there);
@@ -1187,7 +1206,8 @@ void Workspace::discardImport(const QString &path)
 
 QString Workspace::absoluteFilePath(const QString &path) const
 {
-    if (!m_vault || path.isEmpty())
+    // (The PDF viewer and drawings' backdrops read the file itself: never one the vault does not reach.)
+    if (!m_vault || path.isEmpty() || !m_vault->reaches(path))
         return {};
     return m_vault->absolutePath(paths::normalize(path));
 }

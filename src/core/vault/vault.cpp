@@ -332,7 +332,7 @@ void VaultPrivate::adoptSpellings(const DiskListing &listing)
 std::optional<FileStat> VaultPrivate::diskStat(const VaultPath &path) const
 {
     const QFileInfo info(absPath(path));
-    if (!info.exists() || (!info.isDir() && !info.isFile()))
+    if (!info.exists() || (!info.isDir() && !info.isFile()) || behindUnfollowedLink(path))
         return std::nullopt;
     // A link to a file is never followed, one to a folder by followsLink()'s rules.
     if (info.isSymLink() && !path.isEmpty() && (!info.isDir() || !followsLink(info, diskRel(paths::dirname(path)))))
@@ -374,10 +374,19 @@ void VaultPrivate::resolveSpelling(const VaultPath &path)
 bool VaultPrivate::isDirOnDisk(const VaultPath &path) const
 {
     const QFileInfo info(absPath(path));
-    return info.isDir() && (path.isEmpty() || !info.isSymLink() || followsLink(info, diskRel(paths::dirname(path))));
+    return info.isDir() && (path.isEmpty() || !info.isSymLink() || followsLink(info, diskRel(paths::dirname(path))))
+           && !behindUnfollowedLink(path);
 }
 
 bool VaultPrivate::followsLink(const QFileInfo &link, const QString &parentRel) const
+{
+    // Only when this device allows it: a sync peer (Syncthing syncs symlinks) or a checkout could
+    // plant a link to any folder (~/.ssh, ~/Documents), whose files would be indexed, uploaded by
+    // sync and written through.
+    return followOutsideLinks && leadsOutside(link, parentRel);
+}
+
+bool VaultPrivate::leadsOutside(const QFileInfo &link, const QString &parentRel) const
 {
     const QString target = link.canonicalFilePath();
     // Links into the vault would show files twice under different paths: not followed.
@@ -394,10 +403,19 @@ bool VaultPrivate::followsLink(const QFileInfo &link, const QString &parentRel) 
     }
 }
 
+bool VaultPrivate::behindUnfollowedLink(const VaultPath &path) const
+{
+    const QStringList folders = vaultutil::ancestors(path);
+    return std::ranges::any_of(folders, [this](const VaultPath &dir) {
+        const QFileInfo info(absPath(dir));
+        return info.isSymLink() && !followsLink(info, diskRel(paths::dirname(dir)));
+    });
+}
+
 bool VaultPrivate::existsOnDisk(const VaultPath &path) const
 {
     const QFileInfo info(absPath(path));
-    return info.exists() || info.isSymLink();
+    return (info.exists() || info.isSymLink()) && !behindUnfollowedLink(path);
 }
 
 QDateTime VaultPrivate::now() const
@@ -668,6 +686,13 @@ QByteArray VaultPrivate::readFile(const VaultPath &path, bool asText, bool *ok)
     }
     const bool tracked = vaultutil::isTracked(path);
     resolveSpelling(path);
+    if (behindUnfollowedLink(path)) {
+        //: The reason in "Cannot read %1: %2"
+        fail(Vault::tr("Cannot read %1: %2").arg(path, Vault::tr("it is in a linked folder that is not followed")));
+        if (files.contains(path))
+            scheduleCheck(path); // the link changed behind our back
+        return {};
+    }
     // Stat before reading: if the file changes in between, the content read is newer than the
     // stat, which only causes one harmless check later.
     const std::optional<FileStat> before = tracked ? diskStat(path) : std::nullopt;
@@ -1078,6 +1103,36 @@ QString Vault::absolutePath(const VaultPath &path) const
     return d->absPath(paths::normalize(path));
 }
 
+bool Vault::reaches(const VaultPath &path) const
+{
+    const VaultPath p = paths::normalize(path);
+    if (p.isEmpty())
+        return true;
+    if (d->behindUnfollowedLink(p))
+        return false;
+    const QFileInfo info(d->absPath(p));
+    return !info.isSymLink() || (info.isDir() && d->followsLink(info, d->diskRel(paths::dirname(p))));
+}
+
+void Vault::setFollowsOutsideLinks(bool follow)
+{
+    if (d->followOutsideLinks == follow)
+        return;
+    d->followOutsideLinks = follow;
+    if (d->isOpen)
+        rescan(); // the linked folders' files come or go (changed())
+}
+
+bool Vault::followsOutsideLinks() const
+{
+    return d->followOutsideLinks;
+}
+
+bool Vault::skippedOutsideLinks() const
+{
+    return d->outsideLinksSkipped;
+}
+
 QString Vault::errorString() const
 {
     return d->error;
@@ -1221,10 +1276,9 @@ WriteOutcome Vault::writeTextIfUnchanged(const VaultPath &rawPath, const QString
     }
     d->resolveSpelling(path);
     // What the file holds now — on disk, not what the vault remembers: another program may have
-    // written it a moment ago, before its change reached the vault. (A link to a file is none:
-    // write() refuses it.)
-    const QFileInfo info(d->absPath(path));
-    if (info.isFile() && !info.isSymLink()) {
+    // written it a moment ago, before its change reached the vault. (A link to a file, or a file
+    // in a linked folder the vault does not follow, is none: write() refuses it.)
+    if (const std::optional<FileStat> disk = d->diskStat(path); disk && !disk->isDir) {
         bool ok = false;
         const QByteArray bytes = d->readDisk(path, kMaxReadBytes, &ok);
         if (!ok) {
