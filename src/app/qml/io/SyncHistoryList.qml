@@ -37,12 +37,7 @@ IoCard {
     }
     /// The non-empty parts joined with " · ".
     function joinNonEmpty(parts: list<string>): string {
-        let out = ""
-        for (let i = 0; i < parts.length; ++i) {
-            if (parts[i] !== "")
-                out = out === "" ? parts[i] : out + " · " + parts[i]
-        }
-        return out
+        return Js.joinNonEmpty(parts, " · ")
     }
     function open(number: int): void {
         detailsLoader.number = number

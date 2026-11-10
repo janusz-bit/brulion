@@ -500,7 +500,10 @@ Stroke newShape(ElementType type, QPointF from, QPointF to, bool constrain, cons
         const double side = std::max(std::abs(v.x()), std::abs(v.y()));
         end = from + QPointF(v.x() < 0 ? -side : side, v.y() < 0 ? -side : side);
     }
-    end = round2(end);
+    // Squaring or snapping can carry the end past what the readers accept (the drawing would
+    // open read-only): it stays within the coordinate limit like the corners do.
+    end = round2(QPointF(std::clamp(end.x(), -CoordinateLimit, CoordinateLimit),
+                         std::clamp(end.y(), -CoordinateLimit, CoordinateLimit)));
     if (!isLinear(type)) {
         e.box = QRectF(from, end).normalized();
         e.roundness = type == ElementType::Rectangle && st.rounded ? 3 : 0;

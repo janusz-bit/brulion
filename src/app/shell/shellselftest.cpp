@@ -4635,10 +4635,6 @@ QQuickItem *toolbarSlotOf(QQuickWindow *window, QQuickItem *editor)
     return it == slots.cend() ? nullptr : *it;
 }
 
-/// "Share → Brulion" (AppController::receiveShare, ShellShareDialog): shared text opens the
-/// dialog, "Save" (a real tap / click) writes one block at the end of today's journal — no
-/// reminder from "jutro" (tomorrow) —, a shared .md file is offered as a new page titled after the file and
-/// saved byte for byte, its copy removed; Escape drops a share and writes nothing.
 /// Find and replace (docs/UI.md "Find and replace"): the bar in a page with real keys and taps, source
 /// mode, the journal stream, and the notebook-wide view with its ticks, confirmation and Undo.
 void checkFindAndReplace(QQuickWindow *window, AppController *app, const Check &check)

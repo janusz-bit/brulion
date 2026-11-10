@@ -342,7 +342,7 @@ Item {
             readonly property real half: width / 2
             implicitHeight: Math.ceil(Math.max(leftText.implicitHeight, rightText.implicitHeight, 16) + 6)
             Accessible.role: Accessible.StaticText
-            Accessible.name: kind === "equal" ? leftLine : qsTr("Before: %1. After: %2").arg(leftLine).arg(rightLine)
+            Accessible.name: kind === "equal" ? leftLine : Js.arg2(qsTr("Before: %1. After: %2"), leftLine, rightLine)
 
             Rectangle {
                 width: srow.half

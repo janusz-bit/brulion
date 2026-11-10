@@ -873,13 +873,18 @@ QByteArray encodePayload(QByteArrayView sceneJson)
 
 std::optional<QByteArray> decodePayload(QByteArrayView base64, int version)
 {
+    // Bounded by the scene limit, not by the (untrusted) span: whitespace aside, a longer
+    // payload is refused anyway.
     QByteArray b64;
-    b64.reserve(base64.size());
+    b64.reserve(std::min<qsizetype>(base64.size(), MaxSceneBytes + 1));
     for (const char c : base64) {
-        if (c != ' ' && c != '\n' && c != '\r' && c != '\t')
-            b64 += c;
+        if (c == ' ' || c == '\n' || c == '\r' || c == '\t')
+            continue;
+        if (b64.size() == MaxSceneBytes)
+            return std::nullopt;
+        b64 += c;
     }
-    if (b64.isEmpty() || b64.size() > MaxSceneBytes)
+    if (b64.isEmpty())
         return std::nullopt;
     const QByteArray::FromBase64Result decoded =
             QByteArray::fromBase64Encoding(b64, QByteArray::AbortOnBase64DecodingErrors);
