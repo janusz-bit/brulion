@@ -7,6 +7,12 @@ brulion: document
 
 Here you'll find what changed in every version of Brulion, newest first. Full release notes with downloads are on GitHub: https://github.com/janusz-bit/brulion/releases
 
+## 0.16.3 — November 10, 2026
+
+**Changes**
+- **Views ready from the start** — a moment after the notebook opens and its index is ready, Tasks, Calendar, Journal, All pages and Search are built in the background, one at a time, so even the first switch to one is instant (it took 0.5–1 s on a phone). A view still being built is finished at once when you open it, and a view built this way takes the keyboard only when it is shown. Only the window's main pane does this; the split pane and a page's own window build nothing ahead.
+- **Reminders in the block you edit** — a reminder `⏰ …` or an alarm `⏰! …` in the block being edited stays a chip in its colours instead of turning into plain text. A click or tap opens the date and time dialog and the cursor stays where it was; the change is undone with one Ctrl+Z. The chip shows the date as it is written in the note; in Markdown source mode and in table cells it is still text. See [[Reminders and alarms]].
+
 ## 0.16.2 — November 10, 2026
 
 **Changes**

@@ -7,6 +7,12 @@ brulion: document
 
 Tu znajdziesz zmiany w każdej wersji Brulionu, od najnowszej. Pełne opisy wydań z plikami do pobrania są na GitHubie: https://github.com/janusz-bit/brulion/releases
 
+## 0.16.3 — 10 listopada 2026
+
+**Zmiany**
+- **Widoki gotowe od początku** — chwilę po otwarciu notatnika, gdy jego indeks jest gotowy, Zadania, Kalendarz, Dziennik, Wszystkie strony i Szukaj są budowane w tle, jeden po drugim, więc nawet pierwsze przejście do nich jest natychmiastowe (na telefonie trwało 0,5–1 s). Widok, który jeszcze się buduje, zostaje dokończony od razu, gdy go otworzysz, a widok zbudowany w ten sposób bierze klawiaturę dopiero wtedy, gdy jest pokazany. Robi to tylko główny panel okna; drugi panel podziału widoku i osobne okno strony niczego nie budują zawczasu.
+- **Przypomnienia w edytowanym bloku** — przypomnienie `⏰ …` albo alarm `⏰! …` w edytowanym bloku zostaje chipem w swoich kolorach zamiast zamieniać się w zwykły tekst. Kliknięcie albo stuknięcie otwiera okno daty i godziny, a kursor zostaje na miejscu; zmianę cofa jedno Ctrl+Z. Chip pokazuje datę tak, jak jest zapisana w notatce; w trybie źródła Markdown i w komórkach tabel nadal jest tekstem. Zobacz [[Przypomnienia i alarmy]].
+
 ## 0.16.2 — 10 listopada 2026
 
 **Zmiany**
