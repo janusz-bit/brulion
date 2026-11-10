@@ -7,6 +7,18 @@ brulion: document
 
 Here you'll find what changed in every version of Brulion, newest first. Full release notes with downloads are on GitHub: https://github.com/janusz-bit/brulion/releases
 
+## 0.16.2 — November 10, 2026
+
+**Changes**
+- **Links to files and folders** — a note or attachment that is a symbolic link is no longer listed, read or changed: a synced or copied link could make any file of yours part of the notebook. A link to a folder inside the notebook still works; a link to a folder outside it is followed only when *Settings → Notebook → Follow links to folders outside the notebook* is on. That setting is kept on this device only, never in the synced configuration, and it covers `brulion-cli`, the MCP server and Android's background sync too. A device that already followed such a link when it updated keeps it on, so nothing it showed disappears and sync deletes nothing on the server.
+- **Limits against hostile notes** — tables, calculations, a `:LOGBOOK:` clock (a running clock counts at most 366 days), list nesting (exports and the clipboard keep 100 levels, deeper items follow on the last one), Dataview expressions and the values and results a query builds (copying counts as work too) are bounded far above anything real: a note made to freeze or crash the app stops with a message instead. Notes over 1 GB are not read, and an MCP request line over 16 MiB is refused.
+- **Dataview** — only the rows a query shows are worked out (up to 74% less work), and reading `key:: value` fields no longer slows down on long notes. An error in a row that is not shown no longer fails the query.
+
+**Fixes**
+- Nextcloud: when the app password could not be saved or removed from the system's keychain, nothing said so; now a message does.
+- Windows: a picture with another computer's address (`file://server/…`, `\\server\share`) is loaded only when it lies in an open notebook.
+- The whole code was reviewed and simplified (smart pointers, C++20, Qt guidelines), with no change in what you see; it is a little faster.
+
 ## 0.16.1 — November 9, 2026
 
 **Note**

@@ -7,6 +7,18 @@ brulion: document
 
 Tu znajdziesz zmiany w każdej wersji Brulionu, od najnowszej. Pełne opisy wydań z plikami do pobrania są na GitHubie: https://github.com/janusz-bit/brulion/releases
 
+## 0.16.2 — 10 listopada 2026
+
+**Zmiany**
+- **Dowiązania do plików i folderów** — notatka albo załącznik, który jest dowiązaniem symbolicznym, nie jest już pokazywany, czytany ani zmieniany: zsynchronizowane albo skopiowane dowiązanie mogło włączyć do notatnika dowolny Twój plik. Dowiązanie do folderu w notatniku działa jak dotąd; dowiązanie do folderu spoza notatnika jest uwzględniane tylko przy włączonym *Ustawienia → Notatnik → Uwzględniaj dowiązania do folderów spoza notatnika*. To ustawienie jest zapisane tylko na tym urządzeniu, nigdy w synchronizowanej konfiguracji, i dotyczy też `brulion-cli`, serwera MCP i synchronizacji w tle na Androidzie. Urządzenie, które w chwili aktualizacji już korzystało z takiego dowiązania, ma je włączone, więc nic, co pokazywało, nie znika, a synchronizacja niczego nie usuwa z serwera.
+- **Limity przeciw złośliwym notatkom** — tabele, obliczenia, zegar w `:LOGBOOK:` (włączony zegar liczy najwyżej 366 dni), zagnieżdżanie list (eksporty i schowek zachowują 100 poziomów, głębsze elementy idą na ostatnim), wyrażenia Dataview oraz wartości i wyniki tworzone przez zapytanie (kopiowanie też liczy się jako praca) mają granice daleko powyżej wszystkiego, co realne: notatka zrobiona, by zawiesić albo wyłączyć aplikację, kończy się zamiast tego komunikatem. Notatki ponad 1 GB nie są czytane, a wiersz żądania MCP ponad 16 MiB jest odrzucany.
+- **Dataview** — liczone są tylko wiersze, które zapytanie pokazuje (do 74% mniej pracy), a odczyt pól `klucz:: wartość` nie zwalnia już przy długich notatkach. Błąd w niepokazywanym wierszu nie psuje już zapytania.
+
+**Poprawki**
+- Nextcloud: gdy nie udało się zapisać ani usunąć hasła aplikacji w pęku kluczy systemu, nic o tym nie mówiło; teraz mówi komunikat.
+- Windows: obrazek z adresem innego komputera (`file://serwer/…`, `\\serwer\udział`) wczytuje się tylko wtedy, gdy leży w otwartym notatniku.
+- Cały kod został przejrzany i uproszczony (inteligentne wskaźniki, C++20, wytyczne Qt) bez zmian w tym, co widzisz; jest trochę szybszy.
+
 ## 0.16.1 — 9 listopada 2026
 
 **Uwaga**
