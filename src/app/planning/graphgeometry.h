@@ -47,7 +47,7 @@ public:
     int vertexCount() const;
     int indexCount() const;
     bool isEmpty() const { return m_used == 0; }
-    void clear();
+    void clear() { m_used = 0; } ///< keeps the chunks: room() clears each one it uses again
 
 private:
     std::vector<Mesh> m_chunks;

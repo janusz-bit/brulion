@@ -22,7 +22,7 @@ QJsonObject androidReminderItem(const ScheduledNotification &n)
             {u"id"_s, id},
             {u"title"_s, n.title},
             {u"body"_s, n.body},
-            {u"at"_s, QJsonValue(qint64(n.at.toMSecsSinceEpoch()))},
+            {u"at"_s, n.at.toMSecsSinceEpoch()},
             {u"alarm"_s, n.alarm},
             {u"ringMinutes"_s, std::clamp(n.ringMinutes, 1, 60)},
             {u"path"_s, n.path},
@@ -37,7 +37,7 @@ QJsonObject androidReminderItem(const ScheduledNotification &n)
 QList<AndroidDoneRequest> androidDoneRequests(const QJsonArray &array)
 {
     QList<AndroidDoneRequest> out;
-    for (const QJsonValue &value : array) {
+    for (const auto &value : array) {
         const QJsonObject o = value.toObject();
         AndroidDoneRequest request;
         ScheduledNotification &n = request.notification;
@@ -87,13 +87,10 @@ QJsonObject androidSoundPreview(SoundKind kind, const SoundChoice &choice)
 
 SoundChoice androidPickedSound(const QJsonObject &answer, bool *ok)
 {
-    SoundChoice::Mode mode = SoundChoice::Mode::Default;
-    const bool valid = !answer.contains(u"error"_s) && soundModeFromKey(answer.value(u"mode"_s).toString(), &mode);
+    const bool valid = !answer.contains(u"error"_s) && soundModeFromKey(answer.value(u"mode"_s).toString(), nullptr);
     if (ok)
         *ok = valid;
-    if (!valid)
-        return {};
-    return soundFromVariant(answer.toVariantMap());
+    return valid ? soundFromVariant(answer.toVariantMap()) : SoundChoice();
 }
 
 } // namespace brulion::notify

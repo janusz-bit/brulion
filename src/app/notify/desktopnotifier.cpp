@@ -147,7 +147,7 @@ QDateTime DesktopNotifier::now() const
 
 int DesktopNotifier::ringingCount() const
 {
-    return int(std::count_if(m_shown.cbegin(), m_shown.cend(), [](const Shown &s) { return s.ringUntil.isValid(); }));
+    return int(std::ranges::count_if(m_shown, [](const Shown &s) { return s.ringUntil.isValid(); }));
 }
 
 void DesktopNotifier::showNow(const ScheduledNotification &notification)
@@ -157,11 +157,9 @@ void DesktopNotifier::showNow(const ScheduledNotification &notification)
         return;
     }
     // The same reminder again (shown late after a re-plan): replace its notification.
-    uint replaces = 0;
-    for (auto it = m_shown.cbegin(); it != m_shown.cend(); ++it) {
-        if (it->notification.id == notification.id)
-            replaces = it.key();
-    }
+    const auto same = std::ranges::find_if(std::as_const(m_shown),
+                                           [&](const Shown &s) { return s.notification.id == notification.id; });
+    const uint replaces = same == m_shown.cend() ? 0u : same.key();
     const DesktopNotification message =
             buildDesktopNotification(notification, m_bus->capabilities(), m_snoozeMinutes, replaces,
                                      sound(notification.alarm ? SoundKind::Alarm : SoundKind::Reminder));
@@ -225,11 +223,9 @@ void DesktopNotifier::fallback(const ScheduledNotification &notification)
 void DesktopNotifier::onActionInvoked(uint id, const QString &action)
 {
     // Every program's notifications share the bus: only ours are in m_shown.
-    const auto it = m_shown.constFind(id);
-    if (it == m_shown.constEnd())
+    if (!m_shown.contains(id))
         return;
-    const ScheduledNotification notification = it->notification;
-    m_shown.remove(id);
+    const ScheduledNotification notification = m_shown.take(id).notification;
     updateRingTimer();
     // Wayland: the window raised for this click must present the server's activation token.
     if (!m_activationToken.isEmpty())
@@ -245,9 +241,8 @@ void DesktopNotifier::onActionInvoked(uint id, const QString &action)
         Q_EMIT activated(notification.path, notification.line);
 }
 
-void DesktopNotifier::onClosed(uint id, uint reason)
+void DesktopNotifier::onClosed(uint id)
 {
-    Q_UNUSED(reason);
     if (m_shown.remove(id))
         updateRingTimer();
 }
@@ -258,38 +253,36 @@ void DesktopNotifier::ring()
         return;
     const QDateTime current = now();
     const QStringList capabilities = m_bus->capabilities();
+    const SoundChoice alarmSound = sound(SoundKind::Alarm);
     const SoundChoice silent{SoundChoice::Mode::Silent, {}, {}};
-    QList<QPair<uint, DesktopNotification>> again;
-    for (auto it = m_shown.begin(); it != m_shown.end(); ++it) {
-        if (!it->ringUntil.isValid())
+    QList<std::pair<uint, DesktopNotification>> again;
+    for (auto [id, shown] : m_shown.asKeyValueRange()) {
+        if (!shown.ringUntil.isValid())
             continue;
-        const uint id = it.key();
-        const DesktopNotification loud =
-                buildDesktopNotification(it->notification, capabilities, m_snoozeMinutes, id, sound(SoundKind::Alarm));
         // A notification looping its own sound (Windows' alarm toasts with a looping sound) is
         // left alone while it rings and replaced by a silent one when the time is over; any other
         // is sent again (once more when the alarm sound was switched to a looping one meanwhile).
-        if (current >= it->ringUntil) {
-            it->ringUntil = QDateTime(); // rang long enough: it stays on screen, silently
-            if (std::exchange(it->looping, false))
+        if (current >= shown.ringUntil) {
+            shown.ringUntil = QDateTime(); // rang long enough: it stays on screen, silently
+            if (std::exchange(shown.looping, false))
                 again.append(
-                        {id, buildDesktopNotification(it->notification, capabilities, m_snoozeMinutes, id, silent)});
-        } else if (const bool loops = m_bus->ringsItself(loud); !loops || !it->looping) {
-            it->looping = loops;
-            again.append({id, loud});
+                        {id, buildDesktopNotification(shown.notification, capabilities, m_snoozeMinutes, id, silent)});
+            continue;
+        }
+        DesktopNotification loud =
+                buildDesktopNotification(shown.notification, capabilities, m_snoozeMinutes, id, alarmSound);
+        if (const bool loops = m_bus->ringsItself(loud); !loops || !shown.looping) {
+            shown.looping = loops;
+            again.append({id, std::move(loud)});
         }
     }
+    const QPointer<DesktopNotifier> self(this);
     for (const auto &[id, message] : std::as_const(again)) {
-        const QPointer<DesktopNotifier> self(this);
         m_bus->notify(message, [self, id](uint newId) {
-            if (!self || newId == id)
-                return;
             // Refused, or the server made a new one: stop ringing the old entry.
-            const auto it = self->m_shown.find(id);
-            if (it == self->m_shown.end())
+            if (!self || newId == id || !self->m_shown.contains(id))
                 return;
-            Shown shown = *it;
-            self->m_shown.erase(it);
+            const Shown shown = self->m_shown.take(id);
             if (newId != 0)
                 self->m_shown.insert(newId, shown);
             self->updateRingTimer();

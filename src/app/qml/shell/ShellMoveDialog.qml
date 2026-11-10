@@ -25,7 +25,7 @@ BDialog {
     property string path
     property bool isDir: false
     property string query
-    /// The chosen row's folder ("" = the root); `chosen` false: none yet.
+    /// The chosen row's folder ("" = the root); `hasTarget` false: none yet.
     property string target
     property bool hasTarget: false
     /// The chosen row creates its folder first.
@@ -199,6 +199,9 @@ BDialog {
             onClicked: dialog.chooseAt(row.index)
         }
         BText {
+            // (Declared in the list, so its default parent is the content item, which has no height
+            // without rows: the list itself.)
+            parent: list
             anchors.centerIn: parent
             visible: list.count === 0
             text: qsTr("No folders found.")

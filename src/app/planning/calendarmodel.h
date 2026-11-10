@@ -71,9 +71,12 @@ public:
         VaultPath path;
         Task task;
     };
-    /// The tasks due before `today`, by due date (ties: page path, then document order), at most
-    /// `max`; `total` receives how many there are.
-    QList<Overdue> tasks(const VaultIndex &index, QDate today, int max, int *total);
+    struct Found {
+        QList<Overdue> tasks; ///< by due date (ties: page path, then document order), at most `max`
+        int total = 0;        ///< how many there are
+    };
+    /// The tasks due before `today`.
+    Found tasks(const VaultIndex &index, QDate today, int max);
     /// What the last tasks() looked at again (tests).
     const NoteCacheSync &lastSync() const { return m_last; }
 
@@ -277,15 +280,14 @@ private:
     Qt::DayOfWeek weekStartDay() const;
     /// [first, last] of the range for `anchor` in the current mode.
     std::pair<QDate, QDate> rangeFor(QDate anchor) const;
-    /// The agenda's next() / previous(): the anchor's weekday in the first week of the range
-    /// `days` after (before) the one holding anchor `a`.
-    QDate agendaStep(QDate a, int days) const;
+    /// next() / previous(): the anchor a month or a week later (`periods` 1) or earlier (-1); in the
+    /// agenda its weekday in the first week of the range after (before) the one holding it.
+    QDate stepped(int periods) const;
     void scheduleRefresh();
     /// rebuild(forceReset), or once when the QML component is complete.
     void requestRebuild(bool forceReset);
     void rebuild(bool forceReset);
     QVariantMap itemMap(const CalendarItem &item, QDate today) const;
-    QVariant dayData(const Day &day, int role) const;
     void scheduleMidnight();
 
     QPointer<VaultIndex> m_index;

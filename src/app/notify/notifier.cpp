@@ -48,25 +48,6 @@ QList<SoundChoice::Mode> Notifier::soundModes() const
     return {SoundChoice::Mode::Default, SoundChoice::Mode::Silent};
 }
 
-bool Notifier::pickSound(SoundKind kind)
-{
-    Q_UNUSED(kind);
-    return false;
-}
-
-bool Notifier::previewSound(SoundKind kind, const SoundChoice &choice)
-{
-    Q_UNUSED(kind);
-    Q_UNUSED(choice);
-    return false;
-}
-
-bool Notifier::openSystemSoundSettings(SoundKind kind)
-{
-    Q_UNUSED(kind);
-    return false;
-}
-
 QString soundText(SoundText text)
 {
     switch (text) {

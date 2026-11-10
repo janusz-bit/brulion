@@ -94,11 +94,7 @@ public:
     /// with a Looping.* sound, toastLoopsItsSound()): DesktopNotifier does not send it again every
     /// ring interval, only once silently when its ring time is over (sending a toast again would
     /// pop it up again). An alarm with a short sound is sent again, as on Linux.
-    virtual bool ringsItself(const DesktopNotification &notification) const
-    {
-        Q_UNUSED(notification);
-        return false;
-    }
+    virtual bool ringsItself(const DesktopNotification & /*notification*/) const { return false; }
 
 Q_SIGNALS:
     /// The user invoked an action ("default" for a click on the notification).
@@ -157,7 +153,7 @@ private:
     };
 
     void onActionInvoked(uint id, const QString &action);
-    void onClosed(uint id, uint reason);
+    void onClosed(uint id);
     void ring();
     void updateRingTimer();
     QDateTime now() const;

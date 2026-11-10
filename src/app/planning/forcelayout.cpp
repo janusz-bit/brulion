@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <numbers>
+#include <tuple>
 
 namespace brulion::planning {
 
@@ -67,14 +68,8 @@ void ForceLayout::reset(int nodeCount, const QList<std::pair<int, int>> &edges, 
     m_fy.assign(n, 0);
     m_fixed.assign(n, 0);
     for (size_t i = 0; i < n; ++i) {
-        if (i < known.size() && known[i] && i < xs.size() && i < ys.size()) {
-            m_x[i] = xs[i];
-            m_y[i] = ys[i];
-        } else {
-            const auto [x, y] = startPosition(int(i));
-            m_x[i] = x;
-            m_y[i] = y;
-        }
+        const bool kept = i < known.size() && known[i] && i < xs.size() && i < ys.size();
+        std::tie(m_x[i], m_y[i]) = kept ? std::pair(xs[i], ys[i]) : startPosition(int(i));
     }
 
     // Undirected, deduplicated, sorted (deterministic order whatever the input order).
@@ -101,11 +96,9 @@ void ForceLayout::reset(int nodeCount, const QList<std::pair<int, int>> &edges, 
         m_linkStrength[k] = 1.0 / std::max(1, std::min(cs, ct));
         m_linkBias[k] = double(cs) / double(cs + ct);
     }
-    m_gravityScale.assign(n, 1.0);
-    for (size_t i = 0; i < n; ++i) {
-        if (count[i] == 0)
-            m_gravityScale[i] = m_params.orphanGravity;
-    }
+    m_gravityScale.resize(n);
+    std::ranges::transform(count, m_gravityScale.begin(),
+                           [orphan = m_params.orphanGravity](int c) { return c == 0 ? orphan : 1.0; });
     m_nextPoint.assign(n, -1);
     m_alpha = 1;
     m_alphaTarget = 0;
@@ -170,12 +163,7 @@ void ForceLayout::fix(int i, double x, double y)
     if (i < 0 || i >= nodeCount())
         return;
     m_fixed[size_t(i)] = 1;
-    m_fx[size_t(i)] = x;
-    m_fy[size_t(i)] = y;
-    m_x[size_t(i)] = x;
-    m_y[size_t(i)] = y;
-    m_vx[size_t(i)] = 0;
-    m_vy[size_t(i)] = 0;
+    setPosition(i, x, y); // pinned there too
 }
 
 void ForceLayout::unfix(int i)
@@ -258,19 +246,9 @@ void ForceLayout::applyGravity()
 void ForceLayout::buildTree()
 {
     m_cells.clear();
-    double x0 = m_x[0], y0 = m_y[0], x1 = m_x[0], y1 = m_y[0];
-    for (size_t i = 1; i < m_x.size(); ++i) {
-        x0 = std::min(x0, m_x[i]);
-        y0 = std::min(y0, m_y[i]);
-        x1 = std::max(x1, m_x[i]);
-        y1 = std::max(y1, m_y[i]);
-    }
-    const double size = std::max({x1 - x0, y1 - y0, 1.0}) * 1.0001 + 1e-9;
-    Cell root;
-    root.x0 = x0;
-    root.y0 = y0;
-    root.size = size;
-    m_cells.push_back(root);
+    const QRectF box = bounds();
+    const double size = std::max({box.width(), box.height(), 1.0}) * 1.0001 + 1e-9;
+    m_cells.push_back({.x0 = box.x(), .y0 = box.y(), .size = size});
     for (size_t i = 0; i < m_x.size(); ++i) {
         if (std::isfinite(m_x[i]) && std::isfinite(m_y[i]))
             insert(0, int(i), 0);
@@ -283,12 +261,8 @@ void ForceLayout::insert(int cell, int point, int depth)
     const size_t p = size_t(point);
     if (m_cells[size_t(cell)].leaf) {
         const int q = m_cells[size_t(cell)].point;
-        if (q < 0) {
-            m_cells[size_t(cell)].point = point;
-            m_nextPoint[p] = -1;
-            return;
-        }
-        if (depth >= kMaxDepth || (m_x[size_t(q)] == m_x[p] && m_y[size_t(q)] == m_y[p])) {
+        // An empty leaf takes the point; at the depth limit or on the same position it joins q's chain.
+        if (q < 0 || depth >= kMaxDepth || (m_x[size_t(q)] == m_x[p] && m_y[size_t(q)] == m_y[p])) {
             m_nextPoint[p] = q;
             m_cells[size_t(cell)].point = point;
             return;
@@ -296,37 +270,31 @@ void ForceLayout::insert(int cell, int point, int depth)
         // Split: the existing (coincident) points go one level down.
         m_cells[size_t(cell)].leaf = false;
         m_cells[size_t(cell)].point = -1;
-        const Cell parent = m_cells[size_t(cell)];
-        const double half = parent.size / 2;
-        const int quadrant = (m_x[size_t(q)] >= parent.x0 + half ? 1 : 0) | (m_y[size_t(q)] >= parent.y0 + half ? 2 : 0);
-        Cell child;
-        child.x0 = parent.x0 + ((quadrant & 1) ? half : 0);
-        child.y0 = parent.y0 + ((quadrant & 2) ? half : 0);
-        child.size = half;
-        child.point = q; // keeps its m_nextPoint chain
-        m_cells.push_back(child);
-        m_cells[size_t(cell)].child[quadrant] = int(m_cells.size()) - 1;
+        const int child = childFor(cell, q);
+        m_cells[size_t(child)].point = q; // keeps its m_nextPoint chain
     }
-    const Cell parent = m_cells[size_t(cell)];
+    insert(childFor(cell, point), point, depth + 1);
+}
+
+int ForceLayout::childFor(int cell, int point)
+{
+    const Cell parent = m_cells[size_t(cell)]; // a copy: push_back() below may reallocate
     const double half = parent.size / 2;
+    const size_t p = size_t(point);
     const int quadrant = (m_x[p] >= parent.x0 + half ? 1 : 0) | (m_y[p] >= parent.y0 + half ? 2 : 0);
-    int child = parent.child[quadrant];
-    if (child < 0) {
-        Cell c;
-        c.x0 = parent.x0 + ((quadrant & 1) ? half : 0);
-        c.y0 = parent.y0 + ((quadrant & 2) ? half : 0);
-        c.size = half;
-        m_cells.push_back(c);
-        child = int(m_cells.size()) - 1;
-        m_cells[size_t(cell)].child[quadrant] = child;
-    }
-    insert(child, point, depth + 1);
+    if (parent.child[quadrant] >= 0)
+        return parent.child[quadrant];
+    m_cells.push_back({.x0 = parent.x0 + ((quadrant & 1) ? half : 0),
+                       .y0 = parent.y0 + ((quadrant & 2) ? half : 0),
+                       .size = half});
+    const int child = int(m_cells.size()) - 1;
+    m_cells[size_t(cell)].child[quadrant] = child;
+    return child;
 }
 
 void ForceLayout::accumulate(int cell)
 {
-    const double charge = m_params.charge;
-    Cell &c0 = m_cells[size_t(cell)];
+    Cell &c0 = m_cells[size_t(cell)]; // stays valid: nothing is added to m_cells here
     if (c0.leaf) {
         double sx = 0, sy = 0;
         int n = 0;
@@ -335,14 +303,13 @@ void ForceLayout::accumulate(int cell)
             sy += m_y[size_t(p)];
             ++n;
         }
-        c0.charge = charge * n;
+        c0.charge = m_params.charge * n;
         c0.cx = n > 0 ? sx / n : 0;
         c0.cy = n > 0 ? sy / n : 0;
         return;
     }
     double sx = 0, sy = 0, weight = 0, total = 0;
-    for (int q = 0; q < 4; ++q) {
-        const int child = m_cells[size_t(cell)].child[q];
+    for (const int child : c0.child) {
         if (child < 0)
             continue;
         accumulate(child);
@@ -353,10 +320,23 @@ void ForceLayout::accumulate(int cell)
         weight += w;
         total += c.charge;
     }
-    Cell &c = m_cells[size_t(cell)];
-    c.charge = total;
-    c.cx = weight > 0 ? sx / weight : 0;
-    c.cy = weight > 0 ? sy / weight : 0;
+    c0.charge = total;
+    c0.cx = weight > 0 ? sx / weight : 0;
+    c0.cy = weight > 0 ? sy / weight : 0;
+}
+
+void ForceLayout::avoidSingularity(double &dx, double &dy, double &l, double dMin2)
+{
+    if (dx == 0) {
+        dx = jiggle();
+        l += dx * dx;
+    }
+    if (dy == 0) {
+        dy = jiggle();
+        l += dy * dy;
+    }
+    if (l < dMin2)
+        l = std::sqrt(dMin2 * l);
 }
 
 void ForceLayout::applyCharge()
@@ -385,12 +365,7 @@ void ForceLayout::applyCharge()
             if (w * w / theta2 < l) {
                 // Far enough: the whole cell acts as one charge.
                 if (l < dMax2) {
-                    if (dx == 0)
-                        dx = jiggle(), l += dx * dx;
-                    if (dy == 0)
-                        dy = jiggle(), l += dy * dy;
-                    if (l < dMin2)
-                        l = std::sqrt(dMin2 * l);
+                    avoidSingularity(dx, dy, l, dMin2);
                     fx += dx * c.charge * alpha / l;
                     fy += dy * c.charge * alpha / l;
                 }
@@ -403,24 +378,16 @@ void ForceLayout::applyCharge()
                 }
                 continue;
             }
-            if (l >= dMax2)
+            // A leaf near the node (not the node alone): its points one by one (they share a position).
+            if (l >= dMax2 || (c.point == int(i) && m_nextPoint[size_t(c.point)] < 0))
                 continue;
-            // A leaf near the node: its points one by one (they share a position).
-            const bool self = c.point == int(i) && m_nextPoint[size_t(c.point)] < 0;
-            if (self)
-                continue;
-            if (dx == 0)
-                dx = jiggle(), l += dx * dx;
-            if (dy == 0)
-                dy = jiggle(), l += dy * dy;
-            if (l < dMin2)
-                l = std::sqrt(dMin2 * l);
+            avoidSingularity(dx, dy, l, dMin2);
+            const double f = charge * alpha / l;
             for (int p = c.point; p >= 0; p = m_nextPoint[size_t(p)]) {
-                if (p == int(i))
-                    continue;
-                const double f = charge * alpha / l;
-                fx += dx * f;
-                fy += dy * f;
+                if (p != int(i)) {
+                    fx += dx * f;
+                    fy += dy * f;
+                }
             }
         }
         m_vx[i] += fx;
@@ -444,12 +411,7 @@ void ForceLayout::applyChargeExact()
             double l = dx * dx + dy * dy;
             if (l >= dMax2)
                 continue;
-            if (dx == 0)
-                dx = jiggle(), l += dx * dx;
-            if (dy == 0)
-                dy = jiggle(), l += dy * dy;
-            if (l < dMin2)
-                l = std::sqrt(dMin2 * l);
+            avoidSingularity(dx, dy, l, dMin2);
             fx += dx * charge * alpha / l;
             fy += dy * charge * alpha / l;
         }

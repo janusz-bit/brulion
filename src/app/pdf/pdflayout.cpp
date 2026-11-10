@@ -22,14 +22,8 @@ QSizeF PdfPageLayout::sane(QSizeF points, QSizeF fallback)
 
 void PdfPageLayout::setPages(const QList<QSizeF> &points)
 {
-    QSizeF fallback = DefaultPage;
-    for (const QSizeF &p : points) {
-        const QSizeF s = sane(p, QSizeF());
-        if (s.isValid()) {
-            fallback = s;
-            break;
-        }
-    }
+    const auto valid = std::ranges::find_if(points, [](QSizeF p) { return sane(p, QSizeF()).isValid(); });
+    const QSizeF fallback = valid == points.cend() ? DefaultPage : sane(*valid, QSizeF());
     m_points.clear();
     m_points.reserve(points.size());
     for (const QSizeF &p : points)
@@ -115,9 +109,7 @@ void PdfPageLayout::relayout()
     m_widestPair = 0;
     qreal y = m_margin;
     for (int i = 0; i < m_points.size();) {
-        Row row;
-        row.first = i;
-        row.count = m_twoPages && !(m_coverAlone && i == 0) && i + 1 < m_points.size() ? 2 : 1;
+        Row row{.first = i, .count = m_twoPages && !(m_coverAlone && i == 0) && i + 1 < m_points.size() ? 2 : 1};
         for (int k = i; k < i + row.count; ++k) {
             row.width += m_points.at(k).width();
             row.height = std::max(row.height, m_points.at(k).height());
@@ -172,8 +164,7 @@ int PdfPageLayout::rowAt(qreal y) const
     if (m_rows.isEmpty())
         return -1;
     // The last row whose top is at or above y…
-    const auto it = std::upper_bound(m_rows.cbegin(), m_rows.cend(), y,
-                                     [](qreal value, const Row &row) { return value < row.top; });
+    const auto it = std::ranges::upper_bound(m_rows, y, {}, &Row::top);
     if (it == m_rows.cbegin())
         return 0;
     const int r = int(it - m_rows.cbegin()) - 1;

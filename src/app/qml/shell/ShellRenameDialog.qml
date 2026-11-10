@@ -55,9 +55,6 @@ BDialog {
         dialog.liveTyped = dialog.typed
     }
     property var _result: ({})
-    function intOf(map: var, key: string): int {
-        return AppController.routeInt(map, key, 0)
-    }
     function textOf(text: string): string {
         return text
     }
@@ -97,8 +94,8 @@ BDialog {
         // (Typed copies — a property, typed functions: a call's result read after another call
         // is not compiled.)
         dialog._result = Workspace.renameImpact(dialog.path, name, dialog.isDir, true)
-        const resultTags = dialog.intOf(dialog._result, "tags")
-        const n = dialog.intOf(dialog._result, "links") + resultTags
+        const resultTags = words.count(dialog._result, "tags")
+        const n = words.count(dialog._result, "links") + resultTags
         const renamed = dialog.textOf(dialog.isDir ? Workspace.renameFolder(dialog.path, name, true)
                                                    : Workspace.renamePage(dialog.path, name, true))
         if (renamed === "" || renamed === dialog.path)

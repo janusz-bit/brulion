@@ -69,7 +69,6 @@ public:
 
     /// `cacheDir` "" → in memory only (tests); the renderer defaults to PdfReaderPool + PdfReader.
     explicit PdfThumbnails(const QString &cacheDir, QObject *parent = nullptr, Renderer renderer = {});
-    ~PdfThumbnails() override;
 
     /// The long side drawn (pixels; Workspace: 420 logical px × the primary screen's ratio, rounded
     /// up to 512 / 768 / 1024 / 1280 / 1536 — one size per device: the embed's frame is at most 420
@@ -94,7 +93,6 @@ Q_SIGNALS:
     void changed(const QString &file);
 
 private:
-    struct Job;
     void remember(const QString &key, const Entry &entry);
     void forget(const QString &key);
     Entry fromDisk(const QString &key);
@@ -111,8 +109,6 @@ private:
     QHash<QString, std::list<QString>::iterator> m_positions;
     QSet<QString> m_pending;
     QTimer m_prune;
-    /// Set when this object goes: jobs still running drop their results.
-    std::shared_ptr<bool> m_alive = std::make_shared<bool>(true);
 };
 
 } // namespace brulion::pdfview

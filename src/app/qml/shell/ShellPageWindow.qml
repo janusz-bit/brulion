@@ -23,8 +23,9 @@ ApplicationWindow {
     required property int tabId
     /// The tab's route (followed: AppController.tabRouteChanged).
     property var route: AppController.tabRoute(tabId)
+    readonly property string viewName: titles.field(window.route, "view")
     readonly property string pageTitle: pane.routeView.viewTitle !== "" ? pane.routeView.viewTitle
-                                                                         : titles.routeTitle(titles.field(window.route, "view"),
+                                                                         : titles.routeTitle(window.viewName,
                                                                                              titles.field(window.route, "path"),
                                                                                              titles.field(window.route, "date"),
                                                                                              titles.field(window.route, "tag"))
@@ -69,10 +70,9 @@ ApplicationWindow {
         anchors.fill: parent
         spacing: 0
 
-        Rectangle {
+        Item {
             Layout.fillWidth: true
             implicitHeight: Theme.touchUi ? 56 : 46
-            color: Theme.bg
 
             RowLayout {
                 anchors.fill: parent
@@ -82,7 +82,7 @@ ApplicationWindow {
 
                 BIconButton {
                     objectName: "pageWindowBack"
-                    enabled: titles.field(window.route, "view") !== "" && AppController.tabCanGoBack(window.tabId)
+                    enabled: window.viewName !== "" && AppController.tabCanGoBack(window.tabId)
                     iconName: "arrow-left"
                     label: qsTr("Back")
                     shortcut: ShortcutMap.sequences["nav.back"] || ""
@@ -90,7 +90,7 @@ ApplicationWindow {
                 }
                 BIconButton {
                     // (window.route: the binding follows the tab's navigation.)
-                    enabled: titles.field(window.route, "view") !== "" && AppController.tabCanGoForward(window.tabId)
+                    enabled: window.viewName !== "" && AppController.tabCanGoForward(window.tabId)
                     iconName: "arrow-right"
                     label: qsTr("Forward")
                     shortcut: ShortcutMap.sequences["nav.forward"] || ""

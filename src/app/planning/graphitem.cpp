@@ -40,6 +40,9 @@ constexpr int kMaxSprites = 600;
 /// this far.
 constexpr int kMinMovingRepaintMs = 66;
 constexpr int kMaxMovingRepaintMs = 600;
+/// The order in which both renderers draw the discs, by kind.
+constexpr GraphModel::Kind kDrawOrder[] = {GraphModel::Kind::Journal, GraphModel::Kind::Page, GraphModel::Kind::Tag,
+                                           GraphModel::Kind::Missing};
 
 QColor withAlpha(QColor c, double factor)
 {
@@ -52,21 +55,23 @@ double distance(QPointF a, QPointF b)
     return std::hypot(a.x() - b.x(), a.y() - b.y());
 }
 
+/// A node's disc radius on screen at `zoom`: never below 1.6 px.
+double discRadius(const GraphModel::Node &node, double zoom)
+{
+    return std::max(1.6, node.radius * zoom);
+}
+
 /// The software renderer's node: a QPainter frame as a texture (the texture owned here).
 class GraphImageNode : public QSGNode {
 public:
     explicit GraphImageNode(QQuickWindow *window) : image(window->createImageNode())
     {
         image->setOwnsTexture(false);
-        appendChildNode(image);
+        image->setFlag(OwnedByParent, false); // owned by `image`
+        appendChildNode(image.get());
     }
-    ~GraphImageNode() override
-    {
-        removeChildNode(image);
-        delete image; // before the texture it shows
-    }
-    QSGImageNode *image;
     std::unique_ptr<QSGTexture> texture;
+    std::unique_ptr<QSGImageNode> image; ///< declared after `texture`: deleted before the texture it shows
     QImage canvas;
 };
 
@@ -86,21 +91,17 @@ GraphItem::GraphItem(QQuickItem *parent) : QQuickItem(parent)
     m_camera.setEasingCurve(QEasingCurve::OutCubic);
     connect(&m_camera, &QVariantAnimation::valueChanged, this, [this](const QVariant &v) {
         const double t = v.toDouble();
-        m_cx = m_camFrom[0] + (m_camTo[0] - m_camFrom[0]) * t;
-        m_cy = m_camFrom[1] + (m_camTo[1] - m_camFrom[1]) * t;
-        const double z0 = std::max(1e-6, m_camFrom[2]);
-        m_zoom = z0 * std::pow(m_camTo[2] / z0, t);
-        Q_EMIT viewChanged();
-        emitHighlightPosition();
-        update();
+        m_cx = m_camFrom.cx + (m_camTo.cx - m_camFrom.cx) * t;
+        m_cy = m_camFrom.cy + (m_camTo.cy - m_camFrom.cy) * t;
+        const double z0 = std::max(1e-6, m_camFrom.zoom);
+        m_zoom = z0 * std::pow(m_camTo.zoom / z0, t);
+        viewMoved();
     });
-    connect(&m_camera, &QVariantAnimation::finished, this, [this] { update(); });
+    connect(&m_camera, &QVariantAnimation::finished, this, &QQuickItem::update);
     m_clock.start();
     m_repaintTimer.setSingleShot(true);
-    connect(&m_repaintTimer, &QTimer::timeout, this, [this] { update(); });
+    connect(&m_repaintTimer, &QTimer::timeout, this, &QQuickItem::update);
 }
-
-GraphItem::~GraphItem() = default;
 
 // ---- properties ----------------------------------------------------------------------------
 
@@ -120,7 +121,7 @@ void GraphItem::setModel(GraphModel *model)
         connect(m_model, &GraphModel::positionsChanged, this, &GraphItem::onPositionsChanged);
         connect(m_model, &GraphModel::structureChanged, this, &GraphItem::onStructureChanged);
         // The settled frame (software renderer: drawn with antialiasing and all labels).
-        connect(m_model, &GraphModel::runningChanged, this, [this] { update(); });
+        connect(m_model, &GraphModel::runningChanged, this, &QQuickItem::update);
         connect(m_model, &GraphModel::settlingChanged, this, &GraphItem::meshChanged);
         onStructureChanged();
     }
@@ -134,9 +135,7 @@ void GraphItem::setZoom(qreal zoom)
     if (qFuzzyCompare(m_zoom, zoom))
         return;
     m_zoom = zoom;
-    Q_EMIT viewChanged();
-    emitHighlightPosition();
-    update();
+    viewMoved();
 }
 
 void GraphItem::setCenterX(qreal x)
@@ -144,9 +143,7 @@ void GraphItem::setCenterX(qreal x)
     if (qFuzzyCompare(m_cx, double(x)))
         return;
     m_cx = x;
-    Q_EMIT viewChanged();
-    emitHighlightPosition();
-    update();
+    viewMoved();
 }
 
 void GraphItem::setCenterY(qreal y)
@@ -154,14 +151,13 @@ void GraphItem::setCenterY(qreal y)
     if (qFuzzyCompare(m_cy, double(y)))
         return;
     m_cy = y;
-    Q_EMIT viewChanged();
-    emitHighlightPosition();
-    update();
+    viewMoved();
 }
 
 void GraphItem::setMinZoom(qreal z)
 {
     m_minZoom = std::max(0.001, double(z));
+    m_maxZoom = std::max(m_maxZoom, m_minZoom); // the range stays valid (std::clamp requires it)
     Q_EMIT viewChanged();
 }
 
@@ -199,21 +195,11 @@ void GraphItem::setAnimationDuration(int ms)
     Q_EMIT animationDurationChanged();
 }
 
-void GraphItem::setFitTopMargin(qreal margin)
+void GraphItem::setFitMargin(double &member, qreal margin)
 {
-    if (qFuzzyCompare(m_fitTop, double(margin)))
+    if (qFuzzyCompare(member, double(margin)))
         return;
-    m_fitTop = margin;
-    Q_EMIT fitMarginsChanged();
-    applyAutoFit();
-    update();
-}
-
-void GraphItem::setFitBottomMargin(qreal margin)
-{
-    if (qFuzzyCompare(m_fitBottom, double(margin)))
-        return;
-    m_fitBottom = margin;
+    member = margin;
     Q_EMIT fitMarginsChanged();
     applyAutoFit();
     update();
@@ -229,35 +215,21 @@ void GraphItem::setTouchMode(bool on)
     Q_EMIT touchModeChanged();
 }
 
-#define BRULION_COLOR_SETTER(Name, member)                                                                             \
-    void GraphItem::set##Name(const QColor &c)                                                                         \
-    {                                                                                                                  \
-        if (member == c)                                                                                               \
-            return;                                                                                                    \
-        member = c;                                                                                                    \
-        Q_EMIT colorsChanged();                                                                                        \
-        meshChanged();                                                                                                 \
-    }
-
-void GraphItem::setBackgroundColor(const QColor &c)
+void GraphItem::setColor(QColor &member, const QColor &c)
 {
-    if (m_bg == c)
+    if (member == c)
         return;
-    m_bg = c;
-    m_sprites.clear(); // rings are filled with the background
+    member = c;
     Q_EMIT colorsChanged();
     meshChanged();
 }
-BRULION_COLOR_SETTER(EdgeColor, m_edge)
-BRULION_COLOR_SETTER(HighlightColor, m_highlight)
-BRULION_COLOR_SETTER(PageColor, m_page)
-BRULION_COLOR_SETTER(JournalColor, m_journal)
-BRULION_COLOR_SETTER(TagColor, m_tag)
-BRULION_COLOR_SETTER(MissingColor, m_missing)
-BRULION_COLOR_SETTER(FocusColor, m_focus)
-BRULION_COLOR_SETTER(LabelColor, m_label)
-BRULION_COLOR_SETTER(LabelBackground, m_labelBg)
-#undef BRULION_COLOR_SETTER
+
+void GraphItem::setBackgroundColor(const QColor &c)
+{
+    if (m_bg != c)
+        m_sprites.clear(); // rings are filled with the background
+    setColor(m_bg, c);
+}
 
 void GraphItem::setFont(const QFont &font)
 {
@@ -269,16 +241,6 @@ void GraphItem::setFont(const QFont &font)
     m_labelsDirty = true;
     Q_EMIT fontChanged();
     update();
-}
-
-QString GraphItem::hoveredId() const
-{
-    return m_hoveredIdCache;
-}
-
-QString GraphItem::selectedId() const
-{
-    return m_selectedIdCache;
 }
 
 void GraphItem::setSelectedId(const QString &id)
@@ -327,64 +289,58 @@ void GraphItem::stopCameraAnimation()
         m_camera.stop();
 }
 
-void GraphItem::animateCamera(double cx, double cy, double zoom, bool animated)
+void GraphItem::viewMoved()
 {
-    zoom = std::clamp(zoom, m_minZoom, m_maxZoom);
+    Q_EMIT viewChanged();
+    emitHighlightPosition();
+    update();
+}
+
+void GraphItem::animateCamera(CameraPose to, bool animated)
+{
+    to.zoom = std::clamp(to.zoom, m_minZoom, m_maxZoom);
     stopCameraAnimation();
     if (!animated || m_animationDuration <= 0 || !isVisible()) {
-        m_cx = cx;
-        m_cy = cy;
-        m_zoom = zoom;
-        Q_EMIT viewChanged();
-        emitHighlightPosition();
-        update();
+        m_cx = to.cx;
+        m_cy = to.cy;
+        m_zoom = to.zoom;
+        viewMoved();
         return;
     }
-    m_camFrom[0] = m_cx;
-    m_camFrom[1] = m_cy;
-    m_camFrom[2] = m_zoom;
-    m_camTo[0] = cx;
-    m_camTo[1] = cy;
-    m_camTo[2] = zoom;
+    m_camFrom = {m_cx, m_cy, m_zoom};
+    m_camTo = to;
     m_camera.setDuration(m_animationDuration);
     m_camera.start();
 }
 
-void GraphItem::fitCamera(double &cx, double &cy, double &zoom) const
+GraphItem::CameraPose GraphItem::fitCamera() const
 {
     const QRectF b = m_model ? m_model->bounds() : QRectF();
     // Labels hang below the nodes: a little extra room at the bottom.
     const double availW = std::max(40.0, width() - 2 * kFitMargin);
     const double availH = std::max(40.0, height() - m_fitTop - m_fitBottom - 14);
-    zoom = std::clamp(std::min(availW / std::max(1.0, b.width()), availH / std::max(1.0, b.height())), m_minZoom,
-                      std::min(m_maxZoom, kMaxFitZoom));
-    cx = b.center().x();
+    const double fit = std::min(availW / std::max(1.0, b.width()), availH / std::max(1.0, b.height()));
+    // clamp(fit, minZoom, min(maxZoom, kMaxFitZoom)), also defined for a minZoom above kMaxFitZoom.
+    const double zoom = std::max(m_minZoom, std::min({fit, m_maxZoom, kMaxFitZoom}));
     // The free area's centre is (m_fitTop - m_fitBottom) / 2 px below the item's centre.
-    cy = b.center().y() - (m_fitTop - m_fitBottom - 14) / 2 / zoom;
+    return {b.center().x(), b.center().y() - (m_fitTop - m_fitBottom - 14) / 2 / zoom, zoom};
 }
 
 void GraphItem::applyAutoFit()
 {
     if (!m_autoFit || !m_model || width() <= 0 || height() <= 0)
         return;
-    if (m_model->nodeCount() == 0) {
-        m_cx = 0;
-        m_cy = 0;
-        m_zoom = 1;
-        Q_EMIT viewChanged();
-        return;
-    }
-    fitCamera(m_cx, m_cy, m_zoom);
+    const CameraPose c = m_model->nodeCount() > 0 ? fitCamera() : CameraPose();
+    m_cx = c.cx;
+    m_cy = c.cy;
+    m_zoom = c.zoom;
     Q_EMIT viewChanged();
 }
 
 void GraphItem::fitAll(bool animated)
 {
-    if (!m_model || m_model->nodeCount() == 0)
-        return;
-    double cx = 0, cy = 0, z = 1;
-    fitCamera(cx, cy, z);
-    animateCamera(cx, cy, z, animated);
+    if (m_model && m_model->nodeCount() > 0)
+        animateCamera(fitCamera(), animated);
 }
 
 void GraphItem::resetView()
@@ -398,9 +354,7 @@ void GraphItem::resetView()
 
 void GraphItem::centerOn(const QString &id, qreal zoom, bool animated)
 {
-    if (!m_model)
-        return;
-    const int i = m_model->indexOf(id);
+    const int i = m_model ? m_model->indexOf(id) : -1;
     if (i < 0)
         return;
     if (m_autoFit) {
@@ -409,7 +363,7 @@ void GraphItem::centerOn(const QString &id, qreal zoom, bool animated)
     }
     const QPointF p = m_model->position(i);
     m_follow = id;
-    animateCamera(p.x(), p.y(), zoom > 0 ? zoom : std::max(m_zoom, m_labelZoom * 1.15), animated);
+    animateCamera({p.x(), p.y(), zoom > 0 ? zoom : std::max(m_zoom, m_labelZoom * 1.15)}, animated);
 }
 
 void GraphItem::zoomBy(qreal factor, qreal x, qreal y)
@@ -418,15 +372,16 @@ void GraphItem::zoomBy(qreal factor, qreal x, qreal y)
         return;
     stopCameraAnimation();
     const QPointF p = (x < 0 || y < 0) ? QPointF(width() / 2, height() / 2) : QPointF(x, y);
-    const QPointF world = toWorld(p);
-    const double z = std::clamp(m_zoom * factor, m_minZoom, m_maxZoom);
-    m_zoom = z;
-    m_cx = world.x() - (p.x() - width() / 2) / z;
-    m_cy = world.y() - (p.y() - height() / 2) / z;
+    zoomAt(m_zoom * factor, toWorld(p), p);
+}
+
+void GraphItem::zoomAt(double zoom, QPointF world, QPointF screen)
+{
+    m_zoom = std::clamp(zoom, m_minZoom, m_maxZoom);
+    m_cx = world.x() - (screen.x() - width() / 2) / m_zoom;
+    m_cy = world.y() - (screen.y() - height() / 2) / m_zoom;
     userMoved();
-    Q_EMIT viewChanged();
-    emitHighlightPosition();
-    update();
+    viewMoved();
 }
 
 void GraphItem::panBy(qreal dx, qreal dy)
@@ -435,9 +390,7 @@ void GraphItem::panBy(qreal dx, qreal dy)
     m_cx -= dx / m_zoom;
     m_cy -= dy / m_zoom;
     userMoved();
-    Q_EMIT viewChanged();
-    emitHighlightPosition();
-    update();
+    viewMoved();
 }
 
 void GraphItem::userMoved()
@@ -471,6 +424,12 @@ void GraphItem::onStructureChanged()
     }
     if (highlightedId() != before)
         Q_EMIT highlightedIdChanged();
+    // A press or a node drag in progress keeps its node (at its new index; -1: it is gone).
+    if (m_pressNode >= 0) {
+        m_pressNode = m_model ? m_model->indexOf(m_pressId) : -1;
+        if (m_gesture == Gesture::DragNode && m_pressNode >= 0)
+            m_model->beginDrag(m_pressNode); // the rebuild let go of it
+    }
     applyAutoFit();
     emitHighlightPosition();
     update();
@@ -486,8 +445,8 @@ void GraphItem::onPositionsChanged()
         } else {
             const QPointF p = m_model->position(i);
             if (m_camera.state() == QAbstractAnimation::Running) {
-                m_camTo[0] = p.x();
-                m_camTo[1] = p.y();
+                m_camTo.cx = p.x();
+                m_camTo.cy = p.y();
             } else {
                 m_cx = p.x();
                 m_cy = p.y();
@@ -570,7 +529,7 @@ int GraphItem::nodeIndexAt(QPointF pos) const
         if (!std::isfinite(xs[size_t(i)]) || !std::isfinite(ys[size_t(i)]))
             continue;
         const QPointF s = toScreen(xs[size_t(i)], ys[size_t(i)]);
-        const double r = std::max(1.6, nodes.at(i).radius * m_zoom);
+        const double r = discRadius(nodes.at(i), m_zoom);
         const double dist = distance(s, pos);
         if (dist <= r + slack && (best < 0 || dist - r < bestD)) {
             best = i;
@@ -588,9 +547,7 @@ QString GraphItem::nodeAt(qreal x, qreal y) const
 
 QPointF GraphItem::nodePosition(const QString &id) const
 {
-    if (!m_model)
-        return {};
-    const int i = m_model->indexOf(id);
+    const int i = m_model ? m_model->indexOf(id) : -1;
     if (i < 0)
         return {};
     const QPointF p = m_model->position(i);
@@ -637,6 +594,7 @@ void GraphItem::pressAt(QPointF pos)
     m_pressPos = pos;
     m_lastPos = pos;
     m_pressNode = nodeIndexAt(pos);
+    m_pressId = m_pressNode >= 0 ? m_model->nodes().at(m_pressNode).id : QString();
     m_gesture = Gesture::Pending;
 }
 
@@ -665,16 +623,13 @@ void GraphItem::moveTo(QPointF pos)
         m_cx -= delta.x() / m_zoom;
         m_cy -= delta.y() / m_zoom;
         userMoved();
-        Q_EMIT viewChanged();
-        emitHighlightPosition();
-        update();
+        viewMoved();
     }
     m_lastPos = pos;
 }
 
-void GraphItem::releaseAt(QPointF pos)
+void GraphItem::releaseAt()
 {
-    Q_UNUSED(pos);
     if (m_gesture == Gesture::Pending) {
         if (m_pressNode >= 0 && m_model) {
             const QString id = m_model->nodes().at(m_pressNode).id;
@@ -693,15 +648,20 @@ void GraphItem::releaseAt(QPointF pos)
             setSelected(-1);
             Q_EMIT backgroundTapped();
         }
-    } else if (m_gesture == Gesture::DragNode && m_model) {
-        m_model->endDrag(m_pressNode);
     }
-    m_gesture = Gesture::None;
-    m_pressNode = -1;
-    setInteracting(false);
+    endGesture();
 #if QT_CONFIG(cursor)
     setCursor(m_hovered >= 0 ? Qt::PointingHandCursor : Qt::ArrowCursor);
 #endif
+}
+
+void GraphItem::endGesture()
+{
+    if (m_gesture == Gesture::DragNode && m_model)
+        m_model->endDrag(m_pressNode);
+    m_gesture = Gesture::None;
+    m_pressNode = -1;
+    setInteracting(false);
 }
 
 void GraphItem::mousePressEvent(QMouseEvent *event)
@@ -724,17 +684,13 @@ void GraphItem::mouseMoveEvent(QMouseEvent *event)
 
 void GraphItem::mouseReleaseEvent(QMouseEvent *event)
 {
-    releaseAt(event->position());
+    releaseAt();
     event->accept();
 }
 
 void GraphItem::mouseUngrabEvent()
 {
-    if (m_gesture == Gesture::DragNode && m_model)
-        m_model->endDrag(m_pressNode);
-    m_gesture = Gesture::None;
-    m_pressNode = -1;
-    setInteracting(false);
+    endGesture();
 }
 
 void GraphItem::hoverMoveEvent(QHoverEvent *event)
@@ -790,14 +746,7 @@ void GraphItem::touchEvent(QTouchEvent *event)
                 m_pinchWorldCenter = toWorld(mid);
                 setInteracting(true);
             } else {
-                const double z = std::clamp(m_pinchStartZoom * distance(a, b) / m_pinchStartDistance, m_minZoom, m_maxZoom);
-                m_zoom = z;
-                m_cx = m_pinchWorldCenter.x() - (mid.x() - width() / 2) / z;
-                m_cy = m_pinchWorldCenter.y() - (mid.y() - height() / 2) / z;
-                userMoved();
-                Q_EMIT viewChanged();
-                emitHighlightPosition();
-                update();
+                zoomAt(m_pinchStartZoom * distance(a, b) / m_pinchStartDistance, m_pinchWorldCenter, mid);
             }
         } else if (down.size() == 1) {
             const QPointF p = down.first();
@@ -813,16 +762,12 @@ void GraphItem::touchEvent(QTouchEvent *event)
         }
         break;
     case QEvent::TouchEnd:
-        if (m_gesture == Gesture::Pinch || m_gesture == Gesture::Pan) {
-            m_gesture = Gesture::None;
-            setInteracting(false);
-        } else if (!event->points().isEmpty()) {
-            releaseAt(event->points().first().position());
-        }
+        if (m_gesture == Gesture::Pinch || m_gesture == Gesture::Pan)
+            endGesture();
+        else
+            releaseAt();
         break;
-    case QEvent::TouchCancel:
-        touchUngrabEvent();
-        break;
+    case QEvent::TouchCancel: endGesture(); break;
     default: break;
     }
     event->accept();
@@ -830,7 +775,7 @@ void GraphItem::touchEvent(QTouchEvent *event)
 
 void GraphItem::touchUngrabEvent()
 {
-    mouseUngrabEvent();
+    endGesture();
 }
 
 bool GraphItem::event(QEvent *event)
@@ -848,28 +793,37 @@ bool GraphItem::event(QEvent *event)
 
 // ---- labels (both renderers) -------------------------------------------------------------------
 
-QString GraphItem::labelText(int node)
+const GraphItem::LabelText &GraphItem::labelText(int node)
 {
-    auto it = m_labelTexts.find(node);
-    if (it == m_labelTexts.end()) {
+    auto it = m_labelTexts.constFind(node);
+    if (it == m_labelTexts.cend()) {
         const QString title =
                 m_model && node >= 0 && node < m_model->nodeCount() ? m_model->nodes().at(node).title : QString();
         const QFontMetricsF fm(m_font);
-        LabelText t;
-        t.text = fm.elidedText(title, Qt::ElideRight, kLabelMaxWidth);
-        t.size = QSizeF(fm.horizontalAdvance(t.text), fm.height());
-        it = m_labelTexts.insert(node, t);
+        const QString text = fm.elidedText(title, Qt::ElideRight, kLabelMaxWidth);
+        it = m_labelTexts.insert(node, {text, QSizeF(fm.horizontalAdvance(text), fm.height())});
     }
-    return it->text;
+    return *it;
 }
 
-QSizeF GraphItem::labelSize(int node)
+GraphItem::Highlight GraphItem::highlightFor(int n) const
 {
-    labelText(node);
-    return m_labelTexts.value(node).size;
+    Highlight h;
+    if (const int hl = m_hovered >= 0 ? m_hovered : m_selected; hl >= 0 && hl < n) {
+        h.hl = hl;
+        h.hood.assign(size_t(n), 0);
+        h.hood[size_t(hl)] = 1;
+        for (const int j : m_model->adjacency().at(hl)) {
+            if (j < n)
+                h.hood[size_t(j)] = 1;
+        }
+    }
+    const int focus = m_model->focusPath().isEmpty() ? -1 : m_model->indexOf(m_model->focusPath());
+    h.focus = focus < n ? focus : -1;
+    return h;
 }
 
-GraphItem::Frame GraphItem::frameFor(const QSizeF &size) const
+GraphItem::Frame GraphItem::frameFor(QSizeF size) const
 {
     Frame f;
     if (!m_model)
@@ -889,29 +843,19 @@ GraphItem::Frame GraphItem::frameFor(const QSizeF &size) const
         f.pos[size_t(i)] = p;
         if (!std::isfinite(p.x()) || !std::isfinite(p.y()))
             continue;
-        const double r = std::max(1.6, nodes.at(i).radius * z);
+        const double r = discRadius(nodes.at(i), z);
         f.visible[size_t(i)] =
                 p.x() + r >= -margin && p.x() - r <= w + margin && p.y() + r >= -margin && p.y() - r <= h + margin;
     }
-    f.hl = m_hovered >= 0 ? m_hovered : m_selected;
-    if (f.hl >= 0 && f.hl < f.n) {
-        f.hood.assign(size_t(f.n), 0);
-        f.hood[size_t(f.hl)] = 1;
-        for (const int j : m_model->adjacency().at(f.hl)) {
-            if (j < f.n)
-                f.hood[size_t(j)] = 1;
-        }
-    } else {
-        f.hl = -1;
-    }
+    auto [hl, hood, focus] = highlightFor(f.n);
+    f.hl = hl;
+    f.hood = std::move(hood);
     f.dimming = !f.hood.empty();
-    f.focus = m_model->focusPath().isEmpty() ? -1 : m_model->indexOf(m_model->focusPath());
-    if (f.focus >= f.n)
-        f.focus = -1;
+    f.focus = focus;
     return f;
 }
 
-std::vector<GraphItem::PlacedLabel> GraphItem::labelsFor(const QSizeF &size, bool sparse)
+std::vector<GraphItem::PlacedLabel> GraphItem::labelsFor(QSizeF size, bool sparse)
 {
     return labelsFor(frameFor(size), sparse);
 }
@@ -985,13 +929,11 @@ std::vector<GraphItem::PlacedLabel> GraphItem::labelsFor(const Frame &f, bool sp
     std::vector<geometry::LabelCandidate> ordered;
     ordered.reserve(candidates.size());
     for (const int i : candidates) {
-        geometry::LabelCandidate c;
-        c.node = i;
-        c.centre = f.pos[size_t(i)];
-        c.radius = std::max(1.6, nodes.at(i).radius * z);
-        c.text = labelSize(i);
-        c.always = i == hl;
-        ordered.push_back(c);
+        ordered.push_back({.node = i,
+                           .centre = f.pos[size_t(i)],
+                           .radius = discRadius(nodes.at(i), z),
+                           .text = labelText(i).size,
+                           .always = i == hl});
     }
     const QList<QRectF> rects = geometry::placeLabels(ordered, MaxLabels);
     for (size_t k = 0; k < ordered.size(); ++k) {
@@ -1008,10 +950,9 @@ std::vector<GraphItem::PlacedLabel> GraphItem::labelsFor(const Frame &f, bool sp
 
 const QStaticText &GraphItem::labelFor(int node)
 {
-    auto it = m_labels.find(node);
-    if (it != m_labels.end())
+    if (const auto it = m_labels.constFind(node); it != m_labels.cend())
         return it.value();
-    QStaticText st(labelText(node));
+    QStaticText st(labelText(node).text);
     st.setTextFormat(Qt::PlainText);
     st.setPerformanceHint(QStaticText::AggressiveCaching);
     st.prepare(QTransform(), m_font);
@@ -1023,8 +964,7 @@ const QImage &GraphItem::spriteFor(const QColor &color, bool ring, double radius
     // Radius in quarter pixels; colour with alpha; ring style; device pixel ratio.
     const quint64 q = quint64(std::lround(radius * 4));
     const quint64 key = (quint64(color.rgba()) << 32) ^ (q << 2) ^ (ring ? 1u : 0u) ^ (quint64(std::lround(dpr * 8)) << 20);
-    auto it = m_sprites.find(key);
-    if (it != m_sprites.end())
+    if (const auto it = m_sprites.constFind(key); it != m_sprites.cend())
         return it.value();
     if (m_sprites.size() > kMaxSprites)
         m_sprites.clear();
@@ -1051,7 +991,18 @@ const QImage &GraphItem::spriteFor(const QColor &color, bool ring, double radius
     return m_sprites.insert(key, img).value();
 }
 
-void GraphItem::render(QPainter *painter, const QSizeF &size)
+const QColor &GraphItem::kindColor(GraphModel::Kind kind) const
+{
+    switch (kind) {
+    case GraphModel::Kind::Journal: return m_journal;
+    case GraphModel::Kind::Tag: return m_tag;
+    case GraphModel::Kind::Missing: return m_missing;
+    case GraphModel::Kind::Page: break;
+    }
+    return m_page;
+}
+
+void GraphItem::render(QPainter *painter, QSizeF size)
 {
     QElapsedTimer timer;
     timer.start();
@@ -1120,27 +1071,15 @@ void GraphItem::render(QPainter *painter, const QSizeF &size)
     }
 
     // Nodes, grouped by colour: dimmed ones below, then the rest.
-    const auto colorOf = [&](GraphModel::Kind k) -> const QColor & {
-        switch (k) {
-        case GraphModel::Kind::Journal: return m_journal;
-        case GraphModel::Kind::Tag: return m_tag;
-        case GraphModel::Kind::Missing: return m_missing;
-        case GraphModel::Kind::Page: break;
-        }
-        return m_page;
-    };
-    static constexpr GraphModel::Kind kinds[] = {GraphModel::Kind::Journal, GraphModel::Kind::Page,
-                                                 GraphModel::Kind::Tag, GraphModel::Kind::Missing};
     for (int pass = 0; pass < 2; ++pass) {
         const bool dimPass = pass == 0;
         if (dimPass && !dimming)
             continue;
-        for (const GraphModel::Kind kind : kinds) {
-            const QColor base = colorOf(kind);
+        for (const GraphModel::Kind kind : kDrawOrder) {
+            const QColor &base = kindColor(kind);
             const QColor c = dimPass ? withAlpha(base, 0.28) : base;
             if (kind == GraphModel::Kind::Missing) {
-                QPen ring(c, std::clamp(z * 1.4, 1.0, 2.0));
-                painter->setPen(ring);
+                painter->setPen(QPen(c, std::clamp(z * 1.4, 1.0, 2.0)));
                 painter->setBrush(m_bg);
             } else {
                 painter->setPen(Qt::NoPen);
@@ -1151,7 +1090,7 @@ void GraphItem::render(QPainter *painter, const QSizeF &size)
                     continue;
                 if (dimming && (hood[size_t(i)] == 0) != dimPass)
                     continue;
-                const double r = std::max(1.6, nodes.at(i).radius * z);
+                const double r = discRadius(nodes.at(i), z);
                 if (r > kSpriteMaxRadius) {
                     painter->drawEllipse(pos[size_t(i)], r, r);
                     continue;
@@ -1169,9 +1108,8 @@ void GraphItem::render(QPainter *painter, const QSizeF &size)
     const auto ring = [&](int i, const QColor &c, double gap) {
         if (i < 0 || i >= n)
             return;
-        const double r = std::max(1.6, nodes.at(i).radius * z) + gap;
-        QPen pen(c, 2);
-        painter->setPen(pen);
+        const double r = discRadius(nodes.at(i), z) + gap;
+        painter->setPen(QPen(c, 2));
         painter->drawEllipse(pos[size_t(i)], r, r);
     };
     ring(focus, m_focus, 3);
@@ -1219,29 +1157,13 @@ void GraphItem::buildMesh(geometry::MeshChunks &out, qreal dpr) const
     const double px = 1.0 / z;             // one logical pixel in world units
     const double fringe = 1.0 / (dpr * z); // one device pixel
     const auto at = [&](int i) { return QPointF(xs[size_t(i)], ys[size_t(i)]); };
-
-    int hl = m_hovered >= 0 ? m_hovered : m_selected;
-    if (hl >= n)
-        hl = -1;
-    std::vector<char> hood;
-    if (hl >= 0) {
-        hood.assign(size_t(n), 0);
-        hood[size_t(hl)] = 1;
-        for (const int j : m_model->adjacency().at(hl)) {
-            if (j < n)
-                hood[size_t(j)] = 1;
-        }
-    }
+    const auto [hl, hood, focus] = highlightFor(n);
     const bool dimming = !hood.empty();
-    int focus = m_model->focusPath().isEmpty() ? -1 : m_model->indexOf(m_model->focusPath());
-    if (focus >= n)
-        focus = -1;
 
     // Edges, then the highlighted node's (stronger, on top).
     const double edgeWidth = edgeWidthAt(z) * px;
     const QRgb edge = premultiplied(m_edge, dimming ? 0.45 : 1.0);
-    const auto &edges = m_model->edges();
-    for (const auto &[a, b] : edges) {
+    for (const auto &[a, b] : m_model->edges()) {
         if (a >= n || b >= n || (dimming && (a == hl || b == hl)))
             continue;
         appendLine(out, at(a), at(b), edgeWidth, edge, fringe); // thousands: 2 triangles each
@@ -1255,30 +1177,19 @@ void GraphItem::buildMesh(geometry::MeshChunks &out, qreal dpr) const
     }
 
     // Discs grouped by kind: the dimmed ones first, then the rest.
-    const auto colorOf = [&](GraphModel::Kind k) -> const QColor & {
-        switch (k) {
-        case GraphModel::Kind::Journal: return m_journal;
-        case GraphModel::Kind::Tag: return m_tag;
-        case GraphModel::Kind::Missing: return m_missing;
-        case GraphModel::Kind::Page: break;
-        }
-        return m_page;
-    };
-    static constexpr GraphModel::Kind kinds[] = {GraphModel::Kind::Journal, GraphModel::Kind::Page,
-                                                 GraphModel::Kind::Tag, GraphModel::Kind::Missing};
     const QRgb bg = premultiplied(m_bg);
     for (int pass = 0; pass < 2; ++pass) {
         const bool dimPass = pass == 0;
         if (dimPass && !dimming)
             continue;
-        for (const GraphModel::Kind kind : kinds) {
-            const QRgb c = premultiplied(colorOf(kind), dimPass ? 0.28 : 1.0);
+        for (const GraphModel::Kind kind : kDrawOrder) {
+            const QRgb c = premultiplied(kindColor(kind), dimPass ? 0.28 : 1.0);
             for (int i = 0; i < n; ++i) {
                 if (nodes.at(i).kind != kind)
                     continue;
                 if (dimming && (hood[size_t(i)] == 0) != dimPass)
                     continue;
-                const double screenRadius = std::max(1.6, nodes.at(i).radius * z);
+                const double screenRadius = discRadius(nodes.at(i), z);
                 const double r = screenRadius * px;
                 const int segments = discSegments(screenRadius);
                 if (kind == GraphModel::Kind::Missing) {
@@ -1296,7 +1207,7 @@ void GraphItem::buildMesh(geometry::MeshChunks &out, qreal dpr) const
     const auto ring = [&](int i, const QColor &c, double gap) {
         if (i < 0)
             return;
-        const double screenRadius = std::max(1.6, nodes.at(i).radius * z) + gap;
+        const double screenRadius = discRadius(nodes.at(i), z) + gap;
         appendRing(out, at(i), screenRadius * px, 2 * px, premultiplied(c), fringe, discSegments(screenRadius));
     };
     ring(focus, m_focus, 3);
@@ -1406,7 +1317,7 @@ QSGNode *GraphItem::updateSceneNode(QSGNode *old, QQuickWindow *window)
     node->setCamera(camera);
 
     // Labels: placed again every frame (in screen coordinates; panning moves them).
-    const std::vector<PlacedLabel> placed = labelsFor(size(), false);
+    const std::vector<PlacedLabel> placed = labelsFor(size());
     m_labelMesh.clear();
     std::vector<GraphSceneNode::Label> labels;
     labels.reserve(placed.size());
@@ -1415,7 +1326,7 @@ QSGNode *GraphItem::updateSceneNode(QSGNode *old, QQuickWindow *window)
     const QRgb labelBg = geometry::premultiplied(m_labelBg);
     for (const PlacedLabel &l : placed) {
         geometry::appendRoundedRect(m_labelMesh, l.rect, 3, labelBg, 1.0 / dpr);
-        labels.push_back({l.node, labelText(l.node), QPointF(l.rect.left() + 3, l.rect.top() + 1), l.dimmed});
+        labels.push_back({l.node, labelText(l.node).text, QPointF(l.rect.left() + 3, l.rect.top() + 1), l.dimmed});
         rects.append(l.rect);
     }
     node->setLabelBackgrounds(m_labelMesh);

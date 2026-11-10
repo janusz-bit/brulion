@@ -214,59 +214,44 @@ Item {
         sourceComponent: root.componentFor(root.shownKey)
     }
     // The kept views: made when first shown, then (`kept`, with keepViews) only hidden.
-    Loader {
-        id: journalsLoader
+    component KeptLoader: Loader {
+        required property bool shown
+        required property bool keepViews
         property bool kept
-        readonly property bool shown: root.shownKey === "journals"
-        onShownChanged: if (shown && root.keepViews) kept = true
+        onShownChanged: if (shown && keepViews) kept = true
         anchors.fill: parent
         active: shown || kept
         visible: shown
         focus: shown
+    }
+    KeptLoader {
+        id: journalsLoader
+        shown: root.shownKey === "journals"
+        keepViews: root.keepViews
         sourceComponent: journalsView
     }
-    Loader {
+    KeptLoader {
         id: allPagesLoader
-        property bool kept
-        readonly property bool shown: root.shownKey === "allPages"
-        onShownChanged: if (shown && root.keepViews) kept = true
-        anchors.fill: parent
-        active: shown || kept
-        visible: shown
-        focus: shown
+        shown: root.shownKey === "allPages"
+        keepViews: root.keepViews
         sourceComponent: allPagesView
     }
-    Loader {
+    KeptLoader {
         id: searchLoader
-        property bool kept
-        readonly property bool shown: root.shownKey === "search"
-        onShownChanged: if (shown && root.keepViews) kept = true
-        anchors.fill: parent
-        active: shown || kept
-        visible: shown
-        focus: shown
+        shown: root.shownKey === "search"
+        keepViews: root.keepViews
         sourceComponent: searchView
     }
-    Loader {
+    KeptLoader {
         id: tasksLoader
-        property bool kept
-        readonly property bool shown: root.shownKey === "tasks"
-        onShownChanged: if (shown && root.keepViews) kept = true
-        anchors.fill: parent
-        active: shown || kept
-        visible: shown
-        focus: shown
+        shown: root.shownKey === "tasks"
+        keepViews: root.keepViews
         sourceComponent: tasksView
     }
-    Loader {
+    KeptLoader {
         id: calendarLoader
-        property bool kept
-        readonly property bool shown: root.shownKey === "calendar"
-        onShownChanged: if (shown && root.keepViews) kept = true
-        anchors.fill: parent
-        active: shown || kept
-        visible: shown
-        focus: shown
+        shown: root.shownKey === "calendar"
+        keepViews: root.keepViews
         sourceComponent: calendarView
     }
 

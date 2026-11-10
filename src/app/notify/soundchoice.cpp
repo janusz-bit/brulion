@@ -14,15 +14,11 @@ QString soundKindKey(SoundKind kind)
 
 bool soundKindFromKey(const QString &key, SoundKind *kind)
 {
-    SoundKind k;
-    if (key == u"reminder")
-        k = SoundKind::Reminder;
-    else if (key == u"alarm")
-        k = SoundKind::Alarm;
-    else
+    const bool alarm = key == u"alarm";
+    if (!alarm && key != u"reminder")
         return false;
     if (kind)
-        *kind = k;
+        *kind = alarm ? SoundKind::Alarm : SoundKind::Reminder;
     return true;
 }
 
@@ -83,12 +79,12 @@ SoundChoice soundFromVariant(const QVariantMap &map)
 
 bool isSoundFile(const QString &uri)
 {
-    return uri.startsWith(u"file:"_s, Qt::CaseInsensitive) || QDir::isAbsolutePath(uri);
+    return uri.startsWith(u"file:", Qt::CaseInsensitive) || QDir::isAbsolutePath(uri);
 }
 
 QString soundFilePath(const QString &uri)
 {
-    if (uri.startsWith(u"file:"_s, Qt::CaseInsensitive))
+    if (uri.startsWith(u"file:", Qt::CaseInsensitive))
         return QUrl(uri).toLocalFile();
     return QDir::isAbsolutePath(uri) ? QDir::cleanPath(uri) : QString();
 }

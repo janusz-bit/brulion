@@ -49,9 +49,10 @@ QImage failedPicture()
     return image;
 }
 
-bool finite(qreal v)
+/// > 0 and finite (NaN is not).
+bool positive(qreal v)
 {
-    return std::isfinite(v);
+    return v > 0 && std::isfinite(v);
 }
 
 } // namespace
@@ -66,7 +67,7 @@ PdfViewImageProvider::Request PdfViewImageProvider::parse(const QString &id)
         || !out.file.endsWith(u".pdf"_s, Qt::CaseInsensitive))
         return out;
     const QString slashes = QDir::fromNativeSeparators(out.file);
-    for (const QStringView segment : QStringView(slashes).split(u'/')) {
+    for (const QStringView segment : QStringView(slashes).tokenize(u'/')) {
         if (segment == u"..")
             return out;
     }
@@ -76,23 +77,22 @@ PdfViewImageProvider::Request PdfViewImageProvider::parse(const QString &id)
     bool okW = false;
     bool okH = false;
     out.full = QSizeF(query.queryItemValue(u"w"_s).toDouble(&okW), query.queryItemValue(u"h"_s).toDouble(&okH));
-    if (out.page < 1 || !okW || !okH || !finite(out.full.width()) || !finite(out.full.height())
-        || !(out.full.width() > 0) || !(out.full.height() > 0))
+    if (out.page < 1 || !okW || !okH || !positive(out.full.width()) || !positive(out.full.height()))
         return out;
     const QString clip = query.queryItemValue(u"clip"_s);
     if (!clip.isEmpty()) {
         const QStringList parts = clip.split(u',');
         if (parts.size() != 4)
             return out;
-        qreal v[4];
+        qreal v[4] = {};
         for (int i = 0; i < 4; ++i) {
             bool ok = false;
             v[i] = parts.at(i).toDouble(&ok);
-            if (!ok || !finite(v[i]))
+            if (!ok || !std::isfinite(v[i]))
                 return out;
         }
         out.clip = QRectF(v[0], v[1], v[2], v[3]);
-        if (!(out.clip.width() > 0) || !(out.clip.height() > 0))
+        if (!positive(out.clip.width()) || !positive(out.clip.height()))
             return out;
     }
     out.valid = true;
@@ -110,7 +110,7 @@ bool PdfViewImageProvider::pixels(const Request &request, const QSize &requested
         ratio = requestedSize.width() / logical.width();
     else if (requestedSize.height() > 0)
         ratio = requestedSize.height() / logical.height();
-    if (!finite(ratio) || !(ratio > 0))
+    if (!positive(ratio))
         return false;
     QSizeF pageSize = request.full * ratio;
     // A page drawn larger than MaxPdfFullSide is drawn at that size (its detail pictures too).
@@ -147,9 +147,8 @@ QQuickImageResponse *PdfViewImageProvider::requestImageResponse(const QString &i
     }
     const std::shared_ptr<std::atomic_bool> cancelled = response->cancelled();
     // (Alive until it has finished: Qt deletes a response only after finished(), cancelled or not.)
-    Response *const target = response;
     PdfRenderPool::start(
-            [request, full, clip, cancelled, target] {
+            [request, full, clip, cancelled, response] {
                 QImage image;
                 bool failed = false;
                 if (!cancelled->load()) {
@@ -169,7 +168,8 @@ QQuickImageResponse *PdfViewImageProvider::requestImageResponse(const QString &i
                     image = failedPicture();
                 }
                 // finished() must come also for a cancelled response (Qt waits for it).
-                QMetaObject::invokeMethod(target, [target, image] { target->deliver(image); }, Qt::QueuedConnection);
+                QMetaObject::invokeMethod(
+                        response, [response, image] { response->deliver(image); }, Qt::QueuedConnection);
             },
             clip.isEmpty() ? PdfRenderPool::Page : PdfRenderPool::Detail);
     return response;

@@ -106,8 +106,6 @@ ColumnLayout {
     Item {
         id: recorder
         objectName: "shortcutRecorder"
-        width: 0
-        height: 0
         Accessible.role: Accessible.EditableText
         Accessible.name: qsTr("Press the new shortcut")
         Keys.onShortcutOverride: (event) => event.accepted = section.recording !== ""
@@ -133,11 +131,11 @@ ColumnLayout {
         Layout.topMargin: Theme.space1
         flat: Theme.compact
         padding: Theme.space5
-        contentWidth: rows.implicitWidth
-        contentHeight: rows.implicitHeight
+        contentWidth: rowsColumn.implicitWidth
+        contentHeight: rowsColumn.implicitHeight
 
         ColumnLayout {
-            id: rows
+            id: rowsColumn
             anchors.fill: parent
             spacing: Theme.compact ? Theme.space4 : Theme.space5
 

@@ -10,18 +10,18 @@ import Brulion
 //   words.movedText("", 3, false, "")                      // "Moved to the notebook root, …"
 //   words.movedText("Archive", 0, false, "Home 2")          // "Moved to “Archive” as “Home 2”"
 QtObject {
-    /// What a move or rename rewrites (Workspace.moveImpact() / renameImpact() that is ok: its
-    /// `links`, `tags`, `notes` and `specials`, read by the caller — a `var` map cannot be read more
-    /// than once by compiled code): "Updated links: 3 (in 2 notes)" or "No link needs to change.",
-    /// and the notebook settings that follow (its `specials`).
-    /// A field of an impact (typed, as ShellRouteTitles.field): AppController.routeInt (0 when
-    /// missing) / routeStrings.
+    /// A field of an impact (Workspace.moveImpact() / renameImpact(); typed, as
+    /// ShellRouteTitles.field): AppController.routeInt (0 when missing) / routeStrings. The caller
+    /// reads them — a `var` map cannot be read more than once by compiled code.
     function count(impact: var, key: string): int {
         return AppController.routeInt(impact, key, 0)
     }
     function strings(impact: var, key: string): list<string> {
         return AppController.routeStrings(impact, key)
     }
+    /// What a move or rename rewrites, from the impact's `links`, `tags`, `notes` and `specials`
+    /// (an ok one): "Updated links: 3 (in 2 notes)" or "No link needs to change.", and the
+    /// notebook settings that follow (`specials`).
     function impactText(links: int, tags: int, notes: int, specials: list<string>): string {
         const n = links + tags
         let text = n === 0 ? qsTr("No link needs to change.")

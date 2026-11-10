@@ -26,7 +26,7 @@ BDialog {
     property string target: "journal"
     /// The last save failed (a page of that name exists): changed input tries again.
     property string saveError
-    property bool saved: false
+    property bool saved
 
     title: qsTr("Save to Brulion")
     subtitle: hasFiles ? (openedWithBrulion ? qsTr("%n file(s) to save in the notebook", "", files.length)
@@ -41,9 +41,6 @@ BDialog {
 
     /// Fill the dialog from pendingShare (on open, and when a newer share replaces the shown one).
     property var _result: ({})
-    function errorOf(result: var): string {
-        return AppController.routeText(result, "error")
-    }
     function reload(): void {
         dialog.saved = false
         dialog.saveError = ""
@@ -57,7 +54,7 @@ BDialog {
         // (Kept in a property: a call's result read after another call is not compiled.)
         dialog._result = AppController.saveShare({ target: dialog.target, title: Js.trim(titleField.text),
                                                    text: textField.text })
-        const error = dialog.errorOf(dialog._result)
+        const error = AppController.routeText(dialog._result, "error")
         if (AppController.routeFlag(dialog._result, "ok"))
             dialog.saved = true
         else

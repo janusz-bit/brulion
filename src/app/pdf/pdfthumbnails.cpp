@@ -16,6 +16,7 @@
 #include <QJsonObject>
 #include <QPointer>
 #include <QSaveFile>
+#include <QTimeZone>
 
 #include <algorithm>
 #include <cmath>
@@ -111,11 +112,6 @@ PdfThumbnails::PdfThumbnails(const QString &cacheDir, QObject *parent, Renderer 
     });
 }
 
-PdfThumbnails::~PdfThumbnails()
-{
-    *m_alive = false;
-}
-
 void PdfThumbnails::setLongSide(int pixels)
 {
     m_longSide = std::clamp(pixels, 64, platform::MaxPdfPageSide);
@@ -132,31 +128,32 @@ int PdfThumbnails::longSideForRatio(qreal devicePixelRatio)
 
 QString PdfThumbnails::cacheKey(const QString &file, qint64 size, qint64 mtimeMs, int page, int side)
 {
-    const QString key = u"pdfthumb/1|%1|%2|%3|%4|%5"_s.arg(file).arg(size).arg(mtimeMs).arg(page).arg(side);
+    // (One arg() call: a "%1" in the file's name is not taken for a place of the key.)
+    const QString key = u"pdfthumb/1|%1|%2|%3|%4|%5"_s.arg(file, QString::number(size), QString::number(mtimeMs),
+                                                           QString::number(page), QString::number(side));
     return QString::fromLatin1(QCryptographicHash::hash(key.toUtf8(), QCryptographicHash::Sha1).toHex());
 }
 
 void PdfThumbnails::remember(const QString &key, const Entry &entry)
 {
-    if (const auto it = m_positions.find(key); it != m_positions.end()) {
-        m_order.erase(it.value());
-        m_positions.erase(it);
+    if (const auto it = m_positions.constFind(key); it != m_positions.cend()) {
+        m_order.splice(m_order.begin(), m_order, *it);
+    } else {
+        m_order.push_front(key);
+        m_positions.insert(key, m_order.begin());
     }
-    m_order.push_front(key);
-    m_positions.insert(key, m_order.begin());
     m_entries.insert(key, entry);
     while (m_order.size() > MaxMemoryEntries) {
-        const QString oldest = m_order.back();
+        m_positions.remove(m_order.back());
+        m_entries.remove(m_order.back());
         m_order.pop_back();
-        m_positions.remove(oldest);
-        m_entries.remove(oldest);
     }
 }
 
 void PdfThumbnails::forget(const QString &key)
 {
-    if (const auto it = m_positions.find(key); it != m_positions.end()) {
-        m_order.erase(it.value());
+    if (const auto it = m_positions.constFind(key); it != m_positions.cend()) {
+        m_order.erase(*it);
         m_positions.erase(it);
     }
     m_entries.remove(key);
@@ -181,10 +178,11 @@ PdfThumbnails::Entry PdfThumbnails::fromDisk(const QString &key)
             entry.pagePoints = QSizeF(reader.text(QString::fromLatin1(WidthKey)).toDouble(),
                                       reader.text(QString::fromLatin1(HeightKey)).toDouble());
             // Used: kept by the pruning (the mtime orders it), touched at most once a day.
-            if (info.lastModified().secsTo(QDateTime::currentDateTime()) > 24 * 3600) {
+            const QDateTime now = QDateTime::currentDateTimeUtc();
+            if (info.lastModified(QTimeZone::UTC).secsTo(now) > 24 * 3600) {
                 QFile f(png);
                 if (f.open(QIODevice::ReadWrite))
-                    f.setFileTime(QDateTime::currentDateTime(), QFileDevice::FileModificationTime);
+                    f.setFileTime(now, QFileDevice::FileModificationTime);
             }
             return entry;
         }
@@ -206,10 +204,8 @@ PdfThumbnails::Entry PdfThumbnails::fromDisk(const QString &key)
 
 PdfThumbnails::Entry PdfThumbnails::entry(const QString &file, qint64 size, qint64 mtimeMs, int page)
 {
-    Entry unsupported;
-    unsupported.state = State::Unsupported;
     if (!m_customRenderer && !platform::pdfAvailable())
-        return unsupported;
+        return Entry{State::Unsupported, {}, {}, 0, {}, {}};
     if (file.isEmpty())
         return Entry{State::Failed, {}, {}, 0, {}, u"unreadable"_s};
     const int side = m_longSide;
@@ -235,7 +231,6 @@ PdfThumbnails::Entry PdfThumbnails::entry(const QString &file, qint64 size, qint
     const QString version = QString::number(mtimeMs) + u'-' + QString::number(size);
     const QString dir = m_cacheDir;
     const Renderer renderer = m_renderer;
-    const std::shared_ptr<bool> alive = m_alive;
     const QPointer<PdfThumbnails> self(this);
     PdfRenderPool::start(
             [=] {
@@ -289,8 +284,8 @@ PdfThumbnails::Entry PdfThumbnails::entry(const QString &file, qint64 size, qint
                     return;
                 QMetaObject::invokeMethod(
                         app,
-                        [self, alive, key, file, out] {
-                            if (*alive && self)
+                        [self, key, file, out] {
+                            if (self) // (checked on the GUI thread, where it would go)
                                 self->finished(key, file, out);
                         },
                         Qt::QueuedConnection);

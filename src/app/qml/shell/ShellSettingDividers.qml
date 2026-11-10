@@ -25,13 +25,13 @@ Item {
     height: column.height
 
     Repeater {
-        model: root.column.children
+        model: root.rows
         delegate: Rectangle {
             id: line
             required property Item modelData
             required property int index
             readonly property bool isRow: modelData.visible && modelData.height > 0
-            /// The shown row above this one (null: this is the first).
+            /// The index of the shown row above this one (-1: this is the first).
             readonly property int aboveIndex: {
                 for (let i = line.index - 1; i >= 0; --i) {
                     if (root.rows[i].visible && root.rows[i].height > 0)
@@ -39,6 +39,7 @@ Item {
                 }
                 return -1
             }
+            /// That row (null: this is the first).
             readonly property Item above: aboveIndex >= 0 ? root.rows[aboveIndex] : null
             /// A row above with no controls of its own (ShellSettingRow.hasControls) takes none.
             readonly property bool aboveHasControls: {

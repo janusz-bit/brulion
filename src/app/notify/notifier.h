@@ -61,13 +61,13 @@ public:
     /// notebook, still indexing, reminders paused) — WorkspaceReminders::doneTarget(). Android
     /// hands its queued taps over only then, and only that notebook's (the others stay queued);
     /// the desktop notifiers ignore it.
-    virtual void setDoneTarget(const QString &vault) { (void)vault; }
+    virtual void setDoneTarget(const QString & /*vault*/) { }
 
     /// Android's background check of the notes while Brulion is closed (docs/ANDROID.md
     /// "Checking notes in the background"): what it works on — background::Target as JSON, the notebook
     /// whose reminders are armed — or an empty object to turn it off. Elsewhere nothing (the
     /// desktop app runs in the tray instead).
-    virtual void setBackgroundCheck(const QJsonObject &target) { (void)target; }
+    virtual void setBackgroundCheck(const QJsonObject & /*target*/) { }
     /// The last background check (`{at, ok, applied, reminders, sync, error}`); {} for none.
     virtual QJsonObject backgroundCheckStatus() const { return {}; }
 
@@ -91,12 +91,12 @@ public:
     virtual QStringList themeSounds() const { return {}; }
     /// Opens the system's ringtone picker for `kind`; the choice arrives as soundPicked().
     /// False: there is none.
-    virtual bool pickSound(SoundKind kind);
+    virtual bool pickSound(SoundKind /*kind*/) { return false; }
     /// Plays `choice` for a few seconds as `kind` would sound. False (with errorOccurred()
     /// saying why) when it cannot.
-    virtual bool previewSound(SoundKind kind, const SoundChoice &choice);
+    virtual bool previewSound(SoundKind /*kind*/, const SoundChoice & /*choice*/) { return false; }
     /// Opens the system's notification settings of `kind` (Android: its channel). False: none.
-    virtual bool openSystemSoundSettings(SoundKind kind);
+    virtual bool openSystemSoundSettings(SoundKind /*kind*/) { return false; }
 
 Q_SIGNALS:
     /// The user opened the note from a notification (click, "Open" on the alarm screen).

@@ -350,7 +350,12 @@ private:
     static void readSizes(const std::shared_ptr<SizeJob> &job, int from);
 
     void scheduleReload();
+    /// The current page and zoom kept for the next open (the same file opened again).
+    void keepPosition();
     void open();
+    /// The open job's result (the generation checked): `count` pages, the first `first` points.
+    void opened(int count, QSizeF first, const QString &file, const QString &password);
+    void openFailed(const platform::PdfInfo &info, const QString &password);
     void fail(const QString &message, bool locked = false);
     void setStatus(Status status);
     void applyGeometry();
@@ -448,7 +453,6 @@ private:
     QHash<int, QVariantList> m_links; ///< by page
     QSet<int> m_linksAsked;
     int m_linkRevision = 0;
-    std::shared_ptr<bool> m_alive = std::make_shared<bool>(true);
 };
 
 } // namespace brulion::pdfview

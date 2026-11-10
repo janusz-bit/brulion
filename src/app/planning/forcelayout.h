@@ -39,8 +39,6 @@ public:
         double alphaDecay = 0.0228;   ///< 1 - 0.001^(1/300): about 300 ticks from 1 to alphaMin
     };
 
-    ForceLayout() = default;
-
     Params &params() { return m_params; }
     const Params &params() const { return m_params; }
 
@@ -115,8 +113,13 @@ private:
     void applyGravity();
     void buildTree();
     void insert(int cell, int point, int depth);
+    /// The child of `cell` in the quadrant of `point`, created (empty) when missing.
+    int childFor(int cell, int point);
     void accumulate(int cell);
     double jiggle();
+    /// d3's guards for the offset (dx, dy), of squared length `l`, between two charges: a zero
+    /// coordinate gets a tiny random one, an `l` below distanceMin² becomes sqrt(distanceMin² · l).
+    void avoidSingularity(double &dx, double &dy, double &l, double dMin2);
 
     Params m_params;
     std::vector<double> m_x, m_y, m_vx, m_vy, m_fx, m_fy;

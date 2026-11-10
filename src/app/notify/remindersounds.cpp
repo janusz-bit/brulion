@@ -50,15 +50,12 @@ void ReminderSounds::setNotifier(Notifier *notifier)
         return;
     disconnect(m_pickedConnection);
     m_notifier = notifier;
-    if (notifier) {
-        m_pickedConnection = connect(notifier, &Notifier::soundPicked, this,
-                                     [this](SoundKind kind, const SoundChoice &picked) { setChoice(kind, picked); });
-    }
+    if (notifier)
+        m_pickedConnection = connect(notifier, &Notifier::soundPicked, this, &ReminderSounds::setChoice);
     // A mode this platform does not offer (settings copied from another device) plays the default.
-    for (SoundKind kind : kKinds) {
-        SoundChoice &c = kind == SoundKind::Alarm ? m_alarm : m_reminder;
-        if (!offers(c.mode))
-            c.mode = SoundChoice::Mode::Default;
+    for (SoundChoice *c : {&m_reminder, &m_alarm}) {
+        if (!offers(c->mode))
+            c->mode = SoundChoice::Mode::Default;
     }
     Q_EMIT capabilitiesChanged();
     Q_EMIT changed();
@@ -157,8 +154,8 @@ QStringList ReminderSounds::themeSounds() const
 
 bool ReminderSounds::setMode(const QString &kind, const QString &mode)
 {
-    SoundKind k;
-    SoundChoice::Mode m;
+    SoundKind k = SoundKind::Reminder;
+    SoundChoice::Mode m = SoundChoice::Mode::Default;
     if (!soundKindFromKey(kind, &k) || !soundModeFromKey(mode, &m))
         return false;
     SoundChoice c = choice(k);
@@ -170,36 +167,33 @@ bool ReminderSounds::setMode(const QString &kind, const QString &mode)
 
 bool ReminderSounds::setCustom(const QString &kind, const QString &uri, const QString &title)
 {
-    SoundKind k;
+    SoundKind k = SoundKind::Reminder;
     if (!soundKindFromKey(kind, &k))
         return false;
-    SoundChoice c;
-    c.mode = SoundChoice::Mode::Custom;
-    c.uri = uri.trimmed();
-    c.title = title.simplified();
+    SoundChoice c{SoundChoice::Mode::Custom, uri.trimmed(), title.simplified()};
     if (c.uri.isEmpty())
         return false;
-    if (c.title.isEmpty() && isSoundFile(c.uri))
+    const bool file = isSoundFile(c.uri);
+    if (file && c.title.isEmpty())
         c.title = QUrl::fromLocalFile(soundFilePath(c.uri)).fileName();
     // Linux: a sound file or one of the offered theme sounds; Windows: one of its notification
     // sounds, no files (Android: any ringtone URI).
     const QStringList names = themeSounds();
-    if (!isSoundFile(c.uri) && !names.isEmpty() && !names.contains(c.uri))
-        return false;
-    if (isSoundFile(c.uri) && !names.isEmpty() && !soundFiles())
+    const bool offered = file ? soundFiles() : names.contains(c.uri);
+    if (!names.isEmpty() && !offered)
         return false;
     return setChoice(k, c);
 }
 
 bool ReminderSounds::pick(const QString &kind)
 {
-    SoundKind k;
+    SoundKind k = SoundKind::Reminder;
     return soundKindFromKey(kind, &k) && m_notifier && m_notifier->hasSystemSoundPicker() && m_notifier->pickSound(k);
 }
 
 bool ReminderSounds::preview(const QString &kind)
 {
-    SoundKind k;
+    SoundKind k = SoundKind::Reminder;
     if (!soundKindFromKey(kind, &k))
         return false;
     Q_EMIT previewRequested(kind);
@@ -208,7 +202,7 @@ bool ReminderSounds::preview(const QString &kind)
 
 bool ReminderSounds::openSystemSettings(const QString &kind)
 {
-    SoundKind k;
+    SoundKind k = SoundKind::Reminder;
     return soundKindFromKey(kind, &k) && m_notifier && m_notifier->hasSystemSoundSettings()
            && m_notifier->openSystemSoundSettings(k);
 }

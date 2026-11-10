@@ -77,7 +77,7 @@ public:
     class Lease {
     public:
         Lease() = default;
-        Lease(Lease &&other) noexcept;
+        Lease(Lease &&other) noexcept = default; // (the moved-from lease has no reader to give back)
         Lease &operator=(Lease &&other) noexcept;
         Lease(const Lease &) = delete;
         Lease &operator=(const Lease &) = delete;

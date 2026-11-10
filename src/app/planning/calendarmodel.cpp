@@ -7,13 +7,14 @@
 #include "planningutil.h"
 
 #include <QDateTime>
-#include <QSet>
 
 #include <algorithm>
+#include <iterator>
 
 namespace brulion::planning {
 
 using namespace Qt::StringLiterals;
+using namespace std::chrono_literals;
 
 namespace {
 
@@ -54,37 +55,49 @@ QString iconFor(const QString &variant, CalendarItem::Kind kind)
     return u"calendar"_s;
 }
 
-/// "15 października 2026" / "October 15, 2026" parts of a range title.
-QString rangeTitle(QDate a, QDate b, dates::UiLocale locale)
+/// A day with its month's name in `form`: "October 15" / "15 października" (Genitive: the full name
+/// after a day number, in English the plain full name).
+QString dayMonth(QDate d, dates::UiLocale locale, dates::NameForm form)
 {
-    using dates::NameForm;
-    const bool en = locale == dates::UiLocale::English;
-    const auto month = [&](QDate d) {
-        return dates::monthName(d.month(), locale, en ? NameForm::Nominative : NameForm::Genitive);
-    };
-    const QString dash = u"–"_s;
-    if (a.year() == b.year() && a.month() == b.month()) {
-        if (a == b)
-            return en ? u"%1 %2, %3"_s.arg(month(a)).arg(a.day()).arg(a.year())
-                      : u"%1 %2 %3"_s.arg(a.day()).arg(month(a)).arg(a.year());
-        return en ? u"%1 %2%3%4, %5"_s.arg(month(a)).arg(a.day()).arg(dash).arg(b.day()).arg(a.year())
-                  : u"%1%2%3 %4 %5"_s.arg(a.day()).arg(dash).arg(b.day()).arg(month(a)).arg(a.year());
-    }
-    if (a.year() == b.year()) {
-        return en ? u"%1 %2 %3 %4 %5, %6"_s.arg(month(a)).arg(a.day()).arg(dash, month(b)).arg(b.day()).arg(a.year())
-                  : u"%1 %2 %3 %4 %5 %6"_s.arg(a.day()).arg(month(a), dash).arg(b.day()).arg(month(b)).arg(a.year());
-    }
-    return en ? u"%1 %2, %3 %4 %5 %6, %7"_s.arg(month(a)).arg(a.day()).arg(a.year()).arg(dash, month(b)).arg(b.day()).arg(b.year())
-              : u"%1 %2 %3 %4 %5 %6 %7"_s.arg(a.day()).arg(month(a)).arg(a.year()).arg(dash).arg(b.day()).arg(month(b)).arg(b.year());
+    const QString month = dates::monthName(d.month(), locale, form);
+    const QString day = QString::number(d.day());
+    return locale == dates::UiLocale::English ? u"%1 %2"_s.arg(month, day) : u"%1 %2"_s.arg(day, month);
 }
 
+/// The days [a, b] without their year: "October 12–18" / "12–18 października" within a month, else
+/// "September 28 – October 4" / "28 września – 4 października" (month names in `form`).
+QString dayMonthRange(QDate a, QDate b, dates::UiLocale locale, dates::NameForm form)
+{
+    if (a.month() != b.month() || a.year() != b.year())
+        return dayMonth(a, locale, form) + u" – "_s + dayMonth(b, locale, form);
+    const QString month = dates::monthName(a.month(), locale, form);
+    const QString first = QString::number(a.day());
+    const QString last = QString::number(b.day());
+    return locale == dates::UiLocale::English ? u"%1 %2–%3"_s.arg(month, first, last)
+                                              : u"%1–%2 %3"_s.arg(first, last, month);
+}
+
+/// `text` with the `year` after it: "October 15, 2026" / "15 października 2026".
+QString withYear(const QString &text, int year, dates::UiLocale locale)
+{
+    return text + (locale == dates::UiLocale::English ? u", "_s : u" "_s) + QString::number(year);
+}
+
+/// The title of the days [a, b]: "October 12–18, 2026", "September 28 – October 4, 2026",
+/// "December 28, 2026 – January 3, 2027" (Polish: "12–18 października 2026" …).
+QString rangeTitle(QDate a, QDate b, dates::UiLocale locale)
+{
+    constexpr auto form = dates::NameForm::Genitive;
+    if (a.year() != b.year())
+        return withYear(dayMonth(a, locale, form), a.year(), locale) + u" – "_s
+               + withYear(dayMonth(b, locale, form), b.year(), locale);
+    return withYear(a == b ? dayMonth(a, locale, form) : dayMonthRange(a, b, locale, form), a.year(), locale);
+}
+
+/// "Thursday, October 15" / "czwartek, 15 października".
 QString longLabel(QDate d, dates::UiLocale locale)
 {
-    using dates::NameForm;
-    if (locale == dates::UiLocale::English)
-        return u"%1, %2 %3"_s.arg(dates::weekdayName(d.dayOfWeek(), locale), dates::monthName(d.month(), locale)).arg(d.day());
-    return u"%1, %2 %3"_s.arg(dates::weekdayName(d.dayOfWeek(), locale)).arg(d.day()).arg(
-            dates::monthName(d.month(), locale, NameForm::Genitive));
+    return dates::weekdayName(d.dayOfWeek(), locale) + u", "_s + dayMonth(d, locale, dates::NameForm::Genitive);
 }
 
 /// Is `item` (a Due entry of `note`) the written date of its task, not a later occurrence of its
@@ -93,11 +106,37 @@ bool isWrittenDue(const ParsedNote *note, const CalendarItem &item)
 {
     if (!item.recurring || !note)
         return true;
-    for (const Task &t : note->tasks) {
-        if (t.line == item.line)
-            return t.due && t.due->date == item.date;
-    }
-    return true;
+    const auto it = std::ranges::find(note->tasks, item.line, &Task::line);
+    return it == note->tasks.cend() || (it->due && it->due->date == item.date);
+}
+
+/// An open task (todo, doing) whose due date passed.
+bool isOverdue(const Task &t, QDate today)
+{
+    return (t.status == TaskStatus::Todo || t.status == TaskStatus::Doing) && t.due && t.due->date < today;
+}
+
+/// An entry map without a time (minutes < 0).
+bool isAllDay(const QVariant &entry)
+{
+    return entry.toMap().value(u"minutes"_s).toInt() < 0;
+}
+
+/// The kinds of a day's open entries for the month grid's marks on phones, the most urgent first:
+/// overdue, reminder (an alarm too: one bell, four marks do not fit a phone's cell), due,
+/// scheduled. No journal and no done entries: a mark only for what still asks for attention.
+QStringList openKinds(const QStringList &kinds)
+{
+    QStringList out;
+    if (kinds.contains(u"overdue"_s))
+        out.append(u"overdue"_s);
+    if (kinds.contains(u"reminder"_s) || kinds.contains(u"alarm"_s))
+        out.append(u"reminder"_s);
+    if (kinds.contains(u"due"_s))
+        out.append(u"due"_s);
+    if (kinds.contains(u"scheduled"_s))
+        out.append(u"scheduled"_s);
+    return out;
 }
 
 } // namespace
@@ -105,11 +144,11 @@ bool isWrittenDue(const ParsedNote *note, const CalendarItem &item)
 CalendarModel::CalendarModel(QObject *parent) : QAbstractListModel(parent)
 {
     m_refreshTimer.setSingleShot(true);
-    m_refreshTimer.setInterval(120);
+    m_refreshTimer.setInterval(120ms);
     connect(&m_refreshTimer, &QTimer::timeout, this, [this] { rebuild(false); });
     m_midnightTimer.setSingleShot(true);
     connect(&m_midnightTimer, &QTimer::timeout, this, [this] {
-        if (m_todayText.isEmpty()) {
+        if (!m_today.isValid()) { // following the system clock, as currentDay() does
             Q_EMIT todayChanged();
             if (!m_anchor.isValid())
                 Q_EMIT anchorDateChanged();
@@ -129,14 +168,14 @@ void CalendarModel::setCaches(std::shared_ptr<CalendarCache> calendar, std::shar
     m_overdueTasks = std::move(overdue);
 }
 
-QList<OverdueCache::Overdue> OverdueCache::tasks(const VaultIndex &index, QDate today, int max, int *total)
+OverdueCache::Found OverdueCache::tasks(const VaultIndex &index, QDate today, int max)
 {
     m_last = m_notes.sync(
             index, today.toString(Qt::ISODate), false,
             [today](const VaultPath &path, const ParsedNote &note) {
                 QList<Overdue> out;
                 for (const Task &t : note.tasks) { // the blocks' tasks, in document order
-                    if ((t.status == TaskStatus::Todo || t.status == TaskStatus::Doing) && t.due && t.due->date < today)
+                    if (isOverdue(t, today))
                         out.append(Overdue{*t.due, path, t});
                 }
                 return out;
@@ -150,8 +189,7 @@ QList<OverdueCache::Overdue> OverdueCache::tasks(const VaultIndex &index, QDate 
                     QList<Overdue> out;
                     for (; i < all.size() && all.at(i).path == path; ++i) {
                         const Task &t = all.at(i).task;
-                        if ((t.status == TaskStatus::Todo || t.status == TaskStatus::Doing) && t.due
-                            && t.due->date < today)
+                        if (isOverdue(t, today))
                             out.append(Overdue{*t.due, path, t});
                     }
                     if (!out.isEmpty())
@@ -166,12 +204,11 @@ QList<OverdueCache::Overdue> OverdueCache::tasks(const VaultIndex &index, QDate 
     }
     std::ranges::stable_sort(
             all, [](const Overdue *a, const Overdue *b) { return dates::compareDateSpecs(a->due, b->due) < 0; });
-    if (total)
-        *total = int(all.size());
-    QList<Overdue> out;
+    Found found;
+    found.total = int(all.size());
     for (qsizetype i = 0; i < all.size() && i < max; ++i)
-        out.append(*all.at(i));
-    return out;
+        found.tasks.append(*all.at(i));
+    return found;
 }
 
 void CalendarModel::classBegin()
@@ -213,30 +250,10 @@ QVariantList openEntriesFirst(const QVariantList &items)
     return open + closed;
 }
 
-/// The kinds of a day's open entries for the month grid's marks on phones, the most urgent first:
-/// overdue, reminder (an alarm too: one bell, four marks do not fit a phone's cell), due,
-/// scheduled. No journal and no done entries: a mark only for what still asks for attention.
-QStringList openKinds(const QStringList &kinds)
-{
-    QStringList out;
-    if (kinds.contains(u"overdue"_s))
-        out.append(u"overdue"_s);
-    if (kinds.contains(u"reminder"_s) || kinds.contains(u"alarm"_s))
-        out.append(u"reminder"_s);
-    if (kinds.contains(u"due"_s))
-        out.append(u"due"_s);
-    if (kinds.contains(u"scheduled"_s))
-        out.append(u"scheduled"_s);
-    return out;
-}
-
 QVariantList allDayEntries(const QVariantList &items)
 {
     QVariantList out;
-    for (const QVariant &entry : items) {
-        if (entry.toMap().value(u"minutes"_s).toInt() < 0)
-            out.append(entry);
-    }
+    std::ranges::copy_if(items, std::back_inserter(out), isAllDay);
     return out;
 }
 
@@ -273,14 +290,8 @@ QVariant CalendarModel::data(const QModelIndex &index, int role) const
 {
     if (!index.isValid() || index.row() < 0 || index.row() >= m_days.size())
         return {};
-    return dayData(m_days.at(index.row()), role);
-}
-
-QVariant CalendarModel::dayData(const Day &day, int role) const
-{
+    const Day &day = m_days.at(index.row());
     const QDate date = day.date;
-    const QDate today = currentDay();
-    const dates::UiLocale loc = uiLocale(m_locale);
     switch (role) {
     case Qt::DisplayRole:
     case DateRole: return isoDate(date);
@@ -289,8 +300,8 @@ QVariant CalendarModel::dayData(const Day &day, int role) const
     case YearRole: return date.year();
     case DayOfWeekRole: return date.dayOfWeek();
     case InMonthRole: return m_mode != u"month" || date.month() == anchor().month();
-    case IsTodayRole: return date == today;
-    case IsPastRole: return date < today;
+    case IsTodayRole: return date == currentDay();
+    case IsPastRole: return date < currentDay();
     case IsWeekendRole: return date.dayOfWeek() >= 6;
     case IsSelectedRole: return date == anchor();
     case WeekNumberRole: return date.weekNumber();
@@ -301,8 +312,8 @@ QVariant CalendarModel::dayData(const Day &day, int role) const
     case TimedCountRole: return day.timed;
     case KindsRole: return day.kinds;
     case OpenKindsRole: return openKinds(day.kinds);
-    case LabelRole: return dates::formatDateShort(date, loc);
-    case LongLabelRole: return longLabel(date, loc);
+    case LabelRole: return dates::formatDateShort(date, uiLocale(m_locale));
+    case LongLabelRole: return longLabel(date, uiLocale(m_locale));
     case OrderedItemsRole: return openEntriesFirst(day.items);
     case AllDayRole: return allDayEntries(day.items);
     case TimedRole: return timedLanes(day.items);
@@ -312,7 +323,7 @@ QVariant CalendarModel::dayData(const Day &day, int role) const
 
 QHash<int, QByteArray> CalendarModel::roleNames() const
 {
-    return {
+    static const QHash<int, QByteArray> names{
             {DateRole, "date"},
             {DayRole, "day"},
             {MonthRole, "month"},
@@ -337,6 +348,7 @@ QHash<int, QByteArray> CalendarModel::roleNames() const
             {AllDayRole, "allDay"},
             {TimedRole, "timed"},
     };
+    return names;
 }
 
 // ---- properties ----------------------------------------------------------------------------
@@ -350,8 +362,7 @@ void CalendarModel::setVaultIndex(VaultIndex *index)
 {
     if (m_index == index)
         return;
-    if (m_indexConnection)
-        disconnect(m_indexConnection);
+    disconnect(m_indexConnection);
     m_index = index;
     if (index)
         m_indexConnection = connect(index, &VaultIndex::changed, this, &CalendarModel::scheduleRefresh);
@@ -495,55 +506,38 @@ QString CalendarModel::shortTitle() const
     if (m_mode == u"month")
         return title();
     const dates::UiLocale loc = uiLocale(m_locale);
-    const bool en = loc == dates::UiLocale::English;
-    const QDate a = m_rangeStart;
-    const QDate b = m_rangeEnd;
-    const auto month = [loc](QDate x) { return dates::monthName(x.month(), loc, dates::NameForm::Short); };
-    const QString dash = u"–"_s;
-    QString out;
-    if (a.month() == b.month() && a.year() == b.year())
-        out = en ? u"%1 %2%3%4"_s.arg(month(a)).arg(a.day()).arg(dash).arg(b.day())
-                 : u"%1%2%3 %4"_s.arg(a.day()).arg(dash).arg(b.day()).arg(month(a));
-    else
-        out = en ? u"%1 %2 %3 %4 %5"_s.arg(month(a)).arg(a.day()).arg(dash, month(b)).arg(b.day())
-                 : u"%1 %2 %3 %4 %5"_s.arg(a.day()).arg(month(a), dash).arg(b.day()).arg(month(b));
-    if (a.year() != currentDay().year() || b.year() != currentDay().year())
-        out += (en ? u", "_s : u" "_s) + QString::number(b.year());
-    return out;
+    const QString days = dayMonthRange(m_rangeStart, m_rangeEnd, loc, dates::NameForm::Short);
+    const int year = currentDay().year();
+    if (m_rangeStart.year() == year && m_rangeEnd.year() == year)
+        return days;
+    return withYear(days, m_rangeEnd.year(), loc);
 }
 
 // ---- navigation ----------------------------------------------------------------------------
 
 void CalendarModel::next()
 {
-    const QDate a = anchor();
-    if (m_mode == u"month")
-        setAnchorDate(isoDate(a.addMonths(1)));
-    else if (m_mode == u"week")
-        setAnchorDate(isoDate(a.addDays(7)));
-    else
-        setAnchorDate(isoDate(agendaStep(a, m_agendaDays)));
+    setAnchorDate(isoDate(stepped(1)));
 }
 
 void CalendarModel::previous()
 {
-    const QDate a = anchor();
-    if (m_mode == u"month")
-        setAnchorDate(isoDate(a.addMonths(-1)));
-    else if (m_mode == u"week")
-        setAnchorDate(isoDate(a.addDays(-7)));
-    else
-        setAnchorDate(isoDate(agendaStep(a, -m_agendaDays)));
+    setAnchorDate(isoDate(stepped(-1)));
 }
 
-QDate CalendarModel::agendaStep(QDate a, int days) const
+QDate CalendarModel::stepped(int periods) const
 {
-    // From the range's first week, not from the anchor: the anchor may be in any of its weeks (a
-    // day picked in the list), and the next range must start right after this one.
+    const QDate a = anchor();
+    if (m_mode == u"month")
+        return a.addMonths(periods);
+    if (m_mode == u"week")
+        return a.addDays(7 * periods);
+    // The agenda: from the range's first week, not from the anchor: the anchor may be in any of its
+    // weeks (a day picked in the list), and the next range must start right after this one.
     const QDate start = m_rangeStart.isValid() && a >= m_rangeStart && a <= m_rangeEnd
                                 ? m_rangeStart
                                 : dates::startOfWeek(a, weekStartDay());
-    return start.addDays(days + int(start.daysTo(a) % 7));
+    return start.addDays(periods * m_agendaDays + int(start.daysTo(a) % 7));
 }
 
 void CalendarModel::goToday()
@@ -591,24 +585,24 @@ QVariantList CalendarModel::dayItems(const QString &date) const
 
 QVariantList CalendarModel::dayEntries(const QString &date) const
 {
-    QVariantList entries;
-    for (const QVariant &entry : dayItems(date)) {
-        if (entry.toMap().value(u"kind"_s).toString() != u"journal")
-            entries.append(entry);
-    }
+    QVariantList entries = dayItems(date);
+    entries.removeIf([](const QVariant &entry) { return entry.toMap().value(u"kind"_s).toString() == u"journal"; });
     return openEntriesFirst(entries);
 }
 
 bool CalendarModel::dayHasJournal(const QString &date) const
 {
-    const QVariantList items = dayItems(date);
-    return !items.isEmpty() && items.first().toMap().value(u"kind"_s).toString() == u"journal";
+    const QDate on = parseIsoDate(date);
+    if (!on.isValid() || !m_index)
+        return false;
+    const QList<CalendarItem> items = calendarItems(*m_index, on, on);
+    return std::ranges::any_of(items, [](const CalendarItem &item) { return item.kind == CalendarItem::Journal; });
 }
 
 QVariantMap CalendarModel::marks(const QString &from, const QString &to) const
 {
     QVariantMap out;
-    QDate a = parseIsoDate(from);
+    const QDate a = parseIsoDate(from);
     QDate b = parseIsoDate(to);
     if (!a.isValid() || !b.isValid() || a > b || !m_index)
         return out;
@@ -616,7 +610,8 @@ QVariantMap CalendarModel::marks(const QString &from, const QString &to) const
         b = a.addDays(400);
     const QDate today = currentDay();
     QHash<QDate, QStringList> kinds;
-    for (const CalendarItem &item : calendarItems(*m_index, a, b)) {
+    const QList<CalendarItem> items = calendarItems(*m_index, a, b);
+    for (const CalendarItem &item : items) {
         QString k;
         switch (item.kind) {
         case CalendarItem::Journal: k = u"journal"_s; break;
@@ -632,8 +627,8 @@ QVariantMap CalendarModel::marks(const QString &from, const QString &to) const
         if (!list.contains(k))
             list.append(k);
     }
-    for (auto it = kinds.cbegin(); it != kinds.cend(); ++it)
-        out.insert(isoDate(it.key()), it.value());
+    for (const auto [date, list] : std::as_const(kinds).asKeyValueRange())
+        out.insert(isoDate(date), list);
     return out;
 }
 
@@ -716,7 +711,7 @@ QVariantMap CalendarModel::itemMap(const CalendarItem &item, QDate today) const
     }
     const QString time = clockTime(item.time);
     return QVariantMap{
-            {u"key"_s, u"%1:%2:%3:%4"_s.arg(kindName(item.kind), item.path).arg(item.line).arg(time)},
+            {u"key"_s, u"%1:%2:%3:%4"_s.arg(kindName(item.kind), item.path, QString::number(item.line), time)},
             {u"kind"_s, kindName(item.kind)},
             {u"variant"_s, variant},
             {u"icon"_s, iconFor(variant, item.kind)},
@@ -786,11 +781,11 @@ void CalendarModel::rebuild(bool forceReset)
 
     QList<Day> days;
     for (QDate date = from; date.isValid() && date <= to; date = date.addDays(1)) {
-        Day day = byDate.value(date);
+        Day day = byDate.take(date);
         day.date = date;
         if (m_mode == u"agenda" && day.items.isEmpty() && day.journal.isEmpty() && date != today)
             continue;
-        days.append(day);
+        days.append(std::move(day));
     }
 
     // Overdue: open tasks whose (written) due date passed, oldest first (then by page and line) —
@@ -800,14 +795,15 @@ void CalendarModel::rebuild(bool forceReset)
     if (m_index) {
         if (!m_overdueTasks)
             m_overdueTasks = std::make_shared<OverdueCache>();
-        const QList<OverdueCache::Overdue> found = m_overdueTasks->tasks(*m_index, today, MaxOverdue, &overdueCount);
+        const auto [found, total] = m_overdueTasks->tasks(*m_index, today, MaxOverdue);
+        overdueCount = total;
         const dates::UiLocale loc = uiLocale(m_locale);
         for (const OverdueCache::Overdue &item : found) {
             const Task &task = item.task;
             const DateSpec &due = item.due;
             const ParsedNote *note = m_index->note(item.path);
             overdue.append(QVariantMap{
-                    {u"key"_s, u"overdue:%1:%2"_s.arg(item.path).arg(task.line)},
+                    {u"key"_s, u"overdue:%1:%2"_s.arg(item.path, QString::number(task.line))},
                     {u"kind"_s, u"due"_s},
                     {u"variant"_s, u"overdue"_s},
                     {u"icon"_s, u"calendar"_s},
@@ -835,22 +831,15 @@ void CalendarModel::rebuild(bool forceReset)
         }
     }
 
-    bool sameRows = !forceReset && !rangeMoved && days.size() == m_days.size();
+    const bool sameRows = !forceReset && !rangeMoved
+                          && std::ranges::equal(std::as_const(days), std::as_const(m_days), {}, &Day::date, &Day::date);
     if (sameRows) {
-        for (qsizetype i = 0; i < days.size(); ++i) {
-            if (days.at(i).date != m_days.at(i).date) {
-                sameRows = false;
-                break;
-            }
-        }
-    }
-    if (sameRows) {
-        m_days = days;
+        m_days = std::move(days);
         if (!m_days.isEmpty())
             Q_EMIT dataChanged(createIndex(0, 0), createIndex(int(m_days.size()) - 1, 0));
     } else {
         beginResetModel();
-        m_days = days;
+        m_days = std::move(days);
         endResetModel();
     }
     m_rowOf.clear();
@@ -860,13 +849,13 @@ void CalendarModel::rebuild(bool forceReset)
     m_rangeEnd = to;
     m_agendaStart = m_mode == u"agenda" ? from : QDate();
     m_itemCount = itemCount;
-    m_overdue = overdue;
+    m_overdue = std::move(overdue);
     m_overdueCount = overdueCount;
     m_firstHour = firstHour <= lastHour ? firstHour : 8;
     m_lastHour = firstHour <= lastHour ? lastHour : 18;
     m_maxAllDay = 0;
     for (const Day &day : std::as_const(m_days))
-        m_maxAllDay = std::max(m_maxAllDay, int(allDayEntries(day.items).size()));
+        m_maxAllDay = std::max(m_maxAllDay, int(std::ranges::count_if(day.items, isAllDay)));
     ++m_revision;
     Q_EMIT rangeChanged();
     Q_EMIT itemsChanged();

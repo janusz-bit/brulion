@@ -2,6 +2,9 @@
 
 #include <QXmlStreamWriter>
 
+#include <algorithm>
+#include <utility>
+
 using namespace Qt::StringLiterals;
 
 namespace brulion::notify {
@@ -37,9 +40,9 @@ bool isActionKey(const QString &key)
 }
 
 /// The buttons: every action but "default" (the click on the toast itself).
-QList<QPair<QString, QString>> toastButtons(const DesktopNotification &notification)
+QList<std::pair<QString, QString>> toastButtons(const DesktopNotification &notification)
 {
-    QList<QPair<QString, QString>> buttons;
+    QList<std::pair<QString, QString>> buttons;
     for (qsizetype i = 0; i + 1 < notification.actions.size(); i += 2) {
         const QString &key = notification.actions.at(i);
         if (key != u"default" && isActionKey(key))
@@ -72,12 +75,12 @@ QString toastSound(const DesktopNotification &notification)
 
 QStringList windowsToastSounds()
 {
-    QStringList sounds{u"Default"_s, u"IM"_s, u"Mail"_s, u"Reminder"_s, u"SMS"_s, u"Looping.Alarm"_s};
-    for (int i = 2; i <= 10; ++i)
-        sounds.append(u"Looping.Alarm%1"_s.arg(i));
-    sounds.append(u"Looping.Call"_s);
-    for (int i = 2; i <= 10; ++i)
-        sounds.append(u"Looping.Call%1"_s.arg(i));
+    QStringList sounds{u"Default"_s, u"IM"_s, u"Mail"_s, u"Reminder"_s, u"SMS"_s};
+    for (const QString &looping : {u"Looping.Alarm"_s, u"Looping.Call"_s}) {
+        sounds.append(looping);
+        for (int i = 2; i <= 10; ++i)
+            sounds.append(looping + QString::number(i));
+    }
     return sounds;
 }
 
@@ -103,36 +106,26 @@ QString toastArguments(uint id, const QString &action)
 
 ToastActivation parseToastArguments(const QString &arguments)
 {
-    ToastActivation result;
     if (!arguments.startsWith(ArgumentsPrefix))
-        return result;
+        return {};
     const QStringList parts = arguments.mid(ArgumentsPrefix.size()).split(u'&');
     if (parts.size() != 2 || !parts.at(0).startsWith(u"id=") || !parts.at(1).startsWith(u"action="))
-        return result;
+        return {};
     const QString digits = parts.at(0).mid(3);
-    if (digits.isEmpty() || digits.size() > 10)
-        return result;
-    for (const QChar c : digits) {
-        if (c < u'0' || c > u'9')
-            return result;
-    }
-    bool ok = false;
-    const qulonglong id = digits.toULongLong(&ok);
-    if (!ok || id == 0 || id > 0xFFFFFFFFull)
-        return result;
+    if (digits.isEmpty() || digits.size() > 10
+        || !std::ranges::all_of(digits, [](QChar c) { return c >= u'0' && c <= u'9'; }))
+        return {};
+    const qulonglong id = digits.toULongLong(); // at most ten ASCII digits: always a number
     const QString action = parts.at(1).mid(7);
-    if (!isActionKey(action))
-        return result;
-    result.valid = true;
-    result.id = uint(id);
-    result.action = action;
-    return result;
+    if (id == 0 || id > 0xFFFFFFFFull || !isActionKey(action))
+        return {};
+    return {true, uint(id), action};
 }
 
 QString buildToastXml(const DesktopNotification &notification, uint id)
 {
     const QVariantMap &hints = notification.hints;
-    const QList<QPair<QString, QString>> buttons = toastButtons(notification);
+    const auto buttons = toastButtons(notification);
 
     QString xml;
     QXmlStreamWriter w(&xml);

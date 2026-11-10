@@ -34,7 +34,7 @@ namespace {
 /// Sanitizer builds run many times slower: ctest passes BRULION_TEST_SLOWDOWN (tests/CMakeLists.txt).
 int slowdown()
 {
-    static const int factor = qMax(1, qEnvironmentVariableIntValue("BRULION_TEST_SLOWDOWN"));
+    static const int factor = std::max(1, qEnvironmentVariableIntValue("BRULION_TEST_SLOWDOWN"));
     return factor;
 }
 
@@ -113,8 +113,8 @@ void ensureVisible(QQuickItem *item)
             return;
         const qreal originY = p->property("originY").toReal();
         const qreal y = item->mapToItem(content, QPointF(0, item->height() / 2)).y();
-        const qreal maxY = originY + qMax<qreal>(0, p->property("contentHeight").toReal() - p->height());
-        p->setProperty("contentY", qBound<qreal>(originY, y - p->height() / 2, maxY));
+        const qreal maxY = originY + std::max<qreal>(0, p->property("contentHeight").toReal() - p->height());
+        p->setProperty("contentY", std::clamp<qreal>(y - p->height() / 2, originY, maxY));
         settle(200);
         return;
     }
@@ -126,7 +126,7 @@ void visualDescendants(QQuickItem *root, QList<QQuickItem *> &out)
 {
     if (!root)
         return;
-    for (QQuickItem *child : root->childItems()) {
+    for (const QList<QQuickItem *> children = root->childItems(); QQuickItem *child : children) {
         out.append(child);
         visualDescendants(child, out);
     }
@@ -200,11 +200,15 @@ private:
             if (i->objectName() == objectName && !found.contains(i))
                 found.append(i);
         }
-        for (QQuickItem *i : std::as_const(found)) {
-            if (shown(i))
-                return i;
-        }
-        return found.value(0);
+        const auto it = std::ranges::find_if(std::as_const(found), shown);
+        return it != found.cend() ? *it : found.value(0);
+    }
+
+    /// The value the BSegmented called `control` shows ("" when there is none).
+    QString selected(const char *control) const
+    {
+        const QQuickItem *segmented = item(control);
+        return segmented ? segmented->property("currentValue").toString() : QString();
     }
 
     void tap(QQuickItem *target)
@@ -226,15 +230,10 @@ private:
         const qsizetype index = m_sounds->modes().indexOf(mode);
         if (!segmented || index < 0)
             return nullptr;
-        QList<QQuickItem *> all;
-        visualDescendants(segmented, all);
         QList<QQuickItem *> buttons;
-        for (QQuickItem *c : std::as_const(all)) {
-            if (c->inherits("QQuickAbstractButton") && shown(c))
-                buttons.append(c);
-        }
-        std::ranges::sort(buttons,
-                          [](QQuickItem *a, QQuickItem *b) { return a->mapToScene({}).x() < b->mapToScene({}).x(); });
+        visualDescendants(segmented, buttons);
+        buttons.removeIf([](const QQuickItem *c) { return !c->inherits("QQuickAbstractButton") || !shown(c); });
+        std::ranges::sort(buttons, {}, [](const QQuickItem *b) { return b->mapToScene({}).x(); });
         return buttons.value(index);
     }
 
@@ -286,8 +285,7 @@ private:
         check(preview && !preview->isEnabled(), "“Play sample” is off for silence");
         check(summary("reminder") == QCoreApplication::translate("ReminderSoundSetting", "No sound"),
               "the summary says “No sound”");
-        check(item("reminderSoundMode")->property("currentValue").toString() == u"silent",
-              "the selection shows “Silent”");
+        check(selected("reminderSoundMode") == u"silent", "the selection shows “Silent”");
     }
 
     // 2. "Ringtone" for alarms with none chosen yet.
@@ -299,8 +297,7 @@ private:
         settle(200);
         check(m_sounds->choice(SoundKind::Alarm).mode == SoundChoice::Mode::Default,
               "… and keeps the alarm sound meanwhile");
-        check(item("alarmSoundMode")->property("currentValue").toString() == u"default",
-              "the selection stays on “Default”");
+        check(selected("alarmSoundMode") == u"default", "the selection stays on “Default”");
     }
 
     /// The sound the test picks: the sound theme's "bell" (Linux), Windows' "Mail".
@@ -324,8 +321,7 @@ private:
                                  .arg(QCoreApplication::translate("ReminderSoundSetting",
                                                                   name == u"bell" ? "Bell" : "Mail")),
               "the summary names the sound");
-        check(item("alarmSoundMode")->property("currentValue").toString() == u"custom",
-              "the selection shows “Ringtone”");
+        check(selected("alarmSoundMode") == u"custom", "the selection shows “Ringtone”");
         // The pick button opens the same menu; Escape closes it again.
         tap(item("alarmSoundPick"));
         check(waitFor([this] { return menuOpen("alarmSoundMenu"); }), "“Choose ringtone…” opens the sound menu");
@@ -355,15 +351,14 @@ private:
         check(waitFor([this] { return m_sounds->choice(SoundKind::Reminder).mode == SoundChoice::Mode::Default; }),
               "“Default” brings the default sound back");
         QStringList previewed;
-        const QMetaObject::Connection connection =
-                QObject::connect(m_sounds, &ReminderSounds::previewRequested, m_sounds,
-                                 [&previewed](const QString &kind) { previewed.append(kind); });
+        QObject listener; // ends the connection (and its reference to `previewed`) with this step
+        QObject::connect(m_sounds, &ReminderSounds::previewRequested, &listener,
+                         [&previewed](const QString &kind) { previewed.append(kind); });
         QQuickItem *preview = item("reminderSoundPreview");
         check(preview && preview->isEnabled(), "“Play sample” is on again");
         tap(preview);
         check(waitFor([&previewed] { return !previewed.isEmpty(); }) && previewed == QStringList{u"reminder"_s},
               "“Play sample” plays the reminder sound");
-        QObject::disconnect(connection);
     }
 
     QQmlApplicationEngine *m_engine;
@@ -379,11 +374,7 @@ private:
 void startSoundsSelfTest(QQmlApplicationEngine *engine, shell::AppController *app)
 {
     QTimer::singleShot(0, app, [engine, app] {
-        int failures = 0;
-        {
-            SelfTest test(engine, app);
-            failures = test.run();
-        }
+        const int failures = SelfTest(engine, app).run();
         std::fprintf(stderr, "selftest: %d failure(s)\n", failures);
         QCoreApplication::exit(failures);
     });

@@ -9,12 +9,16 @@
 #include <QSet>
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
+#include <limits>
 #include <numeric>
+#include <utility>
 
 namespace brulion::planning {
 
 using namespace Qt::StringLiterals;
+using namespace std::chrono_literals;
 
 namespace {
 
@@ -46,7 +50,7 @@ GraphModel::GraphModel(QObject *parent) : QObject(parent)
 {
     connect(&m_sim, &GraphSimulation::frameReady, this, &GraphModel::onFrameReady);
     m_refreshTimer.setSingleShot(true);
-    m_refreshTimer.setInterval(300);
+    m_refreshTimer.setInterval(300ms);
     connect(&m_refreshTimer, &QTimer::timeout, this, &GraphModel::rebuild);
 }
 
@@ -99,42 +103,32 @@ void GraphModel::settingsEdited()
 
 void GraphModel::setShowTags(bool on)
 {
-    if (m_showTags == on)
-        return;
-    m_showTags = on;
-    settingsEdited();
+    if (std::exchange(m_showTags, on) != on)
+        settingsEdited();
 }
 
 void GraphModel::setShowMissing(bool on)
 {
-    if (m_showMissing == on)
-        return;
-    m_showMissing = on;
-    settingsEdited();
+    if (std::exchange(m_showMissing, on) != on)
+        settingsEdited();
 }
 
 void GraphModel::setShowJournals(bool on)
 {
-    if (m_showJournals == on)
-        return;
-    m_showJournals = on;
-    settingsEdited();
+    if (std::exchange(m_showJournals, on) != on)
+        settingsEdited();
 }
 
 void GraphModel::setShowOrphans(bool on)
 {
-    if (m_showOrphans == on)
-        return;
-    m_showOrphans = on;
-    settingsEdited();
+    if (std::exchange(m_showOrphans, on) != on)
+        settingsEdited();
 }
 
 void GraphModel::setShowTemplates(bool on)
 {
-    if (m_showTemplates == on)
-        return;
-    m_showTemplates = on;
-    settingsEdited();
+    if (std::exchange(m_showTemplates, on) != on)
+        settingsEdited();
 }
 
 void GraphModel::setFocusPath(const QString &path)
@@ -148,22 +142,19 @@ void GraphModel::setFocusPath(const QString &path)
 void GraphModel::setDepth(int depth)
 {
     depth = std::clamp(depth, 1, 3);
-    if (m_depth == depth)
+    if (std::exchange(m_depth, depth) == depth)
         return;
-    m_depth = depth;
-    if (m_focus.isEmpty()) {
-        Q_EMIT settingsChanged();
-        return;
-    }
-    settingsEdited();
+    if (m_focus.isEmpty())
+        Q_EMIT settingsChanged(); // the whole graph has no depth: nothing to rebuild
+    else
+        settingsEdited();
 }
 
 void GraphModel::setSeed(int seed)
 {
     const auto s = std::uint32_t(seed);
-    if (m_seed == s)
+    if (std::exchange(m_seed, s) == s)
         return;
-    m_seed = s;
     Q_EMIT settingsChanged();
     relayout();
 }
@@ -179,17 +170,14 @@ void GraphModel::setLocale(const QString &locale)
 void GraphModel::setMaxNodes(int max)
 {
     max = std::max(1, max);
-    if (m_maxNodes == max)
-        return;
-    m_maxNodes = max;
-    settingsEdited();
+    if (std::exchange(m_maxNodes, max) != max)
+        settingsEdited();
 }
 
 void GraphModel::setActive(bool active)
 {
-    if (m_active == active)
+    if (std::exchange(m_active, active) == active)
         return;
-    m_active = active;
     Q_EMIT activeChanged();
     if (m_simOwned)
         m_sim.command({active ? SimCommand::Resume : SimCommand::Pause});
@@ -200,9 +188,8 @@ void GraphModel::setActive(bool active)
 
 void GraphModel::setReducedMotion(bool on)
 {
-    if (m_reducedMotion == on)
+    if (std::exchange(m_reducedMotion, on) == on)
         return;
-    m_reducedMotion = on;
     // The run starts over with the other cooling (and the other way of showing it).
     takeBack();
     m_layout.params().alphaDecay = alphaDecay();
@@ -214,12 +201,11 @@ void GraphModel::setReducedMotion(bool on)
 void GraphModel::setFrameInterval(int msec)
 {
     msec = std::clamp(msec, 1, 1000);
-    if (m_frameInterval == msec)
+    if (std::exchange(m_frameInterval, msec) == msec)
         return;
-    m_frameInterval = msec;
     // Also for the run in progress (the view sets it after its first build has started one).
     if (m_simOwned)
-        m_sim.command({SimCommand::FrameInterval, -1, 0, 0, double(msec)});
+        m_sim.command({.kind = SimCommand::FrameInterval, .value = double(msec)});
     Q_EMIT frameIntervalChanged();
 }
 
@@ -276,7 +262,7 @@ QVariantList GraphModel::find(const QString &query, int limit) const
         if (rank >= 0)
             hits.append({i, rank});
     }
-    std::ranges::stable_sort(hits, [this](const Hit &a, const Hit &b) {
+    std::ranges::stable_sort(hits, [this](Hit a, Hit b) {
         if (a.rank != b.rank)
             return a.rank < b.rank;
         return m_nodes.at(a.node).degree > m_nodes.at(b.node).degree;
@@ -321,22 +307,19 @@ QRectF GraphModel::bounds() const
     const auto &xv = xs();
     const auto &yv = ys();
     const qsizetype n = std::min({m_nodes.size(), qsizetype(xv.size()), qsizetype(yv.size())});
+    constexpr double inf = std::numeric_limits<double>::infinity();
     bool any = false;
-    double x0 = 0, y0 = 0, x1 = 0, y1 = 0;
+    double x0 = inf, y0 = inf, x1 = -inf, y1 = -inf;
     for (qsizetype i = 0; i < n; ++i) {
         const double x = xv[size_t(i)], y = yv[size_t(i)];
         if (!std::isfinite(x) || !std::isfinite(y))
             continue;
         const double r = m_nodes.at(i).radius;
-        if (!any) {
-            x0 = x - r, y0 = y - r, x1 = x + r, y1 = y + r;
-            any = true;
-            continue;
-        }
         x0 = std::min(x0, x - r);
         y0 = std::min(y0, y - r);
         x1 = std::max(x1, x + r);
         y1 = std::max(y1, y + r);
+        any = true;
     }
     if (!any)
         return {};
@@ -369,15 +352,13 @@ void GraphModel::startRun()
     m_runTicks = 0;
     setFastCooling(false);
     setSettling(m_reducedMotion && m_fresh);
-    SimRun run;
-    run.generation = m_generation;
-    run.layout = m_layout;
-    run.reducedMotion = m_reducedMotion;
-    run.alphaDecay = alphaDecay();
-    run.slowTickMs = m_slowTickMs;
-    run.frameIntervalMs = m_frameInterval;
-    run.minRunMs = m_minRunMs;
-    m_sim.start(std::move(run));
+    m_sim.start({.generation = m_generation,
+                 .layout = m_layout,
+                 .reducedMotion = m_reducedMotion,
+                 .alphaDecay = alphaDecay(),
+                 .slowTickMs = m_slowTickMs,
+                 .frameIntervalMs = m_frameInterval,
+                 .minRunMs = m_minRunMs});
 }
 
 void GraphModel::takeBack()
@@ -435,24 +416,20 @@ void GraphModel::onFrameReady()
 
 void GraphModel::setFastCooling(bool on)
 {
-    if (m_fastCooling == on)
-        return;
-    m_fastCooling = on;
-    Q_EMIT fastCoolingChanged();
+    if (std::exchange(m_fastCooling, on) != on)
+        Q_EMIT fastCoolingChanged();
 }
 
 void GraphModel::setSettling(bool on)
 {
-    if (m_settling == on)
-        return;
-    m_settling = on;
-    Q_EMIT settlingChanged();
+    if (std::exchange(m_settling, on) != on)
+        Q_EMIT settlingChanged();
 }
 
 void GraphModel::reheat(double alpha)
 {
     if (m_simOwned) {
-        m_sim.command({SimCommand::ReheatTo, -1, 0, 0, alpha});
+        m_sim.command({.kind = SimCommand::ReheatTo, .value = alpha});
         m_layout.setAlpha(std::max(m_layout.alpha(), alpha));
         m_alpha = std::max(m_alpha, alpha); // what the worker makes of it
         if (m_alpha >= m_layout.params().alphaMin)
@@ -469,10 +446,7 @@ void GraphModel::reheat(double alpha)
 void GraphModel::relayout()
 {
     takeBack();
-    QList<std::pair<int, int>> edges;
-    edges.reserve(qsizetype(m_layout.edges().size()));
-    for (const auto &e : m_layout.edges())
-        edges.append(e);
+    const QList<std::pair<int, int>> edges(m_layout.edges().cbegin(), m_layout.edges().cend());
     m_layout.reset(int(m_nodes.size()), edges, m_seed);
     m_layout.params().alphaDecay = alphaDecay();
     m_dragging = -1;
@@ -504,7 +478,7 @@ void GraphModel::beginDrag(int node)
     m_layout.setAlphaTarget(target);
     if (m_simOwned) {
         m_sim.command({SimCommand::Fix, node, m_dragPos.x(), m_dragPos.y()});
-        m_sim.command({SimCommand::AlphaTarget, -1, 0, 0, target});
+        m_sim.command({.kind = SimCommand::AlphaTarget, .value = target});
         if (target > 0)
             m_simRunning = true;
     } else {
@@ -541,10 +515,10 @@ void GraphModel::endDrag(int node)
     if (m_simOwned) {
         if (valid)
             m_sim.command({SimCommand::Unfix, node});
-        m_sim.command({SimCommand::AlphaTarget, -1, 0, 0, 0});
+        m_sim.command({.kind = SimCommand::AlphaTarget, .value = 0});
         if (m_reducedMotion) {
             // Settle the neighbours without animating them: one final frame.
-            m_sim.command({SimCommand::ReheatTo, -1, 0, 0, 0.1});
+            m_sim.command({.kind = SimCommand::ReheatTo, .value = 0.1});
             m_alpha = std::max(m_alpha, 0.1);
             m_simRunning = true;
         } else {
@@ -596,9 +570,6 @@ void GraphModel::rebuild()
         for (int i = 0; i < m_nodes.size() && size_t(i) < x.size() && size_t(i) < y.size(); ++i)
             oldPos.insert(m_nodes.at(i).id, QPointF(x[size_t(i)], y[size_t(i)]));
     }
-    QStringList oldIds;
-    for (const Node &n : std::as_const(m_nodes))
-        oldIds.append(n.id);
     const std::vector<std::pair<int, int>> oldEdges = m_layout.edges();
     const double oldAlpha = alpha();
     // The run on the worker belongs to the old graph.
@@ -625,6 +596,8 @@ void GraphModel::rebuild()
         const QString folder = m_index ? paths::normalize(m_index->config().templatesFolder) : QString();
         return folder.isEmpty() ? QString() : folder + u'/';
     }();
+    const auto locale = uiLocale(m_locale);
+    const int thisYear = QDate::currentDate().year();
     QSet<QString> templateIds; ///< template pages left out
     for (const GraphNode &gn : std::as_const(g.nodes)) {
         if (!m_showTemplates && !templatesPrefix.isEmpty() && !gn.isTag && !gn.isMissing && gn.id != m_focus
@@ -644,7 +617,7 @@ void GraphModel::rebuild()
             const ParsedNote *note = m_index ? m_index->note(gn.id) : nullptr;
             n.kind = note && note->journalDate ? Kind::Journal : Kind::Page;
             if (n.kind == Kind::Journal)
-                n.title = dates::formatDateShort(*note->journalDate, uiLocale(m_locale), QDate::currentDate().year());
+                n.title = dates::formatDateShort(*note->journalDate, locale, thisYear);
         }
         if (n.kind == Kind::Journal && !m_showJournals)
             continue;
@@ -784,17 +757,15 @@ void GraphModel::rebuild()
             }
         }
     }
-    QStringList newIds;
-    for (const Node &n : std::as_const(nodes))
-        newIds.append(n.id);
 
+    const bool sameIds = std::ranges::equal(std::as_const(nodes), std::as_const(m_nodes), {}, &Node::id, &Node::id);
     m_nodes = nodes;
     m_indexOf = indexOf;
     m_adjacency = adjacency;
     m_dragging = -1;
     m_layout.reset(int(nodes.size()), edges, m_seed, startX, startY, known);
     m_layout.params().alphaDecay = alphaDecay();
-    const bool changed = newIds != oldIds || m_layout.edges() != oldEdges;
+    const bool changed = !sameIds || m_layout.edges() != oldEdges;
     if (carried > 0)
         m_layout.setAlpha(changed ? std::max(oldAlpha, carried == nodes.size() ? 0.15 : 0.35) : oldAlpha);
     // Fresh start positions, or carried ones that never moved yet (the spiral of a build whose

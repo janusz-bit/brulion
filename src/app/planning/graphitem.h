@@ -104,7 +104,6 @@ public:
     static constexpr int MaxLabels = 260;
 
     explicit GraphItem(QQuickItem *parent = nullptr);
-    ~GraphItem() override;
 
     GraphModel *model() const { return m_model; }
     void setModel(GraphModel *model);
@@ -128,35 +127,35 @@ public:
     bool touchMode() const { return m_touchMode; }
     void setTouchMode(bool on);
     qreal fitTopMargin() const { return m_fitTop; }
-    void setFitTopMargin(qreal margin);
+    void setFitTopMargin(qreal margin) { setFitMargin(m_fitTop, margin); }
     qreal fitBottomMargin() const { return m_fitBottom; }
-    void setFitBottomMargin(qreal margin);
+    void setFitBottomMargin(qreal margin) { setFitMargin(m_fitBottom, margin); }
 
     QColor backgroundColor() const { return m_bg; }
     void setBackgroundColor(const QColor &c);
     QColor edgeColor() const { return m_edge; }
-    void setEdgeColor(const QColor &c);
+    void setEdgeColor(const QColor &c) { setColor(m_edge, c); }
     QColor highlightColor() const { return m_highlight; }
-    void setHighlightColor(const QColor &c);
+    void setHighlightColor(const QColor &c) { setColor(m_highlight, c); }
     QColor pageColor() const { return m_page; }
-    void setPageColor(const QColor &c);
+    void setPageColor(const QColor &c) { setColor(m_page, c); }
     QColor journalColor() const { return m_journal; }
-    void setJournalColor(const QColor &c);
+    void setJournalColor(const QColor &c) { setColor(m_journal, c); }
     QColor tagColor() const { return m_tag; }
-    void setTagColor(const QColor &c);
+    void setTagColor(const QColor &c) { setColor(m_tag, c); }
     QColor missingColor() const { return m_missing; }
-    void setMissingColor(const QColor &c);
+    void setMissingColor(const QColor &c) { setColor(m_missing, c); }
     QColor focusColor() const { return m_focus; }
-    void setFocusColor(const QColor &c);
+    void setFocusColor(const QColor &c) { setColor(m_focus, c); }
     QColor labelColor() const { return m_label; }
-    void setLabelColor(const QColor &c);
+    void setLabelColor(const QColor &c) { setColor(m_label, c); }
     QColor labelBackground() const { return m_labelBg; }
-    void setLabelBackground(const QColor &c);
+    void setLabelBackground(const QColor &c) { setColor(m_labelBg, c); }
     QFont font() const { return m_font; }
     void setFont(const QFont &font);
 
-    QString hoveredId() const;
-    QString selectedId() const;
+    QString hoveredId() const { return m_hoveredIdCache; }
+    QString selectedId() const { return m_selectedIdCache; }
     void setSelectedId(const QString &id);
     QString highlightedId() const;
     QPointF highlightedPosition() const;
@@ -186,7 +185,7 @@ public:
     Q_INVOKABLE void resetView();
 
     /// Draw the graph with QPainter for an item of `size` (the software renderer and tests).
-    void render(QPainter *painter, const QSizeF &size);
+    void render(QPainter *painter, QSizeF size);
     /// The software renderer's frame: `canvas` (re)sized to the item in whole device pixels and
     /// painted with render() — all of it, also the last column or row of a fractional item size
     /// that render()'s background leaves out (the canvas is reused, so they would keep anything).
@@ -203,9 +202,9 @@ public:
     };
     /// The labels of a frame of `size` (both renderers; `sparse`: only the highlighted and the
     /// focused node).
-    std::vector<PlacedLabel> labelsFor(const QSizeF &size, bool sparse = false);
+    std::vector<PlacedLabel> labelsFor(QSizeF size, bool sparse = false);
     /// The size of a node's label text (elided to the maximum width, the item's font).
-    QSizeF labelSize(int node);
+    QSizeF labelSize(int node) { return labelText(node).size; }
 
     /// What the last frames did (tests, diagnostics; any thread).
     struct SceneStats {
@@ -257,20 +256,18 @@ protected:
     QSGNode *updatePaintNode(QSGNode *old, UpdatePaintNodeData *data) override;
 
 private:
-    QPointF toScreen(double x, double y) const;
-    QPointF toWorld(QPointF screen) const;
-    int nodeIndexAt(QPointF pos) const;
-    void setHovered(int node);
-    void setSelected(int node);
-    void setInteracting(bool on);
-    void onPositionsChanged();
-    /// update() — throttled while the layout moves and the software renderer paints slowly (see
-    /// movingRepaintInterval()).
-    void repaintMoving();
-    /// Something the meshes show changed: rebuild them at the next sync.
-    void meshChanged();
-    QSGNode *updateImageNode(QSGNode *old, QQuickWindow *window);
-    QSGNode *updateSceneNode(QSGNode *old, QQuickWindow *window);
+    /// Where the camera looks: the world point at the item's centre, and the zoom.
+    struct CameraPose {
+        double cx = 0;
+        double cy = 0;
+        double zoom = 1;
+    };
+    /// The highlight among the first `n` nodes (highlightFor()).
+    struct Highlight {
+        int hl = -1;            ///< the hovered, else the selected node; -1 none
+        std::vector<char> hood; ///< hl and its neighbours; empty without a highlight (nothing dimmed)
+        int focus = -1;         ///< the local graph's centre; -1 none
+    };
     /// Screen positions and visibility of the nodes, the highlight and its neighbourhood.
     struct Frame {
         int n = 0;
@@ -281,17 +278,49 @@ private:
         bool dimming = false;
         int focus = -1;
     };
-    Frame frameFor(const QSizeF &size) const;
+    struct LabelText {
+        QString text; ///< elided
+        QSizeF size;
+    };
+
+    QPointF toScreen(double x, double y) const;
+    QPointF toWorld(QPointF screen) const;
+    int nodeIndexAt(QPointF pos) const;
+    void setHovered(int node);
+    void setSelected(int node);
+    void setInteracting(bool on);
+    void setColor(QColor &member, const QColor &c);
+    void setFitMargin(double &member, qreal margin);
+    void onPositionsChanged();
+    /// update() — throttled while the layout moves and the software renderer paints slowly (see
+    /// movingRepaintInterval()).
+    void repaintMoving();
+    /// Something the meshes show changed: rebuild them at the next sync.
+    void meshChanged();
+    QSGNode *updateImageNode(QSGNode *old, QQuickWindow *window);
+    QSGNode *updateSceneNode(QSGNode *old, QQuickWindow *window);
+    Highlight highlightFor(int n) const;
+    Frame frameFor(QSizeF size) const;
     std::vector<PlacedLabel> labelsFor(const Frame &frame, bool sparse);
-    QString labelText(int node);
+    /// A node's label text and its size, cached (the reference lasts until the next new label).
+    const LabelText &labelText(int node);
+    const QColor &kindColor(GraphModel::Kind kind) const;
     void onStructureChanged();
     void applyAutoFit();
+    /// Zoom and centre that show all nodes inside the fit margins.
+    CameraPose fitCamera() const;
     void stopCameraAnimation();
-    void animateCamera(double cx, double cy, double zoom, bool animated);
+    void animateCamera(CameraPose to, bool animated);
+    /// The camera moved: viewChanged(), the highlight's new position, a repaint.
+    void viewMoved();
+    /// The user zooms to `zoom` (clamped) with the world point `world` at the item position `screen`.
+    void zoomAt(double zoom, QPointF world, QPointF screen);
     void userMoved();
     void pressAt(QPointF pos);
     void moveTo(QPointF pos);
-    void releaseAt(QPointF pos);
+    void releaseAt();
+    /// The pointer gesture is over (a dragged node is let go).
+    void endGesture();
     void emitHighlightPosition();
     const QStaticText &labelFor(int node);
     /// A cached antialiased disc (or ring, for missing pages) of `radius` px.
@@ -309,8 +338,6 @@ private:
     bool m_touchMode = false;
     double m_fitTop = 36;
     double m_fitBottom = 36;
-    /// Zoom and centre that show all nodes inside the fit margins.
-    void fitCamera(double &cx, double &cy, double &zoom) const;
 
     QColor m_bg = QColor(u"#fbf7ee");
     QColor m_edge = QColor(u"#cdc2ab");
@@ -329,7 +356,6 @@ private:
     int m_selected = -1;
     QString m_hoveredIdCache;
     QString m_selectedIdCache;
-    QString m_lastHighlighted;
 
     // Pointer state.
     enum class Gesture { None, Pending, Pan, DragNode, Pinch };
@@ -337,6 +363,7 @@ private:
     QPointF m_pressPos;
     QPointF m_lastPos;
     int m_pressNode = -1;
+    QString m_pressId; ///< m_pressNode's id: a rebuild during the press renumbers the nodes
     bool m_interacting = false;
     // Pinch.
     double m_pinchStartDistance = 0;
@@ -345,15 +372,11 @@ private:
 
     QVariantAnimation m_camera;
     QString m_follow; ///< node id the camera follows (centerOn), "" none
-    double m_camFrom[3] = {0, 0, 1};
-    double m_camTo[3] = {0, 0, 1};
+    CameraPose m_camFrom;
+    CameraPose m_camTo;
 
     QHash<int, QStaticText> m_labels; ///< QPainter path: prepared label texts
     QHash<quint64, QImage> m_sprites;
-    struct LabelText {
-        QString text; ///< elided
-        QSizeF size;
-    };
     QHash<int, LabelText> m_labelTexts; ///< both paths (the GUI thread, or the render thread while it waits)
     std::atomic<double> m_lastPaintMs{0};
     std::atomic<bool> m_softwareRendering{false}; ///< the window's scene graph is the software renderer

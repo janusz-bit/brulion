@@ -17,7 +17,7 @@ Rectangle {
 
     readonly property var pinned: AppController.sidePanelRoute
     property var _opening: ({})
-    readonly property bool hasPinned: AppController.routeText(AppController.sidePanelRoute, "view") !== ""
+    readonly property bool hasPinned: AppController.routeText(pinned, "view") !== ""
     /// The pinned view's editing toolbar is docked at its bottom edge (touch UIs; AppShell keeps
     /// the panel's bottom on the keyboard).
     readonly property bool toolbarDocked: visible && hasPinned && pinnedView.viewToolbarDocked
@@ -32,10 +32,9 @@ Rectangle {
         anchors.fill: parent
         spacing: 0
 
-        Rectangle {
+        Item {
             Layout.fillWidth: true
             implicitHeight: Theme.touchUi ? 56 : 46
-            color: Theme.bg
 
             RowLayout {
                 anchors.fill: parent
