@@ -1,5 +1,6 @@
 #include "appsettings.h"
 
+#include "workspacegithub.h"
 #include "workspacesync.h"
 
 #include "notebook/journals.h"
@@ -12,12 +13,14 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QHash>
-#include <QSaveFile>
 #include <QSettings>
 #include <QStandardPaths>
 #include <QTime>
 
 #include <algorithm>
+#include <array>
+#include <cmath>
+#include <span>
 
 using namespace Qt::StringLiterals;
 
@@ -25,67 +28,81 @@ namespace brulion::shell {
 
 namespace {
 
-constexpr auto kTheme = "ui/themeMode";
-constexpr auto kLanguage = "ui/language";
-constexpr auto kFontScale = "ui/fontScale";
-constexpr auto kReducedMotion = "ui/reducedMotion";
-constexpr auto kAccent = "ui/accent";
-constexpr auto kCustomAccent = "ui/customAccent";
-constexpr auto kLightSurface = "ui/lightSurface";
-constexpr auto kDarkSurface = "ui/darkSurface";
-constexpr auto kUiFontFamily = "ui/fontFamily";
-constexpr auto kDensity = "ui/density";
-constexpr auto kSidebarHidden = "ui/sidebar/hidden";
-constexpr auto kSidebarSections = "ui/sidebar/sections";
-constexpr auto kBottomNavTabs = "ui/bottomNav/tabs";
-constexpr auto kCaptureButton = "ui/captureButton";
-constexpr auto kEditorFont = "editor/font";
-constexpr auto kEditorFontFamily = "editor/fontFamily";
-constexpr auto kEditorMonoFamily = "editor/monoFamily";
-constexpr auto kEditorLineSpacing = "editor/lineSpacing";
-constexpr auto kEditorFontSize = "editor/fontSize";
-constexpr auto kEditorWidth = "editor/maxWidth";
-constexpr auto kEditorSource = "editor/sourceMode";
-constexpr auto kPropertiesExpanded = "editor/propertiesExpanded";
-constexpr auto kWebPictures = "editor/webPicturesShown";
-constexpr auto kSpellCheck = "spelling/enabled";
-constexpr auto kTaskStatusHistory = "tasks/statusHistory";
-constexpr auto kSpellLanguages = "spelling/languages";
-constexpr auto kSpellingWords = "spelling/words";
-constexpr auto kExportWebPictures = "export/webPictures";
-constexpr auto kWordCount = "editor/wordCountShown";
-constexpr auto kFocusMode = "ui/focusMode";
-constexpr auto kReadingMode = "ui/readingMode";
-constexpr auto kTypewriter = "editor/typewriterScrolling";
-constexpr auto kShortcuts = "shortcuts";
-constexpr auto kIntroDone = "app/introDone";
-constexpr auto kNewNotebookConfig = "app/newNotebookConfig";
-constexpr auto kCurrentVault = "vaults/current";
-constexpr auto kRecentVaults = "vaults/recent";
-constexpr auto kCloseToTray = "app/closeToTray";
-constexpr auto kTrayClick = "app/trayClick";
-constexpr auto kRemindersEnabled = "reminders/enabled";
-constexpr auto kSnooze = "reminders/snoozeMinutes";
-constexpr auto kAlarmRing = "reminders/alarmRingMinutes";
-constexpr auto kNotifyMissed = "reminders/notifyMissed";
-constexpr auto kNcUrl = "sync/nextcloud/url";
-constexpr auto kNcUser = "sync/nextcloud/user";
+constexpr auto kTheme = "ui/themeMode"_L1;
+constexpr auto kLanguage = "ui/language"_L1;
+constexpr auto kFontScale = "ui/fontScale"_L1;
+constexpr auto kReducedMotion = "ui/reducedMotion"_L1;
+constexpr auto kAccent = "ui/accent"_L1;
+constexpr auto kCustomAccent = "ui/customAccent"_L1;
+constexpr auto kLightSurface = "ui/lightSurface"_L1;
+constexpr auto kDarkSurface = "ui/darkSurface"_L1;
+constexpr auto kUiFontFamily = "ui/fontFamily"_L1;
+constexpr auto kDensity = "ui/density"_L1;
+constexpr auto kSidebarHidden = "ui/sidebar/hidden"_L1;
+constexpr auto kSidebarSections = "ui/sidebar/sections"_L1;
+constexpr auto kBottomNavTabs = "ui/bottomNav/tabs"_L1;
+constexpr auto kCaptureButton = "ui/captureButton"_L1;
+constexpr auto kEditorFont = "editor/font"_L1;
+constexpr auto kEditorFontFamily = "editor/fontFamily"_L1;
+constexpr auto kEditorMonoFamily = "editor/monoFamily"_L1;
+constexpr auto kEditorLineSpacing = "editor/lineSpacing"_L1;
+constexpr auto kEditorFontSize = "editor/fontSize"_L1;
+constexpr auto kEditorWidth = "editor/maxWidth"_L1;
+constexpr auto kEditorSource = "editor/sourceMode"_L1;
+constexpr auto kPropertiesExpanded = "editor/propertiesExpanded"_L1;
+constexpr auto kWebPictures = "editor/webPicturesShown"_L1;
+constexpr auto kSpellCheck = "spelling/enabled"_L1;
+constexpr auto kTaskStatusHistory = "tasks/statusHistory"_L1;
+constexpr auto kSpellLanguages = "spelling/languages"_L1;
+constexpr auto kSpellingWords = "spelling/words"_L1;
+constexpr auto kExportWebPictures = "export/webPictures"_L1;
+constexpr auto kWordCount = "editor/wordCountShown"_L1;
+constexpr auto kFocusMode = "ui/focusMode"_L1;
+constexpr auto kReadingMode = "ui/readingMode"_L1;
+constexpr auto kTypewriter = "editor/typewriterScrolling"_L1;
+constexpr auto kShortcuts = "shortcuts"_L1;
+constexpr auto kIntroDone = "app/introDone"_L1;
+constexpr auto kNewNotebookConfig = "app/newNotebookConfig"_L1;
+constexpr auto kCurrentVault = "vaults/current"_L1;
+constexpr auto kRecentVaults = "vaults/recent"_L1;
+constexpr auto kCloseToTray = "app/closeToTray"_L1;
+constexpr auto kTrayClick = "app/trayClick"_L1;
+constexpr auto kRemindersEnabled = "reminders/enabled"_L1;
+constexpr auto kSnooze = "reminders/snoozeMinutes"_L1;
+constexpr auto kAlarmRing = "reminders/alarmRingMinutes"_L1;
+constexpr auto kNotifyMissed = "reminders/notifyMissed"_L1;
+constexpr auto kNcUrl = "sync/nextcloud/url"_L1;
+constexpr auto kNcUser = "sync/nextcloud/user"_L1;
 // Up to 0.3.0 one switch and one folder for every notebook; read only to hand them over.
-constexpr auto kNcSharedEnabled = "sync/nextcloud/enabled";
-constexpr auto kNcSharedFolder = "sync/nextcloud/folder";
+constexpr auto kNcSharedEnabled = "sync/nextcloud/enabled"_L1;
+constexpr auto kNcSharedFolder = "sync/nextcloud/folder"_L1;
 /// The notebook that was current when this version first saw them.
-constexpr auto kNcSharedOwner = "sync/nextcloud/sharedOwner";
-constexpr auto kNcNotebooks = "sync/nextcloud/notebooks";
-constexpr auto kSyncInterval = "sync/intervalMinutes";
+constexpr auto kNcSharedOwner = "sync/nextcloud/sharedOwner"_L1;
+constexpr auto kNcNotebooks = "sync/nextcloud/notebooks"_L1;
+constexpr auto kSyncInterval = "sync/intervalMinutes"_L1;
+constexpr auto kRecentSearches = "search/recent"_L1;
 /// The server folder of a notebook without one (WorkspaceSync syncs with it then).
-constexpr auto kDefaultServerFolder = "Brulion";
+constexpr auto kDefaultServerFolder = "Brulion"_L1;
+/// SearchView's recent searches kept.
+constexpr qsizetype kMaxRecentSearches = 8;
 
-QString key(const char *k)
+// The values of the text settings, the default first (oneOf()).
+constexpr std::array kThemeChoices{u"dark", u"light", u"system"};
+constexpr std::array kAccentChoices{u"coral", u"red", u"blue", u"green", u"teal", u"violet", u"graphite", u"custom"};
+constexpr std::array kLightSurfaceChoices{u"paper", u"white"};
+constexpr std::array kDarkSurfaceChoices{u"black", u"slate"};
+constexpr std::array kDensityChoices{u"comfortable", u"compact"};
+constexpr std::array kEditorFontChoices{u"serif", u"sans"};
+constexpr std::array kLineSpacingChoices{u"normal", u"compact", u"relaxed"};
+constexpr std::array kSpellLanguageChoices{u"auto", u"pl", u"en", u"pl,en", u"en,pl"};
+constexpr std::array kWebPictureExportChoices{u"link", u"include"};
+constexpr std::array kTrayClickChoices{u"calendar", u"window"};
+
+QString cleanPath(const QString &path)
 {
-    return QString::fromLatin1(k);
+    const QString trimmed = path.trimmed();
+    return trimmed.isEmpty() ? QString() : QDir::cleanPath(QDir::fromNativeSeparators(trimmed));
 }
-
-QString cleanPath(const QString &path);
 
 /// The id of a notebook's folder, as its device state is named (Vault::idForPath: the
 /// canonical path); "" without a notebook.
@@ -104,12 +121,21 @@ QString legacyNotebookId(const QString &notebook)
 
 QString groupKey(const QString &id, QStringView name)
 {
-    return key(kNcNotebooks) + u'/' + id + u'/' + name;
+    return kNcNotebooks + u'/' + id + u'/' + name;
 }
 
 QString absolutePath(const QString &path)
 {
     return QDir::cleanPath(QFileInfo(cleanPath(path)).absoluteFilePath());
+}
+
+/// Record `notebook`'s path in its group `id` (unless it is there already).
+void recordPath(QSettings &settings, const QString &id, const QString &notebook)
+{
+    const QString pathKey = groupKey(id, u"path");
+    const QString path = absolutePath(notebook);
+    if (settings.value(pathKey).toString() != path)
+        settings.setValue(pathKey, path);
 }
 
 /// A server folder as compared: no outer slashes, the default for none, NFC, case folded.
@@ -121,7 +147,7 @@ QString folderIdentity(const QString &folder)
     while (v.endsWith(u'/'))
         v.chop(1);
     if (v.isEmpty() || v == u".")
-        v = key(kDefaultServerFolder);
+        v = kDefaultServerFolder;
     return v.normalized(QString::NormalizationForm_C).toCaseFolded();
 }
 
@@ -150,51 +176,33 @@ QString serverFolderFromName(const QString &name)
     return out.normalized(QString::NormalizationForm_C);
 }
 
-QString cleanPath(const QString &path)
+/// `value` when it is one of `choices`, else the first of them (the default).
+QString oneOf(const QString &value, std::span<const char16_t *const> choices)
 {
-    if (path.trimmed().isEmpty())
-        return {};
-    return QDir::cleanPath(QDir::fromNativeSeparators(path.trimmed()));
-}
-
-/// `value` when it is one of `allowed`, else the first of them (the default).
-QString oneOf(const QString &value, std::initializer_list<const char16_t *> allowed)
-{
-    for (const char16_t *a : allowed) {
-        if (value == QStringView(a))
-            return value;
-    }
-    return QString::fromUtf16(*allowed.begin());
-}
-
-QString accentName(const QString &v)
-{
-    return oneOf(v, {u"coral", u"red", u"blue", u"green", u"teal", u"violet", u"graphite", u"custom"});
+    const bool known = std::ranges::any_of(choices, [&](const char16_t *c) { return value == QStringView(c); });
+    return known ? value : QString::fromUtf16(choices.front());
 }
 
 /// "#rrggbb" in lower case, else "".
 QString cleanColor(const QString &color)
 {
     const QString v = color.trimmed().toLower();
-    if (v.size() != 7 || v.front() != u'#')
-        return {};
-    for (qsizetype i = 1; i < v.size(); ++i) {
-        const QChar c = v.at(i);
-        if (!((c >= u'0' && c <= u'9') || (c >= u'a' && c <= u'f')))
-            return {};
-    }
-    return v;
+    const auto hexDigit = [](QChar c) { return (c >= u'0' && c <= u'9') || (c >= u'a' && c <= u'f'); };
+    return v.size() == 7 && v.front() == u'#' && std::all_of(v.cbegin() + 1, v.cend(), hexDigit) ? v : QString();
+}
+
+/// The UI text size factor within 0.85 … 1.4 (NaN, as a settings file may hold, is the default 1).
+qreal cleanFontScale(qreal scale)
+{
+    return std::isnan(scale) ? 1.0 : std::clamp(scale, 0.85, 1.4);
 }
 
 /// The known ids of `ids` in their order, each once.
-QStringList knownIds(const QStringList &ids, const QStringList &known)
+QStringList knownIds(QStringList ids, const QStringList &known)
 {
-    QStringList out;
-    for (const QString &id : ids) {
-        if (known.contains(id) && !out.contains(id))
-            out.append(id);
-    }
-    return out;
+    ids.removeIf([&](const QString &id) { return !known.contains(id); });
+    ids.removeDuplicates();
+    return ids;
 }
 
 /// The bottom navigation's number of views.
@@ -203,28 +211,19 @@ constexpr qsizetype kBottomNavSlots = 5;
 /// Five views for the bottom navigation: the known ones first, the rest from the default order.
 QStringList normalizedTabs(const QStringList &views)
 {
-    QStringList out = knownIds(views, AppSettings::bottomNavViews()).mid(0, kBottomNavSlots);
-    // The default five first, then the other views.
-    for (const QString &d : AppSettings::defaultBottomNavTabs()) {
-        if (out.size() < kBottomNavSlots && !out.contains(d))
-            out.append(d);
-    }
-    for (const QString &d : AppSettings::bottomNavViews()) {
-        if (out.size() < kBottomNavSlots && !out.contains(d))
-            out.append(d);
-    }
-    return out;
+    // The default five after the known ones, then the other views.
+    QStringList out = knownIds(views, AppSettings::bottomNavViews()).mid(0, kBottomNavSlots)
+                      + AppSettings::defaultBottomNavTabs() + AppSettings::bottomNavViews();
+    out.removeDuplicates();
+    return out.mid(0, kBottomNavSlots);
 }
 
 /// All the sidebar's page sections: the known ones in their order, the others after them in the
 /// default order.
 QStringList normalizedSections(const QStringList &ids)
 {
-    QStringList out = knownIds(ids, AppSettings::sidebarSectionIds());
-    for (const QString &d : AppSettings::sidebarSectionIds()) {
-        if (!out.contains(d))
-            out.append(d);
-    }
+    QStringList out = knownIds(ids, AppSettings::sidebarSectionIds()) + AppSettings::sidebarSectionIds();
+    out.removeDuplicates();
     return out;
 }
 
@@ -236,6 +235,48 @@ QStringList storedList(const QVariant &v)
         return text.isEmpty() ? QStringList() : QStringList{text};
     }
     return v.toStringList();
+}
+
+/// An entry of the recent notebooks: { path, name ("": its folder's), lastOpened }.
+QVariantMap recentEntry(const QString &path, const QString &name, const QString &lastOpened)
+{
+    return {{u"path"_s, path},
+            {u"name"_s, name.isEmpty() ? QFileInfo(path).fileName() : name},
+            {u"lastOpened"_s, lastOpened}};
+}
+
+/// Remove the entries of `path` from the recent notebooks `list`; how many there were.
+qsizetype removeRecent(QVariantList &list, const QString &path)
+{
+    return list.removeIf([&](const QVariant &v) { return v.toMap().value(u"path"_s).toString() == path; });
+}
+
+/// The usable part of the intro's notebook settings (Workspace::setConfig() validates again).
+QVariantMap cleanNotebookConfig(const QVariantMap &config)
+{
+    QVariantMap out;
+    for (const QString &name : {u"journalMode"_s, u"pageMode"_s}) {
+        const QString mode = config.value(name).toString();
+        if (mode == u"outline" || mode == u"document")
+            out.insert(name, mode);
+    }
+    bool ok = false;
+    const int day = config.value(u"weekStartsOn"_s).toInt(&ok);
+    if (ok && (day == 1 || day == 6 || day == 7))
+        out.insert(u"weekStartsOn"_s, day);
+    const QTime time = QTime::fromString(config.value(u"defaultReminderTime"_s).toString().trimmed(), u"H:mm"_s);
+    if (time.isValid())
+        out.insert(u"defaultReminderTime"_s, time.toString(u"HH:mm"_s));
+    const QString format = config.value(u"journalFileFormat"_s).toString().trimmed();
+    if (format == u"yyyy-MM-dd" || format == u"yyyy_MM_dd" || format == u"dd.MM.yyyy")
+        out.insert(u"journalFileFormat"_s, format);
+    return out;
+}
+
+/// The file of the app password in the app data folder `dataDir`.
+QString passwordFileIn(const QString &dataDir)
+{
+    return dataDir + u"/secrets/nextcloud-password"_s;
 }
 
 } // namespace
@@ -259,7 +300,7 @@ AppSettings::~AppSettings()
 }
 
 template<typename T>
-bool AppSettings::store(const QString &k, const T &value, const T &current)
+bool AppSettings::store(QAnyStringView k, const T &value, const T &current)
 {
     if (value == current && m_settings->contains(k))
         return false;
@@ -272,51 +313,48 @@ bool AppSettings::store(const QString &k, const T &value, const T &current)
 QString AppSettings::themeMode() const
 {
     // Never chosen (or unknown): dark — with the black background (darkSurface()).
-    return oneOf(m_settings->value(key(kTheme)).toString(), {u"dark", u"light", u"system"});
+    return oneOf(m_settings->value(kTheme).toString(), kThemeChoices);
 }
 
 void AppSettings::setThemeMode(const QString &mode)
 {
-    const QString v = oneOf(mode, {u"dark", u"light", u"system"});
-    if (store(key(kTheme), v, themeMode()))
+    if (store(kTheme, oneOf(mode, kThemeChoices), themeMode()))
         Q_EMIT themeModeChanged();
 }
 
 QString AppSettings::language() const
 {
-    // Never chosen: the system's (brulion-cli reads this setting the same way).
-    return notebook::appLanguage(m_settings->value(key(kLanguage)).toString());
+    // Never chosen: English, whatever the system's (brulion-cli reads this setting the same way).
+    return notebook::appLanguage(m_settings->value(kLanguage).toString());
 }
 
 void AppSettings::setLanguage(const QString &language)
 {
-    const QString v = language == u"pl" ? u"pl"_s : u"en"_s;
-    if (store(key(kLanguage), v, this->language()))
+    if (store(kLanguage, notebook::appLanguage(language), this->language()))
         Q_EMIT languageChanged();
 }
 
 qreal AppSettings::fontScale() const
 {
     bool ok = false;
-    const qreal s = m_settings->value(key(kFontScale)).toReal(&ok);
-    return ok ? std::clamp(s, 0.85, 1.4) : 1.0;
+    const qreal s = m_settings->value(kFontScale).toReal(&ok);
+    return ok ? cleanFontScale(s) : 1.0;
 }
 
 void AppSettings::setFontScale(qreal scale)
 {
-    const qreal v = std::clamp(scale, 0.85, 1.4);
-    if (store(key(kFontScale), v, fontScale()))
+    if (store(kFontScale, cleanFontScale(scale), fontScale()))
         Q_EMIT fontScaleChanged();
 }
 
 bool AppSettings::reducedMotion() const
 {
-    return m_settings->value(key(kReducedMotion), false).toBool();
+    return m_settings->value(kReducedMotion, false).toBool();
 }
 
 void AppSettings::setReducedMotion(bool on)
 {
-    if (store(key(kReducedMotion), on, reducedMotion()))
+    if (store(kReducedMotion, on, reducedMotion()))
         Q_EMIT reducedMotionChanged();
 }
 
@@ -358,78 +396,78 @@ QString AppSettings::cleanFontFamily(const QString &family)
 
 QString AppSettings::accentColor() const
 {
-    return accentName(m_settings->value(key(kAccent)).toString());
+    return oneOf(m_settings->value(kAccent).toString(), kAccentChoices);
 }
 
 void AppSettings::setAccentColor(const QString &name)
 {
-    if (store(key(kAccent), accentName(name), accentColor()))
+    if (store(kAccent, oneOf(name, kAccentChoices), accentColor()))
         Q_EMIT accentChanged();
 }
 
 QString AppSettings::customAccent() const
 {
-    return cleanColor(m_settings->value(key(kCustomAccent)).toString());
+    return cleanColor(m_settings->value(kCustomAccent).toString());
 }
 
 void AppSettings::setCustomAccent(const QString &color)
 {
-    if (store(key(kCustomAccent), cleanColor(color), customAccent()))
+    if (store(kCustomAccent, cleanColor(color), customAccent()))
         Q_EMIT accentChanged();
 }
 
 QString AppSettings::lightSurface() const
 {
-    return oneOf(m_settings->value(key(kLightSurface)).toString(), {u"paper", u"white"});
+    return oneOf(m_settings->value(kLightSurface).toString(), kLightSurfaceChoices);
 }
 
 void AppSettings::setLightSurface(const QString &name)
 {
-    if (store(key(kLightSurface), oneOf(name, {u"paper", u"white"}), lightSurface()))
+    if (store(kLightSurface, oneOf(name, kLightSurfaceChoices), lightSurface()))
         Q_EMIT surfacesChanged();
 }
 
 QString AppSettings::darkSurface() const
 {
-    return oneOf(m_settings->value(key(kDarkSurface)).toString(), {u"black", u"slate"});
+    return oneOf(m_settings->value(kDarkSurface).toString(), kDarkSurfaceChoices);
 }
 
 void AppSettings::setDarkSurface(const QString &name)
 {
-    if (store(key(kDarkSurface), oneOf(name, {u"black", u"slate"}), darkSurface()))
+    if (store(kDarkSurface, oneOf(name, kDarkSurfaceChoices), darkSurface()))
         Q_EMIT surfacesChanged();
 }
 
 QString AppSettings::uiFontFamily() const
 {
-    return cleanFontFamily(m_settings->value(key(kUiFontFamily)).toString());
+    return cleanFontFamily(m_settings->value(kUiFontFamily).toString());
 }
 
 void AppSettings::setUiFontFamily(const QString &family)
 {
-    if (store(key(kUiFontFamily), cleanFontFamily(family), uiFontFamily()))
+    if (store(kUiFontFamily, cleanFontFamily(family), uiFontFamily()))
         Q_EMIT fontFamiliesChanged();
 }
 
 QString AppSettings::density() const
 {
-    return oneOf(m_settings->value(key(kDensity)).toString(), {u"comfortable", u"compact"});
+    return oneOf(m_settings->value(kDensity).toString(), kDensityChoices);
 }
 
 void AppSettings::setDensity(const QString &density)
 {
-    if (store(key(kDensity), oneOf(density, {u"comfortable", u"compact"}), this->density()))
+    if (store(kDensity, oneOf(density, kDensityChoices), this->density()))
         Q_EMIT densityChanged();
 }
 
 QStringList AppSettings::sidebarHidden() const
 {
-    return knownIds(storedList(m_settings->value(key(kSidebarHidden))), sidebarItems());
+    return knownIds(storedList(m_settings->value(kSidebarHidden)), sidebarItems());
 }
 
 void AppSettings::setSidebarHidden(const QStringList &ids)
 {
-    if (store(key(kSidebarHidden), knownIds(ids, sidebarItems()), sidebarHidden()))
+    if (store(kSidebarHidden, knownIds(ids, sidebarItems()), sidebarHidden()))
         Q_EMIT sidebarHiddenChanged();
 }
 
@@ -444,12 +482,12 @@ void AppSettings::setSidebarItemShown(const QString &id, bool shown)
 
 QStringList AppSettings::sidebarSections() const
 {
-    return normalizedSections(storedList(m_settings->value(key(kSidebarSections))));
+    return normalizedSections(storedList(m_settings->value(kSidebarSections)));
 }
 
 void AppSettings::setSidebarSections(const QStringList &ids)
 {
-    if (store(key(kSidebarSections), normalizedSections(ids), sidebarSections()))
+    if (store(kSidebarSections, normalizedSections(ids), sidebarSections()))
         Q_EMIT sidebarSectionsChanged();
 }
 
@@ -466,7 +504,7 @@ void AppSettings::moveSidebarSection(const QString &id, int delta)
 
 QStringList AppSettings::bottomNavTabs() const
 {
-    const QStringList stored = storedList(m_settings->value(key(kBottomNavTabs)));
+    const QStringList stored = storedList(m_settings->value(kBottomNavTabs));
     // The default of the four slots with Menu after them (up to 0.13), as stored by a reset or a
     // slot picked and put back: the default of today, not those four with a fifth view appended.
     if (stored == QStringList{u"journals"_s, u"calendar"_s, u"search"_s, u"tasks"_s})
@@ -476,7 +514,7 @@ QStringList AppSettings::bottomNavTabs() const
 
 void AppSettings::setBottomNavTabs(const QStringList &views)
 {
-    if (store(key(kBottomNavTabs), normalizedTabs(views), bottomNavTabs()))
+    if (store(kBottomNavTabs, normalizedTabs(views), bottomNavTabs()))
         Q_EMIT bottomNavTabsChanged();
 }
 
@@ -494,12 +532,12 @@ void AppSettings::setBottomNavTab(int index, const QString &view)
 
 bool AppSettings::captureButtonShown() const
 {
-    return m_settings->value(key(kCaptureButton), true).toBool();
+    return m_settings->value(kCaptureButton, true).toBool();
 }
 
 void AppSettings::setCaptureButtonShown(bool on)
 {
-    if (store(key(kCaptureButton), on, captureButtonShown()))
+    if (store(kCaptureButton, on, captureButtonShown()))
         Q_EMIT captureButtonShownChanged();
 }
 
@@ -522,66 +560,65 @@ void AppSettings::resetAppearance()
 
 QString AppSettings::editorFont() const
 {
-    return m_settings->value(key(kEditorFont)).toString() == u"sans" ? u"sans"_s : u"serif"_s;
+    return oneOf(m_settings->value(kEditorFont).toString(), kEditorFontChoices);
 }
 
 void AppSettings::setEditorFont(const QString &font)
 {
-    const QString v = font == u"sans" ? u"sans"_s : u"serif"_s;
-    if (store(key(kEditorFont), v, editorFont()))
+    if (store(kEditorFont, oneOf(font, kEditorFontChoices), editorFont()))
         Q_EMIT editorFontChanged();
 }
 
 QString AppSettings::editorFontFamily() const
 {
-    return cleanFontFamily(m_settings->value(key(kEditorFontFamily)).toString());
+    return cleanFontFamily(m_settings->value(kEditorFontFamily).toString());
 }
 
 void AppSettings::setEditorFontFamily(const QString &family)
 {
-    if (store(key(kEditorFontFamily), cleanFontFamily(family), editorFontFamily()))
+    if (store(kEditorFontFamily, cleanFontFamily(family), editorFontFamily()))
         Q_EMIT fontFamiliesChanged();
 }
 
 QString AppSettings::editorMonoFamily() const
 {
-    return cleanFontFamily(m_settings->value(key(kEditorMonoFamily)).toString());
+    return cleanFontFamily(m_settings->value(kEditorMonoFamily).toString());
 }
 
 void AppSettings::setEditorMonoFamily(const QString &family)
 {
-    if (store(key(kEditorMonoFamily), cleanFontFamily(family), editorMonoFamily()))
+    if (store(kEditorMonoFamily, cleanFontFamily(family), editorMonoFamily()))
         Q_EMIT fontFamiliesChanged();
 }
 
 QString AppSettings::editorLineSpacing() const
 {
-    return oneOf(m_settings->value(key(kEditorLineSpacing)).toString(), {u"normal", u"compact", u"relaxed"});
+    return oneOf(m_settings->value(kEditorLineSpacing).toString(), kLineSpacingChoices);
 }
 
 void AppSettings::setEditorLineSpacing(const QString &spacing)
 {
-    if (store(key(kEditorLineSpacing), oneOf(spacing, {u"normal", u"compact", u"relaxed"}), editorLineSpacing()))
+    if (store(kEditorLineSpacing, oneOf(spacing, kLineSpacingChoices), editorLineSpacing()))
         Q_EMIT editorLineSpacingChanged();
 }
 
 int AppSettings::editorFontSize() const
 {
     bool ok = false;
-    const int px = m_settings->value(key(kEditorFontSize)).toInt(&ok);
+    const int px = m_settings->value(kEditorFontSize).toInt(&ok);
     return ok ? std::clamp(px, 12, 28) : 16;
 }
 
 void AppSettings::setEditorFontSize(int px)
 {
-    if (store(key(kEditorFontSize), std::clamp(px, 12, 28), editorFontSize()))
+    if (store(kEditorFontSize, std::clamp(px, 12, 28), editorFontSize()))
         Q_EMIT editorFontSizeChanged();
 }
 
 int AppSettings::editorWidth() const
 {
     bool ok = false;
-    const int px = m_settings->value(key(kEditorWidth)).toInt(&ok);
+    const int px = m_settings->value(kEditorWidth).toInt(&ok);
     if (!ok)
         return 680;
     // The presets before 0.6.0 (Narrow 640, Normal 760) read as today's (600, 680), so the
@@ -596,83 +633,79 @@ int AppSettings::editorWidth() const
 void AppSettings::setEditorWidth(int px)
 {
     const int v = px <= 0 ? 0 : std::clamp(px, 480, 1600);
-    if (store(key(kEditorWidth), v, editorWidth()))
+    if (store(kEditorWidth, v, editorWidth()))
         Q_EMIT editorWidthChanged();
 }
 
 bool AppSettings::editorSourceMode() const
 {
-    return m_settings->value(key(kEditorSource), false).toBool();
+    return m_settings->value(kEditorSource, false).toBool();
 }
 
 void AppSettings::setEditorSourceMode(bool on)
 {
-    if (store(key(kEditorSource), on, editorSourceMode()))
+    if (store(kEditorSource, on, editorSourceMode()))
         Q_EMIT editorSourceModeChanged();
 }
 
 bool AppSettings::propertiesExpanded() const
 {
-    return m_settings->value(key(kPropertiesExpanded), false).toBool();
+    return m_settings->value(kPropertiesExpanded, false).toBool();
 }
 
 void AppSettings::setPropertiesExpanded(bool on)
 {
-    if (store(key(kPropertiesExpanded), on, propertiesExpanded()))
+    if (store(kPropertiesExpanded, on, propertiesExpanded()))
         Q_EMIT propertiesExpandedChanged();
 }
 
 bool AppSettings::webPicturesShown() const
 {
-    return m_settings->value(key(kWebPictures), false).toBool();
+    return m_settings->value(kWebPictures, false).toBool();
 }
 
 void AppSettings::setWebPicturesShown(bool on)
 {
-    if (store(key(kWebPictures), on, webPicturesShown()))
+    if (store(kWebPictures, on, webPicturesShown()))
         Q_EMIT webPicturesShownChanged();
 }
 
 bool AppSettings::spellCheck() const
 {
-    return m_settings->value(key(kSpellCheck), true).toBool();
+    return m_settings->value(kSpellCheck, true).toBool();
 }
 
 void AppSettings::setSpellCheck(bool on)
 {
-    if (store(key(kSpellCheck), on, spellCheck()))
+    if (store(kSpellCheck, on, spellCheck()))
         Q_EMIT spellCheckChanged();
 }
 
 bool AppSettings::taskStatusHistory() const
 {
-    return m_settings->value(key(kTaskStatusHistory), false).toBool();
+    return m_settings->value(kTaskStatusHistory, false).toBool();
 }
 
 void AppSettings::setTaskStatusHistory(bool on)
 {
-    if (store(key(kTaskStatusHistory), on, taskStatusHistory()))
+    if (store(kTaskStatusHistory, on, taskStatusHistory()))
         Q_EMIT taskStatusHistoryChanged();
 }
 
 QString AppSettings::spellLanguages() const
 {
-    static const QStringList known{u"auto"_s, u"pl"_s, u"en"_s, u"pl,en"_s, u"en,pl"_s};
-    const QString v = m_settings->value(key(kSpellLanguages)).toString();
-    return known.contains(v) ? v : u"auto"_s;
+    return oneOf(m_settings->value(kSpellLanguages).toString(), kSpellLanguageChoices);
 }
 
 void AppSettings::setSpellLanguages(const QString &languages)
 {
-    static const QStringList known{u"auto"_s, u"pl"_s, u"en"_s, u"pl,en"_s, u"en,pl"_s};
-    const QString v = known.contains(languages) ? languages : u"auto"_s;
-    if (store(key(kSpellLanguages), v, spellLanguages()))
+    if (store(kSpellLanguages, oneOf(languages, kSpellLanguageChoices), spellLanguages()))
         Q_EMIT spellLanguagesChanged();
 }
 
 QStringList AppSettings::spellingWords() const
 {
-    return storedList(m_settings->value(key(kSpellingWords)));
+    return storedList(m_settings->value(kSpellingWords));
 }
 
 void AppSettings::setSpellingWords(const QStringList &words)
@@ -681,66 +714,66 @@ void AppSettings::setSpellingWords(const QStringList &words)
     for (const QString &w : words) {
         const QString t = w.trimmed();
         // Single words: no line breaks, at most 100 characters.
-        if (!t.isEmpty() && t.size() <= 100 && !t.contains(u'\n') && !clean.contains(t))
+        if (!t.isEmpty() && t.size() <= 100 && !t.contains(u'\n'))
             clean.append(t);
     }
-    if (store(key(kSpellingWords), clean, spellingWords()))
+    clean.removeDuplicates();
+    if (store(kSpellingWords, clean, spellingWords()))
         Q_EMIT spellingWordsChanged();
 }
 
 QString AppSettings::exportWebPictures() const
 {
-    return m_settings->value(key(kExportWebPictures)).toString() == u"include" ? u"include"_s : u"link"_s;
+    return oneOf(m_settings->value(kExportWebPictures).toString(), kWebPictureExportChoices);
 }
 
 void AppSettings::setExportWebPictures(const QString &mode)
 {
-    const QString clean = mode == u"include" ? mode : u"link"_s;
-    if (store(key(kExportWebPictures), clean, exportWebPictures()))
+    if (store(kExportWebPictures, oneOf(mode, kWebPictureExportChoices), exportWebPictures()))
         Q_EMIT exportWebPicturesChanged();
 }
 
 bool AppSettings::wordCountShown() const
 {
-    return value(key(kWordCount), true).toBool(); // (not a bool: the default)
+    return value(kWordCount, true).toBool(); // (not a bool: the default)
 }
 
 void AppSettings::setWordCountShown(bool on)
 {
-    if (store(key(kWordCount), on, wordCountShown()))
+    if (store(kWordCount, on, wordCountShown()))
         Q_EMIT wordCountShownChanged();
 }
 
 bool AppSettings::focusMode() const
 {
-    return value(key(kFocusMode), false).toBool(); // (not a bool: the default)
+    return value(kFocusMode, false).toBool(); // (not a bool: the default)
 }
 
 void AppSettings::setFocusMode(bool on)
 {
-    if (store(key(kFocusMode), on, focusMode()))
+    if (store(kFocusMode, on, focusMode()))
         Q_EMIT focusModeChanged();
 }
 
 bool AppSettings::readingMode() const
 {
-    return value(key(kReadingMode), false).toBool(); // (not a bool: the default)
+    return value(kReadingMode, false).toBool(); // (not a bool: the default)
 }
 
 void AppSettings::setReadingMode(bool on)
 {
-    if (store(key(kReadingMode), on, readingMode()))
+    if (store(kReadingMode, on, readingMode()))
         Q_EMIT readingModeChanged();
 }
 
 bool AppSettings::typewriterScrolling() const
 {
-    return value(key(kTypewriter), false).toBool(); // (not a bool: the default)
+    return value(kTypewriter, false).toBool(); // (not a bool: the default)
 }
 
 void AppSettings::setTypewriterScrolling(bool on)
 {
-    if (store(key(kTypewriter), on, typewriterScrolling()))
+    if (store(kTypewriter, on, typewriterScrolling()))
         Q_EMIT typewriterScrollingChanged();
 }
 
@@ -749,7 +782,7 @@ void AppSettings::setTypewriterScrolling(bool on)
 QVariantMap AppSettings::shortcutOverrides() const
 {
     QVariantMap out;
-    m_settings->beginGroup(key(kShortcuts));
+    m_settings->beginGroup(kShortcuts);
     const QStringList ids = m_settings->childKeys();
     for (const QString &id : ids)
         out.insert(id, m_settings->value(id));
@@ -762,7 +795,7 @@ void AppSettings::setShortcutOverride(const QString &id, const std::optional<QSt
     // (An id never holds a '/': it would be a group of its own.)
     if (id.isEmpty() || id.contains(u'/') || id.contains(u'\\'))
         return;
-    const QString k = key(kShortcuts) + u'/' + id;
+    const QString k = kShortcuts + u'/' + id;
     if (sequence)
         m_settings->setValue(k, *sequence);
     else
@@ -771,20 +804,20 @@ void AppSettings::setShortcutOverride(const QString &id, const std::optional<QSt
 
 void AppSettings::clearShortcutOverrides()
 {
-    m_settings->remove(key(kShortcuts));
+    m_settings->remove(kShortcuts);
 }
 
 // ---- Vaults ---------------------------------------------------------------------------------
 
 QString AppSettings::currentVault() const
 {
-    return m_settings->value(key(kCurrentVault)).toString();
+    return m_settings->value(kCurrentVault).toString();
 }
 
 void AppSettings::setCurrentVault(const QString &path)
 {
     adoptNotebookKeys(path);
-    if (store(key(kCurrentVault), cleanPath(path), currentVault())) {
+    if (store(kCurrentVault, cleanPath(path), currentVault())) {
         Q_EMIT currentVaultChanged();
         Q_EMIT nextcloudChanged(); // the sync switch and folder belong to the notebook
     }
@@ -793,18 +826,12 @@ void AppSettings::setCurrentVault(const QString &path)
 QVariantList AppSettings::recentVaults() const
 {
     QVariantList out;
-    const QVariantList stored = m_settings->value(key(kRecentVaults)).toList();
+    const QVariantList stored = m_settings->value(kRecentVaults).toList();
     for (const QVariant &v : stored) {
         const QVariantMap m = v.toMap();
         const QString path = m.value(u"path"_s).toString();
-        if (path.isEmpty())
-            continue;
-        QVariantMap entry;
-        entry.insert(u"path"_s, path);
-        const QString name = m.value(u"name"_s).toString();
-        entry.insert(u"name"_s, name.isEmpty() ? QFileInfo(path).fileName() : name);
-        entry.insert(u"lastOpened"_s, m.value(u"lastOpened"_s).toString());
-        out.append(entry);
+        if (!path.isEmpty())
+            out.append(recentEntry(path, m.value(u"name"_s).toString(), m.value(u"lastOpened"_s).toString()));
     }
     return out;
 }
@@ -815,28 +842,19 @@ void AppSettings::addRecentVault(const QString &rawPath)
     if (path.isEmpty())
         return;
     QVariantList list = recentVaults();
-    list.removeIf([&](const QVariant &v) { return v.toMap().value(u"path"_s).toString() == path; });
-    QVariantMap entry;
-    entry.insert(u"path"_s, path);
-    entry.insert(u"name"_s, QFileInfo(path).fileName());
-    entry.insert(u"lastOpened"_s, QDateTime::currentDateTime().toString(Qt::ISODate));
-    list.prepend(entry);
-    while (list.size() > MaxRecentVaults)
-        list.removeLast();
-    m_settings->setValue(key(kRecentVaults), list);
+    removeRecent(list, path);
+    list.prepend(recentEntry(path, {}, QDateTime::currentDateTime().toString(Qt::ISODate)));
+    m_settings->setValue(kRecentVaults, list.mid(0, MaxRecentVaults));
     Q_EMIT recentVaultsChanged();
     setCurrentVault(path);
 }
 
 void AppSettings::forgetRecentVault(const QString &rawPath)
 {
-    const QString path = cleanPath(rawPath);
     QVariantList list = recentVaults();
-    const auto before = list.size();
-    list.removeIf([&](const QVariant &v) { return v.toMap().value(u"path"_s).toString() == path; });
-    if (list.size() == before)
+    if (removeRecent(list, cleanPath(rawPath)) == 0)
         return;
-    m_settings->setValue(key(kRecentVaults), list);
+    m_settings->setValue(kRecentVaults, list);
     Q_EMIT recentVaultsChanged();
 }
 
@@ -844,30 +862,28 @@ void AppSettings::forgetRecentVault(const QString &rawPath)
 
 bool AppSettings::closeToTray() const
 {
-    return m_settings->value(key(kCloseToTray), true).toBool();
+    return m_settings->value(kCloseToTray, true).toBool();
 }
 
 void AppSettings::setCloseToTray(bool on)
 {
-    if (store(key(kCloseToTray), on, closeToTray()))
+    if (store(kCloseToTray, on, closeToTray()))
         Q_EMIT closeToTrayChanged();
 }
 
 QString AppSettings::defaultTrayClick()
 {
-    return u"calendar"_s;
+    return QString::fromUtf16(kTrayClickChoices.front());
 }
 
 QString AppSettings::trayClick() const
 {
-    const QString v = m_settings->value(key(kTrayClick)).toString();
-    return v == u"window" || v == u"calendar" ? v : defaultTrayClick();
+    return oneOf(m_settings->value(kTrayClick).toString(), kTrayClickChoices);
 }
 
 void AppSettings::setTrayClick(const QString &action)
 {
-    const QString clean = action == u"window" || action == u"calendar" ? action : defaultTrayClick();
-    if (store(key(kTrayClick), clean, trayClick()))
+    if (store(kTrayClick, oneOf(action, kTrayClickChoices), trayClick()))
         Q_EMIT trayClickChanged();
 }
 
@@ -876,46 +892,19 @@ void AppSettings::setTrayClick(const QString &action)
 bool AppSettings::introDone() const
 {
     // Brulion was used before the intro existed: an update never shows it.
-    const bool usedBefore = m_settings->contains(key(kCurrentVault)) || !recentVaults().isEmpty();
-    return m_settings->value(key(kIntroDone), usedBefore).toBool();
+    const bool usedBefore = m_settings->contains(kCurrentVault) || !recentVaults().isEmpty();
+    return m_settings->value(kIntroDone, usedBefore).toBool();
 }
 
 void AppSettings::setIntroDone(bool done)
 {
-    if (store(key(kIntroDone), done, introDone()))
+    if (store(kIntroDone, done, introDone()))
         Q_EMIT introDoneChanged();
 }
 
-namespace {
-
-/// The usable part of the intro's notebook settings (Workspace::setConfig() validates again).
-QVariantMap cleanNotebookConfig(const QVariantMap &config)
-{
-    QVariantMap out;
-    for (const char16_t *k : {u"journalMode", u"pageMode"}) {
-        const QString name = QString::fromUtf16(k);
-        const QString mode = config.value(name).toString();
-        if (mode == u"outline" || mode == u"document")
-            out.insert(name, mode);
-    }
-    bool ok = false;
-    const int day = config.value(u"weekStartsOn"_s).toInt(&ok);
-    if (ok && (day == 1 || day == 6 || day == 7))
-        out.insert(u"weekStartsOn"_s, day);
-    const QTime time = QTime::fromString(config.value(u"defaultReminderTime"_s).toString().trimmed(), u"H:mm"_s);
-    if (time.isValid())
-        out.insert(u"defaultReminderTime"_s, time.toString(u"HH:mm"_s));
-    const QString format = config.value(u"journalFileFormat"_s).toString().trimmed();
-    if (format == u"yyyy-MM-dd" || format == u"yyyy_MM_dd" || format == u"dd.MM.yyyy")
-        out.insert(u"journalFileFormat"_s, format);
-    return out;
-}
-
-} // namespace
-
 QVariantMap AppSettings::newNotebookConfig() const
 {
-    return cleanNotebookConfig(m_settings->value(key(kNewNotebookConfig)).toMap());
+    return cleanNotebookConfig(m_settings->value(kNewNotebookConfig).toMap());
 }
 
 void AppSettings::setNewNotebookConfig(const QVariantMap &config)
@@ -924,9 +913,9 @@ void AppSettings::setNewNotebookConfig(const QVariantMap &config)
     if (clean == newNotebookConfig())
         return;
     if (clean.isEmpty())
-        m_settings->remove(key(kNewNotebookConfig));
+        m_settings->remove(kNewNotebookConfig);
     else
-        m_settings->setValue(key(kNewNotebookConfig), clean);
+        m_settings->setValue(kNewNotebookConfig, clean);
     Q_EMIT newNotebookConfigChanged();
 }
 
@@ -934,49 +923,49 @@ void AppSettings::setNewNotebookConfig(const QVariantMap &config)
 
 bool AppSettings::remindersEnabled() const
 {
-    return m_settings->value(key(kRemindersEnabled), true).toBool();
+    return m_settings->value(kRemindersEnabled, true).toBool();
 }
 
 void AppSettings::setRemindersEnabled(bool on)
 {
-    if (store(key(kRemindersEnabled), on, remindersEnabled()))
+    if (store(kRemindersEnabled, on, remindersEnabled()))
         Q_EMIT remindersEnabledChanged();
 }
 
 int AppSettings::snoozeMinutes() const
 {
     bool ok = false;
-    const int v = m_settings->value(key(kSnooze)).toInt(&ok);
+    const int v = m_settings->value(kSnooze).toInt(&ok);
     return ok ? std::clamp(v, 1, 120) : 10;
 }
 
 void AppSettings::setSnoozeMinutes(int minutes)
 {
-    if (store(key(kSnooze), std::clamp(minutes, 1, 120), snoozeMinutes()))
+    if (store(kSnooze, std::clamp(minutes, 1, 120), snoozeMinutes()))
         Q_EMIT snoozeMinutesChanged();
 }
 
 int AppSettings::alarmRingMinutes() const
 {
     bool ok = false;
-    const int v = m_settings->value(key(kAlarmRing)).toInt(&ok);
+    const int v = m_settings->value(kAlarmRing).toInt(&ok);
     return ok ? std::clamp(v, 1, 60) : 10;
 }
 
 void AppSettings::setAlarmRingMinutes(int minutes)
 {
-    if (store(key(kAlarmRing), std::clamp(minutes, 1, 60), alarmRingMinutes()))
+    if (store(kAlarmRing, std::clamp(minutes, 1, 60), alarmRingMinutes()))
         Q_EMIT alarmRingMinutesChanged();
 }
 
 bool AppSettings::notifyMissed() const
 {
-    return m_settings->value(key(kNotifyMissed), true).toBool();
+    return m_settings->value(kNotifyMissed, true).toBool();
 }
 
 void AppSettings::setNotifyMissed(bool on)
 {
-    if (store(key(kNotifyMissed), on, notifyMissed()))
+    if (store(kNotifyMissed, on, notifyMissed()))
         Q_EMIT notifyMissedChanged();
 }
 
@@ -986,18 +975,21 @@ void AppSettings::setNotifyMissed(bool on)
 // the server holds one notebook, so a second notebook must never inherit it (its notes would
 // flow into the first one). The server and the account are shared.
 
+QString AppSettings::notebookGroup(const QString &notebook)
+{
+    const QString id = notebookId(notebook);
+    if (!id.isEmpty()) {
+        adoptNotebookKeys(notebook);
+        recordPath(*m_settings, id, notebook);
+    }
+    return id;
+}
+
 template<typename T>
 bool AppSettings::storeNotebookValue(const QString &notebook, QStringView name, const T &value, const T &current)
 {
-    const QString id = notebookId(notebook);
-    if (id.isEmpty())
-        return false; // no notebook open: nothing to set
-    adoptNotebookKeys(notebook);
-    const QString pathKey = groupKey(id, u"path");
-    const QString path = absolutePath(notebook);
-    if (m_settings->value(pathKey).toString() != path)
-        m_settings->setValue(pathKey, path);
-    return store(groupKey(id, name), value, current);
+    const QString id = notebookGroup(notebook);
+    return !id.isEmpty() && store(groupKey(id, name), value, current); // no notebook open: nothing to set
 }
 
 QString AppSettings::notebookKey(const QString &notebook, QStringView name) const
@@ -1022,12 +1014,8 @@ bool AppSettings::hasNotebookValue(const QString &notebook, QStringView name) co
 
 void AppSettings::setNotebookValue(const QString &notebook, QStringView name, const QVariant &value)
 {
-    const QString id = notebookId(notebook);
-    if (id.isEmpty())
-        return;
-    adoptNotebookKeys(notebook);
-    m_settings->setValue(groupKey(id, u"path"), absolutePath(notebook));
-    m_settings->setValue(groupKey(id, name), value);
+    if (const QString id = notebookGroup(notebook); !id.isEmpty())
+        m_settings->setValue(groupKey(id, name), value);
 }
 
 void AppSettings::adoptNotebookKeys(const QString &notebook)
@@ -1041,7 +1029,7 @@ void AppSettings::adoptNotebookKeys(const QString &notebook)
     const QString legacy = legacyNotebookId(clean);
     bool has = false;
     if (legacy != id) {
-        const QString from = key(kNcNotebooks) + u'/' + legacy;
+        const QString from = kNcNotebooks + u'/' + legacy;
         m_settings->beginGroup(from);
         const QStringList keys = m_settings->childKeys();
         m_settings->endGroup();
@@ -1049,44 +1037,42 @@ void AppSettings::adoptNotebookKeys(const QString &notebook)
             const QString to = groupKey(id, k);
             if (!m_settings->contains(to))
                 m_settings->setValue(to, m_settings->value(from + u'/' + k));
-            has = true;
         }
+        has = !keys.isEmpty();
         if (has)
             m_settings->remove(from);
     }
-    const QString pathKey = groupKey(id, u"path");
     if (!has) {
-        m_settings->beginGroup(key(kNcNotebooks) + u'/' + id);
+        m_settings->beginGroup(kNcNotebooks + u'/' + id);
         has = !m_settings->childKeys().isEmpty();
         m_settings->endGroup();
     }
-    if (has && m_settings->value(pathKey).toString() != absolutePath(clean))
-        m_settings->setValue(pathKey, absolutePath(clean));
+    if (has)
+        recordPath(*m_settings, id, clean);
 }
 
 QList<AppSettings::NotebookSync> AppSettings::notebookSyncs() const
 {
     // A group without its path (0.3.1–0.3.5 wrote none) is found among the recent notebooks.
     QHash<QString, QString> recent;
-    for (const QVariant &v : recentVaults()) {
+    for (const QVariantList vaults = recentVaults(); const QVariant &v : vaults) {
         const QString path = v.toMap().value(u"path"_s).toString();
         recent.insert(legacyNotebookId(path), path);
         recent.insert(notebookId(path), path);
     }
-    m_settings->beginGroup(key(kNcNotebooks));
+    m_settings->beginGroup(kNcNotebooks);
     const QStringList ids = m_settings->childGroups();
     m_settings->endGroup();
     QList<NotebookSync> out;
+    out.reserve(ids.size());
     for (const QString &id : ids) {
-        NotebookSync n;
-        n.id = id;
-        n.path = m_settings->value(groupKey(id, u"path")).toString();
-        if (n.path.isEmpty())
-            n.path = recent.value(id);
-        n.enabled = m_settings->value(groupKey(id, u"enabled"), false).toBool();
-        n.hasFolder = m_settings->contains(groupKey(id, u"folder"));
-        n.folder = m_settings->value(groupKey(id, u"folder"), key(kDefaultServerFolder)).toString();
-        out.append(n);
+        const QString path = m_settings->value(groupKey(id, u"path")).toString();
+        const QString folderKey = groupKey(id, u"folder");
+        out.append(NotebookSync{.id = id,
+                                .path = path.isEmpty() ? recent.value(id) : path,
+                                .enabled = m_settings->value(groupKey(id, u"enabled"), false).toBool(),
+                                .hasFolder = m_settings->contains(folderKey),
+                                .folder = m_settings->value(folderKey, kDefaultServerFolder).toString()});
     }
     return out;
 }
@@ -1105,7 +1091,7 @@ void AppSettings::setNextcloudEnabled(bool on)
 
 QString AppSettings::nextcloudUrl() const
 {
-    return m_settings->value(key(kNcUrl)).toString();
+    return m_settings->value(kNcUrl).toString();
 }
 
 void AppSettings::setNextcloudUrl(const QString &url)
@@ -1113,25 +1099,25 @@ void AppSettings::setNextcloudUrl(const QString &url)
     QString v = url.trimmed();
     while (v.endsWith(u'/'))
         v.chop(1);
-    if (store(key(kNcUrl), v, nextcloudUrl()))
+    if (store(kNcUrl, v, nextcloudUrl()))
         Q_EMIT nextcloudChanged();
 }
 
 QString AppSettings::nextcloudUser() const
 {
-    return m_settings->value(key(kNcUser)).toString();
+    return m_settings->value(kNcUser).toString();
 }
 
 void AppSettings::setNextcloudUser(const QString &user)
 {
-    if (store(key(kNcUser), user.trimmed(), nextcloudUser()))
+    if (store(kNcUser, user.trimmed(), nextcloudUser()))
         Q_EMIT nextcloudChanged();
 }
 
 QString AppSettings::nextcloudFolder() const
 {
     const QString k = notebookKey(currentVault(), u"folder");
-    return k.isEmpty() ? key(kDefaultServerFolder) : m_settings->value(k, key(kDefaultServerFolder)).toString();
+    return k.isEmpty() ? QString(kDefaultServerFolder) : m_settings->value(k, kDefaultServerFolder).toString();
 }
 
 void AppSettings::setNextcloudFolder(const QString &folder)
@@ -1165,16 +1151,17 @@ QString AppSettings::proposedNextcloudFolder() const
     const QString id = notebookId(notebook);
     const QString legacy = legacyNotebookId(notebook);
     QStringList taken;
-    for (const NotebookSync &n : notebookSyncs()) {
+    for (const QList<NotebookSync> syncs = notebookSyncs(); const NotebookSync &n : syncs) {
         if (n.id != id && n.id != legacy && (n.hasFolder || n.enabled))
             taken.append(n.folder);
     }
     if (hasSharedNextcloud())
-        taken.append(m_settings->value(key(kNcSharedFolder), key(kDefaultServerFolder)).toString());
+        taken.append(m_settings->value(kNcSharedFolder, kDefaultServerFolder).toString());
     QString candidate = base;
+    // (Not "%1 %2".arg(base).arg(i): a "%2" in the folder's name would be replaced as well.)
     for (int i = 2;
          std::any_of(taken.cbegin(), taken.cend(), [&](const QString &f) { return foldersOverlap(f, candidate); }); ++i)
-        candidate = u"%1 %2"_s.arg(base).arg(i);
+        candidate = base + u' ' + QString::number(i);
     return candidate;
 }
 
@@ -1187,7 +1174,7 @@ QString AppSettings::nextcloudFolderUser(const QString &folder, const QString &e
 {
     const QString exceptId = notebookId(except);
     const QString exceptLegacy = legacyNotebookId(except);
-    for (const NotebookSync &n : notebookSyncs()) {
+    for (const QList<NotebookSync> syncs = notebookSyncs(); const NotebookSync &n : syncs) {
         if (!n.enabled || n.path.isEmpty() || n.id == exceptId || n.id == exceptLegacy)
             continue;
         // A notebook whose folder is gone (moved, deleted) syncs nothing any more; the same folder
@@ -1206,27 +1193,27 @@ void AppSettings::disableNextcloudEverywhere(bool exceptCurrent)
     const QString current = currentVault();
     const QString currentId = notebookId(current);
     const QString currentLegacy = legacyNotebookId(current);
-    for (const NotebookSync &n : notebookSyncs()) {
+    for (const QList<NotebookSync> syncs = notebookSyncs(); const NotebookSync &n : syncs) {
         const bool isCurrent = !currentId.isEmpty() && (n.id == currentId || n.id == currentLegacy);
         if (n.enabled && !(exceptCurrent && isCurrent))
             m_settings->setValue(groupKey(n.id, u"enabled"), false);
     }
-    if (m_settings->value(key(kNcSharedEnabled), false).toBool())
-        m_settings->setValue(key(kNcSharedEnabled), false); // its folder still goes to its notebook
+    if (m_settings->value(kNcSharedEnabled, false).toBool())
+        m_settings->setValue(kNcSharedEnabled, false); // its folder still goes to its notebook
     if (wasOn != nextcloudEnabled())
         Q_EMIT nextcloudChanged();
 }
 
 bool AppSettings::hasSharedNextcloud() const
 {
-    return m_settings->contains(key(kNcSharedEnabled)) || m_settings->contains(key(kNcSharedFolder));
+    return m_settings->contains(kNcSharedEnabled) || m_settings->contains(kNcSharedFolder);
 }
 
 void AppSettings::recordSharedNextcloudOwner(const QString &notebook)
 {
-    if (!hasSharedNextcloud() || m_settings->contains(key(kNcSharedOwner)))
+    if (!hasSharedNextcloud() || m_settings->contains(kNcSharedOwner))
         return;
-    m_settings->setValue(key(kNcSharedOwner), cleanPath(notebook));
+    m_settings->setValue(kNcSharedOwner, cleanPath(notebook));
 }
 
 bool AppSettings::claimSharedNextcloud(const QString &notebook, const QString &syncedRemote)
@@ -1236,23 +1223,23 @@ bool AppSettings::claimSharedNextcloud(const QString &notebook, const QString &s
     // would then sync with the old folder and mix both notebooks there.
     if (!hasSharedNextcloud())
         return false;
-    const QString folder = m_settings->value(key(kNcSharedFolder), key(kDefaultServerFolder)).toString();
+    const QString folder = m_settings->value(kNcSharedFolder, kDefaultServerFolder).toString();
     const bool synced =
             !syncedRemote.isEmpty() && syncedRemote == nextcloudRemote(nextcloudUrl(), nextcloudUser(), folder);
-    const QString owner = m_settings->value(key(kNcSharedOwner)).toString();
+    const QString owner = m_settings->value(kNcSharedOwner).toString();
     if (!synced && (owner.isEmpty() || notebookId(owner) != notebookId(notebook)))
         return false;
     if (!hasNotebookValue(notebook, u"enabled")) {
-        const bool on = m_settings->value(key(kNcSharedEnabled), false).toBool()
-                        && nextcloudFolderUser(folder, notebook).isEmpty();
+        const bool on =
+                m_settings->value(kNcSharedEnabled, false).toBool() && nextcloudFolderUser(folder, notebook).isEmpty();
         setNotebookValue(notebook, u"enabled", on);
     }
     // Always written: a notebook without a folder of its own would be offered another one.
     if (!hasNotebookValue(notebook, u"folder"))
         setNotebookValue(notebook, u"folder", folder);
-    m_settings->remove(key(kNcSharedEnabled));
-    m_settings->remove(key(kNcSharedFolder));
-    m_settings->remove(key(kNcSharedOwner));
+    m_settings->remove(kNcSharedEnabled);
+    m_settings->remove(kNcSharedFolder);
+    m_settings->remove(kNcSharedOwner);
     return true;
 }
 
@@ -1280,24 +1267,24 @@ void AppSettings::notebookOpened(const QString &notebook, const QString &syncedR
 int AppSettings::syncIntervalMinutes() const
 {
     bool ok = false;
-    const int v = m_settings->value(key(kSyncInterval)).toInt(&ok);
+    const int v = m_settings->value(kSyncInterval).toInt(&ok);
     return ok ? std::clamp(v, 0, 24 * 60) : 15;
 }
 
 void AppSettings::setSyncIntervalMinutes(int minutes)
 {
-    if (store(key(kSyncInterval), std::clamp(minutes, 0, 24 * 60), syncIntervalMinutes()))
+    if (store(kSyncInterval, std::clamp(minutes, 0, 24 * 60), syncIntervalMinutes()))
         Q_EMIT nextcloudChanged();
 }
 
 QString AppSettings::passwordFile() const
 {
-    return m_dataDir + u"/secrets/nextcloud-password"_s;
+    return passwordFileIn(m_dataDir);
 }
 
 QString AppSettings::storedNextcloudPassword(const QString &dataDir)
 {
-    QFile in(dataDir + u"/secrets/nextcloud-password"_s);
+    QFile in(passwordFileIn(dataDir));
     return in.open(QIODevice::ReadOnly) ? QString::fromUtf8(in.readAll()) : QString();
 }
 
@@ -1308,42 +1295,19 @@ bool AppSettings::hasNextcloudPassword() const
 
 bool AppSettings::setNextcloudPassword(const QString &password)
 {
-    const QString file = passwordFile();
     const bool had = hasNextcloudPassword();
-    if (password.isEmpty()) {
-        const bool ok = !QFileInfo::exists(file) || QFile::remove(file);
-        m_passwordSecret.reset();
-        if (had)
-            Q_EMIT nextcloudPasswordChanged();
-        return ok;
-    }
-    const QString dir = QFileInfo(file).absolutePath();
-    if (!QDir().mkpath(dir))
-        return false;
-    QFile::setPermissions(dir, QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
+    // Masked in every log line from now on, also when it cannot be stored ("" masks nothing).
     m_passwordSecret.reset(password);
-    QSaveFile out(file);
-    if (!out.open(QIODevice::WriteOnly))
-        return false;
-    // Restrict the temporary file before the secret is written into it; QSaveFile renames it
-    // over the old file, which keeps these permissions.
-    out.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner);
-    out.write(password.toUtf8());
-    if (!out.commit())
-        return false;
-    QFile::setPermissions(file, QFileDevice::ReadOwner | QFileDevice::WriteOwner);
-    Q_EMIT nextcloudPasswordChanged();
-    return true;
+    const bool ok = writeSecretFile(passwordFile(), password); // owner-only; "" removes the file
+    // Forgetting it is a change when there was one, also when the file could not be removed.
+    if (password.isEmpty() ? had : ok)
+        Q_EMIT nextcloudPasswordChanged();
+    return ok;
 }
 
 QString AppSettings::nextcloudPassword() const
 {
-    QFile in(passwordFile());
-    if (!in.open(QIODevice::ReadOnly)) {
-        m_passwordSecret.reset();
-        return {};
-    }
-    const QString password = QString::fromUtf8(in.readAll());
+    const QString password = storedNextcloudPassword(m_dataDir);
     m_passwordSecret.reset(password);
     return password;
 }
@@ -1355,38 +1319,24 @@ QVariant AppSettings::value(const QString &k, const QVariant &defaultValue) cons
     QVariant v = m_settings->value(k, defaultValue);
     // The INI file keeps only text: after a restart a stored bool or number comes back as a
     // string. Give it the default's type again (QML compares with === and computes with it);
-    // a stored value that does not convert yields the default.
-    if (defaultValue.isValid() && !defaultValue.isNull() && v.typeId() == QMetaType::QString
-        && defaultValue.typeId() != QMetaType::QString) {
-        const QString text = v.toString().trimmed();
-        switch (defaultValue.typeId()) {
-        case QMetaType::Bool:
-            if (text == u"true" || text == u"1")
-                return true;
-            if (text == u"false" || text == u"0")
-                return false;
-            return defaultValue;
-        case QMetaType::Int:
-        case QMetaType::LongLong:
-        case QMetaType::Double: {
-            bool ok = false;
-            const double d = text.toDouble(&ok);
-            if (!ok)
-                return defaultValue;
-            if (defaultValue.typeId() == QMetaType::Double)
-                return d;
-            const qlonglong n = text.toLongLong(&ok);
-            if (!ok)
-                return defaultValue;
-            return defaultValue.typeId() == QMetaType::Int ? QVariant(int(n)) : QVariant(n);
-        }
-        default:
-            if (v.convert(defaultValue.metaType()))
-                return v;
-            return defaultValue;
-        }
+    // a stored value that does not convert (a number out of the type's range too) yields the
+    // default.
+    const int type = defaultValue.typeId();
+    if (defaultValue.isNull() || v.typeId() != QMetaType::QString || type == QMetaType::QString)
+        return v;
+    const QString text = v.toString().trimmed();
+    bool ok = false;
+    switch (type) {
+    case QMetaType::Bool:
+        if (text == u"true" || text == u"1")
+            return true;
+        return text == u"false" || text == u"0" ? QVariant(false) : defaultValue;
+    case QMetaType::Int: v = text.toInt(&ok); break;
+    case QMetaType::LongLong: v = text.toLongLong(&ok); break;
+    case QMetaType::Double: v = text.toDouble(&ok); break;
+    default: ok = v.convert(defaultValue.metaType());
     }
-    return v;
+    return ok ? v : defaultValue;
 }
 
 void AppSettings::setValue(const QString &k, const QVariant &value)
@@ -1399,13 +1349,9 @@ void AppSettings::setValue(const QString &k, const QVariant &value)
 
 QStringList AppSettings::recentSearches() const
 {
-    const QVariant saved = m_settings->value(u"search/recent"_s);
-    if (saved.typeId() == QMetaType::QVariantList || saved.typeId() == QMetaType::QStringList) {
-        QStringList out;
-        for (const QVariant &v : saved.toList())
-            out.append(v.toString());
-        return out;
-    }
+    const QVariant saved = m_settings->value(kRecentSearches);
+    if (saved.typeId() == QMetaType::QVariantList || saved.typeId() == QMetaType::QStringList)
+        return saved.toStringList(); // (each entry as text)
     const QString one = saved.toString();
     return one.isEmpty() ? QStringList() : QStringList{one};
 }
@@ -1415,21 +1361,21 @@ QStringList AppSettings::rememberSearch(const QString &query)
     const QString q = query.trimmed();
     if (q.isEmpty())
         return recentSearches();
-    const QString key = text::foldKey(q);
+    const QString folded = text::foldKey(q);
     QStringList list{q};
-    for (const QString &r : recentSearches()) {
-        if (list.size() >= 8)
+    for (const QStringList recent = recentSearches(); const QString &r : recent) {
+        if (list.size() >= kMaxRecentSearches)
             break;
-        if (text::foldKey(r) != key)
+        if (text::foldKey(r) != folded)
             list.append(r);
     }
-    setValue(u"search/recent"_s, list);
+    setValue(kRecentSearches, list);
     return list;
 }
 
 void AppSettings::clearRecentSearches()
 {
-    setValue(u"search/recent"_s, QStringList());
+    setValue(kRecentSearches, QStringList());
 }
 
 void AppSettings::sync()

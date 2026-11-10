@@ -65,7 +65,7 @@ BDialog {
         openedAt = DatesHelper.now()
         time = defaultTime
         // Today after the default time: the next full hour, while it is still today.
-        if (day === DatesHelper.today && DatesHelper.compare(day + " " + defaultTime, openedAt) <= 0) {
+        if (isToday && DatesHelper.compare(day + " " + defaultTime, openedAt) <= 0) {
             const nextHour = "" + DatesHelper.addMinutes(Js.slice(openedAt, 0, 13) + ":00", 60)
             if (DatesHelper.specDate(nextHour) === day)
                 time = DatesHelper.specTime(nextHour)

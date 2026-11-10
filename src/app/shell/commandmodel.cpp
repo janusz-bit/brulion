@@ -38,6 +38,65 @@ QVariantMap toMap(const Command &c, const ShortcutMap *shortcuts)
             {u"enabled"_s, c.enabled}};
 }
 
+/// `commands` into `list` right after the command `id` (at the end when there is none).
+void insertAfter(QList<Command> &list, const QString &id, const QList<Command> &commands)
+{
+    const auto it = std::ranges::find(std::as_const(list), id, &Command::id);
+    qsizetype at = it == list.cend() ? list.size() : it - list.cbegin() + 1;
+    for (const Command &c : commands)
+        list.insert(at++, c);
+}
+
+/// The commands the shell carries out (AppController::uiActionRequested: it opens the dialogs, the
+/// editor on screen copies the links) and their uiAction.
+struct UiAction {
+    QStringView id;
+    QStringView action;
+};
+constexpr UiAction kUiActions[] = {
+        {u"page.new", u"newPage"},
+        {u"page.switch", u"switcher"},
+        {u"page.find", u"findInNote"},
+        {u"page.replace", u"replaceInNote"},
+        {u"page.rename", u"renamePage"},
+        {u"page.export", u"exportPage"},
+        {u"page.print", u"printPage"},
+        {u"page.source", u"toggleSourceMode"},
+        {u"page.mode", u"toggleNoteMode"},
+        {u"page.addProperty", u"addProperty"},
+        {u"page.saveWebPictures", u"saveWebPictures"},
+        {u"page.copyLink", u"copyLink:page"},
+        {u"block.copyRef", u"copyLink:blockRef"},
+        {u"block.copyLink", u"copyLink:blockLink"},
+        {u"heading.copyLink", u"copyLink:heading"},
+        {u"task.clock", u"taskClock"},
+        {u"task.addDependency", u"taskDependency"},
+        {u"folder.new", u"newFolder"},
+        {u"page.move", u"movePage"},
+        {u"page.reveal", u"revealInTree"},
+        {u"page.trash", u"trashPage"},
+        {u"theme.toggle", u"toggleTheme"},
+        {u"about", u"about"},
+};
+
+/// The uiAction of the command `id`, "" for a command that runs in C++.
+QString uiActionOf(const QString &id)
+{
+    for (const UiAction &ui : kUiActions) {
+        if (ui.id == id)
+            return ui.action.toString();
+    }
+    return {};
+}
+
+/// The weekly or monthly note of a journal command: -1 the last one, 1 the next one, 0 this one.
+int periodOffset(const QString &id)
+{
+    if (id.startsWith(u"journal.last"))
+        return -1;
+    return id.startsWith(u"journal.next") ? 1 : 0;
+}
+
 } // namespace
 
 CommandModel::CommandModel(AppController *app) : QObject(nullptr), m_app(app)
@@ -85,9 +144,9 @@ static QList<Command> buildCommands(const AppController *app)
 {
     const bool ready = app->status() == u"ready";
     const QVariantMap route = app->currentRoute();
-    const bool onPage = ready && route.value(u"view"_s).toString() == u"page";
-    // Views showing one page in the editor: pages and daily notes.
     const QString view = route.value(u"view"_s).toString();
+    const bool onPage = ready && view == u"page";
+    // Views showing one page in the editor: pages and daily notes.
     const bool inEditor = ready && (onPage || view == u"journal" || view == u"journals");
     const QString pagePath = route.value(u"path"_s).toString();
     const bool favorite = onPage && app->workspace()->isFavorite(pagePath);
@@ -251,7 +310,6 @@ static QList<Command> backupCommands(const AppController *app)
 }
 
 // ---- Folders (Move to…, New folder…, Show in tree) -----------------------------------------
-// One block: the commands, where they go in the list, and what they do.
 
 /// The folder commands, after "New page": a new folder at the root, moving the page shown, showing
 /// it in the sidebar's tree (the shell opens the dialogs: AppController::uiActionRequested).
@@ -363,147 +421,104 @@ static bool runTabCommand(AppController *app, const QString &id)
     return true;
 }
 
-/// Run a folder command; false when `id` is none.
-static bool runFolderCommand(AppController *app, const QString &id)
+/// The commands for the note on screen, after "Markdown source": available where that is (`editor`:
+/// an editor shows a page or a day) except on a picture attachment, which is no note; those that need
+/// blocks or the properties panel not in source mode (no blocks to point at, no id can be added, the
+/// panel is hidden there).
+static QList<Command> editorCommands(const AppController *app, bool editor)
 {
-    if (id == u"folder.new")
-        app->requestUiAction(u"newFolder"_s);
-    else if (id == u"page.move")
-        app->requestUiAction(u"movePage"_s);
-    else if (id == u"page.reveal")
-        app->requestUiAction(u"revealInTree"_s);
-    else if (id == u"page.trash")
-        app->requestUiAction(u"trashPage"_s);
-    else
-        return false;
-    return true;
-}
-
-/// The commands that copy a link (docs/SYNTAX.md §2 "Copied links") to the page, the current block
-/// (the one being edited, else the selected one) and the heading of its section. The editor of
-/// the page or day on screen copies them: uiAction "copyLink:<kind>" (page | blockRef | blockLink
-/// | heading, BlockEditor.copyCurrentLink()); Ctrl+Shift+C copies the block reference there. In
-/// source mode there are no blocks to point at (and no id can be added): only the page's link.
-static QList<Command> linkCommands(bool inEditor, bool sourceMode)
-{
-    const bool blocks = inEditor && !sourceMode;
+    const QVariantMap route = app->currentRoute();
+    const bool picture = route.value(u"view"_s).toString() == u"page"
+                         && app->workspace()->isPicture(route.value(u"path"_s).toString());
+    const bool inEditor = editor && !picture;
+    const bool blocks = inEditor && !app->sourceModeShown();
+    const VaultIndex *index = app->workspace()->taskIndex();
+    const QList<notebook::TaskPlace> running =
+            index ? notebook::runningClockPlaces(*index) : QList<notebook::TaskPlace>();
     return {
+            // The note mode: document (Obsidian-like) / outline (Logseq-like), written into the note
+            // (docs/UI.md "Note modes").
+            {u"page.mode"_s,
+             CommandModel::tr("Toggle note mode"),
+             CommandModel::tr("Document (like Obsidian) or outline (like Logseq)"),
+             u"file-text"_s,
+             {},
+             inEditor},
+            // A page property (the properties panel's add row, docs/UI.md "Page properties").
+            {u"page.addProperty"_s, CommandModel::tr("Add page property"),
+             CommandModel::tr("Status, date, tags, aliases… in the page's properties"), u"plus"_s, u"Ctrl+;"_s, blocks},
+            // Copying a link (docs/SYNTAX.md §2 "Copied links") to the page, the current block (the one
+            // being edited, else the selected one) and the heading of its section: the editor of the
+            // page or day on screen copies it (uiAction "copyLink:<kind>", BlockEditor.copyCurrentLink());
+            // Ctrl+Shift+C copies the block reference there.
             {u"page.copyLink"_s, CommandModel::tr("Copy link to page"), u"[[…]]"_s, u"link"_s, {}, inEditor},
             {u"block.copyRef"_s, CommandModel::tr("Copy block reference"), u"((…))"_s, u"link"_s, u"Ctrl+Shift+C"_s,
              blocks},
             {u"block.copyLink"_s, CommandModel::tr("Copy link to block"), u"[[…#^…]]"_s, u"link"_s, {}, blocks},
             {u"heading.copyLink"_s, CommandModel::tr("Copy link to heading"), u"[[…#…]]"_s, u"heading"_s, {}, blocks},
+            // Tasks (docs/SYNTAX.md §5): the timer and a dependency of the task at the cursor (uiActions
+            // "taskClock" / "taskDependency": BlockEditor.toggleCurrentTaskClock() /
+            // openCurrentDependencyPicker()), and stopping the timer that runs, wherever it is.
+            {u"task.clock"_s,
+             CommandModel::tr("Start or stop task timer"),
+             CommandModel::tr("The task at the cursor; the time goes to its LOGBOOK"),
+             u"clock"_s,
+             {},
+             blocks},
+            {u"task.addDependency"_s,
+             CommandModel::tr("Add task dependency…"),
+             CommandModel::tr("The task at the cursor waits for another one (⛔)"),
+             u"link"_s,
+             {},
+             blocks},
+            {u"task.stopClocks"_s,
+             CommandModel::tr("Stop task timer"),
+             running.isEmpty() ? CommandModel::tr("No timer runs") : running.first().task.text,
+             u"square"_s,
+             {},
+             !running.isEmpty()},
+            // Pictures from the internet on the page into the notebook (uiAction "saveWebPictures": the
+            // editor on screen, BlockEditor.downloadWebPictures("")).
+            {u"page.saveWebPictures"_s,
+             CommandModel::tr("Save pictures from the internet to notebook"),
+             CommandModel::tr("Copies in the attachments folder instead of web addresses"),
+             u"download"_s,
+             {},
+             blocks},
     };
 }
 
-/// The uiAction of a link command ("block.copyRef" -> "copyLink:blockRef"), "" for other ids.
-static QString linkAction(const QString &id)
-{
-    if (id == u"page.copyLink")
-        return u"copyLink:page"_s;
-    if (id == u"block.copyRef")
-        return u"copyLink:blockRef"_s;
-    if (id == u"block.copyLink")
-        return u"copyLink:blockLink"_s;
-    if (id == u"heading.copyLink")
-        return u"copyLink:heading"_s;
-    return {};
-}
-
-/// buildCommands() with the note mode command right after "Markdown source" (then "Add page
-/// property"), available where that
-/// is (an editor shows a page or a day) except on a picture attachment, which is no note: document
-/// (Obsidian-like) / outline (Logseq-like), written into the note (docs/UI.md "Note modes"); and
-/// the event log after the sync center.
+/// All commands in the palette's order: buildCommands() with the note's commands (editorCommands())
+/// after "Markdown source", the event log after the sync center, the folder commands after "New
+/// page", the tab commands after "Forward" and the backup commands at the end.
 static QList<Command> allCommands(const AppController *app)
 {
     QList<Command> out = buildCommands(app);
-    const auto source = std::find_if(out.cbegin(), out.cend(), [](const Command &c) { return c.id == u"page.source"; });
-    const QVariantMap route = app->currentRoute();
-    const bool picture = route.value(u"view"_s).toString() == u"page"
-                         && app->workspace()->isPicture(route.value(u"path"_s).toString());
-    const bool inEditor = source != out.cend() && source->enabled && !picture;
-    out.insert(source == out.cend() ? out.size() : std::distance(out.cbegin(), source) + 1,
-               {u"page.mode"_s,
-                CommandModel::tr("Toggle note mode"),
-                CommandModel::tr("Document (like Obsidian) or outline (like Logseq)"),
-                u"file-text"_s,
-                {},
-                inEditor});
-    // A page property (the properties panel's add row, docs/UI.md "Page properties"), after the
-    // note mode; not in source mode (the panel is hidden there).
-    const auto mode = std::find_if(out.cbegin(), out.cend(), [](const Command &c) { return c.id == u"page.mode"; });
-    qsizetype at = mode == out.cend() ? out.size() : std::distance(out.cbegin(), mode) + 1;
-    out.insert(at++, {u"page.addProperty"_s, CommandModel::tr("Add page property"),
-                      CommandModel::tr("Status, date, tags, aliases… in the page's properties"), u"plus"_s, u"Ctrl+;"_s,
-                      inEditor && !app->sourceModeShown()});
-    // Copying links, after the page property: where it is available.
-    for (const Command &c : linkCommands(inEditor, app->sourceModeShown()))
-        out.insert(at++, c);
-    // Tasks (docs/SYNTAX.md §5): the timer and a dependency of the task at the cursor (uiActions
-    // "taskClock" / "taskDependency": BlockEditor.toggleCurrentTaskClock() /
-    // openCurrentDependencyPicker()), and stopping the timer that runs, wherever it is.
-    const bool blocks = inEditor && !app->sourceModeShown();
-    out.insert(at++, {u"task.clock"_s,
-                      CommandModel::tr("Start or stop task timer"),
-                      CommandModel::tr("The task at the cursor; the time goes to its LOGBOOK"),
-                      u"clock"_s,
-                      {},
-                      blocks});
-    out.insert(at++, {u"task.addDependency"_s,
-                      CommandModel::tr("Add task dependency…"),
-                      CommandModel::tr("The task at the cursor waits for another one (⛔)"),
-                      u"link"_s,
-                      {},
-                      blocks});
-    const VaultIndex *index = app->workspace()->taskIndex();
-    const QList<notebook::TaskPlace> running =
-            index ? notebook::runningClockPlaces(*index) : QList<notebook::TaskPlace>();
-    out.insert(at++, {u"task.stopClocks"_s,
-                      CommandModel::tr("Stop task timer"),
-                      running.isEmpty() ? CommandModel::tr("No timer runs") : running.first().task.text,
-                      u"square"_s,
-                      {},
-                      !running.isEmpty()});
-    // Pictures from the internet on the page into the notebook (uiAction "saveWebPictures": the
-    // editor on screen, BlockEditor.downloadWebPictures("")).
-    out.insert(at++, {u"page.saveWebPictures"_s,
-                      CommandModel::tr("Save pictures from the internet to notebook"),
-                      CommandModel::tr("Copies in the attachments folder instead of web addresses"),
-                      u"download"_s,
-                      {},
-                      inEditor && !app->sourceModeShown()});
-    // The event log ("Event log") right after the sync center; also found as logs, diagnostics.
-    const auto sync = std::find_if(out.cbegin(), out.cend(), [](const Command &c) { return c.id == u"go.sync"; });
-    out.insert(sync == out.cend() ? out.size() : std::distance(out.cbegin(), sync) + 1,
-               {u"go.logs"_s,
-                CommandModel::tr("Event log"),
-                CommandModel::tr("Logs, diagnostics, sync problems"),
-                u"scroll-text"_s,
-                {},
-                app->status() == u"ready"});
-    // The folder commands after "New page".
-    const auto newPage = std::find_if(out.cbegin(), out.cend(), [](const Command &c) { return c.id == u"page.new"; });
-    const qsizetype folderAt = newPage == out.cend() ? out.size() : std::distance(out.cbegin(), newPage) + 1;
-    const QList<Command> folders = folderCommands(app);
-    for (qsizetype i = 0; i < folders.size(); ++i)
-        out.insert(folderAt + i, folders.at(i));
-    // The tab commands after "Forward".
-    const auto forward =
-            std::find_if(out.cbegin(), out.cend(), [](const Command &c) { return c.id == u"nav.forward"; });
-    const qsizetype tabAt = forward == out.cend() ? out.size() : std::distance(out.cbegin(), forward) + 1;
-    const QList<Command> tabs = tabCommands(app);
-    for (qsizetype i = 0; i < tabs.size(); ++i)
-        out.insert(tabAt + i, tabs.at(i));
+    const auto source = std::ranges::find(std::as_const(out), u"page.source"_s, &Command::id);
+    const bool editor = source != out.cend() && source->enabled;
+    insertAfter(out, u"page.source"_s, editorCommands(app, editor));
+    // The event log ("Event log"); also found as logs, diagnostics.
+    insertAfter(out, u"go.sync"_s,
+                {{u"go.logs"_s,
+                  CommandModel::tr("Event log"),
+                  CommandModel::tr("Logs, diagnostics, sync problems"),
+                  u"scroll-text"_s,
+                  {},
+                  app->status() == u"ready"}});
+    insertAfter(out, u"page.new"_s, folderCommands(app));
+    insertAfter(out, u"nav.forward"_s, tabCommands(app));
     out += backupCommands(app);
     return out;
 }
 
 QVariantList CommandModel::commands() const
 {
+    const QList<Command> all = allCommands(m_app);
+    const ShortcutMap *shortcuts = m_app->shortcuts();
     QVariantList out;
-    for (const Command &c : allCommands(m_app))
-        out.append(toMap(c, m_app->shortcuts()));
+    out.reserve(all.size());
+    for (const Command &c : all)
+        out.append(toMap(c, shortcuts));
     return out;
 }
 
@@ -512,7 +527,7 @@ QList<ShortcutMap::Action> CommandModel::shortcutActions() const
     // The palette itself first; titles that follow the state ("Add to favorites" / "Remove…")
     // by what the command does.
     QList<ShortcutMap::Action> out{{u"palette"_s, tr("Command palette"), u"Ctrl+K"_s}};
-    for (const Command &c : allCommands(m_app)) {
+    for (const QList<Command> all = allCommands(m_app); const Command &c : all) {
         QString title = c.title;
         if (c.id == u"page.favorite")
             title = tr("Add to or remove from favorites");
@@ -530,7 +545,7 @@ QList<ShortcutMap::Action> CommandModel::shortcutActions() const
 QStringList CommandModel::ids() const
 {
     QStringList out;
-    for (const Command &c : allCommands(m_app))
+    for (const QList<Command> all = allCommands(m_app); const Command &c : all)
         out.append(c.id);
     return out;
 }
@@ -538,49 +553,30 @@ QStringList CommandModel::ids() const
 bool CommandModel::run(const QString &id)
 {
     const QList<Command> all = allCommands(m_app);
-    const auto it = std::find_if(all.cbegin(), all.cend(), [&](const Command &c) { return c.id == id; });
+    const auto it = std::ranges::find(all, id, &Command::id);
     if (it == all.cend() || !it->enabled)
         return false;
 
-    const auto go = [this](const QString &view) { m_app->navigate({ { u"view"_s, view } }); };
-    if (id == u"journal.today")
+    if (const QString action = uiActionOf(id); !action.isEmpty())
+        m_app->requestUiAction(action);
+    else if (id == u"journal.today")
         m_app->openToday();
     else if (id == u"journal.yesterday")
         m_app->openJournal(m_app->today(-1));
     else if (id == u"journal.tomorrow")
         m_app->openJournal(m_app->today(1));
     else if (id == u"journal.week" || id == u"journal.lastWeek" || id == u"journal.nextWeek")
-        m_app->openPeriodicNote(u"week"_s, QString(),
-                                id == u"journal.lastWeek"   ? -1
-                                : id == u"journal.nextWeek" ? 1
-                                                            : 0);
+        m_app->openPeriodicNote(u"week"_s, QString(), periodOffset(id));
     else if (id == u"journal.month" || id == u"journal.lastMonth" || id == u"journal.nextMonth")
-        m_app->openPeriodicNote(u"month"_s, QString(),
-                                id == u"journal.lastMonth"   ? -1
-                                : id == u"journal.nextMonth" ? 1
-                                                             : 0);
-    else if (id == u"page.new")
-        m_app->requestUiAction(u"newPage"_s);
-    else if (id == u"page.switch")
-        m_app->requestUiAction(u"switcher"_s);
+        m_app->openPeriodicNote(u"month"_s, QString(), periodOffset(id));
     else if (id == u"capture")
         m_app->quickCapture();
     else if (id.startsWith(u"go."))
-        go(id.mid(3));
+        m_app->navigate({{u"view"_s, id.mid(3)}});
     else if (id == u"page.favorite")
         m_app->workspace()->toggleFavorite(m_app->currentRoute().value(u"path"_s).toString());
     else if (id == u"page.history")
-        m_app->navigate({ { u"view"_s, u"history"_s }, { u"path"_s, m_app->currentRoute().value(u"path"_s) } });
-    else if (id == u"page.find")
-        m_app->requestUiAction(u"findInNote"_s);
-    else if (id == u"page.replace")
-        m_app->requestUiAction(u"replaceInNote"_s);
-    else if (id == u"page.rename")
-        m_app->requestUiAction(u"renamePage"_s);
-    else if (id == u"page.export")
-        m_app->requestUiAction(u"exportPage"_s);
-    else if (id == u"page.print")
-        m_app->requestUiAction(u"printPage"_s);
+        m_app->navigate({{u"view"_s, u"history"_s}, {u"path"_s, m_app->currentRoute().value(u"path"_s)}});
     else if (id == u"view.focus")
         m_app->settings()->setFocusMode(!m_app->settings()->focusMode());
     else if (id == u"view.reading")
@@ -589,22 +585,8 @@ bool CommandModel::run(const QString &id)
         m_app->settings()->setTypewriterScrolling(!m_app->settings()->typewriterScrolling());
     else if (id == u"settings.shortcuts")
         m_app->navigate({{u"view"_s, u"settings"_s}, {u"section"_s, u"shortcuts"_s}});
-    else if (id == u"page.source")
-        m_app->requestUiAction(u"toggleSourceMode"_s);
-    else if (id == u"page.mode")
-        m_app->requestUiAction(u"toggleNoteMode"_s);
-    else if (id == u"page.addProperty")
-        m_app->requestUiAction(u"addProperty"_s);
-    else if (id == u"page.saveWebPictures")
-        m_app->requestUiAction(u"saveWebPictures"_s);
-    else if (id == u"task.clock")
-        m_app->requestUiAction(u"taskClock"_s);
-    else if (id == u"task.addDependency")
-        m_app->requestUiAction(u"taskDependency"_s);
     else if (id == u"task.stopClocks")
         m_app->workspace()->stopTaskClocks();
-    else if (const QString action = linkAction(id); !action.isEmpty())
-        m_app->requestUiAction(action);
     else if (id == u"nav.back")
         m_app->back();
     else if (id == u"nav.forward")
@@ -619,17 +601,13 @@ bool CommandModel::run(const QString &id)
         m_app->navigate({{u"view"_s, u"settings"_s}, {u"section"_s, u"backups"_s}});
     else if (id == u"backup.now")
         m_app->workspace()->backups()->createNow();
-    else if (id == u"theme.toggle")
-        m_app->requestUiAction(u"toggleTheme"_s);
     else if (id == u"language.switch")
         m_app->settings()->setLanguage(m_app->settings()->language() == u"en" ? u"pl"_s : u"en"_s);
     else if (id == u"vault.docs")
         m_app->toggleDocsVault();
     else if (id == u"vault.switch")
         m_app->closeVault();
-    else if (id == u"about")
-        m_app->requestUiAction(u"about"_s);
-    else if (!runFolderCommand(m_app, id) && !runTabCommand(m_app, id))
+    else if (!runTabCommand(m_app, id))
         return false;
     return true;
 }

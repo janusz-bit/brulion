@@ -20,7 +20,6 @@ Item {
 
     signal opened(string monday)
 
-    activeFocusOnTab: false
     Accessible.role: Accessible.Button
     Accessible.name: hasNote ? qsTr("Week %1: open its note").arg(week) : qsTr("Week %1: write its note").arg(week)
     Accessible.onPressAction: root.opened(root.monday)
@@ -29,8 +28,9 @@ Item {
         anchors.centerIn: label
         width: Math.min(root.width - 2, label.implicitWidth + 8)
         height: label.implicitHeight + 4
+        visible: hover.hovered
         radius: Theme.radius
-        color: hover.hovered ? Theme.bgHover : "transparent"
+        color: Theme.bgHover
     }
     Column {
         id: label

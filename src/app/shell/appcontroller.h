@@ -186,8 +186,8 @@ class AppController : public QObject {
     /// "Przykładowy brulion"; demovault.h).
     Q_PROPERTY(QString demoVaultPath READ demoVaultPath NOTIFY notebookPathsChanged FINAL)
     /// The documentation notebook of the UI language ("Brulion Documentation", in Polish
-    /// "Dokumentacja Brulionu"; empty in the browser). The other language's folder, when there is
-    /// one, is still the documentation (inDocsVault) and keeps its own language's pages.
+    /// "Dokumentacja Brulionu"; in the app data folder, in the browser too). The other language's
+    /// folder, if any, is still the documentation (inDocsVault) and keeps its language's pages.
     Q_PROPERTY(QString docsVaultPath READ docsVaultPath NOTIFY notebookPathsChanged FINAL)
     /// Vault waiting for the storage permission (Android), "" otherwise.
     Q_PROPERTY(QString pendingVaultPath READ pendingVaultPath NOTIFY pendingVaultPathChanged FINAL)
@@ -418,7 +418,7 @@ public:
     /// Create (first time) and open the sample notebook of the UI language with its notes.
     Q_INVOKABLE void openDemoVault();
     /// Opens the documentation notebook, writing it on first use and updating the pages nobody
-    /// changed to this version (updateDocsVault(); no-op in the browser).
+    /// changed to this version (updateDocsVault(); also in the browser).
     Q_INVOKABLE void openDocsVault();
     /// True while the documentation notebook is the open one.
     bool inDocsVault() const;

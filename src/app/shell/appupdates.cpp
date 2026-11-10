@@ -18,10 +18,10 @@ namespace brulion::shell {
 
 namespace {
 
-const auto KeyCheck = "updates/check"_L1;
-const auto KeyLastCheck = "updates/lastCheck"_L1; // milliseconds since the epoch
-const auto KeyLatest = "updates/latest"_L1;
-const auto KeyDismissed = "updates/dismissed"_L1;
+constexpr auto KeyCheck = "updates/check"_L1;
+constexpr auto KeyLastCheck = "updates/lastCheck"_L1; // milliseconds since the epoch
+constexpr auto KeyLatest = "updates/latest"_L1;
+constexpr auto KeyDismissed = "updates/dismissed"_L1;
 
 constexpr qint64 CheckEveryMs = 24 * 60 * 60 * 1000;
 constexpr int LookEveryMs = 6 * 60 * 60 * 1000;
@@ -39,8 +39,8 @@ AppUpdates::AppUpdates(const Options &options, QObject *parent)
     m_latest = m_settings->value(KeyLatest).toString();
     m_dismissed = m_settings->value(KeyDismissed).toString();
     if (m_supported && options.network) {
-        m_checker = new appupdate::UpdateChecker(options.apiUrl.isEmpty() ? appupdate::latestReleaseApiUrl() : options.apiUrl,
-                                                 this);
+        const QUrl apiUrl = options.apiUrl.isEmpty() ? appupdate::latestReleaseApiUrl() : options.apiUrl;
+        m_checker = new appupdate::UpdateChecker(apiUrl, this);
         connect(m_checker, &appupdate::UpdateChecker::checked, this, &AppUpdates::onChecked);
         connect(m_checker, &appupdate::UpdateChecker::failed, this,
                 [](const QString &detail) { qCInfo(lcAppUpdates) << "Checking for a new version failed:" << detail; });

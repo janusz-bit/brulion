@@ -81,6 +81,8 @@ Item {
     function nextState(mark: string): string {
         return mark === "done" || mark === "skipped" ? "open" : "done"
     }
+    /// Where openDayMenu() opens (mapToItem's result is read through a typed property).
+    property point _menuAt
     function openDayMenu(date: string, mark: string, item: Item, x: real, y: real): void {
         dayMenuLoader.date = date
         dayMenuLoader.mark = mark
@@ -89,8 +91,6 @@ Item {
         const menu = dayMenuLoader.item as BMenu
         menu.popup(card, card._menuAt.x, card._menuAt.y)
     }
-    /// Where openDayMenu() opens (mapToItem's result is read through a typed property).
-    property point _menuAt
 
     Rectangle {
         x: card.inset
@@ -282,8 +282,7 @@ Item {
                 TapHandler {
                     enabled: dayCell.state_ !== "future"
                     gesturePolicy: TapHandler.ReleaseWithinBounds
-                    onTapped: card.checkRequested(dayCell.date,
-                                                  dayCell.state_ === "done" || dayCell.state_ === "skipped" ? "open" : "done")
+                    onTapped: card.checkRequested(dayCell.date, card.nextState(dayCell.state_))
                     onLongPressed: card.openDayMenu(dayCell.date, dayCell.state_, dayCell, dayCell.width / 2,
                                                     dayCell.height)
                 }

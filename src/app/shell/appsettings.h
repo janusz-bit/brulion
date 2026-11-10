@@ -445,7 +445,7 @@ Q_SIGNALS:
 
 private:
     template<typename T>
-    bool store(const QString &key, const T &value, const T &current);
+    bool store(QAnyStringView key, const T &value, const T &current);
 
     /// The sync settings of one notebook's group in "sync/nextcloud/notebooks".
     struct NotebookSync {
@@ -461,6 +461,9 @@ private:
     QString notebookKey(const QString &notebook, QStringView name) const;
     bool hasNotebookValue(const QString &notebook, QStringView name) const;
     void setNotebookValue(const QString &notebook, QStringView name, const QVariant &value);
+    /// The id of `notebook`'s group ("" without a notebook), made ready for a value: its old keys
+    /// adopted and its path recorded.
+    QString notebookGroup(const QString &notebook);
     template<typename T>
     bool storeNotebookValue(const QString &notebook, QStringView name, const T &value, const T &current);
     /// Move the settings 0.3.1–0.3.5 wrote for `notebook` under the hash of its path as written

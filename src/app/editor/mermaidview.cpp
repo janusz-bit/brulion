@@ -107,31 +107,6 @@ void MermaidView::setFontPixelSize(qreal size)
     relayout();
 }
 
-#define BRULION_MERMAID_COLOR_SETTER(name, member)                                                                     \
-    void MermaidView::name(const QColor &c)                                                                            \
-    {                                                                                                                  \
-        if (c == member)                                                                                               \
-            return;                                                                                                    \
-        member = c;                                                                                                    \
-        Q_EMIT colorsChanged();                                                                                        \
-        update();                                                                                                      \
-    }
-BRULION_MERMAID_COLOR_SETTER(setTextColor, m_text)
-BRULION_MERMAID_COLOR_SETTER(setMutedColor, m_muted)
-BRULION_MERMAID_COLOR_SETTER(setBackgroundColor, m_background)
-BRULION_MERMAID_COLOR_SETTER(setBorderColor, m_border)
-BRULION_MERMAID_COLOR_SETTER(setAccentColor, m_accent)
-#undef BRULION_MERMAID_COLOR_SETTER
-
-void MermaidView::setDark(bool dark)
-{
-    if (dark == m_dark)
-        return;
-    m_dark = dark;
-    Q_EMIT colorsChanged();
-    update();
-}
-
 QString MermaidView::status() const
 {
     if (m_result->ok())
@@ -174,10 +149,9 @@ std::shared_ptr<const diagram::Result> MermaidView::layout(const QString &source
     const QString key = family + u'\x1f' + QString::number(pixelSize) + u'\x1f' + source;
     auto &entries = cache().entries;
     for (qsizetype i = entries.size() - 1; i >= 0; --i) {
-        if (entries[i].first == key) {
-            auto hit = entries.takeAt(i);
-            entries.append(hit);
-            return hit.second;
+        if (entries.at(i).first == key) {
+            entries.move(i, entries.size() - 1);
+            return entries.constLast().second;
         }
     }
     auto result = std::make_shared<const diagram::Result>(diagram::render(source, fontMetrics(family, pixelSize)));
@@ -296,14 +270,12 @@ void MermaidView::paintScene(QPainter *painter, const diagram::Scene &scene, con
             continue;
         painter->setFont(fontOf(family, it.fontSize, it.bold));
         painter->setPen(color);
-        const qreal total = it.lineHeight * it.lines.size();
-        const qreal top = it.box.center().y() - total / 2;
-        const Qt::Alignment h =
-                it.align & Qt::AlignHorizontal_Mask ? it.align & Qt::AlignHorizontal_Mask : Qt::AlignHCenter;
+        const qreal top = it.box.center().y() - it.lineHeight * it.lines.size() / 2;
+        const Qt::Alignment align = it.align & Qt::AlignHorizontal_Mask;
+        const Qt::Alignment h = align ? align : Qt::AlignHCenter;
         for (qsizetype i = 0; i < it.lines.size(); ++i) {
             // A little wider than the box: the font's own rounding never wraps or cuts a line.
-            const QRectF line(it.box.left() - 50, top + i * it.lineHeight, it.box.width() + 100, it.lineHeight);
-            QRectF r = line;
+            QRectF r(it.box.left() - 50, top + i * it.lineHeight, it.box.width() + 100, it.lineHeight);
             if (h & Qt::AlignLeft)
                 r.setLeft(it.box.left());
             else if (h & Qt::AlignRight)
@@ -316,7 +288,6 @@ void MermaidView::paintScene(QPainter *painter, const diagram::Scene &scene, con
 QString MermaidView::errorMessage(const Error &error, const QString &typeName)
 {
     const QString line = QString::number(error.line);
-    QString text;
     switch (error.code) {
     case Error::Code::Empty: return tr("The diagram is empty.");
     case Error::Code::UnknownType:
@@ -331,6 +302,7 @@ QString MermaidView::errorMessage(const Error &error, const QString &typeName)
     case Error::Code::InvalidValue: return tr("Line %1: “%2” is not a number.").arg(line, error.detail);
     case Error::Code::NoData: return tr("The chart has no value above zero.");
     case Error::Code::TooLarge: {
+        QString text;
         if (error.detail == u"nodes")
             text = tr("more than %1 nodes").arg(diagram::limits::MaxNodes);
         else if (error.detail == u"links")

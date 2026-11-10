@@ -60,6 +60,11 @@ FocusScope {
         return Js.concatStrings(names.slice(at), names.slice(0, at))
     }
 
+    /// The selected day's place in its week (0 = the first day of the week).
+    function dayInWeek(): int {
+        return (DatesHelper.dayOfWeek(calendar.anchorDate) - calendar.effectiveWeekStart + 7) % 7
+    }
+
     /// An entry's accessible name and tooltip: its time (if any), its title and its state when
     /// finished (as the week grid's).
     function entryName(closed: bool, status: string, title: string, time: string): string {
@@ -108,15 +113,16 @@ FocusScope {
 
     Keys.onPressed: (event) => {
         const ctrl = event.modifiers & Qt.ControlModifier
+        const forward = Application.layoutDirection === Qt.RightToLeft ? -1 : 1
         switch (event.key) {
-        case Qt.Key_Left: calendar.moveAnchor(Application.layoutDirection === Qt.RightToLeft ? 1 : -1); break
-        case Qt.Key_Right: calendar.moveAnchor(Application.layoutDirection === Qt.RightToLeft ? -1 : 1); break
+        case Qt.Key_Left: calendar.moveAnchor(-forward); break
+        case Qt.Key_Right: calendar.moveAnchor(forward); break
         case Qt.Key_Up: calendar.moveAnchor(-7); break
         case Qt.Key_Down: calendar.moveAnchor(7); break
         case Qt.Key_PageUp: calendar.previous(); break
         case Qt.Key_PageDown: calendar.next(); break
-        case Qt.Key_Home: calendar.moveAnchor(-((DatesHelper.dayOfWeek(calendar.anchorDate) - calendar.effectiveWeekStart + 7) % 7)); break
-        case Qt.Key_End: calendar.moveAnchor(6 - ((DatesHelper.dayOfWeek(calendar.anchorDate) - calendar.effectiveWeekStart + 7) % 7)); break
+        case Qt.Key_Home: calendar.moveAnchor(-dayInWeek()); break
+        case Qt.Key_End: calendar.moveAnchor(6 - dayInWeek()); break
         case Qt.Key_Return:
         case Qt.Key_Enter:
             if (ctrl)
@@ -191,7 +197,6 @@ FocusScope {
                     readonly property string middle: root.calendar.rangeStart !== ""
                                                      ? DatesHelper.addDays(root.calendar.rangeStart, index * 7 + 3) : ""
                     objectName: "calendarWeekNumber" + index
-                    x: 0
                     y: index * root.cellHeight
                     width: root.weekColumn
                     height: root.cellHeight
@@ -211,7 +216,7 @@ FocusScope {
 
             Repeater {
                 model: root.calendar
-                delegate: Rectangle {
+                delegate: Item {
                     id: cell
 
                     required property int index
@@ -242,7 +247,6 @@ FocusScope {
                     width: root.cellWidth
                     height: root.cellHeight
                     // One surface: the selection is the disc on the day's number, not a fill.
-                    color: "transparent"
 
                     Accessible.role: Accessible.Cell
                     Accessible.name: {
@@ -277,7 +281,7 @@ FocusScope {
                     Rectangle {
                         id: dayBadge
                         x: root.dots ? (parent.width - width) / 2 : 6
-                        y: root.dots ? 4 : 4
+                        y: 4
                         width: Theme.touchUi ? 28 : 24
                         height: width
                         radius: width / 2

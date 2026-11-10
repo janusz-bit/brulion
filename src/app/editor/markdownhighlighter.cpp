@@ -10,9 +10,12 @@
 #include <QFont>
 #include <QQuickTextDocument>
 #include <QRegularExpression>
+#include <QScopedValueRollback>
 #include <QTextBlock>
 #include <QTextCursor>
 #include <QTextDocument>
+
+#include <algorithm>
 
 using namespace Qt::StringLiterals;
 
@@ -55,14 +58,6 @@ MarkdownHighlighter::~MarkdownHighlighter()
     // ~QSyntaxHighlighter() detaches from the document, which edits it (contentsChange): by then
     // this object is only a QSyntaxHighlighter, so the line-height handler must be gone first.
     disconnect(m_contentsConnection);
-}
-
-QStringList MarkdownHighlighter::formatNames()
-{
-    return {u"heading"_s,  u"marker"_s,    u"link"_s,      u"url"_s,      u"tag"_s,     u"code"_s,       u"bold"_s,
-            u"italic"_s,   u"strike"_s,    u"highlight"_s, u"muted"_s,    u"faint"_s,   u"blockId"_s,    u"property"_s,
-            u"due"_s,      u"scheduled"_s, u"start"_s,     u"reminder"_s, u"alarm"_s,   u"recurrence"_s, u"done"_s,
-            u"priority"_s, u"blockRef"_s,  u"comment"_s,   u"fence"_s,    u"spelling"_s};
 }
 
 void MarkdownHighlighter::setTextDocument(QQuickTextDocument *document)
@@ -138,7 +133,7 @@ void MarkdownHighlighter::applyLineHeight(int from, int charsAdded)
     QTextDocument *doc = document();
     if (!doc || m_lineHeight <= 0 || m_applyingFormat)
         return;
-    m_applyingFormat = true;
+    const QScopedValueRollback applying(m_applyingFormat, true);
     // The block editor keeps its own undo history; format changes must not land in TextEdit's.
     if (doc->isUndoRedoEnabled())
         doc->setUndoRedoEnabled(false);
@@ -150,10 +145,8 @@ void MarkdownHighlighter::applyLineHeight(int from, int charsAdded)
             continue;
         QTextBlockFormat f;
         f.setLineHeight(m_lineHeight, QTextBlockFormat::FixedHeight);
-        QTextCursor cursor(block);
-        cursor.mergeBlockFormat(f);
+        QTextCursor(block).mergeBlockFormat(f);
     }
-    m_applyingFormat = false;
 }
 
 QColor MarkdownHighlighter::color(const char *key, const QColor &fallback) const
@@ -166,7 +159,7 @@ void MarkdownHighlighter::rebuildFormats()
 {
     m_formats.clear();
     const auto make = [this](const QString &name) -> QTextCharFormat & {
-        QTextCharFormat &f = m_formats[name];
+        QTextCharFormat &f = *m_formats.insert(name, {});
         f.setProperty(NameProperty, name);
         return f;
     };
@@ -174,6 +167,7 @@ void MarkdownHighlighter::rebuildFormats()
     const QColor muted = color("muted", QColor(u"#535a6a"_s));
     const QColor faint = color("faint", QColor(u"#676c7b"_s));
     const QColor marker = color("marker", faint);
+    const QColor scheduled = color("scheduled", QColor(u"#6a4f93"_s));
 
     QTextCharFormat &heading = make(u"heading"_s);
     heading.setFontWeight(QFont::DemiBold);
@@ -206,8 +200,8 @@ void MarkdownHighlighter::rebuildFormats()
     comment.setForeground(faint);
     comment.setFontItalic(true);
     make(u"due"_s).setForeground(color("due", link));
-    make(u"scheduled"_s).setForeground(color("scheduled", QColor(u"#6a4f93"_s)));
-    make(u"start"_s).setForeground(color("scheduled", QColor(u"#6a4f93"_s)));
+    make(u"scheduled"_s).setForeground(scheduled);
+    make(u"start"_s).setForeground(scheduled);
     make(u"reminder"_s).setForeground(color("reminder", QColor(u"#7a4f00"_s)));
     QTextCharFormat &alarm = make(u"alarm"_s);
     alarm.setForeground(color("alarm", QColor(u"#7a4f00"_s)));
@@ -227,7 +221,7 @@ void MarkdownHighlighter::setRange(int from, int length, const QTextCharFormat &
         setFormat(from, length, format);
 }
 
-void MarkdownHighlighter::mergeRange(int from, int length, const QTextCharFormat &format)
+void MarkdownHighlighter::mergeRange(int from, int length, const QTextCharFormat &format, const QColor &plainColor)
 {
     // Merge with what is already there, one run of equal formats at a time.
     int pos = from;
@@ -241,58 +235,17 @@ void MarkdownHighlighter::mergeRange(int from, int length, const QTextCharFormat
         merged.merge(format);
         // Keep the most specific name for tests: the newly merged one.
         merged.setProperty(NameProperty, format.property(NameProperty));
+        if (plainColor.isValid() && !current.hasProperty(QTextFormat::ForegroundBrush))
+            merged.setForeground(plainColor);
         setFormat(pos, run - pos, merged);
         pos = run;
     }
 }
 
-void MarkdownHighlighter::mergeSpelling(int from, int length)
-{
-    // Qt Quick draws a highlighter's format only when it has a colour (QQuickTextNodeEngine
-    // takes a layout's formats with a foreground or a background): plain text gets the palette's
-    // "text" colour with its underline.
-    const QTextCharFormat &spelling = m_formats[u"spelling"_s];
-    const QColor text = color("text", QColor());
-    int pos = from;
-    const int end = from + length;
-    while (pos < end) {
-        const QTextCharFormat current = QSyntaxHighlighter::format(pos);
-        int run = pos + 1;
-        while (run < end && QSyntaxHighlighter::format(run) == current)
-            ++run;
-        QTextCharFormat merged = current;
-        merged.merge(spelling);
-        merged.setProperty(NameProperty, spelling.property(NameProperty));
-        if (!current.hasProperty(QTextFormat::ForegroundBrush) && text.isValid())
-            merged.setForeground(text);
-        setFormat(pos, run - pos, merged);
-        pos = run;
-    }
-}
-
-void MarkdownHighlighter::setFindQuery(const QString &query)
-{
-    findChangedTo(query, m_findOptions);
-}
-
-void MarkdownHighlighter::setFindMatchCase(bool on)
+void MarkdownHighlighter::setFindOption(bool text::FindOptions::*option, bool on)
 {
     text::FindOptions options = m_findOptions;
-    options.matchCase = on;
-    findChangedTo(m_findQuery, options);
-}
-
-void MarkdownHighlighter::setFindMatchDiacritics(bool on)
-{
-    text::FindOptions options = m_findOptions;
-    options.matchDiacritics = on;
-    findChangedTo(m_findQuery, options);
-}
-
-void MarkdownHighlighter::setFindWholeWord(bool on)
-{
-    text::FindOptions options = m_findOptions;
-    options.wholeWord = on;
+    options.*option = on;
     findChangedTo(m_findQuery, options);
 }
 
@@ -306,7 +259,7 @@ void MarkdownHighlighter::setFindColor(const QColor &color)
         rehighlight();
 }
 
-void MarkdownHighlighter::findChangedTo(const QString &query, const text::FindOptions &options)
+void MarkdownHighlighter::findChangedTo(const QString &query, text::FindOptions options)
 {
     if (m_findQuery == query && m_findOptions == options)
         return;
@@ -358,16 +311,11 @@ void MarkdownHighlighter::setSpellCaret(int position)
         return;
     // The line that left a word unmarked for the old caret, and the one with a wrong word ending
     // at the new caret.
-    QSet<int> lines;
-    if (m_spellSuppressedBlock >= 0)
-        lines.insert(m_spellSuppressedBlock);
-    if (const int b = wrongWordBlockAt(position); b >= 0)
-        lines.insert(b);
-    for (const int number : std::as_const(lines)) {
-        const QTextBlock block = document()->findBlockByNumber(number);
-        if (block.isValid())
-            rehighlightBlock(block);
-    }
+    const int suppressed = m_spellSuppressedBlock;
+    const int wrong = wrongWordBlockAt(position);
+    rehighlightLine(suppressed);
+    if (wrong != suppressed)
+        rehighlightLine(wrong);
 }
 
 void MarkdownHighlighter::setSpellColor(const QColor &color)
@@ -402,17 +350,20 @@ int MarkdownHighlighter::wrongWordBlockAt(int position) const
     return verdict == SpellCheck::Verdict::Wrong ? block.blockNumber() : -1;
 }
 
+void MarkdownHighlighter::rehighlightLine(int number)
+{
+    const QTextBlock block = number >= 0 && document() ? document()->findBlockByNumber(number) : QTextBlock();
+    if (block.isValid())
+        rehighlightBlock(block);
+}
+
 void MarkdownHighlighter::rehighlightPendingSpelling()
 {
-    QTextDocument *doc = document();
     const QSet<int> pending = std::exchange(m_spellPending, {});
-    if (!doc || !spellActive())
+    if (!spellActive())
         return;
-    for (const int number : pending) {
-        const QTextBlock block = doc->findBlockByNumber(number);
-        if (block.isValid())
-            rehighlightBlock(block);
-    }
+    for (const int number : pending)
+        rehighlightLine(number);
 }
 
 void MarkdownHighlighter::highlightSpelling(const QString &line)
@@ -439,7 +390,10 @@ void MarkdownHighlighter::highlightSpelling(const QString &line)
                 m_spellSuppressedBlock = number;
                 break;
             }
-            mergeSpelling(int(word.from), int(word.length()));
+            // Qt Quick draws a highlighter's format only when it has a colour (QQuickTextNodeEngine
+            // takes a layout's formats with a foreground or a background): plain text gets the
+            // palette's "text" colour with its underline.
+            mergeRange(int(word.from), int(word.length()), m_formats[u"spelling"_s], color("text", QColor()));
             break;
         }
     }
@@ -484,75 +438,75 @@ void MarkdownHighlighter::highlightLine(const QString &line)
 {
     const int prev = previousBlockState() < 0 ? Normal : previousBlockState();
     setCurrentBlockState(Normal);
+    const int size = int(line.size());
 
     if (m_mode == u"code") {
         static const QRegularExpression commentRe(u"^\\s*(#|//).*$"_s);
         if (commentRe.match(line).hasMatch())
-            setRange(0, int(line.size()), m_formats[u"comment"_s]);
+            setRange(0, size, m_formats[u"comment"_s]);
         return;
     }
 
     const bool source = m_mode == u"source";
     if (source) {
         const int kind = prev & StateMask;
+        const QStringView trimmed = QStringView(line).trimmed();
         static const QRegularExpression fenceRe(u"^\\s{0,3}(`{3,}|~{3,})"_s);
         const auto fm = fenceRe.match(line);
         if (kind == Fence) {
             const QChar ch = (prev & 0x8) ? u'~' : u'`';
             const int len = prev >> 4;
-            const QString trimmed = line.trimmed();
-            if (fm.hasMatch() && fm.captured(1).front() == ch && fm.capturedLength(1) >= len
+            if (fm.hasMatch() && fm.capturedView(1).front() == ch && fm.capturedLength(1) >= len
                 && trimmed.size() == fm.capturedLength(1)) {
-                setRange(0, int(line.size()), m_formats[u"fence"_s]);
+                setRange(0, size, m_formats[u"fence"_s]);
                 return;
             }
-            setRange(0, int(line.size()), m_formats[u"code"_s]);
+            setRange(0, size, m_formats[u"code"_s]);
             setCurrentBlockState(prev);
             return;
         }
-        if (kind == Frontmatter || (currentBlock().blockNumber() == 0 && line.trimmed() == u"---")) {
+        if (kind == Frontmatter || (currentBlock().blockNumber() == 0 && trimmed == u"---")) {
+            // Its fences (the opening one starts it), else a `key:` line.
             const bool opening = kind != Frontmatter;
-            if (!opening && (line.trimmed() == u"---" || line.trimmed() == u"...")) {
-                setRange(0, int(line.size()), m_formats[u"fence"_s]);
+            if (opening || trimmed == u"---" || trimmed == u"...") {
+                setRange(0, size, m_formats[u"fence"_s]);
+                if (opening)
+                    setCurrentBlockState(Frontmatter);
                 return;
             }
-            if (opening) {
-                setRange(0, int(line.size()), m_formats[u"fence"_s]);
-            } else {
-                static const QRegularExpression keyRe(u"^(\\s*[^:#\\s][^:]*:)"_s);
-                const auto km = keyRe.match(line);
-                setRange(0, int(line.size()), m_formats[u"muted"_s]);
-                if (km.hasMatch())
-                    setRange(0, km.capturedLength(1), m_formats[u"property"_s]);
-            }
+            static const QRegularExpression keyRe(u"^(\\s*[^:#\\s][^:]*:)"_s);
+            setRange(0, size, m_formats[u"muted"_s]);
+            if (const auto km = keyRe.match(line); km.hasMatch())
+                setRange(0, int(km.capturedLength(1)), m_formats[u"property"_s]);
             setCurrentBlockState(Frontmatter);
             return;
         }
         if (fm.hasMatch()) {
-            setRange(0, int(line.size()), m_formats[u"fence"_s]);
-            setCurrentBlockState(encodeFence(fm.captured(1).front(), int(fm.capturedLength(1))));
+            setRange(0, size, m_formats[u"fence"_s]);
+            setCurrentBlockState(encodeFence(fm.capturedView(1).front(), int(fm.capturedLength(1))));
             return;
         }
         if (kind == Comment) {
             const qsizetype close = line.indexOf(u"%%"_s);
             if (close < 0) {
-                setRange(0, int(line.size()), m_formats[u"comment"_s]);
+                setRange(0, size, m_formats[u"comment"_s]);
                 setCurrentBlockState(Comment);
                 return;
             }
             setRange(0, int(close + 2), m_formats[u"comment"_s]);
-            highlightInline(line, int(close + 2), int(line.size() - close - 2));
+            highlightInline(line, int(close + 2), size - int(close + 2));
             return;
         }
     }
 
-    highlightInline(line, 0, int(line.size()));
+    highlightInline(line, 0, size);
     if (source) {
-        // An odd number of %% opens a comment that continues on the next lines.
-        const QString masked = markdown::maskInlineCode(line);
-        if (line.count(u"%%"_s) % 2 == 1 && masked.count(u"%%"_s) == line.count(u"%%"_s)) {
+        // An odd number of %% opens a comment that continues on the next lines (counted before
+        // masking the code spans, which copies the line).
+        const qsizetype marks = line.count(u"%%"_s);
+        if (marks % 2 == 1 && markdown::maskInlineCode(line).count(u"%%"_s) == marks) {
             const qsizetype open = line.lastIndexOf(u"%%"_s);
-            setRange(int(open), int(line.size() - open), m_formats[u"comment"_s]);
+            setRange(int(open), size - int(open), m_formats[u"comment"_s]);
             setCurrentBlockState(Comment);
         }
     }
@@ -573,15 +527,13 @@ void MarkdownHighlighter::highlightInline(const QString &full, int offset, int l
         setRange(at(m.capturedStart()), int(m.capturedLength()), m_formats[u"code"_s]);
         setRange(at(m.capturedStart()), int(m.capturedLength(1)), m_formats[u"fence"_s]);
         setRange(at(m.capturedEnd() - m.capturedLength(1)), int(m.capturedLength(1)), m_formats[u"fence"_s]);
-        for (qsizetype k = m.capturedStart(); k < m.capturedEnd(); ++k)
-            masked[k] = u' ';
+        std::fill_n(masked.begin() + m.capturedStart(), m.capturedLength(), u' ');
     }
     static const QRegularExpression commentRe(u"%%.*?%%"_s);
     for (auto it = commentRe.globalMatch(masked); it.hasNext();) {
         const auto m = it.next();
         setRange(at(m.capturedStart()), int(m.capturedLength()), m_formats[u"comment"_s]);
-        for (qsizetype k = m.capturedStart(); k < m.capturedEnd(); ++k)
-            masked[k] = u' ';
+        std::fill_n(masked.begin() + m.capturedStart(), m.capturedLength(), u' ');
     }
 
     // Line-level syntax.
@@ -595,9 +547,8 @@ void MarkdownHighlighter::highlightInline(const QString &full, int offset, int l
             setRange(0, int(q.capturedLength()), m_formats[u"marker"_s]);
             contentStart = int(q.capturedLength());
             static const QRegularExpression calloutRe(u"^\\[![A-Za-z0-9_-]+\\][+-]?"_s);
-            const auto c = calloutRe.matchView(QStringView(masked).sliced(contentStart));
-            if (c.hasMatch()) {
-                QTextCharFormat f = m_formats[u"muted"_s];
+            if (const auto c = calloutRe.matchView(QStringView(masked).sliced(contentStart)); c.hasMatch()) {
+                QTextCharFormat f = m_formats.value(u"muted"_s);
                 f.setFontWeight(QFont::DemiBold);
                 setRange(contentStart, int(c.capturedLength()), f);
             }
@@ -612,7 +563,7 @@ void MarkdownHighlighter::highlightInline(const QString &full, int offset, int l
         if (const auto c = checkboxRe.matchView(rest); c.hasMatch()) {
             setRange(contentStart, int(c.capturedLength()), m_formats[u"marker"_s]);
         } else if (const auto k = keywordRe.matchView(rest); k.hasMatch()) {
-            QTextCharFormat f = m_formats[u"marker"_s];
+            QTextCharFormat f = m_formats.value(u"marker"_s);
             f.setFontWeight(QFont::DemiBold);
             setRange(contentStart, int(k.capturedLength()), f);
         }
@@ -620,9 +571,9 @@ void MarkdownHighlighter::highlightInline(const QString &full, int offset, int l
         static const QRegularExpression headingRe(u"^(\\s{0,3})(#{1,6})(\\s+|$)"_s);
         if (const auto h = headingRe.matchView(rest); h.hasMatch()) {
             setRange(contentStart, int(rest.size()), m_formats[u"heading"_s]);
-            QTextCharFormat mark = m_formats[u"heading"_s];
+            // The # marks: the heading's weight, the marker's colour and name.
+            QTextCharFormat mark = m_formats.value(u"heading"_s);
             mark.merge(m_formats[u"marker"_s]);
-            mark.setProperty(NameProperty, u"marker"_s);
             setRange(contentStart + int(h.capturedStart(2)), int(h.capturedLength(2)), mark);
         }
         // key:: value
@@ -653,7 +604,7 @@ void MarkdownHighlighter::highlightInline(const QString &full, int offset, int l
     // Coloured highlights `<mark …>…</mark>` (markdown/highlight.h): the text on its palette
     // colour, the tags faint.
     for (const markdown::MarkPair &p : markdown::findMarkPairs(masked)) {
-        QTextCharFormat tint = m_formats[u"highlight"_s];
+        QTextCharFormat tint = m_formats.value(u"highlight"_s);
         if (p.open.color != markdown::HighlightColor::Default)
             tint.setBackground(QColor(markdown::highlightTint(p.open.color)));
         mergeRange(at(p.open.to), int(p.close.from - p.open.to), tint);
@@ -678,7 +629,7 @@ void MarkdownHighlighter::highlightInline(const QString &full, int offset, int l
     static const QRegularExpression mdLinkRe(u"!?\\[([^\\]\\n]*)\\]\\(([^)\\n]*)\\)"_s);
     for (auto it = mdLinkRe.globalMatch(masked); it.hasNext();) {
         const auto m = it.next();
-        if (m.capturedStart() > 0 && masked[m.capturedStart() - 1] == u'[')
+        if (m.capturedStart() > 0 && masked.at(m.capturedStart() - 1) == u'[')
             continue;
         setRange(at(m.capturedStart()), int(m.capturedLength()), m_formats[u"marker"_s]);
         setRange(at(m.capturedStart(1)), int(m.capturedLength(1)), m_formats[u"link"_s]);

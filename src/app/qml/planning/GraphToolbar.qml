@@ -41,8 +41,21 @@ BCard {
     ]
     readonly property list<var> depths: [{ value: 1, text: "1" }, { value: 2, text: "2" }]
 
+    /// A search is typed.
+    readonly property bool searching: Js.trim(search.text) !== ""
+
     function findResults(text: string): list<var> {
-        return Js.trim(text) !== "" ? root.model.find(text, 8) : []
+        if (Js.trim(text) === "")
+            return []
+        return root.model.find(text, 8)
+    }
+    /// A toggle chip of the options: `optionName` is sent to optionToggled() with the opposite of `isOn`.
+    component OptionChip: BChip {
+        required property string optionName
+        required property bool isOn
+        interactive: true
+        selected: isOn
+        onClicked: root.optionToggled(optionName, !isOn)
     }
     function focusSearch(): void { search.forceActiveFocus() }
     function choose(index: int): void {
@@ -87,7 +100,7 @@ BCard {
             id: resultList
             Layout.fillWidth: true
             Layout.preferredHeight: contentHeight
-            visible: Js.trim(search.text) !== ""
+            visible: root.searching
             interactive: false
             model: root.results
             currentIndex: count > 0 ? 0 : -1
@@ -109,7 +122,7 @@ BCard {
         }
         Text {
             Layout.fillWidth: true
-            visible: Js.trim(search.text) !== "" && root.results.length === 0
+            visible: root.searching && root.results.length === 0
             text: qsTr("No such page in the graph.")
             font.family: Theme.fontUi
             font.pixelSize: Theme.textSm
@@ -148,34 +161,10 @@ BCard {
             Flow {
                 Layout.fillWidth: true
                 spacing: 6
-                BChip {
-                    interactive: true
-                    selected: root.showTags
-                    iconName: "hash"
-                    text: qsTr("Tags")
-                    onClicked: root.optionToggled("tags", !root.showTags)
-                }
-                BChip {
-                    interactive: true
-                    selected: root.showMissing
-                    iconName: "file"
-                    text: qsTr("Missing pages")
-                    onClicked: root.optionToggled("missing", !root.showMissing)
-                }
-                BChip {
-                    interactive: true
-                    selected: root.showJournals
-                    iconName: "book-open"
-                    text: qsTr("Journals")
-                    onClicked: root.optionToggled("journals", !root.showJournals)
-                }
-                BChip {
-                    interactive: true
-                    selected: root.showTemplates
-                    iconName: "sparkles"
-                    text: qsTr("Templates")
-                    onClicked: root.optionToggled("templates", !root.showTemplates)
-                }
+                OptionChip { optionName: "tags"; isOn: root.showTags; iconName: "hash"; text: qsTr("Tags") }
+                OptionChip { optionName: "missing"; isOn: root.showMissing; iconName: "file"; text: qsTr("Missing pages") }
+                OptionChip { optionName: "journals"; isOn: root.showJournals; iconName: "book-open"; text: qsTr("Journals") }
+                OptionChip { optionName: "templates"; isOn: root.showTemplates; iconName: "sparkles"; text: qsTr("Templates") }
             }
         }
     }

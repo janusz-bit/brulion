@@ -209,6 +209,7 @@ Item {
     // ---- Row components -----------------------------------------------------------------
     /// A row of the diff (the delegate): its row's keys, read by the row it loads (its parent).
     component RowLoader: Loader {
+        required property int index
         /// "equal" | "delete" | "insert" | "change" | "skip"
         required property string kind
         required property int oldNo

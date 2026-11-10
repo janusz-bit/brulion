@@ -32,7 +32,7 @@ T.ItemDelegate {
     readonly property string entryPath: AppController.routeText(entry, "path")
     readonly property string entryPageTitle: AppController.routeText(entry, "pageTitle")
     readonly property string entryDueLabel: AppController.routeText(entry, "dueLabel")
-    readonly property bool recurring: AppController.routeText(entry, "recurring") === "true"
+    readonly property bool recurring: AppController.routeFlag(entry, "recurring")
     /// Show the entry's date in the subtitle (lists spanning several days: overdue tasks).
     property bool showDate: false
     /// The entry's day has passed (the agenda's past days): an open entry's title is muted too.
@@ -49,9 +49,12 @@ T.ItemDelegate {
     /// The entry names a token of a note (journals have none).
     readonly property bool hasTokenMenu: AppController.routeText(entry, "spec") !== "" && entryKind !== "journal"
 
-    readonly property bool isTask: AppController.routeText(entry, "isTask") === "true"
-    readonly property bool closed: AppController.routeText(entry, "closed") === "true"
-    readonly property string variant: AppController.routeText(entry, "variant") !== "" ? AppController.routeText(entry, "variant") : "neutral"
+    readonly property bool isTask: AppController.routeFlag(entry, "isTask")
+    readonly property bool closed: AppController.routeFlag(entry, "closed")
+    readonly property string entryVariant: AppController.routeText(entry, "variant")
+    readonly property string variant: entryVariant !== "" ? entryVariant : "neutral"
+    /// The task box's state (a task without one is open).
+    readonly property string taskStatus: entryStatus !== "" ? entryStatus : "todo"
     readonly property string journalDay: AppController.routeFlag(entry, "isJournalPage") ? Workspace.journalDate(entryPath) : ""
     readonly property string kindLabel: {
         switch (variant) {
@@ -141,11 +144,11 @@ T.ItemDelegate {
                 objectName: "planningTaskBox"
                 anchors.centerIn: parent
                 visible: control.isTask
-                status: control.entryStatus !== "" ? control.entryStatus : "todo"
+                status: control.taskStatus
                 Accessible.name: qsTr("Done: %1").arg(control.entryTitle)
                 onToggled: control.taskToggled()
                 onStatusChosen: (status) => {
-                    if (status !== (control.entryStatus !== "" ? control.entryStatus : "todo"))
+                    if (status !== control.taskStatus)
                         control.statusRequested(status)
                 }
             }

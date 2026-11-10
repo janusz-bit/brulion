@@ -104,6 +104,7 @@ Item {
 
         delegate: Item {
             id: wrapper
+            required property int index
             required property int toastId
             required property string text
             required property string kind

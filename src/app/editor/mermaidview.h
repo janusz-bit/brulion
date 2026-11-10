@@ -59,17 +59,17 @@ public:
     qreal fontPixelSize() const { return m_fontPixelSize; }
     void setFontPixelSize(qreal size);
     QColor textColor() const { return m_text; }
-    void setTextColor(const QColor &c);
+    void setTextColor(const QColor &c) { setThemeValue(m_text, c); }
     QColor mutedColor() const { return m_muted; }
-    void setMutedColor(const QColor &c);
+    void setMutedColor(const QColor &c) { setThemeValue(m_muted, c); }
     QColor backgroundColor() const { return m_background; }
-    void setBackgroundColor(const QColor &c);
+    void setBackgroundColor(const QColor &c) { setThemeValue(m_background, c); }
     QColor borderColor() const { return m_border; }
-    void setBorderColor(const QColor &c);
+    void setBorderColor(const QColor &c) { setThemeValue(m_border, c); }
     QColor accentColor() const { return m_accent; }
-    void setAccentColor(const QColor &c);
+    void setAccentColor(const QColor &c) { setThemeValue(m_accent, c); }
     bool dark() const { return m_dark; }
-    void setDark(bool dark);
+    void setDark(bool dark) { setThemeValue(m_dark, dark); }
 
     QString status() const;
     QString message() const;
@@ -105,6 +105,16 @@ protected:
     void geometryChange(const QRectF &newGeometry, const QRectF &oldGeometry) override;
 
 private:
+    /// A colour (or `dark`) set: only a repaint, the layout stays.
+    template<typename T>
+    void setThemeValue(T &member, const T &value)
+    {
+        if (member == value)
+            return;
+        member = value;
+        Q_EMIT colorsChanged();
+        update();
+    }
     void relayout();
     void updateImplicitSize();
     diagram::Palette palette() const;

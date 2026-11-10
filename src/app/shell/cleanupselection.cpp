@@ -7,6 +7,19 @@ using namespace Qt::StringLiterals;
 
 namespace brulion::shell {
 
+namespace {
+
+/// `paths` with `path` ticked (`on`: once) or not.
+void tick(QStringList &paths, const QString &path, bool on)
+{
+    if (!on)
+        paths.removeAll(path);
+    else if (!paths.contains(path))
+        paths.append(path);
+}
+
+} // namespace
+
 CleanupSelection::CleanupSelection(QObject *parent) : QObject(parent) { }
 
 void CleanupSelection::setFiles(const QVariantList &files)
@@ -33,8 +46,8 @@ void CleanupSelection::setTicked(const QStringList &ticked)
 
 void CleanupSelection::update()
 {
-    const bool all = m_kind != u"notes"_s && m_kind != u"attachments"_s;
-    const bool attachments = m_kind == u"attachments"_s;
+    const bool attachments = m_kind == u"attachments";
+    const bool all = !attachments && m_kind != u"notes";
     const QSet<QString> ticked(m_ticked.cbegin(), m_ticked.cend());
     m_shown.clear();
     m_shownTicked.clear();
@@ -61,27 +74,15 @@ void CleanupSelection::update()
 QStringList CleanupSelection::withTicked(const QString &path, bool on) const
 {
     QStringList next = m_ticked;
-    if (on) {
-        if (!next.contains(path))
-            next.append(path);
-    } else {
-        next.removeAll(path);
-    }
+    tick(next, path, on);
     return next;
 }
 
 QStringList CleanupSelection::withAllShown(bool on) const
 {
     QStringList next = m_ticked;
-    for (const QVariant &value : m_shown) {
-        const QString path = value.toMap().value(u"path"_s).toString();
-        if (on) {
-            if (!next.contains(path))
-                next.append(path);
-        } else {
-            next.removeAll(path);
-        }
-    }
+    for (const QVariant &value : m_shown)
+        tick(next, value.toMap().value(u"path"_s).toString(), on);
     return next;
 }
 
@@ -90,11 +91,8 @@ QStringList CleanupSelection::existingTicks() const
     QSet<QString> paths;
     for (const QVariant &value : m_files)
         paths.insert(value.toMap().value(u"path"_s).toString());
-    QStringList kept;
-    for (const QString &path : m_ticked) {
-        if (paths.contains(path))
-            kept.append(path);
-    }
+    QStringList kept = m_ticked;
+    kept.removeIf([&](const QString &path) { return !paths.contains(path); });
     return kept;
 }
 

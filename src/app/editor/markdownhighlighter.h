@@ -79,13 +79,13 @@ public:
     qreal lineHeight() const { return m_lineHeight; }
     void setLineHeight(qreal px);
     QString findQuery() const { return m_findQuery; }
-    void setFindQuery(const QString &query);
+    void setFindQuery(const QString &query) { findChangedTo(query, m_findOptions); }
     bool findMatchCase() const { return m_findOptions.matchCase; }
-    void setFindMatchCase(bool on);
+    void setFindMatchCase(bool on) { setFindOption(&text::FindOptions::matchCase, on); }
     bool findMatchDiacritics() const { return m_findOptions.matchDiacritics; }
-    void setFindMatchDiacritics(bool on);
+    void setFindMatchDiacritics(bool on) { setFindOption(&text::FindOptions::matchDiacritics, on); }
     bool findWholeWord() const { return m_findOptions.wholeWord; }
-    void setFindWholeWord(bool on);
+    void setFindWholeWord(bool on) { setFindOption(&text::FindOptions::wholeWord, on); }
     QColor findColor() const { return m_findColor; }
     void setFindColor(const QColor &color);
     SpellCheck *spellCheck() const { return m_spell; }
@@ -103,12 +103,6 @@ public:
     /// Attach to a plain QTextDocument (C++/tests); same as QSyntaxHighlighter::setDocument plus
     /// the line-height handling.
     void attach(QTextDocument *document);
-
-    /// Format names used for a character range, for tests: "heading", "marker", "link", "url",
-    /// "tag", "code", "bold", "italic", "strike", "highlight", "muted", "faint", "blockId",
-    /// "property", "due", "scheduled", "start", "reminder", "alarm", "recurrence", "done",
-    /// "priority", "blockRef", "comment", "fence", "spelling".
-    static QStringList formatNames();
 
 Q_SIGNALS:
     void textDocumentChanged();
@@ -132,13 +126,18 @@ private:
     void applyLineHeight(int from = 0, int charsAdded = -1);
     void highlightInline(const QString &text, int offset, int length);
     void highlightLine(const QString &line);
-    void findChangedTo(const QString &query, const text::FindOptions &options);
+    /// One find option set (`option`: &text::FindOptions::matchCase, …).
+    void setFindOption(bool text::FindOptions::*option, bool on);
+    void findChangedTo(const QString &query, text::FindOptions options);
     void setRange(int from, int length, const QTextCharFormat &format);
-    void mergeRange(int from, int length, const QTextCharFormat &format);
-    void mergeSpelling(int from, int length);
+    /// `format` merged into the range's formats; a valid `plainColor` becomes the foreground of the
+    /// text that has none.
+    void mergeRange(int from, int length, const QTextCharFormat &format, const QColor &plainColor = {});
     bool spellActive() const;
     void highlightSpelling(const QString &line);
     void rehighlightPendingSpelling();
+    /// Highlights block `number` again (none: -1 or past the end).
+    void rehighlightLine(int number);
     /// Block number of the wrong word ending at `position`, -1 when none ends there.
     int wrongWordBlockAt(int position) const;
 
@@ -149,6 +148,8 @@ private:
     qreal m_lineHeight = 0;
     bool m_applyingFormat = false;
     QMetaObject::Connection m_contentsConnection;
+    /// By name ("heading", "marker", … "spelling": rebuildFormats()); each format carries its name
+    /// as a property, which the tests read back.
     QHash<QString, QTextCharFormat> m_formats;
     QString m_findQuery;
     text::FindOptions m_findOptions;

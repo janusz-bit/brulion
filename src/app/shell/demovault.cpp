@@ -40,11 +40,13 @@ QDate nextTenth(QDate from)
     return QDate(next.year(), next.month(), 10);
 }
 
-QString fill(QString text, const QHash<QString, QString> &vars)
+/// `text` with each "{name}" of `vars` replaced by its value.
+QString fill(QStringView text, const QHash<QString, QString> &vars)
 {
-    for (auto it = vars.constBegin(); it != vars.constEnd(); ++it)
-        text.replace(u'{' + it.key() + u'}', it.value());
-    return text;
+    QString out = text.toString();
+    for (const auto &[name, value] : vars.asKeyValueRange())
+        out.replace(u'{' + name + u'}', value);
+    return out;
 }
 
 /// The documentation pages in `language` ("en" | "pl": src/app/shell/guide/<language>/*.md,
@@ -63,7 +65,7 @@ QList<DemoFile> guideFiles(const QString &language)
         const QString path = it.filePath().mid(root.size());
         out.append({ path, QString::fromUtf8(file.readAll()) });
     }
-    std::ranges::sort(out, [](const DemoFile &a, const DemoFile &b) { return a.path < b.path; });
+    std::ranges::sort(out, {}, &DemoFile::path);
     return out;
 }
 
@@ -754,10 +756,6 @@ const auto kPlanSvg = uR"svg(<svg xmlns="http://www.w3.org/2000/svg" width="480"
 )svg"_s;
 } // namespace en
 
-} // namespace
-
-namespace {
-
 /// The sample notebook's texts and paths in one language.
 struct SampleTexts {
     QStringView welcome, docsNotebook, today, yesterday, weekAgo;
@@ -781,11 +779,6 @@ SampleTexts sampleTexts(QStringView language)
             u"Projects/Home renovation.md", en::kRenovation, u"Books 2026.md", en::kBooks, u"Recipes.md",
             en::kRecipes, en::kJournalTemplate, u"templates/Meeting.md", en::kMeetingTemplate,
             u"assets/floor-plan.svg", en::kPlanSvg};
-}
-
-QString fillView(QStringView text, const QHash<QString, QString> &vars)
-{
-    return fill(text.toString(), vars);
 }
 
 } // namespace
@@ -819,32 +812,18 @@ QList<DemoFile> demoVaultFiles(const QDateTime &now, QStringView language)
     };
     const VaultConfig config;
     const auto journal = [&](QDate d) { return markdown::journalPathForDate(d, config); };
-    QList<DemoFile> files = {
-        { demoWelcomePage(language), fillView(texts.welcome, vars) },
-        { journal(today), fillView(texts.today, vars) },
-        { journal(today.addDays(-1)), fillView(texts.yesterday, vars) },
-        { journal(today.addDays(-7)), fillView(texts.weekAgo, vars) },
-        { texts.projectPath.toString(), fillView(texts.project, vars) },
-        { texts.booksPath.toString(), fillView(texts.books, vars) },
-        { texts.recipesPath.toString(), fillView(texts.recipes, vars) },
-        { config.journalTemplate, texts.journalTemplate.toString() },
-        { texts.meetingTemplatePath.toString(), texts.meetingTemplate.toString() },
-        { texts.picturePath.toString(), texts.picture.toString() },
+    return {
+            {demoWelcomePage(language), fill(texts.welcome, vars)},
+            {journal(today), fill(texts.today, vars)},
+            {journal(today.addDays(-1)), fill(texts.yesterday, vars)},
+            {journal(today.addDays(-7)), fill(texts.weekAgo, vars)},
+            {texts.projectPath.toString(), fill(texts.project, vars)},
+            {texts.booksPath.toString(), fill(texts.books, vars)},
+            {texts.recipesPath.toString(), fill(texts.recipes, vars)},
+            {config.journalTemplate, texts.journalTemplate.toString()},
+            {texts.meetingTemplatePath.toString(), texts.meetingTemplate.toString()},
+            {texts.picturePath.toString(), texts.picture.toString()},
     };
-    return files;
-}
-
-static int seedFiles(Vault &vault, const QList<DemoFile> &files)
-{
-    int written = 0;
-    for (const DemoFile &file : files) {
-        if (vault.exists(file.path))
-            continue;
-        if (!vault.writeText(file.path, file.content, ChangeSource::Import))
-            return -1;
-        ++written;
-    }
-    return written;
 }
 
 QString docsWelcomePage(QStringView language)
@@ -981,7 +960,7 @@ DocsUpdate updateDocs(Vault &vault, const QList<DemoFile> &pages, bool legacy)
         }
     }
     if (result.ok) {
-        for (const QString &path : record.keys()) {
+        for (const QStringList paths = record.keys(); const QString &path : paths) {
             if (current.contains(path))
                 continue;
             // No longer part of the documentation: gone unless the user changed it (then it is
@@ -1017,7 +996,15 @@ DocsUpdate updateDocsVault(Vault &vault, const QList<DemoFile> &pages)
 
 int seedDemoVault(Vault &vault, const QDateTime &now, QStringView language)
 {
-    return seedFiles(vault, demoVaultFiles(now, language));
+    int written = 0;
+    for (const QList<DemoFile> files = demoVaultFiles(now, language); const DemoFile &file : files) {
+        if (vault.exists(file.path))
+            continue;
+        if (!vault.writeText(file.path, file.content, ChangeSource::Import))
+            return -1;
+        ++written;
+    }
+    return written;
 }
 
 } // namespace brulion::shell

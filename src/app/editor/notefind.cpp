@@ -44,6 +44,19 @@ qsizetype offsetOfSourcePosition(QStringView text, qsizetype position)
     return text.size();
 }
 
+/// `text` as one line: a line break pasted into the field would never match.
+QString oneLine(QString text)
+{
+    text.replace(u'\r', u' ').replace(u'\n', u' ');
+    return text;
+}
+
+/// The index of the first of `matches` that starts at or after `origin` (their count when none does).
+qsizetype firstFrom(const QList<text::TextRange> &matches, qsizetype origin)
+{
+    return std::ranges::lower_bound(matches, origin, {}, &text::TextRange::start) - matches.cbegin();
+}
+
 } // namespace
 
 NoteFind::NoteFind(QObject *parent) : QObject(parent)
@@ -110,39 +123,19 @@ void NoteFind::setActive(bool active)
 
 void NoteFind::setQuery(const QString &query)
 {
-    // One line: a line break pasted into the field would never match.
-    QString line = query;
-    line.replace(u'\r', u' ').replace(u'\n', u' ');
+    QString line = oneLine(query);
     if (m_query == line)
         return;
-    m_query = line;
+    m_query = std::move(line);
     Q_EMIT queryChanged();
     schedule(true);
 }
 
-void NoteFind::setMatchCase(bool on)
+void NoteFind::setOption(bool text::FindOptions::*option, bool on)
 {
-    if (m_options.matchCase == on)
+    if (m_options.*option == on)
         return;
-    m_options.matchCase = on;
-    Q_EMIT optionsChanged();
-    schedule(true);
-}
-
-void NoteFind::setMatchDiacritics(bool on)
-{
-    if (m_options.matchDiacritics == on)
-        return;
-    m_options.matchDiacritics = on;
-    Q_EMIT optionsChanged();
-    schedule(true);
-}
-
-void NoteFind::setWholeWord(bool on)
-{
-    if (m_options.wholeWord == on)
-        return;
-    m_options.wholeWord = on;
+    m_options.*option = on;
     Q_EMIT optionsChanged();
     schedule(true);
 }
@@ -191,9 +184,8 @@ void NoteFind::setOriginHere(int position)
 {
     if (!m_controller)
         return;
-    const QString text = sourceOfSearch();
     if (sourceMode()) {
-        m_origin = position >= 0 ? offsetOfSourcePosition(text, position) : 0;
+        m_origin = position >= 0 ? offsetOfSourcePosition(sourceOfSearch(), position) : 0;
         return;
     }
     const int row = m_controller->editingRow() >= 0 ? m_controller->editingRow() : m_controller->selectedRow();
@@ -211,29 +203,16 @@ void NoteFind::refresh()
 void NoteFind::recount()
 {
     QString text = sourceOfSearch();
-    const bool sameSearch = m_appliedQuery == m_query && m_appliedOptions == m_options;
-    if (m_enter != Enter::None) {
+    const Enter enter = m_enter;
+    if (enter != Enter::None) {
         // Entering a note (the journal stream): its first or last match once it is loaded.
         if (!m_controller || !m_controller->loaded())
             return;
-        const bool first = m_enter == Enter::First;
         m_enter = Enter::None;
         m_jump = false;
-        m_text = std::move(text);
-        m_matches = text::findMatches(m_text, m_query, m_options);
-        m_appliedQuery = m_query;
-        m_appliedOptions = m_options;
-        countRisks();
-        m_current = -1;
-        Q_EMIT matchesChanged();
-        if (m_matches.isEmpty())
-            Q_EMIT endReached(first);
-        else
-            show(first ? 0 : int(m_matches.size() - 1));
+    } else if (m_appliedQuery == m_query && m_appliedOptions == m_options && text == m_text && !m_jump) {
         return;
     }
-    if (sameSearch && text == m_text && !m_jump)
-        return;
     const qsizetype keep = m_current >= 0 && m_current < m_matches.size() ? m_matches.at(m_current).start : -1;
     m_text = std::move(text);
     m_matches = text::findMatches(m_text, m_query, m_options);
@@ -241,24 +220,20 @@ void NoteFind::recount()
     m_appliedOptions = m_options;
     countRisks();
     m_current = -1;
-    if (!std::exchange(m_jump, false)) {
-        // After an edit no match is current: which one is on show is not known any more (the caret
-        // is left alone), and replacing must not hit one nobody has seen. The next goes from here.
-        if (keep >= 0)
-            m_origin = keep;
-        Q_EMIT matchesChanged();
-        return;
-    }
+    const bool jump = std::exchange(m_jump, false);
+    // After an edit no match is current: which one is on show is not known any more (the caret is
+    // left alone), and replacing must not hit one nobody has seen. The next goes from here.
+    if (enter == Enter::None && !jump && keep >= 0)
+        m_origin = keep;
     Q_EMIT matchesChanged();
-    const auto at = std::lower_bound(m_matches.cbegin(), m_matches.cend(), m_origin,
-                                     [](const text::TextRange &r, qsizetype v) { return r.start < v; });
-    if (at == m_matches.cend() && !m_wrap) {
-        Q_EMIT endReached(true); // nothing from here on in this note
-        return;
+    if (enter != Enter::None) {
+        if (m_matches.isEmpty())
+            Q_EMIT endReached(enter == Enter::First);
+        else
+            show(enter == Enter::First ? 0 : count() - 1);
+    } else if (jump) {
+        showForward(firstFrom(m_matches, m_origin));
     }
-    if (m_matches.isEmpty())
-        return;
-    show(at == m_matches.cend() ? 0 : int(std::distance(m_matches.cbegin(), at)));
 }
 
 void NoteFind::countRisks()
@@ -277,17 +252,15 @@ void NoteFind::countRisks()
     }
 }
 
-QVariantMap NoteFind::targetOf(const text::TextRange &range) const
+QVariantMap NoteFind::targetOf(text::TextRange range) const
 {
-    QVariantMap out;
-    out[u"sourceFrom"_s] = int(sourcePosition(m_text, range.start));
-    out[u"sourceTo"_s] = int(sourcePosition(m_text, range.end()));
-    if (sourceMode()) {
-        out[u"source"_s] = true;
+    const bool source = sourceMode();
+    QVariantMap out{{u"sourceFrom"_s, int(sourcePosition(m_text, range.start))},
+                    {u"sourceTo"_s, int(sourcePosition(m_text, range.end()))},
+                    {u"source"_s, source}};
+    if (source)
         return out;
-    }
     const PageController::TextLocation place = m_controller->locateText(range.start, range.length);
-    out[u"source"_s] = false;
     out[u"row"_s] = place.row;
     out[u"from"_s] = place.from;
     out[u"to"_s] = place.to;
@@ -304,55 +277,29 @@ void NoteFind::show(int index)
     Q_EMIT targetRequested(targetOf(m_matches.at(index)));
 }
 
+void NoteFind::showForward(qsizetype index)
+{
+    if (index >= m_matches.size() && !m_wrap)
+        Q_EMIT endReached(true); // nothing from here on in this note
+    else
+        show(int(index < m_matches.size() ? index : 0)); // (no match at all: nothing to show)
+}
+
 void NoteFind::next()
 {
     refresh();
-    if (m_matches.isEmpty()) {
-        if (!m_wrap)
-            Q_EMIT endReached(true);
-        return;
-    }
-    if (m_current >= 0) {
-        if (!m_wrap && m_current + 1 >= m_matches.size()) {
-            Q_EMIT endReached(true);
-            return;
-        }
-        show(int((m_current + 1) % m_matches.size()));
-        return;
-    }
-    const auto at = std::lower_bound(m_matches.cbegin(), m_matches.cend(), m_origin,
-                                     [](const text::TextRange &r, qsizetype v) { return r.start < v; });
-    if (at == m_matches.cend() && !m_wrap) {
-        Q_EMIT endReached(true);
-        return;
-    }
-    show(at == m_matches.cend() ? 0 : int(std::distance(m_matches.cbegin(), at)));
+    showForward(m_current >= 0 ? m_current + 1 : firstFrom(m_matches, m_origin));
 }
 
 void NoteFind::previous()
 {
     refresh();
-    if (m_matches.isEmpty()) {
-        if (!m_wrap)
-            Q_EMIT endReached(false);
-        return;
-    }
-    if (m_current >= 0) {
-        if (!m_wrap && m_current == 0) {
-            Q_EMIT endReached(false);
-            return;
-        }
-        show(int((m_current + m_matches.size() - 1) % m_matches.size()));
-        return;
-    }
-    const auto at = std::lower_bound(m_matches.cbegin(), m_matches.cend(), m_origin,
-                                     [](const text::TextRange &r, qsizetype v) { return r.start < v; });
-    const qsizetype before = std::distance(m_matches.cbegin(), at) - 1;
-    if (before < 0 && !m_wrap) {
+    // The match before the current one, else the last one before the origin.
+    const qsizetype before = (m_current >= 0 ? m_current : firstFrom(m_matches, m_origin)) - 1;
+    if (before < 0 && !m_wrap)
         Q_EMIT endReached(false);
-        return;
-    }
-    show(before >= 0 ? int(before) : int(m_matches.size() - 1));
+    else
+        show(int(before >= 0 ? before : m_matches.size() - 1));
 }
 
 bool NoteFind::replaceCurrent(const QString &replacement)
@@ -375,13 +322,9 @@ bool NoteFind::replaceCurrent(const QString &replacement)
         return false;
     }
     const text::TextRange range = m_matches.at(m_current);
-    QString line = replacement;
-    line.replace(u'\r', u' ').replace(u'\n', u' ');
+    const QString line = oneLine(replacement);
     if (QStringView(m_text).sliced(range.start, range.length) == line) {
-        if (!m_wrap && m_current + 1 >= m_matches.size())
-            Q_EMIT endReached(true);
-        else
-            show(int((m_current + 1) % m_matches.size()));
+        showForward(m_current + 1);
         return false;
     }
     if (sourceMode()) {
@@ -408,8 +351,7 @@ int NoteFind::replaceAll(const QString &replacement)
     const QList<text::TextRange> ranges = m_matches;
     if (ranges.isEmpty())
         return 0;
-    QString line = replacement;
-    line.replace(u'\r', u' ').replace(u'\n', u' ');
+    const QString line = oneLine(replacement);
     if (text::replaceMatches(m_text, ranges, line) == m_text)
         return 0;
     if (sourceMode()) {

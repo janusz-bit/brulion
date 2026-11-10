@@ -871,7 +871,7 @@ void RepoSync::runJob(std::shared_ptr<Run> run, int index)
                 run->pull.errors.append({job.path, u"write-failed"_s, m_vault->errorString()});
             }
         }
-        QTimer::singleShot(0, this, [this, run, finished] {
+        QTimer::singleShot(0, this, [run, finished] {
             if (alive(*run))
                 finished();
         });

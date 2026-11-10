@@ -32,17 +32,26 @@ FocusScope {
     readonly property int allDayRows: Math.min(calendar.maxAllDay, 3)
     readonly property real allDayHeight: allDayRows > 0 ? allDayRows * (pillHeight + 2) + 6 : 0
     property string nowSpec: DatesHelper.now()
-    /// Minutes since midnight of nowSpec (-1 when it has no time).
-    function nowMinutes(): int {
-        const m = root.nowParts.length === 2 ? Js.parseInt(root.nowParts[0]) * 60 + Js.parseInt(root.nowParts[1]) : -1
-        return Js.isNaN(m) ? -1 : m
-    }
     /// ["HH", "mm"] of nowSpec.
     readonly property list<string> nowParts: Js.split(Js.slice(nowSpec, 11, 16), ":")
+    /// Minutes since midnight of nowSpec (-1 when it has no time).
+    readonly property int nowMinutes: {
+        const m = nowParts.length === 2 ? Js.parseInt(nowParts[0]) * 60 + Js.parseInt(nowParts[1]) : -1
+        return Js.isNaN(m) ? -1 : m
+    }
+    /// Mondays of weekly notes in the shown range (the number's accent).
+    readonly property list<string> weekNotes: {
+        // (Read for real: a bare `void Workspace.revision` is compiled away with the dependency.)
+        if (calendar.rangeStart === "" || Workspace.revision < 0)
+            return []
+        return Workspace.periodicNoteStarts("week", calendar.rangeStart, calendar.rangeEnd)
+    }
 
     signal dayTapped(string date)
     signal dayOpened(string date)
     signal itemOpened(var entry)
+    /// The week's number in the corner was clicked: its Monday ("YYYY-MM-DD").
+    signal weekOpened(string monday)
     /// A right-click or long press on an entry: its token menu (PlanningTokenMenu.openToken).
     signal itemMenuRequested(var entry, Item item, real x, real y)
 
@@ -67,6 +76,19 @@ FocusScope {
     /// The short weekday names, Monday first.
     function weekdayShortNames(): list<string> {
         return DatesHelper.weekdayNames("short")
+    }
+    /// A tap on a day (header or column): select it and tell the view.
+    function selectDay(date: string): void {
+        root.forceActiveFocus(Qt.MouseFocusReason)
+        root.keyboardActive = false
+        root.calendar.anchorDate = date
+        root.dayTapped(date)
+    }
+    /// A right-click on an entry (its token menu); the long press is each entry's own handler.
+    component RightClickTap: TapHandler {
+        acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad | PointerDevice.Stylus
+        acceptedButtons: Qt.RightButton
+        gesturePolicy: TapHandler.WithinBounds
     }
     function scrollToFirstEntry(): void {
         const first = calendar.itemCount > 0 ? calendar.firstHour : 7
@@ -111,17 +133,6 @@ FocusScope {
         }
         keyboardActive = true
         event.accepted = true
-    }
-
-
-    /// The week's number in the corner was clicked: its Monday ("YYYY-MM-DD").
-    signal weekOpened(string monday)
-    /// Mondays of weekly notes in the shown range (the number's accent).
-    readonly property list<string> weekNotes: {
-        // (Read for real: a bare `void Workspace.revision` is compiled away with the dependency.)
-        if (calendar.rangeStart === "" || Workspace.revision < 0)
-            return []
-        return Workspace.periodicNoteStarts("week", calendar.rangeStart, calendar.rangeEnd)
     }
 
     // ---- Day headers + all-day strip --------------------------------------------------------
@@ -268,11 +279,8 @@ FocusScope {
                                 }
                             }
                             // A right-click or a finger held on it: the entry's token menu.
-                            TapHandler {
+                            RightClickTap {
                                 enabled: !allDayPill.more
-                                acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad | PointerDevice.Stylus
-                                acceptedButtons: Qt.RightButton
-                                gesturePolicy: TapHandler.WithinBounds
                                 onTapped: (eventPoint) => root.itemMenuRequested(allDayPill.entry, allDayPill, eventPoint.position.x, eventPoint.position.y)
                             }
                             TapHandler {
@@ -284,12 +292,7 @@ FocusScope {
                     }
                 }
                 TapHandler {
-                    onTapped: {
-                        root.forceActiveFocus(Qt.MouseFocusReason)
-                            root.keyboardActive = false
-                        root.calendar.anchorDate = dayHead.date
-                        root.dayTapped(dayHead.date)
-                    }
+                    onTapped: root.selectDay(dayHead.date)
                     onDoubleTapped: root.dayOpened(dayHead.date)
                 }
                 Accessible.role: Accessible.ColumnHeader
@@ -390,22 +393,15 @@ FocusScope {
 
                     Rectangle {
                         anchors.fill: parent
-                        color: dayColumn.isSelected ? Theme.bgSelected.alpha(Theme.bgSelected.a * 0.5)
-                             : dayColumn.isWeekend ? Theme.bgSunken.alpha(0.45) : "transparent"
+                        visible: dayColumn.isSelected || dayColumn.isWeekend
+                        color: dayColumn.isSelected ? Theme.bgSelected.alpha(Theme.bgSelected.a * 0.5) : Theme.bgSunken.alpha(0.45)
                     }
                     Rectangle {
                         width: 1
                         height: parent.height
                         color: Theme.borderSubtle
                     }
-                    TapHandler {
-                        onTapped: {
-                            root.forceActiveFocus(Qt.MouseFocusReason)
-                            root.keyboardActive = false
-                            root.calendar.anchorDate = dayColumn.date
-                            root.dayTapped(dayColumn.date)
-                        }
-                    }
+                    TapHandler { onTapped: root.selectDay(dayColumn.date) }
 
                     Repeater {
                         model: dayColumn.timed
@@ -488,15 +484,11 @@ FocusScope {
                                 }
                             }
                             // A right-click or a finger held on it: the entry's token menu.
-                            TapHandler {
-                                enabled: true
-                                acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad | PointerDevice.Stylus
-                                acceptedButtons: Qt.RightButton
-                                gesturePolicy: TapHandler.WithinBounds
+                            RightClickTap {
                                 onTapped: (eventPoint) => root.itemMenuRequested(event.entry, event, eventPoint.position.x, eventPoint.position.y)
                             }
                             TapHandler {
-                                enabled: true && Theme.touchUi
+                                enabled: Theme.touchUi
                                 acceptedDevices: PointerDevice.TouchScreen
                                 onLongPressed: root.itemMenuRequested(event.entry, event, point.position.x, point.position.y)
                             }
@@ -505,9 +497,8 @@ FocusScope {
 
                     // Now.
                     Rectangle {
-                        readonly property int minutes: root.nowMinutes()
-                        visible: dayColumn.isToday && minutes >= 0
-                        y: minutes / 60 * root.hourHeight - 1
+                        visible: dayColumn.isToday && root.nowMinutes >= 0
+                        y: root.nowMinutes / 60 * root.hourHeight - 1
                         width: parent.width
                         height: 2
                         color: Theme.accent

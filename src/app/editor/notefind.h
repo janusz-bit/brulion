@@ -60,11 +60,11 @@ public:
     QString query() const { return m_query; }
     void setQuery(const QString &query);
     bool matchCase() const { return m_options.matchCase; }
-    void setMatchCase(bool on);
+    void setMatchCase(bool on) { setOption(&text::FindOptions::matchCase, on); }
     bool matchDiacritics() const { return m_options.matchDiacritics; }
-    void setMatchDiacritics(bool on);
+    void setMatchDiacritics(bool on) { setOption(&text::FindOptions::matchDiacritics, on); }
     bool wholeWord() const { return m_options.wholeWord; }
-    void setWholeWord(bool on);
+    void setWholeWord(bool on) { setOption(&text::FindOptions::wholeWord, on); }
     QString appliedQuery() const { return m_appliedQuery; }
     int count() const { return int(m_matches.size()); }
     int current() const { return m_current; }
@@ -113,10 +113,14 @@ Q_SIGNALS:
 
 private:
     void connectController();
+    /// One of the options set (`option`: &text::FindOptions::matchCase, …): a new search.
+    void setOption(bool text::FindOptions::*option, bool on);
     void schedule(bool jump);
     QString sourceOfSearch() const;
-    QVariantMap targetOf(const text::TextRange &range) const;
+    QVariantMap targetOf(text::TextRange range) const;
     void show(int index);
+    /// Shows match `index` going forward: past the last one the first (wrap), else endReached(true).
+    void showForward(qsizetype index);
     void recount();
     void countRisks();
     bool sourceMode() const;

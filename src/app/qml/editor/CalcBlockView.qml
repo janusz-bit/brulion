@@ -116,6 +116,7 @@ Rectangle {
         delegate: Text {
             id: result
             objectName: "calcResult" // (the editor's self-tests)
+            required property int index
             required property int line
             required property string value
             required property string error

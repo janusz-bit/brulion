@@ -67,6 +67,24 @@ FocusScope {
 
     implicitHeight: column.implicitHeight
 
+    /// An action of the day: a full-width row with an icon and a label.
+    component ActionRow: BListItem {
+        Layout.fillWidth: true
+        dense: true
+        leftPadding: Theme.space2
+        Accessible.role: Accessible.Button
+    }
+    /// An entry of the day (the Repeaters' delegate).
+    component EntryRow: PlanningItemRow {
+        required property var modelData
+        Layout.fillWidth: true
+        entry: modelData
+        onOpened: root.itemOpened(modelData)
+        onTaskToggled: root.itemToggled(modelData)
+        onStatusRequested: (status) => root.itemStatusRequested(modelData, status)
+        onTokenMenuRequested: (item, x, y) => root.itemMenuRequested(modelData, item, x, y)
+    }
+
     Flickable {
         id: flick
         TouchFlick.enabled: true
@@ -116,34 +134,22 @@ FocusScope {
             ColumnLayout {
                 Layout.fillWidth: true
                 spacing: 0
-                BListItem {
+                ActionRow {
                     objectName: "calendarDayJournal"
-                    Layout.fillWidth: true
-                    dense: true
-                    leftPadding: Theme.space2
                     iconName: "book-open"
                     text: root.journal ? qsTr("Open journal") : qsTr("Write in journal")
-                    Accessible.role: Accessible.Button
                     onClicked: root.journalOpened(root.date)
                 }
-                BListItem {
+                ActionRow {
                     objectName: "calendarDayAddTask"
-                    Layout.fillWidth: true
-                    dense: true
-                    leftPadding: Theme.space2
                     iconName: "plus"
                     text: qsTr("Add task")
-                    Accessible.role: Accessible.Button
                     onClicked: root.addTaskRequested(root.date)
                 }
-                BListItem {
+                ActionRow {
                     objectName: "calendarDayAddReminder"
-                    Layout.fillWidth: true
-                    dense: true
-                    leftPadding: Theme.space2
                     iconName: "bell"
                     text: qsTr("Add reminder")
-                    Accessible.role: Accessible.Button
                     onClicked: root.addReminderRequested(root.date)
                 }
             }
@@ -161,16 +167,7 @@ FocusScope {
             }
             Repeater {
                 model: root.overdueShown()
-                delegate: PlanningItemRow {
-                    required property var modelData
-                    Layout.fillWidth: true
-                    entry: modelData
-                    showDate: true
-                    onOpened: root.itemOpened(modelData)
-                    onTaskToggled: root.itemToggled(modelData)
-                    onStatusRequested: (status) => root.itemStatusRequested(modelData, status)
-                    onTokenMenuRequested: (item, x, y) => root.itemMenuRequested(modelData, item, x, y)
-                }
+                delegate: EntryRow { showDate: true }
             }
 
             BButton {
@@ -193,15 +190,7 @@ FocusScope {
             }
             Repeater {
                 model: root.orderedItems
-                delegate: PlanningItemRow {
-                    required property var modelData
-                    Layout.fillWidth: true
-                    entry: modelData
-                    onOpened: root.itemOpened(modelData)
-                    onTaskToggled: root.itemToggled(modelData)
-                    onStatusRequested: (status) => root.itemStatusRequested(modelData, status)
-                    onTokenMenuRequested: (item, x, y) => root.itemMenuRequested(modelData, item, x, y)
-                }
+                delegate: EntryRow {}
             }
             // Nothing planned: a short note under "Plan of the day", in line with it (no picture: the
             // panel stays a list, not an empty page).

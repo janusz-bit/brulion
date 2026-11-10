@@ -40,13 +40,20 @@ QString previewOf(const QString &content)
 {
     constexpr int MaxLines = 12;
     constexpr qsizetype MaxChars = 600;
-    QStringList lines = QString(content).remove(u'\r').split(u'\n');
-    const bool more = lines.size() > MaxLines;
-    if (more)
-        lines = lines.mid(0, MaxLines);
-    QString preview = lines.join(u'\n').trimmed();
-    if (preview.size() > MaxChars)
-        return preview.left(MaxChars) + u'…';
+    // Only the lines shown are looked at: a shared file may have megabytes of them.
+    qsizetype end = -1; // the line break after the last line shown, -1 when no line follows
+    for (int line = 0; line < MaxLines; ++line) {
+        end = content.indexOf(u'\n', end + 1);
+        if (end < 0)
+            break;
+    }
+    const bool more = end >= 0;
+    const QString preview = content.left(more ? end : content.size()).remove(u'\r').trimmed();
+    if (preview.size() > MaxChars) {
+        // Never between the two halves of a character outside the BMP (an emoji).
+        const qsizetype cut = preview.at(MaxChars - 1).isHighSurrogate() ? MaxChars - 1 : MaxChars;
+        return preview.left(cut) + u'…';
+    }
     return more ? QString(preview + u"\n…"_s) : preview;
 }
 
@@ -112,7 +119,11 @@ QString AppController::shareInboxPath() const
 
 void AppController::receiveShareJson(const QByteArray &json)
 {
-    receiveShare(QJsonDocument::fromJson(json).object().toVariantMap());
+    QJsonParseError error;
+    const QJsonDocument doc = QJsonDocument::fromJson(json, &error);
+    if (!doc.isObject())
+        qCWarning(lcApp) << "The shared content is no JSON object:" << error.errorString();
+    receiveShare(doc.object().toVariantMap()); // none: an empty share
 }
 
 void AppController::receiveShareQuery(const QString &query)
@@ -152,13 +163,12 @@ void AppController::receiveShare(const QVariantMap &map)
     for (const notebook::SharedFile &shared : std::as_const(share.files)) {
         // A file read for the waiting share is not read again, unless it was opened again: it may
         // have changed since (or be readable now), and that open asks for it as it is now.
-        const auto read = std::find_if(known.cbegin(), known.cend(), [&](const ShareFile &file) {
-            return !shared.path.isEmpty() && shared.error.isEmpty() && file.path == shared.path
-                   && !reopened.contains(shared.path);
-        });
-        if (read != known.cend()) {
-            files.append(*read);
-            continue;
+        if (!shared.path.isEmpty() && shared.error.isEmpty() && !reopened.contains(shared.path)) {
+            if (const auto read = std::ranges::find(std::as_const(known), shared.path, &ShareFile::path);
+                read != known.cend()) {
+                files.append(*read);
+                continue;
+            }
         }
         ShareFile file;
         file.path = shared.path;
@@ -167,16 +177,17 @@ void AppController::receiveShare(const QVariantMap &map)
         file.error = shared.error;
         if (file.error.isEmpty()) {
             const QFileInfo info(shared.path);
+            const bool isFile = info.isFile(); // false when it does not exist
             QString mime = shared.mime;
-            if (info.exists() && info.isFile()) {
+            if (isFile) {
                 file.size = info.size();
                 // A file opened with Brulion has no type: its name, else its content tells ("README"
                 // or "notatka" without an extension is text/plain, a picture is not text).
                 if (mime.isEmpty())
                     mime = QMimeDatabase().mimeTypeForFile(info).name();
             }
-            notebook::SharedFileProblem problem = notebook::checkSharedFile(file.name, mime, file.size);
-            if (problem == notebook::SharedFileProblem::None && !(info.exists() && info.isFile()))
+            const notebook::SharedFileProblem problem = notebook::checkSharedFile(file.name, mime, file.size);
+            if (problem == notebook::SharedFileProblem::None && !isFile)
                 file.error = u"unreadable"_s;
             else
                 file.error = notebook::sharedFileError(problem);
@@ -199,7 +210,7 @@ void AppController::receiveShare(const QVariantMap &map)
         files.append(file);
     }
     m_share = std::move(share);
-    m_shareFiles = files;
+    m_shareFiles = std::move(files);
     Q_EMIT pendingShareChanged();
     showWindow();
     applyPendingShare();
@@ -410,11 +421,8 @@ bool AppController::shareSavesFiles() const
 {
     if (!m_share || m_shareFiles.isEmpty())
         return false;
-    for (const ShareFile &file : m_shareFiles) {
-        if (file.error.isEmpty())
-            return true;
-    }
-    return notebook::composeSharedText(m_share->subject, m_share->text, m_share->url).trimmed().isEmpty();
+    return std::ranges::any_of(m_shareFiles, [](const ShareFile &file) { return file.error.isEmpty(); })
+           || notebook::composeSharedText(m_share->subject, m_share->text, m_share->url).trimmed().isEmpty();
 }
 
 void AppController::dismissShare()
