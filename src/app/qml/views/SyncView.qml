@@ -33,6 +33,13 @@ FocusScope {
     readonly property WorkspaceGitHub github: Workspace.github
     readonly property WorkspaceSync sync: Workspace.sync
     readonly property int conflictCount: sync ? sync.conflictCount : 0
+    readonly property string syncState: sync ? sync.state : ""
+    readonly property string syncStatusText: sync ? sync.statusText : ""
+    readonly property bool githubLinked: github ? github.linked : false
+    readonly property string githubState: github ? github.state : ""
+    readonly property int githubChanges: github ? github.changeCount : 0
+    readonly property string githubStatusText: github ? github.statusText : ""
+    readonly property string githubLinkText: github ? github.linkText : ""
     readonly property int tabPadding: Theme.compact ? 9 : (Theme.touchUi ? 14 : 12)
     /// The conflict the user (or the route) opened.
     property string chosenCopy: ""
@@ -139,6 +146,14 @@ FocusScope {
         }
     }
 
+    /// A tab of the bar: no icon on phones.
+    component Tab: BTabButton {
+        property string symbol
+        iconName: Theme.compact ? "" : symbol
+        leftPadding: root.tabPadding
+        rightPadding: root.tabPadding
+    }
+
     ColumnLayout {
         anchors.fill: parent
         spacing: 0
@@ -150,11 +165,11 @@ FocusScope {
             fadeColor: Theme.bg
             // Phones: the tabs without icons (the bar scrolls on the narrowest; the conflict count
             // stays visible).
-            BTabButton { text: qsTr("Overview"); iconName: Theme.compact ? "" : "folder-sync"; leftPadding: root.tabPadding; rightPadding: root.tabPadding }
-            BTabButton { text: "Syncthing"; iconName: Theme.compact ? "" : "laptop"; leftPadding: root.tabPadding; rightPadding: root.tabPadding }
-            BTabButton { text: "Nextcloud"; iconName: Theme.compact ? "" : "cloud"; leftPadding: root.tabPadding; rightPadding: root.tabPadding }
-            BTabButton { objectName: "syncTabGitHub"; text: "GitHub"; iconName: Theme.compact ? "" : "git-branch"; leftPadding: root.tabPadding; rightPadding: root.tabPadding }
-            BTabButton { text: qsTr("Conflicts"); iconName: Theme.compact ? "" : "git-merge"; count: root.conflictCount; leftPadding: root.tabPadding; rightPadding: root.tabPadding }
+            Tab { text: qsTr("Overview"); symbol: "folder-sync" }
+            Tab { text: "Syncthing"; symbol: "laptop" }
+            Tab { text: "Nextcloud"; symbol: "cloud" }
+            Tab { objectName: "syncTabGitHub"; text: "GitHub"; symbol: "git-branch" }
+            Tab { text: qsTr("Conflicts"); symbol: "git-merge"; count: root.conflictCount }
         }
         Rectangle {
             Layout.fillWidth: true
@@ -220,9 +235,9 @@ FocusScope {
                         subtitle: qsTr("Through your own server (WebDAV) – also in the browser.")
                         trailing: [
                             BBadge {
-                                visible: root.sync !== null && root.sync.state !== "disabled"
+                                visible: root.sync !== null && root.syncState !== "disabled"
                                 text: {
-                                    switch (root.sync !== null ? root.sync.state : "") {
+                                    switch (root.syncState) {
                                     case "syncing": return qsTr("Syncing")
                                     case "offline": return qsTr("Offline")
                                     case "error": return qsTr("Problem")
@@ -230,7 +245,7 @@ FocusScope {
                                     }
                                 }
                                 variant: {
-                                    switch (root.sync !== null ? root.sync.state : "") {
+                                    switch (root.syncState) {
                                     case "syncing": return "info"
                                     case "offline": return "warning"
                                     case "error": return "danger"
@@ -244,10 +259,10 @@ FocusScope {
                         Bullet { text: qsTr("Changes from several devices are merged line by line.") }
                         BText {
                             Layout.fillWidth: true
-                            visible: root.sync !== null && root.sync.statusText !== ""
-                            text: root.sync !== null ? root.sync.statusText : ""
+                            visible: root.syncStatusText !== ""
+                            text: root.syncStatusText
                             variant: "small"
-                            color: root.sync !== null && root.sync.state === "error" ? Theme.dangerText : Theme.fgMuted
+                            color: root.syncState === "error" ? Theme.dangerText : Theme.fgMuted
                             wrapMode: Text.Wrap
                         }
                         Item { Layout.fillHeight: true }
@@ -283,33 +298,31 @@ FocusScope {
                     Layout.fillWidth: true
                     iconName: "git-branch"
                     title: "GitHub"
-                    subtitle: root.github !== null && root.github.linked
-                              ? root.github.linkText
+                    subtitle: root.githubLinked
+                              ? root.githubLinkText
                               : qsTr("Notes kept in a GitHub repository, as a notebook — also in the browser.")
                     trailing: [
                         BBadge {
-                            visible: root.github !== null && root.github.linked
-                            text: root.github !== null && root.github.changeCount > 0
-                                  ? qsTr("%n change(s)", "", root.github.changeCount)
-                                  : root.github !== null && root.github.state === "error" ? qsTr("Problem") : qsTr("Linked")
-                            variant: root.github !== null && root.github.changeCount > 0 ? "info"
-                                   : root.github !== null && root.github.state === "error" ? "danger" : "success"
+                            visible: root.githubLinked
+                            text: root.githubChanges > 0 ? qsTr("%n change(s)", "", root.githubChanges)
+                                  : root.githubState === "error" ? qsTr("Problem") : qsTr("Linked")
+                            variant: root.githubChanges > 0 ? "info" : root.githubState === "error" ? "danger" : "success"
                         }
                     ]
                     BText {
                         Layout.fillWidth: true
-                        visible: root.github !== null && root.github.linked
-                        text: root.github !== null ? root.github.statusText : ""
+                        visible: root.githubLinked
+                        text: root.githubStatusText
                         variant: "small"
-                        color: root.github !== null && root.github.state === "error" ? Theme.dangerText : Theme.fgMuted
+                        color: root.githubState === "error" ? Theme.dangerText : Theme.fgMuted
                         wrapMode: Text.Wrap
                     }
                     Bullet {
-                        visible: root.github === null || !root.github.linked
+                        visible: !root.githubLinked
                         text: qsTr("Brulion gets the newest version and sends your changes back as commits or pull requests.")
                     }
                     BButton {
-                        text: root.github !== null && root.github.linked ? qsTr("Show") : qsTr("Set up GitHub")
+                        text: root.githubLinked ? qsTr("Show") : qsTr("Set up GitHub")
                         iconName: "arrow-right"
                         iconRight: true
                         onClicked: root.showTab("github")
@@ -449,7 +462,6 @@ FocusScope {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
                         Layout.margins: Theme.compact ? Theme.space4 : Theme.space6
-                        Layout.bottomMargin: Theme.compact ? Theme.space4 : Theme.space6
                         visible: root.currentCopy !== ""
                         copy: root.currentCopy
                         onClosed: root.closeCopy()

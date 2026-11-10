@@ -3023,6 +3023,45 @@ void checkLinkPreviews(QQuickWindow *window, AppController *app, const Check &ch
     mouseMove(window, QPointF(2, window->height() - 2));
 }
 
+/// `image` encoded as PNG (empty when it cannot be written).
+QByteArray pngBytes(const QImage &image)
+{
+    QByteArray bytes;
+    QBuffer buffer(&bytes);
+    if (!buffer.open(QIODevice::WriteOnly) || !image.save(&buffer, "PNG"))
+        return {};
+    return bytes;
+}
+
+/// The PDF (A4 pages at 72 dpi) that `draw` paints, as bytes; `margins` are the pages' margins
+/// (the writer's own by default). Empty when it cannot be written.
+QByteArray pdfBytes(const std::function<void(QPdfWriter &, QPainter &)> &draw,
+                    std::optional<QMarginsF> margins = std::nullopt)
+{
+    QByteArray bytes;
+    QBuffer buffer(&bytes);
+    if (!buffer.open(QIODevice::WriteOnly))
+        return {};
+    QPdfWriter writer(&buffer);
+    writer.setResolution(72);
+    writer.setPageSize(QPageSize(QPageSize::A4));
+    if (margins)
+        writer.setPageMargins(*margins);
+    QPainter painter(&writer);
+    draw(writer, painter);
+    painter.end();
+    return bytes;
+}
+
+/// The shell top bar's "More" button, if shown.
+QQuickItem *topBarMoreButton(QQuickWindow *window)
+{
+    const QString more = QCoreApplication::translate("ShellTopBar", "More");
+    return findShown(window->contentItem(), [&more](QQuickItem *item) {
+        return isA(item, "BIconButton") && item->property("label").toString() == more;
+    });
+}
+
 /// 5b. A picture attachment opens as a picture (ContentPictureView): its bytes are not a note and
 /// never reach the editor — the older view read them as text there, mojibake for a binary picture,
 /// and a typed character was saved over it. "Show as text" (a real tap / click) and Ctrl+E
@@ -3035,11 +3074,9 @@ void checkPictureView(QQuickWindow *window, AppController *app, const Check &che
     const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
     Workspace *workspace = app->workspace();
     const auto pictureView = [window]() -> QQuickItem * {
-        for (QQuickItem *v : window->findChildren<QQuickItem *>(u"pictureView"_s)) {
-            if (v->isVisible())
-                return v;
-        }
-        return nullptr;
+        const QList<QQuickItem *> views = window->findChildren<QQuickItem *>(u"pictureView"_s);
+        const auto it = std::ranges::find_if(views, &QQuickItem::isVisible);
+        return it == views.cend() ? nullptr : *it;
     };
     // The shown one: a Loader's earlier items are only deleted once this test returns to the
     // event loop (they stay, hidden, among the view's children until then).
@@ -3047,11 +3084,8 @@ void checkPictureView(QQuickWindow *window, AppController *app, const Check &che
         if (!view)
             return nullptr;
         const QList<QQuickItem *> found = view->findChildren<QQuickItem *>(QString::fromLatin1(name));
-        for (QQuickItem *item : found) {
-            if (item->isVisible())
-                return item;
-        }
-        return found.value(0);
+        const auto it = std::ranges::find_if(found, &QQuickItem::isVisible);
+        return it == found.cend() ? found.value(0) : *it;
     };
     const auto opened = [&](const QString &path) {
         return app->currentRoute().value(u"path"_s).toString() == path && pictureView()
@@ -3098,7 +3132,7 @@ void checkPictureView(QQuickWindow *window, AppController *app, const Check &che
         if (name && size && textButton && waitFor([&] { return size->isVisible(); })) {
             // (Once the row's layout has settled: the name may widen before the toggle moves.)
             const bool fits = waitFor([&] {
-                return name->width() >= qMin<qreal>(name->property("implicitWidth").toReal(), 80)
+                return name->width() >= std::min<qreal>(name->property("implicitWidth").toReal(), 80)
                        && right(name) <= left(size) + 0.5 && right(size) <= left(textButton) + 0.5
                        && right(textButton) <= window->width() + 0.5;
             });
@@ -3132,10 +3166,7 @@ void checkPictureView(QQuickWindow *window, AppController *app, const Check &che
             });
         };
         const auto openMoreMenu = [&] {
-            const QString more = QCoreApplication::translate("ShellTopBar", "More");
-            QQuickItem *button = findShown(window->contentItem(), [&](QQuickItem *item) {
-                return isA(item, "BIconButton") && item->property("label").toString() == more;
-            });
+            QQuickItem *button = topBarMoreButton(window);
             if (button)
                 tapOrClick(window, pointIn(button), touch);
             return button && waitFor([&] { return openMenus(window) == 1; });
@@ -3310,7 +3341,7 @@ void checkPictureView(QQuickWindow *window, AppController *app, const Check &che
                   size = child(v, "pictureSizeButton");
                   return v && v->width() < 600 && pictureShown() && name && size && size->isVisible()
                          && isA(size, "BIconButton");
-              }) && name->width() >= qMin<qreal>(name->property("implicitWidth").toReal(), 40)
+              }) && name->width() >= std::min<qreal>(name->property("implicitWidth").toReal(), 40)
                       && name->mapToScene(QPointF(name->width(), 0)).x() <= size->mapToScene(QPointF(0, 0)).x() + 0.5,
               "in a narrow view on the desktop the picture's size toggle is an icon, next to the file name");
         if (name && size)
@@ -3327,11 +3358,8 @@ void checkPictureView(QQuickWindow *window, AppController *app, const Check &che
     {
         QImage small(40, 30, QImage::Format_RGB32);
         small.fill(Qt::darkGreen);
-        QBuffer buffer;
-        buffer.open(QIODevice::WriteOnly);
-        small.save(&buffer, "PNG");
         const QString icon = u"assets/mała ikona.png"_s;
-        check(workspace->vault()->writeBinary(icon, buffer.data()), "a small picture is added to the notebook");
+        check(workspace->vault()->writeBinary(icon, pngBytes(small)), "a small picture is added to the notebook");
         app->openPage(icon);
         check(waitFor([&] { return opened(icon) && pictureShown(); }), "the small picture opens");
         QQuickItem *image = child(pictureView(), "pictureImage");
@@ -3433,25 +3461,19 @@ void checkPdfViewer(QQuickWindow *window, AppController *app, const Check &check
     const QString note = u"PDF próba.md"_s;
     QString pdf = u"assets/Wykład – ćwiczenia.pdf"_s;
     {
-        QBuffer buffer;
-        buffer.open(QIODevice::WriteOnly);
-        QPdfWriter writer(&buffer);
-        writer.setResolution(72);
-        writer.setPageSize(QPageSize(QPageSize::A4));
-        writer.setPageMargins(QMarginsF(0, 0, 0, 0));
-        QPainter p(&writer);
-        QFont font;
-        font.setPointSize(24);
-        p.setFont(font);
-        p.drawText(QPointF(60, 120), u"Wykład 3 — Zażółć gęślą jaźń"_s);
-        writer.setPageOrientation(QPageLayout::Landscape);
-        writer.newPage();
-        p.fillRect(QRectF(113, 85, 57, 57), Qt::red);
-        writer.setPageOrientation(QPageLayout::Portrait);
-        writer.newPage();
-        p.drawText(QPointF(60, 120), u"Strona trzecia: żółw"_s);
-        p.end();
-        pdf = workspace->createAttachment(pdf, buffer.data());
+        const auto lecture = [](QPdfWriter &writer, QPainter &p) {
+            QFont font;
+            font.setPointSize(24);
+            p.setFont(font);
+            p.drawText(QPointF(60, 120), u"Wykład 3 — Zażółć gęślą jaźń"_s);
+            writer.setPageOrientation(QPageLayout::Landscape);
+            writer.newPage();
+            p.fillRect(QRectF(113, 85, 57, 57), Qt::red);
+            writer.setPageOrientation(QPageLayout::Portrait);
+            writer.newPage();
+            p.drawText(QPointF(60, 120), u"Strona trzecia: żółw"_s);
+        };
+        pdf = workspace->createAttachment(pdf, pdfBytes(lecture, QMarginsF(0, 0, 0, 0)));
     }
     check(!pdf.isEmpty()
                   && workspace->writeFile(
@@ -3465,6 +3487,7 @@ void checkPdfViewer(QQuickWindow *window, AppController *app, const Check &check
         return platform::OpenResult::Opened;
     });
     const auto restoreHook = qScopeGuard([] { platform::setOpenFileHook({}); });
+    const auto routePath = [app] { return app->currentRoute().value(u"path"_s).toString(); };
     const auto pdfView = [window]() { return shownNamed(window->contentItem(), u"pdfView"_s); };
     const auto viewModel = [&]() -> QObject * {
         QQuickItem *view = pdfView();
@@ -3475,8 +3498,8 @@ void checkPdfViewer(QQuickWindow *window, AppController *app, const Check &check
         return m ? m->property(name) : QVariant();
     };
     const auto opened = [&](int page) {
-        return app->currentRoute().value(u"path"_s).toString() == pdf && pdfView()
-               && pdfView()->property("ready").toBool() && (page == 0 || modelValue("currentPage").toInt() == page);
+        return routePath() == pdf && pdfView() && pdfView()->property("ready").toBool()
+               && (page == 0 || modelValue("currentPage").toInt() == page);
     };
 
     if (!platform::pdfAvailable()) {
@@ -3487,8 +3510,7 @@ void checkPdfViewer(QQuickWindow *window, AppController *app, const Check &check
               "without a renderer the PDF is embedded as its chip");
         if (chip)
             tapOrClick(window, pointIn(chip), touch);
-        check(waitFor([&] { return handed.contains(absolute + u"|application/pdf"_s); })
-                      && app->currentRoute().value(u"path"_s).toString() == note,
+        check(waitFor([&] { return handed.contains(absolute + u"|application/pdf"_s); }) && routePath() == note,
               "a click on the chip hands the PDF to another app, the note stays");
         app->openPage(pdf);
         check(waitFor([&] { return shownNamed(window->contentItem(), u"pdfOpenElsewhere"_s) != nullptr; })
@@ -3537,10 +3559,9 @@ void checkPdfViewer(QQuickWindow *window, AppController *app, const Check &check
     }
     const bool viewerOpened = waitFor([&] { return opened(1); }, 15000);
 
-    std::fprintf(stderr, "selftest: PDF route %s, viewer %d, ready %d, page %d of %d\n",
-                 qPrintable(app->currentRoute().value(u"path"_s).toString()), pdfView() != nullptr,
-                 pdfView() ? pdfView()->property("ready").toBool() : false, modelValue("currentPage").toInt(),
-                 modelValue("pageCount").toInt());
+    std::fprintf(stderr, "selftest: PDF route %s, viewer %d, ready %d, page %d of %d\n", qPrintable(routePath()),
+                 pdfView() != nullptr, pdfView() ? pdfView()->property("ready").toBool() : false,
+                 modelValue("currentPage").toInt(), modelValue("pageCount").toInt());
     check(viewerOpened && modelValue("pageCount").toInt() == 3,
           "a tap on the thumbnail opens the PDF viewer at page 1 of 3");
     check(controllerFor(pdf) == nullptr, "the PDF's bytes are not loaded into the block editor");
@@ -3649,8 +3670,7 @@ void checkPdfViewer(QQuickWindow *window, AppController *app, const Check &check
     QQuickItem *searchField = nullptr;
     check(waitFor([&] { return (searchField = shownNamed(view, u"pdfSearchField"_s)) != nullptr; }),
           "Ctrl+F opens the PDF's search");
-    for (const QChar ch : u"gesla"_s)
-        sendKey(window, 0, Qt::NoModifier, QString(ch));
+    typeChars(window, u"gesla"_s);
     check(waitFor([&] { return modelValue("hitCount").toInt() == 1 && !modelValue("searching").toBool(); }, 10000)
                   && waitFor([&] { return shownNamed(view, u"pdfHit"_s) != nullptr; }),
           "“gesla” finds “gęślą” once, highlighted");
@@ -3703,8 +3723,7 @@ void checkPdfViewer(QQuickWindow *window, AppController *app, const Check &check
               "Esc clears the selection and stays in the viewer");
     }
     sendKey(window, Qt::Key_Escape);
-    check(waitFor([&] { return app->currentRoute().value(u"path"_s).toString() == note; }),
-          "Esc again returns to the note");
+    check(waitFor([&] { return routePath() == note; }), "Esc again returns to the note");
 
     // The note's link to page 3.
     if (QObject *page = controllerFor(note)) {
@@ -3744,9 +3763,8 @@ void checkPdfViewer(QQuickWindow *window, AppController *app, const Check &check
         check(drawOnPage(), "“Draw on this page” is offered");
         check(waitFor(
                       [&] {
-                          drawingPath = app->currentRoute().value(u"view"_s).toString() == u"drawing"
-                                                ? app->currentRoute().value(u"path"_s).toString()
-                                                : QString();
+                          drawingPath = app->currentRoute().value(u"view"_s).toString() == u"drawing" ? routePath()
+                                                                                                      : QString();
                           return !drawingPath.isEmpty();
                       },
                       15000),
@@ -3770,8 +3788,7 @@ void checkPdfViewer(QQuickWindow *window, AppController *app, const Check &check
         if (existing)
             tapOrClick(window, pointIn(existing), touch);
         check(waitFor([&] {
-                  return app->currentRoute().value(u"view"_s).toString() == u"drawing"
-                         && app->currentRoute().value(u"path"_s).toString() == drawingPath;
+                  return app->currentRoute().value(u"view"_s).toString() == u"drawing" && routePath() == drawingPath;
               }) && QDir(workspace->absoluteFilePath(u"assets"_s)).entryList({u"*.svg"_s}).size() == svgs,
               "choosing it opens the same drawing, no second file");
         closeMenus(window);
@@ -3781,11 +3798,7 @@ void checkPdfViewer(QQuickWindow *window, AppController *app, const Check &check
 
     // The More menu's "Open in another app" (the shell's top bar).
     {
-        const QString more = QCoreApplication::translate("ShellTopBar", "More");
-        QQuickItem *button = findShown(window->contentItem(), [&](QQuickItem *item) {
-            return isA(item, "BIconButton") && item->property("label").toString() == more;
-        });
-        if (button)
+        if (QQuickItem *button = topBarMoreButton(window))
             tapOrClick(window, pointIn(button), touch);
         QQuickItem *item = nullptr;
         check(waitFor([&] { return (item = shownNamed(window->contentItem(), u"menuOpenInOtherApp"_s)) != nullptr; }),
@@ -3807,10 +3820,8 @@ void checkPdfViewer(QQuickWindow *window, AppController *app, const Check &check
             pdf = moved; // (opened() reads it)
         // (The model opens the new file a moment later: until then it still shows the old one.)
         const QString movedFile = moved.isEmpty() ? QString() : workspace->absoluteFilePath(moved);
-        check(!moved.isEmpty() && waitFor([&] {
-            return app->currentRoute().value(u"path"_s).toString() == moved
-                   && modelValue("file").toString() == movedFile;
-        }),
+        check(!moved.isEmpty()
+                      && waitFor([&] { return routePath() == moved && modelValue("file").toString() == movedFile; }),
               "the route and the viewer follow the moved PDF");
         waitFor([] { return false; }, 1500); // (reopened, and longer than the route write's 500 ms)
         const bool reopened =
@@ -3819,9 +3830,8 @@ void checkPdfViewer(QQuickWindow *window, AppController *app, const Check &check
             std::fprintf(stderr,
                          "selftest: after the move: route path %s, pdfPage %d; viewer %s, ready %d, file %s, status "
                          "%d, page %d of %d, error \"%s\"\n",
-                         qPrintable(app->currentRoute().value(u"path"_s).toString()),
-                         app->currentRoute().value(u"pdfPage"_s).toInt(), pdfView() ? "shown" : "none",
-                         pdfView() ? int(pdfView()->property("ready").toBool()) : -1,
+                         qPrintable(routePath()), app->currentRoute().value(u"pdfPage"_s).toInt(),
+                         pdfView() ? "shown" : "none", pdfView() ? int(pdfView()->property("ready").toBool()) : -1,
                          qPrintable(modelValue("file").toString()), modelValue("status").toInt(),
                          modelValue("currentPage").toInt(), modelValue("pageCount").toInt(),
                          qPrintable(modelValue("error").toString()));
@@ -3862,8 +3872,7 @@ void checkPdfViewer(QQuickWindow *window, AppController *app, const Check &check
                 if (touch)
                     tapOrClick(window, pointIn(field), touch);
                 field->forceActiveFocus();
-                for (const QChar ch : password)
-                    sendKey(window, 0, Qt::NoModifier, QString(ch));
+                typeChars(window, password);
                 sendKey(window, Qt::Key_Return);
                 return true;
             };
@@ -4023,17 +4032,9 @@ void checkPdfViewer(QQuickWindow *window, AppController *app, const Check &check
     // narrow bar (the phone run) it takes the line under the row — the field keeping its room, ‹ ›
     // hidden without hits, × on the screen —; in the wide bar (desktop) it stays in the row.
     {
-        QBuffer buffer;
-        buffer.open(QIODevice::WriteOnly);
-        {
-            QPdfWriter writer(&buffer);
-            writer.setResolution(72);
-            writer.setPageSize(QPageSize(QPageSize::A4));
-            QPainter p(&writer);
-            p.fillRect(QRectF(60, 80, 400, 30), Qt::gray);
-            p.end();
-        }
-        const QString scan = workspace->createAttachment(u"assets/Skan umowy.pdf"_s, buffer.data());
+        const QByteArray bytes =
+                pdfBytes([](QPdfWriter &, QPainter &p) { p.fillRect(QRectF(60, 80, 400, 30), Qt::gray); });
+        const QString scan = workspace->createAttachment(u"assets/Skan umowy.pdf"_s, bytes);
         app->openPage(scan);
         const bool shown = waitFor([&] {
             return pdfView() && pdfView()->property("ready").toBool() && pdfView()->property("path").toString() == scan;
@@ -4047,8 +4048,7 @@ void checkPdfViewer(QQuickWindow *window, AppController *app, const Check &check
             scanView->forceActiveFocus();
             sendKey(window, Qt::Key_F, Qt::ControlModifier);
             check(waitFor([&] { return shownNamed(scanView, u"pdfSearchField"_s) != nullptr; }), "its search opens");
-            for (const QChar ch : u"wzor"_s)
-                sendKey(window, 0, Qt::NoModifier, QString(ch));
+            typeChars(window, u"wzor"_s);
             const QString textless =
                     QCoreApplication::translate("ContentPdfView", "This PDF has no text to search (it may be a scan).");
             QQuickItem *status = nullptr;
@@ -4125,10 +4125,23 @@ void checkPdfViewer(QQuickWindow *window, AppController *app, const Check &check
     app->goHome();
 }
 
-/// 5e. The default reminder time in the notebook's settings, set on the clock: saved at once, and
-/// the field keeps following the notebook's config afterwards — a value synced from another
-/// device shows (assigning the picked text once ended that binding: the field kept the old value
-/// and wrote it back with the next edit).
+/// The shown embed image of the drawing file whose path ends with `pathEnd` ("/name.svg"): its
+/// source is image://drawing/<the file's path, percent-encoded>?v=…&dark=… (Workspace::drawingUrl).
+QQuickItem *drawingEmbedImage(QQuickWindow *window, const QString &pathEnd)
+{
+    return uidriver::topmost(window, [&pathEnd](QQuickItem *item) {
+        const QUrl url = item->property("source").toUrl();
+        return item->objectName() == u"embedImage" && url.scheme() == u"image" && url.host() == u"drawing"
+               && QUrl::fromPercentEncoding(url.path().toUtf8()).endsWith(pathEnd);
+    });
+}
+
+/// Does the drawing image `url` ask for the picture in the dark theme?
+bool isDarkVariant(const QUrl &url)
+{
+    return QUrlQuery(url).queryItemValue(u"dark"_s) == u"1";
+}
+
 /// 5i. A drawing (docs/UI.md "Drawing editor"): a tap / click on its embed opens the drawing
 /// editor; a stroke drawn with real input — a finger on the phone run ("Draw with finger" is on until a
 /// stylus is seen), the mouse on the desktop — is saved by itself, its undo kept (the save coming
@@ -4144,19 +4157,16 @@ void checkDrawing(QQuickWindow *window, AppController *app, const Check &check)
     const QString page = u"Wykład z rysunkiem.md"_s;
     check(!path.isEmpty() && workspace->writeFile(page, u"- Notatki z tablicy: ![[Szkic z wykładu.svg]]\n"_s),
           "a page embeds a new drawing");
+    const auto fileDrawing = [&] { return drawing::readDrawing(workspace->readAttachment(path)); };
     const auto strokesInFile = [&] {
-        const std::optional<drawing::Drawing> d = drawing::readDrawing(workspace->readAttachment(path));
+        const std::optional<drawing::Drawing> d = fileDrawing();
         return d ? int(d->strokes.size()) : -1;
     };
-    // (image://drawing/<the file's path, percent-encoded>?v=…&dark=…: Workspace::drawingUrl.)
-    const auto embedImage = [window]() -> QQuickItem * {
-        return uidriver::topmost(window, [](QQuickItem *item) {
-            const QUrl url = item->property("source").toUrl();
-            return item->objectName() == u"embedImage" && url.scheme() == u"image" && url.host() == u"drawing"
-                   && QUrl::fromPercentEncoding(url.path().toUtf8()).endsWith(u"/Szkic z wykładu.svg"_s);
-        });
+    const auto embedImage = [window] { return drawingEmbedImage(window, u"/Szkic z wykładu.svg"_s); };
+    // An item of the window by name, topmost.
+    const auto topNamed = [window](const QString &name) {
+        return uidriver::topmost(window, [&name](QQuickItem *item) { return item->objectName() == name; });
     };
-    const auto darkQuery = [](const QUrl &url) { return QUrlQuery(url).queryItemValue(u"dark"_s) == u"1"; };
     app->openPage(page);
     check(waitFor([&] { return embedImage() && embedImage()->property("status").toInt() == 1; }, 5000),
           "the drawing's embed is shown");
@@ -4165,17 +4175,15 @@ void checkDrawing(QQuickWindow *window, AppController *app, const Check &check)
         return;
     const QUrl before = image->property("source").toUrl();
     check(before.query().startsWith(u"v="_s), "a drawing's URL carries its version");
-    check(uidriver::topmost(window, [](QQuickItem *item) { return item->objectName() == u"embedDrawingBadge"; })
-                  != nullptr,
-          "a drawing's embed has the pen in its corner");
+    check(topNamed(u"embedDrawingBadge"_s) != nullptr, "a drawing's embed has the pen in its corner");
     {
         // The app's theme switched: the embed shows the drawing in the other one at once.
         AppSettings *settings = app->settings();
         const QString mode = settings->themeMode();
-        const bool wasDark = darkQuery(before);
+        const bool wasDark = isDarkVariant(before);
         const auto embedShows = [&](bool dark) {
             QQuickItem *again = embedImage();
-            return again && darkQuery(again->property("source").toUrl()) == dark
+            return again && isDarkVariant(again->property("source").toUrl()) == dark
                    && again->property("status").toInt() == 1;
         };
         settings->setThemeMode(wasDark ? u"light"_s : u"dark"_s);
@@ -4193,14 +4201,14 @@ void checkDrawing(QQuickWindow *window, AppController *app, const Check &check)
     check(app->currentRoute().value(u"path"_s).toString() == path, "on that drawing");
     QQuickItem *canvas = nullptr;
     waitFor([&] {
-        canvas = uidriver::topmost(window, [](QQuickItem *item) { return item->objectName() == u"drawingCanvas"; });
+        canvas = topNamed(u"drawingCanvas"_s);
         return canvas && canvas->width() > 100;
     });
     if (!canvas) {
         check(false, "the drawing editor shows its paper");
         return;
     }
-    check(canvas->property("dark").toBool() == darkQuery(before) && canvas->property("theme").toString() == u"auto",
+    check(canvas->property("dark").toBool() == isDarkVariant(before) && canvas->property("theme").toString() == u"auto",
           "a new drawing's paper follows the app's theme");
     // Phones: the drawing's tool bar at the bottom takes the bottom navigation's place (no
     // keyboard involved: it stays away while the drawing is edited).
@@ -4213,7 +4221,7 @@ void checkDrawing(QQuickWindow *window, AppController *app, const Check &check)
         QObject *drawer = window->findChild<QObject *>(u"shellDrawer"_s);
         QQuickItem *menuButton = nullptr;
         waitFor([&] {
-            menuButton = uidriver::topmost(window, [](QQuickItem *i) { return i->objectName() == u"topBarMenu"; });
+            menuButton = topNamed(u"topBarMenu"_s);
             return menuButton != nullptr;
         });
         check(menuButton && drawer, "where the drawing's bar replaces the bottom navigation the top bar shows ☰");
@@ -4234,8 +4242,7 @@ void checkDrawing(QQuickWindow *window, AppController *app, const Check &check)
             for (const QString &name : {u"drawingUndo"_s, u"drawingRedo"_s, u"drawingPen"_s, u"drawingHighlighter"_s,
                                         u"drawingEraser"_s, u"drawingSelect"_s, u"drawingShape"_s, u"drawingText"_s,
                                         u"drawingStyle"_s, u"drawingMore"_s, u"drawingDone"_s}) {
-                QQuickItem *item =
-                        uidriver::topmost(window, [&name](QQuickItem *i) { return i->objectName() == name; });
+                QQuickItem *item = topNamed(name);
                 if (!item || !uidriver::shown(item) || !uidriver::onScreen(window, item))
                     hidden.append(name);
             }
@@ -4258,7 +4265,7 @@ void checkDrawing(QQuickWindow *window, AppController *app, const Check &check)
           "the stroke is saved by itself");
     check(canvas->property("canUndo").toBool(), "its own save keeps the undo history (no merge)");
     if (touch) {
-        QQuickItem *undo = uidriver::topmost(window, [](QQuickItem *item) { return item->objectName() == u"drawingUndo"; });
+        QQuickItem *undo = topNamed(u"drawingUndo"_s);
         if (undo)
             touchTap(window, pointIn(undo));
         check(undo != nullptr, "the bar at the bottom has Cofnij");
@@ -4278,13 +4285,10 @@ void checkDrawing(QQuickWindow *window, AppController *app, const Check &check)
         else
             mouseClick(window, at);
     };
-    const auto button = [&](const QString &name) {
-        return uidriver::topmost(window, [&name](QQuickItem *item) { return item->objectName() == name; });
-    };
     const QPointF corner = pointIn(canvas, 0.3, 0.6);
     const QPointF far = pointIn(canvas, 0.6, 0.75);
     if (touch) {
-        if (QQuickItem *shape = button(u"drawingShape"_s))
+        if (QQuickItem *shape = topNamed(u"drawingShape"_s))
             touchTap(window, pointIn(shape));
     } else {
         sendKey(window, Qt::Key_R, Qt::NoModifier, u"r"_s);
@@ -4296,29 +4300,29 @@ void checkDrawing(QQuickWindow *window, AppController *app, const Check &check)
         mouseDrag(window, corner, far);
     const auto elementTypes = [&] {
         QStringList types;
-        const std::optional<drawing::Drawing> d = drawing::readDrawing(workspace->readAttachment(path));
-        for (const drawing::Stroke &e : d ? d->strokes : QList<drawing::Stroke>())
+        const drawing::Drawing d = fileDrawing().value_or(drawing::Drawing());
+        for (const drawing::Stroke &e : d.strokes)
             types.append(drawing::elementTypeName(e.type));
         return types;
     };
     check(waitFor([&] { return elementTypes() == QStringList{u"freedraw"_s, u"rectangle"_s}; }, 5000),
           "a rectangle dragged out is saved as Excalidraw's rectangle");
     if (touch) {
-        if (QQuickItem *select = button(u"drawingSelect"_s))
+        if (QQuickItem *select = topNamed(u"drawingSelect"_s))
             touchTap(window, pointIn(select));
     } else {
         sendKey(window, Qt::Key_V, Qt::NoModifier, u"v"_s);
     }
     check(waitFor([&] { return canvas->property("tool").toString() == u"select"; }), "the select tool");
     // Clicked again: how it selects (lasso, rectangle); it stays marked as the tool in use.
-    if (QQuickItem *select = button(u"drawingSelect"_s)) {
+    if (QQuickItem *select = topNamed(u"drawingSelect"_s)) {
         tap(pointIn(select));
         QQuickItem *lasso = nullptr;
-        check(waitFor([&] { return (lasso = button(u"drawingSelectLasso"_s)) != nullptr; }, 3000),
+        check(waitFor([&] { return (lasso = topNamed(u"drawingSelectLasso"_s)) != nullptr; }, 3000),
               "the select button clicked again offers how it selects");
         if (lasso) {
             tap(pointIn(lasso));
-            check(waitFor([&] { return button(u"drawingSelectLasso"_s) == nullptr; }, 3000),
+            check(waitFor([&] { return topNamed(u"drawingSelectLasso"_s) == nullptr; }, 3000),
                   "a choice closes the menu");
         }
         check(select->property("checked").toBool() && canvas->property("tool").toString() == u"select"
@@ -4328,11 +4332,11 @@ void checkDrawing(QQuickWindow *window, AppController *app, const Check &check)
     tap(pointIn(canvas, 0.45, 0.6)); // on the rectangle's top edge: it alone
     check(waitFor([&] { return canvas->property("selectionCount").toInt() == 1; }), "a tap selects the rectangle");
     check(waitFor([&] {
-              QQuickItem *bar = button(u"drawingSelectionBar"_s);
+              QQuickItem *bar = topNamed(u"drawingSelectionBar"_s);
               return bar && bar->isVisible();
           }),
           "the selection's bar is shown");
-    if (QQuickItem *remove = button(u"drawingSelectionDelete"_s))
+    if (QQuickItem *remove = topNamed(u"drawingSelectionDelete"_s))
         tap(pointIn(remove));
     check(waitFor([&] { return canvas->property("strokeCount").toInt() == 1; }), "Usuń on the bar deletes it");
     QMetaObject::invokeMethod(canvas, "undo");
@@ -4350,7 +4354,7 @@ void checkDrawing(QQuickWindow *window, AppController *app, const Check &check)
         mouseClick(window, pointIn(canvas, 0.3, 0.2));
         QQuickItem *editor = nullptr;
         check(waitFor([&] {
-                  editor = button(u"drawingTextEditor"_s);
+                  editor = topNamed(u"drawingTextEditor"_s);
                   return editor && editor->hasActiveFocus();
               }),
               "a click with the text tool opens the text editor");
@@ -4368,8 +4372,8 @@ void checkDrawing(QQuickWindow *window, AppController *app, const Check &check)
         sendKey(window, Qt::Key_Escape);
         const auto texts = [&] {
             QStringList out;
-            const std::optional<drawing::Drawing> d = drawing::readDrawing(workspace->readAttachment(path));
-            for (const drawing::Stroke &e : d ? d->strokes : QList<drawing::Stroke>()) {
+            const drawing::Drawing d = fileDrawing().value_or(drawing::Drawing());
+            for (const drawing::Stroke &e : d.strokes) {
                 if (e.type == drawing::ElementType::Text)
                     out.append(e.text);
             }
@@ -4386,7 +4390,7 @@ void checkDrawing(QQuickWindow *window, AppController *app, const Check &check)
             check(waitFor([&] { return editor && editor->hasActiveFocus(); }), "a text opens low on the paper");
             const qreal paperHeight = canvas->height();
             window->resize(full.width(), full.height() * 2 / 3);
-            check(waitFor([&] { return canvas->height() < paperHeight - full.height() / 4; }),
+            check(waitFor([&] { return canvas->height() < paperHeight - full.height() / 4.0; }),
                   "the paper shrinks with the window");
             const auto onPaper = [&] {
                 if (!editor) // (a failed step above: no crash, that check failed already)
@@ -4427,7 +4431,7 @@ void checkDrawing(QQuickWindow *window, AppController *app, const Check &check)
         else
             mouseDrag(window, a, b);
     };
-    drawing::Drawing theirs = drawing::readDrawing(workspace->readAttachment(path)).value_or(drawing::Drawing());
+    drawing::Drawing theirs = fileDrawing().value_or(drawing::Drawing());
     drawing::Stroke remote;
     remote.id = u"kreskaZdalna"_s;
     remote.points = {{40, 400, 0.5}, {240, 420, 0.5}};
@@ -4440,16 +4444,16 @@ void checkDrawing(QQuickWindow *window, AppController *app, const Check &check)
     if (view)
         uidriver::callQml(view, "save", {}, &saved);
     {
-        const std::optional<drawing::Drawing> d = drawing::readDrawing(workspace->readAttachment(path));
-        const bool kept = d && std::any_of(d->strokes.cbegin(), d->strokes.cend(),
-                                           [](const drawing::Stroke &s) { return s.id == u"kreskaZdalna"; });
+        const std::optional<drawing::Drawing> d = fileDrawing();
+        const bool kept =
+                d && std::ranges::any_of(d->strokes, [](const drawing::Stroke &s) { return s.id == u"kreskaZdalna"; });
         check(d && d->strokes.size() == 3 && kept && canvas->property("strokeCount").toInt() == 3,
               "the save merges a version not reported yet: both devices' strokes are in the file");
     }
 
     // A version Brulion cannot edit (a frame added in excalidraw.com): shown as it is, never
     // written over; what was drawn here is kept in a new file beside it.
-    drawing::Drawing shapes = drawing::readDrawing(workspace->readAttachment(path)).value_or(drawing::Drawing());
+    drawing::Drawing shapes = fileDrawing().value_or(drawing::Drawing());
     shapes.foreign.append(QJsonObject{{u"type"_s, u"frame"_s},
                                       {u"id"_s, u"ramka"_s},
                                       {u"x"_s, 10},
@@ -4509,24 +4513,18 @@ void checkDrawingFrame(QQuickWindow *window, AppController *app, const Check &ch
     const int h = int(rect.height());
     // The root of another program: the same scene in a wider frame.
     const int ownWidth = w + 96;
-    const QByteArray root = "viewBox=\"0 0 " + QByteArray::number(w) + ' ' + QByteArray::number(h) + "\" width=\""
-                            + QByteArray::number(w) + "\" height=\"" + QByteArray::number(h) + '"';
-    const QByteArray other = "viewBox=\"0 0 " + QByteArray::number(ownWidth) + ' ' + QByteArray::number(h)
-                             + "\" width=\"" + QByteArray::number(ownWidth) + "\" height=\"" + QByteArray::number(h)
-                             + '"';
+    const auto rootOf = [h](int width) -> QByteArray {
+        return "viewBox=\"0 0 " + QByteArray::number(width) + ' ' + QByteArray::number(h) + "\" width=\""
+               + QByteArray::number(width) + "\" height=\"" + QByteArray::number(h) + '"';
+    };
+    const QByteArray root = rootOf(w);
     check(bytes.contains(root), "a drawing's root names its picture's size");
-    bytes.replace(root, other);
+    bytes.replace(root, rootOf(ownWidth));
     const QString path = workspace->saveAttachment(u"Rysunek z innego programu.svg"_s, bytes);
     const QString page = u"Szkic z excalidraw.com.md"_s;
     check(!path.isEmpty() && workspace->writeFile(page, u"Przed rysunkiem\n\n![[Rysunek z innego programu.svg]]\n"_s),
           "a page embeds a drawing whose file names another frame");
-    const auto embedImage = [window]() -> QQuickItem * {
-        return uidriver::topmost(window, [](QQuickItem *item) {
-            const QUrl url = item->property("source").toUrl();
-            return item->objectName() == u"embedImage" && url.scheme() == u"image"
-                   && QUrl::fromPercentEncoding(url.path().toUtf8()).endsWith(u"/Rysunek z innego programu.svg"_s);
-        });
-    };
+    const auto embedImage = [window] { return drawingEmbedImage(window, u"/Rysunek z innego programu.svg"_s); };
     app->openPage(page);
     check(waitFor([&] { return embedImage() && embedImage()->property("status").toInt() == 1; }, 5000),
           "the embed of a drawing from another program is shown");
@@ -4547,15 +4545,14 @@ void checkDrawingFrame(QQuickWindow *window, AppController *app, const Check &ch
           "the embed and its picture have the shape of the file's own size");
     AppSettings *settings = app->settings();
     const QString mode = settings->themeMode();
-    const bool wasDark = QUrlQuery(image->property("source").toUrl()).queryItemValue(u"dark"_s) == u"1";
+    const bool wasDark = isDarkVariant(image->property("source").toUrl());
     bool moved = false;
     const auto showsTheme = [&](bool dark) {
         QQuickItem *again = embedImage();
         if (!again || !again->parentItem())
             return false;
         moved = moved || again->parentItem()->size() != shown;
-        return QUrlQuery(again->property("source").toUrl()).queryItemValue(u"dark"_s) == (dark ? u"1"_s : u"0"_s)
-               && again->property("status").toInt() == 1;
+        return isDarkVariant(again->property("source").toUrl()) == dark && again->property("status").toInt() == 1;
     };
     settings->setThemeMode(wasDark ? u"light"_s : u"dark"_s);
     const bool switched = waitFor([&] { return showsTheme(!wasDark); }, 5000);
@@ -4565,6 +4562,10 @@ void checkDrawingFrame(QQuickWindow *window, AppController *app, const Check &ch
     app->goHome();
 }
 
+/// 5e. The default reminder time in the notebook's settings, set on the clock: saved at once, and
+/// the field keeps following the notebook's config afterwards — a value synced from another
+/// device shows (assigning the picked text once ended that binding: the field kept the old value
+/// and wrote it back with the next edit).
 void checkSettingsClock(QQuickWindow *window, AppController *app, const Check &check)
 {
     Workspace *workspace = app->workspace();
@@ -4573,27 +4574,13 @@ void checkSettingsClock(QQuickWindow *window, AppController *app, const Check &c
     const auto configValue = [&] { return workspace->vaultConfig().value(key).toString(); };
     // Through the visual tree: phones list every section from a Repeater, whose items are not
     // QObject children of the window. Shown, but maybe scrolled out of the view.
-    const auto shownNamed = [window](const QString &name) -> QQuickItem * {
-        std::function<QQuickItem *(QQuickItem *)> visit = [&](QQuickItem *item) -> QQuickItem * {
-            if (!item->isVisible())
-                return nullptr;
-            if (item->objectName() == name)
-                return item;
-            const QList<QQuickItem *> children = item->childItems();
-            for (QQuickItem *child : children) {
-                if (QQuickItem *found = visit(child))
-                    return found;
-            }
-            return nullptr;
-        };
-        return visit(window->contentItem());
-    };
+    const auto named = [window](const QString &name) { return shownNamed(window->contentItem(), name); };
     app->navigate({{u"view"_s, u"settings"_s}, {u"section"_s, u"vault"_s}});
     QQuickItem *field = nullptr;
     QQuickItem *button = nullptr;
     check(waitFor([&] {
-              field = shownNamed(u"defaultReminderTimeField"_s);
-              button = shownNamed(u"defaultReminderTimeClock"_s);
+              field = named(u"defaultReminderTimeField"_s);
+              button = named(u"defaultReminderTimeClock"_s);
               return field && button && field->property("text").toString() == original;
           }),
           "the notebook settings show the default reminder time and its clock button");
@@ -4610,18 +4597,18 @@ void checkSettingsClock(QQuickWindow *window, AppController *app, const Check &c
     check(waitFor([&] { return configValue() == u"07:35" && field->property("text").toString() == u"07:35"; }),
           "a time picked on the clock is saved as the default reminder time");
     waitFor([&] { return !dialog->property("visible").toBool(); });
-    const auto report = [&](bool saved, bool ok) {
+    bool saved = false;
+    const auto report = [&](bool ok) {
         if (!ok)
             std::fprintf(stderr, "selftest: config saved %d, config value %s, field %s\n", int(saved),
                          qPrintable(configValue()), qPrintable(field->property("text").toString()));
         return ok;
     };
-    bool saved = workspace->setConfig({{key, u"10:05"_s}});
-    check(report(saved, waitFor([&] { return field->property("text").toString() == u"10:05"; })),
+    saved = workspace->setConfig({{key, u"10:05"_s}});
+    check(report(waitFor([&] { return field->property("text").toString() == u"10:05"; })),
           "after a clock pick the field still follows the notebook's config (a synced change shows)");
     saved = workspace->setConfig({{key, original}});
-    check(report(saved,
-                 waitFor([&] { return field->property("text").toString() == original; }) && configValue() == original),
+    check(report(waitFor([&] { return field->property("text").toString() == original; }) && configValue() == original),
           "the default reminder time is back");
     app->goHome();
 }
@@ -4629,7 +4616,8 @@ void checkSettingsClock(QQuickWindow *window, AppController *app, const Check &c
 /// The page editor shown under `root` with its controller (a loaded page), else {nullptr, nullptr}.
 std::pair<QQuickItem *, QObject *> shownPageEditor(QQuickWindow *window, QQuickItem *root, const QString &path)
 {
-    for (QQuickItem *e : window->findChildren<QQuickItem *>(u"pageEditor"_s)) {
+    const QList<QQuickItem *> editors = window->findChildren<QQuickItem *>(u"pageEditor"_s);
+    for (QQuickItem *e : editors) {
         auto *c = e->property("controller").value<QObject *>();
         if (c && c->property("path").toString() == path && c->property("loaded").toBool() && shown(e)
             && (!root || root->isAncestorOf(e)))
@@ -4641,20 +4629,16 @@ std::pair<QQuickItem *, QObject *> shownPageEditor(QQuickWindow *window, QQuickI
 /// The editing toolbar's slot of `editor` (docked on another item in the journal stream), if shown.
 QQuickItem *toolbarSlotOf(QQuickWindow *window, QQuickItem *editor)
 {
-    for (QQuickItem *candidate : window->findChildren<QQuickItem *>(u"editToolbarSlot"_s)) {
-        if (candidate->isVisible() && editor->isAncestorOf(candidate))
-            return candidate;
-    }
-    return nullptr;
+    const QList<QQuickItem *> slots = window->findChildren<QQuickItem *>(u"editToolbarSlot"_s);
+    const auto it = std::ranges::find_if(
+            slots, [editor](const QQuickItem *slot) { return slot->isVisible() && editor->isAncestorOf(slot); });
+    return it == slots.cend() ? nullptr : *it;
 }
 
 /// "Share → Brulion" (AppController::receiveShare, ShellShareDialog): shared text opens the
 /// dialog, "Save" (a real tap / click) writes one block at the end of today's journal — no
 /// reminder from "jutro" (tomorrow) —, a shared .md file is offered as a new page titled after the file and
 /// saved byte for byte, its copy removed; Escape drops a share and writes nothing.
-/// "Clean up": what nothing refers to is listed with nothing ticked, a tap ticks it, "Open" and
-/// Back keep the ticks, only what is shown and ticked goes to the trash, and the toast's Undo still
-/// works after leaving the view.
 /// Find and replace (docs/UI.md "Find and replace"): the bar in a page with real keys and taps, source
 /// mode, the journal stream, and the notebook-wide view with its ticks, confirmation and Undo.
 void checkFindAndReplace(QQuickWindow *window, AppController *app, const Check &check)
@@ -4666,22 +4650,12 @@ void checkFindAndReplace(QQuickWindow *window, AppController *app, const Check &
     ws->writeFile(note, u"- pierwszy żółw\n\t- ukryty ŻÓŁW\n- bez niczego\n- ostatni zolw\n"_s);
     ws->writeFile(other, u"- zolw w innej notatce\n"_s);
     app->navigate({ { u"view"_s, u"page"_s }, { u"path"_s, note } });
-    QObject *controller = nullptr;
-    QQuickItem *editor = nullptr;
-    check(waitFor([&] {
-              editor = shownNamed(window->contentItem(), u"pageEditor"_s);
-              controller = editor ? editor->property("controller").value<QObject *>() : nullptr;
-              return controller && controller->property("loaded").toBool()
-                     && controller->property("path").toString() == note;
-          }),
-          "the page to search is open");
-    if (!controller || !editor)
+    QQuickItem *editor = waitLoadedEditor(window->contentItem(), u"pageEditor"_s, note);
+    QObject *controller = controllerOf(editor);
+    check(controller != nullptr, "the page to search is open");
+    if (!controller)
         return;
     const auto text = [&] { return controller->property("sourceText").toString(); };
-    const auto typeIn = [&](const QString &what) {
-        for (const QChar ch : what)
-            sendKey(window, 0, Qt::NoModifier, QString(ch));
-    };
     // Ctrl+F and Ctrl+E as Shortcut objects (the keyboard's way: tst_remote_control_qml) ask the
     // same actions.
     const auto shortcut = [&](int key) {
@@ -4705,7 +4679,7 @@ void checkFindAndReplace(QQuickWindow *window, AppController *app, const Check &
     if (!field)
         return;
     check(waitFor([&] { return field->hasActiveFocus(); }), "the find field has the keyboard");
-    typeIn(u"zolw"_s);
+    typeChars(window, u"zolw"_s);
     QQuickItem *status = nullptr;
     check(waitFor([&] {
               status = named(u"findStatus"_s);
@@ -4735,7 +4709,7 @@ void checkFindAndReplace(QQuickWindow *window, AppController *app, const Check &
     QQuickItem *replacement = nullptr;
     check(waitFor([&] { return (replacement = named(u"findReplacement"_s)) != nullptr && replacement->hasActiveFocus(); }),
           "the replace row opens with the keyboard in it");
-    typeIn(u"kot"_s);
+    typeChars(window, u"kot"_s);
     press(u"findReplaceOne"_s);
     check(waitFor([&] { return text() == u"- pierwszy kot\n\t- ukryty ŻÓŁW\n- bez niczego\n- ostatni zolw\n"_s; }),
           "Replace changes the current match");
@@ -4802,7 +4776,7 @@ void checkFindAndReplace(QQuickWindow *window, AppController *app, const Check &
         field->forceActiveFocus();
         QMetaObject::invokeMethod(field, "selectAll");
     }
-    typeIn(u"zolw"_s);
+    typeChars(window, u"zolw"_s);
     check(waitFor([&] { return sourceEdit && sourceEdit->property("selectedText").toString() == u"ŻÓŁW"_s; }, 3000),
           "source mode selects the match in the text");
     sendKey(window, Qt::Key_Escape);
@@ -4837,7 +4811,7 @@ void checkFindAndReplace(QQuickWindow *window, AppController *app, const Check &
         }
         return QString();
     };
-    typeIn(u"wydrzyk"_s);
+    typeChars(window, u"wydrzyk"_s);
     check(waitFor(
                   [&] {
                       status = named(u"findStatus"_s);
@@ -4882,31 +4856,21 @@ void checkFindAndReplace(QQuickWindow *window, AppController *app, const Check &
           "the notebook-wide view previews the notes");
     const int all = session->tickedHits();
     check(all >= 3, "every hit is ticked at first");
-    QQuickItem *list = named(u"replaceList"_s);
+    // An item called `name` shown in the preview's list.
+    const auto shownInList = [&](const QString &name) -> QQuickItem * {
+        QQuickItem *list = named(u"replaceList"_s);
+        const QList<QQuickItem *> items = list ? uidriver::allItems(list) : QList<QQuickItem *>();
+        const auto it = std::ranges::find_if(
+                items, [&name](QQuickItem *item) { return item->objectName() == name && uidriver::shown(item); });
+        return it == items.cend() ? nullptr : *it;
+    };
     settle(300); // the view fades in
-    QQuickItem *hitTick = nullptr;
-    if (list) {
-        const QList<QQuickItem *> items = uidriver::allItems(list);
-        for (QQuickItem *item : items) {
-            if (item->objectName() == u"replaceHitTick"_s && uidriver::shown(item)) {
-                hitTick = item;
-                break;
-            }
-        }
-    }
+    QQuickItem *hitTick = shownInList(u"replaceHitTick"_s);
     check(hitTick != nullptr, "a hit has its tick");
     if (hitTick)
         tapOrClick(window, pointIn(hitTick), touch);
     check(waitFor([&] { return session->tickedHits() == all - 1; }), "a tap takes one hit out");
     // Opening a hit and coming back keeps what was unticked.
-    const auto shownInList = [&](const QString &name) -> QQuickItem * {
-        const QList<QQuickItem *> items = uidriver::allItems(named(u"replaceList"_s));
-        for (QQuickItem *item : items) {
-            if (item->objectName() == name && uidriver::shown(item))
-                return item;
-        }
-        return nullptr;
-    };
     if (QQuickItem *hitText = shownInList(u"replaceHitText"_s))
         tapOrClick(window, pointIn(hitText), touch);
     check(waitFor([&] { return app->currentView() == u"page"; }), "a tap on a hit opens its note");
@@ -5030,6 +4994,14 @@ void checkPeriodicNotes(QQuickWindow *window, AppController *app, const Check &c
     settle(300);
 }
 
+/// `item` or its nearest ancestor of the QML type `type` (nullptr when none is).
+QQuickItem *enclosingOfType(QQuickItem *item, const char *type)
+{
+    while (item && !isA(item, type))
+        item = item->parentItem();
+    return item;
+}
+
 /// Habits (docs/UI.md "Habits"): the view from the palette's command, a habit added through its
 /// dialog (written as a `habit::` block), today's check ticked and opened again with real input
 /// (the line in today's journal), a tick written in the journal itself shown in the card, a past
@@ -5064,11 +5036,7 @@ void checkHabits(QQuickWindow *window, AppController *app, const Check &check)
     QQuickItem *add = nullptr;
     check(waitFor([&] { return (add = named(u"habitAdd"_s)) != nullptr; }, 3000), "it has “Dodaj nawyk”");
     settle(400); // the view fades in
-    QQuickItem *habitsView = nullptr;
-    for (QQuickItem *up = add; up && !habitsView; up = up->parentItem()) {
-        if (isA(up, "HabitsView"))
-            habitsView = up;
-    }
+    QQuickItem *habitsView = enclosingOfType(add, "HabitsView");
     QObject *dialog = habitsView ? habitsView->findChild<QObject *>(u"habitAddDialog"_s) : nullptr;
     check(dialog != nullptr, "the view has its add dialog");
     // (With a mouse its click as a signal: a pointer left hovering the button keeps its tooltip.)
@@ -5109,15 +5077,14 @@ void checkHabits(QQuickWindow *window, AppController *app, const Check &check)
     check(waitFor([&] { return (toggle = named(u"habitToggle_"_s + key)) != nullptr; }, 3000),
           "the new habit has a card");
     bool written = false;
-    for (auto it = oldPages.cbegin(); it != oldPages.cend(); ++it)
-        written |= ws->readFile(it.key()).contains(u"- Rozciąganie samotestu\n  habit:: codziennie"_s);
+    for (const QString &path : oldPages.keys())
+        written |= ws->readFile(path).contains(u"- Rozciąganie samotestu\n  habit:: codziennie"_s);
     check(written, "it is written as a habit:: block");
 
     // Today's check: a tap writes the line, another one opens it again (once the dialog's closing
     // transition, whose dimmed overlay takes the clicks, is over).
     waitFor([&] { return !dialog->property("visible").toBool(); }, 3000);
     settle(200);
-    // Today's check: a tap writes the line, another one opens it again.
     if (toggle)
         tapOrClick(window, pointIn(toggle), touch);
     check(waitFor([&] { return ws->readFile(journal).contains(line(u"x"_s)); }, 3000),
@@ -5153,11 +5120,11 @@ void checkHabits(QQuickWindow *window, AppController *app, const Check &check)
         ws->writeFile(pastJournal, oldPast);
     else if (ws->exists(pastJournal))
         ws->deletePage(pastJournal);
-    for (auto it = oldPages.cbegin(); it != oldPages.cend(); ++it) {
-        if (!it.value().isEmpty())
-            ws->writeFile(it.key(), it.value());
-        else if (ws->exists(it.key()))
-            ws->deletePage(it.key());
+    for (auto [path, content] : std::as_const(oldPages).asKeyValueRange()) {
+        if (!content.isEmpty())
+            ws->writeFile(path, content);
+        else if (ws->exists(path))
+            ws->deletePage(path);
     }
     closeMenus(window);
     app->goHome();
@@ -5189,20 +5156,14 @@ void checkFocusAndShortcuts(QQuickWindow *window, AppController *app, const Chec
         text += u"- Zdanie numer %1 z kilkoma słowami\n"_s.arg(i);
     ws->writeFile(note, text);
     app->navigate({{u"view"_s, u"page"_s}, {u"path"_s, note}});
-    QObject *controller = nullptr;
-    QQuickItem *editor = nullptr;
-    check(waitFor([&] {
-              editor = named(u"pageEditor"_s);
-              controller = editor ? editor->property("controller").value<QObject *>() : nullptr;
-              return controller && controller->property("loaded").toBool()
-                     && controller->property("path").toString() == note;
-          }),
-          "the page for focus mode is open");
-    if (!controller || !editor)
+    QQuickItem *editor = waitLoadedEditor(window->contentItem(), u"pageEditor"_s, note);
+    QObject *controller = controllerOf(editor);
+    check(controller != nullptr, "the page for focus mode is open");
+    if (!controller)
         return;
     settle(300);
     QVariantMap stats;
-    QMetaObject::invokeMethod(controller, "pageStats", Q_RETURN_ARG(QVariantMap, stats));
+    QMetaObject::invokeMethod(controller, "pageStats", qReturnArg(stats));
     check(stats.value(u"words"_s).toInt() == 360 && stats.value(u"readingMinutes"_s).toInt() == 2,
           "the page counts 360 words, 2 minutes of reading");
 
@@ -5273,8 +5234,7 @@ void checkFocusAndShortcuts(QQuickWindow *window, AppController *app, const Chec
               }),
               "the last block is being edited");
         if (edit) {
-            for (const QChar ch : u" dwa trzy"_s)
-                sendKey(window, 0, Qt::NoModifier, QString(ch));
+            typeChars(window, u" dwa trzy"_s);
             QQuickItem *list = editor->property("listView").value<QQuickItem *>();
             const auto caretOffset = [&] {
                 const QRectF caret = edit->property("cursorRectangle").toRectF();
@@ -5340,7 +5300,8 @@ void checkFocusAndShortcuts(QQuickWindow *window, AppController *app, const Chec
         check(settings->shortcutOverrides().value(u"journal.today"_s).toString() == u"Ctrl+Alt+J",
               "the custom shortcut is kept as this device's setting");
         QString paletteShortcut;
-        for (const QVariant &v : app->commands()->commands()) {
+        const QVariantList commands = app->commands()->commands();
+        for (const QVariant &v : commands) {
             if (v.toMap().value(u"id"_s).toString() == u"journal.today")
                 paletteShortcut = v.toMap().value(u"shortcut"_s).toString();
         }
@@ -5389,10 +5350,7 @@ void checkPageLook(QQuickWindow *window, AppController *app, const Check &check)
     ws->writeFile(page, text);
     QImage picture(64, 32, QImage::Format_RGB32);
     picture.fill(Qt::darkCyan);
-    QBuffer buffer;
-    buffer.open(QIODevice::WriteOnly);
-    picture.save(&buffer, "PNG");
-    const QString cover = ws->createAttachment(u"assets/Wygląd okładka.png"_s, buffer.data());
+    const QString cover = ws->createAttachment(u"assets/Wygląd okładka.png"_s, pngBytes(picture));
     check(!cover.isEmpty(), "a picture for the cover is in the notebook");
     app->openPage(page);
     const auto openMenu = [&]() {
@@ -5409,6 +5367,13 @@ void checkPageLook(QQuickWindow *window, AppController *app, const Check &check)
         if (menuButton)
             tapOrClick(window, pointIn(menuButton), touch);
     };
+    // The child of `parent` whose property `property` is `value` (nullptr for none).
+    const auto childWhere = [](QQuickItem *parent, const char *property, const QString &value) -> QQuickItem * {
+        const QList<QQuickItem *> children = parent->childItems();
+        const auto it = std::ranges::find_if(
+                children, [&](const QQuickItem *child) { return child->property(property).toString() == value; });
+        return it == children.cend() ? nullptr : *it;
+    };
     const auto menuItem = [&](const QString &name, const char *what) {
         QQuickItem *item = nullptr;
         check(waitFor([&] { return (item = named(name)) != nullptr; }), what);
@@ -5423,13 +5388,7 @@ void checkPageLook(QQuickWindow *window, AppController *app, const Check &check)
         check(waitFor([&] { return (emojis = named(u"pageIconEmojis"_s)) != nullptr; }, 3000),
               "“Dodaj ikonę…” opens the icon dialog with its emoji");
         settle(300); // the dialog opens
-        QQuickItem *first = nullptr;
-        if (emojis) {
-            for (QQuickItem *child : emojis->childItems()) {
-                if (child->property("emoji").toString() == u"📝"_s)
-                    first = child;
-            }
-        }
+        QQuickItem *first = emojis ? childWhere(emojis, "emoji", u"📝"_s) : nullptr;
         // The choice draws its emoji (an icon that compiled to undefined left the grid blank).
         const auto *firstIcon = first ? first->property("contentItem").value<QQuickItem *>() : nullptr;
         check(firstIcon && firstIcon->property("emoji").toBool()
@@ -5473,12 +5432,7 @@ void checkPageLook(QQuickWindow *window, AppController *app, const Check &check)
         check(waitFor(
                       [&] {
                           pictures = named(u"pageCoverPictures"_s);
-                          if (!pictures)
-                              return false;
-                          for (QQuickItem *child : pictures->childItems()) {
-                              if (child->property("path").toString() == cover)
-                                  tile = child;
-                          }
+                          tile = pictures ? childWhere(pictures, "path", cover) : nullptr;
                           return tile != nullptr;
                       },
                       3000),
@@ -5537,6 +5491,9 @@ void checkPageLook(QQuickWindow *window, AppController *app, const Check &check)
     ws->deletePage(cover);
 }
 
+/// "Clean up": what nothing refers to is listed with nothing ticked, a tap ticks it, "Open" and
+/// Back keep the ticks, only what is shown and ticked goes to the trash, and the toast's Undo still
+/// works after leaving the view.
 void checkCleanup(QQuickWindow *window, AppController *app, const Check &check)
 {
     const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
@@ -5546,8 +5503,8 @@ void checkCleanup(QQuickWindow *window, AppController *app, const Check &check)
     const QString linkedPicture = u"assets/Sprzątanie w użyciu.png"_s;
     const auto offered = [ws](const QString &path) {
         const QVariantList files = ws->unreferencedFiles();
-        return std::any_of(files.cbegin(), files.cend(),
-                           [&](const QVariant &f) { return f.toMap().value(u"path"_s).toString() == path; });
+        return std::ranges::any_of(files,
+                                   [&](const QVariant &f) { return f.toMap().value(u"path"_s).toString() == path; });
     };
     ws->writeFile(note, u"- [ ] zadanie do zrobienia\n"_s);
     ws->writeFile(u"Sprzątanie z obrazem.md"_s, u"- ![[Sprzątanie w użyciu.png]]\n"_s);
@@ -5567,12 +5524,7 @@ void checkCleanup(QQuickWindow *window, AppController *app, const Check &check)
               return list != nullptr && list->property("count").toInt() > 1;
           }),
           "the cleanup view lists the files");
-    for (QQuickItem *up = list; up; up = up->parentItem()) {
-        if (isA(up, "CleanupView")) {
-            view = up;
-            break;
-        }
-    }
+    view = enclosingOfType(list, "CleanupView");
     check(view && tickedCount() == 0, "nothing is ticked at first");
     QQuickItem *trashButton = shownNamed(window->contentItem(), u"cleanupTrash"_s);
     check(trashButton && !trashButton->isEnabled(), "with nothing ticked nothing can be moved to the trash");
@@ -5611,10 +5563,7 @@ void checkCleanup(QQuickWindow *window, AppController *app, const Check &check)
     view = nullptr;
     check(waitFor([&] {
               list = shownNamed(window->contentItem(), u"cleanupList"_s);
-              for (QQuickItem *up = list; up && !view; up = up->parentItem()) {
-                  if (isA(up, "CleanupView"))
-                      view = up;
-              }
+              view = enclosingOfType(list, "CleanupView");
               return view && tickedCount() == 2;
           }),
           "Back returns with the ticks kept");
@@ -5775,7 +5724,8 @@ void checkSyncConflicts(QQuickWindow *window, AppController *app, const Check &c
           "a resolved conflict leaves the resolver for the list, in the sync center");
 
     // The notebook as it was.
-    for (const QVariant &item : ws->trashItems()) {
+    const QVariantList trash = ws->trashItems();
+    for (const QVariant &item : trash) {
         const QVariantMap entry = item.toMap();
         if (entry.value(u"original"_s).toString() == copy)
             ws->deleteForever(entry.value(u"trashPath"_s).toString());

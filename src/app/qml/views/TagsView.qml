@@ -66,12 +66,17 @@ FocusScope {
 
         FocusScope {
             id: all
+            readonly property bool filtering: Js.trim(filterField.text) !== ""
             focus: true
             Component.onCompleted: {
                 tags.sortKey = "" + AppSettings.value("tags/sort", "count")
                 // Not on touch screens: the on-screen keyboard would cover the tags.
                 if (!Theme.touchUi)
                     filterField.forceActiveFocus()
+            }
+
+            function openAt(row: int): void {
+                AppController.openTag(AppController.routeText(tags.get(row), "tag"))
             }
 
             TagListModel {
@@ -99,7 +104,7 @@ FocusScope {
                             tagList.currentIndex = 0
                             tagList.forceActiveFocus()
                         }
-                        onAccepted: if (tags.count > 0) AppController.openTag(AppController.routeText(tags.get(0), "tag"))
+                        onAccepted: if (tags.count > 0) all.openAt(0)
                     }
                     BSegmented {
                         model: [{ value: "count", text: qsTr("Most used"), icon: "list" },
@@ -115,8 +120,8 @@ FocusScope {
                 }
                 BText {
                     Layout.leftMargin: root.sideMargin + 2
-                    text: Js.trim(filterField.text) !== "" ? qsTr("%1 of %n tag(s)", "", tags.totalCount).arg(tags.count)
-                                                         : qsTr("%n tag(s)", "", tags.totalCount)
+                    text: all.filtering ? qsTr("%1 of %n tag(s)", "", tags.totalCount).arg(tags.count)
+                                                  : qsTr("%n tag(s)", "", tags.totalCount)
                     variant: "caption"
                     color: Theme.fgFaint
                 }
@@ -136,8 +141,8 @@ FocusScope {
                     T.ScrollBar.vertical: BScrollBar {}
                     Accessible.role: Accessible.List
                     Accessible.name: qsTr("Tags")
-                    Keys.onReturnPressed: if (currentIndex >= 0) AppController.openTag(AppController.routeText(tags.get(currentIndex), "tag"))
-                    Keys.onEnterPressed: if (currentIndex >= 0) AppController.openTag(AppController.routeText(tags.get(currentIndex), "tag"))
+                    Keys.onReturnPressed: if (currentIndex >= 0) all.openAt(currentIndex)
+                    Keys.onEnterPressed: if (currentIndex >= 0) all.openAt(currentIndex)
                     Keys.onUpPressed: (event) => {
                         if (currentIndex <= 0)
                             filterField.forceActiveFocus()
@@ -157,7 +162,7 @@ FocusScope {
                         required property string leaf
                         required property list<var> matches
                         required property string pageTitle
-                        readonly property bool nested: tags.sortKey === "name" && item.depth > 0 && Js.trim(filterField.text) === ""
+                        readonly property bool nested: tags.sortKey === "name" && item.depth > 0 && !all.filtering
                         // Full width (ListView places delegates at x 0); the row itself is inset.
                         width: tagList.width
                         implicitHeight: tagRow.implicitHeight
@@ -208,7 +213,7 @@ FocusScope {
                         width: Math.min(parent.width - 2 * Theme.space6, implicitWidth)
                         visible: tags.count === 0 && Workspace.ready
                         iconName: "hash"
-                        title: Js.trim(filterField.text) !== "" ? qsTr("No tag matches “%1”").arg(Js.trim(filterField.text)) : qsTr("No tags yet")
+                        title: all.filtering ? qsTr("No tag matches “%1”").arg(Js.trim(filterField.text)) : qsTr("No tags yet")
                         description: qsTr("Tag blocks with #word (also #nested/tag or #[[two words]]); pages can have tags: in their properties.")
                     }
                 }

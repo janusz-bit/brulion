@@ -56,7 +56,7 @@ FocusScope {
         if (open === "query") {
             openQueryLater.restart()
         } else if (Js.startsWith(open, "add:")) {
-            later.addText = Js.sliceFrom(open, 4)
+            fillAddLater.addText = Js.sliceFrom(open, 4)
             fillAddLater.restart()
         }
     }
@@ -105,20 +105,17 @@ FocusScope {
     }
 
     // Deferred calls (instead of Qt.callLater).
-    QtObject {
-        id: later
-        /// The quick-add field's text from the route ("add:<text>").
-        property string addText
-    }
     Later {
         id: openQueryLater
         onTriggered: queryDialog.open()
     }
     Later {
         id: fillAddLater
+        /// The quick-add field's text from the route ("add:<text>").
+        property string addText
         onTriggered: {
             if (quickAdd.field)
-                quickAdd.field.text = later.addText
+                quickAdd.field.text = fillAddLater.addText
         }
     }
     Later {
