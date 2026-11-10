@@ -11377,8 +11377,8 @@
     </message>
     <message>
         <location filename="../src/app/qml/views/SettingsView.qml" line="69"/>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1291"/>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1338"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1300"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1347"/>
         <source>Reminders</source>
         <translation>Przypomnienia</translation>
     </message>
@@ -11389,7 +11389,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/views/SettingsView.qml" line="72"/>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1456"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1465"/>
         <source>Application</source>
         <translation>Aplikacja</translation>
     </message>
@@ -11568,80 +11568,80 @@
         <translation>Otwórz inny…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1108"/>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1112"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1117"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1121"/>
         <source>Default mode of new pages</source>
         <translation>Domyślny tryb nowych stron</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1109"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1118"/>
         <source>For pages that do not choose a mode themselves. The new-page dialog starts with it.</source>
         <translation>Dla stron bez własnego trybu. Okno nowej strony proponuje ten tryb.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1114"/>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1130"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1123"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1139"/>
         <source>Document</source>
         <translation>Dokument</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1115"/>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1131"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1124"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1140"/>
         <source>Outline</source>
         <translation>Konspekt</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1122"/>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1126"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1131"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1135"/>
         <source>Journal mode</source>
         <translation>Tryb dziennika</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1123"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1132"/>
         <source>Daily notes as an outline (like Logseq) or as documents. A day switched on its own keeps its mode.</source>
         <translation>Strony dziennika jako konspekt (jak w Logseq) albo jako dokumenty. Dzień przełączony osobno zachowuje swój tryb.</translation>
     </message>
     <message>
         <location filename="../src/app/qml/views/SettingsView.qml" line="205"/>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1158"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1167"/>
         <source>Journal folder</source>
         <translation>Folder dziennika</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1159"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1168"/>
         <source>Where the daily pages are kept. Empty: the top of the notebook.</source>
         <translation>Tu są przechowywane strony dzienne. Puste: główny folder notatnika.</translation>
     </message>
     <message>
         <location filename="../src/app/qml/views/SettingsView.qml" line="206"/>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1163"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1172"/>
         <source>Journal file names</source>
         <translation>Nazwy plików dziennika</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1164"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1173"/>
         <source>Date format, e.g. yyyy-MM-dd or dd.MM.yyyy. Today: %1</source>
         <translation>Format daty, np. yyyy-MM-dd albo dd.MM.yyyy. Dziś: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1168"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1177"/>
         <source>The format needs a day, a month and a year.</source>
         <translation>Format musi zawierać dzień, miesiąc i rok.</translation>
     </message>
     <message>
         <location filename="../src/app/qml/views/SettingsView.qml" line="207"/>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1172"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1181"/>
         <source>Journal template</source>
         <translation>Szablon dziennika</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1173"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1182"/>
         <source>New daily pages start with this page.</source>
         <translation>Nowe strony dzienne zaczynają się od tej strony.</translation>
     </message>
     <message>
         <location filename="../src/app/qml/views/SettingsView.qml" line="208"/>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1219"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1228"/>
         <source>Templates folder</source>
         <translation>Folder szablonów</translation>
     </message>
@@ -11689,7 +11689,7 @@
     <message>
         <location filename="../src/app/qml/views/SettingsView.qml" line="107"/>
         <location filename="../src/app/qml/views/SettingsView.qml" line="138"/>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1481"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1490"/>
         <source>Calendar</source>
         <translation>Kalendarz</translation>
     </message>
@@ -12050,114 +12050,114 @@
     </message>
     <message>
         <location filename="../src/app/qml/views/SettingsView.qml" line="209"/>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1223"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1232"/>
         <source>Attachments folder</source>
         <translation>Folder załączników</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1146"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1155"/>
         <source>Settings from Obsidian</source>
         <translation>Ustawienia z Obsidiana</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1147"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1156"/>
         <source>Taken from the Obsidian vault&apos;s settings (.obsidian): %1. They are saved to .brulion/config.json when you change a setting here.</source>
         <translation>Przejęte z ustawień skarbca Obsidiana (.obsidian): %1. Zapiszą się w .brulion/config.json, gdy zmienisz tu któreś ustawienie.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1151"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1160"/>
         <source>Save to the notebook</source>
         <translation>Zapisz w notatniku</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1178"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1187"/>
         <source>Weekly notes folder</source>
         <translation>Folder notatek tygodniowych</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1179"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1188"/>
         <source>Empty: the top of the notebook. Open this week&apos;s note with Ctrl+Alt+W or a week number in the calendar.</source>
         <translation>Puste: główny folder notatnika. Notatkę tego tygodnia otworzysz skrótem Ctrl+Alt+W albo numerem tygodnia w kalendarzu.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1183"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1192"/>
         <source>Weekly note file names</source>
         <translation>Nazwy plików notatek tygodniowych</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1185"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1194"/>
         <source>yyyy is the week&apos;s year, ww its number (w without a leading zero), text in &apos;quotes&apos;. This week: %1</source>
         <translation>yyyy to rok tygodnia, ww jego numer (w bez zera na początku), tekst w &apos;apostrofach&apos;. Ten tydzień: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1190"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1199"/>
         <source>The format needs a year (yyyy) and a week (ww), other letters in &apos;quotes&apos;.</source>
         <translation>Format musi mieć rok (yyyy) i tydzień (ww), inne litery w &apos;apostrofach&apos;.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1194"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1203"/>
         <source>Weekly note template</source>
         <translation>Szablon notatki tygodniowej</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1195"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1204"/>
         <source>New weekly notes start with this page: {{date}} is the Monday, {{end}} the Sunday, {{week}} the week&apos;s number.</source>
         <translation>Nowe notatki tygodniowe zaczynają się od tej strony: {{date}} to poniedziałek, {{end}} niedziela, {{week}} numer tygodnia.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1199"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1208"/>
         <source>Monthly notes folder</source>
         <translation>Folder notatek miesięcznych</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1200"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1209"/>
         <source>Empty: the top of the notebook. Open this month&apos;s note with Ctrl+Alt+M or the month&apos;s title in the calendar.</source>
         <translation>Puste: główny folder notatnika. Notatkę tego miesiąca otworzysz skrótem Ctrl+Alt+M albo nazwą miesiąca w kalendarzu.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1204"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1213"/>
         <source>Monthly note file names</source>
         <translation>Nazwy plików notatek miesięcznych</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1205"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1214"/>
         <source>Date format of the month, e.g. yyyy-MM or MMMM yyyy. This month: %1</source>
         <translation>Format daty miesiąca, np. yyyy-MM albo MMMM yyyy. Ten miesiąc: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1210"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1219"/>
         <source>The format needs a month and a year, and no day.</source>
         <translation>Format musi mieć miesiąc i rok, bez dnia.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1214"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1223"/>
         <source>Monthly note template</source>
         <translation>Szablon notatki miesięcznej</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1215"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1224"/>
         <source>New monthly notes start with this page: {{date}} is the 1st, {{end}} the last day, {{month}} the month&apos;s name.</source>
         <translation>Nowe notatki miesięczne zaczynają się od tej strony: {{date}} to 1. dzień, {{end}} ostatni, {{month}} nazwa miesiąca.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1224"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1233"/>
         <source>Pasted images and dropped files go here.</source>
         <translation>Tu trafiają wklejone obrazy i upuszczone pliki.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1228"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1237"/>
         <source>Folder for new pages</source>
         <translation>Folder na nowe strony</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1229"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1238"/>
         <source>Empty: the top of the notebook.</source>
         <translation>Puste: główny folder notatnika.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1180"/>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1201"/>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1230"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1189"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1210"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1239"/>
         <source>(top level)</source>
         <translation>(główny folder)</translation>
     </message>
@@ -12248,250 +12248,260 @@
         <translation>Strony i dziennik otwierają się do czytania: stuknięcie otwiera linki i nigdy nie zaczyna edycji, nic nie zmienia notatki. %1 albo przycisk z książką w nagłówku strony włącza go i wyłącza.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1233"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1111"/>
+        <source>Follow links to folders outside the notebook</source>
+        <translation>Uwzględniaj dowiązania do folderów spoza notatnika</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1112"/>
+        <source>On this device only. A synced or copied link can point to any folder of yours: its files would be listed, synced and editable here.</source>
+        <translation>Tylko na tym urządzeniu. Zsynchronizowane lub skopiowane dowiązanie może prowadzić do dowolnego Twojego folderu: jego pliki byłyby tu widoczne, synchronizowane i edytowalne.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1242"/>
         <source>Default reminder time</source>
         <translation>Domyślna godzina przypomnień</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1234"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1243"/>
         <source>For reminders written without a time (⏰ 2026-10-15).</source>
         <translation>Dla przypomnień zapisanych bez godziny (⏰ 2026-10-15).</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1240"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1249"/>
         <source>Use HH:mm, e.g. 09:00.</source>
         <translation>Użyj formatu GG:MM, np. 09:00.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1247"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1256"/>
         <source>Pick a time on a clock</source>
         <translation>Wybierz godzinę na zegarze</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1260"/>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1262"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1269"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1271"/>
         <source>First day of the week</source>
         <translation>Pierwszy dzień tygodnia</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1264"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1273"/>
         <source>Monday</source>
         <translation>Poniedziałek</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1265"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1274"/>
         <source>Sunday</source>
         <translation>Niedziela</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1266"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1275"/>
         <source>Saturday</source>
         <translation>Sobota</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1293"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1302"/>
         <source>In the browser, reminders appear only while Brulion is open in a tab or as an installed app.</source>
         <translation>W przeglądarce przypomnienia pojawiają się tylko wtedy, gdy Brulion jest otwarty w karcie lub jako zainstalowana aplikacja.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1295"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1304"/>
         <source>Reminders and alarms are scheduled in Android and ring even when Brulion is closed.</source>
         <translation>Przypomnienia i alarmy są planowane w Androidzie i dzwonią nawet przy zamkniętym Brulionie.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1296"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1305"/>
         <source>Reminders appear as system notifications while Brulion runs (also in the tray).</source>
         <translation>Przypomnienia pojawiają się jako powiadomienia systemowe, gdy Brulion działa (także w zasobniku).</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1299"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1308"/>
         <source>Reminders and alarms</source>
         <translation>Przypomnienia i alarmy</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1300"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1309"/>
         <source>Notify me about ⏰ reminders and ring ⏰! alarms.</source>
         <translation>Powiadamiaj o przypomnieniach (⏰) i włączaj alarmy (⏰!).</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1308"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1317"/>
         <source>Notifications</source>
         <translation>Powiadomienia</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1309"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1318"/>
         <source>Needed to show reminders.</source>
         <translation>Potrzebne do wyświetlania przypomnień.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1314"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1323"/>
         <source>Exact alarms</source>
         <translation>Dokładne alarmy</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1315"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1324"/>
         <source>Without it Android may deliver reminders a few minutes late.</source>
         <translation>Bez tego Android może dostarczać przypomnienia z kilkuminutowym opóźnieniem.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1320"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1329"/>
         <source>Alarms over the lock screen</source>
         <translation>Alarmy na ekranie blokady</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1321"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1330"/>
         <source>Lets an alarm show its full screen like a clock app.</source>
         <translation>Pozwala alarmowi zająć cały ekran, jak w aplikacji zegara.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1325"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1334"/>
         <source>Reminder sound</source>
         <translation>Dźwięk przypomnień</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1329"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1338"/>
         <source>Alarm sound</source>
         <translation>Dźwięk alarmów</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1333"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1342"/>
         <source>System notification settings</source>
         <translation>Ustawienia powiadomień systemowych</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1334"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1343"/>
         <source>Sound, vibration and Do Not Disturb of Brulion&apos;s notifications in Android — when a sound does not play as chosen here.</source>
         <translation>Dźwięk, wibracje i tryb „Nie przeszkadzać” powiadomień Brulionu w Androidzie — gdy dźwięk nie brzmi tak, jak wybrano tutaj.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1344"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1353"/>
         <source>Alarms</source>
         <translation>Alarmy</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1349"/>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1352"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1358"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1361"/>
         <source>Snooze</source>
         <translation>Drzemka</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1350"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1359"/>
         <source>How long “Snooze” postpones a reminder.</source>
         <translation>Na ile „Drzemka” odkłada przypomnienie.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1353"/>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1353"/>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1354"/>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1354"/>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1364"/>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1364"/>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1365"/>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1365"/>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1409"/>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1410"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1362"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1362"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1363"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1363"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1373"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1373"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1374"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1374"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1418"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1419"/>
         <source>%1 min</source>
         <translation>%1 min</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1360"/>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1363"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1369"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1372"/>
         <source>Alarms ring for</source>
         <translation>Czas dzwonienia alarmu</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1361"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1370"/>
         <source>An alarm stops by itself after this time.</source>
         <translation>Po tym czasie alarm wyłączy się sam.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1371"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1380"/>
         <source>Show missed reminders</source>
         <translation>Pokazuj pominięte przypomnienia</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1372"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1381"/>
         <source>Reminders that were due while the device was off appear when Brulion starts.</source>
         <translation>Przypomnienia, które przypadły, gdy urządzenie było wyłączone, pojawią się po uruchomieniu Brulionu.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1422"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1431"/>
         <source>Test</source>
         <translation>Test</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1423"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1432"/>
         <source>Check that notifications get through.</source>
         <translation>Sprawdź, czy powiadomienia docierają.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1425"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1434"/>
         <source>Send a test notification</source>
         <translation>Wyślij powiadomienie testowe</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1461"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1470"/>
         <source>Keep running in the system tray</source>
         <translation>Działaj dalej w zasobniku systemowym</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1463"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1472"/>
         <source>Closing the window keeps Brulion in the tray, so reminders still ring.</source>
         <translation>Po zamknięciu okna Brulion zostaje w zasobniku, więc przypomnienia nadal dzwonią.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1464"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1473"/>
         <source>No system tray was found on this desktop.</source>
         <translation>Na tym pulpicie nie znaleziono zasobnika systemowego.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1475"/>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1478"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1484"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1487"/>
         <source>Click on the tray icon</source>
         <translation>Kliknięcie ikony w zasobniku</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1476"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1485"/>
         <source>A double click always shows the window. The calendar shows the month with its tasks and reminders; it is also in the icon&apos;s menu.</source>
         <translation>Podwójne kliknięcie zawsze pokazuje okno. Kalendarz pokazuje miesiąc z zadaniami i przypomnieniami; jest też w menu ikony.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1480"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1489"/>
         <source>Window</source>
         <translation>Okno</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1493"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1502"/>
         <source>Start when you sign in</source>
         <translation>Uruchamiaj po zalogowaniu</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1495"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1504"/>
         <source>Not in a separate profile (BRULION_PROFILE): Windows starts the default one.</source>
         <translation>Niedostępne w osobnym profilu (BRULION_PROFILE): Windows uruchomiłby profil domyślny.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1497"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1506"/>
         <source>Brulion starts hidden in the tray, so reminders ring from the moment you sign in.</source>
         <translation>Brulion uruchamia się ukryty w zasobniku, więc przypomnienia dzwonią od chwili zalogowania.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1498"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1507"/>
         <source>Brulion starts after you sign in.</source>
         <translation>Brulion uruchamia się po zalogowaniu.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1508"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1517"/>
         <source>Event log</source>
         <translation>Rejestr zdarzeń</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1509"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1518"/>
         <source>What the app and the sync did, step by step. It stays on this device; share it when something does not work.</source>
         <translation>Co robiła aplikacja i synchronizacja, krok po kroku. Zostaje na tym urządzeniu; udostępnij go, gdy coś nie działa.</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1514"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1523"/>
         <source>%n warning(s) or error(s)</source>
         <translation>
             <numerusform>%n ostrzeżenie lub błąd</numerusform>
@@ -12500,93 +12510,93 @@
         </translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1526"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1535"/>
         <source>Detailed log</source>
         <translation>Szczegółowy rejestr</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1527"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1536"/>
         <source>Also writes every request to the server (never note contents or passwords). Turn it on when syncing gives trouble.</source>
         <translation>Zapisuje też każde żądanie do serwera (nigdy treści notatek ani haseł). Włącz, gdy synchronizacja sprawia kłopot.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1535"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1544"/>
         <source>Check for new versions</source>
         <translation>Sprawdzaj nowe wersje</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1536"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1545"/>
         <source>Once a day Brulion asks GitHub for the latest release and shows a message when there is a newer one. GitHub sees this device&apos;s address; nothing about your notes is sent.</source>
         <translation>Raz dziennie Brulion pyta GitHuba o najnowsze wydanie i pokazuje komunikat, gdy jest nowsze. GitHub widzi adres tego urządzenia; nic o Twoich notatkach nie jest wysyłane.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1542"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1551"/>
         <source>Version</source>
         <translation>Wersja</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1543"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1552"/>
         <source>Brulion %1 · %2</source>
         <translation>Brulion %1 · %2</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1545"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1554"/>
         <source>About</source>
         <translation>O programie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1553"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1562"/>
         <source>Licence</source>
         <translation>Licencja</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1554"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1563"/>
         <source>Free software: GNU Affero General Public License 3.0 or later (AGPL-3.0). Icons: Lucide (ISC). Fonts: Inter, Literata, JetBrains Mono; emoji and symbols: Noto Emoji, Noto Sans Math (OFL 1.1).</source>
         <translation>Wolne oprogramowanie: GNU Affero General Public License 3.0 lub nowsza (AGPL-3.0). Ikony: Lucide (ISC). Czcionki: Inter, Literata, JetBrains Mono; emoji i symbole: Noto Emoji, Noto Sans Math (OFL 1.1).</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1556"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1565"/>
         <source>Read</source>
         <translation>Czytaj</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1564"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1573"/>
         <source>Source code</source>
         <translation>Kod źródłowy</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1582"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1591"/>
         <source>For developers</source>
         <translation>Dla programistów</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1586"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1595"/>
         <source>Allow agents to control the app (local socket)</source>
         <translation>Pozwól agentom sterować aplikacją (gniazdo lokalne)</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1587"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1596"/>
         <source>AI agents and scripts of your user account can then see what Brulion shows, click, type and take screenshots (brulion-cli app …). Any program you run can then read your notes too — turn it on only while you need it.</source>
         <translation>Agenci AI i skrypty Twojego konta mogą wtedy widzieć, co pokazuje Brulion, klikać, pisać i robić zrzuty ekranu (brulion-cli app …). Każdy uruchomiony przez Ciebie program może wtedy też czytać Twoje notatki — włączaj tylko na czas, gdy jest potrzebne.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1602"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1611"/>
         <source>The socket could not be opened: %1</source>
         <translation>Nie udało się otworzyć gniazda: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1605"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1614"/>
         <source>On for this run (started with --remote-control).</source>
         <translation>Włączone na to uruchomienie (opcja --remote-control).</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1606"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1615"/>
         <source>Listening at %1</source>
         <translation>Nasłuchuje na %1</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1518"/>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1567"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1527"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1576"/>
         <source>Open</source>
         <translation>Otwórz</translation>
     </message>
@@ -12648,23 +12658,23 @@
         <translation>Nawyki</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1388"/>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1406"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1397"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1415"/>
         <source>Check notes in the background</source>
         <translation>Sprawdzaj notatki w tle</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1390"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1399"/>
         <source>While Brulion is closed, Android reads the notebook now and then (after a Nextcloud sync, if set up), so reminders added on another device ring too. Android may postpone it while the phone sleeps.</source>
         <translation>Gdy Brulion jest zamknięty, Android co jakiś czas czyta notatnik (po synchronizacji z Nextcloud, jeśli jest włączona), więc dzwonią też przypomnienia dodane na innym urządzeniu. Gdy telefon śpi, Android może to odłożyć.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1397"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1406"/>
         <source>Last check %1: the notebook could not be read.</source>
         <translation>Ostatnie sprawdzenie %1: nie udało się przeczytać notatnika.</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1399"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1408"/>
         <source>Last check %1: %n reminder(s), the sync failed.</source>
         <translation>
             <numerusform>Ostatnie sprawdzenie %1: %n przypomnienie, synchronizacja się nie udała.</numerusform>
@@ -12673,7 +12683,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1401"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1410"/>
         <source>Last check %1: %n reminder(s).</source>
         <translation>
             <numerusform>Ostatnie sprawdzenie %1: %n przypomnienie.</numerusform>
@@ -12682,12 +12692,12 @@
         </translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1408"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1417"/>
         <source>Off</source>
         <translation>Wyłączone</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1411"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1420"/>
         <source>1 h</source>
         <translation>1 godz.</translation>
     </message>
@@ -17256,52 +17266,57 @@
         <translation>Wyrażenie jest za długie: zbyt wiele operatorów następuje po sobie (najwyżej %1).</translation>
     </message>
     <message>
-        <location filename="../src/core/dataview/messages.cpp" line="112"/>
+        <location filename="../src/core/dataview/messages.cpp" line="114"/>
         <source>A list, object or lambda is nested more than %1 levels deep.</source>
         <translation>Lista, obiekt lub lambda ma zbyt wiele poziomów zagnieżdżenia (najwyżej %1).</translation>
     </message>
     <message>
-        <location filename="../src/core/dataview/messages.cpp" line="117"/>
+        <location filename="../src/core/dataview/messages.cpp" line="121"/>
         <source>A value is too large: more than %1 items or %2 characters.</source>
         <translation>Wartość jest za duża: przekracza limit elementów (%1) lub znaków (%2).</translation>
     </message>
     <message>
-        <location filename="../src/core/dataview/messages.cpp" line="122"/>
+        <location filename="../src/core/dataview/messages.cpp" line="129"/>
+        <source>The results are too large: more than %1 items or %2 characters.</source>
+        <translation>Wyniki są za duże: przekraczają limit elementów (%1) lub znaków (%2).</translation>
+    </message>
+    <message>
+        <location filename="../src/core/dataview/messages.cpp" line="137"/>
         <source>Cannot read the date “%1”. Examples: date(today), date(2026-10-15), date(&quot;2026-10-15 09:30&quot;).</source>
         <translation>Nie można odczytać daty „%1”. Przykłady: date(today), date(2026-10-15), date(&quot;2026-10-15 09:30&quot;).</translation>
     </message>
     <message>
-        <location filename="../src/core/dataview/messages.cpp" line="128"/>
+        <location filename="../src/core/dataview/messages.cpp" line="143"/>
         <source>Cannot read the duration “%1”. Examples: dur(3 days), dur(&quot;1h 30m&quot;).</source>
         <translation>Nie można odczytać czasu trwania „%1”. Przykłady: dur(3 days), dur(&quot;1h 30m&quot;).</translation>
     </message>
     <message>
-        <location filename="../src/core/dataview/messages.cpp" line="133"/>
+        <location filename="../src/core/dataview/messages.cpp" line="148"/>
         <source>The query takes too long to evaluate. Narrow it down with FROM or WHERE.</source>
         <translation>Obliczanie zapytania trwa zbyt długo. Zawęź je przez FROM albo WHERE.</translation>
     </message>
     <message>
-        <location filename="../src/core/dataview/messages.cpp" line="138"/>
+        <location filename="../src/core/dataview/messages.cpp" line="153"/>
         <source>The query makes more than %1 rows.</source>
         <translation>Zapytanie tworzy ponad %1 wierszy.</translation>
     </message>
     <message>
-        <location filename="../src/core/dataview/messages.cpp" line="143"/>
+        <location filename="../src/core/dataview/messages.cpp" line="158"/>
         <source>“%1” is not a function.</source>
         <translation>„%1” nie jest funkcją.</translation>
     </message>
     <message>
-        <location filename="../src/core/dataview/messages.cpp" line="148"/>
+        <location filename="../src/core/dataview/messages.cpp" line="163"/>
         <source>File</source>
         <translation>Plik</translation>
     </message>
     <message>
-        <location filename="../src/core/dataview/messages.cpp" line="153"/>
+        <location filename="../src/core/dataview/messages.cpp" line="168"/>
         <source>Group</source>
         <translation>Grupa</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/core/dataview/messages.cpp" line="158"/>
+        <location filename="../src/core/dataview/messages.cpp" line="173"/>
         <source>%n year(s)</source>
         <translation>
             <numerusform>%n rok</numerusform>
@@ -17310,7 +17325,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/core/dataview/messages.cpp" line="163"/>
+        <location filename="../src/core/dataview/messages.cpp" line="178"/>
         <source>%n month(s)</source>
         <translation>
             <numerusform>%n miesiąc</numerusform>
@@ -17319,7 +17334,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/core/dataview/messages.cpp" line="168"/>
+        <location filename="../src/core/dataview/messages.cpp" line="183"/>
         <source>%n week(s)</source>
         <translation>
             <numerusform>%n tydzień</numerusform>
@@ -17328,7 +17343,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/core/dataview/messages.cpp" line="173"/>
+        <location filename="../src/core/dataview/messages.cpp" line="188"/>
         <source>%n day(s)</source>
         <translation>
             <numerusform>%n dzień</numerusform>
@@ -17337,7 +17352,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/core/dataview/messages.cpp" line="178"/>
+        <location filename="../src/core/dataview/messages.cpp" line="193"/>
         <source>%n hour(s)</source>
         <translation>
             <numerusform>%n godzina</numerusform>
@@ -17346,7 +17361,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/core/dataview/messages.cpp" line="183"/>
+        <location filename="../src/core/dataview/messages.cpp" line="198"/>
         <source>%n minute(s)</source>
         <translation>
             <numerusform>%n minuta</numerusform>
@@ -17355,7 +17370,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/core/dataview/messages.cpp" line="188"/>
+        <location filename="../src/core/dataview/messages.cpp" line="203"/>
         <source>%n second(s)</source>
         <translation>
             <numerusform>%n sekunda</numerusform>
@@ -17364,7 +17379,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/core/dataview/messages.cpp" line="193"/>
+        <location filename="../src/core/dataview/messages.cpp" line="208"/>
         <source>%n millisecond(s)</source>
         <translation>
             <numerusform>%n milisekunda</numerusform>
@@ -17540,92 +17555,99 @@
         <translation>Notatnik nie jest otwarty</translation>
     </message>
     <message>
-        <location filename="../src/core/vault/vault.cpp" line="650"/>
+        <location filename="../src/core/vault/vault.cpp" line="668"/>
         <source>links to files are not followed</source>
         <extracomment>The reason in &quot;Cannot read %1: %2&quot;</extracomment>
         <translation>dowiązania do plików są pomijane</translation>
     </message>
     <message>
-        <location filename="../src/core/vault/vault.cpp" line="653"/>
+        <location filename="../src/core/vault/vault.cpp" line="671"/>
         <source>it is larger than %1 MB</source>
         <extracomment>The reason in &quot;Cannot read %1: %2&quot;; %1 = 1024</extracomment>
         <translation>ma ponad %1 MB</translation>
     </message>
     <message>
-        <location filename="../src/core/vault/vault.cpp" line="666"/>
+        <location filename="../src/core/vault/vault.cpp" line="684"/>
         <source>Cannot read: empty path</source>
         <translation>Nie można odczytać: pusta ścieżka</translation>
     </message>
     <message>
-        <location filename="../src/core/vault/vault.cpp" line="676"/>
-        <location filename="../src/core/vault/vault.cpp" line="1184"/>
+        <location filename="../src/core/vault/vault.cpp" line="691"/>
+        <location filename="../src/core/vault/vault.cpp" line="701"/>
+        <location filename="../src/core/vault/vault.cpp" line="1239"/>
         <source>Cannot read %1: %2</source>
+        <extracomment>The reason in &quot;Cannot read %1: %2&quot;</extracomment>
         <translation>Nie można odczytać %1: %2</translation>
     </message>
     <message>
-        <location filename="../src/core/vault/vault.cpp" line="750"/>
+        <location filename="../src/core/vault/vault.cpp" line="691"/>
+        <source>it is in a linked folder that is not followed</source>
+        <translation>leży w podlinkowanym folderze, który jest pomijany</translation>
+    </message>
+    <message>
+        <location filename="../src/core/vault/vault.cpp" line="775"/>
         <source>Cannot create the folder %1: a file or link with that name exists</source>
         <translation>Nie można utworzyć folderu %1: istnieje już plik lub dowiązanie o tej nazwie</translation>
     </message>
     <message>
-        <location filename="../src/core/vault/vault.cpp" line="752"/>
-        <location filename="../src/core/vault/vault.cpp" line="1029"/>
+        <location filename="../src/core/vault/vault.cpp" line="777"/>
+        <location filename="../src/core/vault/vault.cpp" line="1054"/>
         <source>Cannot create the folder %1</source>
         <translation>Nie można utworzyć folderu %1</translation>
     </message>
     <message>
-        <location filename="../src/core/vault/vault.cpp" line="793"/>
-        <location filename="../src/core/vault/vault.cpp" line="1219"/>
+        <location filename="../src/core/vault/vault.cpp" line="818"/>
+        <location filename="../src/core/vault/vault.cpp" line="1274"/>
         <source>Cannot write: empty path</source>
         <translation>Nie można zapisać: pusta ścieżka</translation>
     </message>
     <message>
-        <location filename="../src/core/vault/vault.cpp" line="797"/>
+        <location filename="../src/core/vault/vault.cpp" line="822"/>
         <source>Cannot write %1: it is a folder</source>
         <translation>Nie można zapisać %1: to jest folder</translation>
     </message>
     <message>
-        <location filename="../src/core/vault/vault.cpp" line="802"/>
+        <location filename="../src/core/vault/vault.cpp" line="827"/>
         <source>Cannot write %1: it is a link that does not lead to a file</source>
         <translation>Nie można zapisać %1: to dowiązanie, które nie prowadzi do pliku</translation>
     </message>
     <message>
-        <location filename="../src/core/vault/vault.cpp" line="834"/>
+        <location filename="../src/core/vault/vault.cpp" line="859"/>
         <source>Cannot write %1: %2</source>
         <translation>Nie można zapisać %1: %2</translation>
     </message>
     <message>
-        <location filename="../src/core/vault/vault.cpp" line="839"/>
+        <location filename="../src/core/vault/vault.cpp" line="864"/>
         <source>%1 disappeared right after it was written</source>
         <translation>%1 zniknął zaraz po zapisaniu</translation>
     </message>
     <message>
-        <location filename="../src/core/vault/vault.cpp" line="866"/>
+        <location filename="../src/core/vault/vault.cpp" line="891"/>
         <source>Cannot create a file with an empty name</source>
         <translation>Nie można utworzyć pliku bez nazwy</translation>
     </message>
     <message>
-        <location filename="../src/core/vault/vault.cpp" line="1024"/>
+        <location filename="../src/core/vault/vault.cpp" line="1049"/>
         <source>No vault folder given</source>
         <translation>Nie podano folderu notatnika</translation>
     </message>
     <message>
-        <location filename="../src/core/vault/vault.cpp" line="1027"/>
+        <location filename="../src/core/vault/vault.cpp" line="1052"/>
         <source>%1 is not a folder</source>
         <translation>%1 nie jest folderem</translation>
     </message>
     <message>
-        <location filename="../src/core/vault/vault.cpp" line="1231"/>
+        <location filename="../src/core/vault/vault.cpp" line="1285"/>
         <source>Cannot read %1</source>
         <translation>Nie można odczytać %1</translation>
     </message>
     <message>
-        <location filename="../src/core/vault/vault.cpp" line="1265"/>
+        <location filename="../src/core/vault/vault.cpp" line="1319"/>
         <source>Cannot create a folder with an empty name</source>
         <translation>Nie można utworzyć folderu bez nazwy</translation>
     </message>
     <message>
-        <location filename="../src/core/vault/vault.cpp" line="1267"/>
+        <location filename="../src/core/vault/vault.cpp" line="1321"/>
         <source>Cannot create the folder %1: a file with that name exists</source>
         <translation>Nie można utworzyć folderu %1: istnieje już plik o tej nazwie</translation>
     </message>
@@ -17648,7 +17670,7 @@
     </message>
     <message>
         <location filename="../src/core/vault/vaultmove.cpp" line="269"/>
-        <location filename="../src/core/vault/vaultmove.cpp" line="406"/>
+        <location filename="../src/core/vault/vaultmove.cpp" line="408"/>
         <source>%1 does not exist</source>
         <translation>%1 nie istnieje</translation>
     </message>
@@ -17680,37 +17702,38 @@
         <translation>Nie można usunąć %1: leży za dowiązaniem w koszu</translation>
     </message>
     <message>
-        <location filename="../src/core/vault/vaultmove.cpp" line="344"/>
+        <location filename="../src/core/vault/vaultmove.cpp" line="332"/>
+        <location filename="../src/core/vault/vaultmove.cpp" line="346"/>
         <source>Cannot delete %1</source>
         <translation>Nie można usunąć %1</translation>
     </message>
     <message>
-        <location filename="../src/core/vault/vaultmove.cpp" line="401"/>
+        <location filename="../src/core/vault/vaultmove.cpp" line="403"/>
         <source>%1 is not in the trash</source>
         <translation>%1 nie ma w koszu</translation>
     </message>
     <message>
-        <location filename="../src/core/vault/vaultmove.cpp" line="404"/>
+        <location filename="../src/core/vault/vaultmove.cpp" line="406"/>
         <source>Cannot restore %1: it lies behind a link in the trash</source>
         <translation>Nie można przywrócić %1: leży za dowiązaniem w koszu</translation>
     </message>
     <message>
-        <location filename="../src/core/vault/vaultmove.cpp" line="409"/>
+        <location filename="../src/core/vault/vaultmove.cpp" line="411"/>
         <source>Cannot tell where %1 came from</source>
         <translation>Nie wiadomo, skąd pochodzi %1</translation>
     </message>
     <message>
-        <location filename="../src/core/vault/vaultmove.cpp" line="417"/>
+        <location filename="../src/core/vault/vaultmove.cpp" line="419"/>
         <source>Cannot restore %1 to %2</source>
         <translation>Nie można przywrócić %1 do %2</translation>
     </message>
     <message>
-        <location filename="../src/core/vault/vaultscan.cpp" line="496"/>
+        <location filename="../src/core/vault/vaultscan.cpp" line="501"/>
         <source>The vault folder is missing (unmounted?): %1</source>
         <translation>Brak folderu notatnika (odmontowany?): %1</translation>
     </message>
     <message>
-        <location filename="../src/core/vault/vaultscan.cpp" line="497"/>
+        <location filename="../src/core/vault/vaultscan.cpp" line="502"/>
         <source>The vault folder is on another storage than when it was opened (unmounted?): %1</source>
         <translation>Folder notatnika jest na innym nośniku niż przy otwarciu (odmontowany?): %1</translation>
     </message>
@@ -17931,8 +17954,8 @@
     <message>
         <location filename="../src/cli/commands_app.cpp" line="214"/>
         <location filename="../src/cli/commands_pages.cpp" line="210"/>
-        <location filename="../src/cli/context.cpp" line="536"/>
-        <location filename="../src/cli/context.cpp" line="572"/>
+        <location filename="../src/cli/context.cpp" line="539"/>
+        <location filename="../src/cli/context.cpp" line="575"/>
         <source>No page %1</source>
         <translation>Nie ma strony %1</translation>
     </message>
@@ -18333,7 +18356,7 @@
     </message>
     <message>
         <location filename="../src/cli/commands_common.cpp" line="75"/>
-        <location filename="../src/cli/context.cpp" line="301"/>
+        <location filename="../src/cli/context.cpp" line="304"/>
         <source>Something went wrong</source>
         <translation>Coś poszło nie tak</translation>
     </message>
@@ -19325,114 +19348,114 @@
         <translation>%1 nie jest folderem</translation>
     </message>
     <message>
-        <location filename="../src/cli/context.cpp" line="274"/>
+        <location filename="../src/cli/context.cpp" line="277"/>
         <source>Standard input was not valid UTF-8: invalid bytes were replaced</source>
         <translation>Standardowe wejście nie było poprawnym UTF-8: błędne bajty zostały zastąpione</translation>
     </message>
     <message>
-        <location filename="../src/cli/context.cpp" line="340"/>
+        <location filename="../src/cli/context.cpp" line="343"/>
         <source>A path is needed</source>
         <translation>Potrzebna jest ścieżka</translation>
     </message>
     <message>
-        <location filename="../src/cli/context.cpp" line="344"/>
+        <location filename="../src/cli/context.cpp" line="347"/>
         <source>The path contains a NUL character</source>
         <translation>Ścieżka zawiera znak NUL</translation>
     </message>
     <message>
-        <location filename="../src/cli/context.cpp" line="353"/>
-        <location filename="../src/cli/context.cpp" line="360"/>
+        <location filename="../src/cli/context.cpp" line="356"/>
+        <location filename="../src/cli/context.cpp" line="363"/>
         <source>%1 is outside the notebook</source>
         <translation>%1 leży poza notatnikiem</translation>
     </message>
     <message>
-        <location filename="../src/cli/context.cpp" line="370"/>
+        <location filename="../src/cli/context.cpp" line="373"/>
         <source>%1 is not a note: .brulion/, .trash/ and other hidden folders are off limits</source>
         <translation>%1 nie jest notatką: .brulion/, .trash/ i inne ukryte foldery są niedostępne</translation>
     </message>
     <message>
-        <location filename="../src/cli/context.cpp" line="387"/>
-        <location filename="../src/cli/context.cpp" line="400"/>
+        <location filename="../src/cli/context.cpp" line="390"/>
+        <location filename="../src/cli/context.cpp" line="403"/>
         <source>Not a date: %1</source>
         <translation>To nie jest data: %1</translation>
     </message>
     <message>
-        <location filename="../src/cli/context.cpp" line="409"/>
+        <location filename="../src/cli/context.cpp" line="412"/>
         <source>Words that are no date were ignored in %1: %2</source>
         <translation>W %1 pominięto słowa, które nie są datą: %2</translation>
     </message>
     <message>
-        <location filename="../src/cli/context.cpp" line="422"/>
+        <location filename="../src/cli/context.cpp" line="425"/>
         <source>A page is needed: a path, a page name, a date or an item ref</source>
         <translation>Potrzebna jest strona: ścieżka, nazwa strony, data albo odwołanie do elementu</translation>
     </message>
     <message>
-        <location filename="../src/cli/context.cpp" line="427"/>
+        <location filename="../src/cli/context.cpp" line="430"/>
         <source>Not a valid reference: %1</source>
         <translation>Niepoprawne odwołanie: %1</translation>
     </message>
     <message>
-        <location filename="../src/cli/context.cpp" line="446"/>
+        <location filename="../src/cli/context.cpp" line="449"/>
         <source>No block with the id %1</source>
         <translation>Nie ma bloku o id %1</translation>
     </message>
     <message>
-        <location filename="../src/cli/context.cpp" line="458"/>
+        <location filename="../src/cli/context.cpp" line="461"/>
         <source>The notebook folder is not a page</source>
         <translation>Folder notatnika nie jest stroną</translation>
     </message>
     <message>
-        <location filename="../src/cli/context.cpp" line="468"/>
+        <location filename="../src/cli/context.cpp" line="471"/>
         <source>%1 is an attachment, not a page</source>
         <translation>%1 to załącznik, nie strona</translation>
     </message>
     <message>
-        <location filename="../src/cli/context.cpp" line="496"/>
+        <location filename="../src/cli/context.cpp" line="499"/>
         <source>%1 is the page %2; for the daily note of %3 give the date</source>
         <translation>%1 to strona %2; po notatkę dzienną z %3 podaj datę</translation>
     </message>
     <message>
-        <location filename="../src/cli/context.cpp" line="517"/>
+        <location filename="../src/cli/context.cpp" line="520"/>
         <source>Several pages are called %1: give the path</source>
         <translation>Kilka stron nazywa się %1: podaj ścieżkę</translation>
     </message>
     <message>
-        <location filename="../src/cli/context.cpp" line="551"/>
+        <location filename="../src/cli/context.cpp" line="554"/>
         <source>The notebook is busy: %1</source>
         <translation>Notatnik jest zajęty: %1</translation>
     </message>
     <message>
-        <location filename="../src/cli/context.cpp" line="569"/>
+        <location filename="../src/cli/context.cpp" line="572"/>
         <source>The change cannot be made</source>
         <translation>Nie można wprowadzić zmiany</translation>
     </message>
     <message>
-        <location filename="../src/cli/context.cpp" line="576"/>
+        <location filename="../src/cli/context.cpp" line="579"/>
         <source>%1 changed since it was read (its hash is not the one expected): read it again</source>
         <translation>Plik %1 zmienił się od odczytu (ma inny hash niż oczekiwany): odczytaj go ponownie</translation>
     </message>
     <message>
-        <location filename="../src/cli/context.cpp" line="581"/>
+        <location filename="../src/cli/context.cpp" line="584"/>
         <source>%1 kept changing while it was written (another program writes it): try again</source>
         <translation>Plik %1 zmieniał się podczas zapisu (zapisuje go inny program): spróbuj ponownie</translation>
     </message>
     <message>
-        <location filename="../src/cli/context.cpp" line="586"/>
+        <location filename="../src/cli/context.cpp" line="589"/>
         <source>%1 is not UTF-8: it is not changed, so no byte of it gets lost</source>
         <translation>Plik %1 nie jest w UTF-8: pozostaje bez zmian, żeby żaden jego bajt nie przepadł</translation>
     </message>
     <message>
-        <location filename="../src/cli/context.cpp" line="590"/>
+        <location filename="../src/cli/context.cpp" line="593"/>
         <source>Could not write %1: %2</source>
         <translation>Nie udało się zapisać %1: %2</translation>
     </message>
     <message>
-        <location filename="../src/cli/context.cpp" line="625"/>
+        <location filename="../src/cli/context.cpp" line="628"/>
         <source>%1 writes notes: refused in read-only mode</source>
         <translation>Polecenie %1 zapisuje notatki: odmowa w trybie tylko do odczytu</translation>
     </message>
     <message>
-        <location filename="../src/cli/context.cpp" line="628"/>
+        <location filename="../src/cli/context.cpp" line="631"/>
         <source>%1 replaces, moves or removes existing notes: run it with --allow-destructive</source>
         <translation>Polecenie %1 zastępuje, przenosi albo usuwa istniejące notatki: uruchom je z --allow-destructive</translation>
     </message>
@@ -21694,81 +21717,81 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         <translation>Przypomnienia nadal działają. Aby zakończyć, wybierz „Zakończ” w menu ikony w zasobniku.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appshare.cpp" line="141"/>
-        <location filename="../src/app/shell/appshare.cpp" line="319"/>
-        <location filename="../src/app/shell/appshare.cpp" line="349"/>
-        <location filename="../src/app/shell/appshare.cpp" line="363"/>
-        <location filename="../src/app/shell/appshare.cpp" line="377"/>
-        <location filename="../src/app/shell/appshare.cpp" line="399"/>
+        <location filename="../src/app/shell/appshare.cpp" line="143"/>
+        <location filename="../src/app/shell/appshare.cpp" line="321"/>
+        <location filename="../src/app/shell/appshare.cpp" line="351"/>
+        <location filename="../src/app/shell/appshare.cpp" line="365"/>
+        <location filename="../src/app/shell/appshare.cpp" line="379"/>
+        <location filename="../src/app/shell/appshare.cpp" line="401"/>
         <source>Nothing to save.</source>
         <translation>Nie ma nic do zapisania.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appshare.cpp" line="210"/>
-        <location filename="../src/app/shell/appshare.cpp" line="304"/>
+        <location filename="../src/app/shell/appshare.cpp" line="212"/>
+        <location filename="../src/app/shell/appshare.cpp" line="306"/>
         <source>Shared note</source>
         <translation>Udostępniona notatka</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appshare.cpp" line="225"/>
-        <location filename="../src/app/shell/appshare.cpp" line="233"/>
-        <location filename="../src/app/shell/appshare.cpp" line="323"/>
+        <location filename="../src/app/shell/appshare.cpp" line="227"/>
+        <location filename="../src/app/shell/appshare.cpp" line="235"/>
+        <location filename="../src/app/shell/appshare.cpp" line="325"/>
         <source>Open or create a notebook first to save what you shared.</source>
         <translation>Najpierw otwórz albo utwórz notatnik, żeby zapisać to, co udostępniasz.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appshare.cpp" line="281"/>
+        <location filename="../src/app/shell/appshare.cpp" line="283"/>
         <source>Too large to save (over %1 MB)</source>
         <translation>Za duży do zapisania (ponad %1 MB)</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appshare.cpp" line="283"/>
+        <location filename="../src/app/shell/appshare.cpp" line="285"/>
         <source>Not a text file</source>
         <translation>To nie jest plik tekstowy</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appshare.cpp" line="285"/>
+        <location filename="../src/app/shell/appshare.cpp" line="287"/>
         <source>Too many files at once (at most %1)</source>
         <translation>Za dużo plików naraz (najwyżej %1)</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appshare.cpp" line="287"/>
+        <location filename="../src/app/shell/appshare.cpp" line="289"/>
         <source>Could not be read</source>
         <translation>Nie udało się odczytać</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appshare.cpp" line="293"/>
+        <location filename="../src/app/shell/appshare.cpp" line="295"/>
         <source>(no name)</source>
         <translation>(bez nazwy)</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appshare.cpp" line="331"/>
+        <location filename="../src/app/shell/appshare.cpp" line="333"/>
         <source>None of the shared files can be saved.</source>
         <translation>Żadnego z udostępnionych plików nie da się zapisać.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appshare.cpp" line="355"/>
+        <location filename="../src/app/shell/appshare.cpp" line="357"/>
         <source>Could not save to today&apos;s journal.</source>
         <translation>Nie udało się zapisać w dzisiejszym dzienniku.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appshare.cpp" line="359"/>
+        <location filename="../src/app/shell/appshare.cpp" line="361"/>
         <source>Saved in today&apos;s journal</source>
         <translation>Zapisano w dzisiejszym dzienniku</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appshare.cpp" line="386"/>
-        <location filename="../src/app/shell/appshare.cpp" line="406"/>
+        <location filename="../src/app/shell/appshare.cpp" line="388"/>
+        <location filename="../src/app/shell/appshare.cpp" line="408"/>
         <source>A page with this name already exists: %1</source>
         <translation>Strona o tej nazwie już istnieje: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appshare.cpp" line="398"/>
+        <location filename="../src/app/shell/appshare.cpp" line="400"/>
         <source>Could not create the page: %1</source>
         <translation>Nie udało się utworzyć strony: %1</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/shell/appshare.cpp" line="413"/>
+        <location filename="../src/app/shell/appshare.cpp" line="415"/>
         <source>Saved %n page(s); not saved, a page with this name exists: %1</source>
         <translation>
             <numerusform>Zapisano %n stronę; pominięto, bo strona o tej nazwie już istnieje: %1</numerusform>
@@ -21777,7 +21800,7 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/shell/appshare.cpp" line="417"/>
+        <location filename="../src/app/shell/appshare.cpp" line="419"/>
         <source>Saved %n page(s)</source>
         <translation>
             <numerusform>Zapisano %n stronę</numerusform>
@@ -22456,36 +22479,36 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
 <context>
     <name>brulion::shell::Workspace</name>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="587"/>
-        <location filename="../src/app/shell/workspace.cpp" line="603"/>
+        <location filename="../src/app/shell/workspace.cpp" line="602"/>
+        <location filename="../src/app/shell/workspace.cpp" line="618"/>
         <source>Could not save %1: %2</source>
         <translation>Nie udało się zapisać %1: %2</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="776"/>
-        <location filename="../src/app/shell/workspace.cpp" line="788"/>
+        <location filename="../src/app/shell/workspace.cpp" line="791"/>
+        <location filename="../src/app/shell/workspace.cpp" line="803"/>
         <source>Could not save the drawing %1: %2</source>
         <translation>Nie można zapisać rysunku %1: %2</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="1117"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1136"/>
         <source>Could not save the attachment %1: %2</source>
         <translation>Nie udało się zapisać załącznika %1: %2</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="1262"/>
-        <location filename="../src/app/shell/workspace.cpp" line="1283"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1282"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1303"/>
         <location filename="../src/app/shell/workspacefolders.cpp" line="352"/>
         <source>Could not save the notebook settings: %1</source>
         <translation>Nie udało się zapisać ustawień notatnika: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="1428"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1448"/>
         <source>“%1” is the page “%2” (names that differ only in letter case are the same page).</source>
         <translation>„%1” to strona „%2” (nazwy różniące się tylko wielkością liter to ta sama strona).</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="1431"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1451"/>
         <source>Could not create the page: %1</source>
         <translation>Nie udało się utworzyć strony: %1</translation>
     </message>
@@ -22616,17 +22639,17 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         <translation>Zaktualizowano ustawienia notatnika: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="1446"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1466"/>
         <source>Could not move “%1” to the trash: %2</source>
         <translation>Nie udało się przenieść „%1” do kosza: %2</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="1461"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1481"/>
         <source>Could not restore the file: %1</source>
         <translation>Nie udało się przywrócić pliku: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="1559"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1579"/>
         <source>Could not create the journal page: %1</source>
         <translation>Nie udało się utworzyć strony dziennika: %1</translation>
     </message>
@@ -22776,7 +22799,7 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         <translation>Rysunek</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="1643"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1663"/>
         <source>The journal page is not UTF-8 text; it was left unchanged.</source>
         <translation>Strona dziennika nie jest tekstem UTF-8; zostawiono ją bez zmian.</translation>
     </message>
@@ -23573,7 +23596,7 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         <translation>Za kilka sekund pojawi się powiadomienie testowe.</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspaceintegration.cpp" line="290"/>
+        <location filename="../src/app/shell/workspaceintegration.cpp" line="292"/>
         <source>%n note(s) changed on two devices at once. Both versions are kept: merge them in the sync center.</source>
         <translation>
             <numerusform>%n notatka zmieniła się jednocześnie na dwóch urządzeniach. Zachowano obie wersje: scal je w centrum synchronizacji.</numerusform>
@@ -24450,12 +24473,12 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
 <context>
     <name>main</name>
     <message>
-        <location filename="../src/app/main.cpp" line="542"/>
+        <location filename="../src/app/main.cpp" line="553"/>
         <source>Saving to the browser&apos;s storage failed: %1</source>
         <translation>Nie udało się zapisać w pamięci przeglądarki: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/main.cpp" line="584"/>
+        <location filename="../src/app/main.cpp" line="595"/>
         <source>This browser does not let Brulion store data, so notes last only until this tab is closed. Allow site data (or leave private mode), or export your notes before closing.</source>
         <translation>Ta przeglądarka nie pozwala Brulionowi przechowywać danych, więc notatki przetrwają tylko do zamknięcia tej karty. Zezwól na dane witryny (albo wyjdź z trybu prywatnego) lub wyeksportuj notatki przed zamknięciem.</translation>
     </message>

@@ -1103,7 +1103,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1514"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1523"/>
         <source>%n warning(s) or error(s)</source>
         <translation>
             <numerusform>%n warning or error</numerusform>
@@ -1111,7 +1111,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1399"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1408"/>
         <source>Last check %1: %n reminder(s), the sync failed.</source>
         <translation>
             <numerusform>Last check %1: %n reminder, the sync failed.</numerusform>
@@ -1119,7 +1119,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1401"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1410"/>
         <source>Last check %1: %n reminder(s).</source>
         <translation>
             <numerusform>Last check %1: %n reminder.</numerusform>
@@ -1689,7 +1689,7 @@
 <context>
     <name>brulion::Dataview</name>
     <message numerus="yes">
-        <location filename="../src/core/dataview/messages.cpp" line="158"/>
+        <location filename="../src/core/dataview/messages.cpp" line="173"/>
         <source>%n year(s)</source>
         <translation>
             <numerusform>%n year</numerusform>
@@ -1697,7 +1697,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/core/dataview/messages.cpp" line="163"/>
+        <location filename="../src/core/dataview/messages.cpp" line="178"/>
         <source>%n month(s)</source>
         <translation>
             <numerusform>%n month</numerusform>
@@ -1705,7 +1705,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/core/dataview/messages.cpp" line="168"/>
+        <location filename="../src/core/dataview/messages.cpp" line="183"/>
         <source>%n week(s)</source>
         <translation>
             <numerusform>%n week</numerusform>
@@ -1713,7 +1713,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/core/dataview/messages.cpp" line="173"/>
+        <location filename="../src/core/dataview/messages.cpp" line="188"/>
         <source>%n day(s)</source>
         <translation>
             <numerusform>%n day</numerusform>
@@ -1721,7 +1721,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/core/dataview/messages.cpp" line="178"/>
+        <location filename="../src/core/dataview/messages.cpp" line="193"/>
         <source>%n hour(s)</source>
         <translation>
             <numerusform>%n hour</numerusform>
@@ -1729,7 +1729,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/core/dataview/messages.cpp" line="183"/>
+        <location filename="../src/core/dataview/messages.cpp" line="198"/>
         <source>%n minute(s)</source>
         <translation>
             <numerusform>%n minute</numerusform>
@@ -1737,7 +1737,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/core/dataview/messages.cpp" line="188"/>
+        <location filename="../src/core/dataview/messages.cpp" line="203"/>
         <source>%n second(s)</source>
         <translation>
             <numerusform>%n second</numerusform>
@@ -1745,7 +1745,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/core/dataview/messages.cpp" line="193"/>
+        <location filename="../src/core/dataview/messages.cpp" line="208"/>
         <source>%n millisecond(s)</source>
         <translation>
             <numerusform>%n millisecond</numerusform>
@@ -1908,7 +1908,7 @@
 <context>
     <name>brulion::shell::AppController</name>
     <message numerus="yes">
-        <location filename="../src/app/shell/appshare.cpp" line="413"/>
+        <location filename="../src/app/shell/appshare.cpp" line="415"/>
         <source>Saved %n page(s); not saved, a page with this name exists: %1</source>
         <translation>
             <numerusform>Saved %n page; not saved, a page with this name exists: %1</numerusform>
@@ -1916,7 +1916,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/shell/appshare.cpp" line="417"/>
+        <location filename="../src/app/shell/appshare.cpp" line="419"/>
         <source>Saved %n page(s)</source>
         <translation>
             <numerusform>Saved %n page</numerusform>
@@ -2069,7 +2069,7 @@
 <context>
     <name>brulion::shell::WorkspaceIntegration</name>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspaceintegration.cpp" line="290"/>
+        <location filename="../src/app/shell/workspaceintegration.cpp" line="292"/>
         <source>%n note(s) changed on two devices at once. Both versions are kept: merge them in the sync center.</source>
         <translation>
             <numerusform>%n note changed on two devices at once. Both versions are kept: merge them in the sync center.</numerusform>
