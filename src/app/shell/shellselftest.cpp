@@ -5734,11 +5734,92 @@ void checkSyncConflicts(QQuickWindow *window, AppController *app, const Check &c
     app->goHome();
 }
 
+/// Is this the phone run (`--touch`)? Taps are real touches then, clicks otherwise.
+bool touchRun()
+{
+    return QCoreApplication::arguments().contains(u"--touch"_s);
+}
+
+/// The shell (AppShell) item, if shown.
+QQuickItem *appShell(QQuickWindow *window)
+{
+    return findShown(window->contentItem(), [](QQuickItem *item) { return isA(item, "AppShell"); });
+}
+
+/// The first shown BButton under `root` (nullptr for none) whose text is `text`.
+QQuickItem *findButton(QQuickItem *root, const QString &text)
+{
+    return !root ? nullptr : findShown(root, [&text](QQuickItem *item) {
+        return isA(item, "BButton") && item->property("text").toString() == text;
+    });
+}
+
+/// The items called `name` under `root` (the visual tree, in its order) that are shown().
+QList<QQuickItem *> shownItemsNamed(QQuickItem *root, const QString &name)
+{
+    QList<QQuickItem *> out;
+    const QList<QQuickItem *> items = uidriver::allItems(root);
+    for (QQuickItem *item : items) {
+        if (item->objectName() == name && shown(item))
+            out.append(item);
+    }
+    return out;
+}
+
+/// The last item called `name` in the visual tree under `root`, shown or not (nullptr for none).
+QQuickItem *lastNamed(QQuickItem *root, const QString &name)
+{
+    QQuickItem *found = nullptr;
+    const QList<QQuickItem *> items = uidriver::allItems(root);
+    for (QQuickItem *item : items) {
+        if (item->objectName() == name)
+            found = item;
+    }
+    return found;
+}
+
+/// Ask for the window's activation and wait (briefly) for it.
+void activateWindow(QQuickWindow *window)
+{
+    window->requestActivate();
+    waitFor([window] { return window->isActive(); }, 2000);
+}
+
+/// Clear the toasts on screen (one with an action stays 7 s over the bottom rows of the views
+/// checked next).
+void clearToasts(QQuickWindow *window)
+{
+    if (QObject *toasts = window->findChild<QObject *>(u"toastHost"_s))
+        QMetaObject::invokeMethod(toasts, "clear");
+}
+
+/// `bytes` written to the file `path` (true when all of them are).
+bool writeBytes(const QString &path, const QByteArray &bytes)
+{
+    QFile file(path);
+    return file.open(QIODevice::WriteOnly) && file.write(bytes) == bytes.size();
+}
+
+/// The bytes of the file `path` (empty when it cannot be read).
+QByteArray fileBytes(const QString &path)
+{
+    QFile file(path);
+    return file.open(QIODevice::ReadOnly) ? file.readAll() : QByteArray();
+}
+
+/// The index of the first line of `text` that starts with `prefix` (-1 for none).
+qsizetype firstLineStarting(const QString &text, const QString &prefix)
+{
+    const QStringList lines = text.split(u'\n');
+    const auto it = std::ranges::find_if(lines, [&prefix](const QString &line) { return line.startsWith(prefix); });
+    return it == lines.cend() ? -1 : it - lines.cbegin();
+}
+
 /// "Backups": the settings' section with real input: a backup made with its button, the row of
 /// the list, "Restore" through the confirmation with its counts, the note back; "Delete" asks first.
 void checkBackups(QQuickWindow *window, AppController *app, const Check &check)
 {
-    const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
+    const bool touch = touchRun();
     Workspace *ws = app->workspace();
     WorkspaceBackups *backups = ws->backups();
     const QString note = u"Kopia żółwia.md"_s;
@@ -5753,8 +5834,8 @@ void checkBackups(QQuickWindow *window, AppController *app, const Check &check)
             if (!up->inherits("QQuickFlickable"))
                 continue;
             const qreal y = item->mapToItem(up->property("contentItem").value<QQuickItem *>(), QPointF(0, 0)).y();
-            const qreal maxY = qMax<qreal>(0, up->property("contentHeight").toReal() - up->height());
-            up->setProperty("contentY", qBound<qreal>(0, y - up->height() / 3, maxY));
+            const qreal maxY = std::max<qreal>(0, up->property("contentHeight").toReal() - up->height());
+            up->setProperty("contentY", std::clamp<qreal>(y - up->height() / 3, 0, maxY));
             break;
         }
         settle(100);
@@ -5782,8 +5863,7 @@ void checkBackups(QQuickWindow *window, AppController *app, const Check &check)
               return row != nullptr;
           }),
           "the backup has a row");
-    QQuickItem *restore =
-            row ? findShown(row, [](QQuickItem *i) { return i->objectName() == u"backupRestore"; }) : nullptr;
+    QQuickItem *restore = row ? findShownNamed(row, u"backupRestore"_s) : nullptr;
     check(restore != nullptr, "the row has “Restore”");
     if (!restore)
         return;
@@ -5794,12 +5874,7 @@ void checkBackups(QQuickWindow *window, AppController *app, const Check &check)
     tapOrClick(window, pointIn(restore), touch);
     const QString accept = QCoreApplication::translate("ShellBackupSettings", "Restore");
     QQuickItem *acceptButton = nullptr;
-    check(waitFor([&] {
-              acceptButton = findShown(window->contentItem(), [&](QQuickItem *item) {
-                  return isA(item, "BButton") && item->property("text").toString() == accept;
-              });
-              return acceptButton != nullptr;
-          }),
+    check(waitFor([&] { return (acceptButton = findButton(window->contentItem(), accept)) != nullptr; }),
           "a restore asks first, with its counts");
     check(ws->readFile(note) == u"- zmieniona po kopii\n", "nothing is restored before the confirmation");
     settle(250);
@@ -5815,20 +5890,14 @@ void checkBackups(QQuickWindow *window, AppController *app, const Check &check)
     settle(300);
     const qsizetype listed = backups->backups().size();
     row = shownNamed(window->contentItem(), u"backupRow"_s);
-    QQuickItem *remove =
-            row ? findShown(row, [](QQuickItem *i) { return i->objectName() == u"backupDelete"; }) : nullptr;
+    QQuickItem *remove = row ? findShownNamed(row, u"backupDelete"_s) : nullptr;
     check(remove != nullptr, "the row has “Delete”");
     if (remove) {
         reveal(remove);
         tapOrClick(window, pointIn(remove), touch);
         const QString confirm = QCoreApplication::translate("ShellBackupSettings", "Delete");
         QQuickItem *confirmButton = nullptr;
-        check(waitFor([&] {
-                  confirmButton = findShown(window->contentItem(), [&](QQuickItem *item) {
-                      return isA(item, "BButton") && item->property("text").toString() == confirm;
-                  });
-                  return confirmButton != nullptr;
-              }),
+        check(waitFor([&] { return (confirmButton = findButton(window->contentItem(), confirm)) != nullptr; }),
               "deleting a backup asks first");
         check(backups->backups().size() == listed, "nothing is deleted before the confirmation");
         settle(250);
@@ -5843,9 +5912,13 @@ void checkBackups(QQuickWindow *window, AppController *app, const Check &check)
     app->goHome();
 }
 
+/// "Share → Brulion" (docs/UI.md "Share"): the share dialog with real input — a shared text goes
+/// to today's journal as one block, a shared .md file becomes a new page with its bytes kept (its
+/// copy removed), a file opened with Brulion from outside the notebook is saved as a page and left
+/// where it was; Escape drops a share and writes nothing.
 void checkShare(QQuickWindow *window, AppController *app, const Check &check)
 {
-    const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
+    const bool touch = touchRun();
     QObject *dialog = window->findChild<QObject *>(u"shellShare"_s);
     if (!dialog) {
         check(false, "the share dialog exists");
@@ -5857,13 +5930,10 @@ void checkShare(QQuickWindow *window, AppController *app, const Check &check)
     const QString saveText = QCoreApplication::translate("ShellShareDialog", "Save");
     const auto save = [&] {
         // The dialog's own "Save" (its footer): a view behind it may have a button of that name.
-        auto *footer = qvariant_cast<QQuickItem *>(dialog->property("footer"));
-        QQuickItem *button = !footer ? nullptr : findShown(footer, [&](QQuickItem *item) {
-            return isA(item, "BButton") && item->property("text").toString() == saveText;
-        });
+        QQuickItem *button = findButton(qvariant_cast<QQuickItem *>(dialog->property("footer")), saveText);
         if (!button || !button->isEnabled())
             return false;
-        tapOrClick(window, button->mapToScene(QPointF(button->width() / 2, button->height() / 2)), touch);
+        tapOrClick(window, pointIn(button), touch);
         return true;
     };
     const auto opened = [&] { return waitFor([&] { return dialog->property("opened").toBool(); }); };
@@ -5886,22 +5956,18 @@ void checkShare(QQuickWindow *window, AppController *app, const Check &check)
     // A .md file: a new page named after it, its bytes kept, its copy removed.
     const QString dir = app->shareInboxPath() + u"/1792000000000-1"_s;
     const QByteArray bytes = "# Łódź\r\n\r\n- [ ] dworzec\r\n";
+    const QString sharedPath = dir + u"/0/Łódź.md"_s;
     QDir().mkpath(dir + u"/0"_s);
-    QFile file(dir + u"/0/Łódź.md"_s);
-    const bool written = file.open(QIODevice::WriteOnly) && file.write(bytes) == bytes.size();
-    file.close();
-    app->receiveShare(
-            {{u"dir"_s, dir},
-             {u"files"_s, QVariantList{QVariantMap{{u"path"_s, file.fileName()}, {u"name"_s, u"Łódź.md"_s}}}}});
+    const bool written = writeBytes(sharedPath, bytes);
+    app->receiveShare({{u"dir"_s, dir},
+                       {u"files"_s, QVariantList{QVariantMap{{u"path"_s, sharedPath}, {u"name"_s, u"Łódź.md"_s}}}}});
     check(written && opened(), "a shared file opens the share dialog");
     QQuickItem *title = shownNamed(window->contentItem(), u"shareTitle"_s);
     check(title && title->property("text").toString() == u"Łódź"_s, "a new page titled after the file is offered");
     check(save() && closed(), "“Zapisz” saves the page");
     const QString page = app->currentRoute().value(u"path"_s).toString();
     check(page.endsWith(u"Łódź.md"_s), "the new page opens");
-    QFile saved(QDir(ws->rootPath()).filePath(page));
-    check(saved.open(QIODevice::ReadOnly) && saved.readAll() == bytes, "its bytes are the file's (CRLF too)");
-    saved.close();
+    check(fileBytes(QDir(ws->rootPath()).filePath(page)) == bytes, "its bytes are the file's (CRLF too)");
     check(!QFileInfo::exists(dir), "the shared file's copy is removed");
     if (page.endsWith(u"Łódź.md"_s))
         ws->deletePage(page);
@@ -5912,10 +5978,7 @@ void checkShare(QQuickWindow *window, AppController *app, const Check &check)
     QTemporaryDir outside;
     const QString openedPath = outside.filePath(u"Przepis na pierogi.md"_s);
     const QByteArray openedBytes = "# Pierogi\r\n\r\n- mąka\r\n- ser\r\n";
-    QFile openedFile(openedPath);
-    const bool openedWritten = outside.isValid() && openedFile.open(QIODevice::WriteOnly)
-                               && openedFile.write(openedBytes) == openedBytes.size();
-    openedFile.close();
+    const bool openedWritten = outside.isValid() && writeBytes(openedPath, openedBytes);
     app->receiveShare(
             notebook::sharedContentToJson(notebook::openedFilesShare({openedPath}, QString())).toVariantMap());
     check(openedWritten && opened(), "a file opened with Brulion opens the share dialog");
@@ -5928,13 +5991,8 @@ void checkShare(QQuickWindow *window, AppController *app, const Check &check)
     check(save() && closed(), "“Zapisz” saves the opened file as a page");
     const QString openedPage = app->currentRoute().value(u"path"_s).toString();
     check(openedPage.endsWith(u"Przepis na pierogi.md"_s), "the opened file's page opens");
-    QFile openedCopy(QDir(ws->rootPath()).filePath(openedPage));
-    check(openedCopy.open(QIODevice::ReadOnly) && openedCopy.readAll() == openedBytes, "the page has the file's bytes");
-    openedCopy.close();
-    openedFile.setFileName(openedPath);
-    check(openedFile.open(QIODevice::ReadOnly) && openedFile.readAll() == openedBytes,
-          "the opened file stays where it was, unchanged");
-    openedFile.close();
+    check(fileBytes(QDir(ws->rootPath()).filePath(openedPage)) == openedBytes, "the page has the file's bytes");
+    check(fileBytes(openedPath) == openedBytes, "the opened file stays where it was, unchanged");
     if (openedPage.endsWith(u"Przepis na pierogi.md"_s))
         ws->deletePage(openedPage);
 
@@ -5945,26 +6003,19 @@ void checkShare(QQuickWindow *window, AppController *app, const Check &check)
     check(closed() && app->pendingShare().isEmpty() && !ws->readFile(today).contains(u"Nie zapisuj mnie"_s),
           "Escape drops the share and writes nothing");
     app->goHome();
-    if (QQuickItem *toasts = findShown(window->contentItem(), [](QQuickItem *item) { return isA(item, "BToastHost"); }))
-        QMetaObject::invokeMethod(toasts, "clear");
+    clearToasts(window);
 }
 
-/// The tray calendar (ShellTrayCalendar, AppController::showTrayCalendar; desktop): a frameless
-/// tool window without an owner, placed inside the work area next to the icon; today's date, a
-/// day's tasks and reminders from the sample notebook; Escape, a second click on the icon and the
-/// activation going elsewhere hide it, a click right after such a hide keeps it closed; "Open
-/// journal" hides it and shows that day in the main window; with the main window hidden in the
-/// tray, opening and closing it (also Alt+F4's close) never ends the app.
 /// The page windows shown (ShellPageWindow, docs/UI.md "Tabs, split view and windows").
 QList<QQuickWindow *> pageWindows()
 {
     QList<QQuickWindow *> out;
     const QList<QWindow *> windows = QGuiApplication::topLevelWindows();
     for (QWindow *w : windows) {
-        if (w->objectName() == u"shellPageWindow" && w->isVisible())
-            out.append(qobject_cast<QQuickWindow *>(w));
+        auto *quick = qobject_cast<QQuickWindow *>(w);
+        if (quick && w->objectName() == u"shellPageWindow" && w->isVisible())
+            out.append(quick);
     }
-    out.removeAll(nullptr);
     return out;
 }
 
@@ -5978,7 +6029,7 @@ QList<QQuickWindow *> pageWindows()
 void checkTabs(QQuickWindow *window, AppController *app, const Check &check)
 {
     const bool narrow = window->width() < 900;
-    const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
+    const bool touch = touchRun();
     const auto key = [window](int k, Qt::KeyboardModifiers modifiers = Qt::ControlModifier) {
         uidriver::deliverKey(window, {k, modifiers, {}}, uidriver::KeyDelivery::System);
         settle(120);
@@ -6028,11 +6079,7 @@ void checkTabs(QQuickWindow *window, AppController *app, const Check &check)
         check(waitFor([&] { return openMenus(window) == 1; }), "the tab switcher opens its menu");
         QList<QQuickItem *> entries;
         waitFor([&] {
-            entries.clear();
-            for (QQuickItem *item : uidriver::allItems(window->contentItem())) {
-                if (item->objectName() == u"tabSwitcherEntry" && shown(item))
-                    entries.append(item);
-            }
+            entries = shownItemsNamed(window->contentItem(), u"tabSwitcherEntry"_s);
             return entries.size() == 2;
         });
         check(entries.size() == 2, "the tab switcher lists both tabs");
@@ -6068,8 +6115,7 @@ void checkTabs(QQuickWindow *window, AppController *app, const Check &check)
     }
 
     // ---- Desktops: the shortcuts.
-    window->requestActivate();
-    waitFor([window] { return window->isActive(); }, 2000);
+    activateWindow(window);
     const int first = app->focusedTab();
     key(Qt::Key_T);
     check(app->tabCount() == 2 && app->focusedTab() != first && app->atHome() && !app->canGoBack(),
@@ -6119,7 +6165,6 @@ void checkTabs(QQuickWindow *window, AppController *app, const Check &check)
         mouseClick(window, pointIn(row), Qt::LeftButton, Qt::ControlModifier);
     check(waitFor([&] { return app->tabCount() == 3 && path() == renovation; }),
           "a Ctrl+click on a page in the sidebar opens it in a new tab");
-    const int third = app->focusedTab();
 
     // ---- A link in the editor: a middle click, and the link menu's "Open in new tab".
     app->selectTab(second);
@@ -6133,7 +6178,8 @@ void checkTabs(QQuickWindow *window, AppController *app, const Check &check)
             page = found.value(0);
             return page && page->property("loaded").toBool();
         });
-        for (QQuickItem *e : window->findChildren<QQuickItem *>(u"pageEditor"_s)) {
+        const QList<QQuickItem *> editors = window->findChildren<QQuickItem *>(u"pageEditor"_s);
+        for (QQuickItem *e : editors) {
             if (page && e->property("controller").value<QObject *>() == page)
                 editor = e;
         }
@@ -6142,12 +6188,10 @@ void checkTabs(QQuickWindow *window, AppController *app, const Check &check)
     const auto linkOnScreen = [&]() -> QPointF {
         if (!guideEditor())
             return {-1, -1};
-        const QStringList lines = app->workspace()->readFile(guide).split(u'\n');
         int linkRow = -1;
-        for (qsizetype i = 0; i < lines.size() && linkRow < 0; ++i) {
-            if (lines.at(i).startsWith(u"- Link do strony:"_s))
-                QMetaObject::invokeMethod(page, "rowOfLine", qReturnArg(linkRow), int(i));
-        }
+        if (const qsizetype line = firstLineStarting(app->workspace()->readFile(guide), u"- Link do strony:"_s);
+            line >= 0)
+            QMetaObject::invokeMethod(page, "rowOfLine", qReturnArg(linkRow), int(line));
         auto *list = editor->property("listView").value<QQuickItem *>();
         if (!list || linkRow < 0)
             return {-1, -1};
@@ -6208,11 +6252,7 @@ void checkTabs(QQuickWindow *window, AppController *app, const Check &check)
     app->selectTab(second);
     settle(200);
     const auto barTabs = [&] {
-        QList<QQuickItem *> out;
-        for (QQuickItem *item : uidriver::allItems(window->contentItem())) {
-            if (item->objectName() == u"shellTab" && shown(item))
-                out.append(item);
-        }
+        QList<QQuickItem *> out = shownItemsNamed(window->contentItem(), u"shellTab"_s);
         std::ranges::sort(out, [](QQuickItem *a, QQuickItem *b) {
             return a->mapToScene(QPointF()).x() < b->mapToScene(QPointF()).x();
         });
@@ -6222,7 +6262,10 @@ void checkTabs(QQuickWindow *window, AppController *app, const Check &check)
     check(waitFor([&] { return (tabItems = barTabs()).size() == 3; }), "the bar shows the three tabs");
     if (tabItems.size() == 3) {
         mouseDrag(window, pointIn(tabItems.first()), pointIn(tabItems.last(), 0.7), 100);
-        check(waitFor([&] { return app->tabs().last().toMap().value(u"id"_s).toInt() == first; }),
+        check(waitFor([&] {
+                  const QVariantList tabs = app->tabs();
+                  return !tabs.isEmpty() && tabs.constLast().toMap().value(u"id"_s).toInt() == first;
+              }),
               "a tab dragged to the end of the bar moves there");
     }
 
@@ -6307,8 +6350,7 @@ void checkTabs(QQuickWindow *window, AppController *app, const Check &check)
     app->closeTab(windowTab);
     check(waitFor([&] { return pageWindows().isEmpty(); }) && app->windowTabs().isEmpty(),
           "closing the window's tab closes the window");
-    window->requestActivate();
-    waitFor([window] { return window->isActive(); }, 2000);
+    activateWindow(window);
 
     // A view's tab says what it shows: the event log's "Event log" (not "Brulion") with the
     // palette's icon of the log (not a page's).
@@ -6330,11 +6372,11 @@ void checkTabs(QQuickWindow *window, AppController *app, const Check &check)
     // One tab again.
     app->closeOtherTabs(app->focusedTab());
     check(waitFor([&] { return app->tabCount() == 1 && !named(u"shellTabBar"_s); }), "one tab left: the bar goes");
-    Q_UNUSED(third);
     app->goHome();
     closeMenus(window);
 }
 
+/// The tray calendar's window (nullptr when there is none).
 QQuickWindow *trayCalendarWindow()
 {
     const QList<QWindow *> windows = QGuiApplication::topLevelWindows();
@@ -6345,6 +6387,12 @@ QQuickWindow *trayCalendarWindow()
     return nullptr;
 }
 
+/// The tray calendar (ShellTrayCalendar, AppController::showTrayCalendar; desktop): a frameless
+/// tool window without an owner, placed inside the work area next to the icon; today's date, a
+/// day's tasks and reminders from the sample notebook; Escape, a second click on the icon and the
+/// activation going elsewhere hide it, a click right after such a hide keeps it closed; "Open
+/// journal" hides it and shows that day in the main window; with the main window hidden in the
+/// tray, opening and closing it (also Alt+F4's close) never ends the app.
 void checkTrayCalendar(QQuickWindow *window, AppController *app, const Check &check)
 {
     QScreen *screen = window->screen() ? window->screen() : QGuiApplication::primaryScreen();
@@ -6376,18 +6424,19 @@ void checkTrayCalendar(QQuickWindow *window, AppController *app, const Check &ch
     QQuickItem *month = shownNamed(popup->contentItem(), u"trayCalendarMonth"_s);
     const QString tomorrow = app->today(1);
     QStringList titles;
-    for (const QVariant &v : app->workspace()->calendarItems(tomorrow, tomorrow)) {
-        if (v.toMap().value(u"kind"_s).toString() != u"journal")
-            titles.append(v.toMap().value(u"title"_s).toString());
+    const QVariantList dayItems = app->workspace()->calendarItems(tomorrow, tomorrow);
+    for (const QVariant &v : dayItems) {
+        const QVariantMap entry = v.toMap();
+        if (entry.value(u"kind"_s).toString() != u"journal")
+            titles.append(entry.value(u"title"_s).toString());
     }
     if (month)
         month->setProperty("selectedDate", tomorrow);
     const auto listed = [&](const QString &title) {
-        for (QQuickItem *item : uidriver::allItems(popup->contentItem())) {
-            if (isA(item, "BListItem") && item->isVisible() && item->property("text").toString() == title)
-                return true;
-        }
-        return false;
+        const QList<QQuickItem *> items = uidriver::allItems(popup->contentItem());
+        return std::ranges::any_of(items, [&title](QQuickItem *item) {
+            return isA(item, "BListItem") && item->isVisible() && item->property("text").toString() == title;
+        });
     };
     check(month && !titles.isEmpty() && waitFor([&] { return std::ranges::all_of(titles, listed); }),
           "a day's tasks and reminders are listed");
@@ -6471,13 +6520,11 @@ void checkTrayCalendar(QQuickWindow *window, AppController *app, const Check &ch
           }),
           "“Quick capture…” brings the window up with quick capture");
     if (quickCapture && quickCapture->property("visible").toBool()) {
-        window->requestActivate();
-        waitFor([window] { return window->isActive(); }, 2000);
+        activateWindow(window);
         sendKey(window, Qt::Key_Escape);
         waitFor([&] { return !quickCapture->property("visible").toBool(); });
     }
-    window->requestActivate();
-    waitFor([window] { return window->isActive(); }, 2000);
+    activateWindow(window);
     app->goHome();
 }
 
@@ -6540,12 +6587,10 @@ void checkKeyboard(QQmlApplicationEngine *engine, QQuickWindow *window, AppContr
     check(captureField && captureField->inherits("QQuickTextEdit"), "quick capture's field has the keys");
     composeWord(captureField, u"Żółw"_s);
     const QString addText = QCoreApplication::translate("ShellQuickCapture", "Add");
-    QQuickItem *add = findShown(window->contentItem(), [&](QQuickItem *item) {
-        return isA(item, "BButton") && item->property("text").toString() == addText;
-    });
+    QQuickItem *add = findButton(window->contentItem(), addText);
     check(add && add->isEnabled(), "a word still being composed enables “Dodaj”");
     if (add && add->isEnabled())
-        tapOrClick(window, add->mapToScene(QPointF(add->width() / 2, add->height() / 2)), true);
+        tapOrClick(window, pointIn(add), true);
     else
         sendKey(window, Qt::Key_Escape);
     check(waitFor([&] { return !capture->property("visible").toBool(); })
@@ -6554,8 +6599,7 @@ void checkKeyboard(QQmlApplicationEngine *engine, QQuickWindow *window, AppContr
     if (ws->readFile(today) != journal)
         ws->writeFile(today, journal);
     // (Its toast with "Open" stays 7 s over the bottom rows of the views checked next.)
-    if (QQuickItem *toasts = findShown(window->contentItem(), [](QQuickItem *item) { return isA(item, "BToastHost"); }))
-        QMetaObject::invokeMethod(toasts, "clear");
+    clearToasts(window);
 
     insets->setProperty("simulated", 0);
     check(waitFor([&] {
@@ -6566,7 +6610,7 @@ void checkKeyboard(QQmlApplicationEngine *engine, QQuickWindow *window, AppContr
     // Editing with the keyboard hidden by the system: the bottom navigation is back, the toolbar
     // docks right on it.
     const QString guide = u"Witaj w Brulionie.md"_s;
-    QQuickItem *shellItem = findShown(window->contentItem(), [](QQuickItem *item) { return isA(item, "AppShell"); });
+    QQuickItem *shellItem = appShell(window);
     // Quick capture's + on the top bar (it was the bottom navigation's "+ Note" up to 0.13).
     QQuickItem *captureButton = window->findChild<QQuickItem *>(u"shellCaptureButton"_s);
     const auto captureOnTop = [&] {
@@ -6579,19 +6623,10 @@ void checkKeyboard(QQmlApplicationEngine *engine, QQuickWindow *window, AppContr
     QQuickItem *editor = nullptr;
     QObject *page = nullptr;
     const auto openGuide = [&] {
-        editor = nullptr;
-        page = nullptr;
         app->openPage(guide);
-        return waitFor([&] {
-            for (QQuickItem *e : window->findChildren<QQuickItem *>(u"pageEditor"_s)) {
-                auto *c = e->property("controller").value<QObject *>();
-                if (c && c->property("path").toString() == guide && c->property("loaded").toBool() && e->isVisible()) {
-                    editor = e;
-                    page = c;
-                }
-            }
-            return editor != nullptr;
-        });
+        editor = waitLoadedEditor(window->contentItem(), u"pageEditor"_s, guide);
+        page = controllerOf(editor);
+        return editor != nullptr;
     };
     const auto editLastRow = [&] {
         int row = -1;
@@ -6620,8 +6655,7 @@ void checkKeyboard(QQmlApplicationEngine *engine, QQuickWindow *window, AppContr
                      slotBottom(), navTop(), window->height());
         // A toast while typing ("Scalono…", a sync): at the top, never over the line being
         // written (the caret is kept right above the toolbar, where the toasts used to be).
-        if (QObject *toasts = window->findChild<QObject *>(u"toastHost"_s))
-            QMetaObject::invokeMethod(toasts, "clear");
+        clearToasts(window);
         app->toast(u"Scalono zmiany wprowadzone na innym urządzeniu"_s, u"info"_s);
         QQuickItem *typed = window->activeFocusItem();
         const bool caretKnown = typed && typed->inherits("QQuickTextEdit");
@@ -6634,20 +6668,15 @@ void checkKeyboard(QQmlApplicationEngine *engine, QQuickWindow *window, AppContr
                           typingToast->mapRectToScene(QRectF(0, 0, typingToast->width(), typingToast->height()));
                   const QRectF caret =
                           caretKnown ? typed->mapRectToScene(typed->property("cursorRectangle").toRectF()) : QRectF();
-                  return box.bottom() < window->height() / 4 && (!caretKnown || !box.intersects(caret));
+                  return box.bottom() < window->height() / 4.0 && (!caretKnown || !box.intersects(caret));
               }),
               "a toast while typing shows at the top, not over the line being written");
-        if (QObject *toasts = window->findChild<QObject *>(u"toastHost"_s))
-            QMetaObject::invokeMethod(toasts, "clear");
+        clearToasts(window);
         // A system navigation bar under the window's bottom edge (a phone's SafeArea margin, here
         // added to the shell's): the bottom navigation pads itself over it, the toolbar stays on
         // the navigation.
         const auto setSafeBottom = [&](int px) {
-            QQmlExpression set(qmlContext(shellItem), shellItem, u"SafeArea.additionalMargins.bottom = %1"_s.arg(px));
-            set.evaluate();
-            if (set.hasError())
-                std::fprintf(stderr, "selftest: %s\n", qPrintable(set.error().toString()));
-            return !set.hasError();
+            return evaluateIn(shellItem, u"SafeArea.additionalMargins.bottom = %1"_s.arg(px));
         };
         const qreal navHeight = nav->height();
         if (slot && setSafeBottom(48)) {
@@ -6768,7 +6797,7 @@ void checkKeyboard(QQmlApplicationEngine *engine, QQuickWindow *window, AppContr
             check(waitFor([&] { return editor->property("toolbarVisible").toBool() && navAtBottom() && captureOnTop(); }),
                   "editing again, the keyboard hidden: + is on the top bar");
             if (captureButton)
-                tapOrClick(window, pointIn(captureButton), QCoreApplication::arguments().contains(u"--touch"_s));
+                tapOrClick(window, pointIn(captureButton), touchRun());
             check(waitFor([&] {
                       return capture->property("opened").toBool() && !editor->property("toolbarVisible").toBool()
                              && page->property("editingRow").toInt() < 0;
@@ -6791,12 +6820,10 @@ void checkKeyboard(QQmlApplicationEngine *engine, QQuickWindow *window, AppContr
               }),
               "editing again, the keyboard hidden: Kalendarz is on the bottom navigation");
         if (calendarTab)
-            tapOrClick(window, pointIn(calendarTab), QCoreApplication::arguments().contains(u"--touch"_s));
+            tapOrClick(window, pointIn(calendarTab), touchRun());
         check(waitFor([&] {
                   return app->currentRoute().value(u"view"_s).toString() == u"calendar"
-                         && !findShown(window->contentItem(),
-                                       [](QQuickItem *item) { return item->objectName() == u"editToolbarSlot"; })
-                         && navAtBottom();
+                         && !findShownNamed(window->contentItem(), u"editToolbarSlot"_s) && navAtBottom();
               }),
               "a tap on Kalendarz while editing opens the calendar: the editing and its toolbar end");
         check(app->workspace()->readFile(guide) == before, "the guide is left as it was");
@@ -6815,8 +6842,8 @@ void checkKeyboard(QQmlApplicationEngine *engine, QQuickWindow *window, AppContr
         settle(300);
         // The field low on the screen, where the keyboard will come.
         const qreal low = window->height() - 100 - field->height();
-        flick->setProperty("contentY", qMax<qreal>(0, flick->property("contentY").toReal()
-                                                              + field->mapToScene(QPointF(0, 0)).y() - low));
+        const qreal wanted = flick->property("contentY").toReal() + field->mapToScene(QPointF(0, 0)).y() - low;
+        flick->setProperty("contentY", std::max<qreal>(0, wanted));
         settle(100);
         const qreal before = field->mapToScene(QPointF(0, field->height())).y();
         insets->setProperty("simulated", keyboard);
@@ -6889,7 +6916,7 @@ void checkKeyboard(QQmlApplicationEngine *engine, QQuickWindow *window, AppContr
 ///     put back at the end.
 void checkAppearance(QQmlApplicationEngine *engine, QQuickWindow *window, AppController *app, const Check &check)
 {
-    const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
+    const bool touch = touchRun();
     const bool narrow = window->width() < 900;
     AppSettings *settings = app->settings();
     auto *theme = engine->singletonInstance<QObject *>("Brulion", "Theme");
@@ -6930,18 +6957,13 @@ void checkAppearance(QQmlApplicationEngine *engine, QQuickWindow *window, AppCon
     // it; 360 px: each row decides alone, either shape. No option's label is cut, every target
     // is 44 px on touch UIs.
     {
-        const auto rowOf = [](QQuickItem *item) {
-            while (item && !isA(item, "ShellSettingRow"))
-                item = item->parentItem();
-            return item;
-        };
         const auto sceneRect = [](QQuickItem *item) {
             return item->mapRectToScene(QRectF(0, 0, item->width(), item->height()));
         };
         // "" when the control's row has the shape asked for (`stacked`: -1 either, 0 beside, 1 under).
         const auto shapeProblem = [&](const QString &name, int stacked) -> QString {
             QQuickItem *control = shownNamed(window->contentItem(), name);
-            QQuickItem *settingRow = rowOf(control);
+            QQuickItem *settingRow = enclosingOfType(control, "ShellSettingRow");
             QQuickItem *text = settingRow ? settingRow->childItems().value(0) : nullptr;
             if (!control || !text || !shown(control))
                 return name + u": not shown"_s;
@@ -7041,8 +7063,7 @@ void checkAppearance(QQmlApplicationEngine *engine, QQuickWindow *window, AppCon
     if (narrow && drawer)
         QMetaObject::invokeMethod(drawer, "open");
     check(shownItem(u"sidebarNav_calendar"_s) != nullptr
-                  && !findShown(window->contentItem(),
-                                [](QQuickItem *i) { return i->objectName() == u"sidebarNav_graph"; }),
+                  && !findShownNamed(window->contentItem(), u"sidebarNav_graph"_s),
           "the hidden entry is gone from the sidebar, the others stay");
     if (narrow && drawer) {
         QMetaObject::invokeMethod(drawer, "close");
@@ -7051,8 +7072,8 @@ void checkAppearance(QQmlApplicationEngine *engine, QQuickWindow *window, AppCon
     {
         CommandModel commands(app);
         const QVariantList all = commands.commands();
-        check(std::any_of(all.cbegin(), all.cend(),
-                          [](const QVariant &c) { return c.toMap().value(u"id"_s).toString() == u"go.graph"; }),
+        check(std::ranges::any_of(all,
+                                  [](const QVariant &c) { return c.toMap().value(u"id"_s).toString() == u"go.graph"; }),
               "a view hidden in the sidebar stays in the command palette");
     }
 
@@ -7128,8 +7149,7 @@ void checkAppearance(QQmlApplicationEngine *engine, QQuickWindow *window, AppCon
     // Wide windows: the sidebar's button hides the page panel, the rail of views stays; the top
     // bar's search field opens the page switcher, ">" in it the command palette.
     if (!narrow) {
-        QQuickItem *shellItem =
-                findShown(window->contentItem(), [](QQuickItem *item) { return isA(item, "AppShell"); });
+        QQuickItem *shellItem = appShell(window);
         if (shellItem)
             QMetaObject::invokeMethod(shellItem, "toggleSidebar");
         check(shellItem && waitFor([&] { return !shownNamed(window->contentItem(), u"sidebarTree"_s); })
@@ -7167,8 +7187,7 @@ void checkAppearance(QQmlApplicationEngine *engine, QQuickWindow *window, AppCon
           "a view picked in a slot's menu takes the slot");
     if (narrow)
         check(shownItem(u"bottomNav_graph"_s) != nullptr
-                      && !findShown(window->contentItem(),
-                                    [](QQuickItem *i) { return i->objectName() == u"bottomNav_tasks"; }),
+                      && !findShownNamed(window->contentItem(), u"bottomNav_tasks"_s),
               "the phone's bottom bar shows the view picked");
     // The view already in the slot, picked again: its menu still shows it checked.
     closeMenus(window);
@@ -7240,12 +7259,8 @@ void checkAppearance(QQmlApplicationEngine *engine, QQuickWindow *window, AppCon
         activate(reset);
         const QString restoreText = QCoreApplication::translate("SettingsView", "Restore");
         QQuickItem *restoreButton = nullptr;
-        check(waitFor([&] {
-                  restoreButton = findShown(window->contentItem(), [&](QQuickItem *item) {
-                      return isA(item, "BButton") && item->property("text").toString() == restoreText;
-                  });
-                  return restoreButton != nullptr;
-              }) && settings->accentColor() == u"custom",
+        check(waitFor([&] { return (restoreButton = findButton(window->contentItem(), restoreText)) != nullptr; })
+                      && settings->accentColor() == u"custom",
               "\"Restore the default look…\" asks first (nothing restored yet)");
         settle(250);
         if (restoreButton)
@@ -7273,8 +7288,8 @@ void checkAppearance(QQmlApplicationEngine *engine, QQuickWindow *window, AppCon
         // The picker of the settings view shown (a window can hold more than one settings view).
         const auto openPicker = [window]() -> QObject * {
             const QList<QObject *> popups = uidriver::openPopups(window);
-            const auto it = std::find_if(popups.cbegin(), popups.cend(),
-                                         [](QObject *p) { return p->objectName() == u"fontPickerDialog"; });
+            const auto it =
+                    std::ranges::find_if(popups, [](QObject *p) { return p->objectName() == u"fontPickerDialog"; });
             return it != popups.cend() ? *it : nullptr;
         };
         QObject *fontPicker = nullptr;
@@ -7360,12 +7375,7 @@ void checkNamesWithMarkup(QQuickWindow *window, AppController *app, const Check 
     QObject *deleteDialog = window->findChild<QObject *>(u"shellDeleteDialog"_s);
     QQuickItem *subjectText = nullptr;
     check(deleteDialog && waitFor([&] { return deleteDialog->property("opened").toBool(); })
-                  && waitFor([&] {
-                         subjectText = findShown(window->contentItem(), [](QQuickItem *item) {
-                             return item->objectName() == u"confirmSubjectText"_s;
-                         });
-                         return subjectText != nullptr;
-                     })
+                  && (subjectText = waitNamed(window->contentItem(), u"confirmSubjectText"_s)) != nullptr
                   && subjectText->property("text").toString() == name
                   && subjectText->property("textFormat").toInt() == 0,
           "the trash confirmation shows a name with markup as written, in a frame of its own");
@@ -7383,7 +7393,7 @@ void checkLanguageFollows(QQuickWindow *window, AppController *app, const Check 
 {
     if (window->width() < 900)
         return;
-    QQuickItem *shellItem = findShown(window->contentItem(), [](QQuickItem *item) { return isA(item, "AppShell"); });
+    QQuickItem *shellItem = appShell(window);
     if (!shellItem) {
         check(false, "the shell is shown");
         return;
@@ -7479,6 +7489,789 @@ void checkViewsLetGo(QQuickWindow *window, AppController *app, const Check &chec
           "the views a route left are deleted with their editors");
 }
 
+/// Phones: a finger dragged over the source scrolls it (a TextEdit that selects by
+/// dragging kept the finger: the source never moved) and selects nothing; a tap still
+/// puts the cursor where it lands.
+void checkSourceTouch(QQuickWindow *window, QQuickItem *editor, const Check &check)
+{
+    QQuickItem *sourceView = nullptr;
+    QQuickItem *sourceEdit = nullptr;
+    check(waitFor([&] {
+              sourceView = findShown(editor, [](QQuickItem *item) { return isA(item, "SourceEditor"); });
+              // (The whole file: its middle lies far below the screen.)
+              const QList<QQuickItem *> edits =
+                      sourceView ? sourceView->findChildren<QQuickItem *>() : QList<QQuickItem *>();
+              const auto it = std::ranges::find_if(
+                      edits, [](QQuickItem *item) { return item->inherits("QQuickTextEdit") && item->isVisible(); });
+              sourceEdit = it != edits.cend() ? *it : nullptr;
+              return sourceEdit && sourceView->property("contentHeight").toReal() > sourceView->height() + 400;
+          }),
+          "the guide's Markdown source is longer than the screen");
+    if (sourceView && sourceEdit) {
+        const qreal before = sourceView->property("contentY").toReal();
+        touchDrag(window, pointIn(sourceView, 0.5, 0.7), QPointF(0, -300));
+        check(waitFor([&] { return sourceView->property("contentY").toReal() > before + 100; })
+                      && sourceEdit->property("selectedText").toString().isEmpty(),
+              "a finger dragged 300 px over the Markdown source scrolls it and selects nothing");
+        // (A tap on a moving list only stops it.)
+        waitFor([&] { return !sourceView->property("moving").toBool(); });
+        const int cursorBefore = sourceEdit->property("cursorPosition").toInt();
+        // The finger lands in the middle of the line at the view's centre, on a whole
+        // pixel as touch points are (a point near a line's edge would be rounded onto
+        // the next line). The text under it is read before the tap: the tap brings up
+        // the touch toolbar, and the view keeps the cursor above it.
+        QPointF at = pointIn(sourceView, 0.5, 0.5);
+        {
+            const QPointF centre = sourceEdit->mapFromScene(at);
+            int pos = -1;
+            QMetaObject::invokeMethod(sourceEdit, "positionAt", qReturnArg(pos), centre.x(), centre.y());
+            QRectF lineRect;
+            QMetaObject::invokeMethod(sourceEdit, "positionToRectangle", qReturnArg(lineRect), pos);
+            at = QPointF(sourceEdit->mapToScene(QPointF(centre.x(), lineRect.center().y())).toPoint());
+        }
+        const QPointF local = sourceEdit->mapFromScene(at);
+        int expected = -1;
+        QMetaObject::invokeMethod(sourceEdit, "positionAt", qReturnArg(expected), local.x(), local.y());
+        const qreal contentBefore = sourceView->property("contentY").toReal();
+        touchTap(window, at);
+        const int cursor = sourceEdit->property("cursorPosition").toInt();
+        std::fprintf(stderr,
+                     "selftest: the tap in the source at (%.1f, %.1f): cursor %d (before %d, under the "
+                     "finger %d), contentY %.1f -> %.1f\n",
+                     at.x(), at.y(), cursor, cursorBefore, expected, contentBefore,
+                     sourceView->property("contentY").toReal());
+        check(cursor != cursorBefore && qAbs(cursor - expected) <= 1
+                      && sourceEdit->property("selectedText").toString().isEmpty(),
+              "a tap in the Markdown source puts the cursor there");
+        // A long press selects the word under the finger (where the platform has
+        // selection handles, they take it on from there). First the view settles
+        // after the tap: the toolbar it brought up and the keyboard shrink the view and
+        // keep the cursor above them. A view that moved during the hold took the text
+        // away from under the finger (the press is cancelled), which on a slow runner
+        // (Windows) happened when only 150 ms of stillness were waited for.
+        qreal settledY = -1;
+        qreal settledHeight = -1;
+        QElapsedTimer stillFor;
+        waitFor([&] {
+            const qreal y = sourceView->property("contentY").toReal();
+            const qreal height = sourceView->height();
+            if (y != settledY || height != settledHeight || sourceView->property("moving").toBool()
+                || sourceView->property("keyboardSliding").toBool()) {
+                settledY = y;
+                settledHeight = height;
+                stillFor.start();
+                return false;
+            }
+            return stillFor.elapsed() >= 400;
+        });
+        const qreal scrolled = sourceView->property("contentY").toReal();
+        const auto textAt = [&](int from, int to) {
+            QString text;
+            QMetaObject::invokeMethod(sourceEdit, "getText", qReturnArg(text), from, to);
+            return text;
+        };
+        // A point inside a word, read where the finger lands: on a whole pixel (touch
+        // points are) in the middle of its line. A fractional point checked here was
+        // rounded onto the next line by the touch event when a line's edge lay between
+        // them (with the source scrolled to 504 px on Windows runners: the finger landed
+        // after the end of a short wrapped line, "listę.", where there is no word).
+        QPointF onWord = QPointF(pointIn(sourceView, 0.5, 0.4).toPoint());
+        for (int step = 0; step < 8; ++step) {
+            const QPointF p = QPointF(pointIn(sourceView, 0.35, 0.3 + step * 0.05).toPoint());
+            const QPointF l = sourceEdit->mapFromScene(p);
+            int pos = -1;
+            QMetaObject::invokeMethod(sourceEdit, "positionAt", qReturnArg(pos), l.x(), l.y());
+            QRectF lineRect;
+            QMetaObject::invokeMethod(sourceEdit, "positionToRectangle", qReturnArg(lineRect), pos);
+            const QPointF centred = QPointF(sourceEdit->mapToScene(QPointF(l.x(), lineRect.center().y())).toPoint());
+            const QPointF lc = sourceEdit->mapFromScene(centred);
+            QMetaObject::invokeMethod(sourceEdit, "positionAt", qReturnArg(pos), lc.x(), lc.y());
+            const QString around = textAt(pos - 1, pos + 1);
+            if (around.size() == 2 && around.at(0).isLetter() && around.at(1).isLetter()) {
+                onWord = centred;
+                break;
+            }
+        }
+        // The finger stays down until the long press has selected (or the handler let
+        // go of it), not for a fixed time. What happened is logged: when the handler's
+        // long press moved the cursor (onLongPressed puts it under the finger, then
+        // selects the word), the handler's state, the event loop's longest pause.
+        QObject *const handler = sourceView->findChild<QObject *>(u"sourceTouchTap"_s);
+        const bool pressedBefore = handler && handler->property("pressed").toBool();
+        int underFinger = -1;
+        {
+            const QPointF l = sourceEdit->mapFromScene(onWord);
+            QMetaObject::invokeMethod(sourceEdit, "positionAt", qReturnArg(underFinger), l.x(), l.y());
+        }
+        const int cursorBeforeHold = sourceEdit->property("cursorPosition").toInt();
+        QElapsedTimer held;
+        qint64 lastPoll = -1;
+        qint64 longestGap = 0;
+        qint64 selectedAfter = -1;
+        qint64 letGoAfter = -1;
+        qint64 cursorMovedAfter = -1;
+        qreal timeHeld = 0;
+        held.start();
+        uidriver::touchHoldNow(
+                window, onWord,
+                [&] {
+                    const qint64 now = held.elapsed();
+                    longestGap = qMax(longestGap, now - qMax<qint64>(lastPoll, 0));
+                    lastPoll = now;
+                    if (handler)
+                        timeHeld = qMax(timeHeld, handler->property("timeHeld").toReal());
+                    if (cursorMovedAfter < 0 && sourceEdit->property("cursorPosition").toInt() != cursorBeforeHold)
+                        cursorMovedAfter = now;
+                    if (!sourceEdit->property("selectedText").toString().isEmpty()) {
+                        selectedAfter = now;
+                        return true;
+                    }
+                    if (handler && !handler->property("pressed").toBool()) {
+                        letGoAfter = now;
+                        return true;
+                    }
+                    return false;
+                },
+                10000);
+        const QString word = sourceEdit->property("selectedText").toString();
+        std::fprintf(stderr,
+                     "selftest: a long press in the source at (%.1f, %.1f) selected \"%s\" after %lld ms "
+                     "(handler %s, pressed before %d, held %.2f s by its count, let go after %lld ms; cursor "
+                     "%d -> %d after %lld ms, under the finger %d; the event loop's longest pause %lld ms), "
+                     "contentY %.1f -> %.1f, view height %.1f -> %.1f\n",
+                     onWord.x(), onWord.y(), qPrintable(word), qlonglong(selectedAfter), handler ? "found" : "missing",
+                     int(pressedBefore), timeHeld, qlonglong(letGoAfter), cursorBeforeHold,
+                     sourceEdit->property("cursorPosition").toInt(), qlonglong(cursorMovedAfter), underFinger,
+                     qlonglong(longestGap), scrolled, sourceView->property("contentY").toReal(), settledHeight,
+                     sourceView->height());
+        check(!word.isEmpty() && !word.contains(u' ') && !word.contains(u'\n')
+                      && qAbs(sourceView->property("contentY").toReal() - scrolled) < 1,
+              "a long press in the Markdown source selects the word under the finger");
+        QMetaObject::invokeMethod(sourceEdit, "deselect");
+    }
+}
+
+/// The note mode: the guide is a document; the header's toggle (a real click or tap; on
+/// a small header — a phone — the page menu's item instead: the toggle is not among the
+/// page actions there) makes it an outline, the "Toggle note mode" command a document
+/// again — each switch rewrites only the `brulion:` line of the file.
+void checkNoteMode(QQuickWindow *window, AppController *app, const Check &check, QObject *page, QQuickItem *editor,
+                   const QString &guide)
+{
+    const bool touch = touchRun();
+    QMetaObject::invokeMethod(page, "stopEditing");
+    if (auto *list = editor->property("listView").value<QQuickItem *>())
+        QMetaObject::invokeMethod(list, "positionViewAtBeginning");
+    settle(300);
+    QQuickItem *toggle = nullptr;
+    const QList<QQuickItem *> toggles = window->findChildren<QQuickItem *>(u"noteModeToggle"_s);
+    for (QQuickItem *t : toggles) {
+        if (t->isVisible() && editor->isAncestorOf(t))
+            toggle = t;
+    }
+    QQuickItem *pageHeader = findShown(window->contentItem(), [&](QQuickItem *item) {
+        return isA(item, "ContentPageHeader") && item->property("path").toString() == guide;
+    });
+    const bool smallHeader = pageHeader && pageHeader->property("small").toBool();
+    const QString before = app->workspace()->readFile(guide);
+    const auto withKey = [&before](const QString &mode) {
+        return QString(before).replace(u"\nbrulion: document\n"_s, u"\nbrulion: "_s + mode + u'\n');
+    };
+    check(page->property("mode").toString() == u"document" && pageHeader != nullptr
+                  && (smallHeader ? toggle == nullptr : toggle != nullptr),
+          smallHeader ? "the guide is a document; a small header leaves the mode toggle to the page menu"
+                      : "the guide is a document with a mode toggle in its header");
+    if (smallHeader) {
+        auto *menuButton = pageHeader->property("menuAnchor").value<QQuickItem *>();
+        if (menuButton)
+            tapOrClick(window, pointIn(menuButton), touch);
+        QQuickItem *modeItem = nullptr;
+        check(waitFor([&] {
+                  return (modeItem = findShownNamed(window->contentItem(), u"pageMenuNoteMode"_s)) != nullptr;
+              }),
+              "the page menu offers the note mode");
+        if (modeItem) {
+            tapOrClick(window, pointIn(modeItem), touch);
+            check(waitFor([&] { return page->property("mode").toString() == u"outline"; })
+                          && app->workspace()->readFile(guide) == withKey(u"outline"_s),
+                  "the page menu's item switches to an outline, writing only the mode");
+        } else {
+            closeMenus(window);
+        }
+    } else if (toggle) {
+        tapOrClick(window, toggle->mapToScene(QPointF(toggle->width() / 2, toggle->height() / 2)), touch);
+        check(waitFor([&] { return page->property("mode").toString() == u"outline"; })
+                      && app->workspace()->readFile(guide) == withKey(u"outline"_s),
+              "the header's toggle switches to an outline, writing only the mode");
+    }
+    app->requestUiAction(u"toggleNoteMode"_s);
+    check(waitFor([&] { return page->property("mode").toString() == u"document"; })
+                  && app->workspace()->readFile(guide) == before,
+          "the \"Toggle note mode\" command switches back");
+
+    // The top bar's More menu: its Mode switch shows the note's mode and changes it —
+    // Outline (only the mode written), Source (the Markdown source), Document again.
+    const auto openMore = [&] {
+        closeMenus(window);
+        QQuickItem *button = topBarMoreButton(window);
+        if (button)
+            tapOrClick(window, pointIn(button), touch);
+        QQuickItem *mode = waitNamed(window->contentItem(), u"menuNoteMode"_s);
+        settle(150); // the menu's opening transition
+        return mode;
+    };
+    const auto segment = [&](QQuickItem *mode, const char *text) {
+        const QString wanted = QCoreApplication::translate("ShellTopBar", text);
+        return mode ? findShown(mode,
+                                [&](QQuickItem *item) {
+                                    return item->inherits("QQuickAbstractButton")
+                                           && item->property("text").toString() == wanted;
+                                })
+                    : nullptr;
+    };
+    QQuickItem *mode = openMore();
+    QQuickItem *segmented = mode ? findShown(mode, [](QQuickItem *item) { return isA(item, "BSegmented"); }) : nullptr;
+    check(segmented && segmented->property("currentValue").toString() == u"document",
+          "the More menu's Mode switch shows the document");
+    if (QQuickItem *outline = segment(mode, "Outline")) {
+        tapOrClick(window, pointIn(outline), touch);
+        check(waitFor([&] { return page->property("mode").toString() == u"outline"; })
+                      && app->workspace()->readFile(guide) == withKey(u"outline"_s),
+              "its Outline makes the note an outline, writing only the mode");
+    } else {
+        check(false, "the Mode switch has Outline");
+    }
+    mode = openMore();
+    if (QQuickItem *sourceSegment = segment(mode, "Source")) {
+        tapOrClick(window, pointIn(sourceSegment), touch);
+        check(waitFor([&] { return page->property("sourceMode").toBool(); }), "its Source shows the Markdown source");
+    } else {
+        check(false, "the Mode switch has Source");
+    }
+    mode = openMore();
+    if (QQuickItem *document = segment(mode, "Document")) {
+        tapOrClick(window, pointIn(document), touch);
+        check(waitFor([&] {
+                  return !page->property("sourceMode").toBool() && page->property("mode").toString() == u"document";
+              }) && app->workspace()->readFile(guide) == before,
+              "its Document leaves the source and makes the note a document again");
+    } else {
+        check(false, "the Mode switch has Document");
+    }
+    closeMenus(window);
+}
+
+/// Page properties (docs/UI.md "Page properties"): the guide's tag chip in the header —
+/// a right-click, a long press — "Remove from this page" writes only that property (its
+/// last tag: the `tags:` line goes), undo brings it back; the header's "+" → "Add alias"
+/// and an alias typed in the row's field: `aliases:` gets it; the palette's "Add page
+/// property" opens the properties panel's add row.
+void checkPageProperties(QQuickWindow *window, AppController *app, const Check &check, QObject *page,
+                         QQuickItem *editor, const QString &guide)
+{
+    const bool touch = touchRun();
+    const auto saveNow = [page] {
+        bool ok = false;
+        QMetaObject::invokeMethod(page, "save", qReturnArg(ok));
+        return ok;
+    };
+    const auto undoNow = [page] { QMetaObject::invokeMethod(page, "undo"); };
+    // Waits for it: a menu counts as open before its items are laid out (on a slow
+    // machine its rows show a little later).
+    const auto shownItem = [&](const QString &name) {
+        QQuickItem *found = nullptr;
+        waitFor([&] {
+            found = uidriver::topmost(window, [&name](QQuickItem *i) { return i->objectName() == name; });
+            return found != nullptr;
+        });
+        return found;
+    };
+    if (auto *list = editor->property("listView").value<QQuickItem *>())
+        QMetaObject::invokeMethod(list, "positionViewAtBeginning");
+    settle(300);
+    const QString before = app->workspace()->readFile(guide);
+    QQuickItem *chip = shownNamed(editor, u"headerTag_przewodnik"_s);
+    check(chip != nullptr && before.contains(u"\ntags: [przewodnik]\n"_s), "the guide's tag chip is in its header");
+    if (chip) {
+        if (touch)
+            touchTap(window, pointIn(chip), 1000);
+        else
+            mouseClick(window, pointIn(chip), Qt::RightButton);
+        check(waitFor([&] { return openMenus(window) == 1; }),
+              touch ? "a long press on the tag chip opens its menu" : "a right-click on the tag chip opens its menu");
+        if (QQuickItem *remove = shownItem(u"propertyChipRemove"_s)) {
+            tapOrClick(window, pointIn(remove), touch);
+            check(waitFor([&] {
+                      return saveNow()
+                             && app->workspace()->readFile(guide)
+                                        == QString(before).replace(u"tags: [przewodnik]\n"_s, QString());
+                  }),
+                  "“Usuń z tej strony” removes the tag: only that line changes");
+            check(waitFor([&] { return !shownNamed(editor, u"headerTag_przewodnik"_s); }),
+                  "the chip is gone from the header");
+            undoNow();
+            check(waitFor([&] { return saveNow() && app->workspace()->readFile(guide) == before; }),
+                  "undo brings the tag back");
+        } else {
+            check(false, "the chip's menu has “Usuń z tej strony”");
+        }
+    }
+    closeMenus(window);
+    QQuickItem *plus = shownNamed(editor, u"pageHeaderAdd"_s);
+    check(plus != nullptr, "the header's chips end with “+”");
+    if (plus) {
+        tapOrClick(window, pointIn(plus), touch);
+        check(waitFor([&] { return openMenus(window) == 1; }), "“+” opens its menu");
+        if (QQuickItem *alias = shownItem(u"headerAddAlias"_s)) {
+            tapOrClick(window, pointIn(alias), touch);
+            check(waitFor([&] { return focusName(window) == u"pageHeaderField"; }),
+                  "“Dodaj alias” opens a field in the header");
+            typeChars(window, u"Żółw"_s);
+            sendKey(window, Qt::Key_Return);
+            check(waitFor([&] {
+                      return saveNow()
+                             && app->workspace()->readFile(guide)
+                                        == QString(before).replace(u"aliases: [Przewodnik, Start]"_s,
+                                                                   u"aliases: [Przewodnik, Start, Żółw]"_s);
+                  }),
+                  "the alias typed there is written into `aliases:`");
+            sendKey(window, Qt::Key_Escape);
+            undoNow();
+            check(waitFor([&] { return saveNow() && app->workspace()->readFile(guide) == before; }),
+                  "undo takes the alias away");
+        } else {
+            check(false, "the menu has “Dodaj alias”");
+        }
+    }
+    closeMenus(window);
+    // An alias no link can use, then a tap elsewhere: nothing written, the field closes
+    // and a toast says why (Enter says it under the field).
+    plus = shownNamed(editor, u"pageHeaderAdd"_s);
+    if (plus) {
+        tapOrClick(window, pointIn(plus), touch);
+        check(waitFor([&] { return openMenus(window) == 1; }), "“+” opens its menu again");
+        if (QQuickItem *alias = shownItem(u"headerAddAlias"_s)) {
+            tapOrClick(window, pointIn(alias), touch);
+            check(waitFor([&] { return focusName(window) == u"pageHeaderField"; }),
+                  "“Dodaj alias” opens the field again");
+            const ToastSpy toasts(app);
+            typeChars(window, u"Dom|ż"_s);
+            // The keyboard goes elsewhere (outside the editor: its focus scope would
+            // give it back to the field).
+            QQuickItem elsewhere;
+            elsewhere.setParentItem(window->contentItem());
+            elsewhere.forceActiveFocus();
+            const QString reason = QCoreApplication::translate("brulion::editor::PageController",
+                                                               "An alias with this character cannot be used in a link");
+            check(waitFor([&] { return toasts.text == reason; }),
+                  "an alias no link can use, left by a tap elsewhere: a toast says why");
+            check(waitFor([&] { return !shownNamed(editor, u"pageHeaderField"_s); }), "the field closed");
+            check(saveNow() && app->workspace()->readFile(guide) == before, "nothing was written");
+        } else {
+            check(false, "the menu has “Dodaj alias” again");
+        }
+    }
+    closeMenus(window);
+    app->requestUiAction(u"addProperty"_s);
+    check(waitFor([&] { return focusName(window) == u"propertiesKeyField"; }),
+          "the palette's “Dodaj właściwość strony” opens the properties panel's add row");
+    sendKey(window, Qt::Key_Escape);
+    check(app->workspace()->readFile(guide) == before, "nothing is written until a name is chosen");
+    app->settings()->setPropertiesExpanded(false);
+    settle(100);
+}
+
+/// The rows of the palette and the quick switcher (docs/UI.md "Shared components",
+/// BPalette): floating (wide windows) every row is one line high (Theme.listItemHeight), a
+/// subtitle on the title's line after it; full screen (phones) a subtitled row has two lines,
+/// the subtitle under the title. The query shows subtitled rows ("New folder…" — "At the
+/// notebook root", the page "Remont mieszkania" in Projekty).
+void checkPaletteRows(QQmlApplicationEngine *engine, QQuickWindow *window, QObject *palette, const Check &check)
+{
+    const auto isOpen = [](QObject *popup) { return popup->property("visible").toBool(); };
+    auto *theme = engine->singletonInstance<QObject *>("Brulion", "Theme");
+    const auto rowsLaidOut = [theme](QObject *popup, QString *detail) {
+        auto *content = popup->property("contentItem").value<QQuickItem *>();
+        if (!content || !theme) {
+            *detail = u"no list"_s;
+            return false;
+        }
+        const bool floating = !popup->property("fullScreen").toBool();
+        const qreal oneLine = theme->property("listItemHeight").toReal();
+        const qreal twoLine = theme->property("listItemHeightTwoLine").toReal();
+        int rows = 0;
+        int subtitled = 0;
+        const QList<QQuickItem *> items = uidriver::allItems(content);
+        for (QQuickItem *row : items) {
+            if (!isA(row, "BListItem") || !shown(row))
+                continue;
+            ++rows;
+            const QString title = row->property("text").toString();
+            const QString subtitle = row->property("subtitle").toString();
+            const qreal expected = floating || subtitle.isEmpty() ? oneLine : twoLine;
+            if (qAbs(row->height() - expected) > 0.5) {
+                *detail = u"“%1” is %2 px high, not %3"_s.arg(title).arg(row->height()).arg(expected);
+                return false;
+            }
+            if (subtitle.isEmpty())
+                continue;
+            QQuickItem *sub = nullptr;
+            const QList<QQuickItem *> parts = uidriver::allItems(row);
+            for (QQuickItem *part : parts) {
+                if (part->inherits("QQuickText") && part->property("text").toString() == subtitle)
+                    sub = part;
+            }
+            QQuickItem *titleText = sub && sub->parentItem() ? sub->parentItem()->childItems().value(0) : nullptr;
+            if (!sub || !titleText || !shown(sub)) {
+                *detail = u"“%1” does not show its subtitle"_s.arg(title);
+                return false;
+            }
+            const QRectF t = titleText->mapRectToScene(QRectF(0, 0, titleText->width(), titleText->height()));
+            const QRectF u = sub->mapRectToScene(QRectF(0, 0, sub->width(), sub->height()));
+            const bool sameLine = qAbs(u.center().y() - t.center().y()) < t.height() / 2 && u.left() >= t.right();
+            const bool below = u.top() >= t.bottom() - 0.5;
+            if (floating ? !sameLine : !below) {
+                *detail = u"“%1”: the subtitle is not %2 the title"_s.arg(title, floating ? u"beside"_s : u"under"_s);
+                return false;
+            }
+            ++subtitled;
+        }
+        *detail = u"%1 rows, %2 with a subtitle"_s.arg(rows).arg(subtitled);
+        return rows > 0 && subtitled > 0;
+    };
+    // Every command (no query): a floating list fills its room with whole rows — it once stayed
+    // one row high when every row had the same height (nothing changed contentHeight to measure
+    // it again); full screen it fills the screen.
+    if (!palette->property("fullScreen").toBool()) {
+        QMetaObject::invokeMethod(palette, "open");
+        QQuickItem *list = nullptr;
+        const auto filled = [&] {
+            auto *content = palette->property("contentItem").value<QQuickItem *>();
+            const QList<QQuickItem *> items = content ? uidriver::allItems(content) : QList<QQuickItem *>();
+            const auto it =
+                    std::ranges::find_if(items, [](QQuickItem *item) { return item->inherits("QQuickListView"); });
+            list = it != items.cend() ? *it : nullptr;
+            if (!list || !theme)
+                return false;
+            const qreal room = palette->property("_listRoom").toReal();
+            const qreal all = list->property("contentHeight").toReal() + 12;
+            const qreal row = theme->property("listItemHeight").toReal();
+            return list->height() + row > std::min(all, room) && list->height() <= room + 0.5;
+        };
+        const bool full = waitFor([&] { return palette->property("opened").toBool() && filled(); });
+        if (!full && list)
+            std::fprintf(stderr, "selftest: palette list %g px high, room %g, content %g\n", list->height(),
+                         palette->property("_listRoom").toReal(), list->property("contentHeight").toReal());
+        check(full, "the floating command palette shows as many whole rows as fit, not one");
+        // Scrolled to its end (keys, the wheel), far past the first rows, which the view then
+        // releases: the list keeps its height — it once shrank to its margins, no row shown.
+        if (list)
+            QMetaObject::invokeMethod(list, "positionViewAtEnd");
+        const qreal room = palette->property("_listRoom").toReal();
+        const bool stillFull = waitFor([&] { return list && list->property("contentY").toReal() > room && filled(); });
+        if (!stillFull && list)
+            std::fprintf(stderr, "selftest: scrolled palette list %g px high, room %g, contentY %g\n", list->height(),
+                         room, list->property("contentY").toReal());
+        check(stillFull, "the floating command palette keeps its rows when scrolled down");
+        QMetaObject::invokeMethod(palette, "close");
+        waitFor([&] { return !isOpen(palette); });
+    }
+    QObject *switcher = window->findChild<QObject *>(u"shellSwitcher"_s);
+    const QList<std::pair<QObject *, QString>> popups{{palette, u"folder"_s}, {switcher, u"rem"_s}};
+    for (const auto &[popup, query] : popups) {
+        if (!popup) {
+            check(false, "the quick switcher exists");
+            continue;
+        }
+        const bool isPalette = popup == palette;
+        QMetaObject::invokeMethod(popup, "open");
+        const bool opened = waitFor([&] { return popup->property("opened").toBool(); });
+        uidriver::callQml(popup, "typeQuery", {query});
+        QString detail;
+        const bool laidOut = opened && waitFor([&] { return rowsLaidOut(popup, &detail); });
+        if (!laidOut)
+            std::fprintf(stderr, "selftest: %s rows: %s\n", isPalette ? "palette" : "switcher", qPrintable(detail));
+        check(laidOut, isPalette ? "the command palette's rows: one line when floating (a subtitle beside the title), "
+                                   "two on a phone"
+                                 : "the quick switcher's rows: one line when floating (the folder beside the title), "
+                                   "two on a phone");
+        QMetaObject::invokeMethod(popup, "close");
+        waitFor([&] { return !isOpen(popup); });
+    }
+}
+
+/// The block editor in the shell: real keys reach the edited block and are saved, Ctrl+E
+/// and the "Markdown source" command switch source mode, a link to a missing page opens
+/// that page ready to type (and typing creates it).
+/// Then the checks that need the guide page in the editor: links, pictures, PDFs, drawings, the
+/// settings clock and (phones) the on-screen keyboard.
+void checkBlockEditor(QQmlApplicationEngine *engine, QQuickWindow *window, AppController *app, const Check &check)
+{
+    const QString guide = u"Witaj w Brulionie.md"_s;
+    const QString outlineLine = u"- Każdy punkt listy to **blok**. Kliknij go, żeby edytować."_s;
+    // The controller of the page view shown for `path`: views a Loader has let go of (no parent
+    // item) may still be around with their controllers until they are deleted.
+    const auto controllerFor = [window](const QString &path) -> QObject * {
+        const QList<QObject *> found = window->findChildren<QObject *>(u"pageController"_s);
+        for (QObject *c : found) {
+            const auto *shownView = qobject_cast<QQuickItem *>(c->parent());
+            if (c->property("path").toString() == path && (!shownView || shownView->parentItem()))
+                return c;
+        }
+        return nullptr;
+    };
+    const auto editorOf = [window](QObject *controller) -> QQuickItem * {
+        const QList<QQuickItem *> found = window->findChildren<QQuickItem *>(u"pageEditor"_s);
+        for (QQuickItem *e : found) {
+            if (e->property("controller").value<QObject *>() == controller)
+                return e;
+        }
+        return nullptr;
+    };
+    const auto source = [](QObject *c) { return c ? c->property("sourceText").toString() : QString(); };
+    // The block's text editor has the keyboard (its delegate is created a frame later).
+    const auto editorFocused = [window] {
+        return waitFor([window] {
+            const QQuickItem *f = window->activeFocusItem();
+            return f && QByteArray(f->metaObject()->className()).contains("InlineEditor");
+        });
+    };
+
+    app->openPage(guide);
+    QObject *page = nullptr;
+    check(waitFor([&] {
+              page = controllerFor(guide);
+              return page && page->property("loaded").toBool();
+          }),
+          "the guide page opens in the editor");
+    QQuickItem *editor = page ? editorOf(page) : nullptr;
+    if (page && editor) {
+        // Mouse clicks on a block's rendered rich text: a click on words starts editing that
+        // block, a click on a link follows it. (A TapHandler on the rich Text itself lost every
+        // mouse press to the editor's ListView: nothing happened on click.)
+        // Phones (--touch) tap with a finger, desktops click with the mouse.
+        const bool touch = touchRun();
+        settle(300);
+        // The guide's first list block (under "Konspekt", the Polish guide's outline section),
+        // scrolled into view (on a phone it is below the first screen).
+        {
+            const QStringList guideLines = app->workspace()->readFile(guide).split(u'\n');
+            const qsizetype blockLine = guideLines.indexOf(outlineLine);
+            int blockRow = -1;
+            QMetaObject::invokeMethod(page, "rowOfLine", qReturnArg(blockRow), int(blockLine));
+            if (auto *list = editor->property("listView").value<QQuickItem *>(); list && blockRow >= 0)
+                QMetaObject::invokeMethod(list, "positionViewAtIndex", blockRow, 1 /* ListView.Center */);
+            settle(200);
+        }
+        if (QQuickItem *text = renderedTextContaining(editor, u"Kliknij go"_s)) {
+            // A quick tap (30 ms, shorter than the lists' 90 ms press delay on touch UIs).
+            if (touch)
+                touchTap(window, text->mapToScene(QPointF(8, text->height() / 2)), 30);
+            else
+                mouseClick(window, text->mapToScene(QPointF(8, text->height() / 2)));
+            check(waitFor([&] { return page->property("editingRow").toInt() >= 0; }) && editorFocused(),
+                  "a click or tap on a block's text starts editing it");
+            QMetaObject::invokeMethod(page, "stopEditing");
+            settle(100);
+            // Scrolling with a finger that starts on text scrolls and never starts editing.
+            if (touch) {
+                auto *list = editor->property("listView").value<QQuickItem *>();
+                const qreal before = list ? list->property("contentY").toReal() : 0;
+                touchDrag(window, text->mapToScene(QPointF(text->width() / 2, text->height() / 2)), QPointF(0, -160));
+                check(list && list->property("contentY").toReal() > before + 40
+                              && page->property("editingRow").toInt() < 0,
+                      "a finger dragged over block text scrolls the page and does not start editing");
+                QMetaObject::invokeMethod(list, "positionViewAtBeginning");
+                settle(200);
+            }
+        } else {
+            check(false, "the guide shows its first outline block");
+        }
+        // The guide's "Link do strony: [[Remont mieszkania]]" block, scrolled to the middle.
+        {
+            const qsizetype linkLine = firstLineStarting(app->workspace()->readFile(guide), u"- Link do strony:"_s);
+            int linkRow = -1;
+            QMetaObject::invokeMethod(page, "rowOfLine", qReturnArg(linkRow), int(linkLine));
+            if (auto *list = editor->property("listView").value<QQuickItem *>(); list && linkRow >= 0)
+                QMetaObject::invokeMethod(list, "positionViewAtIndex", linkRow, 1 /* ListView.Center */);
+            settle(200);
+        }
+        if (QQuickItem *text = renderedTextContaining(editor, u"page:Remont"_s)) {
+            const QPointF at = linkPoint(text, u"page:Remont"_s);
+            check(at.x() >= 0, "the guide shows a link to the renovation project");
+            tapOrClick(window, at, touch);
+            check(waitFor([app] {
+                      return app->currentRoute().value(u"path"_s).toString() == u"Projekty/Remont mieszkania.md";
+                  }),
+                  "a click or tap on a link opens the linked page");
+            app->back();
+            waitFor([&] {
+                page = controllerFor(guide);
+                return app->currentRoute().value(u"path"_s).toString() == guide && page
+                       && page->property("loaded").toBool();
+            });
+            editor = page ? editorOf(page) : nullptr;
+        } else {
+            check(false, "the guide shows its link to the renovation project");
+        }
+    }
+    if (page && editor) {
+        const QStringList lines = app->workspace()->readFile(guide).split(u'\n');
+        const qsizetype line = lines.indexOf(outlineLine);
+        int row = -1;
+        QMetaObject::invokeMethod(page, "rowOfLine", qReturnArg(row), int(line));
+        check(line >= 0 && row >= 0, "the guide has its first outline block");
+        uidriver::callQml(editor, "startEditing", {QVariant(row), QVariant(-1)});
+        check(waitFor([&] { return page->property("editingRow").toInt() == row; }) && editorFocused(),
+              "a block starts editing and has the keyboard");
+        typeChars(window, u" Żółw ąę"_s);
+        check(source(page).contains(u"żeby edytować. Żółw ąę"_s), "typed keys reach the block (Polish letters)");
+        // Another program (an agent's brulion-cli, Syncthing) changes the page while the block
+        // is being edited and no toast is shown: the typing goes on in the block — neither the
+        // "merged" toast (the first one of its list) nor the editor list's current row takes
+        // the keyboard (the keys after it went nowhere).
+        clearToasts(window);
+        settle(200);
+        typeChars(window, u" i"_s);
+        {
+            QFile file(app->workspace()->rootPath() + u'/' + guide);
+            if (file.open(QIODevice::Append))
+                file.write("\n- Dopisek innego programu: żółw\n");
+        }
+        check(waitFor([&] { return source(page).contains(u"Dopisek innego programu: żółw"_s); }),
+              "another program's change reaches the page being edited");
+        settle(300);
+        check(editorFocused() && page->property("editingRow").toInt() == row,
+              "the edited block keeps the keyboard after another program's change");
+        typeChars(window, u" jeż"_s);
+        check(source(page).contains(u"Żółw ąę i jeż"_s), "keys typed after that change reach the block");
+        // Any toast arriving while typing (a reminder, a sync) leaves the keyboard there too.
+        clearToasts(window);
+        settle(200);
+        app->toast(u"Zsynchronizowano: żółw"_s, u"info"_s);
+        settle(300);
+        check(editorFocused(), "a toast shown while typing leaves the keyboard in the edited block");
+        // Ctrl+K is the command palette, but Qt binds it to "delete to the end of the line" in
+        // text editors on Linux: the edited block must leave it to the shell's shortcut (the
+        // shortcut map asks the focused item with a ShortcutOverride event first).
+        if (QQuickItem *focused = window->activeFocusItem()) {
+            QKeyEvent override(QEvent::ShortcutOverride, Qt::Key_K, Qt::ControlModifier);
+            override.ignore();
+            QCoreApplication::sendEvent(focused, &override);
+            check(!override.isAccepted(), "a block being edited leaves Ctrl+K to the command palette");
+        }
+        sendKey(window, Qt::Key_E, Qt::ControlModifier);
+        check(page->property("sourceMode").toBool(), "Ctrl+E in a block switches to Markdown source");
+        check(waitFor([&] { return app->sourceModeShown(); }),
+              "Markdown source turns the palette's block link commands off (AppController.sourceModeShown)");
+        if (touchRun())
+            checkSourceTouch(window, editor, check);
+        app->requestUiAction(u"toggleSourceMode"_s);
+        check(waitFor([&] { return !page->property("sourceMode").toBool(); }),
+              "the \"Markdown source\" command switches back");
+        check(waitFor([&] { return !app->sourceModeShown(); }), "back to blocks: the block commands are on again");
+        bool saved = false;
+        QMetaObject::invokeMethod(page, "save", qReturnArg(saved));
+        check(saved && app->workspace()->readFile(guide).contains(u"żeby edytować. Żółw ąę"_s),
+              "the edit is saved to the file");
+
+        checkNoteMode(window, app, check, page, editor, guide);
+
+        checkPageProperties(window, app, check, page, editor, guide);
+
+        // Phones: a block at the bottom of the screen that starts editing is scrolled above
+        // the editing toolbar (which sits on the keyboard) instead of staying under it.
+        if (window->width() < 900) {
+            const qsizetype lowLine = lines.indexOf(u"- Ctrl+. zwija i rozwija dzieci bloku w konspekcie."_s);
+            int low = -1;
+            QMetaObject::invokeMethod(page, "rowOfLine", qReturnArg(low), int(lowLine));
+            auto *list = editor->property("listView").value<QQuickItem *>();
+            if (list && low >= 0) {
+                QMetaObject::invokeMethod(page, "stopEditing");
+                QMetaObject::invokeMethod(list, "positionViewAtIndex", low, 2 /* ListView.End */);
+                settle(100);
+                uidriver::callQml(editor, "startEditing", {QVariant(low), QVariant(-1)});
+                const auto caretBottom = [editor]() -> qreal {
+                    auto *edit = editor->property("activeEditor").value<QQuickItem *>();
+                    if (!edit)
+                        return 1e9;
+                    const QRectF r = edit->property("cursorRectangle").toRectF();
+                    return edit->mapToItem(editor, r.bottomLeft()).y();
+                };
+                const auto visibleBottom = [editor] {
+                    double bottom = 0;
+                    QMetaObject::invokeMethod(editor, "visibleBottom", qReturnArg(bottom));
+                    return bottom;
+                };
+                check(editorFocused() && waitFor([&] { return caretBottom() <= visibleBottom() + 0.5; }),
+                      "a block edited at the bottom of a phone screen is not hidden under the toolbar");
+                QMetaObject::invokeMethod(page, "stopEditing");
+            } else {
+                check(false, "the editor's list and the low block exist");
+            }
+        }
+
+        // [[Pomysły na prezenty]] on the guide: the page does not exist yet.
+        const QString missing = u"Pomysły na prezenty.md"_s;
+        QVariantMap result;
+        QMetaObject::invokeMethod(page, "activateLink", qReturnArg(result), row, u"page:Pomys%C5%82y%20na%20prezenty"_s,
+                                  false);
+        QObject *newPage = nullptr;
+        check(waitFor([&] {
+                  newPage = controllerFor(missing);
+                  return app->currentRoute().value(u"path"_s).toString() == missing && newPage
+                         && newPage->property("editingRow").toInt() >= 0;
+              }),
+              "a link to a missing page opens it with a block to type into");
+        check(editorFocused(), "the new page's block has the keyboard");
+        check(!app->workspace()->exists(missing), "opening a missing page does not create a file");
+        if (newPage) {
+            typeChars(window, u"Rower dla Oli"_s);
+            QMetaObject::invokeMethod(newPage, "save", qReturnArg(saved));
+            check(app->workspace()->readFile(missing).contains(u"Rower dla Oli"_s), "typing creates the new page");
+
+            // Renamed with unsaved typing (F2 right after typing): the editor follows the
+            // file, the old name never comes back as a duplicate and nothing typed is lost.
+            typeChars(window, u" i Kuby"_s);
+            const QString renamed = app->workspace()->renamePage(missing, u"Prezenty dla dzieci"_s);
+            check(renamed == u"Prezenty dla dzieci.md"_s, "the open page is renamed");
+            check(waitFor([&] {
+                      return newPage->property("path").toString() == renamed
+                             && app->currentRoute().value(u"path"_s).toString() == renamed;
+                  }),
+                  "the editor and the route follow the rename");
+            QMetaObject::invokeMethod(newPage, "save", qReturnArg(saved));
+            settle(100);
+            check(!app->workspace()->exists(missing), "the old name does not come back");
+            check(app->workspace()->readFile(renamed).contains(u"Rower dla Oli i Kuby"_s),
+                  "the text typed before the rename is saved under the new name");
+        }
+
+        // 5g. Links to blocks and headings: followed, missing, copied from the palette.
+        checkBlockLinks(window, app, check, controllerFor);
+        // 5k. The path parts of a link to a page in a folder.
+        checkLinkParts(window, app, check, controllerFor);
+        // 5l. Link previews; rounded tags in linked references.
+        checkLinkPreviews(window, app, check, controllerFor);
+        // 5b. A picture opens as a picture (checkPictureView).
+        checkPictureView(window, app, check, controllerFor);
+        // 5k. PDFs: the thumbnail, the viewer, drawing on a page (checkPdfViewer).
+        checkPdfViewer(window, app, check, controllerFor);
+        // 5i. A drawing: opened from its embed, drawn with real input, saved by itself.
+        checkDrawing(window, app, check);
+        // 5j. A drawing another program wrote: its embed's frame never moves.
+        checkDrawingFrame(window, app, check);
+        // 5e. The default reminder time set on a clock in the settings.
+        checkSettingsClock(window, app, check);
+        // 5f. The on-screen keyboard (phones).
+        if (window->width() < 900)
+            checkKeyboard(engine, window, app, check);
+    } else {
+        check(false, "the page view has an editor");
+    }
+    app->goHome();
+}
+
 int runChecks(QQmlApplicationEngine *engine, AppController *app)
 {
     int failures = 0;
@@ -7498,8 +8291,7 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
         check(false, "the main window exists");
         return failures;
     }
-    window->requestActivate();
-    waitFor([window] { return window->isActive(); }, 2000);
+    activateWindow(window);
     const auto find = [window](const char *name) { return window->findChild<QObject *>(QString::fromLatin1(name)); };
     QObject *drawer = find("shellDrawer");
     QObject *palette = find("shellPalette");
@@ -7525,7 +8317,7 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
     handled = sendKey(window, Qt::Key_Back);
     check(!handled && view() == u"journals", "back at home is not handled (Android may close the app)");
     // 1b. Phones: a zoom in the journal at home goes out with Back first.
-    if (QCoreApplication::arguments().contains(u"--touch"_s))
+    if (touchRun())
         checkBackZoomsOutAtHome(window, app, check);
 
     // 2. + 3. The drawer (narrow windows; wide ones have the sidebar instead).
@@ -7603,813 +8395,11 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
     handled = sendKey(window, Qt::Key_Back);
     check(handled && view() == u"journals", "after the palette closed, back reaches the shell again");
 
-    // 4b. The rows of the palette and the quick switcher (docs/UI.md "Shared components",
-    //     BPalette): floating (wide windows) every row is one line high (Theme.listItemHeight), a
-    //     subtitle on the title's line after it; full screen (phones) a subtitled row has two lines,
-    //     the subtitle under the title. The query shows subtitled rows ("New folder…" — "At the
-    //     notebook root", the page "Remont mieszkania" in Projekty).
-    {
-        auto *theme = engine->singletonInstance<QObject *>("Brulion", "Theme");
-        const auto rowsLaidOut = [theme](QObject *popup, QString *detail) {
-            auto *content = popup->property("contentItem").value<QQuickItem *>();
-            if (!content || !theme) {
-                *detail = u"no list"_s;
-                return false;
-            }
-            const bool floating = !popup->property("fullScreen").toBool();
-            const qreal oneLine = theme->property("listItemHeight").toReal();
-            const qreal twoLine = theme->property("listItemHeightTwoLine").toReal();
-            int rows = 0;
-            int subtitled = 0;
-            const QList<QQuickItem *> items = uidriver::allItems(content);
-            for (QQuickItem *row : items) {
-                if (!isA(row, "BListItem") || !shown(row))
-                    continue;
-                ++rows;
-                const QString title = row->property("text").toString();
-                const QString subtitle = row->property("subtitle").toString();
-                const qreal expected = floating || subtitle.isEmpty() ? oneLine : twoLine;
-                if (qAbs(row->height() - expected) > 0.5) {
-                    *detail = u"“%1” is %2 px high, not %3"_s.arg(title).arg(row->height()).arg(expected);
-                    return false;
-                }
-                if (subtitle.isEmpty())
-                    continue;
-                QQuickItem *sub = nullptr;
-                const QList<QQuickItem *> parts = uidriver::allItems(row);
-                for (QQuickItem *part : parts) {
-                    if (part->inherits("QQuickText") && part->property("text").toString() == subtitle)
-                        sub = part;
-                }
-                QQuickItem *titleText = sub && sub->parentItem() ? sub->parentItem()->childItems().value(0) : nullptr;
-                if (!sub || !titleText || !shown(sub)) {
-                    *detail = u"“%1” does not show its subtitle"_s.arg(title);
-                    return false;
-                }
-                const QRectF t = titleText->mapRectToScene(QRectF(0, 0, titleText->width(), titleText->height()));
-                const QRectF u = sub->mapRectToScene(QRectF(0, 0, sub->width(), sub->height()));
-                const bool sameLine = qAbs(u.center().y() - t.center().y()) < t.height() / 2 && u.left() >= t.right();
-                const bool below = u.top() >= t.bottom() - 0.5;
-                if (floating ? !sameLine : !below) {
-                    *detail = u"“%1”: the subtitle is not %2 the title"_s.arg(title, floating ? u"beside"_s : u"under"_s);
-                    return false;
-                }
-                ++subtitled;
-            }
-            *detail = u"%1 rows, %2 with a subtitle"_s.arg(rows).arg(subtitled);
-            return rows > 0 && subtitled > 0;
-        };
-        // Every command (no query): a floating list fills its room with whole rows — it once stayed
-        // one row high when every row had the same height (nothing changed contentHeight to measure
-        // it again); full screen it fills the screen.
-        if (!palette->property("fullScreen").toBool()) {
-            QMetaObject::invokeMethod(palette, "open");
-            QQuickItem *list = nullptr;
-            const auto filled = [&] {
-                auto *content = palette->property("contentItem").value<QQuickItem *>();
-                const QList<QQuickItem *> items = content ? uidriver::allItems(content) : QList<QQuickItem *>();
-                const auto it = std::find_if(items.cbegin(), items.cend(),
-                                             [](QQuickItem *item) { return item->inherits("QQuickListView"); });
-                list = it != items.cend() ? *it : nullptr;
-                if (!list || !theme)
-                    return false;
-                const qreal room = palette->property("_listRoom").toReal();
-                const qreal all = list->property("contentHeight").toReal() + 12;
-                const qreal row = theme->property("listItemHeight").toReal();
-                return list->height() + row > std::min(all, room) && list->height() <= room + 0.5;
-            };
-            const bool full = waitFor([&] { return palette->property("opened").toBool() && filled(); });
-            if (!full && list)
-                std::fprintf(stderr, "selftest: palette list %g px high, room %g, content %g\n", list->height(),
-                             palette->property("_listRoom").toReal(), list->property("contentHeight").toReal());
-            check(full, "the floating command palette shows as many whole rows as fit, not one");
-            // Scrolled to its end (keys, the wheel), far past the first rows, which the view then
-            // releases: the list keeps its height — it once shrank to its margins, no row shown.
-            if (list)
-                QMetaObject::invokeMethod(list, "positionViewAtEnd");
-            const qreal room = palette->property("_listRoom").toReal();
-            const bool stillFull = waitFor([&] {
-                return list && list->property("contentY").toReal() > room && filled();
-            });
-            if (!stillFull && list)
-                std::fprintf(stderr, "selftest: scrolled palette list %g px high, room %g, contentY %g\n", list->height(),
-                             room, list->property("contentY").toReal());
-            check(stillFull, "the floating command palette keeps its rows when scrolled down");
-            QMetaObject::invokeMethod(palette, "close");
-            waitFor([&] { return !isOpen(palette); });
-        }
-        QObject *switcher = find("shellSwitcher");
-        const QList<std::pair<QObject *, QString>> popups{{palette, u"folder"_s}, {switcher, u"rem"_s}};
-        for (const auto &[popup, query] : popups) {
-            if (!popup) {
-                check(false, "the quick switcher exists");
-                continue;
-            }
-            const bool isPalette = popup == palette;
-            QMetaObject::invokeMethod(popup, "open");
-            const bool opened = waitFor([&] { return popup->property("opened").toBool(); });
-            uidriver::callQml(popup, "typeQuery", {query});
-            QString detail;
-            const bool laidOut = opened && waitFor([&] { return rowsLaidOut(popup, &detail); });
-            if (!laidOut)
-                std::fprintf(stderr, "selftest: %s rows: %s\n", isPalette ? "palette" : "switcher", qPrintable(detail));
-            check(laidOut, isPalette ? "the command palette's rows: one line when floating (a subtitle beside the title), two on a phone"
-                                     : "the quick switcher's rows: one line when floating (the folder beside the title), two on a phone");
-            QMetaObject::invokeMethod(popup, "close");
-            waitFor([&] { return !isOpen(popup); });
-        }
-    }
+    // 4b. The rows of the palette and the quick switcher.
+    checkPaletteRows(engine, window, palette, check);
 
-    // 5. The block editor in the shell: real keys reach the edited block and are saved, Ctrl+E
-    //    and the "Markdown source" command switch source mode, a link to a missing page opens
-    //    that page ready to type (and typing creates it).
-    {
-        const QString guide = u"Witaj w Brulionie.md"_s;
-        // The controller of the page view shown for `path`: views a Loader has let go of (no parent
-        // item) may still be around with their controllers until they are deleted.
-        const auto controllerFor = [window](const QString &path) -> QObject * {
-            const QList<QObject *> found = window->findChildren<QObject *>(u"pageController"_s);
-            for (QObject *c : found) {
-                const auto *shownView = qobject_cast<QQuickItem *>(c->parent());
-                if (c->property("path").toString() == path && (!shownView || shownView->parentItem()))
-                    return c;
-            }
-            return nullptr;
-        };
-        const auto editorOf = [window](QObject *controller) -> QQuickItem * {
-            const QList<QQuickItem *> found = window->findChildren<QQuickItem *>(u"pageEditor"_s);
-            for (QQuickItem *e : found) {
-                if (e->property("controller").value<QObject *>() == controller)
-                    return e;
-            }
-            return nullptr;
-        };
-        const auto source = [](QObject *c) { return c ? c->property("sourceText").toString() : QString(); };
-        // The block's text editor has the keyboard (its delegate is created a frame later).
-        const auto editorFocused = [window] {
-            return waitFor([window] {
-                const QQuickItem *f = window->activeFocusItem();
-                return f && QByteArray(f->metaObject()->className()).contains("InlineEditor");
-            });
-        };
-        const auto typeText = [window](const QString &text) {
-            for (const QChar ch : text)
-                sendKey(window, 0, Qt::NoModifier, QString(ch));
-        };
-
-        app->openPage(guide);
-        QObject *page = nullptr;
-        check(waitFor([&] {
-                  page = controllerFor(guide);
-                  return page && page->property("loaded").toBool();
-              }),
-              "the guide page opens in the editor");
-        QQuickItem *editor = page ? editorOf(page) : nullptr;
-        if (page && editor) {
-            // Mouse clicks on a block's rendered rich text: a click on words starts editing that
-            // block, a click on a link follows it. (A TapHandler on the rich Text itself lost every
-            // mouse press to the editor's ListView: nothing happened on click.)
-            // Phones (--touch) tap with a finger, desktops click with the mouse.
-            const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
-            settle(300);
-            // The guide's first list block (under "Konspekt", the Polish guide's outline section),
-            // scrolled into view (on a phone it is below the first screen).
-            {
-                const QStringList guideLines = app->workspace()->readFile(guide).split(u'\n');
-                const qsizetype blockLine =
-                        guideLines.indexOf(u"- Każdy punkt listy to **blok**. Kliknij go, żeby edytować."_s);
-                int blockRow = -1;
-                QMetaObject::invokeMethod(page, "rowOfLine", qReturnArg(blockRow), int(blockLine));
-                if (auto *list = editor->property("listView").value<QQuickItem *>(); list && blockRow >= 0)
-                    QMetaObject::invokeMethod(list, "positionViewAtIndex", blockRow, 1 /* ListView.Center */);
-                settle(200);
-            }
-            if (QQuickItem *text = renderedTextContaining(editor, u"Kliknij go"_s)) {
-                // A quick tap (30 ms, shorter than the lists' 90 ms press delay on touch UIs).
-                if (touch)
-                    touchTap(window, text->mapToScene(QPointF(8, text->height() / 2)), 30);
-                else
-                    mouseClick(window, text->mapToScene(QPointF(8, text->height() / 2)));
-                check(waitFor([&] { return page->property("editingRow").toInt() >= 0; }) && editorFocused(),
-                      "a click or tap on a block's text starts editing it");
-                QMetaObject::invokeMethod(page, "stopEditing");
-                settle(100);
-                // Scrolling with a finger that starts on text scrolls and never starts editing.
-                if (touch) {
-                    auto *list = editor->property("listView").value<QQuickItem *>();
-                    const qreal before = list ? list->property("contentY").toReal() : 0;
-                    touchDrag(window, text->mapToScene(QPointF(text->width() / 2, text->height() / 2)), QPointF(0, -160));
-                    check(list && list->property("contentY").toReal() > before + 40
-                              && page->property("editingRow").toInt() < 0,
-                          "a finger dragged over block text scrolls the page and does not start editing");
-                    QMetaObject::invokeMethod(list, "positionViewAtBeginning");
-                    settle(200);
-                }
-            } else {
-                check(false, "the guide shows its first outline block");
-            }
-            // The guide's "Link do strony: [[Remont mieszkania]]" block, scrolled to the middle.
-            {
-                const QStringList guideLines = app->workspace()->readFile(guide).split(u'\n');
-                qsizetype linkLine = -1;
-                for (qsizetype i = 0; i < guideLines.size() && linkLine < 0; ++i) {
-                    if (guideLines.at(i).startsWith(u"- Link do strony:"_s))
-                        linkLine = i;
-                }
-                int linkRow = -1;
-                QMetaObject::invokeMethod(page, "rowOfLine", qReturnArg(linkRow), int(linkLine));
-                if (auto *list = editor->property("listView").value<QQuickItem *>(); list && linkRow >= 0)
-                    QMetaObject::invokeMethod(list, "positionViewAtIndex", linkRow, 1 /* ListView.Center */);
-                settle(200);
-            }
-            if (QQuickItem *text = renderedTextContaining(editor, u"page:Remont"_s)) {
-                const QPointF at = linkPoint(text, u"page:Remont"_s);
-                check(at.x() >= 0, "the guide shows a link to the renovation project");
-                tapOrClick(window, at, touch);
-                check(waitFor([app] { return app->currentRoute().value(u"path"_s).toString() == u"Projekty/Remont mieszkania.md"; }),
-                      "a click or tap on a link opens the linked page");
-                app->back();
-                waitFor([&] {
-                    page = controllerFor(guide);
-                    return app->currentRoute().value(u"path"_s).toString() == guide && page
-                           && page->property("loaded").toBool();
-                });
-                editor = page ? editorOf(page) : nullptr;
-            } else {
-                check(false, "the guide shows its link to the renovation project");
-            }
-        }
-        if (page && editor) {
-            const QStringList lines = app->workspace()->readFile(guide).split(u'\n');
-            const qsizetype line = lines.indexOf(u"- Każdy punkt listy to **blok**. Kliknij go, żeby edytować."_s);
-            int row = -1;
-            QMetaObject::invokeMethod(page, "rowOfLine", qReturnArg(row), int(line));
-            check(line >= 0 && row >= 0, "the guide has its first outline block");
-            uidriver::callQml(editor, "startEditing", {QVariant(row), QVariant(-1)});
-            check(waitFor([&] { return page->property("editingRow").toInt() == row; }) && editorFocused(),
-                  "a block starts editing and has the keyboard");
-            typeText(u" Żółw ąę"_s);
-            check(source(page).contains(u"żeby edytować. Żółw ąę"_s), "typed keys reach the block (Polish letters)");
-            // Another program (an agent's brulion-cli, Syncthing) changes the page while the block
-            // is being edited and no toast is shown: the typing goes on in the block — neither the
-            // "merged" toast (the first one of its list) nor the editor list's current row takes
-            // the keyboard (the keys after it went nowhere).
-            if (QObject *toasts = window->findChild<QObject *>(u"toastHost"_s))
-                QMetaObject::invokeMethod(toasts, "clear");
-            settle(200);
-            typeText(u" i"_s);
-            {
-                QFile file(app->workspace()->rootPath() + u'/' + guide);
-                if (file.open(QIODevice::Append))
-                    file.write("\n- Dopisek innego programu: żółw\n");
-            }
-            check(waitFor([&] { return source(page).contains(u"Dopisek innego programu: żółw"_s); }),
-                  "another program's change reaches the page being edited");
-            settle(300);
-            check(editorFocused() && page->property("editingRow").toInt() == row,
-                  "the edited block keeps the keyboard after another program's change");
-            typeText(u" jeż"_s);
-            check(source(page).contains(u"Żółw ąę i jeż"_s), "keys typed after that change reach the block");
-            // Any toast arriving while typing (a reminder, a sync) leaves the keyboard there too.
-            if (QObject *toasts = window->findChild<QObject *>(u"toastHost"_s))
-                QMetaObject::invokeMethod(toasts, "clear");
-            settle(200);
-            app->toast(u"Zsynchronizowano: żółw"_s, u"info"_s);
-            settle(300);
-            check(editorFocused(), "a toast shown while typing leaves the keyboard in the edited block");
-            // Ctrl+K is the command palette, but Qt binds it to "delete to the end of the line" in
-            // text editors on Linux: the edited block must leave it to the shell's shortcut (the
-            // shortcut map asks the focused item with a ShortcutOverride event first).
-            if (QQuickItem *focused = window->activeFocusItem()) {
-                QKeyEvent override(QEvent::ShortcutOverride, Qt::Key_K, Qt::ControlModifier);
-                override.ignore();
-                QCoreApplication::sendEvent(focused, &override);
-                check(!override.isAccepted(), "a block being edited leaves Ctrl+K to the command palette");
-            }
-            sendKey(window, Qt::Key_E, Qt::ControlModifier);
-            check(page->property("sourceMode").toBool(), "Ctrl+E in a block switches to Markdown source");
-            check(waitFor([&] { return app->sourceModeShown(); }),
-                  "Markdown source turns the palette's block link commands off (AppController.sourceModeShown)");
-            // Phones: a finger dragged over the source scrolls it (a TextEdit that selects by
-            // dragging kept the finger: the source never moved) and selects nothing; a tap still
-            // puts the cursor where it lands.
-            if (QCoreApplication::arguments().contains(u"--touch"_s)) {
-                QQuickItem *sourceView = nullptr;
-                QQuickItem *sourceEdit = nullptr;
-                check(waitFor([&] {
-                          sourceView = findShown(editor, [](QQuickItem *item) { return isA(item, "SourceEditor"); });
-                          // (The whole file: its middle lies far below the screen.)
-                          const QList<QQuickItem *> edits =
-                                  sourceView ? sourceView->findChildren<QQuickItem *>() : QList<QQuickItem *>();
-                          const auto it = std::find_if(edits.cbegin(), edits.cend(), [](QQuickItem *item) {
-                              return item->inherits("QQuickTextEdit") && item->isVisible();
-                          });
-                          sourceEdit = it != edits.cend() ? *it : nullptr;
-                          return sourceEdit
-                                 && sourceView->property("contentHeight").toReal() > sourceView->height() + 400;
-                      }),
-                      "the guide's Markdown source is longer than the screen");
-                if (sourceView && sourceEdit) {
-                    const qreal before = sourceView->property("contentY").toReal();
-                    touchDrag(window, pointIn(sourceView, 0.5, 0.7), QPointF(0, -300));
-                    check(waitFor([&] { return sourceView->property("contentY").toReal() > before + 100; })
-                                  && sourceEdit->property("selectedText").toString().isEmpty(),
-                          "a finger dragged 300 px over the Markdown source scrolls it and selects nothing");
-                    // (A tap on a moving list only stops it.)
-                    waitFor([&] { return !sourceView->property("moving").toBool(); });
-                    const int cursorBefore = sourceEdit->property("cursorPosition").toInt();
-                    // The finger lands in the middle of the line at the view's centre, on a whole
-                    // pixel as touch points are (a point near a line's edge would be rounded onto
-                    // the next line). The text under it is read before the tap: the tap brings up
-                    // the touch toolbar, and the view keeps the cursor above it.
-                    QPointF at = pointIn(sourceView, 0.5, 0.5);
-                    {
-                        const QPointF centre = sourceEdit->mapFromScene(at);
-                        int pos = -1;
-                        QMetaObject::invokeMethod(sourceEdit, "positionAt", qReturnArg(pos), centre.x(), centre.y());
-                        QRectF lineRect;
-                        QMetaObject::invokeMethod(sourceEdit, "positionToRectangle", qReturnArg(lineRect), pos);
-                        at = QPointF(sourceEdit->mapToScene(QPointF(centre.x(), lineRect.center().y())).toPoint());
-                    }
-                    const QPointF local = sourceEdit->mapFromScene(at);
-                    int expected = -1;
-                    QMetaObject::invokeMethod(sourceEdit, "positionAt", qReturnArg(expected), local.x(), local.y());
-                    const qreal contentBefore = sourceView->property("contentY").toReal();
-                    touchTap(window, at);
-                    const int cursor = sourceEdit->property("cursorPosition").toInt();
-                    std::fprintf(stderr,
-                                 "selftest: the tap in the source at (%.1f, %.1f): cursor %d (before %d, under the "
-                                 "finger %d), contentY %.1f -> %.1f\n",
-                                 at.x(), at.y(), cursor, cursorBefore, expected, contentBefore,
-                                 sourceView->property("contentY").toReal());
-                    check(cursor != cursorBefore && qAbs(cursor - expected) <= 1
-                                  && sourceEdit->property("selectedText").toString().isEmpty(),
-                          "a tap in the Markdown source puts the cursor there");
-                    // A long press selects the word under the finger (where the platform has
-                    // selection handles, they take it on from there). First the view settles
-                    // after the tap: the toolbar it brought up and the keyboard shrink the view and
-                    // keep the cursor above them. A view that moved during the hold took the text
-                    // away from under the finger (the press is cancelled), which on a slow runner
-                    // (Windows) happened when only 150 ms of stillness were waited for.
-                    qreal settledY = -1;
-                    qreal settledHeight = -1;
-                    QElapsedTimer stillFor;
-                    waitFor([&] {
-                        const qreal y = sourceView->property("contentY").toReal();
-                        const qreal height = sourceView->height();
-                        if (y != settledY || height != settledHeight || sourceView->property("moving").toBool()
-                            || sourceView->property("keyboardSliding").toBool()) {
-                            settledY = y;
-                            settledHeight = height;
-                            stillFor.start();
-                            return false;
-                        }
-                        return stillFor.elapsed() >= 400;
-                    });
-                    const qreal scrolled = sourceView->property("contentY").toReal();
-                    const auto textAt = [&](int from, int to) {
-                        QString text;
-                        QMetaObject::invokeMethod(sourceEdit, "getText", qReturnArg(text), from, to);
-                        return text;
-                    };
-                    // A point inside a word, read where the finger lands: on a whole pixel (touch
-                    // points are) in the middle of its line. A fractional point checked here was
-                    // rounded onto the next line by the touch event when a line's edge lay between
-                    // them (with the source scrolled to 504 px on Windows runners: the finger landed
-                    // after the end of a short wrapped line, "listę.", where there is no word).
-                    QPointF onWord = QPointF(pointIn(sourceView, 0.5, 0.4).toPoint());
-                    for (qreal fy = 0.3; fy < 0.7; fy += 0.05) {
-                        const QPointF p = QPointF(pointIn(sourceView, 0.35, fy).toPoint());
-                        const QPointF l = sourceEdit->mapFromScene(p);
-                        int pos = -1;
-                        QMetaObject::invokeMethod(sourceEdit, "positionAt", qReturnArg(pos), l.x(), l.y());
-                        QRectF lineRect;
-                        QMetaObject::invokeMethod(sourceEdit, "positionToRectangle", qReturnArg(lineRect), pos);
-                        const QPointF centred =
-                                QPointF(sourceEdit->mapToScene(QPointF(l.x(), lineRect.center().y())).toPoint());
-                        const QPointF lc = sourceEdit->mapFromScene(centred);
-                        QMetaObject::invokeMethod(sourceEdit, "positionAt", qReturnArg(pos), lc.x(), lc.y());
-                        const QString around = textAt(pos - 1, pos + 1);
-                        if (around.size() == 2 && around.at(0).isLetter() && around.at(1).isLetter()) {
-                            onWord = centred;
-                            break;
-                        }
-                    }
-                    // The finger stays down until the long press has selected (or the handler let
-                    // go of it), not for a fixed time. What happened is logged: when the handler's
-                    // long press moved the cursor (onLongPressed puts it under the finger, then
-                    // selects the word), the handler's state, the event loop's longest pause.
-                    QObject *const handler = sourceView->findChild<QObject *>(u"sourceTouchTap"_s);
-                    const bool pressedBefore = handler && handler->property("pressed").toBool();
-                    int underFinger = -1;
-                    {
-                        const QPointF l = sourceEdit->mapFromScene(onWord);
-                        QMetaObject::invokeMethod(sourceEdit, "positionAt", qReturnArg(underFinger), l.x(), l.y());
-                    }
-                    const int cursorBeforeHold = sourceEdit->property("cursorPosition").toInt();
-                    QElapsedTimer held;
-                    qint64 lastPoll = -1;
-                    qint64 longestGap = 0;
-                    qint64 selectedAfter = -1;
-                    qint64 letGoAfter = -1;
-                    qint64 cursorMovedAfter = -1;
-                    qreal timeHeld = 0;
-                    held.start();
-                    uidriver::touchHoldNow(
-                            window, onWord,
-                            [&] {
-                                const qint64 now = held.elapsed();
-                                longestGap = qMax(longestGap, now - qMax<qint64>(lastPoll, 0));
-                                lastPoll = now;
-                                if (handler)
-                                    timeHeld = qMax(timeHeld, handler->property("timeHeld").toReal());
-                                if (cursorMovedAfter < 0
-                                    && sourceEdit->property("cursorPosition").toInt() != cursorBeforeHold)
-                                    cursorMovedAfter = now;
-                                if (!sourceEdit->property("selectedText").toString().isEmpty()) {
-                                    selectedAfter = now;
-                                    return true;
-                                }
-                                if (handler && !handler->property("pressed").toBool()) {
-                                    letGoAfter = now;
-                                    return true;
-                                }
-                                return false;
-                            },
-                            10000);
-                    const QString word = sourceEdit->property("selectedText").toString();
-                    std::fprintf(
-                            stderr,
-                            "selftest: a long press in the source at (%.1f, %.1f) selected \"%s\" after %lld ms "
-                            "(handler %s, pressed before %d, held %.2f s by its count, let go after %lld ms; cursor "
-                            "%d -> %d after %lld ms, under the finger %d; the event loop's longest pause %lld ms), "
-                            "contentY %.1f -> %.1f, view height %.1f -> %.1f\n",
-                            onWord.x(), onWord.y(), qPrintable(word), qlonglong(selectedAfter),
-                            handler ? "found" : "missing", int(pressedBefore), timeHeld, qlonglong(letGoAfter),
-                            cursorBeforeHold, sourceEdit->property("cursorPosition").toInt(),
-                            qlonglong(cursorMovedAfter), underFinger, qlonglong(longestGap), scrolled,
-                            sourceView->property("contentY").toReal(), settledHeight, sourceView->height());
-                    check(!word.isEmpty() && !word.contains(u' ') && !word.contains(u'\n')
-                                  && qAbs(sourceView->property("contentY").toReal() - scrolled) < 1,
-                          "a long press in the Markdown source selects the word under the finger");
-                    QMetaObject::invokeMethod(sourceEdit, "deselect");
-                }
-            }
-            app->requestUiAction(u"toggleSourceMode"_s);
-            check(waitFor([&] { return !page->property("sourceMode").toBool(); }),
-                  "the \"Markdown source\" command switches back");
-            check(waitFor([&] { return !app->sourceModeShown(); }), "back to blocks: the block commands are on again");
-            bool saved = false;
-            QMetaObject::invokeMethod(page, "save", qReturnArg(saved));
-            check(saved && app->workspace()->readFile(guide).contains(u"żeby edytować. Żółw ąę"_s), "the edit is saved to the file");
-
-            // The note mode: the guide is a document; the header's toggle (a real click or tap; on
-            // a small header — a phone — the page menu's item instead: the toggle is not among the
-            // page actions there) makes it an outline, the "Toggle note mode" command a document
-            // again — each switch rewrites only the `brulion:` line of the file.
-            {
-                const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
-                QMetaObject::invokeMethod(page, "stopEditing");
-                if (auto *list = editor->property("listView").value<QQuickItem *>())
-                    QMetaObject::invokeMethod(list, "positionViewAtBeginning");
-                settle(300);
-                QQuickItem *toggle = nullptr;
-                for (QQuickItem *t : window->findChildren<QQuickItem *>(u"noteModeToggle"_s)) {
-                    if (t->isVisible() && editor->isAncestorOf(t))
-                        toggle = t;
-                }
-                QQuickItem *pageHeader = findShown(window->contentItem(), [&](QQuickItem *item) {
-                    return isA(item, "ContentPageHeader") && item->property("path").toString() == guide;
-                });
-                const bool smallHeader = pageHeader && pageHeader->property("small").toBool();
-                const QString before = app->workspace()->readFile(guide);
-                const auto withKey = [&before](const QString &mode) {
-                    return QString(before).replace(u"\nbrulion: document\n"_s, u"\nbrulion: "_s + mode + u'\n');
-                };
-                check(page->property("mode").toString() == u"document" && pageHeader != nullptr
-                              && (smallHeader ? toggle == nullptr : toggle != nullptr),
-                      smallHeader ? "the guide is a document; a small header leaves the mode toggle to the page menu"
-                                  : "the guide is a document with a mode toggle in its header");
-                if (smallHeader) {
-                    auto *menuButton = pageHeader->property("menuAnchor").value<QQuickItem *>();
-                    if (menuButton)
-                        tapOrClick(window, pointIn(menuButton), touch);
-                    QQuickItem *modeItem = nullptr;
-                    check(waitFor([&] {
-                              modeItem = findShown(window->contentItem(), [](QQuickItem *item) {
-                                  return item->objectName() == u"pageMenuNoteMode";
-                              });
-                              return modeItem != nullptr;
-                          }),
-                          "the page menu offers the note mode");
-                    if (modeItem) {
-                        tapOrClick(window, pointIn(modeItem), touch);
-                        check(waitFor([&] { return page->property("mode").toString() == u"outline"; })
-                                      && app->workspace()->readFile(guide) == withKey(u"outline"_s),
-                              "the page menu's item switches to an outline, writing only the mode");
-                    } else {
-                        closeMenus(window);
-                    }
-                } else if (toggle) {
-                    tapOrClick(window, toggle->mapToScene(QPointF(toggle->width() / 2, toggle->height() / 2)), touch);
-                    check(waitFor([&] { return page->property("mode").toString() == u"outline"; })
-                                  && app->workspace()->readFile(guide) == withKey(u"outline"_s),
-                          "the header's toggle switches to an outline, writing only the mode");
-                }
-                app->requestUiAction(u"toggleNoteMode"_s);
-                check(waitFor([&] { return page->property("mode").toString() == u"document"; })
-                              && app->workspace()->readFile(guide) == before,
-                      "the \"Toggle note mode\" command switches back");
-
-                // The top bar's More menu: its Mode switch shows the note's mode and changes it —
-                // Outline (only the mode written), Source (the Markdown source), Document again.
-                const QString more = QCoreApplication::translate("ShellTopBar", "More");
-                const auto openMore = [&] {
-                    closeMenus(window);
-                    QQuickItem *button = findShown(window->contentItem(), [&](QQuickItem *item) {
-                        return isA(item, "BIconButton") && item->property("label").toString() == more;
-                    });
-                    if (button)
-                        tapOrClick(window, pointIn(button), touch);
-                    QQuickItem *mode = nullptr;
-                    waitFor([&] {
-                        mode = findShown(window->contentItem(),
-                                         [](QQuickItem *item) { return item->objectName() == u"menuNoteMode"; });
-                        return mode != nullptr;
-                    });
-                    settle(150); // the menu's opening transition
-                    return mode;
-                };
-                const auto segment = [&](QQuickItem *mode, const char *text) {
-                    const QString wanted = QCoreApplication::translate("ShellTopBar", text);
-                    return mode ? findShown(mode,
-                                            [&](QQuickItem *item) {
-                                                return item->inherits("QQuickAbstractButton")
-                                                       && item->property("text").toString() == wanted;
-                                            })
-                                : nullptr;
-                };
-                QQuickItem *mode = openMore();
-                QQuickItem *segmented = mode ? findShown(mode, [](QQuickItem *item) { return isA(item, "BSegmented"); })
-                                             : nullptr;
-                check(segmented && segmented->property("currentValue").toString() == u"document",
-                      "the More menu's Mode switch shows the document");
-                if (QQuickItem *outline = segment(mode, "Outline")) {
-                    tapOrClick(window, pointIn(outline), touch);
-                    check(waitFor([&] { return page->property("mode").toString() == u"outline"; })
-                                  && app->workspace()->readFile(guide) == withKey(u"outline"_s),
-                          "its Outline makes the note an outline, writing only the mode");
-                } else {
-                    check(false, "the Mode switch has Outline");
-                }
-                mode = openMore();
-                if (QQuickItem *sourceSegment = segment(mode, "Source")) {
-                    tapOrClick(window, pointIn(sourceSegment), touch);
-                    check(waitFor([&] { return page->property("sourceMode").toBool(); }),
-                          "its Source shows the Markdown source");
-                } else {
-                    check(false, "the Mode switch has Source");
-                }
-                mode = openMore();
-                if (QQuickItem *document = segment(mode, "Document")) {
-                    tapOrClick(window, pointIn(document), touch);
-                    check(waitFor([&] {
-                              return !page->property("sourceMode").toBool()
-                                     && page->property("mode").toString() == u"document";
-                          }) && app->workspace()->readFile(guide) == before,
-                          "its Document leaves the source and makes the note a document again");
-                } else {
-                    check(false, "the Mode switch has Document");
-                }
-                closeMenus(window);
-            }
-
-            // Page properties (docs/UI.md "Page properties"): the guide's tag chip in the header —
-            // a right-click, a long press — "Remove from this page" writes only that property (its
-            // last tag: the `tags:` line goes), undo brings it back; the header's "+" → "Add alias"
-            // and an alias typed in the row's field: `aliases:` gets it; the palette's "Add page
-            // property" opens the properties panel's add row.
-            {
-                const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
-                const auto saveNow = [page] {
-                    bool ok = false;
-                    QMetaObject::invokeMethod(page, "save", qReturnArg(ok));
-                    return ok;
-                };
-                const auto undoNow = [page] { QMetaObject::invokeMethod(page, "undo"); };
-                // Waits for it: a menu counts as open before its items are laid out (on a slow
-                // machine its rows show a little later).
-                const auto shownItem = [&](const QString &name) {
-                    QQuickItem *found = nullptr;
-                    waitFor([&] {
-                        found = uidriver::topmost(window, [&name](QQuickItem *i) { return i->objectName() == name; });
-                        return found != nullptr;
-                    });
-                    return found;
-                };
-                if (auto *list = editor->property("listView").value<QQuickItem *>())
-                    QMetaObject::invokeMethod(list, "positionViewAtBeginning");
-                settle(300);
-                const QString before = app->workspace()->readFile(guide);
-                QQuickItem *chip = shownNamed(editor, u"headerTag_przewodnik"_s);
-                check(chip != nullptr && before.contains(u"\ntags: [przewodnik]\n"_s),
-                      "the guide's tag chip is in its header");
-                if (chip) {
-                    if (touch)
-                        touchTap(window, pointIn(chip), 1000);
-                    else
-                        mouseClick(window, pointIn(chip), Qt::RightButton);
-                    check(waitFor([&] { return openMenus(window) == 1; }),
-                          touch ? "a long press on the tag chip opens its menu"
-                                : "a right-click on the tag chip opens its menu");
-                    if (QQuickItem *remove = shownItem(u"propertyChipRemove"_s)) {
-                        tapOrClick(window, pointIn(remove), touch);
-                        check(waitFor([&] {
-                                  return saveNow()
-                                         && app->workspace()->readFile(guide)
-                                                    == QString(before).replace(u"tags: [przewodnik]\n"_s, QString());
-                              }),
-                              "“Usuń z tej strony” removes the tag: only that line changes");
-                        check(waitFor([&] { return !shownNamed(editor, u"headerTag_przewodnik"_s); }),
-                              "the chip is gone from the header");
-                        undoNow();
-                        check(waitFor([&] { return saveNow() && app->workspace()->readFile(guide) == before; }),
-                              "undo brings the tag back");
-                    } else {
-                        check(false, "the chip's menu has “Usuń z tej strony”");
-                    }
-                }
-                closeMenus(window);
-                QQuickItem *plus = shownNamed(editor, u"pageHeaderAdd"_s);
-                check(plus != nullptr, "the header's chips end with “+”");
-                if (plus) {
-                    tapOrClick(window, pointIn(plus), touch);
-                    check(waitFor([&] { return openMenus(window) == 1; }), "“+” opens its menu");
-                    if (QQuickItem *alias = shownItem(u"headerAddAlias"_s)) {
-                        tapOrClick(window, pointIn(alias), touch);
-                        check(waitFor([&] {
-                                  const QQuickItem *f = window->activeFocusItem();
-                                  return f && f->objectName() == u"pageHeaderField";
-                              }),
-                              "“Dodaj alias” opens a field in the header");
-                        typeText(u"Żółw"_s);
-                        sendKey(window, Qt::Key_Return);
-                        check(waitFor([&] {
-                                  return saveNow()
-                                         && app->workspace()->readFile(guide)
-                                                    == QString(before).replace(u"aliases: [Przewodnik, Start]"_s,
-                                                                               u"aliases: [Przewodnik, Start, Żółw]"_s);
-                              }),
-                              "the alias typed there is written into `aliases:`");
-                        sendKey(window, Qt::Key_Escape);
-                        undoNow();
-                        check(waitFor([&] { return saveNow() && app->workspace()->readFile(guide) == before; }),
-                              "undo takes the alias away");
-                    } else {
-                        check(false, "the menu has “Dodaj alias”");
-                    }
-                }
-                closeMenus(window);
-                // An alias no link can use, then a tap elsewhere: nothing written, the field closes
-                // and a toast says why (Enter says it under the field).
-                plus = shownNamed(editor, u"pageHeaderAdd"_s);
-                if (plus) {
-                    tapOrClick(window, pointIn(plus), touch);
-                    check(waitFor([&] { return openMenus(window) == 1; }), "“+” opens its menu again");
-                    if (QQuickItem *alias = shownItem(u"headerAddAlias"_s)) {
-                        tapOrClick(window, pointIn(alias), touch);
-                        check(waitFor([&] {
-                                  const QQuickItem *f = window->activeFocusItem();
-                                  return f && f->objectName() == u"pageHeaderField";
-                              }),
-                              "“Dodaj alias” opens the field again");
-                        QString toast;
-                        const QMetaObject::Connection toasts =
-                                QObject::connect(app, &AppController::toastRequested, app,
-                                                 [&toast](const QString &text) { toast = text; });
-                        typeText(u"Dom|ż"_s);
-                        // The keyboard goes elsewhere (outside the editor: its focus scope would
-                        // give it back to the field).
-                        auto *elsewhere = new QQuickItem;
-                        elsewhere->setParentItem(window->contentItem());
-                        elsewhere->forceActiveFocus();
-                        const QString reason =
-                                QCoreApplication::translate("brulion::editor::PageController",
-                                                            "An alias with this character cannot be used in a link");
-                        check(waitFor([&] { return toast == reason; }),
-                              "an alias no link can use, left by a tap elsewhere: a toast says why");
-                        QObject::disconnect(toasts);
-                        check(waitFor([&] { return !shownNamed(editor, u"pageHeaderField"_s); }), "the field closed");
-                        check(saveNow() && app->workspace()->readFile(guide) == before, "nothing was written");
-                        delete elsewhere;
-                    } else {
-                        check(false, "the menu has “Dodaj alias” again");
-                    }
-                }
-                closeMenus(window);
-                app->requestUiAction(u"addProperty"_s);
-                check(waitFor([&] {
-                          const QQuickItem *f = window->activeFocusItem();
-                          return f && f->objectName() == u"propertiesKeyField";
-                      }),
-                      "the palette's “Dodaj właściwość strony” opens the properties panel's add row");
-                sendKey(window, Qt::Key_Escape);
-                check(app->workspace()->readFile(guide) == before, "nothing is written until a name is chosen");
-                app->settings()->setPropertiesExpanded(false);
-                settle(100);
-            }
-
-            // Phones: a block at the bottom of the screen that starts editing is scrolled above
-            // the editing toolbar (which sits on the keyboard) instead of staying under it.
-            if (window->width() < 900) {
-                const qsizetype lowLine = lines.indexOf(u"- Ctrl+. zwija i rozwija dzieci bloku w konspekcie."_s);
-                int low = -1;
-                QMetaObject::invokeMethod(page, "rowOfLine", qReturnArg(low), int(lowLine));
-                auto *list = editor->property("listView").value<QQuickItem *>();
-                if (list && low >= 0) {
-                    QMetaObject::invokeMethod(page, "stopEditing");
-                    QMetaObject::invokeMethod(list, "positionViewAtIndex", low, 2 /* ListView.End */);
-                    settle(100);
-                    uidriver::callQml(editor, "startEditing", {QVariant(low), QVariant(-1)});
-                    const auto caretBottom = [editor]() -> qreal {
-                        auto *edit = editor->property("activeEditor").value<QQuickItem *>();
-                        if (!edit)
-                            return 1e9;
-                        const QRectF r = edit->property("cursorRectangle").toRectF();
-                        return edit->mapToItem(editor, r.bottomLeft()).y();
-                    };
-                    const auto visibleBottom = [editor] {
-                        double bottom = 0;
-                        QMetaObject::invokeMethod(editor, "visibleBottom", qReturnArg(bottom));
-                        return bottom;
-                    };
-                    check(editorFocused() && waitFor([&] { return caretBottom() <= visibleBottom() + 0.5; }),
-                          "a block edited at the bottom of a phone screen is not hidden under the toolbar");
-                    QMetaObject::invokeMethod(page, "stopEditing");
-                } else {
-                    check(false, "the editor's list and the low block exist");
-                }
-            }
-
-            // [[Pomysły na prezenty]] on the guide: the page does not exist yet.
-            const QString missing = u"Pomysły na prezenty.md"_s;
-            QVariantMap result;
-            QMetaObject::invokeMethod(page, "activateLink", qReturnArg(result), row, u"page:Pomys%C5%82y%20na%20prezenty"_s, false);
-            QObject *newPage = nullptr;
-            check(waitFor([&] {
-                      newPage = controllerFor(missing);
-                      return app->currentRoute().value(u"path"_s).toString() == missing && newPage
-                             && newPage->property("editingRow").toInt() >= 0;
-                  }),
-                  "a link to a missing page opens it with a block to type into");
-            check(editorFocused(), "the new page's block has the keyboard");
-            check(!app->workspace()->exists(missing), "opening a missing page does not create a file");
-            if (newPage) {
-                typeText(u"Rower dla Oli"_s);
-                QMetaObject::invokeMethod(newPage, "save", qReturnArg(saved));
-                check(app->workspace()->readFile(missing).contains(u"Rower dla Oli"_s), "typing creates the new page");
-
-                // Renamed with unsaved typing (F2 right after typing): the editor follows the
-                // file, the old name never comes back as a duplicate and nothing typed is lost.
-                typeText(u" i Kuby"_s);
-                const QString renamed = app->workspace()->renamePage(missing, u"Prezenty dla dzieci"_s);
-                check(renamed == u"Prezenty dla dzieci.md"_s, "the open page is renamed");
-                check(waitFor([&] {
-                          return newPage->property("path").toString() == renamed
-                                 && app->currentRoute().value(u"path"_s).toString() == renamed;
-                      }),
-                      "the editor and the route follow the rename");
-                QMetaObject::invokeMethod(newPage, "save", qReturnArg(saved));
-                settle(100);
-                check(!app->workspace()->exists(missing), "the old name does not come back");
-                check(app->workspace()->readFile(renamed).contains(u"Rower dla Oli i Kuby"_s),
-                      "the text typed before the rename is saved under the new name");
-            }
-
-            // 5g. Links to blocks and headings: followed, missing, copied from the palette.
-            checkBlockLinks(window, app, check, controllerFor);
-            // 5k. The path parts of a link to a page in a folder.
-            checkLinkParts(window, app, check, controllerFor);
-            // 5l. Link previews; rounded tags in linked references.
-            checkLinkPreviews(window, app, check, controllerFor);
-            // 5b. A picture opens as a picture (checkPictureView).
-            checkPictureView(window, app, check, controllerFor);
-            // 5k. PDFs: the thumbnail, the viewer, drawing on a page (checkPdfViewer).
-            checkPdfViewer(window, app, check, controllerFor);
-            // 5i. A drawing: opened from its embed, drawn with real input, saved by itself.
-            checkDrawing(window, app, check);
-            // 5j. A drawing another program wrote: its embed's frame never moves.
-            checkDrawingFrame(window, app, check);
-            // 5e. The default reminder time set on a clock in the settings.
-            checkSettingsClock(window, app, check);
-            // 5f. The on-screen keyboard (phones).
-            if (window->width() < 900)
-                checkKeyboard(engine, window, app, check);
-        } else {
-            check(false, "the page view has an editor");
-        }
-        app->goHome();
-    }
+    // 5. The block editor in the shell, and the checks that follow in the guide page.
+    checkBlockEditor(engine, window, app, check);
 
     // 5m. Tabs, the split view, a page in a window of its own (phones: the tab switcher).
     checkTabs(window, app, check);
@@ -8431,7 +8421,7 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
     checkAppearance(engine, window, app, check);
 
     // 5j. The tray calendar (desktop).
-    if (!QCoreApplication::arguments().contains(u"--touch"_s)) {
+    if (!touchRun()) {
         checkTrayCalendar(window, app, check);
         closeMenus(window);
     }
@@ -8442,11 +8432,7 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
         app->navigate({{u"view"_s, u"settings"_s}, {u"section"_s, u"app"_s}});
         check(waitFor([&] { return shownNamed(window->contentItem(), u"settingsDetailedLog"_s) != nullptr; }),
               "the application settings are shown");
-        QQuickItem *startAtLogin = nullptr;
-        for (QQuickItem *item : uidriver::allItems(window->contentItem())) {
-            if (item->objectName() == u"settingsStartAtLogin")
-                startAtLogin = item;
-        }
+        QQuickItem *startAtLogin = lastNamed(window->contentItem(), u"settingsStartAtLogin"_s);
 #ifdef Q_OS_WIN
         const bool separateProfile = app->autostartAvailability() == u"profile";
         check(startAtLogin && startAtLogin->isVisible() && startAtLogin->isEnabled() == !separateProfile
@@ -8456,11 +8442,7 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
         check(startAtLogin && !startAtLogin->isVisible(), "starting at sign-in is offered on Windows only");
 #endif
         // What a click on the tray icon does: desktops only, while there is a tray.
-        QQuickItem *trayClick = nullptr;
-        for (QQuickItem *item : uidriver::allItems(window->contentItem())) {
-            if (item->objectName() == u"settingsTrayClick")
-                trayClick = item;
-        }
+        QQuickItem *trayClick = lastNamed(window->contentItem(), u"settingsTrayClick"_s);
         check(trayClick && trayClick->isVisible() == app->isDesktop()
                       && (!app->isDesktop() || trayClick->isEnabled() == app->trayAvailable()),
               "the tray click setting is shown on desktops (enabled with a tray)");
@@ -8476,7 +8458,7 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
           "closing the notebook shows onboarding and closes the vault");
 
     // 6b. The tray calendar without a notebook: the month and a hint, no entries.
-    if (!QCoreApplication::arguments().contains(u"--touch"_s)) {
+    if (!touchRun()) {
         app->showTrayCalendar(QRect(), {});
         QQuickWindow *popup = nullptr;
         check(waitFor([&] {
