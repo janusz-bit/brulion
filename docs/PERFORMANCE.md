@@ -13,9 +13,11 @@ compared with `ef90077`) and a smooth graph (L16, compared with `64d0380` on a G
 
 ### What got better
 
-* **Switching views without waiting** (2026-11-09). Journal, Pages, Search, Tasks and Calendar
-  stay in memory once opened: going back to one of them (e.g. from Tasks to the Journal on a
-  phone) shows it at once, where it was scrolled, instead of building it again for 0.5–1 s.
+* **Switching views without waiting** (2026-11-09, 2026-11-10). Journal, Pages, Search, Tasks and
+  Calendar stay in memory once opened: going back to one of them (e.g. from Tasks to the Journal
+  on a phone) shows it at once, where it was scrolled, instead of building it again for 0.5–1 s.
+  Since 2026-11-10 they are also prepared in the background a moment after the notebook opens, so
+  even the first switch to Tasks or Calendar is instant.
 * **Smooth graph** (2026-10-30). The **Graph** view is laid out on a separate thread and drawn by
   the graphics card: from the very first moment you can pan it, zoom it and drag pages, and the
   interface does not wait for the layout computation. With a notebook of 10,000 notes (a graph of
@@ -1034,6 +1036,20 @@ models up to date with edits, which follow the index's change log (`QueryCache`,
 Settings… — are still made per route and deleted when left, so the shell self-test's "5n"
 (rounds of views and pages leave no more editors than the first round) holds. The kept views
 go when the pane shows no route (the split pane closed).
+
+**Built ahead (2026-11-10).** The first switch to one of them still built it. Now the main window's
+main pane (`ShellRouteView.preloadViews`) builds the kept views it has not shown yet in the
+background: 1.2 s after the notebook is ready and indexed (`Workspace.ready`, not `indexing`), one
+at a time — Tasks, Calendar, Journal, All pages, Search —, the next 0.4 s after the one before has
+loaded. Each is an asynchronous `Loader` (`KeptLoader.asynchronous: !shown`): the view's objects
+are incubated over several frames while it stays hidden, with its plain route (`{view: "tasks"}`);
+its models are filled when they are completed (one C++ step per view, not split up). Opening a view
+still being built finishes it at once (asynchronous turned off completes the incubation
+synchronously). A view built hidden must not take the keyboard: its `Component.onCompleted` focuses
+its list or field only when it is visible, and the pane calls its `takeFocus()` the first time it
+shows it (`ViewTraits.takeFocus`). The split pane and a page's own window build nothing ahead.
+The shell self-test's "0b" checks that Tasks and Calendar exist, hidden, before they are opened,
+and that opening Tasks shows that view with the keyboard in it. Not measured on a phone yet.
 
 ### Scrolling pages: cheaper rows, pages created whole (2026-11-06, 2026-11-07)
 

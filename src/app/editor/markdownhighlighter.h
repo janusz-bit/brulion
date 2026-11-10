@@ -26,8 +26,17 @@
 // marked while it is being typed. Verdicts come from the checker's thread: lines with words still
 // pending are highlighted again when they arrive (only those lines). misspelledAt(pos): the
 // marked word there, for the editor's menu.
+// reminderChips (the block editor's edited text, "inline" mode): every ⏰ / ⏰! reminder token stays
+// a chip while its block is edited — `chipShapes` gives one rounded shape per line segment of each
+// token ({x, y, width, height, color, kind "pill", from, to}: document positions of the token), in
+// the document's coordinates, vertically centred on the text's glyphs less `chipInset`, coloured
+// with the palette's reminderBackground / alarmBackground (its text: reminderChip / alarmChip,
+// else reminder / alarm). The editor draws them under the text and opens the reminder dialog on a
+// click (InlineEditor). Recomputed when the document's layout changes (text, width, font) and
+// announced only when different.
 #pragma once
 
+#include "richtextpills.h"
 #include "spellcheck.h"
 #include "text/find.h"
 
@@ -63,8 +72,20 @@ class MarkdownHighlighter : public QSyntaxHighlighter {
     /// The caret (a position in the document; -1: none): the word ending right at it is not marked.
     Q_PROPERTY(int spellCaret READ spellCaret WRITE setSpellCaret NOTIFY spellCaretChanged FINAL)
     Q_PROPERTY(QColor spellColor READ spellColor WRITE setSpellColor NOTIFY spellColorChanged FINAL)
+    /// Reminder tokens are chips (`chipShapes`); off: none.
+    Q_PROPERTY(bool reminderChips READ reminderChips WRITE setReminderChips NOTIFY reminderChipsChanged FINAL)
+    Q_PROPERTY(qreal chipInset READ chipInset WRITE setChipInset NOTIFY chipInsetChanged FINAL)
+    Q_PROPERTY(QList<brulion::editor::RichTextPill> chipShapes READ chipShapes NOTIFY chipShapesChanged FINAL)
 
 public:
+    /// A reminder token of a line (positions in the line): `reminderChips`.
+    struct LineChip {
+        int from = 0;
+        int to = 0;
+        bool alarm = false;
+        bool operator==(const LineChip &other) const = default;
+    };
+
     explicit MarkdownHighlighter(QObject *parent = nullptr);
     ~MarkdownHighlighter() override;
 
@@ -94,6 +115,13 @@ public:
     void setSpellCaret(int position);
     QColor spellColor() const { return m_spellColor; }
     void setSpellColor(const QColor &color);
+    bool reminderChips() const { return m_reminderChips; }
+    void setReminderChips(bool on);
+    qreal chipInset() const { return m_chipInset; }
+    void setChipInset(qreal px);
+    QList<RichTextPill> chipShapes() const { return m_chipShapes; }
+    /// Recomputes `chipShapes` from the current layout (layout changes call it by themselves).
+    Q_INVOKABLE void refreshChips();
 
     /// The word marked as misspelled at `position` of the document (inside it or right after
     /// it): {from, to (document positions), word (as checked: "np." with its dot), text (as
@@ -114,6 +142,9 @@ Q_SIGNALS:
     void spellCheckChanged();
     void spellCaretChanged();
     void spellColorChanged();
+    void reminderChipsChanged();
+    void chipInsetChanged();
+    void chipShapesChanged();
 
 protected:
     void highlightBlock(const QString &text) override;
@@ -140,6 +171,9 @@ private:
     void rehighlightLine(int number);
     /// Block number of the wrong word ending at `position`, -1 when none ends there.
     int wrongWordBlockAt(int position) const;
+    /// The current line's reminder tokens (m_lineChips) kept on its block (ChipData); the shapes
+    /// recomputed when they changed.
+    void storeLineChips();
 
     QPointer<QQuickTextDocument> m_quickDocument;
     QVariantMap m_palette;
@@ -164,6 +198,12 @@ private:
     /// The line where the word at the caret was left unmarked (-1: none).
     int m_spellSuppressedBlock = -1;
     QTimer m_spellTimer;
+    bool m_reminderChips = false;
+    qreal m_chipInset = 0;
+    QList<LineChip> m_lineChips; ///< collected while a line is highlighted
+    QList<RichTextPill> m_chipShapes;
+    bool m_computingChips = false;
+    QList<QMetaObject::Connection> m_layoutConnections;
 };
 
 } // namespace brulion::editor

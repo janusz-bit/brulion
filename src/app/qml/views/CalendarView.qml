@@ -207,6 +207,11 @@ FocusScope {
     onRouteChanged: applyRoute()
     Component.onCompleted: {
         applyRoute()
+        if (visible)
+            takeFocus()
+    }
+    /// The keyboard to the grids (made shown, or shown the first time after being built ahead).
+    function takeFocus(): void {
         body.forceActiveFocus()
     }
     focus: true

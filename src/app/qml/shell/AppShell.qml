@@ -505,6 +505,8 @@ FocusScope {
                     paneActive: !shell.split || !AppController.splitFocused
                     // The calendar grids' swipe took the swipe that closes the drawer over them.
                     covered: drawer.visible
+                    // Tasks, Calendar… are built in the background: the first switch is instant.
+                    preloadViews: true
                     onActivated: if (!Theme.narrow) AppController.focusPane(false)
                 }
                 ShellTabPane {

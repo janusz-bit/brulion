@@ -175,4 +175,10 @@ void ViewTraits::stepBack() const
         m.invoke(m_view, Qt::DirectConnection);
 }
 
+void ViewTraits::takeFocus() const
+{
+    if (const QMetaMethod m = method("takeFocus", 0); m.isValid())
+        m.invoke(m_view, Qt::DirectConnection);
+}
+
 } // namespace brulion::shell

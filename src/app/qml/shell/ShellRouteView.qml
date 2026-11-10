@@ -24,6 +24,8 @@ import Brulion
 // `property bool toolbarDocked` (an editor's touch toolbar is docked at the view's bottom edge:
 // on the keyboard, or on the phone's bottom navigation once the keyboard went), `replacesBottomNav` (DrawingView on phones: the view's own bar at the
 // bottom takes the bottom navigation's place),
+// `takeFocus()` (a kept view built ahead, hidden, shown the first time: the keyboard to its list or
+// field — what its Component.onCompleted does only when made shown),
 // `pictureRoute` / `pictureAsText` (PageView: a picture is shown, as text or not — the top bar's
 // menu acts on it), `sourceMode` (PageView: the page is shown as Markdown source — the palette's
 // block commands are off), `edgeSwipe` (CalendarView: the view's own horizontal swipe starts at
@@ -48,6 +50,8 @@ Item {
     /// Keep the bottom navigation's views (Journal, All pages, Search, Tasks, Calendar) while
     /// other views are shown (the tab panes; not the side panel).
     property bool keepViews: false
+    /// Build the kept views not shown yet ahead, in the background (with keepViews; the main pane).
+    property bool preloadViews: false
 
     /// The view's state (where it is scrolled), {} for a view that keeps none.
     function viewState(): var {
@@ -176,6 +180,58 @@ Item {
         }
         root.shownKey = key
     }
+
+    /// The views built ahead, in this order, and the plain route each starts with.
+    readonly property list<string> preloadOrder: ["tasks", "calendar", "journals", "allPages", "search"]
+    /// The notebook is open and indexed: building views ahead may start (and goes on).
+    readonly property bool preloadAllowed: root.preloadViews && root.keepViews && root.shownKey !== ""
+                                           && Workspace.ready && !Workspace.indexing
+    onPreloadAllowedChanged: if (preloadAllowed) preloadTimer.restart()
+    function keptLoader(key: string): KeptLoader {
+        switch (key) {
+        case "journals": return journalsLoader
+        case "allPages": return allPagesLoader
+        case "search": return searchLoader
+        case "tasks": return tasksLoader
+        case "calendar": return calendarLoader
+        default: return null
+        }
+    }
+    /// Starts building the next kept view that does not exist yet (none left: nothing). The next one
+    /// follows once it is loaded (KeptLoader.onLoaded → preloadTimer).
+    function preloadNext(): void {
+        if (!root.preloadAllowed)
+            return
+        for (let i = 0; i < root.preloadOrder.length; ++i) {
+            const key = root.preloadOrder[i]
+            const next = root.keptLoader(key)
+            if (next === null || next.active)
+                continue
+            switch (key) {
+            case "journals": if (!Js.hasKey(root.journalsRoute, "view")) root.journalsRoute = { view: "journals" }; break
+            case "allPages": if (!Js.hasKey(root.allPagesRoute, "view")) root.allPagesRoute = { view: "allPages" }; break
+            case "search": if (!Js.hasKey(root.searchRoute, "view")) root.searchRoute = { view: "search" }; break
+            case "tasks": if (!Js.hasKey(root.tasksRoute, "view")) root.tasksRoute = { view: "tasks" }; break
+            case "calendar": if (!Js.hasKey(root.calendarRoute, "view")) root.calendarRoute = { view: "calendar" }; break
+            }
+            next.kept = true
+            return
+        }
+    }
+    /// After the notebook is ready, and between two views: the app's own work comes first.
+    Timer {
+        id: preloadTimer
+        interval: 1200
+        onTriggered: root.preloadNext()
+    }
+    /// A kept view finished loading: the next one a moment later.
+    function preloaded(): void {
+        if (root.preloadAllowed) {
+            preloadTimer.interval = 400
+            preloadTimer.restart()
+        }
+    }
+
     onRouteChanged: showRoute()
     onKeepViewsChanged: showRoute()
     Component.onCompleted: showRoute()
@@ -190,6 +246,12 @@ Item {
             fadeIn.start()
         }
         traits.applyPendingState()
+        // A kept view shown the first time (built ahead, hidden, it left the keyboard alone).
+        const kept = root.shownLoader as KeptLoader
+        if (item && kept && !kept.everShown) {
+            kept.everShown = true
+            traits.takeFocus()
+        }
     }
     NumberAnimation {
         id: fadeIn
@@ -213,14 +275,20 @@ Item {
         focus: root.shownLoader === loader
         sourceComponent: root.componentFor(root.shownKey)
     }
-    // The kept views: made when first shown, then (`kept`, with keepViews) only hidden.
+    // The kept views: made when first shown (or built ahead, `kept` set by preloadNext()), then
+    // (`kept`, with keepViews) only hidden. Built ahead while hidden: in pieces over several frames;
+    // shown before it is ready, the rest at once (asynchronous turned off finishes it).
     component KeptLoader: Loader {
         required property bool shown
         required property bool keepViews
         property bool kept
+        /// Its view has been shown (the first time, it takes the keyboard: onViewChanged).
+        property bool everShown
         onShownChanged: if (shown && keepViews) kept = true
+        onActiveChanged: if (!active) everShown = false
         anchors.fill: parent
         active: shown || kept
+        asynchronous: !shown
         visible: shown
         focus: shown
     }
@@ -229,30 +297,35 @@ Item {
         shown: root.shownKey === "journals"
         keepViews: root.keepViews
         sourceComponent: journalsView
+        onLoaded: root.preloaded()
     }
     KeptLoader {
         id: allPagesLoader
         shown: root.shownKey === "allPages"
         keepViews: root.keepViews
         sourceComponent: allPagesView
+        onLoaded: root.preloaded()
     }
     KeptLoader {
         id: searchLoader
         shown: root.shownKey === "search"
         keepViews: root.keepViews
         sourceComponent: searchView
+        onLoaded: root.preloaded()
     }
     KeptLoader {
         id: tasksLoader
         shown: root.shownKey === "tasks"
         keepViews: root.keepViews
         sourceComponent: tasksView
+        onLoaded: root.preloaded()
     }
     KeptLoader {
         id: calendarLoader
         shown: root.shownKey === "calendar"
         keepViews: root.keepViews
         sourceComponent: calendarView
+        onLoaded: root.preloaded()
     }
 
     Component { id: journalsView; JournalsView { route: root.journalsRoute; inSidePanel: root.inSidePanel; paneActive: root.paneActive && journalsLoader.shown } }

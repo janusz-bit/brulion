@@ -554,7 +554,10 @@ FocusScope {
         code: Theme.fg, codeBackground: Theme.bgSunken, highlightBackground: Theme.mark,
         muted: Theme.fgMuted, faint: Theme.fgFaint, due: Theme.chipDueFg, scheduled: Theme.chipScheduledFg,
         reminder: Theme.chipReminderFg, alarm: Theme.warningText, recurrence: Theme.chipRecurrenceFg,
-        done: Theme.fgFaint, priority: Theme.dangerText, text: Theme.fg
+        done: Theme.fgFaint, priority: Theme.dangerText, text: Theme.fg,
+        // The edited block's reminder chips (InlineEditor): the rendered chips' colours.
+        reminderChip: Theme.chipReminderFg, reminderBackground: Theme.chipReminderBg,
+        alarmChip: Theme.chipAlarmFg, alarmBackground: Theme.chipAlarmBg
     })
 
     // Also set at once when the controller arrives, before the list creates its rows: a Binding
@@ -1446,6 +1449,15 @@ FocusScope {
             controller.activateLink(row, url, true)
         else
             activateLink(row, url)
+    }
+
+    /// A reminder chip of the edited text clicked (InlineEditor): the reminder dialog on that token,
+    /// [from, to) a range of the row's edit text.
+    function editReminderInText(row: int, from: int, to: int): void {
+        if (!controller)
+            return
+        const offset = controller.editOffsetAt(row)
+        dialogs.editReminder(row, from + offset, to + offset)
     }
 
     function activateLink(row: int, link: string): void {

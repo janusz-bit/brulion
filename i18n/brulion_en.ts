@@ -4,7 +4,7 @@
 <context>
     <name>AllPagesView</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/AllPagesView.qml" line="212"/>
+        <location filename="../src/app/qml/views/AllPagesView.qml" line="217"/>
         <source>%1 of %n page(s)</source>
         <translation>
             <numerusform>%1 of %n page</numerusform>
@@ -12,8 +12,8 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/AllPagesView.qml" line="213"/>
-        <location filename="../src/app/qml/views/AllPagesView.qml" line="316"/>
+        <location filename="../src/app/qml/views/AllPagesView.qml" line="218"/>
+        <location filename="../src/app/qml/views/AllPagesView.qml" line="321"/>
         <source>%n page(s)</source>
         <translation>
             <numerusform>%n page</numerusform>
@@ -21,7 +21,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/AllPagesView.qml" line="505"/>
+        <location filename="../src/app/qml/views/AllPagesView.qml" line="510"/>
         <source>%n link(s)</source>
         <translation>
             <numerusform>%n link</numerusform>
@@ -32,7 +32,7 @@
 <context>
     <name>AppShell</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/shell/AppShell.qml" line="819"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="821"/>
         <source>This folder and %n page(s) in it will be moved to the trash.</source>
         <translation>
             <numerusform>This folder and %n page in it will be moved to the trash.</numerusform>
@@ -40,7 +40,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/shell/AppShell.qml" line="863"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="865"/>
         <source>%n occurrence(s) replaced</source>
         <translation>
             <numerusform>%n occurrence replaced</numerusform>
@@ -48,7 +48,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/shell/AppShell.qml" line="864"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="866"/>
         <source>%n note(s)</source>
         <translation>
             <numerusform>%n note</numerusform>
@@ -56,8 +56,8 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/shell/AppShell.qml" line="873"/>
         <location filename="../src/app/qml/shell/AppShell.qml" line="875"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="877"/>
         <source>%n note(s) restored</source>
         <translation>
             <numerusform>%n note restored</numerusform>
@@ -159,7 +159,7 @@
 <context>
     <name>BlockEditor</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1059"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1062"/>
         <source>Copied %n block(s) from several days</source>
         <translation>
             <numerusform>Copied %n block from several days</numerusform>
@@ -167,7 +167,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1061"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1064"/>
         <source>Copied %n block(s)</source>
         <translation>
             <numerusform>Copied %n block</numerusform>
@@ -175,7 +175,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1075"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1078"/>
         <source>Cut %n block(s)</source>
         <translation>
             <numerusform>Cut %n block</numerusform>
@@ -183,7 +183,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1091"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1094"/>
         <source>Deleted %n block(s)</source>
         <translation>
             <numerusform>Deleted %n block</numerusform>
@@ -191,7 +191,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1164"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1167"/>
         <source>Pasted %n picture(s) from the internet</source>
         <translation>
             <numerusform>Pasted %n picture from the internet</numerusform>
@@ -199,7 +199,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="2137"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="2149"/>
         <source>%n picture(s) saved to the notebook</source>
         <translation>
             <numerusform>%n picture saved to the notebook</numerusform>
@@ -1057,7 +1057,7 @@
 <context>
     <name>SearchView</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SearchView.qml" line="198"/>
+        <location filename="../src/app/qml/views/SearchView.qml" line="203"/>
         <source>%1 of %n result(s)</source>
         <translation>
             <numerusform>%1 of %n result</numerusform>
@@ -1065,7 +1065,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SearchView.qml" line="199"/>
+        <location filename="../src/app/qml/views/SearchView.qml" line="204"/>
         <source>%n result(s)</source>
         <translation>
             <numerusform>%n result</numerusform>
@@ -1073,7 +1073,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SearchView.qml" line="318"/>
+        <location filename="../src/app/qml/views/SearchView.qml" line="323"/>
         <source>The filters hide %n result(s).</source>
         <translation>
             <numerusform>The filters hide %n result.</numerusform>
@@ -1608,7 +1608,7 @@
 <context>
     <name>TasksView</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/TasksView.qml" line="245"/>
+        <location filename="../src/app/qml/views/TasksView.qml" line="250"/>
         <source>%n open</source>
         <translation>
             <numerusform>%n open</numerusform>
@@ -1616,7 +1616,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/TasksView.qml" line="246"/>
+        <location filename="../src/app/qml/views/TasksView.qml" line="251"/>
         <source>%n overdue</source>
         <translation>
             <numerusform>%n overdue</numerusform>
@@ -1624,7 +1624,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/TasksView.qml" line="247"/>
+        <location filename="../src/app/qml/views/TasksView.qml" line="252"/>
         <source>%n for today</source>
         <translation>
             <numerusform>%n for today</numerusform>
@@ -1632,7 +1632,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/TasksView.qml" line="343"/>
+        <location filename="../src/app/qml/views/TasksView.qml" line="348"/>
         <source>%n tasks in the notebook are hidden by the filters.</source>
         <translation>
             <numerusform>%n task in the notebook is hidden by the filters.</numerusform>

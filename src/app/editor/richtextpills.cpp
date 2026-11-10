@@ -31,7 +31,8 @@ QString kindOf(const RichTextPills::Pill &p)
 
 RichTextPill typed(const RichTextPills::Pill &p)
 {
-    return RichTextPill{p.rect.x(), p.rect.y(), p.rect.width(), p.rect.height(), p.color, kindOf(p), p.icon};
+    return RichTextPill{p.rect.x(), p.rect.y(), p.rect.width(), p.rect.height(), p.color, kindOf(p), p.icon,
+                        p.from,     p.to};
 }
 
 /// A tinted run of a block's text.

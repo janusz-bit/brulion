@@ -94,6 +94,11 @@ FocusScope {
     Component.onCompleted: {
         loadRecent()
         followRoute()
+        if (visible)
+            takeFocus()
+    }
+    /// The keyboard to the query (made shown, or shown the first time after being built ahead).
+    function takeFocus(): void {
         field.forceActiveFocus()
     }
     onRouteChanged: followRoute()

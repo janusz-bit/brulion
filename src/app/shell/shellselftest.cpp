@@ -7439,6 +7439,59 @@ void checkLanguageFollows(QQuickWindow *window, AppController *app, const Check 
     app->goHome();
 }
 
+/// 0b. Tasks, Calendar… are built in the background once the notebook is ready (ShellRouteView.
+///     preloadViews, the main pane): they exist, hidden, before they were ever opened; opening
+///     Tasks shows that same view, and it takes the keyboard then (not while it was hidden).
+void checkViewsBuiltAhead(QQuickWindow *window, AppController *app, const Check &check)
+{
+    auto *mainPane = window->findChild<QQuickItem *>(u"shellMainPane"_s);
+    if (!mainPane) {
+        check(false, "the main pane exists");
+        return;
+    }
+    const auto viewIn = [mainPane](const char *type) {
+        QQuickItem *found = nullptr;
+        std::function<void(QQuickItem *)> visit = [&](QQuickItem *item) {
+            if (found)
+                return;
+            if (isA(item, type)) {
+                found = item;
+                return;
+            }
+            const QList<QQuickItem *> children = item->childItems();
+            for (QQuickItem *child : children)
+                visit(child);
+        };
+        visit(mainPane);
+        return found;
+    };
+    QQuickItem *tasks = nullptr;
+    QQuickItem *calendar = nullptr;
+    const bool built = waitFor(
+            [&] {
+                tasks = viewIn("TasksView");
+                calendar = viewIn("CalendarView");
+                return tasks && calendar;
+            },
+            15000);
+    check(built && app->currentView() == u"journals" && !tasks->isVisible() && !calendar->isVisible(),
+          "Tasks and Calendar are built in the background, hidden, before they are opened");
+    if (!built)
+        return;
+    QQuickItem *focus = window->activeFocusItem();
+    check(!focus || !tasks->isAncestorOf(focus), "a view built ahead leaves the keyboard alone");
+    app->navigate({{u"view"_s, u"tasks"_s}});
+    check(waitFor([&] { return tasks->isVisible(); }) && viewIn("TasksView") == tasks,
+          "opening Tasks shows the view built ahead");
+    check(waitFor([&] {
+              focus = window->activeFocusItem();
+              return focus && tasks->isAncestorOf(focus);
+          }),
+          "and gives it the keyboard");
+    sendKey(window, Qt::Key_Back);
+    waitFor([&] { return app->currentView() == u"journals"; });
+}
+
 /// 5n. The views a route leaves go with their editors: ShellRouteView's Loader detaches the old
 ///     view and deletes it later (deleteLater), and nothing — the tabs, their view states, the
 ///     side panel, the history — may keep it. The running self-test never lets the event loop run
@@ -8305,6 +8358,9 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
         sendKey(window, Qt::Key_Escape);
         check(waitFor([&] { return !isOpen(capture); }), "Escape closes quick capture");
     }
+
+    // 0b. Tasks, Calendar… are built in the background before they are opened.
+    checkViewsBuiltAhead(window, app, check);
 
     // 1. The back key walks the history and is handled; at home it is left to the system.
     app->navigate({ { u"view"_s, u"tasks"_s } });

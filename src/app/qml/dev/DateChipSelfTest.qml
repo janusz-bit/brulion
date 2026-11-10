@@ -15,7 +15,9 @@ import Brulion
 // ⏫ priority, the 🔁 rule (its quick rules), the reminder's "Priority" submenu, a [[day]] link (a
 // day later) opens their menus (removing a date or a reminder red, the 🔁's and the priority's
 // none value a neutral choice), and on a #tag and a [[link]] the link menu (LinkMenu: "Copy"
-// copies the tag, the link) — never the block menu.
+// copies the tag, the link) — never the block menu. While the block is edited its ⏰ stays a chip:
+// a click or tap on it opens the reminder dialog on that reminder, the caret stays, the time chosen
+// is written (one undo step).
 // Steps run on the playground's step runner (EditorPlayground.runSteps).
 QtObject {
     id: test
@@ -57,6 +59,8 @@ QtObject {
     function dateDialog(): BDialog { return dialogs().dateDialog }
     function datePicker(): BDatePicker { return DevTest.objectProperty(dateDialog(), "picker") as BDatePicker }
     function reminderDialog(): BReminderDialog { return dialogs().reminderDialog }
+    /// The edited block's reminder chip (InlineEditor), null when there is none.
+    function chipArea(): Item { return DevTest.findShown(window.delegateAt(row), "reminderChipArea") }
     /// The item of the date menu that opens its submenu `name`.
     function subMenuItem(name: string): T.MenuItem {
         const m = menu()
@@ -230,6 +234,33 @@ QtObject {
         if (window.at()) reminderDialog().reject()
         if (window.at()) window.waitStep(!reminderDialog().opened, "the dialog closes")
         if (window.at()) check(Js.indexOf(line("Zadzwonić do hydraulika"), reminder) > 0, "a cancelled dialog changes nothing")
+        // ---- ⏰ in the edited text: still a chip, a click / tap opens the reminder dialog ---------------
+        if (window.at()) editor.startEditing(row, 3)
+        if (window.at()) window.waitStep(page.editingRow === row && chipArea() !== null, "the edited block's ⏰ is still a chip")
+        if (window.at()) {
+            // (One per line: on a phone the token wraps.)
+            const areas = DevTest.countNamed(window.delegateAt(row), "reminderChipArea")
+            check(areas === (Theme.touchUi ? 2 : 1), "one chip for its one reminder, a part per line: " + areas)
+            const area = chipArea()
+            window.tapAt(area, area.width / 2, area.height / 2)
+        }
+        if (window.at()) window.waitStep(reminderDialog() !== null && reminderDialog().opened,
+                                         (Theme.touchUi ? "a tap" : "a click") + " on it opens the reminder dialog")
+        if (window.at()) {
+            check(reminderDialog().at === "2026-10-15 18:00", "on the reminder's date and time: " + reminderDialog().at)
+            check(page.cursorPosition === 3, "the caret stays where it was: " + page.cursorPosition)
+            reminderDialog().at = "2026-10-15 20:30"
+            reminderDialog().accept()
+        }
+        if (window.at()) window.waitStep(!reminderDialog().opened, "the dialog closes")
+        if (window.at()) check(Js.indexOf(line("Zadzwonić do hydraulika"), "Zadzwonić do hydraulika ⏰ 2026-10-15 20:30 #telefon") > 0,
+                               "the time chosen is written: " + line("Zadzwonić do hydraulika"))
+        if (window.at()) window.waitStep(page.editingRow === row && chipArea() !== null, "the block is edited again, its reminder a chip")
+        if (window.at()) {
+            page.stopEditing()
+            page.undo()
+        }
+        if (window.at()) check(Js.indexOf(line("Zadzwonić do hydraulika"), reminder) > 0, "one undo step puts the time back")
         // ---- ⏫: the priority's menu ----------------------------------------------------------------
         if (window.at()) show("Kupić płytki")
         chipGesture("prio:", false)

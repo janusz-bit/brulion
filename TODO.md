@@ -145,11 +145,11 @@ done in the repository simply disappears from the list.
 * **CalDAV calendars** — two-way sync of tasks and events (Nextcloud, Google, Thunderbird, DAVx⁵)
   and read-only subscription to ICS calendars in the calendar view. Today there is a one-time
   iCalendar import and export.
-* **Reminders and alarms stay chips while a block is edited** — today a focused block shows its
-  raw Markdown, so `⏰ 2026-11-20 18:00` and the alarm turn into plain text as soon as the note is
-  entered (docs/UI.md: only an unfocused block shows the rendered chips). They should stay amber
-  chips in the editor too, with their menu (change the time, snooze, remove) and the caret moving
-  over them as one unit, while the file keeps the same text.
+* **Reminders and alarms in an edited block** — they stay amber chips that open the date and time
+  dialog when clicked (docs/UI.md), but still show the raw text (`2026-11-20 18:00`, not "tomorrow
+  18:00") and are plain text to the keyboard. Missing: the chip's menu (snooze, remove) on a
+  right-click or long-press, the caret moving over the chip as one unit, and chips in Markdown
+  source mode and table cells.
 
 ## Capture
 
@@ -231,12 +231,9 @@ done in the repository simply disappears from the list.
 ## Performance
 
 Details in docs/PERFORMANCE.md, "Next steps":
-* **Tabs prepared in the background** — the bottom navigation's views (Journal, Tasks, Calendar,
-  also All pages and Search) are kept once shown (`ShellRouteView`, `KeptLoader`), but each is
-  built only on its first visit, which takes 0.5–1 s on a phone (docs/PERFORMANCE.md "Switching
-  views"). After the notebook opens they should be built in the background, one at a time while
-  the app is idle (asynchronous `Loader`, hidden), so that even the first switch shows the view at
-  once; to measure: start-up time and memory on a phone and a Raspberry Pi;
+* measuring the bottom navigation's views built in the background after the notebook opens
+  (docs/PERFORMANCE.md "Built ahead"): start-up time, frame times while they are built and memory
+  on a phone and a Raspberry Pi;
 * faster merging of ready notes into the index on the UI thread, less view refreshing during
   loading (in the browser the first load without a ready index takes 11–16 % longer than before
   wave 5) and measuring indexing on a Raspberry Pi and a phone (L1b);

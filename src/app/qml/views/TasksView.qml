@@ -133,6 +133,11 @@ FocusScope {
     onRouteChanged: applyRoute()
     Component.onCompleted: {
         applyRoute()
+        if (visible)
+            takeFocus()
+    }
+    /// The keyboard to the list (made shown, or shown the first time after being built ahead).
+    function takeFocus(): void {
         list.forceActiveFocus()
     }
     focus: true

@@ -23,6 +23,8 @@ FocusScope {
     property bool covered: false
     /// The pane navigation goes to (false: the other pane of a split view).
     property bool paneActive: true
+    /// Build the bottom navigation's views ahead, in the background (ShellRouteView.preloadViews).
+    property bool preloadViews: false
     readonly property ShellRouteView routeView: view
     /// The tab whose route the view shows now.
     property int _shown: 0
@@ -76,5 +78,6 @@ FocusScope {
         paneActive: pane.paneActive
         // The bottom navigation's views stay once shown: switching back to one is instant.
         keepViews: true
+        preloadViews: pane.preloadViews
     }
 }

@@ -2789,6 +2789,11 @@ QVariantMap PageController::reminderAt(int row, int from, int to) const
     return {};
 }
 
+int PageController::editOffsetAt(int row) const
+{
+    return validRow(row) ? m_model->shapeAt(row).editOffset : 0;
+}
+
 QString PageController::dateChipUrl(int row, const QString &url) const
 {
     return dateChip(row, url).value(u"url"_s).toString();

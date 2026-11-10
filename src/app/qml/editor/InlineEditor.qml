@@ -19,6 +19,10 @@ import Brulion
 // marked as misspelled; on touch UIs a tap on such a word opens only those (docs/UI.md "Spell
 // checking"). Spell checking (SpellCheck) runs in the edited prose of text blocks, headings and
 // quotes — not in code, calculations or queries ("code" highlighting).
+// A ⏰ / ⏰! reminder stays a chip while its block is edited (MarkdownHighlighter.reminderChips: a
+// pill under the token's text, in the rendered chip's colours): a click or a tap on it opens the
+// reminder dialog — date, time, alarm, repeat — as on the rendered chip, without moving the caret;
+// the keys still go through its text like any other.
 TextEdit {
     id: edit
 
@@ -50,6 +54,8 @@ TextEdit {
     property string lastText: ""
     property bool softBreak: false
     readonly property color noColor: "transparent"
+    /// A reminder chip's pill reaches this far beyond its text on each side.
+    readonly property real chipPadding: 2
     readonly property string modelText: block ? block.rowData.editText : ""
 
     textFormat: TextEdit.PlainText
@@ -85,6 +91,40 @@ TextEdit {
         spellCheck: edit.spellChecked ? SpellCheck : null
         spellCaret: edit.spellChecked ? edit.cursorPosition : -1
         spellColor: Theme.danger
+        reminderChips: edit.active && edit.highlightMode === "inline"
+    }
+
+    // The reminder chips: their pills under the text, and over it what a click on one does.
+    Repeater {
+        model: highlighter.chipShapes
+        delegate: Rectangle {
+            required property richTextPill modelData
+            z: -1
+            x: modelData.x - edit.chipPadding
+            y: modelData.y
+            width: modelData.width + 2 * edit.chipPadding
+            height: modelData.height
+            radius: height / 2
+            antialiasing: true
+            color: modelData.color
+        }
+    }
+    Repeater {
+        model: highlighter.chipShapes
+        delegate: MouseArea {
+            required property richTextPill modelData
+            objectName: "reminderChipArea"
+            x: modelData.x - edit.chipPadding
+            y: modelData.y
+            width: modelData.width + 2 * edit.chipPadding
+            height: modelData.height
+            enabled: edit.active
+            hoverEnabled: !Theme.touchUi
+            cursorShape: Qt.PointingHandCursor
+            Accessible.role: Accessible.Button
+            Accessible.name: qsTr("Change reminder")
+            onClicked: edit.editor.editReminderInText(edit.row, modelData.from, modelData.to)
+        }
     }
 
     /// The word marked as misspelled at `position` ({from, to, word, text}; {} when none).

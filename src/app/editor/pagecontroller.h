@@ -679,6 +679,10 @@ public:
     /// The reminder at body range [from, to): { at, alarm, recurrence, context } for
     /// BReminderDialog.edit(); empty when there is no reminder there.
     Q_INVOKABLE QVariantMap reminderAt(int row, int from, int to) const;
+    /// The body characters before the row's edit text (the task marker…): a range of the edited
+    /// text plus this is the same range of the body (reminderAt(), a reminder chip of the edited
+    /// block). 0 for a row that is not there.
+    Q_INVOKABLE int editOffsetAt(int row) const;
     /// The token a `date:FROM-TO`, `reminder:FROM-TO`, `recur:FROM-TO`, `prio:FROM-TO` or
     /// `day:FROM-TO` link of the row's rendered text names (its menu, DateChipMenu: a right-click or
     /// long press on it): { from, to } (body range), kind ("due" | "scheduled" | "start" | "created"

@@ -111,6 +111,11 @@ FocusScope {
         pages.descending = order === "desc" || (parts === 1 && (key === "modified" || key === "backlinks"))
         pages.includeJournals = root.flag(AppSettings.value("allPages/journals", false))
         pages.recursive = root.flag(AppSettings.value("allPages/subfolders", true))
+        if (visible)
+            takeFocus()
+    }
+    /// The keyboard to the filter (made shown, or shown the first time after being built ahead).
+    function takeFocus(): void {
         // Keyboard users can type to filter at once; on touch screens that would pop up the
         // on-screen keyboard over the list the user came to browse.
         if (!Theme.touchUi)

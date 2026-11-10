@@ -1,17 +1,22 @@
 #include "markdownhighlighter.h"
 
+#include "richtext_p.h"
+
 #include "markdown/highlight.h"
 #include "markdown/inline.h"
 #include "markdown/tokens.h"
 #include "spell/spellwords.h"
 #include "text/text.h"
 
+#include <QAbstractTextDocumentLayout>
 #include <QCoreApplication>
 #include <QFont>
+#include <QFontMetricsF>
 #include <QQuickTextDocument>
 #include <QRegularExpression>
 #include <QScopedValueRollback>
 #include <QTextBlock>
+#include <QTextBlockUserData>
 #include <QTextCursor>
 #include <QTextDocument>
 
@@ -32,6 +37,12 @@ int encodeFence(QChar ch, int length)
 {
     return 1 | (ch == u'~' ? 0x8 : 0) | (std::min(length, 255) << 4);
 }
+
+/// A line's reminder tokens (MarkdownHighlighter::reminderChips), kept on its QTextBlock: they
+/// follow the line when lines before it are added or removed.
+struct ChipData : QTextBlockUserData {
+    QList<MarkdownHighlighter::LineChip> chips;
+};
 
 QColor toColor(const QVariant &v)
 {
@@ -56,8 +67,11 @@ MarkdownHighlighter::MarkdownHighlighter(QObject *parent) : QSyntaxHighlighter(p
 MarkdownHighlighter::~MarkdownHighlighter()
 {
     // ~QSyntaxHighlighter() detaches from the document, which edits it (contentsChange): by then
-    // this object is only a QSyntaxHighlighter, so the line-height handler must be gone first.
+    // this object is only a QSyntaxHighlighter, so the line-height and the chips' handlers must be
+    // gone first.
     disconnect(m_contentsConnection);
+    for (const QMetaObject::Connection &c : std::as_const(m_layoutConnections))
+        disconnect(c);
 }
 
 void MarkdownHighlighter::setTextDocument(QQuickTextDocument *document)
@@ -73,6 +87,9 @@ void MarkdownHighlighter::attach(QTextDocument *document)
 {
     if (m_contentsConnection)
         disconnect(m_contentsConnection);
+    for (const QMetaObject::Connection &c : std::as_const(m_layoutConnections))
+        disconnect(c);
+    m_layoutConnections.clear();
     // QTextDocument reports edits (contentsChange) only once it has a layout; a TextEdit's
     // document always has one, a bare one (tests, C++ users) gets it here.
     if (document)
@@ -81,6 +98,13 @@ void MarkdownHighlighter::attach(QTextDocument *document)
     if (document) {
         m_contentsConnection = connect(document, &QTextDocument::contentsChange, this,
                                        [this](int from, int, int added) { applyLineHeight(from, added); });
+        // The chips' shapes follow the layout (a new width, font or text), as RichTextPills' do.
+        QAbstractTextDocumentLayout *layout = document->documentLayout();
+        m_layoutConnections = {
+                connect(layout, &QAbstractTextDocumentLayout::documentSizeChanged, this,
+                        &MarkdownHighlighter::refreshChips),
+                connect(layout, &QAbstractTextDocumentLayout::update, this, &MarkdownHighlighter::refreshChips),
+        };
         applyLineHeight();
         // QSyntaxHighlighter highlights a non-empty document on the next event loop pass and
         // ignores edits until then: run that pass now (no flash of plain text, typing right
@@ -88,6 +112,90 @@ void MarkdownHighlighter::attach(QTextDocument *document)
         QCoreApplication::sendPostedEvents(this, QEvent::MetaCall);
         rehighlight();
     }
+    refreshChips();
+}
+
+void MarkdownHighlighter::setReminderChips(bool on)
+{
+    if (m_reminderChips == on)
+        return;
+    m_reminderChips = on;
+    rebuildFormats();
+    rehighlight();
+    Q_EMIT reminderChipsChanged();
+    refreshChips();
+}
+
+void MarkdownHighlighter::setChipInset(qreal px)
+{
+    if (qFuzzyCompare(m_chipInset + 1, px + 1))
+        return;
+    m_chipInset = px;
+    Q_EMIT chipInsetChanged();
+    refreshChips();
+}
+
+void MarkdownHighlighter::storeLineChips()
+{
+    const QList<LineChip> chips = std::exchange(m_lineChips, {});
+    const auto *data = static_cast<const ChipData *>(currentBlockUserData());
+    if ((data ? data->chips : QList<LineChip>()) == chips)
+        return;
+    if (chips.isEmpty()) {
+        setCurrentBlockUserData(nullptr);
+    } else {
+        auto *stored = new ChipData;
+        stored->chips = chips;
+        setCurrentBlockUserData(stored);
+    }
+    // (The layout reports the new formats too; a token whose text did not move needs this.)
+    QMetaObject::invokeMethod(this, &MarkdownHighlighter::refreshChips, Qt::QueuedConnection);
+}
+
+void MarkdownHighlighter::refreshChips()
+{
+    if (m_computingChips)
+        return;
+    QList<RichTextPill> out;
+    QTextDocument *doc = document();
+    if (doc && m_reminderChips) {
+        const QScopedValueRollback computing(m_computingChips, true);
+        QAbstractTextDocumentLayout *layout = doc->documentLayout();
+        const QFontMetricsF metrics(doc->defaultFont());
+        const QColor reminderBg = color("reminderBackground", QColor(242, 179, 61, 56));
+        const QColor alarmBg = color("alarmBackground", QColor(u"#f2b33d"_s));
+        for (QTextBlock block = doc->begin(); block.isValid(); block = block.next()) {
+            const auto *data = static_cast<const ChipData *>(block.userData());
+            if (!data)
+                continue;
+            for (const LineChip &chip : data->chips) {
+                const int from = block.position() + chip.from;
+                const int to = block.position() + chip.to;
+                const QList<detail::LineSegment> segments = detail::lineSegments(layout, block, from, to);
+                for (const detail::LineSegment &segment : segments) {
+                    const QPointF origin = block.layout()->position();
+                    // Centred on the glyphs, not on the fixed-height line box (as RichTextPills).
+                    const qreal baseline = segment.line.y() + segment.line.ascent();
+                    const qreal top = baseline - metrics.ascent() + m_chipInset;
+                    const qreal bottom = baseline + metrics.descent() - m_chipInset;
+                    RichTextPill pill;
+                    pill.x = origin.x() + segment.x1;
+                    pill.y = origin.y() + top;
+                    pill.width = segment.x2 - segment.x1;
+                    pill.height = std::max<qreal>(1, bottom - top);
+                    pill.color = chip.alarm ? alarmBg : reminderBg;
+                    pill.kind = u"pill"_s;
+                    pill.from = from;
+                    pill.to = to;
+                    out.append(pill);
+                }
+            }
+        }
+    }
+    if (out == m_chipShapes)
+        return;
+    m_chipShapes = std::move(out);
+    Q_EMIT chipShapesChanged();
 }
 
 void MarkdownHighlighter::setPalette(const QVariantMap &palette)
@@ -202,9 +310,12 @@ void MarkdownHighlighter::rebuildFormats()
     make(u"due"_s).setForeground(color("due", link));
     make(u"scheduled"_s).setForeground(scheduled);
     make(u"start"_s).setForeground(scheduled);
-    make(u"reminder"_s).setForeground(color("reminder", QColor(u"#7a4f00"_s)));
+    const QColor reminder = color("reminder", QColor(u"#7a4f00"_s));
+    const QColor alarmColor = color("alarm", QColor(u"#7a4f00"_s));
+    // As chips (reminderChips) the text takes the chip's colours, on its background.
+    make(u"reminder"_s).setForeground(m_reminderChips ? color("reminderChip", reminder) : reminder);
     QTextCharFormat &alarm = make(u"alarm"_s);
-    alarm.setForeground(color("alarm", QColor(u"#7a4f00"_s)));
+    alarm.setForeground(m_reminderChips ? color("alarmChip", alarmColor) : alarmColor);
     alarm.setFontWeight(QFont::DemiBold);
     make(u"recurrence"_s).setForeground(color("recurrence", QColor(u"#2a6e44"_s)));
     make(u"done"_s).setForeground(color("done", muted));
@@ -424,7 +535,9 @@ QVariantMap MarkdownHighlighter::misspelledAt(int position) const
 
 void MarkdownHighlighter::highlightBlock(const QString &line)
 {
+    m_lineChips.clear();
     highlightLine(line);
+    storeLineChips();
     highlightSpelling(line);
     if (m_findQuery.isEmpty())
         return;
@@ -672,6 +785,9 @@ void MarkdownHighlighter::highlightInline(const QString &full, int offset, int l
         case markdown::TokenKind::OnCompletion: name = u"muted"_s; break;
         }
         setRange(at(t.from), int(t.to - t.from), m_formats[name]);
+        if (m_reminderChips && m_mode == u"inline"
+            && (t.kind == markdown::TokenKind::Reminder || t.kind == markdown::TokenKind::ReminderCompat))
+            m_lineChips.append({at(t.from), at(t.to), t.alarm});
     }
     if (const auto id = markdown::blockIdAtEnd(masked))
         setRange(at(id->from), int(id->to - id->from), m_formats[u"blockId"_s]);

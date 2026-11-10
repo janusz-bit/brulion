@@ -65,6 +65,9 @@ struct RichTextPill {
     /// "pill", "box" or "icon" (see `pills`).
     Q_PROPERTY(QString kind MEMBER kind FINAL)
     Q_PROPERTY(QString icon MEMBER icon FINAL)
+    /// The document positions of the whole span the shape is part of.
+    Q_PROPERTY(int from MEMBER from FINAL)
+    Q_PROPERTY(int to MEMBER to FINAL)
 public:
     qreal x = 0;
     qreal y = 0;
@@ -73,6 +76,8 @@ public:
     QColor color;
     QString kind;
     QString icon;
+    int from = 0;
+    int to = 0;
     bool operator==(const RichTextPill &other) const = default;
 };
 

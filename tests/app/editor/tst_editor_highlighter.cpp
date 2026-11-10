@@ -3,11 +3,14 @@
 // palette colours and the fixed line height.
 #include "markdownhighlighter.h"
 
+#include <QAbstractTextDocumentLayout>
 #include <QCoreApplication>
 #include <QFont>
+#include <QFontMetricsF>
 #include <QSignalSpy>
 #include <QTest>
 #include <QTextBlock>
+#include <QTextCursor>
 #include <QTextDocument>
 #include <QTextLayout>
 
@@ -235,6 +238,92 @@ private Q_SLOTS:
         QVERIFY(!tinted(12));
         highlighter.setFindQuery(QString());
         QVERIFY(!tinted(5));
+    }
+
+    /// reminderChips: one shape per ⏰ / ⏰! token (none in code, other dates or with the mode off),
+    /// with the token's document positions and the palette's colours; following typing and the
+    /// lines before it, and gone when the token is.
+    void reminderChips()
+    {
+        QTextDocument doc;
+        doc.setTextWidth(2000);
+        doc.setPlainText(
+                u"Zadzwonić do mamy ⏰ 2026-11-11 18:00 📅 2026-11-12\n`⏰ 2026-11-11 09:00` w kodzie\nPobudka ⏰! 2026-11-16 05:45"_s);
+        MarkdownHighlighter h;
+        h.setPalette({{u"reminderBackground"_s, u"#112233"_s},
+                      {u"alarmBackground"_s, u"#445566"_s},
+                      {u"reminderChip"_s, u"#778899"_s},
+                      {u"reminder"_s, u"#aabbcc"_s}});
+        h.attach(&doc);
+        QVERIFY(h.chipShapes().isEmpty()); // off by default (source mode, other editors)
+        QCOMPARE(formatAt(doc, 0, at(doc, 0, u"18:00"_s)).foreground().color(), QColor(u"#aabbcc"_s));
+        QSignalSpy spy(&h, &MarkdownHighlighter::chipShapesChanged);
+        h.setReminderChips(true);
+        QVERIFY(spy.size() >= 1);
+        QList<RichTextPill> shapes = h.chipShapes();
+        QCOMPARE(shapes.size(), 2);
+        const int reminderFrom = at(doc, 0, u"⏰"_s);
+        QCOMPARE(shapes[0].from, reminderFrom);
+        QCOMPARE(shapes[0].to, reminderFrom + int(u"⏰ 2026-11-11 18:00"_s.size()));
+        QCOMPARE(shapes[0].color, QColor(u"#112233"_s));
+        QCOMPARE(shapes[0].kind, u"pill"_s);
+        QVERIFY(shapes[0].width > 10 && shapes[0].height > 5);
+        // The text of a chip takes the chip's colour.
+        QCOMPARE(formatAt(doc, 0, at(doc, 0, u"18:00"_s)).foreground().color(), QColor(u"#778899"_s));
+        const int alarmFrom = doc.findBlockByNumber(2).position() + at(doc, 2, u"⏰!"_s);
+        QCOMPARE(shapes[1].from, alarmFrom);
+        QCOMPARE(shapes[1].to, alarmFrom + int(u"⏰! 2026-11-16 05:45"_s.size()));
+        QCOMPARE(shapes[1].color, QColor(u"#445566"_s));
+        QVERIFY(shapes[1].y > shapes[0].y);
+
+        // Typing before the token moves its chip; a line added before it moves the alarm's.
+        QTextCursor c(&doc);
+        c.insertText(u"Pilne: "_s);
+        QCoreApplication::processEvents();
+        shapes = h.chipShapes();
+        QCOMPARE(shapes.size(), 2);
+        QCOMPARE(shapes[0].from, reminderFrom + 7);
+        QCOMPARE(shapes[1].from, alarmFrom + 7);
+        c.movePosition(QTextCursor::Start);
+        c.insertText(u"Nowa linia\n"_s);
+        QCoreApplication::processEvents();
+        shapes = h.chipShapes();
+        QCOMPARE(shapes.size(), 2);
+        QCOMPARE(shapes[0].from, reminderFrom + 7 + 11);
+        QCOMPARE(shapes[1].from, alarmFrom + 7 + 11);
+
+        // The reminder's time deleted: no token, no chip (the alarm's stays).
+        c.setPosition(shapes[0].from);
+        c.setPosition(shapes[0].to, QTextCursor::KeepAnchor);
+        c.removeSelectedText();
+        QCoreApplication::processEvents();
+        shapes = h.chipShapes();
+        QCOMPARE(shapes.size(), 1);
+        QCOMPARE(shapes[0].color, QColor(u"#445566"_s));
+
+        // Off again: none, the plain colours back.
+        h.setReminderChips(false);
+        QVERIFY(h.chipShapes().isEmpty());
+    }
+
+    /// A reminder wrapped over two lines is two shapes of the same token.
+    void reminderChipWraps()
+    {
+        QTextDocument doc;
+        doc.setPlainText(u"Zadzwonić do mamy ⏰ 2026-11-11 18:00"_s);
+        const qreal before = doc.documentLayout()->documentSize().width();
+        MarkdownHighlighter h;
+        h.setReminderChips(true);
+        h.attach(&doc);
+        // Narrow enough that the wrap falls inside the token ("⏰ 2026-11-11" | "18:00").
+        const QFontMetricsF metrics(doc.defaultFont());
+        doc.setTextWidth(metrics.horizontalAdvance(u"Zadzwonić do mamy ⏰ 2026-11-11 "_s) + 2);
+        QVERIFY(before > doc.textWidth());
+        QCoreApplication::processEvents();
+        const QList<RichTextPill> shapes = h.chipShapes();
+        QCOMPARE(shapes.size(), 2);
+        QCOMPARE(shapes[0].from, shapes[1].from);
+        QVERIFY(shapes[1].y > shapes[0].y);
     }
 };
 

@@ -86,6 +86,9 @@ public:
     Q_INVOKABLE void endEditing() const;
     /// The view's stepBack(), when it has one (AppShell calls it while canStepBack holds).
     Q_INVOKABLE void stepBack() const;
+    /// The view's takeFocus(), when it has one: a view built ahead, hidden, shown for the first
+    /// time gives the keyboard to its own item (a list, a field) as it does when made shown.
+    Q_INVOKABLE void takeFocus() const;
 
 Q_SIGNALS:
     void viewChanged();
