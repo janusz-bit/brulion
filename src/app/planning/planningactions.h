@@ -126,6 +126,12 @@ public:
     /// Only that line changes; undo() puts the file back. False (and failed()) when the task is gone.
     Q_INVOKABLE bool setTaskDate(const QString &path, int line, const QString &text, const QString &field,
                                  const QString &spec);
+    /// Add a reminder (`⏰`, `⏰!` with `alarm`) at `at` ("YYYY-MM-DD HH:mm") to the task found as
+    /// setTaskDate() finds it ("Add date" → "Pick a date…" switched to "Reminder" / "Alarm"):
+    /// appended to its first line (a reminder it has stays). Only that line changes; undo() puts
+    /// the file back. False (and failed()) when the task is gone.
+    Q_INVOKABLE bool addTaskReminder(const QString &path, int line, const QString &text, const QString &at,
+                                     bool alarm);
     /// What the token menu of such a token shows besides the models' values: { rule (the block's
     /// 🔁 rule as the menu edits it — "every week" of "🔁 co tydzień kupić mleko" (Polish: "every
     /// week buy milk") —, or the 🔁 token's own), priority (its name, "" = none), logseq (a Logseq

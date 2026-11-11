@@ -25,7 +25,7 @@ now="${NOW:-2026-10-15 10:00}"
 delay="${DELAY:-1600}"
 read -r -a sizes <<< "${SIZES:-desktop phone}"
 read -r -a themes <<< "${THEMES:-light dark}"
-all_states=(page editing suggest tags tag-pages slash date zoom folded selected source reminder recurrence table calc query mermaid mermaid-editing chart chart-filter embeds title empty conflict markup
+all_states=(page editing suggest tags tag-pages slash date date-dialog date-dialog-reminder date-dialog-alarm zoom folded selected source reminder recurrence table calc query mermaid mermaid-editing chart chart-filter embeds title empty conflict markup
   task-menu task-menu-query task-slash date-menu date-menu-reminder recurrence-menu link-menu copylink copylink-document link-flash
   linkparts linkparts-menu
   selection selection-picked selection-document selection-menu text-menu

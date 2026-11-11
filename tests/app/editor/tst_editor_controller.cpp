@@ -1981,6 +1981,19 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         const int from3 = int(body3.indexOf(u"⏳"_s));
         f.page.removeToken(0, from3, from3 + int(u"⏳ 2026-10-18 09:00"_s.size()));
         QCOMPARE(f.text(), u"- [ ] Zadzwonić do mamy ⏰! 2026-10-17 07:30 🔁 every day ^m1\n"_s);
+        // The date dialog switched to "Reminder" / "Alarm": the due date becomes the reminder (the
+        // rule stays), one undo step; without a date the reminder is added next to the one there.
+        Fixture d(u"- [ ] Zapłacić czynsz 📅 2026-10-20 🔁 co miesiąc ^cz1\n"_s);
+        d.page.setReminderFor(0, u"due"_s, u"2026-10-19 18:00"_s, true);
+        QCOMPARE(d.text(), u"- [ ] Zapłacić czynsz ⏰! 2026-10-19 18:00 🔁 co miesiąc ^cz1\n"_s);
+        d.page.undo();
+        QCOMPARE(d.text(), u"- [ ] Zapłacić czynsz 📅 2026-10-20 🔁 co miesiąc ^cz1\n"_s);
+        d.page.setReminderFor(0, u"scheduled"_s, u"2026-10-19 18:00"_s, false);
+        QCOMPARE(d.text(), u"- [ ] Zapłacić czynsz 📅 2026-10-20 🔁 co miesiąc ⏰ 2026-10-19 18:00 ^cz1\n"_s);
+        d.page.undo();
+        d.page.setReminderFor(0, u"due"_s, u"zła data"_s, false);
+        d.page.setReminderFor(0, u"reminder"_s, u"2026-10-19 18:00"_s, false);
+        QCOMPARE(d.text(), u"- [ ] Zapłacić czynsz 📅 2026-10-20 🔁 co miesiąc ^cz1\n"_s);
         // insertToken / replaceRange in edit-text coordinates.
         Fixture g(u"- [ ] Kupić\n"_s);
         QCOMPARE(g.page.insertToken(0, 5, u"⏫"_s), 8);

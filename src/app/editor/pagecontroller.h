@@ -671,6 +671,11 @@ public:
     /// (never saved while nothing follows it: rememberEditorSpace()).
     Q_INVOKABLE void setReminder(int row, const QString &at, bool alarm, const QString &recurrence,
                                  int from = -1, int to = -1);
+    /// The date dialog switched to "Reminder" / "Alarm": the date token of `field` ("due",
+    /// "scheduled", "start") on the row's first line, if any, becomes a reminder (`⏰`, `⏰!` with
+    /// `alarm`) at `at` ("YYYY-MM-DD HH:mm") — added as setReminder() adds one, the block's 🔁 rule
+    /// kept. One undo step; nothing when `at` is no date.
+    Q_INVOKABLE void setReminderFor(int row, const QString &field, const QString &at, bool alarm);
     /// Remove the token at body range [from, to).
     Q_INVOKABLE void removeToken(int row, int from, int to);
     /// Set (or remove with an empty spec) the date token of `field` ("due" 📅, "scheduled" ⏳,
@@ -1125,6 +1130,10 @@ private:
     markdown::EditResult applyOp(const std::function<markdown::EditResult(markdown::BlockDocument &)> &op);
     /// Body edit of one row as one command.
     void editBody(int row, const QString &body, int focusCursor = -2);
+    /// setReminder() (`keepRule`: an empty `recurrence` leaves the block's rule also when the
+    /// token at [from, to) is replaced — setReminderFor()).
+    void writeReminder(int row, const QString &oldBody, const QString &at, bool alarm, const QString &recurrence,
+                       int from, int to, bool keepRule = false);
     template<typename Edit>
     void editTable(int row, Edit edit);
     QString newColumnHeader(const calc::TableModel &model) const;

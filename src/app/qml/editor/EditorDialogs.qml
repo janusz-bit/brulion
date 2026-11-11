@@ -9,6 +9,9 @@ import Brulion
 //   createReminder(row, alarm)      BReminderDialog → ⏰ / ⏰! token (+ 🔁) on the block
 //   editReminder(row, from, to)     a clicked reminder chip: edit / delete that token
 //   pickDate(row, field)            Due date… (📅) / Scheduled… (⏳): BDatePicker
+//   (The date dialog of a 📅 ⏳ 🛫 date — pickDate, pickDateAt, pickDateWith, pickNewDateWith — has
+//   the choice Date / Reminder / Alarm above the calendar: a reminder or an alarm needs a time and
+//   is written as ⏰ / ⏰! instead, in the date's place — dateAsReminder().)
 //   pickCsvTable(row)               "/Table from CSV…": FilePicker → PageController.insertCsvFile
 //   saveTableCsv(row)               "Save as CSV…": FilePicker (save) → saveTableCsv
 //   pickDateAt(row, from, to, kind, at)  a date chip's "Change date…" (DateChipMenu): that token
@@ -148,6 +151,11 @@ Item {
     property bool dateTimeRequired: false
     property bool dateRemovable: false
     property string dateRemoveText: ""
+    /// The date may become a reminder or an alarm instead (a 📅 ⏳ 🛫 date: convertibleKind()).
+    property bool dateConvertible: false
+    /// What the next convertible date dialog opens as: "date", "reminder" or "alarm" (then "date"
+    /// again; pickDateAs()).
+    property string dateKind: "date"
     // What the recurrence dialog shows as it opens: the rule's text, "Don't repeat".
     property string recurrenceText: ""
     property bool recurrenceRemovable: false
@@ -236,7 +244,12 @@ Item {
         answer.map = controller.blockDates(r)
         const current = root.answerText(which)
         showDate(dateKindTitle(which), dateKindIcon(which), current, tomorrow(), true, false, current !== "",
-                 qsTr("Remove"))
+                 qsTr("Remove"), convertibleKind(which))
+    }
+    /// pickDate() opening as `kind` ("date", "reminder", "alarm"; the playground's screenshots).
+    function pickDateAs(r: int, which: string, kind: string): void {
+        dateKind = kind
+        pickDate(r, which)
     }
     function pickDateAt(r: int, f: int, t: int, kind: string, at: string): void {
         remember(r)
@@ -253,7 +266,7 @@ Item {
         applyTarget = target
         mode = "apply"
         showDate(title, withTime ? "calendar-clock" : "calendar", at, DatesHelper.today, withTime, false,
-                 at !== "", qsTr("Clear"))
+                 at !== "", qsTr("Clear"), false)
     }
     /// The date dialog for a date token (or day link) elsewhere: applied(target, "set", value) /
     /// (target, "remove").
@@ -267,12 +280,13 @@ Item {
     function pickNewDateWith(target: string, kind: string): void {
         applyTarget = target
         mode = "apply"
-        showDate(dateKindTitle(kind), dateKindIcon(kind), "", tomorrow(), true, false, false, qsTr("Remove"))
+        showDate(dateKindTitle(kind), dateKindIcon(kind), "", tomorrow(), true, false, false, qsTr("Remove"),
+                 convertibleKind(kind))
     }
     function openDateDialog(kind: string, at: string): void {
         const day = kind === "day"
         showDate(dateKindTitle(kind), dateKindIcon(kind), at, DatesHelper.today, !day, kind === "reminder", !day,
-                 qsTr("Remove"))
+                 qsTr("Remove"), convertibleKind(kind))
     }
     function pickJournalDate(r: int, c: int): void {
         remember(r)
@@ -281,7 +295,27 @@ Item {
         // (The journal link keeps whatever "time required" and the remove text were: it has no time
         // and nothing to remove.)
         showDate(dateKindTitle("day"), dateKindIcon("day"), "", DatesHelper.today, false, dateTimeRequired, false,
-                 dateRemoveText)
+                 dateRemoveText, false)
+    }
+    /// A date of `kind` the date dialog can turn into a reminder or an alarm: 📅 ⏳ 🛫.
+    function convertibleKind(kind: string): bool {
+        return kind === "due" || kind === "scheduled" || kind === "start"
+    }
+    /// The time a reminder gets when the date had none (the notebook's default reminder time).
+    function reminderTime(): string {
+        const t = AppController.routeText(Workspace.config, "defaultReminderTime")
+        return t !== "" ? t : "09:00"
+    }
+    /// The date dialog switched to "Reminder" / "Alarm" was saved: a ⏰ / ⏰! at `at` instead of
+    /// the date — in the date token's place (one undo step), else added to the block.
+    function dateAsReminder(at: string, alarm: bool): void {
+        const r = blockRow()
+        if (mode === "apply")
+            root.applied(applyTarget, "reminder", at, { alarm: alarm })
+        else if (r >= 0 && mode === "range")
+            controller.applyTokenAction(r, from, to, "reminder", at, { alarm: alarm })
+        else if (r >= 0 && mode === "token")
+            controller.setReminderFor(r, field, at, alarm)
     }
     function tomorrow(): string {
         return DatesHelper.addDays(DatesHelper.today, 1)
@@ -309,7 +343,7 @@ Item {
     }
     /// Open the date dialog on the date (and time) in `at`, else on `fallback`.
     function showDate(title: string, icon: string, at: string, fallback: string, withTime: bool,
-                      timeRequired: bool, removable: bool, removeText: string): void {
+                      timeRequired: bool, removable: bool, removeText: string, convertible: bool): void {
         parts.map = DatesHelper.splitSpec(at)
         const ok = parts.map.ok === true
         dateTitle = title
@@ -320,6 +354,7 @@ Item {
         dateTimeRequired = timeRequired
         dateRemovable = removable
         dateRemoveText = removeText
+        dateConvertible = convertible
         datePopup().open()
     }
     function pickRecurrence(r: int): void {
@@ -719,7 +754,31 @@ Item {
             id: dateDialog
             property bool removable: false
             property string removeText: qsTr("Remove")
+            /// The choice above the calendar (shown when `convertible`): "date" (the date of the
+            /// dialog's kind), "reminder" or "alarm" (written as ⏰ / ⏰!: dateAsReminder()).
+            property bool convertible: false
+            property string kindChoice: "date"
+            readonly property bool asReminder: kindChoice !== "date"
             readonly property alias picker: picker
+            /// The dialog as a date, a reminder or an alarm: its title and icon; a reminder needs a
+            /// time (the default reminder time when the date had none).
+            function chooseKind(kind: string): void {
+                kindChoice = kind
+                if (kind === "date") {
+                    dateDialog.title = root.dateTitle
+                    dateDialog.iconName = root.dateIcon
+                    picker.withTime = root.dateWithTime
+                    picker.timeRequired = root.dateTimeRequired
+                    return
+                }
+                dateDialog.title = kind === "alarm" ? qsTr("Alarm") : qsTr("Reminder")
+                dateDialog.iconName = kind === "alarm" ? "alarm-clock" : "bell"
+                picker.defaultTime = root.reminderTime()
+                picker.withTime = true
+                picker.timeRequired = true
+                if (picker.time === "")
+                    picker.time = picker.defaultTime
+            }
             parent: T.Overlay.overlay
             preferredWidth: Theme.dialogWidthSm + 40
             // What the opening function asked for (pickDate() and the others).
@@ -734,6 +793,9 @@ Item {
                 picker.showMonthOf(picker.selectedDate)
                 dateDialog.removable = root.dateRemovable
                 dateDialog.removeText = root.dateRemoveText
+                dateDialog.convertible = root.dateConvertible
+                dateDialog.chooseKind(root.dateConvertible ? root.dateKind : "date")
+                root.dateKind = "date"
             }
             acceptText: root.mode === "journal" ? qsTr("Insert") : qsTr("Save")
             // A recognised typed date counts before it is confirmed (commitPending()).
@@ -743,7 +805,7 @@ Item {
             footerLeading: [
                 BButton {
                     objectName: "dateDialogRemove"
-                    visible: dateDialog.removable
+                    visible: dateDialog.removable && !dateDialog.asReminder
                     text: dateDialog.removeText
                     iconName: "trash-2"
                     variant: "ghost"
@@ -764,7 +826,9 @@ Item {
             onAcceptRequested: picker.commitPending()
             onAccepted: {
                 const r = root.blockRow()
-                if (root.mode === "apply") {
+                if (dateDialog.asReminder) {
+                    root.dateAsReminder(picker.value, dateDialog.kindChoice === "alarm")
+                } else if (root.mode === "apply") {
                     root.applied(root.applyTarget, "set", picker.value, 0)
                 } else if (r >= 0 && root.mode === "journal")
                     root.controller.insertToken(r, root.cursor, root.controller.journalLink(picker.selectedDate))
@@ -776,6 +840,20 @@ Item {
             }
             onRejected: root.refocus()
 
+            BSegmented {
+                objectName: "dateDialogKind"
+                Layout.fillWidth: true
+                visible: dateDialog.convertible
+                fill: true
+                accessibleName: qsTr("Date, reminder or alarm")
+                model: [
+                    { value: "date", text: root.dateTitle, icon: root.dateIcon },
+                    { value: "reminder", text: qsTr("Reminder"), icon: "bell" },
+                    { value: "alarm", text: qsTr("Alarm"), icon: "alarm-clock" }
+                ]
+                currentValue: dateDialog.kindChoice
+                onActivated: (value) => dateDialog.chooseKind("" + value)
+            }
             BDatePicker {
                 id: picker
                 Layout.fillWidth: true

@@ -510,7 +510,8 @@ QString applyTokenAction(const QString &body, qsizetype from, qsizetype to, cons
                                 shiftedSpec(t->spec(), a.toInt(), b.toInt(), context.defaultReminderTime));
         if (action == u"alarm" && reminder)
             return setReminderAlarm(body, from, to, a.toBool());
-        if (action == u"reminder" && reminder) {
+        // (A date token too: it becomes the reminder — the date dialog's "Reminder" / "Alarm".)
+        if (action == u"reminder") {
             const auto spec = specFrom(a);
             if (!spec)
                 return body;
@@ -653,13 +654,13 @@ QString editBlockToken(const QString &content, int line, const TokenRef &ref, co
     return withEditedBody(content, doc, i, applyTokenAction(body, range->first, range->second, action, a, b, context));
 }
 
-QString setBlockToken(const QString &content, int line, TokenKind kind, const QString &token)
+QString setBlockToken(const QString &content, int line, TokenKind kind, const QString &token, bool append)
 {
     BlockDocument doc(content);
     const int i = tokenBlockAt(doc, line);
     if (i < 0)
         return content;
-    return withEditedBody(content, doc, i, setFirstLineToken(doc.at(i).body, kind, token));
+    return withEditedBody(content, doc, i, setFirstLineToken(doc.at(i).body, kind, token, append));
 }
 
 } // namespace brulion::markdown

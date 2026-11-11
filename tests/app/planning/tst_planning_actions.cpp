@@ -285,6 +285,34 @@ private Q_SLOTS:
         QCOMPARE(host.file(u"Zakupy.md"_s), page);
     }
 
+    // "Add date" → "Pick a date…" switched to "Reminder" / "Alarm": a reminder appended to the
+    // task's first line (before its block id, CRLF kept), next to one it has; undone.
+    void addTaskReminder()
+    {
+        FakeEditorHost host;
+        const QString page = u"- nowy wpis\r\n- [ ] Odebrać paczkę ⏰ 2026-11-11 08:00 ^pak1\r\n  notatka\r\n"_s;
+        host.setFile(u"Poczta.md"_s, page);
+        PlanningActions actions;
+        actions.setHost(&host);
+        actions.setToday(u"2026-11-10"_s);
+        QVERIFY(actions.addTaskReminder(u"Poczta.md"_s, 0, u"Odebrać paczkę"_s, u"2026-11-12 17:30"_s, true));
+        QCOMPARE(host.file(u"Poczta.md"_s),
+                 u"- nowy wpis\r\n- [ ] Odebrać paczkę ⏰ 2026-11-11 08:00 ⏰! 2026-11-12 17:30 ^pak1\r\n  notatka\r\n"_s);
+        QVERIFY(actions.undo());
+        QCOMPARE(host.file(u"Poczta.md"_s), page);
+        QVERIFY(actions.addTaskReminder(u"Poczta.md"_s, 1, u"Odebrać paczkę"_s, u"2026-11-12 17:30"_s, false));
+        QCOMPARE(host.file(u"Poczta.md"_s),
+                 u"- nowy wpis\r\n- [ ] Odebrać paczkę ⏰ 2026-11-11 08:00 ⏰ 2026-11-12 17:30 ^pak1\r\n  notatka\r\n"_s);
+        QVERIFY(actions.undo());
+
+        // No date, a task that is gone: nothing written.
+        QVERIFY(!actions.addTaskReminder(u"Poczta.md"_s, 1, u"Odebrać paczkę"_s, u"jutro"_s, false));
+        QSignalSpy failed(&actions, &PlanningActions::failed);
+        QVERIFY(!actions.addTaskReminder(u"Poczta.md"_s, 1, u"Wysłać list"_s, u"2026-11-12 17:30"_s, false));
+        QCOMPARE(failed.count(), 1);
+        QCOMPARE(host.file(u"Poczta.md"_s), page);
+    }
+
     void staleLineWithAnEqualToken()
     {
         // A line was added above (a sync); the index still has "Zapłacić rachunek" on line 1,

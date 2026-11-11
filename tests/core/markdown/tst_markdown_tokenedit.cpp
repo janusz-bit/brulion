@@ -79,6 +79,19 @@ private Q_SLOTS:
                 << u"Leki (@2026-10-19 09:00)"_s << u"(@2026-10-19 09:00)"_s << u"reminder"_s
                 << QVariant(u"2026-10-20 08:15"_s) << QVariant(QVariantMap{{u"alarm"_s, false}})
                 << u"Leki ⏰ 2026-10-20 08:15"_s;
+        // The date dialog switched to "Reminder" / "Alarm": the date token becomes the reminder, the
+        // block's rule and the other tokens stay.
+        QTest::newRow("due becomes a reminder")
+                << task << u"📅 2026-10-20"_s << u"reminder"_s << QVariant(u"2026-10-21 07:45"_s)
+                << QVariant(QVariantMap{{u"alarm"_s, false}})
+                << u"[ ] Zapłacić za żłobek ⏰ 2026-10-21 07:45 ⏰ 2026-10-19 09:00"_s;
+        QTest::newRow("scheduled becomes an alarm")
+                << u"[ ] Podlać kwiaty ⏳ 2026-10-20 🔁 co tydzień ^k1"_s << u"⏳ 2026-10-20"_s << u"reminder"_s
+                << QVariant(u"2026-10-20 18:00"_s) << QVariant(QVariantMap{{u"alarm"_s, true}})
+                << u"[ ] Podlać kwiaty ⏰! 2026-10-20 18:00 🔁 co tydzień ^k1"_s;
+        QTest::newRow("due to a reminder without a valid time")
+                << task << u"📅 2026-10-20"_s << u"reminder"_s << QVariant(u"pojutrze?"_s)
+                << QVariant(QVariantMap{{u"alarm"_s, true}}) << task;
         QTest::newRow("remove reminder") << task << u"⏰ 2026-10-19 09:00"_s << u"remove"_s << QVariant() << QVariant()
                                          << u"[ ] Zapłacić za żłobek 📅 2026-10-20"_s;
 

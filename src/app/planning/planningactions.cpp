@@ -358,6 +358,24 @@ bool PlanningActions::setTaskDate(const QString &path, int line, const QString &
     return after != content && writeChange(path, content, after);
 }
 
+bool PlanningActions::addTaskReminder(const QString &path, int line, const QString &text, const QString &at,
+                                      bool alarm)
+{
+    const auto spec = dates::parseDateSpec(at.trimmed());
+    if (!m_host || !spec)
+        return false;
+    bool ok = false;
+    const QString content = m_host->read(path, &ok);
+    if (!ok)
+        return fail(tr("The page could not be read."));
+    const int found = locateTask(path, content, line, text);
+    if (found < 0)
+        return fail(tr("The task was changed in the meantime."));
+    const QString after = markdown::setBlockToken(content, found, markdown::TokenKind::Reminder,
+                                                  markdown::formatReminderToken(*spec, alarm), true);
+    return after != content && writeChange(path, content, after);
+}
+
 int PlanningActions::tokenBlockLine(const QString &path, const QString &content, int line, const QString &text,
                                     const markdown::TokenRef &ref) const
 {

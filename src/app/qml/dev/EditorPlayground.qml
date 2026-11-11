@@ -4264,6 +4264,15 @@ ApplicationWindow {
         case "recurrence":
             window.dialogs().pickRecurrence(rowOf("Podlać kwiaty"))
             break
+        case "date-dialog":
+        case "date-dialog-reminder":
+        case "date-dialog-alarm": {
+            // The date dialog of an undated task ("Pick a date…"), as a date, a reminder, an alarm.
+            window.dialogs().pickDateAs(rowOf("Położyć hydroizolację"), "due",
+                                        name === "date-dialog-alarm" ? "alarm"
+                                        : name === "date-dialog-reminder" ? "reminder" : "date")
+            break
+        }
         case "table": {
             const row = viewRow("table")
             editor.listView.positionViewAtIndex(row, ListView.Center)

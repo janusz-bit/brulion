@@ -2690,11 +2690,35 @@ void PageController::setReminder(int row, const QString &at, bool alarm, const Q
 {
     if (refusesEdit() || !validRow(row))
         return;
+    writeReminder(row, m_model->document().at(row).body, at, alarm, recurrence, from, to);
+}
+
+void PageController::setReminderFor(int row, const QString &field, const QString &at, bool alarm)
+{
+    if (refusesEdit() || !validRow(row))
+        return;
+    markdown::TokenKind kind = markdown::TokenKind::Due;
+    if (field == u"scheduled")
+        kind = markdown::TokenKind::Scheduled;
+    else if (field == u"start")
+        kind = markdown::TokenKind::Start;
+    else if (field != u"due")
+        return;
+    // The date's token becomes the reminder where it is (the block's rule kept); without one the
+    // reminder is added.
+    const QString &body = m_model->document().at(row).body;
+    const auto range = markdown::findFirstLineToken(body, kind);
+    writeReminder(row, body, at, alarm, QString(), range ? int(range->first) : -1, range ? int(range->second) : -1,
+                  true);
+}
+
+void PageController::writeReminder(int row, const QString &oldBody, const QString &at, bool alarm,
+                                   const QString &recurrence, int from, int to, bool keepRule)
+{
     const auto spec = dates::parseDateSpec(at.trimmed());
     if (!spec)
         return;
     const QString token = markdown::formatReminderToken(*spec, alarm);
-    const QString &oldBody = m_model->document().at(row).body;
     const bool editingExisting = from >= 0 && to > from;
     QString body = editingExisting ? replaceTokenRange(oldBody, from, to, token)
                                    : setFirstLineToken(oldBody, markdown::TokenKind::Reminder, token, true);
@@ -2707,7 +2731,7 @@ void PageController::setReminder(int row, const QString &at, bool alarm, const Q
             rule = recurrence.trimmed();
         ruleToken = u"🔁 "_s + rule;
         body = markdown::setBlockRecurrence(body, recurrence);
-    } else if (editingExisting) {
+    } else if (editingExisting && !keepRule) {
         body = markdown::setBlockRecurrence(body, QString());
     }
     // The caret at the end of the edited text stays there, after what was written — with a space

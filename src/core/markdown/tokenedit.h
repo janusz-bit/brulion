@@ -135,7 +135,9 @@ struct TokenEditContext {
 ///                     starts from the default reminder time)
 ///   "alarm"           a reminder becomes an alarm (a: true) or a plain reminder
 ///   "reminder"        a reminder gets a ("YYYY-MM-DD HH:mm") and b { alarm, recurrence? }: the
-///                     reminder dialog — `recurrence` (when present) is the block's 🔁 rule
+///                     reminder dialog — `recurrence` (when present) is the block's 🔁 rule; any
+///                     other date token (📅 ⏳ …) is replaced by that reminder (the date dialog's
+///                     "Reminder" / "Alarm")
 ///   "remove"          the token goes (with one adjacent space)
 ///   "recurrence"      a 🔁 rule becomes a (setRecurrenceAt(); "" removes it)
 ///   "priority"        a priority becomes a (a priority name, "" removes it)
@@ -176,9 +178,10 @@ QString editBlockToken(const QString &content, int line, const TokenRef &ref, co
                        const QVariant &b, const TokenEditContext &context);
 /// setFirstLineToken() on the block on `line` (0-based) of a whole file's `content`: the first
 /// token of `kind` on the block's first line replaced by `token` (removed when it is empty), or
-/// `token` appended to that line (before a trailing block id). Written like editBlockToken(): only
-/// that line's changed run, everything else byte for byte. `content` unchanged when the line holds
-/// no block whose text has tokens (code, a table, …) or nothing changes.
-QString setBlockToken(const QString &content, int line, TokenKind kind, const QString &token);
+/// `token` appended to that line (before a trailing block id) — always appended with `append`
+/// (another reminder). Written like editBlockToken(): only that line's changed run, everything
+/// else byte for byte. `content` unchanged when the line holds no block whose text has tokens
+/// (code, a table, …) or nothing changes.
+QString setBlockToken(const QString &content, int line, TokenKind kind, const QString &token, bool append = false);
 
 } // namespace brulion::markdown

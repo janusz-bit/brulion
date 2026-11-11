@@ -75,6 +75,9 @@ Item {
                 root.run(action, a, b)
             else if (target === "planningAdd" && action === "set")
                 root.addDate("" + a)
+            // (The date dialog switched to "Reminder" / "Alarm".)
+            else if (target === "planningAdd" && action === "reminder")
+                root.addReminder("" + a, UiModels.boolField(b, "alarm") === true)
         }
     }
 
@@ -144,6 +147,11 @@ Item {
     function addDate(date: string): void {
         if (actions.setTaskDate(targetPath, targetLine, targetText, "due", date))
             changed(qsTr("Due date set: %1").arg(DatesHelper.formatHuman(date)))
+    }
+    /// The open "Add date" task gets a reminder (an alarm with `alarm`) at `at` ("YYYY-MM-DD HH:mm").
+    function addReminder(at: string, alarm: bool): void {
+        if (actions.addTaskReminder(targetPath, targetLine, targetText, at, alarm))
+            changed((alarm ? qsTr("Alarm set for %1") : qsTr("Reminder set for %1")).arg(DatesHelper.formatHuman(at)))
     }
     /// The link menu of `url` (a tag:, page:, part: — a path part of a link —, block: or ext: link
     /// of a task's text written on `fromPath`); `filterable` makes "Filter by tag" the first item of

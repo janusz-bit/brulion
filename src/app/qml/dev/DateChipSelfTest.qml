@@ -21,6 +21,8 @@ import Brulion
 // its first line — on hover (desktop) and while it is edited, never on a dated or a done task —:
 // its menu (QuickDateMenu) writes Today / Tomorrow / Next week as the 📅 due date at once and
 // "Pick a date…" opens the date dialog on tomorrow; the block stays edited, one undo step each.
+// The date dialog's Date / Reminder / Alarm choice, tapped or clicked: "Change date…" of a 📅
+// switched to Reminder writes a ⏰ in its place, "Pick a date…" switched to Alarm a ⏰!.
 // Steps run on the playground's step runner (EditorPlayground.runSteps).
 QtObject {
     id: test
@@ -62,6 +64,13 @@ QtObject {
     function dateDialog(): BDialog { return dialogs().dateDialog }
     function datePicker(): BDatePicker { return DevTest.objectProperty(dateDialog(), "picker") as BDatePicker }
     function reminderDialog(): BReminderDialog { return dialogs().reminderDialog }
+    /// The date dialog's Date / Reminder / Alarm choice (BSegmented), null when it is not shown.
+    function kindChoice(): Item { return DevTest.findShown(dateDialog().contentItem, "dateDialogKind") }
+    /// A tap / click on segment `i` (0 date, 1 reminder, 2 alarm) of the choice.
+    function tapKind(i: int): void {
+        const k = kindChoice()
+        window.tapAt(k, k.width * (2 * i + 1) / 6, k.height / 2)
+    }
     /// The edited block's reminder chip (InlineEditor), null when there is none.
     function chipArea(): Item { return DevTest.findShown(window.delegateAt(row), "reminderChipArea") }
     function delegateAt(r: int): BlockDelegate { return window.delegateAt(r) }
@@ -207,6 +216,29 @@ QtObject {
                   "the chosen date and time are written: " + line("Kupić płytki"))
             page.undo()
         }
+        // ---- 📅: the date dialog switched to "Reminder": the date becomes a ⏰ in its place ----------
+        chipGesture("date:", false)
+        if (window.at()) window.waitStep(menuOpen(), "the menu opens for the reminder")
+        choose("dateChipChange")
+        if (window.at()) window.waitStep(dateDialog().opened && kindChoice() !== null,
+                                         "the date dialog offers Date / Reminder / Alarm")
+        if (window.at()) tapKind(1)
+        if (window.at()) window.waitStep(DevTest.property(dateDialog(), "kindChoice") === "reminder",
+                                         (Theme.touchUi ? "a tap" : "a click") + " chooses “Reminder”")
+        if (window.at()) {
+            check(dateDialog().iconName === "bell" && datePicker().withTime && datePicker().timeRequired
+                  && datePicker().time !== "" && !DevTest.findShown(dateDialog().footer, "dateDialogRemove"),
+                  "a reminder: its bell, a time required (the default one given), nothing to remove")
+            datePicker().time = "07:30"
+            dateDialog().accept()
+        }
+        if (window.at()) window.waitStep(!dateDialog().opened, "the reminder dialog closes")
+        if (window.at()) {
+            check(Js.indexOf(line("Kupić płytki"), "Kupić płytki ⏰ 2026-10-16 07:30 ⏫ #zakupy") > 0,
+                  "the date became a reminder in its place: " + line("Kupić płytki"))
+            page.undo()
+        }
+        if (window.at()) check(Js.indexOf(line("Kupić płytki"), due) > 0, "one undo step puts the date back")
         // ---- 📅: removed ---------------------------------------------------------------------------
         chipGesture("date:", false)
         if (window.at()) window.waitStep(menuOpen(), "the menu opens to remove the date")
@@ -454,6 +486,31 @@ QtObject {
             page.undo()
         }
         if (window.at()) check(line("Położyć hydroizolację") === "\t- [ ] Położyć hydroizolację", "undo takes it away")
+        // "Pick a date…" switched to "Alarm": a ⏰! with a time instead of the 📅.
+        if (window.at()) editor.startEditing(row, 3)
+        if (window.at()) window.waitStep(page.editingRow === row && dateButton(row) !== null, "the button is there for an alarm")
+        if (window.at()) {
+            const b = dateButton(row)
+            window.tapAt(b, b.width / 2, b.height / 2)
+        }
+        if (window.at()) window.waitStep(quickMenuOpen(), "the menu opens for an alarm")
+        if (window.at()) window.tapItem(quickItem("quickDatePick"))
+        if (window.at()) window.waitStep(dateDialog().opened && kindChoice() !== null, "the date dialog with the choice")
+        if (window.at()) tapKind(2)
+        if (window.at()) window.waitStep(DevTest.property(dateDialog(), "kindChoice") === "alarm", "“Alarm” is chosen")
+        if (window.at()) {
+            check(dateDialog().iconName === "alarm-clock" && datePicker().time !== "", "an alarm with a time: " + datePicker().time)
+            datePicker().time = "06:45"
+            dateDialog().accept()
+        }
+        if (window.at()) window.waitStep(!dateDialog().opened, "the alarm's dialog closes")
+        if (window.at()) window.waitStep(line("Położyć hydroizolację") === "\t- [ ] Położyć hydroizolację ⏰! 2026-10-16 06:45",
+                                         "the alarm is written, no date: " + line("Położyć hydroizolację"))
+        if (window.at()) {
+            page.stopEditing()
+            page.undo()
+        }
+        if (window.at()) check(line("Położyć hydroizolację") === "\t- [ ] Położyć hydroizolację", "undo takes the alarm away")
     }
     function addDateNoneSteps(): void {
         // A done task and a dated one have no button, also while edited.
