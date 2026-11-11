@@ -20,6 +20,11 @@ import Brulion
 //                       onFilterRequested: (tag) => taskModel.tagFilter = tag }
 //   tokenMenu.openToken({ path, line, text, kind, value, alarm, rule, priority, isTask, occurrence, date, time }, item, x, y)
 //   tokenMenu.openLink(url, fromPath, item, x, y, filterable)   // filterable: "Filter by tag" first
+//   tokenMenu.openAddDate(path, line, text, item, x, y)   // a task without a date: QuickDateMenu
+//
+// "Add date" (a Tasks row's chip on a task without a date): Today, Tomorrow and Next week write the
+// task's 📅 due date at once, "Pick a date…" opens the date dialog (PlanningActions.setTaskDate;
+// changed() with "Undo" as for the token menus).
 Item {
     id: root
 
@@ -46,6 +51,7 @@ Item {
     /// The time of an occurrence (a calendar entry of a recurring reminder): the reminder's, 09:00 for none.
     readonly property string occurrenceTime: targetTime !== "" ? targetTime : "09:00"
     property DateChipMenu dateMenu
+    property QuickDateMenu quickDateMenu
     property LinkMenu linkMenu
     // The link whose menu is open (see openLink()).
     property string linkUrl
@@ -67,6 +73,8 @@ Item {
         function onApplied(target: string, action: string, a: var, b: var) {
             if (target === "planning")
                 root.run(action, a, b)
+            else if (target === "planningAdd" && action === "set")
+                root.addDate("" + a)
         }
     }
 
@@ -119,6 +127,24 @@ Item {
         return targetDate + " " + occurrenceTime
     }
 
+    /// The quick date menu for the task on `line` of `path` (`text`: its plain text, finds it again
+    /// when the line moved) at (x, y) of `item`.
+    function openAddDate(path: string, line: int, text: string, item: Item, x: real, y: real): bool {
+        if (!actions || path === "")
+            return false
+        targetPath = path
+        targetLine = line
+        targetText = text
+        if (!quickDateMenu)
+            quickDateMenu = quickDateComponent.createObject(root) as QuickDateMenu
+        quickDateMenu.popup(item, x, y)
+        return true
+    }
+    /// The open "Add date" task gets `date` ("YYYY-MM-DD[ HH:mm]") as its due date.
+    function addDate(date: string): void {
+        if (actions.setTaskDate(targetPath, targetLine, targetText, "due", date))
+            changed(qsTr("Due date set: %1").arg(DatesHelper.formatHuman(date)))
+    }
     /// The link menu of `url` (a tag:, page:, part: — a path part of a link —, block: or ext: link
     /// of a task's text written on `fromPath`); `filterable` makes "Filter by tag" the first item of
     /// a tag's menu.
@@ -223,6 +249,13 @@ Item {
         id: dateMenuComponent
         DateChipMenu {
             onChosen: (action, a, b) => root.choose(action, a, b)
+        }
+    }
+    Component {
+        id: quickDateComponent
+        QuickDateMenu {
+            onDateChosen: (date) => root.addDate(date)
+            onPickRequested: dialogs.pickNewDateWith("planningAdd", "due")
         }
     }
     Component {

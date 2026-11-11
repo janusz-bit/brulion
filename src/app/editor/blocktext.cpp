@@ -8,6 +8,7 @@
 #include "markdown/notemode.h"
 #include "markdown/properties.h"
 #include "markdown/tasks.h"
+#include "markdown/tokens.h"
 #include "text/text.h"
 #include "util/paths.h"
 #include "webpicture/webpicture.h"
@@ -529,6 +530,15 @@ BlockShape shapeOf(const markdown::BlockEntry &e)
         s.headingLevel = level;
     }
     return s;
+}
+
+bool hasFilingDate(const QString &body)
+{
+    using markdown::TokenKind;
+    const QList<markdown::Token> tokens = markdown::findTokens(markdown::maskInlineCode(body));
+    return std::ranges::any_of(tokens, [](const markdown::Token &t) {
+        return t.kind == TokenKind::Due || t.kind == TokenKind::Scheduled || t.kind == TokenKind::Planning;
+    });
 }
 
 QString bodyWithEditText(const markdown::BlockEntry &e, const QString &editText)

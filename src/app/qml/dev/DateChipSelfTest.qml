@@ -17,7 +17,10 @@ import Brulion
 // none value a neutral choice), and on a #tag and a [[link]] the link menu (LinkMenu: "Copy"
 // copies the tag, the link) — never the block menu. While the block is edited its ⏰ stays a chip:
 // a click or tap on it opens the reminder dialog on that reminder, the caret stays, the time chosen
-// is written (one undo step).
+// is written (one undo step). An open task without a date has the "Add date" button at the end of
+// its first line — on hover (desktop) and while it is edited, never on a dated or a done task —:
+// its menu (QuickDateMenu) writes Today / Tomorrow / Next week as the 📅 due date at once and
+// "Pick a date…" opens the date dialog on tomorrow; the block stays edited, one undo step each.
 // Steps run on the playground's step runner (EditorPlayground.runSteps).
 QtObject {
     id: test
@@ -61,6 +64,25 @@ QtObject {
     function reminderDialog(): BReminderDialog { return dialogs().reminderDialog }
     /// The edited block's reminder chip (InlineEditor), null when there is none.
     function chipArea(): Item { return DevTest.findShown(window.delegateAt(row), "reminderChipArea") }
+    function delegateAt(r: int): BlockDelegate { return window.delegateAt(r) }
+    /// The "Add date" button of block `r` (BlockDelegate), null when it is not shown.
+    function dateButton(r: int): Item { return DevTest.findShown(delegateAt(r), "taskDateButton") }
+    function quickMenu(): QuickDateMenu { return editor.quickDateMenu }
+    function quickMenuOpen(): bool { return quickMenu() !== null && quickMenu().opened }
+    function quickItem(name: string): BMenuItem { return window.menuItemNamed(quickMenu(), name) as BMenuItem }
+    /// The date the quick menu's item `name` shows ("" when there is no such item).
+    function quickHint(name: string): string {
+        const it = quickItem(name)
+        return it !== null ? it.hint : ""
+    }
+    function datedAt(r: int): bool { return info(r).taskDated }
+    /// The mouse moved to the middle of block `r` (its hover).
+    function hoverBlock(r: int): void {
+        const d = delegateAt(r)
+        const x = d.width / 2
+        const y = d.height / 2
+        window.taskEvents.mouseMove(d, x, y, -1, Qt.NoButton, Qt.NoModifier)
+    }
     /// The item of the date menu that opens its submenu `name`.
     function subMenuItem(name: string): T.MenuItem {
         const m = menu()
@@ -348,6 +370,102 @@ QtObject {
             page.undo()
         }
         if (window.at()) check(Js.indexOf(line("Klucz w skrzynce"), "[[2026-10-16]]") > 0, "one undo step puts it back")
+
+        addDateHoverSteps()
+        addDateQuickSteps()
+        addDatePickSteps()
+        addDateNoneSteps()
+    }
+
+    /// taskDated and no button on the undated task before it is hovered; the mouse moves onto it.
+    function checkDatedRows(): void {
+        const r = row
+        check(dateButton(r) === null, "an undated task shows no “Add date” button until hovered or edited")
+        check(!datedAt(r), "the task is not dated (taskDated)")
+        // The mouse over the block shows it (desktop); over a dated or done task it shows none.
+        if (!Theme.touchUi)
+            hoverBlock(r)
+    }
+    function addDateHoverSteps(): void {
+        // ---- "Add date" on a task without a date ------------------------------------------------------
+        if (window.at()) show("Położyć hydroizolację")
+        if (window.at()) checkDatedRows()
+        if (window.at() && !Theme.touchUi) window.waitStep(dateButton(row) !== null, "hovering the task shows the button")
+        if (window.at() && !Theme.touchUi) hoverBlock(window.rowOf("Kupić płytki"))
+        if (window.at() && !Theme.touchUi) window.waitStep(dateButton(row) === null, "it goes when the mouse leaves")
+        if (window.at() && !Theme.touchUi) check(dateButton(window.rowOf("Kupić płytki")) === null, "a dated task has none")
+    }
+    function addDateQuickSteps(): void {
+        if (window.at()) editor.startEditing(row, 3)
+        if (window.at()) window.waitStep(page.editingRow === row && dateButton(row) !== null, "the edited task shows the button")
+        if (window.at()) {
+            const b = dateButton(row)
+            const d = delegateAt(row)
+            const centre = b.parent.x + b.x + b.width / 2 // (the button's Loader is the delegate's child)
+            check(d.dateButtonRoom > 0 && centre > d.contentRight - d.dateButtonRoom && centre < d.contentRight,
+                  "it sits at the end of the line, in the room the text leaves for it")
+            window.tapAt(b, b.width / 2, b.height / 2)
+        }
+        if (window.at()) window.waitStep(quickMenuOpen(), (Theme.touchUi ? "a tap" : "a click") + " on it opens the quick date menu")
+        if (window.at()) {
+            const todayHint = quickHint("quickDateToday")
+            const tomorrowHint = quickHint("quickDateTomorrow")
+            const weekHint = quickHint("quickDateNextWeek")
+            check(todayHint === DatesHelper.formatShort("2026-10-15") && tomorrowHint === DatesHelper.formatShort("2026-10-16")
+                  && weekHint === DatesHelper.formatShort("2026-10-19"),
+                  "Today, Tomorrow and Next week with their dates: " + weekHint)
+            window.tapItem(quickItem("quickDateTomorrow"))
+        }
+        if (window.at()) window.waitStep(!quickMenuOpen(), "choosing Tomorrow closes the menu")
+        if (window.at()) window.waitStep(Js.indexOf(line("Położyć hydroizolację"), "Położyć hydroizolację 📅 2026-10-16") > 0,
+                                         "“Tomorrow” writes the due date: " + line("Położyć hydroizolację"))
+        if (window.at()) window.waitStep(info(row).taskDated && page.editingRow === row && dateButton(row) === null,
+                                         "the block stays edited, the dated task has no button any more")
+        if (window.at()) {
+            page.stopEditing()
+            page.undo()
+        }
+        if (window.at()) check(line("Położyć hydroizolację") === "\t- [ ] Położyć hydroizolację",
+                               "one undo step takes the date away: " + line("Położyć hydroizolację"))
+    }
+    function addDatePickSteps(): void {
+        // "Pick a date…": the date dialog on tomorrow, nothing to remove.
+        if (window.at()) editor.startEditing(row, 3)
+        if (window.at()) window.waitStep(page.editingRow === row && dateButton(row) !== null, "the button is back")
+        if (window.at()) {
+            const b = dateButton(row)
+            window.tapAt(b, b.width / 2, b.height / 2)
+        }
+        if (window.at()) window.waitStep(quickMenuOpen(), "the menu opens again")
+        if (window.at()) window.tapItem(quickItem("quickDatePick"))
+        if (window.at()) window.waitStep(!quickMenuOpen() && dateDialog() !== null && dateDialog().opened,
+                                         "“Pick a date…” opens the date dialog")
+        if (window.at()) {
+            check(datePicker().selectedDate === "2026-10-16" && DevTest.property(dateDialog(), "removable") === false,
+                  "on tomorrow, nothing to remove: " + datePicker().selectedDate)
+            datePicker().selectedDate = "2026-10-21"
+            dateDialog().accept()
+        }
+        if (window.at()) window.waitStep(!dateDialog().opened, "the dialog closes")
+        if (window.at()) window.waitStep(Js.indexOf(line("Położyć hydroizolację"), "Położyć hydroizolację 📅 2026-10-21") > 0,
+                                         "the picked date is written: " + line("Położyć hydroizolację"))
+        if (window.at()) {
+            page.stopEditing()
+            page.undo()
+        }
+        if (window.at()) check(line("Położyć hydroizolację") === "\t- [ ] Położyć hydroizolację", "undo takes it away")
+    }
+    function addDateNoneSteps(): void {
+        // A done task and a dated one have no button, also while edited.
+        if (window.at()) editor.startEditing(window.rowOf("Zmierzyć ściany"), 2)
+        if (window.at()) window.waitStep(page.editingRow === window.rowOf("Zmierzyć ściany"), "the done task is edited")
+        if (window.at()) check(dateButton(window.rowOf("Zmierzyć ściany")) === null, "a done task has no “Add date”")
+        if (window.at()) editor.startEditing(window.rowOf("Kupić płytki"), 2)
+        if (window.at()) window.waitStep(page.editingRow === window.rowOf("Kupić płytki"), "the dated task is edited")
+        if (window.at()) {
+            check(dateButton(window.rowOf("Kupić płytki")) === null, "a dated task has no “Add date”")
+            page.stopEditing()
+        }
     }
 
     Component.onCompleted: window.runSteps("datechips")

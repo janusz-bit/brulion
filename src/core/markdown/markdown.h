@@ -65,7 +65,8 @@
 //                  setFirstLineToken, applyTokenAction(body, from, to, action, a, b, context);
 //                  across copies of a block TokenRef {kind, value, ordinal} (tokenRefAt,
 //                  findTokenRef) and editBlockToken(content, line, ref, action, …) — only the
-//                  token's bytes of the file change
+//                  token's bytes of the file change; setBlockToken(content, line, kind, token)
+//                  adds or replaces one on a block's first line the same way
 //   rename.h       renameLinks(content, oldName, newName[, oldPath, newPath]),
 //                  renameTags(...[, naming]) (the tags naming the page: `#old`, `#[[old]]`,
 //                  `tags::` and frontmatter items; bracket form kept, sub-tags untouched; `naming`

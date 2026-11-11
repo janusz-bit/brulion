@@ -20,6 +20,7 @@ qt_target_qml_sources(brulion
         qml/editor/TaskStatusMenu.qml
         qml/editor/TaskDependencyDialog.qml
         qml/editor/DateChipMenu.qml
+        qml/editor/QuickDateMenu.qml
         qml/editor/LinkMenu.qml
         qml/editor/WebPictureMenu.qml
         qml/editor/WebPictureViewer.qml

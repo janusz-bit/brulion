@@ -42,6 +42,7 @@ Item {
     required property string view
     required property string kind
     required property string taskStatus
+    required property bool taskDated
     required property int headingLevel
     required property int depth
     required property string listMarker
@@ -67,6 +68,11 @@ Item {
     readonly property bool listItem: kind === "listItem"
     readonly property bool isTask: taskStatus !== "" && listItem
     readonly property bool closedTask: taskStatus === "done" || taskStatus === "cancelled"
+    /// An open task without a 📅 / ⏳ date (taskDated): the "Add date" button at the end of its first
+    /// line (BlockEditor.openQuickDateMenu) — on hover, and while the block is edited (on touch only
+    /// then). Its room is kept while it is hidden, so the text never reflows when it shows.
+    readonly property bool datable: isTask && !closedTask && !taskDated && textView && !editor.readOnly
+    readonly property real dateButtonRoom: datable ? (Theme.touchUi ? 32 : 28) : 0
     readonly property int shownHeadingLevel: view === "heading" ? Math.max(1, headingLevel) : 0
     readonly property bool hovered: hover.hovered
     readonly property bool doc: editor.documentMode
@@ -488,12 +494,30 @@ Item {
         }
     }
 
+    // ---- "Add date" (an open task without a date) --------------------------------------------------
+    Loader {
+        active: block.datable && block.shown
+                && (block.hovered || block.editing || block.editor.quickDateRow === block.index)
+        x: block.contentRight - block.dateButtonRoom + (block.dateButtonRoom - width) / 2
+        y: block.firstLineCenter - height / 2
+        sourceComponent: BIconButton {
+            id: dateButton
+            objectName: "taskDateButton"
+            label: qsTr("Add date")
+            iconName: "calendar-plus"
+            size: "small"
+            // The edited text keeps the keyboard (the menu takes it while it is open).
+            focusPolicy: Qt.NoFocus
+            onClicked: block.editor.openQuickDateMenu(block.index, dateButton)
+        }
+    }
+
     // ---- Content ---------------------------------------------------------------------------
     BlockText {
         id: textContent
         x: block.contentLeft
         y: block.topPad
-        width: Math.max(40, block.contentRight - x)
+        width: Math.max(40, block.contentRight - block.dateButtonRoom - x)
         visible: textContent.live && !block.noTextLine
         live: block.textView && block.shown
         blockItem: block

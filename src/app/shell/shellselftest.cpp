@@ -597,6 +597,58 @@ void checkTaskStatusMenus(QQuickWindow *window, AppController *app, const Check 
         restore();
     }
 
+    // ---- Tasks: a task without a date has "Add date"; "Tomorrow" writes its due date. (Filtered:
+    // the "No date" section is far down the list.)
+    app->navigate({{u"view"_s, u"tasks"_s}, {u"query"_s, u"Tokarczuk"_s}});
+    // The chip of the filtered row (the list filters a moment after the route).
+    const auto addDateChip = [&]() -> QQuickItem * {
+        QQuickItem *chip = shownWhere(window->contentItem(), [](QQuickItem *item) {
+            if (item->objectName() != u"taskAddDateChip")
+                return false;
+            const QQuickItem *row = item;
+            while (row && !isA(row, "TasksRow"))
+                row = row->parentItem();
+            return row && row->property("text").toString().contains(u"Tokarczuk"_s);
+        });
+        return chip;
+    };
+    QQuickItem *addDate = nullptr;
+    check(waitFor([&] { return (addDate = addDateChip()) != nullptr; }),
+          "a task without a date in Tasks shows “Dodaj datę”");
+    settle(300);
+    addDate = addDateChip();
+    if (addDate) {
+        QQuickItem *row = addDate;
+        while (row && !isA(row, "TasksRow"))
+            row = row->parentItem();
+        const QString path = row ? row->property("path").toString() : QString();
+        const int line = row ? row->property("line").toInt() : -1;
+        const QString before = path.isEmpty() ? QString() : ws->readFile(path);
+        tapOrClick(window, pointIn(addDate), touch);
+        QQuickItem *tomorrow = nullptr;
+        check(waitFor([&] {
+                  return openMenus(window) == 1 && (tomorrow = named(window->contentItem(), u"quickDateTomorrow"_s));
+              }),
+              "“Dodaj datę” opens the quick date menu");
+        if (tomorrow)
+            tapOrClick(window, pointIn(tomorrow), touch);
+        const QString dated = u"📅 "_s + app->today(1);
+        check(!path.isEmpty() && waitFor([&] {
+            const QStringList lines = ws->readFile(path).split(u'\n');
+            return openMenus(window) == 0 && line >= 0 && line < lines.size() && lines.at(line).contains(dated);
+        }),
+              "“Jutro” writes the task's due date on its line");
+        // Nothing else of the note changed: the line with the date taken out is the line before.
+        if (!path.isEmpty()) {
+            QString after = ws->readFile(path);
+            after.replace(u" "_s + dated, QString());
+            check(after == before, "only the task's line changed");
+            ws->writeFile(path, before);
+            settle(300);
+        }
+        restore();
+    }
+
     // ---- The backlinks under a page: today's "Przejrzeć [[Remont mieszkania]]…" task.
     const QString remont = u"Projekty/Remont mieszkania.md"_s;
     app->openPage(remont);

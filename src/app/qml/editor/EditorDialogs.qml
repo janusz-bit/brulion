@@ -20,6 +20,8 @@ import Brulion
 //                                   calendar — there without an editor or controller): the choice
 //                                   is the signal applied(target, action, a, b) (DateChipMenu's
 //                                   actions); `target` is the caller's name for its request
+//   pickNewDateWith(target, kind)   a date for a task that has none of that kind (Tasks' "Add date" →
+//                                   "Pick a date…"): applied(target, "set", value), nothing to remove
 //   pickPropertyDate(target, title, at, withTime)  a page property's date (PropertyRow): the same
 //                                   dialog titled with the property's name, "Clear" to empty it
 //   pickJournalDate(row, cursor)    Date…: a [[journal day]] link at the caret
@@ -259,6 +261,13 @@ Item {
         applyTarget = target
         mode = "apply"
         openDateDialog(kind, at)
+    }
+    /// The date dialog for a new date token of `kind` elsewhere (a task without one): on tomorrow,
+    /// with a time to add, no "Remove" — applied(target, "set", value).
+    function pickNewDateWith(target: string, kind: string): void {
+        applyTarget = target
+        mode = "apply"
+        showDate(dateKindTitle(kind), dateKindIcon(kind), "", tomorrow(), true, false, false, qsTr("Remove"))
     }
     function openDateDialog(kind: string, at: string): void {
         const day = kind === "day"

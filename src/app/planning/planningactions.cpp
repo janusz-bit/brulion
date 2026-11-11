@@ -11,6 +11,7 @@
 #include "markdown/parse.h"
 #include "markdown/taskdeps.h"
 #include "markdown/tokenedit.h"
+#include "markdown/tokens.h"
 #include "notebook/links.h"
 #include "notebook/tasktools.h"
 #include "planningutil.h"
@@ -324,6 +325,36 @@ bool PlanningActions::editToken(const QString &path, int line, const QString &te
     const markdown::TokenEditContext context{
             .today = currentDay(), .defaultReminderTime = cfg.defaultReminderTime, .config = cfg};
     const QString after = markdown::editBlockToken(content, at, *ref, action, a, b, context);
+    return after != content && writeChange(path, content, after);
+}
+
+bool PlanningActions::setTaskDate(const QString &path, int line, const QString &text, const QString &field,
+                                  const QString &spec)
+{
+    using markdown::TokenKind;
+    static const QHash<QString, std::pair<TokenKind, QStringView>> fields{
+            {u"due"_s, {TokenKind::Due, markdown::tokens::Due}},
+            {u"scheduled"_s, {TokenKind::Scheduled, markdown::tokens::Scheduled}},
+            {u"start"_s, {TokenKind::Start, markdown::tokens::Start}},
+    };
+    const auto it = fields.constFind(field);
+    if (!m_host || it == fields.cend())
+        return false;
+    QString token;
+    if (!spec.trimmed().isEmpty()) {
+        const auto parsed = dates::parseDateSpec(spec.trimmed());
+        if (!parsed)
+            return false;
+        token = it->second.toString() + u' ' + parsed->toString();
+    }
+    bool ok = false;
+    const QString content = m_host->read(path, &ok);
+    if (!ok)
+        return fail(tr("The page could not be read."));
+    const int at = locateTask(path, content, line, text);
+    if (at < 0)
+        return fail(tr("The task was changed in the meantime."));
+    const QString after = markdown::setBlockToken(content, at, it->first, token);
     return after != content && writeChange(path, content, after);
 }
 

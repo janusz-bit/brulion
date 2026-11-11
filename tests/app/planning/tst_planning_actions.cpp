@@ -1,8 +1,8 @@
 // PlanningActions and the pure helpers behind it: toggling tasks through an EditorHost (✅ date,
 // recurring tasks, a line that moved, a task that is gone, undo only while the file is
 // unchanged), every status of the status menu (no status included), appending blocks to a page
-// (template bullets, CRLF, continuation lines), the lines written by the calendar ("Dodaj
-// zadanie" / "Dodaj przypomnienie") and natural-language quick add (Polish and English).
+// (template bullets, CRLF, continuation lines), dates added from Tasks' quick date menu, the lines written by the
+// calendar ("Dodaj zadanie" / "Dodaj przypomnienie") and natural-language quick add (Polish and English).
 #include "fakeeditorhost.h"
 #include "planningactions.h"
 #include "planningtest.h"
@@ -247,6 +247,42 @@ private Q_SLOTS:
         // The view still has the task on line 0.
         QVERIFY(actions.editToken(u"Dom.md"_s, 0, u"Zamówić farbę"_s, u"due"_s, u"2026-10-16"_s, u"shift"_s, 1, 0));
         QCOMPARE(host.file(u"Dom.md"_s), u"- nowy wpis\n- [ ] Zamówić farbę 📅 2026-10-17\n"_s);
+    }
+
+    // "Add date" (the quick date menu of Tasks): the token added to the task's first line (before
+    // its block id, CRLF kept), found again when the line moved, replaced, removed, undone.
+    void setTaskDate()
+    {
+        FakeEditorHost host;
+        const QString page = u"- nowy wpis\r\n- [ ] Kupić żółty ser ^ser01\r\n  notatka\r\n"_s;
+        host.setFile(u"Zakupy.md"_s, page);
+        PlanningActions actions;
+        actions.setHost(&host);
+        actions.setToday(u"2026-11-10"_s);
+        // The view still has the task on line 0.
+        QVERIFY(actions.setTaskDate(u"Zakupy.md"_s, 0, u"Kupić żółty ser"_s, u"due"_s, u"2026-11-11"_s));
+        QCOMPARE(host.file(u"Zakupy.md"_s),
+                 u"- nowy wpis\r\n- [ ] Kupić żółty ser 📅 2026-11-11 ^ser01\r\n  notatka\r\n"_s);
+        QVERIFY(actions.canUndo());
+        QVERIFY(actions.undo());
+        QCOMPARE(host.file(u"Zakupy.md"_s), page);
+
+        QVERIFY(actions.setTaskDate(u"Zakupy.md"_s, 1, u"Kupić żółty ser"_s, u"scheduled"_s, u"2026-11-16 09:30"_s));
+        QCOMPARE(host.file(u"Zakupy.md"_s),
+                 u"- nowy wpis\r\n- [ ] Kupić żółty ser ⏳ 2026-11-16 09:30 ^ser01\r\n  notatka\r\n"_s);
+        QVERIFY(actions.setTaskDate(u"Zakupy.md"_s, 1, u"Kupić żółty ser"_s, u"scheduled"_s, u"2026-11-17"_s));
+        QCOMPARE(host.file(u"Zakupy.md"_s),
+                 u"- nowy wpis\r\n- [ ] Kupić żółty ser ⏳ 2026-11-17 ^ser01\r\n  notatka\r\n"_s);
+        QVERIFY(actions.setTaskDate(u"Zakupy.md"_s, 1, u"Kupić żółty ser"_s, u"scheduled"_s, QString()));
+        QCOMPARE(host.file(u"Zakupy.md"_s), page);
+
+        // Malformed requests write nothing; a task that is gone fails.
+        QVERIFY(!actions.setTaskDate(u"Zakupy.md"_s, 1, u"Kupić żółty ser"_s, u"reminder"_s, u"2026-11-11"_s));
+        QVERIFY(!actions.setTaskDate(u"Zakupy.md"_s, 1, u"Kupić żółty ser"_s, u"due"_s, u"jutro"_s));
+        QSignalSpy failed(&actions, &PlanningActions::failed);
+        QVERIFY(!actions.setTaskDate(u"Zakupy.md"_s, 1, u"Kupić mleko"_s, u"due"_s, u"2026-11-11"_s));
+        QCOMPARE(failed.count(), 1);
+        QCOMPARE(host.file(u"Zakupy.md"_s), page);
     }
 
     void staleLineWithAnEqualToken()

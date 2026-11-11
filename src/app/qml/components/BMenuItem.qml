@@ -12,6 +12,7 @@ import Brulion
 //   BMenuItem { text: qsTr("Show completed"); checkable: true; checked: showDone }
 //   BMenuItem { text: qsTr("Delete"); iconName: "trash-2"; danger: true }
 //   BMenuItem { text: qsTr("Move up"); unavailable: gaps ? qsTr("…why…") : "" }
+//   BMenuItem { text: qsTr("Tomorrow"); hint: "Wed, Nov 11" }   // muted text on the right
 // `unavailable`: shown but not possible now — drawn disabled, the reason in a tooltip on hover;
 // it still triggers (and closes the menu), so the menu can say why with a toast on touch screens,
 // where there is no hover.
@@ -30,6 +31,8 @@ T.MenuItem {
     /// A colour square in the icon's place (the highlight colours); transparent: none.
     property color swatch: "transparent"
     property string shortcut
+    /// A muted plain text on the right (what the item stands for: a date), "" = none.
+    property string hint
     property bool danger: false
     property string unavailable: ""
 
@@ -54,7 +57,7 @@ T.MenuItem {
 
     Accessible.role: Accessible.MenuItem
     Accessible.name: text
-    Accessible.description: unavailable !== "" ? unavailable : shortcut
+    Accessible.description: unavailable !== "" ? unavailable : hint !== "" ? hint : shortcut
 
     // A press inside a menu: it no longer moves out of the finger's way (BMenu.touched).
     onPressedChanged: {
@@ -113,6 +116,15 @@ T.MenuItem {
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
             spacing: 6
+            Text {
+                anchors.verticalCenter: parent.verticalCenter
+                visible: control.hint !== ""
+                text: control.hint
+                textFormat: Text.PlainText
+                font.family: Theme.fontUi
+                font.pixelSize: Theme.textSm
+                color: Theme.fgMuted
+            }
             BKbd {
                 anchors.verticalCenter: parent.verticalCenter
                 sequence: control.shortcut

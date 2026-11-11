@@ -6,7 +6,8 @@ import Brulion
 // TasksRow — one task of TasksView: the checkbox, the task text (escaped rich text from the core
 // InlineRenderer: [[links]] and #tags clickable), and its metadata as chips — due date (red when
 // overdue), scheduled, start, the next reminder / alarm, recurrence in words, priority — plus
-// where it is written (page, or the day of a daily note).
+// where it is written (page, or the day of a daily note). An open task without a due or scheduled
+// date has an "Add date" chip instead: its quick date menu (dateMenuRequested, QuickDateMenu).
 //
 //   delegate: TasksRow { onTaskToggled: …; onOpened: …; onLinkActivated: (url) => …
 //                        onTagPageRequested: (tag) => …; onStatusRequested: (status) => … }
@@ -93,6 +94,9 @@ T.ItemDelegate {
     /// A right-click or long press on a chip: the menu of its token `kind` ("due" | "scheduled" |
     /// "start" | "reminder" | "recurrence" | "priority") at (x, y) of `item`.
     signal tokenMenuRequested(string kind, Item item, real x, real y)
+    /// The "Add date" chip of an open task without a date was clicked: the quick date menu under
+    /// `item` (PlanningTokenMenu.openAddDate).
+    signal dateMenuRequested(Item item)
     /// A right-click or long press on a link of the text (`url`: tag:, page:, …).
     signal linkMenuRequested(string url, Item item, real x, real y)
 
@@ -384,6 +388,17 @@ T.ItemDelegate {
                     variant: control.status === "doing" ? "reminder" : "neutral"
                     iconName: control.status === "doing" ? "clock" : control.status === "deferred" ? "hourglass" : "x"
                     text: control.statusLabel
+                }
+                TaskChip {
+                    id: addDateChip
+                    objectName: "taskAddDateChip"
+                    visible: !control.closed && control.due === "" && control.scheduled === ""
+                    variant: "neutral"
+                    iconName: "calendar-plus"
+                    interactive: true
+                    text: qsTr("Add date")
+                    opacity: hovered || visualFocus || control.hovered || Theme.touchUi ? 1 : 0.6
+                    onClicked: control.dateMenuRequested(addDateChip)
                 }
                 TaskChip {
                     objectName: "taskChip_due" // (its token menu: openMenuAt())

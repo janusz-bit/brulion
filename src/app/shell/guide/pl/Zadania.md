@@ -42,6 +42,8 @@ Znaczniki można dopisać gdziekolwiek w pierwszej linii zadania:
 
 Po terminie, zaplanowaniu i początku możesz dopisać godzinę: `📅 2026-10-20 15:00`.
 
+**Szybkie dodanie daty** — zadanie bez terminu ma na końcu wiersza mały przycisk z kalendarzem: na komputerze widać go, gdy wskażesz zadanie myszą albo je edytujesz, na telefonie podczas edycji zadania. Otwiera menu z pozycjami **Dziś**, **Jutro** i **Następny tydzień** (każda ze swoją datą) oraz **Wybierz datę…** z kalendarzem. Data trafia na koniec pierwszego wiersza zadania jako `📅 2026-10-20`, a `Ctrl+Z` ją cofa. W widoku **Zadania** to samo menu otwiera chip **Dodaj datę** pod takim zadaniem.
+
 **Zmiana daty bez szukania jej w tekście** — kliknij znacznik daty (📅, ⏳, 🛫, ✅, ➕, ❌) prawym przyciskiem myszy albo przytrzymaj go palcem. Menu ma pozycje „Zmień datę…” (kalendarz z godziną), „Dziś”, „Jutro”, „Dzień później”, „Tydzień później” i „Usuń datę”. Zmienia się tylko ta data — reszta wiersza zostaje, jak była, a zmianę cofniesz (`Ctrl+Z`). Zwykłe kliknięcie znacznika dalej zaczyna edycję tekstu.
 
 Menu działa wszędzie, gdzie widać znacznik: w notatce i w dzienniku, w komórkach tabel, w wynikach [[Zapytania|zapytań]] i we wstawionych blokach (zmiana trafia wtedy do notatki, w której zadanie jest zapisane, a powiadomienie ma przycisk **Cofnij**), w widoku **Zadania** (na znacznikach pod zadaniem) i w kalendarzu (na wpisie dnia).

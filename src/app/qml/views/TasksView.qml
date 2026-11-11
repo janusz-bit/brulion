@@ -8,8 +8,8 @@ import Brulion
 // PlanningContext.vaultIndex) in sections Overdue / Today / Tomorrow / This week / Later / No
 // date / Done (collapsed): tick them off inline (undo in the toast), see their dates,
 // reminders, recurrence and priority as chips (a right-click or long press on one: its menu,
-// PlanningTokenMenu — the change goes to the task's file, undo in the toast), open them at their
-// line, set any status from the context menu. Filters (status, tag, page, folder, priority, text) and the sort order sit in
+// PlanningTokenMenu — the change goes to the task's file, undo in the toast), give a task without
+// a date one from its "Add date" chip (QuickDateMenu), open them at their line, set any status from the context menu. Filters (status, tag, page, folder, priority, text) and the sort order sit in
 // TasksFilterBar; "Show as query" turns them into the equivalent ```query block (SYNTAX §10);
 // route.query pre-sets them. Quick add with natural-language dates writes into today's journal.
 //
@@ -308,6 +308,8 @@ FocusScope {
                     onTokenMenuRequested: (kind, item, x, y) =>
                         root.openTokenMenu(taskRow.path, taskRow.line, taskRow.text, kind, taskRow.tokenValue(kind),
                                            taskRow.reminderAlarm, taskRow.recurrence, taskRow.priorityName, item, x, y)
+                    onDateMenuRequested: (item) => tokenMenu.openAddDate(taskRow.path, taskRow.line, taskRow.text,
+                                                                        item, 0, item.height)
                     // "Filter by tag" first: PlanningTokenMenu.filterRequested.
                     onLinkMenuRequested: (url, item, x, y) => tokenMenu.openLink(url, taskRow.path, item, x, y, true)
                 }

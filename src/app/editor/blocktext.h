@@ -116,6 +116,11 @@ struct BlockShape {
 /// matching view.
 BlockShape shapeOf(const markdown::BlockEntry &entry);
 
+/// The block's text has a date that files a task (docs/SYNTAX.md §5): a 📅 due or ⏳ scheduled
+/// token, or a Logseq `SCHEDULED:` / `DEADLINE:` line — tokens inside inline code do not count.
+/// A task without one shows the editor's "Add date" button (BlockListModel role `taskDated`).
+bool hasFilingDate(const QString &body);
+
 /// The new body for `editText` (the inverse of shapeOf().editText): the hidden prefix and
 /// suffix of the current body are kept; the unchanged edit text gives the body itself. A task
 /// marker without a trailing space gets one when text follows it. The result stays one block

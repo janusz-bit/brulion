@@ -1324,6 +1324,29 @@ private Q_SLOTS:
              {u"part:"_s, u"part:2:Firma%2FAdam"_s, u"part:01:A%2FB"_s, u"page:Firma"_s, QString()})
             QVERIFY2(linkPartRoute(bad, QString()).isEmpty(), qPrintable(bad));
     }
+
+    // The "Add date" button's test: a date that files a task (📅, ⏳, Logseq planning lines).
+    void filingDates_data()
+    {
+        QTest::addColumn<QString>("body");
+        QTest::addColumn<bool>("dated");
+        QTest::newRow("none") << u"[ ] Kupić żółty ser"_s << false;
+        QTest::newRow("due") << u"[ ] Kupić żółty ser 📅 2026-11-11"_s << true;
+        QTest::newRow("scheduled") << u"[ ] Zadzwonić ⏳ 2026-11-12 09:30"_s << true;
+        QTest::newRow("start only") << u"[ ] Remont 🛫 2026-11-12"_s << false;
+        QTest::newRow("reminder only") << u"[ ] Leki ⏰ 2026-11-11 08:00"_s << false;
+        QTest::newRow("on a later line") << u"[ ] Zażółcić gęślą jaźń\n📅 2026-11-11"_s << true;
+        QTest::newRow("Logseq deadline") << u"TODO Napisać raport\nDEADLINE: <2026-11-20 Fri>"_s << true;
+        QTest::newRow("in inline code") << u"[ ] Opisać `📅 2026-11-11` w dokumentacji"_s << false;
+        QTest::newRow("malformed date") << u"[ ] Coś 📅 2026-13-45"_s << false;
+        QTest::newRow("empty") << QString() << false;
+    }
+    void filingDates()
+    {
+        QFETCH(QString, body);
+        QFETCH(bool, dated);
+        QCOMPARE(hasFilingDate(body), dated);
+    }
 };
 
 QTEST_MAIN(TestBlockText)

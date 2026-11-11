@@ -424,7 +424,7 @@
     <name>ContentPdfView</name>
     <message numerus="yes">
         <location filename="../src/app/qml/content/ContentPdfView.qml" line="1513"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="3599"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="3637"/>
         <source>%n page(s)</source>
         <translation>
             <numerusform>%n page</numerusform>
@@ -500,7 +500,7 @@
 <context>
     <name>EditorDialogs</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="434"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="443"/>
         <source>Inserted %n drawing(s)</source>
         <translation>
             <numerusform>Inserted %n drawing</numerusform>
@@ -1300,7 +1300,7 @@
     <name>ShellShareDialog</name>
     <message numerus="yes">
         <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="32"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="5982"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="6020"/>
         <source>%n file(s) to save in the notebook</source>
         <translation>
             <numerusform>%n file to save in the notebook</numerusform>
@@ -1562,7 +1562,7 @@
 <context>
     <name>TasksRow</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/planning/TasksRow.qml" line="213"/>
+        <location filename="../src/app/qml/planning/TasksRow.qml" line="217"/>
         <source>%n subtask(s) folded</source>
         <translation>
             <numerusform>%n subtask folded</numerusform>
@@ -1570,7 +1570,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/planning/TasksRow.qml" line="442"/>
+        <location filename="../src/app/qml/planning/TasksRow.qml" line="457"/>
         <source>Blocks %n task(s)</source>
         <translation>
             <numerusform>Blocks %n task</numerusform>
@@ -1578,7 +1578,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/planning/TasksRow.qml" line="451"/>
+        <location filename="../src/app/qml/planning/TasksRow.qml" line="466"/>
         <source>%n subtask(s)</source>
         <translation>
             <numerusform>%n subtask</numerusform>
@@ -1632,7 +1632,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/TasksView.qml" line="348"/>
+        <location filename="../src/app/qml/views/TasksView.qml" line="350"/>
         <source>%n tasks in the notebook are hidden by the filters.</source>
         <translation>
             <numerusform>%n task in the notebook is hidden by the filters.</numerusform>

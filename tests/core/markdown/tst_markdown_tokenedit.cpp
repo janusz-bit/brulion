@@ -1,5 +1,5 @@
 // Token edits of the token menus (markdown/tokenedit.h): actions on a chip's range, TokenRefs
-// across copies of a block and editBlockToken() on whole files (byte for byte, CRLF).
+// across copies of a block and editBlockToken() / setBlockToken() on whole files (byte for byte, CRLF).
 #include "markdown/tokenedit.h"
 
 #include <QTest>
@@ -394,6 +394,48 @@ private Q_SLOTS:
         QFETCH(QString, expected);
         const TokenRef ref{TokenKind(kind), value, 0, {}};
         QCOMPARE(editBlockToken(content, line, ref, action, a, QVariant(), context()), expected);
+    }
+
+    void setBlockTokenInFiles_data()
+    {
+        QTest::addColumn<QString>("content");
+        QTest::addColumn<int>("line");
+        QTest::addColumn<int>("kind");
+        QTest::addColumn<QString>("token");
+        QTest::addColumn<QString>("expected");
+
+        const QString page = u"---\r\ntytuł: Zakupy\r\n---\r\n- [ ] Kupić żółty ser ^ser01\r\n"
+                             u"    notatka: w Biedronce\r\n\t- [/] Zadzwonić do pani Łucji\r\n"_s;
+        QTest::newRow("added before the block id, CRLF kept")
+                << page << 3 << int(TokenKind::Due) << u"📅 2026-11-11"_s
+                << QString(page).replace(u"ser ^ser01"_s, u"ser 📅 2026-11-11 ^ser01"_s);
+        QTest::newRow("child with a tab") << page << 5 << int(TokenKind::Scheduled) << u"⏳ 2026-11-12"_s
+                                          << QString(page).replace(u"Łucji"_s, u"Łucji ⏳ 2026-11-12"_s);
+        QTest::newRow("replaced") << u"- [ ] gęś 📅 2026-10-20 #dom\n- b\n"_s << 0 << int(TokenKind::Due)
+                                  << u"📅 2026-11-11"_s << u"- [ ] gęś 📅 2026-11-11 #dom\n- b\n"_s;
+        QTest::newRow("removed") << u"- [ ] gęś 📅 2026-10-20\n"_s << 0 << int(TokenKind::Due) << QString()
+                                 << u"- [ ] gęś\n"_s;
+        QTest::newRow("in inline code: not a token, one added")
+                << u"- [ ] `📅 2026-10-20`"_s << 0 << int(TokenKind::Due) << u"📅 2026-11-11"_s
+                << u"- [ ] `📅 2026-10-20` 📅 2026-11-11"_s;
+        QTest::newRow("continuation line: the block's first line")
+                << page << 4 << int(TokenKind::Due) << u"📅 2026-11-11"_s
+                << QString(page).replace(u"ser ^ser01"_s, u"ser 📅 2026-11-11 ^ser01"_s);
+        QTest::newRow("frontmatter line") << page << 1 << int(TokenKind::Due) << u"📅 2026-11-11"_s << page;
+        QTest::newRow("code block") << u"```\nkod\n```\n"_s << 1 << int(TokenKind::Due) << u"📅 2026-11-11"_s
+                                    << u"```\nkod\n```\n"_s;
+        QTest::newRow("past the end") << page << 40 << int(TokenKind::Due) << u"📅 2026-11-11"_s << page;
+        QTest::newRow("same token: unchanged") << u"- [ ] a 📅 2026-11-11\n"_s << 0 << int(TokenKind::Due)
+                                               << u"📅 2026-11-11"_s << u"- [ ] a 📅 2026-11-11\n"_s;
+    }
+    void setBlockTokenInFiles()
+    {
+        QFETCH(QString, content);
+        QFETCH(int, line);
+        QFETCH(int, kind);
+        QFETCH(QString, token);
+        QFETCH(QString, expected);
+        QCOMPARE(setBlockToken(content, line, TokenKind(kind), token), expected);
     }
 };
 

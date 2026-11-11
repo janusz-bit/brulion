@@ -12,6 +12,8 @@
 //                                       the priority of the block on `line`, only that token's bytes
 //                                       written (markdown::editBlockToken); tokenMenu(…) what
 //                                       its menu shows (none for Logseq planning lines)
+//   setTaskDate(path, line, text, field, spec)   "Add date" (the quick date menu): a 📅 / ⏳ / 🛫
+//                                       token set on the task's first line (markdown::setBlockToken)
 //   snoozeReminder(path, line, text, value, at)   one occurrence of a recurring reminder later (a one-off
 //                                       child bullet, the series untouched: reminders/snooze.h)
 //   linkText(url, fromPath) / copyText(text)   the link menu's "Copy"
@@ -118,6 +120,12 @@ public:
     Q_INVOKABLE bool editToken(const QString &path, int line, const QString &text, const QString &kind,
                                const QString &value, const QString &action, const QVariant &a = {},
                                const QVariant &b = {});
+    /// Give the task on `line` of `path` (or the one with plain text `text` nearest to it) the date
+    /// `spec` ("YYYY-MM-DD[ HH:mm]") as its `field` ("due" 📅 | "scheduled" ⏳ | "start" 🛫): the
+    /// token on its first line replaced, or added at its end (before a block id); "" removes it.
+    /// Only that line changes; undo() puts the file back. False (and failed()) when the task is gone.
+    Q_INVOKABLE bool setTaskDate(const QString &path, int line, const QString &text, const QString &field,
+                                 const QString &spec);
     /// What the token menu of such a token shows besides the models' values: { rule (the block's
     /// 🔁 rule as the menu edits it — "every week" of "🔁 co tydzień kupić mleko" (Polish: "every
     /// week buy milk") —, or the 🔁 token's own), priority (its name, "" = none), logseq (a Logseq

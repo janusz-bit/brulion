@@ -174,5 +174,11 @@ std::optional<std::pair<qsizetype, qsizetype>> findTokenRef(const QString &body,
 /// changes nothing.
 QString editBlockToken(const QString &content, int line, const TokenRef &ref, const QString &action, const QVariant &a,
                        const QVariant &b, const TokenEditContext &context);
+/// setFirstLineToken() on the block on `line` (0-based) of a whole file's `content`: the first
+/// token of `kind` on the block's first line replaced by `token` (removed when it is empty), or
+/// `token` appended to that line (before a trailing block id). Written like editBlockToken(): only
+/// that line's changed run, everything else byte for byte. `content` unchanged when the line holds
+/// no block whose text has tokens (code, a table, …) or nothing changes.
+QString setBlockToken(const QString &content, int line, TokenKind kind, const QString &token);
 
 } // namespace brulion::markdown

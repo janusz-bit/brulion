@@ -365,6 +365,7 @@ QHash<int, QByteArray> BlockListModel::roleNames() const
             {SelectionEdgeRole, "selectionEdge"},
             {NoteModeOnlyRole, "noteModeOnly"},
             {PropertiesInfoRole, "propertiesInfo"},
+            {TaskDatedRole, "taskDated"},
             {ShownRole, "shown"},
     };
     return names;
@@ -1761,6 +1762,7 @@ QVariant BlockListModel::data(const QModelIndex &idx, int role) const
     case VisibleRole:
     case ShownRole: return st.visible;
     case TaskStatusRole: return taskStatusName(cachedShape(row).task);
+    case TaskDatedRole: return cachedShape(row).task.has_value() && hasFilingDate(e.body);
     case BlockIdRole: return e.blockId;
     case IsEditingRole: return st.editing;
     case IsSelectedRole: return st.selected;
@@ -1812,6 +1814,7 @@ QVariantMap BlockListModel::get(int row) const
     return {{u"view"_s, data(idx, ViewRole)},
             {u"kind"_s, data(idx, KindRole)},
             {u"taskStatus"_s, data(idx, TaskStatusRole)},
+            {u"taskDated"_s, data(idx, TaskDatedRole)},
             {u"depth"_s, data(idx, DepthRole)},
             {u"hasChildren"_s, data(idx, HasChildrenRole)},
             {u"collapsed"_s, data(idx, CollapsedRole)},

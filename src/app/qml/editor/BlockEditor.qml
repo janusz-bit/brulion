@@ -3516,6 +3516,72 @@ FocusScope {
         id: followLater
         onTriggered: if (editor.alive) editor.followToolbar()
     }
+    // ---- "Add date": the quick date menu of a task without a date ----------------------------------
+    /// The calendar button at the end of an open task's first line when it has no 📅 / ⏳ date
+    /// (BlockDelegate; shown on hover, and while the block is edited — on touch only then) opens
+    /// QuickDateMenu: Today, Tomorrow and Next week write the due date at once
+    /// (PageController.setDateToken, one undo step), "Pick a date…" opens the date dialog. The block
+    /// is tracked while the menu is open; the block being edited gets the keyboard back.
+    property QuickDateMenu quickDateMenu: null
+    property int quickDateBlock: -1
+    /// The row whose menu is open (-1: none): its button stays shown meanwhile.
+    property int quickDateRow: -1
+    property bool quickDateReturn: false
+    function openQuickDateMenu(row: int, item: Item): void {
+        if (!controller || row < 0 || row >= controller.blocks.count || readOnlyRefuses())
+            return
+        if (!quickDateMenu)
+            quickDateMenu = quickDateMenuComponent.createObject(editor) as QuickDateMenu
+        menuAbove = null
+        quickDateMenu.bottomMargin = menuBottomMargin()
+        if (quickDateBlock >= 0)
+            controller.untrack(quickDateBlock)
+        quickDateBlock = controller.trackBlock(row)
+        quickDateRow = row
+        quickDateReturn = controller.editingRow >= 0 && activeEditor !== null
+                          && activeEditor.row === controller.editingRow && activeEditor.activeFocus
+        closeSuggestions()
+        // A word the keyboard is still composing becomes text first (the date rewrites the text).
+        if (quickDateReturn)
+            EditorInput.commitPreedit(activeEditor)
+        quickDateMenu.popup(item, 0, item.height)
+    }
+    /// The task the menu was opened for (its tracking ends), -1 when gone.
+    function takeQuickDateRow(): int {
+        if (!controller || quickDateBlock < 0)
+            return -1
+        const row = controller.trackedRow(quickDateBlock)
+        controller.untrack(quickDateBlock)
+        quickDateBlock = -1
+        return row
+    }
+    function chooseQuickDate(date: string): void {
+        const row = takeQuickDateRow()
+        if (row >= 0)
+            controller.setDateToken(row, "due", date)
+    }
+    Component {
+        id: quickDateMenuComponent
+        QuickDateMenu {
+            onDateChosen: (date) => editor.chooseQuickDate(date)
+            onPickRequested: {
+                const row = editor.takeQuickDateRow()
+                if (row >= 0)
+                    editor.dialogs.pickDate(row, "due")
+            }
+            onClosed: {
+                editor.takeQuickDateRow() // closed without a choice: the tracking ends too
+                editor.quickDateRow = -1
+                const back = editor.quickDateReturn
+                editor.quickDateReturn = false
+                // (Not when the date dialog took over: it gives the keyboard back itself.)
+                if (back && !editor.dialogs.anyOpen && editor.activeEditor && editor.controller
+                        && editor.activeEditor.row === editor.controller.editingRow)
+                    editor.activeEditor.ensureFocus()
+            }
+        }
+    }
+
     /// The status of a block's task as the menu shows it ("" = none).
     function taskStatusOf(row: int): string {
         return controller.blocks.kindAt(row) === "listItem" ? controller.blocks.taskStatusAt(row) : ""

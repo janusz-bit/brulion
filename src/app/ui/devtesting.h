@@ -71,6 +71,7 @@ class DevBlock : public QObject {
     Q_PROPERTY(QString view READ view NOTIFY changed FINAL)
     Q_PROPERTY(QString kind READ kind NOTIFY changed FINAL)
     Q_PROPERTY(QString taskStatus READ taskStatus NOTIFY changed FINAL)
+    Q_PROPERTY(bool taskDated READ taskDated NOTIFY changed FINAL)
     Q_PROPERTY(int depth READ depth NOTIFY changed FINAL)
     Q_PROPERTY(bool hasChildren READ hasChildren NOTIFY changed FINAL)
     Q_PROPERTY(bool collapsed READ collapsed NOTIFY changed FINAL)
@@ -92,6 +93,7 @@ public:
     QString view() const { return text(u"view"); }
     QString kind() const { return text(u"kind"); }
     QString taskStatus() const { return text(u"taskStatus"); }
+    bool taskDated() const { return m_row.value(QStringLiteral("taskDated")).toBool(); }
     int depth() const { return m_row.value(QStringLiteral("depth")).toInt(); }
     bool hasChildren() const { return m_row.value(QStringLiteral("hasChildren")).toBool(); }
     bool collapsed() const { return m_row.value(QStringLiteral("collapsed")).toBool(); }

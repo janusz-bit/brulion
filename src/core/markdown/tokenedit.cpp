@@ -568,36 +568,35 @@ std::optional<std::pair<qsizetype, qsizetype>> findTokenRef(const QString &body,
     return std::nullopt;
 }
 
-QString editBlockToken(const QString &content, int line, const TokenRef &ref, const QString &action, const QVariant &a,
-                       const QVariant &b, const TokenEditContext &context)
+namespace {
+
+/// The block on `line` of `doc` when tokens are its text (list items, paragraphs, headings,
+/// quotes and callouts — not code, tables, HTML, frontmatter or a fence inside a list item), else -1.
+int tokenBlockAt(const BlockDocument &doc, int line)
 {
-    BlockDocument doc(content);
     const int i = doc.indexAtLine(line);
     if (i < 0)
-        return content;
-    // Tokens are text of list items, paragraphs, headings, quotes and callouts (not of code,
-    // tables, HTML or frontmatter).
+        return -1;
     switch (doc.at(i).kind) {
     case BlockKind::ListItem:
     case BlockKind::Paragraph:
     case BlockKind::Heading:
     case BlockKind::Quote:
     case BlockKind::Callout: break;
-    default: return content;
+    default: return -1;
     }
-    if (!doc.at(i).lang.isEmpty())
-        return content; // a fenced block inside a list item
+    return doc.at(i).lang.isEmpty() ? i : -1;
+}
+
+/// `content` with block `i` of `doc` (parsed from it) given the body `edited`, written into the
+/// file line by line as it stands — indentation, markers and line endings untouched: one changed
+/// line of the body (only its changed run replaced), or one line below the first removed (a token
+/// alone on it, replaceTokenRange()) — the file's line goes with its line ending.
+QString withEditedBody(const QString &content, BlockDocument &doc, int i, const QString &edited)
+{
     const QString body = doc.at(i).body;
-    const auto range = findTokenRef(body, ref);
-    if (!range)
-        return content;
-    const QString edited = applyTokenAction(body, range->first, range->second, action, a, b, context);
     if (edited == body)
         return content;
-    // Written into the file line by line as it stands — indentation, markers and line endings
-    // untouched: one changed line of the body (only its changed run replaced), or one line below
-    // the first removed (a token alone on it, replaceTokenRange()) — the file's line goes with
-    // its line ending.
     const QStringList oldLines = body.split(u'\n');
     const QStringList newLines = edited.split(u'\n');
     qsizetype k = 0; // the body's first changed line
@@ -636,6 +635,31 @@ QString editBlockToken(const QString &content, int line, const TokenRef &ref, co
     // body as the editor writes it.
     doc.setBody(i, edited);
     return doc.toString();
+}
+
+} // namespace
+
+QString editBlockToken(const QString &content, int line, const TokenRef &ref, const QString &action, const QVariant &a,
+                       const QVariant &b, const TokenEditContext &context)
+{
+    BlockDocument doc(content);
+    const int i = tokenBlockAt(doc, line);
+    if (i < 0)
+        return content;
+    const QString body = doc.at(i).body;
+    const auto range = findTokenRef(body, ref);
+    if (!range)
+        return content;
+    return withEditedBody(content, doc, i, applyTokenAction(body, range->first, range->second, action, a, b, context));
+}
+
+QString setBlockToken(const QString &content, int line, TokenKind kind, const QString &token)
+{
+    BlockDocument doc(content);
+    const int i = tokenBlockAt(doc, line);
+    if (i < 0)
+        return content;
+    return withEditedBody(content, doc, i, setFirstLineToken(doc.at(i).body, kind, token));
 }
 
 } // namespace brulion::markdown

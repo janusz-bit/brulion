@@ -19,7 +19,9 @@
 //   kind         listItem | paragraph | heading | code | table | quote | callout | rule | html | frontmatter
 //   view         text | heading | code | calc | query | table | quote | callout | rule | frontmatter | html
 //   headingLevel, lang, hasChildren, collapsed, visible (zoom + folds; also `shown`), taskStatus ("" | todo |
-//   doing | done | cancelled | deferred), blockId, isEditing, isSelected, isZoomRoot,
+//   doing | done | cancelled | deferred), taskDated (a task with a 📅 / ⏳ date or a Logseq
+//   SCHEDULED: / DEADLINE: line: no "Add date" button, hasFilingDate()), blockId, isEditing,
+//   isSelected, isZoomRoot,
 //   selectionEdge  where a selected row sits in the band of selected visible rows: "single" |
 //                "first" | "middle" | "last" ("" when not selected or hidden) — the band's rounded
 //                ends; a selection is a set of rows (setSelectedUids: the editor's block selection
@@ -147,6 +149,7 @@ public:
         NoteModeOnlyRole,
         SelectionEdgeRole,
         PropertiesInfoRole,
+        TaskDatedRole,
         /// `visible` under a name a delegate can take as a required property (Item has `visible`).
         ShownRole,
     };
@@ -170,7 +173,7 @@ public:
     Q_INVOKABLE int visibleRowsBefore(int row) const;
     /// The row of the `n`-th shown row (from 0); -1 when there is none.
     Q_INVOKABLE int visibleRowAt(int n) const;
-    /// A few roles of `row` by name (view, kind, taskStatus, depth, hasChildren, collapsed,
+    /// A few roles of `row` by name (view, kind, taskStatus, taskDated, depth, hasChildren, collapsed,
     /// visible, blockId, headingLevel, plainText, editText, listMarker, html); empty for an invalid row.
     Q_INVOKABLE QVariantMap get(int row) const;
     /// get(row)'s view, kind and taskStatus typed, for QML compiled ahead of time ("" for an
