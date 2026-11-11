@@ -7,6 +7,14 @@ brulion: document
 
 Here you'll find what changed in every version of Brulion, newest first. Full release notes with downloads are on GitHub: https://github.com/janusz-bit/brulion/releases
 
+## 0.16.4 — November 11, 2026
+
+**New**
+- **Add a date to a task** — a task without a date has a small calendar button at the end of its first line: on a computer when you point at the task or edit it, on a phone while you edit it. The **Add date** chip on a row of Tasks does the same. Its menu has **Today**, **Tomorrow** and **Next week** (the first day of next week), each with its date, and **Pick a date…** for the calendar. The day is written at the end of the task's first line as its due date (`📅 2026-11-12`), and one Ctrl+Z (or **Undo** in Tasks) takes it back. Done and cancelled tasks, tasks with a date already (`📅`, `⏳`, Logseq's `SCHEDULED:`/`DEADLINE:`) and read-only pages have no button. See [[Tasks]].
+
+**Changes**
+- **Search ready for typing** — every time Search is shown (from the bottom navigation, a shortcut, or back from another view) its field has the cursor and the previous query is selected, so typing replaces it. On a phone the keyboard comes up at once.
+
 ## 0.16.3 — November 10, 2026
 
 **Changes**

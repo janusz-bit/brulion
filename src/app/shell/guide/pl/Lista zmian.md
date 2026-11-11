@@ -7,6 +7,14 @@ brulion: document
 
 Tu znajdziesz zmiany w każdej wersji Brulionu, od najnowszej. Pełne opisy wydań z plikami do pobrania są na GitHubie: https://github.com/janusz-bit/brulion/releases
 
+## 0.16.4 — 11 listopada 2026
+
+**Nowe**
+- **Data zadania jednym stuknięciem** — zadanie bez daty ma mały przycisk z kalendarzem na końcu pierwszego wiersza: na komputerze, gdy wskażesz zadanie myszą albo je edytujesz, na telefonie podczas edycji. To samo robi chip **Dodaj datę** w wierszu Zadań. Menu ma **Dziś**, **Jutro** i **Następny tydzień** (pierwszy dzień przyszłego tygodnia), każde ze swoją datą, oraz **Wybierz datę…** z kalendarzem. Dzień trafia na koniec pierwszego wiersza zadania jako termin (`📅 2026-11-12`), a jedno Ctrl+Z (albo **Cofnij** w Zadaniach) go cofa. Zadania zrobione i anulowane, zadania, które mają już datę (`📅`, `⏳`, logseqowe `SCHEDULED:`/`DEADLINE:`), i strony tylko do odczytu nie mają przycisku. Zobacz [[Zadania]].
+
+**Zmiany**
+- **Szukanie gotowe do pisania** — przy każdym pokazaniu Szukaj (z dolnej nawigacji, skrótem albo po powrocie z innego widoku) pole ma kursor, a poprzednie zapytanie jest zaznaczone, więc pisanie je zastępuje. Na telefonie od razu wysuwa się klawiatura.
+
 ## 0.16.3 — 10 listopada 2026
 
 **Zmiany**
