@@ -78,6 +78,7 @@ struct CommandInfo
     QString extension;
     QString name; ///< the stable id within the extension ("start")
     QString label; ///< the palette's label (b.command's meta.label), else the name
+    bool needsBlock = false; ///< meta.block: it works on the block under the caret (ctx.block)
 };
 
 struct ViewInfo
@@ -128,6 +129,7 @@ private:
         int ref = 0; // registry ref of the function (a view: its render function)
         int actionsRef = 0; // a view's actions table, 0 = none
         QString label;
+        bool needsBlock = false;
     };
     struct Loaded
     {

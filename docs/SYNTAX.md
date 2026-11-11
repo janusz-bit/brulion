@@ -1047,6 +1047,55 @@ nothing; at most the last 3660 days):
   The start's period, when the habit starts inside it, counts only when met. Streaks count
   periods met in a row; the rate is periods met / (met + missed).
 
+### Gym
+
+Workouts written in daily notes, read by the built-in gym extension (`src/core/extensions/builtin/
+silownia.luau`, docs/EXTENSIONS.md; on in Settings → Extensions) and by any app as an ordinary
+outline. A **workout** is a block tagged `#trening` (`#workout`) in a daily note; its child blocks
+are **exercise lines**. A tagged line without children is a workout of one exercise.
+
+```markdown
+- Trening A #trening
+  plan:: [[Trening A]]
+  - [x] [[Przysiad]] 100 kg 5×5
+  - [x] [[Wyciskanie leżąc]] 60 kg × 10; 80 kg × 5, 5, 4 @9
+  - [x] [[Podciąganie]] MC × 10, 8, 6
+  - [ ] [[Dipy]] MC+10 kg 3×8
+  - [[Deska]] 3×60 s
+- [[Bieg]] 5 km 27:30 #trening
+```
+
+* **Exercise**: a `[[link]]` at the start (`[[Target|alias]]` too; the page need not exist), else the
+  words before the first number, `MC`/`BW` or `@`. Names compare case- and diacritic-insensitively.
+* **Sets** (Brulion writes the first form of each row, reads all; `×` may be typed `x`, `X` or `*`):
+
+  | Written | Means |
+  |---|---|
+  | `100 kg 5×5`, `5x5 100 kg`, `5 x 5 x 100 kg` | 5 sets of 5 reps at 100 kg |
+  | `80 kg × 5, 5, 4`, `80 kg × 5,5,4` | sets of 5, 5 and 4 reps at 80 kg |
+  | `60 kg × 10; 80 kg × 5, 5, 4` (also `,` before a new weight) | groups at different weights |
+  | `42,5 kg`, `42.5 kg`, `225 lb` | decimal comma or point; kg or lb |
+  | `3×8` | sets with the load not written (a plan's line; bodyweight written without MC) |
+  | `MC × 10, 8, 6`, `MC 3×8`, `MC+10 kg 3×8`, `MC-20 kg × 5` | bodyweight (`MC` masa ciała, `BW`), weighted or assisted |
+  | `3×60 s`, `45 s`, `10 min`, `3×2 min` | timed sets |
+  | `5 km 27:30`, `42,2 km 1:35:10` | distance and time |
+  | `@8`, `@7,5` | RPE of the sets since the last weight |
+  | `(…)`, `— …`, `// …`, other words, `#tags` | kept as written after the sets |
+
+  An Obsidian Tasks date (`✅ 2026-11-04`…) and a block id stay where they are. A count is capped at
+  100 sets; a line over 2000 bytes is no exercise.
+* **Status**: a plain bullet or a done task (`[x]`, Logseq `DONE`) is history; an open task (`[ ]`)
+  is planned, a cancelled one (`[-]`) does not count.
+* **Plans**: a page tagged `plan-treningowy` (`workout-plan`: `tags:: plan-treningowy`) whose top-level
+  blocks are exercise lines, usually without weights (`[[Przysiad]] 3×5`); `progresja:: +5 kg`
+  (`progression::`) under a line sets its step (default 2,5 kg, 5 lb), `przerwa:: 3 min` (`rest::`)
+  on the plan page or the workout the rest timer (default 2 min). "Start a workout" appends to today's
+  note `- <plan> #trening`, `plan:: [[<plan>]]` and the plan's lines as open tasks, each at the last
+  session's top weight — one step heavier when every planned set was done there with the planned
+  reps.
+* **Numbers**: the estimated one-rep max is Epley's (1–12 reps, kg; lb converted), volume Σ weight ×
+  reps; bodyweight sets have neither.
+
 ### Dependencies (Obsidian Tasks `🆔` / `⛔`)
 
 | Token | Meaning |

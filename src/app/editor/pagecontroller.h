@@ -314,6 +314,9 @@ public:
     /// the text this editor last read or wrote; a newer one on disk is taken in first (reload or
     /// three-way merge) and the result saved.
     Q_INVOKABLE bool save();
+    /// save(), then the file line where `row`'s block starts (-1 for an invalid row): an extension's
+    /// command on the block under the caret reads the line as it is shown.
+    Q_INVOKABLE int savedLineAt(int row);
     /// The file was renamed/moved (the shell's rename, sync): connect the host's rename signal
     /// here (Workspace.pathRenamed). The page follows to `newPath` keeping edits, undo and the
     /// caret; unsaved edits are saved there — the old path is never written again (setting

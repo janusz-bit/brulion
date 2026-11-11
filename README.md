@@ -117,6 +117,10 @@ Pandoc Markdown document for Word, LibreOffice, PDF or EPUB).
   `codziennie`…) is a habit; each day's tick is a `- [x] Name #habit` task in that day's journal
   (also ticked in the journal itself). The Habits view ticks today, shows the streaks, the completion rate and a
   month grid; `brulion-cli habit list` / `habit tick`.
+* **Gym** (Settings → Extensions): workouts written in the journal (`- [[Squat]] 100 kg 5×5`, kg or
+  lb, bodyweight, timed sets, runs), plans that add weight when every set was done, today's workout
+  with steppers and a rest timer, records and a chart of each exercise's progress — Brulion's first
+  extension, written in Luau.
 * Two note modes: a **document** (Obsidian-like live preview: paragraphs, headings and plain
   lists, edited in place) or an **outline** (Logseq-like: every bullet is a block). Chosen when
   a page is created and switchable at any time; stored in the note as `brulion: document` /
@@ -309,7 +313,10 @@ przykładowym notatnikiem.
   (numer tygodnia, nazwa miesiąca) albo skrótami `Ctrl+Alt+W` / `Ctrl+Alt+M`. `Ctrl+F` w
   dzienniku szuka we wszystkich dniach naraz. **Nawyki**: punkt z `habit:: codziennie` (albo
   `pn, śr, pt`, `3 razy w tygodniu`) odhaczasz w widoku Nawyki albo w dzienniku (`- [x] Medytacja
-  #nawyk`) — z serią, skutecznością i kalendarzem miesiąca. Tagi działają jak linki do stron, jak
+  #nawyk`) — z serią, skutecznością i kalendarzem miesiąca. **Siłownia** (Ustawienia → Rozszerzenia):
+  treningi zapisane w dzienniku (`- [[Przysiad]] 100 kg 5×5`), plany, które dokładają ciężaru, gdy
+  wszystkie serie wyszły, dzisiejszy trening z licznikami i timerem przerwy, rekordy i wykres
+  postępu każdego ćwiczenia — pierwsze rozszerzenie Brulionu, napisane w Luau. Tagi działają jak linki do stron, jak
   w Logseq: `#praca` otwiera stronę „praca” (tworzoną przy pierwszym wpisie), jej odnośniki
   pokazują bloki z tym tagiem, a zmiana nazwy strony poprawia też tagi. Odnośnik do każdego
   bloku i nagłówka — `((…))`, `[[Strona#^…]]`, `[[Strona#Nagłówek]]` — skopiujesz z menu bloku

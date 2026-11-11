@@ -30,6 +30,7 @@ Rectangle {
         case "search": return qsTr("Search")
         case "tasks": return qsTr("Tasks")
         case "habits": return qsTr("Habits")
+        case "gym": return qsTr("Gym")
         case "allPages": return qsTr("Pages")
         case "tags": return qsTr("Tags")
         case "graph": return qsTr("Graph")
@@ -44,6 +45,7 @@ Rectangle {
         case "search": return "search"
         case "tasks": return "list-todo"
         case "habits": return "flame"
+        case "gym": return "dumbbell"
         case "allPages": return "files"
         case "tags": return "tags"
         case "graph": return "waypoints"

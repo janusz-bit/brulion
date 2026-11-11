@@ -111,7 +111,8 @@ local INTERFACE = {
         startButton = "Zacznij trening",
         addSetButton = "+ seria",
         removeSetButton = "− seria",
-        sessions = "%d sesji",
+        sessions = { "%d sesja", "%d sesje", "%d sesji" }, -- 1, 2–4 (not 12–14), the rest
+        openPage = "Strona ćwiczenia",
         allExercises = "Wszystkie ćwiczenia",
     },
     en = {
@@ -148,10 +149,22 @@ local INTERFACE = {
         startButton = "Start a workout",
         addSetButton = "+ set",
         removeSetButton = "− set",
-        sessions = "%d sessions",
+        sessions = { "%d session", "%d sessions", "%d sessions" },
+        openPage = "Exercise page",
         allExercises = "All exercises",
     },
 }
+
+-- "%d sesje": the form of a count (Polish: 1, 2–4 but not 12–14, the rest; English: 1, the rest).
+local function counted(forms: { string }, n: number): string
+    local form = forms[3]
+    if n == 1 then
+        form = forms[1]
+    elseif n % 10 >= 2 and n % 10 <= 4 and (n % 100 < 12 or n % 100 > 14) then
+        form = forms[2]
+    end
+    return string.format(form, n)
+end
 
 local W = if b.lang() == "pl" then WRITTEN.pl else WRITTEN.en
 local T = if b.uiLang() == "pl" then INTERFACE.pl else INTERFACE.en
@@ -372,11 +385,8 @@ local function parseSets(rest: string): ({ Set }, string)
         pos = stop + 1
     end
 
-    for _, set in sets do
-        if set.weight == nil and set.seconds == nil and set.meters == nil then
-            set.bodyweight = true
-        end
-    end
+    -- (No weight and no MC / BW: the load is not written — a plan's "3×5", a bodyweight exercise
+    -- written without MC. Written back as it was.)
     return sets, table.concat(notes, " ")
 end
 
@@ -807,7 +817,7 @@ b.command("tidy", function(ctx)
     end
     b.replaceBlock(block.ref, formatEntry(entry), block.task)
     return nil
-end, { label = T.tidy })
+end, { label = T.tidy, block = true })
 
 b.command("add-set", function(ctx)
     local block = ctx.block
@@ -835,7 +845,7 @@ b.command("add-set", function(ctx)
     b.replaceBlock(block.ref, formatEntry(entry), block.task)
     b.timer(restSeconds(block.props), T.rest)
     return nil
-end, { label = T.addSet })
+end, { label = T.addSet, block = true })
 
 type CatalogText = { name: string, category: string, muscles: { string }, equipment: string? }
 type CatalogEntry = { id: string, pl: CatalogText, en: CatalogText }
@@ -915,7 +925,7 @@ local function progressView(exercise: string)
     end
     local items: { Node } = {
         b.ui.open(T.allExercises, "progress", {}),
-        b.ui.row({ b.ui.link(exercise) }),
+        b.ui.heading(exercise),
     }
     local record = recordText(exercise)
     if record then
@@ -929,6 +939,7 @@ local function progressView(exercise: string)
         }))
     end
     table.insert(items, b.ui.table({ T.date, T.sets, T.volume, T.estimated }, rows))
+    table.insert(items, b.ui.link(exercise, T.openPage))
     return b.ui.column(items)
 end
 
@@ -949,7 +960,7 @@ local function exercisesView()
     local items: { Node } = {}
     for _, name in b.sorted(names) do
         local record = recordText(name)
-        local count = string.format(T.sessions, counts[b.fold(name)])
+        local count = counted(T.sessions, counts[b.fold(name)])
         table.insert(items, b.ui.row({
             b.ui.open(name, "progress", { exercise = name }),
             b.ui.text(if record then `{record} · {count}` else count, true),
@@ -1039,9 +1050,19 @@ b.view("today", function(params) return todayView() end, {
     end,
     weight = function(args)
         editLine(args, function(entry)
-            local last = entry.sets[#entry.sets]
-            last.weight, last.bodyweight = math.max(0, tonumber(args.value) or 0), false
-            last.unit = last.unit or "kg"
+            local value = math.max(0, tonumber(args.value) or 0)
+            -- no weight written yet (a plan's "3×5"): it is every set's; else the last set's
+            local unloaded = true
+            for _, set in entry.sets do
+                if set.weight ~= nil or set.bodyweight then
+                    unloaded = false
+                end
+            end
+            for i, set in entry.sets do
+                if unloaded or i == #entry.sets then
+                    set.weight, set.bodyweight, set.unit = value, false, set.unit or "kg"
+                end
+            end
         end)
     end,
     reps = function(args)

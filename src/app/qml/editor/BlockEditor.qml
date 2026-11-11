@@ -896,6 +896,23 @@ FocusScope {
             return editingTable.block.index
         return controller.selectedRow
     }
+    /// An extension's command on the block under the caret (uiAction "extension:<id>/<name>", the
+    /// palette's "Gym: add a set"; docs/EXTENSIONS.md): the page is saved first, so the extension
+    /// reads the line as it is shown.
+    function runExtensionCommand(command: string): bool {
+        if (!controller)
+            return false
+        const row = currentRow()
+        if (row < 0 || controller.sourceMode) {
+            notice(qsTr("Put the cursor in a block first"), "info", null)
+            return false
+        }
+        const line = controller.savedLineAt(row)
+        const path = controller.path
+        Workspace.extensions.runBlockCommand(command, path, line)
+        return true
+    }
+
     /// The command palette and Ctrl+Shift+C: a link to the page ("page"), to the current block
     /// (currentRow()) ("blockRef", "blockLink") or to the heading of its section ("heading": the
     /// last heading at or above it, as the side panel's outline marks).

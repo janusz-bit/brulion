@@ -42,6 +42,7 @@ constexpr auto kSidebarHidden = "ui/sidebar/hidden"_L1;
 constexpr auto kSidebarSections = "ui/sidebar/sections"_L1;
 constexpr auto kBottomNavTabs = "ui/bottomNav/tabs"_L1;
 constexpr auto kCaptureButton = "ui/captureButton"_L1;
+constexpr auto kGym = "extensions/silownia"_L1;
 constexpr auto kEditorFont = "editor/font"_L1;
 constexpr auto kEditorFontFamily = "editor/fontFamily"_L1;
 constexpr auto kEditorMonoFamily = "editor/monoFamily"_L1;
@@ -364,7 +365,7 @@ void AppSettings::setReducedMotion(bool on)
 
 QStringList AppSettings::sidebarItems()
 {
-    return {u"journals"_s, u"calendar"_s, u"tasks"_s,  u"habits"_s,    u"allPages"_s,
+    return {u"journals"_s, u"calendar"_s, u"tasks"_s,  u"habits"_s,    u"gym"_s,   u"allPages"_s,
             u"tags"_s,     u"graph"_s,    u"search"_s, u"favorites"_s, u"recent"_s};
 }
 
@@ -375,7 +376,7 @@ QStringList AppSettings::sidebarSectionIds()
 
 QStringList AppSettings::bottomNavViews()
 {
-    return {u"journals"_s, u"calendar"_s, u"search"_s, u"tasks"_s, u"habits"_s, u"allPages"_s, u"tags"_s, u"graph"_s};
+    return {u"journals"_s, u"calendar"_s, u"search"_s, u"tasks"_s, u"habits"_s, u"gym"_s, u"allPages"_s, u"tags"_s, u"graph"_s};
 }
 
 QStringList AppSettings::defaultBottomNavTabs()
@@ -530,6 +531,22 @@ void AppSettings::setBottomNavTab(int index, const QString &view)
         tabs[other] = tabs.at(index);
     tabs[index] = view;
     setBottomNavTabs(tabs);
+}
+
+bool AppSettings::gymEnabled() const
+{
+    return m_settings->value(kGym, false).toBool();
+}
+
+void AppSettings::setGymEnabled(bool on)
+{
+    if (store(kGym, on, gymEnabled()))
+        Q_EMIT gymEnabledChanged();
+}
+
+QStringList AppSettings::enabledExtensions() const
+{
+    return gymEnabled() ? QStringList{u"silownia"_s} : QStringList();
 }
 
 bool AppSettings::captureButtonShown() const

@@ -1806,6 +1806,13 @@ int BlockListModel::visibleRowAt(int n) const
     return n >= 0 && n < m_visibleRows.size() ? m_visibleRows.at(n) : -1;
 }
 
+int BlockListModel::lineAt(int row) const
+{
+    if (docIndexOfRow(row) < 0)
+        return -1;
+    return data(index(row), LineRole).toInt();
+}
+
 QVariantMap BlockListModel::get(int row) const
 {
     if (docIndexOfRow(row) < 0)

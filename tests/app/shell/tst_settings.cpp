@@ -113,6 +113,25 @@ private Q_SLOTS:
         QVERIFY(!s.followsOutsideLinks()); // a planted link to ~/Documents is no notebook folder
     }
 
+    void gymIsOffUntilSwitchedOn()
+    {
+        const QString file = nextFile();
+        {
+            AppSettings s(file, m_tmp.path());
+            QVERIFY(!s.gymEnabled());
+            QVERIFY(s.enabledExtensions().isEmpty());
+            QSignalSpy changed(&s, &AppSettings::gymEnabledChanged);
+            s.setGymEnabled(true);
+            s.setGymEnabled(true);
+            QCOMPARE(changed.count(), 1);
+            QCOMPARE(s.enabledExtensions(), QStringList{u"silownia"_s});
+            QVERIFY(AppSettings::sidebarItems().contains(u"gym"_s));
+            QVERIFY(AppSettings::bottomNavViews().contains(u"gym"_s));
+        }
+        AppSettings again(file, m_tmp.path());
+        QVERIFY(again.gymEnabled());
+    }
+
     void followsOutsideLinksPersists()
     {
         // Device-local: in this device's settings, never in the synced .brulion/config.json.

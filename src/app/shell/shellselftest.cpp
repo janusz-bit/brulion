@@ -5179,6 +5179,79 @@ void checkHabits(QQuickWindow *window, AppController *app, const Check &check)
     settle(300);
 }
 
+/// The gym (the built-in Luau extension, docs/UI.md "Gym"): switched on in the settings, opened from
+/// the palette, "Start a workout" asks which plan (ShellExtensionQuestion) and writes it into today's
+/// note, "+ set" in the view rewrites that one line and starts the rest timer; switched off again.
+void checkGym(QQuickWindow *window, AppController *app, const Check &check)
+{
+    const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
+    Workspace *ws = app->workspace();
+    AppSettings *settings = app->settings();
+    const auto named = [&](const QString &name) { return shownNamed(window->contentItem(), name); };
+    const bool wasOn = settings->gymEnabled();
+    const QString journal = ws->journalFileFor(app->today());
+    const bool hadJournal = ws->exists(journal);
+    const QString oldJournal = hadJournal ? ws->readFile(journal) : QString();
+    const QString plan = u"Plan samotestu"_s;
+    const QString planPath = ws->newPagePath(plan);
+    check(!ws->exists(planPath), "the self-test's plan page is new");
+    ws->writeFile(planPath, u"tags:: plan-treningowy\n\n- [[Przysiad samotestu]] 3×5\n"_s);
+    const auto line = [&] {
+        for (const QString &l : ws->readFile(journal).split(u'\n'))
+            if (l.contains(u"[[Przysiad samotestu]]"_s))
+                return l.trimmed();
+        return QString();
+    };
+
+    settings->setGymEnabled(true);
+    check(waitFor([&] { return ws->extensions()->gymEnabled() && !ws->extensions()->commands().isEmpty(); }, 3000),
+          "the gym's commands are loaded");
+    check(app->commands()->ids().contains(u"ext.silownia.start"_s), "the palette offers “Start a workout”");
+    check(app->commands() && app->commands()->run(u"go.gym"_s), "the palette's Gym opens the view");
+    check(waitFor([&] { return app->currentView() == u"gym"; }, 3000), "the Gym view shows");
+    QQuickItem *start = nullptr;
+    check(waitFor([&] { return (start = named(u"gymStart"_s)) != nullptr; }, 3000), "it has “Start a workout”");
+    settle(400);
+    if (start && touch)
+        tapOrClick(window, pointIn(start), touch);
+    else if (start)
+        QMetaObject::invokeMethod(start, "clicked");
+    QQuickItem *option = nullptr;
+    check(waitFor([&] {
+              option = findShown(window->contentItem(), [&](QQuickItem *item) {
+                  return item->objectName() == u"extensionQuestionOption" && item->property("text").toString() == plan;
+              });
+              return option != nullptr;
+          }, 3000),
+          "it asks which plan, the self-test's among them");
+    settle(300); // the sheet slides in
+    if (option)
+        tapOrClick(window, pointIn(option), touch);
+    check(waitFor([&] { return line() == u"- [ ] [[Przysiad samotestu]] 3×5"_s; }, 3000),
+          "the plan is written into today's note as an open task");
+
+    QQuickItem *addSet = nullptr;
+    check(waitFor([&] { return (addSet = named(u"extensionButton"_s)) != nullptr; }, 3000), "the view shows the exercise");
+    settle(200);
+    if (addSet)
+        tapOrClick(window, pointIn(addSet), touch);
+    check(waitFor([&] { return line() == u"- [ ] [[Przysiad samotestu]] 4×5"_s; }, 3000), "“+ set” adds a set to that line");
+    check(waitFor([&] { return ws->extensions()->restRemaining() > 0; }, 2000), "and starts the rest timer");
+    check(waitFor([&] { return named(u"gymRest"_s) != nullptr; }, 2000), "the timer shows in the view");
+
+    // Leave the notebook and the settings as they were.
+    ws->extensions()->stopRest();
+    if (hadJournal)
+        ws->writeFile(journal, oldJournal);
+    else
+        ws->deletePage(journal);
+    ws->deletePage(planPath);
+    settings->setGymEnabled(wasOn);
+    closeMenus(window);
+    app->goHome();
+    settle(300);
+}
+
 /// Focus mode (F8 — the command's shortcut —, Esc, the Back key, its corner button), the word count in
 /// the page's corner and typewriter scrolling (desktop), and one command's shortcut changed in
 /// Settings → Keyboard shortcuts with real keys: another command's key is refused with the reason,
@@ -8525,6 +8598,9 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
     closeMenus(window);
     // 3h'. Habits: added in the view, today's check ticked and opened again, a tick from the journal.
     checkHabits(window, app, check);
+    closeMenus(window);
+    // 3h''. The gym: switched on, a plan written into today's note, a set added in its view.
+    checkGym(window, app, check);
     closeMenus(window);
     // 3i. Focus mode, the word count, typewriter scrolling and a custom shortcut.
     checkFocusAndShortcuts(window, app, check);

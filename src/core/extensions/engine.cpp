@@ -562,7 +562,7 @@ QList<CommandInfo> Engine::commands() const
     QList<CommandInfo> out;
     for (auto it = m_commands.cbegin(); it != m_commands.cend(); ++it) {
         const QString name = it.key().mid(it->extension.size() + 1);
-        out.append({it->extension, name, it->label.isEmpty() ? name : it->label});
+        out.append({it->extension, name, it->label.isEmpty() ? name : it->label, it->needsBlock});
     }
     std::sort(out.begin(), out.end(), [](const CommandInfo &a, const CommandInfo &b) {
         return a.extension != b.extension ? a.extension < b.extension : a.name < b.name;
@@ -807,14 +807,18 @@ int Engine::commandImpl(lua_State *L)
     if (lua_type(L, 2) != LUA_TFUNCTION)
         return failWith(L, u"b.command: argument 2 must be a function"_s);
     QString label;
+    bool needsBlock = false;
     if (lua_type(L, 3) == LUA_TTABLE) {
         lua_rawgetfield(L, 3, "label");
         if (lua_type(L, -1) == LUA_TSTRING)
             label = toQString(L, -1);
         lua_pop(L, 1);
+        lua_rawgetfield(L, 3, "block");
+        needsBlock = lua_toboolean(L, -1);
+        lua_pop(L, 1);
     }
     lua_pushvalue(L, 2);
-    Handler h{extension, lua_ref(L, -1), 0, label};
+    Handler h{extension, lua_ref(L, -1), 0, label, needsBlock};
     lua_pop(L, 1);
     const QString key = extension + u'/' + name;
     if (const auto it = m_commands.constFind(key); it != m_commands.constEnd())

@@ -726,6 +726,46 @@ and their month grids need the width.
   use; `Workspace.addHabit` appends `- Name` + `  habit:: schedule` to the page of the first
   definition, else to a new `Habits` page (`Nawyki` in Polish notes) where new pages go. The empty state explains the syntax.
 
+## Gym
+
+`qml/views/GymView.qml` (route `gym` {tab?: "today" | "progress", exercise?, open?: "start"}; the
+sidebar's **Gym** while it is on — Settings → **Extensions** (`AppSettings.gymEnabled`, off by
+default; the view says so with a "Switch on" button) —, a bottom-bar tab to choose, the palette's
+"Gym" `go.gym`, the icon `dumbbell`): the built-in gym extension (docs/EXTENSIONS.md,
+docs/SYNTAX.md §5 "Gym") through its two views, drawn by `ShellExtensionView`.
+
+* **Today** (view `today`): every exercise line of today's `#trening` blocks as a card — the tasks'
+  checkbox (done / open), the exercise's link (opens its page, made when missing), its sets, the
+  last set's weight and reps as steppers (− value +; a line with no weight written takes the weight
+  for every set), **+ set** / **− set**. Each control rewrites that one line of the note
+  (`b.replaceBlock`); a line changed elsewhere meanwhile is not overwritten (a toast says so and the
+  view shows it again). Adding a set starts the **rest timer**: a banner with the time left, a bar
+  and **Skip**; at the end a notification (`WorkspaceReminders::showNotification`, while the app
+  runs) and a toast. Without a workout today: an empty state and **Start a workout**.
+* **Progress** (view `progress`): every exercise of the history with its record (estimated
+  one-rep max) and its number of sessions; one exercise (`exercise`): its record, a line chart of
+  the estimated one-rep max and the heaviest set per session (`ChartView` fed directly), its
+  sessions newest first (date, sets, volume, estimate) and a link to its page.
+* **Start a workout** (the header's button, the palette's "Siłownia: zacznij trening"): asks which
+  plan (a page tagged `#plan-treningowy`) and appends it to today's note with progression.
+
+**Extension views** (`ShellExtensionView.qml` over `ExtensionView`, a list model of the node tree a
+view returns — docs/EXTENSIONS.md "Views"): headings, texts, empty states, buttons that open another
+view of the extension (`open`) or run one of its commands (`run`), links, rows as cards of wrapping
+controls (all centred on one control height: the touch target on touch UIs), charts and tables (the
+second column widest, numbers right-aligned). A view renders again after every command and action of
+the extension and when the index changes (coalesced), never while a question waits.
+
+**Questions** (`ShellExtensionQuestion.qml`, in AppShell): `b.ask` a text field, `b.choose` the
+options as rows (one tap answers), `b.form` labelled numbers with − / + and typing (`82,5`). A
+question that follows at once reopens the dialog; cancelling answers "" or nil, and only the question
+the dialog showed (`questionSerial`).
+
+**The palette** lists the extensions' commands with their own labels ("Siłownia: dodaj serię");
+those on the block under the caret (`meta.block`) are enabled in an editor and run there (uiAction
+`extension:<id>/<name>` → `BlockEditor.runExtensionCommand`: `PageController.savedLineAt(row)` saves
+first, so the extension reads the line as shown).
+
 ## Statistics and focus mode
 
 **Word count** (`stats/textstats.h`, `PageController.pageStats()` / `selectionStats(text)`): the

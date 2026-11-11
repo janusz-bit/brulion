@@ -40,6 +40,7 @@ QtObject {
         case "calendar": return qsTranslate("AppShell", "Calendar")
         case "tasks": return qsTranslate("AppShell", "Tasks")
         case "habits": return qsTranslate("AppShell", "Habits")
+        case "gym": return qsTranslate("AppShell", "Gym")
         case "graph": return qsTranslate("AppShell", "Graph")
         case "search": return qsTranslate("AppShell", "Search")
         case "allPages": return path !== "" ? Js.sliceFrom(path, Js.lastIndexOf(path, "/") + 1)
@@ -67,6 +68,7 @@ QtObject {
         case "calendar": return "calendar"
         case "tasks": return "list-todo"
         case "habits": return "flame"
+        case "gym": return "dumbbell"
         case "graph": return "waypoints"
         case "search": return "search"
         case "allPages": return "files"

@@ -139,6 +139,7 @@ Item {
         switch (view) {
         case "page": return pageView
         case "habits": return habitsView
+        case "gym": return gymView
         case "graph": return graphView
         case "tags":
         case "tag": return tagsView
@@ -333,6 +334,7 @@ Item {
     Component { id: calendarView; CalendarView { route: root.calendarRoute; covered: root.covered && calendarLoader.shown } }
     Component { id: tasksView; TasksView { route: root.tasksRoute } }
     Component { id: habitsView; HabitsView { route: root.otherRoute } }
+    Component { id: gymView; GymView { route: root.otherRoute } }
     Component { id: graphView; GraphView { route: root.otherRoute } }
     Component { id: searchView; SearchView { route: root.searchRoute } }
     Component { id: allPagesView; AllPagesView { route: root.allPagesRoute } }

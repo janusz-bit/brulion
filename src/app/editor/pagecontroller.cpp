@@ -608,6 +608,12 @@ void PageController::load()
     Q_EMIT foldStateChanged();
 }
 
+int PageController::savedLineAt(int row)
+{
+    save();
+    return m_model ? m_model->lineAt(row) : -1;
+}
+
 bool PageController::save()
 {
     m_saveTimer.stop();

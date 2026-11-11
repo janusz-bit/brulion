@@ -741,6 +741,8 @@ FocusScope {
     }
 
     ShellShareDialog { id: shareDialog; objectName: "shellShare" }
+    // The question an extension's command waits on (the gym: which plan, a set's weight and reps).
+    ShellExtensionQuestion { id: extensionQuestion }
 
     ShellNewPageDialog { id: newPage; objectName: "shellNewPage" }
     ShellRenameDialog { id: rename; objectName: "shellRename" }

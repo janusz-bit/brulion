@@ -5,8 +5,10 @@
 //   AppController    singleton — main()'s instance (AppController::instance())
 //   AppSettings      singleton — AppController.settings
 //   Workspace        singleton — AppController.workspace (the EditorHost for the editor)
-//   WorkspaceReminders, WorkspaceSync, WorkspaceGitHub, WorkspaceBackups   uncreatable —
-//                                       Workspace.reminders / .sync / .github / .backups
+//   WorkspaceReminders, WorkspaceSync, WorkspaceGitHub, WorkspaceBackups, WorkspaceExtensions
+//                    uncreatable —      Workspace.reminders / .sync / .github / .backups / .extensions
+//   ExtensionFormModel, ExtensionControlsModel   uncreatable — a question's fields, a row's controls
+//   ExtensionView    creatable — ExtensionView { extensions: Workspace.extensions; extension; view }
 //   ReplaceSession   uncreatable — Workspace.replacing (the notebook-wide replace)
 //   CommandModel     singleton — the command palette's commands
 //   ShortcutMap      singleton — the commands' keyboard shortcuts (custom ones too)
@@ -20,12 +22,14 @@
 #include "appupdates.h"
 #include "cleanupselection.h"
 #include "commandmodel.h"
+#include "extensionviewmodel.h"
 #include "foldertreemodel.h"
 #include "replacesession.h"
 #include "shortcutmap.h"
 #include "viewtraits.h"
 #include "workspace.h"
 #include "workspacebackups.h"
+#include "workspaceextensions.h"
 #include "workspacegithub.h"
 #include "workspacereminders.h"
 #include "workspacesync.h"
@@ -155,6 +159,33 @@ public:
     {
         return detail::cppOwned(detail::controllerForQml()->shortcuts());
     }
+};
+
+struct WorkspaceExtensionsForeign {
+    Q_GADGET
+    QML_FOREIGN(brulion::shell::WorkspaceExtensions)
+    QML_NAMED_ELEMENT(WorkspaceExtensions)
+    QML_UNCREATABLE("Use Workspace.extensions")
+};
+
+struct ExtensionFormModelForeign {
+    Q_GADGET
+    QML_FOREIGN(brulion::shell::ExtensionFormModel)
+    QML_NAMED_ELEMENT(ExtensionFormModel)
+    QML_UNCREATABLE("Use Workspace.extensions.questionFields")
+};
+
+struct ExtensionControlsModelForeign {
+    Q_GADGET
+    QML_FOREIGN(brulion::shell::ExtensionControlsModel)
+    QML_NAMED_ELEMENT(ExtensionControlsModel)
+    QML_UNCREATABLE("A row's controls of an ExtensionView")
+};
+
+struct ExtensionViewModelForeign {
+    Q_GADGET
+    QML_FOREIGN(brulion::shell::ExtensionViewModel)
+    QML_NAMED_ELEMENT(ExtensionView)
 };
 
 struct FolderTreeModelForeign {

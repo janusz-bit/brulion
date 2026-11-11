@@ -179,6 +179,12 @@ AppController::AppController(const Options &options, QObject *parent)
         m_localeOverride.clear();
         Q_EMIT notebookPathsChanged();
     });
+    // The built-in extensions the settings switch on (the gym), their messages as toasts.
+    m_workspace->extensions()->setEnabled(m_settings->enabledExtensions());
+    connect(m_settings.get(), &AppSettings::gymEnabledChanged, this,
+            [this] { m_workspace->extensions()->setEnabled(m_settings->enabledExtensions()); });
+    connect(m_workspace->extensions(), &WorkspaceExtensions::message, this,
+            [this](const QString &text, const QString &kind) { toast(text, kind); });
     connect(m_workspace.get(), &Workspace::navigationRequested, this, &AppController::navigate);
     connect(m_workspace.get(), &Workspace::errorOccurred, this,
             [this](const QString &message) { toast(message, u"error"_s); });

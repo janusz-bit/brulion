@@ -157,7 +157,8 @@ private Q_SLOTS:
         same("- [[Wyciskanie żołnierskie]] 42,5 kg 3×8 @7,5");
         to("- [[Wyciskanie żołnierskie]] 42.5 kg 3x8", "- [[Wyciskanie żołnierskie]] 42,5 kg 3×8");
         same("- [[Podciąganie]] MC × 10, 8, 6");
-        to("- [[Podciąganie]] 3×8", "- [[Podciąganie]] MC 3×8");
+        same("- [[Podciąganie]] 3×8");
+        to("- [[Wiosłowanie]] 3 x 8", "- [[Wiosłowanie]] 3×8");
         same("- [[Dipy]] MC+10 kg 3×8");
         same("- [[Podciąganie]] MC-20 kg × 5");
         same("- [[Plank]] 3×60 s");
@@ -205,10 +206,10 @@ private Q_SLOTS:
 
     void tidyInEnglish()
     {
-        QVERIFY(open({{u"Lines.md"_s, u"- [[Squat]] 3x8\n- [[Pull-up]] bw x 10, 8\n"_s}}, u"en"_s));
+        QVERIFY(open({{u"Lines.md"_s, u"- [[Squat]] 3x8 100kg\n- [[Pull-up]] bw x 10, 8\n"_s}}, u"en"_s));
         QVERIFY(command(u"tidy"_s, ctxAt(u"Lines.md"_s, 0)).ok());
         QVERIFY(command(u"tidy"_s, ctxAt(u"Lines.md"_s, 1)).ok());
-        QCOMPARE(file(u"Lines.md"_s), u"- [[Squat]] BW 3×8\n- [[Pull-up]] BW × 10, 8\n"_s);
+        QCOMPARE(file(u"Lines.md"_s), u"- [[Squat]] 100 kg 3×8\n- [[Pull-up]] BW × 10, 8\n"_s);
         QVERIFY(command(u"tidy"_s, ctxAt(u"Lines.md"_s, 5)).value.toString().startsWith(u"Put the cursor"_s));
     }
 
@@ -224,7 +225,7 @@ private Q_SLOTS:
                                      u"Wyciskanie żołnierskie"_s}));
         const QVariantMap squatRow = list.value(u"children"_s).toList().value(3).toMap();
         QCOMPARE(squatRow.value(u"children"_s).toList().value(1).toMap().value(u"text"_s).toString(),
-                 u"Rekord: 102,5 kg × 5 (szac. 1RM 119,6 kg), 2026-11-09 · 4 sesji"_s);
+                 u"Rekord: 102,5 kg × 5 (szac. 1RM 119,6 kg), 2026-11-09 · 4 sesje"_s);
 
         const QVariantMap squat = render(u"progress"_s, {{u"exercise"_s, u"Przysiad"_s}});
         const QVariantList items = squat.value(u"children"_s).toList();
@@ -333,6 +334,23 @@ private Q_SLOTS:
         row = rowOf(render(u"today"_s), u"Podciąganie"_s);
         QCOMPARE(control(row, u"stepper"_s, 1).value(u"unit"_s).toString(), QString());
         QVERIFY(control(row, u"stepper"_s, 2).isEmpty());
+    }
+
+    void aPlanWithoutHistory()
+    {
+        // No weight in the plan and none done yet: the sets as planned, the weight left to fill in
+        // (the stepper starts at 0), never "MC".
+        QVERIFY(open({{u"Nowy plan.md"_s, u"tags:: plan-treningowy\n\n- [[Przysiad]] 3×5\n- [[Pompki]] MC 3×10\n"_s}}));
+        command(u"start"_s);
+        QVERIFY(m_engine->resume(u"Nowy plan"_s).ok());
+        QCOMPARE(file(u"journals/2026-11-11.md"_s).trimmed(),
+                 u"- Nowy plan #trening\n  plan:: [[Nowy plan]]\n  - [ ] [[Przysiad]] 3×5\n  - [ ] [[Pompki]] MC 3×10"_s);
+        QVariantMap row = rowOf(render(u"today"_s), u"Przysiad"_s);
+        QCOMPARE(control(row, u"stepper"_s, 1).value(u"value"_s).toDouble(), 0.0);
+        QVERIFY(act(control(row, u"stepper"_s, 1), {{u"value"_s, 60}}).ok());
+        QCOMPARE(lineOf(u"journals/2026-11-11.md"_s, 2), u"  - [ ] [[Przysiad]] 60 kg 3×5"_s); // every set's
+        row = rowOf(render(u"today"_s), u"Pompki"_s);
+        QVERIFY(control(row, u"stepper"_s, 2).isEmpty()); // MC: reps only
     }
 
     void restFromThePlanPage()

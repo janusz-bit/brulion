@@ -1173,6 +1173,8 @@ FocusScope {
                 root.openFind(action === "replaceInNote")
             else if (Js.startsWith(action, "copyLink:") && root.noteRoute)
                 editor.copyCurrentLink(Js.sliceFrom(action, 9))
+            else if (Js.startsWith(action, "extension:") && editor.visible)
+                editor.runExtensionCommand(Js.sliceFrom(action, 10))
             else if (action === "saveWebPictures" && editor.visible)
                 editor.downloadWebPictures("")
             else if (action === "addProperty" && editor.visible)

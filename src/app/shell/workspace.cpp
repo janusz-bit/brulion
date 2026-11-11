@@ -156,6 +156,10 @@ Workspace::Workspace(QObject *parent) : EditorHost(parent)
             [this](const QVariantMap &route) { navigate(route); });
     connect(m_reminders, &WorkspaceReminders::errorOccurred, this, &Workspace::errorOccurred);
     m_backups = new WorkspaceBackups([this] { return now(); }, this);
+    m_extensions = new WorkspaceExtensions([this] { return now(); }, this);
+    m_extensions->setNotifier([this](const QString &title, const QString &body) {
+        m_reminders->showNotification(u"brulion-rest-timer"_s, title, body);
+    });
     m_replacing = new ReplaceSession(this);
     m_sync = new WorkspaceSync(this);
     m_sync->setClock([this] { return now(); });
@@ -187,6 +191,7 @@ Workspace::~Workspace()
     m_github->blockSignals(true);
     m_reminders->blockSignals(true);
     m_backups->blockSignals(true);
+    m_extensions->blockSignals(true);
     blockSignals(true);
     close();
 }
@@ -252,6 +257,7 @@ bool Workspace::open(const QString &rootPath, const QString &deviceStatePath, QS
     m_loader->start(m_vault->files());
     m_trashCount = -1;
     m_reminders->attach(m_vault.get(), m_index.get());
+    m_extensions->attach(m_vault.get(), m_index.get());
     m_sync->attach(m_vault.get());
     m_github->attach(m_vault.get());
     {
@@ -298,6 +304,7 @@ void Workspace::close()
     // Reminders and sync let go of the vault and the index first (a running sync is abandoned:
     // what it finished stays synced, the rest is synced next time).
     m_reminders->detach();
+    m_extensions->detach();
     m_backups->detach(); // before sync: it releases its hold there
     m_sync->detach();
     m_github->detach();
@@ -384,6 +391,7 @@ void Workspace::setUiLanguage(const QString &language)
     m_sync->setLanguage(m_language);
     m_github->setLanguage(m_language);
     m_backups->setLanguage(m_language);
+    m_extensions->setLanguage(m_language);
 }
 
 void Workspace::setDataUrlAssets(bool on)

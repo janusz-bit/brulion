@@ -113,6 +113,7 @@ CommandModel::CommandModel(AppController *app) : QObject(nullptr), m_app(app)
     connect(app, &AppController::sourceModeShownChanged, this, &CommandModel::commandsChanged);
     connect(app, &AppController::languageChanged, this, &CommandModel::commandsChanged);
     connect(app->workspace(), &Workspace::favoritesChanged, this, &CommandModel::commandsChanged);
+    connect(app->workspace()->extensions(), &WorkspaceExtensions::commandsChanged, this, &CommandModel::commandsChanged);
     connect(app->settings(), &AppSettings::focusModeChanged, this, &CommandModel::commandsChanged);
     connect(app->settings(), &AppSettings::readingModeChanged, this, &CommandModel::commandsChanged);
     connect(app->settings(), &AppSettings::typewriterScrollingChanged, this, &CommandModel::commandsChanged);
@@ -491,12 +492,31 @@ static QList<Command> editorCommands(const AppController *app, bool editor)
 /// All commands in the palette's order: buildCommands() with the note's commands (editorCommands())
 /// after "Markdown source", the event log after the sync center, the folder commands after "New
 /// page", the tab commands after "Forward" and the backup commands at the end.
+/// The extensions' commands (docs/EXTENSIONS.md): "Gym" (go.gym) while the gym is on, then every
+/// command of a loaded extension as "ext.<extension>.<name>" with the extension's own label. A
+/// command on the block under the caret (meta.block) only in an editor, run there
+/// (uiAction "extension:<extension>/<name>", BlockEditor.runExtensionCommand()).
+static QList<Command> extensionCommands(const AppController *app, bool blocks)
+{
+    QList<Command> out;
+    const WorkspaceExtensions *extensions = app->workspace()->extensions();
+    const bool ready = app->status() == u"ready";
+    if (extensions->gymEnabled())
+        out.append({u"go.gym"_s, CommandModel::tr("Gym"), CommandModel::tr("Today's workout, plans, progress"), u"dumbbell"_s,
+                    {}, ready});
+    for (const extensions::CommandInfo &c : extensions->commands())
+        out.append({u"ext."_s + c.extension + u'.' + c.name, c.label, extensions->title(c.extension), u"dumbbell"_s, {},
+                    ready && (!c.needsBlock || blocks)});
+    return out;
+}
+
 static QList<Command> allCommands(const AppController *app)
 {
     QList<Command> out = buildCommands(app);
     const auto source = std::ranges::find(std::as_const(out), u"page.source"_s, &Command::id);
     const bool editor = source != out.cend() && source->enabled;
     insertAfter(out, u"page.source"_s, editorCommands(app, editor));
+    insertAfter(out, u"go.habits"_s, extensionCommands(app, editor && !app->sourceModeShown()));
     // The event log ("Event log"); also found as logs, diagnostics.
     insertAfter(out, u"go.sync"_s,
                 {{u"go.logs"_s,
@@ -571,7 +591,19 @@ bool CommandModel::run(const QString &id)
         m_app->openPeriodicNote(u"month"_s, QString(), periodOffset(id));
     else if (id == u"capture")
         m_app->quickCapture();
-    else if (id.startsWith(u"go."))
+    else if (id.startsWith(u"ext.")) {
+        const QString extension = id.section(u'.', 1, 1), name = id.section(u'.', 2);
+        const auto commands = m_app->workspace()->extensions()->commands();
+        const auto c = std::ranges::find_if(commands, [&](const extensions::CommandInfo &info) {
+            return info.extension == extension && info.name == name;
+        });
+        if (c == commands.cend())
+            return false;
+        if (c->needsBlock)
+            m_app->requestUiAction(u"extension:"_s + extension + u'/' + name);
+        else
+            m_app->workspace()->extensions()->runCommand(extension, name);
+    } else if (id.startsWith(u"go."))
         m_app->navigate({{u"view"_s, id.mid(3)}});
     else if (id == u"page.favorite")
         m_app->workspace()->toggleFavorite(m_app->currentRoute().value(u"path"_s).toString());

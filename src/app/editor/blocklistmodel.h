@@ -179,6 +179,9 @@ public:
     /// get(row)'s view, kind and taskStatus typed, for QML compiled ahead of time ("" for an
     /// invalid row).
     Q_INVOKABLE QString viewAt(int row) const;
+    /// The file line (0-based) where `row`'s block starts, -1 for an invalid row (an extension's
+    /// command on the block under the caret).
+    Q_INVOKABLE int lineAt(int row) const;
     Q_INVOKABLE QString kindAt(int row) const;
     Q_INVOKABLE QString taskStatusAt(int row) const;
 

@@ -208,6 +208,10 @@ FocusScope {
                 root.activeEditor.copyCurrentLink(Js.sliceFrom(action, 9))
                 return
             }
+            if (Js.startsWith(action, "extension:")) {
+                root.activeEditor.runExtensionCommand(Js.sliceFrom(action, 10))
+                return
+            }
             if (action === "saveWebPictures") {
                 root.activeEditor.downloadWebPictures("")
                 return

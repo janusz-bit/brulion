@@ -25,6 +25,8 @@ namespace {
 /// 16 hex digits).
 const QString kTestId = u"brulion-test"_s;
 constexpr int kTestNativeId = 2'000'000'001;
+/// The native id of notifications shown now by the app itself (the gym's rest timer).
+constexpr int kRestNativeId = 2'000'000'002;
 
 dates::UiLocale uiLocale(const QString &language)
 {
@@ -591,6 +593,21 @@ bool WorkspaceReminders::applyCompletion(const ScheduledNotification &notificati
     if (m_scheduler)
         m_scheduler->dismissMissed(notification.id);
     Q_EMIT taskCompleted(target.title);
+    return true;
+}
+
+bool WorkspaceReminders::showNotification(const QString &id, const QString &title, const QString &body)
+{
+    NotificationSink *target = sink();
+    if (!target)
+        return false;
+    ScheduledNotification n;
+    n.id = id;
+    n.nativeId = kRestNativeId; // apart from the reminders' ids (nativeIdFor of 16 hex digits)
+    n.title = title.left(120);
+    n.body = body;
+    n.at = now();
+    target->showNow(n);
     return true;
 }
 

@@ -27,6 +27,7 @@ Rectangle {
         { entryView: "calendar", entryAlso: "", entryTitle: qsTr("Calendar"), entryIcon: "calendar" },
         { entryView: "tasks", entryAlso: "", entryTitle: qsTr("Tasks"), entryIcon: "list-todo" },
         { entryView: "habits", entryAlso: "", entryTitle: qsTr("Habits"), entryIcon: "flame" },
+        { entryView: "gym", entryAlso: "", entryTitle: qsTr("Gym"), entryIcon: "dumbbell" },
         { entryView: "allPages", entryAlso: "", entryTitle: qsTr("All pages"), entryIcon: "files" },
         { entryView: "tags", entryAlso: "tag", entryTitle: qsTr("Tags"), entryIcon: "tags" },
         { entryView: "graph", entryAlso: "", entryTitle: qsTr("Graph"), entryIcon: "waypoints" },
@@ -152,8 +153,9 @@ Rectangle {
                         required property string entryTitle
                         required property string entryIcon
                         objectName: "sidebarNav_" + entryView
-                        // Hidden in the settings: not shown (the layout leaves no gap).
-                        visible: AppSettings.sidebarHidden.indexOf(entryView) < 0
+                        // Hidden in the settings: not shown (the layout leaves no gap); the gym only
+                        // while it is switched on (Settings → Extensions).
+                        visible: AppSettings.sidebarHidden.indexOf(entryView) < 0 && (entryView !== "gym" || AppSettings.gymEnabled)
                         label: entryTitle
                         iconName: entryIcon
                         shortcut: AppController.routeText(ShortcutMap.sequences, "go." + entryView)

@@ -74,6 +74,9 @@ class AppSettings : public QObject {
     /// Quick capture's + on the top bar of phones and narrow windows (wide ones always show it).
     Q_PROPERTY(bool captureButtonShown READ captureButtonShown WRITE setCaptureButtonShown NOTIFY
                        captureButtonShownChanged FINAL)
+    /// The built-in gym extension (Settings → Extensions; docs/UI.md "Gym"): the Gym view, its
+    /// palette commands. Off by default.
+    Q_PROPERTY(bool gymEnabled READ gymEnabled WRITE setGymEnabled NOTIFY gymEnabledChanged FINAL)
 
     // ---- Editor -------------------------------------------------------------------------
     /// "serif" | "sans" (Theme.editorFont).
@@ -247,6 +250,10 @@ public:
     /// slot swaps places with the one it replaces.
     Q_INVOKABLE void setBottomNavTab(int index, const QString &view);
     bool captureButtonShown() const;
+    bool gymEnabled() const;
+    void setGymEnabled(bool on);
+    /// The ids of the built-in extensions switched on ("silownia").
+    QStringList enabledExtensions() const;
     void setCaptureButtonShown(bool on);
     /// Back to the default look: accent, backgrounds, fonts, density, line spacing, sizes (the
     /// visibility of elements stays).
@@ -429,6 +436,7 @@ Q_SIGNALS:
     void sidebarSectionsChanged();
     void bottomNavTabsChanged();
     void captureButtonShownChanged();
+    void gymEnabledChanged();
     void editorLineSpacingChanged();
     void editorFontChanged();
     void editorFontSizeChanged();

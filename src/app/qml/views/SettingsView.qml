@@ -67,6 +67,7 @@ Item {
         { key: "shortcuts", title: qsTr("Keyboard shortcuts"), iconName: "keyboard" },
         { key: "vault", title: qsTr("Notebook"), iconName: "notebook-pen" },
         { key: "reminders", title: qsTr("Reminders"), iconName: "bell" },
+        { key: "extensions", title: qsTr("Extensions"), iconName: "puzzle" },
         { key: "sync", title: qsTr("Sync"), iconName: "folder-sync" },
         { key: "backups", title: qsTr("Backups"), iconName: "hard-drive" },
         { key: "app", title: qsTr("Application"), iconName: "info" }
@@ -80,6 +81,7 @@ Item {
         case "shortcuts": return shortcutsSection
         case "vault": return vaultSection
         case "reminders": return remindersSection
+        case "extensions": return extensionsSection
         case "sync": return syncSection
         case "backups": return backupsSection
         case "app": return appSection
@@ -107,6 +109,7 @@ Item {
         { key: "calendar", title: qsTr("Calendar") },
         { key: "tasks", title: qsTr("Tasks") },
         { key: "habits", title: qsTr("Habits") },
+        { key: "gym", title: qsTr("Gym") },
         { key: "allPages", title: qsTr("All pages") },
         { key: "tags", title: qsTr("Tags") },
         { key: "graph", title: qsTr("Graph") },
@@ -139,6 +142,7 @@ Item {
         { value: "search", text: qsTr("Search"), iconName: "search" },
         { value: "tasks", text: qsTr("Tasks"), iconName: "list-todo" },
         { value: "habits", text: qsTr("Habits"), iconName: "flame" },
+        { value: "gym", text: qsTr("Gym"), iconName: "dumbbell" },
         { value: "allPages", text: qsTr("All pages"), iconName: "files" },
         { value: "tags", text: qsTr("Tags"), iconName: "tags" },
         { value: "graph", text: qsTr("Graph"), iconName: "waypoints" }
@@ -1290,6 +1294,23 @@ Item {
                     text: Workspace.config && Workspace.revision >= 0 ? root.configWarnings().join("\n") : ""
                     wrapMode: Text.Wrap
                 }
+            }
+        }
+    }
+
+    Component {
+        id: extensionsSection
+        SettingsGroup {
+            heading: qsTr("Extensions")
+            note: qsTr("Extensions add views and commands to Brulion. They read and write only the open notebook, in plain Markdown that other apps read too.")
+
+            SettingSwitch {
+                objectName: "gymSetting"
+                text: qsTr("Gym")
+                description: qsTr("Workouts written in the journal, plans that add weight when you are ready, a rest timer and the progress of every exercise (Gym in the sidebar).")
+                iconName: "dumbbell"
+                checked: AppSettings.gymEnabled
+                onToggled: AppSettings.gymEnabled = checked
             }
         }
     }

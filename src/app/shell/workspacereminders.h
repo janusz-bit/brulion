@@ -163,6 +163,9 @@ public:
     QString doneTarget() const;
     /// Show a notification now through the sink (the settings page's test notification).
     bool sendTestNotification(const QString &title, const QString &body);
+    /// Shows a notification now through the platform's sink (the gym's rest timer): `id` names it
+    /// (a second one with the same id replaces it). False without a sink.
+    bool showNotification(const QString &id, const QString &title, const QString &body);
 
     /// Map of a notification for QML (see the file comment).
     QVariantMap toMap(const ScheduledNotification &notification) const;
