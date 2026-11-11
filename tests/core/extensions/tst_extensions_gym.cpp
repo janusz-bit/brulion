@@ -80,7 +80,7 @@ class TestExtensionsGym : public QObject
         m_host = std::make_unique<NotebookHost>(*m_vault, *m_index, options);
         m_host->onTimer = [this](const QString &, int seconds, const QString &label) { m_timers.append({seconds, label}); };
         m_engine = std::make_unique<Engine>();
-        if (!m_engine->start(m_host.get(), Limits{}))
+        if (!m_engine->start(m_host.get(), Limits{2000 * BRULION_TEST_SLOWDOWN, 64ll << 20}))
             return false;
         const Result loaded = m_engine->load(builtinExtension(u"silownia"_s));
         if (!loaded.ok())
@@ -449,7 +449,7 @@ private Q_SLOTS:
         const QVariantMap capped = rowOf(view, u"X"_s);
         QVERIFY(!capped.isEmpty());
         QVERIFY(render(u"progress"_s).value(u"type"_s) == u"column"_s);
-        QVERIFY2(clock.elapsed() < 2000, qPrintable(QString::number(clock.elapsed())));
+        QVERIFY2(clock.elapsed() < 2000 * BRULION_TEST_SLOWDOWN, qPrintable(QString::number(clock.elapsed())));
     }
 
     void twoYearsOfWorkouts()
@@ -472,7 +472,7 @@ private Q_SLOTS:
         const qint64 all = clock.elapsed();
         qInfo("progress of one exercise over 400 workouts: %lld ms; the list of exercises: %lld ms", one, all);
         QCOMPARE(list.value(u"children"_s).toList().size(), 4);
-        QVERIFY(one < 1500 && all < 1500);
+        QVERIFY(one < 1500 * BRULION_TEST_SLOWDOWN && all < 1500 * BRULION_TEST_SLOWDOWN);
     }
 };
 

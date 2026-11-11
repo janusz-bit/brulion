@@ -403,12 +403,16 @@ private Q_SLOTS:
     {
         QFETCH(QString, body);
         QFETCH(int, status);
+        // A memory limit is reached by allocating, which takes longer than the time limit under the
+        // sanitizers (BRULION_TEST_SLOWDOWN): those rows get more time.
+        if (status == int(Status::OutOfMemory))
+            engine->setLimits(Limits{300 * BRULION_TEST_SLOWDOWN, 32ll << 20});
         LOAD_OK(ext(u"zły"_s, u"b.command(\"x\", function()\n"_s + body + u"\nend)\nb.command(\"ok\", function() return 7 end)"_s));
         QElapsedTimer clock;
         clock.start();
         const Result r = engine->runCommand(u"zły"_s, u"x"_s, {});
         QCOMPARE(int(r.status), status);
-        QVERIFY2(clock.elapsed() < 5000, qPrintable(QString::number(clock.elapsed())));
+        QVERIFY2(clock.elapsed() < 5000 * BRULION_TEST_SLOWDOWN, qPrintable(QString::number(clock.elapsed())));
         // the VM stays usable
         QCOMPARE(engine->runCommand(u"zły"_s, u"ok"_s, {}).value.toLongLong(), 7);
         QVERIFY(engine->memoryUsed() < (32ll << 20));

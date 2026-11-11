@@ -651,10 +651,11 @@ end
 
 type Day = { date: string, sets: { Set } }
 
--- One row per day (two lines of the same exercise in a day are one session).
-local function daysOf(exercise: string): { Day }
+-- One row per day (two lines of the same exercise in a day are one session) of one exercise's
+-- sessions, oldest first.
+local function daysFrom(sessions: { Session }): { Day }
     local days: { Day } = {}
-    for _, s in sessionsOf(exercise) do
+    for _, s in sessions do
         local last = days[#days]
         if last == nil or last.date ~= s.date then
             last = { date = s.date, sets = {} }
@@ -665,6 +666,10 @@ local function daysOf(exercise: string): { Day }
         end
     end
     return days
+end
+
+local function daysOf(exercise: string): { Day }
+    return daysFrom(sessionsOf(exercise))
 end
 
 type Best = { set: Set, estimate: number, date: string }
@@ -889,8 +894,8 @@ end, { label = T.newExercise })
 
 -- Views -----------------------------------------------------------------------------------------
 
-local function recordText(exercise: string): string?
-    local best = bestOf(daysOf(exercise))
+local function recordOf(days: { Day }): string?
+    local best = bestOf(days)
     if best == nil then
         return nil
     end
@@ -927,7 +932,7 @@ local function progressView(exercise: string)
         b.ui.open(T.allExercises, "progress", {}),
         b.ui.heading(exercise),
     }
-    local record = recordText(exercise)
+    local record = recordOf(days)
     if record then
         table.insert(items, b.ui.text(record, true))
     end
@@ -943,24 +948,32 @@ local function progressView(exercise: string)
     return b.ui.column(items)
 end
 
+-- Every exercise from one pass over the history (not one pass per exercise: the list of a
+-- notebook with years of workouts stays fast on a phone).
 local function exercisesView()
     local names: { string } = {}
-    local counts: { [string]: number } = {}
+    local byKey: { [string]: { Session } } = {}
+    local keyOf: { [string]: string } = {}
     for _, s in allSessions() do
-        local key = b.fold(s.entry.exercise)
-        if counts[key] == nil then
-            counts[key] = 0
+        local key = keyOf[s.entry.exercise]
+        if key == nil then
+            key = b.fold(s.entry.exercise)
+            keyOf[s.entry.exercise] = key
+        end
+        if byKey[key] == nil then
+            byKey[key] = {}
             table.insert(names, s.entry.exercise)
         end
-        counts[key] += 1
+        table.insert(byKey[key], s)
     end
     if #names == 0 then
         return b.ui.column({ b.ui.empty(T.noExercises, T.noExercisesText), b.ui.run(T.startButton, "start") })
     end
     local items: { Node } = {}
     for _, name in b.sorted(names) do
-        local record = recordText(name)
-        local count = counted(T.sessions, counts[b.fold(name)])
+        local days = daysFrom(byKey[keyOf[name]])
+        local record = recordOf(days)
+        local count = counted(T.sessions, #days)
         table.insert(items, b.ui.row({
             b.ui.open(name, "progress", { exercise = name }),
             b.ui.text(if record then `{record} · {count}` else count, true),
