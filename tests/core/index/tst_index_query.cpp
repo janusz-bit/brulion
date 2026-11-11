@@ -426,6 +426,36 @@ private Q_SLOTS:
         QCOMPARE(describe(index, r), QStringList{u"wyjątkowe słowo tutaj"_s});
     }
 
+    void workoutExercisesAreNoTasks()
+    {
+        // SYNTAX §5 "Gym": the checkboxes of a workout's exercise lines are its sets, not tasks.
+        VaultIndex index;
+        index.update(u"journals/2026-10-14.md"_s,
+                     u"- Trening A #trening\n"
+                     "  plan:: [[Trening A]]\n"
+                     "  - [x] [[Przysiad]] 100 kg 5×5\n"
+                     "  - [ ] [[Wyciskanie leżąc]] 60 kg 3×8\n"
+                     "    - [ ] [[Dipy]] 3×8\n"
+                     "- [ ] Kupić karnet #trening\n"
+                     "- Bieganie #Workout\n"
+                     "  - [ ] [[Bieg]] 5 km\n"
+                     "- [ ] Zadzwonić do Ewy\n"_s);
+        // Not in a daily note: tasks as any.
+        index.update(u"Plan.md"_s, u"- Trening #trening\n  - [ ] [[Martwy ciąg]] 3×5\n"_s);
+        const auto tasks = [&](const QString &source) {
+            return describe(index, runQuery(parsed(source), index, fixture::Today));
+        };
+        QCOMPARE(tasks(u"type:tasks"_s), QStringList({u"[[Martwy ciąg]] 3×5"_s, u"Kupić karnet #trening"_s,
+                                                      u"Zadzwonić do Ewy"_s}));
+        QCOMPARE(tasks(u"type:tasks status:open"_s).size(), 3);
+        // Asked for by the tag: the exercises are there.
+        QCOMPARE(tasks(u"type:tasks tag:trening"_s).size(), 5);
+        QCOMPARE(tasks(u"type:tasks #workout"_s), QStringList{u"[[Bieg]] 5 km"_s});
+        QCOMPARE(tasks(u"type:tasks -tag:trening"_s), QStringList{u"Zadzwonić do Ewy"_s});
+        // Blocks are blocks.
+        QVERIFY(tasks(u"Przysiad"_s).size() == 1);
+    }
+
     void pageThis()
     {
         QueryOptions options;

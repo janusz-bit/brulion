@@ -36,7 +36,7 @@ przerwa:: 3 min
   progresja:: +5 kg
 ```
 
-**Zacznij trening** (przycisk w widoku Siłownia albo paleta) pyta o plan i wpisuje go do dzisiejszej notatki jako zadania, każde z ciężarem z ostatniej sesji — o 2,5 kg większym (5 lb albo `progresja::` wiersza), gdy wszystkie zaplanowane serie wyszły tam w pełni.
+**Zacznij trening** (przycisk w widoku Siłownia albo paleta) pyta o plan i wpisuje go do dzisiejszej notatki jako zadania, każde z ciężarem z ostatniej sesji — o 2,5 kg większym (5 lb albo `progresja::` wiersza), gdy wszystkie zaplanowane serie wyszły tam w pełni. Pola wyboru ćwiczeń to serie, nie sprawy do załatwienia: widok Zadania ich nie pokazuje (zapytanie z `tag:trening` je pokaże).
 
 ## Widok Siłownia
 - **Dziś**: dzisiejsze ćwiczenia jako karty — odhacz ćwiczenie, zmień ciężar i powtórzenia ostatniej serii przyciskami − / +, dodaj albo usuń serię. Każda zmiana przepisuje tylko ten jeden wiersz notatki. Dodanie serii uruchamia **timer przerwy** (`przerwa::` planu, inaczej 2 minuty) z powiadomieniem na koniec.

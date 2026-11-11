@@ -1085,7 +1085,10 @@ are **exercise lines**. A tagged line without children is a workout of one exerc
   An Obsidian Tasks date (`✅ 2026-11-04`…) and a block id stay where they are. A count is capped at
   100 sets; a line over 2000 bytes is no exercise.
 * **Status**: a plain bullet or a done task (`[x]`, Logseq `DONE`) is history; an open task (`[ ]`)
-  is planned, a cancelled one (`[-]`) does not count.
+  is planned, a cancelled one (`[-]`) does not count. These checkboxes are the sets' status, not
+  tasks: the blocks under a workout block (`#trening` / `#workout` in a daily note, any depth) are
+  left out of `type:tasks` — the Tasks view, task queries (§10), the widgets — unless the query
+  asks for the tag (`tag:trening`). The tagged line itself stays a task (`- [ ] Siłownia #trening`).
 * **Plans**: a page tagged `plan-treningowy` (`workout-plan`: `tags:: plan-treningowy`) whose top-level
   blocks are exercise lines, usually without weights (`[[Przysiad]] 3×5`); `progresja:: +5 kg`
   (`progression::`) under a line sets its step (default 2,5 kg, 5 lb), `przerwa:: 3 min` (`rest::`)
@@ -1464,7 +1467,7 @@ sort:due,-priority limit:20
 
 | Key (aliases) | Values |
 |---|---|
-| `type:` (`typ:`) | `tasks` (`zadania`), `blocks` (`bloki`), `pages` (`strony`, `notes`, `notatki`), `reminders` (`przypomnienia`). Default: `tasks` when a task filter, sort or group is used (status, priority, due, scheduled, start, done, created, is), `reminders` when `remind:` is, else `blocks`. |
+| `type:` (`typ:`) | `tasks` (`zadania`), `blocks` (`bloki`), `pages` (`strony`, `notes`, `notatki`), `reminders` (`przypomnienia`). Default: `tasks` when a task filter, sort or group is used (status, priority, due, scheduled, start, done, created, is), `reminders` when `remind:` is, else `blocks`. `tasks` leaves out a workout's exercise lines (§5 "Gym") unless `tag:trening` / `tag:workout` is asked for. |
 | `status:` (`stan:`) | `todo` (`do-zrobienia`), `doing` (`in-progress`, `w-toku`), `done` (`zrobione`, `wykonane`), `cancelled` (`canceled`, `anulowane`), `deferred` (`waiting`, `odłożone`), `open` (`otwarte`) = todo + doing, `closed` (`zamknięte`) = done + cancelled, `all` (`any`, `wszystkie`) |
 | `priority:` (`priorytet:`, `prio:`) | `highest` (`najwyższy`), `high` (`wysoki`), `medium` (`średni`), `low` (`niski`), `lowest` (`najniższy`), `none` (`normal`, `brak`, `normalny`) = no priority set |
 | `tag:` (`tags:`, `tagi:`), `#tag` | tag with or without `#`; `projekt` also matches nested `projekt/dom`. A block has its own tags, its ancestors' and the page's tags. |

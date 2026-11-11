@@ -92,6 +92,38 @@ bool isClosed(TaskStatus s)
     return s == TaskStatus::Done || s == TaskStatus::Cancelled;
 }
 
+// ---- workouts (docs/SYNTAX.md §5 "Gym") ---------------------------------------------------------
+// The checkboxes of a workout's exercise lines are its sets' status, not tasks: type:tasks leaves
+// out the blocks under a block tagged #trening / #workout in a daily note — unless the query names
+// that tag (`tag:trening`). The tagged line itself stays a task ("- [ ] Siłownia #trening").
+
+bool isWorkoutTag(QStringView tag)
+{
+    return tag == u"trening" || tag == u"workout";
+}
+
+bool namesWorkoutTag(const Query &query)
+{
+    return std::ranges::any_of(query.filters, [](const QueryFilter &f) {
+        return f.kind == QueryFilterKind::Tag && !f.negate
+               && std::ranges::any_of(f.values, [](const QString &v) { return isWorkoutTag(v); });
+    });
+}
+
+bool hasWorkouts(const ParsedNote &note)
+{
+    return note.journalDate && std::ranges::any_of(note.tags, [](const QString &t) { return isWorkoutTag(t); });
+}
+
+bool isExerciseLine(const ParsedNote &note, int block)
+{
+    for (int i = note.blocks[block].parent; i >= 0; i = note.blocks[i].parent) {
+        if (std::ranges::any_of(note.blocks[i].tags, [](const QString &t) { return isWorkoutTag(t); }))
+            return true;
+    }
+    return false;
+}
+
 /// An item under evaluation.
 struct View {
     const Entry *entry = nullptr;
@@ -231,10 +263,14 @@ void Runner::matchesOf(const Entry &e, QList<QueryMatch> &out)
     const QList<Block> &blocks = e.note.blocks;
     switch (m_query.type) {
     case QueryType::Pages: cands.append(Candidate{View{&e, -1, nullptr, nullptr}, -1}); break;
-    case QueryType::Tasks:
-        for (const int i : e.taskBlocks())
-            cands.append(Candidate{View{&e, i, &*blocks[i].task, nullptr}, -1});
+    case QueryType::Tasks: {
+        const bool workouts = !namesWorkoutTag(m_query) && hasWorkouts(e.note);
+        for (const int i : e.taskBlocks()) {
+            if (!workouts || !isExerciseLine(e.note, i))
+                cands.append(Candidate{View{&e, i, &*blocks[i].task, nullptr}, -1});
+        }
         break;
+    }
     case QueryType::Blocks:
         for (qsizetype i = 0; i < blocks.size(); ++i) {
             const Block &b = blocks[i];
