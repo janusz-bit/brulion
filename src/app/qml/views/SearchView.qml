@@ -12,7 +12,8 @@ import Brulion
 // the matching line. The query and the folder are kept in the route (back from a page returns to
 // the results; a folder renamed or moved is followed).
 //
-// Keys: the field has the focus; Up/Down move through the results, Enter opens (Ctrl+Enter in
+// Keys: the field has the focus whenever the view is shown, its query selected (on phones the
+// keyboard comes up); Up/Down move through the results, Enter opens (Ctrl+Enter in
 // the side panel), Escape clears.
 // Contract with the shell (qml/shell/ShellRouteView.qml): `route`, optional `title`.
 FocusScope {
@@ -97,10 +98,16 @@ FocusScope {
         if (visible)
             takeFocus()
     }
-    /// The keyboard to the query (made shown, or shown the first time after being built ahead).
+    /// The keyboard to the query, selected (typing replaces it), and on touch the on-screen
+    /// keyboard up: whenever the view is shown — made shown, shown the first time after being
+    /// built ahead, or shown again (kept while other views were).
     function takeFocus(): void {
         field.forceActiveFocus()
+        field.selectAll()
+        if (Theme.touchUi)
+            DeviceInfo.showInputMethod()
     }
+    onVisibleChanged: if (visible) takeFocus()
     onRouteChanged: followRoute()
 
     SearchResultModel {
@@ -121,6 +128,7 @@ FocusScope {
 
         BSearchField {
             id: field
+            objectName: "searchField"
             Layout.fillWidth: true
             Layout.leftMargin: root.sideMargin
             Layout.rightMargin: root.sideMargin

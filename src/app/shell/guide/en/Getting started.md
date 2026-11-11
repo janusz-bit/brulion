@@ -34,7 +34,7 @@ While you type, the toolbar sits right above the keyboard — in the journal and
 
 ## Search and navigation
 - **Ctrl+O** or the **Search or type a command…** field in the top bar — jump to a page by typing a few letters of its name. The last item of the list searches for the typed words in the text of all notes, and a `>` at the start switches to commands (like the command palette).
-- **Ctrl+Shift+F** — search the text of all notes; accents can be left out (“cafe” finds “café”).
+- **Ctrl+Shift+F** — search the text of all notes; accents can be left out (“cafe” finds “café”). Whenever the search opens (also from **Search** on a phone's bottom navigation), its field is ready for typing: the keyboard comes up and the previous query is selected, so typing replaces it.
 - **Ctrl+F** — find in the open note (on a phone: page menu → **Find and replace…**), **Ctrl+H** — straight to find and replace. Accents and letter case can be ignored; the “Aa”, “ąa” and “Word” buttons narrow the results. The search covers the note's Markdown text, including link addresses. A single **Ctrl+Z** undoes “Replace all”. In the journal stream you search in the day you are writing in.
 - **Replace in notebook** (the **More** menu → **Notebook**, the command palette, “Replace…” in search) — replace in all notes. First you see every match as “before → after”; untick what you don't want to change. A match inside a link is marked, because the link would start pointing somewhere else: to rename a page together with its links, rename it instead. After replacing, the **Undo** button restores the notes, and **Version history** keeps the old text of each of them too. Trash, drawings and other files are skipped.
 - **Ctrl+K** — command palette.

@@ -43,6 +43,9 @@ class DeviceInfo : public QObject, public QAccessible::ActivationObserver {
                        screenReaderChanged FINAL)
     /// The on-screen keyboard is shown (Qt.inputMethod.visible, typed for compiled QML).
     Q_PROPERTY(bool inputMethodVisible READ inputMethodVisible NOTIFY inputMethodVisibleChanged FINAL)
+    /// How many times showInputMethod() asked for the keyboard (self-tests: a platform without
+    /// an on-screen keyboard never shows one).
+    Q_PROPERTY(int inputMethodRequests READ inputMethodRequests NOTIFY inputMethodRequested FINAL)
 
 public:
     explicit DeviceInfo(QObject *parent = nullptr);
@@ -60,6 +63,7 @@ public:
     bool simulateScreenReader() const { return m_simulated; }
     void setSimulateScreenReader(bool on);
     bool inputMethodVisible() const;
+    int inputMethodRequests() const { return m_inputMethodRequests; }
 
     /// Qt.inputMethod.hide() / show(), callable from compiled QML.
     Q_INVOKABLE void hideInputMethod() const;
@@ -75,12 +79,14 @@ public:
 Q_SIGNALS:
     void screenReaderChanged();
     void inputMethodVisibleChanged();
+    void inputMethodRequested() const;
 
 private:
     void accessibilityActiveChanged(bool active) override;
 
     bool m_accessible = false;
     bool m_simulated = false;
+    mutable int m_inputMethodRequests = 0;
     mutable QStringList m_families;
     mutable QStringList m_fixedFamilies;
 };

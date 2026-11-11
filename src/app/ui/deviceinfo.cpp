@@ -39,6 +39,8 @@ void DeviceInfo::hideInputMethod() const
 
 void DeviceInfo::showInputMethod() const
 {
+    ++m_inputMethodRequests;
+    Q_EMIT inputMethodRequested();
     if (QInputMethod *im = QGuiApplication::inputMethod())
         im->show();
 }

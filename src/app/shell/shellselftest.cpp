@@ -7590,6 +7590,50 @@ void checkViewsLetGo(QQuickWindow *window, AppController *app, const Check &chec
           "the views a route left are deleted with their editors");
 }
 
+/// 5o. Search takes the keys whenever it is shown — from its tab on the bottom navigation (a
+///     phone) or a route, the first time and again after another view: the field has the
+///     focus, its query selected (typing replaces it), and on touch the on-screen keyboard is
+///     asked for (DeviceInfo.inputMethodRequests: offscreen has no keyboard to show).
+void checkSearchTakesKeys(QQmlApplicationEngine *engine, QQuickWindow *window, AppController *app, const Check &check)
+{
+    auto *device = engine->singletonInstance<QObject *>("Brulion", "DeviceInfo");
+    auto *theme = engine->singletonInstance<QObject *>("Brulion", "Theme");
+    if (!device || !theme) {
+        check(false, "DeviceInfo and Theme exist");
+        return;
+    }
+    const bool touchUi = theme->property("touchUi").toBool();
+    QQuickItem *field = nullptr;
+    const auto openSearch = [&] {
+        app->goHome();
+        waitFor([&] { return app->currentView() == u"journals"; });
+        settle(50);
+        const int before = device->property("inputMethodRequests").toInt();
+        if (QQuickItem *tab = shownNamed(window->contentItem(), u"bottomNav_search"_s))
+            tapOrClick(window, pointIn(tab), touchRun());
+        else
+            app->navigate({{u"view"_s, u"search"_s}});
+        const bool shown = waitFor([&] {
+            field = shownNamed(window->contentItem(), u"searchField"_s);
+            return app->currentView() == u"search" && field && field->hasActiveFocus();
+        });
+        const int asked = device->property("inputMethodRequests").toInt() - before;
+        return shown && (touchUi ? asked > 0 : asked == 0);
+    };
+    check(openSearch(), touchUi ? "Search opened: its field has the keys and the keyboard comes up"
+                                : "Search opened: its field has the keys");
+    app->search(u"żółw"_s);
+    check(waitFor([&] { return field && field->property("text").toString() == u"żółw"; }),
+          "a search for „żółw” shows its query");
+    check(openSearch(), touchUi ? "Search opened again after the journal: the field has the keys, the keyboard comes up"
+                                : "Search opened again after the journal: the field has the keys");
+    check(field && field->property("selectedText").toString() == u"żółw",
+          "the query kept from before is selected: typing replaces it");
+    if (QQuickItem *view = findShown(window->contentItem(), [](QQuickItem *item) { return isA(item, "SearchView"); }))
+        QMetaObject::invokeMethod(view, "applyQuery", Q_ARG(QString, QString()));
+    app->goHome();
+}
+
 /// Phones: a finger dragged over the source scrolls it (a TextEdit that selects by
 /// dragging kept the finger: the source never moved) and selects nothing; a tap still
 /// puts the cursor where it lands.
@@ -8367,6 +8411,8 @@ void checkBlockEditor(QQmlApplicationEngine *engine, QQuickWindow *window, AppCo
         // 5f. The on-screen keyboard (phones).
         if (window->width() < 900)
             checkKeyboard(engine, window, app, check);
+        // 5o. Search takes the keys (and on touch the keyboard) whenever it is shown.
+        checkSearchTakesKeys(engine, window, app, check);
     } else {
         check(false, "the page view has an editor");
     }
