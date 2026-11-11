@@ -1862,3 +1862,41 @@ the app closed) fill the template's empty last bullet (`- `) instead of adding b
 keep the note's line endings and BOM. A daily note that is not UTF-8 text is never appended to
 (rewriting it would replace its other characters); the entry is refused (the widgets' one waits
 in their queue).
+
+## 13. Extension pages (Luau)
+
+A page tagged `rozszerzenie` or `extension` at page level (frontmatter `tags:` or a `tags::` line)
+is an **extension**: its ```` ```luau ```` blocks (also ```` ```lua ````, also inside a list item)
+are code that Brulion runs (docs/EXTENSIONS.md "Extensions in the notebook"); everything else on
+the page is documentation and stays ordinary Markdown for every app.
+
+````markdown
+---
+tags: [rozszerzenie]
+uprawnienia: [zapis]
+opis: Liczy słowa dzisiejszej notatki.
+---
+Polecenie w palecie: „Policz słowa”.
+
+```luau
+b.command("policz", function(ctx)
+    local tekst = b.read(b.today()) or ""
+    local n = 0
+    for _ in tekst:gmatch("%S+") do n += 1 end
+    return `Dziś: {n} słów`
+end, { label = "Policz słowa" })
+```
+````
+
+* **Properties** (Polish or English keys; values in either language): `uprawnienia::` /
+  `permissions::` — `zapis` / `write` (it may change notes; reading is always allowed), `ai`;
+  `opis::` / `description::` — shown in Settings → Extensions; `zastępuje::` / `overrides::` — the id
+  of a built-in extension the page replaces (`silownia`). Unknown permission words are reported,
+  not granted.
+* **Id**: the page's title folded — lower case, no diacritics, words joined by `-` ("Licznik słów" →
+  `licznik-slow`). A title naming a built-in extension ("Siłownia", "Gym") overrides it too.
+* **Code**: the blocks in order, each line at its own line of the page (errors name the page's
+  lines). A block without its closing fence runs to the end of the page. Fences inside another
+  fence (a ```` ````markdown ```` example) are text.
+* A page with the tag but no ```` ```luau ```` block is an extension without code (Settings says
+  so); a `#rozszerzenie` inside a block does not make a page an extension.

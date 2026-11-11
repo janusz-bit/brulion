@@ -44,4 +44,4 @@ rest:: 3 min
 
 **Gym: exercise from the catalog** makes a page for an exercise from 51 common ones (muscles, equipment) in English or Polish, as your notes are written.
 
-Everything stays plain Markdown: Obsidian and Logseq show the workouts as an ordinary outline with links and tasks. The gym is Brulion's first extension, written in Luau.
+Everything stays plain Markdown: Obsidian and Logseq show the workouts as an ordinary outline with links and tasks. The gym is Brulion's first extension, written in Luau: its code can become a page of your notebook and be changed there (see [[Extensions]]).

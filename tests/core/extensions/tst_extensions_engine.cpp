@@ -92,7 +92,7 @@ public:
 
 Extension ext(const QString &id, const QString &source, bool write = true)
 {
-    return {id, source, write ? QStringList{u"write"_s} : QStringList{}, {}};
+    return {id, source, write ? QStringList{u"write"_s} : QStringList{}, {}, {}};
 }
 
 } // namespace
@@ -496,6 +496,99 @@ private Q_SLOTS:
         QCOMPARE(r.value.toString(), u"165 42.25 1000 2.2 true"_s);
         if (!comma)
             QSKIP("no locale with a decimal comma installed: checked with the current one only");
+    }
+
+    void hooks()
+    {
+        LOAD_OK(ext(u"dziennik"_s, uR"lua(
+            local zapisane = {}
+            b.on("save", function(e) table.insert(zapisane, e.page) return #zapisane end)
+            b.on("change", function(e) return table.concat(e.pages, ", ") end)
+            b.command("ile", function() return #zapisane end)
+        )lua"_s));
+        LOAD_OK(ext(u"drugie"_s, u"b.on(\"save\", function(e) error(\"zepsute: \" .. e.page) end)"_s));
+        const QList<HookInfo> save = engine->hooks(u"save"_s);
+        QCOMPARE(save.size(), 2);
+        QCOMPARE(save[0].extension, u"dziennik"_s);
+        QCOMPARE(save[1].extension, u"drugie"_s);
+        QVERIFY(save[0].id < save[1].id);
+        QCOMPARE(engine->hooks().size(), 3);
+        Result r = engine->runHook(save[0].id, {{u"page"_s, u"Żółw"_s}});
+        QVERIFY2(r.ok(), qPrintable(r.error));
+        QCOMPARE(r.value.toInt(), 1);
+        r = engine->runHook(engine->hooks(u"change"_s).first().id, {{u"pages"_s, QStringList{u"A"_s, u"Bęben"_s}}});
+        QCOMPARE(r.value.toString(), u"A, Bęben"_s);
+        r = engine->runHook(save[1].id, {{u"page"_s, u"X"_s}});
+        QCOMPARE(r.status, Status::Error);
+        QVERIFY2(r.error.startsWith(u"drugie:1: zepsute: X"_s), qPrintable(r.error));
+        // Removed, and gone with its extension.
+        engine->removeHook(save[1].id);
+        QCOMPARE(engine->runHook(save[1].id, {}).status, Status::NotFound);
+        LOAD_OK(ext(u"dziennik"_s, u"-- nowa wersja bez hooków"_s));
+        QVERIFY(engine->hooks().isEmpty());
+        // Unknown events and non-functions are refused at once, with the line.
+        Result bad = engine->load(ext(u"zle"_s, u"\nb.on(\"zamknięcie\", function() end)"_s));
+        QCOMPARE(bad.status, Status::Error);
+        QVERIFY2(bad.error.startsWith(u"zle:2: b.on: unknown event \"zamknięcie\" (save, change)"_s), qPrintable(bad.error));
+        bad = engine->load(ext(u"zle"_s, u"b.on(\"save\", 42)"_s));
+        QVERIFY2(bad.error.contains(u"b.on: argument 2 must be a function"_s), qPrintable(bad.error));
+    }
+
+    void evaluate()
+    {
+        LOAD_OK(ext(u"*console*"_s, QString()));
+        Result r = engine->evaluate(u"*console*"_s, u"1 + 1"_s, u"console"_s);
+        QVERIFY2(r.ok(), qPrintable(r.error));
+        QCOMPARE(r.value.toInt(), 2);
+        // Statements; globals stay between evaluations (a REPL), print goes to the log.
+        r = engine->evaluate(u"*console*"_s, u"licznik = 41\nlicznik += 1"_s, u"console"_s);
+        QVERIFY2(r.ok(), qPrintable(r.error));
+        QVERIFY(!r.value.isValid());
+        QCOMPARE(engine->evaluate(u"*console*"_s, u"licznik"_s, u"console"_s).value.toInt(), 42);
+        QVERIFY(engine->evaluate(u"*console*"_s, u"print(\"zażółć\", licznik)"_s, u"console"_s).ok());
+        QCOMPARE(host.logs.last(), u"*console*: zażółć\t42"_s);
+        QCOMPARE(engine->evaluate(u"*console*"_s, u"b.today()"_s, u"console"_s).value.toString(), u"2026-11-11"_s);
+        // Errors and syntax errors name the code's lines.
+        r = engine->evaluate(u"*console*"_s, u"\n\nerror(\"nie\")"_s, u"Strona"_s);
+        QCOMPARE(r.status, Status::Error);
+        QVERIFY2(r.error.startsWith(u"Strona:3: nie"_s), qPrintable(r.error));
+        r = engine->evaluate(u"*console*"_s, u"local = = 2"_s, u"console"_s);
+        QCOMPARE(r.status, Status::Error);
+        QVERIFY2(r.error.startsWith(u"console:1:"_s), qPrintable(r.error));
+        // The limits hold here too; another extension's environment is not reachable.
+        QCOMPARE(engine->evaluate(u"*console*"_s, u"while true do end"_s, u"console"_s).status, Status::Timeout);
+        QCOMPARE(engine->evaluate(u"nie-ma"_s, u"1"_s, u"x"_s).status, Status::NotFound);
+        LOAD_OK(ext(u"inne"_s, u"sekret = 7"_s));
+        QVERIFY(!engine->evaluate(u"*console*"_s, u"sekret"_s, u"console"_s).value.isValid());
+        QCOMPARE(engine->evaluate(u"inne"_s, u"sekret"_s, u"x"_s).value.toInt(), 7);
+        // A question waits like a command's.
+        r = engine->evaluate(u"*console*"_s, u"b.ask(\"Imię?\")"_s, u"console"_s);
+        QCOMPARE(r.status, Status::Suspended);
+        r = engine->resume(u"Ala"_s);
+        QCOMPARE(r.value.toString(), u"Ala"_s);
+    }
+
+    void viewMetaAndNames()
+    {
+        Extension e = ext(u"licznik-slow"_s, uR"lua(
+            b.view("projekty", function() return b.ui.text("x") end, nil, { label = "Projekty", icon = "folder" })
+            b.view("bez", function() return b.ui.text("y") end)
+            b.command("blad", function() local t = nil; return t.pole end)
+        )lua"_s);
+        e.name = u"Licznik słów"_s;
+        LOAD_OK(e);
+        const QList<ViewInfo> views = engine->views();
+        QCOMPARE(views.size(), 2);
+        QCOMPARE(views[0].name, u"bez"_s);
+        QVERIFY(views[0].label.isEmpty());
+        QCOMPARE(views[1].label, u"Projekty"_s);
+        QCOMPARE(views[1].icon, u"folder"_s);
+        // Errors carry the extension's name (a page's title), not its id.
+        const Result r = engine->runCommand(u"licznik-slow"_s, u"blad"_s, {});
+        QVERIFY2(r.error.startsWith(u"Licznik słów:4: attempt to index nil"_s), qPrintable(r.error));
+        QVERIFY(engine->isLoaded(u"licznik-slow"_s));
+        const Result bad = engine->load(ext(u"z"_s, u"b.view(\"v\", function() end, nil, 5)"_s));
+        QVERIFY2(bad.error.contains(u"b.view: argument 4 must be a table"_s), qPrintable(bad.error));
     }
 
     void restartAndStop()

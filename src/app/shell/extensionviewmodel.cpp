@@ -198,6 +198,24 @@ void ExtensionViewModel::setParam(const QString &key, const QString &value)
     setParams(params);
 }
 
+void ExtensionViewModel::setRouteParams(const QVariantMap &route)
+{
+    QVariantMap params = route;
+    for (const QString &key : {u"view"_s, u"extension"_s, u"name"_s, u"title"_s})
+        params.remove(key);
+    setParams(params);
+}
+
+QVariantMap ExtensionViewModel::routeFor(const QString &view, const QVariantMap &params) const
+{
+    QVariantMap route = params;
+    route.insert(u"view"_s, u"extension"_s);
+    route.insert(u"extension"_s, m_extension);
+    route.insert(u"name"_s, view);
+    route.insert(u"title"_s, m_extensions ? m_extensions->viewTitle(m_extension, view) : view);
+    return route;
+}
+
 void ExtensionViewModel::refresh()
 {
     m_refreshTimer.stop();

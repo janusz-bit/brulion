@@ -76,7 +76,8 @@ Rectangle {
                 readonly property string title: titles.routeTitle(titles.field(tab.route, "view"),
                                                                  titles.field(tab.route, "path"),
                                                                  titles.field(tab.route, "date"),
-                                                                 titles.field(tab.route, "tag"))
+                                                                 titles.field(tab.route, "tag"),
+                                                                 titles.field(tab.route, "title"))
                 /// While dragged: where it would go.
                 property int dropIndex: index
 

@@ -9,13 +9,15 @@ done in the repository simply disappears from the list.
   remote control: docs/CLI.md). In other apps: an assistant in the editor with your own API key
   (AFFiNE), a writing assistant (SiYuan); also worth considering: questions to the notes and
   semantic search on a local model.
-* **Extensibility as in Emacs and TiddlyWiki** — the engine is there (Luau, `src/core/extensions`,
-  docs/EXTENSIONS.md) and runs the built-in gym; missing for the user's own extensions written in
-  the notebook: finding them (a folder or pages with ```` ```luau ```` blocks), approving new and
-  changed code on each device (notes arrive from sync and import) and per-extension permissions,
-  their errors with lines in the event log, Luau's type checker on save (`b` as a definition file),
+* **Extensibility as in Emacs and TiddlyWiki: what is still missing** — extension pages, approval
+  per device, live reload, hooks (`save`, `change`) and the Luau console are there
+  (docs/EXTENSIONS.md); missing: Luau's type checker on save (`b` as a definition file; the
+  Analysis library is not vendored), syntax colours for ```` ```luau ```` blocks in the editor,
   macros in the text (`{{ext:silownia/rekord Przysiad}}`, rendered through `InlineRenderer`) and
-  hooks, more components for views; the browser build checked against hostile extensions.
+  template variables from extensions, more events (a task done, a daily note created, the app
+  opened), extension views in the sidebar and inside pages (a ```` ```view ```` block), more
+  components for views (text fields, menus), an extension's own settings, sharing extensions
+  between notebooks, the browser build checked against hostile extensions.
 * **Gym: next steps** — the rest timer's notification while the app is closed (Android: a scheduled
   alarm), a catalog beyond the 51 built-in exercises (free-exercise-db, Unlicense, English names),
   sample workouts in the sample notebook, weekly volume per muscle group, a body weight log.

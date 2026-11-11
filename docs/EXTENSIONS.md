@@ -1,10 +1,20 @@
 # Extensions (Luau)
 
-Brulion's extensions are small programs in [Luau](https://luau.org) (a typed Lua) that add commands
-and views to the app and read and write the open notebook through one API, `b`. Today only the
-built-in ones run — the **gym** (`src/core/extensions/builtin/silownia.luau`, docs/SYNTAX.md §5
-"Gym", docs/UI.md "Gym"); extensions written by users inside their notebook are the next step
-(TODO.md "Extensibility as in Emacs and TiddlyWiki").
+Brulion's extensions are small programs in [Luau](https://luau.org) (a typed Lua) that add commands,
+views and reactions to the app and read and write the open notebook through one API, `b`. They come
+from two places:
+
+* **built in** — the **gym** (`src/core/extensions/builtin/silownia.luau`, docs/SYNTAX.md §5 "Gym",
+  docs/UI.md "Gym"), switched on in Settings → Extensions;
+* **the notebook itself** — pages tagged `#rozszerzenie` (`#extension`) whose ```` ```luau ````
+  blocks are code (docs/SYNTAX.md §13): the notebook carries its own code, edited, synced, linked
+  and versioned like any note. Saved, a page's code runs again at once.
+
+The idea is Emacs' and TiddlyWiki's: the program you use is made of code you can read and change
+from inside it. Emacs gives every user an init file and `eval-buffer`, a `*scratch*` buffer and a
+`*Messages*` log; TiddlyWiki keeps its own code in tiddlers, and a tiddler with a built-in one's
+title replaces it (a "shadow tiddler"). Brulion has the same pieces: extension pages, the Luau
+console, and the built-in gym's source as a page that then runs instead of the built-in code.
 
 Why Luau: of eleven languages measured with the same extensions, tests and hostile scripts (the
 extension language experiment, branch `experiment/extension-languages`), it was the only ready-made
@@ -19,17 +29,20 @@ browser build — and the fastest; its type checker finds mistakes with line and
 | `src/core/extensions/engine.h` | `Engine`: one VM; extensions, their commands and views; calls, questions, limits |
 | `src/core/extensions/host.h` | `Host`: what an extension may ask of the app (blocks, pages, writes, today, languages, the timer, the log) |
 | `src/core/extensions/notebookhost.h` | `NotebookHost`: the Host over a `Vault` and its `VaultIndex` — blocks from the index, content-preserving writes (`blockedit.h`, `notebook/journals.h`, `notebook/pages.h`) |
-| `src/core/extensions/builtin.h` | the built-in extensions (resources `:/extensions/…`) |
-| `src/app/shell/workspaceextensions.h` | `WorkspaceExtensions` (QML `Workspace.extensions`): the engine for the open notebook, the extensions the settings switch on, their questions, messages and the rest timer |
+| `src/core/extensions/builtin.h` | the built-in extensions (resources `:/extensions/…`), `builtinFor()`: which one a page overrides |
+| `src/core/extensions/pageextension.h` | extension pages: which pages are extensions, their id, their code with the page's line numbers, permissions, the hash an approval covers; the new-extension page and a built-in's source as a page |
+| `src/app/shell/workspaceextensions.h` | `WorkspaceExtensions` (QML `Workspace.extensions`): the engine for the open notebook, the built-ins the settings switch on, the extension pages and their approval on this device, reloading a page's code when it changes, hooks, the console, questions, messages and the rest timer |
+| `src/app/shell/extensionmodels.h` | `ExtensionListModel` (Settings → Extensions), `ExtensionConsoleModel` (the console's lines) |
 | `src/app/shell/extensionviewmodel.h` | `ExtensionView` (QML): a view's node tree as a list; `qml/shell/ShellExtensionView.qml` draws it |
+| `qml/views/ConsoleView.qml`, `qml/views/ExtensionRouteView.qml` | the Luau console (route `console`), an extension page's view (route `extension`) |
 | `qml/shell/ShellExtensionQuestion.qml` | the dialog of `b.ask` / `b.choose` / `b.form` |
 
 ## Sandbox and limits
 
-* One VM per notebook (made again when the settings or the language change). Every extension has
-  an environment of its own (its globals) whose reads fall through to the frozen standard library,
-  and its own read-only `b`; the library tables, the string metatable and the globals are
-  read-only (`luaL_sandbox`). Nothing reaches files, the network, processes or the environment:
+* One VM per notebook (made again when the language changes or on "Reload extensions"; an extension
+  page that changes is loaded again alone). Every extension has an environment of its own (its
+  globals) whose reads fall through to the frozen standard library, and its own read-only `b`; the
+  library tables, the string metatable and the globals are read-only (`luaL_sandbox`). Nothing reaches files, the network, processes or the environment:
   Luau's library has no `io`, `os.execute`, `require`, `load`, `string.dump`; `print` goes to the
   event log. Brulion compiles the source itself — scripts never see a compiler or a bytecode
   loader.
@@ -77,8 +90,72 @@ at the end), `b.data(name)` (read-only data bundled with the extension: the gym'
 
 Registering: `b.command(name, fn(ctx), {label, block?})` — a palette command ("Siłownia: dodaj
 serię"); with `block = true` it works on the block under the caret (`ctx.block`, the editor saves
-first) and is offered only in an editor. `b.view(name, render(params), actions?)` — a view and its
-named actions.
+first) and is offered only in an editor. `b.view(name, render(params), actions?, {label?, icon?})` —
+a view and its named actions; with a `label` the palette offers it ("Projekty"), on the route
+`extension` (`{extension, name, …params}`). `b.on(event, fn(e))` — a hook (below).
+
+## Hooks
+
+`b.on(event, fn)` calls `fn` with one table when something happens in the notebook (Emacs'
+`add-hook`):
+
+| Event | When | `e` |
+|---|---|---|
+| `save` | this device's editor saved a page (after the save) | `{page, path}` |
+| `change` | notes changed — the editor, a sync, another program, an import; once a burst of changes is over (0.6 s) | `{pages = {names…}}` |
+
+What extensions write themselves never comes back to them as `change` (no echoes, no loops). A
+hook never asks a question (`b.ask` there is an error), runs under the same limits, and one that
+fails three times in a row is taken off until its extension loads again (Emacs does the same to a
+failing `post-command-hook` function); its errors go to the console and the event log.
+
+## Extensions in the notebook
+
+A page is an extension when its page-level tags have `rozszerzenie` or `extension` (frontmatter
+`tags:` or a `tags::` line; a `#rozszerzenie` inside a block does not count). Its code is every
+```` ```luau ```` (or ```` ```lua ````) block, in order, also inside a list item as Logseq writes it;
+prose, headings and other blocks around it are documentation (literate programming, as an
+Emacs `config.org`). The page's properties (docs/SYNTAX.md §13): `uprawnienia::` / `permissions::`
+(`zapis` / `write`, `ai`), `opis::` / `description::`, `zastępuje::` / `overrides::` (a built-in's id).
+
+* **Its id** is its title folded ("Licznik słów" → `licznik-slow`): commands are
+  `ext.licznik-slow.<name>`. Two pages with one id: the first by path runs, the other says so.
+* **Line numbers**: the code is loaded with every other line of the page blanked, so an error names
+  the page's own line ("Licznik słów:14: attempt to index nil") — in Settings, in the page's state
+  line, in the console and the event log. The page's state line has a button to that line.
+* **Approval, per device.** Code can arrive from anywhere: a sync, an import, a shared folder. A
+  page's code runs on a device only after it was approved there (Settings → Extensions, or "Run" on
+  the page's state line) — like VS Code's workspace trust or Emacs' questions before `eval` of a
+  file's local variables. What is approved is the SHA-256 of the code and the permissions, kept in
+  the notebook's device state (`LocalStore` `extensions/approved`, never synced); prose around the
+  code needs no new approval. Code written on this device stays approved: when the app's editor
+  saves an approved page, the new code is approved too — unless it asks for more permissions. Code
+  that changes any other way (a sync, another program, an extension's `b.write`) waits again.
+  "New extension" and "Edit the code" of a built-in write pages that are approved at once.
+* **Live.** Whenever a page changes, its code is loaded again (only that extension); its commands
+  and views follow. A save that does not load (a syntax error, an error at the top level) keeps the
+  version before it running and shows the error: half-written code never takes a working extension
+  away. "Reload extensions" (the palette) starts every extension in a fresh VM.
+* **Switched off** on this device in Settings → Extensions (`extensions/off`).
+* **Built-ins as pages.** "Edit the code" of the gym (Settings → Extensions) writes its source into
+  `Rozszerzenia/Siłownia.md` (`Extensions/Gym.md` in an English notebook): `zastępuje:: silownia`,
+  one ```` ```luau ```` block per section of the source under its heading. While that page exists
+  and is approved, the gym runs from it — with the built-in's bundled data (`b.data`) — and a
+  change there works at once; "Restore" puts the page in the trash and the built-in code runs
+  again. A page titled like a built-in ("Siłownia", "Gym") overrides it too, as TiddlyWiki's
+  shadow tiddlers. The built-in's switch still decides whether the gym runs at all.
+
+## The Luau console
+
+The palette's "Luau console" (route `console`): a line of Luau runs in an environment of its own
+with the notebook's `b` and the permissions to write and to use AI (what is typed there is the
+user's own). An expression shows its value (`b.today()`, `#b.pages({})`; tables as Luau literals),
+statements run, globals stay for the next line (Emacs' `ielm`); Up / Down go through the history.
+Below, as in Emacs' `*Messages*`: what extensions `print()` and `b.log`, their errors with lines,
+"loaded again". "Run Luau block" (the palette, in the editor) evaluates the ```` ```luau ```` block
+under the caret there — a block of any page, with the page's line numbers in errors — and shows the
+result as a message too (Emacs' `C-x C-e`). Code typed in the console may register commands and
+views (`b.command` …) until the extensions are reloaded.
 
 ## Questions
 
@@ -108,7 +185,12 @@ the action needs (a block's `ref` and `text`), so a stale line is refused instea
 ## Tests
 
 `tests/core/extensions`: the engine (sandbox escapes, limits that cannot be caught, questions,
-views, the locale), block edits, and the gym on a real notebook (writing lines back in Brulion's
-spelling, history, plans with progression, today's view and its actions, a stale line, the
-catalog, hostile lines, two years of workouts). The app's self-test (`checkGym`) switches the gym on,
-writes a plan into today's note through the dialog and adds a set in the view.
+views, hooks, evaluation, the locale), block edits, extension pages (ids, code with the page's
+lines, fences in lists and in other fences, permissions, the hash, the new-extension page and the
+gym's source as a page running like the built-in), and the gym on a real notebook (writing lines
+back in Brulion's spelling, history, plans with progression, today's view and its actions, a stale
+line, the catalog, hostile lines, two years of workouts). The app's self-test: `checkGym` switches
+the gym on, writes a plan into today's note through the dialog and adds a set in the view;
+`checkExtensionPages` writes an extension page as a sync would (it waits), approves it, opens its
+view from the palette, saves a change in the editor (it runs at once, still approved), saves a
+broken one (the error on its line, the previous version runs) and evaluates in the console.

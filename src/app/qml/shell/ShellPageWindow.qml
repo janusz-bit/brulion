@@ -28,7 +28,8 @@ ApplicationWindow {
                                                                          : titles.routeTitle(window.viewName,
                                                                                              titles.field(window.route, "path"),
                                                                                              titles.field(window.route, "date"),
-                                                                                             titles.field(window.route, "tag"))
+                                                                                             titles.field(window.route, "tag"),
+                                                                                             titles.field(window.route, "title"))
 
     ShellRouteTitles { id: titles }
 

@@ -39,6 +39,7 @@ Brulion updates the documentation together with the app: new pages are added, an
 - [[Backups|Backups]] — scheduled notebook backups and restoring them.
 - [[File format|File format]] — what your notes look like on disk.
 - [[Command line and AI agents|Command line and AI agents]] — `brulion-cli`, scripts and AI agents (MCP).
+- [[Extensions|Extensions]] — your own commands, views and reactions in Luau, written in the notebook; the Luau console.
 
 ## Handy
 - [[Keyboard shortcuts|Keyboard shortcuts]] — including your own command shortcuts.

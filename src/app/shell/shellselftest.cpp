@@ -5252,6 +5252,86 @@ void checkGym(QQuickWindow *window, AppController *app, const Check &check)
     settle(300);
 }
 
+/// Extensions written in the notebook (docs/EXTENSIONS.md "Extensions in the notebook"): a page
+/// tagged #rozszerzenie that arrives from elsewhere waits for approval, runs once approved (its
+/// command in the palette, its view on its route), runs again when the editor saves a change (still
+/// approved: this device wrote it), keeps its previous version when a save breaks it (the error and
+/// its line on the page), and the Luau console evaluates what is typed into it.
+void checkExtensionPages(QQuickWindow *window, AppController *app, const Check &check)
+{
+    const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
+    Workspace *ws = app->workspace();
+    WorkspaceExtensions *ext = ws->extensions();
+    const auto named = [&](const QString &name) { return shownNamed(window->contentItem(), name); };
+    const QString path = ws->newPagePath(u"Rozszerzenie samotestu"_s);
+    check(!ws->exists(path), "the self-test's extension page is new");
+    const auto page = [](const QString &code) {
+        return u"---\ntags: [rozszerzenie]\nopis: Samotest.\n---\nKod:\n\n```luau\n"_s + code + u"\n```\n"_s;
+    };
+    // Written into the vault as a sync would: it waits.
+    check(ws->vault()->writeText(path,
+                                 page(u"b.command(\"pierwsze\", function() return \"jeden\" end, { label = \"Samotest: pierwsze\" })\n"
+                                      "b.view(\"widok\", function() return b.ui.heading(\"Widok samotestu\") end, nil, "
+                                      "{ label = \"Samotest: widok\" })"_s),
+                                 ChangeSource::Sync),
+          "the extension page is written as a sync would");
+    check(waitFor([&] { return ext->pageState(path) == u"approval"; }, 3000), "code from elsewhere waits for approval");
+    check(!app->commands()->ids().contains(u"ext.rozszerzenie-samotestu.pierwsze"_s), "and its command is not offered");
+    ext->approve(path);
+    check(ext->pageState(path) == u"running", "approved, it runs");
+    check(app->commands()->ids().contains(u"ext.rozszerzenie-samotestu.pierwsze"_s), "its command is in the palette");
+    check(app->commands()->ids().contains(u"extview.rozszerzenie-samotestu.widok"_s), "its view too");
+    check(app->commands()->run(u"extview.rozszerzenie-samotestu.widok"_s), "the palette opens the view");
+    check(waitFor([&] { return app->currentView() == u"extension"; }, 3000), "on the route of extension views");
+    check(waitFor([&] {
+              return findShown(window->contentItem(), [](QQuickItem *item) {
+                         return item->property("text").toString() == u"Widok samotestu"_s;
+                     }) != nullptr;
+          }, 3000),
+          "which draws the extension's nodes");
+
+    // The editor saves a change: loaded again at once, and still approved (this device wrote it).
+    check(ws->write(path, page(u"b.command(\"drugie\", function() return \"dwa\" end, { label = \"Samotest: drugie\" })"_s)),
+          "the editor saves a change of the code");
+    check(waitFor([&] { return app->commands()->ids().contains(u"ext.rozszerzenie-samotestu.drugie"_s); }, 3000),
+          "the new code runs at once");
+    check(ext->pageState(path) == u"running" && !app->commands()->ids().contains(u"ext.rozszerzenie-samotestu.pierwsze"_s),
+          "approved still, the old command gone");
+    // A save that breaks it: the error with its line, the previous version still runs.
+    check(ws->write(path, page(u"b.command(\"drugie\", function() return \"dwa\" end)\nlocal x = = 1"_s)), "a broken save");
+    check(waitFor([&] { return ext->pageState(path) == u"error"; }, 3000), "the page shows an error");
+    check(ext->pageErrorLine(path) == 8, "on the line of the page that has it");
+    check(app->commands()->ids().contains(u"ext.rozszerzenie-samotestu.drugie"_s), "the version before the error still runs");
+    app->openPage(path);
+    check(waitFor([&] { return named(u"pageExtensionState"_s) != nullptr; }, 3000), "the page shows its state");
+
+    // The console: typed, Enter, the value below.
+    app->navigate({{u"view"_s, u"console"_s}});
+    QQuickItem *input = nullptr;
+    check(waitFor([&] { return (input = named(u"consoleInput"_s)) != nullptr; }, 3000), "the Luau console shows");
+    settle(200);
+    if (input) {
+        if (touch)
+            tapOrClick(window, pointIn(input), touch);
+        input->forceActiveFocus();
+        input->setProperty("text", u"#b.pages({ tag = \"rozszerzenie\" }) + 40"_s);
+        sendKey(window, Qt::Key_Return);
+    }
+    check(waitFor([&] { return ext->console()->count() >= 2 && ext->console()->text().endsWith(u"\n41"_s); }, 3000),
+          "an expression shows its value");
+    ext->evaluate(u"licznik = 1"_s);
+    ext->evaluate(u"licznik + 1"_s);
+    check(ext->console()->text().endsWith(u"\n2"_s), "globals stay between lines");
+
+    ws->deletePage(path);
+    check(waitFor([&] { return ext->pageState(path).isEmpty(); }, 3000), "a deleted page is no extension any more");
+    check(!app->commands()->ids().contains(u"ext.rozszerzenie-samotestu.drugie"_s), "and its commands are gone");
+    ext->console()->clear();
+    closeMenus(window);
+    app->goHome();
+    settle(300);
+}
+
 /// Focus mode (F8 — the command's shortcut —, Esc, the Back key, its corner button), the word count in
 /// the page's corner and typewriter scrolling (desktop), and one command's shortcut changed in
 /// Settings → Keyboard shortcuts with real keys: another command's key is refused with the reason,
@@ -8601,6 +8681,9 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
     closeMenus(window);
     // 3h''. The gym: switched on, a plan written into today's note, a set added in its view.
     checkGym(window, app, check);
+    closeMenus(window);
+    // 3h-ext. Extensions written in the notebook: approval, live reload, an error on its line, the console.
+    checkExtensionPages(window, app, check);
     closeMenus(window);
     // 3i. Focus mode, the word count, typewriter scrolling and a custom shortcut.
     checkFocusAndShortcuts(window, app, check);

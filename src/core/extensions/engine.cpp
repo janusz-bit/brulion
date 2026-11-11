@@ -407,6 +407,7 @@ void Engine::stop()
     m_loaded.clear();
     m_commands.clear();
     m_views.clear();
+    m_hooks.clear();
     m_running = nullptr;
     m_runningRef = 0;
     m_uiRef = 0;
@@ -463,6 +464,7 @@ void Engine::pushEnvironment(const QString &extension)
     set("ask", &Engine::apiAsk);
     set("choose", &Engine::apiChoose);
     set("form", &Engine::apiForm);
+    set("on", &Engine::apiOn);
     lua_getref(L, m_uiRef);
     lua_setfield(L, -2, "ui");
     lua_setreadonly(L, -1, true);
@@ -493,6 +495,14 @@ void Engine::dropExtension(const QString &extension)
             }
         }
     }
+    for (auto it = m_hooks.begin(); it != m_hooks.end();) {
+        if (it->extension == extension) {
+            lua_unref(m_L, it->ref);
+            it = m_hooks.erase(it);
+        } else {
+            ++it;
+        }
+    }
     if (const auto it = m_loaded.constFind(extension); it != m_loaded.constEnd()) {
         lua_unref(m_L, it->envRef);
         m_loaded.erase(it);
@@ -513,7 +523,7 @@ Result Engine::load(const Extension &extension)
     options.debugLevel = 1; // line info for errors and tracebacks
     size_t size = 0;
     char *bytecode = luau_compile(src.constData(), size_t(src.size()), &options, &size);
-    const QByteArray chunk = "=" + extension.id.toUtf8();
+    const QByteArray chunk = "=" + (extension.name.isEmpty() ? extension.id : extension.name).toUtf8();
     int rc;
     {
         Unlimited unlimited(&m_unlimited);
@@ -574,7 +584,7 @@ QList<ViewInfo> Engine::views() const
 {
     QList<ViewInfo> out;
     for (auto it = m_views.cbegin(); it != m_views.cend(); ++it) {
-        ViewInfo info{it->extension, it.key().mid(it->extension.size() + 1), {}};
+        ViewInfo info{it->extension, it.key().mid(it->extension.size() + 1), {}, it->label, it->icon};
         if (it->actionsRef) {
             lua_getref(m_L, it->actionsRef);
             lua_pushnil(m_L);
@@ -767,6 +777,7 @@ int Engine::apiData(lua_State *L) { return finishApi(L, self(L)->dataImpl(L)); }
 int Engine::apiAsk(lua_State *L) { return finishApi(L, self(L)->questionImpl(L, "ask")); }
 int Engine::apiChoose(lua_State *L) { return finishApi(L, self(L)->questionImpl(L, "choose")); }
 int Engine::apiForm(lua_State *L) { return finishApi(L, self(L)->questionImpl(L, "form")); }
+int Engine::apiOn(lua_State *L) { return finishApi(L, self(L)->onImpl(L)); }
 
 int Engine::apiToday(lua_State *L)
 {
@@ -818,7 +829,7 @@ int Engine::commandImpl(lua_State *L)
         lua_pop(L, 1);
     }
     lua_pushvalue(L, 2);
-    Handler h{extension, lua_ref(L, -1), 0, label, needsBlock};
+    Handler h{extension, lua_ref(L, -1), 0, label, needsBlock, {}};
     lua_pop(L, 1);
     const QString key = extension + u'/' + name;
     if (const auto it = m_commands.constFind(key); it != m_commands.constEnd())
@@ -837,7 +848,19 @@ int Engine::viewImpl(lua_State *L)
         return failWith(L, u"b.view: argument 2 must be a function"_s);
     if (!lua_isnoneornil(L, 3) && lua_type(L, 3) != LUA_TTABLE)
         return failWith(L, u"b.view: argument 3 must be a table of actions"_s);
-    Handler h{extension, 0, 0, {}};
+    if (!lua_isnoneornil(L, 4) && lua_type(L, 4) != LUA_TTABLE)
+        return failWith(L, u"b.view: argument 4 must be a table ({label = …, icon = …})"_s);
+    Handler h{extension, 0, 0, {}, false, {}};
+    if (lua_type(L, 4) == LUA_TTABLE) {
+        lua_rawgetfield(L, 4, "label");
+        if (lua_type(L, -1) == LUA_TSTRING)
+            h.label = toQString(L, -1).left(200);
+        lua_pop(L, 1);
+        lua_rawgetfield(L, 4, "icon");
+        if (lua_type(L, -1) == LUA_TSTRING)
+            h.icon = toQString(L, -1).left(64);
+        lua_pop(L, 1);
+    }
     lua_pushvalue(L, 2);
     h.ref = lua_ref(L, -1);
     lua_pop(L, 1);
@@ -1099,6 +1122,94 @@ int Engine::dataImpl(lua_State *L)
     Unlimited unlimited(&m_unlimited);
     pushVariant(L, value);
     return 1;
+}
+
+QStringList Engine::hookEvents() { return {u"save"_s, u"change"_s}; }
+
+int Engine::onImpl(lua_State *L)
+{
+    const QString extension = extensionOf(L);
+    QString event;
+    if (!argString(L, 1, "b.on", &event))
+        return kRaise;
+    if (!hookEvents().contains(event))
+        return failWith(L, u"b.on: unknown event \"%1\" (%2)"_s.arg(event, hookEvents().join(u", "_s)));
+    if (lua_type(L, 2) != LUA_TFUNCTION)
+        return failWith(L, u"b.on: argument 2 must be a function"_s);
+    if (m_hooks.size() >= 256)
+        return failWith(L, u"b.on: too many hooks"_s);
+    lua_pushvalue(L, 2);
+    const int ref = lua_ref(L, -1);
+    lua_pop(L, 1);
+    m_hooks.insert(m_nextHook++, Hook{extension, event, ref});
+    return 0;
+}
+
+QList<HookInfo> Engine::hooks(const QString &event) const
+{
+    QList<HookInfo> out;
+    for (auto it = m_hooks.cbegin(); it != m_hooks.cend(); ++it)
+        if (event.isEmpty() || it->event == event)
+            out.append({it.key(), it->extension, it->event});
+    return out;
+}
+
+Result Engine::runHook(int id, const QVariantMap &event)
+{
+    if (!m_L)
+        return {Status::Error, {}, u"the extension engine is not started"_s};
+    const auto it = m_hooks.constFind(id);
+    if (it == m_hooks.constEnd())
+        return {Status::NotFound, {}, u"no hook %1"_s.arg(id)};
+    return call(it->extension, it->ref, {event});
+}
+
+void Engine::removeHook(int id)
+{
+    const auto it = m_hooks.constFind(id);
+    if (it == m_hooks.constEnd())
+        return;
+    if (m_L)
+        lua_unref(m_L, it->ref);
+    m_hooks.erase(it);
+}
+
+Result Engine::evaluate(const QString &extension, const QString &code, const QString &name)
+{
+    if (!m_L)
+        return {Status::Error, {}, u"the extension engine is not started"_s};
+    const auto loaded = m_loaded.constFind(extension);
+    if (loaded == m_loaded.constEnd())
+        return {Status::NotFound, {}, u"no extension "_s + extension};
+    releaseThread();
+    lua_CompileOptions options = {};
+    options.optimizationLevel = 1;
+    options.debugLevel = 1;
+    // An expression first ("1 + 1", "b.today()"): its value is the result. "return " shares the
+    // first line, so the line numbers stay those of the code.
+    size_t size = 0;
+    const QByteArray expression = "return " + code.toUtf8();
+    char *bytecode = luau_compile(expression.constData(), size_t(expression.size()), &options, &size);
+    if (size == 0 || bytecode[0] == 0) { // a syntax error: statements then
+        std::free(bytecode);
+        const QByteArray statements = code.toUtf8();
+        bytecode = luau_compile(statements.constData(), size_t(statements.size()), &options, &size);
+    }
+    const QByteArray chunk = "=" + (name.isEmpty() ? extension : name).toUtf8();
+    int rc;
+    {
+        Unlimited unlimited(&m_unlimited);
+        lua_getref(m_L, loaded->envRef);
+        rc = luau_load(m_L, chunk.constData(), bytecode, size, -1);
+    }
+    std::free(bytecode);
+    if (rc != 0) {
+        const QString message = toQString(m_L, -1);
+        lua_pop(m_L, 2);
+        return {Status::Error, {}, message};
+    }
+    lua_remove(m_L, -2); // the environment (the chunk keeps it)
+    return run(extension, {});
 }
 
 int Engine::questionImpl(lua_State *L, const char *kind)

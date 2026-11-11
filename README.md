@@ -121,6 +121,12 @@ Pandoc Markdown document for Word, LibreOffice, PDF or EPUB).
   lb, bodyweight, timed sets, runs), plans that add weight when every set was done, today's workout
   with steppers and a rest timer, records and a chart of each exercise's progress — Brulion's first
   extension, written in Luau.
+* **Extensions in the notebook**, as in Emacs and TiddlyWiki: a page tagged `#extension` whose
+  ```` ```luau ```` blocks are code adds commands, views and reactions to saves and changes; saved,
+  it runs again at once (an error names the page's line, the previous version keeps running). Code
+  that arrives by sync or import runs on a device only once approved there. The gym's own source
+  can become a page of the notebook and run from there; the **Luau console** evaluates code with
+  the notebook's API and shows what extensions print (docs/EXTENSIONS.md).
 * Two note modes: a **document** (Obsidian-like live preview: paragraphs, headings and plain
   lists, edited in place) or an **outline** (Logseq-like: every bullet is a block). Chosen when
   a page is created and switchable at any time; stored in the note as `brulion: document` /
@@ -316,7 +322,13 @@ przykładowym notatnikiem.
   #nawyk`) — z serią, skutecznością i kalendarzem miesiąca. **Siłownia** (Ustawienia → Rozszerzenia):
   treningi zapisane w dzienniku (`- [[Przysiad]] 100 kg 5×5`), plany, które dokładają ciężaru, gdy
   wszystkie serie wyszły, dzisiejszy trening z licznikami i timerem przerwy, rekordy i wykres
-  postępu każdego ćwiczenia — pierwsze rozszerzenie Brulionu, napisane w Luau. Tagi działają jak linki do stron, jak
+  postępu każdego ćwiczenia — pierwsze rozszerzenie Brulionu, napisane w Luau. **Rozszerzenia w
+  notatniku**, jak w Emacsie i TiddlyWiki: strona z tagiem `#rozszerzenie`, której bloki
+  ```` ```luau ```` są kodem, dodaje polecenia, widoki i reakcje na zapis i zmiany; po zapisie działa od
+  razu (błąd wskazuje wiersz strony, a poprzednia wersja działa dalej). Kod, który przyszedł z
+  synchronizacji albo importu, działa na urządzeniu dopiero po zatwierdzeniu. Kod Siłowni można
+  przenieść na stronę notatnika i zmieniać tam, a **konsola Luau** wykonuje kod z API notatnika i
+  pokazuje, co wypisują rozszerzenia. Tagi działają jak linki do stron, jak
   w Logseq: `#praca` otwiera stronę „praca” (tworzoną przy pierwszym wpisie), jej odnośniki
   pokazują bloki z tym tagiem, a zmiana nazwy strony poprawia też tagi. Odnośnik do każdego
   bloku i nagłówka — `((…))`, `[[Strona#^…]]`, `[[Strona#Nagłówek]]` — skopiujesz z menu bloku

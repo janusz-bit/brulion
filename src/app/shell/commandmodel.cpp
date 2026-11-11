@@ -492,10 +492,13 @@ static QList<Command> editorCommands(const AppController *app, bool editor)
 /// All commands in the palette's order: buildCommands() with the note's commands (editorCommands())
 /// after "Markdown source", the event log after the sync center, the folder commands after "New
 /// page", the tab commands after "Forward" and the backup commands at the end.
-/// The extensions' commands (docs/EXTENSIONS.md): "Gym" (go.gym) while the gym is on, then every
-/// command of a loaded extension as "ext.<extension>.<name>" with the extension's own label. A
-/// command on the block under the caret (meta.block) only in an editor, run there
-/// (uiAction "extension:<extension>/<name>", BlockEditor.runExtensionCommand()).
+/// The extensions' commands (docs/EXTENSIONS.md): "Gym" (go.gym) while the gym is on, every
+/// command of a loaded extension as "ext.<extension>.<name>" with the extension's own label, every
+/// view with a label as "extview.<extension>.<name>" (the route "extension"), then the
+/// extensions' own tools: the Luau console, "Run Luau block", "New extension", "Reload
+/// extensions", Settings → Extensions. A command on the block under the caret (meta.block, "Run
+/// Luau block") only in an editor, run there (uiAction "extension:<extension>/<name>",
+/// BlockEditor.runExtensionCommand()).
 static QList<Command> extensionCommands(const AppController *app, bool blocks)
 {
     QList<Command> out;
@@ -504,9 +507,26 @@ static QList<Command> extensionCommands(const AppController *app, bool blocks)
     if (extensions->gymEnabled())
         out.append({u"go.gym"_s, CommandModel::tr("Gym"), CommandModel::tr("Today's workout, plans, progress"), u"dumbbell"_s,
                     {}, ready});
+    const auto iconOf = [](const QString &extension) { return extension == u"silownia" ? u"dumbbell"_s : u"puzzle"_s; };
     for (const extensions::CommandInfo &c : extensions->commands())
-        out.append({u"ext."_s + c.extension + u'.' + c.name, c.label, extensions->title(c.extension), u"dumbbell"_s, {},
-                    ready && (!c.needsBlock || blocks)});
+        out.append({u"ext."_s + c.extension + u'.' + c.name, c.label, extensions->title(c.extension), iconOf(c.extension),
+                    {}, ready && (!c.needsBlock || blocks)});
+    for (const extensions::ViewInfo &v : extensions->views()) {
+        if (!v.label.isEmpty() && v.extension != u"silownia")
+            out.append({u"extview."_s + v.extension + u'.' + v.name, v.label, extensions->title(v.extension),
+                        v.icon.isEmpty() ? iconOf(v.extension) : v.icon, {}, ready});
+    }
+    out.append({u"go.console"_s, CommandModel::tr("Luau console"),
+                CommandModel::tr("Evaluate Luau with the notebook's API; what extensions print"), u"terminal"_s, {},
+                ready});
+    out.append({u"extensions.runBlock"_s, CommandModel::tr("Run Luau block"),
+                CommandModel::tr("The ```luau block under the cursor, in the console"), u"play"_s, {}, ready && blocks});
+    out.append({u"extensions.new"_s, CommandModel::tr("New extension"),
+                CommandModel::tr("A page of Luau code that adds commands and views"), u"puzzle"_s, {}, ready});
+    out.append({u"extensions.reload"_s, CommandModel::tr("Reload extensions"),
+                CommandModel::tr("Start the extensions again from their pages"), u"refresh-cw"_s, {}, ready});
+    out.append({u"extensions.settings"_s, CommandModel::tr("Extensions"),
+                CommandModel::tr("Settings: built-in extensions and the notebook's own"), u"puzzle"_s, {}, true});
     return out;
 }
 
@@ -591,7 +611,24 @@ bool CommandModel::run(const QString &id)
         m_app->openPeriodicNote(u"month"_s, QString(), periodOffset(id));
     else if (id == u"capture")
         m_app->quickCapture();
-    else if (id.startsWith(u"ext.")) {
+    else if (id == u"extensions.runBlock")
+        m_app->requestUiAction(u"extension:*/run"_s);
+    else if (id == u"extensions.new") {
+        const QString path = m_app->workspace()->extensions()->createExtension();
+        if (path.isEmpty())
+            return false;
+        m_app->openPage(path);
+    } else if (id == u"extensions.reload")
+        m_app->workspace()->extensions()->reloadAll();
+    else if (id == u"extensions.settings")
+        m_app->navigate({{u"view"_s, u"settings"_s}, {u"section"_s, u"extensions"_s}});
+    else if (id.startsWith(u"extview.")) {
+        const QString extension = id.section(u'.', 1, 1), name = id.section(u'.', 2);
+        m_app->navigate({{u"view"_s, u"extension"_s},
+                         {u"extension"_s, extension},
+                         {u"name"_s, name},
+                         {u"title"_s, m_app->workspace()->extensions()->viewTitle(extension, name)}});
+    } else if (id.startsWith(u"ext.")) {
         const QString extension = id.section(u'.', 1, 1), name = id.section(u'.', 2);
         const auto commands = m_app->workspace()->extensions()->commands();
         const auto c = std::ranges::find_if(commands, [&](const extensions::CommandInfo &info) {

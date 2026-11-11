@@ -337,7 +337,8 @@ Rectangle {
                 text: titles.routeTitle(titles.field(entry.route, "view"),
                                         titles.field(entry.route, "path"),
                                         titles.field(entry.route, "date"),
-                                        titles.field(entry.route, "tag"))
+                                        titles.field(entry.route, "tag"),
+                                        titles.field(entry.route, "title"))
                 // (No view icon: a checkable item draws its check where the icon would be.)
                 checkable: true
                 // Not `checked`: a checkable item has already toggled it when onTriggered runs.

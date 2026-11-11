@@ -8,6 +8,7 @@
 //   WorkspaceReminders, WorkspaceSync, WorkspaceGitHub, WorkspaceBackups, WorkspaceExtensions
 //                    uncreatable —      Workspace.reminders / .sync / .github / .backups / .extensions
 //   ExtensionFormModel, ExtensionControlsModel   uncreatable — a question's fields, a row's controls
+//   ExtensionListModel, ExtensionConsoleModel    uncreatable — Workspace.extensions.list / .console
 //   ExtensionView    creatable — ExtensionView { extensions: Workspace.extensions; extension; view }
 //   ReplaceSession   uncreatable — Workspace.replacing (the notebook-wide replace)
 //   CommandModel     singleton — the command palette's commands
@@ -173,6 +174,20 @@ struct ExtensionFormModelForeign {
     QML_FOREIGN(brulion::shell::ExtensionFormModel)
     QML_NAMED_ELEMENT(ExtensionFormModel)
     QML_UNCREATABLE("Use Workspace.extensions.questionFields")
+};
+
+struct ExtensionListModelForeign {
+    Q_GADGET
+    QML_FOREIGN(brulion::shell::ExtensionListModel)
+    QML_NAMED_ELEMENT(ExtensionListModel)
+    QML_UNCREATABLE("Use Workspace.extensions.list")
+};
+
+struct ExtensionConsoleModelForeign {
+    Q_GADGET
+    QML_FOREIGN(brulion::shell::ExtensionConsoleModel)
+    QML_NAMED_ELEMENT(ExtensionConsoleModel)
+    QML_UNCREATABLE("Use Workspace.extensions.console")
 };
 
 struct ExtensionControlsModelForeign {

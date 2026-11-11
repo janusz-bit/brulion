@@ -766,6 +766,39 @@ those on the block under the caret (`meta.block`) are enabled in an editor and r
 `extension:<id>/<name>` → `BlockEditor.runExtensionCommand`: `PageController.savedLineAt(row)` saves
 first, so the extension reads the line as shown).
 
+
+## Extensions
+
+Settings → **Extensions** (`SettingsView.qml`, docs/EXTENSIONS.md): the gym's switch; **The gym's
+code** — "Edit the code" writes its source into a page of the notebook (`Rozszerzenia/Siłownia.md`)
+and opens it, after which the gym runs from that page; "Restore" puts the page in the trash. **In
+this notebook**: "New extension" (a page in `Rozszerzenia/` with an example — a command, a view, a
+hook — approved on this device, opened), "Console", and a row per extension page
+(`Workspace.extensions.list`): its title, its state ("Runs: 2 commands, 1 view, 1 reaction", "Error
+on line 14: …", "New or changed elsewhere: read the code, then run it on this device.", "Off on
+this device."), what it may do and its description; "Code" (or "Line 14") opens the page (at the
+line of the error), "Run" approves it, "Switch off" / "Switch on".
+
+An extension page shows its state in its bottom-left corner (`pageExtensionState` in
+`PageView.qml`): "Extension: runs", the error with its line and a button to it, "new or changed
+elsewhere — read it, then run it" with "Run", "off on this device" with "Switch on"; the console's
+button. It follows every save: the page's code loads again as it is saved.
+
+**Luau console** (`qml/views/ConsoleView.qml`, route `console`, the palette's "Luau console", icon
+`terminal`): a line of Luau and "Run" (Enter); Up / Down recall what was typed; the lines above —
+the input (`> …`), values, `print()` and `b.log` of extensions with the extension's name, errors in
+red — "Copy everything", "Clear". **Run Luau block** (the palette, in an editor): the
+```` ```luau ```` block under the caret runs in the console; its value or error shows as a toast.
+
+**An extension's view** (`qml/views/ExtensionRouteView.qml`, route `extension` {extension, name,
+title, …params}): a view registered with a label (`b.view(name, render, actions, {label, icon})`)
+is a palette command ("extview.<extension>.<name>"); the view is drawn by `ShellExtensionView` like
+the gym's, its label is the title (kept in the route for tabs); its "open" nodes navigate to
+another view of the extension with their params.
+
+The palette also has "New extension", "Reload extensions" (a fresh VM, every extension loaded
+again) and "Extensions" (Settings → Extensions). Extension commands carry the extension's title as
+their subtitle and the icon `puzzle` (the gym's `dumbbell`).
 ## Statistics and focus mode
 
 **Word count** (`stats/textstats.h`, `PageController.pageStats()` / `selectionStats(text)`): the

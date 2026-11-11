@@ -763,7 +763,10 @@ private:
                 emitJson({{u"ev"_s, u"error"_s}, {u"what"_s, u"no editor for "_s + page}});
                 return;
             }
-            QMetaObject::invokeMethod(ed, "startEditing", Q_ARG(QVariant, row), Q_ARG(QVariant, -1));
+            // Typed QML functions (compiled QML: startEditing(row: int, cursor: int)) take ints;
+            // trees from before that took QVariants.
+            if (!QMetaObject::invokeMethod(ed, "startEditing", Q_ARG(int, row), Q_ARG(int, -1)))
+                QMetaObject::invokeMethod(ed, "startEditing", Q_ARG(QVariant, row), Q_ARG(QVariant, -1));
         });
         waitUntil(u"editing"_s, [this] { return focusIsText(); }, 10000);
         wait(400);

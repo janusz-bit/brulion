@@ -28,11 +28,11 @@ QtObject {
     function field(r: var, key: string): string {
         return AppController.routeText(r, key)
     }
-    /// Human title of a route, from its `view`, `path`, `date` and `tag` (a `var` route cannot be
-    /// read more than once by compiled code):
+    /// Human title of a route, from its `view`, `path`, `date`, `tag` and `title` (an extension's
+    /// view keeps its label there; a `var` route cannot be read more than once by compiled code):
     ///   titles.routeTitle(titles.field(r, "view"), titles.field(r, "path"), titles.field(r, "date"),
-    ///                     titles.field(r, "tag"))
-    function routeTitle(view: string, path: string, date: string, tag: string): string {
+    ///                     titles.field(r, "tag"), titles.field(r, "title"))
+    function routeTitle(view: string, path: string, date: string, tag: string, title: string): string {
         switch (view) {
         case "journals": return qsTranslate("AppShell", "Journals")
         case "journal": return longDate(date)
@@ -41,6 +41,8 @@ QtObject {
         case "tasks": return qsTranslate("AppShell", "Tasks")
         case "habits": return qsTranslate("AppShell", "Habits")
         case "gym": return qsTranslate("AppShell", "Gym")
+        case "console": return qsTranslate("AppShell", "Luau console")
+        case "extension": return title !== "" ? title : qsTranslate("AppShell", "Extension")
         case "graph": return qsTranslate("AppShell", "Graph")
         case "search": return qsTranslate("AppShell", "Search")
         case "allPages": return path !== "" ? Js.sliceFrom(path, Js.lastIndexOf(path, "/") + 1)
@@ -69,6 +71,8 @@ QtObject {
         case "tasks": return "list-todo"
         case "habits": return "flame"
         case "gym": return "dumbbell"
+        case "console": return "terminal"
+        case "extension": return "puzzle"
         case "graph": return "waypoints"
         case "search": return "search"
         case "allPages": return "files"

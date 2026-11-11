@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import QtQuick.Layouts
 import QtQuick.Templates as T
 import Brulion
 
@@ -804,6 +805,102 @@ FocusScope {
         target: editor
         property: "propertiesExpanded"
         value: AppSettings.propertiesExpanded
+    }
+
+    // An extension page's state (docs/UI.md "Extensions"): its code runs, waits for approval on
+    // this device, failed on a line (the previous version may still run) or is off — with what to
+    // do about it. Saving the page loads its code again, so this follows the editing.
+    Rectangle {
+        id: extensionState
+        objectName: "pageExtensionState"
+        readonly property string state: Workspace.extensions.revision >= 0 && root.noteRoute && root.routePath !== ""
+                                        ? Workspace.extensions.pageState(root.routePath) : ""
+        readonly property string message: Workspace.extensions.revision >= 0 && state !== ""
+                                          ? Workspace.extensions.pageMessage(root.routePath) : ""
+        readonly property int errorLine: Workspace.extensions.revision >= 0 && state === "error"
+                                         ? Workspace.extensions.pageErrorLine(root.routePath) : -1
+        readonly property string label: {
+            switch (state) {
+            case "running": return qsTr("Extension: runs")
+            case "error": return errorLine >= 0 ? qsTr("Error on line %1: %2").arg(errorLine + 1).arg(message)
+                                                : qsTr("Error: %1").arg(message)
+            case "approval": return qsTr("Extension: new or changed elsewhere — read it, then run it")
+            case "off": return qsTr("Extension: off on this device")
+            case "duplicate": return qsTr("Extension: another page has the same name")
+            case "builtinOff": return qsTr("Extension: the built-in one it replaces is off")
+            case "problem": return qsTr("Extension: no ```luau block yet")
+            default: return ""
+            }
+        }
+        visible: state !== "" && !root.inSidePanel && !editor.toolbarVisible
+        anchors.left: parent.left
+        anchors.bottom: parent.bottom
+        anchors.leftMargin: Theme.space4
+        anchors.bottomMargin: Theme.space2
+        z: 2
+        width: Math.min(stateRow.implicitWidth + 2 * Theme.space2, parent.width - 2 * Theme.space4)
+        height: stateRow.implicitHeight + 2 * Theme.space1
+        radius: Theme.radius
+        // Opaque (the page's text scrolls under it), tinted by its state.
+        color: Theme.bg
+        border.color: state === "error" ? Theme.danger : state === "approval" ? Theme.warning : Theme.borderSubtle
+        Accessible.role: Accessible.StatusBar
+        Accessible.name: extensionState.label
+
+        Rectangle {
+            anchors.fill: parent
+            anchors.margins: 1
+            radius: Theme.radius
+            color: extensionState.state === "error" ? Theme.dangerBg
+                                                    : extensionState.state === "approval" ? Theme.warningBg : Theme.bgSunken
+        }
+
+        RowLayout {
+            id: stateRow
+            x: Theme.space2
+            y: Theme.space1
+            width: parent.width - 2 * Theme.space2
+            spacing: Theme.space2
+            BIcon {
+                name: extensionState.state === "error" ? "circle-alert"
+                                                       : extensionState.state === "approval" ? "triangle-alert" : "puzzle"
+                size: Theme.iconSizeSm
+                color: extensionState.state === "error" ? Theme.dangerText : Theme.fgMuted
+            }
+            BText {
+                Layout.fillWidth: true
+                Layout.maximumWidth: 420
+                text: extensionState.label
+                variant: "small"
+                elide: Text.ElideRight
+            }
+            BButton {
+                objectName: "pageExtensionApprove"
+                visible: extensionState.state === "approval"
+                size: "small"
+                variant: "primary"
+                text: qsTr("Run")
+                onClicked: Workspace.extensions.approve(root.routePath)
+            }
+            BButton {
+                visible: extensionState.state === "error" && extensionState.errorLine >= 0
+                size: "small"
+                text: qsTr("Line %1").arg(extensionState.errorLine + 1)
+                onClicked: AppController.openPage(root.routePath, extensionState.errorLine)
+            }
+            BButton {
+                visible: extensionState.state === "off"
+                size: "small"
+                text: qsTr("Switch on")
+                onClicked: Workspace.extensions.setPageOn(root.routePath, true)
+            }
+            BIconButton {
+                label: qsTr("Luau console")
+                iconName: "terminal"
+                size: "small"
+                onClicked: AppController.navigate({ view: "console" })
+            }
+        }
     }
 
     // The page's word count in the corner (the selection's while there is one); its details in a

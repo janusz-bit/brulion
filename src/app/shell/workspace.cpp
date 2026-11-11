@@ -496,6 +496,8 @@ void Workspace::indexingFinished()
     if (!m_remindersPaused)
         m_reminders->start();
     m_backups->start();
+    // Every note is known: the extensions written in the notebook can be found and run.
+    m_extensions->indexReady();
     setReady(false);
 #ifdef Q_OS_WASM
     {
@@ -582,8 +584,11 @@ void Workspace::onVaultChanged(const QList<VaultChange> &changes)
     }
     for (const QString &path : std::as_const(changed))
         Q_EMIT fileChanged(path);
-    if (!changed.isEmpty())
+    if (!changed.isEmpty()) {
+        // An extension page loads again, "change" hooks run (docs/EXTENSIONS.md).
+        m_extensions->notesChanged(changed);
         Q_EMIT filesChanged(changed);
+    }
 }
 
 // ---- EditorHost: files ----------------------------------------------------------------------
@@ -605,6 +610,7 @@ bool Workspace::write(const QString &path, const QString &content)
     // (PageController compares with what it wrote).
     if (!m_vault)
         return false;
+    m_extensions->savedByEditor(path, content); // this device's own edit ("save" hooks, trust)
     const bool ok = m_vault->writeText(path, content, ChangeSource::User);
     if (!ok)
         Q_EMIT errorOccurred(tr("Could not save %1: %2").arg(path, m_vault->errorString()));
@@ -616,6 +622,7 @@ EditorHost::WriteResult Workspace::writeIfUnchanged(const QString &path, const Q
 {
     if (!m_vault)
         return WriteResult::Failed;
+    m_extensions->savedByEditor(path, content); // this device's own edit ("save" hooks, trust)
     // A change found on disk is reported by the vault right away (onVaultChanged: fileChanged),
     // so the editor merges it before it saves again.
     switch (m_vault->writeTextIfUnchanged(path, content, expected, ChangeSource::User)) {

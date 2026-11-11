@@ -127,7 +127,8 @@ FocusScope {
     readonly property string title: shell.routeView.viewTitle !== "" ? shell.routeView.viewTitle
                                     : routeTitles.routeTitle(shell.currentView, shell.routePath,
                                                              routeTitles.field(AppController.currentRoute, "date"),
-                                                             routeTitles.field(AppController.currentRoute, "tag"))
+                                                             routeTitles.field(AppController.currentRoute, "tag"),
+                                                             routeTitles.field(AppController.currentRoute, "title"))
     /// Folders above the current page, or above the folder All pages shows (with "All
     /// pages" first): their titles (`crumbs`) and paths (`crumbPaths`; "" the notebook's root) —
     /// a crumb opens All pages in that folder.
@@ -553,7 +554,8 @@ FocusScope {
             pinnedTitle: routeTitles.routeTitle(routeTitles.field(AppController.sidePanelRoute, "view"),
                                                 routeTitles.field(AppController.sidePanelRoute, "path"),
                                                 routeTitles.field(AppController.sidePanelRoute, "date"),
-                                                routeTitles.field(AppController.sidePanelRoute, "tag"))
+                                                routeTitles.field(AppController.sidePanelRoute, "tag"),
+                                                routeTitles.field(AppController.sidePanelRoute, "title"))
             contextPanel: shell.routeView.viewSidePanel
         }
     }

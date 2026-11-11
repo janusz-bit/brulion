@@ -12,7 +12,7 @@ QStringList routeViews()
                                    u"habits"_s,   u"graph"_s,   u"search"_s,       u"allPages"_s, u"tags"_s,
                                    u"tag"_s,      u"sync"_s,    u"importExport"_s, u"history"_s,  u"trash"_s,
                                    u"cleanup"_s,  u"replace"_s, u"settings"_s,     u"logs"_s,     u"drawing"_s,
-                                   u"gym"_s};
+                                   u"gym"_s,      u"console"_s, u"extension"_s};
     return views;
 }
 

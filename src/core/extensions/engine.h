@@ -11,6 +11,8 @@
 //       r = engine.resume(answerOf(r.value));     // QVariant() = cancelled (choose/form give nil)
 //   engine.render(u"silownia"_s, u"today"_s, params)          // a view: r.value = its node tree
 //   engine.act(u"silownia"_s, u"today"_s, u"addSet"_s, args)  // one of the view's actions
+//   for (const HookInfo &h : engine.hooks(u"save"_s)) engine.runHook(h.id, {{u"page"_s, title}});
+//   engine.evaluate(u"*console*"_s, u"1 + 1"_s, u"console"_s) // the console: r.value = 2
 //
 // Limits (Limits): a time limit per call (also per resume and load) enforced on the engine's own
 // thread by the VM's interrupt callback — safepoints at loops, calls, returns, the pattern matcher
@@ -31,6 +33,7 @@
 #include <QElapsedTimer>
 #include <QHash>
 #include <QList>
+#include <QMap>
 #include <QString>
 #include <QStringList>
 #include <QVariant>
@@ -49,10 +52,11 @@ struct Limits
 
 struct Extension
 {
-    QString id; ///< "silownia" — also the chunk name in error messages
+    QString id; ///< "silownia"
     QString source; ///< Luau source
     QStringList permissions; ///< "write" lets it change notes (reading is always allowed)
     QVariantMap data; ///< b.data(name): read-only data bundled with it (parsed JSON)
+    QString name; ///< the name in error messages ("Licznik słów:14: …"); "" = the id
 };
 
 enum class Status {
@@ -86,6 +90,16 @@ struct ViewInfo
     QString extension;
     QString name;
     QStringList actions;
+    QString label; ///< b.view's meta.label: a view the palette offers; "" = none
+    QString icon; ///< meta.icon, an icon name of the app ("" = the extensions' own)
+};
+
+/// A function an extension registered with b.on(event, fn) (docs/EXTENSIONS.md "Hooks").
+struct HookInfo
+{
+    int id = 0; ///< in the order of registration
+    QString extension;
+    QString event; ///< "save" | "change"
 };
 
 class Engine
@@ -111,11 +125,23 @@ public:
 
     QList<CommandInfo> commands() const; ///< sorted by extension, then name
     QList<ViewInfo> views() const;
+    bool isLoaded(const QString &id) const { return m_loaded.contains(id); }
+    /// The events b.on accepts.
+    static QStringList hookEvents();
+    /// The hooks of `event` ("" = all), in the order of registration.
+    QList<HookInfo> hooks(const QString &event = QString()) const;
+    /// Calls a hook with `event` (its one argument); NotFound when it is gone.
+    Result runHook(int id, const QVariantMap &event);
+    void removeHook(int id);
 
     Result runCommand(const QString &extension, const QString &name, const QVariantMap &ctx);
     Result render(const QString &extension, const QString &view, const QVariantMap &params);
     Result act(const QString &extension, const QString &view, const QString &action, const QVariantMap &args);
     Result resume(const QVariant &answer);
+    /// Runs `code` in the environment of the loaded extension `extension` (its globals, its `b`,
+    /// its permissions): an expression gives its value ("1 + 1" → 2), statements run as written.
+    /// `name` names the code in errors ("console:1: …"). The console and "Run Luau block".
+    Result evaluate(const QString &extension, const QString &code, const QString &name);
     bool isWaiting() const { return m_running != nullptr; }
     void cancel(); ///< drops the call waiting for an answer, if any
 
@@ -130,6 +156,13 @@ private:
         int actionsRef = 0; // a view's actions table, 0 = none
         QString label;
         bool needsBlock = false;
+        QString icon;
+    };
+    struct Hook
+    {
+        QString extension;
+        QString event;
+        int ref = 0;
     };
     struct Loaded
     {
@@ -168,6 +201,7 @@ private:
     static int apiAsk(lua_State *L);
     static int apiChoose(lua_State *L);
     static int apiForm(lua_State *L);
+    static int apiOn(lua_State *L);
 
     int commandImpl(lua_State *L);
     int viewImpl(lua_State *L);
@@ -187,6 +221,7 @@ private:
     int timerImpl(lua_State *L);
     int dataImpl(lua_State *L);
     int questionImpl(lua_State *L, const char *kind);
+    int onImpl(lua_State *L);
 
     bool mayWrite(lua_State *L, const QString &extension, const char *function);
     void pushEnvironment(const QString &extension);
@@ -213,6 +248,8 @@ private:
     QHash<QString, Loaded> m_loaded;
     QHash<QString, Handler> m_commands; // "extension/name"
     QHash<QString, Handler> m_views;
+    QMap<int, Hook> m_hooks;
+    int m_nextHook = 1;
     lua_State *m_running = nullptr; // the call in progress or waiting for an answer
     int m_runningRef = 0;
     bool m_asking = false;

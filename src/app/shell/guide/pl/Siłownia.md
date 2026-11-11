@@ -44,4 +44,4 @@ przerwa:: 3 min
 
 **Siłownia: ćwiczenie z katalogu** zakłada stronę ćwiczenia spośród 51 popularnych (mięśnie, sprzęt), po polsku albo po angielsku, w języku Twoich notatek.
 
-Wszystko zostaje zwykłym Markdownem: Obsidian i Logseq pokażą treningi jako zwykły konspekt z linkami i zadaniami. Siłownia to pierwsze rozszerzenie Brulionu, napisane w Luau.
+Wszystko zostaje zwykłym Markdownem: Obsidian i Logseq pokażą treningi jako zwykły konspekt z linkami i zadaniami. Siłownia to pierwsze rozszerzenie Brulionu, napisane w Luau: jej kod może stać się stroną Twojego notatnika i być zmieniany tam (zobacz [[Rozszerzenia]]).

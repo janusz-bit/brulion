@@ -102,6 +102,11 @@ public:
     Q_INVOKABLE void refresh();
     /// One parameter of the view ("" removes it).
     Q_INVOKABLE void setParam(const QString &key, const QString &value);
+    /// The params from a route of the view "extension" ({extension, name, title, …}): every key
+    /// but those four (ExtensionRouteView).
+    Q_INVOKABLE void setRouteParams(const QVariantMap &route);
+    /// The route that shows `view` of this extension with `params` (an "open" node's request).
+    Q_INVOKABLE QVariantMap routeFor(const QString &view, const QVariantMap &params) const;
     /// A line's own action: open (another view of the extension), run (a command), link (the page).
     Q_INVOKABLE void activate(int row);
     /// A control of a row: a button, a check, a stepper (`value`: the stepper's new value), open,

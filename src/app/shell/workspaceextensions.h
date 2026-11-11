@@ -1,24 +1,36 @@
 #pragma once
 // WorkspaceExtensions — the extensions of the open notebook (docs/EXTENSIONS.md, QML:
 // Workspace.extensions): the Luau engine (core extensions::Engine) over a NotebookHost bound to the
-// Workspace's vault and index, the built-in extensions the settings switch on (the gym), their
-// palette commands, the question a command or an action waits on (b.ask / b.choose / b.form, shown
-// by ExtensionQuestionDialog.qml), messages (toasts) and the rest timer (b.timer: a countdown in the
-// app and a notification when it ends).
+// Workspace's vault and index; the built-in extensions the settings switch on (the gym) and the
+// extensions written in the notebook (pages tagged #rozszerzenie, pageextension.h) — each page's
+// code approved per device (a hash in the vault's LocalStore) and loaded again whenever its page
+// changes; their palette commands, views and hooks (b.on "save" / "change"); the question a
+// command or an action waits on (b.ask / b.choose / b.form, shown by ShellExtensionQuestion.qml);
+// the Luau console (evaluate(), "Run Luau block"); messages (toasts) and the rest timer
+// (b.timer: a countdown in the app and a notification when it ends).
 //
 //   extensions->runCommand(u"silownia"_s, u"start"_s);                 // the palette
 //   extensions->runCommand(u"silownia"_s, u"add-set"_s, path, line);   // on the block under the caret
 //   QML: Workspace.extensions.questionKind ("" | "ask" | "choose" | "form") → answerText / answerChoice /
 //        setFieldValue + answerForm / cancelQuestion
 //
+// The Workspace tells it about the notebook: indexReady() (scan every page once), notesChanged()
+// (the pages a change touched: an extension page loads again, "change" hooks), savedByEditor()
+// (this device's editor saved a page: "save" hooks; an approved extension's new code stays
+// approved — the code someone writes here is theirs, code that arrives by sync waits).
+//
 // Views (ExtensionViewModel) render through render() and act(); a view renders again after
 // changed() (a command or an action finished, an extension was switched on or off).
 //
 // Single-threaded (the GUI thread, the Workspace's).
 
+#include "extensionmodels.h"
+
 #include "extensions/engine.h"
+#include "extensions/pageextension.h"
 
 #include <QAbstractListModel>
+#include <QSet>
 #include <QDateTime>
 #include <QObject>
 #include <QStringList>
@@ -89,6 +101,15 @@ class WorkspaceExtensions : public QObject {
     Q_PROPERTY(QString restLabel READ restLabel NOTIFY restChanged FINAL)
     /// The time left as "1:47".
     Q_PROPERTY(QString restText READ restText NOTIFY restChanged FINAL)
+    /// Every extension with its state (Settings → Extensions).
+    Q_PROPERTY(brulion::shell::ExtensionListModel *list READ list CONSTANT FINAL)
+    /// The Luau console's lines.
+    Q_PROPERTY(brulion::shell::ExtensionConsoleModel *console READ console CONSTANT FINAL)
+    /// Counts the changes of states, commands and views: bindings that call pageState() & co.
+    /// read it to follow them.
+    Q_PROPERTY(int revision READ revision NOTIFY revisionChanged FINAL)
+    /// Extension pages waiting for approval on this device.
+    Q_PROPERTY(int waitingApproval READ waitingApproval NOTIFY revisionChanged FINAL)
 
 public:
     using Clock = std::function<QDateTime()>;
@@ -106,12 +127,58 @@ public:
     QString language() const { return m_language; }
     bool gymEnabled() const { return m_enabled.contains(QStringLiteral("silownia")); }
     QList<extensions::CommandInfo> commands() const;
-    /// The title of a built-in extension in the UI language ("Siłownia"), its id when unknown.
-    QString title(const QString &extension) const;
+    QList<extensions::ViewInfo> views() const;
+    /// An extension's title: a built-in's in the UI language ("Siłownia"), a page's title, the
+    /// console's ("Luau"), else its id.
+    Q_INVOKABLE QString title(const QString &extension) const;
+    ExtensionListModel *list() const { return m_list; }
+    ExtensionConsoleModel *console() const { return m_console; }
+    int revision() const { return m_revision; }
+    int waitingApproval() const;
+
+    // ---- the notebook (called by the Workspace) -------------------------------------------------
+    /// The index is complete: every extension page is read and the approved ones run.
+    void indexReady();
+    /// Notes changed (created, modified, deleted, renamed: both paths), already in the index.
+    void notesChanged(const QStringList &paths);
+    /// This device's editor is about to write `content` to `path` (its own save).
+    void savedByEditor(const QString &path, const QString &content);
+
+    // ---- extension pages (Settings → Extensions, the page's state line) -------------------------
+    /// The state of the extension page `path` (ExtensionRow::state), "" when it is none.
+    Q_INVOKABLE QString pageState(const QString &path) const;
+    /// Its error or problem, one line.
+    Q_INVOKABLE QString pageMessage(const QString &path) const;
+    /// The 0-based line its error names, -1 none.
+    Q_INVOKABLE int pageErrorLine(const QString &path) const;
+    /// Approves the page's code as it is now on this device and runs it.
+    Q_INVOKABLE void approve(const QString &path);
+    /// Switches an extension page on or off on this device.
+    Q_INVOKABLE void setPageOn(const QString &path, bool on);
+    /// A new extension page (an example to start from, approved here); its path, "" on failure.
+    Q_INVOKABLE QString createExtension();
+    /// The source of a built-in extension as a page of the notebook, which then runs instead of the
+    /// built-in code (approved here); its path ("" on failure). An existing one is returned.
+    Q_INVOKABLE QString editBuiltinSource(const QString &builtin);
+    /// The page of the notebook that overrides a built-in extension ("" = none).
+    Q_INVOKABLE QString overridePage(const QString &builtin) const;
+    /// Moves the pages that override a built-in to the trash: the built-in code runs again.
+    Q_INVOKABLE bool restoreBuiltin(const QString &builtin);
+    /// A fresh VM, every extension loaded again ("Reload extensions").
+    Q_INVOKABLE void reloadAll();
+    /// The label of a view (b.view's meta.label), else its name.
+    Q_INVOKABLE QString viewTitle(const QString &extension, const QString &view) const;
+
+    // ---- the console ----------------------------------------------------------------------------
+    /// Evaluates Luau typed in the console: an expression's value, statements' output.
+    Q_INVOKABLE void evaluate(const QString &code);
+    /// The ```luau block at `line` of `path` evaluated like the console's input ("Run Luau block").
+    void runCodeAt(const QString &path, int line);
 
     /// Runs a command; `path`/`line` name the block under the caret (ctx.block) when given.
     Q_INVOKABLE void runCommand(const QString &extension, const QString &name, const QString &path = QString(), int line = -1);
-    /// runCommand() of `command` "<extension>/<name>" on the block at `line` of `path` (the editor).
+    /// runCommand() of `command` "<extension>/<name>" on the block at `line` of `path` (the editor);
+    /// "*/run" runs the ```luau block there in the console (runCodeAt()).
     Q_INVOKABLE void runBlockCommand(const QString &command, const QString &path, int line);
     /// A view's node tree ({} and `error` when it failed). Never while a question waits (the waiting
     /// call would be abandoned): {} then, and the view renders again after changed().
@@ -142,17 +209,50 @@ Q_SIGNALS:
     void commandsChanged();
     void questionChanged();
     void restChanged();
+    void revisionChanged();
     /// A command's result or an error, for a toast (kind "info" | "error").
     void message(const QString &text, const QString &kind);
     /// Something changed what views show (a command or action finished, extensions on or off).
     void changed();
 
 private:
+    /// An extension page of the notebook as read from the index.
+    struct PageEntry
+    {
+        extensions::PageExtension page;
+        QString runId; ///< the engine's id: page.id, or the built-in's it overrides
+        QString builtin; ///< the built-in it overrides, ""
+        QString state;
+        QString message;
+        int errorLine = -1;
+    };
+
     void reload();
+    bool ensureEngine();
+    /// Loads what should run and unloads the rest (only what changed), then updates the states.
+    void reconcile();
+    void refreshList();
+    void bumpRevision();
+    bool updatePage(const QString &path);
+    void scanPages();
+    void loadTrust();
+    void storeTrust();
+    bool isApproved(const QString &hash) const { return m_approved.contains(hash); }
+    void addApproved(const QString &hash);
+    const PageEntry *pageAt(const QString &path) const;
+    QString pageStateOf(const PageEntry &entry) const;
+    void recordError(const QString &runId, const QString &error);
     void handle(const extensions::Result &result, bool fromAction);
     void setQuestion(const QVariantMap &question);
     void answer(const QVariant &value);
     void tickRest();
+    void runHooks(const QString &event, const QVariantMap &arg);
+    void flushChanged();
+    bool ensureConsole();
+    /// Evaluates `code` in the console's environment (`name` in errors); `toast`: the result as a
+    /// message too ("Run Luau block": the console may not be on screen).
+    void evaluateIn(const QString &code, const QString &name, const QString &echo, bool toast);
+    void consoleResult(const extensions::Result &result);
 
     Clock m_clock;
     Vault *m_vault = nullptr;
@@ -165,6 +265,25 @@ private:
     QStringList m_questionOptions;
     int m_questionSerial = 0;
     ExtensionFormModel *m_fields = nullptr;
+    QHash<QString, PageEntry> m_pages; // by path
+    bool m_scanned = false;
+    QSet<QString> m_approved; // hashes approved on this device (LocalStore)
+    QStringList m_approvedOrder;
+    QSet<QString> m_off; // page extensions switched off here (by id)
+    QHash<QString, QByteArray> m_editorSaves; // path → SHA-1 of the text the editor wrote
+    QSet<QString> m_extensionWrites; // paths extensions wrote (not "change" for hooks)
+    QHash<QString, QString> m_loadedKeys; // engine id → what was loaded (a key of its source)
+    QHash<QString, extensions::Extension> m_lastGood; // engine id → the last version that loaded
+    QHash<QString, QString> m_loadErrors; // engine id → why the last load failed
+    QHash<int, int> m_hookFailures;
+    QStringList m_changedPages;
+    QTimer m_changeTimer;
+    bool m_consoleCall = false; // the call waiting for an answer belongs to the console
+    bool m_consoleToast = false; // its result is shown as a message too
+    bool m_reconcilePending = false; // pages changed while a question waited
+    int m_revision = 0;
+    ExtensionListModel *m_list = nullptr;
+    ExtensionConsoleModel *m_console = nullptr;
     QTimer m_restTimer;
     QDateTime m_restEnd;
     int m_restRemaining = 0;

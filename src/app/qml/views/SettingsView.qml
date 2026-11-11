@@ -352,6 +352,24 @@ Item {
         onObjectRemoved: (index, object) => navSlotMenu.removeItem(object as Item)
     }
 
+    /// What Settings → Extensions says about an extension page's state.
+    function extensionStateText(state: string, message: string, line: int, commands: int, views: int, hooks: int): string {
+        switch (state) {
+        case "running": {
+            const parts = qsTr("%n command(s)", "", commands) + ", " + qsTr("%n view(s)", "", views) + ", "
+                          + qsTr("%n reaction(s)", "", hooks)
+            return qsTr("Runs: %1").arg(parts) + (message !== "" ? " — " + message : "")
+        }
+        case "error": return line >= 0 ? qsTr("Error on line %1: %2").arg(line + 1).arg(message) : qsTr("Error: %1").arg(message)
+        case "approval": return qsTr("New or changed elsewhere: read the code, then run it on this device.")
+        case "off": return qsTr("Off on this device.")
+        case "duplicate": return qsTr("Another page has the same name: only the first one runs.")
+        case "builtinOff": return qsTr("It replaces a built-in extension that is off.")
+        case "problem": return qsTr("No code: add a ```luau block.")
+        default: return message
+        }
+    }
+
     // ---- Building blocks --------------------------------------------------------------------
 
     /// A titled group of setting rows: a card, its rows divided by hairlines. Below 600 px the
@@ -1300,17 +1318,132 @@ Item {
 
     Component {
         id: extensionsSection
-        SettingsGroup {
-            heading: qsTr("Extensions")
-            note: qsTr("Extensions add views and commands to Brulion. They read and write only the open notebook, in plain Markdown that other apps read too.")
+        ColumnLayout {
+            spacing: Theme.space8
 
-            SettingSwitch {
-                objectName: "gymSetting"
-                text: qsTr("Gym")
-                description: qsTr("Workouts written in the journal, plans that add weight when you are ready, a rest timer and the progress of every exercise (Gym in the sidebar).")
-                iconName: "dumbbell"
-                checked: AppSettings.gymEnabled
-                onToggled: AppSettings.gymEnabled = checked
+            SettingsGroup {
+                heading: qsTr("Extensions")
+                note: qsTr("Extensions add views, commands and reactions to Brulion. They read and write only the open notebook, in plain Markdown that other apps read too.")
+
+                SettingSwitch {
+                    objectName: "gymSetting"
+                    text: qsTr("Gym")
+                    description: qsTr("Workouts written in the journal, plans that add weight when you are ready, a rest timer and the progress of every exercise (Gym in the sidebar).")
+                    iconName: "dumbbell"
+                    checked: AppSettings.gymEnabled
+                    onToggled: AppSettings.gymEnabled = checked
+                }
+                // The gym's code as a page of the notebook (TiddlyWiki's shadow tiddlers): edited
+                // there, it runs instead of the built-in one.
+                ShellSettingRow {
+                    id: gymSource
+                    objectName: "gymSourceSetting"
+                    visible: AppSettings.gymEnabled
+                    readonly property string page: Workspace.extensions.revision >= 0 ? Workspace.extensions.overridePage("silownia") : ""
+                    title: qsTr("The gym's code")
+                    description: gymSource.page !== ""
+                                 ? qsTr("The gym runs from its page in this notebook (%1): change the code there. Restore puts the page in the trash, and the built-in code runs again.").arg(Workspace.pageTitle(gymSource.page))
+                                 : qsTr("Built into Brulion. Edit it as a page of this notebook: the page then runs instead.")
+                    BButton {
+                        size: "small"
+                        iconName: "code"
+                        text: gymSource.page !== "" ? qsTr("Open") : qsTr("Edit the code")
+                        onClicked: {
+                            const path = gymSource.page !== "" ? gymSource.page : Workspace.extensions.editBuiltinSource("silownia")
+                            if (path !== "")
+                                AppController.openPage(path)
+                        }
+                    }
+                    BButton {
+                        visible: gymSource.page !== ""
+                        size: "small"
+                        variant: "ghost"
+                        text: qsTr("Restore")
+                        onClicked: {
+                            if (Workspace.extensions.restoreBuiltin("silownia"))
+                                AppController.toast(qsTr("The built-in gym runs again; its page is in the trash."), "success")
+                        }
+                    }
+                }
+            }
+
+            SettingsGroup {
+                heading: qsTr("In this notebook")
+                note: qsTr("Your own extensions are pages of the notebook tagged #rozszerzenie (or #extension): the code in their luau code blocks runs, and runs again whenever you save the page. Code that arrives from another device, a sync or an import runs here only after you approve it.")
+
+                ShellSettingRow {
+                    objectName: "extensionsTools"
+                    title: qsTr("Write an extension")
+                    description: qsTr("A new page with an example: a command, a view and a reaction. The Luau console evaluates code and shows what extensions print.")
+                    BButton {
+                        objectName: "newExtension"
+                        size: "small"
+                        iconName: "plus"
+                        text: qsTr("New extension")
+                        onClicked: {
+                            const path = Workspace.extensions.createExtension()
+                            if (path !== "")
+                                AppController.openPage(path)
+                        }
+                    }
+                    BButton {
+                        size: "small"
+                        variant: "ghost"
+                        iconName: "terminal"
+                        text: qsTr("Console")
+                        onClicked: AppController.navigate({ view: "console" })
+                    }
+                }
+
+                Repeater {
+                    model: Workspace.extensions.list
+                    delegate: ShellSettingRow {
+                        id: extRow
+                        required property string extId
+                        required property string extTitle
+                        required property string extKind
+                        required property string extState
+                        required property string extMessage
+                        required property string extPath
+                        required property string extPermissions
+                        required property string extDescription
+                        required property int extCommands
+                        required property int extViews
+                        required property int extHooks
+                        required property int extErrorLine
+                        objectName: "extensionRow"
+                        visible: extRow.extKind === "page"
+                        Layout.fillWidth: true
+                        title: extRow.extTitle
+                        description: root.extensionStateText(extRow.extState, extRow.extMessage, extRow.extErrorLine,
+                                                             extRow.extCommands, extRow.extViews, extRow.extHooks)
+                                     + (extRow.extPermissions !== "" ? "\n" + qsTr("May: %1").arg(extRow.extPermissions) : "")
+                                     + (extRow.extDescription !== "" ? "\n" + extRow.extDescription : "")
+                        BButton {
+                            size: "small"
+                            variant: "ghost"
+                            iconName: "code"
+                            text: extRow.extState === "error" && extRow.extErrorLine >= 0 ? qsTr("Line %1").arg(extRow.extErrorLine + 1)
+                                                                                         : qsTr("Code")
+                            onClicked: AppController.openPage(extRow.extPath, extRow.extState === "error" ? extRow.extErrorLine : -1)
+                        }
+                        BButton {
+                            objectName: "approveExtension"
+                            visible: extRow.extState === "approval"
+                            size: "small"
+                            variant: "primary"
+                            iconName: "shield-check"
+                            text: qsTr("Run")
+                            onClicked: Workspace.extensions.approve(extRow.extPath)
+                        }
+                        BButton {
+                            visible: extRow.extState === "running" || extRow.extState === "error" || extRow.extState === "off"
+                            size: "small"
+                            text: extRow.extState === "off" ? qsTr("Switch on") : qsTr("Switch off")
+                            onClicked: Workspace.extensions.setPageOn(extRow.extPath, extRow.extState === "off")
+                        }
+                    }
+                }
             }
         }
     }
