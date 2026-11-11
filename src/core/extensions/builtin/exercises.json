@@ -1,0 +1,1081 @@
+[
+ {
+  "id": "back-squat",
+  "pl": {
+   "name": "Przysiad ze sztangą",
+   "category": "nogi",
+   "muscles": [
+    "czworogłowe uda",
+    "pośladki",
+    "dwugłowe uda"
+   ],
+   "equipment": "sztanga"
+  },
+  "en": {
+   "name": "Back squat",
+   "category": "legs",
+   "muscles": [
+    "quadriceps",
+    "glutes",
+    "hamstrings"
+   ],
+   "equipment": "barbell"
+  }
+ },
+ {
+  "id": "front-squat",
+  "pl": {
+   "name": "Przysiad przedni",
+   "category": "nogi",
+   "muscles": [
+    "czworogłowe uda",
+    "pośladki",
+    "mięśnie brzucha"
+   ],
+   "equipment": "sztanga"
+  },
+  "en": {
+   "name": "Front squat",
+   "category": "legs",
+   "muscles": [
+    "quadriceps",
+    "glutes",
+    "abs"
+   ],
+   "equipment": "barbell"
+  }
+ },
+ {
+  "id": "goblet-squat",
+  "pl": {
+   "name": "Przysiad goblet",
+   "category": "nogi",
+   "muscles": [
+    "czworogłowe uda",
+    "pośladki"
+   ],
+   "equipment": "kettlebell"
+  },
+  "en": {
+   "name": "Goblet squat",
+   "category": "legs",
+   "muscles": [
+    "quadriceps",
+    "glutes"
+   ],
+   "equipment": "kettlebell"
+  }
+ },
+ {
+  "id": "leg-press",
+  "pl": {
+   "name": "Wypychanie nogami na suwnicy",
+   "category": "nogi",
+   "muscles": [
+    "czworogłowe uda",
+    "pośladki"
+   ],
+   "equipment": "maszyna"
+  },
+  "en": {
+   "name": "Leg press",
+   "category": "legs",
+   "muscles": [
+    "quadriceps",
+    "glutes"
+   ],
+   "equipment": "machine"
+  }
+ },
+ {
+  "id": "lunge",
+  "pl": {
+   "name": "Wykroki",
+   "category": "nogi",
+   "muscles": [
+    "czworogłowe uda",
+    "pośladki"
+   ],
+   "equipment": "hantle"
+  },
+  "en": {
+   "name": "Lunges",
+   "category": "legs",
+   "muscles": [
+    "quadriceps",
+    "glutes"
+   ],
+   "equipment": "dumbbells"
+  }
+ },
+ {
+  "id": "bulgarian-split-squat",
+  "pl": {
+   "name": "Przysiad bułgarski",
+   "category": "nogi",
+   "muscles": [
+    "czworogłowe uda",
+    "pośladki"
+   ],
+   "equipment": "hantle"
+  },
+  "en": {
+   "name": "Bulgarian split squat",
+   "category": "legs",
+   "muscles": [
+    "quadriceps",
+    "glutes"
+   ],
+   "equipment": "dumbbells"
+  }
+ },
+ {
+  "id": "romanian-deadlift",
+  "pl": {
+   "name": "Martwy ciąg rumuński",
+   "category": "nogi",
+   "muscles": [
+    "dwugłowe uda",
+    "pośladki",
+    "prostowniki grzbietu"
+   ],
+   "equipment": "sztanga"
+  },
+  "en": {
+   "name": "Romanian deadlift",
+   "category": "legs",
+   "muscles": [
+    "hamstrings",
+    "glutes",
+    "lower back"
+   ],
+   "equipment": "barbell"
+  }
+ },
+ {
+  "id": "leg-curl",
+  "pl": {
+   "name": "Uginanie nóg na maszynie",
+   "category": "nogi",
+   "muscles": [
+    "dwugłowe uda"
+   ],
+   "equipment": "maszyna"
+  },
+  "en": {
+   "name": "Leg curl",
+   "category": "legs",
+   "muscles": [
+    "hamstrings"
+   ],
+   "equipment": "machine"
+  }
+ },
+ {
+  "id": "leg-extension",
+  "pl": {
+   "name": "Prostowanie nóg na maszynie",
+   "category": "nogi",
+   "muscles": [
+    "czworogłowe uda"
+   ],
+   "equipment": "maszyna"
+  },
+  "en": {
+   "name": "Leg extension",
+   "category": "legs",
+   "muscles": [
+    "quadriceps"
+   ],
+   "equipment": "machine"
+  }
+ },
+ {
+  "id": "hip-thrust",
+  "pl": {
+   "name": "Hip thrust",
+   "category": "nogi",
+   "muscles": [
+    "pośladki",
+    "dwugłowe uda"
+   ],
+   "equipment": "sztanga"
+  },
+  "en": {
+   "name": "Hip thrust",
+   "category": "legs",
+   "muscles": [
+    "glutes",
+    "hamstrings"
+   ],
+   "equipment": "barbell"
+  }
+ },
+ {
+  "id": "calf-raise",
+  "pl": {
+   "name": "Wspięcia na palce",
+   "category": "nogi",
+   "muscles": [
+    "łydki"
+   ],
+   "equipment": "maszyna"
+  },
+  "en": {
+   "name": "Calf raise",
+   "category": "legs",
+   "muscles": [
+    "calves"
+   ],
+   "equipment": "machine"
+  }
+ },
+ {
+  "id": "deadlift",
+  "pl": {
+   "name": "Martwy ciąg",
+   "category": "plecy",
+   "muscles": [
+    "prostowniki grzbietu",
+    "pośladki",
+    "dwugłowe uda",
+    "czworoboczne"
+   ],
+   "equipment": "sztanga"
+  },
+  "en": {
+   "name": "Deadlift",
+   "category": "back",
+   "muscles": [
+    "lower back",
+    "glutes",
+    "hamstrings",
+    "traps"
+   ],
+   "equipment": "barbell"
+  }
+ },
+ {
+  "id": "sumo-deadlift",
+  "pl": {
+   "name": "Martwy ciąg sumo",
+   "category": "plecy",
+   "muscles": [
+    "pośladki",
+    "przywodziciele",
+    "prostowniki grzbietu"
+   ],
+   "equipment": "sztanga"
+  },
+  "en": {
+   "name": "Sumo deadlift",
+   "category": "back",
+   "muscles": [
+    "glutes",
+    "adductors",
+    "lower back"
+   ],
+   "equipment": "barbell"
+  }
+ },
+ {
+  "id": "pull-up",
+  "pl": {
+   "name": "Podciąganie nachwytem",
+   "category": "plecy",
+   "muscles": [
+    "najszersze grzbietu",
+    "biceps"
+   ],
+   "equipment": "drążek"
+  },
+  "en": {
+   "name": "Pull-up",
+   "category": "back",
+   "muscles": [
+    "lats",
+    "biceps"
+   ],
+   "equipment": "pull-up bar"
+  }
+ },
+ {
+  "id": "chin-up",
+  "pl": {
+   "name": "Podciąganie podchwytem",
+   "category": "plecy",
+   "muscles": [
+    "najszersze grzbietu",
+    "biceps"
+   ],
+   "equipment": "drążek"
+  },
+  "en": {
+   "name": "Chin-up",
+   "category": "back",
+   "muscles": [
+    "lats",
+    "biceps"
+   ],
+   "equipment": "pull-up bar"
+  }
+ },
+ {
+  "id": "barbell-row",
+  "pl": {
+   "name": "Wiosłowanie sztangą",
+   "category": "plecy",
+   "muscles": [
+    "najszersze grzbietu",
+    "czworoboczne",
+    "tylne aktony barków"
+   ],
+   "equipment": "sztanga"
+  },
+  "en": {
+   "name": "Barbell row",
+   "category": "back",
+   "muscles": [
+    "lats",
+    "traps",
+    "rear delts"
+   ],
+   "equipment": "barbell"
+  }
+ },
+ {
+  "id": "dumbbell-row",
+  "pl": {
+   "name": "Wiosłowanie hantlem",
+   "category": "plecy",
+   "muscles": [
+    "najszersze grzbietu",
+    "czworoboczne"
+   ],
+   "equipment": "hantle"
+  },
+  "en": {
+   "name": "Dumbbell row",
+   "category": "back",
+   "muscles": [
+    "lats",
+    "traps"
+   ],
+   "equipment": "dumbbells"
+  }
+ },
+ {
+  "id": "lat-pulldown",
+  "pl": {
+   "name": "Ściąganie drążka wyciągu górnego",
+   "category": "plecy",
+   "muscles": [
+    "najszersze grzbietu",
+    "biceps"
+   ],
+   "equipment": "wyciąg"
+  },
+  "en": {
+   "name": "Lat pulldown",
+   "category": "back",
+   "muscles": [
+    "lats",
+    "biceps"
+   ],
+   "equipment": "cable"
+  }
+ },
+ {
+  "id": "seated-cable-row",
+  "pl": {
+   "name": "Przyciąganie linki wyciągu siedząc",
+   "category": "plecy",
+   "muscles": [
+    "najszersze grzbietu",
+    "czworoboczne"
+   ],
+   "equipment": "wyciąg"
+  },
+  "en": {
+   "name": "Seated cable row",
+   "category": "back",
+   "muscles": [
+    "lats",
+    "traps"
+   ],
+   "equipment": "cable"
+  }
+ },
+ {
+  "id": "face-pull",
+  "pl": {
+   "name": "Face pull",
+   "category": "barki",
+   "muscles": [
+    "tylne aktony barków",
+    "czworoboczne"
+   ],
+   "equipment": "wyciąg"
+  },
+  "en": {
+   "name": "Face pull",
+   "category": "shoulders",
+   "muscles": [
+    "rear delts",
+    "traps"
+   ],
+   "equipment": "cable"
+  }
+ },
+ {
+  "id": "bench-press",
+  "pl": {
+   "name": "Wyciskanie sztangi leżąc",
+   "category": "klatka piersiowa",
+   "muscles": [
+    "klatka piersiowa",
+    "triceps",
+    "przednie aktony barków"
+   ],
+   "equipment": "sztanga"
+  },
+  "en": {
+   "name": "Bench press",
+   "category": "chest",
+   "muscles": [
+    "chest",
+    "triceps",
+    "front delts"
+   ],
+   "equipment": "barbell"
+  }
+ },
+ {
+  "id": "incline-bench-press",
+  "pl": {
+   "name": "Wyciskanie sztangi na ławce skośnej",
+   "category": "klatka piersiowa",
+   "muscles": [
+    "klatka piersiowa",
+    "przednie aktony barków",
+    "triceps"
+   ],
+   "equipment": "sztanga"
+  },
+  "en": {
+   "name": "Incline bench press",
+   "category": "chest",
+   "muscles": [
+    "chest",
+    "front delts",
+    "triceps"
+   ],
+   "equipment": "barbell"
+  }
+ },
+ {
+  "id": "dumbbell-bench-press",
+  "pl": {
+   "name": "Wyciskanie hantli leżąc",
+   "category": "klatka piersiowa",
+   "muscles": [
+    "klatka piersiowa",
+    "triceps",
+    "przednie aktony barków"
+   ],
+   "equipment": "hantle"
+  },
+  "en": {
+   "name": "Dumbbell bench press",
+   "category": "chest",
+   "muscles": [
+    "chest",
+    "triceps",
+    "front delts"
+   ],
+   "equipment": "dumbbells"
+  }
+ },
+ {
+  "id": "incline-dumbbell-press",
+  "pl": {
+   "name": "Wyciskanie hantli na ławce skośnej",
+   "category": "klatka piersiowa",
+   "muscles": [
+    "klatka piersiowa",
+    "przednie aktony barków"
+   ],
+   "equipment": "hantle"
+  },
+  "en": {
+   "name": "Incline dumbbell press",
+   "category": "chest",
+   "muscles": [
+    "chest",
+    "front delts"
+   ],
+   "equipment": "dumbbells"
+  }
+ },
+ {
+  "id": "dumbbell-fly",
+  "pl": {
+   "name": "Rozpiętki z hantlami",
+   "category": "klatka piersiowa",
+   "muscles": [
+    "klatka piersiowa"
+   ],
+   "equipment": "hantle"
+  },
+  "en": {
+   "name": "Dumbbell fly",
+   "category": "chest",
+   "muscles": [
+    "chest"
+   ],
+   "equipment": "dumbbells"
+  }
+ },
+ {
+  "id": "dip",
+  "pl": {
+   "name": "Pompki na poręczach",
+   "category": "klatka piersiowa",
+   "muscles": [
+    "klatka piersiowa",
+    "triceps",
+    "przednie aktony barków"
+   ],
+   "equipment": "poręcze"
+  },
+  "en": {
+   "name": "Dip",
+   "category": "chest",
+   "muscles": [
+    "chest",
+    "triceps",
+    "front delts"
+   ],
+   "equipment": "parallel bars"
+  }
+ },
+ {
+  "id": "push-up",
+  "pl": {
+   "name": "Pompki",
+   "category": "klatka piersiowa",
+   "muscles": [
+    "klatka piersiowa",
+    "triceps",
+    "przednie aktony barków"
+   ],
+   "equipment": "masa ciała"
+  },
+  "en": {
+   "name": "Push-up",
+   "category": "chest",
+   "muscles": [
+    "chest",
+    "triceps",
+    "front delts"
+   ],
+   "equipment": "bodyweight"
+  }
+ },
+ {
+  "id": "overhead-press",
+  "pl": {
+   "name": "Wyciskanie żołnierskie",
+   "category": "barki",
+   "muscles": [
+    "przednie aktony barków",
+    "boczne aktony barków",
+    "triceps"
+   ],
+   "equipment": "sztanga"
+  },
+  "en": {
+   "name": "Overhead press",
+   "category": "shoulders",
+   "muscles": [
+    "front delts",
+    "side delts",
+    "triceps"
+   ],
+   "equipment": "barbell"
+  }
+ },
+ {
+  "id": "dumbbell-shoulder-press",
+  "pl": {
+   "name": "Wyciskanie hantli nad głowę",
+   "category": "barki",
+   "muscles": [
+    "przednie aktony barków",
+    "boczne aktony barków",
+    "triceps"
+   ],
+   "equipment": "hantle"
+  },
+  "en": {
+   "name": "Dumbbell shoulder press",
+   "category": "shoulders",
+   "muscles": [
+    "front delts",
+    "side delts",
+    "triceps"
+   ],
+   "equipment": "dumbbells"
+  }
+ },
+ {
+  "id": "lateral-raise",
+  "pl": {
+   "name": "Unoszenie hantli bokiem",
+   "category": "barki",
+   "muscles": [
+    "boczne aktony barków"
+   ],
+   "equipment": "hantle"
+  },
+  "en": {
+   "name": "Lateral raise",
+   "category": "shoulders",
+   "muscles": [
+    "side delts"
+   ],
+   "equipment": "dumbbells"
+  }
+ },
+ {
+  "id": "rear-delt-fly",
+  "pl": {
+   "name": "Odwrotne rozpiętki",
+   "category": "barki",
+   "muscles": [
+    "tylne aktony barków"
+   ],
+   "equipment": "hantle"
+  },
+  "en": {
+   "name": "Rear delt fly",
+   "category": "shoulders",
+   "muscles": [
+    "rear delts"
+   ],
+   "equipment": "dumbbells"
+  }
+ },
+ {
+  "id": "shrug",
+  "pl": {
+   "name": "Szrugsy",
+   "category": "plecy",
+   "muscles": [
+    "czworoboczne"
+   ],
+   "equipment": "hantle"
+  },
+  "en": {
+   "name": "Shrug",
+   "category": "back",
+   "muscles": [
+    "traps"
+   ],
+   "equipment": "dumbbells"
+  }
+ },
+ {
+  "id": "barbell-curl",
+  "pl": {
+   "name": "Uginanie ramion ze sztangą",
+   "category": "ramiona",
+   "muscles": [
+    "biceps",
+    "przedramiona"
+   ],
+   "equipment": "sztanga"
+  },
+  "en": {
+   "name": "Barbell curl",
+   "category": "arms",
+   "muscles": [
+    "biceps",
+    "forearms"
+   ],
+   "equipment": "barbell"
+  }
+ },
+ {
+  "id": "dumbbell-curl",
+  "pl": {
+   "name": "Uginanie ramion z hantlami",
+   "category": "ramiona",
+   "muscles": [
+    "biceps"
+   ],
+   "equipment": "hantle"
+  },
+  "en": {
+   "name": "Dumbbell curl",
+   "category": "arms",
+   "muscles": [
+    "biceps"
+   ],
+   "equipment": "dumbbells"
+  }
+ },
+ {
+  "id": "hammer-curl",
+  "pl": {
+   "name": "Uginanie młotkowe",
+   "category": "ramiona",
+   "muscles": [
+    "biceps",
+    "przedramiona"
+   ],
+   "equipment": "hantle"
+  },
+  "en": {
+   "name": "Hammer curl",
+   "category": "arms",
+   "muscles": [
+    "biceps",
+    "forearms"
+   ],
+   "equipment": "dumbbells"
+  }
+ },
+ {
+  "id": "triceps-pushdown",
+  "pl": {
+   "name": "Prostowanie ramion na wyciągu",
+   "category": "ramiona",
+   "muscles": [
+    "triceps"
+   ],
+   "equipment": "wyciąg"
+  },
+  "en": {
+   "name": "Triceps pushdown",
+   "category": "arms",
+   "muscles": [
+    "triceps"
+   ],
+   "equipment": "cable"
+  }
+ },
+ {
+  "id": "skull-crusher",
+  "pl": {
+   "name": "Wyciskanie francuskie",
+   "category": "ramiona",
+   "muscles": [
+    "triceps"
+   ],
+   "equipment": "sztanga"
+  },
+  "en": {
+   "name": "Skull crusher",
+   "category": "arms",
+   "muscles": [
+    "triceps"
+   ],
+   "equipment": "barbell"
+  }
+ },
+ {
+  "id": "close-grip-bench-press",
+  "pl": {
+   "name": "Wyciskanie wąskim chwytem",
+   "category": "ramiona",
+   "muscles": [
+    "triceps",
+    "klatka piersiowa"
+   ],
+   "equipment": "sztanga"
+  },
+  "en": {
+   "name": "Close-grip bench press",
+   "category": "arms",
+   "muscles": [
+    "triceps",
+    "chest"
+   ],
+   "equipment": "barbell"
+  }
+ },
+ {
+  "id": "plank",
+  "pl": {
+   "name": "Deska",
+   "category": "brzuch",
+   "muscles": [
+    "mięśnie brzucha",
+    "skośne brzucha"
+   ],
+   "equipment": "masa ciała"
+  },
+  "en": {
+   "name": "Plank",
+   "category": "core",
+   "muscles": [
+    "abs",
+    "obliques"
+   ],
+   "equipment": "bodyweight"
+  }
+ },
+ {
+  "id": "side-plank",
+  "pl": {
+   "name": "Deska bokiem",
+   "category": "brzuch",
+   "muscles": [
+    "skośne brzucha"
+   ],
+   "equipment": "masa ciała"
+  },
+  "en": {
+   "name": "Side plank",
+   "category": "core",
+   "muscles": [
+    "obliques"
+   ],
+   "equipment": "bodyweight"
+  }
+ },
+ {
+  "id": "hanging-leg-raise",
+  "pl": {
+   "name": "Unoszenie nóg w zwisie",
+   "category": "brzuch",
+   "muscles": [
+    "mięśnie brzucha"
+   ],
+   "equipment": "drążek"
+  },
+  "en": {
+   "name": "Hanging leg raise",
+   "category": "core",
+   "muscles": [
+    "abs"
+   ],
+   "equipment": "pull-up bar"
+  }
+ },
+ {
+  "id": "crunch",
+  "pl": {
+   "name": "Spięcia brzucha",
+   "category": "brzuch",
+   "muscles": [
+    "mięśnie brzucha"
+   ],
+   "equipment": "masa ciała"
+  },
+  "en": {
+   "name": "Crunch",
+   "category": "core",
+   "muscles": [
+    "abs"
+   ],
+   "equipment": "bodyweight"
+  }
+ },
+ {
+  "id": "russian-twist",
+  "pl": {
+   "name": "Russian twist",
+   "category": "brzuch",
+   "muscles": [
+    "skośne brzucha",
+    "mięśnie brzucha"
+   ],
+   "equipment": "masa ciała"
+  },
+  "en": {
+   "name": "Russian twist",
+   "category": "core",
+   "muscles": [
+    "obliques",
+    "abs"
+   ],
+   "equipment": "bodyweight"
+  }
+ },
+ {
+  "id": "ab-wheel",
+  "pl": {
+   "name": "Kółko do brzucha",
+   "category": "brzuch",
+   "muscles": [
+    "mięśnie brzucha"
+   ]
+  },
+  "en": {
+   "name": "Ab wheel rollout",
+   "category": "core",
+   "muscles": [
+    "abs"
+   ]
+  }
+ },
+ {
+  "id": "kettlebell-swing",
+  "pl": {
+   "name": "Swing kettlebell",
+   "category": "całe ciało",
+   "muscles": [
+    "pośladki",
+    "dwugłowe uda",
+    "prostowniki grzbietu"
+   ],
+   "equipment": "kettlebell"
+  },
+  "en": {
+   "name": "Kettlebell swing",
+   "category": "full body",
+   "muscles": [
+    "glutes",
+    "hamstrings",
+    "lower back"
+   ],
+   "equipment": "kettlebell"
+  }
+ },
+ {
+  "id": "clean",
+  "pl": {
+   "name": "Zarzut",
+   "category": "całe ciało",
+   "muscles": [
+    "pośladki",
+    "dwugłowe uda",
+    "czworoboczne",
+    "czworogłowe uda"
+   ],
+   "equipment": "sztanga"
+  },
+  "en": {
+   "name": "Power clean",
+   "category": "full body",
+   "muscles": [
+    "glutes",
+    "hamstrings",
+    "traps",
+    "quadriceps"
+   ],
+   "equipment": "barbell"
+  }
+ },
+ {
+  "id": "burpee",
+  "pl": {
+   "name": "Burpees",
+   "category": "całe ciało",
+   "muscles": [
+    "czworogłowe uda",
+    "klatka piersiowa",
+    "serce i płuca"
+   ],
+   "equipment": "masa ciała"
+  },
+  "en": {
+   "name": "Burpee",
+   "category": "full body",
+   "muscles": [
+    "quadriceps",
+    "chest",
+    "heart and lungs"
+   ],
+   "equipment": "bodyweight"
+  }
+ },
+ {
+  "id": "running",
+  "pl": {
+   "name": "Bieg",
+   "category": "kardio",
+   "muscles": [
+    "serce i płuca",
+    "czworogłowe uda",
+    "łydki"
+   ]
+  },
+  "en": {
+   "name": "Running",
+   "category": "cardio",
+   "muscles": [
+    "heart and lungs",
+    "quadriceps",
+    "calves"
+   ]
+  }
+ },
+ {
+  "id": "rowing",
+  "pl": {
+   "name": "Wiosłowanie na ergometrze",
+   "category": "kardio",
+   "muscles": [
+    "serce i płuca",
+    "najszersze grzbietu",
+    "czworogłowe uda"
+   ],
+   "equipment": "ergometr wioślarski"
+  },
+  "en": {
+   "name": "Rowing",
+   "category": "cardio",
+   "muscles": [
+    "heart and lungs",
+    "lats",
+    "quadriceps"
+   ],
+   "equipment": "rowing machine"
+  }
+ },
+ {
+  "id": "cycling",
+  "pl": {
+   "name": "Jazda na rowerze",
+   "category": "kardio",
+   "muscles": [
+    "serce i płuca",
+    "czworogłowe uda"
+   ],
+   "equipment": "rower"
+  },
+  "en": {
+   "name": "Cycling",
+   "category": "cardio",
+   "muscles": [
+    "heart and lungs",
+    "quadriceps"
+   ],
+   "equipment": "bike"
+  }
+ },
+ {
+  "id": "jump-rope",
+  "pl": {
+   "name": "Skakanka",
+   "category": "kardio",
+   "muscles": [
+    "serce i płuca",
+    "łydki"
+   ],
+   "equipment": "skakanka"
+  },
+  "en": {
+   "name": "Jump rope",
+   "category": "cardio",
+   "muscles": [
+    "heart and lungs",
+    "calves"
+   ],
+   "equipment": "jump rope"
+  }
+ }
+]
