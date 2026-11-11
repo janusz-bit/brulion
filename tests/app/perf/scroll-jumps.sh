@@ -151,7 +151,7 @@ run_case() { # run_case <case>
   else
     {
       echo "FAIL: $name"
-      grep -E "^scroll-probe: (target|phase|CHECK|JUMPS|VIEW|THUMB|  jump)" "$work/$name.log" | head -30
+      grep -E "^scroll-probe: (target|phase|CHECK|JUMPS|VIEW|THUMB|SHIFT|  jump|  rows)" "$work/$name.log" | head -40
       tail -5 "$work/$name.log"
     } > "$work/$name.result"
   fi

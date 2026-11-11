@@ -177,6 +177,7 @@ struct Frame {
     int delegates = 0, created = 0, destroyed = 0;
     int blocks = 0, blocksCreated = 0;
     double anchorShift = kNaN;  // the anchor's movement inside the content (layout shift)
+    int anchorRow = -1;         // … and the row (delegate index) it is in
     double anchorScreen = kNaN; // the anchor's movement on screen
     double unexplained = kNaN;  // screen movement the input / the running animation does not explain
     double held = kNaN;         // direct input that did not move the content (drag threshold, an end)
@@ -1142,6 +1143,7 @@ private:
                 const double toEdge = std::min(m_anchorScreenY + m_anchorHeight, m_target->height() - m_anchorScreenY);
                 if (toEdge - scrolled > 0.5) {
                     f.anchorShift = toEdge - scrolled;
+                    f.anchorRow = m_anchorRow;
                     events.append(u"A!%1"_s.arg(toEdge - scrolled, 0, 'f', 0));
                 }
             }
@@ -1152,6 +1154,7 @@ private:
             const double contentPos = m_anchor->mapToItem(m_contentItem, QPointF(0, 0)).y();
             const double screenPos = m_anchor->mapToItem(m_target, QPointF(0, 0)).y();
             f.anchorShift = contentPos - m_anchorContentY;
+            f.anchorRow = m_anchorRow;
             f.anchorScreen = screenPos - m_anchorScreenY;
             judgeAnchorMove(f, prev);
             const bool onScreen = screenPos > -m_anchor->height() && screenPos < m_target->height();
@@ -1254,6 +1257,32 @@ private:
 
     // ---- Report ---------------------------------------------------------------------------------
     static QString fmt(double v, int prec = 1) { return std::isnan(v) ? QString() : QString::number(v, 'f', prec); }
+
+    /// One frame in a line of the report: its timing, the scroll by source, the anchor's shift, the
+    /// delegates created and the events ([…]).
+    static QString describe(const Frame *f)
+    {
+        return u"#%1 t=%2 %3 interval=%4 gap=%5 polish=%6 prevgui=%7 dy(in/frame/anim/other)=%8/%9/%10/%11 "
+               u"unexplained=%12 "
+               u"shift=%13 created=%14 blocks+=%15 y=%16 origin=%17 h=%18 [%19]"_s.arg(f->n)
+                       .arg(f->t, 0, 'f', 0)
+                       .arg(f->phase)
+                       .arg(f->interval, 0, 'f', 1)
+                       .arg(f->gap, 0, 'f', 1)
+                       .arg(f->polish, 0, 'f', 1)
+                       .arg(f->gui, 0, 'f', 1)
+                       .arg(f->dyInput, 0, 'f', 0)
+                       .arg(f->dyFrame, 0, 'f', 0)
+                       .arg(f->dyAnim, 0, 'f', 0)
+                       .arg(f->dyOther, 0, 'f', 0)
+                       .arg(fmt(f->unexplained, 0), fmt(f->anchorShift, 0))
+                       .arg(f->created)
+                       .arg(f->blocksCreated)
+                       .arg(f->contentY, 0, 'f', 0)
+                       .arg(f->originY, 0, 'f', 0)
+                       .arg(f->contentHeight, 0, 'f', 0)
+                       .arg(f->events);
+    }
 
     void writeCsv()
     {
@@ -1442,28 +1471,6 @@ private:
                     .arg(blocksCreated)
                     .arg(percentile(probe, 0.5), 0, 'f', 3)
                     .arg(percentile(probe, 1), 0, 'f', 3));
-        const auto describe = [](const Frame *f) {
-            return u"#%1 t=%2 %3 interval=%4 gap=%5 polish=%6 prevgui=%7 dy(in/frame/anim/other)=%8/%9/%10/%11 "
-                   u"unexplained=%12 "
-                   u"shift=%13 created=%14 blocks+=%15 y=%16 origin=%17 h=%18 [%19]"_s.arg(f->n)
-                           .arg(f->t, 0, 'f', 0)
-                           .arg(f->phase)
-                           .arg(f->interval, 0, 'f', 1)
-                           .arg(f->gap, 0, 'f', 1)
-                           .arg(f->polish, 0, 'f', 1)
-                           .arg(f->gui, 0, 'f', 1)
-                           .arg(f->dyInput, 0, 'f', 0)
-                           .arg(f->dyFrame, 0, 'f', 0)
-                           .arg(f->dyAnim, 0, 'f', 0)
-                           .arg(f->dyOther, 0, 'f', 0)
-                           .arg(fmt(f->unexplained, 0), fmt(f->anchorShift, 0))
-                           .arg(f->created)
-                           .arg(f->blocksCreated)
-                           .arg(f->contentY, 0, 'f', 0)
-                           .arg(f->originY, 0, 'f', 0)
-                           .arg(f->contentHeight, 0, 'f', 0)
-                           .arg(f->events);
-        };
         const auto logFirst = [&](const QString &label, const QList<const Frame *> &list, qsizetype count) {
             for (qsizetype i = 0; i < std::min(count, list.size()); ++i)
                 log(label + describe(list.at(i)));
@@ -1496,6 +1503,7 @@ private:
         int jumps = 0, shifts = 0, thumbJumps = 0;
         double worst = 0;
         const Frame *prev = nullptr;
+        QString layoutBefore; // the delegates as the latest frame before this one placed them
         for (const Frame &f : m_frames) {
             const bool atBound = f.atBound || (prev && prev->atBound);
             const Frame *before = prev;
@@ -1517,7 +1525,18 @@ private:
             if (!std::isnan(f.anchorShift) && std::abs(f.anchorShift) > m_checkTolerance) {
                 ++shifts;
                 worst = std::max(worst, std::abs(f.anchorShift));
+                // Which rows moved: the frame and the delegates (row@y+height) before and after it,
+                // so a shift that only a loaded machine shows can be traced from its log alone.
+                if (shifts <= 4) {
+                    log(u"SHIFT of row %1: "_s.arg(f.anchorRow) + describe(&f));
+                    if (!layoutBefore.isEmpty())
+                        log(u"  rows before: "_s + layoutBefore);
+                    if (!f.layout.isEmpty())
+                        log(u"  rows after: "_s + f.layout);
+                }
             }
+            if (!f.layout.isEmpty())
+                layoutBefore = f.layout;
         }
         // --probe-row-bar: the view must have its BRowScrollBar (a bar left in the content item
         // scrolls away with the rows, and its thumb would go unchecked).
