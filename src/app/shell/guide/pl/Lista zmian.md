@@ -7,6 +7,12 @@ brulion: document
 
 Tu znajdziesz zmiany w każdej wersji Brulionu, od najnowszej. Pełne opisy wydań z plikami do pobrania są na GitHubie: https://github.com/janusz-bit/brulion/releases
 
+## 0.17.0 — 11 listopada 2026
+
+**Nowe**
+- **Siłownia** — dziennik treningowy w Twoim dzienniku, pierwsze rozszerzenie Brulionu (napisane w Luau, małym języku skryptowym działającym w piaskownicy). Włącz ją w **Ustawieniach → Rozszerzenia → Siłownia**. Serie zapisujesz jak zwykłe notatki (`[[Przysiad]] 100 kg 5×5`, `MC+10 kg 3×8`, `5 km 27:30`), strona z tagiem `plan-treningowy` to plan, a **Zacznij trening** wpisuje go do dzisiejszej notatki z ciężarami z ostatniej sesji — większymi, gdy wszystkie serie wyszły. Widok **Siłownia** ma dzisiejszy trening (odhaczanie ćwiczeń, − / + dla ciężaru i powtórzeń ostatniej serii, dodawanie i usuwanie serii, timer przerwy z powiadomieniem) i postęp każdego ćwiczenia (rekord, wykres i sesje). Wszystko zostaje zwykłym Markdownem. Zobacz [[Siłownia]].
+- **Termin, przypomnienie czy alarm** — okno daty ma nad kalendarzem wybór: sama data, **Przypomnienie** albo **Alarm**. To okno przycisku z kalendarzem przy zadaniu, **Wybierz datę…**, poleceń **Termin** i **Zaplanowane**, **Zmień datę…** na chipie daty oraz dat w wynikach zapytań, tabelach, Zadaniach i kalendarzu. Wybór Przypomnienia albo Alarmu pyta o godzinę (domyślną godzinę przypomnień z ustawień) i zapisuje `⏰ 2026-11-12 09:00` albo `⏰! 2026-11-12 09:00` zamiast daty 📅 ⏳ 🛫, w jej miejscu i z jej regułą 🔁; jedno Ctrl+Z to cofa. Zobacz [[Przypomnienia i alarmy]].
+
 ## 0.16.4 — 11 listopada 2026
 
 **Nowe**

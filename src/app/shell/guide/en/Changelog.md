@@ -7,6 +7,12 @@ brulion: document
 
 Here you'll find what changed in every version of Brulion, newest first. Full release notes with downloads are on GitHub: https://github.com/janusz-bit/brulion/releases
 
+## 0.17.0 — November 11, 2026
+
+**New**
+- **Gym** — a training log in your journal, Brulion's first extension (written in Luau, a small sandboxed scripting language). Switch it on in **Settings → Extensions → Gym**. You write the sets as ordinary notes (`[[Squat]] 100 kg 5×5`, `BW+10 kg 3×8`, `5 km 27:30`), a page tagged `workout-plan` is a plan, and **Start a workout** writes it into today's note with the weights of the last session — heavier when every set was done. The **Gym** view has today's workout (tick an exercise off, − / + for the last set's weight and reps, add or remove a set, a rest timer with a notification) and the progress of every exercise (its record, a chart and its sessions). Everything stays plain Markdown. See [[Gym]].
+- **A date, a reminder or an alarm** — the date dialog has a choice above the calendar: the date itself, **Reminder** or **Alarm**. This is the dialog of the calendar button on a task, **Pick a date…**, the **Due date** and **Scheduled** commands, a date chip's **Change date…**, and of dates in query results, tables, Tasks and the calendar. Choosing Reminder or Alarm asks for a time (the default reminder time from the settings) and writes `⏰ 2026-11-12 09:00` or `⏰! 2026-11-12 09:00` instead of the 📅 ⏳ 🛫 date, in its place and with its 🔁 rule; one Ctrl+Z takes it back. See [[Reminders and alarms]].
+
 ## 0.16.4 — November 11, 2026
 
 **New**
