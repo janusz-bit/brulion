@@ -288,8 +288,10 @@ private Q_SLOTS:
         QVERIFY(first.endsWith(u"O czym to jest?"_s));
         QVERIFY(!request.value(u"system"_s).toString().isEmpty());
         QVERIFY(!request.value(u"tools"_s).toList().isEmpty());
-        r = engine.resume(r.call, QVariantMap{{u"text"_s, u"Plan siłowy.\n\n## Ćwiczenia\n- Przysiad\n1. Martwy ciąg\n```\nkod\n```"_s},
-                                              {u"raw"_s, u"[]"_s}});
+        r = engine.resume(
+                r.call,
+                QVariantMap{{u"text"_s, u"Plan siłowy.\n\n## Ćwiczenia\n- Przysiad\n1. Martwy ciąg\n```\nkod\n```"_s},
+                            {u"raw"_s, u"[]"_s}});
         QVERIFY2(r.ok(), qPrintable(r.error));
         QCOMPARE(r.value.toString(), u"Odpowiedź AI jest w dzisiejszej notatce."_s);
         QCOMPARE(host.appended.size(), 1);
