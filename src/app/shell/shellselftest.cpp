@@ -5925,16 +5925,22 @@ void checkCleanup(QQuickWindow *window, AppController *app, const Check &check)
     QQuickItem *trashButton = shownNamed(window->contentItem(), u"cleanupTrash"_s);
     check(trashButton && !trashButton->isEnabled(), "with nothing ticked nothing can be moved to the trash");
 
+    // The row of `title`, scrolled into the list's view: the list makes it with its next layout,
+    // waited for (a fixed pause was too short under the sanitizers, ~25x slower).
     const auto rowOf = [&](const QString &title) -> QQuickItem * {
-        const QVariantList shownFiles = view ? view->property("shown").toList() : QVariantList();
-        for (int i = 0; i < shownFiles.size(); ++i) {
-            if (shownFiles[i].toMap().value(u"title"_s).toString() == title)
-                QMetaObject::invokeMethod(list, "positionViewAtIndex", i, 4 /* ListView.Contain */);
-        }
-        settle(100);
-        return findShown(list, [&](QQuickItem *item) {
-            return isA(item, "BListItem") && item->property("text").toString() == title;
+        QQuickItem *row = nullptr;
+        waitFor([&] {
+            const QVariantList shownFiles = view ? view->property("shown").toList() : QVariantList();
+            for (int i = 0; i < shownFiles.size(); ++i) {
+                if (shownFiles[i].toMap().value(u"title"_s).toString() == title)
+                    QMetaObject::invokeMethod(list, "positionViewAtIndex", i, 4 /* ListView.Contain */);
+            }
+            row = findShown(list, [&](QQuickItem *item) {
+                return isA(item, "BListItem") && item->property("text").toString() == title;
+            });
+            return row != nullptr;
         });
+        return row;
     };
     QQuickItem *noteRow = rowOf(u"Sprzątanie stara notatka"_s);
     QQuickItem *pictureRow = rowOf(u"Sprzątanie żółw.png"_s);
