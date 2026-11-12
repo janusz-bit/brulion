@@ -23,7 +23,12 @@ BDialog {
         dialog.extensions.answerChoice(option)
     }
 
-    title: extensions.questionTitle
+    /// The question's first line is the title; the lines after it (b.choose's preview of a change
+    /// the AI assistant wants to make, say) show under it, as plain text: they quote notes.
+    readonly property string questionText: extensions.questionTitle
+    readonly property int titleEnd: Js.indexOf(questionText, "\n")
+    readonly property string details: titleEnd >= 0 ? Js.trim(Js.sliceFrom(questionText, titleEnd + 1)) : ""
+    title: titleEnd >= 0 ? Js.slice(questionText, 0, titleEnd) : questionText
     iconName: "circle-help"
     showFooter: kind !== "choose"
     acceptText: kind === "form" ? qsTr("Save") : qsTr("OK")
@@ -61,6 +66,26 @@ BDialog {
         function onQuestionChanged() {
             if (dialog.extensions.questionKind !== "")
                 openLater.restart() // after the dialog that answered the last one has closed
+        }
+    }
+
+    Rectangle {
+        objectName: "extensionQuestionDetails"
+        Layout.fillWidth: true
+        visible: dialog.details !== ""
+        implicitHeight: detailsText.implicitHeight + 2 * Theme.space3
+        radius: Theme.radius
+        color: Theme.bgSunken
+        BText {
+            id: detailsText
+            x: Theme.space3
+            y: Theme.space3
+            width: parent.width - 2 * Theme.space3
+            text: dialog.details
+            textFormat: Text.PlainText
+            wrapMode: Text.Wrap
+            maximumLineCount: 18
+            elide: Text.ElideRight
         }
     }
 

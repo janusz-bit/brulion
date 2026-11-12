@@ -61,6 +61,40 @@ public:
         }
         return out;
     }
+    /// search(): the lines of every page holding the query's text (as written), the query asked.
+    QVariantList search(const QString &query, int limit) override
+    {
+        searched << query;
+        QVariantList out;
+        for (auto it = pagesByName.cbegin(); it != pagesByName.cend() && out.size() < limit; ++it) {
+            int line = 0;
+            for (const QString &text : it.value().split(u'\n')) {
+                ++line;
+                if (text.contains(query))
+                    out << QVariantMap{{u"page"_s, it.key()},
+                                       {u"line"_s, line},
+                                       {u"excerpt"_s, text},
+                                       {u"ref"_s, u"%1.md#L%2@0"_s.arg(it.key()).arg(line)}};
+            }
+        }
+        return out;
+    }
+    /// query(): `queryResult` for any query but "zła", which is none.
+    QVariantMap query(const QString &source, int limit, QString *error) override
+    {
+        queried << source;
+        if (source == u"zła")
+            *error = u"unknown filter"_s;
+        QVariantMap result = queryResult;
+        result.insert(u"limit"_s, limit);
+        return error->isEmpty() ? result : QVariantMap();
+    }
+    QStringList searched, queried;
+    QVariantMap queryResult{{u"total"_s, 1},
+                            {u"items"_s, QVariantList{QVariantMap{{u"page"_s, u"Dom"_s},
+                                                                  {u"text"_s, u"Zapłacić czynsz"_s},
+                                                                  {u"task"_s, u" "_s},
+                                                                  {u"due"_s, u"2026-11-13"_s}}}}};
     QString write(const QString &, const QString &page, const QString &content) override
     {
         pagesByName.insert(page, content);
@@ -631,6 +665,92 @@ private Q_SLOTS:
         QVERIFY(engine->evaluate(u"asystent"_s, u"coroutine.wrap(function() return b.ai(\"x\") end)()"_s, u"t"_s)
                         .error.contains(u"cannot wait for an answer here"_s));
         QVERIFY(engine->evaluate(u"asystent"_s, u"b.ai(print)"_s, u"t"_s).error.contains(u"argument 1 must be"_s));
+    }
+
+    void searchAndQuery()
+    {
+        // b.search and b.query: the host's full-text search and its query language, no permission
+        // needed (reading, as b.read).
+        host.pagesByName.insert(u"Dom"_s, u"- [ ] Zapłacić czynsz 📅 2026-11-13\n- Żółw w ogrodzie"_s);
+        LOAD_OK(ext(u"szukaj"_s, uR"lua(
+            b.command("s", function()
+                local hits = b.search("Żółw", 5)
+                return #hits .. " " .. hits[1].page .. ":" .. hits[1].line .. " " .. hits[1].ref
+            end)
+            b.command("q", function()
+                local r = b.query("type:tasks status:todo")
+                return r.total .. " " .. r.items[1].text .. " " .. r.items[1].due .. " " .. r.limit
+            end)
+            b.command("zla", function() return b.query("zła") end)
+        )lua"_s,
+                    false));
+        QCOMPARE(engine->runCommand(u"szukaj"_s, u"s"_s, {}).value.toString(), u"1 Dom:2 Dom.md#L2@0"_s);
+        QCOMPARE(host.searched, QStringList{u"Żółw"_s});
+        QCOMPARE(engine->runCommand(u"szukaj"_s, u"q"_s, {}).value.toString(), u"1 Zapłacić czynsz 2026-11-13 50"_s);
+        QCOMPARE(host.queried, QStringList{u"type:tasks status:todo"_s});
+        const Result bad = engine->runCommand(u"szukaj"_s, u"zla"_s, {});
+        QCOMPARE(bad.status, Status::Error);
+        QVERIFY2(bad.error.contains(u"b.query: unknown filter"_s), qPrintable(bad.error));
+        QVERIFY(engine->evaluate(u"szukaj"_s, u"b.search(5)"_s, u"t"_s)
+                        .error.contains(u"argument 1 must be a string"_s));
+        QVERIFY(engine->evaluate(u"szukaj"_s, u"b.query(\"x\", \"dużo\")"_s, u"t"_s)
+                        .error.contains(u"argument 2 must be a number"_s));
+    }
+
+    void aiWithTools()
+    {
+        // An agent's loop in a script: b.ai offers tools; a reply's toolCalls are run and their
+        // results sent with the turn back as it came (raw), until an answer without calls.
+        Extension e = ext(u"agent"_s, uR"lua(
+            local tools = {{ name = "search_notes", description = "Szuka.",
+                             input = { type = "object", properties = { query = { type = "string" } }, required = { "query" } } }}
+            b.command("ask", function()
+                local messages = {{ role = "user", content = "Co o żółwiach?" }}
+                for round = 1, 4 do
+                    local text, reply = b.ai({ messages = messages, tools = tools })
+                    table.insert(messages, { role = "assistant", raw = reply.raw })
+                    if not reply.toolCalls then return text end
+                    local results = {}
+                    for _, call in reply.toolCalls do
+                        local hits = b.search(call.input.query)
+                        table.insert(results, { id = call.id, content = #hits .. " trafień" })
+                    end
+                    table.insert(messages, { role = "user", results = results })
+                end
+                return "za długo"
+            end)
+        )lua"_s,
+                          false);
+        e.permissions = {u"ai"_s};
+        LOAD_OK(e);
+        host.pagesByName.insert(u"Ogród"_s, u"- Żółw je sałatę"_s);
+        Result r = engine->runCommand(u"agent"_s, u"ask"_s, {});
+        QCOMPARE(r.status, Status::Suspended);
+        QVariantMap request = r.value.toMap().value(u"request"_s).toMap();
+        const QVariantList tools = request.value(u"tools"_s).toList();
+        QCOMPARE(tools.size(), 1);
+        QCOMPARE(tools[0].toMap().value(u"input"_s).toMap().value(u"required"_s).toList(), QVariantList{u"query"_s});
+        // The model asks for a search.
+        r = engine->resume(
+                r.call, QVariantMap{{u"text"_s, QString()},
+                                    {u"raw"_s, u"[1]"_s},
+                                    {u"toolCalls"_s,
+                                     QVariantList{QVariantMap{{u"id"_s, u"t1"_s},
+                                                              {u"name"_s, u"search_notes"_s},
+                                                              {u"input"_s, QVariantMap{{u"query"_s, u"Żółw"_s}}}}}}});
+        QCOMPARE(r.status, Status::Suspended);
+        request = r.value.toMap().value(u"request"_s).toMap();
+        const QVariantList messages = request.value(u"messages"_s).toList();
+        QCOMPARE(messages.size(), 3);
+        QCOMPARE(messages[1].toMap().value(u"raw"_s).toString(), u"[1]"_s);
+        const QVariantList results = messages[2].toMap().value(u"results"_s).toList();
+        QCOMPARE(results.size(), 1);
+        QCOMPARE(results[0].toMap().value(u"id"_s).toString(), u"t1"_s);
+        QCOMPARE(results[0].toMap().value(u"content"_s).toString(), u"1 trafień"_s);
+        // The answer ends the loop.
+        r = engine->resume(r.call, QVariantMap{{u"text"_s, u"Żółw je sałatę."_s}, {u"raw"_s, u"[2]"_s}});
+        QVERIFY2(r.ok(), qPrintable(r.error));
+        QCOMPARE(r.value.toString(), u"Żółw je sałatę."_s);
     }
 
     void viewMetaAndNames()

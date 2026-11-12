@@ -261,6 +261,7 @@ private:
         bool toast = false; // also as a message ("Run Luau block")
         bool fromAction = false; // a view's action
         bool hook = false; // a hook: errors to the console, never a question
+        bool askedAi = false; // "Asking AI…" said once per call (an agent's loop asks many times)
         int hookId = 0;
         QString hookEvent;
         QString extension;

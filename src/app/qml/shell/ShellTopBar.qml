@@ -13,9 +13,10 @@ import Brulion
 // the title, the AI assistant's ✨ (while it is on: AppSettings.assistantEnabled), the reading
 // mode's book (pages and the journal), quick capture + (AppSettings.captureButtonShown), search
 // only while the bottom navigation has no Search tab (so the two bars never repeat a button), and
-// the menu. The ✨'s menu runs the assistant (src/core/extensions/builtin/asystent.luau) on the
-// page on screen — in the journal's stream today's note —: ask it, summarise it; the button
-// spins while a model answers (WorkspaceExtensions.aiPending).
+// the menu. The ✨'s menu runs the assistant (src/core/extensions/builtin/asystent.luau): ask it
+// anything — it searches and reads the whole notebook and changes it with the user's yes —, the
+// page on screen (in the journal's stream today's note) going along; summarise that page; the
+// button spins while a model answers (WorkspaceExtensions.aiPending).
 // Phones (narrow windows) show no tab bar: with two tabs or more a square with their number comes
 // before Search — the tab switcher, a menu of the tabs (one tap shows it) with New tab, Close
 // tab and Close other tabs (docs/UI.md "Tabs, split view and windows").
@@ -487,14 +488,14 @@ Rectangle {
             AppController.requestUiAction("toggleNoteMode")
     }
 
-    // The ✨ button's menu: ask the AI (about the page on screen, or anything without one),
-    // summarise the page, the AI's settings.
+    // The ✨ button's menu: ask the AI (anything about the notes, or to change them; the page on
+    // screen goes along), summarise the page, the AI's settings.
     BMenu {
         id: aiMenu
         objectName: "topBarAiMenu"
         BMenuItem {
             objectName: "aiAsk"
-            text: bar.aiPage !== "" ? qsTr("Ask about this page…") : qsTr("Ask the AI…")
+            text: qsTr("Ask the AI…")
             iconName: "message-square"
             onTriggered: bar.runAssistant("ask")
         }

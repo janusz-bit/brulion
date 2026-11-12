@@ -5,13 +5,14 @@ done in the repository simply disappears from the list.
 
 ## Features
 
-* **AI: what is still missing** — extensions can ask a model (`b.ai`, Claude or any
-  OpenAI-compatible API, a server of one's own) and the built-in AI assistant answers about a page
+* **AI: what is still missing** — extensions can ask a model (`b.ai` with tools, Claude or any
+  OpenAI-compatible API, a server of one's own) and the built-in AI assistant is an agent over the
+  whole notebook — full-text search, queries, reading, changes the user confirms
   (docs/EXTENSIONS.md "AI"); missing: the providers' own apps reaching the notes from a phone (a
   remote MCP server: `brulion-cli mcp` over HTTPS with sign-in, for claude.ai's and ChatGPT's
-  connectors), answers streamed as they are written, an assistant in the editor (rewrite the
-  selection, continue a paragraph), questions to the whole notebook with semantic search
-  (docs/SEMANTIC.md) and a model on the device itself.
+  connectors), answers streamed as they are written, a conversation that goes on after the answer
+  (a chat view), an assistant in the editor (rewrite the selection, continue a paragraph), search
+  by meaning rather than words (docs/SEMANTIC.md) and a model on the device itself.
 * **Extensibility as in Emacs and TiddlyWiki: what is still missing** — extension pages, approval
   per device, live reload, hooks (`save`, `change`) and the Luau console are there
   (docs/EXTENSIONS.md); missing: Luau's type checker on save (`b` as a definition file; the

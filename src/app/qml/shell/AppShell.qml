@@ -122,8 +122,11 @@ FocusScope {
         : typing ? keyboardRoom + (toolbarDocked ? Theme.editToolbarHeight : 0) : navigationBar + keyboardRoom
     /// Toasts go to the window's top (Main.qml) while text is typed on a touch screen — the
     /// on-screen keyboard up, or an editing toolbar docked while a view edits text: the caret's
-    /// line is kept right above the keyboard and the toolbar, under the toasts' usual place.
+    /// line is kept right above the keyboard and the toolbar, under the toasts' usual place — and
+    /// while an extension's question is a bottom sheet: the AI assistant's "Asking AI…" covered
+    /// the change it asks about and its choices.
     readonly property bool toastsAtTop: KeyboardInsets.shown || (toolbarDocked && shell.routeView.viewEditing)
+                                        || (extensionQuestion.opened && extensionQuestion.sheet)
     readonly property string title: shell.routeView.viewTitle !== "" ? shell.routeView.viewTitle
                                     : routeTitles.routeTitle(shell.currentView, shell.routePath,
                                                              routeTitles.field(AppController.currentRoute, "date"),

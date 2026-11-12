@@ -5459,7 +5459,7 @@ void checkExtensionPages(QQuickWindow *window, AppController *app, const Check &
 }
 
 /// The AI assistant's ✨ on the top bar: none while the assistant is off; switched on, its menu on
-/// a page — "Summarise this page" enabled —, "Ask about this page…" running the assistant's
+/// a page — "Summarise this page" enabled —, "Ask the AI…" running the assistant's
 /// question (b.ask: the extension's question, cancelled here: no model is asked), "AI settings…"
 /// opening the settings' Extensions section.
 void checkAiButton(QQuickWindow *window, AppController *app, const Check &check)
@@ -5491,12 +5491,12 @@ void checkAiButton(QQuickWindow *window, AppController *app, const Check &check)
     QQuickItem *summarize = named(u"aiSummarize"_s);
     check(summarize && summarize->isEnabled() && named(u"aiSettings"_s) != nullptr,
           "on a page: “Summarise this page” enabled, and the AI's settings");
-    // "Ask about this page…": the assistant asks for the question (cancelled: no model is asked).
+    // "Ask the AI…": the assistant asks for the question (cancelled: no model is asked).
     if (QQuickItem *ask = named(u"aiAsk"_s))
         tapOrClick(window, pointIn(ask), touch);
     // (The question's dialog is a popup: its text field is what shows.)
     check(waitFor([&] { return ext->isWaiting() && named(u"extensionQuestionText"_s) != nullptr; }, 10000),
-          "“Ask about this page…” runs the assistant: its question shows");
+          "“Ask the AI…” runs the assistant: its question shows");
     // Its "Cancel", tapped or clicked: the dialog goes, the question is cancelled.
     QQuickItem *sheet = named(u"extensionQuestionText"_s);
     while (sheet && sheet->parentItem() && !isA(sheet->parentItem(), "QQuickOverlay"))

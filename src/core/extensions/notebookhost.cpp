@@ -1,6 +1,7 @@
 #include "extensions/notebookhost.h"
 
 #include "extensions/blockedit.h"
+#include "index/query.h"
 #include "index/vaultindex.h"
 #include "markdown/tasks.h"
 #include "notebook/itemref.h"
@@ -225,6 +226,90 @@ QVariantList NotebookHost::blocks(const BlockQuery &query)
         out << blockMap(hit.path, *note, lines, hit.block, 0);
     }
     return out;
+}
+
+QVariantList NotebookHost::search(const QString &query, int limit)
+{
+    QVariantList out;
+    const QList<SearchHit> hits = m_index.search(query, std::clamp(limit, 1, 200));
+    for (const SearchHit &hit : hits) {
+        const ParsedNote *note = m_index.note(hit.path);
+        if (!note)
+            continue;
+        QVariantMap item{{u"page"_s, note->title}, {u"excerpt"_s, hit.excerpt}};
+        if (note->journalDate)
+            item.insert(u"date"_s, note->journalDate->toString(Qt::ISODate));
+        if (hit.line >= 0) {
+            item.insert(u"line"_s, hit.line + 1);
+            // The block holding that line: the last one starting at it or above.
+            int holding = -1;
+            for (int i = 0; i < note->blocks.size(); ++i)
+                if (note->blocks[i].line >= 0 && note->blocks[i].line <= hit.line
+                    && (holding < 0 || note->blocks[i].line >= note->blocks[holding].line))
+                    holding = i;
+            if (holding >= 0) {
+                const QVariantMap block =
+                        blockMap(hit.path, *note, text::splitLines(m_index.content(hit.path)), holding, 64);
+                for (const QString &key : {u"ref"_s, u"text"_s, u"task"_s})
+                    if (block.contains(key))
+                        item.insert(key, block.value(key));
+            }
+        }
+        out << item;
+    }
+    return out;
+}
+
+QVariantMap NotebookHost::query(const QString &source, int limit, QString *error)
+{
+    const std::variant<Query, QString> parsed = parseQuery(source);
+    if (const QString *message = std::get_if<QString>(&parsed)) {
+        if (error)
+            *error = *message;
+        return {};
+    }
+    Query query = std::get<Query>(parsed);
+    limit = std::clamp(limit, 1, 1000);
+    if (!query.limit || *query.limit > limit)
+        query.limit = limit;
+    QueryOptions options;
+    options.now = now().time();
+    options.defaultLimit = limit;
+    const QueryResult result = runQuery(query, m_index, now().date(), Qt::Monday, options);
+    QVariantList items;
+    VaultPath linesOf;
+    QList<text::Line> lines;
+    for (const QueryItem &item : result.items) {
+        const ParsedNote *note = m_index.note(item.path);
+        if (!note)
+            continue;
+        if (item.blockIndex < 0 || item.blockIndex >= note->blocks.size()) {
+            QVariantMap page{{u"page"_s, note->title}};
+            if (note->journalDate)
+                page.insert(u"date"_s, note->journalDate->toString(Qt::ISODate));
+            items << page;
+            continue;
+        }
+        if (linesOf != item.path) {
+            linesOf = item.path;
+            lines = text::splitLines(m_index.content(item.path));
+        }
+        // (Depth 64: the block without its subtree.)
+        QVariantMap block = blockMap(item.path, *note, lines, item.blockIndex, 64);
+        block.remove(u"children"_s);
+        if (item.task) {
+            if (item.task->due)
+                block.insert(u"due"_s, item.task->due->toString());
+            if (item.task->scheduled)
+                block.insert(u"scheduled"_s, item.task->scheduled->toString());
+            if (item.task->start)
+                block.insert(u"start"_s, item.task->start->toString());
+        }
+        if (item.reminder)
+            block.insert(u"reminder"_s, item.reminder->at.toString());
+        items << block;
+    }
+    return {{u"total"_s, result.total}, {u"items"_s, items}};
 }
 
 QString NotebookHost::writeFile(const QString &extension, const VaultPath &path, const QString &content)

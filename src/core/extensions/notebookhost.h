@@ -59,6 +59,8 @@ public:
     std::optional<QString> read(const QString &page) override;
     QVariantMap page(const QString &page) override;
     QVariantList blocks(const BlockQuery &query) override;
+    QVariantList search(const QString &query, int limit) override;
+    QVariantMap query(const QString &source, int limit, QString *error) override;
     QString write(const QString &extension, const QString &page, const QString &content) override;
     QString appendToJournal(const QString &extension, const QString &date, const QString &markdown) override;
     QString replaceBlock(const QString &extension, const QString &ref, const QString &text,

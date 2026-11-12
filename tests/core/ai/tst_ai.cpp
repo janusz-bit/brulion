@@ -40,7 +40,7 @@ ai::Settings claude()
 ai::Request ask(const QString &prompt)
 {
     ai::Request r;
-    r.messages << ai::Message{u"user"_s, prompt};
+    r.messages << ai::textMessage(u"user"_s, prompt);
     return r;
 }
 
@@ -232,6 +232,207 @@ private Q_SLOTS:
         r = ai::readReply(openai, json(429, R"({"error":{"message":"Rate limit reached","type":"requests"}})"));
         QVERIFY2(r.error.endsWith(u"Rate limit reached"_s), qPrintable(r.error));
         QVERIFY(!ai::readReply(openai, json(200, R"({"choices":[]})")).ok);
+    }
+
+    // Tools (an agent's loop): a script's table → each provider's request, the assistant's turn sent
+    // back verbatim (thinking blocks included), one turn's results in one message, the calls read.
+    void tools()
+    {
+        // The conversation of a loop: the question, the assistant's turn as it came, the results.
+        const QString anthropicTurn = QString::fromUtf8(
+                R"([{"type":"thinking","thinking":"","signature":"sig=="},)"
+                R"({"type":"text","text":"Szukam."},)"
+                R"({"type":"tool_use","id":"toolu_1","name":"search_notes","input":{"query":"żółw"}}])");
+        const QVariantMap schema{{u"type"_s, u"object"_s},
+                                 {u"properties"_s, QVariantMap{{u"query"_s, QVariantMap{{u"type"_s, u"string"_s}}}}},
+                                 {u"required"_s, QVariantList{u"query"_s}}};
+        const QVariantMap table{
+                {u"system"_s, u"Notatki."_s},
+                {u"tools"_s, QVariantList{QVariantMap{{u"name"_s, u"search_notes"_s},
+                                                      {u"description"_s, u"Szuka w notatkach."_s},
+                                                      {u"input"_s, schema}},
+                                          // `{}` of a script reads as an empty list: an empty object.
+                                          QVariantMap{{u"name"_s, u"today"_s},
+                                                      {u"description"_s, u"Dzisiejsza data."_s},
+                                                      {u"input"_s, QVariantMap{{u"properties"_s, QVariantList{}}}}}}},
+                {u"messages"_s,
+                 QVariantList{QVariantMap{{u"role"_s, u"user"_s}, {u"content"_s, u"Co wiem o żółwiach?"_s}},
+                              QVariantMap{{u"role"_s, u"assistant"_s}, {u"raw"_s, anthropicTurn}},
+                              QVariantMap{{u"role"_s, u"user"_s},
+                                          {u"results"_s, QVariantList{QVariantMap{{u"id"_s, u"toolu_1"_s},
+                                                                                  {u"content"_s, u"[[Żółw]]: gad"_s}},
+                                                                      QVariantMap{{u"id"_s, u"toolu_2"_s},
+                                                                                  {u"content"_s, u"no such page"_s},
+                                                                                  {u"isError"_s, true}}}}}}}};
+        QString error;
+        const std::optional<ai::Request> request = ai::requestFrom(table, &error);
+        QVERIFY2(request, qPrintable(error));
+        QCOMPARE(request->tools.size(), 2);
+        QCOMPARE(request->messages.size(), 3);
+        QCOMPARE(request->messages[2].results.size(), 2);
+        QVERIFY(request->messages[2].results[1].isError);
+
+        std::optional<sync::HttpRequest> http = ai::httpRequest(claude(), *request, &error);
+        QVERIFY2(http, qPrintable(error));
+        QJsonObject body = bodyOf(*http);
+        const QJsonArray tools = body.value(u"tools"_s).toArray();
+        QCOMPARE(tools.size(), 2);
+        QCOMPARE(tools[0].toObject().value(u"name"_s).toString(), u"search_notes"_s);
+        QCOMPARE(tools[0].toObject()
+                         .value(u"input_schema"_s)
+                         .toObject()
+                         .value(u"required"_s)
+                         .toArray()
+                         .first()
+                         .toString(),
+                 u"query"_s);
+        QVERIFY(tools[1].toObject().value(u"input_schema"_s).toObject().value(u"properties"_s).isObject());
+        QCOMPARE(tools[1].toObject().value(u"input_schema"_s).toObject().value(u"type"_s).toString(), u"object"_s);
+        QVERIFY(!body.contains(u"tool_choice"_s)); // (forced tool use is refused by the current models)
+        QJsonArray messages = body.value(u"messages"_s).toArray();
+        QCOMPARE(messages.size(), 3);
+        // The assistant's content blocks as they came: the thinking block and its signature too.
+        QCOMPARE(messages[1].toObject().value(u"content"_s).toArray(),
+                 QJsonDocument::fromJson(anthropicTurn.toUtf8()).array());
+        const QJsonArray results = messages[2].toObject().value(u"content"_s).toArray();
+        QCOMPARE(messages[2].toObject().value(u"role"_s).toString(), u"user"_s);
+        QCOMPARE(results.size(), 2);
+        QCOMPARE(results[0].toObject().value(u"type"_s).toString(), u"tool_result"_s);
+        QCOMPARE(results[0].toObject().value(u"tool_use_id"_s).toString(), u"toolu_1"_s);
+        QCOMPARE(results[0].toObject().value(u"content"_s).toString(), u"[[Żółw]]: gad"_s);
+        QVERIFY(!results[0].toObject().contains(u"is_error"_s));
+        QVERIFY(results[1].toObject().value(u"is_error"_s).toBool());
+
+        // An OpenAI-compatible API: functions; the assistant's message as it came; a "tool"
+        // message per result.
+        ai::Settings openai;
+        openai.provider = u"openai"_s;
+        openai.model = u"qwen3"_s;
+        openai.baseUrl = u"http://192.168.1.10:11434/v1"_s;
+        // (Built, not written out: the arguments are JSON in a JSON text.)
+        const QJsonObject openAiCall{{u"id"_s, u"call_1"_s},
+                                     {u"type"_s, u"function"_s},
+                                     {u"function"_s, QJsonObject{{u"name"_s, u"search_notes"_s},
+                                                                 {u"arguments"_s, u"{\"query\":\"żółw\"}"_s}}}};
+        const QString openAiTurn =
+                QString::fromUtf8(QJsonDocument(QJsonObject{{u"role"_s, u"assistant"_s},
+                                                            {u"content"_s, QJsonValue::Null},
+                                                            {u"tool_calls"_s, QJsonArray{openAiCall}}})
+                                          .toJson(QJsonDocument::Compact));
+        QVariantMap second = table;
+        QVariantList conversation = second.value(u"messages"_s).toList();
+        conversation[1] = QVariantMap{{u"role"_s, u"assistant"_s}, {u"raw"_s, openAiTurn}};
+        second.insert(u"messages"_s, conversation);
+        const std::optional<ai::Request> openAiRequest = ai::requestFrom(second, &error);
+        QVERIFY2(openAiRequest, qPrintable(error));
+        http = ai::httpRequest(openai, *openAiRequest, &error);
+        QVERIFY2(http, qPrintable(error));
+        body = bodyOf(*http);
+        const QJsonObject function = body.value(u"tools"_s).toArray().first().toObject();
+        QCOMPARE(function.value(u"type"_s).toString(), u"function"_s);
+        QCOMPARE(function.value(u"function"_s).toObject().value(u"name"_s).toString(), u"search_notes"_s);
+        QVERIFY(function.value(u"function"_s).toObject().value(u"parameters"_s).isObject());
+        messages = body.value(u"messages"_s).toArray();
+        // system, user, the assistant's message, a tool message per result
+        QCOMPARE(messages.size(), 5);
+        QCOMPARE(messages[2].toObject(), QJsonDocument::fromJson(openAiTurn.toUtf8()).object());
+        QCOMPARE(messages[3].toObject().value(u"role"_s).toString(), u"tool"_s);
+        QCOMPARE(messages[3].toObject().value(u"tool_call_id"_s).toString(), u"toolu_1"_s);
+        QCOMPARE(messages[4].toObject().value(u"content"_s).toString(), u"Error: no such page"_s);
+        // A turn of the other provider (the provider changed mid-conversation): its text.
+        http = ai::httpRequest(claude(), *openAiRequest, &error);
+        QVERIFY(http);
+        QVERIFY(bodyOf(*http).value(u"messages"_s).toArray()[1].toObject().value(u"content"_s).isString());
+
+        // Reading the calls: Anthropic's tool_use blocks, the turn to send back.
+        ai::Reply reply =
+                ai::readReply(claude(), json(200, R"({"model":"claude-opus-5-5","stop_reason":"tool_use","content":)"
+                                                          + anthropicTurn.toUtf8() + "}"));
+        QVERIFY(reply.ok);
+        QCOMPARE(reply.stopReason, u"tool_use"_s);
+        QCOMPARE(reply.text, u"Szukam."_s);
+        QCOMPARE(reply.toolCalls.size(), 1);
+        QCOMPARE(reply.toolCalls[0].id, u"toolu_1"_s);
+        QCOMPARE(reply.toolCalls[0].name, u"search_notes"_s);
+        QCOMPARE(reply.toolCalls[0].input.value(u"query"_s).toString(), u"żółw"_s);
+        QCOMPARE(QJsonDocument::fromJson(reply.raw).array(), QJsonDocument::fromJson(anthropicTurn.toUtf8()).array());
+        QVariantMap v = reply.toVariant();
+        QCOMPARE(v.value(u"toolCalls"_s).toList().size(), 1);
+        QCOMPARE(v.value(u"toolCalls"_s).toList()[0].toMap().value(u"input"_s).toMap().value(u"query"_s).toString(),
+                 u"żółw"_s);
+        // The raw text goes back into a request unchanged.
+        QVERIFY(ai::requestFrom(
+                {{u"messages"_s, QVariantList{QVariantMap{{u"role"_s, u"user"_s}, {u"content"_s, u"a"_s}},
+                                              QVariantMap{{u"role"_s, u"assistant"_s}, {u"raw"_s, v.value(u"raw"_s)}},
+                                              QVariantMap{{u"role"_s, u"user"_s}, {u"content"_s, u"b"_s}}}}},
+                &error));
+        // An OpenAI-compatible API's tool_calls, their arguments a JSON text.
+        reply = ai::readReply(openai,
+                              json(200, R"({"model":"qwen3","choices":[{"finish_reason":"tool_calls","message":)"
+                                                + openAiTurn.toUtf8() + "}]}"));
+        QVERIFY(reply.ok);
+        QCOMPARE(reply.stopReason, u"tool_calls"_s);
+        QCOMPARE(reply.toolCalls.size(), 1);
+        QCOMPARE(reply.toolCalls[0].id, u"call_1"_s);
+        QCOMPARE(reply.toolCalls[0].input.value(u"query"_s).toString(), u"żółw"_s);
+        QCOMPARE(QJsonDocument::fromJson(reply.raw).object(), QJsonDocument::fromJson(openAiTurn.toUtf8()).object());
+        // Arguments that are no JSON object: no input, the call still named.
+        reply = ai::readReply(
+                openai,
+                json(200, R"({"choices":[{"message":{"role":"assistant","content":null,)"
+                          R"("tool_calls":[{"id":"c","function":{"name":"today","arguments":"nie json"}}]}}]})"));
+        QVERIFY(reply.ok);
+        QCOMPARE(reply.toolCalls.size(), 1);
+        QVERIFY(reply.toolCalls[0].input.isEmpty());
+        // A plain answer has no toolCalls in b.ai's table.
+        reply = ai::readReply(claude(),
+                              json(200, R"({"stop_reason":"end_turn","content":[{"type":"text","text":"Gad."}]})"));
+        QVERIFY(!reply.toVariant().contains(u"toolCalls"_s));
+        // (The same blocks; the keys in Qt's order.)
+        QCOMPARE(QJsonDocument::fromJson(reply.toVariant().value(u"raw"_s).toString().toUtf8()).array(),
+                 QJsonDocument::fromJson(R"([{"type":"text","text":"Gad."}])").array());
+
+        // Refused, each with why.
+        const auto refused = [&](const QVariantMap &t, const QString &why) {
+            QString e;
+            const bool none = !ai::requestFrom(t, &e);
+            if (!none || !e.contains(why))
+                qWarning("%s", qPrintable(e));
+            return none && e.contains(why);
+        };
+        const QVariantMap user{{u"role"_s, u"user"_s}, {u"content"_s, u"a"_s}};
+        const auto withTools = [&](const QVariantList &list) {
+            return QVariantMap{{u"prompt"_s, u"a"_s}, {u"tools"_s, list}};
+        };
+        QVERIFY(refused(withTools({QVariantMap{{u"name"_s, u"szukaj notatek"_s}}}), u"letters, digits"_s));
+        QVERIFY(refused(withTools({QVariantMap{{u"name"_s, u"x"_s}}, QVariantMap{{u"name"_s, u"x"_s}}}),
+                        u"two tools"_s));
+        QVERIFY(refused(
+                withTools({QVariantMap{{u"name"_s, u"x"_s}, {u"input"_s, QVariantMap{{u"type"_s, u"string"_s}}}}}),
+                u"type \"object\""_s));
+        QVERIFY(refused({{u"prompt"_s, u"a"_s}, {u"tools"_s, u"wszystkie"_s}}, u"tools must be a list"_s));
+        QVERIFY(refused(
+                {{u"messages"_s,
+                  QVariantList{user, QVariantMap{{u"role"_s, u"assistant"_s}, {u"raw"_s, u"nie json"_s}}, user}}},
+                u"raw"_s));
+        QVERIFY(refused(
+                {{u"messages"_s, QVariantList{QVariantMap{{u"role"_s, u"user"_s}, {u"results"_s, QVariantList{}}}}}},
+                u"results must be"_s));
+        QVERIFY(refused({{u"messages"_s, QVariantList{QVariantMap{
+                                                 {u"role"_s, u"user"_s},
+                                                 {u"results"_s, QVariantList{QVariantMap{{u"content"_s, u"x"_s}}}}}}}},
+                        u"call's id"_s));
+        QVERIFY(refused({{u"messages"_s,
+                          QVariantList{user, QVariantMap{{u"role"_s, u"assistant"_s}, {u"raw"_s, anthropicTurn}}}}},
+                        u"last message must be the user's"_s));
+        // Results count toward the request's length.
+        QVERIFY(refused({{u"messages"_s,
+                          QVariantList{QVariantMap{
+                                  {u"role"_s, u"user"_s},
+                                  {u"results"_s, QVariantList{QVariantMap{
+                                                         {u"id"_s, u"t"_s},
+                                                         {u"content"_s, QString(ai::MaxRequestChars + 1, u'a')}}}}}}}},
+                        u"too long"_s));
     }
 
     void clientOverATransport()

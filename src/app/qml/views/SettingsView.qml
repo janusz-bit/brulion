@@ -1396,7 +1396,7 @@ Item {
                 SettingSwitch {
                     objectName: "assistantSetting"
                     text: qsTr("AI assistant")
-                    description: qsTr("The ✨ button on the top bar (and “AI: …” in the palette) asks about the page on screen or summarises it: the answer goes into today's note.")
+                    description: qsTr("The ✨ button on the top bar (and “AI: …” in the palette): ask about your notes — the AI searches and reads the whole notebook — or ask it to change them, each change with your yes; or sum up the page on screen. The answer goes into today's note.")
                     iconName: "sparkles"
                     checked: AppSettings.assistantEnabled
                     onToggled: AppSettings.assistantEnabled = checked

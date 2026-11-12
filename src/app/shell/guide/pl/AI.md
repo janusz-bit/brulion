@@ -23,11 +23,13 @@ Klucz zostaje **tylko na tym urządzeniu** (nie w notatniku, nie w synchronizacj
 ## Asystent AI
 Włącz go w **Ustawieniach → Rozszerzenia → AI → Asystent AI**. Wtedy górny pasek ma przycisk **✨** — także na telefonie — z pozycjami:
 
-- **Zapytaj o tę stronę…** — wpisz pytanie; odpowiedź trafi do **dzisiejszej notatki** pod `🤖 Twoje pytanie ([[Strona]])`, jej punkty jako elementy listy. W dzienniku pyta o dzisiejszą notatkę; bez strony to zwykłe pytanie (**Zapytaj AI…**).
-- **Streść tę stronę** — kilka zdań i zadania ze strony, także do dzisiejszej notatki.
+- **Zapytaj AI…** — zapytaj o cokolwiek w notatkach albo poproś, żeby coś w nich zrobiło. AI **samo przeszukuje i czyta cały notatnik** — strony, dziennik, zadania z terminami, tagi, przypomnienia — więc możesz zapytać „Co mam do zrobienia w tym tygodniu?”, „Co pisałem o wyjeździe?” albo poprosić „Dopisz mleko do listy zakupów”. Strona na ekranie idzie razem z pytaniem (w dzienniku: dzisiejsza notatka).
+- **Streść tę stronę** — kilka zdań i zadania ze strony.
 - **Ustawienia AI…** — dostawca, klucz i model.
 
-Gdy model odpowiada, przycisk się kręci. Te same polecenia są w palecie (Ctrl+K) jako **AI: zapytaj o tę stronę** i **AI: streść tę stronę**.
+**Zmiany tylko za Twoją zgodą.** Zanim AI dopisze coś do strony albo dnia, zapisze stronę czy odhaczy zadanie, okno pokazuje, co chce zapisać: **Zgoda**, **Zgoda na wszystkie zmiany tego pytania** albo **Nie**. Tego, na co się nie zgodzisz, AI nie zapisze — i dowie się o tym.
+
+Odpowiedź trafia do **dzisiejszej notatki** pod `🤖 Twoje pytanie`, jej punkty jako elementy listy, z `✏️ Zmienione: [[…]]` — stronami, które AI zmieniło. Asystent pracuje narzędziami (szukanie, czytanie, zapis): na własnym serwerze wybierz model, który je obsługuje (np. Qwen 3 albo Llama 3.1); Claude je obsługuje. Gdy model odpowiada, przycisk się kręci. Te same polecenia są w palecie (Ctrl+K) jako **AI: zapytaj albo poproś…** i **AI: streść tę stronę**.
 
 Odpowiedź zostaje w notatkach, więc przeczytasz ją później na telefonie, podlinkujesz albo poprawisz.
 

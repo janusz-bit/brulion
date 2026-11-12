@@ -23,11 +23,13 @@ The key stays **only on this device** (not in the notebook, not in sync, not in 
 ## The AI assistant
 Switch it on in **Settings → Extensions → AI → AI assistant**. Then the top bar has a **✨** button — on the phone too — with:
 
-- **Ask about this page…** — type a question; the answer goes into **today's note** under `🤖 your question ([[Page]])`, its points as items. In the journal it asks about today's note; without a page it is a plain question (**Ask the AI…**).
-- **Summarise this page** — a few sentences and the page's tasks, also into today's note.
+- **Ask the AI…** — ask anything about your notes, or ask it to do something in them. The AI **searches and reads the whole notebook** by itself — pages, the journal, tasks with their dates, tags, reminders — so you can ask "What do I have to do this week?", "What did I write about the trip?" or "Add milk to my shopping list". The page on screen goes along (in the journal: today's note).
+- **Summarise this page** — a few sentences and the page's tasks.
 - **AI settings…** — the provider, the key and the model.
 
-While the model answers, the button spins. The same commands are in the palette (Ctrl+K) as **AI: ask about this page** and **AI: summarise this page**.
+**Changes only with your yes.** Before the AI adds to a page or a day, writes a page or ticks off a task, a window shows what it would write: **Allow**, **Allow every change of this question** or **No**. What you decline is not written, and the AI is told so.
+
+The answer goes into **today's note** under `🤖 your question`, its points as items, with `✏️ Changed: [[…]]` naming the pages it changed. The assistant works with tools (searching, reading, writing): on a server of your own pick a model that supports them (e.g. Qwen 3 or Llama 3.1); Claude does. While the model answers, the button spins. The same commands are in the palette (Ctrl+K) as **AI: ask or ask to do…** and **AI: summarise this page**.
 
 The answer stays with your notes, so you can read it later on the phone, link it or edit it.
 

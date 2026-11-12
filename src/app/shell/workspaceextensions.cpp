@@ -568,12 +568,16 @@ void WorkspaceExtensions::setAi(const ai::Settings &settings) { m_aiSettings = s
 void WorkspaceExtensions::dispatchAi(int call, const QVariantMap &request)
 {
     const CallContext ctx = m_calls.value(call);
+    m_calls[call].askedAi = true;
     ++m_aiPending;
     Q_EMIT aiPendingChanged();
-    if (ctx.console)
+    if (ctx.askedAi) {
+        // (A further turn of the same call: said once; the top bar's ✨ spins meanwhile.)
+    } else if (ctx.console) {
         m_console->append(u"info"_s, tr("Asking AI…"));
-    else if (!ctx.hook)
+    } else if (!ctx.hook) {
         Q_EMIT message(tr("Asking AI…"), u"info"_s);
+    }
     QString error;
     const std::optional<ai::Request> r = ai::requestFrom(request, &error);
     const quint64 generation = m_generation;
@@ -611,7 +615,7 @@ void WorkspaceExtensions::finishAi(int call, const QVariantMap &reply, quint64 g
 void WorkspaceExtensions::testAi()
 {
     ai::Request request;
-    request.messages << ai::Message{u"user"_s, u"Say OK."_s};
+    request.messages << ai::textMessage(u"user"_s, u"Say OK."_s);
     request.maxTokens = 1024;
     if (m_aiSettings.provider == u"anthropic")
         request.effort = u"low"_s;

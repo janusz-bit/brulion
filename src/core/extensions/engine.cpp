@@ -482,6 +482,8 @@ void Engine::pushEnvironment(const QString &extension)
     set("read", &Engine::apiRead);
     set("page", &Engine::apiPage);
     set("blocks", &Engine::apiBlocks);
+    set("search", &Engine::apiSearch);
+    set("query", &Engine::apiQuery);
     set("write", &Engine::apiWrite);
     set("appendToJournal", &Engine::apiAppendToJournal);
     set("replaceBlock", &Engine::apiReplaceBlock);
@@ -883,6 +885,14 @@ int Engine::apiPages(lua_State *L) { return finishApi(L, self(L)->pagesImpl(L));
 int Engine::apiRead(lua_State *L) { return finishApi(L, self(L)->readImpl(L)); }
 int Engine::apiPage(lua_State *L) { return finishApi(L, self(L)->pageImpl(L)); }
 int Engine::apiBlocks(lua_State *L) { return finishApi(L, self(L)->blocksImpl(L)); }
+int Engine::apiSearch(lua_State *L)
+{
+    return finishApi(L, self(L)->searchImpl(L));
+}
+int Engine::apiQuery(lua_State *L)
+{
+    return finishApi(L, self(L)->queryImpl(L));
+}
 int Engine::apiWrite(lua_State *L) { return finishApi(L, self(L)->writeImpl(L)); }
 int Engine::apiAppendToJournal(lua_State *L) { return finishApi(L, self(L)->appendImpl(L)); }
 int Engine::apiReplaceBlock(lua_State *L) { return finishApi(L, self(L)->replaceImpl(L)); }
@@ -1072,6 +1082,33 @@ int Engine::blocksImpl(lua_State *L)
     const QVariantList blocks = m_host->blocks(query);
     Unlimited unlimited(&m_unlimited);
     pushVariant(L, blocks);
+    return 1;
+}
+
+int Engine::searchImpl(lua_State *L)
+{
+    QString text;
+    double limit = 20;
+    if (!argString(L, 1, "b.search", &text) || (!lua_isnoneornil(L, 2) && !argNumber(L, 2, "b.search", &limit)))
+        return kRaise;
+    const QVariantList hits = m_host->search(text, int(std::clamp(limit, 1.0, 200.0)));
+    Unlimited unlimited(&m_unlimited);
+    pushVariant(L, hits);
+    return 1;
+}
+
+int Engine::queryImpl(lua_State *L)
+{
+    QString source;
+    double limit = 50;
+    if (!argString(L, 1, "b.query", &source) || (!lua_isnoneornil(L, 2) && !argNumber(L, 2, "b.query", &limit)))
+        return kRaise;
+    QString error;
+    const QVariantMap result = m_host->query(source, int(std::clamp(limit, 1.0, 1000.0)), &error);
+    if (!error.isEmpty())
+        return failWith(L, u"b.query: "_s + error);
+    Unlimited unlimited(&m_unlimited);
+    pushVariant(L, result);
     return 1;
 }
 

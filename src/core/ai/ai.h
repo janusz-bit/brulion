@@ -13,9 +13,18 @@
 //
 // Building the HTTP request and reading the answer are pure functions; Client sends through a
 // sync::HttpTransport (NetworkHttpTransport in the app, a fake in the tests).
+//
+// Tools (an agent's loop, docs/EXTENSIONS.md "AI"): a request may offer tools ({name,
+// description, input = a JSON schema}); a reply that calls some has `toolCalls` ({id, name,
+// input}) and `raw`, the assistant's turn as the provider wrote it. The caller runs the tools and
+// asks again with the conversation so far: the turn sent back as `raw` — verbatim, thinking blocks
+// included, which the providers check — and then a user message of `results` ({id, content,
+// isError}), all of one turn's calls in one message.
 
 #include "sync/http.h"
 
+#include <QByteArray>
+#include <QJsonObject>
 #include <QList>
 #include <QString>
 #include <QVariantMap>
@@ -45,11 +54,40 @@ struct Settings
     bool usable(QString *why = nullptr) const;
 };
 
+/// A tool the model may call: its name (letters, digits, "_" and "-", at most 64), what it does
+/// and when to call it, and its input's JSON schema (an object).
+struct Tool {
+    QString name;
+    QString description;
+    QJsonObject schema;
+};
+
+/// The result of one tool call, sent back in a user message.
+struct ToolResult {
+    QString id; ///< the call's id (Reply::toolCalls)
+    QString content;
+    bool isError = false;
+};
+
 struct Message
 {
     QString role; ///< "user" | "assistant"
     QString content;
+    /// An assistant turn as the provider wrote it (Reply::raw: Anthropic's content blocks, an
+    /// OpenAI-compatible API's message), sent back verbatim instead of `content`.
+    QByteArray raw;
+    /// A user message of tool results instead of `content`.
+    QList<ToolResult> results;
 };
+
+/// A message of text.
+inline Message textMessage(const QString &role, const QString &content)
+{
+    Message message;
+    message.role = role;
+    message.content = content;
+    return message;
+}
 
 struct Request
 {
@@ -58,6 +96,14 @@ struct Request
     QString model; ///< "" = the settings' model
     int maxTokens = 0; ///< 0 = the provider's default (Anthropic: DefaultMaxTokens)
     QString effort; ///< "" | "low" | "medium" | "high" | "xhigh" | "max" (Anthropic's output_config.effort)
+    QList<Tool> tools;
+};
+
+/// A tool the model asked for (Reply::toolCalls).
+struct ToolCall {
+    QString id;
+    QString name;
+    QVariantMap input; ///< the arguments ({} when the model wrote none, or no JSON object)
 };
 
 struct Reply
@@ -69,8 +115,11 @@ struct Reply
     QString stopReason; ///< "end_turn", "max_tokens", "stop", "length" …
     qint64 inputTokens = 0;
     qint64 outputTokens = 0;
+    QList<ToolCall> toolCalls; ///< the tools the model asked for (a request with tools)
+    QByteArray raw;            ///< the assistant's turn as the provider wrote it (compact JSON)
 
-    /// b.ai's answer: {text, model, stopReason, inputTokens, outputTokens} or {error}.
+    /// b.ai's answer: {text, model, stopReason, inputTokens, outputTokens, raw, toolCalls = {{id,
+    /// name, input}} (only when there are some)} or {error}.
     QVariantMap toVariant() const;
 };
 
@@ -78,8 +127,11 @@ struct Reply
 /// names one) for an OpenAI-compatible API.
 QString defaultModel(const QString &provider);
 
-/// A request from b.ai's argument: {prompt = "…"} or {messages = {{role, content}, …}}, with
-/// system, model, maxTokens (1–128000) and effort; nothing when it is not one (`error` says why).
+/// A request from b.ai's argument: {prompt = "…"} or {messages = {…}}, with system, model,
+/// maxTokens (1–128000), effort and tools ({{name, description, input = schema}}); nothing when it
+/// is not one (`error` says why). A message is {role, content}, an assistant's {role = "assistant",
+/// raw = reply.raw} or a user's {role = "user", results = {{id, content, isError?}}}; the last one
+/// is the user's.
 std::optional<Request> requestFrom(const QVariantMap &table, QString *error);
 
 /// The HTTP request for `request` with `settings`; nothing when it cannot be made (`error`).

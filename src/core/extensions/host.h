@@ -39,6 +39,15 @@ public:
     /// {name, tags, props} of an existing page, else an empty map.
     virtual QVariantMap page(const QString &page) = 0;
     virtual QVariantList blocks(const BlockQuery &query) = 0;
+    /// Full-text search over every note (VaultIndex::search: diacritics optional, prefixes, fuzzy),
+    /// the best first, at most `limit`: {page, date?, excerpt, line? (1-based; none for a match in
+    /// the title), ref?, text?, task?} — ref, text and task of the block holding that line.
+    virtual QVariantList search(const QString &query, int limit) = 0;
+    /// A query of the query language (docs/SYNTAX.md §10: "type:tasks status:todo due:before:today
+    /// tag:dom"): {total, items}, at most `limit` items — blocks as blocks() gives them, without
+    /// children, with `due`, `scheduled`, `start` of a task and `reminder` ("2026-11-12 09:00") of
+    /// a reminder; {page, date?} for pages. `error`: why `source` is no query.
+    virtual QVariantMap query(const QString &source, int limit, QString *error) = 0;
 
     // Writing (permission "write"; the engine checks it before calling)
     virtual QString write(const QString &extension, const QString &page, const QString &content) = 0;

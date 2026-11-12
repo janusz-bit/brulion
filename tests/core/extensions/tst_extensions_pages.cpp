@@ -33,6 +33,8 @@ public:
     }
     QVariantMap page(const QString &) override { return {}; }
     QVariantList blocks(const BlockQuery &) override { return {}; }
+    QVariantList search(const QString &, int) override { return {}; }
+    QVariantMap query(const QString &, int, QString *) override { return {}; }
     QString write(const QString &, const QString &, const QString &) override { return {}; }
     QString appendToJournal(const QString &, const QString &, const QString &markdown) override
     {
@@ -262,8 +264,9 @@ private Q_SLOTS:
 
     void assistantAsksAndWrites()
     {
-        // The built-in AI assistant: a question about the page on screen goes to b.ai with the
-        // page's text; the answer is written into today's note as an outline under the question.
+        // The built-in AI assistant: a question goes to b.ai with the page on screen's text and the
+        // agent's tools (tst_extensions_assistant: the tools on a notebook); the answer is written
+        // into today's note as an outline under the question.
         NullHost host;
         host.texts.insert(u"Trening A"_s, u"tags:: plan-treningowy\n\n- [[Przysiad]] 3×5\n"_s);
         Engine engine;
@@ -280,10 +283,13 @@ private Q_SLOTS:
         QCOMPARE(r.status, Status::Suspended);
         const QVariantMap request = r.value.toMap().value(u"request"_s).toMap();
         QCOMPARE(r.value.toMap().value(u"kind"_s).toString(), u"ai"_s);
-        QVERIFY(request.value(u"prompt"_s).toString().contains(u"[[Przysiad]] 3×5"_s));
-        QVERIFY(request.value(u"prompt"_s).toString().endsWith(u"O czym to jest?"_s));
+        const QString first = request.value(u"messages"_s).toList().value(0).toMap().value(u"content"_s).toString();
+        QVERIFY2(first.contains(u"[[Przysiad]] 3×5"_s), qPrintable(first));
+        QVERIFY(first.endsWith(u"O czym to jest?"_s));
         QVERIFY(!request.value(u"system"_s).toString().isEmpty());
-        r = engine.resume(r.call, QVariantMap{{u"text"_s, u"Plan siłowy.\n\n## Ćwiczenia\n- Przysiad\n1. Martwy ciąg\n```\nkod\n```"_s}});
+        QVERIFY(!request.value(u"tools"_s).toList().isEmpty());
+        r = engine.resume(r.call, QVariantMap{{u"text"_s, u"Plan siłowy.\n\n## Ćwiczenia\n- Przysiad\n1. Martwy ciąg\n```\nkod\n```"_s},
+                                              {u"raw"_s, u"[]"_s}});
         QVERIFY2(r.ok(), qPrintable(r.error));
         QCOMPARE(r.value.toString(), u"Odpowiedź AI jest w dzisiejszej notatce."_s);
         QCOMPARE(host.appended.size(), 1);

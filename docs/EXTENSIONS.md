@@ -72,6 +72,8 @@ Reading the notebook:
 | `b.page(name)` | `{name, tags, props, date?}` or nil |
 | `b.read(name)` | the page's text or nil |
 | `b.blocks({page} \| {tag, journal?, from?, to?})` | blocks from the index: a page's top-level blocks, or every block carrying a tag (daily notes only with `journal`; `from`/`to` ISO dates), each `{ref, page, date?, text, task?, tags, props, children}` — `text` is the first line after the marker and checkbox, verbatim; `task` the status character (`" "`, `"x"`, `"-"`, `"/"`, `">"`; a Logseq keyword as its character) |
+| `b.search(text, limit?)` | full-text search over every note (the search view's: words in any form, diacritics optional, the best first; at most `limit`, 20 by default, 200 at most), each `{page, date?, excerpt, line?, ref?, text?, task?}` — `line` 1-based (none for a match in the title), `ref`/`text`/`task` of the block holding that line |
+| `b.query(source, limit?)` | a query of the query language (docs/SYNTAX.md §10: `"type:tasks status:open due:<=+7d"`), `{total, items}` with at most `limit` items (50 by default, 1000 at most): blocks as `b.blocks` gives them, without `children`, plus a task's `due`, `scheduled`, `start` and a reminder's `reminder` (`"2026-11-12 09:00"`); `{page, date?}` for `type:pages`; an invalid query is an error with the reason |
 
 Writing (permission `write`; every write is the whole file through the vault, other lines byte for
 byte):
@@ -174,9 +176,20 @@ answers) while others run; the app shows one question at a time — a new one an
 `b.ai(prompt)` or `b.ai({prompt = …, system = …, model = …, maxTokens = …, effort = …})` (or
 `messages = {{role = "user" | "assistant", content}, …}` for a conversation) asks the model the
 user chose on this device and returns its text and the whole reply (`{text, model, stopReason,
-inputTokens, outputTokens}`); a failure is an error at the script's line ("b.ai: the API key was
+inputTokens, outputTokens, raw}`); a failure is an error at the script's line ("b.ai: the API key was
 refused (HTTP 401): …", "b.ai: no connection: …", "b.ai: the model declined to answer"). It needs
 the permission `ai` (`uprawnienia:: ai`, approved with the page like `zapis`; the console has it).
+
+**Tools** (an agent): `tools = {{name, description, input = <a JSON schema of an object>}}` lets
+the model call functions the script runs. A reply that calls some has `toolCalls = {{id, name,
+input}}`; the script runs them and asks again with the conversation: the reply's turn as
+`{role = "assistant", raw = reply.raw}` — verbatim, the providers check its thinking blocks — and
+then one `{role = "user", results = {{id, content, isError?}}}` with every call's result, until a
+reply without calls. Both providers take the same table (Anthropic's `tool_use` / `tool_result`
+blocks, an OpenAI-compatible API's `tool_calls` and `tool` messages; a server of one's own needs a
+model that knows tools); a turn of the other provider (the setting changed mid-conversation) is
+sent as its text. Forced tool use is not offered (the current Claude models refuse it): a tool's
+description says when to call it.
 The call waits for the answer like a question: nothing blocks — other commands, views and the UI
 go on — and its result is handled as the command's (a message, the console).
 
@@ -200,10 +213,18 @@ go on — and its result is handled as the command's (a message, the console).
   answer are pure functions (`tests/core/ai`); `ai::Client` sends through `sync::HttpTransport`.
 
 **The AI assistant** (built in, `src/core/extensions/builtin/asystent.luau`; Settings → Extensions →
-AI, off by default): "AI: ask about this page" asks for a question (`b.ask`), sends it with the page
-on screen (at most 60 000 characters) and writes the answer into today's note — `- 🤖 <question>
-([[Page]])`, the answer's lines as items under it; "AI: summarise this page" does the same with a
-summary and the page's tasks. Both are a tap away on the top bar's ✨ button while the assistant is
+AI, off by default) is an agent: "AI: ask or ask to do…" asks for a question or a request
+(`b.ask`) and sends it with the page on screen (at most 30 000 characters) and eight tools —
+`search_notes` (`b.search`), `query_notes` (`b.query`, the query language described in the tool's
+description), `list_pages`, `read_page`, and the changes `append_to_journal`, `append_to_page`,
+`write_page`, `update_block` (`b.replaceBlock`: a task's status too). The model calls them as it
+needs, at most twelve turns, each result at most 12 000 characters. **Every change waits for the
+user**: `b.choose` with what would be written (the question dialog shows the lines after the
+first under its title, as plain text) — Allow, Allow every change of this question, No; a no (or
+the dialog closed) goes back to the model as a declined change. The answer goes into today's note —
+`- 🤖 <question> ([[Page]])`, its lines as items under it, then `✏️ Changed: [[…]]` with the
+pages changed; "Asking AI…" is said once per question. "AI: summarise this page" sums up the page
+on screen in one request without tools. Both are a tap away on the top bar's ✨ button while the assistant is
 on (docs/UI.md "Top bar": the page on screen, in the journal's stream today's note; a spinner while
 `aiPending`). Like the gym, its source can become a page of the notebook (title
 "Asystent AI" / "AI assistant", or `zastępuje:: asystent`) and be changed there.
