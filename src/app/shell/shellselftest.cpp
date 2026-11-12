@@ -4743,16 +4743,23 @@ void checkSettingsTabs(QQuickWindow *window, AppController *app, const Check &ch
                      && shownNamed(window->contentItem(), u"defaultReminderTimeField"_s) == nullptr;
           }),
           "a phone's settings: the route's section is the checked tab, scrolled into view, alone on the screen");
-    // The bar is wider than the phone and scrolled away from its start (a list's content starts at
-    // originX, not 0): General, the first tab, is out of view — clipped, or not shown at all (a list
-    // may hide what it scrolled away: Windows).
-    QQuickItem *general = tab(u"general"_s);
+    // The tabs do not fit the phone: the bar is scrolled from its start (a list's content starts at
+    // originX, not 0) and its first tab in view, as the list itself says (indexAt), is not General.
+    // (Not General's own place: a tab the list scrolled away is only culled, and keeps the place it
+    // had — on a slow machine one it never got, inside the window.)
     QQuickItem *list = tab(u"backups"_s);
     while (list && !isA(list, "QQuickListView"))
         list = list->parentItem();
-    check(list && list->property("contentWidth").toReal() > list->width()
-                  && list->property("contentX").toReal() > list->property("originX").toReal() + 1
-                  && (!general || !uidriver::onScreen(window, general)),
+    const qreal tabsWidth = list ? list->property("contentWidth").toReal() : 0;
+    const qreal contentX = list ? list->property("contentX").toReal() : 0;
+    const qreal scrolled = list ? contentX - list->property("originX").toReal() : 0;
+    int firstShown = -1;
+    if (list)
+        QMetaObject::invokeMethod(list, "indexAt", qReturnArg(firstShown), contentX + 1, list->height() / 2);
+    std::fprintf(stderr,
+                 "selftest: the settings' tabs: %.0f px in a bar of %.0f px, scrolled %.0f px, the first in view %d\n",
+                 tabsWidth, list ? list->width() : 0.0, scrolled, firstShown);
+    check(list && tabsWidth > list->width() + 1 && scrolled > 1 && firstShown > 0,
           "the section tabs scroll sideways (General is out of view beside Backups)");
     QQuickItem *sync = tab(u"sync"_s);
     if (!sync || !uidriver::onScreen(window, sync)) {
