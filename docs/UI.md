@@ -835,6 +835,8 @@ emoji alone none; a no-break space separates words except between digits) — th
 Counting is cheap but not per keystroke: the footer counts once the page has not changed for
 400 ms plus 1 ms per 100 characters (at most 3 s; about 5 ms per 100 000 characters), the
 selection 150 ms after it changed; with the footer hidden nothing is counted until the menu opens.
+A page that opens is counted once, right after its first frame (a `Later`: the counts becoming
+available and the footer shown arrive together and asked for two whole counts before).
 The journal stream shows no count (a day opened as a page does).
 
 **Focus mode** (`AppSettings.focusMode`, `ui/focusMode`, a device setting kept across restarts;

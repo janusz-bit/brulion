@@ -1051,6 +1051,37 @@ shows it (`ViewTraits.takeFocus`). The split pane and a page's own window build 
 The shell self-test's "0b" checks that Tasks and Calendar exist, hidden, before they are opened,
 and that opening Tasks shows that view with the keyboard in it. Not measured on a phone yet.
 
+### Extensions in the notebook, and one count per page opened (2026-11-12)
+
+Extension pages, the Luau console and `b.ai` (docs/EXTENSIONS.md) cost nothing in a notebook
+without them: no VM is made until an extension or the console runs; a save looks up its path in
+a hash of the extension pages (hashing the text only for those); the changed notes are looked at
+after the event (`WorkspaceExtensions::processPages`, a zero timer); the one full scan — the
+page-level tags of every note — runs when the index is ready. A page's state line is a `Loader`
+made only on extension pages.
+
+Measured on the 10 000-note bench notebook (`bench-matrix.sh`, Release + `-g`, Xvfb, 5 runs × 2
+alternating rounds, the probe's medians), main at e1443b21 against this work:
+
+| | before | after |
+|---|---|---|
+| start, first: content / ready | 855 / 1390 ms | 837 / 1379 ms |
+| start, warm: content / ready | 680 / 1169 ms | 664 / 1130 ms |
+| keystroke → frame (small page / 5000-block outline / document) | 13.7 / 17.9 / 20.8 ms | 13.7 / 17.8 / 21.0 ms |
+| open a 5000-block document: content / frame | 179 / 196 ms | 119 / 168 ms |
+| open a 5000-block outline: content / frame | 162 / 179 ms | 114 / 154 ms |
+| again (open2): document / outline content | 153 / 140 ms | 107 / 93 ms |
+
+Opening a page got faster on the way: a page that loads makes its counts available and the
+stats footer shown in the same turn, and `PageView` counted the whole page for each
+(`countNow()` twice, ~30 ms each on a 5000-block page) before the first frame. One deferred count
+now (a `Later`) — after this change moved the second count from a half-built document to the whole
+one, which made the second opening 12 % slower before the fix. The views' round
+(`views-10k`) runs ~2 % more instructions on the GUI thread (the palette's five new commands are
+rebuilt on every navigation); one interaction there, Agenda opened a second time, measures 30
+instead of 17 ms because the same QML garbage collection now falls into it instead of just after
+it (perf: the same sweep in both builds).
+
 ### Scrolling pages: cheaper rows, pages created whole (2026-11-06, 2026-11-07)
 
 The question was whether a note's whole page could be created at once, so that scrolling it never
