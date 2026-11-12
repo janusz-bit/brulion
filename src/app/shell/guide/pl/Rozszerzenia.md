@@ -39,7 +39,7 @@ uprawnienia: [zapis]
 ---
 ```
 
-`zapis` (`write`) pozwala zmieniać notatki. Zatwierdzenie strony zatwierdza jej uprawnienia; prośba o więcej wymaga zatwierdzenia od nowa.
+`zapis` (`write`) pozwala zmieniać notatki, `ai` — pytać model AI (zobacz [[AI]]). Zatwierdzenie strony zatwierdza jej uprawnienia; prośba o więcej wymaga zatwierdzenia od nowa.
 
 ## Konsola Luau
 **Konsola Luau** w palecie wykonuje po jednym wierszu Luau z API notatnika: `b.today()`, `#b.pages({})` (ile stron), `b.blocks({ tag = "projekt" })`. Wartość pojawia się poniżej; zmienne zostają na następny wiersz; ↑ i ↓ przywołują to, co już wpisałeś. Trafia tam też wszystko, co rozszerzenia wypisują przez `print()`, razem z ich błędami. **Uruchom blok Luau** (paleta, kursor w bloku `luau` dowolnej strony) wykonuje ten blok i pokazuje wynik w komunikacie.

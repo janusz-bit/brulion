@@ -796,6 +796,17 @@ is a palette command ("extview.<extension>.<name>"); the view is drawn by `Shell
 the gym's, its label is the title (kept in the route for tabs); its "open" nodes navigate to
 another view of the extension with their params.
 
+**AI** (Settings → Extensions, group "AI", `objectName` `aiSettings`; docs/EXTENSIONS.md "AI"):
+the AI assistant's switch (`AppSettings.assistantEnabled`), the provider (Claude / OpenAI-compatible:
+`aiProvider`), the API key (a password field; saved when editing finishes, then emptied: "Saved on
+this device", "Forget"), the model and the address (`aiModel`, `aiBaseUrl`; placeholders show the
+defaults), "Check" (`Workspace.extensions.testAi()`: the model's "OK" or the error as a toast; busy
+while `aiPending`). The group's note says what it costs and where the notes go. A command whose
+extension asks AI shows "Asking AI…"; its result comes as the command's own message when the
+answer arrives; the console shows "Asking AI…" and then the value. The assistant's commands ("AI:
+ask about this page", "AI: summarise this page") take the page on screen (`ctx.page`: every
+extension command gets the route's page) and write into today's note.
+
 The palette also has "New extension", "Reload extensions" (a fresh VM, every extension loaded
 again) and "Extensions" (Settings → Extensions). Extension commands carry the extension's title as
 their subtitle and the icon `puzzle` (the gym's `dumbbell`).

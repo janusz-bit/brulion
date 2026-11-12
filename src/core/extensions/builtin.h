@@ -5,6 +5,7 @@
 //   for (const BuiltinExtension &b : builtinExtensions()) engine.load(b.extension);
 //
 // silownia — the gym (docs/SYNTAX.md §5 "Gym"): silownia.luau + exercises.json (b.data("exercises")).
+// asystent — the AI assistant (docs/EXTENSIONS.md "AI"): asystent.luau, b.ai about the page on screen.
 
 #include "extensions/engine.h"
 

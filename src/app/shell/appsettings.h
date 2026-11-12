@@ -77,6 +77,16 @@ class AppSettings : public QObject {
     /// The built-in gym extension (Settings → Extensions; docs/UI.md "Gym"): the Gym view, its
     /// palette commands. Off by default.
     Q_PROPERTY(bool gymEnabled READ gymEnabled WRITE setGymEnabled NOTIFY gymEnabledChanged FINAL)
+    /// The built-in AI assistant extension (asks about a page, summarises it). Off by default.
+    Q_PROPERTY(bool assistantEnabled READ assistantEnabled WRITE setAssistantEnabled NOTIFY assistantEnabledChanged FINAL)
+    /// AI for extensions (b.ai, docs/EXTENSIONS.md "AI") on this device: "anthropic" | "openai"
+    /// (any OpenAI-compatible API), the model ("" = the provider's default), the API's address
+    /// ("" = the provider's own; a server of one's own: "http://192.168.1.10:11434/v1"). The key
+    /// lives in `<app data>/secrets/ai-key` (owner-only, like the Nextcloud password).
+    Q_PROPERTY(QString aiProvider READ aiProvider WRITE setAiProvider NOTIFY aiChanged FINAL)
+    Q_PROPERTY(QString aiModel READ aiModel WRITE setAiModel NOTIFY aiChanged FINAL)
+    Q_PROPERTY(QString aiBaseUrl READ aiBaseUrl WRITE setAiBaseUrl NOTIFY aiChanged FINAL)
+    Q_PROPERTY(bool hasAiKey READ hasAiKey NOTIFY aiChanged FINAL)
 
     // ---- Editor -------------------------------------------------------------------------
     /// "serif" | "sans" (Theme.editorFont).
@@ -252,8 +262,20 @@ public:
     bool captureButtonShown() const;
     bool gymEnabled() const;
     void setGymEnabled(bool on);
-    /// The ids of the built-in extensions switched on ("silownia").
+    bool assistantEnabled() const;
+    void setAssistantEnabled(bool on);
+    /// The ids of the built-in extensions switched on ("silownia", "asystent").
     QStringList enabledExtensions() const;
+    QString aiProvider() const;
+    void setAiProvider(const QString &provider);
+    QString aiModel() const;
+    void setAiModel(const QString &model);
+    QString aiBaseUrl() const;
+    void setAiBaseUrl(const QString &url);
+    bool hasAiKey() const;
+    /// Stores the AI key ("" forgets it); false when it could not be written.
+    Q_INVOKABLE bool setAiKey(const QString &key);
+    QString aiKey() const;
     void setCaptureButtonShown(bool on);
     /// Back to the default look: accent, backgrounds, fonts, density, line spacing, sizes (the
     /// visibility of elements stays).
@@ -437,6 +459,8 @@ Q_SIGNALS:
     void bottomNavTabsChanged();
     void captureButtonShownChanged();
     void gymEnabledChanged();
+    void assistantEnabledChanged();
+    void aiChanged();
     void editorLineSpacingChanged();
     void editorFontChanged();
     void editorFontSizeChanged();
@@ -498,6 +522,7 @@ private:
     QString m_dataDir;
     /// The app password is masked in every log line (logging::redact) while it is stored.
     mutable logging::ScopedSecret m_passwordSecret;
+    mutable logging::ScopedSecret m_aiKeySecret;
 };
 
 } // namespace brulion::shell

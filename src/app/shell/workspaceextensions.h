@@ -26,6 +26,7 @@
 
 #include "extensionmodels.h"
 
+#include "ai/ai.h"
 #include "extensions/engine.h"
 #include "extensions/pageextension.h"
 
@@ -46,6 +47,9 @@ class Vault;
 class VaultIndex;
 namespace extensions {
 class NotebookHost;
+}
+namespace sync {
+class NetworkHttpTransport;
 }
 } // namespace brulion
 
@@ -110,6 +114,8 @@ class WorkspaceExtensions : public QObject {
     Q_PROPERTY(int revision READ revision NOTIFY revisionChanged FINAL)
     /// Extension pages waiting for approval on this device.
     Q_PROPERTY(int waitingApproval READ waitingApproval NOTIFY revisionChanged FINAL)
+    /// b.ai requests on their way (the console shows that it waits).
+    Q_PROPERTY(int aiPending READ aiPending NOTIFY aiPendingChanged FINAL)
 
 public:
     using Clock = std::function<QDateTime()>;
@@ -122,6 +128,11 @@ public:
     void setEnabled(const QStringList &ids);
     /// Shows a notification now (the rest timer's end): Workspace connects its reminders' sink.
     void setNotifier(std::function<void(const QString &title, const QString &body)> notify);
+    /// The model b.ai asks on this device (AppSettings: provider, key, model, address).
+    void setAi(const ai::Settings &settings);
+    int aiPending() const { return m_aiPending; }
+    /// Asks the model "Say OK." with the settings as they are: the answer or the error as a message.
+    Q_INVOKABLE void testAi();
 
     QStringList enabled() const { return m_enabled; }
     QString language() const { return m_language; }
@@ -210,6 +221,7 @@ Q_SIGNALS:
     void questionChanged();
     void restChanged();
     void revisionChanged();
+    void aiPendingChanged();
     /// A command's result or an error, for a toast (kind "info" | "error").
     void message(const QString &text, const QString &kind);
     /// Something changed what views show (a command or action finished, extensions on or off).
@@ -242,7 +254,23 @@ private:
     const PageEntry *pageAt(const QString &path) const;
     QString pageStateOf(const PageEntry &entry) const;
     void recordError(const QString &runId, const QString &error);
+    /// Where a call came from: what its result means and where it goes.
+    struct CallContext
+    {
+        bool console = false; // the console's: the value or the error in the console
+        bool toast = false; // also as a message ("Run Luau block")
+        bool fromAction = false; // a view's action
+        bool hook = false; // a hook: errors to the console, never a question
+        int hookId = 0;
+        QString hookEvent;
+        QString extension;
+    };
+    /// A call's result: a question shown, an AI request sent, or its end (by its context).
+    void handleResult(const extensions::Result &result);
     void handle(const extensions::Result &result, bool fromAction);
+    void dispatchAi(int call, const QVariantMap &request);
+    void finishAi(int call, const QVariantMap &reply, quint64 generation);
+    void processPages();
     void setQuestion(const QVariantMap &question);
     void answer(const QVariant &value);
     void tickRest();
@@ -252,7 +280,8 @@ private:
     /// Evaluates `code` in the console's environment (`name` in errors); `toast`: the result as a
     /// message too ("Run Luau block": the console may not be on screen).
     void evaluateIn(const QString &code, const QString &name, const QString &echo, bool toast);
-    void consoleResult(const extensions::Result &result);
+    void consoleResult(const extensions::Result &result, bool toast);
+    void hookResult(const CallContext &ctx, const extensions::Result &result);
 
     Clock m_clock;
     Vault *m_vault = nullptr;
@@ -278,9 +307,17 @@ private:
     QHash<int, int> m_hookFailures;
     QStringList m_changedPages;
     QTimer m_changeTimer;
-    bool m_consoleCall = false; // the call waiting for an answer belongs to the console
-    bool m_consoleToast = false; // its result is shown as a message too
+    CallContext m_current; // the context of the call starting now
+    QHash<int, CallContext> m_calls; // waiting calls by id
+    int m_questionCall = 0; // the call the shown question belongs to
     bool m_reconcilePending = false; // pages changed while a question waited
+    QStringList m_pendingPaths; // changed notes not looked at yet (processPages())
+    QTimer m_pagesTimer;
+    ai::Settings m_aiSettings;
+    std::unique_ptr<sync::NetworkHttpTransport> m_transport;
+    std::unique_ptr<ai::Client> m_aiClient;
+    int m_aiPending = 0;
+    quint64 m_generation = 0; // a new engine: answers for the old one are dropped
     int m_revision = 0;
     ExtensionListModel *m_list = nullptr;
     ExtensionConsoleModel *m_console = nullptr;

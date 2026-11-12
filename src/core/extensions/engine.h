@@ -21,12 +21,16 @@
 // never unwinds through pcall) and an error is raised wherever a yield is impossible. Works in the
 // single-threaded browser build (no watchdog thread). Errors name the extension and the line.
 //
-// Questions (Status::Suspended, value = QVariantMap):
-//   {kind: "ask", prompt}                       → resume(QString)
-//   {kind: "choose", prompt, options: [string]} → resume(QString) or resume(QVariant()) = nil
+// Waiting calls (Status::Suspended, value = QVariantMap, Result::call = its id): a call that asks
+// the host for something suspends until resume(call, answer); other calls run meanwhile.
+//   {kind: "ask", prompt}                       → resume(call, QString)
+//   {kind: "choose", prompt, options: [string]} → resume(call, QString) or QVariant() = nil
 //   {kind: "form", title, fields: [{key, label, kind, value, step, unit, options}]}
-//                                               → resume(QVariantMap) or resume(QVariant()) = nil
-// Only one call runs or waits at a time: a new call abandons a waiting one.
+//                                               → resume(call, QVariantMap) or QVariant() = nil
+//   {kind: "ai", request: {prompt | messages, system, model, maxTokens, effort}}
+//                                               → resume(call, {text, model, …} or {error})
+// One call executes at a time (one thread); any number may wait. Loading an extension again
+// drops its waiting calls.
 //
 // Not thread-safe: one Engine is used from one thread.
 
@@ -74,6 +78,9 @@ struct Result
     Status status = Status::Ok;
     QVariant value; ///< QString, qint64, double, bool, QVariantList, QVariantMap or null
     QString error;
+    /// The call's id once it waited (Suspended: resume it with this; a later result of it: its
+    /// end), 0 for a call that never waited.
+    int call = 0;
     bool ok() const { return status == Status::Ok; }
 };
 
@@ -137,13 +144,20 @@ public:
     Result runCommand(const QString &extension, const QString &name, const QVariantMap &ctx);
     Result render(const QString &extension, const QString &view, const QVariantMap &params);
     Result act(const QString &extension, const QString &view, const QString &action, const QVariantMap &args);
+    Result resume(int call, const QVariant &answer);
+    /// resume() of the newest call waiting on a question (ask / choose / form).
     Result resume(const QVariant &answer);
     /// Runs `code` in the environment of the loaded extension `extension` (its globals, its `b`,
     /// its permissions): an expression gives its value ("1 + 1" → 2), statements run as written.
     /// `name` names the code in errors ("console:1: …"). The console and "Run Luau block".
     Result evaluate(const QString &extension, const QString &code, const QString &name);
-    bool isWaiting() const { return m_running != nullptr; }
-    void cancel(); ///< drops the call waiting for an answer, if any
+    bool isWaiting() const { return !m_waiting.isEmpty(); }
+    /// A call executes now (a host function is running inside it): no other call may start.
+    bool isRunning() const { return m_running != nullptr; }
+    /// The calls waiting for an answer, oldest first.
+    QList<int> waitingCalls() const;
+    void cancel(int call); ///< drops a waiting call
+    void cancel(); ///< drops the newest call waiting on a question, if any
 
     qint64 memoryUsed() const { return qint64(m_used); }
     static QString version(); ///< "Luau 0.743"
@@ -202,6 +216,7 @@ private:
     static int apiChoose(lua_State *L);
     static int apiForm(lua_State *L);
     static int apiOn(lua_State *L);
+    static int apiAi(lua_State *L);
 
     int commandImpl(lua_State *L);
     int viewImpl(lua_State *L);
@@ -222,6 +237,7 @@ private:
     int dataImpl(lua_State *L);
     int questionImpl(lua_State *L, const char *kind);
     int onImpl(lua_State *L);
+    int aiImpl(lua_State *L);
 
     bool mayWrite(lua_State *L, const QString &extension, const char *function);
     void pushEnvironment(const QString &extension);
@@ -232,6 +248,7 @@ private:
     Result run(const QString &extension, const QVariantList &args);
     Result finish(int status);
     void releaseThread();
+    void dropWaiting(const QString &extension);
 
     lua_State *m_L = nullptr;
     Host *m_host = nullptr;
@@ -250,9 +267,22 @@ private:
     QHash<QString, Handler> m_views;
     QMap<int, Hook> m_hooks;
     int m_nextHook = 1;
-    lua_State *m_running = nullptr; // the call in progress or waiting for an answer
+    struct Waiting
+    {
+        lua_State *thread = nullptr;
+        int ref = 0;
+        QString extension;
+        QString kind;
+    };
+    lua_State *m_running = nullptr; // the call executing now
     int m_runningRef = 0;
+    QString m_runningExtension;
+    int m_runningCall = 0; // its id when it waited before, else 0
     bool m_asking = false;
+    QString m_askingKind;
+    QMap<int, Waiting> m_waiting; // by call id
+    int m_nextCall = 1;
+    int m_aiFactoryRef = 0; // the b.ai wrapper's factory (a prelude)
 };
 
 } // namespace brulion::extensions

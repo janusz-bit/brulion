@@ -179,10 +179,26 @@ AppController::AppController(const Options &options, QObject *parent)
         m_localeOverride.clear();
         Q_EMIT notebookPathsChanged();
     });
-    // The built-in extensions the settings switch on (the gym), their messages as toasts.
+    // The built-in extensions the settings switch on (the gym, the AI assistant), their messages
+    // as toasts; the model b.ai asks on this device.
     m_workspace->extensions()->setEnabled(m_settings->enabledExtensions());
     connect(m_settings.get(), &AppSettings::gymEnabledChanged, this,
             [this] { m_workspace->extensions()->setEnabled(m_settings->enabledExtensions()); });
+    connect(m_settings.get(), &AppSettings::assistantEnabledChanged, this,
+            [this] { m_workspace->extensions()->setEnabled(m_settings->enabledExtensions()); });
+    const auto aiSettings = [this] {
+        ai::Settings s;
+        s.provider = m_settings->aiProvider();
+        s.apiKey = m_settings->aiKey();
+        s.model = m_settings->aiModel();
+        s.baseUrl = m_settings->aiBaseUrl();
+#ifdef Q_OS_WASM
+        s.browser = true; // Anthropic's API answers a web page only with its header
+#endif
+        m_workspace->extensions()->setAi(s);
+    };
+    aiSettings();
+    connect(m_settings.get(), &AppSettings::aiChanged, this, aiSettings);
     connect(m_workspace->extensions(), &WorkspaceExtensions::message, this,
             [this](const QString &text, const QString &kind) { toast(text, kind); });
     connect(m_workspace.get(), &Workspace::navigationRequested, this, &AppController::navigate);

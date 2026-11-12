@@ -30,6 +30,7 @@ browser build — and the fastest; its type checker finds mistakes with line and
 | `src/core/extensions/host.h` | `Host`: what an extension may ask of the app (blocks, pages, writes, today, languages, the timer, the log) |
 | `src/core/extensions/notebookhost.h` | `NotebookHost`: the Host over a `Vault` and its `VaultIndex` — blocks from the index, content-preserving writes (`blockedit.h`, `notebook/journals.h`, `notebook/pages.h`) |
 | `src/core/extensions/builtin.h` | the built-in extensions (resources `:/extensions/…`), `builtinFor()`: which one a page overrides |
+| `src/core/ai/ai.h` | AI for `b.ai`: the request from a script's table, the HTTP requests of Anthropic's Messages API and of OpenAI-compatible chat APIs, reading their answers and errors; `ai::Client` over `sync::HttpTransport` |
 | `src/core/extensions/pageextension.h` | extension pages: which pages are extensions, their id, their code with the page's line numbers, permissions, the hash an approval covers; the new-extension page and a built-in's source as a page |
 | `src/app/shell/workspaceextensions.h` | `WorkspaceExtensions` (QML `Workspace.extensions`): the engine for the open notebook, the built-ins the settings switch on, the extension pages and their approval on this device, reloading a page's code when it changes, hooks, the console, questions, messages and the rest timer |
 | `src/app/shell/extensionmodels.h` | `ExtensionListModel` (Settings → Extensions), `ExtensionConsoleModel` (the console's lines) |
@@ -164,7 +165,46 @@ views (`b.command` …) until the extensions are reloaded.
 value, step, unit}`: numbers with − / + and typing, `82,5` too). Each suspends the call: the engine
 returns the question, the app shows it (ShellExtensionQuestion), and the answer resumes the call
 where it stopped — no callbacks, no nested event loop. Refused at load time, inside a coroutine of
-the script and inside library callbacks. A new call abandons a waiting one.
+the script and inside library callbacks. Any number of calls may wait at once (questions, AI
+answers) while others run; the app shows one question at a time — a new one answers the older
+"cancelled". A view never waits; a hook never asks.
+
+## AI (`b.ai`)
+
+`b.ai(prompt)` or `b.ai({prompt = …, system = …, model = …, maxTokens = …, effort = …})` (or
+`messages = {{role = "user" | "assistant", content}, …}` for a conversation) asks the model the
+user chose on this device and returns its text and the whole reply (`{text, model, stopReason,
+inputTokens, outputTokens}`); a failure is an error at the script's line ("b.ai: the API key was
+refused (HTTP 401): …", "b.ai: no connection: …", "b.ai: the model declined to answer"). It needs
+the permission `ai` (`uprawnienia:: ai`, approved with the page like `zapis`; the console has it).
+The call waits for the answer like a question: nothing blocks — other commands, views and the UI
+go on — and its result is handled as the command's (a message, the console).
+
+* **Settings → Extensions → AI**, per device: the provider — **Claude** (Anthropic's Messages API;
+  `claude-opus-5-5` unless a model is named; `anthropic-version: 2026-10-21`; a request one model's
+  safeguards decline is answered by the model Anthropic recommends, `fallbacks: "default"`, for the
+  models that have it) or **OpenAI-compatible** (OpenAI, OpenRouter, or a server of one's own —
+  Ollama `http://192.168.1.10:11434/v1`, LM Studio, llama.cpp — which needs no key); the API key
+  (in `<app data>/secrets/ai-key`, owner-only like the Nextcloud password, masked in logs, never in
+  the notebook); the model; the address; **Check** ("Say OK."). In the browser the key is in the
+  site's storage, and Anthropic's API is told the request comes from a page.
+* **Subscriptions** (Claude Pro/Max, ChatGPT Plus) cannot be used by other apps: the providers bill
+  their APIs separately, by use. On a phone that leaves an API key (a question about a note costs
+  fractions of a cent), a server of one's own (free, private; reachable through Tailscale or the
+  home network), or the providers' own apps with a connector to the notes (a remote MCP server —
+  `brulion-cli mcp` speaks stdio only so far: TODO.md).
+* **Limits**: at most 200 000 characters per request (a script cannot send the notebook by
+  accident), 5 minutes per answer; only extensions approved with `ai` send anything, and what they
+  send goes to the chosen provider.
+* `src/core/ai/ai.h`: the request from b.ai's table, the HTTP request of each API and reading the
+  answer are pure functions (`tests/core/ai`); `ai::Client` sends through `sync::HttpTransport`.
+
+**The AI assistant** (built in, `src/core/extensions/builtin/asystent.luau`; Settings → Extensions →
+AI, off by default): "AI: ask about this page" asks for a question (`b.ask`), sends it with the page
+on screen (at most 60 000 characters) and writes the answer into today's note — `- 🤖 <question>
+([[Page]])`, the answer's lines as items under it; "AI: summarise this page" does the same with a
+summary and the page's tasks. Like the gym, its source can become a page of the notebook (title
+"Asystent AI" / "AI assistant", or `zastępuje:: asystent`) and be changed there.
 
 ## Views
 

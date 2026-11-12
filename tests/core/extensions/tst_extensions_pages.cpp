@@ -21,20 +21,32 @@ class NullHost : public Host
 {
 public:
     QStringList logs;
+    QMap<QString, QString> texts; // pages b.read finds
+    QStringList appended; // b.appendToJournal's markdown
+    QString lang = u"pl"_s;
     QStringList pages(const QString &) override { return {}; }
-    std::optional<QString> read(const QString &) override { return std::nullopt; }
+    std::optional<QString> read(const QString &page) override
+    {
+        if (!texts.contains(page))
+            return std::nullopt;
+        return texts.value(page);
+    }
     QVariantMap page(const QString &) override { return {}; }
     QVariantList blocks(const BlockQuery &) override { return {}; }
     QString write(const QString &, const QString &, const QString &) override { return {}; }
-    QString appendToJournal(const QString &, const QString &, const QString &) override { return {}; }
+    QString appendToJournal(const QString &, const QString &, const QString &markdown) override
+    {
+        appended << markdown;
+        return {};
+    }
     QString replaceBlock(const QString &, const QString &, const QString &, const std::optional<QString> &,
                          QString *) override
     {
         return {};
     }
     QString today() override { return u"2026-11-11"_s; }
-    QString language() override { return u"pl"_s; }
-    QString uiLanguage() override { return u"pl"_s; }
+    QString language() override { return lang; }
+    QString uiLanguage() override { return lang; }
     void timer(const QString &, int, const QString &) override { }
     void log(const QString &extension, const QString &message) override { logs << extension + u": "_s + message; }
 };
@@ -246,6 +258,51 @@ private Q_SLOTS:
         QCOMPARE(hooks.size(), 1);
         QVERIFY(engine.runHook(hooks.first().id, {{u"page"_s, u"Żółw"_s}}).ok());
         QVERIFY2(host.logs.last().endsWith(u": Żółw"_s), qPrintable(host.logs.last()));
+    }
+
+    void assistantAsksAndWrites()
+    {
+        // The built-in AI assistant: a question about the page on screen goes to b.ai with the
+        // page's text; the answer is written into today's note as an outline under the question.
+        NullHost host;
+        host.texts.insert(u"Trening A"_s, u"tags:: plan-treningowy\n\n- [[Przysiad]] 3×5\n"_s);
+        Engine engine;
+        QVERIFY(engine.start(&host, Limits{}));
+        const Extension assistant = builtinExtension(u"asystent"_s);
+        QVERIFY(assistant.permissions.contains(u"ai"_s));
+        const Result loaded = engine.load(assistant);
+        QVERIFY2(loaded.ok(), qPrintable(loaded.error));
+        QCOMPARE(engine.commands().size(), 2);
+        Result r = engine.runCommand(u"asystent"_s, u"ask"_s, {{u"page"_s, u"Trening A"_s}});
+        QCOMPARE(r.status, Status::Suspended);
+        QCOMPARE(r.value.toMap().value(u"kind"_s).toString(), u"ask"_s);
+        r = engine.resume(r.call, u"  O czym to jest?  "_s);
+        QCOMPARE(r.status, Status::Suspended);
+        const QVariantMap request = r.value.toMap().value(u"request"_s).toMap();
+        QCOMPARE(r.value.toMap().value(u"kind"_s).toString(), u"ai"_s);
+        QVERIFY(request.value(u"prompt"_s).toString().contains(u"[[Przysiad]] 3×5"_s));
+        QVERIFY(request.value(u"prompt"_s).toString().endsWith(u"O czym to jest?"_s));
+        QVERIFY(!request.value(u"system"_s).toString().isEmpty());
+        r = engine.resume(r.call, QVariantMap{{u"text"_s, u"Plan siłowy.\n\n## Ćwiczenia\n- Przysiad\n1. Martwy ciąg\n```\nkod\n```"_s}});
+        QVERIFY2(r.ok(), qPrintable(r.error));
+        QCOMPARE(r.value.toString(), u"Odpowiedź AI jest w dzisiejszej notatce."_s);
+        QCOMPARE(host.appended.size(), 1);
+        QCOMPARE(host.appended.first(), u"- 🤖 O czym to jest? ([[Trening A]])\n  - Plan siłowy.\n  - **Ćwiczenia**\n"
+                                        "  - Przysiad\n  - Martwy ciąg\n  - kod"_s);
+        // A summary needs a page; an error of the model is the command's error.
+        QCOMPARE(engine.runCommand(u"asystent"_s, u"summarize"_s, {{u"page"_s, QString()}}).value.toString(),
+                 u"Otwórz stronę, którą streścić."_s);
+        r = engine.runCommand(u"asystent"_s, u"summarize"_s, {{u"page"_s, u"Trening A"_s}});
+        QCOMPARE(r.status, Status::Suspended);
+        r = engine.resume(r.call, QVariantMap{{u"error"_s, u"the API key was refused (HTTP 401)"_s}});
+        QCOMPARE(r.status, Status::Error);
+        QVERIFY2(r.error.contains(u"b.ai: the API key was refused"_s), qPrintable(r.error));
+        QCOMPARE(host.appended.size(), 1);
+        // Cancelled question: nothing asked, nothing written.
+        r = engine.runCommand(u"asystent"_s, u"ask"_s, {{u"page"_s, u"Trening A"_s}});
+        r = engine.resume(r.call, QString());
+        QVERIFY(r.ok());
+        QCOMPARE(host.appended.size(), 1);
     }
 
     void builtinSourceAsAPage_data()

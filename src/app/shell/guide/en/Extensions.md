@@ -39,7 +39,7 @@ permissions: [write]
 ---
 ```
 
-`write` (`zapis`) lets it change notes. Approving a page approves its permissions; asking for more later needs a new approval.
+`write` (`zapis`) lets it change notes, `ai` lets it ask an AI model (see [[AI]]). Approving a page approves its permissions; asking for more later needs a new approval.
 
 ## The Luau console
 **Luau console** in the palette runs one line of Luau at a time with the notebook's API: `b.today()`, `#b.pages({})` (how many pages), `b.blocks({ tag = "project" })`. A value shows below; variables stay for the next line; ↑ and ↓ bring back what you typed. Whatever extensions `print()` shows up there too, with their errors. **Run Luau block** (the palette, the cursor in a `luau` block of any page) runs that block and shows the result as a message.

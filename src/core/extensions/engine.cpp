@@ -14,6 +14,7 @@
 #include <climits>
 #include <cmath>
 #include <cstdlib>
+#include <utility>
 
 using namespace Qt::StringLiterals;
 
@@ -50,6 +51,23 @@ function ui.empty(title, text) return { type = "empty", title = title, text = te
 function ui.open(label, view, params) return { type = "open", label = label, view = view, params = params } end
 function ui.run(label, command) return { type = "run", label = label, command = command } end
 return table.freeze(ui)
+)luau";
+
+// b.ai: the host's answer comes back as a table; the wrapper turns {error} into an error at the
+// script's line and returns the text (and the whole reply).
+const char kAiPrelude[] = R"luau(
+return function(raw)
+    return function(request)
+        local reply = raw(request)
+        if type(reply) ~= "table" then
+            error("b.ai: no answer", 2)
+        end
+        if reply.error ~= nil then
+            error("b.ai: " .. tostring(reply.error), 2)
+        end
+        return reply.text, reply
+    end
+end
 )luau";
 
 void pushString(lua_State *L, QStringView s)
@@ -390,6 +408,18 @@ bool Engine::start(Host *host, const Limits &limits, QString *error)
     }
     m_uiRef = lua_ref(m_L, -1);
     lua_pop(m_L, 1);
+
+    bytecode = luau_compile(kAiPrelude, sizeof(kAiPrelude) - 1, &options, &size);
+    const int aiRc = luau_load(m_L, "=b.ai", bytecode, size, 0);
+    std::free(bytecode);
+    if (aiRc != 0 || lua_pcall(m_L, 0, 1, 0) != 0) {
+        if (error)
+            *error = u"b.ai: "_s + toQString(m_L, -1);
+        stop();
+        return false;
+    }
+    m_aiFactoryRef = lua_ref(m_L, -1);
+    lua_pop(m_L, 1);
     return true;
 }
 
@@ -410,7 +440,11 @@ void Engine::stop()
     m_hooks.clear();
     m_running = nullptr;
     m_runningRef = 0;
+    m_runningExtension.clear();
+    m_runningCall = 0;
+    m_waiting.clear();
     m_uiRef = 0;
+    m_aiFactoryRef = 0;
     m_asking = false;
 }
 
@@ -465,6 +499,12 @@ void Engine::pushEnvironment(const QString &extension)
     set("choose", &Engine::apiChoose);
     set("form", &Engine::apiForm);
     set("on", &Engine::apiOn);
+    // b.ai = factory(raw): the raw C function yields; the Luau wrapper raises its errors.
+    lua_getref(L, m_aiFactoryRef);
+    lua_pushlstring(L, id.constData(), size_t(id.size()));
+    lua_pushcclosure(L, &Engine::apiAi, "ai", 1);
+    lua_call(L, 1, 1);
+    lua_setfield(L, -2, "ai");
     lua_getref(L, m_uiRef);
     lua_setfield(L, -2, "ui");
     lua_setreadonly(L, -1, true);
@@ -503,17 +543,23 @@ void Engine::dropExtension(const QString &extension)
             ++it;
         }
     }
+    dropWaiting(extension);
     if (const auto it = m_loaded.constFind(extension); it != m_loaded.constEnd()) {
         lua_unref(m_L, it->envRef);
         m_loaded.erase(it);
     }
 }
 
+namespace {
+const char kBusy[] = "the extension engine is busy: a call runs (a host function may not start another)";
+}
+
 Result Engine::load(const Extension &extension)
 {
     if (!m_L)
         return {Status::Error, {}, u"the extension engine is not started"_s};
-    releaseThread();
+    if (m_running)
+        return {Status::Error, {}, QString::fromLatin1(kBusy)};
     dropExtension(extension.id);
     // Brulion compiles the source itself: scripts never see a compiler or a bytecode loader
     // (loading untrusted bytecode would not be safe).
@@ -545,7 +591,7 @@ Result Engine::load(const Extension &extension)
     lua_remove(m_L, -2); // the environment (the chunk keeps it)
     Result r = run(extension.id, {});
     if (r.status == Status::Suspended) {
-        releaseThread();
+        cancel(r.call);
         r = {Status::Error, {}, extension.id + u": an extension cannot ask a question while it loads"_s};
     }
     if (r.status != Status::Ok)
@@ -556,7 +602,8 @@ Result Engine::load(const Extension &extension)
 
 void Engine::unload(const QString &id)
 {
-    releaseThread();
+    if (m_running && m_runningExtension == id)
+        return; // never under a running call of its own (it is unloaded by whoever asks later)
     dropExtension(id);
 }
 
@@ -621,6 +668,8 @@ Result Engine::run(const QString &extension, const QVariantList &args)
             pushVariant(co, a);
     }
     m_running = co;
+    m_runningExtension = extension;
+    m_runningCall = 0;
     m_asking = false;
     arm();
     const int status = lua_resume(co, nullptr, int(args.size()));
@@ -629,7 +678,8 @@ Result Engine::run(const QString &extension, const QVariantList &args)
 
 Result Engine::call(const QString &extension, int functionRef, const QVariantList &args)
 {
-    releaseThread(); // a call still waiting for an answer is abandoned
+    if (m_running)
+        return {Status::Error, {}, QString::fromLatin1(kBusy)};
     lua_getref(m_L, functionRef);
     return run(extension, args);
 }
@@ -641,23 +691,65 @@ void Engine::releaseThread()
     lua_unref(m_L, m_runningRef);
     m_running = nullptr;
     m_runningRef = 0;
+    m_runningExtension.clear();
+    m_runningCall = 0;
     m_asking = false;
 }
 
-void Engine::cancel() { releaseThread(); }
+void Engine::dropWaiting(const QString &extension)
+{
+    for (auto it = m_waiting.begin(); it != m_waiting.end();) {
+        if (it->extension == extension) {
+            if (m_L)
+                lua_unref(m_L, it->ref);
+            it = m_waiting.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
+QList<int> Engine::waitingCalls() const { return m_waiting.keys(); }
+
+void Engine::cancel(int call)
+{
+    const auto it = m_waiting.constFind(call);
+    if (it == m_waiting.constEnd())
+        return;
+    if (m_L)
+        lua_unref(m_L, it->ref);
+    m_waiting.erase(it);
+}
+
+void Engine::cancel()
+{
+    for (auto it = m_waiting.cend(); it != m_waiting.cbegin();) {
+        --it;
+        if (it->kind != u"ai") {
+            cancel(it.key());
+            return;
+        }
+    }
+}
 
 Result Engine::finish(int status)
 {
     lua_State *co = m_running;
     disarm();
-    if (m_timedOut) {
+    // The call is over: the limits' sticky flags end with it (host-side Luau — the environment's
+    // b.ai wrapper — must run before the next call is armed).
+    const bool timedOut = std::exchange(m_timedOut, false);
+    const bool outOfMemory = std::exchange(m_outOfMemory, false);
+    if (timedOut) {
+        Result r{Status::Timeout, {}, QString::fromLatin1(kTimeout), m_runningCall};
         releaseThread();
-        return {Status::Timeout, {}, QString::fromLatin1(kTimeout)};
+        return r;
     }
-    if (status == LUA_ERRMEM || m_outOfMemory) {
+    if (status == LUA_ERRMEM || outOfMemory) {
+        Result r{Status::OutOfMemory, {}, QString::fromLatin1(kNoMemory), m_runningCall};
         releaseThread();
         lua_gc(m_L, LUA_GCCOLLECT, 0);
-        return {Status::OutOfMemory, {}, QString::fromLatin1(kNoMemory)};
+        return r;
     }
     if (status == LUA_YIELD) {
         if (m_asking) {
@@ -668,13 +760,22 @@ Result Engine::finish(int status)
                 toVariant(co, -1, &question, &error);
             }
             lua_settop(co, 0);
+            // The call waits (its thread kept by its registry reference) under a stable id.
+            const int id = m_runningCall ? m_runningCall : m_nextCall++;
+            m_waiting.insert(id, Waiting{co, m_runningRef, m_runningExtension, m_askingKind});
+            m_running = nullptr;
+            m_runningRef = 0;
+            m_runningExtension.clear();
+            m_runningCall = 0;
             m_asking = false;
-            return {Status::Suspended, question, {}};
+            return {Status::Suspended, question, {}, id};
         }
+        Result r{Status::Error, {}, u"coroutine.yield outside a coroutine"_s, m_runningCall};
         releaseThread();
-        return {Status::Error, {}, u"coroutine.yield outside a coroutine"_s};
+        return r;
     }
     Result r;
+    r.call = m_runningCall;
     Unlimited unlimited(&m_unlimited);
     if (status == LUA_OK) {
         if (lua_gettop(co) > 0) {
@@ -696,7 +797,8 @@ Result Engine::finish(int status)
             lua_pop(m_L, 1);
         }
         r = {overflow ? Status::StackOverflow : Status::Error, {},
-             traceback.isEmpty() || traceback == message ? message : message + u"\nstack traceback:\n"_s + traceback};
+             traceback.isEmpty() || traceback == message ? message : message + u"\nstack traceback:\n"_s + traceback,
+             r.call};
     }
     releaseThread();
     return r;
@@ -729,7 +831,8 @@ Result Engine::act(const QString &extension, const QString &view, const QString 
     const auto it = m_views.constFind(extension + u'/' + view);
     if (it == m_views.constEnd() || !it->actionsRef)
         return {Status::NotFound, {}, u"no view %1/%2 with actions"_s.arg(extension, view)};
-    releaseThread();
+    if (m_running)
+        return {Status::Error, {}, QString::fromLatin1(kBusy)};
     lua_getref(m_L, it->actionsRef);
     const QByteArray key = action.toUtf8();
     lua_pushlstring(m_L, key.constData(), size_t(key.size()));
@@ -742,10 +845,17 @@ Result Engine::act(const QString &extension, const QString &view, const QString 
     return run(extension, {args});
 }
 
-Result Engine::resume(const QVariant &answer)
+Result Engine::resume(int call, const QVariant &answer)
 {
-    if (!m_running || lua_status(m_running) != LUA_YIELD)
-        return {Status::Error, {}, u"nothing is waiting for an answer"_s};
+    const auto it = m_waiting.constFind(call);
+    if (!m_L || it == m_waiting.constEnd() || m_running || lua_status(it->thread) != LUA_YIELD)
+        return {Status::Error, {}, u"nothing is waiting for an answer"_s, call};
+    m_running = it->thread;
+    m_runningRef = it->ref;
+    m_runningExtension = it->extension;
+    m_runningCall = call;
+    m_waiting.erase(it);
+    m_asking = false;
     {
         Unlimited unlimited(&m_unlimited);
         pushVariant(m_running, answer);
@@ -753,6 +863,16 @@ Result Engine::resume(const QVariant &answer)
     arm();
     const int status = lua_resume(m_running, nullptr, 1);
     return finish(status);
+}
+
+Result Engine::resume(const QVariant &answer)
+{
+    for (auto it = m_waiting.cend(); it != m_waiting.cbegin();) {
+        --it;
+        if (it->kind != u"ai")
+            return resume(it.key(), answer);
+    }
+    return {Status::Error, {}, u"nothing is waiting for an answer"_s};
 }
 
 // ---- the `b` API -------------------------------------------------------------------------------
@@ -778,6 +898,7 @@ int Engine::apiAsk(lua_State *L) { return finishApi(L, self(L)->questionImpl(L, 
 int Engine::apiChoose(lua_State *L) { return finishApi(L, self(L)->questionImpl(L, "choose")); }
 int Engine::apiForm(lua_State *L) { return finishApi(L, self(L)->questionImpl(L, "form")); }
 int Engine::apiOn(lua_State *L) { return finishApi(L, self(L)->onImpl(L)); }
+int Engine::apiAi(lua_State *L) { return finishApi(L, self(L)->aiImpl(L)); }
 
 int Engine::apiToday(lua_State *L)
 {
@@ -1181,7 +1302,8 @@ Result Engine::evaluate(const QString &extension, const QString &code, const QSt
     const auto loaded = m_loaded.constFind(extension);
     if (loaded == m_loaded.constEnd())
         return {Status::NotFound, {}, u"no extension "_s + extension};
-    releaseThread();
+    if (m_running)
+        return {Status::Error, {}, QString::fromLatin1(kBusy)};
     lua_CompileOptions options = {};
     options.optimizationLevel = 1;
     options.debugLevel = 1;
@@ -1248,6 +1370,35 @@ int Engine::questionImpl(lua_State *L, const char *kind)
         pushVariant(L, question);
     }
     m_asking = true;
+    m_askingKind = QString::fromLatin1(kind);
+    return kYield;
+}
+
+int Engine::aiImpl(lua_State *L)
+{
+    const QString extension = extensionOf(L);
+    if (!m_loaded.value(extension).permissions.contains(u"ai"_s))
+        return failWith(L, u"b.ai: permission denied: ai (the page needs `uprawnienia:: ai`)"_s);
+    QVariant request;
+    if (lua_type(L, 1) == LUA_TSTRING) {
+        request = QVariantMap{{u"prompt"_s, toQString(L, 1)}};
+    } else if (lua_type(L, 1) == LUA_TTABLE) {
+        if (!argValue(L, 1, "b.ai", &request))
+            return kRaise;
+        if (request.metaType().id() != QMetaType::QVariantMap)
+            return failWith(L, u"b.ai: the request must be a text or a table {prompt = …}"_s);
+    } else {
+        return failWith(L, u"b.ai: argument 1 must be a text or a table {prompt = …}"_s);
+    }
+    if (L != m_running || !lua_isyieldable(L))
+        return failWith(L, u"b.ai: cannot wait for an answer here (inside a coroutine or a library callback)"_s);
+    {
+        Unlimited unlimited(&m_unlimited);
+        lua_settop(L, 0);
+        pushVariant(L, QVariantMap{{u"kind"_s, u"ai"_s}, {u"request"_s, request}});
+    }
+    m_asking = true;
+    m_askingKind = u"ai"_s;
     return kYield;
 }
 

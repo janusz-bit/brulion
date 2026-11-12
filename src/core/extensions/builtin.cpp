@@ -33,7 +33,13 @@ QList<BuiltinExtension> builtinExtensions()
         gym.extension.data.insert(u"exercises"_s, QJsonDocument::fromJson(resource(u"exercises.json"_s)).toVariant());
         gym.titleEn = u"Gym"_s;
         gym.titlePl = u"Siłownia"_s;
-        return QList<BuiltinExtension>{gym};
+        BuiltinExtension assistant;
+        assistant.extension.id = u"asystent"_s;
+        assistant.extension.source = QString::fromUtf8(resource(u"asystent.luau"_s));
+        assistant.extension.permissions = {u"ai"_s, u"write"_s};
+        assistant.titleEn = u"AI assistant"_s;
+        assistant.titlePl = u"Asystent AI"_s;
+        return QList<BuiltinExtension>{gym, assistant};
     }();
     return builtins;
 }

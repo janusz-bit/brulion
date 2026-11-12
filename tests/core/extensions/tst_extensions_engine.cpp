@@ -568,6 +568,71 @@ private Q_SLOTS:
         QCOMPARE(r.value.toString(), u"Ala"_s);
     }
 
+    void aiWaitsForTheHost()
+    {
+        // b.ai needs the permission "ai"; it suspends the call with the request, the host resumes
+        // it with {text} (b.ai returns the text) or {error} (an error at the script's line).
+        Extension e = ext(u"asystent"_s, uR"lua(
+            b.command("zapytaj", function(ctx)
+                local text, reply = b.ai({ prompt = "Streść: " .. ctx.page, system = "Krótko.", maxTokens = 300 })
+                return text .. " (" .. reply.model .. ")"
+            end)
+            b.command("krotko", function() return b.ai("Ile to 2 + 2?") end)
+            b.command("blad", function()
+                return b.ai("x")
+            end)
+        )lua"_s);
+        e.permissions = {u"ai"_s};
+        LOAD_OK(e);
+        Result r = engine->runCommand(u"asystent"_s, u"zapytaj"_s, {{u"page"_s, u"Żółw"_s}});
+        QCOMPARE(r.status, Status::Suspended);
+        QVERIFY(r.call > 0);
+        const QVariantMap question = r.value.toMap();
+        QCOMPARE(question.value(u"kind"_s).toString(), u"ai"_s);
+        const QVariantMap request = question.value(u"request"_s).toMap();
+        QCOMPARE(request.value(u"prompt"_s).toString(), u"Streść: Żółw"_s);
+        QCOMPARE(request.value(u"system"_s).toString(), u"Krótko."_s);
+        QCOMPARE(request.value(u"maxTokens"_s).toInt(), 300);
+        // Another call waits too, and a third one runs meanwhile: calls no longer abandon each other.
+        const Result second = engine->runCommand(u"asystent"_s, u"krotko"_s, {});
+        QCOMPARE(second.status, Status::Suspended);
+        QVERIFY(second.call != r.call);
+        QCOMPARE(second.value.toMap().value(u"request"_s).toMap().value(u"prompt"_s).toString(), u"Ile to 2 + 2?"_s);
+        QCOMPARE(engine->waitingCalls(), (QList<int>{r.call, second.call}));
+        LOAD_OK(ext(u"inne"_s, u"b.command(\"x\", function() return 7 end)"_s));
+        QCOMPARE(engine->runCommand(u"inne"_s, u"x"_s, {}).value.toInt(), 7);
+        // Answered in any order.
+        Result done = engine->resume(second.call, QVariantMap{{u"text"_s, u"4"_s}, {u"model"_s, u"m"_s}});
+        QVERIFY2(done.ok(), qPrintable(done.error));
+        QCOMPARE(done.value.toString(), u"4"_s);
+        QCOMPARE(done.call, second.call);
+        done = engine->resume(r.call, QVariantMap{{u"text"_s, u"Gad."_s}, {u"model"_s, u"claude-opus-5-5"_s}});
+        QCOMPARE(done.value.toString(), u"Gad. (claude-opus-5-5)"_s);
+        QVERIFY(engine->waitingCalls().isEmpty());
+        QCOMPARE(engine->resume(r.call, QVariant()).status, Status::Error); // nothing waits under that id
+        // An error from the host: raised at the script's line.
+        r = engine->runCommand(u"asystent"_s, u"blad"_s, {});
+        QCOMPARE(r.status, Status::Suspended);
+        done = engine->resume(r.call, QVariantMap{{u"error"_s, u"invalid API key"_s}});
+        QCOMPARE(done.status, Status::Error);
+        QVERIFY2(done.error.startsWith(u"asystent:8: b.ai: invalid API key"_s), qPrintable(done.error));
+        // Loading the extension again drops its waiting calls.
+        r = engine->runCommand(u"asystent"_s, u"krotko"_s, {});
+        QCOMPARE(r.status, Status::Suspended);
+        LOAD_OK(e);
+        QVERIFY(engine->waitingCalls().isEmpty());
+        // Without the permission: refused at once.
+        LOAD_OK(ext(u"bez"_s, u"b.command(\"x\", function() return b.ai(\"hej\") end)"_s));
+        const Result denied = engine->runCommand(u"bez"_s, u"x"_s, {});
+        QCOMPARE(denied.status, Status::Error);
+        QVERIFY2(denied.error.contains(u"b.ai: permission denied: ai"_s), qPrintable(denied.error));
+        // Not from a coroutine of the script; not with a function as the request.
+        LOAD_OK(e);
+        QVERIFY(engine->evaluate(u"asystent"_s, u"coroutine.wrap(function() return b.ai(\"x\") end)()"_s, u"t"_s)
+                        .error.contains(u"cannot wait for an answer here"_s));
+        QVERIFY(engine->evaluate(u"asystent"_s, u"b.ai(print)"_s, u"t"_s).error.contains(u"argument 1 must be"_s));
+    }
+
     void viewMetaAndNames()
     {
         Extension e = ext(u"licznik-slow"_s, uR"lua(

@@ -1367,6 +1367,106 @@ Item {
                 }
             }
 
+            // AI for extensions (b.ai) on this device: the provider, the key, the model.
+            SettingsGroup {
+                objectName: "aiSettings"
+                heading: qsTr("AI")
+                note: qsTr("Extensions with the “ai” permission can ask a model about your notes — also on the phone. Claude and ChatGPT subscriptions cannot be used by other apps: an API key is billed separately, by use (a few notes cost fractions of a cent). A server of your own (Ollama, LM Studio) needs no key. What an extension sends goes to that provider; the key stays on this device.")
+
+                SettingSwitch {
+                    objectName: "assistantSetting"
+                    text: qsTr("AI assistant")
+                    description: qsTr("“AI: ask about this page” and “AI: summarise this page” in the palette: the answer goes into today's note.")
+                    iconName: "sparkles"
+                    checked: AppSettings.assistantEnabled
+                    onToggled: AppSettings.assistantEnabled = checked
+                }
+                ShellSettingRow {
+                    title: qsTr("Provider")
+                    description: AppSettings.aiProvider === "openai"
+                                 ? qsTr("Any API that speaks OpenAI's chat format: OpenAI, OpenRouter, or Ollama and LM Studio on your own computer.")
+                                 : qsTr("Claude by Anthropic: a key from platform.claude.com (Settings → API keys).")
+                    BSegmented {
+                        objectName: "aiProviderSetting"
+                        accessibleName: qsTr("Provider")
+                        model: [{ value: "anthropic", text: "Claude" }, { value: "openai", text: qsTr("OpenAI-compatible") }]
+                        currentValue: AppSettings.aiProvider
+                        onActivated: (value) => AppSettings.aiProvider = "" + value
+                    }
+                }
+                ShellSettingRow {
+                    id: aiKeyRow
+                    title: qsTr("API key")
+                    description: AppSettings.hasAiKey ? qsTr("Saved on this device. Type a new one to replace it.")
+                                                      : qsTr("Not set. It is kept only on this device, never in the notebook.")
+                    BTextField {
+                        id: aiKeyField
+                        objectName: "aiKeySetting"
+                        Layout.preferredWidth: Theme.compact ? -1 : 260
+                        Layout.fillWidth: Theme.compact
+                        echoMode: TextInput.Password
+                        placeholderText: AppSettings.hasAiKey ? "••••••••" : (AppSettings.aiProvider === "openai" ? "sk-…" : "sk-ant-…")
+                        accessibleName: qsTr("API key")
+                        inputMethodHints: Qt.ImhNoAutoUppercase | Qt.ImhNoPredictiveText | Qt.ImhSensitiveData
+                        onEditingFinished: {
+                            if (aiKeyField.text !== "") {
+                                if (AppSettings.setAiKey(aiKeyField.text))
+                                    AppController.toast(qsTr("The key is saved on this device."), "success")
+                                aiKeyField.text = ""
+                            }
+                        }
+                    }
+                    BButton {
+                        visible: AppSettings.hasAiKey
+                        size: "small"
+                        variant: "ghost"
+                        text: qsTr("Forget")
+                        onClicked: AppSettings.setAiKey("")
+                    }
+                }
+                ShellSettingRow {
+                    title: qsTr("Model")
+                    description: AppSettings.aiProvider === "openai" ? qsTr("Its name at the provider, e.g. the model you pulled into Ollama.")
+                                                                     : qsTr("Empty: claude-opus-5-5. Cheaper and faster: claude-haiku-5-5.")
+                    BTextField {
+                        objectName: "aiModelSetting"
+                        Layout.preferredWidth: Theme.compact ? -1 : 260
+                        Layout.fillWidth: Theme.compact
+                        text: AppSettings.aiModel
+                        placeholderText: AppSettings.aiProvider === "openai" ? "llama3.2" : "claude-opus-5-5"
+                        accessibleName: qsTr("Model")
+                        inputMethodHints: Qt.ImhNoAutoUppercase | Qt.ImhNoPredictiveText
+                        onEditingFinished: AppSettings.aiModel = text
+                    }
+                }
+                ShellSettingRow {
+                    title: qsTr("Address")
+                    description: qsTr("Empty: the provider's own. A server of your own: e.g. http://192.168.1.10:11434/v1 (Ollama).")
+                    BTextField {
+                        objectName: "aiAddressSetting"
+                        Layout.preferredWidth: Theme.compact ? -1 : 260
+                        Layout.fillWidth: Theme.compact
+                        text: AppSettings.aiBaseUrl
+                        placeholderText: AppSettings.aiProvider === "openai" ? "https://api.openai.com/v1" : "https://api.anthropic.com"
+                        accessibleName: qsTr("Address")
+                        inputMethodHints: Qt.ImhUrlCharactersOnly | Qt.ImhNoAutoUppercase
+                        onEditingFinished: AppSettings.aiBaseUrl = text
+                    }
+                }
+                ShellSettingRow {
+                    title: qsTr("Check")
+                    description: qsTr("Asks the model “Say OK.” with these settings.")
+                    BButton {
+                        objectName: "aiTest"
+                        size: "small"
+                        iconName: "sparkles"
+                        busy: Workspace.extensions.aiPending > 0
+                        text: qsTr("Check")
+                        onClicked: Workspace.extensions.testAi()
+                    }
+                }
+            }
+
             SettingsGroup {
                 heading: qsTr("In this notebook")
                 note: qsTr("Your own extensions are pages of the notebook tagged #rozszerzenie (or #extension): the code in their luau code blocks runs, and runs again whenever you save the page. Code that arrives from another device, a sync or an import runs here only after you approve it.")

@@ -8,6 +8,7 @@
 #include "log/categories.h"
 #include "markdown/parse.h"
 #include "notebook/pages.h"
+#include "sync/http.h"
 #include "util/paths.h"
 #include "vault/localstore.h"
 #include "vault/vault.h"
@@ -196,6 +197,11 @@ WorkspaceExtensions::WorkspaceExtensions(Clock clock, QObject *parent)
     m_changeTimer.setSingleShot(true);
     m_changeTimer.setInterval(600ms);
     connect(&m_changeTimer, &QTimer::timeout, this, &WorkspaceExtensions::flushChanged);
+    // Changed notes are looked at after the change, never inside it: an extension's own write
+    // reaches notesChanged() while its call still runs, and nothing may load in the engine then.
+    m_pagesTimer.setSingleShot(true);
+    m_pagesTimer.setInterval(0);
+    connect(&m_pagesTimer, &QTimer::timeout, this, &WorkspaceExtensions::processPages);
 }
 
 WorkspaceExtensions::~WorkspaceExtensions() = default;
@@ -224,6 +230,11 @@ void WorkspaceExtensions::detach()
     m_index = nullptr;
     m_pages.clear();
     m_scanned = false;
+    m_pendingPaths.clear();
+    m_pagesTimer.stop();
+    m_calls.clear();
+    m_questionCall = 0;
+    ++m_generation;
     m_approved.clear();
     m_approvedOrder.clear();
     m_off.clear();
@@ -268,6 +279,9 @@ void WorkspaceExtensions::reload()
     cancelQuestion();
     m_engine.reset();
     m_host.reset();
+    m_calls.clear();
+    m_questionCall = 0;
+    ++m_generation; // AI answers still on their way find no call
     m_loadedKeys.clear();
     m_loadErrors.clear();
     m_hookFailures.clear();
@@ -419,15 +433,12 @@ void WorkspaceExtensions::notesChanged(const QStringList &changedPaths)
 {
     if (!m_index)
         return;
-    bool pagesChanged = false;
     if (m_scanned) {
         for (const QString &path : changedPaths)
-            pagesChanged = updatePage(path) || pagesChanged;
+            if (!m_pendingPaths.contains(path))
+                m_pendingPaths << path;
+        m_pagesTimer.start();
     }
-    for (const QString &path : changedPaths)
-        m_editorSaves.remove(path);
-    if (pagesChanged)
-        reconcile();
     // "change" hooks: what changed, except what extensions wrote themselves (no echoes, no loops).
     const bool hooked = m_engine && !m_engine->hooks(u"change"_s).isEmpty();
     for (const QString &path : changedPaths) {
@@ -440,6 +451,22 @@ void WorkspaceExtensions::notesChanged(const QStringList &changedPaths)
     }
     if (!m_changedPages.isEmpty())
         m_changeTimer.start();
+}
+
+void WorkspaceExtensions::processPages()
+{
+    if (m_engine && m_engine->isRunning()) { // (never from the event loop; a guard all the same)
+        m_pagesTimer.start();
+        return;
+    }
+    bool pagesChanged = false;
+    const QStringList paths = std::exchange(m_pendingPaths, {});
+    for (const QString &path : paths) {
+        pagesChanged = updatePage(path) || pagesChanged;
+        m_editorSaves.remove(path);
+    }
+    if (pagesChanged)
+        reconcile();
 }
 
 void WorkspaceExtensions::savedByEditor(const QString &path, const QString &content)
@@ -465,37 +492,146 @@ void WorkspaceExtensions::runHooks(const QString &event, const QVariantMap &arg)
 {
     if (!m_engine)
         return;
-    if (isWaiting()) { // a question is open: a call now would abandon it
-        QTimer::singleShot(1000, this, [this, event, arg] { runHooks(event, arg); });
+    if (m_engine->isRunning()) { // never inside another call
+        QTimer::singleShot(0, this, [this, event, arg] { runHooks(event, arg); });
         return;
     }
     const QList<extensions::HookInfo> hooks = m_engine->hooks(event);
     for (const extensions::HookInfo &h : hooks) {
-        extensions::Result r = m_engine->runHook(h.id, arg);
-        if (r.status == extensions::Status::Suspended) {
-            m_engine->cancel();
-            r = {extensions::Status::Error, {}, u"b.on(\"%1\"): a hook cannot ask a question"_s.arg(event)};
-        }
-        if (r.status == extensions::Status::NotFound)
-            continue;
-        if (r.ok()) {
-            m_hookFailures.remove(h.id);
-            if (r.value.isValid() && !r.value.isNull())
-                m_console->append(u"result"_s, formatValue(r.value), title(h.extension));
-            continue;
-        }
-        qCWarning(lcApp, "extension %s, hook %s: %s", qUtf8Printable(h.extension), qUtf8Printable(event),
-                  qUtf8Printable(r.error));
-        m_console->append(u"error"_s, r.error, title(h.extension));
-        // Emacs' way: a hook that keeps failing is taken off (until the extension loads again).
-        if (++m_hookFailures[h.id] >= 3) {
-            m_engine->removeHook(h.id);
-            m_hookFailures.remove(h.id);
-            Q_EMIT message(tr("%1: its reaction to “%2” failed three times and is off until the extension is loaded again.")
-                                   .arg(title(h.extension), event),
-                           u"error"_s);
-        }
+        m_current = CallContext{};
+        m_current.hook = true;
+        m_current.hookId = h.id;
+        m_current.hookEvent = event;
+        m_current.extension = h.extension;
+        handleResult(m_engine->runHook(h.id, arg));
     }
+    m_current = CallContext{};
+}
+
+void WorkspaceExtensions::hookResult(const CallContext &ctx, const extensions::Result &r)
+{
+    if (r.status == extensions::Status::NotFound || !m_engine)
+        return;
+    if (r.ok()) {
+        m_hookFailures.remove(ctx.hookId);
+        if (r.value.isValid() && !r.value.isNull())
+            m_console->append(u"result"_s, formatValue(r.value), title(ctx.extension));
+        return;
+    }
+    qCWarning(lcApp, "extension %s, hook %s: %s", qUtf8Printable(ctx.extension), qUtf8Printable(ctx.hookEvent),
+              qUtf8Printable(r.error));
+    m_console->append(u"error"_s, r.error, title(ctx.extension));
+    // Emacs' way: a hook that keeps failing is taken off (until the extension loads again).
+    if (++m_hookFailures[ctx.hookId] >= 3) {
+        m_engine->removeHook(ctx.hookId);
+        m_hookFailures.remove(ctx.hookId);
+        Q_EMIT message(tr("%1: its reaction to “%2” failed three times and is off until the extension is loaded again.")
+                               .arg(title(ctx.extension), ctx.hookEvent),
+                       u"error"_s);
+    }
+}
+
+void WorkspaceExtensions::handleResult(const extensions::Result &r)
+{
+    const auto known = r.call ? m_calls.constFind(r.call) : m_calls.constEnd();
+    const CallContext ctx = known != m_calls.constEnd() ? *known : m_current;
+    if (r.status == extensions::Status::Suspended) {
+        m_calls.insert(r.call, ctx);
+        const QVariantMap request = r.value.toMap();
+        if (request.value(u"kind"_s).toString() == u"ai") {
+            dispatchAi(r.call, request.value(u"request"_s).toMap());
+            return;
+        }
+        if (ctx.hook) {
+            m_engine->cancel(r.call);
+            m_calls.remove(r.call);
+            hookResult(ctx, {extensions::Status::Error, {}, u"b.on(\"%1\"): a hook cannot ask a question"_s.arg(ctx.hookEvent)});
+            return;
+        }
+        cancelQuestion(); // one question at a time: an older one is answered "cancelled"
+        m_questionCall = r.call;
+        setQuestion(request);
+        return;
+    }
+    if (r.call)
+        m_calls.remove(r.call);
+    if (ctx.console)
+        consoleResult(r, ctx.toast);
+    else if (ctx.hook)
+        hookResult(ctx, r);
+    else
+        handle(r, ctx.fromAction);
+}
+
+void WorkspaceExtensions::setAi(const ai::Settings &settings) { m_aiSettings = settings; }
+
+void WorkspaceExtensions::dispatchAi(int call, const QVariantMap &request)
+{
+    const CallContext ctx = m_calls.value(call);
+    ++m_aiPending;
+    Q_EMIT aiPendingChanged();
+    if (ctx.console)
+        m_console->append(u"info"_s, tr("Asking AI…"));
+    else if (!ctx.hook)
+        Q_EMIT message(tr("Asking AI…"), u"info"_s);
+    QString error;
+    const std::optional<ai::Request> r = ai::requestFrom(request, &error);
+    const quint64 generation = m_generation;
+    if (!r) {
+        QTimer::singleShot(0, this, [this, call, error, generation] { finishAi(call, {{u"error"_s, error}}, generation); });
+        return;
+    }
+    if (!m_aiClient) {
+        m_transport = std::make_unique<sync::NetworkHttpTransport>();
+        m_aiClient = std::make_unique<ai::Client>(m_transport.get());
+    }
+    const QPointer<WorkspaceExtensions> self(this);
+    m_aiClient->send(m_aiSettings, *r, [self, call, generation](const ai::Reply &reply) {
+        if (self)
+            self->finishAi(call, reply.toVariant(), generation);
+    });
+}
+
+void WorkspaceExtensions::finishAi(int call, const QVariantMap &reply, quint64 generation)
+{
+    m_aiPending = std::max(0, m_aiPending - 1);
+    Q_EMIT aiPendingChanged();
+    if (generation != m_generation || !m_engine || !m_engine->waitingCalls().contains(call)) {
+        m_calls.remove(call); // its extension was loaded again, or the notebook closed
+        return;
+    }
+    if (m_engine->isRunning()) {
+        ++m_aiPending;
+        QTimer::singleShot(0, this, [this, call, reply, generation] { finishAi(call, reply, generation); });
+        return;
+    }
+    handleResult(m_engine->resume(call, reply));
+}
+
+void WorkspaceExtensions::testAi()
+{
+    ai::Request request;
+    request.messages << ai::Message{u"user"_s, u"Say OK."_s};
+    request.maxTokens = 1024;
+    if (m_aiSettings.provider == u"anthropic")
+        request.effort = u"low"_s;
+    if (!m_aiClient) {
+        m_transport = std::make_unique<sync::NetworkHttpTransport>();
+        m_aiClient = std::make_unique<ai::Client>(m_transport.get());
+    }
+    ++m_aiPending;
+    Q_EMIT aiPendingChanged();
+    const QPointer<WorkspaceExtensions> self(this);
+    m_aiClient->send(m_aiSettings, request, [self](const ai::Reply &reply) {
+        if (!self)
+            return;
+        self->m_aiPending = std::max(0, self->m_aiPending - 1);
+        Q_EMIT self->aiPendingChanged();
+        if (reply.ok)
+            Q_EMIT self->message(tr("AI answers (%1): %2").arg(reply.model, reply.text.simplified().left(80)), u"success"_s);
+        else
+            Q_EMIT self->message(tr("AI: %1").arg(reply.error), u"error"_s);
+    });
 }
 
 QString WorkspaceExtensions::pageStateOf(const PageEntry &entry) const { return entry.state; }
@@ -844,8 +980,9 @@ void WorkspaceExtensions::runCommand(const QString &extension, const QString &na
             ctx.insert(u"block"_s, block);
     }
     cancelQuestion();
-    m_consoleCall = false;
-    handle(m_engine->runCommand(extension, name, ctx), false);
+    m_current = CallContext{};
+    handleResult(m_engine->runCommand(extension, name, ctx));
+    m_current = CallContext{};
 }
 
 void WorkspaceExtensions::runBlockCommand(const QString &command, const QString &path, int line)
@@ -865,7 +1002,9 @@ QVariantMap WorkspaceExtensions::render(const QString &extension, const QString 
         return {};
     const extensions::Result r = m_engine->render(extension, view, params);
     if (r.status == extensions::Status::Suspended) {
-        m_engine->cancel(); // a view never asks
+        m_engine->cancel(r.call); // a view never waits (b.ask, b.ai)
+        if (error)
+            *error = tr("A view cannot wait for a question or for AI: ask in a command or an action.");
         return {};
     }
     if (r.status == extensions::Status::NotFound)
@@ -884,9 +1023,11 @@ bool WorkspaceExtensions::act(const QString &extension, const QString &view, con
     if (!m_engine)
         return false;
     cancelQuestion();
-    m_consoleCall = false;
+    m_current = CallContext{};
+    m_current.fromAction = true;
     const extensions::Result r = m_engine->act(extension, view, action, args);
-    handle(r, true);
+    handleResult(r);
+    m_current = CallContext{};
     return r.ok() || r.status == extensions::Status::Suspended;
 }
 
@@ -965,18 +1106,15 @@ void WorkspaceExtensions::evaluateIn(const QString &code, const QString &name, c
         return;
     }
     cancelQuestion();
-    m_consoleCall = true;
-    m_consoleToast = toast;
-    consoleResult(m_engine->evaluate(kConsole, code, name));
+    m_current = CallContext{};
+    m_current.console = true;
+    m_current.toast = toast;
+    handleResult(m_engine->evaluate(kConsole, code, name));
+    m_current = CallContext{};
 }
 
-void WorkspaceExtensions::consoleResult(const extensions::Result &result)
+void WorkspaceExtensions::consoleResult(const extensions::Result &result, bool toast)
 {
-    if (result.status == extensions::Status::Suspended) {
-        setQuestion(result.value.toMap());
-        return;
-    }
-    m_consoleCall = false;
     QString shown;
     if (result.ok()) {
         if (result.value.isValid() && !result.value.isNull()) {
@@ -990,7 +1128,7 @@ void WorkspaceExtensions::consoleResult(const extensions::Result &result)
         const bool oneFrame = lines.size() == 3 && lines[1] == u"stack traceback:";
         m_console->append(u"error"_s, oneFrame ? shown : result.error);
     }
-    if (std::exchange(m_consoleToast, false) && !shown.isEmpty())
+    if (toast && !shown.isEmpty())
         Q_EMIT message(result.ok() ? u"Luau: "_s + shown.left(300) : tr("Luau: %1").arg(shown.left(300)),
                        result.ok() ? u"info"_s : u"error"_s);
     // The console may have registered commands, views or hooks (b.command typed in it).
@@ -1014,15 +1152,12 @@ void WorkspaceExtensions::answer(const QVariant &value)
 {
     if (!m_engine || m_questionKind.isEmpty())
         return;
+    const int call = std::exchange(m_questionCall, 0);
     m_questionKind.clear();
     m_questionTitle.clear();
     m_questionOptions.clear();
     Q_EMIT questionChanged();
-    const extensions::Result r = m_engine->resume(value);
-    if (m_consoleCall)
-        consoleResult(r);
-    else
-        handle(r, false);
+    handleResult(m_engine->resume(call, value));
     if (m_reconcilePending && !isWaiting())
         reconcile();
 }

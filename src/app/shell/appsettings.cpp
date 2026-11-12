@@ -43,6 +43,10 @@ constexpr auto kSidebarSections = "ui/sidebar/sections"_L1;
 constexpr auto kBottomNavTabs = "ui/bottomNav/tabs"_L1;
 constexpr auto kCaptureButton = "ui/captureButton"_L1;
 constexpr auto kGym = "extensions/silownia"_L1;
+constexpr auto kAssistant = "extensions/asystent"_L1;
+constexpr auto kAiProvider = "ai/provider"_L1;
+constexpr auto kAiModel = "ai/model"_L1;
+constexpr auto kAiBaseUrl = "ai/baseUrl"_L1;
 constexpr auto kEditorFont = "editor/font"_L1;
 constexpr auto kEditorFontFamily = "editor/fontFamily"_L1;
 constexpr auto kEditorMonoFamily = "editor/monoFamily"_L1;
@@ -544,9 +548,78 @@ void AppSettings::setGymEnabled(bool on)
         Q_EMIT gymEnabledChanged();
 }
 
+bool AppSettings::assistantEnabled() const
+{
+    return m_settings->value(kAssistant, false).toBool();
+}
+
+void AppSettings::setAssistantEnabled(bool on)
+{
+    if (store(kAssistant, on, assistantEnabled()))
+        Q_EMIT assistantEnabledChanged();
+}
+
 QStringList AppSettings::enabledExtensions() const
 {
-    return gymEnabled() ? QStringList{u"silownia"_s} : QStringList();
+    QStringList out;
+    if (gymEnabled())
+        out << u"silownia"_s;
+    if (assistantEnabled())
+        out << u"asystent"_s;
+    return out;
+}
+
+QString AppSettings::aiProvider() const
+{
+    const QString p = m_settings->value(kAiProvider, u"anthropic"_s).toString();
+    return p == u"openai" ? p : u"anthropic"_s;
+}
+
+void AppSettings::setAiProvider(const QString &provider)
+{
+    if (store(kAiProvider, provider == u"openai" ? u"openai"_s : u"anthropic"_s, aiProvider()))
+        Q_EMIT aiChanged();
+}
+
+QString AppSettings::aiModel() const { return m_settings->value(kAiModel).toString(); }
+
+void AppSettings::setAiModel(const QString &model)
+{
+    if (store(kAiModel, model.trimmed().left(200), aiModel()))
+        Q_EMIT aiChanged();
+}
+
+QString AppSettings::aiBaseUrl() const { return m_settings->value(kAiBaseUrl).toString(); }
+
+void AppSettings::setAiBaseUrl(const QString &url)
+{
+    if (store(kAiBaseUrl, url.trimmed().left(500), aiBaseUrl()))
+        Q_EMIT aiChanged();
+}
+
+namespace {
+QString aiKeyFileIn(const QString &dataDir) { return dataDir + u"/secrets/ai-key"_s; }
+} // namespace
+
+bool AppSettings::hasAiKey() const { return QFileInfo(aiKeyFileIn(m_dataDir)).size() > 0; }
+
+bool AppSettings::setAiKey(const QString &key)
+{
+    const bool had = hasAiKey();
+    const QString trimmed = key.trimmed();
+    m_aiKeySecret.reset(trimmed); // masked in every log line from now on
+    const bool ok = writeSecretFile(aiKeyFileIn(m_dataDir), trimmed); // owner-only; "" removes the file
+    if (trimmed.isEmpty() ? had : ok)
+        Q_EMIT aiChanged();
+    return ok;
+}
+
+QString AppSettings::aiKey() const
+{
+    QFile in(aiKeyFileIn(m_dataDir));
+    const QString key = in.open(QIODevice::ReadOnly) ? QString::fromUtf8(in.readAll()).trimmed() : QString();
+    m_aiKeySecret.reset(key);
+    return key;
 }
 
 bool AppSettings::captureButtonShown() const

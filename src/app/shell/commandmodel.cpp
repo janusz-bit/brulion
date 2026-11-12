@@ -638,8 +638,9 @@ bool CommandModel::run(const QString &id)
             return false;
         if (c->needsBlock)
             m_app->requestUiAction(u"extension:"_s + extension + u'/' + name);
-        else
-            m_app->workspace()->extensions()->runCommand(extension, name);
+        else // ctx.page: the page on screen (a command about "this page")
+            m_app->workspace()->extensions()->runCommand(extension, name,
+                                                         m_app->currentRoute().value(u"path"_s).toString());
     } else if (id.startsWith(u"go."))
         m_app->navigate({{u"view"_s, id.mid(3)}});
     else if (id == u"page.favorite")

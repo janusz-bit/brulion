@@ -127,6 +127,9 @@ Pandoc Markdown document for Word, LibreOffice, PDF or EPUB).
   that arrives by sync or import runs on a device only once approved there. The gym's own source
   can become a page of the notebook and run from there; the **Luau console** evaluates code with
   the notebook's API and shows what extensions print (docs/EXTENSIONS.md).
+* **AI in extensions**, also on the phone: `b.ai` asks Claude, any OpenAI-compatible API or a
+  server of your own (Ollama), with the key kept on the device; the built-in **AI assistant**
+  answers questions about the page on screen and summarises it into today's note.
 * Two note modes: a **document** (Obsidian-like live preview: paragraphs, headings and plain
   lists, edited in place) or an **outline** (Logseq-like: every bullet is a block). Chosen when
   a page is created and switchable at any time; stored in the note as `brulion: document` /
@@ -328,7 +331,10 @@ przykładowym notatnikiem.
   razu (błąd wskazuje wiersz strony, a poprzednia wersja działa dalej). Kod, który przyszedł z
   synchronizacji albo importu, działa na urządzeniu dopiero po zatwierdzeniu. Kod Siłowni można
   przenieść na stronę notatnika i zmieniać tam, a **konsola Luau** wykonuje kod z API notatnika i
-  pokazuje, co wypisują rozszerzenia. Tagi działają jak linki do stron, jak
+  pokazuje, co wypisują rozszerzenia. **AI w rozszerzeniach**, także na telefonie: `b.ai` pyta
+  Claude'a, dowolne API zgodne z OpenAI albo własny serwer (Ollama), a klucz zostaje na urządzeniu;
+  wbudowany **Asystent AI** odpowiada na pytania o otwartą stronę i streszcza ją do dzisiejszej
+  notatki. Tagi działają jak linki do stron, jak
   w Logseq: `#praca` otwiera stronę „praca” (tworzoną przy pierwszym wpisie), jej odnośniki
   pokazują bloki z tym tagiem, a zmiana nazwy strony poprawia też tagi. Odnośnik do każdego
   bloku i nagłówka — `((…))`, `[[Strona#^…]]`, `[[Strona#Nagłówek]]` — skopiujesz z menu bloku
