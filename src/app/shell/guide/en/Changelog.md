@@ -7,6 +7,17 @@ brulion: document
 
 Here you'll find what changed in every version of Brulion, newest first. Full release notes with downloads are on GitHub: https://github.com/janusz-bit/brulion/releases
 
+## 0.18.1 — November 12, 2026
+
+**New**
+- **Tap a date to change it** — a tap or click on a date marker (📅, ⏳, 🛫, ✅, ➕, ❌) opens the date window on it, with a calendar and a time — in notes, query results, embedded blocks, tables and the **Tasks** view (there the rest of a task's row still opens its note). The right-click / long-press menu stays. See [[Tasks]].
+- **A separate reminder next to a date** — the date window's **+**, beside **Reminder** and **Alarm**, adds a reminder or an alarm right after the date, which stays: the window says the date stays, **Add** writes it, `Ctrl+Z` takes it away. A task has one due date, so a second one is not offered. A task with a date keeps its calendar button at the end of its line as a **+** for the same. See [[Reminders and alarms]].
+- **AI a tap away** — while **Settings → Extensions → AI → AI assistant** is on, the top bar has a **✨** button, on the phone too: **Ask about this page…**, **Summarise this page** and **AI settings…**. In the journal it asks about today's note; the button spins while the model answers. See [[AI]].
+
+**Changes**
+- **Settings in tabs on the phone** — on narrow windows the settings' sections are tabs at the top, one section at a time, instead of one long list to scroll through.
+- **A field above the keyboard** — a settings field near the end of a short section is scrolled above the on-screen keyboard again.
+
 ## 0.18.0 — November 12, 2026
 
 **New**

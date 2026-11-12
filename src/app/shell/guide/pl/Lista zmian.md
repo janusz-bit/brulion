@@ -7,6 +7,17 @@ brulion: document
 
 Tu znajdziesz zmiany w każdej wersji Brulionu, od najnowszej. Pełne opisy wydań z plikami do pobrania są na GitHubie: https://github.com/janusz-bit/brulion/releases
 
+## 0.18.1 — 12 listopada 2026
+
+**Nowe**
+- **Stuknij datę, żeby ją zmienić** — stuknięcie albo kliknięcie znacznika daty (📅, ⏳, 🛫, ✅, ➕, ❌) otwiera na nim okno daty z kalendarzem i godziną — w notatkach, wynikach zapytań, wstawionych blokach, tabelach i w widoku **Zadania** (tam reszta wiersza zadania nadal otwiera jego notatkę). Menu spod prawego przycisku albo przytrzymania zostaje. Zobacz [[Zadania]].
+- **Osobne przypomnienie przy dacie** — **+** w oknie daty, obok **Przypomnienia** i **Alarmu**, dodaje przypomnienie albo alarm zaraz za datą, która zostaje: okno mówi, że data zostaje, **Dodaj** je zapisuje, a `Ctrl+Z` cofa. Zadanie ma jeden termin, więc drugiego okno nie dodaje. Zadanie z datą ma na końcu wiersza przycisk z kalendarzem jako **+** do tego samego. Zobacz [[Przypomnienia i alarmy]].
+- **AI pod ręką** — gdy **Ustawienia → Rozszerzenia → AI → Asystent AI** jest włączony, górny pasek ma przycisk **✨**, także na telefonie: **Zapytaj o tę stronę…**, **Streść tę stronę** i **Ustawienia AI…**. W dzienniku pyta o dzisiejszą notatkę; przycisk kręci się, gdy model odpowiada. Zobacz [[AI]].
+
+**Zmiany**
+- **Ustawienia w zakładkach na telefonie** — w wąskim oknie sekcje ustawień są zakładkami u góry, jedna sekcja naraz, zamiast jednej długiej listy do przewijania.
+- **Pole nad klawiaturą** — pole ustawień blisko końca krótkiej sekcji znów przewija się nad klawiaturę ekranową.
+
 ## 0.18.0 — 12 listopada 2026
 
 **Nowe**
