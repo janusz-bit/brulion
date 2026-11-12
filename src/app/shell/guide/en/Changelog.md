@@ -7,6 +7,16 @@ brulion: document
 
 Here you'll find what changed in every version of Brulion, newest first. Full release notes with downloads are on GitHub: https://github.com/janusz-bit/brulion/releases
 
+## 0.19.0 — November 12, 2026
+
+**New**
+- **AI that knows your whole notebook** — **Ask the AI…** (the top bar's **✨**, or **AI: ask or ask to do…** in the palette) no longer sees only the page on screen: it searches and reads all your notes by itself — pages, the journal, tasks with their dates, tags, reminders — so you can ask "What do I have to do this week?" or "What did I write about the trip?". Asked to, it changes them too: it adds to a page or a day, creates or rewrites a page, changes a line or ticks off a task. **Every change waits for your yes**: a window shows what it would write — **Allow**, **Allow every change of this question** or **No**. The answer goes into today's note, with `✏️ Changed: [[…]]` naming the pages it changed. On a server of your own pick a model that supports tools. See [[AI]].
+- **Ignore a page's tasks** — **Ignore tasks on this page** in the page's menu (**⋯**, on a phone **⋮**) keeps the page's checkboxes — a checklist to copy, a packing list, a book's notes — out of **Tasks**, the calendar, task queries and widgets: the page gets `tasks: ignore` (`zadania: ignoruj` with a Polish interface). On the page they work as before and their reminders still ring; **Show this page's tasks in Tasks** brings them back, and a query naming the page (`page:`) shows them. See [[Tasks]].
+- **An agent of your own** — extensions get `b.search` (full-text search over every note), `b.query` (the query language: tasks, dates, tags, reminders) and `b.ai` with tools, which the model calls and the extension runs. See [[Extensions]].
+
+**Changes**
+- **Questions of extensions** — the lines of a question after its first show under its title (what a change would write); on the phone toasts move to the top while such a question is open, and "Asking AI…" shows once per question.
+
 ## 0.18.1 — November 12, 2026
 
 **New**

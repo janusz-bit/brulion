@@ -7,6 +7,16 @@ brulion: document
 
 Tu znajdziesz zmiany w każdej wersji Brulionu, od najnowszej. Pełne opisy wydań z plikami do pobrania są na GitHubie: https://github.com/janusz-bit/brulion/releases
 
+## 0.19.0 — 12 listopada 2026
+
+**Nowe**
+- **AI, które zna cały notatnik** — **Zapytaj AI…** (przycisk **✨** na górnym pasku albo **AI: zapytaj albo poproś…** w palecie) nie widzi już tylko strony na ekranie: samo przeszukuje i czyta wszystkie notatki — strony, dziennik, zadania z terminami, tagi, przypomnienia — więc możesz zapytać „Co mam do zrobienia w tym tygodniu?” albo „Co pisałem o wyjeździe?”. Poproszone, także je zmienia: dopisze do strony albo dnia, utworzy albo przepisze stronę, zmieni wiersz czy odhaczy zadanie. **Każda zmiana czeka na Twoją zgodę**: okno pokazuje, co AI chce zapisać — **Zgoda**, **Zgoda na wszystkie zmiany tego pytania** albo **Nie**. Odpowiedź trafia do dzisiejszej notatki, a `✏️ Zmienione: [[…]]` wymienia strony, które AI zmieniło. Na własnym serwerze wybierz model, który obsługuje narzędzia. Zobacz [[AI]].
+- **Ignorowanie zadań strony** — **Ignoruj zadania z tej strony** w menu strony (**⋯**, na telefonie **⋮**) wyłącza jej pola wyboru — listę do skopiowania, listę do spakowania, notatki z książki — z **Zadań**, kalendarza, zapytań o zadania i widżetów: strona dostaje `zadania: ignoruj` (`tasks: ignore` przy angielskim interfejsie). Na samej stronie działają jak dotąd, a ich przypomnienia dalej dzwonią; **Pokazuj zadania z tej strony w Zadaniach** je przywraca, a zapytanie, które nazywa stronę (`page:`), dalej je pokazuje. Zobacz [[Zadania]].
+- **Własny agent** — rozszerzenia dostają `b.search` (wyszukiwanie w całym notatniku), `b.query` (język zapytań: zadania, terminy, tagi, przypomnienia) i `b.ai` z narzędziami, które model wywołuje, a rozszerzenie wykonuje. Zobacz [[Rozszerzenia]].
+
+**Zmiany**
+- **Pytania rozszerzeń** — wiersze pytania po pierwszym widać pod jego tytułem (co zmiana zapisze); na telefonie, gdy takie pytanie jest otwarte, powiadomienia przesuwają się na górę, a „Pytam AI…” pokazuje się raz na pytanie.
+
 ## 0.18.1 — 12 listopada 2026
 
 **Nowe**
