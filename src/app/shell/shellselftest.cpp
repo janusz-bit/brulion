@@ -626,10 +626,11 @@ void checkTaskStatusMenus(QQuickWindow *window, AppController *app, const Check 
             tapOrClick(window, pointIn(add), touch);
         QQuickItem *accept = nullptr;
         check(waitFor([&] {
-                  accept = popup ? findShown(popup, [](QQuickItem *item) {
-                      const QString text = item->property("text").toString();
-                      return isA(item, "BButton") && (text == u"Dodaj" || text == u"Add");
-                  })
+                  accept = popup ? findShown(popup,
+                                             [](QQuickItem *item) {
+                                                 const QString text = item->property("text").toString();
+                                                 return isA(item, "BButton") && (text == u"Dodaj" || text == u"Add");
+                                             })
                                  : nullptr;
                   return accept != nullptr && accept->isEnabled();
               }),
@@ -4737,10 +4738,21 @@ void checkSettingsTabs(QQuickWindow *window, AppController *app, const Check &ch
     app->goHome();
     waitFor([app] { return app->currentView() == u"journals"; });
     app->navigate({{u"view"_s, u"settings"_s}, {u"section"_s, u"backups"_s}});
-    check(waitFor([&] { return current(u"backups"_s) && shownNamed(window->contentItem(), u"defaultReminderTimeField"_s) == nullptr; }),
+    check(waitFor([&] {
+              return current(u"backups"_s)
+                     && shownNamed(window->contentItem(), u"defaultReminderTimeField"_s) == nullptr;
+          }),
           "a phone's settings: the route's section is the checked tab, scrolled into view, alone on the screen");
+    // The bar is wider than the phone and scrolled away from its start (a list's content starts at
+    // originX, not 0): General, the first tab, is out of view — clipped, or not shown at all (a list
+    // may hide what it scrolled away: Windows).
     QQuickItem *general = tab(u"general"_s);
-    check(general && !uidriver::onScreen(window, general),
+    QQuickItem *list = tab(u"backups"_s);
+    while (list && !isA(list, "QQuickListView"))
+        list = list->parentItem();
+    check(list && list->property("contentWidth").toReal() > list->width()
+                  && list->property("contentX").toReal() > list->property("originX").toReal() + 1
+                  && (!general || !uidriver::onScreen(window, general)),
           "the section tabs scroll sideways (General is out of view beside Backups)");
     QQuickItem *sync = tab(u"sync"_s);
     if (!sync || !uidriver::onScreen(window, sync)) {
@@ -4749,10 +4761,14 @@ void checkSettingsTabs(QQuickWindow *window, AppController *app, const Check &ch
     }
     settle(200);
     touchTap(window, pointIn(sync));
-    check(waitFor([&] { return section() == u"sync" && current(u"sync"_s) && !tab(u"backups"_s)->property("checked").toBool(); }),
+    check(waitFor([&] {
+              return section() == u"sync" && current(u"sync"_s) && !tab(u"backups"_s)->property("checked").toBool();
+          }),
           "a tap on a section's tab shows that section");
     app->navigate({{u"view"_s, u"settings"_s}, {u"section"_s, u"vault"_s}});
-    check(waitFor([&] { return current(u"vault"_s) && shownNamed(window->contentItem(), u"defaultReminderTimeField"_s) != nullptr; }),
+    check(waitFor([&] {
+              return current(u"vault"_s) && shownNamed(window->contentItem(), u"defaultReminderTimeField"_s) != nullptr;
+          }),
           "a route to another section, after a tap, checks its tab and shows it");
     app->back();
     check(waitFor([&] { return app->currentView() == u"settings" && section() == u"sync"; }),
@@ -5373,7 +5389,8 @@ void checkExtensionPages(QQuickWindow *window, AppController *app, const Check &
                                       "{ label = \"Samotest: widok\" })"_s),
                                  ChangeSource::Sync),
           "the extension page is written as a sync would");
-    check(waitFor([&] { return ext->pageState(path) == u"approval"; }, 10000), "code from elsewhere waits for approval");
+    check(waitFor([&] { return ext->pageState(path) == u"approval"; }, 10000),
+          "code from elsewhere waits for approval");
     check(!app->commands()->ids().contains(u"ext.rozszerzenie-samotestu.pierwsze"_s), "and its command is not offered");
     ext->approve(path);
     check(ext->pageState(path) == u"running", "approved, it runs");
@@ -5381,11 +5398,15 @@ void checkExtensionPages(QQuickWindow *window, AppController *app, const Check &
     check(app->commands()->ids().contains(u"extview.rozszerzenie-samotestu.widok"_s), "its view too");
     check(app->commands()->run(u"extview.rozszerzenie-samotestu.widok"_s), "the palette opens the view");
     check(waitFor([&] { return app->currentView() == u"extension"; }, 10000), "on the route of extension views");
-    check(waitFor([&] {
-              return findShown(window->contentItem(), [](QQuickItem *item) {
-                         return item->property("text").toString() == u"Widok samotestu"_s;
-                     }) != nullptr;
-          }, 10000),
+    check(waitFor(
+                  [&] {
+                      return findShown(window->contentItem(),
+                                       [](QQuickItem *item) {
+                                           return item->property("text").toString() == u"Widok samotestu"_s;
+                                       })
+                             != nullptr;
+                  },
+                  10000),
           "which draws the extension's nodes");
 
     // The editor saves a change: loaded again at once, and still approved (this device wrote it).
@@ -5473,10 +5494,11 @@ void checkAiButton(QQuickWindow *window, AppController *app, const Check &check)
     QQuickItem *sheet = named(u"extensionQuestionText"_s);
     while (sheet && sheet->parentItem() && !isA(sheet->parentItem(), "QQuickOverlay"))
         sheet = sheet->parentItem();
-    QQuickItem *cancel = sheet ? findShown(sheet, [](QQuickItem *item) {
-        const QString text = item->property("text").toString();
-        return isA(item, "BButton") && (text == u"Anuluj" || text == u"Cancel");
-    })
+    QQuickItem *cancel = sheet ? findShown(sheet,
+                                           [](QQuickItem *item) {
+                                               const QString text = item->property("text").toString();
+                                               return isA(item, "BButton") && (text == u"Anuluj" || text == u"Cancel");
+                                           })
                                : nullptr;
     settle(300); // (a phone's sheet slides in)
     if (cancel)
