@@ -156,6 +156,15 @@ Item {
     /// What the next convertible date dialog opens as: "date", "reminder" or "alarm" (then "date"
     /// again; pickDateAs()).
     property string dateKind: "date"
+    /// The next date dialog offers "+": a separate date, reminder or alarm, the date it opened on
+    /// kept (a date the block has, in the editor's own blocks; then false again).
+    property bool dateAddable: false
+    /// The next date dialog opens adding ("+" on: the "+" of a task that has a date).
+    property bool dateAdding: false
+    /// The block has a date of the dialog's kind already: "+" adds no second one (a task has one).
+    property bool dateKindTaken: false
+    /// The date kept while adding ("📅 Fri, Nov 13"): the dialog's subtitle.
+    property string dateKeptText: ""
     // What the recurrence dialog shows as it opens: the rule's text, "Don't repeat".
     property string recurrenceText: ""
     property bool recurrenceRemovable: false
@@ -243,6 +252,9 @@ Item {
         mode = "token"
         answer.map = controller.blockDates(r)
         const current = root.answerText(which)
+        dateAddable = current !== "" && convertibleKind(which)
+        dateKindTaken = current !== ""
+        dateKeptText = keptText(which, current)
         showDate(dateKindTitle(which), dateKindIcon(which), current, tomorrow(), true, false, current !== "",
                  qsTr("Remove"), convertibleKind(which))
     }
@@ -256,7 +268,54 @@ Item {
         from = f
         to = t
         mode = "range"
+        field = kind
+        dateAddable = convertibleKind(kind)
+        dateKindTaken = true
+        dateKeptText = keptText(kind, at)
         openDateDialog(kind, at)
+    }
+    /// The "+" of a task that has a date already: the date dialog adding to block `r` — a reminder
+    /// first; a due date when it has none (only a ⏳ one) — the dates it has kept.
+    function addDateTo(r: int): void {
+        remember(r)
+        field = "due"
+        mode = "token"
+        answer.map = controller.blockDates(r)
+        const due = root.answerText("due")
+        const scheduled = root.answerText("scheduled")
+        dateAddable = true
+        dateAdding = true
+        dateKindTaken = due !== ""
+        dateKeptText = due !== "" ? keptText("due", due) : keptText("scheduled", scheduled)
+        dateKind = "reminder"
+        showDate(dateKindTitle("due"), dateKindIcon("due"), "", tomorrow(), true, false, false, qsTr("Remove"), true)
+    }
+    /// A date token as the dialog's subtitle names it ("📅 Fri, Nov 13").
+    function keptText(kind: string, at: string): string {
+        const emoji = kind === "scheduled" ? "⏳" : kind === "start" ? "🛫" : "📅"
+        return at !== "" ? emoji + " " + DatesHelper.formatHuman(at) : ""
+    }
+    /// The date dialog's "+" saved: a reminder or an alarm added next to the date it is on, which
+    /// stays — right after that token ("addReminder", PageController.applyTokenAction; elsewhere
+    /// applied(target, "addReminder", at, { alarm })), or at the end of the block's first line as
+    /// the reminder dialog adds one (the "+" of a task) —, or a date of the dialog's kind the
+    /// block has none of.
+    function addSeparate(at: string, kind: string): void {
+        const alarm = kind === "alarm"
+        if (mode === "apply") {
+            if (kind !== "date")
+                root.applied(applyTarget, "addReminder", at, { alarm: alarm })
+            return
+        }
+        const r = blockRow()
+        if (r < 0 || !controller)
+            return
+        if (kind === "date")
+            controller.setDateToken(r, field, at)
+        else if (mode === "range")
+            controller.applyTokenAction(r, from, to, "addReminder", at, { alarm: alarm })
+        else
+            controller.setReminder(r, at, alarm, "", -1, -1)
     }
     /// The date dialog for a page property (PropertyRow): the property's name as the title, a
     /// date or a date and time (`withTime`), "Clear" for an empty value — applied(target, "set",
@@ -273,6 +332,9 @@ Item {
     function pickDateWith(target: string, kind: string, at: string): void {
         applyTarget = target
         mode = "apply"
+        dateAddable = convertibleKind(kind) && at !== ""
+        dateKindTaken = true
+        dateKeptText = keptText(kind, at)
         openDateDialog(kind, at)
     }
     /// The date dialog for a new date token of `kind` elsewhere (a task without one): on tomorrow,
@@ -759,7 +821,21 @@ Item {
             property bool convertible: false
             property string kindChoice: "date"
             readonly property bool asReminder: kindChoice !== "date"
+            /// "+" is offered (the dialog is on a date the block has) and on: Save adds a separate
+            /// date, reminder or alarm (addSeparate()), the date it opened on kept.
+            property bool addable: false
+            property bool adding: false
+            /// The block has a date of the dialog's kind: adding one more is refused (dateTaken).
+            property bool kindTaken: false
+            readonly property bool dateTaken: adding && kindChoice === "date" && kindTaken
             readonly property alias picker: picker
+            /// "+" on or off; on, a date the block has already becomes a reminder choice.
+            function setAdding(on: bool): void {
+                adding = on
+                addButton.checked = on
+                if (on && kindChoice === "date" && kindTaken)
+                    chooseKind("reminder")
+            }
             /// The dialog as a date, a reminder or an alarm: its title and icon; a reminder needs a
             /// time (the default reminder time when the date had none).
             function chooseKind(kind: string): void {
@@ -794,18 +870,28 @@ Item {
                 dateDialog.removable = root.dateRemovable
                 dateDialog.removeText = root.dateRemoveText
                 dateDialog.convertible = root.dateConvertible
+                dateDialog.addable = root.dateAddable
+                dateDialog.kindTaken = root.dateKindTaken
+                dateDialog.adding = false
+                addButton.checked = false
                 dateDialog.chooseKind(root.dateConvertible ? root.dateKind : "date")
+                dateDialog.setAdding(root.dateAdding)
                 root.dateKind = "date"
+                root.dateAddable = false
+                root.dateAdding = false
+                root.dateKindTaken = false
             }
-            acceptText: root.mode === "journal" ? qsTr("Insert") : qsTr("Save")
+            acceptText: root.mode === "journal" ? qsTr("Insert") : dateDialog.adding ? qsTr("Add") : qsTr("Save")
+            subtitle: dateDialog.adding && root.dateKeptText !== "" ? qsTr("Separately: %1 stays").arg(root.dateKeptText) : ""
             // A recognised typed date counts before it is confirmed (commitPending()).
             acceptEnabled: (picker.selectedDate !== "" || natural.map.ok === true) && !picker.timeInvalid
+                           && !dateDialog.dateTaken
             /// The picker's natural-language date ({ ok, … }).
             MapHolder { id: natural; map: picker.natural }
             footerLeading: [
                 BButton {
                     objectName: "dateDialogRemove"
-                    visible: dateDialog.removable && !dateDialog.asReminder
+                    visible: dateDialog.removable && !dateDialog.asReminder && !dateDialog.adding
                     text: dateDialog.removeText
                     iconName: "trash-2"
                     variant: "ghost"
@@ -826,7 +912,9 @@ Item {
             onAcceptRequested: picker.commitPending()
             onAccepted: {
                 const r = root.blockRow()
-                if (dateDialog.asReminder) {
+                if (dateDialog.adding) {
+                    root.addSeparate(picker.value, dateDialog.kindChoice)
+                } else if (dateDialog.asReminder) {
                     root.dateAsReminder(picker.value, dateDialog.kindChoice === "alarm")
                 } else if (root.mode === "apply") {
                     root.applied(root.applyTarget, "set", picker.value, 0)
@@ -840,19 +928,43 @@ Item {
             }
             onRejected: root.refocus()
 
-            BSegmented {
-                objectName: "dateDialogKind"
+            RowLayout {
                 Layout.fillWidth: true
                 visible: dateDialog.convertible
-                fill: true
-                accessibleName: qsTr("Date, reminder or alarm")
-                model: [
-                    { value: "date", text: root.dateTitle, icon: root.dateIcon },
-                    { value: "reminder", text: qsTr("Reminder"), icon: "bell" },
-                    { value: "alarm", text: qsTr("Alarm"), icon: "alarm-clock" }
-                ]
-                currentValue: dateDialog.kindChoice
-                onActivated: (value) => dateDialog.chooseKind("" + value)
+                spacing: Theme.space2
+                BSegmented {
+                    objectName: "dateDialogKind"
+                    Layout.fillWidth: true
+                    fill: true
+                    accessibleName: qsTr("Date, reminder or alarm")
+                    model: [
+                        { value: "date", text: root.dateTitle, icon: root.dateIcon },
+                        { value: "reminder", text: qsTr("Reminder"), icon: "bell" },
+                        { value: "alarm", text: qsTr("Alarm"), icon: "alarm-clock" }
+                    ]
+                    currentValue: dateDialog.kindChoice
+                    onActivated: (value) => dateDialog.chooseKind("" + value)
+                }
+                // "+": a separate one, the date the dialog is on kept.
+                BIconButton {
+                    id: addButton
+                    objectName: "dateDialogAdd"
+                    visible: dateDialog.addable
+                    label: qsTr("Add a separate one, this one stays")
+                    iconName: "plus"
+                    variant: "secondary"
+                    checkable: true
+                    onToggled: dateDialog.setAdding(checked)
+                }
+            }
+            BText {
+                objectName: "dateDialogTaken"
+                Layout.fillWidth: true
+                visible: dateDialog.dateTaken
+                variant: "small"
+                wrapMode: Text.Wrap
+                color: Theme.warningText
+                text: qsTr("A task has one date of this kind, and this one has it. Add a reminder or an alarm, or change the date without “+”.")
             }
             BDatePicker {
                 id: picker

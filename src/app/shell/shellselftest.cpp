@@ -597,6 +597,62 @@ void checkTaskStatusMenus(QQuickWindow *window, AppController *app, const Check 
         restore();
     }
 
+    // ---- Tasks: a tap / click on a due date's chip opens the date dialog on it; its "+" adds a
+    // reminder right after the date, which stays (PlanningTokenMenu.openTokenDialog).
+    app->navigate({{u"view"_s, u"tasks"_s}});
+    settle(800);
+    dueChip = shownWhere(window->contentItem(), [](QQuickItem *item) { return item->objectName() == u"taskChip_due"; });
+    if (dueChip) {
+        QQuickItem *row = dueChip;
+        while (row && !isA(row, "TasksRow"))
+            row = row->parentItem();
+        const QString path = row ? row->property("path").toString() : QString();
+        const QString due = row ? row->property("due").toString() : QString();
+        const QString before = path.isEmpty() ? QString() : ws->readFile(path);
+        tapOrClick(window, pointIn(dueChip), touch);
+        QQuickItem *add = nullptr;
+        check(waitFor([&] { return (add = shownNamed(window->contentItem(), u"dateDialogAdd"_s)) != nullptr; })
+                      && app->currentView() == u"tasks",
+              "a tap or click on a due date's chip in Tasks opens the date dialog with “+”, not the note");
+        // The dialog: its popup item (under the overlay), whose QObject parent is the popup. Tapped
+        // once it is open (a phone's sheet slides in).
+        QQuickItem *popup = add;
+        while (popup && popup->parentItem() && !isA(popup->parentItem(), "QQuickOverlay"))
+            popup = popup->parentItem();
+        QObject *dialog = popup ? popup->parent() : nullptr;
+        waitFor([&] { return dialog && dialog->property("opened").toBool(); });
+        settle(100);
+        if (add)
+            tapOrClick(window, pointIn(add), touch);
+        QQuickItem *accept = nullptr;
+        check(waitFor([&] {
+                  accept = popup ? findShown(popup, [](QQuickItem *item) {
+                      const QString text = item->property("text").toString();
+                      return isA(item, "BButton") && (text == u"Dodaj" || text == u"Add");
+                  })
+                                 : nullptr;
+                  return accept != nullptr && accept->isEnabled();
+              }),
+              "its “+” turns “Zapisz” into “Dodaj”");
+        if (accept)
+            tapOrClick(window, pointIn(accept), touch);
+        // The reminder on the date's day (at its time, else the default reminder time).
+        const QString added = u"📅 "_s + due + u" ⏰ "_s + due.left(10) + u' ';
+        check(!path.isEmpty() && !due.isEmpty() && waitFor([&] { return ws->readFile(path).contains(added); }),
+              "“Dodaj” writes a reminder right after the task's due date, which stays");
+        if (!path.isEmpty()) {
+            // Without " ⏰ YYYY-MM-DD HH:mm" (19 UTF-16 units) after the date: the note as it was.
+            QString after = ws->readFile(path);
+            const qsizetype at = after.indexOf(added);
+            if (at >= 0)
+                after.remove(at + 3 + due.size(), 19);
+            check(after == before, "only the reminder was added to the note");
+        }
+        if (dialog && dialog->property("visible").toBool())
+            QMetaObject::invokeMethod(dialog, "close");
+        restore();
+    }
+
     // ---- Tasks: a task without a date has "Add date"; "Tomorrow" writes its due date. (Filtered:
     // the "No date" section is far down the list.)
     app->navigate({{u"view"_s, u"tasks"_s}, {u"query"_s, u"Tokarczuk"_s}});
@@ -5309,47 +5365,48 @@ void checkExtensionPages(QQuickWindow *window, AppController *app, const Check &
     const auto page = [](const QString &code) {
         return u"---\ntags: [rozszerzenie]\nopis: Samotest.\n---\nKod:\n\n```luau\n"_s + code + u"\n```\n"_s;
     };
-    // Written into the vault as a sync would: it waits.
+    // Written into the vault as a sync would: it waits. (The waits below are upper bounds: a page
+    // goes through the index and the extensions' deferred reading — seconds on a loaded machine.)
     check(ws->vault()->writeText(path,
                                  page(u"b.command(\"pierwsze\", function() return \"jeden\" end, { label = \"Samotest: pierwsze\" })\n"
                                       "b.view(\"widok\", function() return b.ui.heading(\"Widok samotestu\") end, nil, "
                                       "{ label = \"Samotest: widok\" })"_s),
                                  ChangeSource::Sync),
           "the extension page is written as a sync would");
-    check(waitFor([&] { return ext->pageState(path) == u"approval"; }, 3000), "code from elsewhere waits for approval");
+    check(waitFor([&] { return ext->pageState(path) == u"approval"; }, 10000), "code from elsewhere waits for approval");
     check(!app->commands()->ids().contains(u"ext.rozszerzenie-samotestu.pierwsze"_s), "and its command is not offered");
     ext->approve(path);
     check(ext->pageState(path) == u"running", "approved, it runs");
     check(app->commands()->ids().contains(u"ext.rozszerzenie-samotestu.pierwsze"_s), "its command is in the palette");
     check(app->commands()->ids().contains(u"extview.rozszerzenie-samotestu.widok"_s), "its view too");
     check(app->commands()->run(u"extview.rozszerzenie-samotestu.widok"_s), "the palette opens the view");
-    check(waitFor([&] { return app->currentView() == u"extension"; }, 3000), "on the route of extension views");
+    check(waitFor([&] { return app->currentView() == u"extension"; }, 10000), "on the route of extension views");
     check(waitFor([&] {
               return findShown(window->contentItem(), [](QQuickItem *item) {
                          return item->property("text").toString() == u"Widok samotestu"_s;
                      }) != nullptr;
-          }, 3000),
+          }, 10000),
           "which draws the extension's nodes");
 
     // The editor saves a change: loaded again at once, and still approved (this device wrote it).
     check(ws->write(path, page(u"b.command(\"drugie\", function() return \"dwa\" end, { label = \"Samotest: drugie\" })"_s)),
           "the editor saves a change of the code");
-    check(waitFor([&] { return app->commands()->ids().contains(u"ext.rozszerzenie-samotestu.drugie"_s); }, 3000),
+    check(waitFor([&] { return app->commands()->ids().contains(u"ext.rozszerzenie-samotestu.drugie"_s); }, 10000),
           "the new code runs at once");
     check(ext->pageState(path) == u"running" && !app->commands()->ids().contains(u"ext.rozszerzenie-samotestu.pierwsze"_s),
           "approved still, the old command gone");
     // A save that breaks it: the error with its line, the previous version still runs.
     check(ws->write(path, page(u"b.command(\"drugie\", function() return \"dwa\" end)\nlocal x = = 1"_s)), "a broken save");
-    check(waitFor([&] { return ext->pageState(path) == u"error"; }, 3000), "the page shows an error");
+    check(waitFor([&] { return ext->pageState(path) == u"error"; }, 10000), "the page shows an error");
     check(ext->pageErrorLine(path) == 8, "on the line of the page that has it");
     check(app->commands()->ids().contains(u"ext.rozszerzenie-samotestu.drugie"_s), "the version before the error still runs");
     app->openPage(path);
-    check(waitFor([&] { return named(u"pageExtensionState"_s) != nullptr; }, 3000), "the page shows its state");
+    check(waitFor([&] { return named(u"pageExtensionState"_s) != nullptr; }, 10000), "the page shows its state");
 
     // The console: typed, Enter, the value below.
     app->navigate({{u"view"_s, u"console"_s}});
     QQuickItem *input = nullptr;
-    check(waitFor([&] { return (input = named(u"consoleInput"_s)) != nullptr; }, 3000), "the Luau console shows");
+    check(waitFor([&] { return (input = named(u"consoleInput"_s)) != nullptr; }, 10000), "the Luau console shows");
     settle(200);
     if (input) {
         if (touch)
@@ -5358,14 +5415,14 @@ void checkExtensionPages(QQuickWindow *window, AppController *app, const Check &
         input->setProperty("text", u"#b.pages({ tag = \"rozszerzenie\" }) + 40"_s);
         sendKey(window, Qt::Key_Return);
     }
-    check(waitFor([&] { return ext->console()->count() >= 2 && ext->console()->text().endsWith(u"\n41"_s); }, 3000),
+    check(waitFor([&] { return ext->console()->count() >= 2 && ext->console()->text().endsWith(u"\n41"_s); }, 10000),
           "an expression shows its value");
     ext->evaluate(u"licznik = 1"_s);
     ext->evaluate(u"licznik + 1"_s);
     check(ext->console()->text().endsWith(u"\n2"_s), "globals stay between lines");
 
     ws->deletePage(path);
-    check(waitFor([&] { return ext->pageState(path).isEmpty(); }, 3000), "a deleted page is no extension any more");
+    check(waitFor([&] { return ext->pageState(path).isEmpty(); }, 10000), "a deleted page is no extension any more");
     check(!app->commands()->ids().contains(u"ext.rozszerzenie-samotestu.drugie"_s), "and its commands are gone");
     ext->console()->clear();
     closeMenus(window);

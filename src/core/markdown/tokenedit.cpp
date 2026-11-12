@@ -510,6 +510,14 @@ QString applyTokenAction(const QString &body, qsizetype from, qsizetype to, cons
                                 shiftedSpec(t->spec(), a.toInt(), b.toInt(), context.defaultReminderTime));
         if (action == u"alarm" && reminder)
             return setReminderAlarm(body, from, to, a.toBool());
+        // The date dialog's "+": a separate reminder right after the token, which stays.
+        if (action == u"addReminder") {
+            const auto spec = specFrom(a);
+            if (!spec)
+                return body;
+            const QString token = formatReminderToken(*spec, b.toMap().value(u"alarm"_s).toBool());
+            return body.left(t->to) + u' ' + token + body.mid(t->to);
+        }
         // (A date token too: it becomes the reminder — the date dialog's "Reminder" / "Alarm".)
         if (action == u"reminder") {
             const auto spec = specFrom(a);

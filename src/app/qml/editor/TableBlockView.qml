@@ -491,6 +491,8 @@ Item {
                                 shown: !cell.editingCell
                                 maxHeight: cellText.height
                                 onActivated: (href, x, y) => {
+                                    if (root.block.editor.openCellTokenDialog(root.blockIndex, rowItem.r, cell.c, href))
+                                        return // a date chip: the date dialog, as a click
                                     if (Js.startsWith(href, "reminder:") || root.block.editor.editsOnClick(href))
                                         root.cellMenu(rowItem.r, cell.c, cellText, x, y)
                                     else
@@ -570,9 +572,12 @@ Item {
                                     const y = eventPoint.position.y
                                     if (root.block.editor.blockTapped(root.blockIndex))
                                         return // Shift+click, the touch selection mode
-                                    // Reminder, date, 🔁 and priority chips name ranges of the cell's
-                                    // text: a click edits the cell (their menu is the right button's).
+                                    // Reminder, 🔁 and priority chips name ranges of the cell's text:
+                                    // a click edits the cell (their menu is the right button's); a
+                                    // date chip's opens the date dialog on it.
                                     const link = root.linkIn(cellText, x - cellText.x, y - cellText.y)
+                                    if (root.block.editor.openCellTokenDialog(root.blockIndex, rowItem.r, cell.c, link))
+                                        return
                                     if (link !== "" && !Js.startsWith(link, "reminder:") && !root.block.editor.editsOnClick(link))
                                         root.block.editor.activateLink(root.blockIndex, link)
                                     else

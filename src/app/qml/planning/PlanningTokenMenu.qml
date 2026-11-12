@@ -19,6 +19,7 @@ import Brulion
 //                       onChanged: (text) => …a toast with "Undo": planningActions.undo()
 //                       onFilterRequested: (tag) => taskModel.tagFilter = tag }
 //   tokenMenu.openToken({ path, line, text, kind, value, alarm, rule, priority, isTask, occurrence, date, time }, item, x, y)
+//   tokenMenu.openTokenDialog({ path, line, text, kind, value, … })   // a date chip's click: its dialog
 //   tokenMenu.openLink(url, fromPath, item, x, y, filterable)   // filterable: "Filter by tag" first
 //   tokenMenu.openAddDate(path, line, text, item, x, y)   // a task without a date: QuickDateMenu
 //
@@ -86,6 +87,26 @@ Item {
     /// "reminder" | "recurrence" | "priority"), value (the token's value as the models give it),
     /// alarm, rule, priority, isTask, occurrence (a series' other date), date, time }.
     function openToken(t: var, item: Item, x: real, y: real): bool {
+        if (!setTarget(t))
+            return false
+        if (!dateMenu)
+            dateMenu = dateMenuComponent.createObject(root) as DateChipMenu
+        dateMenu.kind = targetKind
+        dateMenu.alarm = targetAlarm
+        dateMenu.rule = targetRule
+        dateMenu.priority = targetPriority
+        dateMenu.logseq = infoHolder.map.logseq === true
+        dateMenu.isTask = tokenHolder.map.isTask === true
+        dateMenu.occurrence = targetOccurrence
+        // A later time of a recurring reminder that has not come yet would still ring: no snooze.
+        dateMenu.snoozable = !(targetOccurrence && targetKind === "reminder"
+                               && DatesHelper.compare(occurrenceAt(), DatesHelper.now()) > 0)
+        dateMenu.popup(item, x, y)
+        return true
+    }
+    /// The token `t` (as openToken()'s) the menu or dialog is for; false when it is no token of its
+    /// file.
+    function setTarget(t: var): bool {
         // (Read into the target's properties first: compiled code passes no value read before
         // another call.)
         tokenHolder.map = t
@@ -109,19 +130,14 @@ Item {
         targetOccurrence = tokenHolder.map.occurrence === true
         targetDate = AppController.routeText(tokenHolder.map, "date")
         targetTime = AppController.routeText(tokenHolder.map, "time")
-        if (!dateMenu)
-            dateMenu = dateMenuComponent.createObject(root) as DateChipMenu
-        dateMenu.kind = targetKind
-        dateMenu.alarm = targetAlarm
-        dateMenu.rule = targetRule
-        dateMenu.priority = targetPriority
-        dateMenu.logseq = infoHolder.map.logseq === true
-        dateMenu.isTask = tokenHolder.map.isTask === true
-        dateMenu.occurrence = targetOccurrence
-        // A later time of a recurring reminder that has not come yet would still ring: no snooze.
-        dateMenu.snoozable = !(targetOccurrence && targetKind === "reminder"
-                               && DatesHelper.compare(occurrenceAt(), DatesHelper.now()) > 0)
-        dateMenu.popup(item, x, y)
+        return true
+    }
+    /// A click on a task's date chip: the date dialog on token `t` (as openToken()'s menu's
+    /// "Change date…"; its "+" adds a reminder next to it). False when it is no token of its file.
+    function openTokenDialog(t: var): bool {
+        if (!setTarget(t))
+            return false
+        choose("change", 0, 0)
         return true
     }
     /// When the open token's occurrence (a calendar entry of a recurring reminder) rings:
@@ -192,6 +208,7 @@ Item {
                 : action === "priority" || action === "blockPriority" ? qsTr("Priority changed")
                 : action === "remove" ? qsTr("Removed")
                 : action === "alarm" || action === "reminder" ? qsTr("Reminder changed")
+                : action === "addReminder" ? qsTr("Reminder added")
                 : qsTr("Date changed"))
     }
     function snooze(at: string): void {

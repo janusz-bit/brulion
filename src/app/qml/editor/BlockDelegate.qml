@@ -72,7 +72,9 @@ Item {
     /// line (BlockEditor.openQuickDateMenu) — on hover, and while the block is edited (on touch only
     /// then). Its room is kept while it is hidden, so the text never reflows when it shows.
     readonly property bool datable: isTask && !closedTask && !taskDated && textView && !editor.readOnly
-    readonly property real dateButtonRoom: datable ? (Theme.touchUi ? 32 : 28) : 0
+    /// An open task with a date: its "+" adds a reminder, an alarm (or the date it lacks) next to it.
+    readonly property bool addable: isTask && !closedTask && taskDated && textView && !editor.readOnly
+    readonly property real dateButtonRoom: datable || addable ? (Theme.touchUi ? 32 : 28) : 0
     readonly property int shownHeadingLevel: view === "heading" ? Math.max(1, headingLevel) : 0
     readonly property bool hovered: hover.hovered
     readonly property bool doc: editor.documentMode
@@ -494,21 +496,26 @@ Item {
         }
     }
 
-    // ---- "Add date" (an open task without a date) --------------------------------------------------
+    // ---- "Add date" (an open task without a date; with one, "+" adds another) ---------------------
     Loader {
-        active: block.datable && block.shown
+        active: (block.datable || block.addable) && block.shown
                 && (block.hovered || block.editing || block.editor.quickDateRow === block.index)
         x: block.contentRight - block.dateButtonRoom + (block.dateButtonRoom - width) / 2
         y: block.firstLineCenter - height / 2
         sourceComponent: BIconButton {
             id: dateButton
             objectName: "taskDateButton"
-            label: qsTr("Add date")
+            label: block.addable ? qsTr("Add a reminder or an alarm") : qsTr("Add date")
             iconName: "calendar-plus"
             size: "small"
             // The edited text keeps the keyboard (the menu takes it while it is open).
             focusPolicy: Qt.NoFocus
-            onClicked: block.editor.openQuickDateMenu(block.index, dateButton)
+            onClicked: {
+                if (block.addable)
+                    block.editor.addDateTo(block.index)
+                else
+                    block.editor.openQuickDateMenu(block.index, dateButton)
+            }
         }
     }
 

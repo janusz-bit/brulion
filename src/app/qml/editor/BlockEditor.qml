@@ -3085,6 +3085,10 @@ FocusScope {
     function editsOnClick(link: string): bool {
         return Js.startsWith(link, "date:") || Js.startsWith(link, "recur:") || Js.startsWith(link, "prio:")
     }
+    /// A click on `link` of a block's own text opens the date dialog (openDateDialogAt()).
+    function opensDateDialog(link: string): bool {
+        return !readOnly && Js.startsWith(link, "date:")
+    }
     /// Open DateChipMenu for the chip in `chip` (PageController.dateChip / tokenChipIn /
     /// tableCellChip) at (x, y) of `item`; the choice goes to `mode` (dateMenuMode).
     /// Reading mode: only a day link's menu opens (open it, copy it); any other token's says why.
@@ -3127,6 +3131,32 @@ FocusScope {
     /// after other calls.
     property var tokenA
     property var tokenB
+    /// A click on a date chip (📅 ⏳ 🛫 ➕ ✅ ❌: a date: link) of block `row`'s text: the date
+    /// dialog on that token, as its menu's "Change date…". False when `link` names none (and in
+    /// reading mode, which changes no token).
+    function openDateDialogAt(row: int, link: string): bool {
+        if (!controller || readOnly || row < 0 || row >= controller.blocks.count || !Js.startsWith(link, "date:"))
+            return false
+        closeSuggestions()
+        chipFound.map = controller.dateChip(row, link)
+        const kind = BlockViews.textAt(chipFound.map, "kind")
+        if (kind === "" || kind === "day")
+            return false
+        dialogs.pickDateAt(row, chipFound.map.from, chipFound.map.to, kind, chipFound.map.at)
+        return true
+    }
+    /// The "+" of an open task that has a date: the date dialog adding a reminder, an alarm (or a
+    /// date it has none of) next to it.
+    function addDateTo(row: int): void {
+        if (!controller || row < 0 || row >= controller.blocks.count || readOnlyRefuses())
+            return
+        // A word the keyboard is still composing becomes text first (the dialog's edit rewrites it).
+        if (activeEditor !== null && activeEditor.row === row && activeEditor.activeFocus)
+            EditorInput.commitPreedit(activeEditor)
+        closeSuggestions()
+        dialogs.addDateTo(row)
+    }
+
     /// The menu of a token in block `row`'s text. False when `link` names none.
     function openDateMenu(row: int, link: string, item: Item, x: real, y: real): bool {
         if (!controller || row < 0 || row >= controller.blocks.count || !isDateChipLink(link))
@@ -3203,6 +3233,44 @@ FocusScope {
         popupTokenMenu(chipFound.map, "cell", item, x, y)
         return true
     }
+    /// A click on a date chip of a copy of another file's block (a query result, an embed: `raw`
+    /// its Markdown as the index has it, on `line` of `path`): the date dialog on that token, as
+    /// its menu's "Change date…" (the change goes to that file: tokenRun()). False when `link`
+    /// names none (and in reading mode).
+    function openTokenDialogIn(path: string, line: int, raw: string, link: string): bool {
+        if (!controller || readOnly || path === "" || line < 0 || raw === "" || !Js.startsWith(link, "date:"))
+            return false
+        chipFound.map = controller.tokenChipIn(raw, link)
+        const kind = BlockViews.textAt(chipFound.map, "kind")
+        if (kind === "" || kind === "day")
+            return false
+        closeSuggestions()
+        dateMenuChip.map = chipFound.map
+        dateMenuPath = path
+        dateMenuLine = line
+        dateMenuRaw = raw
+        chooseTokenWith("in", "change")
+        return true
+    }
+    /// The same for a date chip of a table cell (`tableRow` -1: the header) of block `row`.
+    function openCellTokenDialog(row: int, tableRow: int, column: int, link: string): bool {
+        if (!controller || readOnly || row < 0 || !Js.startsWith(link, "date:"))
+            return false
+        chipFound.map = controller.tableCellChip(row, tableRow, column, link)
+        const kind = BlockViews.textAt(chipFound.map, "kind")
+        if (kind === "" || kind === "day")
+            return false
+        closeSuggestions()
+        if (dateMenuBlock >= 0)
+            controller.untrack(dateMenuBlock)
+        dateMenuBlock = controller.trackBlock(row)
+        dateMenuHandle = dateMenuBlock
+        dateMenuTableRow = tableRow
+        dateMenuColumn = column
+        dateMenuChip.map = chipFound.map
+        chooseTokenWith("cell", "change")
+        return true
+    }
     /// A token menu's choice in `mode` ("in", "cell"), applied by tokenRun(); "change" opens the
     /// dialog that ends in it (EditorDialogs.applied with the target "token").
     function chooseTokenWith(mode: string, action: string): void {
@@ -3266,6 +3334,7 @@ FocusScope {
                            : action === "priority" || action === "blockPriority" ? qsTr("Priority changed")
                            : action === "remove" ? qsTr("Removed")
                            : action === "alarm" || action === "reminder" ? qsTr("Reminder changed")
+                           : action === "addReminder" ? qsTr("Reminder added")
                            : qsTr("Date changed")
                 const undo = toastAction("undoTokenEdit", qsTr("Undo"))
                 undo.undo = tokenEdit.undo()

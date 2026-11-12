@@ -138,6 +138,9 @@ struct TokenEditContext {
 ///                     reminder dialog — `recurrence` (when present) is the block's 🔁 rule; any
 ///                     other date token (📅 ⏳ …) is replaced by that reminder (the date dialog's
 ///                     "Reminder" / "Alarm")
+///   "addReminder"     a reminder at a ("YYYY-MM-DD HH:mm"), an alarm with b { alarm: true },
+///                     written right after a date token or reminder, which stays (the date
+///                     dialog's "+")
 ///   "remove"          the token goes (with one adjacent space)
 ///   "recurrence"      a 🔁 rule becomes a (setRecurrenceAt(); "" removes it)
 ///   "priority"        a priority becomes a (a priority name, "" removes it)

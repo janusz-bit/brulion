@@ -573,6 +573,8 @@ Rectangle {
                         maxHeight: 4 * root.itemLineHeight
                         shown: !row.group && !row.tableRow
                         onActivated: (href, x, y) => {
+                            if (root.editor.openTokenDialogIn(row.path, row.line, row.raw, href))
+                                return // a date chip: the date dialog, as a click
                             if (root.editor.editsOnClick(href))
                                 root.resultMenu(row.index, row.path, row.line, row.raw, itemText, x, y)
                             else
@@ -617,6 +619,10 @@ Rectangle {
                             const text = row.textAt(x)
                             row.at = text.mapFromItem(row, x, y)
                             const link = root.linkIn(text as BRichText, row.at.x, row.at.y)
+                            // A date chip: the date dialog on that token (the change goes to the
+                            // item's own file).
+                            if (root.editor.openTokenDialogIn(row.path, row.line, row.raw, link))
+                                return
                             if (link !== "")
                                 root.activateResultLink(row.index, link)
                             else

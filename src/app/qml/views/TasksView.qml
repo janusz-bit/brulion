@@ -94,6 +94,11 @@ FocusScope {
                               alarm: alarm, rule: rule, priority: priority,
                               isTask: true, occurrence: false }, item, x, y)
     }
+    /// A click on a task's date chip: the date dialog on its token (PlanningTokenMenu).
+    function openTokenDialog(path: string, line: int, text: string, kind: string, value: string): void {
+        tokenMenu.openTokenDialog({ path: path, line: line, text: text, kind: kind, value: value,
+                                    isTask: true, occurrence: false })
+    }
     function activateLink(link: string, path: string): void {
         // A tag filters this list (Ctrl+click or a long press opens its page: TasksRow); everything
         // else navigates.
@@ -308,6 +313,8 @@ FocusScope {
                     onTokenMenuRequested: (kind, item, x, y) =>
                         root.openTokenMenu(taskRow.path, taskRow.line, taskRow.text, kind, taskRow.tokenValue(kind),
                                            taskRow.reminderAlarm, taskRow.recurrence, taskRow.priorityName, item, x, y)
+                    onTokenDialogRequested: (kind) =>
+                        root.openTokenDialog(taskRow.path, taskRow.line, taskRow.text, kind, taskRow.tokenValue(kind))
                     onDateMenuRequested: (item) => tokenMenu.openAddDate(taskRow.path, taskRow.line, taskRow.text,
                                                                         item, 0, item.height)
                     // "Filter by tag" first: PlanningTokenMenu.filterRequested.

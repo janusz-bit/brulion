@@ -92,6 +92,29 @@ private Q_SLOTS:
         QTest::newRow("due to a reminder without a valid time")
                 << task << u"📅 2026-10-20"_s << u"reminder"_s << QVariant(u"pojutrze?"_s)
                 << QVariant(QVariantMap{{u"alarm"_s, true}}) << task;
+        // The date dialog's "+": a separate reminder after the token, which stays.
+        QTest::newRow("add a reminder after the due date")
+                << task << u"📅 2026-10-20"_s << u"addReminder"_s << QVariant(u"2026-10-20 07:30"_s)
+                << QVariant(QVariantMap{{u"alarm"_s, false}})
+                << u"[ ] Zapłacić za żłobek 📅 2026-10-20 ⏰ 2026-10-20 07:30 ⏰ 2026-10-19 09:00"_s;
+        QTest::newRow("add an alarm, words and an id after the date")
+                << u"[ ] Podlać kwiaty ⏳ 2026-10-20 przed wyjazdem ^k1"_s << u"⏳ 2026-10-20"_s << u"addReminder"_s
+                << QVariant(u"2026-10-19 20:00"_s) << QVariant(QVariantMap{{u"alarm"_s, true}})
+                << u"[ ] Podlać kwiaty ⏳ 2026-10-20 ⏰! 2026-10-19 20:00 przed wyjazdem ^k1"_s;
+        QTest::newRow("add a reminder after a date with a time, at the end")
+                << u"Wizyta u dentysty 📅 2026-10-20 16:00"_s << u"📅 2026-10-20 16:00"_s << u"addReminder"_s
+                << QVariant(u"2026-10-20 14:00"_s) << QVariant()
+                << u"Wizyta u dentysty 📅 2026-10-20 16:00 ⏰ 2026-10-20 14:00"_s;
+        QTest::newRow("add a second reminder after a reminder")
+                << u"Leki ⏰ 2026-10-19 09:00"_s << u"⏰ 2026-10-19 09:00"_s << u"addReminder"_s
+                << QVariant(u"2026-10-19 21:00"_s) << QVariant(QVariantMap{{u"alarm"_s, false}})
+                << u"Leki ⏰ 2026-10-19 09:00 ⏰ 2026-10-19 21:00"_s;
+        QTest::newRow("add a reminder without a valid time")
+                << task << u"📅 2026-10-20"_s << u"addReminder"_s << QVariant(u"pojutrze?"_s)
+                << QVariant(QVariantMap{{u"alarm"_s, true}}) << task;
+        QTest::newRow("add a reminder to a rule does nothing")
+                << u"[ ] Podlać kwiaty 🔁 co tydzień"_s << u"🔁 co tydzień"_s << u"addReminder"_s
+                << QVariant(u"2026-10-20 09:00"_s) << QVariant() << u"[ ] Podlać kwiaty 🔁 co tydzień"_s;
         QTest::newRow("remove reminder") << task << u"⏰ 2026-10-19 09:00"_s << u"remove"_s << QVariant() << QVariant()
                                          << u"[ ] Zapłacić za żłobek 📅 2026-10-20"_s;
 

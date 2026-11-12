@@ -11,16 +11,20 @@ import Brulion
 // its items tapped or clicked move the date (a day later, today), open the date dialog on the
 // chip's own date, remove the token; on a reminder an hour later and the alarm switch, "Change
 // date and time…" the reminder dialog; each change is one undo step and the rest of the line
-// stays as written; a plain click or tap on the chip still edits the text. The same gesture on the
+// stays as written. A plain click or tap on the 📅 chip opens the date dialog on its date (no
+// editing, no menu); its "+" adds a separate reminder — a second due date refused with a hint, no
+// "Add" —, written right after the 📅, which stays (one undo step). The same gesture on the
 // ⏫ priority, the 🔁 rule (its quick rules), the reminder's "Priority" submenu, a [[day]] link (a
 // day later) opens their menus (removing a date or a reminder red, the 🔁's and the priority's
 // none value a neutral choice), and on a #tag and a [[link]] the link menu (LinkMenu: "Copy"
 // copies the tag, the link) — never the block menu. While the block is edited its ⏰ stays a chip:
 // a click or tap on it opens the reminder dialog on that reminder, the caret stays, the time chosen
 // is written (one undo step). An open task without a date has the "Add date" button at the end of
-// its first line — on hover (desktop) and while it is edited, never on a dated or a done task —:
-// its menu (QuickDateMenu) writes Today / Tomorrow / Next week as the 📅 due date at once and
-// "Pick a date…" opens the date dialog on tomorrow; the block stays edited, one undo step each.
+// its first line — on hover (desktop) and while it is edited, never on a done task —: its menu
+// (QuickDateMenu) writes Today / Tomorrow / Next week as the 📅 due date at once and "Pick a
+// date…" opens the date dialog on tomorrow; the block stays edited, one undo step each. On a dated
+// task the button is its "+": the date dialog adding a reminder, written at the end of the line,
+// the date kept.
 // The date dialog's Date / Reminder / Alarm choice, tapped or clicked: "Change date…" of a 📅
 // switched to Reminder writes a ⏰ in its place, "Pick a date…" switched to Alarm a ⏰!.
 // Steps run on the playground's step runner (EditorPlayground.runSteps).
@@ -62,6 +66,9 @@ QtObject {
     function linkMenuOpen(): bool { return linkMenu() !== null && linkMenu().opened }
     function linkItem(name: string): T.MenuItem { return window.menuItemNamed(linkMenu(), name) }
     function dateDialog(): BDialog { return dialogs().dateDialog }
+    /// The date dialog's "+" (a separate reminder), null when it is not shown.
+    function addButton(): Item { return DevTest.findShown(dateDialog().contentItem, "dateDialogAdd") }
+    function adding(): bool { return DevTest.property(dateDialog(), "adding") === true }
     function datePicker(): BDatePicker { return DevTest.objectProperty(dateDialog(), "picker") as BDatePicker }
     function reminderDialog(): BReminderDialog { return dialogs().reminderDialog }
     /// The date dialog's Date / Reminder / Alarm choice (BSegmented), null when it is not shown.
@@ -249,13 +256,43 @@ QtObject {
             page.undo()
         }
         if (window.at()) check(Js.indexOf(line("Kupić płytki"), due) > 0, "undo brings the date back")
-        // ---- A plain click / tap on the chip edits the text --------------------------------------
+        // ---- A plain click / tap on the 📅 chip: the date dialog on it; its "+" ------------------------
         if (window.at()) clickChip()
-        if (window.at()) window.waitStep(page.editingRow === row, (Theme.touchUi ? "a tap" : "a click") + " on the chip edits the block")
+        if (window.at()) window.waitStep(dateDialog() !== null && dateDialog().opened,
+                                         (Theme.touchUi ? "a tap" : "a click") + " on the chip opens the date dialog")
         if (window.at()) {
-            check(!menuOpen(), "without a menu")
-            page.stopEditing()
+            check(page.editingRow < 0 && !menuOpen(), "without editing the block or a menu")
+            check(datePicker().selectedDate === "2026-10-16" && addButton() !== null && !adding(),
+                  "on the chip's date, “+” offered and off: " + datePicker().selectedDate)
+            window.tapAt(addButton(), addButton().width / 2, addButton().height / 2)
         }
+        if (window.at()) window.waitStep(adding() && DevTest.property(dateDialog(), "kindChoice") === "reminder",
+                                         "“+” adds a separate one: a reminder, as the task has its due date")
+        if (window.at()) {
+            check(!DevTest.findShown(dateDialog().footer, "dateDialogRemove") && dateDialog().subtitle !== "",
+                  "nothing to remove; the subtitle says the date stays: " + dateDialog().subtitle)
+            tapKind(0)
+        }
+        if (window.at()) window.waitStep(DevTest.property(dateDialog(), "kindChoice") === "date", "the date chosen while adding")
+        if (window.at()) {
+            check(DevTest.findShown(dateDialog().contentItem, "dateDialogTaken") !== null && !dateDialog().acceptEnabled,
+                  "a second due date is refused: the hint, no “Add”")
+            tapKind(1)
+        }
+        if (window.at()) window.waitStep(DevTest.property(dateDialog(), "kindChoice") === "reminder" && dateDialog().acceptEnabled,
+                                         "back to a reminder, “Add” enabled")
+        if (window.at()) {
+            datePicker().selectedDate = "2026-10-15"
+            datePicker().time = "19:00"
+            dateDialog().accept()
+        }
+        if (window.at()) window.waitStep(!dateDialog().opened, "the dialog closes")
+        if (window.at()) {
+            check(Js.indexOf(line("Kupić płytki"), "Kupić płytki 📅 2026-10-16 ⏰ 2026-10-15 19:00 ⏫ #zakupy") > 0,
+                  "the reminder is added right after the due date, which stays: " + line("Kupić płytki"))
+            page.undo()
+        }
+        if (window.at()) check(Js.indexOf(line("Kupić płytki"), due) > 0, "one undo step takes it away")
         // ---- ⏰: an hour later, the alarm, undo ----------------------------------------------------
         if (window.at()) show("Zadzwonić do hydraulika")
         if (window.at()) check(Js.indexOf(line("Zadzwonić do hydraulika"), reminder) > 0, "the sample reminder")
@@ -425,7 +462,8 @@ QtObject {
         if (window.at() && !Theme.touchUi) window.waitStep(dateButton(row) !== null, "hovering the task shows the button")
         if (window.at() && !Theme.touchUi) hoverBlock(window.rowOf("Kupić płytki"))
         if (window.at() && !Theme.touchUi) window.waitStep(dateButton(row) === null, "it goes when the mouse leaves")
-        if (window.at() && !Theme.touchUi) check(dateButton(window.rowOf("Kupić płytki")) === null, "a dated task has none")
+        if (window.at() && !Theme.touchUi) window.waitStep(dateButton(window.rowOf("Kupić płytki")) !== null,
+                                                           "a dated task hovered shows its “+”")
     }
     function addDateQuickSteps(): void {
         if (window.at()) editor.startEditing(row, 3)
@@ -451,8 +489,8 @@ QtObject {
         if (window.at()) window.waitStep(!quickMenuOpen(), "choosing Tomorrow closes the menu")
         if (window.at()) window.waitStep(Js.indexOf(line("Położyć hydroizolację"), "Położyć hydroizolację 📅 2026-10-16") > 0,
                                          "“Tomorrow” writes the due date: " + line("Położyć hydroizolację"))
-        if (window.at()) window.waitStep(info(row).taskDated && page.editingRow === row && dateButton(row) === null,
-                                         "the block stays edited, the dated task has no button any more")
+        if (window.at()) window.waitStep(info(row).taskDated && page.editingRow === row && delegateAt(row).addable,
+                                         "the block stays edited, its button now adds a reminder")
         if (window.at()) {
             page.stopEditing()
             page.undo()
@@ -513,16 +551,35 @@ QtObject {
         if (window.at()) check(line("Położyć hydroizolację") === "\t- [ ] Położyć hydroizolację", "undo takes the alarm away")
     }
     function addDateNoneSteps(): void {
-        // A done task and a dated one have no button, also while edited.
+        // A done task has no button, also while edited.
         if (window.at()) editor.startEditing(window.rowOf("Zmierzyć ściany"), 2)
         if (window.at()) window.waitStep(page.editingRow === window.rowOf("Zmierzyć ściany"), "the done task is edited")
         if (window.at()) check(dateButton(window.rowOf("Zmierzyć ściany")) === null, "a done task has no “Add date”")
-        if (window.at()) editor.startEditing(window.rowOf("Kupić płytki"), 2)
-        if (window.at()) window.waitStep(page.editingRow === window.rowOf("Kupić płytki"), "the dated task is edited")
+        // A dated task's "+": the date dialog adding a reminder, the date kept.
+        if (window.at()) show("Kupić płytki")
+        if (window.at()) editor.startEditing(row, 2)
+        if (window.at()) window.waitStep(page.editingRow === row && dateButton(row) !== null, "the dated task, edited, has its “+”")
         if (window.at()) {
-            check(dateButton(window.rowOf("Kupić płytki")) === null, "a dated task has no “Add date”")
-            page.stopEditing()
+            const b = dateButton(row)
+            window.tapAt(b, b.width / 2, b.height / 2)
         }
+        if (window.at()) window.waitStep(dateDialog().opened && adding() && DevTest.property(dateDialog(), "kindChoice") === "reminder",
+                                         "its “+” opens the date dialog adding a reminder")
+        if (window.at()) {
+            datePicker().selectedDate = "2026-10-16"
+            datePicker().time = "08:00"
+            dateDialog().accept()
+        }
+        if (window.at()) window.waitStep(!dateDialog().opened, "the dialog closes")
+        if (window.at()) window.waitStep(Js.indexOf(line("Kupić płytki"), "⏰ 2026-10-16 08:00") > 0
+                                         && Js.indexOf(line("Kupić płytki"), "📅 2026-10-16") > 0,
+                                         "the reminder is added, the due date kept: " + line("Kupić płytki"))
+        if (window.at()) {
+            page.stopEditing()
+            page.undo()
+        }
+        if (window.at()) check(Js.indexOf(line("Kupić płytki"), due) > 0 && Js.indexOf(line("Kupić płytki"), "⏰") < 0,
+                               "one undo step takes it away: " + line("Kupić płytki"))
     }
 
     Component.onCompleted: window.runSteps("datechips")

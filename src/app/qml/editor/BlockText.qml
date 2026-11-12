@@ -199,13 +199,14 @@ Item {
         HoverHandler {
             id: textHover
             enabled: !Theme.touchUi
-            // (A click on a date, 🔁 or priority chip edits the text: its menu is the right button's.)
+            // (A click on a 🔁 or priority chip edits the text: its menu is the right button's; one
+            // on a date chip opens the date dialog.)
             cursorShape: {
                 if (!root.editor)
                     return Qt.ArrowCursor
                 const link = root.linkAt(point.position.x, point.position.y)
-                return link !== "" && !root.editor.editsOnClick(link) ? Qt.PointingHandCursor
-                                                                      : root.editor.readOnly ? Qt.ArrowCursor : Qt.IBeamCursor
+                return link !== "" && (!root.editor.editsOnClick(link) || root.editor.opensDateDialog(link))
+                       ? Qt.PointingHandCursor : root.editor.readOnly ? Qt.ArrowCursor : Qt.IBeamCursor
             }
             onPointChanged: {
                 root.trackLink(point.position.x, point.position.y)
@@ -240,6 +241,8 @@ Item {
                 if (root.editor.blockTappedWith(root.block.index, tap.point.modifiers))
                     return
                 const link = root.linkAt(x, y)
+                if (root.editor.openDateDialogAt(root.block.index, link))
+                    return
                 if (link !== "" && !root.editor.editsOnClick(link))
                     root.editor.activateLink(root.block.index, link)
                 else
@@ -292,13 +295,15 @@ Item {
     }
 
     // Screen readers: every link of the shown text an accessible link item (a press does what a
-    // click does; a date chip opens its menu).
+    // click does: a date chip opens the date dialog; a 🔁 or priority chip its menu).
     BLinkTargets {
         textItem: root.renderedItem
         html: root.html
         lineHeight: root.lineHeightPx
         shown: root.live && !root.editing
         onActivated: (href, x, y) => {
+            if (root.editor.openDateDialogAt(root.block.index, href))
+                return
             if (root.editor.editsOnClick(href))
                 root.editor.openDateMenu(root.block.index, href, root.renderedItem, x, y)
             else

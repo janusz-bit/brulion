@@ -144,7 +144,8 @@ Column {
     /// What controller.openLocation() answered.
     MapHolder { id: answer }
     /// A link inside the embedded text: tasks and reminders belong to the source block; a click on
-    /// a date, 🔁 or priority chip edits the block with the embed (their menu is the right button's).
+    /// a 🔁 or priority chip edits the block with the embed (their menu is the right button's; a
+    /// date chip's click opens the date dialog: BlockEditor.openTokenDialogIn).
     function activate(link: string, path: string, line: int): void {
         if (root.editor.editsOnClick(link)) {
             root.editor.startEditing(root.block.index, -1)
@@ -421,7 +422,9 @@ Column {
                             lineHeight: entry.lineHeightPx
                             shown: body.visible
                             onActivated: (href, x, y) => {
-                                if (root.editor.editsOnClick(href)) // a date chip: its menu
+                                if (root.editor.openTokenDialogIn(entry.path, entry.line, entry.raw, href))
+                                    return // a date chip: the date dialog, as a click
+                                if (root.editor.editsOnClick(href)) // a 🔁 or priority chip: its menu
                                     root.linkMenu(entry.path, entry.line, entry.raw, body, x, y)
                                 else
                                     root.activate(href, entry.path, entry.line)
@@ -447,6 +450,10 @@ Column {
                                     if (root.editor.blockTapped(root.block.index))
                                         return // the touch selection mode
                                     const link = body.linkAt(x, y)
+                                    // A date chip: the date dialog on that token (the change goes
+                                    // to the block's own file).
+                                    if (root.editor.openTokenDialogIn(entry.path, entry.line, entry.raw, link))
+                                        return
                                     if (link !== "")
                                         root.activate(link, entry.path, entry.line)
                                     else

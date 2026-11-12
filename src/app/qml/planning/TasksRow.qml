@@ -15,7 +15,8 @@ import Brulion
 // A TaskListModel task row's delegate: its roles are required properties (`text` is the task's
 // plain text).
 //
-// Click / Enter opens the note at the task's line; Space toggles; the context menu — "Open" and
+// Click / Enter opens the note at the task's line (a click on a 📅 ⏳ 🛫 date chip opens the date
+// dialog on that token instead: tokenDialogRequested); Space toggles; the context menu — "Open" and
 // the statuses (TaskStatusMenu; "No status" makes it a plain list item) — opens with a right
 // click or long press on the row or its checkbox, or the Menu key. A right-click or long press on a
 // date, reminder, 🔁 or priority chip asks for that token's menu instead (tokenMenuRequested: the
@@ -94,6 +95,8 @@ T.ItemDelegate {
     /// A right-click or long press on a chip: the menu of its token `kind` ("due" | "scheduled" |
     /// "start" | "reminder" | "recurrence" | "priority") at (x, y) of `item`.
     signal tokenMenuRequested(string kind, Item item, real x, real y)
+    /// A click on a date chip: the date dialog on its token `kind` ("due" | "scheduled" | "start").
+    signal tokenDialogRequested(string kind)
     /// The "Add date" chip of an open task without a date was clicked: the quick date menu under
     /// `item` (PlanningTokenMenu.openAddDate).
     signal dateMenuRequested(Item item)
@@ -119,6 +122,19 @@ T.ItemDelegate {
     function openTagPage(tag: string): void {
         control._tagOpened = true
         control.tagPageRequested(tag)
+    }
+    /// A click at (x, y) on a date chip (📅 ⏳ 🛫) asks for the date dialog on its token instead of
+    /// opening the note; false elsewhere.
+    function openDateDialogAt(x: real, y: real): bool {
+        control._chipsPoint = chips.mapFromItem(control, x, y)
+        control._chip = chips.childAt(control._chipsPoint.x, control._chipsPoint.y)
+        if (control._chip === null || !Js.startsWith(control._chip.objectName, "taskChip_"))
+            return false
+        const kind = Js.sliceFrom(control._chip.objectName, 9)
+        if (kind !== "due" && kind !== "scheduled" && kind !== "start")
+            return false
+        control.tokenDialogRequested(kind)
+        return true
     }
     /// The menu of what is at (x, y) of the row: a chip's token, a link of the text; false when
     /// there is neither (the row's own menu then).
@@ -218,7 +234,10 @@ T.ItemDelegate {
                                    statusLabel, dueLabel !== "" ? qsTr("due %1").arg(dueLabel) : "",
                                    overdue ? qsTr("overdue") : "", priorityLabel, where])
 
-    onClicked: control.opened()
+    onClicked: {
+        if (!control.openDateDialogAt(control.pressX, control.pressY))
+            control.opened()
+    }
     onPressAndHold: {
         if (!control.openMenuAt(control.pressX, control.pressY))
             control.openMenu()
