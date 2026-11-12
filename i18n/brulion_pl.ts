@@ -313,7 +313,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellRouteTitles.qml" line="58"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="6656"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="6710"/>
         <source>Event log</source>
         <translation>Rejestr zdarzeń</translation>
     </message>
@@ -2729,7 +2729,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/views/CleanupView.qml" line="117"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="5890"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="5944"/>
         <source>Attachments (%1)</source>
         <translation>Załączniki (%1)</translation>
     </message>
@@ -2750,7 +2750,7 @@
     <message>
         <location filename="../src/app/qml/views/CleanupView.qml" line="144"/>
         <location filename="../src/app/qml/views/CleanupView.qml" line="234"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="5903"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="5957"/>
         <source>Move to trash</source>
         <translation>Przenieś do kosza</translation>
     </message>
@@ -12618,7 +12618,7 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
     <message>
         <location filename="../src/app/qml/views/SettingsView.qml" line="775"/>
         <location filename="../src/app/qml/views/SettingsView.qml" line="1381"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="7558"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="7612"/>
         <source>Restore</source>
         <translation>Przywróć</translation>
     </message>
@@ -12752,11 +12752,6 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
         <location filename="../src/app/qml/views/SettingsView.qml" line="1398"/>
         <source>AI assistant</source>
         <translation>Asystent AI</translation>
-    </message>
-    <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1399"/>
-        <source>“AI: ask about this page” and “AI: summarise this page” in the palette: the answer goes into today&apos;s note.</source>
-        <translation>„AI: zapytaj o tę stronę” i „AI: streść tę stronę” w palecie: odpowiedź trafia do dzisiejszej notatki.</translation>
     </message>
     <message>
         <location filename="../src/app/qml/views/SettingsView.qml" line="1405"/>
@@ -13269,6 +13264,11 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
         <translation>Rozszerzenia dodają do Brulionu widoki, polecenia i reakcje. Czytają i zapisują tylko otwarty notatnik, zwykłym Markdownem, który czytają też inne aplikacje.</translation>
     </message>
     <message>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1399"/>
+        <source>The ✨ button on the top bar (and “AI: …” in the palette) asks about the page on screen or summarises it: the answer goes into today&apos;s note.</source>
+        <translation>Przycisk ✨ na górnym pasku (i „AI: …” w palecie) pyta o stronę na ekranie albo ją streszcza: odpowiedź trafia do dzisiejszej notatki.</translation>
+    </message>
+    <message>
         <location filename="../src/app/qml/views/SettingsView.qml" line="1671"/>
         <location filename="../src/app/qml/views/SettingsView.qml" line="1689"/>
         <source>Check notes in the background</source>
@@ -13612,7 +13612,7 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="319"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="6173"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="6227"/>
         <source>Restore</source>
         <translation>Przywróć</translation>
     </message>
@@ -13623,7 +13623,7 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="330"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="6196"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="6250"/>
         <source>Delete</source>
         <translation>Usuń</translation>
     </message>
@@ -13815,7 +13815,7 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellMoveDialog.qml" line="126"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="7667"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="7721"/>
         <source>Move “%1”</source>
         <translation>Przenieś „%1”</translation>
     </message>
@@ -14118,7 +14118,7 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellQuickCapture.qml" line="17"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="6887"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="6941"/>
         <source>Add</source>
         <translation>Dodaj</translation>
     </message>
@@ -14323,7 +14323,7 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
     </message>
     <message numerus="yes">
         <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="32"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="6284"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="6338"/>
         <source>%n file(s) to save in the notebook</source>
         <translation>
             <numerusform>%n plik do zapisania w notatniku</numerusform>
@@ -14342,7 +14342,7 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="36"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="6228"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="6282"/>
         <source>Save</source>
         <translation>Zapisz</translation>
     </message>
@@ -14849,100 +14849,100 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
 <context>
     <name>ShellTopBar</name>
     <message>
-        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="111"/>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="130"/>
         <source>Menu</source>
         <translation>Menu</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="117"/>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="136"/>
         <source>Hide sidebar</source>
         <translation>Ukryj pasek boczny</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="117"/>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="136"/>
         <source>Show sidebar</source>
         <translation>Pokaż pasek boczny</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="127"/>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="146"/>
         <source>Back</source>
         <translation>Wstecz</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="135"/>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="154"/>
         <source>Forward</source>
         <translation>Dalej</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="268"/>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="287"/>
         <source>Search</source>
         <translation>Szukaj</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="687"/>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="748"/>
         <source>Command palette</source>
         <translation>Paleta poleceń</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="294"/>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="328"/>
         <source>Quick capture</source>
         <translation>Szybka notatka</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="309"/>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="343"/>
         <source>Hide side panel</source>
         <translation>Ukryj panel boczny</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="303"/>
-        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="309"/>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="337"/>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="343"/>
         <source>Show side panel</source>
         <translation>Pokaż panel boczny</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="318"/>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="352"/>
         <location filename="../src/app/io/ioselftest.cpp" line="378"/>
         <location filename="../src/app/shell/shellselftest.cpp" line="3167"/>
         <source>More</source>
         <translation>Więcej</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="475"/>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="536"/>
         <source>Remove from favorites</source>
         <translation>Usuń z ulubionych</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="475"/>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="536"/>
         <source>Add to favorites</source>
         <translation>Dodaj do ulubionych</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="487"/>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="548"/>
         <source>Rename…</source>
         <translation>Zmień nazwę…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="498"/>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="559"/>
         <source>Move to…</source>
         <translation>Przenieś do…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="652"/>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="713"/>
         <source>Show in tree</source>
         <translation>Pokaż w drzewie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="661"/>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="722"/>
         <source>Open in a new tab</source>
         <translation>Otwórz w nowej karcie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="661"/>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="722"/>
         <source>Open in another app</source>
         <translation>Otwórz w innej aplikacji</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="509"/>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="570"/>
         <source>Page history</source>
         <translation>Historia strony</translation>
     </message>
@@ -14952,12 +14952,12 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
         <translation>Źródło Markdown</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="552"/>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="613"/>
         <source>Show picture</source>
         <translation>Pokaż obraz</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="552"/>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="613"/>
         <source>Show as text</source>
         <translation>Pokaż jako tekst</translation>
     </message>
@@ -14967,200 +14967,230 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
         <translation>Przełącz tryb notatki</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="633"/>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="694"/>
         <source>Add property</source>
         <translation>Dodaj właściwość</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="595"/>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="656"/>
         <source>Open in side panel</source>
         <translation>Otwórz w panelu bocznym</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="674"/>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="735"/>
         <source>Move to trash</source>
         <translation>Przenieś do kosza</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="701"/>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="762"/>
         <source>New page</source>
         <translation>Nowa strona</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="708"/>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="769"/>
         <source>Sync center</source>
         <translation>Centrum synchronizacji</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="720"/>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="781"/>
         <source>Import and export</source>
         <translation>Import i eksport</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="738"/>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="799"/>
         <source>Trash (%1)</source>
         <translation>Kosz (%1)</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="738"/>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="799"/>
         <source>Trash</source>
         <translation>Kosz</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="733"/>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="794"/>
         <source>Clean up</source>
         <translation>Sprzątanie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="750"/>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="811"/>
         <source>Settings</source>
         <translation>Ustawienia</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="744"/>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="805"/>
         <source>About Brulion</source>
         <translation>O Brulionie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="715"/>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="776"/>
         <source>Import notes</source>
         <translation>Importuj notatki</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="643"/>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="704"/>
         <source>Find in note</source>
         <translation>Znajdź w notatce</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="728"/>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="789"/>
         <source>Replace in notebook</source>
         <translation>Zamień w notatniku</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="182"/>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="201"/>
         <source>Tabs (%1)</source>
         <translation>Karty (%1)</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="365"/>
-        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="572"/>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="399"/>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="633"/>
         <source>New tab</source>
         <translation>Nowa karta</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="371"/>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="405"/>
         <source>Close tab</source>
         <translation>Zamknij kartę</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="378"/>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="412"/>
         <source>Close other tabs</source>
         <translation>Zamknij pozostałe karty</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="573"/>
-        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="621"/>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="634"/>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="682"/>
         <source>Open in new tab</source>
         <translation>Otwórz w nowej karcie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="584"/>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="645"/>
         <source>Open in new window</source>
         <translation>Otwórz w nowym oknie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="605"/>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="666"/>
         <source>Close split view</source>
         <translation>Zamknij podział</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="605"/>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="666"/>
         <source>Split view</source>
         <translation>Podziel widok</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="215"/>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="234"/>
         <source>Search or type a command…</source>
         <translation>Szukaj lub wpisz polecenie…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="474"/>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="298"/>
+        <source>The AI is answering…</source>
+        <translation>AI odpowiada…</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="298"/>
+        <source>AI assistant</source>
+        <translation>Asystent AI</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="497"/>
+        <source>Ask about this page…</source>
+        <translation>Zapytaj o tę stronę…</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="497"/>
+        <source>Ask the AI…</source>
+        <translation>Zapytaj AI…</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="503"/>
+        <source>Summarise this page</source>
+        <translation>Streść tę stronę</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="511"/>
+        <source>AI settings…</source>
+        <translation>Ustawienia AI…</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="535"/>
         <source>Favorite</source>
         <translation>Ulubione</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="486"/>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="547"/>
         <source>Rename</source>
         <translation>Nazwa</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="497"/>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="558"/>
         <source>Move</source>
         <translation>Przenieś</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="508"/>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="569"/>
         <source>History</source>
         <translation>Historia</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="531"/>
-        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="539"/>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="592"/>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="600"/>
         <source>Mode</source>
         <translation>Tryb</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="540"/>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="601"/>
         <source>Document</source>
         <translation>Dokument</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="541"/>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="602"/>
         <source>Outline</source>
         <translation>Konspekt</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="542"/>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="603"/>
         <source>Source</source>
         <translation>Źródło</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="565"/>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="626"/>
         <source>Open in</source>
         <translation>Otwórz w</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="583"/>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="644"/>
         <source>Window</source>
         <translation>Okno</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="594"/>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="655"/>
         <source>Side panel</source>
         <translation>Panel boczny</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="604"/>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="665"/>
         <source>Unsplit</source>
         <translation>Jeden widok</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="604"/>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="665"/>
         <source>Split</source>
         <translation>Podziel</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="279"/>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="313"/>
         <source>Leave reading mode</source>
         <translation>Wyłącz tryb do czytania</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="279"/>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="313"/>
         <source>Reading mode</source>
         <translation>Tryb do czytania</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="697"/>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="758"/>
         <location filename="../src/app/io/ioselftest.cpp" line="387"/>
         <source>Notebook</source>
         <translation>Notatnik</translation>
@@ -15180,13 +15210,13 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellTrayCalendar.qml" line="109"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="8887"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="8944"/>
         <source>Opening the notebook…</source>
         <translation>Otwieranie notatnika…</translation>
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellTrayCalendar.qml" line="110"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="8877"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="8934"/>
         <source>Open a notebook to see its tasks and reminders.</source>
         <translation>Otwórz notatnik, aby zobaczyć zadania i przypomnienia.</translation>
     </message>
@@ -15503,7 +15533,7 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
     </message>
     <message>
         <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="550"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="6014"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="6068"/>
         <source>Keep mine</source>
         <translation>Zachowaj moją</translation>
     </message>
@@ -16258,7 +16288,7 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
     </message>
     <message>
         <location filename="../src/app/qml/views/SyncView.qml" line="340"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="5989"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="6043"/>
         <source>Merge</source>
         <translation>Scal</translation>
     </message>
@@ -20905,7 +20935,7 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
     </message>
     <message>
         <location filename="../src/app/editor/pagecontroller_properties.cpp" line="78"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="8259"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="8313"/>
         <source>An alias with this character cannot be used in a link</source>
         <translation>Aliasu z takim znakiem nie da się użyć w linku</translation>
     </message>

@@ -10,9 +10,12 @@ import Brulion
 // tree among them). On narrow windows it keeps only what fits a phone: the drawer button ☰,
 // always first (the same place whatever the view, the keyboard or the history), back (with
 // history, and not on Android, whose back key / gesture walks the same history: `systemBack`),
-// the title, the reading mode's book (pages and the journal), quick capture +
-// (AppSettings.captureButtonShown), search only while the bottom navigation has no Search tab
-// (so the two bars never repeat a button), and the menu.
+// the title, the AI assistant's ✨ (while it is on: AppSettings.assistantEnabled), the reading
+// mode's book (pages and the journal), quick capture + (AppSettings.captureButtonShown), search
+// only while the bottom navigation has no Search tab (so the two bars never repeat a button), and
+// the menu. The ✨'s menu runs the assistant (src/core/extensions/builtin/asystent.luau) on the
+// page on screen — in the journal's stream today's note —: ask it, summarise it; the button
+// spins while a model answers (WorkspaceExtensions.aiPending).
 // Phones (narrow windows) show no tab bar: with two tabs or more a square with their number comes
 // before Search — the tab switcher, a menu of the tabs (one tap shows it) with New tab, Close
 // tab and Close other tabs (docs/UI.md "Tabs, split view and windows").
@@ -84,6 +87,22 @@ Rectangle {
                                      && Workspace.exists(bar.pagePath)
 
     ShellRouteTitles { id: titles }
+    /// A model is answering (b.ai: the assistant or another extension).
+    readonly property bool aiBusy: Workspace.extensions !== null && Workspace.extensions.aiPending > 0
+    /// The page the AI menu is about (set as it opens): the one on screen; in the journal's stream
+    /// today's note when it exists; "" for none.
+    property string aiPage: ""
+    function openAiMenu(): void {
+        const today = Workspace.journalPath(DatesHelper.today)
+        aiPage = bar.pagePath !== "" ? bar.pagePath
+               : bar.routeView === "journals" && Workspace.exists(today) ? today : ""
+        aiMenu.popup(aiButton, aiButton.width - aiMenu.width, aiButton.height)
+    }
+    /// Runs the assistant's command `name` ("ask", "summarize") on aiPage.
+    function runAssistant(name: string): void {
+        if (Workspace.extensions !== null)
+            Workspace.extensions.runCommand("asystent", name, bar.aiPage)
+    }
     /// The back button is shown (wide windows: always, disabled without history).
     readonly property bool backShown: !Theme.narrow || (AppController.canGoBack && !bar.systemBack)
 
@@ -269,6 +288,21 @@ Rectangle {
             shortcut: ShortcutMap.sequences["go.search"] || ""
             onClicked: AppController.search("")
         }
+        // The AI assistant's commands, a tap away (while it is on): its menu; a spinner while a
+        // model answers.
+        BIconButton {
+            id: aiButton
+            objectName: "topBarAi"
+            visible: AppSettings.assistantEnabled
+            iconName: bar.aiBusy ? "" : "sparkles"
+            label: bar.aiBusy ? qsTr("The AI is answering…") : qsTr("AI assistant")
+            onClicked: bar.openAiMenu()
+            BSpinner {
+                anchors.centerIn: parent
+                visible: bar.aiBusy
+                size: Theme.iconSize
+            }
+        }
         // Reading mode (docs/UI.md "Reading mode"): a device setting for every page and the journal,
         // at every width (phones read the most); checked while it is on. An eye: the book is the
         // journal's (the rail, the bottom navigation — on a phone both are on screen).
@@ -451,6 +485,33 @@ Rectangle {
             AppController.requestUiAction("toggleSourceMode")
         if (bar.noteMode !== mode)
             AppController.requestUiAction("toggleNoteMode")
+    }
+
+    // The ✨ button's menu: ask the AI (about the page on screen, or anything without one),
+    // summarise the page, the AI's settings.
+    BMenu {
+        id: aiMenu
+        objectName: "topBarAiMenu"
+        BMenuItem {
+            objectName: "aiAsk"
+            text: bar.aiPage !== "" ? qsTr("Ask about this page…") : qsTr("Ask the AI…")
+            iconName: "message-square"
+            onTriggered: bar.runAssistant("ask")
+        }
+        BMenuItem {
+            objectName: "aiSummarize"
+            text: qsTr("Summarise this page")
+            iconName: "scroll-text"
+            enabled: bar.aiPage !== ""
+            onTriggered: bar.runAssistant("summarize")
+        }
+        BMenuSeparator {}
+        BMenuItem {
+            objectName: "aiSettings"
+            text: qsTr("AI settings…")
+            iconName: "settings"
+            onTriggered: AppController.navigate({ view: "settings", section: "extensions" })
+        }
     }
 
     // "More" (docs/UI.md "Top bar"): the page's actions as a row of icons, the note's mode, where

@@ -203,7 +203,9 @@ go on — and its result is handled as the command's (a message, the console).
 AI, off by default): "AI: ask about this page" asks for a question (`b.ask`), sends it with the page
 on screen (at most 60 000 characters) and writes the answer into today's note — `- 🤖 <question>
 ([[Page]])`, the answer's lines as items under it; "AI: summarise this page" does the same with a
-summary and the page's tasks. Like the gym, its source can become a page of the notebook (title
+summary and the page's tasks. Both are a tap away on the top bar's ✨ button while the assistant is
+on (docs/UI.md "Top bar": the page on screen, in the journal's stream today's note; a spinner while
+`aiPending`). Like the gym, its source can become a page of the notebook (title
 "Asystent AI" / "AI assistant", or `zastępuje:: asystent`) and be changed there.
 
 ## Views

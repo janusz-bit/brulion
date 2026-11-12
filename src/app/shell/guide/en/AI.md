@@ -21,10 +21,13 @@ Press **Check**: the model answers "OK", or you see what is wrong.
 The key stays **only on this device** (not in the notebook, not in sync, not in the logs). Notes go to the provider only when you ask, or when an extension you approved with the `ai` permission does.
 
 ## The AI assistant
-Switch it on in **Settings → Extensions → AI → AI assistant**. Then, with a page open, the palette (Ctrl+K) has:
+Switch it on in **Settings → Extensions → AI → AI assistant**. Then the top bar has a **✨** button — on the phone too — with:
 
-- **AI: ask about this page** — type a question; the answer goes into **today's note** under `🤖 your question ([[Page]])`, its points as items. Without a page open it is a plain question.
-- **AI: summarise this page** — a few sentences and the page's tasks, also into today's note.
+- **Ask about this page…** — type a question; the answer goes into **today's note** under `🤖 your question ([[Page]])`, its points as items. In the journal it asks about today's note; without a page it is a plain question (**Ask the AI…**).
+- **Summarise this page** — a few sentences and the page's tasks, also into today's note.
+- **AI settings…** — the provider, the key and the model.
+
+While the model answers, the button spins. The same commands are in the palette (Ctrl+K) as **AI: ask about this page** and **AI: summarise this page**.
 
 The answer stays with your notes, so you can read it later on the phone, link it or edit it.
 

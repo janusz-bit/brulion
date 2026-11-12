@@ -21,10 +21,13 @@ Naciśnij **Sprawdź**: model odpowie „OK” albo zobaczysz, co jest nie tak.
 Klucz zostaje **tylko na tym urządzeniu** (nie w notatniku, nie w synchronizacji, nie w dziennikach zdarzeń). Notatki trafiają do dostawcy tylko wtedy, gdy o to poprosisz, albo gdy zrobi to rozszerzenie zatwierdzone przez Ciebie z uprawnieniem `ai`.
 
 ## Asystent AI
-Włącz go w **Ustawieniach → Rozszerzenia → AI → Asystent AI**. Wtedy przy otwartej stronie paleta (Ctrl+K) ma:
+Włącz go w **Ustawieniach → Rozszerzenia → AI → Asystent AI**. Wtedy górny pasek ma przycisk **✨** — także na telefonie — z pozycjami:
 
-- **AI: zapytaj o tę stronę** — wpisz pytanie; odpowiedź trafi do **dzisiejszej notatki** pod `🤖 Twoje pytanie ([[Strona]])`, jej punkty jako elementy listy. Bez otwartej strony to zwykłe pytanie.
-- **AI: streść tę stronę** — kilka zdań i zadania ze strony, także do dzisiejszej notatki.
+- **Zapytaj o tę stronę…** — wpisz pytanie; odpowiedź trafi do **dzisiejszej notatki** pod `🤖 Twoje pytanie ([[Strona]])`, jej punkty jako elementy listy. W dzienniku pyta o dzisiejszą notatkę; bez strony to zwykłe pytanie (**Zapytaj AI…**).
+- **Streść tę stronę** — kilka zdań i zadania ze strony, także do dzisiejszej notatki.
+- **Ustawienia AI…** — dostawca, klucz i model.
+
+Gdy model odpowiada, przycisk się kręci. Te same polecenia są w palecie (Ctrl+K) jako **AI: zapytaj o tę stronę** i **AI: streść tę stronę**.
 
 Odpowiedź zostaje w notatkach, więc przeczytasz ją później na telefonie, podlinkujesz albo poprawisz.
 

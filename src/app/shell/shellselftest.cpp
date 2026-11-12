@@ -5430,6 +5430,74 @@ void checkExtensionPages(QQuickWindow *window, AppController *app, const Check &
     settle(300);
 }
 
+/// The AI assistant's ✨ on the top bar: none while the assistant is off; switched on, its menu on
+/// a page — "Summarise this page" enabled —, "Ask about this page…" running the assistant's
+/// question (b.ask: the extension's question, cancelled here: no model is asked), "AI settings…"
+/// opening the settings' Extensions section.
+void checkAiButton(QQuickWindow *window, AppController *app, const Check &check)
+{
+    const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
+    AppSettings *settings = app->settings();
+    WorkspaceExtensions *ext = app->workspace()->extensions();
+    const auto named = [&](const QString &name) { return shownNamed(window->contentItem(), name); };
+    const bool was = settings->assistantEnabled();
+    const QString page = u"Projekty/Remont mieszkania.md"_s;
+    settings->setAssistantEnabled(false);
+    app->openPage(page);
+    check(waitFor([&] { return app->currentRoute().value(u"path"_s).toString() == page; }),
+          "a page is open for the AI button");
+    settle(200);
+    check(named(u"topBarAi"_s) == nullptr, "no ✨ on the top bar while the AI assistant is off");
+    settings->setAssistantEnabled(true);
+    QQuickItem *button = nullptr;
+    check(waitFor([&] { return (button = named(u"topBarAi"_s)) != nullptr; }), "the assistant on: ✨ on the top bar");
+    check(waitFor([&] { return app->commands()->ids().contains(u"ext.asystent.ask"_s); }, 10000),
+          "the assistant's commands are loaded");
+    const auto openMenu = [&] {
+        closeMenus(window);
+        if (QQuickItem *b = named(u"topBarAi"_s))
+            tapOrClick(window, pointIn(b), touch);
+        return waitFor([&] { return openMenus(window) == 1 && named(u"aiAsk"_s) != nullptr; });
+    };
+    check(openMenu(), "a tap or click on ✨ opens its menu");
+    QQuickItem *summarize = named(u"aiSummarize"_s);
+    check(summarize && summarize->isEnabled() && named(u"aiSettings"_s) != nullptr,
+          "on a page: “Summarise this page” enabled, and the AI's settings");
+    // "Ask about this page…": the assistant asks for the question (cancelled: no model is asked).
+    if (QQuickItem *ask = named(u"aiAsk"_s))
+        tapOrClick(window, pointIn(ask), touch);
+    // (The question's dialog is a popup: its text field is what shows.)
+    check(waitFor([&] { return ext->isWaiting() && named(u"extensionQuestionText"_s) != nullptr; }, 10000),
+          "“Ask about this page…” runs the assistant: its question shows");
+    // Its "Cancel", tapped or clicked: the dialog goes, the question is cancelled.
+    QQuickItem *sheet = named(u"extensionQuestionText"_s);
+    while (sheet && sheet->parentItem() && !isA(sheet->parentItem(), "QQuickOverlay"))
+        sheet = sheet->parentItem();
+    QQuickItem *cancel = sheet ? findShown(sheet, [](QQuickItem *item) {
+        const QString text = item->property("text").toString();
+        return isA(item, "BButton") && (text == u"Anuluj" || text == u"Cancel");
+    })
+                               : nullptr;
+    settle(300); // (a phone's sheet slides in)
+    if (cancel)
+        tapOrClick(window, pointIn(cancel), touch);
+    check(cancel && waitFor([&] { return !ext->isWaiting() && named(u"extensionQuestionText"_s) == nullptr; }, 10000),
+          "its “Anuluj” cancels it: the dialog goes, nothing is asked");
+    settle(300); // (the sheet's closing animation)
+    check(openMenu(), "the menu opens again");
+    if (QQuickItem *more = named(u"aiSettings"_s))
+        tapOrClick(window, pointIn(more), touch);
+    check(waitFor([&] {
+              return app->currentView() == u"settings"
+                     && app->currentRoute().value(u"section"_s).toString() == u"extensions";
+          }),
+          "“AI settings…” opens Settings → Extensions");
+    settings->setAssistantEnabled(was);
+    closeMenus(window);
+    app->goHome();
+    settle(300);
+}
+
 /// Focus mode (F8 — the command's shortcut —, Esc, the Back key, its corner button), the word count in
 /// the page's corner and typewriter scrolling (desktop), and one command's shortcut changed in
 /// Settings → Keyboard shortcuts with real keys: another command's key is refused with the reason,
@@ -8784,6 +8852,9 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
     closeMenus(window);
     // 3h-ext. Extensions written in the notebook: approval, live reload, an error on its line, the console.
     checkExtensionPages(window, app, check);
+    closeMenus(window);
+    // 3h-ai. The AI assistant's ✨ on the top bar: its menu, the assistant's question, its settings.
+    checkAiButton(window, app, check);
     closeMenus(window);
     // 3i. Focus mode, the word count, typewriter scrolling and a custom shortcut.
     checkFocusAndShortcuts(window, app, check);
