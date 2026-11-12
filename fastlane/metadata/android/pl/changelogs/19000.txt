@@ -1,0 +1,6 @@
+Nowości w 0.19.0:
+• AI, które zna cały notatnik
+• Ignorowanie zadań strony
+• Własny agent
+
+Pełny opis: https://github.com/janusz-bit/brulion/releases/tag/v0.19.0
