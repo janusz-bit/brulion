@@ -456,6 +456,39 @@ private Q_SLOTS:
         QVERIFY(tasks(u"Przysiad"_s).size() == 1);
     }
 
+    void ignoredPagesHoldNoTasks()
+    {
+        // SYNTAX §5 "Ignoring a page's tasks": `zadania:: ignoruj` / `tasks: ignore` keeps a page's
+        // tasks out of type:tasks and the index's task lists — unless the query names pages.
+        VaultIndex index;
+        index.update(u"Lista.md"_s, u"Zadania:: Ignoruj\n\n- [ ] mleko 📅 2026-10-15\n- [x] chleb\n"_s);
+        index.update(u"Szablony/Zadanie.md"_s, u"---\ntasks: Ignore\n---\n- [ ] coś z szablonu\n"_s);
+        index.update(u"Dom.md"_s, u"- [ ] Zapłacić czynsz\n"_s);
+        index.update(u"Inna.md"_s, u"zadania:: wszystkie\n\n- [ ] Podlać kwiaty\n"_s); // another value
+        const auto tasks = [&](const QString &source) {
+            return describe(index, runQuery(parsed(source), index, fixture::Today));
+        };
+        QCOMPARE(tasks(u"type:tasks"_s), QStringList({u"Zapłacić czynsz"_s, u"Podlać kwiaty"_s}));
+        QCOMPARE(tasks(u"type:tasks due:any"_s), QStringList());
+        QCOMPARE(tasks(u"type:tasks -page:Dom"_s), QStringList{u"Podlać kwiaty"_s}); // (a negated one names none)
+        // Named by page or path: there.
+        QCOMPARE(tasks(u"type:tasks page:Lista"_s), QStringList({u"mleko"_s, u"chleb"_s}));
+        QCOMPARE(tasks(u"type:tasks path:Szablony/"_s), QStringList{u"coś z szablonu"_s});
+        // Blocks are blocks.
+        QCOMPARE(tasks(u"mleko"_s).size(), 1);
+        QCOMPARE(index.tasks().size(), 2);
+        QVERIFY(index.tasksOf(u"Lista.md"_s).isEmpty());
+        QCOMPARE(index.tasksOf(u"Dom.md"_s).size(), 1);
+        // The property gone: the tasks are back (the lists follow the change).
+        index.update(u"Lista.md"_s, u"- [ ] mleko 📅 2026-10-15\n- [x] chleb\n"_s);
+        QCOMPARE(index.tasks().size(), 4);
+        QCOMPARE(tasks(u"type:tasks due:any"_s), QStringList{u"mleko"_s});
+        // And ignored again.
+        index.update(u"Lista.md"_s, u"tasks:: ignore\n\n- [ ] mleko 📅 2026-10-15\n"_s);
+        QCOMPARE(index.tasks().size(), 2);
+        QVERIFY(tasks(u"type:tasks due:any"_s).isEmpty());
+    }
+
     void pageThis()
     {
         QueryOptions options;

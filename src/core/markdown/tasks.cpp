@@ -65,6 +65,27 @@ QChar checkboxCharFor(TaskStatus status, std::optional<QChar> previous)
     return statusChar(status);
 }
 
+bool isIgnoreTasksValue(QStringView value)
+{
+    const QStringView v = value.trimmed();
+    return v.compare(u"ignore", Qt::CaseInsensitive) == 0 || v.compare(u"ignoruj", Qt::CaseInsensitive) == 0;
+}
+
+bool tasksIgnored(const ParsedNote &note)
+{
+    for (const QString &key : {u"tasks"_s, u"zadania"_s}) {
+        const QVariant value = note.properties.value(key);
+        // (A list's first value: `tasks: [ignore]` in a frontmatter.)
+        const QString text =
+                value.metaType().id() == QMetaType::QVariantList || value.metaType().id() == QMetaType::QStringList
+                        ? value.toStringList().value(0)
+                        : value.toString();
+        if (isIgnoreTasksValue(text))
+            return true;
+    }
+    return false;
+}
+
 QString keywordFor(TaskStatus status, QStringView previous)
 {
     if (!previous.isEmpty() && statusFromKeyword(previous) == status)

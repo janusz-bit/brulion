@@ -28,7 +28,7 @@
 //                  formatReminderToken(DateSpec, alarm), blockIdAtEnd(line),
 //                  parseLogseqTimestamp(inner), recurrenceOf(token)
 //   tasks.h        statusFromCheckbox / statusFromKeyword / statusChar / keywordFor,
-//                  matchTaskMarker(text, start)
+//                  matchTaskMarker(text, start), tasksIgnored(note) (`tasks:: ignore`)
 //   taskdeps.h     Obsidian Tasks dependencies: isValidTaskId, generateTaskId, setTaskId /
 //                  addTaskDependency / removeTaskDependency(content, line, id) (🆔 / ⛔ written in
 //                  Obsidian Tasks' order), subtaskProgress(note, block) -> {done, total} ("3/5")

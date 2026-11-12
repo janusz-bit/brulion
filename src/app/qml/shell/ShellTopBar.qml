@@ -85,6 +85,9 @@ Rectangle {
     readonly property string pagePath: routeView === "page" ? routePath : journalPagePath
     // (Workspace.favorites: followed; it lists the favourites that exist.)
     readonly property bool favorite: onPage && Workspace.favorites.length >= 0 && Workspace.isFavorite(bar.pagePath)
+    /// The page's tasks are ignored (`tasks:: ignore`): the menu offers to show them again. (Read
+    /// for real after each change of the notes: Workspace.revision.)
+    readonly property bool tasksIgnored: onPage && Workspace.revision >= 0 && Workspace.tasksIgnored(bar.pagePath)
                                      && Workspace.exists(bar.pagePath)
 
     ShellRouteTitles { id: titles }
@@ -697,6 +700,17 @@ Rectangle {
             shortcut: ShortcutMap.sequences["page.addProperty"] || ""
             enabled: !AppController.sourceModeShown && !AppSettings.readingMode
             onTriggered: AppController.requestUiAction("addProperty")
+        }
+        BMenuItem {
+            // The page's tasks out of Tasks, the calendar and task queries, or back (the
+            // property `zadania:: ignoruj` / `tasks:: ignore`, PageView "toggleTasksIgnored").
+            objectName: "menuIgnoreTasks"
+            visible: bar.inNote && bar.onPage
+            height: visible ? implicitHeight : 0
+            text: bar.tasksIgnored ? qsTr("Show this page's tasks in Tasks") : qsTr("Ignore tasks on this page")
+            iconName: bar.tasksIgnored ? "list-checks" : "eye-off"
+            enabled: !AppController.sourceModeShown && !AppSettings.readingMode
+            onTriggered: AppController.requestUiAction("toggleTasksIgnored")
         }
         BMenuItem {
             objectName: "menuFindInNote"

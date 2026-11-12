@@ -328,6 +328,19 @@ private Q_SLOTS:
                          {u"2026-10-14 08:00 reminder Leki (done) 🔁"_s, u"2026-10-14 08:10 reminder Leki (done)"_s}));
     }
 
+    void ignoredPageTasks()
+    {
+        // SYNTAX §5 "Ignoring a page's tasks": a page with `zadania:: ignoruj` has no task dates in
+        // the calendar; its reminders still come.
+        const QString ignored = lines({u"zadania:: ignoruj"_s, QString(), u"- [ ] Mleko 📅 2026-10-14"_s,
+                                       u"- Zadzwonić ⏰ 2026-10-14 18:00"_s});
+        QCOMPARE(describe(calendarOf(ignored, QDate(2026, 10, 14), QDate(2026, 10, 14))),
+                 QStringList{u"2026-10-14 18:00 reminder Zadzwonić"_s});
+        const QString counted = lines({u"- [ ] Mleko 📅 2026-10-14"_s});
+        QCOMPARE(describe(calendarOf(counted, QDate(2026, 10, 14), QDate(2026, 10, 14))),
+                 QStringList{u"2026-10-14 due Mleko (todo)"_s});
+    }
+
     void journalsOnly()
     {
         Files files;

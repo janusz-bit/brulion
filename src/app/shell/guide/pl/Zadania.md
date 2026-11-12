@@ -106,6 +106,8 @@ Widok **Zadania** zbiera zadania z całego notatnika: pole szybkiego dodawania, 
 
 Zadania z terminami pokazuje też kalendarz ([[Dziennik, kalendarz i szablony|Dziennik, kalendarz i szablony]]).
 
+**Ignorowanie zadań strony** — gdy pola wyboru na stronie nie są Twoimi zadaniami (lista do skopiowania, lista rzeczy do spakowania, notatki z książki), wybierz w menu strony (**⋯**, na telefonie **⋮**) **Ignoruj zadania z tej strony**. Strona dostaje właściwość `zadania: ignoruj` (`tasks: ignore` przy angielskim interfejsie), a jej zadania znikają z **Zadań**, kalendarza, zapytań o zadania i widżetów; na samej stronie działają jak dotąd, a ich przypomnienia dalej dzwonią. **Pokazuj zadania z tej strony w Zadaniach** w tym samym menu je przywraca. Zapytanie, które nazywa stronę (`page:`), dalej je pokazuje.
+
 ## Widżety na Androidzie
 Na ekranie głównym telefonu postawisz widżety Brulionu (przytrzymaj puste miejsce → **Widżety** → **Brulion**):
 

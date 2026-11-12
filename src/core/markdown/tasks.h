@@ -30,6 +30,14 @@ QChar checkboxCharFor(TaskStatus status, std::optional<QChar> previous = std::nu
 /// `TODO`/`DOING`) and its spelling of "cancelled" / "waiting".
 QString keywordFor(TaskStatus status, QStringView previous = {});
 
+/// The page's tasks are left out of the task lists (SYNTAX §5 "Ignoring a page's tasks"): the
+/// page property `tasks:: ignore` / `zadania:: ignoruj` (also in the frontmatter; keys and values
+/// case-insensitive). The Tasks view, `type:tasks` queries that name no page or path, the
+/// calendar and VaultIndex::tasks() pass them by; the checkboxes stay checkboxes on the page.
+bool tasksIgnored(const ParsedNote &note);
+/// The values that mark a page's tasks ignored: "ignore", "ignoruj".
+bool isIgnoreTasksValue(QStringView value);
+
 /// Open = todo or doing (SYNTAX §10 "open").
 inline bool isOpenStatus(TaskStatus status)
 {

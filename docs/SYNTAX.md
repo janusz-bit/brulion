@@ -965,6 +965,18 @@ Logseq planning lines inside the block are understood too:
 above the completed one (dates shifted by the rule), exactly like Obsidian Tasks, and the
 completed line gets `✅ <today>`.
 
+### Ignoring a page's tasks
+
+A page whose checkboxes are no tasks of yours — a checklist to copy, a packing list, a book's
+notes — keeps them out of the task lists with the page property `zadania:: ignoruj`
+(`tasks:: ignore`; in a frontmatter `zadania: ignoruj`; keys and values in any case). Its tasks
+are then left out of the Tasks view, the calendar, `type:tasks` queries (§10), the widgets and the
+command line's task lists — unless a query names pages or folders (`page:`, `path:`), which asks
+for those pages' tasks, these too. The checkboxes stay checkboxes on the page (checked off,
+completed, recurring as ever), blocks queries still find their lines, and their reminders still
+ring. The page menu's "Ignore tasks on this page" writes the property ("Show this page's tasks in
+Tasks" removes it): `markdown::tasksIgnored`.
+
 ### Habits
 
 Recurring points of the day (`src/core/habits`, writing a check: `notebook/habitchecks.h`), kept as

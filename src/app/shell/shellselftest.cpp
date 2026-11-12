@@ -5458,6 +5458,36 @@ void checkExtensionPages(QQuickWindow *window, AppController *app, const Check &
     settle(300);
 }
 
+/// The page menu's "Ignore tasks on this page" (PageView.toggleTasksIgnored): the page gets
+/// `zadania: ignoruj` (`tasks: ignore` in English), its task leaves type:tasks (the Tasks view's query) and the menu
+/// offers to show it again; the second time the property goes and the task is back (docs/SYNTAX.md §5).
+void checkIgnoreTasks(QQuickWindow *window, AppController *app, const Check &check)
+{
+    Workspace *ws = app->workspace();
+    const QString path = ws->newPagePath(u"Samotest zadań"_s);
+    check(ws->write(path, u"- [ ] zadanie samotestu do pominięcia\n"_s), "a page with a task is written");
+    const auto listed = [ws] { return ws->runQuery(u"type:tasks \"zadanie samotestu\""_s).value(u"total"_s).toInt(); };
+    check(waitFor([&] { return listed() == 1; }, 10000), "its task is listed");
+    app->openPage(path);
+    check(waitFor([&] { return shownNamed(window->contentItem(), u"pageEditor"_s) != nullptr; }, 10000),
+          "the page is open");
+    settle(300);
+    app->requestUiAction(u"toggleTasksIgnored"_s);
+    check(waitFor([&] { return ws->tasksIgnored(path) && listed() == 0; }, 10000),
+          "“Ignore tasks on this page”: the task leaves the task lists");
+    // (`zadania: ignoruj` with a Polish interface, `tasks: ignore` with an English one.)
+    check(ws->readFile(path).contains(u"ignor"_s)
+                  && ws->readFile(path).contains(u"- [ ] zadanie samotestu do pominięcia"_s),
+          "the page gets the property, its task stays on it");
+    app->requestUiAction(u"toggleTasksIgnored"_s);
+    check(waitFor([&] { return !ws->tasksIgnored(path) && listed() == 1; }, 10000),
+          "the second time the property goes: the task is back");
+    check(!ws->readFile(path).contains(u"ignor"_s), "no property is left");
+    ws->deletePage(path);
+    app->goHome();
+    settle(300);
+}
+
 /// The AI assistant's ✨ on the top bar: none while the assistant is off; switched on, its menu on
 /// a page — "Summarise this page" enabled —, "Ask the AI…" running the assistant's
 /// question (b.ask: the extension's question, cancelled here: no model is asked), "AI settings…"
@@ -8890,6 +8920,9 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
     closeMenus(window);
     // 3h-ai. The AI assistant's ✨ on the top bar: its menu, the assistant's question, its settings.
     checkAiButton(window, app, check);
+    closeMenus(window);
+    // 3h-ign. A page's tasks ignored from its menu, and back.
+    checkIgnoreTasks(window, app, check);
     closeMenus(window);
     // 3i. Focus mode, the word count, typewriter scrolling and a custom shortcut.
     checkFocusAndShortcuts(window, app, check);

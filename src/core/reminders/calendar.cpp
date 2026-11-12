@@ -2,6 +2,7 @@
 #include "reminders/calendar.h"
 
 #include "index/vaultindex.h"
+#include "markdown/tasks.h"
 #include "reminders/reminders_p.h"
 
 #include <algorithm>
@@ -39,6 +40,9 @@ public:
     /// index.tasks() does).
     void addTasks(const VaultPath &path, const ParsedNote &note)
     {
+        // (A page whose tasks are ignored has none here; its reminders still come: SYNTAX §5.)
+        if (markdown::tasksIgnored(note))
+            return;
         for (const Task &task : note.tasks)
             addTask(path, task);
     }

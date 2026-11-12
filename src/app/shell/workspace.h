@@ -571,6 +571,9 @@ public:
     Q_INVOKABLE QStringList historyPaths() const;
 
     // ---- Index queries for views (plain data; C++ models use index()) ------------------------
+    /// The page's tasks are left out of the task lists (its `tasks:: ignore` / `zadania:: ignoruj`,
+    /// markdown::tasksIgnored; docs/SYNTAX.md §5): the page menu's checked "Ignore tasks".
+    Q_INVOKABLE bool tasksIgnored(const QString &path) const;
     /// Full-text search: [{ path, title, folder, line (-1: title only), excerpt (plain text),
     /// score, journal ("YYYY-MM-DD" for daily notes) }], best first.
     Q_INVOKABLE QVariantList search(const QString &query, int limit = 50) const;

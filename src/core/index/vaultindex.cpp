@@ -7,6 +7,7 @@
 #include "markdown/inline.h"
 #include "markdown/parse.h"
 #include "markdown/properties.h"
+#include "markdown/tasks.h"
 #include "text/text.h"
 #include "util/paths.h"
 
@@ -319,7 +320,8 @@ int IndexAccess::buildCount(const VaultIndex &index, std::string_view list)
 
 void appendTasks(const Entry &e, QList<TaskRef> &out)
 {
-    if (e.note.tasks.isEmpty())
+    // (A page whose tasks are ignored lists none: tasks(), tasksOf(), SYNTAX §5.)
+    if (e.note.tasks.isEmpty() || markdown::tasksIgnored(e.note))
         return;
     const QList<Block> &blocks = e.note.blocks;
     for (qsizetype i = 0; i < blocks.size(); ++i) {

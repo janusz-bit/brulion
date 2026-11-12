@@ -106,6 +106,8 @@ The **Tasks** view gathers tasks from the whole notebook: a quick add field, fil
 
 Tasks with dates are also shown by the calendar ([[Journal, calendar and templates|Journal, calendar and templates]]).
 
+**Ignoring a page's tasks** — when a page's checkboxes are not your tasks (a checklist to copy, a packing list, a book's notes), choose **Ignore tasks on this page** in the page's menu (**⋯**, on a phone **⋮**). The page gets the property `tasks: ignore` (`zadania: ignoruj` with a Polish interface), and its tasks no longer show in **Tasks**, the calendar, task queries and widgets; on the page they work as before, and their reminders still ring. **Show this page's tasks in Tasks** in the same menu brings them back. A query that names the page (`page:`) still shows them.
+
 ## Android widgets
 You can put Brulion widgets on the phone's home screen (long-press an empty spot → **Widgets** → **Brulion**):
 

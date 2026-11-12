@@ -733,6 +733,12 @@ bool Workspace::exists(const QString &path) const
     return m_vault && m_vault->exists(path);
 }
 
+bool Workspace::tasksIgnored(const QString &path) const
+{
+    const ParsedNote *note = m_index ? m_index->note(paths::normalize(path)) : nullptr;
+    return note && markdown::tasksIgnored(*note);
+}
+
 QString Workspace::pageTitle(const QString &path) const
 {
     return paths::pageTitle(path);

@@ -513,6 +513,30 @@ FocusScope {
             AppController.toast(qsTr("The note mode could not be changed: the page's properties are not in a form Brulion can edit safely. Change them in the Markdown source (Ctrl+E)."), "error")
     }
 
+    /// The page's tasks out of the task lists, or back (the page menu's "Ignore tasks on this
+    /// page"): the property `zadania:: ignoruj` (`tasks:: ignore` with an English interface) set,
+    /// or every spelling of it removed — PageController's property edits, one undo step each
+    /// (docs/SYNTAX.md §5 "Ignoring a page's tasks").
+    function toggleTasksIgnored(): void {
+        if (!page.loaded || editor.readOnlyRefuses())
+            return
+        if (Workspace.tasksIgnored(page.path)) {
+            page.removePageProperty("", "zadania")
+            page.removePageProperty("", "tasks")
+            if (!Workspace.tasksIgnored(page.path))
+                AppController.toast(qsTr("This page's tasks are in Tasks and the calendar again."), "success")
+            return
+        }
+        const polish = AppSettings.language === "pl"
+        ignoreResult.map = page.setPageProperty("", polish ? "zadania" : "tasks", polish ? "ignoruj" : "ignore", "text")
+        if (ignoreResult.map.ok === true)
+            AppController.toast(qsTr("This page's tasks are left out of Tasks, the calendar and task queries."), "success")
+        else
+            AppController.toast(AppController.routeText(ignoreResult.map, "reason"), "error")
+    }
+    /// What setPageProperty() answered ({ ok, status, reason }).
+    MapHolder { id: ignoreResult }
+
     // ---- The find bar -------------------------------------------------------------------------
     property bool findOpen: false
     /// A note is shown in the editor: there is something to find in.
@@ -1292,6 +1316,8 @@ FocusScope {
                 editor.downloadWebPictures("")
             else if (action === "addProperty" && editor.visible)
                 editor.addProperty()
+            else if (action === "toggleTasksIgnored" && editor.visible)
+                root.toggleTasksIgnored()
             else if (action === "taskClock" && editor.visible)
                 editor.toggleCurrentTaskClock()
             else if (action === "taskDependency" && editor.visible)

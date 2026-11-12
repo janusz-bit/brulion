@@ -8,6 +8,7 @@
 #include "index/resolve_p.h"
 #include "index/textutil_p.h"
 #include "index/vaultindex_p.h"
+#include "markdown/tasks.h"
 #include "text/text.h"
 #include "util/paths.h"
 
@@ -113,6 +114,17 @@ bool namesWorkoutTag(const Query &query)
 bool hasWorkouts(const ParsedNote &note)
 {
     return note.journalDate && std::ranges::any_of(note.tags, [](const QString &t) { return isWorkoutTag(t); });
+}
+
+// ---- ignored pages (docs/SYNTAX.md §5 "Ignoring a page's tasks") ---------------------------------
+// A page with `tasks:: ignore` keeps its tasks out of type:tasks — unless the query names pages
+// or folders (`page:`, `path:`), which asks for those pages' tasks, these too.
+
+bool namesPages(const Query &query)
+{
+    return std::ranges::any_of(query.filters, [](const QueryFilter &f) {
+        return (f.kind == QueryFilterKind::Page || f.kind == QueryFilterKind::Path) && !f.negate;
+    });
 }
 
 bool isExerciseLine(const ParsedNote &note, int block)
@@ -264,6 +276,8 @@ void Runner::matchesOf(const Entry &e, QList<QueryMatch> &out)
     switch (m_query.type) {
     case QueryType::Pages: cands.append(Candidate{View{&e, -1, nullptr, nullptr}, -1}); break;
     case QueryType::Tasks: {
+        if (markdown::tasksIgnored(e.note) && !namesPages(m_query))
+            break;
         const bool workouts = !namesWorkoutTag(m_query) && hasWorkouts(e.note);
         for (const int i : e.taskBlocks()) {
             if (!workouts || !isExerciseLine(e.note, i))
