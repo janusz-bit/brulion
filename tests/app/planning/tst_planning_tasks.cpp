@@ -942,7 +942,8 @@ private Q_SLOTS:
         std::sort(built.begin(), built.end());
         qInfo("%d notes changed at once: merged %.1f ms, built afresh %.1f ms", Notes + 1, merged[1] / 1e6,
               built[1] / 1e6);
-        QVERIFY2(merged[1] <= 2 * built[1] + 5'000'000,
+        // (The slack grows with the sanitizers' slowdown: their runs are noisy, 2.1x once.)
+        QVERIFY2(merged[1] <= 2 * built[1] + 5'000'000LL * BRULION_TEST_SLOWDOWN,
                  qPrintable(u"merged %1 ns, built afresh %2 ns"_s.arg(merged[1]).arg(built[1])));
     }
 };
