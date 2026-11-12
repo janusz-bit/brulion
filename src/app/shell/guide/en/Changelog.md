@@ -7,6 +7,17 @@ brulion: document
 
 Here you'll find what changed in every version of Brulion, newest first. Full release notes with downloads are on GitHub: https://github.com/janusz-bit/brulion/releases
 
+## 0.18.0 — November 12, 2026
+
+**New**
+- **Extensions in your notebook** — as in Emacs and TiddlyWiki, your notebook can carry its own code. A page tagged `extension` (or `rozszerzenie`) is an extension: the code in its `luau` blocks adds commands to the palette, views of its own and reactions to saves and changes, and everything around the code is documentation. Save the page and its code runs again at once; an error names the line of the page (the page's corner has a button to it) while the version before the error keeps running. Code that arrives from another device, a sync or an import runs on a device only after you approve it there (**Run** in the page's corner or in **Settings → Extensions**); what you write here in Brulion stays approved. **New extension** (Settings → Extensions, or the palette) writes a page with an example. **Settings → Extensions → The gym's code → Edit the code** turns the gym's own source into a page of your notebook that runs instead of the built-in one; **Restore** brings the built-in back. See [[Extensions]].
+- **Luau console** — **Luau console** in the palette runs Luau with your notebook's API: `b.today()`, `#b.pages({})`, `b.blocks({ tag = "project" })`. Values show below, variables stay for the next line, ↑ and ↓ bring back what you typed, and whatever extensions print shows there too. **Run Luau block** runs the `luau` block under the cursor and shows its result.
+- **AI, also on the phone** — **Settings → Extensions → AI**: Claude (an API key from platform.claude.com), any OpenAI-compatible API (OpenAI, OpenRouter) or a server of your own (Ollama, LM Studio, no key needed), the model and **Check**. The key stays on this device only. The **AI assistant** (switched on there) adds **AI: ask about this page** and **AI: summarise this page** to the palette: the answer goes into today's note under your question. Extensions with the `ai` permission can ask a model with `b.ai`. A Claude or ChatGPT subscription cannot be used by other apps; an API key is billed by use. See [[AI]].
+
+**Changes**
+- **Pages open faster** — a page is counted for the word count once, right after it shows, instead of twice before: a 5000-block page opens about a third sooner.
+- **Gym** — the exercises of a workout (`- [ ]` items under a `#workout` item of a day) are no longer listed in Tasks; the item with the tag itself still is, and a query with `tag:trening` shows them all.
+
 ## 0.17.0 — November 11, 2026
 
 **New**

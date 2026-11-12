@@ -7,6 +7,17 @@ brulion: document
 
 Tu znajdziesz zmiany w każdej wersji Brulionu, od najnowszej. Pełne opisy wydań z plikami do pobrania są na GitHubie: https://github.com/janusz-bit/brulion/releases
 
+## 0.18.0 — 12 listopada 2026
+
+**Nowe**
+- **Rozszerzenia w notatniku** — jak w Emacsie i TiddlyWiki Twój notatnik może nieść własny kod. Strona z tagiem `rozszerzenie` (albo `extension`) jest rozszerzeniem: kod w jej blokach `luau` dodaje polecenia do palety, własne widoki i reakcje na zapis i zmiany, a wszystko wokół kodu to dokumentacja. Zapisz stronę, a jej kod od razu zadziała od nowa; błąd wskazuje wiersz strony (w rogu strony jest przycisk do niego), a wersja sprzed błędu działa dalej. Kod, który przyszedł z innego urządzenia, synchronizacji albo importu, działa na urządzeniu dopiero po zatwierdzeniu (**Uruchom** w rogu strony albo w **Ustawieniach → Rozszerzenia**); to, co piszesz w Brulionie na tym urządzeniu, zostaje zatwierdzone. **Nowe rozszerzenie** (Ustawienia → Rozszerzenia albo paleta) zapisuje stronę z przykładem. **Ustawienia → Rozszerzenia → Kod Siłowni → Edytuj kod** zamienia źródło Siłowni w stronę Twojego notatnika, która działa zamiast wbudowanej; **Przywróć** wraca do wbudowanej. Zobacz [[Rozszerzenia]].
+- **Konsola Luau** — **Konsola Luau** w palecie wykonuje kod Luau z API notatnika: `b.today()`, `#b.pages({})`, `b.blocks({ tag = "projekt" })`. Wartości pojawiają się poniżej, zmienne zostają na następny wiersz, ↑ i ↓ przywołują to, co już wpisałeś, a wszystko, co wypisują rozszerzenia, też tam trafia. **Uruchom blok Luau** wykonuje blok `luau` pod kursorem i pokazuje wynik.
+- **AI, także na telefonie** — **Ustawienia → Rozszerzenia → AI**: Claude (klucz API z platform.claude.com), dowolne API zgodne z OpenAI (OpenAI, OpenRouter) albo własny serwer (Ollama, LM Studio, bez klucza), model i **Sprawdź**. Klucz zostaje tylko na tym urządzeniu. **Asystent AI** (włączany tamże) dodaje do palety **AI: zapytaj o tę stronę** i **AI: streść tę stronę**: odpowiedź trafia do dzisiejszej notatki pod Twoje pytanie. Rozszerzenia z uprawnieniem `ai` mogą pytać model przez `b.ai`. Subskrypcji Claude ani ChatGPT nie użyją inne aplikacje; klucz API jest rozliczany za użycie. Zobacz [[AI]].
+
+**Zmiany**
+- **Szybsze otwieranie stron** — licznik słów liczy stronę raz, zaraz po jej pokazaniu, zamiast dwa razy przed: strona z 5000 bloków otwiera się mniej więcej o jedną trzecią szybciej.
+- **Siłownia** — ćwiczenia z treningu (punkty `- [ ]` pod punktem dnia z `#trening`) nie trafiają już do Zadań; sam punkt z tagiem nadal tak, a zapytanie z `tag:trening` pokaże wszystkie.
+
 ## 0.17.0 — 11 listopada 2026
 
 **Nowe**
