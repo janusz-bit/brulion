@@ -19,11 +19,16 @@ const JOURNAL = `journals/${TODAY}.md`;
 const PDF_PATH = 'assets/wykład.pdf';
 const PDF = readFileSync(new URL('../data/pdf/wyklad.pdf', import.meta.url));
 
-/** The notebook: today's journal with the PDF embedded and linked. */
+/**
+ * The notebook: today's journal with the PDF linked and embedded. The link's block comes first:
+ * the chip's tooltip ("Open in a new tab", 550 ms after the pointer comes to rest on the chip)
+ * shows over the line above the chip — the embed's own — and took the link's click there on a
+ * slow runner, the pointer still on the chip from the click before.
+ */
 async function seedPdf(page, origin) {
   await seed(page, origin, {
     files: {
-      [JOURNAL]: '- Slajdy ![[wykład.pdf]]\n- [[wykład.pdf]]\n- Zażółć gęślą jaźń\n',
+      [JOURNAL]: '- [[wykład.pdf]]\n- Slajdy ![[wykład.pdf]]\n- Zażółć gęślą jaźń\n',
       [PDF_PATH]: PDF,
     },
   });

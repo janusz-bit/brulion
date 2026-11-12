@@ -85,10 +85,10 @@ Rectangle {
     readonly property string pagePath: routeView === "page" ? routePath : journalPagePath
     // (Workspace.favorites: followed; it lists the favourites that exist.)
     readonly property bool favorite: onPage && Workspace.favorites.length >= 0 && Workspace.isFavorite(bar.pagePath)
+                                     && Workspace.exists(bar.pagePath)
     /// The page's tasks are ignored (`tasks:: ignore`): the menu offers to show them again. (Read
     /// for real after each change of the notes: Workspace.revision.)
     readonly property bool tasksIgnored: onPage && Workspace.revision >= 0 && Workspace.tasksIgnored(bar.pagePath)
-                                     && Workspace.exists(bar.pagePath)
 
     ShellRouteTitles { id: titles }
     /// A model is answering (b.ai: the assistant or another extension).
