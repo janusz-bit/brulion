@@ -130,7 +130,7 @@ if(NOT ANDROID)
         FILES ${PROJECT_SOURCE_DIR}/assets/fonts/BrulionEmoji.ttf ${PROJECT_SOURCE_DIR}/assets/fonts/BrulionMath.otf)
 endif()
 # The bundled text fonts (uifonts.h; assets/fonts/ui, subsets of Inter, Literata and JetBrains Mono
-# under the SIL OFL 1.1, made by scripts/ui-fonts.py) as resources ":/fonts/ui/*.ttf" (~1.3 MB),
+# under the SIL OFL 1.1, made by scripts/ui-fonts.py) as resources ":/fonts/ui/*.ttf" (~1.4 MB),
 # on every platform, Android and the browser included.
 file(GLOB _brulion_ui_font_files CONFIGURE_DEPENDS ${PROJECT_SOURCE_DIR}/assets/fonts/ui/*.ttf)
 qt_add_resources(brulion_ui_fonts brulion_ui_text_fonts

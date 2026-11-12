@@ -42,6 +42,7 @@ private Q_SLOTS:
         QTest::newRow("Inter SemiBold") << ui << int(QFont::DemiBold) << false;
         QTest::newRow("Inter Bold") << ui << int(QFont::Bold) << false;
         QTest::newRow("Inter Italic") << ui << int(QFont::Normal) << true;
+        QTest::newRow("Inter Bold Italic") << ui << int(QFont::Bold) << true;
         QTest::newRow("Literata Regular") << serif << int(QFont::Normal) << false;
         QTest::newRow("Literata Italic") << serif << int(QFont::Normal) << true;
         QTest::newRow("Literata Bold") << serif << int(QFont::Bold) << false;
@@ -60,6 +61,13 @@ private Q_SLOTS:
         const QRawFont raw = QRawFont::fromFont(font);
         QVERIFY(raw.isValid());
         QCOMPARE(raw.familyName(), family);
+        // A file of this style, not one Qt slants or emboldens itself: the 'head' table's macStyle
+        // (offset 44: bold bit 0, italic bit 1) of the font picked.
+        const QByteArray head = raw.fontTable("head");
+        QVERIFY(head.size() >= 46);
+        const int macStyle = (quint8(head.at(44)) << 8) | quint8(head.at(45));
+        QCOMPARE(bool(macStyle & 1), weight >= int(QFont::Bold));
+        QCOMPARE(bool(macStyle & 2), italic);
         // Text with what fonts like to substitute: dashes between words and digits, fi / fl / ff,
         // arrows typed as -> and =>, != and ===, 1:30, x×y, a fraction, Polish letters.
         const QString text = u"Wykład 3 — Zażółć gęślą jaźń – 10–12, fi fl ffi -> => != === 1:30 x×y ½ «ą» „ż” ÓŚĆŃ…"_s;

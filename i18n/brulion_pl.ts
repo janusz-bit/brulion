@@ -12644,8 +12644,8 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
     </message>
     <message>
         <location filename="../src/app/qml/views/SettingsView.qml" line="923"/>
-        <source>Font of your notes: Literata (serif) or Inter (sans-serif), built into Brulion; the interface font is set in Appearance.</source>
-        <translation>Czcionka notatek: Literata (szeryfowa) albo Inter (bezszeryfowa), wbudowane w Brulion; czcionkę interfejsu ustawisz w Wyglądzie.</translation>
+        <source>Font of your notes: Inter (sans-serif) or Literata (serif), built into Brulion; the interface font is set in Appearance.</source>
+        <translation>Czcionka notatek: Inter (bezszeryfowa) albo Literata (szeryfowa), wbudowane w Brulion; czcionkę interfejsu ustawisz w Wyglądzie.</translation>
     </message>
     <message>
         <location filename="../src/app/qml/views/SettingsView.qml" line="957"/>

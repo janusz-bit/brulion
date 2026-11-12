@@ -9,12 +9,12 @@ namespace brulion::ui {
 QStringList bundledFontFiles()
 {
     static const QStringList files{
-            u":/fonts/ui/BrulionInter-Regular.ttf"_s,       u":/fonts/ui/BrulionInter-Medium.ttf"_s,
-            u":/fonts/ui/BrulionInter-SemiBold.ttf"_s,      u":/fonts/ui/BrulionInter-Bold.ttf"_s,
-            u":/fonts/ui/BrulionInter-Italic.ttf"_s,        u":/fonts/ui/BrulionLiterata-Regular.ttf"_s,
-            u":/fonts/ui/BrulionLiterata-Italic.ttf"_s,     u":/fonts/ui/BrulionLiterata-Bold.ttf"_s,
-            u":/fonts/ui/BrulionLiterata-BoldItalic.ttf"_s, u":/fonts/ui/BrulionJetBrainsMono-Regular.ttf"_s,
-            u":/fonts/ui/BrulionJetBrainsMono-Bold.ttf"_s,
+            u":/fonts/ui/BrulionInter-Regular.ttf"_s,         u":/fonts/ui/BrulionInter-Medium.ttf"_s,
+            u":/fonts/ui/BrulionInter-SemiBold.ttf"_s,        u":/fonts/ui/BrulionInter-Bold.ttf"_s,
+            u":/fonts/ui/BrulionInter-Italic.ttf"_s,          u":/fonts/ui/BrulionInter-BoldItalic.ttf"_s,
+            u":/fonts/ui/BrulionLiterata-Regular.ttf"_s,      u":/fonts/ui/BrulionLiterata-Italic.ttf"_s,
+            u":/fonts/ui/BrulionLiterata-Bold.ttf"_s,         u":/fonts/ui/BrulionLiterata-BoldItalic.ttf"_s,
+            u":/fonts/ui/BrulionJetBrainsMono-Regular.ttf"_s, u":/fonts/ui/BrulionJetBrainsMono-Bold.ttf"_s,
     };
     return files;
 }

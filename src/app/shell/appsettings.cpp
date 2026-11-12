@@ -99,7 +99,7 @@ constexpr std::array kAccentChoices{u"coral", u"red", u"blue", u"green", u"teal"
 constexpr std::array kLightSurfaceChoices{u"paper", u"white"};
 constexpr std::array kDarkSurfaceChoices{u"black", u"slate"};
 constexpr std::array kDensityChoices{u"comfortable", u"compact"};
-constexpr std::array kEditorFontChoices{u"serif", u"sans"};
+constexpr std::array kEditorFontChoices{u"sans", u"serif"};
 constexpr std::array kLineSpacingChoices{u"normal", u"compact", u"relaxed"};
 constexpr std::array kSpellLanguageChoices{u"auto", u"pl", u"en", u"pl,en", u"en,pl"};
 constexpr std::array kWebPictureExportChoices{u"link", u"include"};
@@ -641,7 +641,7 @@ void AppSettings::resetAppearance()
     setUiFontFamily(QString());
     setDensity(u"comfortable"_s);
     setFontScale(1.0);
-    setEditorFont(u"serif"_s);
+    setEditorFont(u"sans"_s);
     setEditorFontFamily(QString());
     setEditorMonoFamily(QString());
     setEditorFontSize(16);

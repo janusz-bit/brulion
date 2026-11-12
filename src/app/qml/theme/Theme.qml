@@ -26,7 +26,7 @@ import Brulion
 //   reducedMotion  durations become 0
 //   forceTouch     touch sizes on any device (gallery --touch)
 //   windowWidth/Height  the main window's size (bind it: Binding { target: Theme; ... })
-//   editorFont     "serif" | "sans";  fontScale  user font size factor
+//   editorFont     "sans" | "serif";  fontScale  user font size factor
 //   editorFontSize the editor's base size in px (setting; touch UIs add one, fontScale applies)
 //   accentName     "coral" | "red" | "blue" | "green" | "teal" | "violet" | "graphite" | "custom" (+ customAccent "#rrggbb")
 //   lightSurface   "paper" | "white";  darkSurface  "black" (OLED) | "slate"
@@ -47,7 +47,7 @@ QtObject {
     property bool forceTouch: DevTools.touch
     property real windowWidth: 1280
     property real windowHeight: 800
-    property string editorFont: "serif"
+    property string editorFont: "sans"
     property real fontScale: 1.0
     property int editorFontSize: 16
     property string accentName: DevTools.accentName !== "" ? DevTools.accentName : "coral"

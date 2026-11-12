@@ -62,7 +62,7 @@ In *Settings → Appearance* you tailor Brulion to yourself — separately on ea
 - **Text size**, **interface font** (Inter, built in, or any installed font) and **density** — compact fits more on a computer screen (on a phone the buttons stay large).
 - **Layout**: which items and sections the sidebar shows, in what order Favorites, Recent and Pages appear, which five views the bottom navigation has on a phone, and whether the top bar has the quick capture button **+**. Hidden views stay in the command palette and under their shortcuts.
 
-The font of notes (serif — Literata —, sans-serif — Inter — or **Other…**), the code font (JetBrains Mono), the text size and the **line spacing** are in *Settings → Editor*. “Restore the default look” goes back to the original colors and fonts. Brulion brings these three fonts with it, so notes look the same on every device. In the browser there is no choice of fonts — only the built-in ones work.
+The font of notes (sans-serif — Inter, the default —, serif — Literata — or **Other…**), the code font (JetBrains Mono), the text size and the **line spacing** are in *Settings → Editor*. “Restore the default look” goes back to the original colors and fonts. Brulion brings these three fonts with it, so notes look the same on every device. In the browser there is no choice of fonts — only the built-in ones work.
 
 On a computer a thin **status bar** runs along the bottom of the window: the sync status on the left (green “synced”; a click opens the Sync center), on the right the edited block (“Block 3 of 12”), the word count and the command palette's key.
 

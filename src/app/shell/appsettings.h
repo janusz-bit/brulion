@@ -89,7 +89,7 @@ class AppSettings : public QObject {
     Q_PROPERTY(bool hasAiKey READ hasAiKey NOTIFY aiChanged FINAL)
 
     // ---- Editor -------------------------------------------------------------------------
-    /// "serif" | "sans" (Theme.editorFont).
+    /// "sans" (default, Inter) | "serif" (Literata) (Theme.editorFont).
     Q_PROPERTY(QString editorFont READ editorFont WRITE setEditorFont NOTIFY editorFontChanged FINAL)
     /// Editor text size in px at 100 % (12 … 28, default 16).
     Q_PROPERTY(int editorFontSize READ editorFontSize WRITE setEditorFontSize NOTIFY editorFontSizeChanged FINAL)

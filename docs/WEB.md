@@ -835,8 +835,9 @@ The emoji and symbol fallback fonts (above, "Fonts: emoji and symbols") add
 +190 272 B of raw `brulion.wasm` (+118 111 B after gzip -9, +103 429 B after brotli; measured on
 2026-10-22, the same toolchain before and after).
 
-The bundled text fonts (Inter, Literata, JetBrains Mono: eleven subsets, `scripts/ui-fonts.py`) add
-1 292 260 B of resources (643 737 B after gzip -9; fonts barely compress) — about 0.65 MB more to
+The bundled text fonts (Inter, Literata, JetBrains Mono: twelve subsets, `scripts/ui-fonts.py`) add
+1 447 196 B of font files (measured with the first eleven: 1 292 260 B of resources, 643 737 B
+after gzip -9; fonts barely compress; Inter Bold Italic adds 154 936 B) — about 0.7 MB more to
 download on the first visit, for the same letters as on the desktop and Android instead of DejaVu.
 
 The browser build contains no developer QML (the gallery, the editor playground, the

@@ -77,7 +77,7 @@ private Q_SLOTS:
         QVERIFY(!s.introDone());
         QVERIFY(s.newNotebookConfig().isEmpty());
         QCOMPARE(s.fontScale(), 1.0);
-        QCOMPARE(s.editorFont(), u"serif"_s);
+        QCOMPARE(s.editorFont(), u"sans"_s);
         QCOMPARE(s.editorFontSize(), 16);
         QCOMPARE(s.editorWidth(), 680);
         QVERIFY(!s.editorSourceMode());
@@ -176,7 +176,7 @@ private Q_SLOTS:
             s.setLanguage(u"pl"_s);
             s.setFontScale(1.15);
             s.setReducedMotion(true);
-            s.setEditorFont(u"sans"_s);
+            s.setEditorFont(u"serif"_s);
             s.setEditorFontSize(19);
             s.setEditorWidth(0);
             s.setEditorSourceMode(true);
@@ -210,7 +210,7 @@ private Q_SLOTS:
         QCOMPARE(s.language(), u"pl"_s);
         QCOMPARE(s.fontScale(), 1.15);
         QVERIFY(s.reducedMotion());
-        QCOMPARE(s.editorFont(), u"sans"_s);
+        QCOMPARE(s.editorFont(), u"serif"_s);
         QCOMPARE(s.editorFontSize(), 19);
         QCOMPARE(s.editorWidth(), 0); // full width
         QVERIFY(s.editorSourceMode());
@@ -538,7 +538,7 @@ private Q_SLOTS:
         s.setEditorLineSpacing(u"compact"_s);
         s.setDensity(u"compact"_s);
         s.setFontScale(1.3);
-        s.setEditorFont(u"sans"_s);
+        s.setEditorFont(u"serif"_s);
         s.setEditorFontSize(20);
         s.setCaptureButtonShown(false);
         QSignalSpy accent(&s, &AppSettings::accentChanged);
@@ -554,7 +554,7 @@ private Q_SLOTS:
         QCOMPARE(s.editorLineSpacing(), u"normal"_s);
         QCOMPARE(s.density(), u"comfortable"_s);
         QCOMPARE(s.fontScale(), 1.0);
-        QCOMPARE(s.editorFont(), u"serif"_s);
+        QCOMPARE(s.editorFont(), u"sans"_s);
         QCOMPARE(s.editorFontSize(), 16);
         QVERIFY(!s.captureButtonShown());
         QCOMPARE(s.sidebarHidden(), QStringList{u"recent"_s});
@@ -1026,7 +1026,7 @@ private Q_SLOTS:
         s.setFontScale(0.1);
         QCOMPARE(s.fontScale(), 0.85);
         s.setEditorFont(u"comic"_s);
-        QCOMPARE(s.editorFont(), u"serif"_s);
+        QCOMPARE(s.editorFont(), u"sans"_s);
         s.setEditorFontSize(100);
         QCOMPARE(s.editorFontSize(), 28);
         s.setEditorWidth(100);

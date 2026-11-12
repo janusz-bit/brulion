@@ -62,7 +62,7 @@ W *Ustawienia → Wygląd* dopasujesz Brulion do siebie — osobno na każdym ur
 - **Rozmiar tekstu**, **czcionka interfejsu** (wbudowana Inter albo dowolna zainstalowana) i **gęstość** — zwarta mieści więcej na ekranie komputera (na telefonie przyciski zostają duże).
 - **Układ**: które pozycje i sekcje pokazuje pasek boczny, w jakiej kolejności są Ulubione, Ostatnie i Strony, jakie pięć widoków ma dolna nawigacja na telefonie i czy górny pasek ma przycisk szybkiej notatki **+**. Ukryte widoki zostają w palecie poleceń i pod skrótami.
 
-Czcionkę notatek (szeryfowa — Literata —, bezszeryfowa — Inter — albo **Inna…**), czcionkę kodu (JetBrains Mono), rozmiar tekstu i **odstęp między wierszami** ustawisz w *Ustawienia → Edytor*. „Przywróć domyślny wygląd” wraca do kolorów i czcionek z początku. Brulion ma te trzy czcionki w sobie, więc notatki wyglądają tak samo na każdym urządzeniu. W przeglądarce nie ma wyboru czcionek — działają tylko wbudowane.
+Czcionkę notatek (bezszeryfowa — Inter, domyślna —, szeryfowa — Literata — albo **Inna…**), czcionkę kodu (JetBrains Mono), rozmiar tekstu i **odstęp między wierszami** ustawisz w *Ustawienia → Edytor*. „Przywróć domyślny wygląd” wraca do kolorów i czcionek z początku. Brulion ma te trzy czcionki w sobie, więc notatki wyglądają tak samo na każdym urządzeniu. W przeglądarce nie ma wyboru czcionek — działają tylko wbudowane.
 
 Na komputerze wzdłuż dołu okna biegnie cienki **pasek stanu**: po lewej stan synchronizacji (zielone „zsynchronizowano”; kliknięcie otwiera centrum synchronizacji), po prawej edytowany blok („Blok 3 z 12”), liczba słów i klawisz palety poleceń.
 

@@ -50,20 +50,20 @@ components — no Material/Fusion look, so all targets look identical.
   default font. The browser has no font rows (Qt there sees only its bundled DejaVu fonts).
 * Typography: **bundled fonts** on every platform (`src/app/ui/uifonts.h`, `assets/fonts/ui`,
   made by `scripts/ui-fonts.py`; SIL OFL 1.1, no Reserved Font Names): **Inter** for the UI
-  (Regular, Medium, SemiBold, Bold, Italic), **Literata** for note text — the editor's "Serif"
-  (Regular, Italic, Bold, Bold Italic) —, **JetBrains Mono** for code, dates and meta text (the
+  (Regular, Medium, SemiBold, Bold, Italic, Bold Italic) and, by default, note text (the editor's
+  "Sans-serif"), **Literata** for the editor's "Serif" (Regular, Italic, Bold, Bold Italic), **JetBrains Mono** for code, dates and meta text (the
   status bar's counts). Static instances subset to the Latin alphabets of Europe and the Greek
   letters with punctuation, arrows and common symbols (other scripts and emoji come from the
   system's fonts or "Brulion Emoji"), no hinting, stylistic sets or default ligatures and contextual
   alternates (`liga`, `clig`, `calt`: their glyphs have no character, and Qt's PDF writer maps
   glyphs back to text through the cmap — Inter's em dash vanished from PDFs; `tst_ui_fonts` checks
-  that shaped text uses only glyphs with a character) — 1.3 MB for all eleven —,
+  that shaped text uses only glyphs with a character) — 1.4 MB for all twelve —,
   renamed "Brulion Inter", "Brulion Literata", "Brulion JetBrains Mono" so a complete system font
   of the same name never mixes with a subset; the font pickers leave them out and offer them as
   the default row ("Inter (default)", …). Loaded in `main.cpp` before anything is laid out;
   `DeviceInfo.defaultUiFamily` / `defaultSerifFamily` / `defaultMonoFamily` give them, or the
   system's fonts when one failed to load. A chosen interface family (or none: Inter), the editor
-  font serif (Literata), sans (Inter) or any installed family (Settings → Editor → Font →
+  font sans (Inter, the default), serif (Literata) or any installed family (Settings → Editor → Font →
   **Other…**), the code font any monospaced family (JetBrains Mono by default: code blocks, source
   mode, formulas; inline `code` in rendered text keeps Qt's own fixed font); calculations are note text: the editor font at the editor's size, results with tabular
   figures (`tnum`) so they still line up right-aligned, errors smaller in the UI font; line spacing Tight 1.45 | Normal 1.65 | Relaxed 1.9; configurable max

@@ -225,10 +225,8 @@ Item {
             target = which
             fixedOnly = which === "mono"
             title = which === "ui" ? qsTr("Interface font") : which === "mono" ? qsTr("Code font") : qsTr("Font of notes")
-            defaultLabel = which === "ui" ? qsTr("Inter (default)") : which === "mono" ? qsTr("JetBrains Mono (default)")
-                                                                                       : qsTr("Literata (default)")
-            defaultFamily = which === "ui" ? DeviceInfo.defaultUiFamily : which === "mono" ? DeviceInfo.defaultMonoFamily
-                                                                                           : Theme.fontSerif
+            defaultLabel = which === "mono" ? qsTr("JetBrains Mono (default)") : qsTr("Inter (default)")
+            defaultFamily = which === "mono" ? DeviceInfo.defaultMonoFamily : DeviceInfo.defaultUiFamily
             openFor(which === "ui" ? AppSettings.uiFontFamily : which === "mono" ? AppSettings.editorMonoFamily
                                                                                 : AppSettings.editorFontFamily)
         }
@@ -238,8 +236,8 @@ Item {
             else if (target === "mono")
                 AppSettings.editorMonoFamily = family
             else if (family === "") {
-                AppSettings.editorFontFamily = "" // the default row: serif
-                AppSettings.editorFont = "serif"
+                AppSettings.editorFontFamily = "" // the default row: sans-serif (Inter)
+                AppSettings.editorFont = "sans"
             } else {
                 AppSettings.editorFontFamily = family
             }
@@ -920,7 +918,7 @@ Item {
                 title: qsTr("Font")
                 // A missing family: Theme.fontEditor falls back to the serif / sans-serif choice.
                 description: AppSettings.editorFontFamily === "" || !root.fontChoice
-                             ? qsTr("Font of your notes: Literata (serif) or Inter (sans-serif), built into Brulion; the interface font is set in Appearance.")
+                             ? qsTr("Font of your notes: Inter (sans-serif) or Literata (serif), built into Brulion; the interface font is set in Appearance.")
                              : Theme.fontEditor === AppSettings.editorFontFamily ? AppSettings.editorFontFamily
                              : AppSettings.editorFont === "sans"
                              ? qsTr("%1 is not installed on this device: sans-serif is used.").arg(AppSettings.editorFontFamily)
@@ -931,9 +929,9 @@ Item {
                     controlled: true
                     accessibleName: qsTr("Font")
                     model: root.fontChoice
-                           ? [{ value: "serif", text: qsTr("Serif") }, { value: "sans", text: qsTr("Sans-serif") },
+                           ? [{ value: "sans", text: qsTr("Sans-serif") }, { value: "serif", text: qsTr("Serif") },
                               { value: "other", text: qsTr("Other…", "font") }]
-                           : [{ value: "serif", text: qsTr("Serif") }, { value: "sans", text: qsTr("Sans-serif") }]
+                           : [{ value: "sans", text: qsTr("Sans-serif") }, { value: "serif", text: qsTr("Serif") }]
                     currentValue: root.fontChoice && AppSettings.editorFontFamily !== "" ? "other" : AppSettings.editorFont
                     onActivated: (value) => {
                         if (value === "other") {

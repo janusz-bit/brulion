@@ -7749,8 +7749,8 @@ void checkAppearance(QQmlApplicationEngine *engine, QQuickWindow *window, AppCon
                       && serifNote != sansNote && fontSetting->property("currentValue").toString() == u"other",
               "a missing editor font names the serif or sans-serif font used instead");
         settings->setEditorFontFamily(QString());
-        settings->setEditorFont(u"serif"_s);
-        check(fontSetting->property("currentValue").toString() == u"serif", "the font selection follows the settings");
+        settings->setEditorFont(u"sans"_s);
+        check(fontSetting->property("currentValue").toString() == u"sans", "the font selection follows the settings");
     } else {
         check(false, "the editor settings show the font choice");
     }
