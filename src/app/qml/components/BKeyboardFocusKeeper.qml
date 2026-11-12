@@ -8,7 +8,9 @@ import Brulion
 // page never moves): the content only ends at the keyboard's top. So while the keyboard is up,
 // the Flickables around the focused field — an item with `keepAboveKeyboard: true`, BTextField
 // and BTextArea — scroll it into the part the keyboard leaves: when it gets the focus, when the
-// keyboard has settled (not frame by frame while it slides), when the window or the caret moves.
+// keyboard has settled (not frame by frame while it slides), when the window or the caret moves
+// and when the Flickable around the field gets another height (the shell's view ending at the
+// keyboard).
 // A field taller than that part keeps its caret there. The block editor keeps its own caret,
 // table cell and source above its toolbar (BlockEditor.ensureEditVisible).
 //
@@ -87,6 +89,22 @@ Item {
         }
     }
 
+    /// The innermost Flickable around the field. The shell lays the view out again after the
+    /// keyboard came, in steps (taller without the bottom navigation, then ending at the
+    /// keyboard), and a Flickable pulls a scroll past its end back at each: its new height keeps
+    /// the field in view again (a field near the end of a short content).
+    readonly property Flickable fieldFlickable: innermostFlickable(field)
+    function innermostFlickable(item: Item): Flickable {
+        if (!item)
+            return null
+        for (let p = item.parent; p; p = p.parent) {
+            const f = p as Flickable
+            if (f !== null)
+                return f
+        }
+        return null
+    }
+
     onFieldChanged: schedule()
     Connections {
         target: KeyboardInsets
@@ -96,6 +114,10 @@ Item {
     }
     Connections {
         target: keeper.window
+        function onHeightChanged() { keeper.schedule() }
+    }
+    Connections {
+        target: keeper.fieldFlickable
         function onHeightChanged() { keeper.schedule() }
     }
     // Typing moves the caret (a growing text area, a new line).

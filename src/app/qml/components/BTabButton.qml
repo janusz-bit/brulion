@@ -30,17 +30,21 @@ T.TabButton {
     font.pixelSize: Theme.textControl
     font.weight: checked ? Theme.weightSemiBold : Theme.weightMedium
 
+    onClicked: if (bar) bar.picked(T.TabBar.index)
+
     // Arrow keys move between tabs (and keep the keyboard focus on the current one).
     Keys.onLeftPressed: {
         if (bar) {
             bar.decrementCurrentIndex()
             bar.currentItem.forceActiveFocus(Qt.TabFocusReason)
+            bar.picked(bar.currentIndex)
         }
     }
     Keys.onRightPressed: {
         if (bar) {
             bar.incrementCurrentIndex()
             bar.currentItem.forceActiveFocus(Qt.TabFocusReason)
+            bar.picked(bar.currentIndex)
         }
     }
 

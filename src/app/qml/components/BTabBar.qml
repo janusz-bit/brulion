@@ -15,11 +15,17 @@ import Brulion
 // Tabs take their natural width (left-aligned); `stretch: true` gives them equal widths
 // filling the bar. Scrolls horizontally when the tabs do not fit, with the cut-off edge faded
 // into `fadeColor` (set it to the surface behind the bar).
+//
+// Tabs that stand for a route set `currentIndex` from it and follow `picked`, not
+// currentIndexChanged (which also comes when tabs are added or removed).
 T.TabBar {
     id: control
 
     property bool stretch: false
     property color fadeColor: Theme.bg
+
+    /// The user chose tab `index`: a click or tap, Space, or the arrow keys.
+    signal picked(int index)
 
     implicitWidth: Math.max(implicitBackgroundWidth + leftInset + rightInset,
                             contentWidth + leftPadding + rightPadding)
@@ -37,7 +43,8 @@ T.TabBar {
         orientation: ListView.Horizontal
         boundsBehavior: Flickable.StopAtBounds
         flickableDirection: Flickable.AutoFlickIfNeeded
-        snapMode: ListView.SnapToItem
+        // No snapping: with the highlight range below it would align the second tab with the
+        // range's start at rest, the first tab never wholly in view.
         clip: true
 
         highlightMoveDuration: Theme.duration
@@ -46,6 +53,10 @@ T.TabBar {
         highlightRangeMode: ListView.ApplyRange
         preferredHighlightBegin: 40
         preferredHighlightEnd: width - 40
+        // The range scrolls to tabs chosen later, not to the current tab of a new bar (nor while
+        // it gets its width, as in a layout): then that tab is put in the middle, as far as the
+        // bar's ends let it.
+        onWidthChanged: if (width > 0 && currentIndex >= 0) positionViewAtIndex(currentIndex, ListView.Center)
         highlight: Item {
             z: 2
             Rectangle {

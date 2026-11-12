@@ -4624,8 +4624,8 @@ void checkSettingsClock(QQuickWindow *window, AppController *app, const Check &c
     const QString key = u"defaultReminderTime"_s;
     const QString original = workspace->vaultConfig().value(key).toString();
     const auto configValue = [&] { return workspace->vaultConfig().value(key).toString(); };
-    // Through the visual tree: phones list every section from a Repeater, whose items are not
-    // QObject children of the window. Shown, but maybe scrolled out of the view.
+    // Through the visual tree: the section is a Loader's item. Shown, but maybe scrolled out of
+    // the view.
     const auto named = [window](const QString &name) { return shownNamed(window->contentItem(), name); };
     app->navigate({{u"view"_s, u"settings"_s}, {u"section"_s, u"vault"_s}});
     QQuickItem *field = nullptr;
@@ -4663,6 +4663,47 @@ void checkSettingsClock(QQuickWindow *window, AppController *app, const Check &c
     check(report(waitFor([&] { return field->property("text").toString() == original; }) && configValue() == original),
           "the default reminder time is back");
     app->goHome();
+}
+
+/// Narrow windows: the settings' sections as tabs at the top — the route's one checked and
+/// scrolled into the bar's view, a tap on another shows it (the route's section replaced, no
+/// history entry), a route from elsewhere moves the tabs along.
+void checkSettingsTabs(QQuickWindow *window, AppController *app, const Check &check)
+{
+    const auto tab = [window](const QString &key) {
+        return shownNamed(window->contentItem(), u"settingsTab-"_s + key);
+    };
+    const auto section = [app] { return app->currentRoute().value(u"section"_s).toString(); };
+    const auto current = [&](const QString &key) {
+        QQuickItem *t = tab(key);
+        return t && t->property("checked").toBool() && uidriver::onScreen(window, t);
+    };
+    app->goHome();
+    waitFor([app] { return app->currentView() == u"journals"; });
+    app->navigate({{u"view"_s, u"settings"_s}, {u"section"_s, u"backups"_s}});
+    check(waitFor([&] { return current(u"backups"_s) && shownNamed(window->contentItem(), u"defaultReminderTimeField"_s) == nullptr; }),
+          "a phone's settings: the route's section is the checked tab, scrolled into view, alone on the screen");
+    QQuickItem *general = tab(u"general"_s);
+    check(general && !uidriver::onScreen(window, general),
+          "the section tabs scroll sideways (General is out of view beside Backups)");
+    QQuickItem *sync = tab(u"sync"_s);
+    if (!sync || !uidriver::onScreen(window, sync)) {
+        check(false, "the Sync tab is in view beside Backups");
+        return;
+    }
+    settle(200);
+    touchTap(window, pointIn(sync));
+    check(waitFor([&] { return section() == u"sync" && current(u"sync"_s) && !tab(u"backups"_s)->property("checked").toBool(); }),
+          "a tap on a section's tab shows that section");
+    app->navigate({{u"view"_s, u"settings"_s}, {u"section"_s, u"vault"_s}});
+    check(waitFor([&] { return current(u"vault"_s) && shownNamed(window->contentItem(), u"defaultReminderTimeField"_s) != nullptr; }),
+          "a route to another section, after a tap, checks its tab and shows it");
+    app->back();
+    check(waitFor([&] { return app->currentView() == u"settings" && section() == u"sync"; }),
+          "Back returns to the section shown before the route");
+    app->back();
+    check(waitFor([app] { return app->currentView() == u"journals"; }),
+          "a tab's choice made no history entry of its own: Back leaves the settings");
 }
 
 /// The page editor shown under `root` with its controller (a loaded page), else {nullptr, nullptr}.
@@ -7032,7 +7073,7 @@ void checkKeyboard(QQmlApplicationEngine *engine, QQuickWindow *window, AppContr
 
     // A form field low in the settings: the window is never panned to it, it is scrolled above
     // the keyboard when it gets the focus (BKeyboardFocusKeeper).
-    app->navigate({{u"view"_s, u"settings"_s}});
+    app->navigate({{u"view"_s, u"settings"_s}, {u"section"_s, u"vault"_s}});
     QQuickItem *field = nullptr;
     check(waitFor([&] {
               return (field = shownNamed(window->contentItem(), u"defaultReminderTimeField"_s)) != nullptr;
@@ -8559,8 +8600,10 @@ void checkBlockEditor(QQmlApplicationEngine *engine, QQuickWindow *window, AppCo
         checkDrawing(window, app, check);
         // 5j. A drawing another program wrote: its embed's frame never moves.
         checkDrawingFrame(window, app, check);
-        // 5e. The default reminder time set on a clock in the settings.
+        // 5e. The default reminder time set on a clock in the settings; phones: the sections' tabs.
         checkSettingsClock(window, app, check);
+        if (window->width() < 900)
+            checkSettingsTabs(window, app, check);
         // 5f. The on-screen keyboard (phones).
         if (window->width() < 900)
             checkKeyboard(engine, window, app, check);

@@ -23,40 +23,30 @@ import Brulion
 // detailed mode, version, licence, source code; on the desktop "For developers": the switch
 // that lets AI agents drive the running app, AppController.remoteControl).
 //
-// Wide windows: section list on the left, one section on the right. Narrow: all sections in
-// one scrolling column.
+// One section at a time: wide windows list the sections on the left; narrow ones (phones) have
+// them as tabs at the top, a bar that scrolls sideways, the route's section scrolled into view.
+// Choosing one replaces the route's section (no history entry).
 Item {
     id: root
 
     property var route: ({})
     readonly property string title: qsTr("Settings")
     property string section: AppController.routeText(route, "section") !== "" ? AppController.routeText(route, "section") : "general"
-    onSectionChanged: scrollToSection()
-
-    // Narrow windows show every section in one list: the route's section is brought to the top,
-    // also while the sections above it are still being laid out (until the user scrolls).
-    property bool _scrollPending: false
-    function scrollToSection(): void {
-        _scrollPending = Theme.narrow
-        if (_scrollPending)
-            scrollSettle.restart()
-        for (let i = 0; i < narrowSections.count; ++i) {
-            const item = root.narrowItemAt(i)
-            if (item && AppController.routeText(root.sections[i], "key") === root.section)
-                scrollTo(i === 0 ? 0 : item.y)
+    /// The route's section in `sections` (General for an unknown one, as sectionComponent()).
+    readonly property int sectionIndex: indexOfSection(section)
+    function indexOfSection(key: string): int {
+        for (let i = 0; i < sections.length; ++i) {
+            if (sectionKey(i) === key)
+                return i
         }
+        return 0
     }
-    function narrowItemAt(i: int): Item {
-        return narrowSections.itemAt(i)
+    function sectionKey(i: int): string {
+        return i >= 0 && i < sections.length ? AppController.routeText(sections[i], "key") : ""
     }
-    function scrollTo(y: real): void {
-        if (_scrollPending)
-            flick.contentY = Math.max(0, Math.min(y, flick.contentHeight - flick.height))
-    }
-    Timer {
-        id: scrollSettle
-        interval: 1000 // the sections are laid out by then; later changes are the user's
-        onTriggered: root._scrollPending = false
+    function openSection(key: string): void {
+        if (key !== "" && key !== section)
+            AppController.replaceRoute({ view: "settings", section: key })
     }
 
     /// The sections ({ key, title, iconName }).
@@ -72,7 +62,6 @@ Item {
         { key: "backups", title: qsTr("Backups"), iconName: "hard-drive" },
         { key: "app", title: qsTr("Application"), iconName: "info" }
     ]
-    readonly property list<var> noSections: []
 
     function sectionComponent(id: string): Component {
         switch (id) {
@@ -499,7 +488,7 @@ Item {
                         text: title
                         selected: root.section === key
                         selectionBar: true
-                        onClicked: AppController.replaceRoute({ view: "settings", section: sectionItem.key })
+                        onClicked: root.openSection(sectionItem.key)
                     }
                 }
             }
@@ -511,50 +500,81 @@ Item {
             }
         }
 
-        Flickable {
-            id: flick
-            TouchFlick.enabled: true
+        ColumnLayout {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            clip: true
-            contentWidth: width
-            contentHeight: content.implicitHeight + 2 * margin
-            boundsBehavior: Flickable.StopAtBounds
-            T.ScrollBar.vertical: BScrollBar {}
+            spacing: 0
 
-            readonly property int margin: Theme.compact ? Theme.space4 : Theme.space8
-            onMovementStarted: root._scrollPending = false
-            onContentHeightChanged: if (root._scrollPending) root.scrollToSection()
+            // Section tabs (narrow windows), made when the window becomes narrow: their
+            // currentIndex is bound from the route at their creation.
+            Loader {
+                Layout.fillWidth: true
+                active: Theme.narrow
+                visible: active
+                sourceComponent: sectionTabs
+            }
 
-            ColumnLayout {
-                id: content
-                x: flick.margin
-                y: flick.margin
-                width: Math.min(flick.width - 2 * flick.margin, 760)
-                spacing: Theme.space8
+            Flickable {
+                id: flick
+                TouchFlick.enabled: true
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                clip: true
+                contentWidth: width
+                contentHeight: content.implicitHeight + 2 * margin
+                boundsBehavior: Flickable.StopAtBounds
+                T.ScrollBar.vertical: BScrollBar {}
 
-                // Wide: the chosen section.
-                Loader {
-                    Layout.fillWidth: true
-                    visible: !Theme.narrow
-                    active: !Theme.narrow
-                    sourceComponent: root.sectionComponent(root.section)
-                    onLoaded: flick.contentY = 0
-                }
-                // Narrow: everything, scrolled to the route's section.
-                Repeater {
-                    id: narrowSections
-                    model: Theme.narrow ? root.sections : root.noSections
-                    delegate: Loader {
-                        id: sectionLoader
-                        required property string key
-                        required property int index
+                readonly property int margin: Theme.compact ? Theme.space4 : Theme.space8
+
+                ColumnLayout {
+                    id: content
+                    x: flick.margin
+                    y: flick.margin
+                    width: Math.min(flick.width - 2 * flick.margin, 760)
+                    spacing: Theme.space8
+
+                    // The chosen section, from its top.
+                    Loader {
                         Layout.fillWidth: true
-                        sourceComponent: root.sectionComponent(key)
-                        onLoaded: if (sectionLoader.key === root.section) root.scrollToSection()
-                        onYChanged: if (sectionLoader.key === root.section) root.scrollTo(index === 0 ? 0 : y)
+                        sourceComponent: root.sectionComponent(root.section)
+                        onLoaded: flick.contentY = 0
                     }
                 }
+            }
+        }
+    }
+
+    Component {
+        id: sectionTabs
+        ColumnLayout {
+            spacing: 0
+            BTabBar {
+                Layout.fillWidth: true
+                leftPadding: Theme.compact ? Theme.space1 : Theme.space6
+                fadeColor: Theme.bg
+                currentIndex: root.sectionIndex
+                onPicked: (index) => root.openSection(root.sectionKey(index))
+
+                Repeater {
+                    model: root.sections
+                    delegate: BTabButton {
+                        required property int index
+                        required property string key
+                        required property string title
+                        objectName: "settingsTab-" + key
+                        text: title
+                        // Phones: the tabs without icons, as the sync center's (more of them fit).
+                        iconName: Theme.compact ? "" : AppController.routeText(root.sections[index], "iconName")
+                        leftPadding: Theme.compact ? 9 : (Theme.touchUi ? 14 : 12)
+                        rightPadding: leftPadding
+                    }
+                }
+            }
+            Rectangle {
+                Layout.fillWidth: true
+                implicitHeight: 1
+                color: Theme.borderSubtle
             }
         }
     }
