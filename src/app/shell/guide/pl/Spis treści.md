@@ -40,6 +40,8 @@ Brulion aktualizuje dokumentację razem z aplikacją: dochodzą nowe strony, a t
 - [[Format plików|Format plików]] — jak notatki wyglądają na dysku.
 - [[Wiersz poleceń i agenci AI|Wiersz poleceń i agenci AI]] — `brulion-cli`, skrypty i agenci AI (MCP).
 - [[Rozszerzenia|Rozszerzenia]] — własne polecenia, widoki i reakcje w Luau, pisane w notatniku; konsola Luau.
+- [[API rozszerzeń|API rozszerzeń]] — każda funkcja, którą może wywołać Twój kod: czytanie i zmienianie notatek, widoki, pytania, limity i komunikaty błędów.
+- [[Przepisy na rozszerzenia|Przepisy na rozszerzenia]] — gotowe polecenia, widoki i reakcje do skopiowania.
 - [[AI|AI]] — Asystent AI i `b.ai`: Claude, API zgodne z OpenAI albo własny serwer, także na telefonie.
 
 ## Pod ręką

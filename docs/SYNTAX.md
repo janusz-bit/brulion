@@ -1900,15 +1900,23 @@ end, { label = "Policz słowa" })
 ```
 ````
 
-* **Properties** (Polish or English keys; values in either language): `uprawnienia::` /
-  `permissions::` — `zapis` / `write` (it may change notes; reading is always allowed), `ai`;
-  `opis::` / `description::` — shown in Settings → Extensions; `zastępuje::` / `overrides::` — the id
-  of a built-in extension the page replaces (`silownia`). Unknown permission words are reported,
-  not granted.
-* **Id**: the page's title folded — lower case, no diacritics, words joined by `-` ("Licznik słów" →
-  `licznik-slow`). A title naming a built-in extension ("Siłownia", "Gym") overrides it too.
+* **Properties** (Polish or English keys, any case; a `key:: value` line or the frontmatter;
+  values in either language): `uprawnienia::` / `permissions::` — a list or words separated by
+  commas or spaces: `zapis` / `write` (it may change notes; reading is always allowed, and `odczyt`
+  / `read` may be written), `ai`; `opis::` / `description::` — shown in Settings → Extensions;
+  `zastępuje::` / `overrides::` — the id of a built-in extension the page replaces (`silownia`,
+  `asystent`). Unknown permission words are reported, not granted.
+* **Id**: the page's title folded — lower case, no diacritics, what is no letter or digit a `-`
+  ("Licznik słów" → `licznik-slow`; at most 64 characters; `extension` when nothing is left). A
+  title naming a built-in extension ("Siłownia", "Gym", "Asystent AI", "AI assistant") overrides
+  it too. Of two pages with one id the first by path runs.
 * **Code**: the blocks in order, each line at its own line of the page (errors name the page's
-  lines). A block without its closing fence runs to the end of the page. Fences inside another
-  fence (a ```` ````markdown ```` example) are text.
+  lines). A fence is three or more backticks or tildes, may be indented and may follow a list
+  marker (`- `, `1. `); its language is the first word after it, `luau` or `lua`, also written
+  `{luau}` or `.luau`; it closes with a line of the same character, at least as long. A block
+  without its closing fence runs to the end of the page. Fences inside another fence (a
+  ```` ````markdown ```` example) are text, and so is a leading frontmatter block.
 * A page with the tag but no ```` ```luau ```` block is an extension without code (Settings says
   so); a `#rozszerzenie` inside a block does not make a page an extension.
+* What the code may call (the `b` API), when it runs and how a device approves it:
+  docs/EXTENSIONS.md.

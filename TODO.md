@@ -21,7 +21,16 @@ done in the repository simply disappears from the list.
   template variables from extensions, more events (a task done, a daily note created, the app
   opened), extension views in the sidebar and inside pages (a ```` ```view ```` block), more
   components for views (text fields, menus), an extension's own settings, sharing extensions
-  between notebooks, the browser build checked against hostile extensions.
+  between notebooks, the browser build checked against hostile extensions. Smaller gaps the
+  documentation has to mention (docs/EXTENSIONS.md): text fields in `b.form` (the engine takes
+  `kind = "text"`, the dialog draws number fields only), the editor's selection for a command
+  (`ctx.selection` is always empty), keyboard shortcuts for extension commands (the list of
+  Settings → Keyboard shortcuts is made when the app starts, before extensions load), a timer of
+  an extension's own (`b.timer` is the gym's rest timer: its banner shows in the Gym view only and
+  its notification speaks of the next set), an empty state's own icon (`b.ui.empty` shows the
+  gym's dumbbell), the notebook's first day of the week in `b.query` (`NotebookHost::query` starts
+  weeks on Monday), "Edit the code" for the AI assistant (Settings has the button for the gym
+  only).
 * **Gym: next steps** — the rest timer's notification while the app is closed (Android: a scheduled
   alarm), a catalog beyond the 51 built-in exercises (free-exercise-db, Unlicense, English names),
   sample workouts in the sample notebook, weekly volume per muscle group, a body weight log.

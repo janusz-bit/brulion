@@ -50,4 +50,50 @@ end, { label = "A haiku for today" })
 ```
 ````
 
-`b.ai("question")` returns the text; a table adds `system`, `model`, `maxTokens`, `effort`, or `messages` for a conversation. While the model writes, Brulion keeps working. In the **Luau console** try `b.ai("What is 2 + 2?")`.
+`b.ai("question")` returns the text; a table adds `system`, `model`, `maxTokens`, `effort`, or `messages` for a conversation. While the model writes, Brulion keeps working. In the **Luau console** try `b.ai("What is 2 + 2?")`. When the model cannot be asked — no key, no connection — the command stops with the reason; `pcall(b.ai, "…")` catches it.
+
+## Tools: a model that looks things up
+With `tools`, the model can call functions of your code — search the notes, read a page — before it answers; this is how the AI assistant works. A tool has a name, a description that says when to call it, and the shape of its input. A reply that calls tools has `toolCalls`: your code runs them and asks again, with the model's turn (`raw`, unchanged) and every result in one message, until a reply comes without calls.
+
+```luau
+local tools = {
+    {
+        name = "search_notes",
+        description = "Full-text search over the user's notes. "
+            .. "Call it before answering a question about them.",
+        input = {
+            type = "object",
+            properties = { query = { type = "string", description = "Words to look for" } },
+            required = { "query" },
+        },
+    },
+}
+
+b.command("ask-notes", function(ctx)
+    local question = b.ask("Ask your notes")
+    if question == "" then
+        return nil
+    end
+    local messages = { { role = "user", content = question } }
+    for turn = 1, 6 do
+        local text, reply = b.ai({ messages = messages, tools = tools })
+        if not reply.toolCalls then
+            return text
+        end
+        table.insert(messages, { role = "assistant", raw = reply.raw })
+        local results = {}
+        for _, call in reply.toolCalls do
+            local found = {}
+            for _, hit in b.search(tostring(call.input.query), 10) do
+                table.insert(found, `[[{hit.page}]]: {hit.excerpt}`)
+            end
+            local content = #found > 0 and table.concat(found, "\n") or "Nothing found."
+            table.insert(results, { id = call.id, content = content })
+        end
+        table.insert(messages, { role = "user", results = results })
+    end
+    return "No answer after six turns."
+end, { label = "Ask my notes (AI)" })
+```
+
+The page needs `permissions: [ai]`; on a server of your own, pick a model that supports tools. [[Extension recipes]] has a week's review written by a model, and [[Extension API]] lists the rest of what your code can call.

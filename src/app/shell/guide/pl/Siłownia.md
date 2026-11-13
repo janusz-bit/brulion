@@ -1,5 +1,5 @@
 ---
-tags: [documentation]
+tags: [dokumentacja]
 brulion: document
 ---
 # Siłownia

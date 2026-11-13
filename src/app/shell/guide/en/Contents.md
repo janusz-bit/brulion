@@ -40,6 +40,8 @@ Brulion updates the documentation together with the app: new pages are added, an
 - [[File format|File format]] — what your notes look like on disk.
 - [[Command line and AI agents|Command line and AI agents]] — `brulion-cli`, scripts and AI agents (MCP).
 - [[Extensions|Extensions]] — your own commands, views and reactions in Luau, written in the notebook; the Luau console.
+- [[Extension API|Extension API]] — every function your code can call: reading and changing notes, views, questions, limits and error messages.
+- [[Extension recipes|Extension recipes]] — ready commands, views and reactions to copy.
 - [[AI|AI]] — the AI assistant and `b.ai`: Claude, OpenAI-compatible APIs or your own server, also on the phone.
 
 ## Handy

@@ -313,8 +313,9 @@ tags: [extension]
 description: My first extension — a command, a view and a hook.
 ---
 This page is an **extension**: the code in its `luau` blocks runs in Brulion. Change it and save —
-Brulion loads it again at once; an error names the line of this page. The `b` API and more
-examples: "Extensions" in Brulion's documentation (the palette: "Brulion Documentation").
+Brulion loads it again at once; an error names the line of this page. Everything the code can call
+is on the page "Extension API" of Brulion's documentation (the palette: "Brulion Documentation"),
+ready pieces to copy on "Extension recipes".
 
 A command in the palette (Ctrl+K): "Hello".
 
@@ -353,8 +354,9 @@ tags: [rozszerzenie]
 opis: Moje pierwsze rozszerzenie — polecenie, widok i reakcja na zapis.
 ---
 Ta strona to **rozszerzenie**: kod w jej blokach `luau` działa w Brulionie. Zmień go i zapisz —
-Brulion od razu wczyta go od nowa; błąd wskaże wiersz tej strony. API `b` i więcej przykładów:
-„Rozszerzenia” w dokumentacji Brulionu (w palecie: „Dokumentacja Brulionu”).
+Brulion od razu wczyta go od nowa; błąd wskaże wiersz tej strony. Wszystko, co kod może wywołać,
+opisuje strona „API rozszerzeń” w dokumentacji Brulionu (w palecie: „Dokumentacja Brulionu”),
+a gotowe kawałki do skopiowania — „Przepisy na rozszerzenia”.
 
 Polecenie w palecie (Ctrl+K): „Powitanie”.
 

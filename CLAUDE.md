@@ -8,6 +8,10 @@ Read before changing code:
 * `docs/SYNTAX.md` — the Markdown dialect (single source of truth for parsing/rendering).
 * `docs/ARCHITECTURE.md` — layers, modules, platform strategy.
 * `docs/UI.md` — QML UI, block editor, navigation, components.
+* `docs/EXTENSIONS.md` — Luau extensions (scripting): the `b` API, extension pages, the sandbox.
+  A change to `b` goes into its reference there and into the documentation notebook's "Extension
+  API" page in both languages; `tst_extensions_docs` runs every ```` ```luau ```` example of the
+  documentation and fails for a function no reference names.
 * `src/core/types.h` — shared data model. Change only when strictly needed, keep compatible.
 * `TODO.md` — ideas and known gaps, a plain list by category with no order or "in
   progress" marks. Implement an item only when the user asks for it (fully: tests, docs, i18n);

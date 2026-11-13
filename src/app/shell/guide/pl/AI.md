@@ -1,5 +1,5 @@
 ---
-tags: [documentation]
+tags: [dokumentacja]
 aliases: [Sztuczna inteligencja, Asystent AI, Claude, ChatGPT, Ollama]
 brulion: document
 ---
@@ -50,4 +50,50 @@ end, { label = "Haiku na dziś" })
 ```
 ````
 
-`b.ai("pytanie")` zwraca tekst; tabela dodaje `system`, `model`, `maxTokens`, `effort` albo `messages` dla rozmowy. Gdy model pisze, Brulion działa dalej. W **konsoli Luau** spróbuj `b.ai("Ile to 2 + 2?")`.
+`b.ai("pytanie")` zwraca tekst; tabela dodaje `system`, `model`, `maxTokens`, `effort` albo `messages` dla rozmowy. Gdy model pisze, Brulion działa dalej. W **konsoli Luau** spróbuj `b.ai("Ile to 2 + 2?")`. Gdy modelu nie da się zapytać — brak klucza, brak połączenia — polecenie zatrzymuje się z podaniem powodu; `pcall(b.ai, "…")` to łapie.
+
+## Narzędzia: model, który sam sprawdza
+Dzięki `tools` model może wywoływać funkcje Twojego kodu — przeszukać notatki, przeczytać stronę — zanim odpowie; tak działa Asystent AI. Narzędzie ma nazwę, opis mówiący, kiedy je wywołać, i kształt danych wejściowych. Odpowiedź, która wywołuje narzędzia, ma `toolCalls`: Twój kod je wykonuje i pyta ponownie, z turą modelu (`raw`, bez zmian) i wszystkimi wynikami w jednej wiadomości, aż przyjdzie odpowiedź bez wywołań.
+
+```luau
+local narzedzia = {
+    {
+        name = "szukaj_w_notatkach",
+        description = "Wyszukiwanie pełnotekstowe w notatkach użytkownika. "
+            .. "Wywołaj je, zanim odpowiesz na pytanie o notatki.",
+        input = {
+            type = "object",
+            properties = { query = { type = "string", description = "Słowa do wyszukania" } },
+            required = { "query" },
+        },
+    },
+}
+
+b.command("zapytaj-notatki", function(ctx)
+    local pytanie = b.ask("Zapytaj swoje notatki")
+    if pytanie == "" then
+        return nil
+    end
+    local wiadomosci = { { role = "user", content = pytanie } }
+    for tura = 1, 6 do
+        local tekst, odpowiedz = b.ai({ messages = wiadomosci, tools = narzedzia })
+        if not odpowiedz.toolCalls then
+            return tekst
+        end
+        table.insert(wiadomosci, { role = "assistant", raw = odpowiedz.raw })
+        local wyniki = {}
+        for _, wywolanie in odpowiedz.toolCalls do
+            local znalezione = {}
+            for _, trafienie in b.search(tostring(wywolanie.input.query), 10) do
+                table.insert(znalezione, `[[{trafienie.page}]]: {trafienie.excerpt}`)
+            end
+            local tresc = #znalezione > 0 and table.concat(znalezione, "\n") or "Nic nie znaleziono."
+            table.insert(wyniki, { id = wywolanie.id, content = tresc })
+        end
+        table.insert(wiadomosci, { role = "user", results = wyniki })
+    end
+    return "Brak odpowiedzi po sześciu turach."
+end, { label = "Zapytaj moje notatki (AI)" })
+```
+
+Strona potrzebuje `uprawnienia: [ai]`; na własnym serwerze wybierz model, który obsługuje narzędzia. [[Przepisy na rozszerzenia]] mają podsumowanie tygodnia pisane przez model, a [[API rozszerzeń]] wymienia resztę tego, co Twój kod może wywołać.

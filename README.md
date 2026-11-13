@@ -126,10 +126,13 @@ Pandoc Markdown document for Word, LibreOffice, PDF or EPUB).
   it runs again at once (an error names the page's line, the previous version keeps running). Code
   that arrives by sync or import runs on a device only once approved there. The gym's own source
   can become a page of the notebook and run from there; the **Luau console** evaluates code with
-  the notebook's API and shows what extensions print (docs/EXTENSIONS.md).
+  the notebook's API and shows what extensions print. Everything a script can call, with recipes
+  to copy, is in the documentation notebook (**Extension API**, **Extension recipes**) and in
+  [docs/EXTENSIONS.md](docs/EXTENSIONS.md); the examples there are run by the tests.
 * **AI in extensions**, also on the phone: `b.ai` asks Claude, any OpenAI-compatible API or a
-  server of your own (Ollama), with the key kept on the device; the built-in **AI assistant**
-  answers questions about the page on screen and summarises it into today's note.
+  server of your own (Ollama), with the key kept on the device, and may give the model tools the
+  script runs; the built-in **AI assistant** searches and reads the whole notebook to answer a
+  question, changes notes only with your yes, and sums up the page on screen into today's note.
 * Two note modes: a **document** (Obsidian-like live preview: paragraphs, headings and plain
   lists, edited in place) or an **outline** (Logseq-like: every bullet is a block). Chosen when
   a page is created and switchable at any time; stored in the note as `brulion: document` /
@@ -282,7 +285,8 @@ Or without installing: `nix run github:janusz-bit/brulion`.
 Build: `nix develop`, then `scripts/dev-build.sh -t .`; the Android APK: `nix build
 .#brulion-android` (x86_64-linux hosts, unsigned; sign with `nix run .#brulion-android-sign --
 result/*.apk`). Developer docs: [architecture](docs/ARCHITECTURE.md), [Markdown
-dialect](docs/SYNTAX.md), [UI](docs/UI.md), [releases](docs/RELEASE.md). License: AGPL-3.0-or-later; icons Lucide (ISC), ZIP miniz (MIT), the stroke
+dialect](docs/SYNTAX.md), [UI](docs/UI.md), [extensions (Luau scripting)](docs/EXTENSIONS.md),
+[releases](docs/RELEASE.md). License: AGPL-3.0-or-later; icons Lucide (ISC), ZIP miniz (MIT), the stroke
 outline of drawings ported from perfect-freehand (MIT, © Stephen Ruiz Ltd), the compression of
 Obsidian Excalidraw plugin drawings ported from lz-string (MIT, © 2013 Pieroxy), emoji and
 symbol fallback fonts: subsets of Noto Emoji and Noto Sans Math (SIL OFL 1.1, `assets/fonts`); PDF
@@ -331,10 +335,14 @@ przykładowym notatnikiem.
   razu (błąd wskazuje wiersz strony, a poprzednia wersja działa dalej). Kod, który przyszedł z
   synchronizacji albo importu, działa na urządzeniu dopiero po zatwierdzeniu. Kod Siłowni można
   przenieść na stronę notatnika i zmieniać tam, a **konsola Luau** wykonuje kod z API notatnika i
-  pokazuje, co wypisują rozszerzenia. **AI w rozszerzeniach**, także na telefonie: `b.ai` pyta
-  Claude'a, dowolne API zgodne z OpenAI albo własny serwer (Ollama), a klucz zostaje na urządzeniu;
-  wbudowany **Asystent AI** odpowiada na pytania o otwartą stronę i streszcza ją do dzisiejszej
-  notatki. Tagi działają jak linki do stron, jak
+  pokazuje, co wypisują rozszerzenia. Wszystko, co skrypt może wywołać, i gotowe przepisy do
+  skopiowania są w notatniku z dokumentacją (**API rozszerzeń**, **Przepisy na rozszerzenia**) i
+  w [docs/EXTENSIONS.md](docs/EXTENSIONS.md); tamtejsze przykłady uruchamiają testy.
+  **AI w rozszerzeniach**, także na telefonie: `b.ai` pyta
+  Claude'a, dowolne API zgodne z OpenAI albo własny serwer (Ollama), klucz zostaje na urządzeniu,
+  a model może dostać narzędzia, które wykonuje skrypt; wbudowany **Asystent AI** przeszukuje i
+  czyta cały notatnik, żeby odpowiedzieć na pytanie, zmienia notatki tylko za Twoją zgodą i
+  streszcza otwartą stronę do dzisiejszej notatki. Tagi działają jak linki do stron, jak
   w Logseq: `#praca` otwiera stronę „praca” (tworzoną przy pierwszym wpisie), jej odnośniki
   pokazują bloki z tym tagiem, a zmiana nazwy strony poprawia też tagi. Odnośnik do każdego
   bloku i nagłówka — `((…))`, `[[Strona#^…]]`, `[[Strona#Nagłówek]]` — skopiujesz z menu bloku
@@ -719,7 +727,7 @@ Zrzuty ekranu i testy interfejsu działają bez okna (`--screenshot`, `--journey
 Wiersz poleceń (`./build/src/cli/brulion-cli`) i serwer MCP: [docs/CLI.md](docs/CLI.md).
 
 Dokumentacja: [architektura](docs/ARCHITECTURE.md) · [składnia](docs/SYNTAX.md) ·
-[szablony](docs/TEMPLATES.md) · [interfejs](docs/UI.md) · [Android](docs/ANDROID.md) · [przeglądarka](docs/WEB.md) ·
+[szablony](docs/TEMPLATES.md) · [interfejs](docs/UI.md) · [rozszerzenia (skrypty Luau)](docs/EXTENSIONS.md) · [Android](docs/ANDROID.md) · [przeglądarka](docs/WEB.md) ·
 [NixOS](docs/NIXOS.md) · [wydania](docs/RELEASE.md). Poprzednia wersja (TypeScript +
 Tauri) jest zachowana na gałęzi `archive/web-v1`.
 
