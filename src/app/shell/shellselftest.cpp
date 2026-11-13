@@ -2046,8 +2046,8 @@ void checkRowsAndMenus(QQuickWindow *window, AppController *app, const Check &ch
             sendKey(window, Qt::Key_Down);
             walked << focusName(window);
         }
-        const QStringList shownItems = {u"blockMenuCopy"_s, u"blockMenuCut"_s, u"blockMenuCopyText"_s,
-                                        u"blockMenuSelect"_s, u"blockMenuZoom"_s};
+        const QStringList shownItems = {u"blockMenuCopy"_s,   u"blockMenuCut"_s,    u"blockMenuCopyText"_s,
+                                        u"blockMenuQrCode"_s, u"blockMenuSelect"_s, u"blockMenuZoom"_s};
         const bool tail = !walked.isEmpty() && walked.size() <= shownItems.size()
                           && shownItems.mid(shownItems.size() - walked.size()) == walked;
         if (!tail)
