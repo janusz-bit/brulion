@@ -730,6 +730,16 @@ Rectangle {
             onTriggered: bar.revealRequested(bar.pagePath)
         }
         BMenuItem {
+            // The note as QR codes another phone's camera reads (docs/UI.md "QR code"); in the
+            // journal's stream the day being written in.
+            objectName: "menuQrCode"
+            visible: bar.inNote
+            height: visible ? implicitHeight : 0
+            text: qsTr("QR code…")
+            iconName: "qr-code"
+            onTriggered: AppController.requestUiAction("qrCode")
+        }
+        BMenuItem {
             objectName: "menuOpenInOtherApp"
             // A PDF; another attachment of the allow-list (DOCX, XLSX, MP3…: name and first bytes).
             visible: bar.onPage && (bar.pdf || (bar.fileOnly && Workspace.canOpenInOtherApp(bar.pagePath)))

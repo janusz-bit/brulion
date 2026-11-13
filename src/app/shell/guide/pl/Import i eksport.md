@@ -88,6 +88,15 @@ PDF i DOCX robi sam Brulion: nagłówki, listy z polami wyboru zadań, tabele, k
 
 **Drukuj…** na komputerze otwiera okno drukowania systemu (drukarka, liczba kopii, rozmiar papieru), na Androidzie — drukowanie systemu z jego drukarkami i opcją „Zapisz jako PDF”, a w przeglądarce — jej okno drukowania.
 
+### Kod QR
+Najszybszy sposób, żeby przekazać notatkę komuś obok: **Kod QR…** w menu strony (⋮), w **Więcej** albo w palecie poleceń („Udostępnij jako kod QR…”) pokazuje notatkę jako kod QR. Skieruj na niego aparat innego telefonu, a pojawi się na nim tekst notatki — bez internetu, bez konta i bez żadnej aplikacji po drugiej stronie. **Kod QR…** w menu bloku (albo w **Więcej** zaznaczenia) robi to samo tylko z wybranymi blokami.
+
+- **Markdown** daje notatkę dokładnie tak, jak jest zapisana — inna aplikacja do notatek (Brulion, Obsidian, Logseq) dostanie ją w całości, z linkami i zadaniami.
+- **Zwykły tekst** daje to, co widać w notatce, jak „Kopiuj jako tekst”: punktory „•”, zadania ☐ i ☑, linki jako ich etykiety.
+- **Dołącz tytuł** stawia na początku tytuł strony (notatka dzienna: jej dzień); notatka, która zaczyna się od własnego `# Tytułu`, już go ma.
+
+Jeden kod mieści około trzech tysięcy liter (mniej, gdy są emoji i polskie znaki). Dłuższa notatka dzieli się na kilka kodów podobnej wielkości — **Kod 1 z 3**, ze strzałkami ‹ › albo klawiszami strzałek: zeskanuj je po kolei i połącz teksty. Najwyżej dwadzieścia kodów; z dłuższej notatki zaznacz fragment, który chcesz przekazać.
+
 Ponieważ notatki to zwykłe pliki, najprostszą kopią zapasową jest skopiowanie folderu notatnika.
 
 Wróć do [[Spis treści|spisu treści]]. Jeśli chcesz zrozumieć, co leży w plikach, zobacz [[Format plików|Format plików]].

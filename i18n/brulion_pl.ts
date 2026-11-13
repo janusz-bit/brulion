@@ -1841,6 +1841,11 @@
         <translation>Kopiuj jako tekst</translation>
     </message>
     <message>
+        <location filename="../src/app/qml/editor/BlockMenu.qml" line="268"/>
+        <source>QR code…</source>
+        <translation>Kod QR…</translation>
+    </message>
+    <message>
         <location filename="../src/app/qml/editor/BlockMenu.qml" line="304"/>
         <source>Select</source>
         <translation>Zaznacz</translation>
@@ -10448,6 +10453,11 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
         <source>Print…</source>
         <translation>Drukuj…</translation>
     </message>
+    <message>
+        <location filename="../src/app/qml/views/PageView.qml" line="1116"/>
+        <source>QR code…</source>
+        <translation>Kod QR…</translation>
+    </message>
 </context>
 <context>
     <name>PdfEmbedTile</name>
@@ -10841,6 +10851,112 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
         <location filename="../src/app/editor/blockviews.cpp" line="327"/>
         <source>page</source>
         <translation>strona</translation>
+    </message>
+</context>
+<context>
+    <name>QrCodeDialog</name>
+    <message>
+        <location filename="../src/app/qml/qr/QrCodeDialog.qml" line="34"/>
+        <source>Markdown</source>
+        <translation>Markdown</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/qr/QrCodeDialog.qml" line="35"/>
+        <source>Plain text</source>
+        <translation>Zwykły tekst</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/qr/QrCodeDialog.qml" line="42"/>
+        <location filename="../src/app/qml/qr/QrCodeDialog.qml" line="95"/>
+        <source>QR code</source>
+        <translation>Kod QR</translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/qr/QrCodeDialog.qml" line="44"/>
+        <source>%n block(s)</source>
+        <translation>
+            <numerusform>%n blok</numerusform>
+            <numerusform>%n bloki</numerusform>
+            <numerusform>%n bloków</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/qr/QrCodeDialog.qml" line="45"/>
+        <source>%1 — %n block(s)</source>
+        <translation>
+            <numerusform>%1 — %n blok</numerusform>
+            <numerusform>%1 — %n bloki</numerusform>
+            <numerusform>%1 — %n bloków</numerusform>
+        </translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/qr/QrCodeDialog.qml" line="48"/>
+        <source>Close</source>
+        <translation>Zamknij</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/qr/QrCodeDialog.qml" line="95"/>
+        <source>QR code %1 of %2</source>
+        <translation>Kod QR %1 z %2</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/qr/QrCodeDialog.qml" line="116"/>
+        <source>Nothing to share: the note is empty.</source>
+        <translation>Nie ma czego udostępnić: notatka jest pusta.</translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/qr/QrCodeDialog.qml" line="117"/>
+        <source>Too long for QR codes: it would take %n code(s), at most %1 are made. Select a part of the note and share that from the selection&apos;s menu.</source>
+        <translation>
+            <numerusform>Za długie na kody QR: potrzeba by %n kodu, a powstaje najwyżej %1. Zaznacz fragment notatki i udostępnij go z menu zaznaczenia.</numerusform>
+            <numerusform>Za długie na kody QR: potrzeba by %n kodów, a powstaje najwyżej %1. Zaznacz fragment notatki i udostępnij go z menu zaznaczenia.</numerusform>
+            <numerusform>Za długie na kody QR: potrzeba by %n kodów, a powstaje najwyżej %1. Zaznacz fragment notatki i udostępnij go z menu zaznaczenia.</numerusform>
+        </translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/qr/QrCodeDialog.qml" line="138"/>
+        <source>Previous code</source>
+        <translation>Poprzedni kod</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/qr/QrCodeDialog.qml" line="145"/>
+        <source>Code %1 of %2</source>
+        <translation>Kod %1 z %2</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/qr/QrCodeDialog.qml" line="151"/>
+        <source>Next code</source>
+        <translation>Następny kod</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/qr/QrCodeDialog.qml" line="162"/>
+        <source>What the code carries</source>
+        <translation>Co zawiera kod</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/qr/QrCodeDialog.qml" line="171"/>
+        <source>Include the title</source>
+        <translation>Dołącz tytuł</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/qr/QrCodeDialog.qml" line="182"/>
+        <source>It does not fit one code: scan the codes in turn, each holds the next part of the text.</source>
+        <translation>Tekst nie mieści się w jednym kodzie: zeskanuj kody po kolei, każdy zawiera kolejną część tekstu.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/qr/QrCodeDialog.qml" line="183"/>
+        <source>Point another phone&apos;s camera at the code: the text appears there, no internet needed.</source>
+        <translation>Skieruj na kod aparat innego telefonu: pojawi się na nim tekst, bez internetu.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/qr/QrCodeDialog.qml" line="184"/>
+        <source>Plain text: as the note shows it, links by their labels.</source>
+        <translation>Zwykły tekst: tak, jak wygląda notatka, linki jako ich etykiety.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/qr/QrCodeDialog.qml" line="185"/>
+        <source>Markdown: as written, for a notes app such as Brulion or Obsidian.</source>
+        <translation>Markdown: tak, jak zapisano, dla aplikacji do notatek, np. Brulionu lub Obsidiana.</translation>
     </message>
 </context>
 <context>
@@ -11591,6 +11707,11 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
         <location filename="../src/app/qml/editor/SelectionToolbar.qml" line="229"/>
         <source>Copy as plain text</source>
         <translation>Kopiuj jako tekst</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/SelectionToolbar.qml" line="235"/>
+        <source>QR code…</source>
+        <translation>Kod QR…</translation>
     </message>
     <message>
         <location filename="../src/app/qml/editor/SelectionToolbar.qml" line="235"/>
@@ -14950,6 +15071,11 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
         <location filename="../src/app/qml/shell/ShellTopBar.qml" line="728"/>
         <source>Show in tree</source>
         <translation>Pokaż w drzewie</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="738"/>
+        <source>QR code…</source>
+        <translation>Kod QR…</translation>
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellTopBar.qml" line="737"/>
@@ -22796,6 +22922,16 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         <location filename="../src/app/shell/commandmodel.cpp" line="455"/>
         <source>Copy link to page</source>
         <translation>Kopiuj link do strony</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/commandmodel.cpp" line="461"/>
+        <source>Share as QR code…</source>
+        <translation>Udostępnij jako kod QR…</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/commandmodel.cpp" line="462"/>
+        <source>The note&apos;s text for another phone&apos;s camera, no internet needed</source>
+        <translation>Tekst notatki dla aparatu innego telefonu, bez internetu</translation>
     </message>
     <message>
         <location filename="../src/app/shell/commandmodel.cpp" line="456"/>

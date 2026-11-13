@@ -10,6 +10,7 @@ import Brulion
 //     place (renaming rewrites links and the tags that name the page everywhere — a confirmation
 //     says how many when other notes link here or carry such a tag), a strip for the tag that
 //     names the page (tag overview, its tasks, sub-tags), favourite star, page menu (Version history, Copy link, Export page…,
+//     QR code… — QrCodeDialog through the editor, docs/UI.md "QR code" —,
 //     Open in side panel, Markdown source, Move to trash), previous / next day for daily notes and the
 //     page's properties (aliases, tags, frontmatter values) as chips;
 //   * the blocks (route line / blockId / heading scroll there, select the block and flash it —
@@ -1108,6 +1109,16 @@ FocusScope {
             onTriggered: exportDialog.openFor(page.path, true)
         }
         BMenuItem {
+            // The note as QR codes another phone's camera reads (docs/UI.md "QR code").
+            objectName: "pageMenuQrCode"
+            visible: root.noteRoute
+            height: visible ? implicitHeight : 0
+            text: qsTr("QR code…")
+            iconName: "qr-code"
+            enabled: page.loaded
+            onTriggered: root.showQrCode()
+        }
+        BMenuItem {
             visible: root.journalDate === "" && page.exists
             height: visible ? implicitHeight : 0
             text: qsTr("Rename…")
@@ -1324,7 +1335,14 @@ FocusScope {
                 editor.openCurrentDependencyPicker()
             else if ((action === "exportPage" || action === "printPage") && page.exists && root.noteRoute)
                 exportDialog.openFor(page.path, action === "printPage")
+            else if (action === "qrCode" && root.noteRoute && page.loaded)
+                root.showQrCode()
         }
+    }
+    /// "QR code…" (the page menu, the top bar's More, the palette): the note as it is now, under
+    /// the title its view shows (a daily note by its day, a weekly one by its week).
+    function showQrCode(): void {
+        editor.showPageQrCode(root.title)
     }
 
     // "Add property" (docs/UI.md "Page properties"): the panel's add row.

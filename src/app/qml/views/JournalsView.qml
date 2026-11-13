@@ -196,7 +196,7 @@ FocusScope {
     /// The stream's commands and shortcuts act on the day being written in (this pane, shown).
     readonly property bool streamKeys: !single && !inSidePanel && paneActive && visible && activeDay !== null
 
-    // The palette's "Toggle note mode", "Add page property" and its link commands
+    // The palette's "Toggle note mode", "Add page property", "Share as QR code…" and its link commands
     // ("copyLink:<kind>") in the journal stream: the day being written in (today until another day gets the caret). One day
     // as a page: its PageView does it.
     Connections {
@@ -235,6 +235,11 @@ FocusScope {
             }
             if (action === "taskDependency") {
                 root.activeEditor.openCurrentDependencyPicker()
+                return
+            }
+            if (action === "qrCode") {
+                // The day being written in as QR codes, titled by its day (docs/UI.md "QR code").
+                root.activeEditor.showPageQrCode("")
                 return
             }
             if (action !== "toggleNoteMode" || root.activeEditor.readOnlyRefuses())

@@ -951,6 +951,33 @@
     </message>
 </context>
 <context>
+    <name>QrCodeDialog</name>
+    <message numerus="yes">
+        <location filename="../src/app/qml/qr/QrCodeDialog.qml" line="44"/>
+        <source>%n block(s)</source>
+        <translation>
+            <numerusform>%n block</numerusform>
+            <numerusform>%n blocks</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/qr/QrCodeDialog.qml" line="45"/>
+        <source>%1 — %n block(s)</source>
+        <translation>
+            <numerusform>%1 — %n block</numerusform>
+            <numerusform>%1 — %n blocks</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/qr/QrCodeDialog.qml" line="117"/>
+        <source>Too long for QR codes: it would take %n code(s), at most %1 are made. Select a part of the note and share that from the selection&apos;s menu.</source>
+        <translation>
+            <numerusform>Too long for QR codes: it would take %n code, at most %1 are made. Select a part of the note and share that from the selection&apos;s menu.</numerusform>
+            <numerusform>Too long for QR codes: it would take %n codes, at most %1 are made. Select a part of the note and share that from the selection&apos;s menu.</numerusform>
+        </translation>
+    </message>
+</context>
+<context>
     <name>QueryBlockView</name>
     <message numerus="yes">
         <location filename="../src/app/qml/editor/QueryBlockView.qml" line="119"/>

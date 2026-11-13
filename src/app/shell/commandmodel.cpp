@@ -66,6 +66,7 @@ constexpr UiAction kUiActions[] = {
         {u"page.addProperty", u"addProperty"},
         {u"page.saveWebPictures", u"saveWebPictures"},
         {u"page.copyLink", u"copyLink:page"},
+        {u"page.qrCode", u"qrCode"},
         {u"block.copyRef", u"copyLink:blockRef"},
         {u"block.copyLink", u"copyLink:blockLink"},
         {u"heading.copyLink", u"copyLink:heading"},
@@ -453,6 +454,15 @@ static QList<Command> editorCommands(const AppController *app, bool editor)
             // page or day on screen copies it (uiAction "copyLink:<kind>", BlockEditor.copyCurrentLink());
             // Ctrl+Shift+C copies the block reference there.
             {u"page.copyLink"_s, CommandModel::tr("Copy link to page"), u"[[…]]"_s, u"link"_s, {}, inEditor},
+            // The note on screen — in the journal stream the day being written in — as QR codes
+            // another phone's camera reads as text (docs/UI.md "QR code"; uiAction "qrCode": the
+            // editor's QrCodeDialog). Source mode too: its text as it is being edited.
+            {u"page.qrCode"_s,
+             CommandModel::tr("Share as QR code…"),
+             CommandModel::tr("The note's text for another phone's camera, no internet needed"),
+             u"qr-code"_s,
+             {},
+             inEditor},
             {u"block.copyRef"_s, CommandModel::tr("Copy block reference"), u"((…))"_s, u"link"_s, u"Ctrl+Shift+C"_s,
              blocks},
             {u"block.copyLink"_s, CommandModel::tr("Copy link to block"), u"[[…#^…]]"_s, u"link"_s, {}, blocks},

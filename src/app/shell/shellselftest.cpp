@@ -5488,6 +5488,100 @@ void checkIgnoreTasks(QQuickWindow *window, AppController *app, const Check &che
     settle(300);
 }
 
+/// "QR code…" (docs/UI.md "QR code"): the top bar's More and the palette (uiAction "qrCode") open
+/// the dialog on the page shown — its code drawn (QrCodeView), the note's Markdown with the title
+/// first —; "Plain text" and the title's box change what the code holds; a note longer than one
+/// code is cut into several, walked by → on the code and by the "Next code" button, each part drawn
+/// and the parts joined the note's text; Escape closes it.
+void checkQrCode(QQuickWindow *window, AppController *app, const Check &check)
+{
+    const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
+    Workspace *ws = app->workspace();
+    // The open one: every page's editor makes its own dialog when it is first asked for.
+    const auto openDialog = [window]() -> QObject * {
+        for (QObject *dialog : window->findChildren<QObject *>(u"qrCodeDialog"_s)) {
+            if (dialog->property("opened").toBool())
+                return dialog;
+        }
+        return nullptr;
+    };
+    const auto shareOf = [](QObject *dialog) {
+        return dialog ? dialog->property("share").value<QObject *>() : nullptr;
+    };
+    const auto textOf = [](QObject *share) { return share ? share->property("text").toString() : QString(); };
+
+    const QString path = ws->newPagePath(u"Samotest kodu QR"_s);
+    check(ws->write(path, u"- [ ] mleko\n- [x] chleb\n"_s), "a page to share as a QR code is written");
+    app->openPage(path);
+    check(waitFor([&] { return shownNamed(window->contentItem(), u"pageEditor"_s) != nullptr; }, 10000),
+          "the page to share is open");
+    settle(300);
+    app->requestUiAction(u"qrCode"_s);
+    QObject *dialog = nullptr;
+    check(waitFor([&] { return (dialog = openDialog()) != nullptr; }, 10000), "“QR code…” opens the QR code dialog");
+    QObject *share = shareOf(dialog);
+    if (!dialog || !share)
+        return;
+    // (The format and the title's box are kept on the device: as a first run has them.)
+    uidriver::callQml(dialog, "setFormat", {u"markdown"_s});
+    uidriver::callQml(dialog, "setWithTitle", {true});
+    QQuickItem *view = nullptr;
+    check(waitFor([&] { return (view = shownNamed(window->contentItem(), u"qrCodeView"_s)) != nullptr; })
+                  && view->property("modules").toInt() >= 21 && view->property("modulePixels").toInt() >= 1,
+          "the dialog draws the note's code");
+    check(textOf(share) == u"# Samotest kodu QR\n\n- [ ] mleko\n- [x] chleb"_s && view
+                  && view->property("text").toString() == textOf(share) && share->property("count").toInt() == 1,
+          "the code holds the note's Markdown, its title first");
+    uidriver::callQml(dialog, "setFormat", {u"plain"_s});
+    check(textOf(share) == u"Samotest kodu QR\n\n☐ mleko\n☑ chleb"_s,
+          "“Plain text”: the code holds what the note shows");
+    uidriver::callQml(dialog, "setWithTitle", {false});
+    check(textOf(share) == u"☐ mleko\n☑ chleb"_s, "without the title");
+    uidriver::callQml(dialog, "setWithTitle", {true});
+    uidriver::callQml(dialog, "setFormat", {u"markdown"_s});
+    QMetaObject::invokeMethod(dialog, "close");
+    waitFor([&] { return !dialog->property("opened").toBool(); });
+
+    QString note;
+    for (int i = 1; i <= 150; ++i)
+        note += u"- [ ] Zadanie %1: zadzwonić do pani Łucji w sprawie żółtej ściany\n"_s.arg(i);
+    const QString longPath = ws->newPagePath(u"Samotest długiego kodu QR"_s);
+    check(ws->write(longPath, note), "a note longer than one code is written");
+    app->openPage(longPath);
+    check(waitFor([&] { return shownNamed(window->contentItem(), u"pageEditor"_s) != nullptr; }, 10000),
+          "the long note is open");
+    settle(300);
+    app->requestUiAction(u"qrCode"_s);
+    check(waitFor([&] { return (dialog = openDialog()) != nullptr; }, 10000), "its QR code dialog opens");
+    share = shareOf(dialog);
+    if (!dialog || !share)
+        return;
+    const int count = share->property("count").toInt();
+    check(count >= 3 && share->property("index").toInt() == 0, "a note longer than one code is cut into several");
+    QString joined = share->property("partText").toString();
+    sendKey(window, Qt::Key_Right); // the code has the keyboard
+    check(waitFor([&] { return share->property("index").toInt() == 1; }), "→ on the code shows the next one");
+    joined += share->property("partText").toString();
+    QQuickItem *next = shownNamed(window->contentItem(), u"qrCodeNext"_s);
+    check(next != nullptr, "several codes have a “Next code” button");
+    for (int i = 2; i < count && next; ++i) {
+        tapOrClick(window, pointIn(next), touch);
+        waitFor([&] { return share->property("index").toInt() == i; });
+        joined += share->property("partText").toString();
+    }
+    view = shownNamed(window->contentItem(), u"qrCodeView"_s);
+    check(share->property("index").toInt() == count - 1 && joined == textOf(share) && view
+                  && view->property("text").toString() == share->property("partText").toString()
+                  && view->property("modules").toInt() >= 21,
+          "the codes walked in turn are drawn and join into the note's text");
+    sendKey(window, Qt::Key_Escape);
+    check(waitFor([&] { return !dialog->property("opened").toBool(); }), "Escape closes the QR code dialog");
+    ws->deletePage(path);
+    ws->deletePage(longPath);
+    app->goHome();
+    settle(300);
+}
+
 /// The AI assistant's ✨ on the top bar: none while the assistant is off; switched on, its menu on
 /// a page — "Summarise this page" enabled —, "Ask the AI…" running the assistant's
 /// question (b.ask: the extension's question, cancelled here: no model is asked), "AI settings…"
@@ -8923,6 +9017,9 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
     closeMenus(window);
     // 3h-ign. A page's tasks ignored from its menu, and back.
     checkIgnoreTasks(window, app, check);
+    closeMenus(window);
+    // 3h-qr. A note as QR codes: one code, the formats, a long note walked code by code.
+    checkQrCode(window, app, check);
     closeMenus(window);
     // 3i. Focus mode, the word count, typewriter scrolling and a custom shortcut.
     checkFocusAndShortcuts(window, app, check);

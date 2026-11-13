@@ -88,6 +88,15 @@ PDF and DOCX are made by Brulion itself: headings, lists with task checkboxes, t
 
 **Print…** on a computer opens the system's print dialog (printer, number of copies, paper size), on Android the system's printing with its printers and the “Save as PDF” option, and in the browser its own print dialog.
 
+### A QR code
+The quickest way to hand a note to someone in the same room: **QR code…** in the page menu (⋮), in **More** or in the command palette (“Share as QR code…”) shows the note as a QR code. Point another phone's camera at it and the note's text appears there — no internet, no account and no app on the other side. **QR code…** in a block's menu (or in **More** of a selection) does the same with the chosen blocks only.
+
+- **Markdown** gives the note exactly as written — another notes app (Brulion, Obsidian, Logseq) gets it whole, with links and tasks.
+- **Plain text** gives what the note shows, as “Copy as plain text” does: bullets “•”, tasks ☐ and ☑, links by their labels.
+- **Include the title** puts the page's title first (a daily note: its day); a note that starts with its own `# Title` already has one.
+
+One code holds about three thousand letters (fewer with emoji and accented letters). A longer note is cut into a few codes of about the same size — **Code 1 of 3**, with ‹ › or the arrow keys: scan them in turn and join the texts. Twenty codes at most; for a longer note select the part you want to share.
+
 Because your notes are ordinary files, the simplest backup is copying the notebook folder.
 
 Back to the [[Contents|contents]]. If you want to understand what's in the files, see [[File format|File format]].

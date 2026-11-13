@@ -1083,6 +1083,33 @@ FocusScope {
             notice(selectionCopyFailure(reason), reason === "empty" ? "info" : "error", null)
         return ok
     }
+    /// The page's title as its view shows it — a daily note by its day in words —, for the QR code
+    /// dialog.
+    function pageTitle(): string {
+        if (!controller)
+            return ""
+        const date = Workspace.journalDate(controller.path)
+        return date !== "" ? DatesHelper.formatLong(date) : controller.title
+    }
+    /// "QR code…" of the page (docs/UI.md "QR code"): its text as it is now — unsaved edits and
+    /// the source being edited included —, `title` first ("": pageTitle()).
+    function showPageQrCode(title: string): void {
+        if (!controller)
+            return
+        const name = title !== "" ? title : pageTitle()
+        const text = controller.sourceText
+        dialogs.showQrCode(name, text, 0)
+    }
+    /// "QR code…" of the selection (a block's menu selects the block with its children first); a
+    /// selection over several days of the journal stream goes whole, without a title.
+    function showSelectionQrCode(): void {
+        if (!controller)
+            return
+        const name = inSpan ? "" : pageTitle()
+        const count = Math.max(1, inSpan ? stream.count : controller.selectionCount)
+        const text = inSpan ? stream.markdown() : controller.selectionMarkdown()
+        dialogs.showQrCode(name, text, count)
+    }
     function cutSelection(): bool {
         if (!controller || spanRefuses() || readOnlyRefuses())
             return false

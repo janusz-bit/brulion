@@ -42,6 +42,8 @@ import Brulion
 //                                   after it; one drawing opens in the drawing editor. A copy of
 //                                   a picked file stored for nothing (cancelled, a locked PDF, a
 //                                   picture that cannot be shown) is removed again.
+//   showQrCode(title, markdown, n)  QR code…: the page's text — or n selected blocks' — as QR codes
+//                                   to scan (QrCodeDialog, docs/UI.md "QR code")
 // The page may change while a dialog is open (sync, Syncthing): a dialog tracks its block
 // (PageController.trackBlock) and acts on wherever that block is then — never on whatever block
 // moved into its row (and on nothing when the block itself changed or is gone).
@@ -66,6 +68,7 @@ Item {
                                     || (webImageDialog !== null && webImageDialog.opened)
                                     || (backdropPicker !== null && backdropPicker.visible)
                                     || (backdropDialog !== null && backdropDialog.opened)
+                                    || (qrDialog !== null && qrDialog.opened)
 
     /// The dialogs, null until first used (see the file comment).
     property BReminderDialog reminderDialog: null
@@ -81,6 +84,7 @@ Item {
     property BDialog webImageDialog: null
     property FilePicker backdropPicker: null
     property DrawingBackdropDialog backdropDialog: null
+    property QrCodeDialog qrDialog: null
     /// "Drawing on a picture or PDF…": the browser's pick and a picture being prepared (0 none).
     property int backdropPick: 0
     property int backdropJob: 0
@@ -700,6 +704,20 @@ Item {
                     root.editor.csvInserted(answer.map.truncated === true)
             }
             onRejected: root.refocus()
+        }
+    }
+
+    /// "QR code…": `markdown` — the page's text, or `blocks` selected blocks' (0: the whole page) —
+    /// as QR codes, the page's `title` (as its view shows it) to put first.
+    function showQrCode(title: string, markdown: string, blocks: int): void {
+        if (!qrDialog)
+            qrDialog = qrComponent.createObject(root) as QrCodeDialog
+        qrDialog.openFor(title, markdown, blocks)
+    }
+    Component {
+        id: qrComponent
+        QrCodeDialog {
+            onClosed: root.refocus()
         }
     }
 

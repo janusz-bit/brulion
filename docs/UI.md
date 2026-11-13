@@ -167,8 +167,8 @@ components — no Material/Fusion look, so all targets look identical.
     Ignore tasks on this page / Show this page's tasks in Tasks (a page's
     `zadania: ignoruj` — `tasks: ignore` with an English interface — set or removed,
     `PageView.toggleTasksIgnored`, `Workspace.tasksIgnored`; docs/SYNTAX.md §5 "Ignoring a page's
-    tasks"), Find in note, Show in tree, Open in another app (a PDF, an attachment); Move
-    to trash between two separators; on phones Command palette; the **Notebook** submenu (New page, Sync
+    tasks"), Find in note, Show in tree, QR code… (a note: "QR code" below), Open in another app
+    (a PDF, an attachment); Move to trash between two separators; on phones Command palette; the **Notebook** submenu (New page, Sync
     center, Import notes, Import and export, Replace in notebook, Clean up, Trash, About
     Brulion) and Settings.
     Under it, with two tabs or more, the **tab bar** (`ShellTabBar`), and the view: one pane or two
@@ -1154,6 +1154,52 @@ tables with header rows (at most 63 columns, Word's limit) and the pictures as e
 Tests: `tst_io_paper` (also through LibreOffice when installed), `tst_appio_pageexport` (printing
 into a PDF read back), the import self-test's step 8 (the dialog, the save dialog's name, printing).
 
+## QR code (`qml/qr/QrCodeDialog.qml`, `src/app/qr`, core `qr`)
+
+A note shown as QR codes that another phone's camera reads as text — the quickest way to hand it
+over in the same room: no network, no account and no app on the other side (any camera app or
+Google Lens shows the text, with Copy and Share). **QR code…** is in the page's menu "⋯", the top
+bar's More (notes only; in the journal stream the day being written in), a block's menu (the block
+with its children, or the selection it is part of) and the selection's More (a selection over
+several days of the journal stream too); the palette's **Share as QR code…** (`page.qrCode`,
+uiAction `qrCode`, handled by the PageView or the journal stream on screen). The dialog is the
+editor's (`EditorDialogs.showQrCode`, made when first asked for): the page's text as it is now,
+unsaved edits and the source being edited included (`PageController.sourceText`), the selection's
+Markdown (`selectionMarkdown()`, `StreamSelection.markdown()`).
+
+* **The code**: black on white whatever the theme, its quiet zone (4 modules) around it, as large as
+  the window allows (`QrCodeView`: whole device pixels a module, so none is blurred, also at
+  fractional scales). Byte mode with the text's UTF-8 — no ECI header, which some scanners show as
+  stray characters —; the smallest version that holds it at error correction L, then as much
+  correction as that version allows (a short note gets H). Nayuki's QR Code generator
+  (`3rdparty/qrcodegen`, MIT) makes it; `qr::encode` refuses more than 2953 bytes before asking it
+  (it throws, and the browser's Qt never catches).
+* **What it holds** (`qr::noteText`, a segmented switch kept on the device, `qr/format`):
+  **Markdown** — the note as written (a notes app on the other side, Brulion, Obsidian, Logseq,
+  gets it whole: links, tasks, properties, block ids), every line break LF, no byte order mark, no
+  blank lines around — or **Plain text** — what "Copy as plain text" gives (`blocksPlainText`: no
+  frontmatter, properties or block ids, "• " and ☐ ☑ ☒, links by their labels, `((id))` by the
+  block's text). **Include the title** (`qr/title`, shown only where it makes a difference): the
+  title the view shows (a daily note by its day) first — in Markdown a `# ` heading after the
+  frontmatter and the page properties, which have to stay first —; a note that starts with a
+  level-1 heading of its own has its title already. A note with no block besides its frontmatter
+  and properties has nothing to share.
+* **Several codes** (`qr::splitText`): a text over 2953 bytes is cut into as few codes as hold it,
+  of about the same size (two of 1500 bytes scan more easily than a full one and a scrap), each
+  ending after a line break near its share, else after a space, never inside a character (a
+  surrogate pair, a letter with its combining marks, an emoji sequence). "Code 2 of 3" with ‹ ›,
+  ← → on the code; scanned in turn and joined, the parts are the text byte for byte. More than 20
+  codes (`qr::MaxCodes`, about 59 KB) is too long: the dialog says how many it would take and to
+  share a selection instead.
+
+Tests: `tst_qr` (codes read back by a reader written apart from the generator,
+`tests/core/qr/qrdecode.h`: format and version information, Reed-Solomon codewords, the byte
+segment; the smallest version; the text in both formats, the title after a frontmatter; cutting
+Polish letters, emoji and combining marks), `tst_qrview` (QrShare's codes and their walk, the
+painted code read back at several sizes), `tst_navigation` (the palette's command), the shell
+self-test (`checkQrCode`: the dialog from the uiAction, both formats, a long note walked by → and
+"Next code").
+
 ## Cleaning up (`qml/views/CleanupView.qml`)
 
 **Clean up** (More menu and the palette, `go.cleanup`) lists the notes and attachments nothing
@@ -1592,7 +1638,8 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   children, which becomes the selection — or, for a block that is part of a selection of several,
   "Copy 3 blocks", "Cut 3 blocks": the whole selection; indenting, moving and "Delete 3 blocks"
   then act on all of it too — a selection with gaps is not indented or moved: those items are
-  shown disabled, a tap says why), **Select** (the block becomes the selection; on touch UIs the
+  shown disabled, a tap says why), **QR code…** (the same blocks as QR codes: "QR code"),
+  **Select** (the block becomes the selection; on touch UIs the
   selection mode), Zoom in and Collapse / Expand (outline), **Copy link** ▸ —
   Block reference `((…))` (Ctrl+Shift+C), Link to block `[[…#^…]]`, on headings Link to
   heading `[[…#…]]`, Embed (`!((…))`, a heading's section `![[…#…]]`); what each writes:
@@ -2101,7 +2148,7 @@ the Markdown source (Ctrl+E, More → Markdown source).
   picked with gaps between them: a band for each run; made only for selected blocks (a `Loader`:
   "Scrolling performance").
 * **Tools**: `SelectionToolbar` — "%n selected", Copy, Cut, Delete, Select all,
-  One by one (docked only), More (Copy as plain text, "Copy link" for one block, Indent /
+  One by one (docked only), More (Copy as plain text, QR code…, "Copy link" for one block, Indent /
   Outdent, Move up / Move down, Task status; the indents only where
   they can happen — `canIndentSelection()`: a document's paragraphs and headings have none; with
   gaps the indents and moves are shown disabled — `BMenuItem.unavailable`, the reason in a tooltip

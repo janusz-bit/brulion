@@ -1756,6 +1756,10 @@ private Q_SLOTS:
             QVERIFY(model->run(command));
             QCOMPARE(sourceUi.last().first().toString(), action);
         }
+        // The note as QR codes (docs/UI.md "QR code"): the editor of the page or day opens them.
+        QCOMPARE(ids.indexOf(u"page.qrCode"_s), ids.indexOf(u"page.copyLink"_s) + 1);
+        QVERIFY(model->run(u"page.qrCode"_s));
+        QCOMPARE(sourceUi.last().first().toString(), u"qrCode"_s);
         const auto commandNamed = [model](const QString &id) {
             for (const QVariant &v : model->commands()) {
                 if (v.toMap().value(u"id"_s).toString() == id)
@@ -1822,7 +1826,8 @@ private Q_SLOTS:
             QVERIFY(!model->run(command));
         }
         QVERIFY(commandNamed(u"page.copyLink"_s).value(u"enabled"_s).toBool());
-        QVERIFY(commandNamed(u"page.source"_s).value(u"enabled"_s).toBool()); // the way back
+        QVERIFY(commandNamed(u"page.qrCode"_s).value(u"enabled"_s).toBool());       // the text being edited
+        QVERIFY(commandNamed(u"page.source"_s).value(u"enabled"_s).toBool());       // the way back
         QVERIFY(!commandNamed(u"page.addProperty"_s).value(u"enabled"_s).toBool()); // the panel is hidden
         app->setSourceModeShown(false);
         for (const QString &command : {u"block.copyRef"_s, u"block.copyLink"_s, u"heading.copyLink"_s})
@@ -1832,7 +1837,7 @@ private Q_SLOTS:
         QVERIFY(!model->run(u"page.mode"_s));
         QVERIFY(!model->run(u"page.addProperty"_s));
         for (const QString &command :
-             {u"page.copyLink"_s, u"block.copyRef"_s, u"block.copyLink"_s, u"heading.copyLink"_s}) {
+             {u"page.copyLink"_s, u"page.qrCode"_s, u"block.copyRef"_s, u"block.copyLink"_s, u"heading.copyLink"_s}) {
             QVERIFY(!model->run(command));
             QVERIFY(!commandNamed(command).value(u"enabled"_s).toBool());
         }

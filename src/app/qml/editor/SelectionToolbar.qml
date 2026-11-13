@@ -5,19 +5,19 @@ import Brulion
 
 // SelectionToolbar — the tools of a block selection (docs/UI.md "Selecting and copying"):
 // "%n block(s) selected", Copy, Cut, Delete, Select all, One by one (docked: taps pick single
-// blocks, BlockEditor.pickMode), More (Copy as plain text, the block menu's "Copy link" for a
-// single block, Indent / Outdent, Move up / down — for blocks picked with gaps
-// between them shown disabled, a tap says why —, the task status) and Done (docked, first:
+// blocks, BlockEditor.pickMode), More (Copy as plain text, QR code… — docs/UI.md "QR code" —, the
+// block menu's "Copy link" for a single block, Indent / Outdent, Move up / down — for blocks
+// picked with gaps between them shown disabled, a tap says why —, the task status) and Done (docked, first:
 // leaves the selection mode) or × (floating, last: clears the selection). Two places:
 //   * docked: the "selection" tool set of MobileEditToolbar on touch UIs — in the editing
 //     toolbar's slot, on the keyboard's place (BlockEditor.toolbarMode);
 //   * floating: desktops, a compact bar at the top of the editor while two or more blocks are
 //     selected (BlockEditor).
 // Blocks selected across several days of the journal stream (BlockEditor.inSpan): the count is the
-// stream's, Copy and Copy as plain text copy them all; the other tools are shown unavailable and
-// a tap says that only copying works there; Select all selects the day's own blocks. In reading
-// mode (BlockEditor.readOnly) only what changes nothing: Copy, Select all, One by one, Copy as
-// plain text and Copy link.
+// stream's, Copy, Copy as plain text and QR code… take them all; the other tools are shown
+// unavailable and a tap says that only copying works there; Select all selects the day's own
+// blocks. In reading mode (BlockEditor.readOnly) only what changes nothing: Copy, Select all, One
+// by one, Copy as plain text, QR code… and Copy link.
 // Buttons never take the keyboard: it stays with the selection (the editor's list).
 //
 //   SelectionToolbar { editor: editor; docked: true }
@@ -229,6 +229,12 @@ Row {
                 text: qsTr("Copy as plain text")
                 iconName: "copy"
                 onTriggered: bar.editor.copySelection(true)
+            }
+            BMenuItem {
+                objectName: "selectionQrCode"
+                text: qsTr("QR code…")
+                iconName: "qr-code"
+                onTriggered: bar.editor.showSelectionQrCode()
             }
             BMenu {
                 objectName: "selectionCopyLinkMenu"

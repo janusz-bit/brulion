@@ -3,8 +3,9 @@ import QtQuick
 import Brulion
 
 // BlockMenu — the menu of one block of the editor (docs/UI.md "The block editor"): Copy, Cut,
-// Copy as plain text, Select (docs/UI.md "Selecting and copying" — a block that is part of the
-// block selection: the whole selection; else the block with its children), Zoom in,
+// Copy as plain text, QR code… (docs/UI.md "QR code"), Select (docs/UI.md "Selecting and
+// copying" — a block that is part of the block selection: the whole selection; else the block
+// with its children), Zoom in,
 // Collapse / Expand (outline), Copy link ▸ (Block reference ((…)), Link to block [[…#^…]],
 // on headings Link to heading [[…#…]], Embed — what `BlockEditor.copyLink` puts on the
 // clipboard, docs/SYNTAX.md §2 "Copied links"), Insert picture…, Indent / Outdent,
@@ -259,6 +260,19 @@ BMenu {
                 return
             menu.selectFor(r)
             menu.editor.copySelection(true)
+        }
+    }
+    BMenuItem {
+        // The block with its children (the selection it is part of) as QR codes to scan.
+        objectName: "blockMenuQrCode"
+        text: qsTr("QR code…")
+        iconName: "qr-code"
+        onTriggered: {
+            const r = menu.row()
+            if (r < 0)
+                return
+            menu.selectFor(r)
+            menu.editor.showSelectionQrCode()
         }
     }
     OptionalItem {

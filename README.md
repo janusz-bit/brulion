@@ -161,6 +161,10 @@ Pandoc Markdown document for Word, LibreOffice, PDF or EPUB).
   ("Copy as plain text" too). In the journal, blocks of several days can be selected and copied at
   once (each day after its link). For part of several paragraphs, select the whole blocks, or select
   exactly those characters in the Markdown source mode (`Ctrl+E`, More → Markdown source).
+* **A note as a QR code**: "QR code…" in the page's menu, More or a block's menu shows the note —
+  or the selected blocks — as a QR code that another phone's camera reads as text, without the
+  internet or an app on the other side; Markdown as written or plain text, the title first or
+  not; a longer note is cut into a few codes to scan in turn.
 * Tasks compatible with Obsidian Tasks and Logseq markers; any status (to do, in progress, done,
   waiting, cancelled, or none) from the checkbox's menu — a right-click or a long press,
   wherever a task is shown — or a `/` command. The same gesture on a date, reminder, 🔁 rule or
@@ -286,7 +290,8 @@ Build: `nix develop`, then `scripts/dev-build.sh -t .`; the Android APK: `nix bu
 .#brulion-android` (x86_64-linux hosts, unsigned; sign with `nix run .#brulion-android-sign --
 result/*.apk`). Developer docs: [architecture](docs/ARCHITECTURE.md), [Markdown
 dialect](docs/SYNTAX.md), [UI](docs/UI.md), [extensions (Luau scripting)](docs/EXTENSIONS.md),
-[releases](docs/RELEASE.md). License: AGPL-3.0-or-later; icons Lucide (ISC), ZIP miniz (MIT), the stroke
+[releases](docs/RELEASE.md). License: AGPL-3.0-or-later; icons Lucide (ISC), ZIP miniz (MIT), QR codes
+Nayuki's QR Code generator (MIT, © Project Nayuki), the stroke
 outline of drawings ported from perfect-freehand (MIT, © Stephen Ruiz Ltd), the compression of
 Obsidian Excalidraw plugin drawings ported from lz-string (MIT, © 2013 Pieroxy), emoji and
 symbol fallback fonts: subsets of Noto Emoji and Noto Sans Math (SIL OFL 1.1, `assets/fonts`); PDF
@@ -359,6 +364,10 @@ przykładowym notatnikiem.
   z kilku dni naraz (każdy dzień poprzedzony linkiem do niego). Kawałki kilku akapitów (koniec jednego
   i początek następnego) skopiujesz, zaznaczając całe bloki, albo co do znaku w trybie źródła
   Markdown (`Ctrl+E`, *Więcej* → *Źródło Markdown*).
+* **Notatka w kodzie QR.** *Kod QR…* w menu strony, w *Więcej* albo w menu bloku pokazuje notatkę
+  — albo zaznaczone bloki — jako kod QR, który aparat innego telefonu odczyta jako tekst, bez
+  internetu i bez aplikacji po drugiej stronie; Markdown tak, jak zapisano, albo zwykły tekst, z
+  tytułem albo bez; dłuższa notatka dzieli się na kilka kodów do zeskanowania po kolei.
 * **Dokument albo konspekt.** Każda notatka ma swój tryb: **dokument** jak w Obsidianie
   (akapity, nagłówki i zwykłe listy, czytane jak tekst; klikasz i piszesz w miejscu) albo
   **konspekt** jak w Logseq (każdy punkt to blok). Tryb wybierasz przy tworzeniu strony
@@ -736,7 +745,8 @@ Wydajność (liczby na komputerze, telefonie i w przeglądarce, benchmarki, stra
 ## Licencja
 
 [AGPL-3.0-or-later](LICENSE). Ikony: [Lucide](https://lucide.dev) (ISC). Kompresja ZIP:
-[miniz](https://github.com/richgel999/miniz) (MIT). Kształt linii w rysunkach: algorytm
+[miniz](https://github.com/richgel999/miniz) (MIT). Kody QR: [QR Code generator](https://www.nayuki.io/page/qr-code-generator-library)
+(MIT, © Project Nayuki). Kształt linii w rysunkach: algorytm
 [perfect-freehand](https://github.com/steveruiz/perfect-freehand) (MIT, © Stephen Ruiz Ltd), przeniesiony
 do C++ w `src/core/drawing/stroke.cpp`. Rysunki wtyczki Excalidraw dla Obsidiana: kompresja
 [lz-string](https://github.com/pieroxy/lz-string) (MIT, © 2013 Pieroxy), przeniesiona do C++
