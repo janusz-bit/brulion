@@ -1,0 +1,4 @@
+Nowości w 0.19.1:
+• Notatki w Interze
+
+Pełny opis: https://github.com/janusz-bit/brulion/releases/tag/v0.19.1
