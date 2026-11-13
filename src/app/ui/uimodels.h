@@ -75,9 +75,10 @@ public:
     /// The rows of `rows` that are not disabled (`enabled: false` hides one; a missing `enabled`
     /// keeps it), as they are — BCommandPalette's commands.
     Q_INVOKABLE QVariantList enabledRows(const QVariantList &rows) const;
-    /// The parts BBreadcrumb shows of crumbRows() `rows`: { title, icon, partIndex } — all of them, or
-    /// when `collapsed` the first, a "…" part (partIndex -1) and the last `visibleTail` ones.
-    Q_INVOKABLE QVariantList shownCrumbs(const QVariantList &rows, int visibleTail, bool collapsed) const;
+    /// The parts BBreadcrumb shows of crumbRows() `rows`: { title, icon, partIndex } — the first
+    /// `head` ones, a "…" part (partIndex -1) standing for those between when there are any and
+    /// `dots` is set, and the last `tail` ones; all of them when head + tail covers them.
+    Q_INVOKABLE QVariantList shownCrumbs(const QVariantList &rows, int head, int tail, bool dots) const;
     /// The rows of `rows` whose `key` (as text) is one of `values`, in the order of `values` (a value
     /// no row has is left out) — e.g. the segments of the modes a platform offers.
     Q_INVOKABLE QVariantList rowsByKey(const QVariantList &rows, const QString &key, const QStringList &values) const;

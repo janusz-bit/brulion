@@ -226,7 +226,7 @@ QVariantList UiModels::crumbRows(const QVariantList &model) const
     return out;
 }
 
-QVariantList UiModels::shownCrumbs(const QVariantList &rows, int visibleTail, bool collapsed) const
+QVariantList UiModels::shownCrumbs(const QVariantList &rows, int head, int tail, bool dots) const
 {
     const auto part = [](const QVariant &row, int index) {
         QVariantMap shown = crumbOf(row);
@@ -235,14 +235,13 @@ QVariantList UiModels::shownCrumbs(const QVariantList &rows, int visibleTail, bo
     };
     QVariantList out;
     const int n = int(rows.size());
-    if (!collapsed || n == 0) {
-        for (int i = 0; i < n; ++i)
-            out.append(part(rows.at(i), i));
-        return out;
-    }
-    out.append(part(rows.at(0), 0));
-    out.append(QVariantMap{{u"title"_s, u"…"_s}, {u"icon"_s, QString()}, {u"partIndex"_s, -1}});
-    for (int i = std::max(1, n - visibleTail); i < n; ++i)
+    head = std::clamp(head, 0, n);
+    tail = std::clamp(tail, 0, n - head);
+    for (int i = 0; i < head; ++i)
+        out.append(part(rows.at(i), i));
+    if (dots && head + tail < n)
+        out.append(QVariantMap{{u"title"_s, u"…"_s}, {u"icon"_s, QString()}, {u"partIndex"_s, -1}});
+    for (int i = head + tail < n ? n - tail : head; i < n; ++i)
         out.append(part(rows.at(i), i));
     return out;
 }

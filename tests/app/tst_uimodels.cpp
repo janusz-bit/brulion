@@ -144,13 +144,20 @@ private Q_SLOTS:
                  (QStringList{u"Dziennik"_s, u"2026"_s, u"Październik"_s, u"Środa"_s, u"Notatka"_s}));
         QCOMPARE(m.stringFields(rows, u"icon"_s), (QStringList{{}, u"folder"_s, {}, {}, {}}));
 
-        const QVariantList all = m.shownCrumbs(rows, 5, false);
+        const QVariantList all = m.shownCrumbs(rows, 1, 4, true);
         QCOMPARE(field(all, u"partIndex"_s), (QStringList{u"0"_s, u"1"_s, u"2"_s, u"3"_s, u"4"_s}));
-        const QVariantList collapsed = m.shownCrumbs(rows, 2, true);
+        QCOMPARE(field(m.shownCrumbs(rows, 5, 5, true), u"partIndex"_s), field(all, u"partIndex"_s));
+        const QVariantList collapsed = m.shownCrumbs(rows, 1, 2, true);
         QCOMPARE(field(collapsed, u"title"_s), (QStringList{u"Dziennik"_s, u"…"_s, u"Środa"_s, u"Notatka"_s}));
         QCOMPARE(field(collapsed, u"partIndex"_s), (QStringList{u"0"_s, u"-1"_s, u"3"_s, u"4"_s}));
         QCOMPARE(collapsed.at(1).toMap().value(u"icon"_s).toString(), QString());
-        QVERIFY(m.shownCrumbs({}, 0, true).isEmpty());
+        // No room for the first part either (a phone): "…" and the tail.
+        const QVariantList tight = m.shownCrumbs(rows, 0, 1, true);
+        QCOMPARE(field(tight, u"title"_s), (QStringList{u"…"_s, u"Notatka"_s}));
+        QCOMPARE(field(tight, u"partIndex"_s), (QStringList{u"-1"_s, u"4"_s}));
+        // Nor for "…": the current page alone.
+        QCOMPARE(field(m.shownCrumbs(rows, 0, 1, false), u"partIndex"_s), (QStringList{u"4"_s}));
+        QVERIFY(m.shownCrumbs({}, 1, 1, true).isEmpty());
     }
 
     void enabledRowsAndRowsByKey()
