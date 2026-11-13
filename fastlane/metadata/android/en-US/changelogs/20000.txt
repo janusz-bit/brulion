@@ -1,0 +1,6 @@
+What's new in 0.20.0:
+• A note as a QR code
+• Scripting documented
+• The path fits on phones
+
+Full release notes: https://github.com/janusz-bit/brulion/releases/tag/v0.20.0

@@ -1,0 +1,6 @@
+Nowości w 0.20.0:
+• Notatka jako kod QR
+• Opisane skrypty
+• Ścieżka mieści się na telefonie
+
+Pełny opis: https://github.com/janusz-bit/brulion/releases/tag/v0.20.0
