@@ -7,6 +7,11 @@ brulion: document
 
 Here you'll find what changed in every version of Brulion, newest first. Full release notes with downloads are on GitHub: https://github.com/janusz-bit/brulion/releases
 
+## 0.19.1 — November 13, 2026
+
+**Changes**
+- **Notes in Inter** — note text is now set in **Inter**, the interface's font, by default, in bold italic too; **Literata** stays in **Settings → Editor → Font → Serif**, and a font you chose before stays. See [[Getting started]].
+
 ## 0.19.0 — November 12, 2026
 
 **New**

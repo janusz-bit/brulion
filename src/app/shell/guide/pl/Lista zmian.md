@@ -7,6 +7,11 @@ brulion: document
 
 Tu znajdziesz zmiany w każdej wersji Brulionu, od najnowszej. Pełne opisy wydań z plikami do pobrania są na GitHubie: https://github.com/janusz-bit/brulion/releases
 
+## 0.19.1 — 13 listopada 2026
+
+**Zmiany**
+- **Notatki w Interze** — tekst notatek jest teraz domyślnie pisany **Interem**, czcionką interfejsu, także w pogrubionej kursywie; **Literata** zostaje w **Ustawienia → Edytor → Czcionka → Szeryfowa**, a wybrana wcześniej czcionka zostaje. Zobacz [[Pierwsze kroki]].
+
 ## 0.19.0 — 12 listopada 2026
 
 **Nowe**
