@@ -7,6 +7,15 @@ brulion: document
 
 Tu znajdziesz zmiany w każdej wersji Brulionu, od najnowszej. Pełne opisy wydań z plikami do pobrania są na GitHubie: https://github.com/janusz-bit/brulion/releases
 
+## 0.20.0 — 13 listopada 2026
+
+**Nowe**
+- **Notatka jako kod QR** — **Kod QR…** w menu strony (**⋯**, na telefonie **⋮**), w **Więcej** albo **Udostępnij jako kod QR…** w palecie pokazuje notatkę jako kod QR: skieruj na niego aparat innego telefonu, a pojawi się na nim tekst notatki — bez internetu, bez konta i bez żadnej aplikacji po drugiej stronie. **Kod QR…** w menu bloku (albo w **Więcej** zaznaczenia) przekazuje tylko te bloki. **Markdown** daje notatkę tak, jak jest zapisana, **Zwykły tekst** — to, co daje „Kopiuj jako tekst”; **Dołącz tytuł** stawia na początku tytuł strony. Dłuższa notatka dzieli się na kilka kodów podobnej wielkości (**Kod 1 z 3**, ‹ › albo klawisze strzałek), najwyżej dwadzieścia. Zobacz [[Import i eksport]].
+- **Opisane skrypty** — dwie nowe strony: [[API rozszerzeń]] (wszystko, co może wywołać kod rozszerzenia, limity i komunikaty o błędach) i [[Przepisy na rozszerzenia]] (dziesięć kawałków do skopiowania: polecenia, widoki z akcjami, reakcje na zapis i zmiany, recenzja napisana przez model). [[Rozszerzenia]] mówią teraz, jak działa kod, a [[AI]] pokazuje model z narzędziami.
+
+**Poprawki**
+- **Ścieżka na telefonie** — ścieżka strony na górnym pasku nie wchodzi już pod przyciski (np. **✨**) na wąskich ekranach: gdy jest ciasno, pierwsze części chowają się w **…**, a w końcu zostaje sam tytuł strony.
+
 ## 0.19.1 — 13 listopada 2026
 
 **Zmiany**

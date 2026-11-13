@@ -7,6 +7,15 @@ brulion: document
 
 Here you'll find what changed in every version of Brulion, newest first. Full release notes with downloads are on GitHub: https://github.com/janusz-bit/brulion/releases
 
+## 0.20.0 — November 13, 2026
+
+**New**
+- **A note as a QR code** — **QR code…** in the page menu (**⋯**, on a phone **⋮**), in **More**, or **Share as QR code…** in the palette shows the note as a QR code: point another phone's camera at it and the note's text appears there — no internet, no account and no app on the other side. **QR code…** in a block's menu (or in **More** of a selection) shares only those blocks. **Markdown** gives the note as written, **Plain text** what "Copy as plain text" gives; **Include the title** puts the page's title first. A longer note is cut into a few codes of about the same size (**Code 1 of 3**, ‹ › or the arrow keys), twenty at most. See [[Import and export]].
+- **Scripting documented** — two new pages: [[Extension API]] (everything an extension's code can call, the limits and the error messages) and [[Extension recipes]] (ten pieces to copy: commands, views with actions, reactions to saves and changes, a review written by a model). [[Extensions]] now says how the code runs, and [[AI]] shows a model with tools.
+
+**Fixes**
+- **The path on phones** — the page path on the top bar no longer runs under the buttons (such as **✨**) on narrow screens: when it is tight, the first parts go into **…**, and in the end only the page's title stays.
+
 ## 0.19.1 — November 13, 2026
 
 **Changes**
