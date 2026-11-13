@@ -8468,7 +8468,10 @@ void checkPageProperties(QQuickWindow *window, AppController *app, const Check &
     }
     closeMenus(window);
     // An alias no link can use, then a tap elsewhere: nothing written, the field closes
-    // and a toast says why (Enter says it under the field).
+    // and a toast says why (Enter says it under the field). The undone alias's chip leaves
+    // the header after the file is back (later on a slow machine) and "+" moves left with it.
+    waitFor([&] { return !shownNamed(editor, u"headerAlias_Żółw"_s); });
+    settle(50);
     plus = shownNamed(editor, u"pageHeaderAdd"_s);
     if (plus) {
         tapOrClick(window, pointIn(plus), touch);
