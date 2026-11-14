@@ -6,8 +6,8 @@ import Brulion
 
 // ShellSidebar — the page panel beside the rail of views (ShellRail, docs/UI.md "Sidebar"): the
 // notebook's name with "New page", then its sections in the order of Settings → Appearance →
-// Layout (AppSettings.sidebarSections): Favorites, Recent and All pages — the notebook's
-// folder tree. Favorites and Recent can be hidden (AppSettings.sidebarHidden); the sections
+// Layout (AppSettings.sidebarSections): All pages — the notebook's folder tree —, Favorites and
+// Recent by default. Favorites and Recent can be hidden (AppSettings.sidebarHidden); the sections
 // before the tree are the list's header, the ones after it its footer. The same component is the
 // left pane on wide windows (hidden with the top bar's sidebar button; the rail stays) and, beside
 // the rail, the drawer's content on narrow ones (`navigated()` closes it).

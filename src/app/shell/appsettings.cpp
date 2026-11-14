@@ -375,7 +375,7 @@ QStringList AppSettings::sidebarItems()
 
 QStringList AppSettings::sidebarSectionIds()
 {
-    return {u"favorites"_s, u"recent"_s, u"pages"_s};
+    return {u"pages"_s, u"favorites"_s, u"recent"_s};
 }
 
 QStringList AppSettings::bottomNavViews()

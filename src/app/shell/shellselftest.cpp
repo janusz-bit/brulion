@@ -2449,11 +2449,14 @@ void checkFolders(QQuickWindow *window, AppController *app, const Check &check)
     app->goHome();
     restore();
 
-    // ---- The window's sidebar hidden while its header grows (two pages starred) shows its
-    //      navigation again when it comes back, on a route with no file (nothing revealed).
+    // ---- The window's sidebar hidden while its header grows (two pages starred, Favorites
+    //      before the tree) shows its navigation again when it comes back, on a route with no
+    //      file (nothing revealed).
     if (!narrow) {
         QQuickItem *shellItem =
                 findShown(window->contentItem(), [](QQuickItem *item) { return isA(item, "AppShell"); });
+        AppSettings *settings = app->settings();
+        settings->setSidebarSections({u"favorites"_s, u"recent"_s, u"pages"_s});
         app->navigate({{u"view"_s, u"tasks"_s}});
         settle(200);
         QQuickItem *list = treeList();
@@ -2484,6 +2487,7 @@ void checkFolders(QQuickWindow *window, AppController *app, const Check &check)
         check(grew && atTop, "the sidebar shown again after its header grew shows its navigation at the top");
         ws->setFavorite(recipes, false);
         ws->setFavorite(remont, false);
+        settings->setSidebarSections({});
         settle(100);
     }
 
@@ -2566,6 +2570,10 @@ void checkFolders(QQuickWindow *window, AppController *app, const Check &check)
                           && sidebar->property("dropFolder").toString() == now,
                   "while the list scrolls under a still pointer the drop target follows the rows");
             // The header in view is the root; scrolled just above the list's top edge it is not.
+            // (The pointer off the list's edges first, here and below: held near one, the list
+            // goes on scrolling — the header at the very top is near its top edge.)
+            const QPointF middle = list->mapToScene(QPointF(list->width() / 2, list->height() / 2));
+            uidriver::callQml(sidebar, "dragTo", {QVariant(middle)});
             QMetaObject::invokeMethod(list, "positionViewAtBeginning");
             settle(100);
             uidriver::callQml(sidebar, "dragTo", {QVariant(pointIn(pagesHeader, 0.5))});
@@ -2577,6 +2585,7 @@ void checkFolders(QQuickWindow *window, AppController *app, const Check &check)
                              && sidebar->property("dropValid").toBool();
                   }),
                   "the drag's ghost says what the move rewrites before the drop");
+            uidriver::callQml(sidebar, "dragTo", {QVariant(middle)});
             const qreal headerBottom = pagesHeader->mapToItem(content, QPointF(0, pagesHeader->height())).y();
             list->setProperty("contentY", headerBottom + 4);
             settle(100);
@@ -7659,21 +7668,24 @@ void checkAppearance(QQmlApplicationEngine *engine, QQuickWindow *window, AppCon
               "a view hidden in the sidebar stays in the command palette");
     }
 
-    // The page sections' order (Layout → Order of the sections): "Pages" moved up twice goes first,
-    // Favorites (a page starred) then come after the tree, in the list's footer.
+    // The page sections' order (Layout → Order of the sections): "Pages" (first by default) moved
+    // down twice goes last, Favorites (a page starred) then come before the tree, in the list's
+    // header; back in the default order they come after it, in its footer.
     {
-        const QStringList defaults{u"favorites"_s, u"recent"_s, u"pages"_s};
-        check(settings->sidebarSections() == defaults, "the sidebar's sections start as Ulubione, Ostatnie, Strony");
-        check(activate(shownItem(u"sidebarSectionUp_pages"_s))
+        const QStringList defaults{u"pages"_s, u"favorites"_s, u"recent"_s};
+        check(settings->sidebarSections() == defaults, "the sidebar's sections start as Strony, Ulubione, Ostatnie");
+        QQuickItem *up = shownItem(u"sidebarSectionUp_pages"_s);
+        check(up && !up->isEnabled(), "the first section cannot move further up");
+        check(activate(shownItem(u"sidebarSectionDown_pages"_s))
                       && waitFor([&] {
                              return settings->sidebarSections()
                                     == QStringList{u"favorites"_s, u"pages"_s, u"recent"_s};
                          }),
-              "a section's “up” button moves it one place up (saved)");
+              "a section's “down” button moves it one place down (saved)");
         // The rows are made anew for the new order: tap only once they are (a tap at the old
-        // row's place would reach the section that moved down there).
+        // row's place would reach the section that moved up there).
         const auto rowY = [&](const QString &section) {
-            QQuickItem *item = shownNamed(window->contentItem(), u"sidebarSectionUp_"_s + section);
+            QQuickItem *item = shownNamed(window->contentItem(), u"sidebarSectionDown_"_s + section);
             return item && shown(item) ? item->mapToScene(QPointF(0, 0)).y() : -1.0;
         };
         const auto rowsInOrder = [&](const QStringList &order) {
@@ -7688,17 +7700,17 @@ void checkAppearance(QQmlApplicationEngine *engine, QQuickWindow *window, AppCon
         };
         waitFor([&] { return rowsInOrder({u"favorites"_s, u"pages"_s, u"recent"_s}); });
         // The pointer away from the rows: left where it clicked, it hovers the button of the
-        // section that moved down there, whose tooltip (after 550 ms) covers the button above.
+        // section that moved up there, whose tooltip (after 550 ms) covers the button below.
         mouseMove(window, QPointF(1, 1));
-        activate(shownItem(u"sidebarSectionUp_pages"_s));
+        activate(shownItem(u"sidebarSectionDown_pages"_s));
         check(waitFor([&] {
-                  return settings->sidebarSections() == QStringList{u"pages"_s, u"favorites"_s, u"recent"_s};
+                  return settings->sidebarSections() == QStringList{u"favorites"_s, u"recent"_s, u"pages"_s};
               }),
-              "and once more to the top");
-        waitFor([&] { return rowsInOrder({u"pages"_s, u"favorites"_s, u"recent"_s}); });
+              "and once more to the bottom");
+        waitFor([&] { return rowsInOrder({u"favorites"_s, u"recent"_s, u"pages"_s}); });
         mouseMove(window, QPointF(1, 1));
-        QQuickItem *up = shownItem(u"sidebarSectionUp_pages"_s);
-        check(up && !up->isEnabled(), "the first section cannot move further up");
+        QQuickItem *down = shownItem(u"sidebarSectionDown_pages"_s);
+        check(down && !down->isEnabled(), "the last section cannot move further down");
         Workspace *ws = app->workspace();
         const QString starred = u"Przepisy.md"_s;
         ws->setFavorite(starred, true);
@@ -7712,16 +7724,20 @@ void checkAppearance(QQmlApplicationEngine *engine, QQuickWindow *window, AppCon
         check(waitFor([&] {
                   const qreal favorites = sceneY(u"sidebarFavoritesHeader"_s);
                   const qreal pages = sceneY(u"sidebarPagesHeader"_s);
-                  return favorites >= 0 && pages >= 0 && favorites > pages;
+                  return favorites >= 0 && pages >= 0 && favorites < pages;
               }),
-              "with Strony first the favourites come after the folder tree");
-        ws->setFavorite(starred, false);
+              "with Strony last the favourites come before the folder tree");
         settings->setSidebarSections({});
         check(waitFor([&] {
-                  return settings->sidebarSections() == defaults
-                         && !shownNamed(window->contentItem(), u"sidebarFavoritesHeader"_s);
+                  const qreal favorites = sceneY(u"sidebarFavoritesHeader"_s);
+                  const qreal pages = sceneY(u"sidebarPagesHeader"_s);
+                  return settings->sidebarSections() == defaults && favorites >= 0 && pages >= 0
+                         && favorites > pages;
               }),
-              "the default order comes back");
+              "the default order comes back: the favourites after the folder tree");
+        ws->setFavorite(starred, false);
+        check(waitFor([&] { return !shownNamed(window->contentItem(), u"sidebarFavoritesHeader"_s); }),
+              "no Favorites section without a starred page");
         if (narrow && sectionDrawer) {
             QMetaObject::invokeMethod(sectionDrawer, "close");
             waitFor([sectionDrawer] { return !sectionDrawer->property("visible").toBool(); });

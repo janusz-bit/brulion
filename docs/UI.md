@@ -145,7 +145,7 @@ components — no Material/Fusion look, so all targets look identical.
     button hides only the page panel: the rail stays (not in focus mode).
   * Sidebar (`ShellSidebar`, the page panel): the notebook's name and a new-page button, then
     its sections in the order chosen in Settings → Appearance → Layout → "Order of the sections"
-    (`AppSettings.sidebarSections`, `ui/sidebar/sections`; Favorites, Recent, Pages by default;
+    (`AppSettings.sidebarSections`, `ui/sidebar/sections`; Pages, Favorites, Recent by default;
     the ones before the tree are the list's header, the ones after it its footer): Favorites (shown
     once a page is starred — the page header's ☆, the More menu, a tree row's "Add to
     favorites", the palette); Recent (up to 5 pages opened lately, without the one shown — the
