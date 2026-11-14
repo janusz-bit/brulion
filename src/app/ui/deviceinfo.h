@@ -6,6 +6,7 @@
 
 #include <QAccessible>
 #include <QObject>
+#include <QQuickItem>
 #include <QString>
 #include <QStringList>
 #include <QtQml/qqmlregistration.h>
@@ -75,6 +76,10 @@ public:
     /// `family` is installed (a family chosen on another device or since removed is not:
     /// Theme.qml falls back to the default font then).
     Q_INVOKABLE bool hasFontFamily(const QString &family) const;
+    /// A popup that takes the keyboard focus (`focus: true`: a menu, a dialog — not a tooltip) is
+    /// shown in `item`'s window, also while it plays its exit transition (Main.qml: the keyboard
+    /// focus left above the screen goes back to it only once no such popup is there).
+    Q_INVOKABLE bool focusPopupShown(QQuickItem *item) const;
 
 Q_SIGNALS:
     void screenReaderChanged();

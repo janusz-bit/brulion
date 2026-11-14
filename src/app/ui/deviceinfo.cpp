@@ -8,6 +8,7 @@
 #include <QGuiApplication>
 #include <QInputDevice>
 #include <QInputMethod>
+#include <QQuickWindow>
 
 #include <algorithm>
 
@@ -136,6 +137,28 @@ bool DeviceInfo::hasTouchScreen() const
 {
     const auto devices = QInputDevice::devices();
     return std::ranges::find(devices, QInputDevice::DeviceType::TouchScreen, &QInputDevice::type) != devices.end();
+}
+
+bool DeviceInfo::focusPopupShown(QQuickItem *item) const
+{
+    QQuickWindow *window = item ? item->window() : nullptr;
+    if (!window)
+        return false;
+    // Shown popups have their items in the window's overlay (QQuickOverlay, a child of the root
+    // item); the popup is the item's QObject parent (a toast host there is no popup).
+    const QList<QQuickItem *> rootChildren = window->contentItem()->childItems();
+    for (QQuickItem *overlay : rootChildren) {
+        if (!overlay->inherits("QQuickOverlay"))
+            continue;
+        const QList<QQuickItem *> shown = overlay->childItems();
+        for (QQuickItem *popupItem : shown) {
+            const QObject *popup = popupItem->parent();
+            if (popupItem->isVisible() && popup && popup->inherits("QQuickPopup")
+                && popup->property("focus").toBool())
+                return true;
+        }
+    }
+    return false;
 }
 
 } // namespace brulion::ui

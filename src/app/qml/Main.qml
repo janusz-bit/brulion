@@ -55,21 +55,47 @@ ApplicationWindow {
     Binding { target: DatesHelper; property: "weekStart"; value: Workspace.config.weekStartsOn !== undefined ? Workspace.config.weekStartsOn : 1 }
     Binding { target: AppController; property: "sidePanelAllowed"; value: !Theme.narrow }
 
-    // A popup that closes hands the focus back to what had it when it opened. When it opened
-    // at start-up (quick capture from a launcher or the tray, while the window was not active
-    // yet) that is the window's content item — outside every view, where no key (Tab, Escape,
-    // the Android back key) reaches the shell any more. Give the focus back to the screen then.
+    // The keyboard focus above the screen (docs/UI.md "Keyboard shortcuts (desktop)"): keys go
+    // from the focused item up to its parents, so on the window's content item, its content
+    // control or the root item no key (Tab, Escape, the Android back key) reaches the shell any
+    // more. A closing popup leaves it there: it hands the focus back to what had it when it
+    // opened — the content item when it opened at start-up (quick capture from a launcher or the
+    // tray, while the window was not active yet) — and holds it on the root item during its exit
+    // transition, after which Qt gives it to the next popup that takes the focus (a submenu's
+    // menu) or to the content item, though not always (some sequences of closing dialogs and
+    // menus left it on the root item until a click). Give the focus back to the screen then —
+    // at once, or, while a popup that takes the focus is shown (closing too), once its
+    // transitions are over (asked again while such a popup stays and the focus above).
     onActiveFocusItemChanged: {
-        if (window.activeFocusItem === window.contentItem)
+        if (window.focusAboveStage())
             focusBack.restart()
     }
-    // (Once the popup has closed.)
+    function focusAboveStage(): bool {
+        const focused = window.activeFocusItem
+        if (focused === null)
+            return false
+        for (let p = stage.parent; p !== null; p = p.parent) {
+            if (p === focused)
+                return true
+        }
+        return false
+    }
+    function giveFocusBack(): void {
+        if (!window.focusAboveStage())
+            return
+        if (DeviceInfo.focusPopupShown(stage))
+            focusBackLater.restart()
+        else
+            stage.forceActiveFocus()
+    }
     Later {
         id: focusBack
-        onTriggered: {
-            if (window.activeFocusItem === window.contentItem)
-                stage.forceActiveFocus()
-        }
+        onTriggered: window.giveFocusBack()
+    }
+    Timer {
+        id: focusBackLater
+        interval: Theme.durationSlow + 120
+        onTriggered: window.giveFocusBack()
     }
 
     // Back from a page's own window (docs/UI.md "Tabs, split view and windows"): navigation goes to

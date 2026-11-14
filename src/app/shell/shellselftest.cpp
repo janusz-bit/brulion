@@ -5752,6 +5752,28 @@ void checkFocusAndShortcuts(QQuickWindow *window, AppController *app, const Chec
     check(stats.value(u"words"_s).toInt() == 360 && stats.value(u"readingMinutes"_s).toInt() == 2,
           "the page counts 360 words, 2 minutes of reading");
 
+    // ---- The keyboard focus left above the screen goes back to it (Main.qml): only once no popup
+    //      that takes the focus is shown — closing, Qt itself gives the focus on (a submenu's menu).
+    QObject *device = qmlEngine(window)->singletonInstance<QObject *>("Brulion", "DeviceInfo");
+    const auto focusPopupShown = [&] {
+        bool shown = false;
+        QMetaObject::invokeMethod(device, "focusPopupShown", qReturnArg(shown), window->contentItem());
+        return shown;
+    };
+    check(!focusPopupShown(), "no popup that takes the keyboard focus is shown");
+    if (QQuickItem *button = topBarMoreButton(window))
+        tapOrClick(window, pointIn(button), touch);
+    check(waitFor([&] { return openMenus(window) == 1; }) && focusPopupShown(),
+          "the top bar's More menu is a popup that takes the keyboard focus");
+    closeMenus(window);
+    check(!focusPopupShown(), "the menu closed, no such popup is shown");
+    // Below the window's content item (ApplicationWindow's), as a view's keys need.
+    auto *windowContent = window->property("contentItem").value<QQuickItem *>();
+    const auto focusInScreen = [&] {
+        const QQuickItem *focused = window->activeFocusItem();
+        return focused && focused != windowContent && windowContent && windowContent->isAncestorOf(focused);
+    };
+
     // ---- Focus mode: F8 (the command's default shortcut) hides the bars, the text column centred.
     check(named(u"shellTopBar"_s) != nullptr && named(u"focusModeExit"_s) == nullptr,
           "outside focus mode the top bar is shown");
@@ -5770,6 +5792,19 @@ void checkFocusAndShortcuts(QQuickWindow *window, AppController *app, const Chec
                      && (touch || qAbs(contentX + contentWidth / 2 - editor->width() / 2) <= 1);
           }),
           "in focus mode the editor fills the window, its text column centred");
+    // The keyboard focus on the root item, as some closing popups left it (Esc then reached no
+    // view — focus mode stayed until a click): it goes back to the screen.
+    // (As Qt does for a popup's exit transition: the focus taken from the root item's focus
+    // scope below it — Main.qml's stage — leaves the active focus on the root item.)
+    QQuickItem *stageScope = nullptr;
+    for (QQuickItem *p = window->activeFocusItem(); p && p != window->contentItem(); p = p->parentItem()) {
+        if (p->isFocusScope())
+            stageScope = p;
+    }
+    if (stageScope)
+        stageScope->setFocus(false);
+    check(window->activeFocusItem() == window->contentItem() && waitFor(focusInScreen),
+          "the keyboard focus left on the root item goes back to the screen");
     // Esc: what the view does not need ends it (a selected block first, if any).
     for (int i = 0; i < 3 && settings->focusMode(); ++i)
         sendKey(window, Qt::Key_Escape);

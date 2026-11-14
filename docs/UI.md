@@ -676,6 +676,19 @@ everything near the bottom, the same way on Android, in the browser and with a s
 Every key of this table but Delete and Ctrl+Enter is a command's shortcut and can be changed
 ("Custom shortcuts" below); the block editor's keys below cannot.
 
+Keys go from the focused item up to its parents, so the keyboard focus must stay inside the screen
+(`stage`, the Loader of `Main.qml`): on an item above it — the window's content item, its content
+control, the root item — no key (Tab, Escape, the Android back key) reaches the shell. A closing
+popup can leave it there: it hands the focus back to what had it when it opened (the content item
+when quick capture opened at start-up, before the window was active) and holds it on the root item
+during its exit transition, after which Qt gives it to the next popup that takes the focus (a
+submenu's menu) or the content item — not always: closing the assistant's question and the ✨ menu
+once left it on the root item, and Esc did not end focus mode until a click. `Main.qml` gives it
+back to the screen (`stage.forceActiveFocus()`) as soon as it is above it — at once, or, while a
+popup that takes the focus is shown (`DeviceInfo.focusPopupShown`, closing ones too), once the
+transitions are over (`Theme.durationSlow` + 120 ms, asked again while such a popup stays).
+The shell self-test (`checkFocusAndShortcuts`) puts the focus on the root item and expects it back.
+
 Block editor (handled in `qml/editor/BlockEditor.qml`, executed by `PageController`):
 
 | Keys | Editing a block | Blocks selected (Esc, Shift+↑/↓, Ctrl+A, a drag, …) |
