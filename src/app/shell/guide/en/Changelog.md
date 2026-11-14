@@ -7,6 +7,16 @@ brulion: document
 
 Here you'll find what changed in every version of Brulion, newest first. Full release notes with downloads are on GitHub: https://github.com/janusz-bit/brulion/releases
 
+## 0.21.0 — November 14, 2026
+
+**New**
+- **AI writes extensions** — ask the [[AI]] assistant for a new command, view or reaction ("a command that counts the words of today's note"): it reads how extensions are written, tries its code on your notes without changing anything, and with your yes writes the page into **Extensions/**. The code then waits for you like code from another device: read the page and press **Run** when you agree with what it does; every later change by the AI waits again. See [[Extensions]].
+- **Extensions from agents** — `brulion-cli extension docs`, `list`, `show`, `check`, `run`, `eval` and `write` (also as MCP tools) let an agent such as Claude Code read the API, check a page, try a command, view or reaction (what it would write comes back as a diff) and write the page. See [[Command line and AI agents]].
+- **`b.checkExtension(name, text)`** tries a page's text as an extension without saving it. See [[Extension API]].
+
+**Fixes**
+- **Nix packages** — `nix build .#brulion-cli` and the flake's checks no longer stop on a missing file.
+
 ## 0.20.0 — November 13, 2026
 
 **New**

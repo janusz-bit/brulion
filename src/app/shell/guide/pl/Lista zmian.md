@@ -7,6 +7,16 @@ brulion: document
 
 Tu znajdziesz zmiany w każdej wersji Brulionu, od najnowszej. Pełne opisy wydań z plikami do pobrania są na GitHubie: https://github.com/janusz-bit/brulion/releases
 
+## 0.21.0 — 14 listopada 2026
+
+**Nowe**
+- **AI pisze rozszerzenia** — poproś [[AI|Asystenta AI]] o nowe polecenie, widok albo reakcję („polecenie, które policzy słowa dzisiejszej notatki”): przeczyta, jak się pisze rozszerzenia, wypróbuje kod na Twoich notatkach, niczego nie zmieniając, i za Twoją zgodą zapisze stronę w **Rozszerzenia/**. Potem kod czeka na Ciebie jak kod z innego urządzenia: przeczytaj stronę i naciśnij **Uruchom**, gdy zgadzasz się z tym, co robi; każda późniejsza zmiana AI znowu czeka. Zobacz [[Rozszerzenia]].
+- **Rozszerzenia od agentów** — `brulion-cli extension docs`, `list`, `show`, `check`, `run`, `eval` i `write` (także jako narzędzia MCP) pozwalają agentowi, np. Claude Code, przeczytać API, sprawdzić stronę, wypróbować polecenie, widok albo reakcję (to, co by zapisały, wraca jako różnica) i zapisać stronę. Zobacz [[Wiersz poleceń i agenci AI]].
+- **`b.checkExtension(nazwa, tekst)`** próbuje tekst strony jako rozszerzenie, nie zapisując go. Zobacz [[API rozszerzeń]].
+
+**Poprawki**
+- **Paczki Nix** — `nix build .#brulion-cli` i sprawdzenia flake'a nie zatrzymują się już na brakującym pliku.
+
 ## 0.20.0 — 13 listopada 2026
 
 **Nowe**

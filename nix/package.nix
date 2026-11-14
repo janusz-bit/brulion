@@ -42,6 +42,8 @@ stdenv.mkDerivation (finalAttrs: {
         ../assets
         ../packaging
         ../3rdparty
+        # Built into the core as a resource (src/core/extensions: the extensions reference).
+        ../docs/EXTENSIONS.md
       ]
       # What the tests read besides their own folder; the package itself does not rebuild for these.
       ++ lib.optionals finalAttrs.doCheck [

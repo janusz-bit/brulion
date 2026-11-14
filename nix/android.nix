@@ -125,6 +125,8 @@ stdenvNoCC.mkDerivation (finalAttrs: {
       ../assets
       ../android
       ../3rdparty
+      # Built into the core as a resource (src/core/extensions: the extensions reference).
+      ../docs/EXTENSIONS.md
     ];
   };
 
