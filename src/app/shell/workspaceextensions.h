@@ -301,7 +301,6 @@ private:
     QStringList m_approvedOrder;
     QSet<QString> m_off; // page extensions switched off here (by id)
     QHash<QString, QByteArray> m_editorSaves; // path → SHA-1 of the text the editor wrote
-    QSet<QString> m_extensionWrites; // paths extensions wrote (not "change" for hooks)
     QHash<QString, QString> m_loadedKeys; // engine id → what was loaded (a key of its source)
     QHash<QString, extensions::Extension> m_lastGood; // engine id → the last version that loaded
     QHash<QString, QString> m_loadErrors; // engine id → why the last load failed

@@ -237,7 +237,6 @@ void WorkspaceExtensions::detach()
     m_approvedOrder.clear();
     m_off.clear();
     m_editorSaves.clear();
-    m_extensionWrites.clear();
     m_loadedKeys.clear();
     m_lastGood.clear();
     m_loadErrors.clear();
@@ -312,7 +311,6 @@ bool WorkspaceExtensions::ensureEngine()
         qCInfo(lcApp, "extension %s: %s", qUtf8Printable(extension), qUtf8Printable(text));
         m_console->append(u"print"_s, text, extension == kConsole ? QString() : title(extension));
     };
-    m_host->onWritten = [this](const QString &, const QString &path) { m_extensionWrites.insert(path); };
     m_engine = std::make_unique<extensions::Engine>();
     QString error;
     if (!m_engine->start(m_host.get(), extensions::Limits{}, &error)) {
@@ -438,9 +436,12 @@ void WorkspaceExtensions::notesChanged(const QStringList &changedPaths)
         m_pagesTimer.start();
     }
     // "change" hooks: what changed, except what extensions wrote themselves (no echoes, no loops).
-    const bool hooked = m_engine && !m_engine->hooks(u"change"_s).isEmpty();
+    // The vault reports a write while it is made, so a change that arrives while a call of an
+    // extension executes is that call's own write (a sync, the editor and other programs change
+    // notes from the event loop, never inside a call).
+    const bool hooked = m_engine && !m_engine->isRunning() && !m_engine->hooks(u"change"_s).isEmpty();
     for (const QString &path : changedPaths) {
-        if (m_extensionWrites.remove(path) || !hooked || !paths::isMarkdown(path))
+        if (!hooked || !paths::isMarkdown(path))
             continue;
         const ParsedNote *note = m_index->note(path);
         const QString name = note ? note->title : paths::pageTitle(path);

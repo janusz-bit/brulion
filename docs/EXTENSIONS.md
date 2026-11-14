@@ -372,13 +372,14 @@ end, {
 | `b.on("save", fn)` | this device's editor saved a page (right after the save) | `{ page, path }`: the page's name and its file in the notebook |
 | `b.on("change", fn)` | notes changed — the editor, a sync, another program, an import; once a burst of changes is over (0.6 s) | `{ pages = { names… } }`; a deleted page is named too (`b.read` gives `nil`) |
 
-What extensions write themselves never comes back to them as `"change"` (no echoes, no loops). A
-hook may write and may ask a model, but never asks a question (`b.ask` there is an error); it runs
-under the same limits; what it returns is written to the console; and one that fails three times
-in a row is taken off until its extension loads again (Emacs does the same to a failing
-`post-command-hook` function), its errors in the console and the event log. At most 256 hooks in
-all. A view is not drawn again after a hook: keep what a view shows in the notebook, not in
-variables a hook fills.
+What extensions write — any of them, in a command, an action or a hook — is no `"change"` (no
+echoes, no loops): the hooks hear the editor, a sync and other programs, so one extension does not
+react to what another wrote. A hook may write and may ask a model, but never asks a question
+(`b.ask` there is an error); it runs under the same limits; what it returns is written to the
+console; and one that fails three times in a row is taken off until its extension loads again
+(Emacs does the same to a failing `post-command-hook` function), its errors in the console and the
+event log. At most 256 hooks in all. A view is not drawn again after a hook: keep what a view shows
+in the notebook, not in variables a hook fills.
 
 ```luau
 -- Keeps the page "Project index" in step with the pages tagged #project.
