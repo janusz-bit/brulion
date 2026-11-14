@@ -26,6 +26,7 @@ Czytanie nie wymaga uprawnień.
 | `b.blocks({ tag = "pomysł" })` | każdy blok, który sam ma ten tag; z `journal = true`, `from = "2026-11-01"` albo `to = "2026-11-30"` tylko bloki dziennika |
 | `b.search(tekst, limit)` | to, co znajduje widok wyszukiwania: jedno trafienie na stronę, najlepsze najpierw (20 bez `limit`, najwyżej 200) |
 | `b.query(tekst, limit)` | zapytanie w języku opisanym na stronie [[Zapytania]]: `{ total, items }` (50 pozycji bez `limit`, najwyżej 1000) |
+| `b.checkExtension(nazwa, tekst)` | próbuje `tekst` jako stronę rozszerzenia `nazwa`, nie zapisując go i o nic nie pytając: `{ ok, commands, views, hooks, … }` albo `ok = false` z `error` i wierszem strony `line`. Niczego nie zapisuje; tak Asystent AI sprawdza rozszerzenie, zanim je zapisze |
 
 ```luau
 local wkrotce = b.query("type:tasks status:open due:<=+7d sort:due")
@@ -100,7 +101,7 @@ end, { label = "Oznacz zadanie jako zrobione", block = true })
 | `b.lang()`, `b.uiLang()` | język notatek i język interfejsu: `"pl"` albo `"en"` |
 | `b.log(tekst)`, `print(…)` | wiersz w konsoli Luau |
 | `b.timer(sekundy, etykieta)` | uruchamia timer przerwy (ten ze strony [[Siłownia]]): powiadomienie, gdy czas minie |
-| `b.data(nazwa)` | dane dołączone do wbudowanego rozszerzenia (lista ćwiczeń Siłowni); we własnym `nil` |
+| `b.data(nazwa)` | dane dołączone do wbudowanego rozszerzenia (lista ćwiczeń Siłowni, opis pisania rozszerzeń dla Asystenta AI); we własnym `nil` |
 
 ## Polecenia
 `b.command(nazwa, function(ctx) … end, { label = "…", block = true })` dodaje do palety polecenie pod etykietą `label`.

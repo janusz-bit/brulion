@@ -27,6 +27,8 @@ Switch it on in **Settings → Extensions → AI → AI assistant**. Then the to
 - **Summarise this page** — a few sentences and the page's tasks.
 - **AI settings…** — the provider, the key and the model.
 
+**Extensions, too.** Ask for a new command, view or reaction — "a command that counts the words of today's note" — and the AI reads how extensions are written, tries its code on your notes without changing anything, and writes the page into **Extensions/**. It then waits for you like code from another device: read the page and press **Run** when you agree with what it does (see [[Extensions]]).
+
 **Changes only with your yes.** Before the AI adds to a page or a day, writes a page or ticks off a task, a window shows what it would write: **Allow**, **Allow every change of this question** or **No**. What you decline is not written, and the AI is told so.
 
 The answer goes into **today's note** under `🤖 your question`, its points as items, with `✏️ Changed: [[…]]` naming the pages it changed. The assistant works with tools (searching, reading, writing): on a server of your own pick a model that supports them (e.g. Qwen 3 or Llama 3.1); Claude does. While the model answers, the button spins. The same commands are in the palette (Ctrl+K) as **AI: ask or ask to do…** and **AI: summarise this page**.

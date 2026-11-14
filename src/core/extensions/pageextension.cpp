@@ -1,6 +1,7 @@
 #include "extensions/pageextension.h"
 
 #include "extensions/notebookhost.h"
+#include "markdown/frontmatter.h"
 #include "text/text.h"
 
 #include <QCryptographicHash>
@@ -303,6 +304,54 @@ PageExtension readPageExtension(const VaultPath &path, const ParsedNote &note, Q
         out.problems << u"unknown permission: "_s + word;
     out.hash = extensionHash(out.permissions, out.code);
     return out;
+}
+
+QString extensionPageText(const QString &language, const QString &description, const QStringList &permissions,
+                          const QString &code)
+{
+    const bool en = language == u"en";
+    QVariantMap properties{{u"tags"_s, QStringList{en ? u"extension"_s : u"rozszerzenie"_s}}};
+    const QString descriptionKey = en ? u"description"_s : u"opis"_s;
+    const QString permissionsKey = en ? u"permissions"_s : u"uprawnienia"_s;
+    if (!description.trimmed().isEmpty())
+        properties.insert(descriptionKey, description.simplified());
+    QStringList words;
+    for (const QString &p : permissionsFrom(permissions))
+        words << (p == u"write" && !en ? u"zapis"_s : p);
+    if (!words.isEmpty())
+        properties.insert(permissionsKey, words);
+    QStringList lines{markdown::stringifyFrontmatter(properties, {u"tags"_s, descriptionKey, permissionsKey}).chopped(1)};
+    QString body = code;
+    body.replace(u"\r\n"_s, u"\n"_s);
+    while (body.endsWith(u'\n'))
+        body.chop(1);
+    // A fence longer than every run of backticks starting a line of the code: the code stays whole.
+    qsizetype longest = 0;
+    for (const QStringView line : QStringView(body).split(u'\n')) {
+        const QStringView t = line.trimmed();
+        qsizetype n = 0;
+        while (n < t.size() && t.at(n) == u'`')
+            ++n;
+        longest = std::max(longest, n);
+    }
+    const QString fence(std::max<qsizetype>(3, longest + 1), u'`');
+    lines << fence + u"luau"_s << body << fence;
+    return lines.join(u'\n') + u'\n';
+}
+
+int errorLine(const QString &title, const QString &error)
+{
+    const QString first = error.section(u'\n', 0, 0);
+    const QString prefix = title + u':';
+    if (!first.startsWith(prefix))
+        return -1;
+    qsizetype i = prefix.size();
+    int line = 0;
+    while (i < first.size() && first.at(i).isDigit() && line < 10000000)
+        line = line * 10 + first.at(i++).digitValue();
+    if (i == prefix.size() || i >= first.size() || first.at(i) != u':' || line < 1)
+        return -1;
+    return line - 1;
 }
 
 QString newExtensionPage(const QString &language)

@@ -108,6 +108,9 @@ end, nil, { label = "Projekty" })
 
 Reakcja działa, gdy coś się dzieje: `b.on("save", function(e) … end)` po zapisaniu strony na tym urządzeniu (`e.page`), `b.on("change", function(e) … end)` po zmianach w notatkach, skądkolwiek przyszły (`e.pages`). Reakcja, która ciągle się wywraca, zostaje wyłączona do ponownego wczytania rozszerzenia.
 
+## Napisane przez AI
+Poproś o nie [[AI|Asystenta AI]] — „AI: zapytaj albo poproś…”, a potem „polecenie, które policzy słowa dzisiejszej notatki”. Asystent przeczyta, jak się pisze rozszerzenia, wypróbuje kod na Twoich notatkach, niczego nie zmieniając, i za Twoją zgodą zapisze stronę w **Rozszerzenia/**. Agent, np. Claude Code, zrobi to samo przez [[Wiersz poleceń i agenci AI|wiersz poleceń]]: przeczyta API (`brulion-cli extension docs`), wypróbuje kod (`extension eval`, `extension run` — to, co kod by zapisał, wraca jako różnica) i zapisze stronę (`extension write`). W obu przypadkach kod czeka na Ciebie jak kod z innego urządzenia: przeczytaj stronę i naciśnij **Uruchom**, gdy zgadzasz się z tym, co robi. Każda późniejsza zmiana AI znowu czeka.
+
 ## Kod Siłowni
 [[Siłownia]] też jest rozszerzeniem. **Ustawienia → Rozszerzenia → Kod Siłowni → Edytuj kod** zapisuje jej źródło na stronie Twojego notatnika, sekcja pod nagłówkiem, i odtąd Siłownia działa **z tej strony**: zmień, zapisz i zmiana działa. **Przywróć** przenosi stronę do kosza i znowu działa wbudowana Siłownia.
 

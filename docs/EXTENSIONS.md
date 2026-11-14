@@ -33,6 +33,7 @@ pages name every function of `b`.
 | copy something that works | [Recipes](#recipes) |
 | find out why it does not work | [Errors](#errors), [Troubleshooting](#troubleshooting), [The Luau console](#the-luau-console) |
 | know what a page may do and when it runs | [Extensions in the notebook](#extensions-in-the-notebook), [Sandbox and limits](#sandbox-and-limits) |
+| write one as an AI agent, from the command line | [Written by an AI agent](#written-by-an-ai-agent) |
 
 ## Quick start
 
@@ -167,11 +168,22 @@ Reading needs no permission.
 | `b.blocks({ tag = "workout", journal = true, from = "2026-11-01", to = "2026-11-30" })` | every block that carries the tag itself (not through its parent or its page), each with its `children`: first those of ordinary pages (by path), then those of daily notes, oldest day first. `journal = true` — or a `from` / `to` day, both optional and inclusive — keeps daily notes only. At most 20 000 blocks |
 | `b.search(text, limit?)` | full-text search as the search view does it (words in any form, diacritics optional, the best first): one hit per page, at most `limit` (20 by default, 200 at most), each `{ page, date?, excerpt, line?, ref?, text?, task? }` — `line` the first matching line, counted from 1 (none when only the title matched), `ref` / `text` / `task` of the block holding that line |
 | `b.query(source, limit?)` | a query of the query language (docs/SYNTAX.md §10): `{ total, items }` with at most `limit` items (50 by default, 1000 at most; a smaller `limit:` in the query wins). Items are blocks without `children`, plus a task's `due`, `scheduled`, `start` and a reminder's `reminder` (`"2026-11-12 09:00"`); for `type:pages` they are `{ page, date? }`. A query that is none is an error with the reason |
+| `b.checkExtension(name, text)` | loads `text` as the extension page `name` would load (a new page: where new pages go), in an engine of its own — its top-level code runs with 1 s and 32 MB, writes only computed, nothing stays registered, no approval needed: `{ ok, id, title, path, permissions, problems, commands = { { name, label, block } }, views = { { name, label, icon, actions } }, hooks = { events… }, printed, writes? }`, or `ok = false` with `error`, `line` (the page's line, from 1) and `status` (`"timeout"` …). Text that is no extension page (no tag, no code) has `ok = false` too. Inside such a check it reports an error instead of checking again |
 
 `b.blocks({ tag = … })` and `tag:` in `b.query` differ: the first finds the blocks that carry the
 tag themselves, the query also those under a tagged block or on a tagged page, and `tag:project`
 matches `#project/home` too. `page:this` and `ref:this` mean nothing in a script (there is no
 "page of the query").
+
+```luau
+-- An extension that writes extensions checks them first (the AI assistant's write_extension).
+local page = "---\ntags: [extension]\n---\n```luau\nb.command(\"hi\", function() return \"Hi\" end)\n```\n"
+local report = b.checkExtension("Greeting", page)
+if not report.ok then
+    return `Line {report.line}: {report.error}`
+end
+return `{#report.commands} command(s): {report.commands[1].name}`
+```
 
 ```luau
 b.command("numbers", function(ctx)
@@ -261,7 +273,7 @@ end, { label = "Mark the task done", block = true })
 | `b.uiLang()` | the interface's language (labels, messages): `"pl"` or `"en"`. The app gives both the interface's language today; ask each for what it means |
 | `b.log(text)`, `print(…)` | a line in the Luau console and in the event log, under the extension's name (at most 4000 characters). `print` joins its values with tabs and writes a table as `table`: build the text yourself |
 | `b.timer(seconds, label?)` | starts the app's rest timer (1 … 86400 s) — the gym's: its countdown shows in the Gym view, and at the end a notification and a message say "`label` is over" and speak of the next set. One timer at a time: a new one replaces it |
-| `b.data(name)` | read-only data bundled with a built-in extension (the gym's `b.data("exercises")`); `nil` for extension pages — unless the page overrides a built-in, which keeps the built-in's data |
+| `b.data(name)` | read-only data bundled with a built-in extension (the gym's `b.data("exercises")`, the AI assistant's `b.data("reference")` — this document's text); `nil` for extension pages — unless the page overrides a built-in, which keeps the built-in's data |
 
 ## Commands
 
@@ -537,14 +549,19 @@ end, { label = "Ask my notes (AI)" })
 
 **The AI assistant** (built in, `src/core/extensions/builtin/asystent.luau`; Settings → Extensions →
 AI, off by default) is an agent: "AI: ask or ask to do…" asks for a question or a request
-(`b.ask`) and sends it with the page on screen (at most 30 000 characters) and eight tools —
+(`b.ask`) and sends it with the page on screen (at most 30 000 characters) and eleven tools —
 `search_notes` (`b.search`), `query_notes` (`b.query`, the query language described in the tool's
-description), `list_pages`, `read_page`, and the changes `append_to_journal`, `append_to_page`,
-`write_page`, `update_block` (`b.replaceBlock`: a task's status too). The model calls them as it
-needs, at most twelve turns, each result at most 12 000 characters. **Every change waits for the
+description), `list_pages`, `read_page`, the changes `append_to_journal`, `append_to_page`,
+`write_page`, `update_block` (`b.replaceBlock`: a task's status too), and for writing an extension
+`extension_reference` (this document, `b.data("reference")`: the list of its sections, or the
+sections whose heading has the words asked for), `check_extension` (`b.checkExtension`) and
+`write_extension` (checked first and refused while it does not load or when the page is no
+extension; a new page goes to `Rozszerzenia/` / `Extensions/`). The model calls them as it needs,
+at most sixteen turns, each result at most 12 000 characters (the reference 40 000). **Every change waits for the
 user**: `b.choose` with what would be written (the question dialog shows the lines after the
 first under its title, as plain text) — Allow, Allow every change of this question, No; a no (or
-the dialog closed) goes back to the model as a declined change. The answer goes into today's note —
+the dialog closed) goes back to the model as a declined change. An extension it wrote is code
+"changed elsewhere" like any `b.write` of a page: it runs once the user approves it on the page. The answer goes into today's note —
 `- 🤖 <question> ([[Page]])`, its lines as items under it, then `✏️ Changed: [[…]]` with the
 pages changed; "Asking AI…" is said once per question. "AI: summarise this page" sums up the page
 on screen in one request without tools. Both are a tap away on the top bar's ✨ button while the assistant is
@@ -753,6 +770,28 @@ Emacs `config.org`). The page's properties (docs/SYNTAX.md §13), in English or 
   overrides it too, as TiddlyWiki's shadow tiddlers. The built-in's switch still decides whether
   it runs at all.
 
+## Written by an AI agent
+
+The built-in **AI assistant** writes one when asked ("a command that counts today's words"): it
+reads this reference, checks the page and writes it with the user's yes ("AI" below). An agent
+outside the app (Claude Code, Codex, Hermes …) writes and tries extensions with `brulion-cli` or its MCP
+tools (docs/CLI.md "Extensions"), without the app:
+
+| Step | Command (MCP tool `brulion_extension_…`) |
+|---|---|
+| read this reference, or a part of it | `extension docs`, `extension docs views` |
+| see what there is, learn from a built-in | `extension list`, `extension show silownia` |
+| try code over the notebook | `extension eval 'b.query("type:tasks status:open").total'` |
+| check a page text before writing it | `extension check "Word count" --stdin` — the error with the page's `line` |
+| write the page | `extension write "Word count" --code … --description … --permissions write` (or `--content`, the whole page); replacing one needs `--expect-hash` |
+| try a command, view, action or hook | `extension run "Word count" count --page Home`, `--view today --args '{…}'`, `--hook save --page Home`, `--answers '["…"]'` |
+
+Every check and run is a fresh engine with the limits below, over the notebook as it is, and
+**writes nothing**: `NotebookHost`'s dry run (`Options::dryRun`) computes each write with the same
+edits and returns it as a diff; `b.ai` gets an error; `print` comes back as `printed`. The page
+`extension write` makes is code "changed elsewhere": it runs in the app only once the user approves
+it there, like code from a sync — the command line never approves anything.
+
 ## The Luau console
 
 The palette's "Luau console" (route `console`): a line of Luau runs in an environment of its own
@@ -841,11 +880,13 @@ Home:7
 | `3rdparty/luau` | Luau 0.743, the VM and the compiler only, patched (see its CMakeLists.txt): the plain `string.find` honours the time limit; numbers are read and written with `.` whatever the C locale (Qt sets it from the environment — with a Polish locale Luau's own `strtod` rejected `82.5`) |
 | `src/core/extensions/engine.h` | `Engine`: one VM; extensions, their commands and views; calls, questions, limits |
 | `src/core/extensions/host.h` | `Host`: what an extension may ask of the app (blocks, pages, writes, today, languages, the timer, the log) |
-| `src/core/extensions/notebookhost.h` | `NotebookHost`: the Host over a `Vault` and its `VaultIndex` — blocks from the index, content-preserving writes (`blockedit.h`, `notebook/journals.h`, `notebook/pages.h`) |
+| `src/core/extensions/notebookhost.h` | `NotebookHost`: the Host over a `Vault` and its `VaultIndex` — blocks from the index, content-preserving writes (`blockedit.h`, `notebook/journals.h`, `notebook/pages.h`); a dry run that only computes them (`brulion-cli extension …`) |
+| `src/core/extensions/sandbox.h` | `checkExtension()`, `checkExtensionPage()`: an extension loaded in an engine of its own over a dry-run `NotebookHost` — `b.checkExtension`, `brulion-cli extension check / write` |
 | `src/core/extensions/builtin.h` | the built-in extensions (resources `:/extensions/…`), `builtinFor()`: which one a page overrides |
 | `src/core/ai/ai.h` | AI for `b.ai`: the request from a script's table, the HTTP requests of Anthropic's Messages API and of OpenAI-compatible chat APIs, reading their answers and errors; `ai::Client` over `sync::HttpTransport` |
 | `src/core/extensions/pageextension.h` | extension pages: which pages are extensions, their id, their code with the page's line numbers, permissions, the hash an approval covers; the new-extension page and a built-in's source as a page |
 | `src/app/shell/workspaceextensions.h` | `WorkspaceExtensions` (QML `Workspace.extensions`): the engine for the open notebook, the built-ins the settings switch on, the extension pages and their approval on this device, reloading a page's code when it changes, hooks, the console, questions, messages and the rest timer |
+| `src/cli/commands_extensions.cpp` | `brulion-cli extension …` (docs/CLI.md "Extensions"): this reference (bundled), the extension pages and their state on the device, a sandbox for checks and runs, writing a page |
 | `src/app/shell/extensionmodels.h` | `ExtensionListModel` (Settings → Extensions), `ExtensionConsoleModel` (the console's lines) |
 | `src/app/shell/extensionviewmodel.h` | `ExtensionView` (QML): a view's node tree as a list; `qml/shell/ShellExtensionView.qml` draws it |
 | `qml/views/ConsoleView.qml`, `qml/views/ExtensionRouteView.qml` | the Luau console (route `console`), an extension page's view (route `extension`) |

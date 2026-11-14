@@ -96,6 +96,22 @@ QString extensionHash(const QStringList &permissions, const QString &code);
 /// small example (a command, a view, a hook), every line explained.
 QString newExtensionPage(const QString &language);
 
+/// The text of an extension page holding `code` (the Luau source, one ```luau block) in `language`
+/// ("pl" | "en"): the tag, the description and the permissions ("write", "ai") as frontmatter in
+/// that language, the code under it. `brulion-cli extension write` (docs/CLI.md "Extensions").
+QString extensionPageText(const QString &language, const QString &description, const QStringList &permissions,
+                          const QString &code);
+
+/// The page's line (0-based) an engine error names — "Licznik słów:14: attempt to index nil" is
+/// line 13 of the page titled "Licznik słów" — or -1 when it names none.
+int errorLine(const QString &title, const QString &error);
+
+/// The keys of the extensions' state in the notebook's device state (LocalStore, never synced),
+/// written by the app only: `approved` the SHA-256 hashes (PageExtension::hash) approved on this
+/// device, oldest first; `off` the ids of the extensions switched off here.
+inline QString approvedStoreKey() { return QStringLiteral("extensions/approved"); }
+inline QString offStoreKey() { return QStringLiteral("extensions/off"); }
+
 /// A built-in extension's source as a page of the notebook (its override: `zastępuje:: <id>`): the
 /// properties, a few words on what the page is, then the code in ```luau blocks, one per section
 /// of the source ("-- Parsing ----" comment lines start a section, each under its own heading).

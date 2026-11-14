@@ -26,6 +26,7 @@ Reading needs no permission.
 | `b.blocks({ tag = "idea" })` | every block that carries the tag itself; with `journal = true`, `from = "2026-11-01"` or `to = "2026-11-30"` only blocks of the journal |
 | `b.search(text, limit)` | what the search view finds: one hit per page, the best first (20 without a `limit`, 200 at most) |
 | `b.query(text, limit)` | a query in the language of [[Queries]]: `{ total, items }` (50 items without a `limit`, 1000 at most) |
+| `b.checkExtension(name, text)` | tries `text` as the extension page `name` without saving it or asking you: `{ ok, commands, views, hooks, … }`, or `ok = false` with the `error` and the page's `line`. It writes nothing; this is how the AI assistant checks an extension before it writes one |
 
 ```luau
 local soon = b.query("type:tasks status:open due:<=+7d sort:due")
@@ -100,7 +101,7 @@ end, { label = "Mark the task done", block = true })
 | `b.lang()`, `b.uiLang()` | the language of the notes and of the interface: `"pl"` or `"en"` |
 | `b.log(text)`, `print(…)` | a line in the Luau console |
 | `b.timer(seconds, label)` | starts the rest timer of the [[Gym]]: a notification when the time is up |
-| `b.data(name)` | data that comes with a built-in extension (the gym's list of exercises); `nil` in your own |
+| `b.data(name)` | data that comes with a built-in extension (the gym's list of exercises, the AI assistant's reference for writing extensions); `nil` in your own |
 
 ## Commands
 `b.command(name, function(ctx) … end, { label = "…", block = true })` puts a command into the palette under its `label`.

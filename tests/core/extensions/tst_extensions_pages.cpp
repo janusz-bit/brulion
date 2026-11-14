@@ -313,6 +313,74 @@ private Q_SLOTS:
         QCOMPARE(host.appended.size(), 1);
     }
 
+    void pageFromCode_data()
+    {
+        QTest::addColumn<QString>("language");
+        QTest::addColumn<QString>("description");
+        QTest::addColumn<QStringList>("permissions");
+        QTest::addColumn<QString>("code");
+        QTest::addColumn<QString>("expected");
+        const QString hello = u"b.command(\"hej\", function() return \"Cześć\" end)"_s;
+        QTest::newRow("pl") << u"pl"_s << u"Liczy słowa"_s << QStringList{u"zapis"_s, u"ai"_s} << hello
+                            << u"---\ntags:\n  - rozszerzenie\nopis: Liczy słowa\nuprawnienia:\n  - ai\n  - zapis\n---\n"
+                               "```luau\n"_s + hello + u"\n```\n"_s;
+        QTest::newRow("en, only reads") << u"en"_s << QString() << QStringList() << hello + u"\r\n\r\n"_s
+                                        << u"---\ntags:\n  - extension\n---\n```luau\n"_s + hello + u"\n```\n"_s;
+        // A colon, a hash and quotes in the description survive as YAML; a fence in the code
+        // (a Markdown string) gets a longer fence around it.
+        QTest::newRow("tricky") << u"en"_s << u"Sums: #tags \"quoted\""_s << QStringList{u"write"_s}
+                                << u"local md = [[\n```\ncode\n```\n]]\nb.command(\"x\", function() return md end)"_s
+                                << QString();
+    }
+    void pageFromCode()
+    {
+        QFETCH(QString, language);
+        QFETCH(QString, description);
+        QFETCH(QStringList, permissions);
+        QFETCH(QString, code);
+        QFETCH(QString, expected);
+        const QString content = extensionPageText(language, description, permissions, code);
+        if (!expected.isEmpty())
+            QCOMPARE(content, expected);
+        const ParsedNote note = markdown::parseNote(u"Licznik słów.md"_s, content);
+        QVERIFY(isExtensionPage(note));
+        const PageExtension e = readPageExtension(u"Licznik słów.md"_s, note, content);
+        QVERIFY2(e.problems.isEmpty(), qPrintable(e.problems.join(u", "_s)));
+        QCOMPARE(e.description, description);
+        QCOMPARE(e.permissions, permissionsFrom(permissions));
+        QString trimmed = code;
+        trimmed.replace(u"\r\n"_s, u"\n"_s);
+        QCOMPARE(e.code, trimmed.trimmed());
+        QCOMPARE(e.blocks, 1);
+        NullHost host;
+        Engine engine;
+        QVERIFY(engine.start(&host, Limits{}));
+        const Result loaded = engine.load(e.extension());
+        QVERIFY2(loaded.ok(), qPrintable(loaded.error));
+        QCOMPARE(engine.commands().size(), 1);
+    }
+
+    void errorLineOfAMessage_data()
+    {
+        QTest::addColumn<QString>("title");
+        QTest::addColumn<QString>("error");
+        QTest::addColumn<int>("line");
+        QTest::newRow("page line") << u"Licznik słów"_s << u"Licznik słów:14: attempt to index nil\nstack"_s << 13;
+        QTest::newRow("another page") << u"Licznik"_s << u"Licznik słów:14: x"_s << -1;
+        QTest::newRow("no line") << u"Żółw"_s << u"Żółw: x"_s << -1;
+        QTest::newRow("no colon after") << u"Żółw"_s << u"Żółw:12 x"_s << -1;
+        QTest::newRow("line 0") << u"Żółw"_s << u"Żółw:0: x"_s << -1;
+        QTest::newRow("title with a colon") << u"A: b"_s << u"A: b:3: x"_s << 2;
+        QTest::newRow("empty") << u"Żółw"_s << QString() << -1;
+    }
+    void errorLineOfAMessage()
+    {
+        QFETCH(QString, title);
+        QFETCH(QString, error);
+        QFETCH(int, line);
+        QCOMPARE(errorLine(title, error), line);
+    }
+
     void builtinSourceAsAPage_data()
     {
         QTest::addColumn<QString>("language");

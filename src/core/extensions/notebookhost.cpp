@@ -1,6 +1,7 @@
 #include "extensions/notebookhost.h"
 
 #include "extensions/blockedit.h"
+#include "extensions/sandbox.h"
 #include "index/query.h"
 #include "index/vaultindex.h"
 #include "markdown/tasks.h"
@@ -120,8 +121,25 @@ VaultPath NotebookHost::pathOf(const QString &page) const
         return {};
     const auto path = m_index.resolveLink(name);
     if (!path || !paths::isMarkdown(*path) || !m_index.note(*path))
-        return {};
+        return m_dryPages.value(text::foldKey(name));
     return *path;
+}
+
+NotebookHost::DryWrite *NotebookHost::dryWrite(const VaultPath &path)
+{
+    for (DryWrite &w : m_dryWrites)
+        if (w.path == path)
+            return &w;
+    return nullptr;
+}
+
+QString NotebookHost::currentText(const VaultPath &path, bool *ok)
+{
+    if (const DryWrite *w = dryWrite(path)) {
+        *ok = true;
+        return w->after;
+    }
+    return m_vault.readText(path, ok);
 }
 
 QStringList NotebookHost::pages(const QString &tag)
@@ -142,6 +160,8 @@ std::optional<QString> NotebookHost::read(const QString &page)
     const VaultPath path = pathOf(page);
     if (path.isEmpty())
         return std::nullopt;
+    if (const DryWrite *w = dryWrite(path))
+        return w->after;
     return m_index.content(path);
 }
 
@@ -312,8 +332,34 @@ QVariantMap NotebookHost::query(const QString &source, int limit, QString *error
     return {{u"total"_s, result.total}, {u"items"_s, items}};
 }
 
+QVariantMap NotebookHost::checkExtension(const QString &page, const QString &content)
+{
+    VaultPath path = pathOf(page);
+    if (path.isEmpty())
+        path = notebook::plannedPage(m_vault, page).path;
+    if (path.isEmpty())
+        return {{u"ok"_s, false}, {u"error"_s, u"no page name"_s}};
+    Options options = m_options;
+    options.updateIndex = false;
+    const QDateTime when = now();
+    options.now = [when] { return when; };
+    return checkExtensionPage(m_vault, m_index, path, content, options, Limits{1000, 32ll << 20});
+}
+
 QString NotebookHost::writeFile(const QString &extension, const VaultPath &path, const QString &content)
 {
+    if (m_options.dryRun) {
+        if (DryWrite *w = dryWrite(path)) {
+            w->after = content;
+        } else {
+            bool ok = false;
+            const QString before = m_vault.readText(path, &ok);
+            m_dryWrites.append({path, ok ? before : QString(), content, ok && m_vault.exists(path)});
+        }
+        if (onWritten)
+            onWritten(extension, path);
+        return {};
+    }
     if (!m_vault.writeText(path, content, ChangeSource::User))
         return m_vault.errorString();
     if (m_options.updateIndex)
@@ -326,6 +372,19 @@ QString NotebookHost::writeFile(const QString &extension, const VaultPath &path,
 QString NotebookHost::write(const QString &extension, const QString &page, const QString &content)
 {
     VaultPath path = pathOf(page);
+    if (path.isEmpty() && m_options.dryRun) {
+        const notebook::CreatedPage planned = notebook::plannedPage(m_vault, page);
+        if (planned.path.isEmpty())
+            return u"cannot create the page \"%1\""_s.arg(page);
+        if (!planned.existing) {
+            m_dryWrites.append({planned.path, QString(), notebook::newPageText(m_vault, planned.path, std::nullopt, content), false});
+            m_dryPages.insert(text::foldKey(page.trimmed()), planned.path);
+            if (onWritten)
+                onWritten(extension, planned.path);
+            return {};
+        }
+        path = planned.path;
+    }
     if (path.isEmpty()) {
         const notebook::CreatedPage created = notebook::createPage(m_vault, page, QString(), std::nullopt, content);
         if (created.path.isEmpty())
@@ -345,8 +404,19 @@ QString NotebookHost::write(const QString &extension, const QString &page, const
 QString NotebookHost::appendToJournal(const QString &extension, const QString &date, const QString &markdown)
 {
     const QDate day = QDate::fromString(date, Qt::ISODate);
+    const dates::UiLocale locale = m_options.language == u"en" ? dates::UiLocale::English : dates::UiLocale::Polish;
+    if (m_options.dryRun) {
+        const VaultPath path = notebook::journalFileFor(m_vault, day);
+        if (path.isEmpty())
+            return u"cannot open the daily note of %1"_s.arg(date);
+        bool ok = false;
+        QString content = currentText(path, &ok);
+        if (!ok || (!dryWrite(path) && !m_vault.exists(path)))
+            content = notebook::newJournalText(m_vault, day, now(), locale);
+        return writeFile(extension, path, notebook::appendBlock(content, markdown));
+    }
     const notebook::EnsuredJournal journal = notebook::ensureJournal(
-            m_vault, day, now(), m_options.language == u"en" ? dates::UiLocale::English : dates::UiLocale::Polish);
+            m_vault, day, now(), locale);
     if (journal.path.isEmpty())
         return journal.error.isEmpty() ? u"cannot open the daily note of %1"_s.arg(date) : journal.error;
     bool ok = false;
@@ -363,7 +433,7 @@ QString NotebookHost::replaceBlock(const QString &extension, const QString &ref,
     if (!item || !item->hasLine())
         return u"not a block reference: "_s + ref;
     bool ok = false;
-    const QString content = m_vault.readText(item->page, &ok);
+    const QString content = currentText(item->page, &ok);
     if (!ok)
         return u"stale: the page is gone ("_s + ref + u")"_s;
     const notebook::ResolvedLine resolved = notebook::resolve(content, *item, m_vault.config());

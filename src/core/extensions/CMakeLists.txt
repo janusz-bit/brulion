@@ -9,8 +9,8 @@ endif()
 
 brulion_add_core_module(extensions
     SOURCES
-        engine.h host.h builtin.h notebookhost.h blockedit.h pageextension.h
-        engine.cpp builtin.cpp notebookhost.cpp blockedit.cpp pageextension.cpp
+        engine.h host.h builtin.h notebookhost.h blockedit.h pageextension.h sandbox.h
+        engine.cpp builtin.cpp notebookhost.cpp blockedit.cpp pageextension.cpp sandbox.cpp
     DEPS util text dates markdown vault index notebook)
 target_link_libraries(brulion_core_extensions PRIVATE brulion_luau)
 file(GLOB _brulion_builtin_extensions CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/builtin/*)
@@ -18,4 +18,11 @@ qt_add_resources(brulion_core_extensions brulion_builtin_extensions
     PREFIX /extensions
     BASE ${CMAKE_CURRENT_SOURCE_DIR}/builtin
     FILES ${_brulion_builtin_extensions})
-set_property(TARGET brulion_core_extensions APPEND PROPERTY QT_EXCLUDE_SOURCES_FROM_TRANSLATION ${_brulion_builtin_extensions})
+# The reference for writing extensions, for those who write them without the app's documentation
+# at hand: the AI assistant (b.data("reference")) and `brulion-cli extension docs`.
+qt_add_resources(brulion_core_extensions brulion_extensions_reference
+    PREFIX /extensions
+    BASE ${PROJECT_SOURCE_DIR}/docs
+    FILES ${PROJECT_SOURCE_DIR}/docs/EXTENSIONS.md)
+set_property(TARGET brulion_core_extensions APPEND PROPERTY QT_EXCLUDE_SOURCES_FROM_TRANSLATION
+    ${_brulion_builtin_extensions} ${PROJECT_SOURCE_DIR}/docs/EXTENSIONS.md)

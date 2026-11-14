@@ -108,6 +108,9 @@ end, nil, { label = "Projects" })
 
 A reaction runs when something happens: `b.on("save", function(e) … end)` after this device saved a page (`e.page`), `b.on("change", function(e) … end)` after notes changed anywhere (`e.pages`). One that keeps failing is switched off until the extension loads again.
 
+## Written by AI
+Ask the [[AI|AI assistant]] for one — "AI: ask or ask to do…", then "a command that counts the words of today's note". It reads how extensions are written, tries its code on your notes without changing anything, and with your yes writes the page into **Extensions/**. An agent such as Claude Code does the same through [[Command line and AI agents|the command line]]: it reads the API (`brulion-cli extension docs`), tries its code (`extension eval`, `extension run` — what the code would write comes back as a diff) and writes the page (`extension write`). Either way the code waits for you like code from another device: read the page, and press **Run** when you agree with what it does. Every later change by the AI waits again.
+
 ## The gym's own code
 The [[Gym]] is an extension too. **Settings → Extensions → The gym's code → Edit the code** writes its source into a page of your notebook, one section per heading, and from then on the gym runs **from that page**: change it, save, and the change works. **Restore** puts the page in the trash and the built-in gym runs again.
 

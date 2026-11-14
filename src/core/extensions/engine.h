@@ -200,6 +200,7 @@ private:
     static int apiBlocks(lua_State *L);
     static int apiSearch(lua_State *L);
     static int apiQuery(lua_State *L);
+    static int apiCheckExtension(lua_State *L);
     static int apiWrite(lua_State *L);
     static int apiAppendToJournal(lua_State *L);
     static int apiReplaceBlock(lua_State *L);
@@ -228,6 +229,7 @@ private:
     int blocksImpl(lua_State *L);
     int searchImpl(lua_State *L);
     int queryImpl(lua_State *L);
+    int checkImpl(lua_State *L);
     int writeImpl(lua_State *L);
     int appendImpl(lua_State *L);
     int replaceImpl(lua_State *L);

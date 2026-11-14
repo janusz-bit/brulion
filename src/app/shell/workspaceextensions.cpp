@@ -127,8 +127,6 @@ void ExtensionFormModel::step(int row, int direction)
 namespace {
 
 const QString kConsole = u"*console*"_s; // the console's environment (no page or built-in has a '*')
-const char kApprovedKey[] = "extensions/approved";
-const char kOffKey[] = "extensions/off";
 constexpr int kMaxApproved = 300;
 
 QByteArray contentKey(const QString &content)
@@ -338,14 +336,14 @@ void WorkspaceExtensions::loadTrust()
     LocalStore *store = m_vault ? m_vault->store() : nullptr;
     if (!store)
         return;
-    for (const QJsonValue v : store->get(QString::fromLatin1(kApprovedKey)).toArray()) {
+    for (const QJsonValue v : store->get(extensions::approvedStoreKey()).toArray()) {
         const QString hash = v.toString();
         if (hash.size() == 64 && !m_approved.contains(hash)) {
             m_approved.insert(hash);
             m_approvedOrder << hash;
         }
     }
-    for (const QJsonValue v : store->get(QString::fromLatin1(kOffKey)).toArray())
+    for (const QJsonValue v : store->get(extensions::offStoreKey()).toArray())
         m_off.insert(v.toString());
 }
 
@@ -354,10 +352,10 @@ void WorkspaceExtensions::storeTrust()
     LocalStore *store = m_vault ? m_vault->store() : nullptr;
     if (!store)
         return;
-    store->set(QString::fromLatin1(kApprovedKey), QJsonArray::fromStringList(m_approvedOrder));
+    store->set(extensions::approvedStoreKey(), QJsonArray::fromStringList(m_approvedOrder));
     QStringList off(m_off.cbegin(), m_off.cend());
     off.sort();
-    store->set(QString::fromLatin1(kOffKey), QJsonArray::fromStringList(off));
+    store->set(extensions::offStoreKey(), QJsonArray::fromStringList(off));
 }
 
 void WorkspaceExtensions::addApproved(const QString &hash)
@@ -733,10 +731,7 @@ void WorkspaceExtensions::reconcile()
             continue;
         e.state = u"error"_s;
         e.message = error->section(u'\n', 0, 0);
-        // "Licznik słów:14: …": the page's line (the code keeps the page's line numbers).
-        const QRegularExpression at(u"^"_s + QRegularExpression::escape(e.page.title) + u":(\\d+):"_s);
-        if (const QRegularExpressionMatch m = at.match(e.message); m.hasMatch())
-            e.errorLine = m.captured(1).toInt() - 1;
+        e.errorLine = extensions::errorLine(e.page.title, e.message); // the code keeps the page's lines
     }
     refreshList();
     if (loaded) {

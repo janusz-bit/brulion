@@ -37,6 +37,12 @@ QList<BuiltinExtension> builtinExtensions()
         assistant.extension.id = u"asystent"_s;
         assistant.extension.source = QString::fromUtf8(resource(u"asystent.luau"_s));
         assistant.extension.permissions = {u"ai"_s, u"write"_s};
+        // The extensions' reference (docs/EXTENSIONS.md): the model reads it to write one.
+        {
+            QFile reference(u":/extensions/EXTENSIONS.md"_s);
+            if (reference.open(QIODevice::ReadOnly))
+                assistant.extension.data.insert(u"reference"_s, QString::fromUtf8(reference.readAll()));
+        }
         assistant.titleEn = u"AI assistant"_s;
         assistant.titlePl = u"Asystent AI"_s;
         return QList<BuiltinExtension>{gym, assistant};

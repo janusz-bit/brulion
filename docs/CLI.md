@@ -155,7 +155,7 @@ Qt's LinguistTools (`BRULION_BUILD_APP=OFF`, `find_package` finds no `lrelease`)
 | 3 | not found: page, block, line, heading, history version |
 | 4 | conflict: stale ref, hash mismatch, ambiguous page name (with candidates), target exists, a file that keeps changing, not UTF-8 |
 | 5 | unavailable: no notebook, not a folder, lock timeout, no running app, the app's remote control off, no notebook open in the app |
-| 6 | not understood: a date phrase, a week or month phrase, a recurrence, a query, a calculation |
+| 6 | not understood: a date phrase, a week or month phrase, a recurrence, a query, a calculation; an extension that does not load or fails (`extension_error`) |
 | 7 | refused by policy: `--read-only`, a destructive command without `--allow-destructive` |
 
 ## References
@@ -240,6 +240,13 @@ Never compute a hash yourself.
 | `history list <ref>` | | versions of a page on this device (also a deleted one) | |
 | `history show <id>` | | a version's text | |
 | `history restore <ref> <id>` | | write a version back (the current text is kept as one) | destructive |
+| `extension docs [<section>]` | | the reference for writing extensions (docs/EXTENSIONS.md as built in): `{sections, text}`; a section's words give only the sections whose heading has them (`extension docs views`) | |
+| `extension list` | | the extension pages `{id, title, path, hash, codeHash, permissions, description, overrides?, problems, state}` — state on this device: `approved`, `approval` (waits for the user), `off`, `problem`, `duplicate` — and the built-ins | |
+| `extension show <name>` | | an extension's page and code (a built-in's source, and `overridePage`: the page that replaces it) | |
+| `extension check <name>` | `[--content T \| --stdin]` | load it in a sandbox: `{loaded, commands, views, hooks, printed}` or the error with the page's `line` (exit 6); `--content` checks a text before it is written | |
+| `extension run <name> [<command>]` | `[--view V [--action A]] [--hook E] [--args JSON] [--page P] [--block REF] [--answers JSON]` | try a command, a view (its node tree), an action or the hooks of an event in a sandbox: `{status, value, writes (diffs, never made), printed, questions}` | |
+| `extension eval <code>` | `[--extension N] [--answers JSON] [--stdin]` | Luau with the notebook's `b`, as the app's console (writes only computed) | |
+| `extension write <name>` | `(--content T \| --stdin \| --code C [--description D] [--permissions P]) [--folder F] [--expect-hash H] [--force]` | write an extension page, checked first (exit 6 when it does not load); replacing one needs its hash. The app runs it once the user approves it | yes |
 | `app open <target>` | a ref, `today` or `capture`; `[--line N] [--block-id ID] [--heading H] [--side]` | show the running app there (exit 5 when none runs); with its remote control on the app resolves the ref and says what it opened | |
 | `app today` | | the running app at today's note | |
 | `app capture [<text>]` | `[--stdin]` | no text: open quick capture in the running app; a text: save it as quick capture does (remote control) | yes |
@@ -280,6 +287,36 @@ day ("jutro", `2027-01-01` — in week `2026-W53`); a phrase that names no week 
 `help --json` and `schema` describe every argument (type, required, positional or `--option`); the
 same registry builds the argument parser, the help, the schema and the MCP tools, and a test checks
 this table against it.
+
+## Extensions
+
+An agent can write Brulion's extensions (docs/EXTENSIONS.md: Luau pages tagged `#extension` that
+add commands, views and hooks) and try them without the app:
+
+1. **Learn the API**: `extension docs` (all of it, about 55 kB) or a part (`extension docs views`,
+   `extension docs recipes`); `extension show silownia` is a large extension to learn from.
+2. **Try code**: `extension eval 'b.query("type:tasks status:open").total'` runs Luau with the
+   notebook's `b`; `extension check <name> --stdin` loads a page text not written yet and names the
+   page's line of an error.
+3. **Write it**: `extension write "Word count" --code "$(cat wc.luau)" --description "…"
+   --permissions write` makes `Extensions/Word count.md` (`Rozszerzenia/` in a Polish notebook)
+   around the code; `--content` (or `--stdin`) writes a whole page of your own (properties, prose,
+   several ```` ```luau ```` blocks). It is checked first: code that does not load is not written
+   (exit 6, `--force` writes it anyway). Replacing a page needs `--expect-hash` with the `hash`
+   of `extension show` or `extension list`; the old text stays in the version history.
+4. **Test it**: `extension run "Word count" count --page Dom`, `--view today --args '{"week": 2}'`,
+   `--hook save --page Dom`, questions answered with `--answers '["Przysiad", {"kg": 80}, null]'`.
+
+The sandbox is the app's engine with the app's limits (2 s a call, 64 MB), a fresh one for every
+call, over the notebook as it is: what the code writes comes back as `writes` (unified diffs, later
+reads of the same run see them) and **nothing is written**; `print` and `b.log` go to `printed`;
+`b.ai` gets an error the code can `pcall` (no model is asked from the command line); a question
+without an answer left ends the run with `status: "waiting"` and the question.
+
+**Approval stays the user's.** Code from anywhere but the app's own editor waits until the user
+approves it on that device (Settings → Extensions, or **Run** on the page's state line), and every
+change of the code waits again: `extension write` never approves, `extension list` shows `approval`
+until the user did. Tell the user to approve it, and what it does.
 
 ## Writing safely
 

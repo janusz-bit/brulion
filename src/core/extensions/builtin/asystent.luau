@@ -4,7 +4,10 @@
 -- "ask" is an agent: the model has tools to search and read the whole notebook (b.search, b.query,
 -- b.pages, b.read) and to change it (append to a page or a day, write a page, change a block). It
 -- calls them as it needs, a turn at a time (b.ai with tools), until it answers; every change waits
--- for the user's yes (b.choose: yes, yes to every change of this question, no). The answer goes
+-- for the user's yes (b.choose: yes, yes to every change of this question, no). It can also write
+-- extensions: it reads the extensions' reference (b.data("reference"): docs/EXTENSIONS.md), checks
+-- a page in a sandbox (b.checkExtension) and writes it; the app runs that code only once the user
+-- approves it on the page, like code from a sync. The answer goes
 -- into today's daily note under the question, as an outline, with the pages it changed — readable
 -- on a phone and kept with the notes. "summarize" sums up the page on screen in one request.
 --
@@ -14,7 +17,8 @@
 
 local MAX_PAGE = 30000 -- characters of the page on screen sent along
 local MAX_RESULT = 12000 -- characters of one tool's result
-local MAX_ROUNDS = 12 -- the model's turns for one question
+local MAX_ROUNDS = 16 -- the model's turns for one question
+local MAX_REFERENCE = 40000 -- characters of the extensions' reference in one result
 local MAX_PREVIEW = 600 -- characters of a change shown in its confirmation
 
 local WRITTEN = {
@@ -23,7 +27,7 @@ local WRITTEN = {
         about = " ([[%s]])",
         summary = "🤖 Streszczenie [[%s]]",
         changed = "✏️ Zmienione: %s",
-        system = "Jesteś asystentem w aplikacji do notatek Brulion. Masz narzędzia do przeszukiwania i czytania całego notatnika użytkownika i do zmieniania go. Notatki to Markdown: punkty \"- \", zadania \"- [ ]\" i \"- [x]\", terminy \"📅 RRRR-MM-DD\", przypomnienia \"⏰ RRRR-MM-DD GG:MM\", linki [[Strona]], tagi #tag; dziennik to strony dni, nazwane datą (2026-11-12). Dziś jest %s. Zanim odpowiesz na pytanie o notatki, poszukaj w nich (search_notes, query_notes) i przeczytaj, czego potrzebujesz. Zmieniaj notatki tylko wtedy, gdy użytkownik o to prosi; raczej dopisuj, niż przepisuj; niczego nie usuwaj, o ile nie poproszono. Każdą zmianę użytkownik zatwierdza; gdy odmówi, nie ponawiaj jej. Odpowiadasz zwięźle, po polsku, chyba że notatki są w innym języku; zwykłym tekstem albo krótkimi punktami, z linkami [[Strona]] do stron, o których mówisz.",
+        system = "Jesteś asystentem w aplikacji do notatek Brulion. Masz narzędzia do przeszukiwania i czytania całego notatnika użytkownika i do zmieniania go. Notatki to Markdown: punkty \"- \", zadania \"- [ ]\" i \"- [x]\", terminy \"📅 RRRR-MM-DD\", przypomnienia \"⏰ RRRR-MM-DD GG:MM\", linki [[Strona]], tagi #tag; dziennik to strony dni, nazwane datą (2026-11-12). Dziś jest %s. Zanim odpowiesz na pytanie o notatki, poszukaj w nich (search_notes, query_notes) i przeczytaj, czego potrzebujesz. Zmieniaj notatki tylko wtedy, gdy użytkownik o to prosi; raczej dopisuj, niż przepisuj; niczego nie usuwaj, o ile nie poproszono. Każdą zmianę użytkownik zatwierdza; gdy odmówi, nie ponawiaj jej. Gdy użytkownik chce nowego polecenia, widoku albo automatyzacji w Brulionie, możesz napisać rozszerzenie: najpierw przeczytaj opis (extension_reference: Quick start i części, których potrzebujesz), sprawdź stronę (check_extension), potem ją zapisz (write_extension) i powiedz użytkownikowi, że zadziała po naciśnięciu „Uruchom” na stronie rozszerzenia. Odpowiadasz zwięźle, po polsku, chyba że notatki są w innym języku; zwykłym tekstem albo krótkimi punktami, z linkami [[Strona]] do stron, o których mówisz.",
         summarySystem = "Jesteś asystentem w aplikacji do notatek. Odpowiadasz zwięźle, po polsku, chyba że notatka jest w innym języku. Piszesz zwykłym tekstem albo krótkimi punktami.",
         noteIntro = "Notatka „%s”:\n\n%s\n\n",
         onScreen = "Na ekranie jest strona [[%s]]:\n\n%s\n\n---\n\n",
@@ -34,7 +38,7 @@ local WRITTEN = {
         about = " ([[%s]])",
         summary = "🤖 Summary of [[%s]]",
         changed = "✏️ Changed: %s",
-        system = "You are an assistant in the notes app Brulion. You have tools to search and read the user's whole notebook and to change it. Notes are Markdown: items \"- \", tasks \"- [ ]\" and \"- [x]\", due dates \"📅 YYYY-MM-DD\", reminders \"⏰ YYYY-MM-DD HH:MM\", links [[Page]], tags #tag; the journal is one page per day, named by its date (2026-11-12). Today is %s. Before you answer a question about the notes, search them (search_notes, query_notes) and read what you need. Change notes only when the user asks you to; prefer adding to rewriting; never delete anything unless asked. The user approves every change; when they decline one, do not try it again. You answer briefly, in English unless the notes are in another language; plain text or short points, with [[Page]] links to the pages you mention.",
+        system = "You are an assistant in the notes app Brulion. You have tools to search and read the user's whole notebook and to change it. Notes are Markdown: items \"- \", tasks \"- [ ]\" and \"- [x]\", due dates \"📅 YYYY-MM-DD\", reminders \"⏰ YYYY-MM-DD HH:MM\", links [[Page]], tags #tag; the journal is one page per day, named by its date (2026-11-12). Today is %s. Before you answer a question about the notes, search them (search_notes, query_notes) and read what you need. Change notes only when the user asks you to; prefer adding to rewriting; never delete anything unless asked. The user approves every change; when they decline one, do not try it again. When the user wants a new command, view or automation in Brulion, you can write an extension: read the reference first (extension_reference: its Quick start and the sections you need), check the page (check_extension), then write it (write_extension) and tell the user it works once they press Run on the extension's page. You answer briefly, in English unless the notes are in another language; plain text or short points, with [[Page]] links to the pages you mention.",
         summarySystem = "You are an assistant in a notes app. You answer briefly, in English unless the note is in another language. You write plain text or short points.",
         noteIntro = "The note \"%s\":\n\n%s\n\n",
         onScreen = "The page on screen is [[%s]]:\n\n%s\n\n---\n\n",
@@ -59,6 +63,8 @@ local INTERFACE = {
         createPage = "AI chce utworzyć stronę „%s”:\n\n%s",
         replacePage = "AI chce zastąpić całą treść strony „%s” (teraz %d znaków) nową:\n\n%s",
         changeBlock = "AI chce zmienić wiersz na stronie „%s” na:\n\n%s",
+        createExtension = "AI chce utworzyć rozszerzenie „%s” (zadziała, gdy naciśniesz Uruchom na jego stronie):\n\n%s",
+        replaceExtension = "AI chce zastąpić rozszerzenie „%s” nowym kodem (znowu poczeka na Uruchom):\n\n%s",
         tooLong = "AI nie skończyło po %d krokach; to, co zrobiło, jest w dzisiejszej notatce.",
     },
     en = {
@@ -77,6 +83,8 @@ local INTERFACE = {
         createPage = "The AI wants to create the page \"%s\":\n\n%s",
         replacePage = "The AI wants to replace the whole page \"%s\" (now %d characters) with:\n\n%s",
         changeBlock = "The AI wants to change a line of the page \"%s\" to:\n\n%s",
+        createExtension = "The AI wants to create the extension \"%s\" (it runs once you press Run on its page):\n\n%s",
+        replaceExtension = "The AI wants to replace the extension \"%s\" with new code (it waits for Run again):\n\n%s",
         tooLong = "The AI did not finish in %d steps; what it did is in today's note.",
     },
 }
@@ -233,6 +241,41 @@ local TOOLS = {
     },
 }
 
+table.insert(TOOLS, {
+    name = "extension_reference",
+    description = "Brulion's reference for writing extensions: Luau code on a page tagged #extension that adds palette commands, views and hooks through the API table b. Without a section it lists the sections; ask for the ones you need by words of their heading (\"Quick start\", \"The API\", \"Commands\", \"Views\", \"Hooks\", \"Questions\", \"Recipes\", \"Errors\", \"Extensions in the notebook\"). Read it before you write an extension: never guess the functions of b.",
+    input = {
+        type = "object",
+        properties = {
+            section = { type = "string", description = "Words of a section's heading; none: the list of sections" },
+        },
+    },
+})
+table.insert(TOOLS, {
+    name = "check_extension",
+    description = "Loads the whole Markdown text of an extension page in a sandbox, as the app would load it, and writes nothing: whether it loads, an error with the page's line, the commands, views and hooks it registers. Call it before write_extension and fix what it reports.",
+    input = {
+        type = "object",
+        properties = {
+            name = { type = "string", description = "The page's name (title)" },
+            content = { type = "string", description = "The page's whole Markdown text" },
+        },
+        required = { "name", "content" },
+    },
+})
+table.insert(TOOLS, {
+    name = "write_extension",
+    description = "Creates or replaces an extension page with its whole Markdown text: frontmatter with tags: [extension] (permissions: [write] or [ai] only when the code needs them; description: one line), a sentence on what it does, the code in ```luau blocks. It is checked first and refused when it does not load. A new page goes to the folder Extensions/ unless the name has a folder. The user approves the write, and the app runs the code only after they press Run on the page: tell them so, and what the extension does.",
+    input = {
+        type = "object",
+        properties = {
+            name = { type = "string", description = "The page's name (title)" },
+            content = { type = "string", description = "The page's whole Markdown text" },
+        },
+        required = { "name", "content" },
+    },
+})
+
 local STATUS = { todo = " ", doing = "/", done = "x", cancelled = "-" }
 
 local function str(v: any): string
@@ -299,6 +342,113 @@ local function noteChanged(session: Session, page: string)
 end
 
 local DECLINED = "The user declined this change."
+
+-- ---- Extensions ---------------------------------------------------------------------------------
+
+local REFERENCE: string = str(b.data("reference"))
+
+type Heading = { level: number, title: string, line: number }
+
+-- The reference, or the sections whose heading has `section`'s words (with their subsections).
+local function reference(section: string): (string, boolean)
+    if REFERENCE == "" then
+        return "The reference is not available.", true
+    end
+    local lines = {}
+    for line in (REFERENCE .. "\n"):gmatch("([^\n]*)\n") do
+        table.insert(lines, line)
+    end
+    local heads: { Heading } = {}
+    local fence: string? = nil -- the open code block's fence ("```", "````", "~~~")
+    for i, line in lines do
+        local run, rest = line:match("^(```+)(.*)$")
+        if not run then
+            run, rest = line:match("^(~~~+)(.*)$")
+        end
+        -- A fence (CommonMark): no backtick after a backtick run ("```` ```luau ````" is prose).
+        if run and fence == nil and not (run:sub(1, 1) == "`" and rest:find("`", 1, true)) then
+            fence = run
+        elseif run and fence ~= nil and run:sub(1, 1) == fence:sub(1, 1) and #run >= #fence and rest:match("^%s*$") then
+            fence = nil
+        elseif fence == nil then
+            local hashes, title = line:match("^(#+) (.+)$")
+            if hashes and #hashes >= 2 and #hashes <= 3 then
+                table.insert(heads, { level = #hashes, title = title, line = i })
+            end
+        end
+    end
+    local wanted = b.fold(section)
+    if wanted == "" then
+        local names = {}
+        for _, h in heads do
+            table.insert(names, string.rep("  ", h.level - 2) .. "- " .. h.title)
+        end
+        return "Sections of the reference (ask for one by words of its heading):\n" .. table.concat(names, "\n"), false
+    end
+    local parts = {}
+    local k = 1
+    while k <= #heads do
+        local h = heads[k]
+        if b.fold(h.title):find(wanted, 1, true) then
+            local n = k + 1
+            while n <= #heads and heads[n].level > h.level do
+                n += 1
+            end
+            local finish = if n <= #heads then heads[n].line - 1 else #lines
+            table.insert(parts, table.concat(lines, "\n", h.line, finish))
+            k = n
+        else
+            k += 1
+        end
+    end
+    if #parts == 0 then
+        return "No section has \"" .. section .. "\" in its heading: call extension_reference without a section for the list.", true
+    end
+    return table.concat(parts, "\n\n"), false
+end
+
+-- b.checkExtension's report for the model; whether the extension does not load.
+local function checkReport(r: any): (string, boolean)
+    if not r.ok then
+        local where = if r.line then " (line " .. str(r.line) .. " of the page)" else ""
+        return "It does not load" .. where .. ": " .. str(r.error), true
+    end
+    local parts = {}
+    for _, c in r.commands or {} do
+        table.insert(parts, "command " .. str(c.name) .. (if str(c.label) ~= str(c.name) then " \"" .. str(c.label) .. "\"" else ""))
+    end
+    for _, v in r.views or {} do
+        table.insert(parts, "view " .. str(v.name) .. (if str(v.label) ~= "" then " \"" .. str(v.label) .. "\"" else " (not in the palette)"))
+    end
+    for _, event in r.hooks or {} do
+        table.insert(parts, "hook " .. str(event))
+    end
+    local text = "It loads and registers " .. (if #parts > 0 then table.concat(parts, ", ") else "nothing") .. "."
+    if r.permissions and #r.permissions > 0 then
+        text ..= " Permissions: " .. table.concat(r.permissions, ", ") .. "."
+    end
+    if r.problems and #r.problems > 0 then
+        text ..= " Problems: " .. table.concat(r.problems, "; ") .. "."
+    end
+    if r.writes then
+        text ..= " Its top-level code writes to notes each time it loads (every save): do that in a command or a hook instead."
+    end
+    if r.printed and #r.printed > 0 then
+        text ..= " It printed: " .. cut(table.concat(r.printed, " | "), 400)
+    end
+    return text, false
+end
+
+-- Is the page named `page` tagged as an extension?
+local function isExtensionPage(page: string): boolean
+    local info = b.page(page)
+    for _, tag in if info then info.tags else {} do
+        if tag == "extension" or tag == "rozszerzenie" then
+            return true
+        end
+    end
+    return false
+end
 
 -- Runs a tool: its result's text and whether it failed.
 local function runTool(session: Session, name: string, input: any): (string, boolean)
@@ -416,6 +566,41 @@ local function runTool(session: Session, name: string, input: any): (string, boo
         end
         noteChanged(session, page)
         return "Changed; its ref is now " .. str(result) .. ".", false
+    elseif name == "extension_reference" then
+        return reference(trim(str(input.section)))
+    elseif name == "check_extension" then
+        local page = trim(str(input.name))
+        if page == "" then
+            return "A page's name is needed.", true
+        end
+        return checkReport(b.checkExtension(page, str(input.content)))
+    elseif name == "write_extension" then
+        local page = trim(str(input.name))
+        local content = str(input.content)
+        if page == "" or trim(content) == "" then
+            return "A page's name and its whole text are needed.", true
+        end
+        local before = b.read(page)
+        if before == nil and not page:find("/", 1, true) then
+            page = (if b.lang() == "pl" then "Rozszerzenia/" else "Extensions/") .. page
+        elseif before ~= nil and not isExtensionPage(page) then
+            return "[[" .. page .. "]] is a page that is no extension: choose another name.", true
+        end
+        local report, failed = checkReport(b.checkExtension(page, content))
+        if failed then
+            return "Not written. " .. report .. " Fix it and check again.", true
+        end
+        local what = string.format(if before == nil then T.createExtension else T.replaceExtension, page, cut(content, MAX_PREVIEW))
+        if not confirm(session, what) then
+            return DECLINED, true
+        end
+        local ok, err = pcall(b.write, page, content)
+        if not ok then
+            return tostring(err), true
+        end
+        noteChanged(session, page)
+        return "Wrote the extension [[" .. page .. "]]. " .. report
+            .. " It runs once the user presses Run on its page (or in Settings → Extensions): tell them, and what it does.", false
     end
     return "No tool named \"" .. name .. "\".", true
 end
@@ -448,7 +633,8 @@ b.command("ask", function(ctx)
         local results = {}
         for _, call in reply.toolCalls do
             local result, failed = runTool(session, str(call.name), call.input)
-            table.insert(results, { id = call.id, content = cut(result, MAX_RESULT), isError = failed })
+            local limit = if str(call.name) == "extension_reference" then MAX_REFERENCE else MAX_RESULT
+            table.insert(results, { id = call.id, content = cut(result, limit), isError = failed })
         end
         table.insert(messages, { role = "user", results = results })
     end

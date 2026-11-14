@@ -51,6 +51,19 @@ Agent działający na innym komputerze (np. na Raspberry Pi) pracuje na kopii fo
 
 **Przypomnienia** dodane przez agenta dzwonią tam, gdzie działa aplikacja: na komputerze (w zasobniku) i na telefonie, gdy aplikacja zobaczy zmianę — zobacz [[Przypomnienia i alarmy|Przypomnienia i alarmy]].
 
+## Rozszerzenia pisane przez agenta
+Agent może też pisać [[Rozszerzenia|rozszerzenia]] — polecenia, widoki i reakcje w Luau — i wypróbować je, zanim je zobaczysz:
+
+```sh
+brulion-cli extension docs views                     # opis API (po angielsku) albo jego część
+brulion-cli extension eval 'b.query("type:tasks status:open").total'
+brulion-cli extension write "Licznik słów" --code "$(cat licznik.luau)" --description "Liczy słowa"
+brulion-cli extension run "Licznik słów" policz --page Dom  # zmiany wracają jako różnica, nic nie jest zapisywane
+brulion-cli extension list                           # „approval”: czeka na Ciebie
+```
+
+Kod nie uruchomi się w aplikacji, dopóki go tam nie zatwierdzisz (**Uruchom** na stronie albo **Ustawienia → Rozszerzenia**), a każda zmiana agenta znowu na Ciebie czeka.
+
 ## Otwórz w aplikacji
 `brulion-cli app open <strona>` pokazuje stronę w działającej aplikacji (na tym samym komputerze), `app today` — dzisiejszy dziennik, a `app capture` otwiera szybką notatkę.
 

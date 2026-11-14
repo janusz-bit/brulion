@@ -48,6 +48,15 @@ public:
     /// children, with `due`, `scheduled`, `start` of a task and `reminder` ("2026-11-12 09:00") of
     /// a reminder; {page, date?} for pages. `error`: why `source` is no query.
     virtual QVariantMap query(const QString &source, int limit, QString *error) = 0;
+    /// b.checkExtension: `content` loaded as the extension page `page` would be, in a sandbox of its
+    /// own (sandbox.h: {ok, error, line, commands, views, hooks, …}). A host without a notebook
+    /// cannot: the default says so.
+    virtual QVariantMap checkExtension(const QString &page, const QString &content)
+    {
+        Q_UNUSED(page);
+        Q_UNUSED(content);
+        return {{QStringLiteral("ok"), false}, {QStringLiteral("error"), QStringLiteral("extensions cannot be checked here")}};
+    }
 
     // Writing (permission "write"; the engine checks it before calling)
     virtual QString write(const QString &extension, const QString &page, const QString &content) = 0;

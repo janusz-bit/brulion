@@ -1258,6 +1258,170 @@ private Q_SLOTS:
         QVERIFY(QFileInfo::exists(dir + u'/' + trashPath));
     }
 
+    void extensionsForAgents()
+    {
+        // What an agent needs to write an extension: the reference, the extensions there are, the
+        // code checked and tried in a sandbox (writes computed, never made), the page written —
+        // and never approved: the app's approval stays the user's.
+        Run r = cli({u"extension"_s, u"docs"_s});
+        QCOMPARE(r.code, 0);
+        QVERIFY(r.result().value(u"text"_s).toString().contains(u"## The API (`b`)"_s));
+        QVERIFY(r.result().value(u"sections"_s).toArray().contains(u"Hooks"_s));
+        QVERIFY(r.result().value(u"sections"_s).toArray().contains(u"Troubleshooting"_s)); // after "```` ```luau ````"
+        r = cli({u"extension"_s, u"docs"_s, u"hooks"_s});
+        QCOMPARE(r.code, 0);
+        QVERIFY(r.result().value(u"text"_s).toString().startsWith(u"## Hooks\n"_s));
+        QVERIFY(!r.result().value(u"text"_s).toString().contains(u"## Questions"_s));
+        r = cli({u"extension"_s, u"docs"_s, u"żółw"_s});
+        QCOMPARE(r.code, 3);
+
+        const QByteArray counter = "---\ntags: [rozszerzenie]\nopis: Liczy zakupy.\nuprawnienia: [zapis]\n---\n"
+                                   "Liczy otwarte zakupy.\n\n```luau\n"
+                                   "b.command(\"policz\", function(ctx)\n"
+                                   "    local n = b.query(\"type:tasks status:open\").total\n"
+                                   "    b.appendToJournal(b.today(), `- Zakupy: {n}`)\n"
+                                   "    print(\"policzone\")\n"
+                                   "    return `{ctx.page}: {n}`\n"
+                                   "end, { label = \"Policz zakupy\" })\n"
+                                   "b.command(\"pytaj\", function()\n"
+                                   "    return \"Odpowiedź: \" .. b.ask(\"Co?\")\n"
+                                   "end)\n"
+                                   "b.view(\"lista\", function(p)\n"
+                                   "    return b.ui.column({ b.ui.heading(p.tytul or \"Lista\") })\n"
+                                   "end)\n"
+                                   "b.on(\"save\", function(e) return \"zapisano \" .. e.page end)\n"
+                                   "```\n";
+        const QString dir = vault({{u"Rozszerzenia/Licznik.md"_s, counter},
+                                   {u"Zakupy.md"_s, "- [ ] mleko\n- [ ] chleb\n"}});
+        r = run(dir, {u"extension"_s, u"list"_s});
+        QCOMPARE(r.code, 0);
+        QJsonArray pages = r.result().value(u"pages"_s).toArray();
+        QCOMPARE(pages.size(), 1);
+        QJsonObject page = pages.first().toObject();
+        QCOMPARE(page.value(u"id"_s).toString(), u"licznik"_s);
+        QCOMPARE(page.value(u"state"_s).toString(), u"approval"_s); // never approved on this device
+        QCOMPARE(page.value(u"permissions"_s).toArray(), QJsonArray{u"write"_s});
+        QCOMPARE(r.result().value(u"builtins"_s).toArray().size(), 2);
+        // Approved in the app (its device state): approved here too.
+        writeFile(stateDirOf(dir) + u"/store.json"_s,
+                  QJsonDocument(QJsonObject{{u"extensions/approved"_s,
+                                             QJsonArray{page.value(u"codeHash"_s).toString()}}})
+                          .toJson());
+        r = run(dir, {u"extension"_s, u"list"_s});
+        QCOMPARE(r.result().value(u"pages"_s).toArray().first().toObject().value(u"state"_s).toString(),
+                 u"approved"_s);
+
+        r = run(dir, {u"extension"_s, u"check"_s, u"Licznik"_s});
+        QCOMPARE(r.code, 0);
+        QVERIFY(r.result().value(u"loaded"_s).toBool());
+        QCOMPARE(r.result().value(u"commands"_s).toArray().size(), 2);
+        QCOMPARE(r.result().value(u"views"_s).toArray().size(), 1);
+        QCOMPARE(r.result().value(u"hooks"_s).toArray(), QJsonArray{u"save"_s});
+        // A text not saved yet; an error names the page's line.
+        r = run(dir, {u"extension"_s, u"check"_s, u"Zepsute"_s, u"--stdin"_s},
+                "---\ntags: [extension]\n---\nText.\n\n```luau\nlocal x = = 1\n```\n");
+        QCOMPARE(r.code, 6);
+        QCOMPARE(r.errorCode(), u"extension_error"_s);
+        QJsonObject details = r.json.value(u"error"_s).toObject().value(u"details"_s).toObject();
+        QCOMPARE(details.value(u"error"_s).toObject().value(u"line"_s).toInt(), 7);
+        QVERIFY(!QFile::exists(dir + u"/Rozszerzenia/Zepsute.md"_s));
+        r = run(dir, {u"extension"_s, u"check"_s, u"Zakupy"_s});
+        QCOMPARE(r.code, 3);
+        QCOMPARE(r.errorCode(), u"not_an_extension"_s);
+
+        // Running: the command's message, the journal line it would append, what it printed.
+        r = run(dir, {u"extension"_s, u"run"_s, u"licznik"_s, u"policz"_s, u"--page"_s, u"Zakupy"_s});
+        QCOMPARE(r.code, 0);
+        QCOMPARE(r.result().value(u"value"_s).toString(), u"Zakupy: 2"_s);
+        QCOMPARE(r.result().value(u"printed"_s).toArray(), QJsonArray{u"policzone"_s});
+        const QJsonArray writes = r.result().value(u"writes"_s).toArray();
+        QCOMPARE(writes.size(), 1);
+        QVERIFY(writes.first().toObject().value(u"created"_s).toBool());
+        QVERIFY(writes.first().toObject().value(u"diff"_s).toString().contains(u"+- Zakupy: 2"_s));
+        QVERIFY(QDir(dir).entryList({u"journals"_s}, QDir::Dirs).isEmpty()); // nothing written
+        // Questions: answered in order, or the run stops at one without an answer.
+        r = run(dir, {u"extension"_s, u"run"_s, u"Licznik"_s, u"pytaj"_s, u"--answers"_s, uR"(["Żółw"])"_s});
+        QCOMPARE(r.code, 0);
+        QCOMPARE(r.result().value(u"value"_s).toString(), u"Odpowiedź: Żółw"_s);
+        r = run(dir, {u"extension"_s, u"run"_s, u"Licznik"_s, u"pytaj"_s});
+        QCOMPARE(r.code, 0);
+        QCOMPARE(r.result().value(u"status"_s).toString(), u"waiting"_s);
+        QVERIFY(r.warnings().contains(u"question_unanswered"_s));
+        r = run(dir, {u"extension"_s, u"run"_s, u"Licznik"_s, u"pytaj"_s, u"--answers"_s, u"nie json"_s});
+        QCOMPARE(r.code, 2);
+        // A view's node tree, its params; a hook.
+        r = run(dir, {u"extension"_s, u"run"_s, u"Licznik"_s, u"--view"_s, u"lista"_s, u"--args"_s,
+                      uR"({"tytul": "Łąka"})"_s});
+        QCOMPARE(r.code, 0);
+        QVERIFY(QJsonDocument(r.result().value(u"value"_s).toObject()).toJson().contains("\xc5\x81\xc4\x85ka"));
+        r = run(dir, {u"extension"_s, u"run"_s, u"Licznik"_s, u"--hook"_s, u"save"_s, u"--page"_s, u"Zakupy"_s});
+        QCOMPARE(r.code, 0);
+        QCOMPARE(r.result().value(u"values"_s).toArray(), QJsonArray{u"zapisano Zakupy"_s});
+        r = run(dir, {u"extension"_s, u"run"_s, u"Licznik"_s, u"brak"_s});
+        QCOMPARE(r.code, 6);
+        r = run(dir, {u"extension"_s, u"run"_s, u"Licznik"_s});
+        QCOMPARE(r.code, 2);
+        // The console.
+        r = run(dir, {u"extension"_s, u"eval"_s, u"b.today()"_s});
+        QCOMPARE(r.code, 0);
+        QCOMPARE(r.result().value(u"value"_s).toString(), u"2026-10-14"_s);
+        r = run(dir, {u"extension"_s, u"eval"_s, u"--stdin"_s}, "b.write(\"Zakupy\", \"- [x] mleko\\n\")\n");
+        QCOMPARE(r.code, 0);
+        QCOMPARE(r.result().value(u"writes"_s).toArray().size(), 1);
+        QCOMPARE(readFile(dir + u"/Zakupy.md"_s), "- [ ] mleko\n- [ ] chleb\n"_ba);
+        r = run(dir, {u"extension"_s, u"eval"_s, u"error(\"ups\")"_s});
+        QCOMPARE(r.code, 6);
+        QCOMPARE(r.json.value(u"error"_s).toObject().value(u"details"_s).toObject().value(u"error"_s).toObject().value(
+                         u"line"_s).toInt(),
+                 1);
+        // A built-in's source and the page that would replace it.
+        r = run(dir, {u"extension"_s, u"show"_s, u"silownia"_s});
+        QCOMPARE(r.code, 0);
+        QVERIFY(r.result().value(u"code"_s).toString().contains(u"b.command"_s));
+        QVERIFY(r.result().value(u"overridePage"_s).toString().contains(u"silownia"_s));
+
+        // Writing: a new page around the code, in the notebook language's folder; checked first.
+        const QString code = u"b.command(\"hej\", function() return \"Cześć\" end, { label = \"Hej\" })"_s;
+        r = run(dir, {u"--lang"_s, u"pl"_s, u"extension"_s, u"write"_s, u"Powitanie"_s, u"--code"_s, code,
+                      u"--description"_s, u"Mówi: cześć"_s, u"--permissions"_s, u"zapis"_s});
+        QCOMPARE(r.code, 0);
+        QCOMPARE(r.result().value(u"path"_s).toString(), u"Rozszerzenia/Powitanie.md"_s);
+        QVERIFY(!r.result().value(u"approved"_s).toBool());
+        QVERIFY(r.warnings().contains(u"needs_approval"_s));
+        QCOMPARE(r.result().value(u"check"_s).toObject().value(u"commands"_s).toArray().size(), 1);
+        const QByteArray written = readFile(dir + u"/Rozszerzenia/Powitanie.md"_s);
+        QVERIFY2(written.contains("opis: 'Mówi: cześć'") || written.contains("opis: \"Mówi: cześć\""), written.constData());
+        QVERIFY(written.contains(code.toUtf8()));
+        r = run(dir, {u"extension"_s, u"show"_s, u"Powitanie"_s});
+        QCOMPARE(r.result().value(u"description"_s).toString(), u"Mówi: cześć"_s);
+        QCOMPARE(r.result().value(u"permissions"_s).toArray(), QJsonArray{u"write"_s});
+        const QString hash = r.result().value(u"hash"_s).toString();
+        // Replacing needs its hash; broken code is not written unless forced.
+        r = run(dir, {u"extension"_s, u"write"_s, u"Powitanie"_s, u"--code"_s, u"return 1"_s});
+        QCOMPARE(r.code, 4);
+        QCOMPARE(r.errorCode(), u"hash_required"_s);
+        r = run(dir, {u"extension"_s, u"write"_s, u"Powitanie"_s, u"--code"_s, u"b.command(("_s, u"--expect-hash"_s,
+                      hash});
+        QCOMPARE(r.code, 6);
+        QCOMPARE(readFile(dir + u"/Rozszerzenia/Powitanie.md"_s), written);
+        r = run(dir, {u"--lang"_s, u"pl"_s, u"extension"_s, u"write"_s, u"powitanie"_s, u"--code"_s,
+                      u"b.command(\"hej\", function() return \"Hej!\" end)"_s, u"--expect-hash"_s, hash});
+        QCOMPARE(r.code, 0);
+        QVERIFY(r.warnings().contains(u"page_replaced"_s));
+        QVERIFY(readFile(dir + u"/Rozszerzenia/Powitanie.md"_s).contains("opis: ")); // kept from the page
+        QVERIFY(readFile(dir + u"/Rozszerzenia/Powitanie.md"_s).contains("Hej!"));
+        r = run(dir, {u"extension"_s, u"write"_s, u"Zakupy"_s, u"--code"_s, u"return 1"_s});
+        QCOMPARE(r.code, 4);
+        QCOMPARE(r.errorCode(), u"not_an_extension"_s);
+        r = run(dir, {u"extension"_s, u"write"_s, u"Bez tagu"_s, u"--content"_s, u"```luau\nreturn 1\n```\n"_s});
+        QCOMPARE(r.code, 2);
+        QCOMPARE(r.errorCode(), u"not_an_extension_page"_s);
+        r = run(dir, {u"--read-only"_s, u"extension"_s, u"write"_s, u"Inne"_s, u"--code"_s, u"return 1"_s});
+        QCOMPARE(r.code, 7);
+        r = run(dir, {u"--read-only"_s, u"extension"_s, u"check"_s, u"Powitanie"_s});
+        QCOMPARE(r.code, 0);
+    }
+
     void pageWriteCanEmptyAPage()
     {
         const QString dir = vault({{u"Dom.md"_s, "- farba\n"}});

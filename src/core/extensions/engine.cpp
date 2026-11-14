@@ -484,6 +484,7 @@ void Engine::pushEnvironment(const QString &extension)
     set("blocks", &Engine::apiBlocks);
     set("search", &Engine::apiSearch);
     set("query", &Engine::apiQuery);
+    set("checkExtension", &Engine::apiCheckExtension);
     set("write", &Engine::apiWrite);
     set("appendToJournal", &Engine::apiAppendToJournal);
     set("replaceBlock", &Engine::apiReplaceBlock);
@@ -893,6 +894,7 @@ int Engine::apiQuery(lua_State *L)
 {
     return finishApi(L, self(L)->queryImpl(L));
 }
+int Engine::apiCheckExtension(lua_State *L) { return finishApi(L, self(L)->checkImpl(L)); }
 int Engine::apiWrite(lua_State *L) { return finishApi(L, self(L)->writeImpl(L)); }
 int Engine::apiAppendToJournal(lua_State *L) { return finishApi(L, self(L)->appendImpl(L)); }
 int Engine::apiReplaceBlock(lua_State *L) { return finishApi(L, self(L)->replaceImpl(L)); }
@@ -1118,6 +1120,19 @@ bool Engine::mayWrite(lua_State *L, const QString &extension, const char *functi
         return true;
     failWith(L, QString::fromLatin1(function) + u": permission denied: write"_s);
     return false;
+}
+
+int Engine::checkImpl(lua_State *L)
+{
+    QString name, content;
+    if (!argString(L, 1, "b.checkExtension", &name) || !argString(L, 2, "b.checkExtension", &content))
+        return kRaise;
+    if (name.trimmed().isEmpty())
+        return failWith(L, u"b.checkExtension: the page's name is empty"_s);
+    const QVariantMap report = m_host->checkExtension(name.trimmed(), content);
+    Unlimited unlimited(&m_unlimited);
+    pushVariant(L, report);
+    return 1;
 }
 
 int Engine::writeImpl(lua_State *L)

@@ -51,6 +51,19 @@ An agent running on another computer (e.g. on a Raspberry Pi) works on a copy of
 
 **Reminders** added by an agent ring wherever the app runs: on a computer (in the tray) and on the phone, once the app sees the change — see [[Reminders and alarms|Reminders and alarms]].
 
+## Extensions written by an agent
+An agent can also write [[Extensions|extensions]] — commands, views and reactions in Luau — and try them before you see them:
+
+```sh
+brulion-cli extension docs views                     # the API reference, or a part of it
+brulion-cli extension eval 'b.query("type:tasks status:open").total'
+brulion-cli extension write "Word count" --code "$(cat wc.luau)" --description "Counts words"
+brulion-cli extension run "Word count" count --page Home    # changes come back as a diff, nothing is written
+brulion-cli extension list                           # "approval": waiting for you
+```
+
+The code never runs in the app until you approve it there (**Run** on the page, or **Settings → Extensions**), and each change by the agent waits for you again.
+
 ## Open in the app
 `brulion-cli app open <page>` shows a page in the running app (on the same computer), `app today` — today's journal, and `app capture` opens a quick capture.
 

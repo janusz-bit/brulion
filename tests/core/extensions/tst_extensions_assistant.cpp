@@ -2,8 +2,9 @@
 // notebook: a vault, its index and the NotebookHost, the model played by the test. The host's
 // full-text search and queries (b.search, b.query), the tools' requests (valid for ai::requestFrom
 // and both providers), a question answered from a query's results, a change made with the user's
-// yes, one declined, "yes to every change" asked once, an unknown tool, too many turns, and the
-// summary without tools.
+// yes, one declined, "yes to every change" asked once, an extension written (the reference read,
+// the page checked, refused while it does not load, written with the user's yes), an unknown
+// tool, too many turns, and the summary without tools.
 
 #include "ai/ai.h"
 #include "extensions/builtin.h"
@@ -160,7 +161,7 @@ private Q_SLOTS:
         QCOMPARE(r.status, Status::Suspended);
         QVariantMap request = r.value.toMap().value(u"request"_s).toMap();
         QCOMPARE(r.value.toMap().value(u"kind"_s).toString(), u"ai"_s);
-        QCOMPARE(request.value(u"tools"_s).toList().size(), 8);
+        QCOMPARE(request.value(u"tools"_s).toList().size(), 11);
         QVERIFY(request.value(u"system"_s).toString().contains(u"2026-11-11"_s));
         QCOMPARE(request.value(u"messages"_s).toList().value(0).toMap().value(u"content"_s).toString(), question);
         // The script's tools are a request both providers take.
@@ -320,6 +321,68 @@ private Q_SLOTS:
                  qPrintable(file(u"journals/2026-11-11.md"_s)));
     }
 
+    void writesAnExtension()
+    {
+        QVERIFY(open(sampleNotes()));
+        Result r = ask(u"Napisz polecenie, które policzy otwarte zadania"_s);
+        // The reference: its sections, one of them, a heading no section has.
+        r = m_engine->resume(r.call, calling({call(u"c1"_s, u"extension_reference"_s, {}),
+                                              call(u"c2"_s, u"extension_reference"_s, {{u"section"_s, u"hooks"_s}}),
+                                              call(u"c3"_s, u"extension_reference"_s, {{u"section"_s, u"żółw"_s}})}));
+        QVariantList results = lastResults(r);
+        QCOMPARE(results.size(), 3);
+        const QString sections = results[0].toMap().value(u"content"_s).toString();
+        QVERIFY2(sections.contains(u"\n- Quick start\n"_s) && sections.contains(u"\n  - Reading\n"_s), qPrintable(sections));
+        // Also those after a line that starts with code in prose (```` ```luau ````): no fence.
+        QVERIFY2(sections.contains(u"\n- Troubleshooting\n"_s) && sections.contains(u"\n- Tests"_s), qPrintable(sections));
+        const QString hooks = results[1].toMap().value(u"content"_s).toString();
+        QVERIFY2(hooks.startsWith(u"## Hooks\n"_s) && hooks.contains(u"b.on(\"change\""_s), qPrintable(hooks.left(200)));
+        QVERIFY(!hooks.contains(u"## Questions"_s));
+        QVERIFY(!results[1].toMap().value(u"isError"_s).toBool());
+        QVERIFY(results[2].toMap().value(u"isError"_s).toBool());
+        // A check: the error names the page's line; nothing is asked, nothing written.
+        const QString broken = u"---\ntags: [rozszerzenie]\n---\nLiczy zadania.\n\n```luau\nlocal n = = 1\n```\n"_s;
+        r = m_engine->resume(r.call, calling({call(u"c4"_s, u"check_extension"_s,
+                                                   {{u"name"_s, u"Licznik zadań"_s}, {u"content"_s, broken}})}));
+        QCOMPARE(r.value.toMap().value(u"kind"_s).toString(), u"ai"_s);
+        QVariantMap result = lastResults(r).value(0).toMap();
+        QVERIFY(result.value(u"isError"_s).toBool());
+        QVERIFY2(result.value(u"content"_s).toString().contains(u"line 7 of the page"_s),
+                 qPrintable(result.value(u"content"_s).toString()));
+        // Code that does not load is never written; a page that is no extension is never replaced.
+        r = m_engine->resume(r.call, calling({call(u"c5"_s, u"write_extension"_s,
+                                                   {{u"name"_s, u"Licznik zadań"_s}, {u"content"_s, broken}}),
+                                              call(u"c6"_s, u"write_extension"_s,
+                                                   {{u"name"_s, u"Dom"_s}, {u"content"_s, broken}})}));
+        QCOMPARE(r.value.toMap().value(u"kind"_s).toString(), u"ai"_s);
+        results = lastResults(r);
+        QVERIFY(results[0].toMap().value(u"content"_s).toString().startsWith(u"Not written."_s));
+        QVERIFY(results[1].toMap().value(u"content"_s).toString().contains(u"no extension"_s));
+        QVERIFY(!QFile::exists(m_vault->absolutePath(u"Rozszerzenia/Licznik zadań.md"_s)));
+        // Working code: checked, then written into Rozszerzenia/ with the user's yes.
+        const QString page = u"---\ntags: [rozszerzenie]\nopis: Liczy otwarte zadania.\n---\nLiczy zadania.\n\n```luau\n"
+                             "b.command(\"policz\", function()\n"
+                             "    return `Otwarte: {b.query(\"type:tasks status:open\").total}`\n"
+                             "end, { label = \"Policz zadania\" })\n```\n"_s;
+        r = m_engine->resume(r.call, calling({call(u"c7"_s, u"write_extension"_s,
+                                                   {{u"name"_s, u"Licznik zadań"_s}, {u"content"_s, page}})}));
+        QCOMPARE(r.value.toMap().value(u"kind"_s).toString(), u"choose"_s);
+        const QString prompt = r.value.toMap().value(u"prompt"_s).toString();
+        QVERIFY2(prompt.contains(u"rozszerzenie „Rozszerzenia/Licznik zadań”"_s) && prompt.contains(u"Uruchom"_s),
+                 qPrintable(prompt));
+        r = m_engine->resume(r.call, r.value.toMap().value(u"options"_s).toStringList().value(0));
+        result = lastResults(r).value(0).toMap();
+        QVERIFY(!result.value(u"isError"_s).toBool());
+        QVERIFY2(result.value(u"content"_s).toString().startsWith(u"Wrote the extension [[Rozszerzenia/Licznik zadań]]."_s)
+                         && result.value(u"content"_s).toString().contains(u"command policz \"Policz zadania\""_s),
+                 qPrintable(result.value(u"content"_s).toString()));
+        QCOMPARE(file(u"Rozszerzenia/Licznik zadań.md"_s), page);
+        r = m_engine->resume(r.call, answering(u"Napisałem [[Licznik zadań]]: naciśnij Uruchom na jego stronie."_s));
+        QVERIFY2(r.ok(), qPrintable(r.error));
+        QVERIFY2(file(u"journals/2026-11-11.md"_s).contains(u"✏️ Zmienione: [[Rozszerzenia/Licznik zadań]]"_s),
+                 qPrintable(file(u"journals/2026-11-11.md"_s)));
+    }
+
     void unknownToolsAndTooManyTurns()
     {
         QVERIFY(open(sampleNotes()));
@@ -331,11 +394,11 @@ private Q_SLOTS:
         QVERIFY(results[0].toMap().value(u"content"_s).toString().contains(u"No tool named"_s));
         QVERIFY(results[0].toMap().value(u"isError"_s).toBool());
         QVERIFY(results[1].toMap().value(u"isError"_s).toBool());
-        // A model that never stops calling tools: twelve turns, then the question ends.
-        for (int turn = 2; turn <= 12 && r.status == Status::Suspended; ++turn)
+        // A model that never stops calling tools: sixteen turns, then the question ends.
+        for (int turn = 2; turn <= 16 && r.status == Status::Suspended; ++turn)
             r = m_engine->resume(r.call, calling({call(u"c%1"_s.arg(turn), u"list_pages"_s, {})}));
         QVERIFY2(r.ok(), qPrintable(r.error));
-        QVERIFY2(r.value.toString().contains(u"12"_s), qPrintable(r.value.toString()));
+        QVERIFY2(r.value.toString().contains(u"16"_s), qPrintable(r.value.toString()));
         QVERIFY(file(u"journals/2026-11-11.md"_s).contains(u"- 🤖 Zrób coś\n  - …"_s));
     }
 

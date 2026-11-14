@@ -31,6 +31,7 @@ const QList<Command> &commands()
         addHabitCommands(out);
         addIndexCommands(out);
         addToolCommands(out);
+        addExtensionCommands(out);
         addAppCommands(out);
         addMetaCommands(out);
         return out;
