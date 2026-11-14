@@ -1,0 +1,5 @@
+What's new in 0.21.0:
+• AI writes extensions
+• Nix packages build again
+
+Full release notes: https://github.com/janusz-bit/brulion/releases/tag/v0.21.0

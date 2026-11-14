@@ -1,0 +1,5 @@
+Nowości w 0.21.0:
+• AI pisze rozszerzenia
+• Paczki Nix znowu się budują
+
+Pełny opis: https://github.com/janusz-bit/brulion/releases/tag/v0.21.0
