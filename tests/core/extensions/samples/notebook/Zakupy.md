@@ -1,0 +1,3 @@
+- [ ] mleko
+- [ ] chleb żytni
+- [x] masło ✅ 2026-11-10

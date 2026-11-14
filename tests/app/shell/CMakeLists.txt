@@ -30,6 +30,14 @@ brulion_add_test(tst_shell_shortcutmap SOURCES tst_shortcutmap.cpp LIBS brulion_
 brulion_add_test(tst_shell_appupdates SOURCES tst_appupdates.cpp ../minihttpserver.h LIBS brulion_shell Qt6::Network)
 target_compile_definitions(tst_shell_appupdates PRIVATE BRULION_UPDATE_CHECK_EXPECTED=$<BOOL:${BRULION_UPDATE_CHECK}>)
 brulion_add_test(tst_shell_workspace SOURCES tst_workspace.cpp LIBS brulion_shell brulion_core_vault brulion_core_markdown)
+# The extensions as the app runs them (workspaceextensions.h), on the sample extensions and their
+# notebook (tests/core/extensions/samples): approval per device, commands with the questions the
+# app shows, views and their actions, hooks as the Workspace delivers them (what an extension
+# writes is no "change", what the user changes always is), code an extension writes, the editor's
+# saves of an approved page.
+brulion_add_test(tst_shell_extensions SOURCES tst_extensions.cpp
+    LIBS brulion_shell brulion_core_extensions brulion_core_index brulion_core_vault)
+target_compile_definitions(tst_shell_extensions PRIVATE BRULION_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
 brulion_add_test(tst_shell_demovault SOURCES tst_demovault.cpp
     LIBS brulion_shell brulion_core_vault brulion_core_markdown brulion_core_index brulion_core_calc
          brulion_core_dates brulion_core_diagram brulion_core_chart)

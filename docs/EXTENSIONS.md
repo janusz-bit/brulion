@@ -926,15 +926,28 @@ column.
 `tests/core/extensions`: the engine (sandbox escapes, limits that cannot be caught, questions,
 views, hooks, evaluation, the locale), block edits, extension pages (ids, code with the page's
 lines, fences in lists and in other fences, permissions, the hash, the new-extension page and the
-gym's source as a page running like the built-in), the gym on a real notebook (writing lines
-back in Brulion's spelling, history, plans with progression, today's view and its actions, a stale
-line, the catalog, hostile lines, two years of workouts), the AI assistant as an agent, and the
-documentation (`tst_extensions_docs`: every ```` ```luau ```` example of this document, of
-docs/SYNTAX.md and of the documentation notebook's pages in both languages loads and runs on a
-real notebook — its commands with their questions and the model answered, its views and their
-actions, its hooks —, both languages have the same examples, and the references name every
-function of `b`, of `b.ui` and every hook event). The app's self-test: `checkGym` switches
-the gym on, writes a plan into today's note through the dialog and adds a set in the view;
-`checkExtensionPages` writes an extension page as a sync would (it waits), approves it, opens its
-view from the palette, saves a change in the editor (it runs at once, still approved), saves a
-broken one (the error on its line, the previous version runs) and evaluates in the console.
+gym's source as a page running like the built-in), the notebook host (the dry run, refs that name
+notes only), the gym on a real notebook (writing lines back in Brulion's spelling, history, plans
+with progression, today's view and its actions, a stale line, the catalog, hostile lines, two
+years of workouts), the AI assistant as an agent, the documentation (`tst_extensions_docs`: every
+```` ```luau ```` example of this document, of docs/SYNTAX.md and of the documentation notebook's
+pages in both languages loads and runs on a real notebook — its commands with their questions and
+the model answered, its views and their actions, its hooks —, both languages have the same
+examples, and the references name every function of `b`, of `b.ui` and every hook event), and
+**ten sample extensions** (`tests/core/extensions/samples/extensions`: pages as people write them,
+Polish and English — a word count, a task review, a mood log, expenses, a project index kept by
+hooks, a pomodoro timer, an extension that writes extensions, flashcards, a link check, action
+items by AI) at work on a notebook of their own, all in one engine (`tst_extensions_samples`:
+every command with its questions, every view held to what "Views" says a node is, every tap, the
+hooks, both languages, a notebook of two thousand pages, notes with lines of 100 000 characters
+and numbers that are none).
+
+`tests/app/shell/tst_extensions.cpp` runs the same pages in the app's own class
+(`WorkspaceExtensions`, wired as the Workspace wires it): approval per device, the questions the
+app shows, an extension's own writes that are no "change" and the user's edits that always are,
+code an extension writes waiting for approval, the editor's saves of an approved page. The app's
+self-test: `checkGym` switches the gym on, writes a plan into today's note through the dialog and
+adds a set in the view; `checkExtensionPages` writes an extension page as a sync would (it waits),
+approves it, opens its view from the palette, saves a change in the editor (it runs at once, still
+approved), saves a broken one (the error on its line, the previous version runs) and evaluates in
+the console.

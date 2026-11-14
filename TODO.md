@@ -31,6 +31,23 @@ done in the repository simply disappears from the list.
   gym's dumbbell), the notebook's first day of the week in `b.query` (`NotebookHost::query` starts
   weeks on Monday), "Edit the code" for the AI assistant (Settings has the button for the gym
   only).
+* **Extensions: what ten sample extensions had to work around** — the samples of
+  `tests/core/extensions/samples` (a task review, a mood log, expenses, flashcards, a project index
+  kept by hooks …) run, but each met a wall of the API: a block's properties and children cannot be
+  changed, nor a block added under another or removed, without rewriting the page
+  (`b.replaceBlock` changes the first line only: the mood log cannot correct today's entry, the
+  flashcards keep their schedule in the line's text); adding to a page that is no daily note is
+  `b.read` and `b.write` of the whole page; `b.query` has no paging past its 1000 items; there is
+  no clock of the host (`b.today()` follows the app's clock and `brulion-cli --now`, `os.date` and
+  `os.time` the system's — a `b.now()`) and no date helper next to `b.daysBetween` (every sample
+  carries its own `addDays`); the hooks hear nothing of what another extension wrote (a task ticked
+  in one extension's view does not refresh the page another one keeps), and a view cannot tell
+  cheaply that nothing changed (it reads everything on every draw: a revision of the notebook to
+  cache on); pages of one name in different folders are one name to `b.pages` and `b.page` (no
+  path); the attachments are invisible (the link check guesses a file by its extension); code
+  cannot be shared between extensions (each page carries its helpers); what a question shows has no
+  limit (`b.ask` with a megabyte of prompt, `b.choose` with thousands of options), nor has
+  `b.timer`'s label.
 * **Gym: next steps** — the rest timer's notification while the app is closed (Android: a scheduled
   alarm), a catalog beyond the 51 built-in exercises (free-exercise-db, Unlicense, English names),
   sample workouts in the sample notebook, weekly volume per muscle group, a body weight log.
