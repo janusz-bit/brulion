@@ -161,11 +161,11 @@ Reading needs no permission.
 
 | Function | Gives |
 |---|---|
-| `b.pages()`, `b.pages({ tag = "project" })` | the names of all pages (daily notes too), sorted as `b.sorted` sorts; with `tag` only the pages whose own tags — the frontmatter's `tags:` or a `tags::` line — have it (without `#`, any case) |
+| `b.pages()`, `b.pages({ tag = "project" })` | the names of all pages (daily notes too), sorted as `b.sorted` sorts; with `tag` only the pages whose own tags — the frontmatter's `tags:` or a `tags::` line — have it (with or without `#`, any case). The filter is a table: `b.pages("project")` is an error, not every page |
 | `b.page(name)` | `{ name, tags, props, date? }` — the page's own tags and properties (as a block's `props`) — or `nil` |
 | `b.read(name)` | the page's whole Markdown text, or `nil` |
 | `b.blocks({ page = name })` | the page's top-level blocks in order, each with its `children`: list items, but also headings (`text` is `# Home`, with its hashes), paragraphs, code blocks (the fence line) and the frontmatter (`---`, its `props` the page's). `{}` for a page that does not exist |
-| `b.blocks({ tag = "workout", journal = true, from = "2026-11-01", to = "2026-11-30" })` | every block that carries the tag itself (not through its parent or its page), each with its `children`: first those of ordinary pages (by path), then those of daily notes, oldest day first. `journal = true` — or a `from` / `to` day, both optional and inclusive — keeps daily notes only. At most 20 000 blocks |
+| `b.blocks({ tag = "workout", journal = true, from = "2026-11-01", to = "2026-11-30" })` | every block that carries the tag itself (not through its parent or its page), each with its `children`: first those of ordinary pages (by path), then those of daily notes, oldest day first. `journal = true` — or a `from` / `to` day, both optional and inclusive — keeps daily notes only; a `from` or `to` that is no day (`"2026-11-31"`) is an error. At most 20 000 blocks |
 | `b.search(text, limit?)` | full-text search as the search view does it (words in any form, diacritics optional, the best first): one hit per page, at most `limit` (20 by default, 200 at most), each `{ page, date?, excerpt, line?, ref?, text?, task? }` — `line` the first matching line, counted from 1 (none when only the title matched), `ref` / `text` / `task` of the block holding that line |
 | `b.query(source, limit?)` | a query of the query language (docs/SYNTAX.md §10): `{ total, items }` with at most `limit` items (50 by default, 1000 at most; a smaller `limit:` in the query wins). Items are blocks without `children`, plus a task's `due`, `scheduled`, `start` and a reminder's `reminder` (`"2026-11-12 09:00"`); for `type:pages` they are `{ page, date? }`. A query that is none is an error with the reason |
 | `b.checkExtension(name, text)` | loads `text` as the extension page `name` would load (a new page: where new pages go), in an engine of its own — its top-level code runs with 1 s and 32 MB, writes only computed, nothing stays registered, no approval needed: `{ ok, id, title, path, permissions, problems, commands = { { name, label, block } }, views = { { name, label, icon, actions } }, hooks = { events… }, printed, writes? }`, or `ok = false` with `error`, `line` (the page's line, from 1) and `status` (`"timeout"` …). Text that is no extension page (no tag, no code) has `ok = false` too. Inside such a check it reports an error instead of checking again |
@@ -328,6 +328,11 @@ of one of the app's icons (`assets/icons/`: `folder`, `calendar-check`, `chart-c
 A view shows at most 2000 lines; nodes it does not know are left out. `params` are the route's
 other keys — what an `open` node passed, `{}` from the palette; `view`, `extension`, `name` and
 `title` are the route's own and never reach `render`.
+
+`render` returns one node; a list of nodes is taken as a column of them, and anything else —
+nothing, a text — is an error ("The view could not be drawn: … returned nothing"), never an empty
+view. A `nil` among the children of a column or a row is left out, so a piece that is not always
+there is written `show and b.ui.text(…) or nil`; a table's `nil` cell shows empty.
 
 **Actions** are the functions of the third argument, by name. A control's `args` are stored with
 the drawn view and given back to the action when it is tapped, so they must be plain data and
@@ -602,6 +607,9 @@ Word count:9: b.replaceBlock: stale: the block changed since it was read (Home.m
 | `b.replaceBlock: not a block reference: …` | the `ref` is not one a block had: made by hand, without its hash, or naming a file that is no note |
 | `b.replaceBlock: the text must be one line` | no line breaks in a block's first line |
 | `b.blocks: the query needs a page or a tag` | `b.blocks({})` |
+| `b.blocks: invalid date: …` | `from` or `to` is not `YYYY-MM-DD`, or no such day |
+| `b.pages: argument 1 must be a table …` | `b.pages("project")`: the filter is `{ tag = "project" }` |
+| `…: the view "…" returned nothing` | `render` must return a node of `b.ui` (or a list of them) |
 | `b.query: …` | the query language's own message (an unknown filter, a wrong date) |
 | `b.appendToJournal: invalid date: …`, `b.daysBetween: invalid date: …` | not `YYYY-MM-DD`, or no such day |
 | `b.read: argument 1 must be a string, not nil` | a wrong argument, by its position |
@@ -832,6 +840,7 @@ Home:7
 | `attempt to index nil with …` | Something was not there: `b.read`, `b.page` and `ctx.block` are `nil` for what does not exist, a block has no `task` when it is no task, `ctx.page` is `""` outside a page |
 | `stale:` | The line changed after it was read. In a view, pass `ref` and `text` in the control's `args`; in a command, read the block again |
 | A check or a stepper does not show | They are drawn inside `b.ui.row` only |
+| "The view could not be drawn: … returned nothing" | `render` ended without `return`, or returned a text: return `b.ui.column({ … })` |
 | The view shows old numbers | `render` reads variables a hook or a command filled: read the notebook in `render` instead |
 | Polish letters sort or match wrongly | `table.sort`, `%a` and `string.lower` are ASCII: `b.sorted`, `b.fold`, `utf8.len` |
 | "The extension took too long" | One call has 2 s. Ask the index for less (`b.query` with filters and a limit instead of reading every page), do not read long text with backtracking patterns |

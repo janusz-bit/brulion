@@ -183,6 +183,7 @@ private:
         int envRef = 0;
         QStringList permissions;
         QVariantMap data;
+        QString name; // as errors name it: Extension::name, else the id
     };
 
     static void *alloc(void *ud, void *ptr, size_t osize, size_t nsize);

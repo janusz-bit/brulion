@@ -338,6 +338,102 @@ private Q_SLOTS:
         QVERIFY2(a.error.contains(u"b.replaceBlock: stale: Lista.md#L1@stale"_s), qPrintable(a.error));
     }
 
+    void viewsDrawWhatIsThere()
+    {
+        // A list written with conditions in it — { a, show and b or nil, c } — is no sequence: as
+        // it is, it would cross to the app as a record with the keys "1" and "3" and nothing of it
+        // would be drawn. b.ui.column and b.ui.row take what is there; a table's nil cell shows
+        // empty and its row keeps its columns.
+        Extension views = ext(u"n"_s, uR"lua(
+            b.view("v", function(params)
+                local show = params.show == true
+                return b.ui.column({
+                    b.ui.heading("a"),
+                    show and b.ui.text("sometimes") or nil,
+                    b.ui.row({ nil, b.ui.text("b"), nil, b.ui.link("C"), nil }),
+                    show and b.ui.text("sometimes too") or nil,
+                    b.ui.table({ "x", "y", "z" }, { { "1", nil, "3" }, nil, { nil, nil, "c" }, { "a", "b", "c", "d" } }),
+                    nil,
+                })
+            end)
+            b.view("list", function() return { b.ui.heading("a"), b.ui.text("b") } end)
+            b.view("nothing", function() end)
+            b.view("words", function() return "just words" end)
+            b.view("record", function() return { title = "no type" } end)
+            b.view("gaps", function() return { b.ui.heading("a"), nil, b.ui.text("b") } end)
+        )lua"_s);
+        views.name = u"Widoki"_s;
+        LOAD_OK(views);
+        const auto types = [](const QVariant &list) {
+            QStringList out;
+            for (const QVariant &node : list.toList())
+                out << node.toMap().value(u"type"_s).toString();
+            return out;
+        };
+        Result r = engine->render(u"n"_s, u"v"_s, {});
+        QVERIFY2(r.ok(), qPrintable(r.error));
+        QVariantList children = r.value.toMap().value(u"children"_s).toList();
+        QCOMPARE(types(children), (QStringList{u"heading"_s, u"row"_s, u"table"_s}));
+        QCOMPARE(types(children[1].toMap().value(u"children"_s)), (QStringList{u"text"_s, u"link"_s}));
+        const QVariantList rows = children[2].toMap().value(u"rows"_s).toList();
+        QCOMPARE(rows.size(), 3);
+        QCOMPARE(rows[0].toStringList(), (QStringList{u"1"_s, QString(), u"3"_s}));
+        QCOMPARE(rows[1].toStringList(), (QStringList{QString(), QString(), u"c"_s}));
+        QCOMPARE(rows[2].toStringList(), (QStringList{u"a"_s, u"b"_s, u"c"_s, u"d"_s}));
+        r = engine->render(u"n"_s, u"v"_s, {{u"show"_s, true}});
+        children = r.value.toMap().value(u"children"_s).toList();
+        QCOMPARE(types(children), (QStringList{u"heading"_s, u"text"_s, u"row"_s, u"text"_s, u"table"_s}));
+
+        // What a view returns is a node; a list of nodes is a column of them. Anything else would
+        // be an empty view without a word: an error that says what came instead.
+        r = engine->render(u"n"_s, u"list"_s, {});
+        QVERIFY2(r.ok(), qPrintable(r.error));
+        QCOMPARE(r.value.toMap().value(u"type"_s).toString(), u"column"_s);
+        QCOMPARE(types(r.value.toMap().value(u"children"_s)), (QStringList{u"heading"_s, u"text"_s}));
+        const QList<std::pair<QString, QString>> wrong{{u"nothing"_s, u"returned nothing"_s},
+                                                       {u"words"_s, u"returned a value that is no b.ui node"_s},
+                                                       {u"record"_s, u"returned a table that is no b.ui node"_s},
+                                                       {u"gaps"_s, u"returned a table that is no b.ui node"_s}};
+        for (const auto &[view, why] : wrong) {
+            r = engine->render(u"n"_s, view, {});
+            QCOMPARE(r.status, Status::Error);
+            QVERIFY2(r.error.startsWith(u"Widoki: the view \"%1\" %2"_s.arg(view, why)), qPrintable(r.error));
+        }
+    }
+
+    void filtersThatWouldMeanEverything()
+    {
+        // b.pages("projekt") and a day that is none used to be read as "no filter": the script got
+        // every page, the blocks of every day, and never knew. They are errors; a tag may be
+        // written with its '#'.
+        host.pagesByName = {{u"Dom"_s, u"- remont #projekt"_s}, {u"Inne"_s, u"- nic"_s}};
+        LOAD_OK(ext(u"f"_s, QString()));
+        const auto value = [&](const QString &code) {
+            const Result r = engine->evaluate(u"f"_s, code, u"t"_s);
+            return r.ok() ? r.value.toString() : r.error.section(u'\n', 0, 0);
+        };
+        QCOMPARE(value(u"#b.pages()"_s), u"2"_s);
+        QCOMPARE(value(u"#b.pages({})"_s), u"2"_s);
+        QCOMPARE(value(u"#b.pages({ tag = \"projekt\" })"_s), u"1"_s);
+        QCOMPARE(value(u"#b.pages({ tag = \"#projekt\" })"_s), u"1"_s);
+        QCOMPARE(value(u"b.pages(\"projekt\")"_s),
+                 u"t:1: b.pages: argument 1 must be a table ({ tag = … }), not string"_s);
+        QCOMPARE(value(u"b.pages({ tag = 5 })"_s), u"t:1: b.pages: tag must be a text"_s);
+        QCOMPARE(value(u"#b.blocks({ page = \"Dom\", from = \"2026-11-01\", to = \"2026-11-30\" })"_s), u"1"_s);
+        QCOMPARE(value(u"b.blocks({ tag = \"projekt\", from = \"2026-11-31\" })"_s),
+                 u"t:1: b.blocks: invalid date: 2026-11-31"_s);
+        QCOMPARE(value(u"b.blocks({ tag = \"projekt\", to = \"wczoraj\" })"_s),
+                 u"t:1: b.blocks: invalid date: wczoraj"_s);
+        QCOMPARE(value(u"b.blocks({ tag = \"projekt\", from = 20261101 })"_s),
+                 u"t:1: b.blocks: invalid date: 20261101"_s);
+        // A count that is no number (0/0) is the default, not whatever a cast makes of it.
+        host.lang = u"en"_s;
+        QCOMPARE(value(u"b.formatNumber(1/3, 0/0)"_s), u"0.33"_s);
+        QCOMPARE(value(u"b.query(\"q\", 0/0).limit"_s), u"50"_s);
+        QCOMPARE(value(u"b.query(\"q\", 1e99).limit"_s), u"1000"_s);
+        QCOMPARE(value(u"#b.search(\"remont\", 0/0)"_s), u"1"_s);
+    }
+
     void textHelpers_data()
     {
         QTest::addColumn<QString>("lang");

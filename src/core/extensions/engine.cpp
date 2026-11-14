@@ -33,8 +33,27 @@ constexpr int kYield = -2; // the implementation pushed a question: suspend the 
 // per VM; the tables it returns are plain data the app's QML draws.
 const char kUiPrelude[] = R"luau(
 local ui = {}
-function ui.column(children) return { type = "column", children = children } end
-function ui.row(children) return { type = "row", children = children } end
+-- A list written with conditions in it — { a, show and b or nil, c } — as what is there, in order.
+-- (A table with a nil in the middle is no sequence: it would reach the app as a record with the
+-- keys "1" and "3", and nothing of it would be drawn.)
+local function present(list)
+    if type(list) ~= "table" then
+        return list
+    end
+    local last = table.maxn(list)
+    local out = nil
+    for i = 1, last do
+        local item = list[i]
+        if item == nil then
+            out = out or table.move(list, 1, i - 1, 1, {})
+        elseif out then
+            table.insert(out, item)
+        end
+    end
+    return out or list
+end
+function ui.column(children) return { type = "column", children = present(children) } end
+function ui.row(children) return { type = "row", children = present(children) } end
 function ui.heading(text) return { type = "heading", text = text } end
 function ui.text(text, muted) return { type = "text", text = text, muted = muted == true } end
 function ui.link(page, label) return { type = "link", page = page, label = label } end
@@ -46,7 +65,25 @@ end
 function ui.chart(spec)
     return { type = "chart", kind = spec.kind, title = spec.title, labels = spec.labels, series = spec.series }
 end
-function ui.table(columns, rows) return { type = "table", columns = columns, rows = rows } end
+function ui.table(columns, rows)
+    -- A cell that is nil (a value that is not there) shows empty, and its row keeps its columns.
+    if type(rows) == "table" then
+        local filled = {}
+        for _, row in present(rows) do
+            if type(row) == "table" then
+                local cells = {}
+                for i = 1, table.maxn(row) do
+                    local cell = row[i]
+                    cells[i] = if cell == nil then "" else cell
+                end
+                row = cells
+            end
+            table.insert(filled, row)
+        end
+        rows = filled
+    end
+    return { type = "table", columns = columns, rows = rows }
+end
 function ui.empty(title, text) return { type = "empty", title = title, text = text } end
 function ui.open(label, view, params) return { type = "open", label = label, view = view, params = params } end
 function ui.run(label, command) return { type = "run", label = label, command = command } end
@@ -289,6 +326,21 @@ struct Unlimited
 };
 
 QString extensionOf(lua_State *L) { return toQString(L, lua_upvalueindex(1)); }
+
+// A count a script gave as a number, within [low, high]; what is no number (0/0): `fallback`.
+int countFrom(double value, int low, int high, int fallback)
+{
+    return std::isnan(value) ? fallback : int(std::clamp(value, double(low), double(high)));
+}
+
+// A tag as a script names it: "project", "#project" and " Project " are one tag.
+QString tagName(const QString &tag)
+{
+    QString name = tag.trimmed();
+    while (name.startsWith(u'#'))
+        name.remove(0, 1);
+    return name;
+}
 
 QString formatNumber(double value, int decimals, bool comma)
 {
@@ -581,6 +633,7 @@ Result Engine::load(const Extension &extension)
         loaded.envRef = lua_ref(m_L, -1);
         loaded.permissions = extension.permissions;
         loaded.data = extension.data;
+        loaded.name = extension.name.isEmpty() ? extension.id : extension.name;
         m_loaded.insert(extension.id, loaded);
         rc = luau_load(m_L, chunk.constData(), bytecode, size, -1);
     }
@@ -824,7 +877,24 @@ Result Engine::render(const QString &extension, const QString &view, const QVari
     const auto it = m_views.constFind(extension + u'/' + view);
     if (it == m_views.constEnd())
         return {Status::NotFound, {}, u"no view %1/%2"_s.arg(extension, view)};
-    return call(extension, it->ref, {params});
+    Result r = call(extension, it->ref, {params});
+    if (!r.ok())
+        return r;
+    // What a view returns is a node of b.ui; a list of nodes is a column of them. Anything else —
+    // nothing, a text, a table that is no node — would be drawn as an empty view without a word.
+    if (r.value.metaType().id() == QMetaType::QVariantList) {
+        r.value = QVariantMap{{u"type"_s, u"column"_s}, {u"children"_s, r.value}};
+    } else if (r.value.toMap().value(u"type"_s).metaType().id() != QMetaType::QString) {
+        QString got = u"a value that is no b.ui node"_s;
+        if (!r.value.isValid() || r.value.isNull())
+            got = u"nothing"_s;
+        else if (r.value.metaType().id() == QMetaType::QVariantMap)
+            got = u"a table that is no b.ui node"_s;
+        const QString message =
+                u"%1: the view \"%2\" returned %3 (return b.ui.column({ … }) or another node of b.ui)"_s;
+        r = {Status::Error, {}, message.arg(m_loaded.value(extension).name, view, got), r.call};
+    }
+    return r;
 }
 
 Result Engine::act(const QString &extension, const QString &view, const QString &action, const QVariantMap &args)
@@ -1024,12 +1094,19 @@ int Engine::viewImpl(lua_State *L)
 
 int Engine::pagesImpl(lua_State *L)
 {
+    // b.pages("project") would silently list every page: the filter is a table, its tag a text.
     QString tag;
     if (lua_type(L, 1) == LUA_TTABLE) {
         lua_rawgetfield(L, 1, "tag");
-        if (lua_type(L, -1) == LUA_TSTRING)
-            tag = toQString(L, -1);
+        const int type = lua_type(L, -1);
+        if (type == LUA_TSTRING)
+            tag = tagName(toQString(L, -1));
         lua_pop(L, 1);
+        if (type != LUA_TSTRING && type != LUA_TNIL)
+            return failWith(L, u"b.pages: tag must be a text"_s);
+    } else if (!lua_isnoneornil(L, 1)) {
+        return failWith(L, u"b.pages: argument 1 must be a table ({ tag = … }), not %1"_s.arg(
+                                   QString::fromUtf8(luaL_typename(L, 1))));
     }
     const QStringList pages = m_host->pages(tag);
     Unlimited unlimited(&m_unlimited);
@@ -1075,12 +1152,17 @@ int Engine::blocksImpl(lua_State *L)
     const QVariantMap map = value.toMap();
     BlockQuery query;
     query.page = map.value(u"page"_s).toString();
-    query.tag = map.value(u"tag"_s).toString().toLower();
+    query.tag = tagName(map.value(u"tag"_s).toString()).toLower();
     query.journalOnly = map.value(u"journal"_s).toBool();
-    query.from = map.value(u"from"_s).toString();
-    query.to = map.value(u"to"_s).toString();
+    query.from = map.value(u"from"_s).toString().trimmed();
+    query.to = map.value(u"to"_s).toString().trimmed();
     if (query.page.isEmpty() && query.tag.isEmpty())
         return failWith(L, u"b.blocks: the query needs a page or a tag"_s);
+    // A day that is none ("2026-11-31", "yesterday") must not read as "no limit": the script would
+    // get the blocks of every day and never know.
+    for (const QString &day : {query.from, query.to})
+        if (!day.isEmpty() && !QDate::fromString(day, Qt::ISODate).isValid())
+            return failWith(L, u"b.blocks: invalid date: "_s + day);
     const QVariantList blocks = m_host->blocks(query);
     Unlimited unlimited(&m_unlimited);
     pushVariant(L, blocks);
@@ -1093,7 +1175,7 @@ int Engine::searchImpl(lua_State *L)
     double limit = 20;
     if (!argString(L, 1, "b.search", &text) || (!lua_isnoneornil(L, 2) && !argNumber(L, 2, "b.search", &limit)))
         return kRaise;
-    const QVariantList hits = m_host->search(text, int(std::clamp(limit, 1.0, 200.0)));
+    const QVariantList hits = m_host->search(text, countFrom(limit, 1, 200, 20));
     Unlimited unlimited(&m_unlimited);
     pushVariant(L, hits);
     return 1;
@@ -1106,7 +1188,7 @@ int Engine::queryImpl(lua_State *L)
     if (!argString(L, 1, "b.query", &source) || (!lua_isnoneornil(L, 2) && !argNumber(L, 2, "b.query", &limit)))
         return kRaise;
     QString error;
-    const QVariantMap result = m_host->query(source, int(std::clamp(limit, 1.0, 1000.0)), &error);
+    const QVariantMap result = m_host->query(source, countFrom(limit, 1, 1000, 50), &error);
     if (!error.isEmpty())
         return failWith(L, u"b.query: "_s + error);
     Unlimited unlimited(&m_unlimited);
@@ -1244,7 +1326,7 @@ int Engine::formatImpl(lua_State *L)
         return kRaise;
     const bool comma = m_host->language() == u"pl";
     Unlimited unlimited(&m_unlimited);
-    pushString(L, formatNumber(value, int(decimals), comma));
+    pushString(L, formatNumber(value, countFrom(decimals, 0, 10, 2), comma));
     return 1;
 }
 

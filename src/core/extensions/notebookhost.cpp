@@ -37,11 +37,12 @@ QVariantMap propertiesMap(const Properties &properties)
 
 QStringList splitTags(const QVariant &value)
 {
+    static const QRegularExpression separators(u"[,\\s]+"_s); // (made once: pages() asks for every note)
     QStringList raw;
     if (value.metaType().id() == QMetaType::QStringList || value.metaType().id() == QMetaType::QVariantList)
         raw = value.toStringList();
-    else
-        raw = value.toString().split(QRegularExpression(u"[,\\s]+"_s), Qt::SkipEmptyParts);
+    else if (value.isValid())
+        raw = value.toString().split(separators, Qt::SkipEmptyParts);
     QStringList out;
     for (QString tag : raw) {
         tag = tag.trimmed();
@@ -147,7 +148,8 @@ QStringList NotebookHost::pages(const QString &tag)
     const QString wanted = tag.normalized(QString::NormalizationForm_C).toLower();
     QStringList out;
     m_index.forEachNote([&](const VaultPath &, const ParsedNote &note) {
-        if (wanted.isEmpty() || pageTags(note).contains(wanted))
+        // (note.tags has every tag of the page, its blocks' too: the cheap test first.)
+        if (wanted.isEmpty() || (note.tags.contains(wanted) && pageTags(note).contains(wanted)))
             out << note.title;
     });
     std::stable_sort(out.begin(), out.end(), [](const QString &a, const QString &b) { return text::compareNames(a, b) < 0; });

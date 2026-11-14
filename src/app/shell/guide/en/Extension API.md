@@ -129,6 +129,8 @@ end, { label = "Mark the task done", block = true })
 | `b.ui.open(label, view, params)` | opens another view of the extension, with `params` for its function |
 | `b.ui.run(label, command)` | a button that runs one of the extension's commands |
 
+The view's function has to return a piece (a list of pieces is shown as a column): a view that returns nothing says so instead of staying empty. A piece that is not always there can be written `condition and b.ui.text("…") or nil` — a `nil` inside a column or a row is skipped, and a `nil` cell of a table shows empty.
+
 **Actions** are the functions in the third argument, by name. A button, a check or a stepper names one and carries `args` for it — put there what the action needs, such as a block's `ref` and `text`. The view is drawn again after every action and whenever a note changes, so its function should read the notebook each time and never ask or write. The view below has an action that writes, so its page needs `permissions: [write]`.
 
 ```luau
@@ -206,6 +208,8 @@ One call may take 2 seconds (the time you spend answering a question does not co
 | `argument 1 must be a string` | a function got something else than it takes; the number says which argument |
 | `invalid date` | a date is not written `2026-11-13`, or there is no such day |
 | `the query needs a page or a tag` | `b.blocks` got neither |
+| `argument 1 must be a table` | `b.pages("project")`: write `b.pages({ tag = "project" })` |
+| `the view "…" returned nothing` | a view's function ended without returning what to show |
 | `A view cannot wait for a question or for AI` | a view's function asked: ask in a command or an action |
 | `a hook cannot ask a question` | a reaction asked |
 | `cannot wait for an answer here` | a question or `b.ai` inside a function that `table.sort` or `string.gsub` calls |

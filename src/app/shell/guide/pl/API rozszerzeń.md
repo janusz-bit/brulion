@@ -129,6 +129,8 @@ end, { label = "Oznacz zadanie jako zrobione", block = true })
 | `b.ui.open(etykieta, widok, params)` | otwiera inny widok rozszerzenia, z `params` dla jego funkcji |
 | `b.ui.run(etykieta, polecenie)` | przycisk, który uruchamia jedno z poleceń rozszerzenia |
 
+Funkcja widoku musi zwrócić element (lista elementów pokaże się jak kolumna): widok, który nic nie zwraca, mówi o tym, zamiast zostać pusty. Element, który nie zawsze jest potrzebny, można zapisać jako `warunek and b.ui.text("…") or nil` — `nil` w kolumnie albo w wierszu jest pomijany, a komórka tabeli z `nil` jest pusta.
+
 **Akcje** to funkcje z trzeciego argumentu, po nazwie. Przycisk, pole wyboru albo licznik wskazuje jedną z nich i niesie dla niej `args` — włóż tam to, czego akcja potrzebuje, na przykład `ref` i `text` bloku. Widok rysuje się od nowa po każdej akcji i po każdej zmianie w notatkach, więc jego funkcja powinna za każdym razem czytać notatnik i nigdy nie pytać ani nie zapisywać. Widok poniżej ma akcję, która zapisuje, więc jego strona potrzebuje `uprawnienia: [zapis]`.
 
 ```luau
@@ -208,6 +210,8 @@ Komunikaty silnika są po angielsku:
 | `argument 1 must be a string` | funkcja dostała coś innego, niż przyjmuje; liczba mówi, który to argument |
 | `invalid date` | data nie jest zapisana jak `2026-11-13` albo nie ma takiego dnia |
 | `the query needs a page or a tag` | `b.blocks` nie dostało ani strony, ani tagu |
+| `argument 1 must be a table` | `b.pages("projekt")`: napisz `b.pages({ tag = "projekt" })` |
+| `the view "…" returned nothing` | funkcja widoku skończyła się, nie zwracając tego, co pokazać |
 | `Widok nie może czekać na pytanie ani na AI` | funkcja widoku o coś zapytała: pytaj w poleceniu albo w akcji |
 | `a hook cannot ask a question` | zapytała reakcja |
 | `cannot wait for an answer here` | pytanie albo `b.ai` wewnątrz funkcji, którą wywołuje `table.sort` albo `string.gsub` |
