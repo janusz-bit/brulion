@@ -744,12 +744,13 @@ docs/SYNTAX.md §5 "Gym") through its two views, drawn by `ShellExtensionView`.
 
 * **Today** (view `today`): every exercise line of today's `#trening` blocks as a card — the tasks'
   checkbox (done / open), the exercise's link (opens its page, made when missing), its sets, the
-  last set's weight and reps as steppers (− value +; a line with no weight written takes the weight
-  for every set), **+ set** / **− set**. Each control rewrites that one line of the note
-  (`b.replaceBlock`); a line changed elsewhere meanwhile is not overwritten (a toast says so and the
-  view shows it again). Adding a set starts the **rest timer**: a banner with the time left, a bar
-  and **Skip**; at the end a notification (`WorkspaceReminders::showNotification`, while the app
-  runs) and a toast. Without a workout today: an empty state and **Start a workout**.
+  last set's weight and reps as steppers (− value +, the value typed in as well: "Extension views"
+  below; a line with no weight written takes the weight for every set), **+ set** / **− set**.
+  Each control rewrites that one line of the note (`b.replaceBlock`); a line changed elsewhere
+  meanwhile is not overwritten (a toast says so and the view shows it again). Adding a set starts
+  the **rest timer**: a banner with the time left, a bar and **Skip**; at the end a notification
+  (`WorkspaceReminders::showNotification`, while the app runs) and a toast. Without a workout
+  today: an empty state and **Start a workout**.
 * **Progress** (view `progress`): every exercise of the history with its record (estimated
   one-rep max) and its number of sessions; one exercise (`exercise`): its record, a line chart of
   the estimated one-rep max and the heaviest set per session (`ChartView` fed directly), its
@@ -762,10 +763,23 @@ view returns — docs/EXTENSIONS.md "Views"): headings, texts, empty states, but
 view of the extension (`open`) or run one of its commands (`run`), links, rows as cards of wrapping
 controls (all centred on one control height: the touch target on touch UIs), charts and tables (the
 second column widest, numbers right-aligned). A view renders again after every command and action of
-the extension and when the index changes (coalesced), never while a question waits.
+the extension and when the index changes (coalesced), never while a question waits; after an action
+of its own controls at once. The same view drawn again with lines of the same kinds changes them in
+place (dataChanged with the roles that changed; a row whose controls changed their kinds resets
+only that row's model, from the timer — never inside the handler that acted): the delegates stay.
+A **stepper** is − number +, its number a borderless `BTextField` framed by the stepper's box (the
+field's hover and focus colours on the box): a tap or Tab selects the number, the touch keyboard is
+numeric (`ImhFormattedNumbersOnly`); Enter (Done) or leaving the field writes what was typed through
+`ExtensionView.enterValue` — a number of at least 0 with a comma or a point, the unit allowed after
+it, different from the one shown — and anything else shows the number again, as Escape does; ↑ / ↓
+step. Leaving it for another control writes first: the focus moves on press with a mouse, on
+release on touch screens, before that control's click, which then acts on the line as written
+(the view is in place by then). A field that loses the focus because its delegate goes while the
+lines change writes nothing (`enterValue` is refused during the update).
 
 **Questions** (`ShellExtensionQuestion.qml`, in AppShell): `b.ask` a text field, `b.choose` the
-options as rows (one tap answers), `b.form` labelled numbers with − / + and typing (`82,5`). A
+options as rows (one tap answers), `b.form` labelled numbers with − / + and typing (`82,5`, `82.5`,
+`82,5 kg`; − / + from a number between two steps go to the next step's value). A
 question that follows at once reopens the dialog; cancelling answers "" or nil, and only the question
 the dialog showed (`questionSerial`).
 

@@ -318,7 +318,7 @@ of one of the app's icons (`assets/icons/`: `folder`, `calendar-check`, `chart-c
 | `b.ui.button(label, action, args?)` | a button that calls the view's action `action` with `args` |
 | `b.ui.row(children)` | a card whose controls sit side by side and wrap: `check`, `stepper`, `text`, `link`, `button`, `open`, `run` (at most 24) |
 | `b.ui.check(checked, action, args?)` | the tasks' checkbox; a tap calls the action. **Only inside a row** |
-| `b.ui.stepper({ value, step, unit?, action, args? })` | `− value +`: a tap calls the action with `args` and the new `value` (never below 0; `step` 1 by default; shown with at most two decimals and the unit). **Only inside a row** |
+| `b.ui.stepper({ value, step, unit?, action, args? })` | `− value +`: a tap calls the action with `args` and the new `value` (never below 0; `step` 1 by default; shown with at most two decimals and the unit). The number can be typed in as well (`82,5` or `82.5`, the unit may follow; Enter or leaving the field): the action gets it the same way, only a number of at least 0 that differs from the one shown. − / + from a number between two steps go to the next step's value (`31` with a step of 2,5: 30 or 32,5). **Only inside a row** |
 | `b.ui.table(columns, rows)` | a table: `columns` a list of headings, `rows` a list of lists of cells (text; format numbers yourself). Made for up to four columns: the second is the widest, from the third on they are right-aligned |
 | `b.ui.chart({ kind, title?, labels, series })` | a chart drawn like the notes' charts: `kind` `"line"` (the default) or `"bar"`, `labels` a list of texts, `series = { { name = …, values = { … } } }` with a value per label (`nil` leaves a gap) |
 | `b.ui.empty(title, text)` | an empty state: an icon, a title and a sentence |
@@ -340,10 +340,12 @@ carry what the action needs — a block's `ref` and `text` — instead of someth
 would look up again: a line that changed meanwhile is then refused (`stale:`), not overwritten.
 For that case the app says "The line changed in the meantime" and draws the view again.
 
-**When it is drawn.** `render` runs when the view opens, after every command and action, and
-whenever a note changes anywhere (the editor, a sync). It should be quick, read what it shows from
-the notebook each time, and neither write nor wait: `b.ask` and `b.ai` there end the drawing with
-"A view cannot wait for a question or for AI".
+**When it is drawn.** `render` runs when the view opens, after every command and action — at
+once after an action of its controls —, and whenever a note changes anywhere (the editor, a sync).
+It should be quick, read what it shows from the notebook each time, and neither write nor wait:
+`b.ask` and `b.ai` there end the drawing with "A view cannot wait for a question or for AI". Drawn
+again with nodes of the same kinds in the same order, the view changes in place: a number being
+typed into a stepper keeps its field.
 
 ```luau
 b.view("week", function(params)

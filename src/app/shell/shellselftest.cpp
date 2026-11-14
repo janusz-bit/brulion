@@ -46,6 +46,7 @@
 #include <QPageSize>
 #include <QPainter>
 #include <QPdfWriter>
+#include <QPointer>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQmlExpression>
@@ -5301,7 +5302,9 @@ void checkHabits(QQuickWindow *window, AppController *app, const Check &check)
 
 /// The gym (the built-in Luau extension, docs/UI.md "Gym"): switched on in the settings, opened from
 /// the palette, "Start a workout" asks which plan (ShellExtensionQuestion) and writes it into today's
-/// note, "+ set" in the view rewrites that one line and starts the rest timer; switched off again.
+/// note, "+ set" in the view rewrites that one line and starts the rest timer; a weight typed into
+/// its stepper (a tap selects the number, Enter writes it) leaves the field in place with the focus,
+/// reps typed and "+ set" tapped at once write the reps first; switched off again.
 void checkGym(QQuickWindow *window, AppController *app, const Check &check)
 {
     const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
@@ -5358,6 +5361,59 @@ void checkGym(QQuickWindow *window, AppController *app, const Check &check)
     check(waitFor([&] { return line() == u"- [ ] [[Przysiad samotestu]] 4×5"_s; }, 3000), "“+ set” adds a set to that line");
     check(waitFor([&] { return ws->extensions()->restRemaining() > 0; }, 2000), "and starts the rest timer");
     check(waitFor([&] { return named(u"gymRest"_s) != nullptr; }, 2000), "the timer shows in the view");
+
+    // Numbers typed into the steppers (the row: check, link, sets, weight, reps, "+ set", "− set").
+    const auto shownButtons = [&] {
+        int n = 0;
+        findShown(window->contentItem(), [&](QQuickItem *item) {
+            if (item->objectName() == u"extensionButton")
+                ++n;
+            return false;
+        });
+        return n;
+    };
+    check(waitFor([&] { return shownButtons() == 2; }, 3000), "the exercise has “+ set” and “− set”");
+    settle(200);
+    const auto stepperField = [&](bool ofWeight) {
+        return findShown(window->contentItem(), [&](QQuickItem *item) {
+            return item->objectName() == u"extensionStepperField"
+                   && item->property("accessibleName").toString().endsWith(u"(kg)"_s) == ofWeight;
+        });
+    };
+    // The line has no weight yet (a plan's "3×5"): a tap selects the 0, what is typed replaces it,
+    // Enter writes it for every set. The view changes in place: the field stays, with the focus.
+    const QString weight = ws->extensions()->language() == u"pl" ? u"62,5"_s : u"62.5"_s;
+    QPointer<QQuickItem> weightField = stepperField(true);
+    check(weightField != nullptr, "the exercise has a weight stepper with a field");
+    if (weightField) {
+        tapOrClick(window, pointIn(weightField), touch);
+        check(waitFor([&] { return weightField && weightField->hasActiveFocus(); }, 2000), "a tap puts the focus in it");
+        check(waitFor([&] { return weightField && weightField->property("selectedText").toString() == u"0"; }, 2000),
+              "and selects its number");
+        typeChars(window, u"62,5"_s);
+        sendKey(window, Qt::Key_Return);
+    }
+    check(waitFor([&] { return line() == u"- [ ] [[Przysiad samotestu]] "_s + weight + u" kg 4×5"_s; }, 3000),
+          "Enter writes the typed weight (a decimal comma) for every set");
+    check(weightField && weightField->hasActiveFocus() && weightField->property("text").toString() == weight,
+          "the view changed in place: the field is still there, with the focus and the number as written");
+    // Reps typed, then "+ set" tapped at once: leaving the field writes the reps, then the new set
+    // copies them.
+    QPointer<QQuickItem> repsField = stepperField(false);
+    QQuickItem *plusSet = findShown(window->contentItem(), [&](QQuickItem *item) {
+        return item->objectName() == u"extensionButton" && item->property("text").toString().startsWith(u'+');
+    });
+    check(repsField != nullptr && plusSet != nullptr, "a reps stepper with a field, and “+ set”");
+    if (repsField && plusSet) {
+        const QPointF plusSetAt = pointIn(plusSet);
+        tapOrClick(window, pointIn(repsField), touch);
+        check(waitFor([&] { return repsField && repsField->property("selectedText").toString() == u"5"; }, 2000),
+              "a tap in the reps selects them");
+        typeChars(window, u"8"_s);
+        tapOrClick(window, plusSetAt, touch);
+    }
+    check(waitFor([&] { return line() == u"- [ ] [[Przysiad samotestu]] "_s + weight + u" kg × 5, 5, 5, 8, 8"_s; }, 3000),
+          "reps typed, then “+ set”: the reps are written first, the new set has them");
 
     // Leave the notebook and the settings as they were.
     ws->extensions()->stopRest();

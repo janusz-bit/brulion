@@ -7,8 +7,10 @@ import Brulion
 // ShellExtensionView — an extension's view drawn with Brulion's own components (docs/UI.md
 // "Extension views"): a list over an ExtensionView model whose lines are headings, texts, empty
 // states, buttons that open another view of the extension or run one of its commands, links, rows
-// of controls (a check, a link, a text, steppers, buttons), a chart (ChartView) and tables. Nothing
-// of the extension is QML: it returns data (b.ui nodes), this file draws it.
+// of controls (a check, a link, a text, steppers — − number +, the number typed in as well —,
+// buttons), a chart (ChartView) and tables. Nothing of the extension is QML: it returns data (b.ui
+// nodes), this file draws it. The model changes lines in place when the view is drawn again with
+// lines of the same kinds, so a field keeps its focus (and the touch keyboard) across a write.
 //
 //   ShellExtensionView { lines: gymModel; maximumWidth: 720; header: Item { … } }
 ListView {
@@ -324,15 +326,50 @@ ListView {
                                         }
                                     }
                                 }
+                                // − number +: the number is a field — a tap selects it, what is typed
+                                // ("82,5", "82.5") is written by the stepper's action on Enter (the
+                                // touch keyboard's Done) or when the field is left, also for − / +
+                                // or "+ set" tapped next (the view changes in place, the field stays);
+                                // Escape brings the number back, ↑ / ↓ step.
                                 DelegateChoice {
                                     roleValue: "stepper"
                                     Item {
                                         id: stepper
                                         required property int controlIndex
                                         required property string controlDisplay
+                                        required property string controlNumber
+                                        required property string controlUnit
                                         objectName: "extensionStepper"
                                         width: stepperBox.width
                                         height: Math.max(stepperBox.height, list.controlHeight)
+
+                                        /// The field shows the line's number (after a change of the
+                                        /// line, or when what was typed is not written).
+                                        function showValue(): void {
+                                            numberField.text = stepper.controlNumber
+                                        }
+                                        /// What was typed goes to the stepper's action when it is a
+                                        /// number of at least 0 that differs from the shown one
+                                        /// (ExtensionView.enterValue); then the field shows the line's
+                                        /// number, drawn again by then.
+                                        function enter(): void {
+                                            const rowIndex = row.index
+                                            const controlIndex = stepper.controlIndex
+                                            const typed = numberField.typedText
+                                            list.lines.enterValue(rowIndex, controlIndex, typed)
+                                            stepper.showValue()
+                                        }
+                                        /// One step from the number — what was typed first.
+                                        function step(direction: int): void {
+                                            stepper.enter()
+                                            const rowIndex = row.index
+                                            const controlIndex = stepper.controlIndex
+                                            const value = list.lines.stepped(rowIndex, controlIndex, direction)
+                                            list.lines.activateControl(rowIndex, controlIndex, value)
+                                        }
+                                        onControlNumberChanged: stepper.showValue()
+                                        Component.onCompleted: stepper.showValue()
+
                                       Rectangle {
                                         id: stepperBox
                                         anchors.verticalCenter: parent.verticalCenter
@@ -340,29 +377,73 @@ ListView {
                                         height: stepperRow.implicitHeight
                                         radius: Theme.radius
                                         color: Theme.bg
-                                        border.color: Theme.border
+                                        // The box is the number field's frame, in BTextField's colours.
+                                        border.color: numberField.activeFocus ? Theme.focusRing
+                                                    : numberField.hovered ? Theme.borderControl : Theme.border
+                                        Rectangle {
+                                            visible: numberField.activeFocus
+                                            x: -3
+                                            y: -3
+                                            width: parent.width + 6
+                                            height: parent.height + 6
+                                            radius: stepperBox.radius + 3
+                                            color: "transparent"
+                                            border.width: 3
+                                            border.color: Theme.focusRing.alpha(0.28)
+                                        }
                                         Row {
                                             id: stepperRow
                                             BIconButton {
                                                 label: qsTr("Less: %1").arg(stepper.controlDisplay)
                                                 iconName: "minus"
                                                 size: "small"
-                                                onClicked: list.lines.activateControl(row.index, stepper.controlIndex,
-                                                                                      list.lines.stepped(row.index, stepper.controlIndex, -1))
+                                                onClicked: stepper.step(-1)
                                             }
-                                            BText {
+                                            BTextField {
+                                                id: numberField
+                                                objectName: "extensionStepperField"
                                                 anchors.verticalCenter: parent.verticalCenter
-                                                width: Math.max(implicitWidth, 52)
-                                                horizontalAlignment: Text.AlignHCenter
-                                                text: stepper.controlDisplay
-                                                variant: "label"
+                                                // As wide as the number with its unit was (at least 52):
+                                                // narrow paddings, the unit in the field's trailing slot
+                                                // (8 from the edge in a small field, 4 from the number).
+                                                width: Math.max(52, contentWidth + leftPadding + rightPadding)
+                                                leftPadding: 4
+                                                rightPadding: unitLabel.visible ? unitLabel.implicitWidth + 12 : 4
+                                                size: "small"
+                                                horizontalAlignment: TextInput.AlignHCenter
+                                                inputMethodHints: Qt.ImhFormattedNumbersOnly
+                                                font.weight: Theme.weightMedium
+                                                accessibleName: stepper.controlUnit !== "" ? qsTr("Number (%1)").arg(stepper.controlUnit)
+                                                                                          : qsTr("Number")
+                                                background: Item {}
+                                                trailingItem: BText {
+                                                    id: unitLabel
+                                                    visible: stepper.controlUnit !== ""
+                                                    text: stepper.controlUnit
+                                                    variant: "muted"
+                                                }
+                                                /// It had the focus when pressed: the tap places the caret.
+                                                property bool hadFocus: false
+                                                // A tap that gives the focus selects the number, so what
+                                                // is typed replaces it — after the release, which moves
+                                                // the caret on touch screens (and gives the focus there).
+                                                onPressed: numberField.hadFocus = numberField.activeFocus
+                                                onReleased: if (!numberField.hadFocus) selectLater.restart()
+                                                onActiveFocusChanged: if (numberField.activeFocus) numberField.selectAll()
+                                                Later {
+                                                    id: selectLater
+                                                    onTriggered: if (numberField.activeFocus) numberField.selectAll()
+                                                }
+                                                onEditingFinished: stepper.enter()
+                                                onEscapePressed: stepper.showValue()
+                                                Keys.onUpPressed: stepper.step(1)
+                                                Keys.onDownPressed: stepper.step(-1)
                                             }
                                             BIconButton {
                                                 label: qsTr("More: %1").arg(stepper.controlDisplay)
                                                 iconName: "plus"
                                                 size: "small"
-                                                onClicked: list.lines.activateControl(row.index, stepper.controlIndex,
-                                                                                      list.lines.stepped(row.index, stepper.controlIndex, 1))
+                                                onClicked: stepper.step(1)
                                             }
                                         }
                                       }

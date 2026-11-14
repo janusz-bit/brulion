@@ -34,7 +34,8 @@ brulion_add_test(tst_shell_workspace SOURCES tst_workspace.cpp LIBS brulion_shel
 # notebook (tests/core/extensions/samples): approval per device, commands with the questions the
 # app shows, views and their actions, hooks as the Workspace delivers them (what an extension
 # writes is no "change", what the user changes always is), code an extension writes, the editor's
-# saves of an approved page.
+# saves of an approved page; a view as the app draws it (ExtensionViewModel on the gym's "today"):
+# numbers typed into its steppers, drawn again in place at once after an action.
 brulion_add_test(tst_shell_extensions SOURCES tst_extensions.cpp
     LIBS brulion_shell brulion_core_extensions brulion_core_index brulion_core_vault)
 target_compile_definitions(tst_shell_extensions PRIVATE BRULION_SOURCE_DIR="${PROJECT_SOURCE_DIR}")

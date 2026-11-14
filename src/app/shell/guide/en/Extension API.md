@@ -122,7 +122,7 @@ end, { label = "Mark the task done", block = true })
 | `b.ui.button(label, action, args)` | a button that calls one of the view's actions |
 | `b.ui.row({ … })` | a card with controls side by side: checks, steppers, texts, links, buttons |
 | `b.ui.check(checked, action, args)` | a task's checkbox. Only inside a row |
-| `b.ui.stepper({ value = 3, step = 1, unit = "kg", action = "set", args = { … } })` | a number with − and +; the action gets the new number as `args.value`. Only inside a row |
+| `b.ui.stepper({ value = 3, step = 1, unit = "kg", action = "set", args = { … } })` | a number with − and +, which can also be typed in; the action gets the new number as `args.value`. Only inside a row |
 | `b.ui.table(columns, rows)` | a table: a list of headings and a list of rows, each a list of texts. Best with up to four columns |
 | `b.ui.chart({ kind = "line", labels = { … }, series = { { name = "…", values = { … } } } })` | a chart, `"line"` or `"bar"`, a number per label |
 | `b.ui.empty(title, text)` | what to show when there is nothing to show |

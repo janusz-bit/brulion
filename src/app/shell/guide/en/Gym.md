@@ -39,7 +39,7 @@ rest:: 3 min
 **Start a workout** (the Gym view's button, or the palette) asks for the plan and writes it into today's note as tasks, each at the weight of the last session — 2,5 kg heavier (5 lb, or the line's `progression::`) when every planned set was done there with the planned reps. The exercises' checkboxes are sets, not to-dos: the Tasks view leaves them out (a query with `tag:trening` shows them).
 
 ## The Gym view
-- **Today**: today's exercises as cards — tick one off, change the last set's weight and reps with − / +, add or remove a set. Every change rewrites just that line of the note. Adding a set starts the **rest timer** (`rest::` of the plan, else 2 minutes) with a notification when it ends.
+- **Today**: today's exercises as cards — tick one off, change the last set's weight and reps with − / + or type them in (tap the number, type `32,5`, then Enter or tap elsewhere), add or remove a set. Every change rewrites just that line of the note. Adding a set starts the **rest timer** (`rest::` of the plan, else 2 minutes) with a notification when it ends.
 - **Progress**: every exercise with its record (the estimated one-rep max) and the number of sessions; one exercise has a chart of its progress and all its sessions.
 
 **Gym: exercise from the catalog** makes a page for an exercise from 51 common ones (muscles, equipment) in English or Polish, as your notes are written.

@@ -122,7 +122,7 @@ end, { label = "Oznacz zadanie jako zrobione", block = true })
 | `b.ui.button(etykieta, akcja, args)` | przycisk, który wywołuje jedną z akcji widoku |
 | `b.ui.row({ … })` | karta z kontrolkami obok siebie: pola wyboru, liczniki, teksty, linki, przyciski |
 | `b.ui.check(zaznaczone, akcja, args)` | pole wyboru zadania. Tylko wewnątrz wiersza `row` |
-| `b.ui.stepper({ value = 3, step = 1, unit = "kg", action = "ustaw", args = { … } })` | liczba z − i +; akcja dostaje nową liczbę jako `args.value`. Tylko wewnątrz wiersza `row` |
+| `b.ui.stepper({ value = 3, step = 1, unit = "kg", action = "ustaw", args = { … } })` | liczba z − i +, którą można też wpisać; akcja dostaje nową liczbę jako `args.value`. Tylko wewnątrz wiersza `row` |
 | `b.ui.table(kolumny, wiersze)` | tabela: lista nagłówków i lista wierszy, każdy jako lista tekstów. Najlepiej do czterech kolumn |
 | `b.ui.chart({ kind = "line", labels = { … }, series = { { name = "…", values = { … } } } })` | wykres, `"line"` (liniowy) albo `"bar"` (słupkowy), liczba na każdą etykietę |
 | `b.ui.empty(tytuł, tekst)` | co pokazać, gdy nie ma czego pokazać |

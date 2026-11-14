@@ -103,13 +103,10 @@ void ExtensionFormModel::setText(int row, const QString &text)
 
 void ExtensionFormModel::setNumberText(int row, const QString &text)
 {
-    QString t = text.trimmed();
-    t.replace(u',', u'.');
-    t.remove(u' ');
-    bool ok = false;
-    const double value = t.toDouble(&ok);
-    if (ok)
-        setNumber(row, value);
+    if (row < 0 || row >= m_fields.size())
+        return;
+    if (const std::optional<double> value = parseExtensionNumber(text, m_fields[row].unit))
+        setNumber(row, *value);
 }
 
 void ExtensionFormModel::step(int row, int direction)
@@ -117,9 +114,8 @@ void ExtensionFormModel::step(int row, int direction)
     if (row < 0 || row >= m_fields.size())
         return;
     const Field &f = m_fields[row];
-    // Back onto the step's grid first ("82,5" +2,5 → 85), then one step.
-    const double base = std::round(f.value / f.step) * f.step;
-    setNumber(row, base + (direction < 0 ? -f.step : f.step));
+    // Onto the step's grid ("31" −2,5 → 30, +2,5 → 32,5; "82,5" +2,5 → 85).
+    setNumber(row, stepExtensionNumber(f.value, f.step, direction));
 }
 
 // ---- WorkspaceExtensions -----------------------------------------------------------------------

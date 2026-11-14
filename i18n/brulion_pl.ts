@@ -13887,17 +13887,27 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
 <context>
     <name>ShellExtensionView</name>
     <message>
-        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="263"/>
+        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="265"/>
         <source>Done</source>
         <translation>Zrobione</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="347"/>
+        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="397"/>
         <source>Less: %1</source>
         <translation>Mniej: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="361"/>
+        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="416"/>
+        <source>Number (%1)</source>
+        <translation>Liczba (%1)</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="417"/>
+        <source>Number</source>
+        <translation>Liczba</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="443"/>
         <source>More: %1</source>
         <translation>Więcej: %1</translation>
     </message>

@@ -70,8 +70,10 @@ public:
     QVariantMap values() const;
     Q_INVOKABLE void setNumber(int row, double value);
     Q_INVOKABLE void setText(int row, const QString &text);
-    /// A number typed in ("82,5", "82.5"); ignored when it is not one.
+    /// A number typed in ("82,5", "82.5", "82,5 kg" — parseExtensionNumber()); ignored when it is
+    /// not one.
     Q_INVOKABLE void setNumberText(int row, const QString &text);
+    /// One step up (direction 1) or down (-1) onto the step's grid (stepExtensionNumber()).
     Q_INVOKABLE void step(int row, int direction);
     void setComma(bool comma) { m_comma = comma; }
 
