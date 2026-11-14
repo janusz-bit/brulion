@@ -141,7 +141,8 @@ components — no Material/Fusion look, so all targets look identical.
     Search (the selected one tinted, the accent's bar at the rail's edge; the entries hidden in
     Settings → Appearance → Layout left out; in the drawer also Import notes; they scroll when the
     window is too low); at the bottom the sync status (`ShellSyncFooter` with `compact`: the icon,
-    its text in the tooltip; a click opens the sync center) and Settings. The top bar's sidebar
+    its text in the tooltip; a click syncs now when there is a sync engine, otherwise or while a
+    sync runs it opens the sync center, as do a right click and a long press) and Settings. The top bar's sidebar
     button hides only the page panel: the rail stays (not in focus mode).
   * Sidebar (`ShellSidebar`, the page panel): the notebook's name and a new-page button, then
     its sections in the order chosen in Settings → Appearance → Layout → "Order of the sections"

@@ -8,13 +8,16 @@ import Brulion
 // integration via AppController.syncStatus — or, for a notebook kept on GitHub without Nextcloud,
 // GitHub's, with its own icon —, a Syncthing folder, this browser, this device only).
 // A line with "Sync now" when a sync engine is available, or `compact`: the status icon alone
-// (the sidebar's rail, ShellRail), its text as the tooltip. Clicking it opens the sync center.
+// (the sidebar's rail, ShellRail), its text as the tooltip. Clicking it opens the sync center
+// (the rail's button, `syncOnClick`, syncs instead; its tooltip says so).
 T.ItemDelegate {
     id: control
 
     property real safeBottom: 0
     /// Only the icon, in a square button (the rail).
     property bool compact: false
+    /// The owner syncs on a click (the rail): the tooltip says it.
+    property bool syncOnClick: false
 
     /// AppController.syncStatus: { state, text, icon? }.
     readonly property string statusState: AppController.routeText(AppController.syncStatus, "state")
@@ -127,7 +130,9 @@ T.ItemDelegate {
         active: control.compact && (control.hovered || control.visualFocus)
         sourceComponent: BToolTip {
             parent: control
-            text: control.statusText
+            text: control.syncOnClick && control.syncState !== "syncing"
+                  ? qsTr("%1\nClick to sync now · right-click for the sync center").arg(control.statusText)
+                  : control.statusText
             beside: true
             visible: (control.hovered && !control.down) || control.visualFocus
         }

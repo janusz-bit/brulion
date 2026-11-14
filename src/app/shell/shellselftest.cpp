@@ -7793,6 +7793,24 @@ void checkAppearance(QQmlApplicationEngine *engine, QQuickWindow *window, AppCon
         check(waitFor([&] { return shownNamed(window->contentItem(), u"sidebarTree"_s) != nullptr; }),
               "the page panel comes back");
 
+        // The rail's sync status: a click syncs now with a sync engine, opens the sync center
+        // without one.
+        if (!app->syncAvailable()) {
+            app->setSyncAvailable(true);
+            int syncs = 0;
+            const QMetaObject::Connection counting =
+                QObject::connect(app, &AppController::syncRequested, app, [&syncs] { ++syncs; });
+            check(activate(shownItem(u"railSync"_s)) && waitFor([&] { return syncs == 1; })
+                          && app->currentView() == u"settings",
+                  "a click on the rail's sync status syncs now");
+            QObject::disconnect(counting);
+            app->setSyncAvailable(false);
+            check(activate(shownItem(u"railSync"_s)) && waitFor([&] { return app->currentView() == u"sync"; }),
+                  "without a sync engine it opens the sync center");
+            app->navigate({{u"view"_s, u"settings"_s}, {u"section"_s, u"appearance"_s}});
+            waitFor([&] { return app->currentView() == u"settings"; });
+        }
+
         QObject *switcher = window->findChild<QObject *>(u"shellSwitcher"_s);
         QObject *palette = window->findChild<QObject *>(u"shellPalette"_s);
         check(activate(shownItem(u"topBarSearchField"_s)) && switcher

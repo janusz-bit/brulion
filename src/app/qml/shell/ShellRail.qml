@@ -9,8 +9,8 @@ import Brulion
 // documentation, another folder). Then the views as icon buttons, their names in tooltips:
 // Journal, Calendar, Tasks, Habits, All pages, Tags, Graph, Search (without the ones
 // hidden in Settings → Appearance → Layout; on phones also Import notes). They scroll when the
-// window is too low for all. At the bottom the sync status (ShellSyncFooter, compact) and
-// Settings. On wide windows the rail stays at the window's left edge when the page panel
+// window is too low for all. At the bottom the sync status (ShellSyncFooter, compact; a click
+// syncs now, a right click or long press opens the sync center) and Settings. On wide windows the rail stays at the window's left edge when the page panel
 // (ShellSidebar) is hidden; on phones it is the drawer's left column (`navigated()` closes it).
 Rectangle {
     id: rail
@@ -176,10 +176,27 @@ Rectangle {
         }
 
         // ---- Sync status and settings ------------------------------------------------------
+        // A click syncs now (with a sync engine, not while a sync runs); without one, while it
+        // runs, a right click or a long press: the sync center.
         ShellSyncFooter {
+            id: railSync
+            objectName: "railSync"
             compact: true
+            syncOnClick: AppController.syncAvailable
             Layout.alignment: Qt.AlignHCenter
-            onClicked: rail.go({ view: "sync" })
+            onClicked: {
+                if (railSync.syncOnClick && railSync.syncState !== "syncing")
+                    AppController.requestSync()
+                else
+                    rail.go({ view: "sync" })
+            }
+            onPressAndHold: rail.go({ view: "sync" })
+            // Only devices with buttons: Qt hands a finger to it whatever acceptedButtons.
+            TapHandler {
+                acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad | PointerDevice.Stylus
+                acceptedButtons: Qt.RightButton
+                onTapped: rail.go({ view: "sync" })
+            }
         }
         RailButton {
             objectName: "railSettings"
