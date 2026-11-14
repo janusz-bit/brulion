@@ -203,6 +203,7 @@ Komunikaty silnika są po angielsku:
 | `permission denied: write` | strona nie ma `uprawnienia: [zapis]` we właściwościach |
 | `permission denied: ai` | to samo dla `ai` |
 | `stale: the block changed since it was read` | wiersz nie jest już tym, co kod przeczytał: przeczytaj go jeszcze raz |
+| `not a block reference` | `b.replaceBlock` dostało coś, co nie jest `ref` bloku: podaj `ref` takie, jakie dało `b.blocks`, `b.query`, `b.search` albo `ctx.block` |
 | `attempt to index nil` | czegoś nie było: strony, która nie istnieje, zadania w bloku, który nim nie jest, `ctx.block` poza blokiem |
 | `argument 1 must be a string` | funkcja dostała coś innego, niż przyjmuje; liczba mówi, który to argument |
 | `invalid date` | data nie jest zapisana jak `2026-11-13` albo nie ma takiego dnia |

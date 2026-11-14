@@ -429,11 +429,21 @@ QString NotebookHost::appendToJournal(const QString &extension, const QString &d
 QString NotebookHost::replaceBlock(const QString &extension, const QString &ref, const QString &text,
                                    const std::optional<QString> &task, QString *newRef)
 {
+    // A block's ref as blocks(), search() and query() give it: a note's path, a line and the hash
+    // of that line's text. A script can write any text as a ref, so nothing else is taken: a ref
+    // without the hash would overwrite a line nobody read, and a path that is no note of the
+    // notebook would reach the other files of its folder (.git/config, .brulion/config.json, the
+    // attachments) — an extension allowed to change notes changes notes.
     const std::optional<notebook::ItemRef> item = notebook::parseItemRef(ref);
-    if (!item || !item->hasLine())
+    if (!item || !item->hasLine() || item->lineHash.isEmpty())
         return u"not a block reference: "_s + ref;
+    const VaultPath path = paths::normalize(item->page);
+    if (!paths::isMarkdown(path) || paths::isIgnored(path))
+        return u"not a block reference: "_s + ref;
+    if (!m_index.note(path) && !dryWrite(path))
+        return u"stale: the page is gone ("_s + ref + u")"_s;
     bool ok = false;
-    const QString content = currentText(item->page, &ok);
+    const QString content = currentText(path, &ok);
     if (!ok)
         return u"stale: the page is gone ("_s + ref + u")"_s;
     const notebook::ResolvedLine resolved = notebook::resolve(content, *item, m_vault.config());
@@ -443,12 +453,12 @@ QString NotebookHost::replaceBlock(const QString &extension, const QString &ref,
     if (!edited)
         return u"cannot replace the line of "_s + ref;
     if (*edited != content) {
-        const QString error = writeFile(extension, item->page, *edited);
+        const QString error = writeFile(extension, path, *edited);
         if (!error.isEmpty())
             return error;
     }
     if (newRef)
-        *newRef = notebook::formatLineRef(item->page, resolved.line, rawLine(*edited, resolved.line));
+        *newRef = notebook::formatLineRef(path, resolved.line, rawLine(*edited, resolved.line));
     return {};
 }
 

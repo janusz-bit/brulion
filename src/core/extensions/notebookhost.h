@@ -9,7 +9,9 @@
 //
 // A block's reference is a notebook::ItemRef line reference ("Dziennik/2026-11-11.md#L3@1a2b3c4d");
 // replaceBlock() resolves it against the file as it is now: the same line, or the same text moved
-// by up to 50 lines, else "stale" and nothing is written.
+// by up to 50 lines, else "stale" and nothing is written. A reference is taken only as a block had
+// it — a note the index knows, a line and its hash: a script may pass any text, and no text makes
+// the host read or write another file of the notebook's folder (.git/config, an attachment).
 //
 // A dry run (Options::dryRun: `brulion-cli extension check / run / eval`) writes nothing: every
 // write is applied to the page's text as it would be — the same edits — and kept in dryWrites();

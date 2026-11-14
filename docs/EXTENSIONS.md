@@ -233,7 +233,9 @@ line stays byte for byte, the index, the views and a sync follow.
 `b.replaceBlock` never writes over what it did not see: when the line changed since `ref` was read —
 a sync arrived, another pane edited it — the call is an error with `stale:` in it and nothing is
 written (the same text up to 50 lines away still counts as the same line: lines added above do not
-matter). Read the block again and decide again.
+matter). Read the block again and decide again. A `ref` is taken as a block had it — a note of the
+notebook, a line, the hash of the line's text: one without its hash, or with the path of a file
+that is no note (`.git/config`, a file among the attachments), is `not a block reference`.
 
 ```luau
 b.command("note", function(ctx)
@@ -596,7 +598,7 @@ Word count:9: b.replaceBlock: stale: the block changed since it was read (Home.m
 | `b.write: permission denied: write` | the page has no `permissions: [write]` |
 | `b.ai: permission denied: ai` | the same for `ai` |
 | `b.replaceBlock: stale: …` | the line changed since its `ref` was read, or its page is gone: read again |
-| `b.replaceBlock: not a block reference: …` | the `ref` is not one a block had |
+| `b.replaceBlock: not a block reference: …` | the `ref` is not one a block had: made by hand, without its hash, or naming a file that is no note |
 | `b.replaceBlock: the text must be one line` | no line breaks in a block's first line |
 | `b.blocks: the query needs a page or a tag` | `b.blocks({})` |
 | `b.query: …` | the query language's own message (an unknown filter, a wrong date) |
@@ -858,6 +860,11 @@ Home:7
   reaches files, the network, processes or the environment: Luau's library has no `io`,
   `os.execute`, `require`, `load`, `string.dump`; `print` goes to the event log. Brulion compiles
   the source itself — scripts never see a compiler or a bytecode loader.
+* **Notes only**: `b.write` makes and replaces pages (`.md` files; a name's leading dots and
+  `..` are taken out), `b.appendToJournal` writes daily notes, and `b.replaceBlock` takes only the
+  ref of a line of a note the index knows. No function reads or writes another file of the
+  notebook's folder — `.git/config`, `.brulion/config.json`, `.obsidian/`, the attachments —
+  whatever text a script passes as a name or a ref (`tst_extensions_host`: `refsNameNotesOnly`).
 * **Time**: 2 s per call (and per resume and load). The VM's interrupt callback runs on the
   engine's own thread at loop back edges, calls, returns, every step of the pattern matcher and of
   the plain string search; past the deadline the call's thread is yielded (a yield never unwinds

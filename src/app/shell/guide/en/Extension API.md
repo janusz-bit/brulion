@@ -201,6 +201,7 @@ One call may take 2 seconds (the time you spend answering a question does not co
 | `permission denied: write` | the page has no `permissions: [write]` in its properties |
 | `permission denied: ai` | the same for `ai` |
 | `stale: the block changed since it was read` | the line is no longer what the code read: read it again |
+| `not a block reference` | `b.replaceBlock` got something that is not the `ref` of a block: pass the `ref` as `b.blocks`, `b.query`, `b.search` or `ctx.block` gave it |
 | `attempt to index nil` | something was not there: a page that does not exist, a block without a task, `ctx.block` outside a block |
 | `argument 1 must be a string` | a function got something else than it takes; the number says which argument |
 | `invalid date` | a date is not written `2026-11-13`, or there is no such day |

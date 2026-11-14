@@ -8,6 +8,7 @@
 #include "extensions/engine.h"
 #include "extensions/notebookhost.h"
 #include "index/vaultindex.h"
+#include "notebook/itemref.h"
 #include "vault/vault.h"
 
 #include <QDir>
@@ -166,6 +167,91 @@ private Q_SLOTS:
         QCOMPARE(r.status, Status::Error);
         QVERIFY2(r.error.contains(u"stale"_s), qPrintable(r.error));
         QCOMPARE(onDisk(u"Zakupy.md"_s), "- [ ] mleko\n- [ ] chleb\r\n"_ba);
+    }
+
+    void refsNameNotesOnly()
+    {
+        // A block's ref names a note of the notebook. Whatever a script makes of one — the path of
+        // another file in the notebook's folder (a git repository's configuration, the notebook's
+        // own, a file among the attachments), with the right hash for its line or with none —
+        // b.replaceBlock reads and writes nothing but notes. (An extension allowed to change notes
+        // must not reach .git/config, where a line is a command git runs.)
+        const QList<std::pair<QString, QString>> others{
+                {u".git/config"_s, u"[core]\n\trepositoryformatversion = 0\n"_s},
+                {u".brulion/config.json"_s, u"{\"journalTemplate\": \"templates/Dziennik.md\"}"_s},
+                {u"assets/dane.csv"_s, u"a;b\n1;2\n"_s},
+        };
+        for (const auto &[path, content] : others) {
+            QDir().mkpath(QFileInfo(dir() + u'/' + path).absolutePath());
+            QFile f(dir() + u'/' + path);
+            QVERIFY(f.open(QIODevice::WriteOnly));
+            f.write(content.toUtf8());
+        }
+        // A host that really writes, as the app's, and the dry run of the command line.
+        NotebookHost::Options options;
+        options.now = [] { return QDateTime(QDate(2026, 11, 14), QTime(9, 0)); };
+        options.updateIndex = true;
+        NotebookHost real(*m_vault, *m_index, options);
+        Engine writing;
+        QVERIFY(writing.start(&real, Limits{2000 * BRULION_TEST_SLOWDOWN, 64ll << 20}));
+        Extension e;
+        e.id = u"t"_s;
+        e.permissions = {u"write"_s};
+        QVERIFY(writing.load(e).ok());
+        for (const auto &[path, content] : others) {
+            const QString hash = notebook::lineHash(content.section(u'\n', 0, 0));
+            const QStringList refs{path + u"#L1"_s, path + u"#L1@"_s + hash,
+                                   u"Zakupy.md/../"_s + path + u"#L1@"_s + hash, u"./"_s + path + u"#L2"_s};
+            for (const QString &ref : refs) {
+                const QString code = u"return b.replaceBlock(\"%1\", \"zmienione\")"_s.arg(ref);
+                for (Engine *engine : {&writing, m_engine.get()}) {
+                    const Result r = engine->evaluate(u"t"_s, code, u"test"_s);
+                    QVERIFY2(r.status == Status::Error, qPrintable(ref + u" → "_s + r.value.toString()));
+                    QVERIFY2(r.error.contains(u"b.replaceBlock: not a block reference: "_s + ref), qPrintable(r.error));
+                }
+                QCOMPARE(onDisk(path), content.toUtf8());
+            }
+        }
+        QVERIFY(m_host->dryWrites().isEmpty());
+        // A page that is not there (deleted since, or never there): stale, as before.
+        Result r = writing.evaluate(u"t"_s, u"return b.replaceBlock(\"Nie ma.md#L1@00000000\", \"x\")"_s, u"test"_s);
+        QVERIFY2(r.error.contains(u"b.replaceBlock: stale: the page is gone"_s), qPrintable(r.error));
+        // A note's line without its hash is not a ref a block had: nothing is written over a line
+        // the script did not see.
+        r = writing.evaluate(u"t"_s, u"return b.replaceBlock(\"Zakupy.md#L1\", \"x\")"_s, u"test"_s);
+        QVERIFY2(r.error.contains(u"b.replaceBlock: not a block reference: Zakupy.md#L1"_s), qPrintable(r.error));
+        QCOMPARE(onDisk(u"Zakupy.md"_s), "- [ ] mleko\n- [ ] chleb\r\n"_ba);
+        // And the ref a block has still works: the real host writes the file.
+        r = writing.evaluate(u"t"_s,
+                             u"local t = b.blocks({ page = \"Zakupy\" })[1]; return b.replaceBlock(t.ref, \"kefir\")"_s,
+                             u"test"_s);
+        QVERIFY2(r.ok(), qPrintable(r.error));
+        QCOMPARE(onDisk(u"Zakupy.md"_s), "- [ ] kefir\n- [ ] chleb\r\n"_ba);
+        QCOMPARE(r.value.toString(), u"Zakupy.md#L1@"_s + notebook::lineHash(u"- [ ] kefir"_s));
+
+        // The same for names: b.read and b.blocks know notes only, and b.write makes pages — a
+        // name's leading dots and ".." are taken out, so the page lands beside those files, never
+        // on them and never outside the notebook.
+        r = writing.evaluate(u"t"_s,
+                             u"return tostring(b.read(\".git/config\")) .. tostring(b.read(\".brulion/config.json\")) "
+                             "..  tostring(b.read(\"assets/dane.csv\")) .. #b.blocks({ page = \".git/config\" })"_s,
+                             u"test"_s);
+        QVERIFY2(r.ok(), qPrintable(r.error));
+        QCOMPARE(r.value.toString(), u"nilnilnil0"_s);
+        r = writing.evaluate(u"t"_s,
+                             u"b.write(\".git/config\", \"x\") b.write(\".brulion/config.json\", \"x\") "
+                             "b.write(\"../../Poza\", \"x\") return true"_s,
+                             u"test"_s);
+        QVERIFY2(r.ok(), qPrintable(r.error));
+        for (const auto &[path, content] : others)
+            QCOMPARE(onDisk(path), content.toUtf8());
+        QCOMPARE(onDisk(u"git/config.md"_s), "x"_ba);
+        QCOMPARE(onDisk(u"brulion/config.json.md"_s), "x"_ba);
+        QVERIFY(!QFile::exists(m_tmp.filePath(u"Poza.md"_s)) && !QFile::exists(m_tmp.filePath(u"../Poza.md"_s)));
+        QStringList outside;
+        for (const QString &entry : QDir(m_tmp.path()).entryList(QDir::AllEntries | QDir::NoDotAndDotDot))
+            outside << entry;
+        QCOMPARE(outside, (QStringList{u"s"_s, u"v"_s})); // the device state and the notebook, nothing else
     }
 };
 
