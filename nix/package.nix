@@ -51,6 +51,9 @@ stdenv.mkDerivation (finalAttrs: {
         ../scripts
         ../fastlane
         ../wasm
+        # tst_scripts_android_backup_rules: the manifest and the backup rules it names.
+        ../android/AndroidManifest.xml
+        ../android/res/xml
       ]
     );
   };

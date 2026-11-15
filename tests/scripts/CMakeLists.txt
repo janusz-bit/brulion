@@ -29,8 +29,9 @@ if(BRULION_BASH)
                      ${PROJECT_SOURCE_DIR}/scripts/check-qml-text-format.sh ${PROJECT_SOURCE_DIR}/src/app/qml)
 endif()
 # Android's own backup leaves out the passwords and tokens (docs/ANDROID.md "Backups"): the
-# manifest, its two rule files and the folder the code writes its secrets to agree.
-if(BRULION_BASH)
+# manifest, its two rule files and the folder the code writes its secrets to agree. (The Nix
+# package's source has no android/: nothing to check there.)
+if(BRULION_BASH AND EXISTS ${PROJECT_SOURCE_DIR}/android/AndroidManifest.xml)
     add_test(NAME tst_scripts_android_backup_rules
              COMMAND ${BRULION_BASH} ${CMAKE_CURRENT_SOURCE_DIR}/tst_android_backup_rules.sh ${PROJECT_SOURCE_DIR})
 endif()
