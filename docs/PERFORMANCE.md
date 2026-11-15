@@ -1340,8 +1340,9 @@ kept 2 131 of its 2 618 tokens and read the rest, a note's photo among them, in 
 "Summarise this page" read 289 tokens in 1.8 s and wrote 237 in 19.5 s. That is two thirds of
 the laptop's speed at reading and a quarter at writing.
 
-What the runner changed after those figures (not measured on the phone yet — the next run of the
-package beside the released app does, by the same lines of the event log):
+What the runner changed after those figures (measured on the laptop — below —, not on the phone
+yet: the next run of the package beside the released app does, by the same lines of the event
+log):
 
 * **Its threads stay.** Without a pool of its own llama.cpp starts its threads for every step and
   ends them after it (`ggml_graph_compute` with no `ggml_threadpool` attached) — for every token
@@ -1351,14 +1352,30 @@ package beside the released app does, by the same lines of the event log):
   its threads move to the fast cores, a token's step lasts 80 ms and they hardly do — which fits
   writing at a quarter of the laptop's speed against reading at two thirds. The runner now makes
   the pool once (`ggml_threadpool_new` of the processor plugin, `llama_attach_threadpool`): its
-  threads live as long as the model, wait for the next step spinning a moment and then asleep.
+  threads live as long as the model.
+* **Spinning only where the fast cores are the model's own.** Between two steps a pool's threads
+  spin before they sleep (llama.cpp's `poll` level, 50 by default: some 6.5 million rounds of
+  `pause`/`yield`), and inside a step they spin at every barrier anyway. On an idle processor that
+  writes 12 % faster than sleeping at once (no waking up, the cores' clocks stay up); on one that
+  other programs keep busy it is ruinous: a thread spinning on a core keeps the very thread it
+  waits for off it. With 16 busy loops beside it on the laptop the spinning, pinned pool did not
+  finish a round in 5 minutes, the unpinned one wrote 1.5 tokens a second — against 5.9 of
+  threads started for every step and 13.3 of a pool that sleeps (`poll = 0`, below). So the
+  threads sleep at once (`LocalRunner::Options::spinWait` false) except on Android, where the
+  system keeps background work off the fast cores (its cpusets: `background` and
+  `system-background` on the slow cluster) and the app sets `spinWait`. The event log says so:
+  `…, 4 threads on cores 4-7, spinning`.
 * **On the fast cores.** `ai::computeCores()` reads the cores' capacities from sysfs and leaves
   out the cluster below the widest gap (Cortex-A5xx next to A7xx: a third of the speed); the pool
   and the thread that asks the model are kept on the rest (`cpumask`), one thread per core, at
   most 8. On the Pixel 9 Pro that is 4 threads, as before, but on cores 4–7 only; a phone with
   2 fast and 6 slow cores (Helio G99) now takes 2 threads instead of 4, one with 8 fast cores
-  (Snapdragon 8 Elite, Dimensity 9300) 8 instead of 4. A PC's processor tells no capacities: half
-  its logical processors, as before, in a pool of its own. The event log tells what was taken:
+  (Snapdragon 8 Elite, Dimensity 9300) 8 instead of 4. One logical processor per physical core
+  (`topology/core_cpus_list`): a PC's kernel gives capacities too (1024 for each core), and
+  without that rule the first 8 of the i5-13450HX's logical processors were 4 performance cores
+  with their SMT siblings — reading 20 % slower (below). There the clocks tell the efficiency
+  cores (3.4 against 4.6 GHz): 6 threads on cores 0,2,4,6,8,10. A kernel without capacities: half
+  the logical processors, as before, in a pool of its own. The event log tells what was taken:
   `ggml-cpu-android_armv8.6_1, 4 threads on cores 4-7`.
 * **The system text and the tools are read once.** After a prompt's stable part (the system text
   and the tools: 2 551 tokens of the assistant, 17.6 s on the Pixel) the runner writes the model's
@@ -1372,6 +1389,25 @@ package beside the released app does, by the same lines of the event log):
   file mapped) instead of those tokens: tens of milliseconds for 30 MB from a phone's storage
   against 17.6 s. The event log counts them apart: `… tokens read in … s (0 kept from before,
   2551 from the disk) …`. Removing a model empties the folder.
+
+On the laptop (`tst_ai_llama speed` with `BRULION_LOCAL_SPEED=2`, `BRULION_LOCAL_SPIN=1` for
+`spinWait`: 2 267 tokens of Polish text read, 256 written, each round on a model opened anew; the
+variants one after the other, several series, 2026-11-15, the machine shared with other work;
+"busy": 16 shell loops `while :; do :; done` beside it, one round):
+
+| Threads | Idle: reading | Idle: writing | Busy: reading | Busy: writing |
+|---|---|---|---|---|
+| 8, started for every step (v0.22.0) | 204–215 | 36–41 | 131–133 | 4.4–6.5 |
+| 8 in a pool, spinning, wherever the system puts them | 206–216 | 36–43 | 79 | 1.5 |
+| 8 in a pool, spinning, on cores 0–7 (4 cores and their SMT siblings) | 162–166 | 33–38 | | |
+| 6 in a pool, spinning, on the performance cores 0,2,…,10 (Android's way) | 200–228 | 39–45 | — (> 5 min) | — |
+| **6 in a pool, asleep between steps, on the performance cores (a PC's way)** | **217–228** | **38–42** | **93** | **13.3** |
+| 8 in a pool, asleep between steps, wherever the system puts them | 215 | 41–42 | 93 | 12.8 |
+
+Tokens a second. On a PC the pool alone changes nothing (Linux puts a thread that has just
+started on an idle fast core): what counts there is one thread per performance core, not two on
+one core's SMT siblings, and no spinning when the processor is shared — writing twice as fast as
+v0.22.0's beside a busy processor, reading at three quarters of its speed then.
 
 Its memory (the app of the Nix package, 16 384 tokens at once, "Check" pressed): the process
 grows from 201 to 2 504 MiB resident — 1.3 GiB of its own and 1.0 GiB of the model's file. Its

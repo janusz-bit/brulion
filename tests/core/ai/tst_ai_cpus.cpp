@@ -26,8 +26,10 @@ void write(const QString &path, const QByteArray &text)
     file.write(text);
 }
 
-/// A sysfs folder in `root`: core i has `cores[i]` — "capacity/kHz", either may be "" (no file)
-/// or not a number; `online` the list of the online ones ("": no such file).
+/// A sysfs folder in `root`: core i has `cores[i]` — "capacity/kHz[/siblings]", either of the
+/// first two may be "" (no file) or not a number, the third is the list of the logical processors
+/// on the same physical core (none: no such file); `online` the list of the online ones ("": no
+/// such file).
 void layOut(const QString &root, const QStringList &cores, const QByteArray &online)
 {
     if (!online.isEmpty())
@@ -40,6 +42,8 @@ void layOut(const QString &root, const QStringList &cores, const QByteArray &onl
             write(dir + u"/cpu_capacity"_s, parts.value(0).toLatin1() + '\n');
         if (!parts.value(1).isEmpty())
             write(dir + u"/cpufreq/cpuinfo_max_freq"_s, parts.value(1).toLatin1() + '\n');
+        if (!parts.value(2).isEmpty())
+            write(dir + u"/topology/core_cpus_list"_s, parts.value(2).toLatin1() + '\n');
     }
     // Other entries of the folder that are no cores.
     QVERIFY(QDir().mkpath(root + u"/cpufreq"_s));
@@ -100,6 +104,26 @@ private Q_SLOTS:
         QTest::newRow("every capacity 1024, clocks a little apart")
                 << times(4, u"1024/2000000"_s) + times(4, u"1024/2200000"_s) << QByteArray("0-7")
                 << QList<int>{0, 1, 2, 3, 4, 5, 6, 7};
+        // A PC's processor (a kernel that has capacities: 1024 each): one thread per physical
+        // core, not on its SMT sibling, no efficiency cores (their clocks tell).
+        QStringList raptorLake;
+        for (int i = 0; i < 12; ++i)
+            raptorLake << u"1024/4600000/%1-%2"_s.arg(i & ~1).arg(i | 1);
+        for (int i = 12; i < 16; ++i)
+            raptorLake << u"1024/3400000/%1"_s.arg(i);
+        QTest::newRow("i5-13450HX (6 P-cores with SMT, 4 E-cores)")
+                << raptorLake << QByteArray("0-15") << QList<int>{0, 2, 4, 6, 8, 10};
+        QStringList ryzen;
+        for (int i = 0; i < 16; ++i)
+            ryzen << u"1024/5100000/%1,%2"_s.arg(i % 8).arg(i % 8 + 8);
+        QTest::newRow("Ryzen 7 (8 cores, siblings 8 apart)")
+                << ryzen << QByteArray("0-15") << QList<int>{0, 1, 2, 3, 4, 5, 6, 7};
+        QTest::newRow("a sibling offline: the other one computes")
+                << QStringList{u"1024/4000000/0-1"_s, u"1024/4000000/0-1"_s, u"1024/4000000/2-3"_s,
+                               u"1024/4000000/2-3"_s}
+                << QByteArray("1-3") << QList<int>{1, 2};
+        QTest::newRow("a sibling list that is none: each its own core")
+                << times(4, u"1024/4000000/two"_s) << QByteArray("0-3") << QList<int>{0, 1, 2, 3};
         // At most eight, the fastest.
         QTest::newRow("a 16-core server")
                 << times(16, u"1024/3000000"_s) << QByteArray("0-15") << QList<int>{0, 1, 2, 3, 4, 5, 6, 7};
@@ -118,8 +142,8 @@ private Q_SLOTS:
         // A one-core gap is no cluster of fast cores: all of them.
         QTest::newRow("one fast core") << times(3, u"400/1800000"_s) + QStringList{u"1024/2800000"_s}
                                        << QByteArray("0-3") << QList<int>{0, 1, 2, 3};
-        // Not told how fast the cores are (a PC's processor: SMT siblings, efficiency cores): none
-        // chosen — the runner's own rule.
+        // Not told how fast the cores are (a PC with an older kernel: SMT siblings, efficiency
+        // cores unknown): none chosen — the runner's own rule.
         QTest::newRow("a PC's processor (no capacities)")
                 << times(16, u"/4600000"_s) << QByteArray("0-15") << QList<int>{};
         QTest::newRow("one core without its capacity")
@@ -152,6 +176,15 @@ private Q_SLOTS:
         QCOMPARE(cores[1], (CpuCore{1, 620, 2600000}));
         QCOMPARE(cores[2], (CpuCore{2, 1024, 0}));
         QCOMPARE(cores[3], (CpuCore{3, 0, 3105000}));
+        // The cores sharing one physical core: by the list's newer name or its older one.
+        write(root + u"/cpu0/topology/core_cpus_list"_s, "0-1\n");
+        write(root + u"/cpu1/topology/thread_siblings_list"_s, "0-1\n");
+        write(root + u"/cpu2/topology/core_cpus_list"_s, "2\n");
+        write(root + u"/cpu3/topology/core_cpus_list"_s, "0-1\n"); // not its own: not told
+        QCOMPARE(ai::cpuCores(root)[0].firstSibling, 0);
+        QCOMPARE(ai::cpuCores(root)[1].firstSibling, 0);
+        QCOMPARE(ai::cpuCores(root)[2].firstSibling, 2);
+        QCOMPARE(ai::cpuCores(root)[3].firstSibling, -1);
 
         // No such folder (Windows, macOS, the browser): no cores.
         QVERIFY(ai::cpuCores(dir.filePath(u"nonexistent"_s)).isEmpty());

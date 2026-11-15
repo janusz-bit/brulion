@@ -872,7 +872,8 @@ another phone the model is downloaded again.
   in the app's cache (`cache/model-state`, some 30 MB: never in a backup, emptied by Android when
   storage runs low): the first question after the model was loaded again starts after them. The
   model computes on the processor's fast cores only, one thread each, kept for as long as it is
-  loaded — a phone's slow cores (Cortex-A5xx) would hold the others back
+  loaded and spinning between two tokens (Android keeps background work on the slow cores) — a
+  phone's slow cores (Cortex-A5xx) would hold the others back
   ([docs/PERFORMANCE.md](PERFORMANCE.md) "The model on the device"). Writing follows token by
   token, a dozen a second on a fast phone (measured before the threads were kept).
 * **While the app is on screen**: Qt for Android pauses the app's event loop while the activity

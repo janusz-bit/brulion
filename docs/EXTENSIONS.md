@@ -603,11 +603,14 @@ end, { label = "Ask my notes (AI)" })
     app's cache, a few at most): the first request after the model was loaded again — ten minutes
     after the last one, or after a new start of the app — does not read them anew.
   * It computes on the processor: on a phone its fast cores only, one thread each (their slow
-    cores would hold them back), elsewhere half the processor's threads, at most 8.
+    cores would hold them back), on a PC one per performance core (not on its SMT sibling), at
+    most 8, kept in a pool for as long as the model is loaded. On Android they spin between two
+    tokens (the system keeps other work off those cores); elsewhere they sleep, so that a busy
+    processor does not stall them.
   * How fast it is on a device is in the event log (`brulion.ai.local`): `lfm3-vl-2b opened:
-    8192 tokens at once, ggml-cpu-haswell, 8 threads, in 1.42 s` — the processor plugin taken,
-    its threads (on a phone also their cores: `ggml-cpu-android_armv8.6_1, 4 threads on cores
-    4-7`) and the time the files took to load —, and of every answer `answered: 1520 tokens read
+    8192 tokens at once, ggml-cpu-alderlake, 6 threads on cores 0,2,4,6,8,10, in 1.42 s` — the
+    processor plugin taken, its threads and their cores (on Android also that they spin:
+    `ggml-cpu-android_armv8.6_1, 4 threads on cores 4-7, spinning`) and the time the files took to load —, and of every answer `answered: 1520 tokens read
     in 0.61 s (1400 kept from before, 0 from the disk), 85 written in 1.90 s`: reading costs only
     the tokens neither kept in memory nor read from the disk. A
     download is there too, from `lfm3-vl-2b download: 1.2 GB to fetch of 1.2 GB` to `downloaded:

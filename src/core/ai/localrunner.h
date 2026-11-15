@@ -35,9 +35,10 @@ public:
         int contextTokens = 8192;
         /// The most tokens a picture may take (it is scaled down to fit).
         int imageTokens = 1024;
-        /// 0: one per fast core (ai/cpus.h: a phone's slow cores left out), the threads kept on
-        /// those cores; where the cores do not tell their speed (a PC), half the processor's
-        /// threads; at most MaxComputeThreads.
+        /// 0: one per fast physical core (ai/cpus.h: a phone's slow cores, a PC's SMT siblings
+        /// and efficiency cores left out), the threads kept on those cores; where the cores do not
+        /// tell their speed (an older kernel), half the processor's threads; at most
+        /// MaxComputeThreads.
         int threads = 0;
         /// The folder of llama.cpp's processor plugins ("": found by name alone — Android, where
         /// libraries stay inside the APK).
@@ -46,6 +47,12 @@ public:
         /// is kept between runs, so that the first request after the model was opened again
         /// does not read them anew ("": nowhere). A cache: its files can go at any time.
         QString stateDir;
+        /// Between two steps (two tokens of an answer) the threads spin a while instead of going
+        /// to sleep at once: an answer is written some 7 % faster on an idle processor (no waking
+        /// up, the cores' clocks stay up) — and many times slower on one other programs keep busy,
+        /// where they spin while the thread they wait for waits for a core. For a system that
+        /// keeps other work off the fast cores (Android: background work on the slow ones).
+        bool spinWait = false;
     };
 
     struct Params {

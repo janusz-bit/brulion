@@ -195,6 +195,12 @@ AppController::AppController(const Options &options, QObject *parent)
         if (!cache.isEmpty())
             localAi.stateFolder = cache + u"/model-state"_s;
     }
+#ifdef Q_OS_ANDROID
+    // Android keeps background work off the fast cores (cpusets): the model's threads have them
+    // to themselves and spin between two tokens rather than wake up (docs/PERFORMANCE.md "The
+    // model on the device").
+    localAi.spinWait = true;
+#endif
     if (localAi.pluginDirs.isEmpty() && !localAi.open)
         localAi.pluginDirs = localAiPluginDirs();
     if (localAi.memoryBytes <= 0)

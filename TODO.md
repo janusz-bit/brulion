@@ -20,10 +20,11 @@ done in the repository simply disappears from the list.
     the libraries go next to `brulion.exe` and nothing was built or tried there; the AppImage's
     older aarch64 compilers do not know the newest ARM variants llama.cpp builds, and linuxdeploy
     has to keep `usr/lib/brulion` as it is);
-  * measurements on a phone of the runner's threads kept on the fast cores and of the system
-    text and tools read from the disk (docs/PERFORMANCE.md "The model on the device": the Pixel 9
-    Pro again — it wrote at a quarter of a laptop's speed with threads started for every token —
-    and a mid-range phone with other cores; whether fewer threads write faster than they read),
+  * measurements on a phone of the runner's threads kept on the fast cores, spinning, and of the
+    system text and tools read from the disk (docs/PERFORMANCE.md "The model on the device": the
+    Pixel 9 Pro again — it wrote at a quarter of a laptop's speed with threads started for every
+    token —, whether Android lets the app read `cpu_capacity`, and a mid-range phone with other
+    cores; whether fewer threads write faster than they read),
     and an Adreno/Mali GPU through llama.cpp's Vulkan or OpenCL backends (the processor only so
     far: +35 MB of shaders for Vulkan);
   * a button that stops an answer being written, and the answer shown while it is written;

@@ -152,9 +152,10 @@ struct PoolFree {
 using ThreadPool = std::unique_ptr<ggml_threadpool, PoolFree>;
 
 /// `threads` threads kept for the life of a model, on `cores` (none: wherever the system puts
-/// them); nullptr when the processor plugin gives none. The thread that makes it is kept on those
-/// cores too: it computes beside them.
-ThreadPool makePool(int threads, const QList<int> &cores)
+/// them), spinning between two steps or asleep (LocalRunner::Options::spinWait); nullptr when the
+/// processor plugin gives none. The thread that makes it is kept on those cores too: it computes
+/// beside them.
+ThreadPool makePool(int threads, const QList<int> &cores, bool spin)
 {
     ggml_backend_dev_t cpu = ggml_backend_dev_by_type(GGML_BACKEND_DEVICE_TYPE_CPU);
     ggml_backend_reg_t reg = cpu ? ggml_backend_dev_backend_reg(cpu) : nullptr;
@@ -163,6 +164,10 @@ ThreadPool makePool(int threads, const QList<int> &cores)
     if (!create || !release)
         return {};
     ggml_threadpool_params params = ggml_threadpool_params_default(threads);
+    // Between two steps llama.cpp's threads spin for a while (its "poll" level, 50 by default:
+    // some 6.5 million rounds) before they sleep; 0: they sleep at once.
+    if (!spin)
+        params.poll = 0;
     for (const int core : cores) {
         if (core >= 0 && core < GGML_MAX_N_THREADS)
             params.cpumask[core] = true;
@@ -193,8 +198,10 @@ public:
     bool sees() const override { return bool(m_mtmd); }
     QString device() const override
     {
-        const QString threads = u"%1, %2 threads"_s.arg(m_backend).arg(m_threads);
-        return m_cores.isEmpty() ? threads : threads + u" on cores "_s + coreList(m_cores);
+        QString threads = u"%1, %2 threads"_s.arg(m_backend).arg(m_threads);
+        if (!m_cores.isEmpty())
+            threads += u" on cores "_s + coreList(m_cores);
+        return m_spin ? threads + u", spinning"_s : threads;
     }
     Result generate(const local::Prompt &prompt, const Params &params) override;
 
@@ -262,6 +269,7 @@ private:
     int m_contextTokens = 0;
     int m_threads = 0;
     QList<int> m_cores; ///< what the threads are kept on (empty: wherever the system puts them)
+    bool m_spin = false; ///< they spin between steps (Options::spinWait)
     QString m_backend;
     QString m_stateDir;
     QByteArray m_stateIdentity;    ///< what a state kept on disk holds for: llama.cpp, its plugin, the model's file
@@ -300,10 +308,10 @@ bool LlamaRunner::open(const Options &options, QString *error)
         return fail(u"cannot load the model %1"_s.arg(options.modelPath));
     m_vocab = llama_model_get_vocab(m_model.get());
 
-    // One thread per fast core (ai/cpus.h: llama.cpp's threads wait for the slowest at every
-    // operation, so a phone's slow cores only hold the rest back); where the cores do not tell
-    // their speed (a PC), half the processor's threads — its SMT siblings and efficiency cores
-    // left over.
+    // One thread per fast physical core (ai/cpus.h: llama.cpp's threads wait for the slowest at
+    // every operation, so a phone's slow cores only hold the rest back, and an SMT sibling only
+    // halves its core's time); where the cores do not tell their speed (an older kernel, another
+    // system), half the processor's threads — its SMT siblings and efficiency cores left over.
     const QList<int> cores = options.threads > 0 ? QList<int>() : computeCores(cpuCores());
     if (options.threads > 0)
         m_threads = options.threads;
@@ -339,11 +347,15 @@ bool LlamaRunner::open(const Options &options, QString *error)
     // llama.cpp starts and ends them for every step — for every token of an answer —, and a
     // phone's system first puts a thread that just started on a slow core, where all the others
     // then wait for it. The thread that asks the model (the app's one worker) is kept on those
-    // cores as well, and so are the threads it starts to look at a picture.
-    m_pool = makePool(m_threads, cores);
+    // cores as well, and so are the threads it starts to look at a picture. Between two steps
+    // they sleep — or spin a while first, where the fast cores are the model's own
+    // (Options::spinWait): on a processor other programs keep busy a thread spinning on a core
+    // keeps the one it waits for off it, and a step takes many times longer.
+    m_pool = makePool(m_threads, cores, options.spinWait);
     if (m_pool) {
         llama_attach_threadpool(m_ctx.get(), m_pool.get(), nullptr);
         m_cores = cores;
+        m_spin = options.spinWait;
     }
 
     // What a state kept on disk holds for (stateKey).

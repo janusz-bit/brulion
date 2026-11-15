@@ -118,6 +118,7 @@ struct Fixture {
         LocalAi::Options o;
         o.folder = dir.path() + u"/models"_s;
         o.stateFolder = dir.path() + u"/model-state"_s;
+        o.spinWait = true;
         o.models = {sees, reads};
         o.memoryBytes = 16LL * 1024 * 1024 * 1024;
         Record *r = &record;
@@ -375,6 +376,7 @@ private Q_SLOTS:
             QCOMPARE(f.record.opened[0].imageTokens, 1024);
             // What it read of a request's system text and tools is kept there between runs.
             QCOMPARE(f.record.opened[0].stateDir, f.dir.path() + u"/model-state"_s);
+            QVERIFY(f.record.opened[0].spinWait); // (Android's)
             QCOMPARE(f.record.prompts.size(), 1);
             QVERIFY(std::ranges::any_of(f.record.prompts[0].pieces, [](const ai::local::Piece &p) {
                 return p.text.contains(u"Co słychać u żółwia?");

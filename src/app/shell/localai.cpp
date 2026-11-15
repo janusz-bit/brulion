@@ -107,6 +107,7 @@ LocalAi::LocalAi(const Options &options, QObject *parent)
     , m_models(options.models.isEmpty() ? ai::localModels() : options.models)
     , m_files(options.folder)
     , m_stateFolder(options.stateFolder)
+    , m_spinWait(options.spinWait)
 {
     Opener open = options.open;
     if (open) {
@@ -390,6 +391,7 @@ void LocalAi::send(const ai::Settings &settings, const ai::Request &request,
     job.options.contextTokens = m_contextTokens;
     job.options.imageTokens = imageTokensFor(m_contextTokens);
     job.options.stateDir = m_stateFolder;
+    job.options.spinWait = m_spinWait;
     job.request = request;
 
     ++m_pending;

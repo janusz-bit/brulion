@@ -74,6 +74,10 @@ public:
         /// Where a model's state after a request's system text and tools is kept between runs (a
         /// cache: "" keeps none).
         QString stateFolder;
+        /// The model's threads spin between two steps instead of sleeping at once
+        /// (ai::LocalRunner::Options::spinWait: Android, where background work is kept off the
+        /// fast cores).
+        bool spinWait = false;
         QStringList pluginDirs;       ///< where the model runner's plugin may be ("": by its name)
         qint64 memoryBytes = 0;       ///< the device's memory (0: unknown)
         QList<ai::LocalModel> models; ///< empty: ai::localModels() (tests: small ones)
@@ -152,6 +156,7 @@ private:
     QList<ai::LocalModel> m_models;
     ai::LocalModelFiles m_files;
     QString m_stateFolder;
+    bool m_spinWait = false;
     bool m_available = false;
     int m_contextTokens = 0;
     QString m_chosen;

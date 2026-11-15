@@ -41,7 +41,8 @@ QString projectorPath()
     return qEnvironmentVariable("BRULION_LOCAL_PROJECTOR");
 }
 
-std::unique_ptr<LocalRunner> openRunner(int context = 8192, bool pictures = false, const QString &stateDir = QString())
+std::unique_ptr<LocalRunner> openRunner(int context = 8192, bool pictures = false, const QString &stateDir = QString(),
+                                        bool spin = false)
 {
     LocalRunner::Options options;
     options.modelPath = modelPath();
@@ -49,6 +50,7 @@ std::unique_ptr<LocalRunner> openRunner(int context = 8192, bool pictures = fals
         options.projectorPath = projectorPath();
     options.contextTokens = context;
     options.stateDir = stateDir;
+    options.spinWait = spin;
     options.imageTokens = 256;
     options.backendDir = QStringLiteral(BRULION_LOCAL_AI_OUTPUT_DIR);
     QString error;
@@ -132,6 +134,13 @@ private Q_SLOTS:
         if (!cores.isEmpty())
             QVERIFY2(runner->device().endsWith(u"%1 threads on cores %2"_s.arg(cores.size()).arg(ai::coreList(cores))),
                      qPrintable(runner->device()));
+        // Threads that spin between two steps (Android's) say so.
+        const std::unique_ptr<LocalRunner> spinning = openRunner(1024, false, QString(), true);
+        QVERIFY(spinning);
+        QVERIFY2(spinning->device().endsWith(u", spinning"_s), qPrintable(spinning->device()));
+        QVERIFY(!runner->device().contains(u"spinning"));
+        const LocalRunner::Result s = spinning->generate(ai::local::prompt(kFormat, question(u"Say OK."_s)), params());
+        QVERIFY2(s.status == LocalRunner::Ok, qPrintable(s.error));
 
         const ai::Request request = question(u"Say OK."_s);
         const LocalRunner::Result r = runner->generate(ai::local::prompt(kFormat, request), params());
@@ -493,6 +502,32 @@ private Q_SLOTS:
         request.messages[0].images[0].data = "not a picture";
         refused = runner->generate(ai::local::prompt(kFormat, request), params(24));
         QCOMPARE(refused.status, LocalRunner::Failed);
+    }
+
+    void speed()
+    {
+        // How fast it reads and writes, for docs/PERFORMANCE.md: BRULION_LOCAL_SPEED=<rounds>
+        // (each on a model opened anew, so nothing is kept from the round before),
+        // BRULION_LOCAL_SPIN=1 with threads that spin between steps (LocalRunner::Options::spinWait).
+        const int rounds = qEnvironmentVariableIntValue("BRULION_LOCAL_SPEED");
+        if (rounds <= 0)
+            QSKIP("BRULION_LOCAL_SPEED is not set: no measurement");
+        QString text;
+        const QString day = u"Dzień %1: zakupy na targu — jabłka, gruszki, śliwki; rozmowa z sąsiadem o pogodzie. "_s;
+        for (int i = 0; i < 60; ++i)
+            text += day.arg(i + 1);
+        for (int round = 0; round < rounds; ++round) {
+            const std::unique_ptr<LocalRunner> runner =
+                    openRunner(8192, false, QString(), qEnvironmentVariableIntValue("BRULION_LOCAL_SPIN") > 0);
+            QVERIFY(runner);
+            ai::Request request = question(
+                    u"%1\n\nRound %2. Write a long story (500 words) about the days above."_s.arg(text).arg(round));
+            const LocalRunner::Result r = runner->generate(ai::local::prompt(kFormat, request), params(256));
+            QVERIFY2(r.status == LocalRunner::Ok, qPrintable(r.error));
+            qInfo("%s: read %d tokens in %lld ms (%.1f/s), wrote %d in %lld ms (%.1f/s)", qPrintable(runner->device()),
+                  r.promptTokens, r.promptMs, 1000.0 * r.promptTokens / double(std::max<qint64>(1, r.promptMs)),
+                  r.outputTokens, r.outputMs, 1000.0 * r.outputTokens / double(std::max<qint64>(1, r.outputMs)));
+        }
     }
 
     void aMissingFile()

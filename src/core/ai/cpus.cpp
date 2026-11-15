@@ -114,6 +114,11 @@ QList<CpuCore> cpuCores(const QString &root)
         c.index = index;
         c.capacity = int(std::min<qint64>(readNumber(core + u"/cpu_capacity"_s), 1 << 20));
         c.maxKHz = readNumber(core + u"/cpufreq/cpuinfo_max_freq"_s);
+        // (thread_siblings_list: the older name of the same list.)
+        QList<int> siblings = parseList(readLine(core + u"/topology/core_cpus_list"_s));
+        if (siblings.isEmpty())
+            siblings = parseList(readLine(core + u"/topology/thread_siblings_list"_s));
+        c.firstSibling = siblings.contains(index) ? siblings.first() : -1;
         cores.append(c);
     }
     return cores;
@@ -122,24 +127,33 @@ QList<CpuCore> cpuCores(const QString &root)
 QList<int> computeCores(const QList<CpuCore> &cores)
 {
     if (cores.isEmpty() || std::ranges::any_of(cores, [](const CpuCore &c) { return c.capacity <= 0; }))
-        return {}; // not told how fast they are: a PC's processor (SMT siblings, efficiency cores)
+        return {}; // not told how fast they are (an older kernel): the caller's rule
+
+    // One logical processor per physical core: an SMT sibling only halves its core's time.
+    QList<CpuCore> physical;
+    for (const CpuCore &core : cores) {
+        if (core.firstSibling < 0 || core.firstSibling == core.index
+            || !std::ranges::any_of(cores, [&](const CpuCore &c) { return c.index == core.firstSibling; }))
+            physical.append(core);
+    }
 
     const auto capacityOf = [](const CpuCore &c) { return qint64(c.capacity); };
     const auto clockOf = [](const CpuCore &c) { return c.maxKHz; };
     QList<CpuCore> kept;
-    const bool alike = std::ranges::all_of(cores, [&](const CpuCore &c) { return c.capacity == cores[0].capacity; });
+    const bool alike =
+            std::ranges::all_of(physical, [&](const CpuCore &c) { return c.capacity == physical[0].capacity; });
     if (!alike) {
         // A slow core has well under two thirds of the next faster one's capacity (an Arm
         // Cortex-A5xx next to an A7xx: a third); fast cores of two kinds differ by less.
-        kept = aboveWidestGap(cores, capacityOf, 1.5);
-    } else if (std::ranges::all_of(cores, [](const CpuCore &c) { return c.maxKHz > 0; })) {
+        kept = aboveWidestGap(physical, capacityOf, 1.5);
+    } else if (std::ranges::all_of(physical, [](const CpuCore &c) { return c.maxKHz > 0; })) {
         // Alike as far as the kernel says — one that does not know their capacities says 1024 for
         // each —, their clocks may still differ: slow cores run at three quarters of the fast
         // ones' clock or less (an A520 at 1.95 GHz beside A720s at 2.6), fast cores of two kinds
         // closer (Oryon cores at 3.53 and 4.32 GHz).
-        kept = aboveWidestGap(cores, clockOf, 1.25);
+        kept = aboveWidestGap(physical, clockOf, 1.25);
     } else {
-        kept = cores;
+        kept = physical;
     }
     std::ranges::sort(kept, [](const CpuCore &a, const CpuCore &b) {
         if (a.capacity != b.capacity)
