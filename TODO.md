@@ -10,9 +10,17 @@ done in the repository simply disappears from the list.
   the built-in AI assistant is an agent over the whole notebook — full-text search, queries,
   reading, pictures, changes the user confirms (docs/EXTENSIONS.md "AI"); missing: the providers'
   own apps reaching the notes from a phone (a remote MCP server: `brulion-cli mcp` over HTTPS with
-  sign-in, for claude.ai's and ChatGPT's connectors), answers streamed as they are written, a
-  conversation that goes on after the answer (a chat view), an assistant in the editor (rewrite
-  the selection, continue a paragraph) and search by meaning rather than words (docs/SEMANTIC.md).
+  sign-in, for claude.ai's and ChatGPT's connectors), answers streamed as they are written (the
+  chat shows them only once written), an assistant in the editor (rewrite the selection, continue
+  a paragraph) and search by meaning rather than words (docs/SEMANTIC.md).
+* **The AI chat: what is still missing** — conversations are pages in `AI/` (docs/UI.md "AI chat",
+  docs/SYNTAX.md §14); missing: a picture or a photo from the camera sent with a message (the
+  assistant looks only at pictures already in notes), dictation, renaming and deleting a
+  conversation from its list (the page's own menu does it), Stop that also stops the model on the
+  device (the chat drops the answer, the model writes it to its end meanwhile), more than one turn
+  at a time (one per app), a conversation too long for a small model cut by turns rather than by
+  characters, the time of each message, and an extension of one's own as the chat's partner
+  (`chat` is the built-in assistant's command).
 * **The model on the device: what is still missing** — LFM3-VL 2B and LFM3 1.7B run in the app
   through llama.cpp on Linux (the Nix package) and Android (docs/EXTENSIONS.md "AI",
   docs/ARCHITECTURE.md "The model on the device"). Missing:

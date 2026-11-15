@@ -39,19 +39,23 @@ What to expect:
 The models are Liquid AI's, under their own licence (LFM Open License v1.0), and are not part of Brulion: the app downloads the one you choose from Hugging Face. **Remove** deletes its files. Not every build has this provider: the browser version and some desktop packages do not.
 
 ## The AI assistant
-Switch it on in **Settings → Extensions → AI → AI assistant**. Then the top bar has a **✨** button — on the phone too — with:
+Switch it on in **Settings → Extensions → AI → AI assistant**. You talk to it in the **AI chat**, as in a messenger: your messages on the right, the AI's answers on the left, and you can go on asking — "And next week?", "Move the rent to Friday". The top bar has a **✨** button — on the phone too — with:
 
-- **Ask the AI…** — ask anything about your notes, or ask it to do something in them. The AI **searches and reads the whole notebook** by itself — pages, the journal, tasks with their dates, tags, reminders — so you can ask "What do I have to do this week?", "What did I write about the trip?" or "Add milk to my shopping list". It also **looks at pictures** in your notes when the model can see (Claude, LFM3-VL on the device): "What did I pay for milk? The receipt is in Shopping." The page on screen goes along (in the journal: today's note).
-- **Summarise this page** — a few sentences and the page's tasks.
+- **New conversation** — ask anything about your notes, or ask it to do something in them. The page on screen goes along (in the journal: today's note); before you send the first message you can take it away (× on its chip). Suggestions get you started: "What do I have to do this week?", "Plan my tomorrow".
+- **New conversation beside the page** — the same in the side panel, next to the page you are reading (on a wide window).
+- **Conversations** — every conversation you had, the newest first.
+- **Summarise this page** — a new conversation that asks for a summary of the page and its tasks; ask more about it there.
 - **AI settings…** — the provider, the key and the model.
+
+The AI **searches and reads the whole notebook** by itself — pages, the journal, tasks with their dates, tags, reminders — so you can ask "What do I have to do this week?", "What did I write about the trip?" or "Add milk to my shopping list". While it works it says what it does: "Searching the notes: “trip”…", "Reading “Shopping”…"; **Stop** ends it. It also **looks at pictures** in your notes when the model can see (Claude, LFM3-VL on the device): "What did I pay for milk? The receipt is in Shopping." The same is in the palette (Ctrl+K) as **AI: new conversation** and **AI chat**.
 
 **Extensions, too.** Ask for a new command, view or reaction — "a command that counts the words of today's note" — and the AI reads how extensions are written, tries its code on your notes without changing anything, and writes the page into **Extensions/**. It then waits for you like code from another device: read the page and press **Run** when you agree with what it does (see [[Extensions]]).
 
-**Changes only with your yes.** Before the AI adds to a page or a day, writes a page or ticks off a task, a window shows what it would write: **Allow**, **Allow every change of this question** or **No**. What you decline is not written, and the AI is told so.
+**Changes only with your yes.** Before the AI adds to a page or a day, writes a page or ticks off a task, the conversation shows what it would write: **Allow**, **Allow every change of this question** or **No**. What you decline is not written, and the AI is told so. Its answer then names the pages it changed: `✏️ Changed: [[…]]`.
 
-The answer goes into **today's note** under `🤖 your question`, its points as items, with `✏️ Changed: [[…]]` naming the pages it changed. The assistant works with tools (searching, reading, writing): on a server of your own pick a model that supports them (e.g. Qwen 3 or Llama 3.1); Claude does. While the model answers, the button spins. The same commands are in the palette (Ctrl+K) as **AI: ask or ask to do…** and **AI: summarise this page**.
+**Every conversation is a page** in the folder **AI/**, named after your first question — `AI/2026-11-15 What do I have to do this week` — and the day's journal gets a line that links to it. So you can read it later on the phone, search it, link it or edit it; the chat goes on from what the page says. Its tasks stay out of your task lists and a reminder in an answer never rings (the page has `tasks: ignore`). **Open the conversation as a page** (in the chat) shows it in the editor.
 
-The answer stays with your notes, so you can read it later on the phone, link it or edit it.
+The assistant works with tools (searching, reading, writing): on a server of your own pick a model that supports them (e.g. Qwen 3 or Llama 3.1); Claude does. While the model answers, the ✨ button spins. One answer is written at a time; it goes on while you look at other pages and lands in its conversation.
 
 ## In your own extensions
 An extension page with `ai` among its permissions can ask a model:

@@ -319,11 +319,12 @@ private Q_SLOTS:
         QVERIFY2(host.logs.last().endsWith(u": Żółw"_s), qPrintable(host.logs.last()));
     }
 
-    void assistantAsksAndWrites()
+    void assistantAnswersAChatTurn()
     {
-        // The built-in AI assistant: a question goes to b.ai with the page on screen's text and the
-        // agent's tools (tst_extensions_assistant: the tools on a notebook); the answer is written
-        // into today's note as an outline under the question.
+        // The built-in AI assistant: a turn of a conversation goes to b.ai with the text of the page
+        // it is about and the agent's tools (tst_extensions_assistant: the tools on a notebook); the
+        // answer is the command's value, as the model wrote it (the app writes it into the
+        // conversation), and nothing is written by the command itself.
         NullHost host;
         host.texts.insert(u"Trening A"_s, u"tags:: plan-treningowy\n\n- [[Przysiad]] 3×5\n"_s);
         Engine engine;
@@ -332,11 +333,9 @@ private Q_SLOTS:
         QVERIFY(assistant.permissions.contains(u"ai"_s));
         const Result loaded = engine.load(assistant);
         QVERIFY2(loaded.ok(), qPrintable(loaded.error));
-        QCOMPARE(engine.commands().size(), 2);
-        Result r = engine.runCommand(u"asystent"_s, u"ask"_s, {{u"page"_s, u"Trening A"_s}});
-        QCOMPARE(r.status, Status::Suspended);
-        QCOMPARE(r.value.toMap().value(u"kind"_s).toString(), u"ask"_s);
-        r = engine.resume(r.call, u"  O czym to jest?  "_s);
+        QCOMPARE(engine.commands().size(), 1);
+        const QVariantList messages{QVariantMap{{u"role"_s, u"user"_s}, {u"content"_s, u"O czym to jest?"_s}}};
+        Result r = engine.runCommand(u"asystent"_s, u"chat"_s, {{u"page"_s, u"Trening A"_s}, {u"messages"_s, messages}});
         QCOMPARE(r.status, Status::Suspended);
         const QVariantMap request = r.value.toMap().value(u"request"_s).toMap();
         QCOMPARE(r.value.toMap().value(u"kind"_s).toString(), u"ai"_s);
@@ -345,29 +344,18 @@ private Q_SLOTS:
         QVERIFY(first.endsWith(u"O czym to jest?"_s));
         QVERIFY(!request.value(u"system"_s).toString().isEmpty());
         QVERIFY(!request.value(u"tools"_s).toList().isEmpty());
-        r = engine.resume(
-                r.call,
-                QVariantMap{{u"text"_s, u"Plan siłowy.\n\n## Ćwiczenia\n- Przysiad\n1. Martwy ciąg\n```\nkod\n```"_s},
-                            {u"raw"_s, u"[]"_s}});
+        const QString answer = u"Plan siłowy.\n\n## Ćwiczenia\n- Przysiad\n1. Martwy ciąg\n```\nkod\n```"_s;
+        r = engine.resume(r.call, QVariantMap{{u"text"_s, answer}, {u"raw"_s, u"[]"_s}});
         QVERIFY2(r.ok(), qPrintable(r.error));
-        QCOMPARE(r.value.toString(), u"Odpowiedź AI jest w dzisiejszej notatce."_s);
-        QCOMPARE(host.appended.size(), 1);
-        QCOMPARE(host.appended.first(), u"- 🤖 O czym to jest? ([[Trening A]])\n  - Plan siłowy.\n  - **Ćwiczenia**\n"
-                                        "  - Przysiad\n  - Martwy ciąg\n  - kod"_s);
-        // A summary needs a page; an error of the model is the command's error.
-        QCOMPARE(engine.runCommand(u"asystent"_s, u"summarize"_s, {{u"page"_s, QString()}}).value.toString(),
-                 u"Otwórz stronę, którą streścić."_s);
-        r = engine.runCommand(u"asystent"_s, u"summarize"_s, {{u"page"_s, u"Trening A"_s}});
+        QCOMPARE(r.value.toString(), answer);
+        QVERIFY(host.appended.isEmpty());
+        // An error of the model is the command's error.
+        r = engine.runCommand(u"asystent"_s, u"chat"_s, {{u"page"_s, QString()}, {u"messages"_s, messages}});
         QCOMPARE(r.status, Status::Suspended);
         r = engine.resume(r.call, QVariantMap{{u"error"_s, u"the API key was refused (HTTP 401)"_s}});
         QCOMPARE(r.status, Status::Error);
         QVERIFY2(r.error.contains(u"b.ai: the API key was refused"_s), qPrintable(r.error));
-        QCOMPARE(host.appended.size(), 1);
-        // Cancelled question: nothing asked, nothing written.
-        r = engine.runCommand(u"asystent"_s, u"ask"_s, {{u"page"_s, u"Trening A"_s}});
-        r = engine.resume(r.call, QString());
-        QVERIFY(r.ok());
-        QCOMPARE(host.appended.size(), 1);
+        QVERIFY(host.appended.isEmpty());
     }
 
     void pageFromCode_data()

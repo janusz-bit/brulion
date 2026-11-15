@@ -1920,3 +1920,51 @@ end, { label = "Policz słowa" })
   so); a `#rozszerzenie` inside a block does not make a page an extension.
 * What the code may call (the `b` API), when it runs and how a device approves it:
   docs/EXTENSIONS.md.
+
+## 14. Conversations with AI
+
+The AI chat (docs/UI.md "AI chat") keeps each conversation with the AI assistant as a page in the
+folder `AI/` (the same name in every language), named after its first question:
+`AI/2026-11-15 Co mam jutro do zrobienia.md` — the day it began and the question's first words (at
+most 60 characters, cut at a word; links, code and what a file name cannot hold left out;
+"Rozmowa" / "Conversation" when nothing is left, " 2" and on for a name in use). The day's journal
+gets one line that links to it, `- 🤖 [[AI/2026-11-15 Co mam jutro do zrobienia]]`. The page is an
+ordinary outline — any app reads it, it syncs, it can be edited, and the chat goes on from what it
+says:
+
+```markdown
+---
+zadania: ignoruj
+---
+- 🧑 Co mam jutro do zrobienia? ([[Dom]])
+- 🤖 Jutro masz trzy zadania:
+
+  - zapłacić czynsz — [[Dom]]
+  - oddać raport — [[Praca]]
+
+  ✏️ Zmienione: [[Dom]]
+- 🧑 Przesuń czynsz na piątek
+```
+
+* **A message** is a top-level list item (`- `, `* ` or `+ ` at the start of a line) whose text
+  starts with 🧑 (the user's) or 🤖 (the AI's) and a space or the line's end, and every line after it
+  up to the next one: its text is the rest of its first line, then the lines under it without the
+  indentation they share (two spaces as Brulion writes them, a tab in a Logseq outline). Blank
+  lines and fenced code inside stay; a `- 🧑` inside fenced code, in the frontmatter or indented is
+  no message. A message that begins with a list, a heading, a table, a quote or code has its marker
+  alone on its first line and all of it under it.
+* What comes before the first message (the frontmatter, a title, a line of text) belongs to no
+  message; another top-level line between messages — one typed into the page — belongs to the
+  message before it.
+* **The page it is about**: a link in parentheses at the end of the first message's first line,
+  `([[Dom]])` — its text goes to the AI with every turn.
+* **Written by the chat**: the frontmatter `zadania: ignoruj` (`tasks: ignore` in an English
+  notebook: the checkboxes of answers stay out of the task lists, §5 "Ignoring a page's tasks"),
+  messages appended at the end of the page (its line ending kept, everything before byte for
+  byte), the AI's answer as the model wrote it. A reminder in a message (`⏰ 2026-11-16 09:00`,
+  `⏰! …`, `(@…)`) is written inside a code span — `` `⏰ 2026-11-16 09:00` `` — so a conversation
+  never rings; fenced code is left as it is, and code left open at the end of an answer is closed.
+* The model gets the conversation as its messages: the user's and the AI's turns, messages of one
+  side in a row joined, the AI's lines before the user's first left out.
+* Pure functions: `src/core/chat/chat.h` (`parse`, `appendMessage`, `newConversation`,
+  `pageTitle`, `journalEntry`, `history`, `preview`), tested in `tests/core/chat`.

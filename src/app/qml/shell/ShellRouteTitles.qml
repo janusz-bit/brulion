@@ -20,6 +20,10 @@ QtObject {
         return DatesHelper.locale !== "" ? DatesHelper.formatLong(date) : date
     }
 
+    /// A conversation with the AI by its page's name, without the date in front of it.
+    function chatTitle(path: string): string {
+        return Js.replaceRegExp(Workspace.pageTitle(path), "^\\d{4}-\\d{2}-\\d{2} ", "", "")
+    }
     function dayOf(path: string): string {
         return Workspace.journalDate(path)
     }
@@ -42,6 +46,7 @@ QtObject {
         case "habits": return qsTranslate("AppShell", "Habits")
         case "gym": return qsTranslate("AppShell", "Gym")
         case "console": return qsTranslate("AppShell", "Luau console")
+        case "chat": return path !== "" ? chatTitle(path) : qsTranslate("AppShell", "AI chat")
         case "extension": return title !== "" ? title : qsTranslate("AppShell", "Extension")
         case "graph": return qsTranslate("AppShell", "Graph")
         case "search": return qsTranslate("AppShell", "Search")
@@ -72,6 +77,7 @@ QtObject {
         case "habits": return "flame"
         case "gym": return "dumbbell"
         case "console": return "terminal"
+        case "chat": return "message-square"
         case "extension": return "puzzle"
         case "graph": return "waypoints"
         case "search": return "search"

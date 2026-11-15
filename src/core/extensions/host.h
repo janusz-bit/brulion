@@ -73,6 +73,13 @@ public:
     virtual QString uiLanguage() = 0; ///< the app's interface language: "pl" | "en"
     virtual void timer(const QString &extension, int seconds, const QString &label) = 0;
     virtual void log(const QString &extension, const QString &message) = 0;
+    /// b.status: what the running call does now ("" = nothing to say), for the user to see while
+    /// it waits (the chat shows it under the AI's dots). A host that shows nothing ignores it.
+    virtual void status(const QString &extension, const QString &text)
+    {
+        Q_UNUSED(extension);
+        Q_UNUSED(text);
+    }
 };
 
 } // namespace brulion::extensions

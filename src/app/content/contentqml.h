@@ -9,10 +9,13 @@
 //   PageListModel     { workspace: Workspace; sortKey: "modified" }            AllPagesView
 //   SearchResultModel { workspace: Workspace; query: field.text }              SearchView
 //   HistoryModel      { workspace: Workspace; path: route.path }               HistoryView
+//   ChatMessageModel  { workspace: Workspace; path: route.path }               ChatView (a conversation)
+//   ChatListModel     { workspace: Workspace }                                 ChatView (the conversations)
 //   OutlineModel      { source: page.blocks }                                  side panel
 //   PageTools         { workspace: Workspace }                                 page header and menu
 #pragma once
 
+#include "chatmodels.h"
 #include "historymodel.h"
 #include "journallistmodel.h"
 #include "outlinemodel.h"
@@ -69,6 +72,18 @@ struct SearchResultModelForeign {
     Q_GADGET
     QML_FOREIGN(brulion::content::SearchResultModel)
     QML_NAMED_ELEMENT(SearchResultModel)
+};
+
+struct ChatMessageModelForeign {
+    Q_GADGET
+    QML_FOREIGN(brulion::content::ChatMessageModel)
+    QML_NAMED_ELEMENT(ChatMessageModel)
+};
+
+struct ChatListModelForeign {
+    Q_GADGET
+    QML_FOREIGN(brulion::content::ChatListModel)
+    QML_NAMED_ELEMENT(ChatListModel)
 };
 
 struct HistoryModelForeign {

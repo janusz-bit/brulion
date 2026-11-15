@@ -7,7 +7,9 @@ import Brulion
 // (Workspace.extensions, docs/EXTENSIONS.md "Questions"): b.ask a line of text, b.choose one of a
 // list, b.form numbers with steppers (the gym's weight and reps). Cancelling gives the extension ""
 // (ask) or nil (choose, form), and its command ends itself. A question that follows right after
-// (choose a plan, then a form) opens the dialog again.
+// (choose a plan, then a form) opens the dialog again. A question of the AI chat's turn
+// (Workspace.extensions.questionChat) is asked in the conversation while a chat view shows it
+// (Workspace.chats.isShown); the dialog asks it once none does.
 BDialog {
     id: dialog
     objectName: "extensionQuestion"
@@ -51,10 +53,16 @@ BDialog {
         dialog.shownSerial = -1
     }
 
+    /// The question is a turn's of a conversation that a chat view shows: it is answered there.
+    function inChat(): bool {
+        const conversation = dialog.extensions.questionChat
+        return conversation !== "" && Workspace.chats.isShown(conversation)
+    }
+
     Later {
         id: openLater
         onTriggered: {
-            if (dialog.extensions.questionKind === "")
+            if (dialog.extensions.questionKind === "" || dialog.inChat())
                 return
             textField.text = ""
             dialog.shownSerial = dialog.extensions.questionSerial
@@ -64,8 +72,21 @@ BDialog {
     Connections {
         target: dialog.extensions
         function onQuestionChanged() {
+            // (Answered elsewhere — in the chat —: the dialog of it goes, asking nothing.)
+            if (dialog.opened && dialog.shownSerial !== dialog.extensions.questionSerial) {
+                dialog.shownSerial = -1
+                dialog.close()
+            }
             if (dialog.extensions.questionKind !== "")
                 openLater.restart() // after the dialog that answered the last one has closed
+        }
+    }
+    Connections {
+        target: Workspace.chats
+        function onShownChanged() {
+            // The chat that showed the question went (another view, the panel closed): asked here.
+            if (dialog.extensions.questionKind !== "" && !dialog.opened && !dialog.inChat())
+                openLater.restart()
         }
     }
 

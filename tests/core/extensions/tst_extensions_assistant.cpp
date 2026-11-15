@@ -1,11 +1,14 @@
 // The built-in AI assistant (src/core/extensions/builtin/asystent.luau) as an agent on a real
-// notebook: a vault, its index and the NotebookHost, the model played by the test. The host's
+// notebook: a vault, its index and the NotebookHost, the model played by the test, a turn of a
+// conversation ("chat": ctx.messages, ctx.page; its answer the command's value). The host's
 // full-text search and queries (b.search, b.query), the tools' requests (valid for ai::requestFrom
-// and both providers), a question answered from a query's results, a change made with the user's
-// yes, one declined, "yes to every change" asked once, an extension written (the reference read,
-// the page checked, refused while it does not load, written with the user's yes), a picture looked
-// at (a request of its own with the picture, its answer the tool's result), an unknown tool, too
-// many turns, and the summary without tools.
+// and both providers), a question answered from a query's results, a conversation that goes on
+// (its history in the request, the page it is about before the first message), what it says it
+// does (b.status), a change made with the user's yes, one declined, "yes to every change" asked
+// once, an extension written (the reference read, the page checked, refused while it does not
+// load, written with the user's yes), a picture looked at (a request of its own with the picture,
+// its answer the tool's result), an unknown tool, too many turns, the command the palette does not
+// offer and its run by hand.
 
 #include "ai/ai.h"
 #include "extensions/builtin.h"
@@ -71,6 +74,7 @@ class TestExtensionsAssistant : public QObject {
     std::unique_ptr<VaultIndex> m_index;
     std::unique_ptr<NotebookHost> m_host;
     std::unique_ptr<Engine> m_engine;
+    QStringList m_statuses; // b.status, in order
 
     bool open(const QHash<QString, QString> &files)
     {
@@ -99,6 +103,8 @@ class TestExtensionsAssistant : public QObject {
         options.uiLanguage = u"pl"_s;
         options.updateIndex = true;
         m_host = std::make_unique<NotebookHost>(*m_vault, *m_index, options);
+        m_statuses.clear();
+        m_host->onStatus = [this](const QString &, const QString &text) { m_statuses.append(text); };
         m_engine = std::make_unique<Engine>();
         if (!m_engine->start(m_host.get(), Limits{2000 * BRULION_TEST_SLOWDOWN, 64ll << 20}))
             return false;
@@ -110,13 +116,13 @@ class TestExtensionsAssistant : public QObject {
 
     QString file(const QString &path) const { return m_vault->readText(path); }
 
-    /// "ask" with `question` (and the page on screen): the call waiting for the model's first turn.
-    Result ask(const QString &question, const QString &page = QString())
+    /// A turn of a conversation (`earlier`: its messages before, {role, content}) that ends with
+    /// `question`, about `page`: the call waiting for the model's first turn.
+    Result ask(const QString &question, const QString &page = QString(), const QVariantList &earlier = {})
     {
-        Result r = m_engine->runCommand(u"asystent"_s, u"ask"_s, {{u"page"_s, page}});
-        if (r.status != Status::Suspended || r.value.toMap().value(u"kind"_s) != u"ask"_s)
-            return r;
-        return m_engine->resume(r.call, question);
+        QVariantList messages = earlier;
+        messages.append(QVariantMap{{u"role"_s, u"user"_s}, {u"content"_s, question}});
+        return m_engine->runCommand(u"asystent"_s, u"chat"_s, {{u"page"_s, page}, {u"messages"_s, messages}});
     }
 
 private Q_SLOTS:
@@ -204,17 +210,16 @@ private Q_SLOTS:
         QCOMPARE(results.size(), 2);
         QVERIFY(results[0].toMap().value(u"content"_s).toString().contains(u"Żółw je sałatę"_s));
         QCOMPARE(results[1].toMap().value(u"content"_s).toString(), u"- chleb\n"_s);
-        // The answer goes into today's note, under the question.
-        r = m_engine->resume(r.call, answering(u"W tym tygodniu:\n- [[Dom]]: zapłacić czynsz do piątku."_s));
+        // The answer is the command's value, as the model wrote it: the app writes it into the
+        // conversation. Nothing else was written.
+        r = m_engine->resume(r.call, answering(u"  W tym tygodniu:\n\n- [[Dom]]: zapłacić czynsz do piątku.\n"_s));
         QVERIFY2(r.ok(), qPrintable(r.error));
-        QCOMPARE(r.value.toString(), u"Odpowiedź AI jest w dzisiejszej notatce."_s);
-        const QString journal = file(u"journals/2026-11-11.md"_s);
-        QVERIFY2(
-                journal.contains(
-                        u"- 🤖 Co mam do zrobienia w tym tygodniu?\n  - W tym tygodniu:\n  - [[Dom]]: zapłacić czynsz do piątku."_s),
-                qPrintable(journal));
-        QVERIFY(!journal.contains(u"✏️"_s));
+        QCOMPARE(r.value.toString(), u"W tym tygodniu:\n\n- [[Dom]]: zapłacić czynsz do piątku."_s);
+        QVERIFY(!m_vault->exists(u"journals/2026-11-11.md"_s));
         QCOMPARE(file(u"Dom.md"_s), sampleNotes().value(u"Dom.md"_s));
+        // What it did, said as it did it; nothing while the model thinks.
+        QCOMPARE(m_statuses, (QStringList{u""_s, u"Przeglądam notatki: type:tasks status:open due:<=+7d…"_s, u""_s,
+                                          u"Szukam w notatkach: „żółw”…"_s, u"Czytam „Zakupy”…"_s, u""_s, u""_s}));
     }
 
     void changesWithTheUsersYes()
@@ -250,11 +255,8 @@ private Q_SLOTS:
         QCOMPARE(file(u"Zakupy.md"_s), u"- chleb\n- mleko\n"_s);
         r = m_engine->resume(r.call, answering(u"Dopisałem mleko do [[Zakupy]]."_s));
         QVERIFY2(r.ok(), qPrintable(r.error));
-        const QString journal = file(u"journals/2026-11-11.md"_s);
-        QVERIFY2(
-                journal.contains(
-                        u"- 🤖 Dopisz mleko do zakupów ([[Zakupy]])\n  - Dopisałem mleko do [[Zakupy]].\n  - ✏️ Zmienione: [[Zakupy]]"_s),
-                qPrintable(journal));
+        // The pages it changed, after the answer.
+        QCOMPARE(r.value.toString(), u"Dopisałem mleko do [[Zakupy]].\n\n✏️ Zmienione: [[Zakupy]]"_s);
     }
 
     void aLongChangeSaysHowMuchOfItIsShown_data()
@@ -320,7 +322,7 @@ private Q_SLOTS:
         r = m_engine->resume(r.call, answering(u"Nie zmieniłem strony."_s));
         QVERIFY2(r.ok(), qPrintable(r.error));
         QCOMPARE(file(u"Dom.md"_s), sampleNotes().value(u"Dom.md"_s));
-        QVERIFY(!file(u"journals/2026-11-11.md"_s).contains(u"✏️"_s));
+        QCOMPARE(r.value.toString(), u"Nie zmieniłem strony."_s);
     }
 
     void yesToEveryChangeIsAskedOnce()
@@ -362,8 +364,7 @@ private Q_SLOTS:
         QVERIFY(!file(u"Dom.md"_s).contains(u"Inaczej"_s));
         r = m_engine->resume(r.call, answering(u"Gotowe."_s));
         QVERIFY2(r.ok(), qPrintable(r.error));
-        QVERIFY2(file(u"journals/2026-11-11.md"_s).contains(u"✏️ Zmienione: [[Dom]], [[2026-11-11]]"_s),
-                 qPrintable(file(u"journals/2026-11-11.md"_s)));
+        QCOMPARE(r.value.toString(), u"Gotowe.\n\n✏️ Zmienione: [[Dom]], [[2026-11-11]]"_s);
     }
 
     void writesAnExtension()
@@ -424,8 +425,7 @@ private Q_SLOTS:
         QCOMPARE(file(u"Rozszerzenia/Licznik zadań.md"_s), page);
         r = m_engine->resume(r.call, answering(u"Napisałem [[Licznik zadań]]: naciśnij Uruchom na jego stronie."_s));
         QVERIFY2(r.ok(), qPrintable(r.error));
-        QVERIFY2(file(u"journals/2026-11-11.md"_s).contains(u"✏️ Zmienione: [[Rozszerzenia/Licznik zadań]]"_s),
-                 qPrintable(file(u"journals/2026-11-11.md"_s)));
+        QVERIFY2(r.value.toString().endsWith(u"✏️ Zmienione: [[Rozszerzenia/Licznik zadań]]"_s), qPrintable(r.value.toString()));
     }
 
     void looksAtAPicture()
@@ -498,7 +498,8 @@ private Q_SLOTS:
 
         r = m_engine->resume(r.call, answering(u"Mleko kosztowało 3,49 zł."_s));
         QVERIFY2(r.ok(), qPrintable(r.error));
-        QVERIFY(file(u"journals/2026-11-11.md"_s).contains(u"  - Mleko kosztowało 3,49 zł."_s));
+        QCOMPARE(r.value.toString(), u"Mleko kosztowało 3,49 zł."_s);
+        QVERIFY(m_statuses.contains(u"Oglądam obrazek „paragon.jpg”…"_s));
     }
 
     void unknownToolsAndTooManyTurns()
@@ -512,29 +513,66 @@ private Q_SLOTS:
         QVERIFY(results[0].toMap().value(u"content"_s).toString().contains(u"No tool named"_s));
         QVERIFY(results[0].toMap().value(u"isError"_s).toBool());
         QVERIFY(results[1].toMap().value(u"isError"_s).toBool());
-        // A model that never stops calling tools: sixteen turns, then the question ends.
+        // A model that never stops calling tools: sixteen turns, then the turn ends with a word
+        // about it (in the notebook's language: it is written into the conversation).
         for (int turn = 2; turn <= 16 && r.status == Status::Suspended; ++turn)
             r = m_engine->resume(r.call, calling({call(u"c%1"_s.arg(turn), u"list_pages"_s, {})}));
         QVERIFY2(r.ok(), qPrintable(r.error));
-        QVERIFY2(r.value.toString().contains(u"16"_s), qPrintable(r.value.toString()));
-        QVERIFY(file(u"journals/2026-11-11.md"_s).contains(u"- 🤖 Zrób coś\n  - …"_s));
+        QCOMPARE(r.value.toString(), u"_(AI nie skończyło po 16 krokach. Napisz, co dalej.)_"_s);
     }
 
-    void summaryWithoutTools()
+    void aConversationGoesOn()
     {
         QVERIFY(open(sampleNotes()));
-        Result r = m_engine->runCommand(u"asystent"_s, u"summarize"_s, {{u"page"_s, u"Dom"_s}});
+        // The page it is about goes before the first message, read again each turn; the history
+        // as it was, the new question last.
+        const QVariantList earlier{QVariantMap{{u"role"_s, u"user"_s}, {u"content"_s, u"Co jest na tej stronie? ([[Dom]])"_s}},
+                                   QVariantMap{{u"role"_s, u"assistant"_s}, {u"content"_s, u"Czynsz i żarówka."_s}}};
+        Result r = ask(u"A co z żółwiem?"_s, u"Dom"_s, earlier);
         QCOMPARE(r.status, Status::Suspended);
-        const QVariantMap request = r.value.toMap().value(u"request"_s).toMap();
-        QVERIFY(!request.contains(u"tools"_s));
-        QVERIFY(request.value(u"prompt"_s).toString().contains(u"Zapłacić czynsz"_s));
-        r = m_engine->resume(r.call, answering(u"Dom: czynsz do zapłacenia."_s));
+        const QVariantList messages = r.value.toMap().value(u"request"_s).toMap().value(u"messages"_s).toList();
+        QCOMPARE(messages.size(), 3);
+        const QString first = messages[0].toMap().value(u"content"_s).toString();
+        QVERIFY2(first.startsWith(u"Dziś jest 2026-11-11.\n\nRozmowa dotyczy strony [[Dom]]:\n\n- [ ] Zapłacić czynsz"_s),
+                 qPrintable(first));
+        QVERIFY(first.endsWith(u"---\n\nCo jest na tej stronie? ([[Dom]])"_s));
+        QCOMPARE(messages[1].toMap().value(u"role"_s).toString(), u"assistant"_s);
+        QCOMPARE(messages[1].toMap().value(u"content"_s).toString(), u"Czynsz i żarówka."_s);
+        QCOMPARE(messages[2].toMap().value(u"content"_s).toString(), u"A co z żółwiem?"_s);
+        r = m_engine->resume(r.call, answering(u"Je sałatę."_s));
+        QCOMPARE(r.value.toString(), u"Je sałatę."_s);
+
+        // A page longer than what goes along: said once, after the first answer.
+        QHash<QString, QString> notes = sampleNotes();
+        notes.insert(u"Długa.md"_s, u"- zażółć gęślą jaźń\n"_s.repeated(2000));
+        QVERIFY(open(notes));
+        r = ask(u"Streść"_s, u"Długa"_s);
+        const QString sent = r.value.toMap().value(u"request"_s).toMap().value(u"messages"_s).toList()[0].toMap().value(u"content"_s).toString();
+        QVERIFY(sent.size() < 31000);
+        QVERIFY(sent.contains(u"\n…"_s));
+        r = m_engine->resume(r.call, answering(u"Powtarza się."_s));
+        QCOMPARE(r.value.toString(), u"Powtarza się.\n\n_(Strona [[Długa]] poszła do AI przycięta do 30000 znaków.)_"_s);
+        r = ask(u"Na pewno?"_s, u"Długa"_s,
+                {QVariantMap{{u"role"_s, u"user"_s}, {u"content"_s, u"Streść"_s}},
+                 QVariantMap{{u"role"_s, u"assistant"_s}, {u"content"_s, u"Powtarza się."_s}}});
+        r = m_engine->resume(r.call, answering(u"Tak."_s));
+        QCOMPARE(r.value.toString(), u"Tak."_s);
+        // A model that says nothing.
+        r = m_engine->resume(ask(u"Halo?"_s).call, answering(u"  "_s));
+        QCOMPARE(r.value.toString(), u"…"_s);
+    }
+
+    void theChatIsNoPaletteCommand()
+    {
+        QVERIFY(open(sampleNotes()));
+        const QList<CommandInfo> commands = m_engine->commands();
+        QCOMPARE(commands.size(), 1);
+        QCOMPARE(commands[0].name, u"chat"_s);
+        QVERIFY(!commands[0].palette);
+        // Run by hand (a view's button, the command line): no conversation, said so, nothing asked.
+        const Result r = m_engine->runCommand(u"asystent"_s, u"chat"_s, {{u"page"_s, u"Dom"_s}});
         QVERIFY2(r.ok(), qPrintable(r.error));
-        QVERIFY(file(u"journals/2026-11-11.md"_s)
-                        .contains(u"- 🤖 Streszczenie [[Dom]]\n  - Dom: czynsz do zapłacenia."_s));
-        // No page on screen: said, nothing asked.
-        QCOMPARE(m_engine->runCommand(u"asystent"_s, u"summarize"_s, {}).value.toString(),
-                 u"Otwórz stronę, którą streścić."_s);
+        QCOMPARE(r.value.toString(), u"Z AI rozmawia się w czacie: ✨ → Nowa rozmowa."_s);
     }
 };
 

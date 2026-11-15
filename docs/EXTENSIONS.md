@@ -274,14 +274,18 @@ end, { label = "Mark the task done", block = true })
 | `b.lang()` | the language to write notes in: `"pl"` or `"en"` |
 | `b.uiLang()` | the interface's language (labels, messages): `"pl"` or `"en"`. The app gives both the interface's language today; ask each for what it means |
 | `b.log(text)`, `print(…)` | a line in the Luau console and in the event log, under the extension's name (at most 4000 characters). `print` joins its values with tabs and writes a table as `table`: build the text yourself |
+| `b.status(text?)` | what the running command is doing now, for the user to see while it waits (a question, a model): "Reading “Home”…". The AI chat shows it under the AI's dots (the assistant says what each tool does); elsewhere nothing shows it yet. Whitespace made single, at most 300 characters; `""` or nothing clears it. Not a text: an error |
 | `b.timer(seconds, label?)` | starts the app's rest timer (1 … 86400 s) — the gym's: its countdown shows in the Gym view, and at the end a notification and a message say "`label` is over" and speak of the next set. One timer at a time: a new one replaces it |
 | `b.data(name)` | read-only data bundled with a built-in extension (the gym's `b.data("exercises")`, the AI assistant's `b.data("reference")` — this document's text); `nil` for extension pages — unless the page overrides a built-in, which keeps the built-in's data |
 
 ## Commands
 
-`b.command(name, fn, { label = …, block = … })` adds a command to the palette. `name` is its id
-within the extension (the palette's id is `ext.<extension>.<name>`); `label` is what the palette
-shows (else the name), with the extension's title under it. Registering a name again replaces it.
+`b.command(name, fn, { label = …, block = …, palette = … })` adds a command to the palette. `name`
+is its id within the extension (the palette's id is `ext.<extension>.<name>`); `label` is what the
+palette shows (else the name), with the extension's title under it. Registering a name again
+replaces it. With **`palette = false`** the palette does not offer it: a view's `b.ui.run` button,
+`brulion-cli extension run` or the app runs it — the AI chat runs the AI assistant's `chat` so
+("AI"); any other value of `palette` changes nothing.
 
 The function gets one table, `ctx`:
 
@@ -290,6 +294,7 @@ The function gets one table, `ctx`:
 | `ctx.page` | the name of the page on screen, `""` when the view on screen is no page (the journal's stream, Tasks, a view of an extension) |
 | `ctx.block` | with `block = true`: the block under the caret (above, "Blocks") |
 | `ctx.selection` | always `""` so far |
+| `ctx.messages` | only in a turn of the AI chat (the AI assistant's `chat`, "AI"): the conversation's messages `{ role = "user" \| "assistant", content }`, the user's last |
 
 With **`block = true`** the command works on the block under the caret: the palette offers it only
 in an editor (not in the Markdown source), and the page is saved first, so the block is read as
@@ -638,8 +643,14 @@ end, { label = "Ask my notes (AI)" })
   llama.cpp, in a plugin the app loads on first use (`src/app/shell/localai.h`).
 
 **The AI assistant** (built in, `src/core/extensions/builtin/asystent.luau`; Settings → Extensions →
-AI, off by default) is an agent: "AI: ask or ask to do…" asks for a question or a request
-(`b.ask`) and sends it with the page on screen (at most 30 000 characters) and twelve tools —
+AI, off by default) is an agent that the **AI chat** talks to (docs/UI.md "AI chat"): a
+conversation is a page in `AI/` (docs/SYNTAX.md §14), and every message sent there runs one turn,
+its command `chat` (`palette = false`: the palette does not offer it; run by hand it says to use
+the chat). The app gives it the conversation's messages (`ctx.messages`, the user's last) and the
+page it is about (`ctx.page`); today's date and that page's text (at most 30 000 characters, read
+again each turn) go before the first message — not into the system text, which stays the same from
+day to day, so that a model on the device keeps what it read of it —; what the command returns is
+the AI's message, which the app writes into the conversation. Twelve tools —
 `search_notes` (`b.search`), `query_notes` (`b.query`, the query language described in the tool's
 description), `list_pages`, `read_page`, the changes `append_to_journal`, `append_to_page`,
 `write_page`, `update_block` (`b.replaceBlock`: a task's status too), `look_at_picture` (a picture
@@ -650,19 +661,23 @@ is needed), and for writing an extension
 sections whose heading has the words asked for), `check_extension` (`b.checkExtension`) and
 `write_extension` (checked first and refused while it does not load or when the page is no
 extension; a new page goes to `Rozszerzenia/` / `Extensions/`). The model calls them as it needs,
-at most sixteen turns, each result at most 12 000 characters (the reference 40 000). **Every change waits for the
-user**: `b.choose` with what would be written (the question dialog shows the lines after the
-first under its title, as plain text) — Allow, Allow every change of this question, No; a no (or
-the dialog closed) goes back to the model as a declined change. An extension it wrote is code
-"changed elsewhere" like any `b.write` of a page: it runs once the user approves it on the page. The answer goes into today's note —
-`- 🤖 <question> ([[Page]])`, its lines as items under it, then `✏️ Changed: [[…]]` with the
-pages changed; "Asking AI…" is said once per question. "AI: summarise this page" sums up the page
-on screen in one request without tools. Both are a tap away on the top bar's ✨ button while the assistant is
-on (docs/UI.md "Top bar": the page on screen, in the journal's stream today's note; a spinner while
-`aiPending`). Like the gym, its source can run from a page of the notebook and be changed there: a
-page tagged as an extension, with `permissions: [write, ai]`, that holds the source and is titled
-"Asystent AI" / "AI assistant" (or has `overrides: asystent`) — copied by hand so far: Settings has
-"Edit the code" for the gym only.
+at most sixteen turns, each result at most 12 000 characters (the reference 40 000); before each
+tool `b.status` says what it does ("Searching the notes: “rent”…", "Reading “Home”…"), before each
+request to the model `b.status("")`. **Every change waits for the user**: `b.choose` with what
+would be written — the chat shows it in the conversation as a card with the options (the dialog
+asks it only while no chat view shows the conversation; it shows the lines after the first under
+its title, as plain text) — Allow, Allow every change of this question, No; a no (or the dialog
+closed) goes back to the model as a declined change. An extension it wrote is code "changed
+elsewhere" like any `b.write` of a page: it runs once the user approves it on the page. The AI's
+message is its answer as the model wrote it, then `✏️ Changed: [[…]]` with the pages changed (and,
+after the first answer, a note when the page it is about went cut); sixteen turns without an
+answer end with a word about it, in the notebook's language. The top bar's ✨ button opens the chat
+while the assistant is on (docs/UI.md "Top bar": a new conversation about the page on screen — in
+the journal's stream today's note —, one beside it in the side panel, the conversations, a summary
+of the page as a new conversation; a spinner while `aiPending`). Like the gym, its source can run
+from a page of the notebook and be changed there: a page tagged as an extension, with
+`permissions: [write, ai]`, that holds the source and is titled "Asystent AI" / "AI assistant" (or
+has `overrides: asystent`) — copied by hand so far: Settings has "Edit the code" for the gym only.
 
 ## Errors
 
@@ -994,7 +1009,8 @@ Home:7
 | `src/core/ai/local.h`, `localfiles.h`, `localrunner.h` | the model on the device: the models the app knows, LFM3's chat format (a request as pieces of text and control tokens, the answer read back, a long request cut), the models' files (downloads), what runs a model and the plugin with it (`llamarunner.h`: llama.cpp, only in builds with `BRULION_LOCAL_AI`) |
 | `src/app/shell/localai.h` | `AppController.localAi`: the chosen model, its download and removal, requests answered on a worker thread |
 | `src/core/extensions/pageextension.h` | extension pages: which pages are extensions, their id, their code with the page's line numbers, permissions, the hash an approval covers; the new-extension page and a built-in's source as a page |
-| `src/app/shell/workspaceextensions.h` | `WorkspaceExtensions` (QML `Workspace.extensions`): the engine for the open notebook, the built-ins the settings switch on, the extension pages and their approval on this device, reloading a page's code when it changes, hooks, the console, questions, messages and the rest timer |
+| `src/app/shell/workspaceextensions.h` | `WorkspaceExtensions` (QML `Workspace.extensions`): the engine for the open notebook, the built-ins the settings switch on, the extension pages and their approval on this device, reloading a page's code when it changes, hooks, the console, questions, messages and the rest timer; a turn of the AI chat (`runChat`: the assistant's `chat`, its answer, failure and `b.status` as signals, its question named by `questionChat`) |
+| `src/app/shell/workspacechats.h` | `WorkspaceChats` (QML `Workspace.chats`): the AI chat's conversations as pages (core `chat`), one turn at a time, Stop, Try again (docs/UI.md "AI chat") |
 | `src/cli/commands_extensions.cpp` | `brulion-cli extension …` (docs/CLI.md "Extensions"): this reference (bundled), the extension pages and their state on the device, a sandbox for checks and runs, writing a page |
 | `src/app/shell/extensionmodels.h` | `ExtensionListModel` (Settings → Extensions), `ExtensionConsoleModel` (the console's lines) |
 | `src/app/shell/extensionviewmodel.h` | `ExtensionView` (QML): a view's node tree as a list; `qml/shell/ShellExtensionView.qml` draws it |
@@ -1021,7 +1037,8 @@ lines, fences in lists and in other fences, permissions, the hash, the new-exten
 gym's source as a page running like the built-in), the notebook host (the dry run, refs that name
 notes only), the gym on a real notebook (writing lines back in Brulion's spelling, history, plans
 with progression, today's view and its actions, a stale line, the catalog, hostile lines, two
-years of workouts), the AI assistant as an agent, the documentation (`tst_extensions_docs`: every
+years of workouts), the AI assistant as an agent (a turn of a conversation: its history, the page it
+is about, what it says it does), the documentation (`tst_extensions_docs`: every
 ```` ```luau ```` example of this document, of docs/SYNTAX.md and of the documentation notebook's
 pages in both languages loads and runs on a real notebook — its commands with their questions and
 the model answered, its views and their actions, its hooks —, both languages have the same
@@ -1037,7 +1054,10 @@ and numbers that are none).
 `tests/app/shell/tst_extensions.cpp` runs the same pages in the app's own class
 (`WorkspaceExtensions`, wired as the Workspace wires it): approval per device, the questions the
 app shows, an extension's own writes that are no "change" and the user's edits that always are,
-code an extension writes waiting for approval, the editor's saves of an approved page. The app's
+code an extension writes waiting for approval, the editor's saves of an approved page;
+`tests/app/content/tst_content_chat.cpp` the AI chat on a real Workspace with the model on the device
+played (a conversation's page and the journal's line, its turns, a change asked in it, Stop, a
+failure and Try again). The app's
 self-test: `checkGym` switches the gym on, writes a plan into today's note through the dialog and
 adds a set in the view; `checkExtensionPages` writes an extension page as a sync would (it waits),
 approves it, opens its view from the palette, saves a change in the editor (it runs at once, still

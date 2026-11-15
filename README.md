@@ -133,9 +133,10 @@ Pandoc Markdown document for Word, LibreOffice, PDF or EPUB).
   server of your own (Ollama) or a small model that runs **on the device itself** (Liquid AI's
   LFM3-VL and LFM3, downloaded once: no key, no internet, nothing sent anywhere; Linux with Nix
   and Android), with the key kept on the device, and may give the model tools the script runs
-  and pictures of the notebook to look at; the built-in **AI assistant** searches and reads the
-  whole notebook to answer a question, looks at its pictures, changes notes only with your yes,
-  and sums up the page on screen into today's note.
+  and pictures of the notebook to look at; the built-in **AI assistant** is a **chat**, as in a
+  messenger: it searches and reads the whole notebook to answer, looks at its pictures, changes
+  notes only with your yes (asked in the conversation), and keeps every conversation as a page
+  of the notebook (`AI/`), linked from the day's journal.
 * Two note modes: a **document** (Obsidian-like live preview: paragraphs, headings and plain
   lists, edited in place) or an **outline** (Logseq-like: every bullet is a block). Chosen when
   a page is created and switchable at any time; stored in the note as `brulion: document` /
@@ -351,9 +352,9 @@ przykładowym notatnikiem.
   **na samym urządzeniu** (LFM3-VL i LFM3 firmy Liquid AI, pobierane raz: bez klucza, bez
   internetu, nic nigdzie nie jest wysyłane; Linux z Nixem i Android), klucz zostaje na urządzeniu,
   a model może dostać narzędzia, które wykonuje skrypt, i obrazki z notatnika do obejrzenia;
-  wbudowany **Asystent AI** przeszukuje i czyta cały notatnik, żeby odpowiedzieć na pytanie,
-  ogląda jego obrazki, zmienia notatki tylko za Twoją zgodą i
-  streszcza otwartą stronę do dzisiejszej notatki. Tagi działają jak linki do stron, jak
+  wbudowany **Asystent AI** to **czat** jak w komunikatorze: przeszukuje i czyta cały notatnik,
+  żeby odpowiedzieć, ogląda jego obrazki, zmienia notatki tylko za Twoją zgodą (pyta w rozmowie)
+  i zapisuje każdą rozmowę jako stronę notatnika (`AI/`) z linkiem w dzienniku z tego dnia. Tagi działają jak linki do stron, jak
   w Logseq: `#praca` otwiera stronę „praca” (tworzoną przy pierwszym wpisie), jej odnośniki
   pokazują bloki z tym tagiem, a zmiana nazwy strony poprawia też tagi. Odnośnik do każdego
   bloku i nagłówka — `((…))`, `[[Strona#^…]]`, `[[Strona#Nagłówek]]` — skopiujesz z menu bloku

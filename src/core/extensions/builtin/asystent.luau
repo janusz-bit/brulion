@@ -1,17 +1,21 @@
 --!strict
 -- Asystent AI (AI assistant): asks the model the user chose in Settings → Extensions → AI.
 --
--- "ask" is an agent: the model has tools to search and read the whole notebook (b.search, b.query,
--- b.pages, b.read) and to change it (append to a page or a day, write a page, change a block). It
--- calls them as it needs, a turn at a time (b.ai with tools), until it answers; every change waits
--- for the user's yes (b.choose: yes, yes to every change of this question, no). It looks at the
--- notebook's pictures — a photo, a scan, a screenshot — with a request of their own (b.ai with
--- `images`: its answer, as text, is the tool's result; a model that sees is needed). It can also write
--- extensions: it reads the extensions' reference (b.data("reference"): docs/EXTENSIONS.md), checks
--- a page in a sandbox (b.checkExtension) and writes it; the app runs that code only once the user
--- approves it on the page, like code from a sync. The answer goes
--- into today's daily note under the question, as an outline, with the pages it changed — readable
--- on a phone and kept with the notes. "summarize" sums up the page on screen in one request.
+-- "chat" is one turn of a conversation in the app's chat view (docs/EXTENSIONS.md "AI"): the app
+-- keeps the conversation as a page of the notebook (AI/…) and calls this command with its messages
+-- (ctx.messages, the user's last) and the page it is about (ctx.page); what the command returns is
+-- the AI's message, which the app writes into the conversation. It is an agent: the model has tools
+-- to search and read the whole notebook (b.search, b.query, b.pages, b.read) and to change it
+-- (append to a page or a day, write a page, change a block). It calls them as it needs, a turn at
+-- a time (b.ai with tools), until it answers, and says what it is doing meanwhile (b.status); every
+-- change waits for the user's yes (b.choose: yes, yes to every change of this question, no — the
+-- chat shows the question in the conversation). It looks at the notebook's pictures — a photo, a
+-- scan, a screenshot — with a request of their own (b.ai with `images`: its answer, as text, is
+-- the tool's result; a model that sees is needed). It can also write extensions: it reads the
+-- extensions' reference (b.data("reference"): docs/EXTENSIONS.md), checks a page in a sandbox
+-- (b.checkExtension) and writes it; the app runs that code only once the user approves it on the
+-- page, like code from a sync. The palette does not offer the command (palette = false): only the
+-- chat has a conversation to give it.
 --
 -- Written with the extensions' public API only (docs/EXTENSIONS.md "AI"); its source can become a
 -- page of the notebook and be changed there, like any built-in extension: its tools, their
@@ -26,42 +30,29 @@ local MAX_PREVIEW_LINES = 40 -- and lines: the dialog has room for every one of 
 
 local WRITTEN = {
     pl = {
-        question = "🤖 %s",
-        about = " ([[%s]])",
-        summary = "🤖 Streszczenie [[%s]]",
         changed = "✏️ Zmienione: %s",
         system = "Jesteś asystentem w aplikacji do notatek Brulion. Masz narzędzia do przeszukiwania i czytania całego notatnika użytkownika i do zmieniania go. Notatki to Markdown: punkty \"- \", zadania \"- [ ]\" i \"- [x]\", terminy \"📅 RRRR-MM-DD\", przypomnienia \"⏰ RRRR-MM-DD GG:MM\", linki [[Strona]], tagi #tag; dziennik to strony dni, nazwane datą (2026-11-12). Zanim odpowiesz na pytanie o notatki, poszukaj w nich (search_notes, query_notes) i przeczytaj, czego potrzebujesz. Obrazki w notatkach to ![[nazwa.jpg]]: gdy pytanie dotyczy obrazka albo tego, co na nim napisane, obejrzyj go (look_at_picture). Zmieniaj notatki tylko wtedy, gdy użytkownik o to prosi; raczej dopisuj, niż przepisuj; niczego nie usuwaj, o ile nie poproszono. Każdą zmianę użytkownik zatwierdza; gdy odmówi, nie ponawiaj jej. Gdy użytkownik chce nowego polecenia, widoku albo automatyzacji w Brulionie, możesz napisać rozszerzenie: najpierw przeczytaj opis (extension_reference: Quick start i części, których potrzebujesz), sprawdź stronę (check_extension), potem ją zapisz (write_extension) i powiedz użytkownikowi, że zadziała po naciśnięciu „Uruchom” na stronie rozszerzenia. Odpowiadasz zwięźle, po polsku, chyba że notatki są w innym języku; zwykłym tekstem albo krótkimi punktami, z linkami [[Strona]] do stron, o których mówisz.",
-        summarySystem = "Jesteś asystentem w aplikacji do notatek. Odpowiadasz zwięźle, po polsku, chyba że notatka jest w innym języku. Piszesz zwykłym tekstem albo krótkimi punktami.",
-        noteIntro = "Notatka „%s”:\n\n%s\n\n",
         today = "Dziś jest %s.\n\n",
-        onScreen = "Na ekranie jest strona [[%s]]:\n\n%s\n\n---\n\n",
-        summarizeAsk = "Streść tę notatkę w 3–5 zdaniach. Na końcu wypisz najważniejsze zadania, jeśli jakieś są.",
+        about = "Rozmowa dotyczy strony [[%s]]:\n\n%s\n\n---\n\n",
         lookAsk = "Opisz krótko, co jest na tym obrazku, i przepisz widoczny na nim tekst.",
+        cut = "_(Strona [[%s]] poszła do AI przycięta do %d znaków.)_",
+        tooLong = "_(AI nie skończyło po %d krokach. Napisz, co dalej.)_",
     },
     en = {
-        question = "🤖 %s",
-        about = " ([[%s]])",
-        summary = "🤖 Summary of [[%s]]",
         changed = "✏️ Changed: %s",
         system = "You are an assistant in the notes app Brulion. You have tools to search and read the user's whole notebook and to change it. Notes are Markdown: items \"- \", tasks \"- [ ]\" and \"- [x]\", due dates \"📅 YYYY-MM-DD\", reminders \"⏰ YYYY-MM-DD HH:MM\", links [[Page]], tags #tag; the journal is one page per day, named by its date (2026-11-12). Before you answer a question about the notes, search them (search_notes, query_notes) and read what you need. Pictures in notes are ![[name.jpg]]: when the question is about a picture or what is written on it, look at it (look_at_picture). Change notes only when the user asks you to; prefer adding to rewriting; never delete anything unless asked. The user approves every change; when they decline one, do not try it again. When the user wants a new command, view or automation in Brulion, you can write an extension: read the reference first (extension_reference: its Quick start and the sections you need), check the page (check_extension), then write it (write_extension) and tell the user it works once they press Run on the extension's page. You answer briefly, in English unless the notes are in another language; plain text or short points, with [[Page]] links to the pages you mention.",
-        summarySystem = "You are an assistant in a notes app. You answer briefly, in English unless the note is in another language. You write plain text or short points.",
-        noteIntro = "The note \"%s\":\n\n%s\n\n",
         today = "Today is %s.\n\n",
-        onScreen = "The page on screen is [[%s]]:\n\n%s\n\n---\n\n",
-        summarizeAsk = "Summarise this note in 3–5 sentences. At the end list the most important tasks, if there are any.",
+        about = "The conversation is about the page [[%s]]:\n\n%s\n\n---\n\n",
         lookAsk = "Describe briefly what this picture shows and write out the text on it.",
+        cut = "_(The page [[%s]] went to the AI cut to %d characters.)_",
+        tooLong = "_(The AI did not finish in %d steps. Say how to go on.)_",
     },
 }
 
 local INTERFACE = {
     pl = {
-        ask = "AI: zapytaj albo poproś…",
-        summarize = "AI: streść tę stronę",
-        prompt = "O co zapytać albo co zrobić w notatkach?",
-        noPage = "Otwórz stronę, którą streścić.",
-        empty = "Ta strona jest pusta.",
-        written = "Odpowiedź AI jest w dzisiejszej notatce.",
-        cut = "(strona przycięta do %d znaków)",
+        chat = "AI: tura rozmowy",
+        chatOnly = "Z AI rozmawia się w czacie: ✨ → Nowa rozmowa.",
         partial = "(Poniżej początek: %d z %d znaków. Reszty tu nie widać.)",
         yes = "Zgoda",
         yesAll = "Zgoda na wszystkie zmiany tego pytania",
@@ -73,16 +64,17 @@ local INTERFACE = {
         changeBlock = "AI chce zmienić wiersz na stronie „%s” na:\n\n%s",
         createExtension = "AI chce utworzyć rozszerzenie „%s” (zadziała, gdy naciśniesz Uruchom na jego stronie):\n\n%s",
         replaceExtension = "AI chce zastąpić rozszerzenie „%s” nowym kodem (znowu poczeka na Uruchom):\n\n%s",
-        tooLong = "AI nie skończyło po %d krokach; to, co zrobiło, jest w dzisiejszej notatce.",
+        searching = "Szukam w notatkach: „%s”…",
+        querying = "Przeglądam notatki: %s…",
+        listing = "Przeglądam strony…",
+        reading = "Czytam „%s”…",
+        looking = "Oglądam obrazek „%s”…",
+        referencing = "Czytam, jak się pisze rozszerzenia…",
+        checking = "Sprawdzam rozszerzenie „%s”…",
     },
     en = {
-        ask = "AI: ask or ask to do…",
-        summarize = "AI: summarise this page",
-        prompt = "What do you want to ask, or to do in your notes?",
-        noPage = "Open the page to summarise.",
-        empty = "This page is empty.",
-        written = "The AI's answer is in today's note.",
-        cut = "(the page cut to %d characters)",
+        chat = "AI: a turn of a conversation",
+        chatOnly = "Talk to the AI in the chat: ✨ → New conversation.",
         partial = "(Below is the beginning: %d of %d characters. The rest is not shown here.)",
         yes = "Allow",
         yesAll = "Allow every change of this question",
@@ -94,7 +86,13 @@ local INTERFACE = {
         changeBlock = "The AI wants to change a line of the page \"%s\" to:\n\n%s",
         createExtension = "The AI wants to create the extension \"%s\" (it runs once you press Run on its page):\n\n%s",
         replaceExtension = "The AI wants to replace the extension \"%s\" with new code (it waits for Run again):\n\n%s",
-        tooLong = "The AI did not finish in %d steps; what it did is in today's note.",
+        searching = "Searching the notes: “%s”…",
+        querying = "Looking through the notes: %s…",
+        listing = "Looking through the pages…",
+        reading = "Reading “%s”…",
+        looking = "Looking at the picture “%s”…",
+        referencing = "Reading how extensions are written…",
+        checking = "Checking the extension “%s”…",
     },
 }
 
@@ -150,38 +148,17 @@ local function preview(s: string): string
     return string.format(T.partial, utf8.len(seen) or #seen, utf8.len(s) or #s) .. "\n\n" .. seen .. "\n…"
 end
 
--- The answer as an outline under its question: every line a child item (a list item's own marker
--- dropped, a heading in bold), empty lines and code fences left out.
-local function outline(answer: string): string
-    local items = {}
-    for line in (answer .. "\n"):gmatch("([^\n]*)\n") do
-        local text = trim(line)
-        if text ~= "" and not text:match("^```") then
-            local heading = text:match("^#+%s+(.+)$")
-            if heading then
-                text = "**" .. heading .. "**"
-            else
-                text = text:gsub("^[-*+]%s+", ""):gsub("^%d+[.)]%s+", "")
-            end
-            table.insert(items, "  - " .. text)
-        end
-    end
-    if #items == 0 then
-        return "  - …"
-    end
-    return table.concat(items, "\n")
-end
-
--- The page's text to send (cut when it is long), "" when there is none.
-local function pageText(page: string, max: number): (string, string?)
+-- The page's text to send (cut when it is long: whole characters, "…" at the end), "" when there
+-- is none; true when it was cut.
+local function pageText(page: string, max: number): (string, boolean)
     if page == "" then
-        return "", nil
+        return "", false
     end
     local text = b.read(page) or ""
     if #text > max then
-        return text:sub(1, max), string.format(T.cut, max)
+        return cut(text, max), true
     end
-    return text, nil
+    return text, false
 end
 
 -- ---- The agent's tools ------------------------------------------------------------------------
@@ -512,12 +489,14 @@ local function runTool(session: Session, name: string, input: any): (string, boo
             return "No query given.", true
         end
         local limit = math.clamp(tonumber(input.limit) or 15, 1, 50)
+        b.status(string.format(T.searching, query))
         local hits = b.search(query, limit)
         if #hits == 0 then
             return "Nothing found for \"" .. query .. "\".", false
         end
         return itemLines(hits), false
     elseif name == "query_notes" then
+        b.status(string.format(T.querying, trim(str(input.query))))
         local ok, result = pcall(b.query, str(input.query), 60)
         if not ok then
             return tostring(result), true
@@ -529,6 +508,7 @@ local function runTool(session: Session, name: string, input: any): (string, boo
             .. ":\n" .. itemLines(result.items), false
     elseif name == "list_pages" then
         local tag = trim(str(input.tag))
+        b.status(T.listing)
         local pages = b.pages(if tag ~= "" then { tag = tag } else {})
         if #pages == 0 then
             return "No pages.", false
@@ -540,6 +520,7 @@ local function runTool(session: Session, name: string, input: any): (string, boo
         local more = if #pages > #shown then "\n… and " .. (#pages - #shown) .. " more" else ""
         return #pages .. " pages: " .. table.concat(shown, "; ") .. more, false
     elseif name == "read_page" then
+        b.status(string.format(T.reading, trim(str(input.name))))
         local text = b.read(str(input.name))
         if text == nil then
             return "No page named \"" .. str(input.name) .. "\".", true
@@ -630,6 +611,7 @@ local function runTool(session: Session, name: string, input: any): (string, boo
         if question == "" then
             question = W.lookAsk
         end
+        b.status(string.format(T.looking, picture))
         -- A request of its own, without the tools: the model's answer about the picture is the
         -- result (text, for any provider). "low": no long thinking over a picture.
         local ok, seen = pcall(b.ai, { prompt = question, images = { picture }, maxTokens = 1500, effort = "low" })
@@ -639,12 +621,14 @@ local function runTool(session: Session, name: string, input: any): (string, boo
         seen = trim(str(seen))
         return if seen == "" then "(The model said nothing about the picture.)" else seen, false
     elseif name == "extension_reference" then
+        b.status(T.referencing)
         return reference(trim(str(input.section)))
     elseif name == "check_extension" then
         local page = trim(str(input.name))
         if page == "" then
             return "A page's name is needed.", true
         end
+        b.status(string.format(T.checking, page))
         return checkReport(b.checkExtension(page, str(input.content)))
     elseif name == "write_extension" then
         local page = trim(str(input.name))
@@ -679,25 +663,33 @@ end
 
 -- ---- Commands -----------------------------------------------------------------------------------
 
-b.command("ask", function(ctx)
-    local question = trim(b.ask(T.prompt))
-    if question == "" then
-        return nil
+-- One turn of a conversation of the chat: ctx.messages ({role, content}, the user's last), ctx.page
+-- (the page it is about, "" none: its text goes along before the first message, read again each
+-- turn). Returns the AI's message: its answer, the pages it changed, a note on a page cut short.
+b.command("chat", function(ctx)
+    local history = ctx.messages
+    if type(history) ~= "table" or #history == 0 then
+        return T.chatOnly -- (run by hand: there is no conversation to answer)
     end
     local page: string = ctx.page or ""
-    local text, note = pageText(page, MAX_PAGE)
+    local text, wasCut = pageText(page, MAX_PAGE)
     -- The day goes in the first message, not in the system text: the system text and the tools
     -- stay the same from day to day, and a model on the device keeps what it read of them on
-    -- disk (docs/EXTENSIONS.md "AI").
-    local first = string.format(W.today, b.today()) .. question
-    if text ~= "" then
-        first = string.format(W.today, b.today()) .. string.format(W.onScreen, page, text) .. question
+    -- disk (docs/EXTENSIONS.md "AI"). The page the conversation is about goes there too.
+    local messages: { any } = {}
+    for i, m in history do
+        local content = str(m.content)
+        if i == 1 then
+            content = string.format(W.today, b.today())
+                .. (if text ~= "" then string.format(W.about, page, text) else "") .. content
+        end
+        table.insert(messages, { role = if str(m.role) == "assistant" then "assistant" else "user", content = content })
     end
     local session: Session = { all = false, changed = {} }
-    local messages: { any } = { { role = "user", content = first } }
     local system: string = W.system
     local answer: string? = nil
     for _ = 1, MAX_ROUNDS do
+        b.status("") -- (the model thinks: the chat's dots alone)
         local said, reply = b.ai({ system = system, messages = messages, tools = TOOLS, maxTokens = 8000 })
         table.insert(messages, { role = "assistant", raw = reply.raw })
         if not reply.toolCalls then
@@ -713,31 +705,14 @@ b.command("ask", function(ctx)
         end
         table.insert(messages, { role = "user", results = results })
     end
-    local title = string.format(W.question, question)
-    if page ~= "" then
-        title ..= string.format(W.about, page)
-    end
-    local entry = "- " .. title .. "\n" .. outline(answer or "")
+    b.status("")
+    local said = if answer == nil then string.format(W.tooLong, MAX_ROUNDS) else trim(answer)
+    local parts = { if said == "" then "…" else said }
     if #session.changed > 0 then
-        entry ..= "\n  - " .. string.format(W.changed, table.concat(session.changed, ", "))
+        table.insert(parts, string.format(W.changed, table.concat(session.changed, ", ")))
     end
-    b.appendToJournal(b.today(), entry)
-    if answer == nil then
-        return string.format(T.tooLong, MAX_ROUNDS)
+    if wasCut and #history == 1 then
+        table.insert(parts, string.format(W.cut, page, MAX_PAGE))
     end
-    return if note then T.written .. " " .. note else T.written
-end, { label = T.ask })
-
-b.command("summarize", function(ctx)
-    local page: string = ctx.page or ""
-    if page == "" then
-        return T.noPage
-    end
-    local text, note = pageText(page, 60000)
-    if trim(text) == "" then
-        return T.empty
-    end
-    local answer = b.ai({ system = W.summarySystem, prompt = string.format(W.noteIntro, page, text) .. W.summarizeAsk })
-    b.appendToJournal(b.today(), "- " .. string.format(W.summary, page) .. "\n" .. outline(answer))
-    return if note then T.written .. " " .. note else T.written
-end, { label = T.summarize })
+    return table.concat(parts, "\n\n")
+end, { label = T.chat, palette = false })

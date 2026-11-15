@@ -63,6 +63,7 @@ public:
 
     std::function<void(const QString &extension, int seconds, const QString &label)> onTimer;
     std::function<void(const QString &extension, const QString &message)> onLog;
+    std::function<void(const QString &extension, const QString &text)> onStatus;
     /// Called after every write the host made (the path written).
     std::function<void(const QString &extension, const QString &path)> onWritten;
 
@@ -92,6 +93,7 @@ public:
     QString uiLanguage() override { return m_options.uiLanguage; }
     void timer(const QString &extension, int seconds, const QString &label) override;
     void log(const QString &extension, const QString &message) override;
+    void status(const QString &extension, const QString &text) override;
 
 private:
     QDateTime now() const;

@@ -120,8 +120,10 @@ public:
     QString uiLanguage() override { return uiLang; }
     void timer(const QString &, int seconds, const QString &label) override { timers.append({seconds, label}); }
     void log(const QString &extension, const QString &message) override { logs << extension + u": "_s + message; }
+    void status(const QString &extension, const QString &text) override { statuses << extension + u": "_s + text; }
 
     QString lastReplace;
+    QStringList statuses;
 };
 
 Extension ext(const QString &id, const QString &source, bool write = true)
@@ -176,6 +178,53 @@ private Q_SLOTS:
         QCOMPARE(c.value.toLongLong(), 42);
         QCOMPARE(engine->runCommand(u"zadania"_s, u"nie-ma"_s, {}).status, Status::NotFound);
         QCOMPARE(engine->runCommand(u"inne"_s, u"z-zaznaczenia"_s, {}).status, Status::NotFound);
+        QVERIFY(commands[0].palette && commands[1].palette);
+    }
+
+    void commandsThePaletteDoesNotOffer()
+    {
+        // palette = false: the app or a view's button runs it, the palette does not list it; any
+        // other value of it (true, a text) changes nothing.
+        LOAD_OK(ext(u"czat"_s, uR"lua(
+            b.command("tura", function(ctx) return #ctx.messages end, { label = "Tura", palette = false })
+            b.command("jawne", function() return 1 end, { palette = true })
+            b.command("tekst", function() return 1 end, { palette = "nie" })
+        )lua"_s));
+        const QList<CommandInfo> commands = engine->commands();
+        QCOMPARE(commands.size(), 3);
+        QCOMPARE(commands[0].name, u"jawne"_s);
+        QVERIFY(commands[0].palette);
+        QVERIFY(commands[1].palette);
+        QCOMPARE(commands[2].name, u"tura"_s);
+        QVERIFY(!commands[2].palette);
+        QCOMPARE(commands[2].label, u"Tura"_s);
+        const QVariantList messages{QVariantMap{{u"role"_s, u"user"_s}, {u"content"_s, u"Cześć"_s}}};
+        QCOMPARE(engine->runCommand(u"czat"_s, u"tura"_s, {{u"messages"_s, messages}}).value.toLongLong(), 1);
+    }
+
+    void statusSaysWhatACallDoes()
+    {
+        LOAD_OK(ext(u"agent"_s, uR"lua(
+            b.command("pracuj", function()
+                b.status("Szukam   w\nnotatkach: „żółw”…")
+                b.status("")
+                b.status()
+                b.status(string.rep("ą", 400))
+                return "gotowe"
+            end)
+            b.command("zle", function() b.status(42) end)
+        )lua"_s));
+        const Result r = engine->runCommand(u"agent"_s, u"pracuj"_s, {});
+        QVERIFY2(r.ok(), qPrintable(r.error));
+        // Whitespace made single, at most 300 characters; "" and nil clear it.
+        QCOMPARE(host.statuses.size(), 4);
+        QCOMPARE(host.statuses[0], u"agent: Szukam w notatkach: „żółw”…"_s);
+        QCOMPARE(host.statuses[1], u"agent: "_s);
+        QCOMPARE(host.statuses[2], u"agent: "_s);
+        QCOMPARE(host.statuses[3], u"agent: "_s + QString(300, u'ą'));
+        const Result bad = engine->runCommand(u"agent"_s, u"zle"_s, {});
+        QCOMPARE(bad.status, Status::Error);
+        QVERIFY2(bad.error.contains(u"b.status"_s), qPrintable(bad.error));
     }
 
     void reloadReplacesRegistrations()

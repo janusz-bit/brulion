@@ -100,6 +100,7 @@ end, { label = "Oznacz zadanie jako zrobione", block = true })
 | `b.formatNumber(n, miejsca)` | liczbę jako tekst, w polskim notatniku z przecinkiem: `82,5` |
 | `b.lang()`, `b.uiLang()` | język notatek i język interfejsu: `"pl"` albo `"en"` |
 | `b.log(tekst)`, `print(…)` | wiersz w konsoli Luau |
+| `b.status(tekst)` | mówi, co robi teraz polecenie czekające na odpowiedź („Czytam „Dom”…”); czat z AI pokazuje to pod kropkami AI, `b.status("")` to czyści |
 | `b.timer(sekundy, etykieta)` | uruchamia timer przerwy (ten ze strony [[Siłownia]]): powiadomienie, gdy czas minie |
 | `b.data(nazwa)` | dane dołączone do wbudowanego rozszerzenia (lista ćwiczeń Siłowni, opis pisania rozszerzeń dla Asystenta AI); we własnym `nil` |
 
@@ -108,6 +109,7 @@ end, { label = "Oznacz zadanie jako zrobione", block = true })
 
 - `ctx.page` to nazwa strony na ekranie; pusty tekst, gdy żadnej nie ma.
 - Z `block = true` polecenie działa na bloku pod kursorem, `ctx.block`, a paleta pokazuje je tylko w notatce. Sprawdź, czy `ctx.block` jest.
+- Z `palette = false` paleta go nie pokazuje: uruchamia je przycisk widoku (`b.ui.run`) albo sama aplikacja — tak czat z AI uruchamia polecenie `chat` asystenta AI.
 - Tekst, który funkcja zwróci, pojawia się jako komunikat. Można nie zwracać niczego.
 
 ## Widoki

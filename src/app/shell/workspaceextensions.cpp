@@ -270,9 +270,17 @@ void WorkspaceExtensions::setNotifier(std::function<void(const QString &, const 
 void WorkspaceExtensions::reload()
 {
     cancelQuestion();
+    // A turn of the AI chat on its way ends here: the chat says so.
+    QStringList chats;
+    for (const CallContext &ctx : std::as_const(m_calls)) {
+        if (!ctx.chat.isEmpty())
+            chats << ctx.chat;
+    }
     m_engine.reset();
     m_host.reset();
     m_calls.clear();
+    for (const QString &chat : std::as_const(chats))
+        Q_EMIT chatFailed(chat, tr("The AI assistant was loaded again meanwhile: try again."));
     m_questionCall = 0;
     ++m_generation; // AI answers still on their way find no call
     m_loadedKeys.clear();
@@ -306,6 +314,11 @@ bool WorkspaceExtensions::ensureEngine()
     m_host->onLog = [this](const QString &extension, const QString &text) {
         qCInfo(lcApp, "extension %s: %s", qUtf8Printable(extension), qUtf8Printable(text));
         m_console->append(u"print"_s, text, extension == kConsole ? QString() : title(extension));
+    };
+    // b.status: the chat shows what its turn does; other calls say nothing that way (yet).
+    m_host->onStatus = [this](const QString &, const QString &text) {
+        if (!m_statusChat.isEmpty())
+            Q_EMIT chatStatus(m_statusChat, text);
     };
     m_engine = std::make_unique<extensions::Engine>();
     QString error;
@@ -562,12 +575,15 @@ void WorkspaceExtensions::handleResult(const extensions::Result &r)
         }
         cancelQuestion(); // one question at a time: an older one is answered "cancelled"
         m_questionCall = r.call;
+        m_questionChat = ctx.chat;
         setQuestion(request);
         return;
     }
     if (r.call)
         m_calls.remove(r.call);
-    if (ctx.console)
+    if (!ctx.chat.isEmpty())
+        chatResult(ctx.chat, r);
+    else if (ctx.console)
         consoleResult(r, ctx.toast);
     else if (ctx.hook)
         hookResult(ctx, r);
@@ -611,7 +627,7 @@ void WorkspaceExtensions::dispatchAi(int call, const QVariantMap &request)
         // (A further turn of the same call: said once; the top bar's ✨ spins meanwhile.)
     } else if (ctx.console) {
         m_console->append(u"info"_s, tr("Asking AI…"));
-    } else if (!ctx.hook) {
+    } else if (!ctx.hook && ctx.chat.isEmpty()) { // (the chat shows its own dots)
         Q_EMIT message(tr("Asking AI…"), u"info"_s);
     }
     QString error;
@@ -633,7 +649,12 @@ void WorkspaceExtensions::finishAi(int call, const QVariantMap &reply, quint64 g
     m_aiPending = std::max(0, m_aiPending - 1);
     Q_EMIT aiPendingChanged();
     if (generation != m_generation || !m_engine || !m_engine->waitingCalls().contains(call)) {
-        m_calls.remove(call); // its extension was loaded again, or the notebook closed
+        // Its extension was loaded again, or the notebook closed. A chat's turn says so (a
+        // stopped one is no longer among the calls: nothing).
+        // (A new engine said so in reload().)
+        const CallContext ctx = m_calls.take(call);
+        if (!ctx.chat.isEmpty() && generation == m_generation)
+            Q_EMIT chatFailed(ctx.chat, tr("The AI assistant was loaded again meanwhile: try again."));
         return;
     }
     if (m_engine->isRunning()) {
@@ -641,7 +662,93 @@ void WorkspaceExtensions::finishAi(int call, const QVariantMap &reply, quint64 g
         QTimer::singleShot(0, this, [this, call, reply, generation] { finishAi(call, reply, generation); });
         return;
     }
-    handleResult(m_engine->resume(call, reply));
+    handleResult(resumeCall(call, reply));
+}
+
+extensions::Result WorkspaceExtensions::resumeCall(int call, const QVariant &value)
+{
+    const QString before = std::exchange(m_statusChat, m_calls.value(call).chat);
+    const extensions::Result r = m_engine->resume(call, value);
+    m_statusChat = before;
+    return r;
+}
+
+// ---- the AI chat ---------------------------------------------------------------------------------
+
+bool WorkspaceExtensions::runChat(const QString &path, const QVariantList &messages, const QString &page)
+{
+    if (!m_engine || !m_engine->isLoaded(u"asystent"_s)) {
+        Q_EMIT chatFailed(path, tr("The AI assistant is off: switch it on in Settings → Extensions → AI."));
+        return false;
+    }
+    const QVariantMap ctx{{u"page"_s, page}, {u"selection"_s, QString()}, {u"messages"_s, messages}};
+    cancelQuestion();
+    m_current = CallContext{};
+    m_current.chat = path;
+    const QString before = std::exchange(m_statusChat, path);
+    const extensions::Result r = m_engine->runCommand(u"asystent"_s, u"chat"_s, ctx);
+    m_statusChat = before;
+    handleResult(r);
+    m_current = CallContext{};
+    return true;
+}
+
+void WorkspaceExtensions::stopChat(const QString &path)
+{
+    if (!m_engine || path.isEmpty())
+        return;
+    for (auto it = m_calls.begin(); it != m_calls.end();) {
+        if (it->chat != path) {
+            ++it;
+            continue;
+        }
+        const int call = it.key();
+        if (call == m_questionCall) { // (its question goes with it, unanswered)
+            m_questionCall = 0;
+            m_questionKind.clear();
+            m_questionTitle.clear();
+            m_questionOptions.clear();
+            m_questionChat.clear();
+            Q_EMIT questionChanged();
+        }
+        m_engine->cancel(call); // (a model's answer on its way finds no call: finishAi drops it)
+        it = m_calls.erase(it);
+    }
+    if (m_reconcilePending && !isWaiting())
+        reconcile();
+}
+
+void WorkspaceExtensions::chatResult(const QString &path, const extensions::Result &r)
+{
+    switch (r.status) {
+    case extensions::Status::Ok: {
+        const QString text = r.value.metaType().id() == QMetaType::QString ? r.value.toString().trimmed() : QString();
+        if (text.isEmpty())
+            Q_EMIT chatFailed(path, tr("The AI assistant gave no answer."));
+        else
+            Q_EMIT chatAnswered(path, text);
+        break;
+    }
+    case extensions::Status::NotFound:
+        Q_EMIT chatFailed(path, tr("The AI assistant is off: switch it on in Settings → Extensions → AI."));
+        break;
+    case extensions::Status::Timeout:
+        Q_EMIT chatFailed(path, tr("The extension took too long and was stopped."));
+        break;
+    case extensions::Status::OutOfMemory:
+        Q_EMIT chatFailed(path, tr("The extension needed too much memory and was stopped."));
+        break;
+    default: {
+        qCWarning(lcApp, "AI chat: %s", qUtf8Printable(r.error));
+        m_console->append(u"error"_s, r.error);
+        // The model's or the provider's own words ("b.ai: no connection: …") without the script's
+        // line before them.
+        const QString first = r.error.section(u'\n', 0, 0);
+        const qsizetype ai = first.indexOf(u"b.ai: "_s);
+        Q_EMIT chatFailed(path, ai >= 0 ? tr("AI: %1").arg(first.mid(ai + 6)) : tr("The extension failed: %1").arg(first));
+    }
+    }
+    Q_EMIT changed(); // (its tools may have written pages: views show them)
 }
 
 void WorkspaceExtensions::testAi()
@@ -1186,8 +1293,9 @@ void WorkspaceExtensions::answer(const QVariant &value)
     m_questionKind.clear();
     m_questionTitle.clear();
     m_questionOptions.clear();
+    m_questionChat.clear();
     Q_EMIT questionChanged();
-    handleResult(m_engine->resume(call, value));
+    handleResult(resumeCall(call, value));
     if (m_reconcilePending && !isWaiting())
         reconcile();
 }

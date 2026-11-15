@@ -1,7 +1,8 @@
 # brulion_content — the C++ side of the content views (docs/UI.md: JournalsView, PageView,
 # AllPagesView, TagsView, SearchView, TrashView, HistoryView and the side panel): JournalListModel,
 # BacklinksModel / TagBlocksModel (block references grouped by page, unlinked mentions -> links),
-# TagListModel, PageListModel, SearchResultModel, HistoryModel, OutlineModel and PageTools (rename
+# TagListModel, PageListModel, SearchResultModel, HistoryModel, ChatMessageModel / ChatListModel
+# (the AI chat's conversations), OutlineModel and PageTools (rename
 # impact, properties summary, wiki links, page export), on the WorkspaceListModel base (diffed
 # updates, so delegates survive background changes) and the pure helpers of contentutil.h.
 # A static library so tests/app/content links it without the app; the app's QML module "Brulion"
@@ -17,12 +18,13 @@ qt_add_library(brulion_content STATIC
     pagelistmodel.h pagelistmodel.cpp
     searchmodel.h searchmodel.cpp
     historymodel.h historymodel.cpp
+    chatmodels.h chatmodels.cpp
     outlinemodel.h outlinemodel.cpp
     pagetools.h pagetools.cpp
 )
 target_include_directories(brulion_content PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(brulion_content
     PUBLIC Qt6::Core Qt6::Gui brulion_shell brulion_core_index brulion_core_markdown brulion_core_dates
-    PRIVATE brulion_core_text brulion_core_util brulion_core_vault brulion_core_io)
+    PRIVATE brulion_core_text brulion_core_util brulion_core_vault brulion_core_io brulion_core_chat)
 qt_extract_metatypes(brulion_content)
 brulion_set_warnings(brulion_content)

@@ -13,6 +13,13 @@
 //   extensions->runCommand(u"silownia"_s, u"add-set"_s, path, line);   // on the block under the caret
 //   QML: Workspace.extensions.questionKind ("" | "ask" | "choose" | "form") → answerText / answerChoice /
 //        setFieldValue + answerForm / cancelQuestion
+//   extensions->runChat(u"AI/2026-11-15 Pytanie.md"_s, messages, u"Dom"_s);   // a turn of the AI chat
+//
+// The AI chat (WorkspaceChats): runChat() runs the assistant's command "chat" with a
+// conversation's messages; its value arrives as chatAnswered(), an error or a missing assistant as
+// chatFailed(), what it says it does (b.status) as chatStatus(). Its questions (a change to
+// confirm) are the usual question, with questionChat naming the conversation, so the chat shows it
+// in the conversation instead of the dialog.
 //
 // The Workspace tells it about the notebook: indexReady() (scan every page once), notesChanged()
 // (the pages a change touched: an extension page loads again, "change" hooks), savedByEditor()
@@ -120,6 +127,8 @@ class WorkspaceExtensions : public QObject {
     Q_PROPERTY(int waitingApproval READ waitingApproval NOTIFY revisionChanged FINAL)
     /// b.ai requests on their way (the console shows that it waits).
     Q_PROPERTY(int aiPending READ aiPending NOTIFY aiPendingChanged FINAL)
+    /// The conversation (its path) whose turn asks the waiting question, "" for any other's.
+    Q_PROPERTY(QString questionChat READ questionChat NOTIFY questionChanged FINAL)
 
 public:
     using Clock = std::function<QDateTime()>;
@@ -210,6 +219,15 @@ public:
     bool act(const QString &extension, const QString &view, const QString &action, const QVariantMap &args);
     bool isWaiting() const;
 
+    // ---- the AI chat (WorkspaceChats) --------------------------------------------------------
+    /// Runs the assistant's turn in the conversation `path` (asystent's "chat": ctx.messages,
+    /// ctx.page): its answer comes as chatAnswered(path, …), a failure as chatFailed(path, …).
+    /// False (and chatFailed) when the assistant is not loaded.
+    bool runChat(const QString &path, const QVariantList &messages, const QString &page);
+    /// Drops the waiting turn of the conversation `path` (its question too): no answer comes.
+    void stopChat(const QString &path);
+    QString questionChat() const { return m_questionChat; }
+
     QString questionKind() const { return m_questionKind; }
     int questionSerial() const { return m_questionSerial; }
     QString questionTitle() const { return m_questionTitle; }
@@ -238,6 +256,12 @@ Q_SIGNALS:
     void message(const QString &text, const QString &kind);
     /// Something changed what views show (a command or action finished, extensions on or off).
     void changed();
+    /// A turn of runChat() ended with the AI's message.
+    void chatAnswered(const QString &path, const QString &text);
+    /// A turn of runChat() failed: why, for the user.
+    void chatFailed(const QString &path, const QString &error);
+    /// What the conversation's turn does now (b.status; "" = nothing to say).
+    void chatStatus(const QString &path, const QString &text);
 
 private:
     /// An extension page of the notebook as read from the index.
@@ -280,6 +304,7 @@ private:
         bool fromAction = false; // a view's action
         bool hook = false; // a hook: errors to the console, never a question
         bool askedAi = false; // "Asking AI…" said once per call (an agent's loop asks many times)
+        QString chat; // a turn of the AI chat: the conversation's path
         int hookId = 0;
         QString hookEvent;
         QString extension;
@@ -287,6 +312,9 @@ private:
     /// A call's result: a question shown, an AI request sent, or its end (by its context).
     void handleResult(const extensions::Result &result);
     void handle(const extensions::Result &result, bool fromAction);
+    void chatResult(const QString &path, const extensions::Result &result);
+    /// resume() of `call` with the conversation it belongs to known to b.status.
+    extensions::Result resumeCall(int call, const QVariant &value);
     void dispatchAi(int call, const QVariantMap &request);
     void finishAi(int call, const QVariantMap &reply, quint64 generation);
     void processPages();
@@ -328,6 +356,8 @@ private:
     CallContext m_current; // the context of the call starting now
     QHash<int, CallContext> m_calls; // waiting calls by id
     int m_questionCall = 0; // the call the shown question belongs to
+    QString m_questionChat; // its conversation, when a chat's turn asks
+    QString m_statusChat; // the conversation of the call running now (b.status goes there)
     bool m_reconcilePending = false; // pages changed while a question waited
     QStringList m_pendingPaths; // changed notes not looked at yet (processPages())
     QTimer m_pagesTimer;

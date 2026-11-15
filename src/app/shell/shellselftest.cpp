@@ -5652,14 +5652,14 @@ void checkQrCode(QQuickWindow *window, AppController *app, const Check &check)
 }
 
 /// The AI assistant's ✨ on the top bar: none while the assistant is off; switched on, its menu on
-/// a page — "Summarise this page" enabled —, "Ask the AI…" running the assistant's
-/// question (b.ask: the extension's question, cancelled here: no model is asked), "AI settings…"
-/// opening the settings' Extensions section.
+/// a page — "Summarise this page" enabled —, "New conversation" opening the AI chat on a new
+/// conversation about the page (its chip, the field, the suggestions; nothing sent: no model is
+/// asked), Back returning to the page, "Conversations" opening the list, "AI settings…" opening the
+/// settings' Extensions section.
 void checkAiButton(QQuickWindow *window, AppController *app, const Check &check)
 {
     const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
     AppSettings *settings = app->settings();
-    WorkspaceExtensions *ext = app->workspace()->extensions();
     const auto named = [&](const QString &name) { return shownNamed(window->contentItem(), name); };
     const bool was = settings->assistantEnabled();
     const QString page = u"Projekty/Remont mieszkania.md"_s;
@@ -5669,11 +5669,20 @@ void checkAiButton(QQuickWindow *window, AppController *app, const Check &check)
           "a page is open for the AI button");
     settle(200);
     check(named(u"topBarAi"_s) == nullptr, "no ✨ on the top bar while the AI assistant is off");
+    check(!app->commands()->ids().contains(u"go.chat"_s), "and no AI chat in the palette");
     settings->setAssistantEnabled(true);
     QQuickItem *button = nullptr;
     check(waitFor([&] { return (button = named(u"topBarAi"_s)) != nullptr; }), "the assistant on: ✨ on the top bar");
-    check(waitFor([&] { return app->commands()->ids().contains(u"ext.asystent.ask"_s); }, 10000),
-          "the assistant's commands are loaded");
+    check(waitFor([&] {
+              const auto commands = app->workspace()->extensions()->commands();
+              return std::ranges::any_of(commands, [](const extensions::CommandInfo &c) {
+                  return c.extension == u"asystent" && c.name == u"chat" && !c.palette;
+              });
+          }, 10000),
+          "the assistant is loaded: its turn of the chat, no palette command");
+    check(app->commands()->ids().contains(u"go.chat"_s) && app->commands()->ids().contains(u"ai.newChat"_s)
+                  && !app->commands()->ids().contains(u"ext.asystent.chat"_s),
+          "the palette has the AI chat and a new conversation, not the assistant's turn");
     const auto openMenu = [&] {
         closeMenus(window);
         if (QQuickItem *b = named(u"topBarAi"_s))
@@ -5682,31 +5691,40 @@ void checkAiButton(QQuickWindow *window, AppController *app, const Check &check)
     };
     check(openMenu(), "a tap or click on ✨ opens its menu");
     QQuickItem *summarize = named(u"aiSummarize"_s);
-    check(summarize && summarize->isEnabled() && named(u"aiSettings"_s) != nullptr,
-          "on a page: “Summarise this page” enabled, and the AI's settings");
-    // "Ask the AI…": the assistant asks for the question (cancelled: no model is asked).
+    check(summarize && summarize->isEnabled() && named(u"aiSettings"_s) != nullptr && named(u"aiChats"_s) != nullptr,
+          "on a page: “Summarise this page” enabled, the conversations and the AI's settings");
+    // "New conversation": the chat, about the page on screen; nothing is sent yet.
     if (QQuickItem *ask = named(u"aiAsk"_s))
         tapOrClick(window, pointIn(ask), touch);
-    // (The question's dialog is a popup: its text field is what shows.)
-    check(waitFor([&] { return ext->isWaiting() && named(u"extensionQuestionText"_s) != nullptr; }, 10000),
-          "“Ask the AI…” runs the assistant: its question shows");
-    // Its "Cancel", tapped or clicked: the dialog goes, the question is cancelled.
-    QQuickItem *sheet = named(u"extensionQuestionText"_s);
-    while (sheet && sheet->parentItem() && !isA(sheet->parentItem(), "QQuickOverlay"))
-        sheet = sheet->parentItem();
-    QQuickItem *cancel = sheet ? findShown(sheet,
-                                           [](QQuickItem *item) {
-                                               const QString text = item->property("text").toString();
-                                               return isA(item, "BButton") && (text == u"Anuluj" || text == u"Cancel");
-                                           })
-                               : nullptr;
-    settle(300); // (a phone's sheet slides in)
-    if (cancel)
-        tapOrClick(window, pointIn(cancel), touch);
-    check(cancel && waitFor([&] { return !ext->isWaiting() && named(u"extensionQuestionText"_s) == nullptr; }, 10000),
-          "its “Anuluj” cancels it: the dialog goes, nothing is asked");
-    settle(300); // (the sheet's closing animation)
+    check(waitFor([&] {
+              return app->currentView() == u"chat" && app->currentRoute().value(u"new"_s).toBool()
+                     && named(u"chatInput"_s) != nullptr;
+          }),
+          "“New conversation” opens the AI chat with its field");
+    QQuickItem *chip = named(u"chatPage"_s);
+    check(chip && chip->property("text").toString() == u"Remont mieszkania"_s,
+          "the page on screen goes along: its chip above the field");
+    check(named(u"chatSuggestSummary"_s) != nullptr && named(u"chatEmpty"_s) != nullptr,
+          "a new conversation suggests what to ask, a summary of the page among it");
+    QQuickItem *send = named(u"chatSend"_s);
+    check(send && !send->isEnabled(), "nothing typed: nothing to send");
+    check(app->workspace()->chats()->running().isEmpty(),
+          "no conversation was started by opening the chat");
+    app->back();
+    check(waitFor([&] { return app->currentRoute().value(u"path"_s).toString() == page; }), "Back returns to the page");
+    settle(300);
     check(openMenu(), "the menu opens again");
+    if (QQuickItem *list = named(u"aiChats"_s))
+        tapOrClick(window, pointIn(list), touch);
+    check(waitFor([&] {
+              return app->currentView() == u"chat" && app->currentRoute().value(u"path"_s).toString().isEmpty()
+                     && named(u"chatConversations"_s) != nullptr;
+          }),
+          "“Conversations” opens the list of conversations");
+    app->back();
+    check(waitFor([&] { return app->currentRoute().value(u"path"_s).toString() == page; }), "Back returns to the page again");
+    settle(300);
+    check(openMenu(), "and the menu opens once more");
     if (QQuickItem *more = named(u"aiSettings"_s))
         tapOrClick(window, pointIn(more), touch);
     check(waitFor([&] {

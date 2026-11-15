@@ -70,6 +70,7 @@ qt_add_library(brulion_shell STATIC
     ${_brulion_shell_dir}/workspacereminders.h ${_brulion_shell_dir}/workspacereminders.cpp
     ${_brulion_shell_dir}/workspacebackups.h ${_brulion_shell_dir}/workspacebackups.cpp
     ${_brulion_shell_dir}/workspaceextensions.h ${_brulion_shell_dir}/workspaceextensions.cpp
+    ${_brulion_shell_dir}/workspacechats.h ${_brulion_shell_dir}/workspacechats.cpp
     ${_brulion_shell_dir}/extensionviewmodel.h ${_brulion_shell_dir}/extensionviewmodel.cpp
     ${_brulion_shell_dir}/extensionmodels.h ${_brulion_shell_dir}/extensionmodels.cpp
     ${_brulion_shell_dir}/workspacesync.h ${_brulion_shell_dir}/workspacesync.cpp
@@ -95,7 +96,7 @@ target_include_directories(brulion_shell PUBLIC ${_brulion_shell_dir})
 target_link_libraries(brulion_shell
     PUBLIC Qt6::Core Qt6::Gui Qt6::Qml brulion_editorhost brulion_core_vault brulion_core_index brulion_core_markdown
            brulion_core_reminders brulion_core_dates brulion_core_log brulion_core_notebook brulion_core_backup
-           brulion_core_extensions brulion_core_ai
+           brulion_core_extensions brulion_core_ai brulion_core_chat
     PRIVATE Qt6::Network brulion_core_appupdate brulion_core_util brulion_core_text brulion_core_sync brulion_core_io brulion_core_webpicture
             brulion_core_github
             brulion_core_drawing brulion_notify brulion_background

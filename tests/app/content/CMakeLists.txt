@@ -6,6 +6,10 @@ brulion_add_test(tst_content_util SOURCES tst_content_util.cpp
     LIBS brulion_content brulion_core_markdown brulion_core_dates brulion_core_index)
 brulion_add_test(tst_content_models SOURCES tst_content_models.cpp
     LIBS brulion_content brulion_shell brulion_core_vault Qt6::Gui)
+# The AI chat on a real Workspace, the model on the device played (tst_content_chat.cpp): a
+# conversation's page, its turns, a change asked in it, Stop, a failure, the messages and the list.
+brulion_add_test(tst_content_chat SOURCES tst_content_chat.cpp
+    LIBS brulion_content brulion_shell brulion_core_vault brulion_core_ai Qt6::Gui)
 
 # The views in their real QML (qml-smoke.sh): every content view (journals, a page with its side
 # panel and dialogs, all pages, tags, a tag, search, trash, history) at desktop and phone sizes

@@ -548,6 +548,7 @@ void Engine::pushEnvironment(const QString &extension)
     set("lang", &Engine::apiLang);
     set("uiLang", &Engine::apiUiLang);
     set("log", &Engine::apiLog);
+    set("status", &Engine::apiStatus);
     set("timer", &Engine::apiTimer);
     set("data", &Engine::apiData);
     set("ask", &Engine::apiAsk);
@@ -675,7 +676,7 @@ QList<CommandInfo> Engine::commands() const
     QList<CommandInfo> out;
     for (auto it = m_commands.cbegin(); it != m_commands.cend(); ++it) {
         const QString name = it.key().mid(it->extension.size() + 1);
-        out.append({it->extension, name, it->label.isEmpty() ? name : it->label, it->needsBlock});
+        out.append({it->extension, name, it->label.isEmpty() ? name : it->label, it->needsBlock, it->palette});
     }
     std::sort(out.begin(), out.end(), [](const CommandInfo &a, const CommandInfo &b) {
         return a.extension != b.extension ? a.extension < b.extension : a.name < b.name;
@@ -973,6 +974,7 @@ int Engine::apiSorted(lua_State *L) { return finishApi(L, self(L)->sortedImpl(L)
 int Engine::apiFold(lua_State *L) { return finishApi(L, self(L)->foldImpl(L)); }
 int Engine::apiFormatNumber(lua_State *L) { return finishApi(L, self(L)->formatImpl(L)); }
 int Engine::apiLog(lua_State *L) { return finishApi(L, self(L)->logImpl(L)); }
+int Engine::apiStatus(lua_State *L) { return finishApi(L, self(L)->statusImpl(L)); }
 int Engine::apiPrint(lua_State *L) { return finishApi(L, self(L)->printImpl(L)); }
 int Engine::apiTimer(lua_State *L) { return finishApi(L, self(L)->timerImpl(L)); }
 int Engine::apiData(lua_State *L) { return finishApi(L, self(L)->dataImpl(L)); }
@@ -1022,6 +1024,7 @@ int Engine::commandImpl(lua_State *L)
         return failWith(L, u"b.command: argument 2 must be a function"_s);
     QString label;
     bool needsBlock = false;
+    bool palette = true;
     if (lua_type(L, 3) == LUA_TTABLE) {
         lua_rawgetfield(L, 3, "label");
         if (lua_type(L, -1) == LUA_TSTRING)
@@ -1030,9 +1033,12 @@ int Engine::commandImpl(lua_State *L)
         lua_rawgetfield(L, 3, "block");
         needsBlock = lua_toboolean(L, -1);
         lua_pop(L, 1);
+        lua_rawgetfield(L, 3, "palette");
+        palette = lua_type(L, -1) != LUA_TBOOLEAN || lua_toboolean(L, -1);
+        lua_pop(L, 1);
     }
     lua_pushvalue(L, 2);
-    Handler h{extension, lua_ref(L, -1), 0, label, needsBlock, {}};
+    Handler h{extension, lua_ref(L, -1), 0, label, needsBlock, {}, palette};
     lua_pop(L, 1);
     const QString key = extension + u'/' + name;
     if (const auto it = m_commands.constFind(key); it != m_commands.constEnd())
@@ -1053,7 +1059,7 @@ int Engine::viewImpl(lua_State *L)
         return failWith(L, u"b.view: argument 3 must be a table of actions"_s);
     if (!lua_isnoneornil(L, 4) && lua_type(L, 4) != LUA_TTABLE)
         return failWith(L, u"b.view: argument 4 must be a table ({label = …, icon = …})"_s);
-    Handler h{extension, 0, 0, {}, false, {}};
+    Handler h{extension, 0, 0, {}, false, {}, true};
     if (lua_type(L, 4) == LUA_TTABLE) {
         lua_rawgetfield(L, 4, "label");
         if (lua_type(L, -1) == LUA_TSTRING)
@@ -1336,6 +1342,15 @@ int Engine::logImpl(lua_State *L)
     if (!argString(L, 1, "b.log", &message))
         return kRaise;
     m_host->log(extensionOf(L), message.left(4000));
+    return 0;
+}
+
+int Engine::statusImpl(lua_State *L)
+{
+    QString text;
+    if (!argOptString(L, 1, "b.status", &text))
+        return kRaise;
+    m_host->status(extensionOf(L), text.simplified().left(300));
     return 0;
 }
 

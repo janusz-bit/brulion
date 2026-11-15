@@ -140,9 +140,10 @@ QString brulionEmoji()
     // Reminders and alarms (⏰ ⏰! 🔔), the task fields of the Tasks-plugin syntax (docs/SYNTAX.md):
     // dates, recurrence, priorities, done/cancelled, ids and dependencies, created; attachments
     // and images in rendered notes; the page icon dialog's common emoji (docs/UI.md "Page icon and
-    // cover"). tst_fallback_fonts checks that src/ uses no other emoji.
+    // cover"); the AI chat's messages (🤖 the AI's, 🧑 the user's: docs/SYNTAX.md §14).
+    // tst_fallback_fonts checks that src/ uses no other emoji.
     return u"⏰🔔📅⏳🛫✅❌🔁🔂🔺⏫🔼🔽⏬➕🆔🏁📆📎🖼🗓⛔⌛"
-           u"📝📚📖📓📄📁📂✔⭐🌟✨💡🔥❤💯🎯🏆🚩🚀✈🚗🚲🏠🏢🏫🏥🌍🌱🌳🌸🌹🍀☀🌙⛅❄⚡🌈🍎🍕🍰☕🍷🎉🎁🎂🎓🎨🎵🎮🎬📷💻📱🖥🔧🔨🛠⚙🔑🔒📦📌📍🔖🏷💼💰💳📈📊📋🧾✉📧📞💬💭📢🧠💪🧘🏃🩺🐱🐶👪👶😀😊😎🤔🙏👍👋🧳🛒🧹🤖🔍🗂🔴🟠🟡🟢🔵🟣"_s;
+           u"📝📚📖📓📄📁📂✔⭐🌟✨💡🔥❤💯🎯🏆🚩🚀✈🚗🚲🏠🏢🏫🏥🌍🌱🌳🌸🌹🍀☀🌙⛅❄⚡🌈🍎🍕🍰☕🍷🎉🎁🎂🎓🎨🎵🎮🎬📷💻📱🖥🔧🔨🛠⚙🔑🔒📦📌📍🔖🏷💼💰💳📈📊📋🧾✉📧📞💬💭📢🧠💪🧘🏃🩺🐱🐶👪👶😀😊😎🤔🙏👍👋🧳🛒🧹🤖🧑🔍🗂🔴🟠🟡🟢🔵🟣"_s;
 }
 
 QString brulionSymbols()

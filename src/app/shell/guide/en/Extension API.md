@@ -100,6 +100,7 @@ end, { label = "Mark the task done", block = true })
 | `b.formatNumber(n, decimals)` | a number as text, with the decimal comma in a Polish notebook: `82,5` |
 | `b.lang()`, `b.uiLang()` | the language of the notes and of the interface: `"pl"` or `"en"` |
 | `b.log(text)`, `print(…)` | a line in the Luau console |
+| `b.status(text)` | says what a command waiting for an answer is doing now ("Reading “Home”…"); the AI chat shows it under the AI's dots, `b.status("")` clears it |
 | `b.timer(seconds, label)` | starts the rest timer of the [[Gym]]: a notification when the time is up |
 | `b.data(name)` | data that comes with a built-in extension (the gym's list of exercises, the AI assistant's reference for writing extensions); `nil` in your own |
 
@@ -108,6 +109,7 @@ end, { label = "Mark the task done", block = true })
 
 - `ctx.page` is the name of the page on screen, an empty text when there is none.
 - With `block = true` the command works on the block under the cursor, `ctx.block`, and the palette offers it only in a note. Check that `ctx.block` is there.
+- With `palette = false` the palette does not offer it: a view's button (`b.ui.run`) or the app runs it — the AI chat runs the AI assistant's `chat` this way.
 - A text the function returns is shown as a message. Returning nothing is fine.
 
 ## Views

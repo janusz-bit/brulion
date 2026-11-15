@@ -163,6 +163,7 @@ Workspace::Workspace(QObject *parent) : EditorHost(parent)
         m_reminders->showNotification(u"brulion-rest-timer"_s, title, body);
     });
     m_extensions->setAiPictures([this](const QString &name, QString *why) { return aiPicture(name, why); });
+    m_chats = new WorkspaceChats(this, m_extensions, this);
     m_replacing = new ReplaceSession(this);
     m_sync = new WorkspaceSync(this);
     m_sync->setClock([this] { return now(); });
@@ -195,6 +196,7 @@ Workspace::~Workspace()
     m_reminders->blockSignals(true);
     m_backups->blockSignals(true);
     m_extensions->blockSignals(true);
+    m_chats->blockSignals(true);
     blockSignals(true);
     close();
 }
@@ -309,6 +311,7 @@ void Workspace::close()
     // what it finished stays synced, the rest is synced next time).
     m_reminders->detach();
     m_extensions->detach();
+    m_chats->reset();
     m_backups->detach(); // before sync: it releases its hold there
     m_sync->detach();
     m_github->detach();

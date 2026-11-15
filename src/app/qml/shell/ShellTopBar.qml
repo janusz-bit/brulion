@@ -13,10 +13,11 @@ import Brulion
 // the title, the AI assistant's ✨ (while it is on: AppSettings.assistantEnabled), the reading
 // mode's book (pages and the journal), quick capture + (AppSettings.captureButtonShown), search
 // only while the bottom navigation has no Search tab (so the two bars never repeat a button), and
-// the menu. The ✨'s menu runs the assistant (src/core/extensions/builtin/asystent.luau): ask it
-// anything — it searches and reads the whole notebook and changes it with the user's yes —, the
-// page on screen (in the journal's stream today's note) going along; summarise that page; the
-// button spins while a model answers (WorkspaceExtensions.aiPending).
+// the menu. The ✨'s menu talks to the assistant (src/core/extensions/builtin/asystent.luau) in the
+// AI chat (ChatView, route "chat"): a new conversation about the page on screen (in the journal's
+// stream today's note) — it searches and reads the whole notebook and changes it with the user's
+// yes —, beside the page in the side panel (wide windows), the conversations, a summary of that
+// page as a new conversation; the button spins while a model answers (WorkspaceExtensions.aiPending).
 // Phones (narrow windows) show no tab bar: with two tabs or more a square with their number comes
 // before Search — the tab switcher, a menu of the tabs (one tap shows it) with New tab, Close
 // tab and Close other tabs (docs/UI.md "Tabs, split view and windows").
@@ -102,10 +103,12 @@ Rectangle {
                : bar.routeView === "journals" && Workspace.exists(today) ? today : ""
         aiMenu.popup(aiButton, aiButton.width - aiMenu.width, aiButton.height)
     }
-    /// Runs the assistant's command `name` ("ask", "summarize") on aiPage.
-    function runAssistant(name: string): void {
-        if (Workspace.extensions !== null)
-            Workspace.extensions.runCommand("asystent", name, bar.aiPage)
+    /// The name of aiPage as the chat takes it ("" for none).
+    readonly property string aiPageName: bar.aiPage !== "" ? Workspace.pageTitle(bar.aiPage) : ""
+    /// A new conversation of the AI chat about aiPage (`prompt`: sent at once), in the side panel
+    /// with `beside`.
+    function newChat(prompt: string, beside: bool): void {
+        AppController.navigate({ view: "chat", new: true, page: bar.aiPageName, prompt: prompt }, beside)
     }
     /// The back button is shown (wide windows: always, disabled without history).
     readonly property bool backShown: !Theme.narrow || (AppController.canGoBack && !bar.systemBack)
@@ -491,23 +494,37 @@ Rectangle {
             AppController.requestUiAction("toggleNoteMode")
     }
 
-    // The ✨ button's menu: ask the AI (anything about the notes, or to change them; the page on
-    // screen goes along), summarise the page, the AI's settings.
+    // The ✨ button's menu: the AI chat — a new conversation (the page on screen goes along), one
+    // beside the page, the conversations, a summary of the page —, the AI's settings.
     BMenu {
         id: aiMenu
         objectName: "topBarAiMenu"
         BMenuItem {
             objectName: "aiAsk"
-            text: qsTr("Ask the AI…")
+            text: qsTr("New conversation")
             iconName: "message-square"
-            onTriggered: bar.runAssistant("ask")
+            onTriggered: bar.newChat("", false)
+        }
+        BMenuItem {
+            objectName: "aiAskBeside"
+            visible: AppController.sidePanelAllowed && bar.aiPage !== ""
+            height: visible ? implicitHeight : 0
+            text: qsTr("New conversation beside the page")
+            iconName: "panel-right"
+            onTriggered: bar.newChat("", true)
+        }
+        BMenuItem {
+            objectName: "aiChats"
+            text: qsTr("Conversations")
+            iconName: "history"
+            onTriggered: AppController.navigate({ view: "chat" })
         }
         BMenuItem {
             objectName: "aiSummarize"
             text: qsTr("Summarise this page")
             iconName: "scroll-text"
             enabled: bar.aiPage !== ""
-            onTriggered: bar.runAssistant("summarize")
+            onTriggered: bar.newChat(qsTr("Summarise this page in a few sentences and list its most important tasks."), false)
         }
         BMenuSeparator {}
         BMenuItem {

@@ -141,6 +141,7 @@ Item {
         case "habits": return habitsView
         case "gym": return gymView
         case "console": return consoleView
+        case "chat": return chatView
         case "extension": return extensionView
         case "graph": return graphView
         case "tags":
@@ -338,6 +339,7 @@ Item {
     Component { id: habitsView; HabitsView { route: root.otherRoute } }
     Component { id: gymView; GymView { route: root.otherRoute } }
     Component { id: consoleView; ConsoleView { route: root.otherRoute } }
+    Component { id: chatView; ChatView { route: root.otherRoute; inSidePanel: root.inSidePanel } }
     Component { id: extensionView; ExtensionRouteView { route: root.otherRoute } }
     Component { id: graphView; GraphView { route: root.otherRoute } }
     Component { id: searchView; SearchView { route: root.searchRoute } }

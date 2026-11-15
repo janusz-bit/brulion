@@ -477,4 +477,10 @@ void NotebookHost::log(const QString &extension, const QString &message)
         onLog(extension, message);
 }
 
+void NotebookHost::status(const QString &extension, const QString &text)
+{
+    if (onStatus)
+        onStatus(extension, text);
+}
+
 } // namespace brulion::extensions

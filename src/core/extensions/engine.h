@@ -90,6 +90,7 @@ struct CommandInfo
     QString name; ///< the stable id within the extension ("start")
     QString label; ///< the palette's label (b.command's meta.label), else the name
     bool needsBlock = false; ///< meta.block: it works on the block under the caret (ctx.block)
+    bool palette = true; ///< meta.palette ~= false: the palette offers it (else only the app or a view runs it)
 };
 
 struct ViewInfo
@@ -171,6 +172,7 @@ private:
         QString label;
         bool needsBlock = false;
         QString icon;
+        bool palette = true;
     };
     struct Hook
     {
@@ -213,6 +215,7 @@ private:
     static int apiLang(lua_State *L);
     static int apiUiLang(lua_State *L);
     static int apiLog(lua_State *L);
+    static int apiStatus(lua_State *L);
     static int apiPrint(lua_State *L);
     static int apiTimer(lua_State *L);
     static int apiData(lua_State *L);
@@ -239,6 +242,7 @@ private:
     int foldImpl(lua_State *L);
     int formatImpl(lua_State *L);
     int logImpl(lua_State *L);
+    int statusImpl(lua_State *L);
     int printImpl(lua_State *L);
     int timerImpl(lua_State *L);
     int dataImpl(lua_State *L);

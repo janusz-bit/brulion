@@ -39,19 +39,23 @@ Czego się spodziewać:
 Modele należą do Liquid AI, mają własną licencję (LFM Open License v1.0) i nie są częścią Bruliona: aplikacja pobiera wybrany model z Hugging Face. **Usuń** kasuje jego pliki. Nie każde wydanie ma tego dostawcę: nie ma go wersja w przeglądarce ani część paczek na komputery.
 
 ## Asystent AI
-Włącz go w **Ustawieniach → Rozszerzenia → AI → Asystent AI**. Wtedy górny pasek ma przycisk **✨** — także na telefonie — z pozycjami:
+Włącz go w **Ustawieniach → Rozszerzenia → AI → Asystent AI**. Rozmawiasz z nim w **czacie z AI**, jak w komunikatorze: Twoje wiadomości po prawej, odpowiedzi AI po lewej, i możesz pytać dalej — „A w przyszłym tygodniu?”, „Przesuń czynsz na piątek”. Górny pasek ma przycisk **✨** — także na telefonie — z pozycjami:
 
-- **Zapytaj AI…** — zapytaj o cokolwiek w notatkach albo poproś, żeby coś w nich zrobiło. AI **samo przeszukuje i czyta cały notatnik** — strony, dziennik, zadania z terminami, tagi, przypomnienia — więc możesz zapytać „Co mam do zrobienia w tym tygodniu?”, „Co pisałem o wyjeździe?” albo poprosić „Dopisz mleko do listy zakupów”. **Ogląda też obrazki** w notatkach, gdy model widzi (Claude, LFM3-VL na urządzeniu): „Ile zapłaciłem za mleko? Paragon jest w Zakupach.” Strona na ekranie idzie razem z pytaniem (w dzienniku: dzisiejsza notatka).
-- **Streść tę stronę** — kilka zdań i zadania ze strony.
+- **Nowa rozmowa** — zapytaj o cokolwiek w notatkach albo poproś, żeby coś w nich zrobiło. Strona na ekranie idzie razem z pytaniem (w dzienniku: dzisiejsza notatka); zanim wyślesz pierwszą wiadomość, możesz ją zabrać (× na jej etykiecie). Na start są podpowiedzi: „Co mam do zrobienia w tym tygodniu?”, „Zaplanuj mi jutro”.
+- **Nowa rozmowa obok strony** — to samo w panelu bocznym, obok strony, którą czytasz (w szerokim oknie).
+- **Rozmowy** — wszystkie Twoje rozmowy, od najnowszej.
+- **Streść tę stronę** — nowa rozmowa, która prosi o streszczenie strony i jej zadań; dopytasz w niej o resztę.
 - **Ustawienia AI…** — dostawca, klucz i model.
+
+AI **samo przeszukuje i czyta cały notatnik** — strony, dziennik, zadania z terminami, tagi, przypomnienia — więc możesz zapytać „Co mam do zrobienia w tym tygodniu?”, „Co pisałem o wyjeździe?” albo poprosić „Dopisz mleko do listy zakupów”. Gdy pracuje, mówi, co robi: „Szukam w notatkach: „wyjazd”…”, „Czytam „Zakupy”…”; **Zatrzymaj** je przerywa. **Ogląda też obrazki** w notatkach, gdy model widzi (Claude, LFM3-VL na urządzeniu): „Ile zapłaciłem za mleko? Paragon jest w Zakupach.” To samo jest w palecie (Ctrl+K) jako **AI: nowa rozmowa** i **Czat z AI**.
 
 **Także rozszerzenia.** Poproś o nowe polecenie, widok albo reakcję — „polecenie, które policzy słowa dzisiejszej notatki” — a AI przeczyta, jak się pisze rozszerzenia, wypróbuje kod na Twoich notatkach, niczego nie zmieniając, i zapisze stronę w **Rozszerzenia/**. Potem czeka na Ciebie jak kod z innego urządzenia: przeczytaj stronę i naciśnij **Uruchom**, gdy zgadzasz się z tym, co robi (zob. [[Rozszerzenia]]).
 
-**Zmiany tylko za Twoją zgodą.** Zanim AI dopisze coś do strony albo dnia, zapisze stronę czy odhaczy zadanie, okno pokazuje, co chce zapisać: **Zgoda**, **Zgoda na wszystkie zmiany tego pytania** albo **Nie**. Tego, na co się nie zgodzisz, AI nie zapisze — i dowie się o tym.
+**Zmiany tylko za Twoją zgodą.** Zanim AI dopisze coś do strony albo dnia, zapisze stronę czy odhaczy zadanie, rozmowa pokazuje, co chce zapisać: **Zgoda**, **Zgoda na wszystkie zmiany tego pytania** albo **Nie**. Tego, na co się nie zgodzisz, AI nie zapisze — i dowie się o tym. Odpowiedź wymienia potem strony, które zmieniło: `✏️ Zmienione: [[…]]`.
 
-Odpowiedź trafia do **dzisiejszej notatki** pod `🤖 Twoje pytanie`, jej punkty jako elementy listy, z `✏️ Zmienione: [[…]]` — stronami, które AI zmieniło. Asystent pracuje narzędziami (szukanie, czytanie, zapis): na własnym serwerze wybierz model, który je obsługuje (np. Qwen 3 albo Llama 3.1); Claude je obsługuje. Gdy model odpowiada, przycisk się kręci. Te same polecenia są w palecie (Ctrl+K) jako **AI: zapytaj albo poproś…** i **AI: streść tę stronę**.
+**Każda rozmowa to strona** w folderze **AI/**, nazwana od Twojego pierwszego pytania — `AI/2026-11-15 Co mam do zrobienia w tym tygodniu` — a dziennik z tego dnia dostaje wiersz z linkiem do niej. Przeczytasz ją więc później na telefonie, wyszukasz, podlinkujesz albo poprawisz; czat ciągnie się dalej od tego, co jest na stronie. Jej zadania nie trafiają do Twoich list zadań, a przypomnienie w odpowiedzi nigdy nie zadzwoni (strona ma `zadania: ignoruj`). **Otwórz rozmowę jako stronę** (w czacie) pokazuje ją w edytorze.
 
-Odpowiedź zostaje w notatkach, więc przeczytasz ją później na telefonie, podlinkujesz albo poprawisz.
+Asystent pracuje narzędziami (szukanie, czytanie, zapis): na własnym serwerze wybierz model, który je obsługuje (np. Qwen 3 albo Llama 3.1); Claude je obsługuje. Gdy model odpowiada, przycisk ✨ się kręci. Naraz powstaje jedna odpowiedź; pisze się dalej, gdy oglądasz inne strony, i trafia do swojej rozmowy.
 
 ## We własnych rozszerzeniach
 Strona rozszerzenia z `ai` wśród uprawnień może pytać model:

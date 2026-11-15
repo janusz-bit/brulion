@@ -518,13 +518,23 @@ static QList<Command> extensionCommands(const AppController *app, bool blocks)
         out.append({u"go.gym"_s, CommandModel::tr("Gym"), CommandModel::tr("Today's workout, plans, progress"), u"dumbbell"_s,
                     {}, ready});
     const auto iconOf = [](const QString &extension) { return extension == u"silownia" ? u"dumbbell"_s : u"puzzle"_s; };
-    for (const extensions::CommandInfo &c : extensions->commands())
-        out.append({u"ext."_s + c.extension + u'.' + c.name, c.label, extensions->title(c.extension), iconOf(c.extension),
-                    {}, ready && (!c.needsBlock || blocks)});
+    for (const extensions::CommandInfo &c : extensions->commands()) {
+        if (c.palette) // (else only the app or a view's button runs it: the assistant's chat turn)
+            out.append({u"ext."_s + c.extension + u'.' + c.name, c.label, extensions->title(c.extension),
+                        iconOf(c.extension), {}, ready && (!c.needsBlock || blocks)});
+    }
     for (const extensions::ViewInfo &v : extensions->views()) {
         if (!v.label.isEmpty() && v.extension != u"silownia")
             out.append({u"extview."_s + v.extension + u'.' + v.name, v.label, extensions->title(v.extension),
                         v.icon.isEmpty() ? iconOf(v.extension) : v.icon, {}, ready});
+    }
+    // The AI chat (docs/UI.md "AI chat") while the assistant is on: its conversations, a new one
+    // about the page on screen.
+    if (app->settings()->assistantEnabled()) {
+        out.append({u"ai.newChat"_s, CommandModel::tr("AI: new conversation"),
+                    CommandModel::tr("Ask about your notes, or ask to do something in them"), u"sparkles"_s, {}, ready});
+        out.append({u"go.chat"_s, CommandModel::tr("AI chat"), CommandModel::tr("Conversations with the AI assistant"),
+                    u"message-square"_s, {}, ready});
     }
     out.append({u"go.console"_s, CommandModel::tr("Luau console"),
                 CommandModel::tr("Evaluate Luau with the notebook's API; what extensions print"), u"terminal"_s, {},
@@ -628,6 +638,11 @@ bool CommandModel::run(const QString &id)
         if (path.isEmpty())
             return false;
         m_app->openPage(path);
+    } else if (id == u"ai.newChat") {
+        const QString path = m_app->currentRoute().value(u"path"_s).toString();
+        m_app->navigate({{u"view"_s, u"chat"_s},
+                         {u"new"_s, true},
+                         {u"page"_s, path.isEmpty() ? QString() : m_app->workspace()->pageTitle(path)}});
     } else if (id == u"extensions.reload")
         m_app->workspace()->extensions()->reloadAll();
     else if (id == u"extensions.settings")
