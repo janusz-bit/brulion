@@ -1,0 +1,7 @@
+What's new in 0.21.1:
+• Faster typing in long pages, a faster sync
+• Safer with notes and servers from anywhere
+• Extensions
+• Small things
+
+Full release notes: https://github.com/janusz-bit/brulion/releases/tag/v0.21.1

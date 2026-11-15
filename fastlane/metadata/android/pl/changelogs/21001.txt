@@ -1,0 +1,7 @@
+Nowości w 0.21.1:
+• Szybsze pisanie na długich stronach, szybsza synchronizacja
+• Bezpieczniej z notatkami i serwerami skądkolwiek
+• Rozszerzenia
+• Drobiazgi
+
+Pełny opis: https://github.com/janusz-bit/brulion/releases/tag/v0.21.1
