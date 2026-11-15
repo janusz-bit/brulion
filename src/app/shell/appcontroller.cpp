@@ -189,6 +189,12 @@ AppController::AppController(const Options &options, QObject *parent)
     LocalAi::Options localAi = options.localAi;
     if (localAi.folder.isEmpty())
         localAi.folder = m_dataDir + u"/models"_s;
+    if (localAi.stateFolder.isEmpty()) {
+        // (A cache: Android leaves it out of backups and empties it when storage runs low.)
+        const QString cache = QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
+        if (!cache.isEmpty())
+            localAi.stateFolder = cache + u"/model-state"_s;
+    }
     if (localAi.pluginDirs.isEmpty() && !localAi.open)
         localAi.pluginDirs = localAiPluginDirs();
     if (localAi.memoryBytes <= 0)

@@ -2,6 +2,7 @@
 
 #include "log/slowscope.h"
 
+#include <QDir>
 #include <QElapsedTimer>
 #include <QLocale>
 #include <QLoggingCategory>
@@ -63,16 +64,17 @@ public:
                                                    .arg(m_runner->device(), seconds(opening.elapsed()));
         }
         // The times are what tells a slow device from a long prompt: of the tokens read, those
-        // kept from the request before cost nothing.
+        // kept from the request before and those of the state on disk cost (almost) nothing.
         ai::LocalRunner::Result run;
         const ai::Reply reply = ai::answerLocally(m_runner.get(), job.model, job.request, m_cancel, &run);
         if (reply.ok)
             qCInfo(lcLocalAi).noquote()
-                    << u"%1 answered: %2 tokens read in %3 s (%4 kept from before), %5 written in %6 s"_s
+                    << u"%1 answered: %2 tokens read in %3 s (%4 kept from before, %5 from the disk), %6 written in %7 s"_s
                                .arg(job.model.id)
                                .arg(run.promptTokens)
                                .arg(seconds(run.promptMs))
                                .arg(run.reusedTokens)
+                               .arg(run.storedTokens)
                                .arg(run.outputTokens)
                                .arg(seconds(run.outputMs));
         else
@@ -101,7 +103,10 @@ private:
 };
 
 LocalAi::LocalAi(const Options &options, QObject *parent)
-    : QObject(parent), m_models(options.models.isEmpty() ? ai::localModels() : options.models), m_files(options.folder)
+    : QObject(parent)
+    , m_models(options.models.isEmpty() ? ai::localModels() : options.models)
+    , m_files(options.folder)
+    , m_stateFolder(options.stateFolder)
 {
     Opener open = options.open;
     if (open) {
@@ -332,10 +337,13 @@ void LocalAi::remove(const QString &id)
         m_files.remove(removed); // no model ever runs here: only its files
         return;
     }
-    // The model leaves memory first (a request it is answering ends), then its files go.
+    // The model leaves memory first (a request it is answering ends), then its files go — and
+    // the states kept on disk (of any model: the next request keeps them again).
     m_cancel.store(true);
-    QMetaObject::invokeMethod(m_worker, [this, worker = m_worker, removed] {
+    QMetaObject::invokeMethod(m_worker, [this, worker = m_worker, removed, states = m_stateFolder] {
         worker->close(removed.id);
+        if (!states.isEmpty())
+            QDir(states).removeRecursively();
         m_cancel.store(false);
         QMetaObject::invokeMethod(this, [this, removed] { m_files.remove(removed); }, Qt::QueuedConnection);
     });
@@ -381,6 +389,7 @@ void LocalAi::send(const ai::Settings &settings, const ai::Request &request,
         job.options.projectorPath = m_files.pathOf(m->projector);
     job.options.contextTokens = m_contextTokens;
     job.options.imageTokens = imageTokensFor(m_contextTokens);
+    job.options.stateDir = m_stateFolder;
     job.request = request;
 
     ++m_pending;

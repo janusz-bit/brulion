@@ -12,6 +12,7 @@
 #include <QDir>
 #include <QElapsedTimer>
 #include <QFile>
+#include <QFileInfo>
 #include <QRegularExpression>
 #include <QSignalSpy>
 #include <QTemporaryDir>
@@ -116,6 +117,7 @@ struct Fixture {
     {
         LocalAi::Options o;
         o.folder = dir.path() + u"/models"_s;
+        o.stateFolder = dir.path() + u"/model-state"_s;
         o.models = {sees, reads};
         o.memoryBytes = 16LL * 1024 * 1024 * 1024;
         Record *r = &record;
@@ -371,6 +373,8 @@ private Q_SLOTS:
             QCOMPARE(f.record.opened[0].projectorPath, f.dir.path() + u"/models/sees-projector.gguf"_s);
             QCOMPARE(f.record.opened[0].contextTokens, 16384);
             QCOMPARE(f.record.opened[0].imageTokens, 1024);
+            // What it read of a request's system text and tools is kept there between runs.
+            QCOMPARE(f.record.opened[0].stateDir, f.dir.path() + u"/model-state"_s);
             QCOMPARE(f.record.prompts.size(), 1);
             QVERIFY(std::ranges::any_of(f.record.prompts[0].pieces, [](const ai::local::Piece &p) {
                 return p.text.contains(u"Co słychać u żółwia?");
@@ -448,8 +452,14 @@ private Q_SLOTS:
         LocalAi local(f.options());
         QVERIFY(download(local, u"sees"_s));
         QVERIFY(ask(local, u"sees"_s).ok);
+        // (A state the runner kept on disk.)
+        QVERIFY(QDir().mkpath(f.dir.path() + u"/model-state"_s));
+        QFile state(f.dir.path() + u"/model-state/0123abcd.state"_s);
+        QVERIFY(state.open(QIODevice::WriteOnly));
+        state.write("BRST");
+        state.close();
         // While it answers, the model is removed: the answer ends, the model leaves memory, its
-        // files go.
+        // files go, and the states kept on disk with them.
         f.record.block.store(true);
         ai::Reply got;
         bool done = false;
@@ -468,6 +478,7 @@ private Q_SLOTS:
         QTRY_COMPARE_WITH_TIMEOUT(f.record.open.load(), 0, 5000);
         QVERIFY(!QFile::exists(f.dir.path() + u"/models/sees.gguf"_s));
         QVERIFY(!QFile::exists(f.dir.path() + u"/models/sees-projector.gguf"_s));
+        QVERIFY(!QFileInfo::exists(f.dir.path() + u"/model-state"_s));
         // A request for it now: not on this device.
         const ai::Reply reply = ask(local, u"sees"_s);
         QVERIFY2(reply.error.contains(u"not on this device yet"), qPrintable(reply.error));

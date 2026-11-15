@@ -866,10 +866,15 @@ another phone the model is downloaded again.
   it wants ([measured below](#on-a-pixel-9-pro)). A phone with 7 GB of memory or more holds
   16 384 tokens at once, one with 5 GB 8 192, less 4 096 (12 KB of memory a token).
 * **Speed**: the model is loaded for the first question (some seconds) and stays for ten minutes.
-  The first question of a conversation is the slow one — the assistant's instructions and tools
-  are some 2 500 tokens before the question itself —; what was read stays, so the steps and the
-  questions after it read only what is new. Writing follows token by token, a dozen a second on
-  a fast phone.
+  The very first question is the slow one — the assistant's instructions and tools are some
+  2 500 tokens before the question itself —; what was read stays, so the steps and the questions
+  after it read only what is new, and the model's state after the instructions and tools is kept
+  in the app's cache (`cache/model-state`, some 30 MB: never in a backup, emptied by Android when
+  storage runs low): the first question after the model was loaded again starts after them. The
+  model computes on the processor's fast cores only, one thread each, kept for as long as it is
+  loaded — a phone's slow cores (Cortex-A5xx) would hold the others back
+  ([docs/PERFORMANCE.md](PERFORMANCE.md) "The model on the device"). Writing follows token by
+  token, a dozen a second on a fast phone (measured before the threads were kept).
 * **While the app is on screen**: Qt for Android pauses the app's event loop while the activity
   is off the screen, so a download stops there — the server waits: the files come over HTTP/1.1
   with 4 MB read ahead, where over HTTP/2 Qt would take all the server sends into memory, 3 GB

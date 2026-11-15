@@ -20,20 +20,21 @@ done in the repository simply disappears from the list.
     the libraries go next to `brulion.exe` and nothing was built or tried there; the AppImage's
     older aarch64 compilers do not know the newest ARM variants llama.cpp builds, and linuxdeploy
     has to keep `usr/lib/brulion` as it is);
-  * measurements on more phones than the Pixel 9 Pro (docs/ANDROID.md "On a Pixel 9 Pro": a
-    mid-range one; the best number of threads per processor — the runner takes half the threads,
-    at most 8, and writes at a quarter of a laptop's speed there) and an Adreno/Mali GPU through
-    llama.cpp's Vulkan or OpenCL backends (the processor only so far: +35 MB of shaders for
-    Vulkan);
+  * measurements on a phone of the runner's threads kept on the fast cores and of the system
+    text and tools read from the disk (docs/PERFORMANCE.md "The model on the device": the Pixel 9
+    Pro again — it wrote at a quarter of a laptop's speed with threads started for every token —
+    and a mid-range phone with other cores; whether fewer threads write faster than they read),
+    and an Adreno/Mali GPU through llama.cpp's Vulkan or OpenCL backends (the processor only so
+    far: +35 MB of shaders for Vulkan);
   * a button that stops an answer being written, and the answer shown while it is written;
   * Android: a model works only while the app is on screen (the screen is kept on meanwhile; no
     foreground service). Behind another app an answer is worked on at a fraction of the speed
     and stands still once Android freezes the process — the time away counts towards the five
     minutes after which it ends as "no answer" — and a download stops (it goes on from there
     when asked again);
-  * the system text and tools read once and kept on disk between runs (they are read again
-    after the model left memory: some 2 000 tokens for the assistant), a smaller tool set of the
-    assistant for a small model, tool calls kept to the tools' names by a grammar;
+  * a smaller tool set of the assistant for a small model (its first question still reads some
+    2 500 tokens of instructions and tools once — then they are kept on disk), tool calls kept to
+    the tools' names by a grammar;
   * other models: a GGUF file of the user's own, a chat format beside LFM3's;
   * stores: F-Droid's and Google Play's rules for an app that downloads model weights under a
     licence that is not free software (a store build without it: `BRULION_LOCAL_AI=OFF`).

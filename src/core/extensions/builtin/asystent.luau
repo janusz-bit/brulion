@@ -30,9 +30,10 @@ local WRITTEN = {
         about = " ([[%s]])",
         summary = "🤖 Streszczenie [[%s]]",
         changed = "✏️ Zmienione: %s",
-        system = "Jesteś asystentem w aplikacji do notatek Brulion. Masz narzędzia do przeszukiwania i czytania całego notatnika użytkownika i do zmieniania go. Notatki to Markdown: punkty \"- \", zadania \"- [ ]\" i \"- [x]\", terminy \"📅 RRRR-MM-DD\", przypomnienia \"⏰ RRRR-MM-DD GG:MM\", linki [[Strona]], tagi #tag; dziennik to strony dni, nazwane datą (2026-11-12). Dziś jest %s. Zanim odpowiesz na pytanie o notatki, poszukaj w nich (search_notes, query_notes) i przeczytaj, czego potrzebujesz. Obrazki w notatkach to ![[nazwa.jpg]]: gdy pytanie dotyczy obrazka albo tego, co na nim napisane, obejrzyj go (look_at_picture). Zmieniaj notatki tylko wtedy, gdy użytkownik o to prosi; raczej dopisuj, niż przepisuj; niczego nie usuwaj, o ile nie poproszono. Każdą zmianę użytkownik zatwierdza; gdy odmówi, nie ponawiaj jej. Gdy użytkownik chce nowego polecenia, widoku albo automatyzacji w Brulionie, możesz napisać rozszerzenie: najpierw przeczytaj opis (extension_reference: Quick start i części, których potrzebujesz), sprawdź stronę (check_extension), potem ją zapisz (write_extension) i powiedz użytkownikowi, że zadziała po naciśnięciu „Uruchom” na stronie rozszerzenia. Odpowiadasz zwięźle, po polsku, chyba że notatki są w innym języku; zwykłym tekstem albo krótkimi punktami, z linkami [[Strona]] do stron, o których mówisz.",
+        system = "Jesteś asystentem w aplikacji do notatek Brulion. Masz narzędzia do przeszukiwania i czytania całego notatnika użytkownika i do zmieniania go. Notatki to Markdown: punkty \"- \", zadania \"- [ ]\" i \"- [x]\", terminy \"📅 RRRR-MM-DD\", przypomnienia \"⏰ RRRR-MM-DD GG:MM\", linki [[Strona]], tagi #tag; dziennik to strony dni, nazwane datą (2026-11-12). Zanim odpowiesz na pytanie o notatki, poszukaj w nich (search_notes, query_notes) i przeczytaj, czego potrzebujesz. Obrazki w notatkach to ![[nazwa.jpg]]: gdy pytanie dotyczy obrazka albo tego, co na nim napisane, obejrzyj go (look_at_picture). Zmieniaj notatki tylko wtedy, gdy użytkownik o to prosi; raczej dopisuj, niż przepisuj; niczego nie usuwaj, o ile nie poproszono. Każdą zmianę użytkownik zatwierdza; gdy odmówi, nie ponawiaj jej. Gdy użytkownik chce nowego polecenia, widoku albo automatyzacji w Brulionie, możesz napisać rozszerzenie: najpierw przeczytaj opis (extension_reference: Quick start i części, których potrzebujesz), sprawdź stronę (check_extension), potem ją zapisz (write_extension) i powiedz użytkownikowi, że zadziała po naciśnięciu „Uruchom” na stronie rozszerzenia. Odpowiadasz zwięźle, po polsku, chyba że notatki są w innym języku; zwykłym tekstem albo krótkimi punktami, z linkami [[Strona]] do stron, o których mówisz.",
         summarySystem = "Jesteś asystentem w aplikacji do notatek. Odpowiadasz zwięźle, po polsku, chyba że notatka jest w innym języku. Piszesz zwykłym tekstem albo krótkimi punktami.",
         noteIntro = "Notatka „%s”:\n\n%s\n\n",
+        today = "Dziś jest %s.\n\n",
         onScreen = "Na ekranie jest strona [[%s]]:\n\n%s\n\n---\n\n",
         summarizeAsk = "Streść tę notatkę w 3–5 zdaniach. Na końcu wypisz najważniejsze zadania, jeśli jakieś są.",
         lookAsk = "Opisz krótko, co jest na tym obrazku, i przepisz widoczny na nim tekst.",
@@ -42,9 +43,10 @@ local WRITTEN = {
         about = " ([[%s]])",
         summary = "🤖 Summary of [[%s]]",
         changed = "✏️ Changed: %s",
-        system = "You are an assistant in the notes app Brulion. You have tools to search and read the user's whole notebook and to change it. Notes are Markdown: items \"- \", tasks \"- [ ]\" and \"- [x]\", due dates \"📅 YYYY-MM-DD\", reminders \"⏰ YYYY-MM-DD HH:MM\", links [[Page]], tags #tag; the journal is one page per day, named by its date (2026-11-12). Today is %s. Before you answer a question about the notes, search them (search_notes, query_notes) and read what you need. Pictures in notes are ![[name.jpg]]: when the question is about a picture or what is written on it, look at it (look_at_picture). Change notes only when the user asks you to; prefer adding to rewriting; never delete anything unless asked. The user approves every change; when they decline one, do not try it again. When the user wants a new command, view or automation in Brulion, you can write an extension: read the reference first (extension_reference: its Quick start and the sections you need), check the page (check_extension), then write it (write_extension) and tell the user it works once they press Run on the extension's page. You answer briefly, in English unless the notes are in another language; plain text or short points, with [[Page]] links to the pages you mention.",
+        system = "You are an assistant in the notes app Brulion. You have tools to search and read the user's whole notebook and to change it. Notes are Markdown: items \"- \", tasks \"- [ ]\" and \"- [x]\", due dates \"📅 YYYY-MM-DD\", reminders \"⏰ YYYY-MM-DD HH:MM\", links [[Page]], tags #tag; the journal is one page per day, named by its date (2026-11-12). Before you answer a question about the notes, search them (search_notes, query_notes) and read what you need. Pictures in notes are ![[name.jpg]]: when the question is about a picture or what is written on it, look at it (look_at_picture). Change notes only when the user asks you to; prefer adding to rewriting; never delete anything unless asked. The user approves every change; when they decline one, do not try it again. When the user wants a new command, view or automation in Brulion, you can write an extension: read the reference first (extension_reference: its Quick start and the sections you need), check the page (check_extension), then write it (write_extension) and tell the user it works once they press Run on the extension's page. You answer briefly, in English unless the notes are in another language; plain text or short points, with [[Page]] links to the pages you mention.",
         summarySystem = "You are an assistant in a notes app. You answer briefly, in English unless the note is in another language. You write plain text or short points.",
         noteIntro = "The note \"%s\":\n\n%s\n\n",
+        today = "Today is %s.\n\n",
         onScreen = "The page on screen is [[%s]]:\n\n%s\n\n---\n\n",
         summarizeAsk = "Summarise this note in 3–5 sentences. At the end list the most important tasks, if there are any.",
         lookAsk = "Describe briefly what this picture shows and write out the text on it.",
@@ -684,13 +686,16 @@ b.command("ask", function(ctx)
     end
     local page: string = ctx.page or ""
     local text, note = pageText(page, MAX_PAGE)
-    local first = question
+    -- The day goes in the first message, not in the system text: the system text and the tools
+    -- stay the same from day to day, and a model on the device keeps what it read of them on
+    -- disk (docs/EXTENSIONS.md "AI").
+    local first = string.format(W.today, b.today()) .. question
     if text ~= "" then
-        first = string.format(W.onScreen, page, text) .. question
+        first = string.format(W.today, b.today()) .. string.format(W.onScreen, page, text) .. question
     end
     local session: Session = { all = false, changed = {} }
     local messages: { any } = { { role = "user", content = first } }
-    local system = string.format(W.system, b.today())
+    local system: string = W.system
     local answer: string? = nil
     for _ = 1, MAX_ROUNDS do
         local said, reply = b.ai({ system = system, messages = messages, tools = TOOLS, maxTokens = 8000 })

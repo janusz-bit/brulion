@@ -32,7 +32,7 @@ Gdy wybierzesz **Na tym urządzeniu**, model działa w Brulionie — także na t
 Czego się spodziewać:
 
 - Jest **mały**. Streszczenie strony, pytanie o notatkę, tekst ze sfotografowanego paragonu wychodzą dobrze; długie zadanie w wielu krokach może zejść na manowce, a jego polszczyzna jest prostsza niż u Claude'a. Do poważnej pracy wybierz Claude'a.
-- Jest **wolniejszy** niż model w chmurze, najbardziej na telefonie: szybki telefon odpowiada na pytanie w mniej więcej pół minuty, wolniejszy potrzebuje więcej. Ekran telefonu nie gaśnie, dopóki model odpowiada; zostaw Bruliona na ekranie — za inną aplikacją model pracuje wielokrotnie wolniej, a po chwili staje, dopóki nie wrócisz. Potem model zostaje w pamięci przez dziesięć minut.
+- Jest **wolniejszy** niż model w chmurze, najbardziej na telefonie: szybki telefon odpowiada na pytanie w mniej więcej pół minuty, wolniejszy potrzebuje więcej. Najdłużej trwa pierwsze pytanie — model czyta wtedy instrukcje asystenta i zachowuje na urządzeniu to, co z nich przeczytał, na kolejne pytania. Ekran telefonu nie gaśnie, dopóki model odpowiada; zostaw Bruliona na ekranie — za inną aplikacją model pracuje wielokrotnie wolniej, a po chwili staje, dopóki nie wrócisz. Potem model zostaje w pamięci przez dziesięć minut.
 - Zajmuje około **2,5 GB pamięci**, dopóki jest wczytany, i potrzebuje procesora z ostatnich lat (telefon mniej więcej od 2018 roku, komputer z AVX2).
 - Zbyt długą prośbę **przycina** — długą stronę w środku, długi wynik wyszukiwania na końcu — zamiast odmawiać.
 

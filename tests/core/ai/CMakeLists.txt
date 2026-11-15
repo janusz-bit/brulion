@@ -8,6 +8,9 @@ brulion_add_test(tst_ai_local SOURCES tst_ai_local.cpp LIBS brulion_core_ai)
 # The models' files (ai/localfiles.h): downloads against a small HTTP server on 127.0.0.1 — ranges,
 # broken transfers, damaged files, cancel and remove.
 brulion_add_test(tst_ai_localfiles SOURCES tst_ai_localfiles.cpp LIBS brulion_core_ai)
+# The processor cores a model computes on (ai/cpus.h): sysfs folders of phones' processors laid
+# out in a temporary folder, their slow cores left out.
+brulion_add_test(tst_ai_cpus SOURCES tst_ai_cpus.cpp LIBS brulion_core_ai)
 
 # With a model runner in the build (BRULION_LOCAL_AI): llama.cpp behind ai/llamarunner.h against a
 # real model — skipped unless BRULION_LOCAL_MODEL names one — and the plugin loaded as the app

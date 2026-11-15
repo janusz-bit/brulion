@@ -2,7 +2,8 @@
 # the device — Anthropic's Messages API (Claude), any OpenAI-compatible chat API (OpenAI, a server
 # of the user's own: Ollama, llama.cpp, LM Studio …) or a model that runs on the device itself
 # (local.h: which models there are, their prompts and answers; localfiles.h: downloading their
-# files; localrunner.h: what runs one, and loading it). Requests and answers as pure functions (tests); Client sends through
+# files; localrunner.h: what runs one, and loading it; cpus.h: the processor cores it computes on).
+# Requests and answers as pure functions (tests); Client sends through
 # sync::HttpTransport (no network in tests).
 brulion_add_core_module(ai
     SOURCES
@@ -10,6 +11,7 @@ brulion_add_core_module(ai
         local.h local.cpp
         localrunner.h localrunner.cpp
         localfiles.h localfiles.cpp
+        cpus.h cpus.cpp
     DEPS util sync
     QT Network)
 

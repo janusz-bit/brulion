@@ -6,17 +6,21 @@
 //   export BRULION_LOCAL_PROJECTOR=~/…/mmproj-LFM3-VL-2B-Q8_0.gguf
 //   ctest --test-dir build -R tst_ai_llama --output-on-failure
 //
-// What is checked is the runner, not the model's wit: that what it kept of a conversation gives
-// the very answer a fresh start gives, that a note's text never turns into control tokens, that a
-// long request is refused with its size, that it stops when told.
+// What is checked is the runner, not the model's wit: that what it kept of a conversation — in
+// memory, or on disk from a model opened before — gives the very answer a fresh start gives, that
+// a note's text never turns into control tokens, that a long request is refused with its size,
+// that it stops when told.
 
 #include "ai/llamarunner.h"
 
 #include <QBuffer>
+#include <QDir>
+#include <QFile>
 #include <QImage>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QPainter>
+#include <QTemporaryDir>
 #include <QTest>
 
 using namespace Qt::StringLiterals;
@@ -37,13 +41,14 @@ QString projectorPath()
     return qEnvironmentVariable("BRULION_LOCAL_PROJECTOR");
 }
 
-std::unique_ptr<LocalRunner> openRunner(int context = 8192, bool pictures = false)
+std::unique_ptr<LocalRunner> openRunner(int context = 8192, bool pictures = false, const QString &stateDir = QString())
 {
     LocalRunner::Options options;
     options.modelPath = modelPath();
     if (pictures)
         options.projectorPath = projectorPath();
     options.contextTokens = context;
+    options.stateDir = stateDir;
     options.imageTokens = 256;
     options.backendDir = QStringLiteral(BRULION_LOCAL_AI_OUTPUT_DIR);
     QString error;
@@ -122,6 +127,11 @@ private Q_SLOTS:
         QCOMPARE(runner->contextTokens(), 8192);
         QVERIFY(!runner->sees());
         QVERIFY2(runner->device().contains(u"ggml-cpu"), qPrintable(runner->device()));
+        // Its threads on the fast cores, where the processor tells which they are (ai/cpus.h).
+        const QList<int> cores = ai::computeCores(ai::cpuCores());
+        if (!cores.isEmpty())
+            QVERIFY2(runner->device().endsWith(u"%1 threads on cores %2"_s.arg(cores.size()).arg(ai::coreList(cores))),
+                     qPrintable(runner->device()));
 
         const ai::Request request = question(u"Say OK."_s);
         const LocalRunner::Result r = runner->generate(ai::local::prompt(kFormat, request), params());
@@ -219,6 +229,88 @@ private Q_SLOTS:
         const LocalRunner::Result again = keeping->generate(prompt, params());
         QCOMPARE(again.pieces, afresh.pieces);
         QVERIFY2(again.reusedTokens > 60, qPrintable(QString::number(again.reusedTokens)));
+    }
+
+    void keepsTheStartOnDisk()
+    {
+        // The system text and the tools are read once: a model opened afterwards finds the state
+        // after them on disk, reads only the rest — and answers as the first one did.
+        QTemporaryDir states;
+        QVERIFY(states.isValid());
+        ai::Request request = question(u"Search my notes for the word \"szarlotka\"."_s);
+        for (int i = 1; i <= 30; ++i)
+            request.system +=
+                    u"\nRule %1: answer in the language of the question, ąćęłńóśźż kept as they are."_s.arg(i);
+        request.tools << searchTool();
+        const ai::local::Prompt prompt = ai::local::prompt(kFormat, request);
+        const auto stateFiles = [&] { return QDir(states.path()).entryInfoList({u"*.state"_s}, QDir::Files); };
+
+        LocalRunner::Result first;
+        {
+            const std::unique_ptr<LocalRunner> runner = openRunner(8192, false, states.path());
+            QVERIFY(runner);
+            first = runner->generate(prompt, params());
+            QVERIFY2(first.status == LocalRunner::Ok, qPrintable(first.error));
+            QCOMPARE(first.reusedTokens, 0);
+            QCOMPARE(first.storedTokens, 0);
+        }
+        QCOMPARE(stateFiles().size(), 1);
+        const qint64 bytes = stateFiles().first().size();
+
+        const auto again = [&](const QString &what) {
+            const std::unique_ptr<LocalRunner> runner = openRunner(8192, false, states.path());
+            const LocalRunner::Result r = runner->generate(prompt, params());
+            if (r.status != LocalRunner::Ok)
+                qWarning("%s: %s", qPrintable(what), qPrintable(r.error));
+            qInfo("%s: %d prompt tokens, %d from the disk, read in %lld ms", qPrintable(what), r.promptTokens,
+                  r.storedTokens, r.promptMs);
+            return r;
+        };
+        const LocalRunner::Result second = again(u"opened again"_s);
+        QVERIFY2(second.status == LocalRunner::Ok, qPrintable(second.error));
+        QCOMPARE(second.reusedTokens, 0);
+        QVERIFY2(second.storedTokens > 256 && second.storedTokens < second.promptTokens,
+                 qPrintable(QString::number(second.storedTokens)));
+        QCOMPARE(second.pieces, first.pieces);
+        QCOMPARE(stateFiles().size(), 1);
+
+        // Another question after the same system text and tools: its start from the disk too.
+        ai::Request other = question(u"Say only the word: kot"_s);
+        other.system = request.system;
+        other.tools = request.tools;
+        const ai::local::Prompt otherPrompt = ai::local::prompt(kFormat, other);
+        const std::unique_ptr<LocalRunner> fresh = openRunner();
+        const LocalRunner::Result afresh = fresh->generate(otherPrompt, params());
+        const std::unique_ptr<LocalRunner> stored = openRunner(8192, false, states.path());
+        const LocalRunner::Result fromDisk = stored->generate(otherPrompt, params());
+        QVERIFY2(fromDisk.status == LocalRunner::Ok, qPrintable(fromDisk.error));
+        QCOMPARE(fromDisk.storedTokens, second.storedTokens);
+        QCOMPARE(fromDisk.pieces, afresh.pieces);
+        QCOMPARE(afresh.storedTokens, 0); // (a runner without the folder keeps nothing)
+
+        // A damaged file is read anew — the same answer — and kept again.
+        {
+            QFile file(stateFiles().first().absoluteFilePath());
+            QVERIFY(file.open(QIODevice::ReadWrite));
+            QVERIFY(file.resize(bytes / 2));
+        }
+        const LocalRunner::Result damaged = again(u"a damaged file"_s);
+        QVERIFY2(damaged.status == LocalRunner::Ok, qPrintable(damaged.error));
+        QCOMPARE(damaged.storedTokens, 0);
+        QCOMPARE(damaged.pieces, first.pieces);
+        QCOMPARE(stateFiles().size(), 1);
+        QCOMPARE(stateFiles().first().size(), bytes);
+        QCOMPARE(again(u"kept again"_s).storedTokens, second.storedTokens);
+
+        // A state is its prompt's own: a system text one letter apart is read anew, and kept
+        // beside the first.
+        ai::Request changed = request;
+        changed.system.replace(u"Rule 7"_s, u"Rule 8"_s);
+        const std::unique_ptr<LocalRunner> runner = openRunner(8192, false, states.path());
+        const LocalRunner::Result r = runner->generate(ai::local::prompt(kFormat, changed), params());
+        QVERIFY2(r.status == LocalRunner::Ok, qPrintable(r.error));
+        QCOMPARE(r.storedTokens, 0);
+        QCOMPARE(stateFiles().size(), 2);
     }
 
     void anotherRequestInBetween()

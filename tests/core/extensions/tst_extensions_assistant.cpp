@@ -163,8 +163,11 @@ private Q_SLOTS:
         QVariantMap request = r.value.toMap().value(u"request"_s).toMap();
         QCOMPARE(r.value.toMap().value(u"kind"_s).toString(), u"ai"_s);
         QCOMPARE(request.value(u"tools"_s).toList().size(), 12);
-        QVERIFY(request.value(u"system"_s).toString().contains(u"2026-11-11"_s));
-        QCOMPARE(request.value(u"messages"_s).toList().value(0).toMap().value(u"content"_s).toString(), question);
+        // The day is in the first message: the system text is the same every day (a model on the
+        // device keeps what it read of it on disk).
+        QVERIFY(!request.value(u"system"_s).toString().contains(u"2026-11-11"_s));
+        QCOMPARE(request.value(u"messages"_s).toList().value(0).toMap().value(u"content"_s).toString(),
+                 u"Dziś jest 2026-11-11.\n\n"_s + question);
         // The script's tools are a request both providers take.
         QString error;
         std::optional<ai::Request> made = ai::requestFrom(request, &error);

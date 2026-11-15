@@ -8,8 +8,10 @@
 // plugin loaded the first time a model is asked — an app that never asks loads none of it, and a
 // build without the plugin (`available` false) offers no model at all. Requests are answered one
 // after another; the model stays in memory between them (the next question of a conversation
-// reads only what is new) and is let go after ten minutes without a request. How much it holds at
-// once follows the device's memory (contextFor()).
+// reads only what is new) and is let go after ten minutes without a request — what it read of a
+// request's system text and tools is kept on disk (`stateFolder`), so the first request after it
+// was opened again does not read them anew. How much it holds at once follows the device's memory
+// (contextFor()).
 #pragma once
 
 #include "ai/local.h"
@@ -69,6 +71,9 @@ public:
 
     struct Options {
         QString folder;               ///< where the models' files are kept
+        /// Where a model's state after a request's system text and tools is kept between runs (a
+        /// cache: "" keeps none).
+        QString stateFolder;
         QStringList pluginDirs;       ///< where the model runner's plugin may be ("": by its name)
         qint64 memoryBytes = 0;       ///< the device's memory (0: unknown)
         QList<ai::LocalModel> models; ///< empty: ai::localModels() (tests: small ones)
@@ -146,6 +151,7 @@ private:
 
     QList<ai::LocalModel> m_models;
     ai::LocalModelFiles m_files;
+    QString m_stateFolder;
     bool m_available = false;
     int m_contextTokens = 0;
     QString m_chosen;

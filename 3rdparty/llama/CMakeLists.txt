@@ -138,12 +138,14 @@ message(STATUS "Brulion: llama.cpp ${_tag} processor plugins: ${_variants}")
 
 # Brulion's runner and plugin (src/core/ai/CMakeLists.txt, defined before this directory): the
 # plugin is built into the same folder and loads the libraries from next to itself; the runner
-# knows the processor plugins by their file names, the best first.
+# knows the processor plugins by their file names, the best first, and the release (a model's
+# state it keeps on disk holds only for the llama.cpp that computed it).
 set(_variant_files "")
 foreach(_v IN LISTS BRULION_LLAMA_CPU_VARIANTS)
     string(APPEND _variant_files "$<TARGET_FILE_NAME:${_v}>|")
 endforeach()
-target_compile_definitions(brulion_ai_llama PRIVATE "BRULION_LLAMA_CPU_VARIANTS=\"${_variant_files}\"")
+target_compile_definitions(brulion_ai_llama PRIVATE "BRULION_LLAMA_CPU_VARIANTS=\"${_variant_files}\""
+    "BRULION_LLAMA_TAG=\"${_tag}\"")
 add_dependencies(brulion_ai_llama ${BRULION_LLAMA_CPU_VARIANTS})
 set_target_properties(brulion_localai PROPERTIES
     LIBRARY_OUTPUT_DIRECTORY ${BRULION_LOCAL_AI_OUTPUT_DIR}

@@ -15,6 +15,7 @@
 // A runner is used from one thread at a time (the app: a worker thread; generate() blocks until
 // the answer is written, `cancel` and `timeoutMs` end it early).
 
+#include "ai/cpus.h"
 #include "ai/local.h"
 
 #include <QString>
@@ -34,10 +35,17 @@ public:
         int contextTokens = 8192;
         /// The most tokens a picture may take (it is scaled down to fit).
         int imageTokens = 1024;
-        int threads = 0; ///< 0: half the processor's threads, at most 8
+        /// 0: one per fast core (ai/cpus.h: a phone's slow cores left out), the threads kept on
+        /// those cores; where the cores do not tell their speed (a PC), half the processor's
+        /// threads; at most MaxComputeThreads.
+        int threads = 0;
         /// The folder of llama.cpp's processor plugins ("": found by name alone — Android, where
         /// libraries stay inside the APK).
         QString backendDir;
+        /// Where the model's state after a prompt's stable part (the system text and the tools)
+        /// is kept between runs, so that the first request after the model was opened again
+        /// does not read them anew ("": nowhere). A cache: its files can go at any time.
+        QString stateDir;
     };
 
     struct Params {
@@ -69,6 +77,7 @@ public:
         int promptTokens = 0;
         int promptLimit = 0;  ///< the most tokens a prompt may have (with the room for the answer left)
         int reusedTokens = 0; ///< of the prompt: already in the model's memory from the last requests
+        int storedTokens = 0; ///< of the prompt: its stable part, from the state kept on disk (Options::stateDir)
         int outputTokens = 0;
         qint64 promptMs = 0; ///< reading the prompt
         qint64 outputMs = 0; ///< writing the answer
@@ -78,7 +87,8 @@ public:
     virtual int contextTokens() const = 0;
     /// Can it take pictures (it was opened with a projector)?
     virtual bool sees() const = 0;
-    /// What computes: llama.cpp's processor plugin ("ggml-cpu-haswell") and the threads used.
+    /// What computes: llama.cpp's processor plugin ("ggml-cpu-haswell"), the threads used and the
+    /// cores they are kept on ("ggml-cpu-android_armv8.6_1, 4 threads on cores 4-7").
     virtual QString device() const = 0;
     virtual Result generate(const local::Prompt &prompt, const Params &params) = 0;
 };

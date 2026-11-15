@@ -1340,6 +1340,39 @@ kept 2 131 of its 2 618 tokens and read the rest, a note's photo among them, in 
 "Summarise this page" read 289 tokens in 1.8 s and wrote 237 in 19.5 s. That is two thirds of
 the laptop's speed at reading and a quarter at writing.
 
+What the runner changed after those figures (not measured on the phone yet — the next run of the
+package beside the released app does, by the same lines of the event log):
+
+* **Its threads stay.** Without a pool of its own llama.cpp starts its threads for every step and
+  ends them after it (`ggml_graph_compute` with no `ggml_threadpool` attached) — for every token
+  of an answer, three new threads on the Pixel. Android's scheduler puts a thread that has just
+  started where it costs least energy, a slow core, until it has run long enough to look busy,
+  and every operation of the step waits there for it: a step of a long prompt lasts seconds and
+  its threads move to the fast cores, a token's step lasts 80 ms and they hardly do — which fits
+  writing at a quarter of the laptop's speed against reading at two thirds. The runner now makes
+  the pool once (`ggml_threadpool_new` of the processor plugin, `llama_attach_threadpool`): its
+  threads live as long as the model, wait for the next step spinning a moment and then asleep.
+* **On the fast cores.** `ai::computeCores()` reads the cores' capacities from sysfs and leaves
+  out the cluster below the widest gap (Cortex-A5xx next to A7xx: a third of the speed); the pool
+  and the thread that asks the model are kept on the rest (`cpumask`), one thread per core, at
+  most 8. On the Pixel 9 Pro that is 4 threads, as before, but on cores 4–7 only; a phone with
+  2 fast and 6 slow cores (Helio G99) now takes 2 threads instead of 4, one with 8 fast cores
+  (Snapdragon 8 Elite, Dimensity 9300) 8 instead of 4. A PC's processor tells no capacities: half
+  its logical processors, as before, in a pool of its own. The event log tells what was taken:
+  `ggml-cpu-android_armv8.6_1, 4 threads on cores 4-7`.
+* **The system text and the tools are read once.** After a prompt's stable part (the system text
+  and the tools: 2 551 tokens of the assistant, 17.6 s on the Pixel) the runner writes the model's
+  state for it — llama.cpp's cells of that sequence, 12 KB a token: some 30 MB — to
+  `<cache>/model-state/<key>.state` (`QSaveFile`; at most 4 states, 192 MB together, the ones used
+  longest ago go). The key is a SHA-256 of the prompt's tokens, the model's file (path, size,
+  time), llama.cpp's release and its processor plugin, so a state is read back only into the
+  model that computed it, and gives the very answer a fresh start gives (`tst_ai_llama
+  keepsTheStartOnDisk`). The first request after the model was opened — after ten minutes
+  without one, or a new start of the app — reads the file (`llama_state_seq_set_data_ext`, the
+  file mapped) instead of those tokens: tens of milliseconds for 30 MB from a phone's storage
+  against 17.6 s. The event log counts them apart: `… tokens read in … s (0 kept from before,
+  2551 from the disk) …`. Removing a model empties the folder.
+
 Its memory (the app of the Nix package, 16 384 tokens at once, "Check" pressed): the process
 grows from 201 to 2 504 MiB resident — 1.3 GiB of its own and 1.0 GiB of the model's file. Its
 own: llama.cpp lays the Q4_0 weights out anew for the processor's instructions (787 MiB, no

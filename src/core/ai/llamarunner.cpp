@@ -1,11 +1,20 @@
 #include "ai/llamarunner.h"
 
+#include "ai/cpus.h"
+
 #include <QCryptographicHash>
+#include <QDateTime>
+#include <QDir>
 #include <QElapsedTimer>
+#include <QFile>
+#include <QFileInfo>
 #include <QHash>
 #include <QImage>
 #include <QLoggingCategory>
+#include <QSaveFile>
+#include <QSet>
 #include <QThread>
+#include <QTimeZone>
 
 // llama.cpp's headers are not written for Brulion's warnings.
 QT_WARNING_PUSH
@@ -14,6 +23,7 @@ QT_WARNING_DISABLE_GCC("-Wold-style-cast")
 QT_WARNING_DISABLE_CLANG("-Wshadow")
 QT_WARNING_DISABLE_CLANG("-Wold-style-cast")
 #include <ggml-backend.h>
+#include <ggml-cpu.h>
 #include <llama.h>
 #include <mtmd-helper.h>
 #include <mtmd.h>
@@ -21,6 +31,7 @@ QT_WARNING_POP
 
 #include <algorithm>
 #include <array>
+#include <bit>
 #include <climits>
 #include <cstring>
 #include <mutex>
@@ -39,6 +50,11 @@ namespace {
 #define BRULION_LLAMA_CPU_VARIANTS ""
 #endif
 
+/// The release of llama.cpp compiled ("v0.9.0": CMake) — a state kept on disk is its own.
+#ifndef BRULION_LLAMA_TAG
+#define BRULION_LLAMA_TAG ""
+#endif
+
 /// Conversations kept in the model's memory at once (see Lane).
 constexpr int LaneCount = 2;
 /// A lane is continued when the new prompt starts with this many of its tokens; else the lane
@@ -48,6 +64,19 @@ constexpr size_t SharedStart = 64;
 constexpr int BatchTokens = 512;
 /// The states kept per lane to step back to (the first — after the system text — always stays).
 constexpr size_t MaxCheckpoints = 4;
+
+/// A prompt's stable part is kept on disk (Options::stateDir) from this many cells on — a shorter
+/// one is read in a moment —, at most this many states together, of at most this many bytes
+/// together (the assistant's instructions and tools: some 2 500 tokens, 30 MB).
+constexpr int MinStoredCells = 256;
+constexpr int MaxStoredStates = 4;
+constexpr qint64 MaxStoredBytes = 192LL * 1024 * 1024;
+/// A kept state's file: this, its version, its key (StateKeyBytes), its cells, the bytes of
+/// llama.cpp's state that follow (numbers the lowest byte first).
+constexpr char StateMagic[4] = {'B', 'R', 'S', 'T'};
+constexpr quint32 StateVersion = 1;
+constexpr qint64 StateKeyBytes = 32; // SHA-256
+constexpr qint64 StateHeaderBytes = qint64(sizeof StateMagic) + 4 + StateKeyBytes + 4 + 8;
 
 void logCallback(ggml_log_level level, const char *text, void *)
 {
@@ -111,13 +140,62 @@ struct SamplerFree {
 struct ChunkFree {
     void operator()(mtmd_input_chunk *c) const { mtmd_input_chunk_free(c); }
 };
+/// (ggml_threadpool_free of the processor plugin: llama.cpp's libraries do not export it.)
+struct PoolFree {
+    void (*release)(ggml_threadpool *) = nullptr;
+    void operator()(ggml_threadpool *pool) const
+    {
+        if (release)
+            release(pool);
+    }
+};
+using ThreadPool = std::unique_ptr<ggml_threadpool, PoolFree>;
+
+/// `threads` threads kept for the life of a model, on `cores` (none: wherever the system puts
+/// them); nullptr when the processor plugin gives none. The thread that makes it is kept on those
+/// cores too: it computes beside them.
+ThreadPool makePool(int threads, const QList<int> &cores)
+{
+    ggml_backend_dev_t cpu = ggml_backend_dev_by_type(GGML_BACKEND_DEVICE_TYPE_CPU);
+    ggml_backend_reg_t reg = cpu ? ggml_backend_dev_backend_reg(cpu) : nullptr;
+    void *create = reg ? ggml_backend_reg_get_proc_address(reg, "ggml_threadpool_new") : nullptr;
+    void *release = reg ? ggml_backend_reg_get_proc_address(reg, "ggml_threadpool_free") : nullptr;
+    if (!create || !release)
+        return {};
+    ggml_threadpool_params params = ggml_threadpool_params_default(threads);
+    for (const int core : cores) {
+        if (core >= 0 && core < GGML_MAX_N_THREADS)
+            params.cpumask[core] = true;
+    }
+    ggml_threadpool *pool = std::bit_cast<decltype(&ggml_threadpool_new)>(create)(&params);
+    return ThreadPool(pool, PoolFree{std::bit_cast<decltype(&ggml_threadpool_free)>(release)});
+}
+
+/// `value` in `bytes` bytes, the lowest first.
+void appendNumber(QByteArray *out, quint64 value, int bytes)
+{
+    for (int i = 0; i < bytes; ++i)
+        out->append(char((value >> (8 * i)) & 0xFF));
+}
+
+quint64 readNumber(const uchar *at, int bytes)
+{
+    quint64 value = 0;
+    for (int i = bytes - 1; i >= 0; --i)
+        value = (value << 8) | at[i];
+    return value;
+}
 
 class LlamaRunner final : public LocalRunner {
 public:
     ~LlamaRunner() override = default;
     int contextTokens() const override { return m_contextTokens; }
     bool sees() const override { return bool(m_mtmd); }
-    QString device() const override { return u"%1, %2 threads"_s.arg(m_backend).arg(m_threads); }
+    QString device() const override
+    {
+        const QString threads = u"%1, %2 threads"_s.arg(m_backend).arg(m_threads);
+        return m_cores.isEmpty() ? threads : threads + u" on cores "_s + coreList(m_cores);
+    }
     Result generate(const local::Prompt &prompt, const Params &params) override;
 
     bool open(const Options &options, QString *error);
@@ -167,17 +245,27 @@ private:
     Read readTokens(Lane &lane, const llama_token *tokens, int count, bool wantLogits);
     Read readPicture(Lane &lane, const Segment &picture, bool wantLogits);
     Read readPrompt(Lane &lane, const std::vector<Segment> &segments, int stableCells);
+    QByteArray stateKey(const std::vector<int32_t> &cells, size_t count) const;
+    QString statePath(const QByteArray &key) const;
+    int restoreStart(Lane &lane, const std::vector<int32_t> &cells, int stableCells);
+    void storeStart(const Lane &lane);
+    void pruneStates() const;
     bool isControl(llama_token token) const;
     static bool aborted(void *self);
 
     std::unique_ptr<llama_model, ModelFree> m_model;
+    ThreadPool m_pool;                                 ///< the context's threads: freed after it
     std::unique_ptr<llama_context, ContextFree> m_ctx; ///< after the model: freed before it
     std::unique_ptr<mtmd_context, MtmdFree> m_mtmd;
     const llama_vocab *m_vocab = nullptr;
     llama_memory_t m_memory = nullptr;
     int m_contextTokens = 0;
     int m_threads = 0;
+    QList<int> m_cores; ///< what the threads are kept on (empty: wherever the system puts them)
     QString m_backend;
+    QString m_stateDir;
+    QByteArray m_stateIdentity;    ///< what a state kept on disk holds for: llama.cpp, its plugin, the model's file
+    QSet<QByteArray> m_storedKeys; ///< the states known to be on disk: kept or restored by this runner
     std::array<Lane, LaneCount> m_lanes;
     quint64 m_clock = 0;
     /// The texts of the model's control tokens: never read as one inside a text (tokenizeText).
@@ -212,9 +300,17 @@ bool LlamaRunner::open(const Options &options, QString *error)
         return fail(u"cannot load the model %1"_s.arg(options.modelPath));
     m_vocab = llama_model_get_vocab(m_model.get());
 
-    // Half the processor's threads, at most 8: its efficiency cores and SMT siblings slow the
-    // rest down (a phone's 8 cores: its 4 fast ones).
-    m_threads = options.threads > 0 ? options.threads : std::clamp(QThread::idealThreadCount() / 2, 1, 8);
+    // One thread per fast core (ai/cpus.h: llama.cpp's threads wait for the slowest at every
+    // operation, so a phone's slow cores only hold the rest back); where the cores do not tell
+    // their speed (a PC), half the processor's threads — its SMT siblings and efficiency cores
+    // left over.
+    const QList<int> cores = options.threads > 0 ? QList<int>() : computeCores(cpuCores());
+    if (options.threads > 0)
+        m_threads = options.threads;
+    else if (!cores.isEmpty())
+        m_threads = int(cores.size());
+    else
+        m_threads = std::clamp(QThread::idealThreadCount() / 2, 1, MaxComputeThreads);
     m_contextTokens = std::max(512, options.contextTokens);
 
     llama_context_params cp = llama_context_default_params();
@@ -239,6 +335,24 @@ bool LlamaRunner::open(const Options &options, QString *error)
     m_memory = llama_get_memory(m_ctx.get());
     for (int i = 0; i < LaneCount; ++i)
         m_lanes[size_t(i)].seq = i;
+    // Its threads stay for the life of the model, on those cores. Without a pool of its own
+    // llama.cpp starts and ends them for every step — for every token of an answer —, and a
+    // phone's system first puts a thread that just started on a slow core, where all the others
+    // then wait for it. The thread that asks the model (the app's one worker) is kept on those
+    // cores as well, and so are the threads it starts to look at a picture.
+    m_pool = makePool(m_threads, cores);
+    if (m_pool) {
+        llama_attach_threadpool(m_ctx.get(), m_pool.get(), nullptr);
+        m_cores = cores;
+    }
+
+    // What a state kept on disk holds for (stateKey).
+    m_stateDir = options.stateDir;
+    const QFileInfo modelFile(options.modelPath);
+    m_stateIdentity = "brulion model state " + QByteArray::number(StateVersion) + '\n' + QByteArray(BRULION_LLAMA_TAG)
+                      + '\n' + m_backend.toUtf8() + '\n' + modelFile.absoluteFilePath().toUtf8() + '\n'
+                      + QByteArray::number(modelFile.size()) + '\n'
+                      + QByteArray::number(modelFile.lastModified(QTimeZone::UTC).toMSecsSinceEpoch()) + '\n';
 
     if (!options.projectorPath.isEmpty()) {
         mtmd_context_params pp = mtmd_context_params_default();
@@ -655,18 +769,131 @@ LlamaRunner::Read LlamaRunner::readPrompt(Lane &lane, const std::vector<Segment>
                     read != Read::Ok)
                     return read;
                 checkpoint(lane);
+                storeStart(lane);
                 from = lane.cells.size() - at;
             }
             if (const Read read = readTokens(lane, s.tokens.data() + from, int(size_t(s.cells) - from), last);
                 read != Read::Ok)
                 return read;
         }
-        if (int(lane.cells.size()) == stableCells)
+        if (int(lane.cells.size()) == stableCells) {
             checkpoint(lane);
+            storeStart(lane);
+        }
         at = end;
     }
     checkpoint(lane);
     return Read::Ok;
+}
+
+/// What a state kept on disk is found by: the model (its file, llama.cpp and its processor plugin
+/// that computed it) and the cells it holds.
+QByteArray LlamaRunner::stateKey(const std::vector<int32_t> &cells, size_t count) const
+{
+    QCryptographicHash hash(QCryptographicHash::Sha256);
+    hash.addData(m_stateIdentity);
+    hash.addData(QByteArrayView(reinterpret_cast<const char *>(cells.data()), qsizetype(count * sizeof(int32_t))));
+    return hash.result();
+}
+
+QString LlamaRunner::statePath(const QByteArray &key) const
+{
+    return QDir(m_stateDir).filePath(QString::fromLatin1(key.toHex().left(32)) + u".state"_s);
+}
+
+/// The first request after the model was opened: the prompt's stable part (the system text and
+/// the tools) from the state kept on disk, where this lane lacks it and such a state was kept.
+/// Returns how many cells that added (0: none — the lane reads them then).
+int LlamaRunner::restoreStart(Lane &lane, const std::vector<int32_t> &cells, int stableCells)
+{
+    const size_t had = lane.cells.size();
+    // (Never all of the prompt — its last token is read for the answer's first —, never a picture.)
+    if (m_stateDir.isEmpty() || stableCells < MinStoredCells || size_t(stableCells) >= cells.size()
+        || had >= size_t(stableCells)
+        || std::any_of(cells.begin(), cells.begin() + stableCells, [](int32_t cell) { return cell < 0; }))
+        return 0;
+    const QByteArray key = stateKey(cells, size_t(stableCells));
+    QFile file(statePath(key));
+    if (!file.open(QIODevice::ReadOnly))
+        return 0;
+    const qint64 size = file.size();
+    const uchar *map = size > StateHeaderBytes ? file.map(0, size) : nullptr;
+    const auto number = [&](qint64 at, int bytes) { return readNumber(map + at, bytes); };
+    constexpr qint64 Version = qint64(sizeof StateMagic);
+    constexpr qint64 Key = Version + 4;
+    constexpr qint64 Cells = Key + StateKeyBytes;
+    constexpr qint64 Bytes = Cells + 4;
+    if (!map || std::memcmp(map, StateMagic, sizeof StateMagic) != 0 || number(Version, 4) != StateVersion
+        || std::memcmp(map + Key, key.constData(), size_t(StateKeyBytes)) != 0
+        || number(Cells, 4) != quint64(stableCells) || number(Bytes, 8) != quint64(size - StateHeaderBytes)) {
+        // Not one this runner wrote, or written only in part: it is read anew and kept again.
+        file.close();
+        QFile::remove(file.fileName());
+        return 0;
+    }
+    clearLane(lane); // (what it had is the start of what comes)
+    const size_t bytes = size_t(size - StateHeaderBytes);
+    if (llama_state_seq_set_data_ext(m_ctx.get(), map + StateHeaderBytes, bytes, lane.seq, 0) != bytes) {
+        // (No room for it in one stretch, or not of this context: llama.cpp left the lane empty.)
+        clearLane(lane);
+        return 0;
+    }
+    lane.cells.assign(cells.begin(), cells.begin() + stableCells);
+    checkpoint(lane);
+    m_storedKeys.insert(key);
+    file.setFileTime(QDateTime::currentDateTimeUtc(), QFileDevice::FileModificationTime); // (the newest go last)
+    return stableCells - int(had);
+}
+
+/// Keeps the model's state after the lane's cells — a prompt's stable part, just read — on disk,
+/// for the first request after the model was opened again (restoreStart).
+void LlamaRunner::storeStart(const Lane &lane)
+{
+    const size_t count = lane.cells.size();
+    if (m_stateDir.isEmpty() || count < size_t(MinStoredCells)
+        || std::ranges::any_of(lane.cells, [](int32_t cell) { return cell < 0; }))
+        return;
+    const QByteArray key = stateKey(lane.cells, count);
+    if (m_storedKeys.contains(key))
+        return;
+    m_storedKeys.insert(key); // (tried once: a disk that refuses it is not asked again)
+    const size_t size = llama_state_seq_get_size_ext(m_ctx.get(), lane.seq, 0);
+    if (size == 0 || qint64(size) > MaxStoredBytes)
+        return;
+    std::vector<uint8_t> state(size);
+    const size_t written = llama_state_seq_get_data_ext(m_ctx.get(), state.data(), size, lane.seq, 0);
+    if (written == 0 || written > size || !QDir().mkpath(m_stateDir))
+        return;
+    QByteArray header(StateMagic, sizeof StateMagic);
+    appendNumber(&header, StateVersion, 4);
+    header += key;
+    appendNumber(&header, quint64(count), 4);
+    appendNumber(&header, quint64(written), 8);
+    QSaveFile file(statePath(key));
+    if (!file.open(QIODevice::WriteOnly) || file.write(header) != header.size()
+        || file.write(reinterpret_cast<const char *>(state.data()), qint64(written)) != qint64(written)
+        || !file.commit()) {
+        qCWarning(lcLlama).noquote() << u"cannot keep the model's state in %1: %2"_s.arg(file.fileName(),
+                                                                                         file.errorString());
+        return;
+    }
+    pruneStates();
+}
+
+/// At most MaxStoredStates states on disk, of MaxStoredBytes together: those used longest ago go.
+void LlamaRunner::pruneStates() const
+{
+    const QFileInfoList files = QDir(m_stateDir).entryInfoList({u"*.state"_s}, QDir::Files, QDir::Time);
+    int kept = 0;
+    qint64 bytes = 0;
+    for (const QFileInfo &file : files) { // the newest first
+        if (kept < MaxStoredStates && bytes + file.size() <= MaxStoredBytes) {
+            ++kept;
+            bytes += file.size();
+        } else {
+            QFile::remove(file.absoluteFilePath());
+        }
+    }
 }
 
 LocalRunner::Result LlamaRunner::generate(const local::Prompt &prompt, const Params &params)
@@ -755,6 +982,10 @@ LocalRunner::Result LlamaRunner::generate(const local::Prompt &prompt, const Par
     }
     rewind(lane, shared);
     r.reusedTokens = int(lane.cells.size());
+    // The first request after the model was opened: its stable part from the disk, when kept (a
+    // restore that fails leaves the lane empty).
+    r.storedTokens = restoreStart(lane, cells, stableCells);
+    r.reusedTokens = std::min(r.reusedTokens, int(lane.cells.size()) - r.storedTokens);
 
     // Read the rest. llama.cpp wants a free stretch of cells for every step: when it finds none
     // (two lanes leave gaps), the other lane goes; when that is not enough, this lane starts
@@ -774,6 +1005,7 @@ LocalRunner::Result LlamaRunner::generate(const local::Prompt &prompt, const Par
                 clearLane(lane);
             }
             r.reusedTokens = std::min(r.reusedTokens, int(lane.cells.size()));
+            r.storedTokens = std::min(r.storedTokens, int(lane.cells.size()) - r.reusedTokens);
             continue;
         }
         if (!stopped()) {

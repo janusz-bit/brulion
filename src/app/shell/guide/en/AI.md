@@ -32,7 +32,7 @@ With **On this device** chosen, the model runs in Brulion — on the phone too �
 What to expect:
 
 - It is **small**. A summary of a page, a question about a note, the text of a photographed receipt go well; a long task with many steps may go astray, and its Polish is plainer than Claude's. For serious work choose Claude.
-- It is **slower** than a model in the cloud, most of all on a phone: a fast phone answers a question in about half a minute, a slower one takes longer. The phone's screen stays on while it answers; keep Brulion on the screen — behind another app the model works many times slower and after a while stops until you come back. The model then stays in memory for ten minutes.
+- It is **slower** than a model in the cloud, most of all on a phone: a fast phone answers a question in about half a minute, a slower one takes longer. The very first question is the slowest — the model reads the assistant's instructions then, and keeps what it read of them on the device for the questions after. The phone's screen stays on while it answers; keep Brulion on the screen — behind another app the model works many times slower and after a while stops until you come back. The model then stays in memory for ten minutes.
 - It takes about **2.5 GB of memory** while it is loaded, and needs a processor from the last years (a phone from about 2018 on, a computer with AVX2).
 - A request too long for it is **cut** — a long page in its middle, a long search result at its end — rather than refused.
 
