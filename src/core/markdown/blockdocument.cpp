@@ -211,14 +211,24 @@ bool isBlankLines(QStringView s)
     return std::ranges::all_of(s, [](QChar c) { return c == u'\n' || c == u'\r' || isSpaceOrTab(c); });
 }
 
+/// "\n", "\r\n" and a lone "\r" each end a line: every '\n' and every '\r', less the '\r' right
+/// before a '\n'. Sums without a branch, which the compiler turns into wide compares: recompute()
+/// asks this of every block of the page after every operation (a third of an operation's time on
+/// a long page when each character was tested in turn).
 int countLineBreaks(QStringView s)
 {
-    int n = 0;
-    for (qsizetype i = 0; i < s.size(); ++i) {
-        if (s[i] == u'\n' || (s[i] == u'\r' && charAt(s, i + 1) != u'\n'))
-            ++n;
+    int lineFeeds = 0;
+    int carriageReturns = 0;
+    for (const QChar c : s) {
+        lineFeeds += int(c == u'\n');
+        carriageReturns += int(c == u'\r');
     }
-    return n;
+    if (carriageReturns == 0)
+        return lineFeeds;
+    int pairs = 0;
+    for (qsizetype i = 0; i + 1 < s.size(); ++i)
+        pairs += int(s[i] == u'\r') & int(s[i + 1] == u'\n');
+    return lineFeeds + carriageReturns - pairs;
 }
 
 /// "\r\n" and "\r" become "\n".
@@ -479,7 +489,14 @@ void BlockDocument::setContent(const QString &content, const BlockDocument *reus
 
 QString BlockDocument::toString() const
 {
-    QString out = m_bom + m_leading;
+    // One allocation of the final size: the editor asks for the text at every keystroke.
+    qsizetype size = m_bom.size() + m_leading.size();
+    for (const Item &it : m_items)
+        size += it.own.size() + it.eol.size() + it.entry.trailing.size();
+    QString out;
+    out.reserve(size);
+    out += m_bom;
+    out += m_leading;
     for (const Item &it : m_items) {
         out += it.own;
         out += it.eol;
@@ -907,6 +924,7 @@ void BlockDocument::setOwn(int i, const QString &own)
 void BlockDocument::touch(int i)
 {
     ++m_items[i].version;
+    ++m_epoch;
 }
 
 QString BlockDocument::serializeBody(const Item &item, const QString &body) const
@@ -946,6 +964,7 @@ void BlockDocument::rederivePositional()
 
 void BlockDocument::recompute()
 {
+    ++m_epoch; // whatever led here changed the document (the typing shortcut starts over)
     rederivePositional();
     QList<int> stack;
     int line = countLineBreaks(m_leading);
@@ -995,11 +1014,18 @@ BlockDocument::Snapshot BlockDocument::snapshot() const
 /// everything between them YAML frontmatter on reload: a blank line before it keeps it a rule.
 void BlockDocument::protectLeadingRule()
 {
-    if (m_items.isEmpty() || !m_leading.isEmpty() || m_items.constFirst().entry.kind == BlockKind::Frontmatter
-        || !m_items.constFirst().own.startsWith(u"---"))
+    if (leadingRuleSafe())
         return;
     if (findFrontmatter(toString()))
         m_leading = m_eol;
+}
+
+/// No `---` on the very first line that is not frontmatter already: whatever the other blocks
+/// say, protectLeadingRule() has nothing to do.
+bool BlockDocument::leadingRuleSafe() const
+{
+    return m_items.isEmpty() || !m_leading.isEmpty() || m_items.constFirst().entry.kind == BlockKind::Frontmatter
+           || !m_items.constFirst().own.startsWith(u"---");
 }
 
 /// A block whose `$$` line opens a display formula it does not close (a closing `$$` deleted, Enter
@@ -1062,10 +1088,29 @@ EditResult BlockDocument::rowChanges(const Snapshot &before, int focus, int curs
     EditResult r;
     r.focus = focus;
     r.cursor = cursor;
+    // The same blocks in the same order — text edited, a task ticked, a block indented in place:
+    // no row was removed, moved or inserted, so only the versions are compared, without the
+    // tables below (they were a third of such an operation's time on a page of 5000 blocks).
+    if (before.uids.size() == m_items.size()
+        && std::ranges::equal(before.uids, m_items, {}, {}, [](const Item &it) { return it.entry.uid; })) {
+        for (int i = 0; i < count();) {
+            if (before.versions[i] == m_items[i].version) {
+                ++i;
+                continue;
+            }
+            const int first = i;
+            while (i < count() && before.versions[i] != m_items[i].version)
+                ++i;
+            r.changes.append({BlockChange::Type::Changed, first, i - first, -1});
+        }
+        return r;
+    }
     QHash<quint64, int> oldVersion;
+    oldVersion.reserve(before.uids.size());
     for (qsizetype k = 0; k < before.uids.size(); ++k)
         oldVersion.insert(before.uids[k], before.versions[k]);
     QSet<quint64> now;
+    now.reserve(m_items.size());
     for (const Item &it : std::as_const(m_items))
         now.insert(it.entry.uid);
 
@@ -1265,8 +1310,9 @@ void BlockDocument::shiftIndent(int first, int end, const QString &from, const Q
     }
 }
 
-void BlockDocument::renumberChildren(int parent, quint64 restartUid)
+QList<std::pair<int, int>> BlockDocument::renumbering(int parent, quint64 restartUid) const
 {
+    QList<std::pair<int, int>> out;
     QList<int> children;
     for (int i = parent + 1; i < count(); ++i) {
         const BlockEntry &e = at(i);
@@ -1302,17 +1348,33 @@ void BlockDocument::renumberChildren(int parent, quint64 restartUid)
         const int start = restartUid && at(run.first()).uid == restartUid ? 1 : *std::ranges::min_element(numbers);
         for (qsizetype r = 0; r < run.size(); ++r) {
             const int want = start + int(r);
-            if (numbers[r] == want)
-                continue;
-            const int i = run[r];
-            const QString &own = m_items[i].own;
-            // The first line's marker ("2." may end that line, its text on the next ones).
-            const auto mlm = matchListMarker(firstLine(own));
-            if (!mlm)
-                continue;
-            setOwn(i, own.first(mlm->markerFrom) + QString::number(want) + own.sliced(mlm->markerEnd - 1));
+            if (numbers[r] != want)
+                out.append({run[r], want});
         }
     }
+    return out;
+}
+
+void BlockDocument::renumberChildren(int parent, quint64 restartUid)
+{
+    // The numbers first, then the texts: writing one item's number changes nothing another item's
+    // number is read from (its kind, its marker).
+    const QList<std::pair<int, int>> numbers = renumbering(parent, restartUid);
+    for (const auto &[i, want] : numbers) {
+        const QString &own = m_items[i].own;
+        // The first line's marker ("2." may end that line, its text on the next ones).
+        const auto mlm = matchListMarker(firstLine(own));
+        if (!mlm)
+            continue;
+        setOwn(i, own.first(mlm->markerFrom) + QString::number(want) + own.sliced(mlm->markerEnd - 1));
+    }
+}
+
+/// renumberAround() of block `i` would change nothing: the ordered lists among its siblings and
+/// its children count as they should.
+bool BlockDocument::numberingSettled(int i) const
+{
+    return renumbering(m_items[i].entry.parent, 0).isEmpty() && (!isListItem(i) || renumbering(i, 0).isEmpty());
 }
 
 void BlockDocument::renumberAround(quint64 uid)
@@ -1325,16 +1387,30 @@ void BlockDocument::renumberAround(quint64 uid)
         renumberChildren(i);
 }
 
+bool BlockDocument::continuesListItem(int i) const
+{
+    return isListItem(i) && !isListItem(i + 1) && at(i + 1).kind != BlockKind::Frontmatter
+           && indentOf(m_items[i + 1].own).chars > 0;
+}
+
+bool BlockDocument::separated(int i) const
+{
+    if (i < 0 || i + 1 >= count())
+        return true;
+    if (continuesListItem(i))
+        return false;
+    const Item &it = m_items[i];
+    return !it.entry.trailing.isEmpty() || !needsBlankLine(it.entry.kind, m_items[i + 1].entry.kind);
+}
+
 void BlockDocument::ensureSeparated(int i)
 {
     if (i < 0 || i + 1 >= count())
         return;
     // An indented non-list block after a list item would continue that item: unindent it.
-    if (isListItem(i) && !isListItem(i + 1) && at(i + 1).kind != BlockKind::Frontmatter) {
+    if (continuesListItem(i)) {
         const QString &next = m_items[i + 1].own;
-        const qsizetype ws = indentOf(next).chars;
-        if (ws > 0)
-            shiftIndent(i + 1, i + 2, next.first(ws), QString());
+        shiftIndent(i + 1, i + 2, next.first(indentOf(next).chars), QString());
     }
     Item &it = m_items[i];
     if (!it.entry.trailing.isEmpty() || !needsBlankLine(it.entry.kind, m_items[i + 1].entry.kind))
@@ -1370,6 +1446,22 @@ void BlockDocument::fixEnds()
     } else if (!m_finalNewline && tailEol && last.entry.trailing.isEmpty()) {
         last.eol.clear();
     }
+}
+
+bool BlockDocument::endsFixed() const
+{
+    if (m_items.isEmpty())
+        return true;
+    if (!m_leading.isEmpty() && !endsWithEol(m_leading))
+        return false;
+    for (int i = 0; i + 1 < count(); ++i) {
+        const Item &it = m_items[i];
+        if (it.eol.isEmpty() || (!it.entry.trailing.isEmpty() && !endsWithEol(it.entry.trailing)))
+            return false;
+    }
+    const Item &last = m_items.constLast();
+    const bool tailEol = endsWithEol(last.entry.trailing.isEmpty() ? last.eol : last.entry.trailing);
+    return m_finalNewline ? tailEol : !(tailEol && last.entry.trailing.isEmpty());
 }
 
 void BlockDocument::insertItem(int pos, Item item, bool takeTrailingFromPrevious)
@@ -1434,15 +1526,81 @@ EditResult BlockDocument::setBody(int i, const QString &text)
     const QString body = normalizeNewlines(text);
     if (body == at(i).body)
         return {};
-    const Snapshot before = snapshot();
+    const QString own = serializeBody(m_items[i], body);
+    // The second edit in a row of the block the last setBody() normalised around: typing. Looked
+    // into only now — a loop setting the bodies of many blocks never pays for the question.
+    bool typing = m_typingShortcut && m_typing.epoch == m_epoch && m_typing.uid == m_items[i].entry.uid
+                  && own != m_items[i].own;
+    if (typing && !m_typing.checked) {
+        typing = typingSettled(i);
+        m_typing.checked = typing;
+    }
+    if (!typing) {
+        const Snapshot before = snapshot();
+        setOwn(i, own);
+        return normalisedBody(before, i);
+    }
+    // As long as the new text leaves alone everything the rest of the document reads of this
+    // block — its kind, its list marker and its column, an open `$$` — and the blocks next to it
+    // need no blank line or unindenting for it, the long way would change this block and the line
+    // numbers after it, nothing else. (A page of 5000 blocks: 1.2 ms the long way, 20 µs this one.)
+    const BlockKind kind = m_items[i].entry.kind;
+    const int markerCol = m_items[i].markerCol;
+    const QString prefix = m_items[i].entry.prefix;
+    const int lineBreaks = countLineBreaks(m_items[i].own);
+    setOwn(i, own);
+    const Item &now = m_items[i];
+    if (now.entry.kind == kind && now.markerCol == markerCol && now.entry.prefix == prefix && !now.displayMathOpen
+        && leadingRuleSafe() && separated(i - 1) && separated(i)) {
+        if (const int shift = countLineBreaks(now.own) - lineBreaks; shift != 0) {
+            for (int j = i + 1; j < count(); ++j)
+                m_items[j].entry.line += shift;
+        }
+        m_typing.epoch = m_epoch; // (setOwn() counted this change)
+        EditResult r;
+        r.changes.append({BlockChange::Type::Changed, i, 1, -1});
+        return r;
+    }
+    // The text reaches further: the long way from here, as if nothing had been tried — its
+    // snapshot is the document before the text changed (setOwn() raised this block's version).
+    Snapshot before = snapshot();
+    --before.versions[i];
+    return normalisedBody(before, i);
+}
+
+EditResult BlockDocument::normalisedBody(const Snapshot &before, int i)
+{
     const quint64 uid = at(i).uid;
-    setOwn(i, serializeBody(m_items[i], body));
     recompute();
     renumberAround(uid);
     ensureSeparated(i - 1);
     ensureSeparated(i);
     fixEnds();
-    return finish(before, -1, -1);
+    const EditResult r = finish(before, -1, -1);
+    // The next edit of this block, if nothing else happens first, may be typing (setBody()).
+    m_typing = {uid, m_epoch, false};
+    return r;
+}
+
+/// What the short way of setBody() skips has nothing to do, whatever is typed into block `i` next:
+/// the document's ends, formulas left open by any block (a text without `$$` may still stand
+/// between one and the line that closes it), the numbering of the lists the block is in. The rest
+/// is looked at with the new text.
+bool BlockDocument::typingSettled(int i) const
+{
+    return endsFixed() && std::ranges::none_of(m_items, &Item::displayMathOpen) && numberingSettled(i);
+}
+
+bool BlockDocument::isTypingIn(int i) const
+{
+    return m_typingShortcut && i >= 0 && i < count() && m_typing.epoch == m_epoch
+           && m_typing.uid == m_items[i].entry.uid && (m_typing.checked || typingSettled(i));
+}
+
+void BlockDocument::setTypingShortcut(bool on)
+{
+    m_typingShortcut = on;
+    m_typing = {};
 }
 
 EditResult BlockDocument::split(int i, int cursor, bool collapsed)

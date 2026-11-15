@@ -23,6 +23,8 @@ QJsonObject SyncFileState::toJson() const
     };
     if (mtime)
         json.insert(u"mtime"_s, *mtime);
+    if (checkedAt != 0)
+        json.insert(u"checkedAt"_s, checkedAt);
     if (!remoteId.isEmpty())
         json.insert(u"remoteId"_s, remoteId);
     return json;
@@ -42,6 +44,7 @@ std::optional<SyncFileState> SyncFileState::fromJson(const QJsonObject &json)
     if (const QJsonValue mtime = json.value(u"mtime"_s); mtime.isDouble())
         state.mtime = mtime.toInteger();
     state.syncedAt = json.value(u"syncedAt"_s).toInteger();
+    state.checkedAt = json.value(u"checkedAt"_s).toInteger(); // optional (states up to 0.21 have none)
     state.remoteId = json.value(u"remoteId"_s).toString(); // optional (states of 0.4.x have none)
     return state;
 }

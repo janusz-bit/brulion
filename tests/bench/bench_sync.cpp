@@ -13,6 +13,8 @@
 #include "vault/vault.h"
 
 #include <QCoreApplication>
+#include <QDateTime>
+#include <QFile>
 #include <QTest>
 
 #include <map>
@@ -111,6 +113,15 @@ class BenchSync : public QObject {
         f->files = bench::makeVault(files, 13);
         if (!bench::writeVault(f->dir->path() + u"/vault"_s, f->files))
             qFatal("cannot write the vault");
+        // As in a notebook in use, the notes were written long before the sync: a note written
+        // within SyncFileState::SettledAfterMs of the run that reads it is read again by the next
+        // one, which would make "no changes" measure the first sync's aftermath.
+        const QDateTime written = QDateTime::currentDateTime().addSecs(-3600);
+        for (const bench::VaultFile &file : std::as_const(f->files)) {
+            QFile onDisk(f->dir->path() + u"/vault/"_s + file.path);
+            if (!onDisk.open(QIODevice::ReadWrite) || !onDisk.setFileTime(written, QFileDevice::FileModificationTime))
+                qFatal("cannot set the time of %s", qPrintable(file.path));
+        }
         f->server = std::make_unique<synctest::FakeWebDavServer>();
         f->server->mkdir(kFolder);
         f->vault = std::make_unique<Vault>(f->dir->path() + u"/vault"_s, QString());

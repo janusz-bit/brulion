@@ -52,6 +52,16 @@ RenderContext renderContext()
     return ctx;
 }
 
+/// Every setBody() of `doc` the long way from now on. A template, so that the same benchmark
+/// sources build against a tree from before the typing shortcut (it has no switch: there the long
+/// way is the only one).
+template<typename Document>
+void withoutTypingShortcut(Document &doc)
+{
+    if constexpr (requires { doc.setTypingShortcut(false); })
+        doc.setTypingShortcut(false);
+}
+
 /// A block index in the middle of `doc` that is a list item with a previous sibling (indent()
 /// and moveUp() do something there).
 int middleItem(const BlockDocument &doc)
@@ -168,8 +178,9 @@ private Q_SLOTS:
         QTest::addColumn<QString>("op");
         for (int n : {500, 5000}) {
             for (const QString &op :
-                 {u"setBody"_s, u"split+merge"_s, u"insertAfter+remove"_s, u"indent+outdent"_s, u"moveDown+moveUp"_s,
-                  u"toggleTask x2"_s, u"keystroke"_s, u"undo+redo"_s, u"version+diff"_s, u"re-read"_s})
+                 {u"setBody"_s, u"setBody the long way"_s, u"split+merge"_s, u"insertAfter+remove"_s,
+                  u"indent+outdent"_s, u"moveDown+moveUp"_s, u"toggleTask x2"_s, u"keystroke"_s, u"undo+redo"_s,
+                  u"version+diff"_s, u"re-read"_s})
                 QTest::newRow(qPrintable(u"%1 blocks %2"_s.arg(n).arg(op))) << n << op;
         }
     }
@@ -185,6 +196,11 @@ private Q_SLOTS:
         int flip = 0;
         qsizetype sink = 0;
         BlockDocument::Delta enter;
+        // Typing is the same block's body set again and again ("setBody", "keystroke",
+        // "version+diff"): the document's short way. The long way is what the first keystroke in
+        // a block costs, and every edit that changes what the block is.
+        if (op == u"setBody the long way")
+            withoutTypingShortcut(doc);
         if (op == u"undo+redo") {
             const BlockDocument::Version v = doc.version();
             doc.split(i, int(body.size() / 2));
@@ -203,7 +219,7 @@ private Q_SLOTS:
             } else if (op == u"re-read") {
                 const BlockDocument fresh(doc.toString(), &doc);
                 sink += fresh.count();
-            } else if (op == u"setBody") {
+            } else if (op == u"setBody" || op == u"setBody the long way") {
                 doc.setBody(i, (flip++ & 1) ? body : body + u" x"_s);
             } else if (op == u"split+merge") {
                 const EditResult r = doc.split(i, int(body.size() / 2));

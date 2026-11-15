@@ -74,64 +74,42 @@ QString formatList(const std::vector<Value> &items, CalcLocale locale, NumberFor
 
 Value Value::number(double value)
 {
-    Value v;
-    v.m_type = Type::Number;
-    v.m_si = value;
-    return v;
+    return Value(value, Unit(), Currency(), false);
 }
 
 Value Value::quantity(double si, Unit unit)
 {
-    Value v = number(si);
-    v.m_unit = std::move(unit);
-    return v;
+    return Value(si, std::move(unit), Currency(), false);
 }
 
 Value Value::percent(double fraction)
 {
-    Value v = number(fraction);
-    v.m_percent = true;
-    return v;
+    return Value(fraction, Unit(), Currency(), true);
 }
 
 Value Value::money(double amount, Currency currency)
 {
-    Value v = number(amount);
-    v.m_currency = std::move(currency);
-    return v;
+    return Value(amount, Unit(), std::move(currency), false);
 }
 
 Value Value::boolean(bool value)
 {
-    Value v;
-    v.m_type = Type::Bool;
-    v.m_bool = value;
-    v.m_si = value ? 1 : 0;
-    return v;
+    return Value(value);
 }
 
 Value Value::string(QString text)
 {
-    Value v;
-    v.m_type = Type::String;
-    v.m_text = std::move(text);
-    return v;
+    return Value(std::move(text));
 }
 
 Value Value::list(std::vector<Value> items)
 {
-    Value v;
-    v.m_type = Type::List;
-    v.m_items = std::make_shared<const std::vector<Value>>(std::move(items));
-    return v;
+    return Value(std::make_shared<const std::vector<Value>>(std::move(items)));
 }
 
 Value Value::function(std::shared_ptr<const FunctionDef> def)
 {
-    Value v;
-    v.m_type = Type::Function;
-    v.m_function = std::move(def);
-    return v;
+    return Value(std::move(def));
 }
 
 const std::vector<Value> &Value::items() const

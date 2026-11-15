@@ -34,6 +34,12 @@
 // undo step keeps that Delta: revert() / reapply() turn the document into the other version
 // exactly (text, empty paragraphs, uids), parsing only the blocks the step changes, and report
 // the row changes like any operation. composed() joins two consecutive deltas (typing).
+//
+// Typing: every operation ends with the normalisations above over the whole document, which a
+// page of thousands of blocks pays at every keystroke. setBody() therefore remembers the block it
+// has just normalised around; the next setBody() of that block that leaves its kind and list
+// marker alone changes the block only (isTypingIn(), setTypingShortcut()) — with the same result
+// as the long way, which any other operation, and any text that reaches further, takes again.
 #pragma once
 
 #include "types.h"
@@ -187,6 +193,13 @@ public:
     /// indentation; "\r\n" in `text` is accepted. The block's kind follows its new text (typing
     /// "# " makes a heading, "- " a list item, …).
     EditResult setBody(int i, const QString &text);
+    /// The next setBody() of block `i` takes the short way (the file comment, "Typing") when its
+    /// text keeps the block's kind and list marker: the last change of the document was a
+    /// setBody() of this block and nothing in the document waits to be normalised.
+    bool isTypingIn(int i) const;
+    /// Off: every setBody() goes the long way (tests and measurements compare the two). On by
+    /// default.
+    void setTypingShortcut(bool on);
 
     /// The blank blocks — empty paragraphs, which exist only in memory: in the text they are blank
     /// lines, so a document read from text has none. Their lines and line counts, ascending.
@@ -388,12 +401,26 @@ private:
     QString childPrefix(int parent) const;
     QString serializeBody(const Item &item, const QString &body) const;
     void shiftIndent(int first, int end, const QString &from, const QString &to);
+    /// What renumberChildren() writes: (block, number) for every ordered item among the children
+    /// of `parent` whose number is not the one its run gives it.
+    QList<std::pair<int, int>> renumbering(int parent, quint64 restartUid) const;
     void renumberChildren(int parent, quint64 restartUid = 0);
     void renumberAround(quint64 uid);
+    /// Block `i + 1` is an indented non-list block right after list item `i`.
+    bool continuesListItem(int i) const;
     void ensureSeparated(int i);
     void separateDisplayMath();
     void protectLeadingRule();
     void fixEnds();
+    // The normalisations that would change nothing as the document is (each mirrors the
+    // conditions of the function it stands for): what the typing shortcut may skip.
+    bool separated(int i) const;        ///< ensureSeparated(i)
+    bool leadingRuleSafe() const;       ///< protectLeadingRule()
+    bool endsFixed() const;             ///< fixEnds()
+    bool numberingSettled(int i) const; ///< renumberAround() of block `i`
+    /// The rest of setBody() after the block's text is in place: the long way.
+    EditResult normalisedBody(const Snapshot &before, int i);
+    bool typingSettled(int i) const;
     void insertItem(int pos, Item item, bool takeTrailingFromPrevious);
     void removeItems(int first, int end);
     void swapRanges(int a0, int b0, int b1);
@@ -404,6 +431,19 @@ private:
     QString m_leading; ///< blank lines before the first block
     QString m_eol = QStringLiteral("\n");
     bool m_finalNewline = true;
+    /// Counts the changes: every changed block (touch()) and every recompute(), which each
+    /// operation that changes anything ends with.
+    quint64 m_epoch = 0;
+    /// The typing shortcut: the block the last setBody() normalised around, while m_epoch is still
+    /// `epoch` (nothing else happened to the document since); `checked` once typingSettled() said
+    /// the block may change alone.
+    struct Typing {
+        quint64 uid = 0;
+        quint64 epoch = 0;
+        bool checked = false;
+    };
+    Typing m_typing;
+    bool m_typingShortcut = true;
 };
 
 } // namespace brulion::markdown

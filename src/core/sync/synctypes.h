@@ -43,12 +43,24 @@ struct SyncFileState {
     QString localHash;           ///< content hash of the local file (text: of its decoded text)
     QString remoteEtag;          ///< remote version (remoteVersion()); "" = unknown
     qint64 size = 0;             ///< local size in bytes
-    std::optional<qint64> mtime; ///< local mtime in ms (quick change check for binary files)
+    std::optional<qint64> mtime; ///< local mtime in ms (the quick change check, see checkedAt)
     qint64 syncedAt = 0;         ///< when the path was synced, ms since epoch
     /// RemoteEntry::fileId of the server's file when the state was saved ("" = unknown: a server
     /// without oc:fileid, a state of an older version, or an upload not listed yet). Recognises
     /// the file after a rename or move on the server.
     QString remoteId;
+    /// When the local file was last read and its content found to be `localHash`, ms since epoch
+    /// (0 = unknown: a state of an older version). A file with the size and mtime recorded here is
+    /// not read again — a binary file always, a text file once `settled()`.
+    qint64 checkedAt = 0;
+
+    /// A file written again within the storage's timestamp granularity (2 s on FAT) keeps its
+    /// mtime, so a hash taken that soon after the mtime says nothing about a later write of the
+    /// same size: only a file checked at least this long after its mtime is trusted by its size
+    /// and mtime.
+    static constexpr qint64 SettledAfterMs = 3000;
+    /// The local file was read long enough after it was last written (see SettledAfterMs).
+    bool settled() const { return mtime && checkedAt > 0 && *mtime <= checkedAt - SettledAfterMs; }
 
     QJsonObject toJson() const;
     /// std::nullopt when `json` lacks localHash / remoteEtag / size.

@@ -84,6 +84,17 @@ public:
     friend bool operator==(const Value &a, const Value &b);
 
 private:
+    // What the factories above build: each constructs its value whole, in the place it is
+    // returned to (no object declared first and filled in member by member — the evaluator
+    // makes a number for every operation of a calculation).
+    Value(double si, Unit unit, Currency currency, bool percent)
+        : m_type(Type::Number), m_si(si), m_percent(percent), m_unit(std::move(unit)), m_currency(std::move(currency))
+    { }
+    explicit Value(bool value) : m_type(Type::Bool), m_si(value ? 1 : 0), m_bool(value) { }
+    explicit Value(QString text) : m_type(Type::String), m_text(std::move(text)) { }
+    explicit Value(std::shared_ptr<const std::vector<Value>> items) : m_type(Type::List), m_items(std::move(items)) { }
+    explicit Value(std::shared_ptr<const FunctionDef> def) : m_type(Type::Function), m_function(std::move(def)) { }
+
     Type m_type = Type::None;
     double m_si = 0;
     bool m_bool = false;

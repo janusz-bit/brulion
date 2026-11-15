@@ -461,6 +461,77 @@ private Q_SLOTS:
         QVERIFY(b.hasPendingChanges());
     }
 
+    void reloadSeesWhatOthersWroteAndKeepsWhatItHas()
+    {
+        // A sync run reloads the store when it starts. The file as this store left it is not
+        // parsed again (its content and the pending changes stay); a version written by somebody
+        // else is read — also one of the same size, or the bytes this store wrote earlier.
+        const QString path = freshPath();
+        LocalStore a(path);
+        a.set(u"liczba"_s, 1);
+        a.set(u"tekst"_s, u"zażółć"_s);
+        QVERIFY(a.flush());
+        const QByteArray first = fileBytes(path);
+        a.set(u"oczekuje"_s, u"gęś"_s); // pending
+        QVERIFY(a.reload());
+        QCOMPARE(a.keys(), (QStringList{u"liczba"_s, u"oczekuje"_s, u"tekst"_s}));
+        QCOMPARE(a.get(u"liczba"_s).toInt(), 1);
+        QVERIFY(a.hasPendingChanges());
+        QCOMPARE(fileBytes(path), first); // a reload writes nothing
+        // Another writer: a value of the same size.
+        LocalStore b(path);
+        b.set(u"liczba"_s, 2);
+        QVERIFY(b.flush());
+        QCOMPARE(fileBytes(path).size(), first.size());
+        QVERIFY(a.reload());
+        QCOMPARE(a.get(u"liczba"_s).toInt(), 2);
+        QCOMPARE(a.get(u"oczekuje"_s).toString(), u"gęś"_s);
+        // Back to the bytes this store wrote first (a copy from a backup).
+        QVERIFY(writeFileBytes(path, first));
+        QVERIFY(a.reload());
+        QCOMPARE(a.get(u"liczba"_s).toInt(), 1);
+        // The file gone: only what is pending is left, and a flush writes it.
+        QVERIFY(QFile::remove(path));
+        QVERIFY(a.reload());
+        QCOMPARE(a.keys(), QStringList{u"oczekuje"_s});
+        QVERIFY(a.flush());
+        QCOMPARE(fileObject(path), (QJsonObject{{u"oczekuje"_s, u"gęś"_s}}));
+    }
+
+    void reloadAfterAFailedSaveKeepsTheOtherWritersKeys()
+    {
+        // A flush that met another writer's file and then could not save has that file's keys
+        // in memory: a reload of the same file keeps them with the pending change.
+        const QString dir = m_tmp.path() + u"/readonly-reload"_s;
+        const QString path = dir + u"/store.json"_s;
+        QVERIFY(QDir().mkpath(dir));
+        const auto writable = [&](bool on) {
+            QFile::setPermissions(dir, QFileDevice::ReadOwner | QFileDevice::ExeOwner
+                                               | (on ? QFileDevice::WriteOwner : QFileDevice::Permissions()));
+        };
+        const auto restore = qScopeGuard([&] { writable(true); });
+        LocalStore a(path);
+        a.set(u"a"_s, 1);
+        QVERIFY(a.flush());
+        {
+            LocalStore b(path);
+            b.set(u"b"_s, 2);
+            QVERIFY(b.flush());
+        }
+        writable(false);
+        if (QFileInfo(dir).isWritable())
+            QSKIP("running with privileges that ignore file permissions");
+        a.set(u"c"_s, 3);
+        QVERIFY(!a.flush());
+        QCOMPARE(a.keys(), (QStringList{u"a"_s, u"b"_s, u"c"_s}));
+        QVERIFY(a.reload());
+        QCOMPARE(a.keys(), (QStringList{u"a"_s, u"b"_s, u"c"_s}));
+        QVERIFY(a.hasPendingChanges());
+        writable(true);
+        QVERIFY(a.flush());
+        QCOMPARE(fileObject(path), (QJsonObject{{u"a"_s, 1}, {u"b"_s, 2}, {u"c"_s, 3}}));
+    }
+
     void missingFileOnFlushKeepsOurData()
     {
         const QString path = freshPath();

@@ -274,6 +274,10 @@ QString versionDifference(const BlockDocument &doc, const BlockDocument &want, b
 class TestBlockDocument : public QObject {
     Q_OBJECT
 
+    // typingMatchesTheLongWay(): edits of a body in all its rows, and those that met the shortcut.
+    int m_typed = 0;
+    int m_shortWays = 0;
+
 private Q_SLOTS:
     // --- round trip ------------------------------------------------------------------------------
 
@@ -1072,6 +1076,297 @@ private Q_SLOTS:
         BlockDocument doc(u"-\n- b\n"_s);
         doc.setBody(0, u"tekst"_s);
         QCOMPARE(doc.toString(), u"- tekst\n- b\n"_s);
+    }
+
+    // --- typing: setBody of the same block again -----------------------------------------------------
+
+    void typingChangesTheBlockOnly()
+    {
+        BlockDocument doc(u"- pierwszy\n\t- drugi\n\t- trzeci\n- czwarty\n\nAkapit\n"_s);
+        QVERIFY(!doc.isTypingIn(1)); // nothing typed yet
+        EditResult r = doc.setBody(1, u"drugi ż"_s);
+        QCOMPARE(describe(r.changes), u"changed 1+1"_s);
+        QVERIFY(doc.isTypingIn(1));
+        QVERIFY(!doc.isTypingIn(2));
+        // The same block again: the row and the text change, the lines below move with a line break.
+        r = doc.setBody(1, u"drugi żó"_s);
+        QCOMPARE(describe(r.changes), u"changed 1+1"_s);
+        QCOMPARE(r.focus, -1);
+        QCOMPARE(r.cursor, -1);
+        QVERIFY(doc.isTypingIn(1));
+        QCOMPARE(doc.toString(), u"- pierwszy\n\t- drugi żó\n\t- trzeci\n- czwarty\n\nAkapit\n"_s);
+        r = doc.setBody(1, u"drugi żó\nłąka"_s);
+        QCOMPARE(describe(r.changes), u"changed 1+1"_s);
+        QCOMPARE(doc.toString(), u"- pierwszy\n\t- drugi żó\n\t  łąka\n\t- trzeci\n- czwarty\n\nAkapit\n"_s);
+        QCOMPARE(doc.at(2).line, 3);
+        QCOMPARE(doc.at(4).line, 6);
+        QCOMPARE(doc.indexAtLine(3), 2);
+        QVERIFY(doc.isTypingIn(1));
+        // Nothing changed: nothing reported, and typing goes on.
+        QVERIFY(!doc.setBody(1, u"drugi żó\nłąka"_s).changed());
+        QVERIFY(doc.isTypingIn(1));
+        // A text that makes the block something else goes the long way (a heading in a list ends it).
+        r = doc.setBody(1, u"# nagłówek"_s);
+        QCOMPARE(doc.at(1).kind, BlockKind::ListItem); // "- # nagłówek" stays an item
+        r = doc.setBody(4, u"Akapit."_s);
+        QVERIFY(doc.isTypingIn(4));
+        QVERIFY(!doc.isTypingIn(1));
+        r = doc.setBody(4, u"- punkt"_s); // the paragraph becomes a list item
+        QCOMPARE(doc.at(4).kind, BlockKind::ListItem);
+        QCOMPARE(BlockDocument(doc.toString()).toString(), doc.toString());
+        // Any other operation ends the typing.
+        doc.setBody(0, u"pierwszy!"_s);
+        QVERIFY(doc.isTypingIn(0));
+        doc.toggleTask(3, Today);
+        QVERIFY(!doc.isTypingIn(0));
+        doc.setBody(0, u"pierwszy!!"_s);
+        QVERIFY(doc.isTypingIn(0));
+        // Switched off: always the long way.
+        doc.setTypingShortcut(false);
+        QVERIFY(!doc.isTypingIn(0));
+        doc.setBody(0, u"pierwszy!!!"_s);
+        QVERIFY(!doc.isTypingIn(0));
+    }
+
+    void typingWaitsForWhatTheDocumentStillNeeds()
+    {
+        // A loose ordered list is renumbered by the first edit; typing starts after it.
+        BlockDocument loose(u"1. a\n5. b\n9. c\n"_s);
+        loose.setBody(0, u"ax"_s);
+        QCOMPARE(loose.toString(), u"1. ax\n2. b\n3. c\n"_s);
+        QVERIFY(loose.isTypingIn(0));
+        // A formula left open by a block: every edit looks at the whole document (the line that
+        // closes it may be typed into any block after it).
+        BlockDocument open(u"- $$\n- b\n- c\n"_s);
+        open.setBody(1, u"bx"_s);
+        QVERIFY(!open.isTypingIn(1));
+        open.setBody(1, u"bxy"_s);
+        QVERIFY(!open.isTypingIn(1));
+        open.setBody(1, u"bxy\n$$"_s); // its last line would close it: a blank line keeps the blocks apart
+        QCOMPARE(open.toString(), u"- $$\n\n- bxy\n  $$\n- c\n"_s);
+        QCOMPARE(entries(BlockDocument(open.toString())), entries(open));
+        // A rule on the first line that a `---` typed below would make frontmatter of.
+        BlockDocument rule(u"---\n\nAkapit\n"_s);
+        QCOMPARE(rule.at(0).kind, BlockKind::Rule);
+        rule.setBody(1, u"Akapit."_s);
+        QVERIFY(rule.isTypingIn(1));
+        rule.setBody(1, u"---"_s);
+        QVERIFY(!markdown::findFrontmatter(rule.toString()));
+        QCOMPARE(BlockDocument(rule.toString()).at(0).kind, BlockKind::Rule);
+        // A paragraph after a list item: indented, it would continue the item, so it never is.
+        BlockDocument glued(u"- a\n\nb\n"_s);
+        glued.setBody(1, u"bc"_s);
+        QVERIFY(glued.isTypingIn(1));
+        glued.setBody(1, u"  bcd"_s);
+        QCOMPARE(glued.toString(), u"- a\n\nbcd\n"_s);
+    }
+
+    void typedTextsMatchTheLongWay_data()
+    {
+        QTest::addColumn<QString>("content");
+        QTest::addColumn<int>("block");
+        QTest::addColumn<QStringList>("bodies");
+        // What the rest of the document reads of the block being typed in, one case each: the
+        // texts are typed in turn into the one block.
+        QTest::newRow("plain typing") << u"- a\n- b\n- c\n"_s << 1
+                                      << QStringList{u"bx"_s, u"bxy"_s, u"bx"_s, u""_s, u"z"_s};
+        QTest::newRow("line breaks move the lines below")
+                << u"- a\n\t- b\n- c\n\nAkapit\n"_s << 1 << QStringList{u"bx"_s, u"bx\ny"_s, u"bx\ny\n\nz"_s, u"bx"_s};
+        QTest::newRow("the kind changes: heading, list, quote, code, table")
+                << u"Akapit\n\nKoniec\n"_s << 0
+                << QStringList{u"Akapit."_s,      u"# Akapit."_s,    u"Akapit."_s, u"- Akapit."_s,
+                               u"Akapit."_s,      u"> Akapit."_s,    u"```"_s,     u"1. Akapit."_s,
+                               u"Akapit.\n==="_s, u"| a |\n|---|"_s, u"Akapit."_s};
+        QTest::newRow("a list item stops being one")
+                << u"- a\n- b\n- c\n"_s << 1 << QStringList{u"bx"_s, u"# b"_s, u"bx"_s, u"```\nkod"_s, u"bx"_s};
+        QTest::newRow("a paragraph glued to the block after it")
+                << u"# T\nAkapit\nDalej\n"_s << 0 << QStringList{u"Tytuł"_s, u"Tytuł!"_s, u"- x"_s, u"- xy"_s};
+        QTest::newRow("an indented paragraph after a list item")
+                << u"- a\n\nb\n"_s << 1 << QStringList{u"bc"_s, u"  bcd"_s, u"\tbcd"_s, u"bcd"_s, u"    bcd"_s};
+        QTest::newRow("the block opens a formula that a later line closes")
+                << u"- a\n- b\n  $$\n- c\n"_s << 0
+                << QStringList{u"ax"_s, u"ax\n$$"_s, u"ax\n$$ "_s, u"ax\n$$\nb"_s, u"ax"_s};
+        QTest::newRow("the block opens a formula above a block with a whole one")
+                << u"- a\n- b\n  $$\n  x\n  $$\n- c\n"_s << 0
+                << QStringList{u"ax"_s, u"ax\n$$"_s, u"ax\n$$\ny"_s, u"ax\n$$\ny\n$$"_s, u"ax"_s};
+        QTest::newRow("an ordered list that the first edit brings to the top level")
+                << u"- a\n\n    5. x\n6. y\n8. z\n"_s << 0 << QStringList{u"ax"_s, u"axy"_s, u"axyz"_s, u"a"_s};
+        QTest::newRow("a formula left open above: the closing line typed below")
+                << u"- $$\n- b\n- c\n"_s << 1 << QStringList{u"bx"_s, u"bxy"_s, u"bxy\n$$"_s, u"bxy"_s};
+        QTest::newRow("a formula left open above, a blank line typed in between")
+                << u"- $$\n- b\n- c\n  $$\n- d\n"_s << 1 << QStringList{u"bx"_s, u"bx\n\ny"_s, u"bx"_s, u"bxy"_s};
+        QTest::newRow("a rule on the first line: a closing line typed below")
+                << u"---\n\nAkapit\n"_s << 1
+                << QStringList{u"Akapit."_s, u".."_s, u"..."_s, u"...."_s, u"..."_s, u"---"_s, u"Akapit"_s};
+        QTest::newRow("a rule on the first line: another rule below becomes a closing line")
+                << u"---\n\n***\n\nKoniec\n"_s << 1 << QStringList{u"****"_s, u"---"_s, u"***"_s, u"---"_s};
+        QTest::newRow("the first line becomes a rule")
+                << u"Akapit\n\n---\n\nKoniec\n"_s << 0 << QStringList{u"Akapit."_s, u"---"_s, u"Akapit"_s};
+        // The first block becoming a page property (or no longer one) changes what the block
+        // after it is: `key:: value` lines are properties only below properties.
+        QTest::newRow("a page property typed at the top")
+                << u"tytul\n\nklucz:: wartość\n\n- a\n"_s << 0
+                << QStringList{u"tytul:"_s, u"tytul:: x"_s, u"tytul:: xy"_s, u"tytul"_s};
+        QTest::newRow("frontmatter typed at the top")
+                << u"Akapit\n\nklucz:: wartość\n\n- a\n"_s << 0
+                << QStringList{u"Akapit."_s, u"---\ntitle: x\n---"_s, u"---\ntitle: xy\n---"_s, u"Akapit"_s};
+        QTest::newRow("a page property that stops being one")
+                << u"status:: szkic\n\nklucz:: wartość\n\n- a\n"_s << 0
+                << QStringList{u"status:: szkic."_s, u"status: szkic"_s, u"status:: szkic"_s};
+        QTest::newRow("page properties edited")
+                << u"klucz:: wartość\nstatus:: szkic\n\n- a\n"_s << 0
+                << QStringList{u"klucz:: wartość\nstatus:: gotowe"_s, u"klucz:: wartość\nstatus:: gotowe!"_s,
+                               u"klucz: wartość"_s, u"klucz:: wartość"_s};
+        QTest::newRow("a loose ordered list")
+                << u"1. a\n5. b\n9. c\n"_s << 1 << QStringList{u"bx"_s, u"bxy"_s, u"2. bxy"_s, u"bxy"_s};
+        QTest::newRow("an ordered list: a nested one typed")
+                << u"1. a\n2. b\n   1. c\n   2. d\n3. e\n"_s << 2 << QStringList{u"cx"_s, u"cxy"_s, u""_s, u"c"_s};
+        QTest::newRow("no final newline: the last block")
+                << u"- a\n- b"_s << 1 << QStringList{u"bx"_s, u"bxy"_s, u""_s, u"b\n"_s, u"b"_s};
+        QTest::newRow("no final newline: a paragraph cleared and typed again")
+                << u"a\n\nb"_s << 1 << QStringList{u"bx"_s, u""_s, u"x"_s, u"x\n"_s, u"x\ny"_s};
+        QTest::newRow("CRLF") << u"- a\r\n- b\r\n\r\nc\r\n"_s << 1
+                              << QStringList{u"bx"_s, u"bx\r\ny"_s, u"bx\ny\nz"_s, u"bx"_s};
+        QTest::newRow("a callout typed in")
+                << u"> [!note] Uwaga\n> tekst\n\n- a\n"_s << 0
+                << QStringList{u"[!note] Uwaga\ntekst."_s, u"[!note] Uwaga\ntekst.\n\ndalej"_s, u"Uwaga"_s,
+                               u"[!todo] Uwaga"_s};
+        QTest::newRow("a task typed and ticked in the text")
+                << u"- [ ] a\n- b\n"_s << 0
+                << QStringList{u"[ ] ax"_s, u"[x] ax"_s, u"[x] ax ✅ 2026-10-14"_s, u"ax"_s};
+        QTest::newRow("a block id typed")
+                << u"- a\n- b\n"_s << 0 << QStringList{u"ax"_s, u"ax ^id1"_s, u"ax ^id12"_s, u"ax"_s};
+    }
+    void typedTextsMatchTheLongWay()
+    {
+        QFETCH(QString, content);
+        QFETCH(int, block);
+        QFETCH(QStringList, bodies);
+        BlockDocument fast(content);
+        BlockDocument slow = fast;
+        slow.setTypingShortcut(false);
+        QVERIFY(block < fast.count());
+        for (const QString &body : std::as_const(bodies)) {
+            const EditResult a = fast.setBody(block, body);
+            const EditResult b = slow.setBody(block, body);
+            const QString what = u"body '%1'"_s.arg(body);
+            QVERIFY2(a.changes == b.changes,
+                     qPrintable(what + u": "_s + describe(a.changes) + u" | "_s + describe(b.changes)));
+            QVERIFY2(a.focus == b.focus && a.cursor == b.cursor, qPrintable(what));
+            const QString d = difference(fast, slow, true, true);
+            QVERIFY2(d.isEmpty(), qPrintable(what + u": "_s + d));
+            // ...and it is the document its text gives when read again.
+            QCOMPARE(BlockDocument(fast.toString()).toString(), fast.toString());
+            if (block >= fast.count())
+                break; // (no case removes blocks; stay in range all the same)
+        }
+    }
+
+    void typingMatchesTheLongWay_data()
+    {
+        QTest::addColumn<QString>("content");
+        QTest::addColumn<quint32>("seed");
+        quint32 seed = 7;
+        int k = 0;
+        for (const QString &f : fixtures() + deltaFixtures()) {
+            if (f.trimmed().isEmpty())
+                continue;
+            QTest::newRow(qPrintable(u"document %1"_s.arg(k))) << f << seed;
+            QString crlf = f;
+            crlf.replace(u"\r\n"_s, u"\n"_s).replace(u"\n"_s, u"\r\n"_s);
+            QTest::newRow(qPrintable(u"document %1 crlf"_s.arg(k))) << crlf << seed + 1;
+            if (f.endsWith(u'\n'))
+                QTest::newRow(qPrintable(u"document %1 no final newline"_s.arg(k))) << f.chopped(1) << seed + 2;
+            seed += 3;
+            ++k;
+        }
+    }
+    void typingMatchesTheLongWay()
+    {
+        // Two copies of a document, one with the typing shortcut and one without, get the same
+        // edits — mostly text typed into one block, with everything that changes what a block is —
+        // and must stay the same document, with the same row changes, after every one of them.
+        QFETCH(QString, content);
+        QFETCH(quint32, seed);
+        const auto rnd = [&](quint32 n) {
+            seed = (seed * 1103515245u + 12345u) % 2147483648u;
+            return n ? (seed >> 8) % n : 0;
+        };
+        const QStringList pieces{u"x"_s,     u" "_s,    u"ż"_s,     u"\n"_s,    u"$$"_s,  u"$$\n"_s,  u"- "_s,
+                                 u"1. "_s,   u"2) "_s,  u"# "_s,    u"> "_s,    u"---"_s, u"```"_s,   u"| a |"_s,
+                                 u"k:: v"_s, u"[ ] "_s, u"TODO "_s, u"  "_s,    u"\t"_s,  u" ^id1"_s, u"%%"_s,
+                                 u"<div>"_s, u"\n\n"_s, u"==="_s,   u"12. "_s,  u"* "_s,  u"\r\n"_s,  u"[[a]]"_s,
+                                 u"😀"_s,    u"\n- "_s, u"\n  "_s,  u"...\n"_s, u"+ "_s,  u"    "_s};
+        // (Not "block id": each copy would draw an id of its own.)
+        auto ops = deltaOperations();
+        ops.removeIf([](const auto &op) { return op.first == u"block id"; });
+        BlockDocument fast(content);
+        BlockDocument slow = fast;
+        slow.setTypingShortcut(false);
+        int typed = 0;
+        int shortWays = 0;
+        int at = -1;
+        for (int step = 0; step < 120; ++step) {
+            const int n = fast.count();
+            QCOMPARE(slow.count(), n);
+            QString what;
+            EditResult a;
+            EditResult b;
+            if (n > 0 && rnd(100) < 80) {
+                if (at < 0 || at >= n || rnd(100) < 12)
+                    at = int(rnd(quint32(n)));
+                QString body = fast.at(at).body;
+                const QString piece = pieces[rnd(quint32(pieces.size()))];
+                switch (rnd(8)) {
+                case 0: body.prepend(piece); break;
+                case 1: body.insert(int(rnd(quint32(body.size() + 1))), piece); break;
+                case 2: body.chop(1); break;
+                case 3: body.remove(0, 1); break;
+                case 4: body = piece; break;
+                case 5: body.clear(); break;
+                default: body.append(piece); break;
+                }
+                what = u"step %1: body of block %2 = '%3'"_s.arg(step).arg(at).arg(body);
+                ++typed;
+                if (fast.isTypingIn(at))
+                    ++shortWays;
+                QVERIFY(!slow.isTypingIn(at));
+                a = fast.setBody(at, body);
+                b = slow.setBody(at, body);
+            } else {
+                const int i = n ? int(rnd(quint32(n))) : -1;
+                const auto &[name, op] = ops[rnd(quint32(ops.size()))];
+                what = u"step %1: %2 of block %3"_s.arg(step).arg(name).arg(i);
+                a = op(fast, i);
+                b = op(slow, i);
+                // New blocks have other uids in each copy: the reference takes the first one's.
+                QCOMPARE(slow.count(), fast.count());
+                QList<std::pair<int, quint64>> adopt;
+                for (int k = 0; k < fast.count(); ++k) {
+                    if (slow.at(k).uid != fast.at(k).uid)
+                        adopt.append({k, fast.at(k).uid});
+                }
+                slow.adoptUids(adopt);
+            }
+            QVERIFY2(a.changes == b.changes,
+                     qPrintable(what + u": "_s + describe(a.changes) + u" | "_s + describe(b.changes)));
+            QVERIFY2(a.focus == b.focus && a.cursor == b.cursor, qPrintable(what));
+            const QString d = difference(fast, slow, false, true);
+            QVERIFY2(d.isEmpty(), qPrintable(what + u": "_s + d));
+            QVERIFY2(fast.blankBlocks() == slow.blankBlocks(), qPrintable(what));
+        }
+        // ...and what the entries do not show (the parse each block keeps) is the same too.
+        const QString d = difference(fast, slow, true, true);
+        QVERIFY2(d.isEmpty(), qPrintable(d));
+        m_typed += typed;
+        m_shortWays += shortWays;
+    }
+    void typingMatchesTheLongWay_tookTheShortWay()
+    {
+        // The comparison above had something to compare: a fair share of the typing met the
+        // shortcut (a document with a formula left open never does).
+        QVERIFY2(m_typed > 1000 && m_shortWays * 3 >= m_typed,
+                 qPrintable(u"%1 of %2 edits met the typing shortcut"_s.arg(m_shortWays).arg(m_typed)));
     }
 
     // --- split -----------------------------------------------------------------------------------

@@ -968,26 +968,41 @@ void SyncRun::syncPath(const VaultPath &path, Done done)
         done(Outcome::done());
         return;
     }
-    if (localStat) {
-        const ReadResult read = readLocal(path, *localStat, ctx.state);
+    // The local file into ctx.snap; false when the path is finished (the file is gone or unreadable).
+    const auto readSnap = [&](const std::optional<SyncFileState> &known) {
+        const ReadResult read = readLocal(path, *localStat, known);
         if (read.vanished) {
             // Deleted or renamed since the listing: handled by the next sync.
             done(Outcome::skipped(u"%1 disappeared locally during sync"_s.arg(path)));
-            return;
+            return false;
         }
         if (!read.error.isEmpty()) {
             done(Outcome::failed(u"read-failed"_s, read.error));
-            return;
+            return false;
         }
         ctx.snap = read.snap;
+        return true;
+    };
+    const auto planNow = [&] {
+        SyncFacts facts;
+        facts.local = ctx.snap.has_value();
+        facts.remote = ctx.remote.has_value();
+        facts.known = ctx.state.has_value();
+        facts.localChanged = ctx.snap && (!ctx.state || ctx.snap->hash != ctx.state->localHash);
+        facts.remoteChanged = ctx.remote && (!ctx.state || remoteVersion(*ctx.remote) != ctx.state->remoteEtag);
+        return planSync(facts);
+    };
+    if (localStat && !readSnap(ctx.state))
+        return;
+    SyncPlan plan = planNow();
+    // A text file taken as unchanged by its size and time alone (readLocal()): whatever is to be
+    // done with it but nothing works on its text — a merge, a conflict copy, the check before a
+    // download or a deletion replaces it —, so it is read after all and planned by what it holds.
+    if (plan != SyncPlan::Noop && ctx.snap && !ctx.snap->hasBytes && isSyncTextPath(path)) {
+        if (!readSnap(std::nullopt))
+            return;
+        plan = planNow();
     }
-    SyncFacts facts;
-    facts.local = ctx.snap.has_value();
-    facts.remote = ctx.remote.has_value();
-    facts.known = ctx.state.has_value();
-    facts.localChanged = ctx.snap && (!ctx.state || ctx.snap->hash != ctx.state->localHash);
-    facts.remoteChanged = ctx.remote && (!ctx.state || remoteVersion(*ctx.remote) != ctx.state->remoteEtag);
-    const SyncPlan plan = planSync(facts);
     if (m_holdDeletions && (plan == SyncPlan::DeleteRemote || plan == SyncPlan::DeleteLocal)) {
         // Held back by the mass-deletion guard; the sync state stays, so the next run plans it again.
         m_report.pendingDeletions.append(
@@ -1027,8 +1042,12 @@ SyncRun::ReadResult SyncRun::readLocal(const VaultPath &path, const FileStat &st
                                        const std::optional<SyncFileState> &state)
 {
     ReadResult result;
-    if (!isSyncTextPath(path) && state && state->size == stat.size && state->mtime == stat.mtime) {
-        // Unchanged binary file (same size and mtime): not read again.
+    if (state && state->size == stat.size && state->mtime == stat.mtime
+        && (!isSyncTextPath(path) || state->settled())) {
+        // The size and mtime of the last sync: not read again. A binary file always; a text file
+        // once its content was read long enough after that mtime (SyncFileState::settled()), so a
+        // second write within the storage's timestamp granularity cannot hide behind the first.
+        // A sync that found nothing to do used to read and hash every note of the notebook.
         LocalSnap snap;
         snap.hash = state->localHash;
         snap.stat = stat;
@@ -1162,6 +1181,7 @@ void SyncRun::saveState(const VaultPath &path, const QString &hash, const QStrin
     if (st)
         state.mtime = st->mtime;
     state.syncedAt = now().toMSecsSinceEpoch();
+    state.checkedAt = state.syncedAt; // `hash` is of the content as it is now
     // The server's file id as listed (kept on overwrite); a new upload learns it next run.
     state.remoteId = m_remoteAll.value(path).fileId;
     store()->set(SyncEngine::stateKey(path), state.toJson());
@@ -1199,15 +1219,24 @@ void SyncRun::record(const VaultPath &path, SyncAction action)
 
 void SyncRun::refreshState(const PathCtx &ctx, Done done)
 {
-    // Nothing changed; keep the binary quick check (size + mtime) up to date.
+    // Nothing changed; keep the quick check (size + mtime, and when the content was read) up to
+    // date.
     const LocalSnap &snap = *ctx.snap;
     const SyncFileState &state = *ctx.state;
-    if (snap.stat.size != state.size || state.mtime != snap.stat.mtime) {
-        SyncFileState next = state;
-        next.size = snap.stat.size;
-        next.mtime = snap.stat.mtime;
-        store()->set(SyncEngine::stateKey(ctx.path), next.toJson());
+    SyncFileState next = state;
+    next.size = snap.stat.size;
+    next.mtime = snap.stat.mtime;
+    if (snap.hasBytes && !next.settled()) {
+        // Read just now and found to be the recorded content. Recorded only when that settles the
+        // file: one written moments ago (or dated in the future) is read again by the next run,
+        // and must not cost a save of the store every time.
+        SyncFileState checked = next;
+        checked.checkedAt = now().toMSecsSinceEpoch();
+        if (checked.settled())
+            next = checked;
     }
+    if (next != state)
+        store()->set(SyncEngine::stateKey(ctx.path), next.toJson());
     done(Outcome::done());
 }
 

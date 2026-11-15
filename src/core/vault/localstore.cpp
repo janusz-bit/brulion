@@ -155,8 +155,11 @@ bool LocalStore::flush()
     }
     // Somebody else saved the file since we last looked: keep their keys, apply ours on top.
     // (A missing or unreadable file is no newer version: then our view is written as it is.)
-    if (!raw.isEmpty() && raw != m_lastBytes)
+    // Their bytes are what this store has read last, whether or not the save below succeeds.
+    if (!raw.isEmpty() && raw != m_lastBytes) {
         m_data = withPendingApplied(disk);
+        m_lastBytes = raw;
+    }
     QJsonObject object;
     for (auto it = m_data.cbegin(); it != m_data.cend(); ++it)
         object.insert(it.key(), it.value());
@@ -179,9 +182,15 @@ bool LocalStore::reload()
     logging::SlowScope slow(lcVault(), "LocalStore load", 200);
     Map disk;
     QByteArray raw;
-    if (!readFile(disk, raw))
+    // The file as this store last read or wrote it needs no parsing here either: m_data is its
+    // content with the pending changes applied. Every sync run re-reads the store when it starts
+    // (another process may have synced, SyncRun::lockStore()), and with the merge bases of ten
+    // thousand notes in it that parse was a third of a sync that found nothing to do.
+    if (!readFile(disk, raw, &m_lastBytes))
         return false;
     slow.setDetail(logging::formatBytes(raw.size()));
+    if (!raw.isEmpty() && raw == m_lastBytes)
+        return true;
     m_lastBytes = raw;
     m_data = withPendingApplied(disk);
     return true;
