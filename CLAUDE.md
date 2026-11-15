@@ -56,7 +56,9 @@ builds) run on the x86_64 laptop via `flock <lock> laptop-run …` or in GitHub 
   allowed). `#pragma once`. `QT_NO_KEYWORDS` is set: use `Q_SIGNALS`, `Q_SLOTS`, `Q_EMIT`.
   `QT_NO_CAST_FROM_ASCII`: use `QStringLiteral`/`u"..."_s`/`QLatin1String`.
 * `src/core` is GUI-free (QtCore + QtNetwork; `src/core/io` may use QtGui for
-  `QTextDocument`). No platform `#ifdef`s in core — platform code lives in `src/platform`.
+  `QTextDocument`, and the model runner over llama.cpp — `brulion_ai_llama`, a library outside
+  `brulion_core`, only in builds with `BRULION_LOCAL_AI` — for `QImage`). No platform `#ifdef`s in
+  core — platform code lives in `src/platform`.
 * One directory per core module (`src/core/<module>/`) with its own `CMakeLists.txt` calling
   `brulion_add_core_module(<module> SOURCES … DEPS <modules it uses> [QT Network|Gui])` →
   static library `brulion_core_<module>`; picked up automatically. Include headers relative to

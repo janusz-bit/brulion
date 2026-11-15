@@ -129,10 +129,13 @@ Pandoc Markdown document for Word, LibreOffice, PDF or EPUB).
   the notebook's API and shows what extensions print. Everything a script can call, with recipes
   to copy, is in the documentation notebook (**Extension API**, **Extension recipes**) and in
   [docs/EXTENSIONS.md](docs/EXTENSIONS.md); the examples there are run by the tests.
-* **AI in extensions**, also on the phone: `b.ai` asks Claude, any OpenAI-compatible API or a
-  server of your own (Ollama), with the key kept on the device, and may give the model tools the
-  script runs; the built-in **AI assistant** searches and reads the whole notebook to answer a
-  question, changes notes only with your yes, and sums up the page on screen into today's note.
+* **AI in extensions**, also on the phone: `b.ai` asks Claude, any OpenAI-compatible API, a
+  server of your own (Ollama) or a small model that runs **on the device itself** (Liquid AI's
+  LFM3-VL and LFM3, downloaded once: no key, no internet, nothing sent anywhere; Linux with Nix
+  and Android), with the key kept on the device, and may give the model tools the script runs
+  and pictures of the notebook to look at; the built-in **AI assistant** searches and reads the
+  whole notebook to answer a question, looks at its pictures, changes notes only with your yes,
+  and sums up the page on screen into today's note.
 * Two note modes: a **document** (Obsidian-like live preview: paragraphs, headings and plain
   lists, edited in place) or an **outline** (Logseq-like: every bullet is a block). Chosen when
   a page is created and switchable at any time; stored in the note as `brulion: document` /
@@ -344,9 +347,12 @@ przykładowym notatnikiem.
   skopiowania są w notatniku z dokumentacją (**API rozszerzeń**, **Przepisy na rozszerzenia**) i
   w [docs/EXTENSIONS.md](docs/EXTENSIONS.md); tamtejsze przykłady uruchamiają testy.
   **AI w rozszerzeniach**, także na telefonie: `b.ai` pyta
-  Claude'a, dowolne API zgodne z OpenAI albo własny serwer (Ollama), klucz zostaje na urządzeniu,
-  a model może dostać narzędzia, które wykonuje skrypt; wbudowany **Asystent AI** przeszukuje i
-  czyta cały notatnik, żeby odpowiedzieć na pytanie, zmienia notatki tylko za Twoją zgodą i
+  Claude'a, dowolne API zgodne z OpenAI, własny serwer (Ollama) albo mały model działający
+  **na samym urządzeniu** (LFM3-VL i LFM3 firmy Liquid AI, pobierane raz: bez klucza, bez
+  internetu, nic nigdzie nie jest wysyłane; Linux z Nixem i Android), klucz zostaje na urządzeniu,
+  a model może dostać narzędzia, które wykonuje skrypt, i obrazki z notatnika do obejrzenia;
+  wbudowany **Asystent AI** przeszukuje i czyta cały notatnik, żeby odpowiedzieć na pytanie,
+  ogląda jego obrazki, zmienia notatki tylko za Twoją zgodą i
   streszcza otwartą stronę do dzisiejszej notatki. Tagi działają jak linki do stron, jak
   w Logseq: `#praca` otwiera stronę „praca” (tworzoną przy pierwszym wpisie), jej odnośniki
   pokazują bloki z tym tagiem, a zmiana nazwy strony poprawia też tagi. Odnośnik do każdego

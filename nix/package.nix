@@ -23,7 +23,25 @@
   makeFontsConf,
   hunspell,
   hunspellDicts,
+  fetchFromGitHub,
+  # The model on the device (docs/EXTENSIONS.md "AI"): llama.cpp compiled in from its pinned
+  # sources as the plugin lib/brulion/libbrulion_localai.so with llama.cpp's libraries beside it.
+  # false: a build without it (no "On this device" in the settings).
+  withLocalAi ? true,
 }:
+
+let
+  # llama.cpp's sources, one release (3rdparty/llama/pin.json; cmake/BrulionLocalAi.cmake).
+  llamaPin = lib.importJSON ../3rdparty/llama/pin.json;
+  llamaSrc = fetchFromGitHub {
+    inherit (llamaPin)
+      owner
+      repo
+      tag
+      hash
+      ;
+  };
+in
 
 stdenv.mkDerivation (finalAttrs: {
   pname = "brulion";
@@ -99,7 +117,14 @@ stdenv.mkDerivation (finalAttrs: {
     (lib.cmakeFeature "BRULION_SPELL_DICTIONARY_DIRS" (
       lib.concatMapStringsSep ";" (d: "${d}/share/hunspell") finalAttrs.passthru.spellDictionaries
     ))
+    (lib.cmakeFeature "BRULION_LOCAL_AI" (if withLocalAi then "ON" else "OFF"))
+  ]
+  ++ lib.optionals withLocalAi [
+    (lib.cmakeFeature "BRULION_LLAMA_SOURCE_DIR" "${llamaSrc}")
   ];
+
+  # llama.cpp's sources for the dev shell (flake.nix: BRULION_LLAMA_SOURCE_DIR).
+  passthru.llamaSrc = llamaSrc;
 
   # Dictionaries of the editor's spell checking (also on DICPATH in the dev shell, flake.nix).
   passthru.spellDictionaries = [
@@ -160,6 +185,20 @@ stdenv.mkDerivation (finalAttrs: {
     test -x $out/bin/brulion
     test -x $out/bin/brulion-cli
     test -f $out/share/brulion/agent-skills/brulion/SKILL.md
+    ${lib.optionalString withLocalAi ''
+      # The model on the device: the plugin, llama.cpp's libraries and a processor plugin beside
+      # it, each finding the others there (no library left unresolved).
+      test -f $out/lib/brulion/libbrulion_localai.so
+      ls $out/lib/brulion/libggml-cpu-*.so >/dev/null
+      # … where the app looks for it: lib/brulion, from its program's folder.
+      grep -aqF -- '../lib/brulion' $out/bin/.brulion-wrapped
+      for lib in $out/lib/brulion/*.so*; do
+        if ldd "$lib" | grep -F "not found"; then
+          echo "$lib: a library it needs is not found" >&2
+          exit 1
+        fi
+      done
+    ''}
     # The command line runs (on a notebook of its own; no display, no settings touched).
     export HOME=$TMPDIR
     $out/bin/brulion-cli version

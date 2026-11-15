@@ -15,6 +15,8 @@ import Brulion
 // `fill`); a button beside a badge or another button, a text button ("ghost": no frame to line
 // up), switches and swatches keep their width; a wrapping group takes `evenWrapWidth()` as its
 // maximum width (all on one line, or even lines).
+// A wider window stacks a row only when its controls would leave the text a sliver (under
+// `minTextWidth`: a choice of three in a narrow pane — the sidebar open in a small window).
 // A row without controls titles what follows it (no divider below it: ShellSettingDividers).
 //
 //   ShellSettingRow { title: qsTr("Theme"); description: qsTr("…"); BSegmented { … } }
@@ -25,11 +27,14 @@ GridLayout {
     property string description
     default property alias controls: slot.data
 
-    /// The control is under the text: on compact windows, when it does not fit beside it.
-    readonly property bool stacked: Theme.compact && !fitsBeside
-    /// Some controls are shown and they fit beside the title on one line, leaving the text at
-    /// least 40 % of the row, and none of them wraps or wants the row's width.
-    readonly property bool fitsBeside: {
+    /// The control is under the text: on compact windows, when it does not fit beside it; on
+    /// wider ones only when it would leave the text a sliver.
+    readonly property bool stacked: Theme.compact ? !fitsBeside : squeezed
+    /// The least width the text keeps beside the controls on a window that is not compact.
+    readonly property int minTextWidth: 180
+    /// The natural widths of the controls shown with the gaps between them: -1 without any, -2
+    /// when one of them wraps or wants the row's width (a Flow, a text field).
+    readonly property real controlsWidth: {
         let controls = 0
         let shown = 0
         for (let i = 0; i < slot.children.length; ++i) {
@@ -37,19 +42,27 @@ GridLayout {
             if (!child.visible)
                 continue
             if ((child as Flow) !== null || (child as BTextField) !== null)
-                return false
+                return -2
             // (`naturalWidth`: BButton's and BSegmented's width without `fill`.)
             const button = child as BButton
             const segmented = child as BSegmented
             controls += button !== null ? button.naturalWidth : segmented !== null ? segmented.naturalWidth : child.implicitWidth
             ++shown
         }
-        if (shown === 0)
+        return shown === 0 ? -1 : controls + (shown - 1) * slot.spacing
+    }
+    /// Some controls are shown and they fit beside the title on one line, leaving the text at
+    /// least 40 % of the row, and none of them wraps or wants the row's width.
+    readonly property bool fitsBeside: {
+        if (row.controlsWidth < 0)
             return false
-        controls += (shown - 1) * slot.spacing
-        const textRoom = row.width - row.columnSpacing - controls
+        const textRoom = row.width - row.columnSpacing - row.controlsWidth
         return titleText.implicitWidth <= textRoom && textRoom >= 0.4 * row.width
     }
+    /// The controls shown would leave the text less than `minTextWidth` (a wrapping group and a
+    /// text field take what room there is: never).
+    readonly property bool squeezed: row.controlsWidth >= 0 && row.width > 0
+                                     && row.width - row.columnSpacing - row.controlsWidth < row.minTextWidth
     /// The row has controls (shown or not); one without titles the rows after it.
     readonly property bool hasControls: slot.children.length > 0
 

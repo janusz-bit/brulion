@@ -302,6 +302,15 @@ public:
     /// The file system path of the vault path `path` ("" without a notebook or a path): the
     /// drawing editor's PDF pages (DrawingBackdrops' path resolver).
     Q_INVOKABLE QString absoluteFilePath(const QString &path) const;
+    /// A picture of the notebook ready for a model (b.ai's `images`, workspacepictures.cpp):
+    /// named as in the notes ("paragon.jpg", "assets/skan.png"), decoded by Qt, scaled down to
+    /// AiPictureSide on its longer side, the photo's own turn applied, and written again as a
+    /// JPEG — no model reader and no provider sees a picture file as a sync or an import left it.
+    /// Nothing, with `why`, when the notebook has no such picture or it cannot be read.
+    std::optional<ai::Image> aiPicture(const QString &name, QString *why = nullptr);
+    /// The longer side of a picture sent to a model, in pixels.
+    static constexpr int AiPictureSide = 1568;
+
     /// Pictures from the internet (workspacepictures.cpp): fetched by webpicture::PictureFetcher
     /// into the device's cache (<app cache>/web-pictures, webpicture::PictureCache), shown from
     /// there — file: URLs, data: URLs in the browser. Not tied to the notebook: the cache is the

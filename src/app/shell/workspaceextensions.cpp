@@ -577,6 +577,30 @@ void WorkspaceExtensions::handleResult(const extensions::Result &r)
 
 void WorkspaceExtensions::setAi(const ai::Settings &settings) { m_aiSettings = settings; }
 
+void WorkspaceExtensions::setLocalAi(ai::LocalBackend *backend)
+{
+    m_localAi = backend;
+    if (m_aiClient)
+        m_aiClient->setLocal(backend);
+}
+
+void WorkspaceExtensions::setAiPictures(ai::ImageLoader loader)
+{
+    m_aiPictures = std::move(loader);
+}
+
+/// The client of b.ai's requests: the network for the providers there, the app's model runner
+/// for the model on the device.
+ai::Client *WorkspaceExtensions::aiClient()
+{
+    if (!m_aiClient) {
+        m_transport = std::make_unique<sync::NetworkHttpTransport>();
+        m_aiClient = std::make_unique<ai::Client>(m_transport.get());
+        m_aiClient->setLocal(m_localAi);
+    }
+    return m_aiClient.get();
+}
+
 void WorkspaceExtensions::dispatchAi(int call, const QVariantMap &request)
 {
     const CallContext ctx = m_calls.value(call);
@@ -591,18 +615,14 @@ void WorkspaceExtensions::dispatchAi(int call, const QVariantMap &request)
         Q_EMIT message(tr("Asking AI…"), u"info"_s);
     }
     QString error;
-    const std::optional<ai::Request> r = ai::requestFrom(request, &error);
+    const std::optional<ai::Request> r = ai::requestFrom(request, &error, m_aiPictures);
     const quint64 generation = m_generation;
     if (!r) {
         QTimer::singleShot(0, this, [this, call, error, generation] { finishAi(call, {{u"error"_s, error}}, generation); });
         return;
     }
-    if (!m_aiClient) {
-        m_transport = std::make_unique<sync::NetworkHttpTransport>();
-        m_aiClient = std::make_unique<ai::Client>(m_transport.get());
-    }
     const QPointer<WorkspaceExtensions> self(this);
-    m_aiClient->send(m_aiSettings, *r, [self, call, generation](const ai::Reply &reply) {
+    aiClient()->send(m_aiSettings, *r, [self, call, generation](const ai::Reply &reply) {
         if (self)
             self->finishAi(call, reply.toVariant(), generation);
     });
@@ -629,16 +649,13 @@ void WorkspaceExtensions::testAi()
     ai::Request request;
     request.messages << ai::textMessage(u"user"_s, u"Say OK."_s);
     request.maxTokens = 1024;
-    if (m_aiSettings.provider == u"anthropic")
+    // (Claude's effort; the model on the device answers without thinking first.)
+    if (m_aiSettings.provider == u"anthropic" || m_aiSettings.provider == u"local")
         request.effort = u"low"_s;
-    if (!m_aiClient) {
-        m_transport = std::make_unique<sync::NetworkHttpTransport>();
-        m_aiClient = std::make_unique<ai::Client>(m_transport.get());
-    }
     ++m_aiPending;
     Q_EMIT aiPendingChanged();
     const QPointer<WorkspaceExtensions> self(this);
-    m_aiClient->send(m_aiSettings, request, [self](const ai::Reply &reply) {
+    aiClient()->send(m_aiSettings, request, [self](const ai::Reply &reply) {
         if (!self)
             return;
         self->m_aiPending = std::max(0, self->m_aiPending - 1);

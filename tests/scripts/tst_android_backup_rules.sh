@@ -2,6 +2,8 @@
 # Android's own backup and its transfer to a new phone leave out the passwords and tokens
 # (docs/ANDROID.md, "Backups"): the manifest names both rule files, each of their sections leaves
 # out the folder the app keeps its secrets in, and that folder is the one the code writes to.
+# The same for a model downloaded to run on the device (over a gigabyte: with it the app's data
+# would be over the backup's quota, and nothing of the app would be backed up).
 # Usage: tst_android_backup_rules.sh <repository root>
 set -euo pipefail
 
@@ -40,6 +42,11 @@ secrets='<exclude domain="file" path="secrets" */>'
 [[ $(count '<cloud-backup disableIfNoEncryptionCapabilities="true">' "$new_rules") == 1 ]] ||
   fail "the cloud backup may be readable by the backup service"
 [[ $(count '<device-transfer>' "$new_rules") == 1 ]] || fail "no rules for the transfer to another device"
+# The models' folder, in the same places.
+models='<exclude domain="file" path="models" */>'
+[[ $(count "$models" "$old_rules") == 1 ]] || fail "backup_rules.xml does not leave out files/models"
+[[ $(count "$models" "$new_rules") == 2 ]] ||
+  fail "data_extraction_rules.xml leaves out files/models in $(count "$models" "$new_rules") of its 2 sections"
 # Nothing is let back in: an <include> would make every other rule an exception to it.
 for file in "$old_rules" "$new_rules"; do
   [[ $(count '<include ' "$file") == 0 ]] || fail "$file includes paths: what it leaves out is no longer the whole rule"
@@ -52,8 +59,13 @@ settings=$root/src/app/shell/appsettings.cpp
 [[ $(count 'u"/secrets/' "$settings") == $(count 'u"/secrets/[a-z-]+"_s' "$settings") ]] ||
   fail "a secret is written outside <app data>/secrets"
 
+# The models are downloaded into the folder the rules name (<app data>/models).
+controller=$root/src/app/shell/appcontroller.cpp
+[[ $(count 'localAi\.folder = m_dataDir \+ u"/models"_s' "$controller") == 1 ]] ||
+  fail "the models are no longer downloaded to <app data>/models: the backup rules name another folder"
+
 if ((failures)); then
   echo "$failures failure(s)" >&2
   exit 1
 fi
-echo "PASS: Android's backup rules leave out the secrets"
+echo "PASS: Android's backup rules leave out the secrets and the downloaded models"

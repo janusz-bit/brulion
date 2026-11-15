@@ -58,7 +58,8 @@
     <!-- requestLegacyExternalStorage: Android 10 keeps the classic file API on shared storage.
          networkSecurityConfig: HTTPS also trusts the certificate authorities the user installed.
          fullBackupContent (Android 9–11) and dataExtractionRules (Android 12+): the system's
-         backup and the transfer to a new phone leave out the passwords and tokens (files/secrets). -->
+         backup and the transfer to a new phone leave out the passwords and tokens (files/secrets)
+         and a model downloaded to run on the device (files/models). -->
     <application
         android:name="org.qtproject.qt.android.bindings.QtApplication"
         android:hardwareAccelerated="true"

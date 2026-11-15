@@ -134,6 +134,10 @@ public:
     void setNotifier(std::function<void(const QString &title, const QString &body)> notify);
     /// The model b.ai asks on this device (AppSettings: provider, key, model, address).
     void setAi(const ai::Settings &settings);
+    /// What answers the provider "local" (the app's LocalAi; not owned, nullptr: none).
+    void setLocalAi(ai::LocalBackend *backend);
+    /// Loads the pictures a request names (b.ai's `images`): Workspace's, from the notebook.
+    void setAiPictures(ai::ImageLoader loader);
     int aiPending() const { return m_aiPending; }
     /// Asks the model "Say OK." with the settings as they are: the answer or the error as a message.
     Q_INVOKABLE void testAi();
@@ -328,6 +332,9 @@ private:
     QStringList m_pendingPaths; // changed notes not looked at yet (processPages())
     QTimer m_pagesTimer;
     ai::Settings m_aiSettings;
+    ai::LocalBackend *m_localAi = nullptr;
+    ai::ImageLoader m_aiPictures;
+    ai::Client *aiClient();
     std::unique_ptr<sync::NetworkHttpTransport> m_transport;
     std::unique_ptr<ai::Client> m_aiClient;
     int m_aiPending = 0;

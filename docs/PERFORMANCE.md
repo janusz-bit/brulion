@@ -1320,6 +1320,48 @@ checked standard library in every function of the one big library), the AppImage
 (x86_64) and 0.34 MB (aarch64), the Windows installer 0.14 MB, the browser version 0.04 MB (it
 is built without the options).
 
+**The model on the device** (docs/EXTENSIONS.md "AI"; llama.cpp's libraries are built with the
+same hardening). LFM3-VL 2B (Q4_0) on the i5-13450HX, 8 threads, the AVX2 + VNNI processor
+plugin, `tst_ai_llama` with `BRULION_LOCAL_MODEL`: 115 tokens read in 0.52 s (some 220 a second),
+answers written at about 45 tokens a second (92 in 2.0–2.1 s), a small picture with its question
+read in 1.2 s. With and without the hardening options (`-DBRULION_HARDENING=OFF`) the times are
+the same — under 2 % apart, the runs' own spread: the arithmetic is intrinsics over buffers, with
+little for a stack protector or a zeroed local to slow down. On the Android emulator (the same
+machine, the SSE4.2 plugin, 2 threads) the model opened in 2.8 s and a first "Check" — 14 tokens
+read, 2 written — took 1.4 s.
+
+On a Pixel 9 Pro (Tensor G4, 16 GB of memory; Android 17, GrapheneOS; the package built beside
+the released app — docs/ANDROID.md "Signing" —, the plugin `ggml-cpu-android_armv8.6_1`,
+4 threads, 16 384 tokens at once; the event log's lines, 2026-11-15) the model opens in
+1.5–2.7 s, reads 145–160 tokens a second and writes 11–13. The assistant's first question read its 2 551 tokens of instructions and tools in 17.6 s,
+wrote a tool call (73 tokens, 5.7 s), read the 95 tokens that were new of 2 719 in 0.9 s and
+wrote the answer (104 tokens, 8.7 s): 33 s from the question to the answer. The next question
+kept 2 131 of its 2 618 tokens and read the rest, a note's photo among them, in 3.6 s;
+"Summarise this page" read 289 tokens in 1.8 s and wrote 237 in 19.5 s. That is two thirds of
+the laptop's speed at reading and a quarter at writing.
+
+Its memory (the app of the Nix package, 16 384 tokens at once, "Check" pressed): the process
+grows from 201 to 2 504 MiB resident — 1.3 GiB of its own and 1.0 GiB of the model's file. Its
+own: llama.cpp lays the Q4_0 weights out anew for the processor's instructions (787 MiB, no
+longer the file's pages), the picture part is read in (194 MiB), the context's cells take 12 KB
+a token (202 MiB for 16 384) and the work buffers the rest. Of the file's mapped pages only the
+205 MiB not laid out anew are read again; the others the system takes back when it wants
+memory. The model opens in 0.5 s while its file is in the system's cache.
+
+On the Pixel (`dumpsys meminfo`, PSS): the app 472 MiB before, 2 913 MiB with the model — 1.45 GiB
+of its own (0.15 GiB more than on the laptop) and 0.98 GiB of the file's pages —, 3 029 MiB
+after the photo was read. After 45 s behind another app the model was still
+there and answered at once; ten minutes after its last answer it left, and the app was back at
+461 MiB.
+
+Its download (src/core/ai/localfiles.cpp) holds 4 MB read ahead, over HTTP/1.1. Without that a
+thread that does not read for six seconds — as an Android app's does while it is off the screen —
+had a 3 GB file wholly in memory: 3.2 GiB resident over HTTP/1.1 (6.6 GiB with TLS), and 3.2 GiB
+over HTTP/2 with the limit or without, because there Qt does not make the server wait. With the
+limit over HTTP/1.1 and TLS the process stayed at 38 MiB (a small program with Qt 6.11.2
+against servers on the same machine, 2026-11-15). `tst_ai_localfiles` keeps it so: after a
+second without reading, its server still holds 54 of the 64 MB it has to send.
+
 **NFC in linear time.** `QString::normalized(NormalizationForm_C)` sorts combining marks with an
 insertion sort and decomposes in place: 16 000 marks above a letter followed by 16 000 below
 take it 4.1 s, 160 000 letters after one decomposed pair 3.7–4 s, and four times that for twice

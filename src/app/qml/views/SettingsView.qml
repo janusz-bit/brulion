@@ -1385,11 +1385,17 @@ Item {
                 }
             }
 
-            // AI for extensions (b.ai) on this device: the provider, the key, the model.
+            // AI for extensions (b.ai) on this device: the provider, the key, the model — or a
+            // model that runs on the device itself (AppController.localAi), in builds that have one.
             SettingsGroup {
+                id: aiGroup
                 objectName: "aiSettings"
                 heading: qsTr("AI")
-                note: qsTr("Extensions with the “ai” permission can ask a model about your notes — also on the phone. Claude and ChatGPT subscriptions cannot be used by other apps: an API key is billed separately, by use (a few notes cost fractions of a cent). A server of your own (Ollama, LM Studio) needs no key. What an extension sends goes to that provider; the key stays on this device.")
+                note: qsTr("Extensions with the “ai” permission can ask a model about your notes — also on the phone. Claude and ChatGPT subscriptions cannot be used by other apps: an API key is billed separately, by use (a few notes cost fractions of a cent). A server of your own (Ollama, LM Studio) needs no key, and neither does a model on this device, which sends nothing anywhere. What an extension sends goes to the provider chosen; the key stays on this device.")
+
+                readonly property bool local: AppSettings.aiProvider === "local"
+                readonly property list<var> providers: [{ value: "anthropic", text: "Claude" }, { value: "openai", text: qsTr("OpenAI-compatible") }]
+                readonly property list<var> providersWithLocal: [{ value: "anthropic", text: "Claude" }, { value: "openai", text: qsTr("OpenAI-compatible") }, { value: "local", text: qsTr("On this device") }]
 
                 SettingSwitch {
                     objectName: "assistantSetting"
@@ -1401,19 +1407,107 @@ Item {
                 }
                 ShellSettingRow {
                     title: qsTr("Provider")
-                    description: AppSettings.aiProvider === "openai"
-                                 ? qsTr("Any API that speaks OpenAI's chat format: OpenAI, OpenRouter, or Ollama and LM Studio on your own computer.")
-                                 : qsTr("Claude by Anthropic: a key from platform.claude.com (Settings → API keys).")
+                    description: aiGroup.local
+                                 ? qsTr("A small model that runs on this device: no key, no account, and nothing you ask leaves the device. Slower and less able than Claude.")
+                                 : AppSettings.aiProvider === "openai"
+                                   ? qsTr("Any API that speaks OpenAI's chat format: OpenAI, OpenRouter, or Ollama and LM Studio on your own computer.")
+                                   : qsTr("Claude by Anthropic: a key from platform.claude.com (Settings → API keys).")
                     BSegmented {
                         objectName: "aiProviderSetting"
                         accessibleName: qsTr("Provider")
-                        model: [{ value: "anthropic", text: "Claude" }, { value: "openai", text: qsTr("OpenAI-compatible") }]
+                        model: AppController.localAi.available ? aiGroup.providersWithLocal : aiGroup.providers
                         currentValue: AppSettings.aiProvider
                         onActivated: (value) => AppSettings.aiProvider = "" + value
                     }
                 }
+                // The model on the device: which one, its files (downloaded here), its license.
+                ShellSettingRow {
+                    objectName: "aiLocalModelRow"
+                    visible: aiGroup.local
+                    title: qsTr("Model")
+                    description: AppController.localAi.modelSees
+                                 ? qsTr("%1 by %2 sees pictures — photos, scans, screenshots — and reads the text on them. It is the weaker one at working through a notebook step by step.").arg(AppController.localAi.modelName).arg(AppController.localAi.modelMaker)
+                                 : qsTr("%1 by %2 reads text only. It is the better one at searching the notebook and changing notes.").arg(AppController.localAi.modelName).arg(AppController.localAi.modelMaker)
+                    BSegmented {
+                        objectName: "aiLocalModelSetting"
+                        accessibleName: qsTr("Model")
+                        model: AppController.localAi.choices
+                        currentValue: AppController.localAi.model
+                        onActivated: (value) => AppSettings.aiLocalModel = "" + value
+                    }
+                }
+                ColumnLayout {
+                    objectName: "aiLocalFiles"
+                    visible: aiGroup.local
+                    Layout.fillWidth: true
+                    spacing: Theme.space3
+                    ShellSettingRow {
+                        Layout.fillWidth: true
+                        title: qsTr("The model's files")
+                        description: AppController.localAi.modelHere
+                                     ? qsTr("On this device (%1). The model answers without the internet.").arg(AppController.localAi.modelSize)
+                                     : AppController.localAi.checking
+                                       ? qsTr("Checking the downloaded files…")
+                                       : AppController.localAi.downloading
+                                         ? qsTr("Downloading: %1. You can leave this page; a download that stops goes on from where it was.").arg(AppController.localAi.progressText)
+                                         : AppController.localAi.downloadError !== ""
+                                           ? qsTr("The download stopped (%1). Download again: it goes on from where it was.").arg(AppController.localAi.downloadError)
+                                           : qsTr("Not on this device yet: %1 to download from Hugging Face, best over Wi-Fi.").arg(AppController.localAi.modelSize)
+                        BButton {
+                            objectName: "aiLocalDownload"
+                            visible: !AppController.localAi.modelHere && !AppController.localAi.downloading
+                            enabled: !AppController.localAi.downloadingOther
+                            size: "small"
+                            variant: "primary"
+                            iconName: "download"
+                            text: qsTr("Download")
+                            onClicked: AppController.localAi.download()
+                        }
+                        BButton {
+                            objectName: "aiLocalCancel"
+                            visible: AppController.localAi.downloading
+                            size: "small"
+                            text: qsTr("Stop")
+                            onClicked: AppController.localAi.cancelDownload()
+                        }
+                        BButton {
+                            objectName: "aiLocalRemove"
+                            visible: AppController.localAi.modelHere
+                            size: "small"
+                            variant: "ghost"
+                            text: qsTr("Remove")
+                            onClicked: AppController.localAi.remove()
+                        }
+                    }
+                    BProgressBar {
+                        objectName: "aiLocalProgress"
+                        Layout.fillWidth: true
+                        visible: AppController.localAi.downloading
+                        indeterminate: AppController.localAi.checking
+                        value: AppController.localAi.progress
+                    }
+                }
+                ShellSettingRow {
+                    objectName: "aiLocalLicense"
+                    visible: aiGroup.local
+                    title: qsTr("Whose model")
+                    description: qsTr("%1 made it and gives it under its own licence (%2), not Brulion's. Brulion only downloads it when you ask.").arg(AppController.localAi.modelMaker).arg(AppController.localAi.modelLicense)
+                    BButton {
+                        size: "small"
+                        variant: "ghost"
+                        text: qsTr("Licence")
+                        onClicked: Workspace.openUrl(AppController.localAi.modelLicenseUrl)
+                    }
+                    BButton {
+                        size: "small"
+                        variant: "ghost"
+                        text: qsTr("About the model")
+                        onClicked: Workspace.openUrl(AppController.localAi.modelPageUrl)
+                    }
+                }
                 ShellSettingRow {
                     id: aiKeyRow
+                    visible: !aiGroup.local
                     title: qsTr("API key")
                     description: AppSettings.hasAiKey ? qsTr("Saved on this device. Type a new one to replace it.")
                                                       : qsTr("Not set. It is kept only on this device, never in the notebook.")
@@ -1443,6 +1537,7 @@ Item {
                     }
                 }
                 ShellSettingRow {
+                    visible: !aiGroup.local
                     title: qsTr("Model")
                     description: AppSettings.aiProvider === "openai" ? qsTr("Its name at the provider, e.g. the model you pulled into Ollama.")
                                                                      : qsTr("Empty: claude-opus-5-5. Cheaper and faster: claude-haiku-5-5.")
@@ -1458,6 +1553,7 @@ Item {
                     }
                 }
                 ShellSettingRow {
+                    visible: !aiGroup.local
                     title: qsTr("Address")
                     description: AppSettings.aiUnencrypted
                                  ? qsTr("Not encrypted: the notes sent to the AI and the key can be read on the network on the way to this address. Fine for a server at home; anywhere else use https.")
@@ -1475,7 +1571,8 @@ Item {
                 }
                 ShellSettingRow {
                     title: qsTr("Check")
-                    description: qsTr("Asks the model “Say OK.” with these settings.")
+                    description: aiGroup.local ? qsTr("Asks the model “Say OK.”. The first answer takes longer: the model is loaded into memory.")
+                                               : qsTr("Asks the model “Say OK.” with these settings.")
                     BButton {
                         objectName: "aiTest"
                         size: "small"

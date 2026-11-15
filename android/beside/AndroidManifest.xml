@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<!--
+  Merged over AndroidManifest.xml in a build with BRULION_ANDROID_ID_SUFFIX only (settings.gradle,
+  which also fills in brulionLabel): the package that installs beside a released Brulion is told
+  apart by the name under its icon.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <application
+        android:label="${brulionLabel}"
+        tools:replace="android:label" />
+</manifest>

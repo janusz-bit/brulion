@@ -14,6 +14,7 @@
 
 #include "workspaceextensions.h"
 
+#include "ai/local.h"
 #include "extensionviewmodel.h"
 #include "index/vaultindex.h"
 #include "util/paths.h"
@@ -26,6 +27,7 @@
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
+#include <QTimer>
 
 #include <algorithm>
 #include <cmath>
@@ -332,6 +334,66 @@ private Q_SLOTS:
         m_ext->runCommand(u"action-items"_s, u"extract"_s, u"Podróże/Peru.md"_s);
         QTRY_VERIFY2(m_messages.join(u'|').contains(u"AI is not available: "_s), qPrintable(m_messages.join(u'|')));
         QCOMPARE(m_ext->aiPending(), 0);
+    }
+
+    void aModelOnTheDeviceAndPictures()
+    {
+        // b.ai with the provider "local": the request goes to the app's model on the device, a
+        // picture it names is loaded by the app first.
+        struct Device : ai::LocalBackend {
+            QList<ai::Request> requests;
+            QList<ai::Settings> settings;
+            void send(const ai::Settings &s, const ai::Request &request,
+                      std::function<void(const ai::Reply &)> done) override
+            {
+                settings << s;
+                requests << request;
+                ai::Reply reply;
+                reply.ok = true;
+                reply.text = u"Na zdjęciu jest paragon."_s;
+                reply.model = u"lfm3-vl-2b"_s;
+                QTimer::singleShot(0, [done, reply] { done(reply); });
+            }
+        } device;
+        QStringList asked;
+        m_ext->setAiPictures([&](const QString &name, QString *why) -> std::optional<ai::Image> {
+            asked << name;
+            if (name == u"paragon.jpg")
+                return ai::Image{"JPEG of the receipt", u"image/jpeg"_s};
+            *why = u"no such picture in the notebook"_s;
+            return std::nullopt;
+        });
+        ai::Settings local;
+        local.provider = u"local"_s;
+        m_ext->setAi(local);
+        m_ext->setLocalAi(&device);
+
+        m_ext->evaluate(u"return b.ai({ prompt = \"Co to?\", images = { \"paragon.jpg\" } })"_s);
+        QTRY_COMPARE(consoleLines(u"Na zdjęciu jest paragon."_s), 1);
+        QCOMPARE(m_ext->aiPending(), 0);
+        QCOMPARE(asked, QStringList{u"paragon.jpg"_s});
+        QCOMPARE(device.requests.size(), 1);
+        QCOMPARE(device.settings[0].provider, u"local"_s);
+        QCOMPARE(device.requests[0].messages.size(), 1);
+        QCOMPARE(device.requests[0].messages[0].content, u"Co to?"_s);
+        QCOMPARE(device.requests[0].messages[0].images, (QList<ai::Image>{{"JPEG of the receipt", u"image/jpeg"_s}}));
+        // A picture the notebook does not have: the script gets the error, nothing is asked.
+        m_ext->evaluate(u"return b.ai({ prompt = \"A to?\", images = { \"brak.png\" } })"_s);
+        QTRY_COMPARE(consoleLines(u"the picture \"brak.png\": no such picture in the notebook"_s), 1);
+        QCOMPARE(device.requests.size(), 1);
+        // "Check" in the settings asks the same model.
+        m_messages.clear();
+        m_ext->testAi();
+        QTRY_COMPARE(m_messages.size(), 1);
+        QVERIFY2(m_messages[0].startsWith(u"success: "_s) && m_messages[0].contains(u"lfm3-vl-2b"_s)
+                         && m_messages[0].contains(u"Na zdjęciu jest paragon."_s),
+                 qPrintable(m_messages[0]));
+        QCOMPARE(device.requests.size(), 2);
+        QCOMPARE(device.requests[1].effort, u"low"_s); // no thinking over "Say OK."
+        // Without a model runner in the app (a build without one): the request is refused.
+        m_ext->setLocalAi(nullptr);
+        m_ext->evaluate(u"return b.ai(\"x\")"_s);
+        QTRY_COMPARE(consoleLines(u"runs no model on the device"_s), 1);
     }
 
     void viewsAndTheirActions()

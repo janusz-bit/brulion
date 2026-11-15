@@ -48,6 +48,7 @@ qt_add_library(brulion_shell STATIC
     ${_brulion_shell_dir}/appshare.cpp
     ${_brulion_shell_dir}/appsettings.h ${_brulion_shell_dir}/appsettings.cpp
     ${_brulion_shell_dir}/appupdates.h ${_brulion_shell_dir}/appupdates.cpp
+    ${_brulion_shell_dir}/localai.h ${_brulion_shell_dir}/localai.cpp
     ${_brulion_shell_dir}/commandmodel.h ${_brulion_shell_dir}/commandmodel.cpp
     ${_brulion_shell_dir}/demovault.h ${_brulion_shell_dir}/demovault.cpp
     ${_brulion_shell_dir}/folderchoices.h ${_brulion_shell_dir}/folderchoices.cpp
@@ -105,6 +106,20 @@ target_link_libraries(brulion_shell
 target_link_libraries(brulion_shell PRIVATE brulion_platform brulion_pdfview)
 target_compile_definitions(brulion_shell PRIVATE BRULION_VERSION="${PROJECT_VERSION}"
     BRULION_UPDATE_CHECK=$<BOOL:${BRULION_UPDATE_CHECK}>)
+# The model on the device (localai.h): where the app looks for the model runner's plugin — next
+# to llama.cpp's libraries in <lib>/brulion of the installed app, and in a debug build also where
+# they were built (the app run from its build folder). A build without it defines nothing here.
+if(BRULION_LOCAL_AI_ENABLED)
+    # From the program's folder to <lib>/brulion, whatever the install folders are (relative to
+    # the prefix, or absolute as Nix gives them).
+    include(GNUInstallDirs)
+    file(RELATIVE_PATH _brulion_localai_dir "${CMAKE_INSTALL_FULL_BINDIR}" "${CMAKE_INSTALL_FULL_LIBDIR}/brulion")
+    target_compile_definitions(brulion_shell PRIVATE BRULION_LOCAL_AI
+        BRULION_LOCALAI_RELATIVE_DIR="${_brulion_localai_dir}")
+    if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+        target_compile_definitions(brulion_shell PRIVATE BRULION_LOCALAI_BUILD_DIR="${BRULION_LOCAL_AI_OUTPUT_DIR}")
+    endif()
+endif()
 qt_extract_metatypes(brulion_shell)
 brulion_set_warnings(brulion_shell)
 

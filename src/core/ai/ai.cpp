@@ -1,5 +1,7 @@
 #include "ai/ai.h"
 
+#include "ai/local.h"
+
 #include <QHostAddress>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -17,6 +19,7 @@ namespace brulion::ai {
 namespace {
 
 const QString kAnthropic = u"anthropic"_s;
+const QString kLocal = u"local"_s;
 const QStringList kEfforts{u"low"_s, u"medium"_s, u"high"_s, u"xhigh"_s, u"max"_s};
 
 /// The models that take Anthropic's server-side fallback (a declined request retried on another
@@ -112,7 +115,11 @@ QString httpError(int status, const QString &message)
 bool Settings::usable(QString *why) const
 {
     QString problem;
-    if (provider != kAnthropic && provider != u"openai")
+    if (provider == kLocal) {
+        // The model's file is the app's to check (it may still be downloading).
+        if (!localModel(model.trimmed()))
+            problem = u"no such model on this device: \"%1\" (Settings → Extensions → AI)"_s.arg(model.trimmed());
+    } else if (provider != kAnthropic && provider != u"openai")
         problem = u"unknown provider \"%1\""_s.arg(provider);
     else if (provider == kAnthropic && apiKey.trimmed().isEmpty() && baseUrl.trimmed().isEmpty())
         problem = u"no API key (Settings → Extensions → AI)"_s;
@@ -125,6 +132,8 @@ bool Settings::usable(QString *why) const
 
 bool Settings::unencrypted() const
 {
+    if (provider == kLocal)
+        return false; // nothing travels: an address left from another provider is not used
     const QUrl url(baseOf(*this));
     if (url.scheme().compare(u"http"_s, Qt::CaseInsensitive) != 0)
         return false;
@@ -151,9 +160,14 @@ QVariantMap Reply::toVariant() const
     return out;
 }
 
-QString defaultModel(const QString &provider) { return provider == kAnthropic ? u"claude-opus-5-5"_s : QString(); }
+QString defaultModel(const QString &provider)
+{
+    if (provider == kLocal)
+        return localModels().isEmpty() ? QString() : localModels().first().id;
+    return provider == kAnthropic ? u"claude-opus-5-5"_s : QString();
+}
 
-std::optional<Request> requestFrom(const QVariantMap &table, QString *error)
+std::optional<Request> requestFrom(const QVariantMap &table, QString *error, const ImageLoader &images)
 {
     const auto fail = [&](const QString &message) {
         if (error)
@@ -162,12 +176,48 @@ std::optional<Request> requestFrom(const QVariantMap &table, QString *error)
     };
     Request r;
     qint64 chars = 0;
+    int pictures = 0;
+    // A message's pictures, loaded: false (with the error set) when one cannot be sent.
+    const auto loadImages = [&](const QVariant &names, Message *message) {
+        if (!names.isValid() || names.isNull())
+            return true;
+        if (names.metaType().id() != QMetaType::QVariantList) {
+            fail(u"images must be a list of picture names"_s);
+            return false;
+        }
+        for (const QVariant &v : names.toList()) {
+            const QString name = v.toString().trimmed();
+            if (v.metaType().id() != QMetaType::QString || name.isEmpty()) {
+                fail(u"images must be a list of picture names"_s);
+                return false;
+            }
+            if (++pictures > MaxRequestImages) {
+                fail(u"at most %1 pictures in a request"_s.arg(MaxRequestImages));
+                return false;
+            }
+            if (!images) {
+                fail(u"pictures cannot be sent from here"_s);
+                return false;
+            }
+            QString why;
+            const std::optional<Image> image = images(name, &why);
+            if (!image || image->data.isEmpty()) {
+                fail(u"the picture \"%1\": %2"_s.arg(name, why.isEmpty() ? u"cannot be read"_s : why));
+                return false;
+            }
+            message->images << *image;
+        }
+        return true;
+    };
     const QVariant prompt = table.value(u"prompt"_s);
     const QVariant messages = table.value(u"messages"_s);
     if (prompt.isValid() && !prompt.isNull()) {
         if (prompt.metaType().id() != QMetaType::QString)
             return fail(u"prompt must be a text"_s);
-        r.messages << textMessage(u"user"_s, prompt.toString());
+        Message message = textMessage(u"user"_s, prompt.toString());
+        if (!loadImages(table.value(u"images"_s), &message))
+            return std::nullopt;
+        r.messages << message;
     } else if (messages.metaType().id() == QMetaType::QVariantList) {
         for (const QVariant &m : messages.toList()) {
             const QVariantMap map = m.toMap();
@@ -202,6 +252,12 @@ std::optional<Request> requestFrom(const QVariantMap &table, QString *error)
                 if (map.value(u"content"_s).metaType().id() != QMetaType::QString)
                     return fail(u"a message's content must be a text"_s);
                 message.content = map.value(u"content"_s).toString();
+                if (const QVariant names = map.value(u"images"_s); names.isValid() && !names.isNull()) {
+                    if (role != u"user")
+                        return fail(u"only a user's message has pictures"_s);
+                    if (!loadImages(names, &message))
+                        return std::nullopt;
+                }
             }
             r.messages << message;
         }
@@ -270,6 +326,12 @@ std::optional<sync::HttpRequest> httpRequest(const Settings &settings, const Req
             *error = why;
         return std::nullopt;
     }
+    if (settings.provider == kLocal) {
+        // Answered on the device (Client::send hands it to the LocalBackend): nothing to send.
+        if (error)
+            *error = u"the model on this device takes no network request"_s;
+        return std::nullopt;
+    }
     const QString model = modelOf(settings, request);
     sync::HttpRequest http;
     http.method = "POST";
@@ -304,6 +366,18 @@ std::optional<sync::HttpRequest> httpRequest(const Settings &settings, const Req
                     blocks.append(block);
                 }
                 messages.append(QJsonObject{{u"role"_s, u"user"_s}, {u"content"_s, blocks}});
+            } else if (!m.images.isEmpty()) {
+                // The pictures first, then the text about them.
+                QJsonArray blocks;
+                for (const Image &image : m.images)
+                    blocks.append(QJsonObject{
+                            {u"type"_s, u"image"_s},
+                            {u"source"_s, QJsonObject{{u"type"_s, u"base64"_s},
+                                                      {u"media_type"_s, image.mediaType},
+                                                      {u"data"_s, QString::fromLatin1(image.data.toBase64())}}}});
+                if (!m.content.isEmpty())
+                    blocks.append(QJsonObject{{u"type"_s, u"text"_s}, {u"text"_s, m.content}});
+                messages.append(QJsonObject{{u"role"_s, m.role}, {u"content"_s, blocks}});
             } else {
                 messages.append(QJsonObject{{u"role"_s, m.role}, {u"content"_s, m.content}});
             }
@@ -349,6 +423,19 @@ std::optional<sync::HttpRequest> httpRequest(const Settings &settings, const Req
                             {u"role"_s, u"tool"_s},
                             {u"tool_call_id"_s, result.id},
                             {u"content"_s, result.isError ? u"Error: "_s + result.content : result.content}});
+            } else if (!m.images.isEmpty()) {
+                // The pictures (data: addresses) first, then the text about them.
+                QJsonArray parts;
+                for (const Image &image : m.images)
+                    parts.append(QJsonObject{
+                            {u"type"_s, u"image_url"_s},
+                            {u"image_url"_s,
+                             QJsonObject{{u"url"_s,
+                                          u"data:%1;base64,%2"_s.arg(image.mediaType,
+                                                                     QString::fromLatin1(image.data.toBase64()))}}}});
+                if (!m.content.isEmpty())
+                    parts.append(QJsonObject{{u"type"_s, u"text"_s}, {u"text"_s, m.content}});
+                messages.append(QJsonObject{{u"role"_s, m.role}, {u"content"_s, parts}});
             } else {
                 messages.append(QJsonObject{{u"role"_s, m.role}, {u"content"_s, m.content}});
             }
@@ -460,6 +547,16 @@ Reply readReply(const Settings &settings, const sync::HttpResponse &response)
 void Client::send(const Settings &settings, const Request &request, std::function<void(const Reply &)> done)
 {
     QString error;
+    if (settings.provider == kLocal && settings.usable(&error)) {
+        if (m_local) {
+            m_local->send(settings, request, std::move(done));
+            return;
+        }
+        Reply reply;
+        reply.error = u"this build of Brulion runs no model on the device"_s;
+        QTimer::singleShot(0, [done = std::move(done), reply] { done(reply); });
+        return;
+    }
     const std::optional<sync::HttpRequest> http = httpRequest(settings, request, &error);
     if (!http || !m_transport) {
         Reply reply;

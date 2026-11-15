@@ -1,6 +1,6 @@
 ---
 tags: [dokumentacja]
-aliases: [Sztuczna inteligencja, Asystent AI, Claude, ChatGPT, Ollama]
+aliases: [Sztuczna inteligencja, Asystent AI, Claude, ChatGPT, Ollama, Model na urządzeniu]
 brulion: document
 ---
 # AI
@@ -12,6 +12,7 @@ Otwórz **Ustawienia → Rozszerzenia → AI** i wybierz:
 
 - **Claude** — klucz z platform.claude.com (**API keys**). Bez podanego modelu Brulion pyta `claude-opus-5-5`; `claude-haiku-5-5` jest szybszy i dużo tańszy.
 - **Zgodne z OpenAI** — OpenAI, OpenRouter albo własny serwer: Ollama lub LM Studio na Twoim komputerze (adres, np. `http://192.168.1.10:11434/v1`, i nazwa modelu). Własny serwer nie potrzebuje klucza i nic nie kosztuje; telefon dosięgnie go w domu albo przez Tailscale. Adres `http://` nie jest szyfrowany — ustawienia o tym mówią: w domowej sieci to w porządku, poza nią użyj `https://`.
+- **Na tym urządzeniu** — mały model, który działa w samym Brulionie: bez klucza, bez konta, bez internetu. Zobacz [[#Model na tym urządzeniu]] niżej.
 
 Naciśnij **Sprawdź**: model odpowie „OK” albo zobaczysz, co jest nie tak.
 
@@ -20,10 +21,27 @@ Naciśnij **Sprawdź**: model odpowie „OK” albo zobaczysz, co jest nie tak.
 
 Klucz zostaje **tylko na tym urządzeniu** (nie w notatniku, nie w synchronizacji, nie w dziennikach zdarzeń). Notatki trafiają do dostawcy tylko wtedy, gdy o to poprosisz, albo gdy zrobi to rozszerzenie zatwierdzone przez Ciebie z uprawnieniem `ai`.
 
+## Model na tym urządzeniu
+Gdy wybierzesz **Na tym urządzeniu**, model działa w Brulionie — także na telefonie — i nic, o co pytasz, nie opuszcza urządzenia. Wybierz jeden z dwóch modeli firmy Liquid AI i naciśnij **Pobierz** (najlepiej przez Wi-Fi; na telefonie zostaw Bruliona na ekranie, aż skończy — ekran sam nie zgaśnie; przerwane pobieranie zacznie się od miejsca, w którym stanęło):
+
+| Model | Rozmiar | W czym dobry |
+|---|---|---|
+| **LFM3-VL 2B** | 1,2 GB | **widzi obrazki**: zdjęcia, skany, zrzuty ekranu i tekst na nich |
+| **LFM3 1.7B** | 1,0 GB | tylko tekst; lepiej przeszukuje notatnik i zmienia notatki |
+
+Czego się spodziewać:
+
+- Jest **mały**. Streszczenie strony, pytanie o notatkę, tekst ze sfotografowanego paragonu wychodzą dobrze; długie zadanie w wielu krokach może zejść na manowce, a jego polszczyzna jest prostsza niż u Claude'a. Do poważnej pracy wybierz Claude'a.
+- Jest **wolniejszy** niż model w chmurze, najbardziej na telefonie: szybki telefon odpowiada na pytanie w mniej więcej pół minuty, wolniejszy potrzebuje więcej. Ekran telefonu nie gaśnie, dopóki model odpowiada; zostaw Bruliona na ekranie — za inną aplikacją model pracuje wielokrotnie wolniej, a po chwili staje, dopóki nie wrócisz. Potem model zostaje w pamięci przez dziesięć minut.
+- Zajmuje około **2,5 GB pamięci**, dopóki jest wczytany, i potrzebuje procesora z ostatnich lat (telefon mniej więcej od 2018 roku, komputer z AVX2).
+- Zbyt długą prośbę **przycina** — długą stronę w środku, długi wynik wyszukiwania na końcu — zamiast odmawiać.
+
+Modele należą do Liquid AI, mają własną licencję (LFM Open License v1.0) i nie są częścią Bruliona: aplikacja pobiera wybrany model z Hugging Face. **Usuń** kasuje jego pliki. Nie każde wydanie ma tego dostawcę: nie ma go wersja w przeglądarce ani część paczek na komputery.
+
 ## Asystent AI
 Włącz go w **Ustawieniach → Rozszerzenia → AI → Asystent AI**. Wtedy górny pasek ma przycisk **✨** — także na telefonie — z pozycjami:
 
-- **Zapytaj AI…** — zapytaj o cokolwiek w notatkach albo poproś, żeby coś w nich zrobiło. AI **samo przeszukuje i czyta cały notatnik** — strony, dziennik, zadania z terminami, tagi, przypomnienia — więc możesz zapytać „Co mam do zrobienia w tym tygodniu?”, „Co pisałem o wyjeździe?” albo poprosić „Dopisz mleko do listy zakupów”. Strona na ekranie idzie razem z pytaniem (w dzienniku: dzisiejsza notatka).
+- **Zapytaj AI…** — zapytaj o cokolwiek w notatkach albo poproś, żeby coś w nich zrobiło. AI **samo przeszukuje i czyta cały notatnik** — strony, dziennik, zadania z terminami, tagi, przypomnienia — więc możesz zapytać „Co mam do zrobienia w tym tygodniu?”, „Co pisałem o wyjeździe?” albo poprosić „Dopisz mleko do listy zakupów”. **Ogląda też obrazki** w notatkach, gdy model widzi (Claude, LFM3-VL na urządzeniu): „Ile zapłaciłem za mleko? Paragon jest w Zakupach.” Strona na ekranie idzie razem z pytaniem (w dzienniku: dzisiejsza notatka).
 - **Streść tę stronę** — kilka zdań i zadania ze strony.
 - **Ustawienia AI…** — dostawca, klucz i model.
 
@@ -52,7 +70,7 @@ end, { label = "Haiku na dziś" })
 ```
 ````
 
-`b.ai("pytanie")` zwraca tekst; tabela dodaje `system`, `model`, `maxTokens`, `effort` albo `messages` dla rozmowy. Gdy model pisze, Brulion działa dalej. W **konsoli Luau** spróbuj `b.ai("Ile to 2 + 2?")`. Gdy modelu nie da się zapytać — brak klucza, brak połączenia — polecenie zatrzymuje się z podaniem powodu; `pcall(b.ai, "…")` to łapie.
+`b.ai("pytanie")` zwraca tekst; tabela dodaje `system`, `model`, `maxTokens`, `effort`, `images` (obrazki z notatnika, nazwane tak, jak osadzają je notatki: `images = { "paragon.jpg" }`) albo `messages` dla rozmowy. Gdy model pisze, Brulion działa dalej. W **konsoli Luau** spróbuj `b.ai("Ile to 2 + 2?")`. Gdy modelu nie da się zapytać — brak klucza, brak połączenia — polecenie zatrzymuje się z podaniem powodu; `pcall(b.ai, "…")` to łapie.
 
 ## Narzędzia: model, który sam sprawdza
 Dzięki `tools` model może wywoływać funkcje Twojego kodu — przeszukać notatki, przeczytać stronę — zanim odpowie; tak działa Asystent AI. Narzędzie ma nazwę, opis mówiący, kiedy je wywołać, i kształt danych wejściowych. Odpowiedź, która wywołuje narzędzia, ma `toolCalls`: Twój kod je wykonuje i pyta ponownie, z turą modelu (`raw`, bez zmian) i wszystkimi wynikami w jednej wiadomości, aż przyjdzie odpowiedź bez wywołań.

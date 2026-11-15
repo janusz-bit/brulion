@@ -15,6 +15,7 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
 import android.util.Log
+import android.view.WindowManager
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import org.json.JSONArray
@@ -77,6 +78,8 @@ object BrulionAndroid {
   @Volatile private var attaches = 0
   /** [setSystemBarsLight]'s value, null before C++ asked. */
   @Volatile private var systemBarsLight: Boolean? = null
+  /** [setKeepScreenOn]'s value. */
+  @Volatile private var keepScreenOn = false
 
   // -----------------------------------------------------------------------------------------
   // Native methods, registered from C++ (QJniEnvironment::registerNativeMethods)
@@ -153,6 +156,27 @@ object BrulionAndroid {
   fun setSystemBarsLight(light: Boolean) {
     systemBarsLight = light
     onMain { applySystemBars() }
+  }
+
+  /**
+   * The screen stays on while [on] (the activity's window: FLAG_KEEP_SCREEN_ON): the model on the
+   * device is downloaded and answers only while the app is on the screen, and a screen that turned
+   * off by itself in the middle — after 30 seconds on many phones — would stop both.
+   */
+  @JvmStatic
+  fun setKeepScreenOn(on: Boolean) {
+    keepScreenOn = on
+    onMain { applyKeepScreenOn() }
+  }
+
+  /** The window's flag as C++ asked ([setKeepScreenOn]) — again for an activity made anew. */
+  internal fun applyKeepScreenOn() {
+    val window = currentActivity()?.window ?: return
+    if (keepScreenOn) {
+      window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+    } else {
+      window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+    }
   }
 
   /**
@@ -741,6 +765,7 @@ object BrulionAndroid {
     activityRef = WeakReference(activity)
     applySystemBars()
     applyGestureExclusion()
+    applyKeepScreenOn()
     ReminderNotifier.ensureChannels(activity)
     onActivityIntent(activity, activity.intent)
   }

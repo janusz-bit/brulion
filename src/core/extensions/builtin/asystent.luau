@@ -4,7 +4,9 @@
 -- "ask" is an agent: the model has tools to search and read the whole notebook (b.search, b.query,
 -- b.pages, b.read) and to change it (append to a page or a day, write a page, change a block). It
 -- calls them as it needs, a turn at a time (b.ai with tools), until it answers; every change waits
--- for the user's yes (b.choose: yes, yes to every change of this question, no). It can also write
+-- for the user's yes (b.choose: yes, yes to every change of this question, no). It looks at the
+-- notebook's pictures — a photo, a scan, a screenshot — with a request of their own (b.ai with
+-- `images`: its answer, as text, is the tool's result; a model that sees is needed). It can also write
 -- extensions: it reads the extensions' reference (b.data("reference"): docs/EXTENSIONS.md), checks
 -- a page in a sandbox (b.checkExtension) and writes it; the app runs that code only once the user
 -- approves it on the page, like code from a sync. The answer goes
@@ -28,22 +30,24 @@ local WRITTEN = {
         about = " ([[%s]])",
         summary = "🤖 Streszczenie [[%s]]",
         changed = "✏️ Zmienione: %s",
-        system = "Jesteś asystentem w aplikacji do notatek Brulion. Masz narzędzia do przeszukiwania i czytania całego notatnika użytkownika i do zmieniania go. Notatki to Markdown: punkty \"- \", zadania \"- [ ]\" i \"- [x]\", terminy \"📅 RRRR-MM-DD\", przypomnienia \"⏰ RRRR-MM-DD GG:MM\", linki [[Strona]], tagi #tag; dziennik to strony dni, nazwane datą (2026-11-12). Dziś jest %s. Zanim odpowiesz na pytanie o notatki, poszukaj w nich (search_notes, query_notes) i przeczytaj, czego potrzebujesz. Zmieniaj notatki tylko wtedy, gdy użytkownik o to prosi; raczej dopisuj, niż przepisuj; niczego nie usuwaj, o ile nie poproszono. Każdą zmianę użytkownik zatwierdza; gdy odmówi, nie ponawiaj jej. Gdy użytkownik chce nowego polecenia, widoku albo automatyzacji w Brulionie, możesz napisać rozszerzenie: najpierw przeczytaj opis (extension_reference: Quick start i części, których potrzebujesz), sprawdź stronę (check_extension), potem ją zapisz (write_extension) i powiedz użytkownikowi, że zadziała po naciśnięciu „Uruchom” na stronie rozszerzenia. Odpowiadasz zwięźle, po polsku, chyba że notatki są w innym języku; zwykłym tekstem albo krótkimi punktami, z linkami [[Strona]] do stron, o których mówisz.",
+        system = "Jesteś asystentem w aplikacji do notatek Brulion. Masz narzędzia do przeszukiwania i czytania całego notatnika użytkownika i do zmieniania go. Notatki to Markdown: punkty \"- \", zadania \"- [ ]\" i \"- [x]\", terminy \"📅 RRRR-MM-DD\", przypomnienia \"⏰ RRRR-MM-DD GG:MM\", linki [[Strona]], tagi #tag; dziennik to strony dni, nazwane datą (2026-11-12). Dziś jest %s. Zanim odpowiesz na pytanie o notatki, poszukaj w nich (search_notes, query_notes) i przeczytaj, czego potrzebujesz. Obrazki w notatkach to ![[nazwa.jpg]]: gdy pytanie dotyczy obrazka albo tego, co na nim napisane, obejrzyj go (look_at_picture). Zmieniaj notatki tylko wtedy, gdy użytkownik o to prosi; raczej dopisuj, niż przepisuj; niczego nie usuwaj, o ile nie poproszono. Każdą zmianę użytkownik zatwierdza; gdy odmówi, nie ponawiaj jej. Gdy użytkownik chce nowego polecenia, widoku albo automatyzacji w Brulionie, możesz napisać rozszerzenie: najpierw przeczytaj opis (extension_reference: Quick start i części, których potrzebujesz), sprawdź stronę (check_extension), potem ją zapisz (write_extension) i powiedz użytkownikowi, że zadziała po naciśnięciu „Uruchom” na stronie rozszerzenia. Odpowiadasz zwięźle, po polsku, chyba że notatki są w innym języku; zwykłym tekstem albo krótkimi punktami, z linkami [[Strona]] do stron, o których mówisz.",
         summarySystem = "Jesteś asystentem w aplikacji do notatek. Odpowiadasz zwięźle, po polsku, chyba że notatka jest w innym języku. Piszesz zwykłym tekstem albo krótkimi punktami.",
         noteIntro = "Notatka „%s”:\n\n%s\n\n",
         onScreen = "Na ekranie jest strona [[%s]]:\n\n%s\n\n---\n\n",
         summarizeAsk = "Streść tę notatkę w 3–5 zdaniach. Na końcu wypisz najważniejsze zadania, jeśli jakieś są.",
+        lookAsk = "Opisz krótko, co jest na tym obrazku, i przepisz widoczny na nim tekst.",
     },
     en = {
         question = "🤖 %s",
         about = " ([[%s]])",
         summary = "🤖 Summary of [[%s]]",
         changed = "✏️ Changed: %s",
-        system = "You are an assistant in the notes app Brulion. You have tools to search and read the user's whole notebook and to change it. Notes are Markdown: items \"- \", tasks \"- [ ]\" and \"- [x]\", due dates \"📅 YYYY-MM-DD\", reminders \"⏰ YYYY-MM-DD HH:MM\", links [[Page]], tags #tag; the journal is one page per day, named by its date (2026-11-12). Today is %s. Before you answer a question about the notes, search them (search_notes, query_notes) and read what you need. Change notes only when the user asks you to; prefer adding to rewriting; never delete anything unless asked. The user approves every change; when they decline one, do not try it again. When the user wants a new command, view or automation in Brulion, you can write an extension: read the reference first (extension_reference: its Quick start and the sections you need), check the page (check_extension), then write it (write_extension) and tell the user it works once they press Run on the extension's page. You answer briefly, in English unless the notes are in another language; plain text or short points, with [[Page]] links to the pages you mention.",
+        system = "You are an assistant in the notes app Brulion. You have tools to search and read the user's whole notebook and to change it. Notes are Markdown: items \"- \", tasks \"- [ ]\" and \"- [x]\", due dates \"📅 YYYY-MM-DD\", reminders \"⏰ YYYY-MM-DD HH:MM\", links [[Page]], tags #tag; the journal is one page per day, named by its date (2026-11-12). Today is %s. Before you answer a question about the notes, search them (search_notes, query_notes) and read what you need. Pictures in notes are ![[name.jpg]]: when the question is about a picture or what is written on it, look at it (look_at_picture). Change notes only when the user asks you to; prefer adding to rewriting; never delete anything unless asked. The user approves every change; when they decline one, do not try it again. When the user wants a new command, view or automation in Brulion, you can write an extension: read the reference first (extension_reference: its Quick start and the sections you need), check the page (check_extension), then write it (write_extension) and tell the user it works once they press Run on the extension's page. You answer briefly, in English unless the notes are in another language; plain text or short points, with [[Page]] links to the pages you mention.",
         summarySystem = "You are an assistant in a notes app. You answer briefly, in English unless the note is in another language. You write plain text or short points.",
         noteIntro = "The note \"%s\":\n\n%s\n\n",
         onScreen = "The page on screen is [[%s]]:\n\n%s\n\n---\n\n",
         summarizeAsk = "Summarise this note in 3–5 sentences. At the end list the most important tasks, if there are any.",
+        lookAsk = "Describe briefly what this picture shows and write out the text on it.",
     },
 }
 
@@ -276,6 +280,18 @@ local TOOLS = {
     },
 }
 
+table.insert(TOOLS, {
+    name = "look_at_picture",
+    description = "Looks at a picture of the notebook — a photo, a scan, a screenshot, embedded in notes as ![[name.jpg]] — and answers a question about it: what it shows, the text written on it. Returns the answer as text. Call it when the user asks about a picture, or when a picture in a note may hold what they ask about.",
+    input = {
+        type = "object",
+        properties = {
+            name = { type = "string", description = "The picture's file name, as in ![[name.jpg]]" },
+            question = { type = "string", description = "What to find out about it (default: what it shows and the text on it)" },
+        },
+        required = { "name" },
+    },
+})
 table.insert(TOOLS, {
     name = "extension_reference",
     description = "Brulion's reference for writing extensions: Luau code on a page tagged #extension that adds palette commands, views and hooks through the API table b. Without a section it lists the sections; ask for the ones you need by words of their heading (\"Quick start\", \"The API\", \"Commands\", \"Views\", \"Hooks\", \"Questions\", \"Recipes\", \"Errors\", \"Extensions in the notebook\"). Read it before you write an extension: never guess the functions of b.",
@@ -601,6 +617,25 @@ local function runTool(session: Session, name: string, input: any): (string, boo
         end
         noteChanged(session, page)
         return "Changed; its ref is now " .. str(result) .. ".", false
+    elseif name == "look_at_picture" then
+        -- The name as notes write it: without the embed's brackets and its size ("![[a.jpg|300]]").
+        local picture = trim(str(input.name)):gsub("^!?%[%[", ""):gsub("%]%]$", ""):gsub("|.*$", "")
+        picture = trim(picture)
+        if picture == "" then
+            return "A picture's name is needed.", true
+        end
+        local question = trim(str(input.question))
+        if question == "" then
+            question = W.lookAsk
+        end
+        -- A request of its own, without the tools: the model's answer about the picture is the
+        -- result (text, for any provider). "low": no long thinking over a picture.
+        local ok, seen = pcall(b.ai, { prompt = question, images = { picture }, maxTokens = 1500, effort = "low" })
+        if not ok then
+            return tostring(seen), true
+        end
+        seen = trim(str(seen))
+        return if seen == "" then "(The model said nothing about the picture.)" else seen, false
     elseif name == "extension_reference" then
         return reference(trim(str(input.section)))
     elseif name == "check_extension" then

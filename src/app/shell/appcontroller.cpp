@@ -12,6 +12,7 @@
 #include "workspaceintegration.h"
 
 #include "autostart.h"  // src/platform
+#include "platform.h"   // src/platform
 #include "traywindow.h" // src/platform
 
 #include "notebook/session.h"
@@ -107,6 +108,32 @@ QString cleanLocalPath(const QString &raw)
     return QDir::cleanPath(QDir::fromNativeSeparators(path));
 }
 
+/// Where the plugin with the model runner may be (ai/localrunner.h), most likely first; nothing
+/// in a build without one (BRULION_LOCAL_AI, cmake/BrulionLocalAi.cmake) — BRULION_LOCALAI_DIR in
+/// the environment names a folder either way (tests, a plugin built elsewhere).
+QStringList localAiPluginDirs()
+{
+    QStringList dirs;
+    if (const QString dir = qEnvironmentVariable("BRULION_LOCALAI_DIR"); !dir.isEmpty())
+        dirs << dir;
+#ifdef BRULION_LOCAL_AI
+#if defined(Q_OS_ANDROID)
+    dirs << QString(); // inside the APK: found by its name
+#else
+#ifdef BRULION_LOCALAI_BUILD_DIR
+    dirs << QString::fromUtf8(BRULION_LOCALAI_BUILD_DIR); // a debug build run from its build folder
+#endif
+    const QString bin = QCoreApplication::applicationDirPath();
+#ifdef BRULION_LOCALAI_RELATIVE_DIR
+    // Installed: <prefix>/lib/brulion. (Plain bytes in the program: the Nix package's check reads them.)
+    dirs << QDir::cleanPath(bin + u'/' + QString::fromUtf8(BRULION_LOCALAI_RELATIVE_DIR));
+#endif
+    dirs << bin; // Windows: next to the program
+#endif
+#endif
+    return dirs;
+}
+
 /// The folder of the documentation notebook in `language` inside the app data folder `dataDir`.
 QString docsNotebookPath(const QString &dataDir, const QString &language)
 {
@@ -158,6 +185,15 @@ AppController::AppController(const Options &options, QObject *parent)
     // notebook that was open then — not the documentation: then the last notebook before it.
     const QString current = m_settings->currentVault();
     m_settings->recordSharedNextcloudOwner(isDocsPath(current) ? lastUserVault() : current);
+    // The model on the device: its files in the app's data, its runner a plugin loaded on first use.
+    LocalAi::Options localAi = options.localAi;
+    if (localAi.folder.isEmpty())
+        localAi.folder = m_dataDir + u"/models"_s;
+    if (localAi.pluginDirs.isEmpty() && !localAi.open)
+        localAi.pluginDirs = localAiPluginDirs();
+    if (localAi.memoryBytes <= 0)
+        localAi.memoryBytes = platform::physicalMemoryBytes();
+    m_localAi = std::make_unique<LocalAi>(localAi);
     m_workspace = std::make_unique<Workspace>();
     m_workspace->setUiLanguage(m_settings->language());
     m_shortcuts = std::make_unique<ShortcutMap>(m_settings.get());
@@ -189,9 +225,14 @@ AppController::AppController(const Options &options, QObject *parent)
     const auto aiSettings = [this] {
         ai::Settings s;
         s.provider = m_settings->aiProvider();
-        s.apiKey = m_settings->aiKey();
-        s.model = m_settings->aiModel();
-        s.baseUrl = m_settings->aiBaseUrl();
+        if (s.provider == u"local") {
+            // The model on the device: its own setting, no key and no address.
+            s.model = m_settings->aiLocalModel();
+        } else {
+            s.apiKey = m_settings->aiKey();
+            s.model = m_settings->aiModel();
+            s.baseUrl = m_settings->aiBaseUrl();
+        }
 #ifdef Q_OS_WASM
         s.browser = true; // Anthropic's API answers a web page only with its header
 #endif
@@ -199,6 +240,14 @@ AppController::AppController(const Options &options, QObject *parent)
     };
     aiSettings();
     connect(m_settings.get(), &AppSettings::aiChanged, this, aiSettings);
+    m_workspace->extensions()->setLocalAi(m_localAi.get());
+    // The model chosen in the settings is the one Settings → Extensions → AI downloads and removes.
+    m_localAi->setChosen(m_settings->aiLocalModel());
+    connect(m_settings.get(), &AppSettings::aiChanged, this,
+            [this] { m_localAi->setChosen(m_settings->aiLocalModel()); });
+    // A phone's screen stays on while a model is downloaded or answers: both go on only while the
+    // app is on screen, and many phones turn the screen off after 30 seconds without a touch.
+    connect(m_localAi.get(), &LocalAi::workingChanged, this, [this] { platform::keepScreenOn(m_localAi->working()); });
     connect(m_workspace->extensions(), &WorkspaceExtensions::message, this,
             [this](const QString &text, const QString &kind) { toast(text, kind); });
     connect(m_workspace.get(), &Workspace::navigationRequested, this, &AppController::navigate);

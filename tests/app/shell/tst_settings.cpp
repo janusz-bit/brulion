@@ -132,6 +132,47 @@ private Q_SLOTS:
         QVERIFY(again.gymEnabled());
     }
 
+    void theModelOnTheDevice()
+    {
+        // The provider "On this device" and its model are kept; a model the app does not know (a
+        // setting left by another version) and an unknown provider fall back to the defaults.
+        const QString file = nextFile();
+        {
+            AppSettings s(file, m_tmp.path());
+            QCOMPARE(s.aiProvider(), u"anthropic"_s);
+            QCOMPARE(s.aiLocalModel(), QString()); // the default model
+            QSignalSpy changed(&s, &AppSettings::aiChanged);
+            s.setAiProvider(u"local"_s);
+            QCOMPARE(s.aiProvider(), u"local"_s);
+            s.setAiLocalModel(u"lfm3-1.7b"_s);
+            QCOMPARE(s.aiLocalModel(), u"lfm3-1.7b"_s);
+            QCOMPARE(changed.size(), 2);
+            s.setAiLocalModel(u"lfm3-1.7b"_s);
+            QCOMPARE(changed.size(), 2);
+            // The cloud provider's model name is another setting.
+            s.setAiModel(u"claude-haiku-5-5"_s);
+            QCOMPARE(s.aiLocalModel(), u"lfm3-1.7b"_s);
+        }
+        {
+            AppSettings s(file, m_tmp.path());
+            QCOMPARE(s.aiProvider(), u"local"_s);
+            QCOMPARE(s.aiLocalModel(), u"lfm3-1.7b"_s);
+            QCOMPARE(s.aiModel(), u"claude-haiku-5-5"_s);
+            s.setAiLocalModel(u"gpt-9"_s);
+            QCOMPARE(s.aiLocalModel(), QString());
+            s.setAiProvider(u"skynet"_s);
+            QCOMPARE(s.aiProvider(), u"anthropic"_s);
+        }
+        {
+            QSettings raw(file, QSettings::IniFormat);
+            raw.setValue(u"ai/localModel"_s, u"a-model-of-tomorrow"_s);
+            raw.setValue(u"ai/provider"_s, u"local"_s);
+        }
+        AppSettings s(file, m_tmp.path());
+        QCOMPARE(s.aiProvider(), u"local"_s);
+        QCOMPARE(s.aiLocalModel(), QString());
+    }
+
     void followsOutsideLinksPersists()
     {
         // Device-local: in this device's settings, never in the synced .brulion/config.json.

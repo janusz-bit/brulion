@@ -3,8 +3,9 @@
 // full-text search and queries (b.search, b.query), the tools' requests (valid for ai::requestFrom
 // and both providers), a question answered from a query's results, a change made with the user's
 // yes, one declined, "yes to every change" asked once, an extension written (the reference read,
-// the page checked, refused while it does not load, written with the user's yes), an unknown
-// tool, too many turns, and the summary without tools.
+// the page checked, refused while it does not load, written with the user's yes), a picture looked
+// at (a request of its own with the picture, its answer the tool's result), an unknown tool, too
+// many turns, and the summary without tools.
 
 #include "ai/ai.h"
 #include "extensions/builtin.h"
@@ -161,7 +162,7 @@ private Q_SLOTS:
         QCOMPARE(r.status, Status::Suspended);
         QVariantMap request = r.value.toMap().value(u"request"_s).toMap();
         QCOMPARE(r.value.toMap().value(u"kind"_s).toString(), u"ai"_s);
-        QCOMPARE(request.value(u"tools"_s).toList().size(), 11);
+        QCOMPARE(request.value(u"tools"_s).toList().size(), 12);
         QVERIFY(request.value(u"system"_s).toString().contains(u"2026-11-11"_s));
         QCOMPARE(request.value(u"messages"_s).toList().value(0).toMap().value(u"content"_s).toString(), question);
         // The script's tools are a request both providers take.
@@ -422,6 +423,79 @@ private Q_SLOTS:
         QVERIFY2(r.ok(), qPrintable(r.error));
         QVERIFY2(file(u"journals/2026-11-11.md"_s).contains(u"✏️ Zmienione: [[Rozszerzenia/Licznik zadań]]"_s),
                  qPrintable(file(u"journals/2026-11-11.md"_s)));
+    }
+
+    void looksAtAPicture()
+    {
+        QVERIFY(open(sampleNotes()));
+        Result r = ask(u"Ile zapłaciłem za mleko? Paragon jest w notatce Zakupy."_s);
+        QCOMPARE(r.status, Status::Suspended);
+        QVERIFY(r.value.toMap()
+                        .value(u"request"_s)
+                        .toMap()
+                        .value(u"system"_s)
+                        .toString()
+                        .contains(u"look_at_picture"_s));
+        // The model looks at the picture, named as the note embeds it: a request of its own —
+        // the picture and the question, no tools, a short answer asked for.
+        r = m_engine->resume(
+                r.call,
+                calling({call(u"c1"_s, u"look_at_picture"_s,
+                              {{u"name"_s, u"![[paragon.jpg|300]]"_s}, {u"question"_s, u"Ile kosztowało mleko?"_s}})}));
+        QCOMPARE(r.status, Status::Suspended);
+        QCOMPARE(r.value.toMap().value(u"kind"_s).toString(), u"ai"_s);
+        QVariantMap look = r.value.toMap().value(u"request"_s).toMap();
+        QCOMPARE(look.value(u"prompt"_s).toString(), u"Ile kosztowało mleko?"_s);
+        QCOMPARE(look.value(u"images"_s).toList(), QVariantList{u"paragon.jpg"_s});
+        QVERIFY(!look.contains(u"tools"_s));
+        QVERIFY(!look.contains(u"messages"_s));
+        QCOMPARE(look.value(u"effort"_s).toString(), u"low"_s);
+        // A request ai::requestFrom takes, with the picture loaded by the app.
+        QString error;
+        QStringList asked;
+        const std::optional<ai::Request> made =
+                ai::requestFrom(look, &error, [&](const QString &name, QString *) -> std::optional<ai::Image> {
+                    asked << name;
+                    return ai::Image{"JPEG", u"image/jpeg"_s};
+                });
+        QVERIFY2(made, qPrintable(error));
+        QCOMPARE(asked, QStringList{u"paragon.jpg"_s});
+        QCOMPARE(made->messages.value(0).images.size(), 1);
+
+        // What the model saw is the tool's result, back in the conversation.
+        r = m_engine->resume(r.call, answering(u"  Mleko 2% — 3,49 zł.\n"_s));
+        QCOMPARE(r.status, Status::Suspended);
+        QVariantList results = lastResults(r);
+        QCOMPARE(results.size(), 1);
+        QCOMPARE(results[0].toMap().value(u"id"_s).toString(), u"c1"_s);
+        QCOMPARE(results[0].toMap().value(u"content"_s).toString(), u"Mleko 2% — 3,49 zł."_s);
+        QVERIFY(!results[0].toMap().value(u"isError"_s).toBool());
+        QCOMPARE(r.value.toMap().value(u"request"_s).toMap().value(u"tools"_s).toList().size(), 12);
+
+        // No question: the default one, in the notes' language. A model that cannot see (the
+        // request fails): the failure is the result, the conversation goes on.
+        r = m_engine->resume(r.call, calling({call(u"c2"_s, u"look_at_picture"_s, {{u"name"_s, u"skan.png"_s}})}));
+        look = r.value.toMap().value(u"request"_s).toMap();
+        QCOMPARE(look.value(u"prompt"_s).toString(),
+                 u"Opisz krótko, co jest na tym obrazku, i przepisz widoczny na nim tekst."_s);
+        QCOMPARE(look.value(u"images"_s).toList(), QVariantList{u"skan.png"_s});
+        r = m_engine->resume(r.call,
+                             QVariantMap{{u"error"_s, u"the picture \"skan.png\": no such picture in the notebook"_s}});
+        QCOMPARE(r.status, Status::Suspended);
+        results = lastResults(r);
+        QVERIFY2(results[0].toMap().value(u"content"_s).toString().contains(u"no such picture in the notebook"_s),
+                 qPrintable(results[0].toMap().value(u"content"_s).toString()));
+        QVERIFY(results[0].toMap().value(u"isError"_s).toBool());
+        // No name: no request at all. Nothing said about the picture: said so.
+        r = m_engine->resume(r.call, calling({call(u"c3"_s, u"look_at_picture"_s, {{u"name"_s, u" "_s}})}));
+        QVERIFY(lastResults(r)[0].toMap().value(u"content"_s).toString().contains(u"name is needed"_s));
+        r = m_engine->resume(r.call, calling({call(u"c4"_s, u"look_at_picture"_s, {{u"name"_s, u"paragon.jpg"_s}})}));
+        r = m_engine->resume(r.call, answering(u" "_s));
+        QVERIFY(lastResults(r)[0].toMap().value(u"content"_s).toString().contains(u"said nothing"_s));
+
+        r = m_engine->resume(r.call, answering(u"Mleko kosztowało 3,49 zł."_s));
+        QVERIFY2(r.ok(), qPrintable(r.error));
+        QVERIFY(file(u"journals/2026-11-11.md"_s).contains(u"  - Mleko kosztowało 3,49 zł."_s));
     }
 
     void unknownToolsAndTooManyTurns()

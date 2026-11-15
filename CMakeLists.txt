@@ -39,6 +39,7 @@ include(cmake/BrulionWindows.cmake)
 # (-DBRULION_HARDENING=OFF builds without them).
 include(cmake/BrulionHardening.cmake)
 brulion_enable_hardening()
+include(cmake/BrulionLocalAi.cmake)
 
 # The desktop (Linux and Windows): the system tray, one instance per session, the command line
 # brulion-cli and the self-tests of the real app (BRULION_DESKTOP_INTEGRATION in the code).
@@ -95,6 +96,11 @@ else()
 endif()
 
 add_subdirectory(src/core)
+# llama.cpp for the model on the device (BRULION_LOCAL_AI, 3rdparty/llama): after the core modules,
+# whose semantic search prototype may have found another llama.cpp of the system (its own targets).
+if(BRULION_LOCAL_AI_ENABLED)
+    add_subdirectory(3rdparty/llama)
+endif()
 # The desktop (Linux, Windows): the single-instance socket and the command line for scripts and AI
 # agents (brulion-cli, docs/CLI.md); the app hands `brulion cli …` over to it.
 if(NOT ANDROID AND NOT EMSCRIPTEN)

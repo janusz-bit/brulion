@@ -4,6 +4,7 @@
 #include "workspacesync.h"
 
 #include "ai/ai.h"
+#include "ai/local.h"
 #include "notebook/journals.h"
 #include "text/text.h"
 #include "util/unicode.h"
@@ -48,6 +49,7 @@ constexpr auto kGym = "extensions/silownia"_L1;
 constexpr auto kAssistant = "extensions/asystent"_L1;
 constexpr auto kAiProvider = "ai/provider"_L1;
 constexpr auto kAiModel = "ai/model"_L1;
+constexpr auto kAiLocalModel = "ai/localModel"_L1;
 constexpr auto kAiBaseUrl = "ai/baseUrl"_L1;
 constexpr auto kEditorFont = "editor/font"_L1;
 constexpr auto kEditorFontFamily = "editor/fontFamily"_L1;
@@ -574,12 +576,26 @@ QStringList AppSettings::enabledExtensions() const
 QString AppSettings::aiProvider() const
 {
     const QString p = m_settings->value(kAiProvider, u"anthropic"_s).toString();
-    return p == u"openai" ? p : u"anthropic"_s;
+    return p == u"openai" || p == u"local" ? p : u"anthropic"_s;
 }
 
 void AppSettings::setAiProvider(const QString &provider)
 {
-    if (store(kAiProvider, provider == u"openai" ? u"openai"_s : u"anthropic"_s, aiProvider()))
+    const QString p = provider == u"openai" || provider == u"local" ? provider : u"anthropic"_s;
+    if (store(kAiProvider, p, aiProvider()))
+        Q_EMIT aiChanged();
+}
+
+QString AppSettings::aiLocalModel() const
+{
+    // A model the app knows; one it no longer does (or none chosen) is the default.
+    const QString id = m_settings->value(kAiLocalModel).toString();
+    return ai::localModel(id) ? id : QString();
+}
+
+void AppSettings::setAiLocalModel(const QString &id)
+{
+    if (store(kAiLocalModel, ai::localModel(id) ? id : QString(), aiLocalModel()))
         Q_EMIT aiChanged();
 }
 

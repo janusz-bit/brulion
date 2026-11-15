@@ -85,6 +85,8 @@ class AppSettings : public QObject {
     /// lives in `<app data>/secrets/ai-key` (owner-only, like the Nextcloud password).
     Q_PROPERTY(QString aiProvider READ aiProvider WRITE setAiProvider NOTIFY aiChanged FINAL)
     Q_PROPERTY(QString aiModel READ aiModel WRITE setAiModel NOTIFY aiChanged FINAL)
+    /// The model on the device for the provider "local" (an ai::LocalModel's id; "": the default).
+    Q_PROPERTY(QString aiLocalModel READ aiLocalModel WRITE setAiLocalModel NOTIFY aiChanged FINAL)
     Q_PROPERTY(QString aiBaseUrl READ aiBaseUrl WRITE setAiBaseUrl NOTIFY aiChanged FINAL)
     Q_PROPERTY(bool hasAiKey READ hasAiKey NOTIFY aiChanged FINAL)
     /// The address is plain http to another machine (ai::Settings::unencrypted()): the settings
@@ -273,6 +275,8 @@ public:
     void setAiProvider(const QString &provider);
     QString aiModel() const;
     void setAiModel(const QString &model);
+    QString aiLocalModel() const;
+    void setAiLocalModel(const QString &id);
     QString aiBaseUrl() const;
     bool aiUnencrypted() const;
     void setAiBaseUrl(const QString &url);

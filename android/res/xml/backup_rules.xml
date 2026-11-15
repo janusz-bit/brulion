@@ -3,7 +3,11 @@
      backup`) leaves out of the app's data. Passwords and tokens stay on the device that was
      given them: the Nextcloud app password, the GitHub and Microsoft tokens, the AI and
      Syncthing keys live in files/secrets (QStandardPaths::AppDataLocation + "/secrets").
+     A model that runs on the device (files/models, over a gigabyte; docs/EXTENSIONS.md "AI") is
+     downloaded again where it is wanted: with it the app's data would be over the backup's
+     quota (25 MB), and then none of it is backed up.
      Android 12+ reads data_extraction_rules.xml instead. docs/ANDROID.md, "Backups". -->
 <full-backup-content>
     <exclude domain="file" path="secrets" />
+    <exclude domain="file" path="models" />
 </full-backup-content>

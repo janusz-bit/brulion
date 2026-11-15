@@ -65,6 +65,7 @@
 
 #include "appsettings.h"
 #include "appupdates.h"
+#include "localai.h"
 #include "navigation.h"
 #include "tabs.h"
 #include "workspace.h"
@@ -116,6 +117,8 @@ class AppController : public QObject {
     Q_PROPERTY(brulion::shell::Workspace *workspace READ workspace CONSTANT FINAL)
     /// The message about a newer version (appupdates.h).
     Q_PROPERTY(brulion::shell::AppUpdates *updates READ updates CONSTANT FINAL)
+    /// The model on the device: downloads, and whether this build runs one (localai.h).
+    Q_PROPERTY(brulion::shell::LocalAi *localAi READ localAi CONSTANT FINAL)
 
     // ---- Navigation ---------------------------------------------------------------------
     Q_PROPERTY(QVariantMap currentRoute READ currentRoute NOTIFY currentRouteChanged FINAL)
@@ -242,6 +245,10 @@ public:
         /// Asks GitHub about new versions where the app tells about them (main(), not its
         /// self-tests; off in tests).
         bool checkForUpdates = false;
+        /// The model on the device (localai.h). What is left empty is the app's own: the models
+        /// folder <dataDir>/models, the model runner's plugin of this build, the device's memory.
+        /// Tests give small models and a fake runner.
+        LocalAi::Options localAi;
     };
 
     explicit AppController(const Options &options, QObject *parent = nullptr);
@@ -254,6 +261,7 @@ public:
     AppSettings *settings() const { return m_settings.get(); }
     Workspace *workspace() const { return m_workspace.get(); }
     AppUpdates *updates() const { return m_updates.get(); }
+    LocalAi *localAi() const { return m_localAi.get(); }
     CommandModel *commands() const { return m_commands.get(); }
     /// The commands' keyboard shortcuts, custom ones included (Settings → Keyboard shortcuts).
     ShortcutMap *shortcuts() const { return m_shortcuts.get(); }
@@ -729,6 +737,8 @@ private:
     void refuseOtherNotebookRoute(const QString &vault);
 
     std::unique_ptr<AppSettings> m_settings;
+    /// Before the workspace (its extensions hand it their requests): destroyed after it.
+    std::unique_ptr<LocalAi> m_localAi;
     std::unique_ptr<Workspace> m_workspace;
     std::unique_ptr<AppUpdates> m_updates;
     std::unique_ptr<ShortcutMap> m_shortcuts;

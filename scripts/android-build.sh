@@ -38,6 +38,12 @@
 #   BRULION_ANDROID_SELFTEST=1   also build the bridge self-test APK (same package as the app!)
 #                                for scripts/android-emulator-test.sh
 #   BRULION_ANDROID_VERSION_CODE versionCode (default major*1000000 + minor*1000 + patch)
+#   BRULION_ANDROID_ID_SUFFIX=.test  an APK that installs beside a released Brulion instead of
+#                                replacing it: the package io.github.januszbit.brulion.test, named
+#                                "Brulion (test)", with data of its own (android/settings.gradle).
+#                                For a phone that has the release: no key but the release's can
+#                                update that one, and uninstalling it deletes its notes. Not with
+#                                BRULION_ANDROID_AAB (a bundle is for a store)
 #   BRULION_UPDATE_CHECK=OFF     no check for a newer version on GitHub, no message or switch about
 #                                it (CMake option BRULION_UPDATE_CHECK, default ON): for builds that a
 #                                store updates (F-Droid, IzzyOnDroid; docs/ANDROID.md)
@@ -51,6 +57,11 @@
 #                                CMake downloads the pinned OpenSSL 3 libraries, src/app/CMakeLists.txt)
 #   BRULION_QT_SOURCE_DIR, BRULION_OPENSSL_SOURCE_DIR   source trees for the two scripts above
 #                                (F-Droid's srclibs) instead of their pinned source archives
+#   BRULION_LOCAL_AI=OFF         an APK without the model on the device (no llama.cpp libraries;
+#                                default: with it, for the 64-bit ABIs — docs/EXTENSIONS.md "AI")
+#   BRULION_LLAMA_SOURCE_DIR     llama.cpp's sources, the release pinned in 3rdparty/llama/pin.json
+#                                (default: scripts/llama-source.sh downloads and checks them;
+#                                F-Droid: a srclib)
 #   BRULION_WERROR=ON            warnings in Brulion's own C++ code are errors
 #   JOBS                         parallel compile jobs (default: all cores)
 #   SOURCE_DATE_EPOCH            time stamp of the files in Qt resources (rcc), for reproducible
@@ -67,7 +78,8 @@
 #   APK signed with the release key. Create a release key: scripts/android-new-keystore.sh.
 #
 # Output: dist-android/brulion-<version>-<abis>.apk (+ .aab; with BRULION_ANDROID_SIGN=0
-# brulion-<version>-<abis>-unsigned.apk). On GitHub Actions also written to $GITHUB_OUTPUT as
+# brulion-<version>-<abis>-unsigned.apk; with BRULION_ANDROID_ID_SUFFIX=.test
+# brulion-<version>-<abis>-test.apk). On GitHub Actions also written to $GITHUB_OUTPUT as
 # `apk`, `aab`, `version`, `signing` (release/throwaway/unsigned) and `openssl` (its version).
 set -euo pipefail
 
@@ -141,6 +153,18 @@ QT_ROOT=$(realpath -m -- "$QT_ROOT")
 [[ -z ${BRULION_OPENSSL_OUT:-} ]] || BRULION_OPENSSL_OUT=$(realpath -m -- "$BRULION_OPENSSL_OUT")
 SIGN=${BRULION_ANDROID_SIGN:-1}
 [[ $SIGN == 0 || $SIGN == 1 ]] || die "BRULION_ANDROID_SIGN must be 0 or 1, not '$SIGN'"
+# Gradle reads it from the environment (android/settings.gradle): what follows the package name.
+ID_SUFFIX=${BRULION_ANDROID_ID_SUFFIX:-}
+if [[ -n $ID_SUFFIX ]]; then
+  [[ $ID_SUFFIX =~ ^(\.[a-z][a-z0-9_]*)+$ ]] ||
+    die "BRULION_ANDROID_ID_SUFFIX must be a dot and a lower-case name, like .test, not '$ID_SUFFIX'"
+  [[ ${BRULION_ANDROID_AAB:-0} != 1 ]] ||
+    die "BRULION_ANDROID_ID_SUFFIX makes a test package: not with BRULION_ANDROID_AAB=1 (a bundle is for a store)"
+  export BRULION_ANDROID_ID_SUFFIX
+else
+  unset BRULION_ANDROID_ID_SUFFIX
+fi
+PACKAGE=io.github.januszbit.brulion$ID_SUFFIX
 NDK_VERSION=${NDK_VERSION:-27.2.12479018}
 SDK_PLATFORM=android-36
 BUILD_TOOLS=36.0.0
@@ -166,6 +190,7 @@ qt_arch() { # ABI -> aqt arch / Qt directory name
 }
 
 info "Brulion $VERSION for Android: Qt $QT_VERSION ($QT_SOURCE), OpenSSL ($OPENSSL_SOURCE), ABIs ${ABIS[*]}, $BUILD_TYPE"
+[[ -z $ID_SUFFIX ]] || echo "Package $PACKAGE: installs beside a released Brulion, with data of its own"
 
 # --- JDK ----------------------------------------------------------------------------------------
 
@@ -385,6 +410,23 @@ fi
 for abi in "${ABIS[@]:1}"; do
   cmake_args+=("-DQT_PATH_ANDROID_ABI_$abi=$QT_ROOT/$QT_VERSION/$(qt_arch "$abi")")
 done
+# The model on the device (cmake/BrulionLocalAi.cmake): llama.cpp compiled from its pinned sources
+# into libraries of the APK, for the 64-bit ABIs.
+LOCAL_AI=on
+case ${BRULION_LOCAL_AI:-auto} in
+  OFF | off | 0 | false) LOCAL_AI=off ;;
+esac
+if [[ $LOCAL_AI == on ]]; then
+  if [[ -z ${BRULION_LLAMA_SOURCE_DIR:-} ]]; then
+    info "llama.cpp for the model on the device (scripts/llama-source.sh)"
+    BRULION_LLAMA_SOURCE_DIR=$("$ROOT/scripts/llama-source.sh") || die "no llama.cpp sources (BRULION_LOCAL_AI=OFF builds without)"
+  fi
+  [[ -f $BRULION_LLAMA_SOURCE_DIR/include/llama.h ]] || die "BRULION_LLAMA_SOURCE_DIR=$BRULION_LLAMA_SOURCE_DIR has no include/llama.h"
+  echo "llama.cpp: $BRULION_LLAMA_SOURCE_DIR"
+  cmake_args+=(-DBRULION_LLAMA_SOURCE_DIR="$BRULION_LLAMA_SOURCE_DIR")
+else
+  cmake_args+=(-DBRULION_LOCAL_AI=OFF)
+fi
 if command -v ccache >/dev/null; then
   cmake_args+=(-DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_C_COMPILER_LAUNCHER=ccache)
 fi
@@ -442,13 +484,14 @@ apk_in=$(newest_apk "$android_build")
 [[ -n $apk_in ]] || die "androiddeployqt produced no APK under $android_build/build/outputs/apk"
 unsigned_suffix=
 ((SIGN)) || unsigned_suffix=-unsigned
-apk=$OUT_DIR/brulion-$VERSION-$abi_tag$unsigned_suffix.apk
+id_tag=${ID_SUFFIX//./-} # ".test": "-test"
+apk=$OUT_DIR/brulion-$VERSION-$abi_tag$id_tag$unsigned_suffix.apk
 sign_apk "$apk_in" "$apk"
 selftest_apk=
 if [[ ${BRULION_ANDROID_SELFTEST:-0} == 1 ]]; then
   selftest_in=$(newest_apk "$selftest_build")
   [[ -n $selftest_in ]] || die "no self-test APK under $selftest_build/build/outputs/apk"
-  selftest_apk=$OUT_DIR/brulion-selftest-$VERSION-$abi_tag$unsigned_suffix.apk
+  selftest_apk=$OUT_DIR/brulion-selftest-$VERSION-$abi_tag$id_tag$unsigned_suffix.apk
   sign_apk "$selftest_in" "$selftest_apk"
 fi
 
@@ -475,7 +518,12 @@ elif unzip -l "$apk" | grep -qE 'META-INF/[^ ]*\.(RSA|DSA|EC|SF)$'; then
 fi
 badging=$("$BT/aapt2" dump badging "$apk")
 grep -E "^(package|minSdkVersion|sdkVersion|targetSdkVersion|application-label|native-code):" <<<"$badging"
-grep -q "^package: name='io.github.januszbit.brulion'" <<<"$badging" || die "wrong package name"
+grep -q "^package: name='$PACKAGE'" <<<"$badging" || die "wrong package name (not $PACKAGE)"
+# The package beside the release is told apart under its icon; the release's own name is Qt's
+# (QT_ANDROID_APP_NAME).
+label=Brulion
+[[ -z $ID_SUFFIX ]] || label="Brulion (${ID_SUFFIX#.})"
+grep -qxF "application-label:'$label'" <<<"$badging" || die "wrong app name (not \"$label\")"
 for permission in MANAGE_EXTERNAL_STORAGE POST_NOTIFICATIONS SCHEDULE_EXACT_ALARM USE_EXACT_ALARM \
   RECEIVE_BOOT_COMPLETED VIBRATE WAKE_LOCK USE_FULL_SCREEN_INTENT INTERNET ACCESS_NETWORK_STATE; do
   grep -q "uses-permission: name='android.permission.$permission'" <<<"$badging" ||
@@ -549,6 +597,28 @@ if [[ $QT_SOURCE == source || $OPENSSL_SOURCE == source ]]; then
   done
   echo "from source: Qt ($QT_SOURCE) and OpenSSL ($OPENSSL_SOURCE) libraries in the APK match the local builds"
 fi
+# The model on the device: the plugin with the model runner, llama.cpp's libraries and its
+# processor plugins, for each 64-bit ABI (src/app/CMakeLists.txt, 3rdparty/llama) — in the APK,
+# but none of them among the libraries Qt's loader loads when the app starts (libs.xml): they
+# wait for the first question to a model.
+if [[ $LOCAL_AI == on ]]; then
+  for abi in "${ABIS[@]}"; do
+    case $abi in
+      arm64-v8a) cpus=(libggml-cpu-android_armv8.6_1.so libggml-cpu-android_armv8.2_2.so) ;;
+      x86_64) cpus=(libggml-cpu-haswell.so libggml-cpu-sse42.so) ;;
+      *) continue ;;
+    esac
+    for lib in libbrulion_localai.so libllama.so libmtmd.so libggml.so libggml-base.so "${cpus[@]}"; do
+      grep -q "lib/$abi/$lib" <<<"$listing" || die "lib/$abi/$lib missing from the APK: no model on the device"
+    done
+  done
+  libs_xml=$BUILD_DIR/src/app/android-build/res/values/libs.xml
+  [[ -f $libs_xml ]] || die "$libs_xml not found: cannot tell what the app loads when it starts"
+  if grep -E 'brulion_localai|llama|mtmd|ggml' "$libs_xml"; then
+    die "the model runner's libraries are loaded when the app starts ($libs_xml): they are for the first question to a model (src/app/CMakeLists.txt)"
+  fi
+  echo "the model on the device: llama.cpp's libraries are in the APK, none loaded when the app starts"
+fi
 if [[ $BUILD_TYPE == Release || $BUILD_TYPE == MinSizeRel ]] && grep -q 'libplugins_qmltooling_' <<<"$listing"; then
   die "QML debugging plugins (qmltooling) in a $BUILD_TYPE APK (src/app/CMakeLists.txt leaves them out)"
 fi
@@ -580,7 +650,8 @@ if [[ -x $readelf_bin ]]; then
     checked=$((checked + 1))
     if ((min < 16384)); then
       # Qt built from source is linked for 16 KB pages too (scripts/android-qt-from-source.sh).
-      [[ $QT_SOURCE != source && $lib != */libbrulion_* && $lib != */libssl_3.so && $lib != */libcrypto_3.so ]] ||
+      [[ $QT_SOURCE != source && $lib != */libbrulion_* && $lib != */libssl_3.so && $lib != */libcrypto_3.so &&
+        $lib != */libllama.so && $lib != */libmtmd.so && $lib != */libggml* ]] ||
         die "$lib: LOAD segments aligned to $min bytes, 16 KB pages need 16384"
       misaligned+=("$lib ($min)")
     fi

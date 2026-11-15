@@ -240,6 +240,9 @@ public:
     /// gesture navigation (Android 10+; the side panel drawer's handle). Empty: none.
     void setGestureExclusion(const QList<QRect> &rects);
 
+    /// The screen does not turn off by itself while `on` (the activity's window keeps it on).
+    static void setKeepScreenOn(bool on);
+
 Q_SIGNALS:
     /// A reminder notification (or "Open note" on the alarm screen) was tapped.
     void activated(const QString &path, int line);

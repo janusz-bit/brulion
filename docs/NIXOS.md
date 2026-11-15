@@ -160,6 +160,17 @@ from cache.nixos.org for x86_64 and aarch64). CMake finds it through pkg-config
 the `tst_pdfpages` tests check the poppler backend there. Building without PDFs:
 `-DBRULION_PDF_BACKEND=none`.
 
+### The model on the device
+
+The Nix package has the AI provider "On this device" (docs/EXTENSIONS.md "AI"): llama.cpp is
+compiled into the build from the sources of one release (`3rdparty/llama/pin.json`, fetched by
+`nix/package.nix`; nixpkgs' own `llama-cpp` is not used: the flake pins a nixpkgs older than the
+models) as `lib/brulion/libbrulion_localai.so` with llama.cpp's libraries and processor plugins
+beside it — 15 MB that the program loads only when a model is first asked. The models are
+downloaded by the app into `~/.local/share/Brulion/Brulion/models` (1.0–1.2 GB each). Without it:
+`brulion.override { withLocalAi = false; }`. `nix develop` sets `BRULION_LLAMA_SOURCE_DIR`, so
+`./build` has it too; `brulion-cli` alone never does.
+
 ### Spell checking
 
 The Nix package checks spelling with Hunspell from nixpkgs (`hunspell`) and the dictionaries

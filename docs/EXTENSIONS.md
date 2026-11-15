@@ -453,7 +453,32 @@ script's line ("b.ai: the API key was refused (HTTP 401): …", "b.ai: no connec
 model declined to answer") that `pcall(b.ai, …)` catches. It needs the permission `ai`
 (`permissions: [ai]`, approved with the page like `write`; the console has it). `maxTokens` is a
 whole number from 1 to 128000 (Claude gets 16000 without one); `effort` is `"low"`, `"medium"`,
-`"high"`, `"xhigh"` or `"max"` and reaches Claude only.
+`"high"`, `"xhigh"` or `"max"`: Claude's effort, and for a model on the device `"low"` means an
+answer without thinking first.
+
+**Pictures**: `images = {"paragon.jpg", …}` next to `prompt` — or in a user's message of
+`messages` — shows the model pictures of the notebook, named as notes embed them
+(`![[paragon.jpg]]`) or by their path (`assets/skan.png`); at most 8 in a request. The app finds
+each one in the notebook, decodes it, scales it down to 1568 pixels on its longer side and sends
+it as a JPEG, before the message's text. A model that sees is needed: Claude, an
+OpenAI-compatible model with vision, or LFM3-VL on the device; a picture the notebook does not
+have is an error ("b.ai: the picture "brak.jpg": no such picture in the notebook").
+
+```luau
+b.command("opisz-zdjecie", function(ctx)
+    local name = b.ask("Which picture? (as in ![[…]])")
+    if name == "" then
+        return nil
+    end
+    local seen = b.ai({
+        prompt = "Describe this picture in two sentences and write out the text on it.",
+        images = { name },
+        maxTokens = 600,
+    })
+    b.appendToJournal(b.today(), `- ![[{name}]]: {seen:gsub("%s+", " ")}`)
+    return seen
+end, { label = "Describe a picture into the journal" })
+```
 
 ```luau
 b.command("tldr", function(ctx)
@@ -541,28 +566,76 @@ end, { label = "Ask my notes (AI)" })
 * **Settings → Extensions → AI**, per device: the provider — **Claude** (Anthropic's Messages API;
   `claude-opus-5-5` unless a model is named; `anthropic-version: 2026-10-21`; a request one model's
   safeguards decline is answered by the model Anthropic recommends, `fallbacks: "default"`, for the
-  models that have it) or **OpenAI-compatible** (OpenAI, OpenRouter, or a server of one's own —
-  Ollama `http://192.168.1.10:11434/v1`, LM Studio, llama.cpp — which needs no key); the API key
+  models that have it), **OpenAI-compatible** (OpenAI, OpenRouter, or a server of one's own —
+  Ollama `http://192.168.1.10:11434/v1`, LM Studio, llama.cpp — which needs no key) or **On this
+  device** (below; in builds that have it); the API key
   (in `<app data>/secrets/ai-key`, owner-only like the Nextcloud password, masked in logs, never in
   the notebook); the model; the address; **Check** ("Say OK."). In the browser the key is in the
   site's storage, and Anthropic's API is told the request comes from a page.
+* **On this device**: a small model that runs inside the app — no key, no account, no network once
+  its files are there, nothing sent anywhere. Two models by Liquid AI, chosen in the settings:
+  **LFM3-VL 2B** (the default: it sees pictures; 1.2 GB) and **LFM3 1.7B** (text only, the better
+  one at working through a notebook with tools; 1.0 GB). Settings downloads the chosen one from
+  Hugging Face into `<app data>/models` — one pinned revision, each file checked against its
+  SHA-256; a download that breaks off goes on from where it stopped — and removes it. The files
+  come over HTTP/1.1 with 4 MB read ahead: what the server sends while the app stands still (an
+  Android app off the screen) waits there, not in the app's memory. The models
+  are their maker's, under the LFM Open License v1.0 (not a free-software licence; the app ships
+  none of them). They are slower and far less able than Claude: fine for a summary, a question
+  about a note, reading a photographed receipt; unreliable for long chains of tool calls.
+  * The model is loaded the first time it is asked (some seconds) and leaves memory after ten
+    minutes without a request. While loaded it takes some 1.3 GB of the app's own memory, and
+    its file's 1 GB stays mapped until the system wants that memory back (docs/PERFORMANCE.md
+    "The model on the device"). Requests are answered one after another, on a thread of their
+    own.
+  * It holds 16 384 tokens at once on a device with 7 GB of memory or more, 8 192 from 5 GB,
+    4 096 below — the request and the answer together. A request that does not fit is cut rather
+    than refused: its longest texts first, a tool's result at its end and a message in its middle
+    (its start and its question stay), each marked `[… cut: the model on this device cannot read
+    more at once …]`; only a request whose system text and tools alone are too long is an error.
+    One answer is at most 2 048 tokens, thoughts included. A picture takes up to 1 024 tokens.
+  * The model thinks before it answers (its thoughts are not part of `text`); `effort = "low"`
+    asks for the answer at once — faster, less careful.
+  * What it has read stays in its memory: the next turn of a tool loop reads only what is new,
+    another question after the same system text and tools starts after them, and a request about
+    something else in between (a look at a picture) does not push the conversation out.
+  * How fast it is on a device is in the event log (`brulion.ai.local`): `lfm3-vl-2b opened:
+    8192 tokens at once, ggml-cpu-haswell, 8 threads, in 1.42 s` — the processor plugin taken and
+    the time the files took to load —, and of every answer `answered: 1520 tokens read in 0.61 s
+    (1400 kept from before), 85 written in 1.90 s`: reading costs only the tokens not kept. A
+    download is there too, from `lfm3-vl-2b download: 1.2 GB to fetch of 1.2 GB` to `downloaded:
+    1.2 GB in 3 min 05 s`, `download stopped after 41.0 s` (by the user) or the warning `download
+    failed after 1 min 02 s: …` with the reason.
+  * A note's text never becomes part of the conversation's structure: the request is given to
+    the model as pieces — its control tokens (a turn's end, a tool call) apart from the text, in
+    which the same letters are only letters — and its answer is read the same way.
+  * `brulion-cli` runs no model; the browser version has none (`available` is false there, and
+    in any build without llama.cpp: docs/ARCHITECTURE.md "The model on the device").
 * **Subscriptions** (Claude Pro/Max, ChatGPT Plus) cannot be used by other apps: the providers bill
   their APIs separately, by use. On a phone that leaves an API key (a question about a note costs
   fractions of a cent), a server of one's own (free, private; reachable through Tailscale or the
   home network), or the providers' own apps with a connector to the notes (a remote MCP server —
   `brulion-cli mcp` speaks stdio only so far: TODO.md).
-* **Limits**: at most 200 000 characters per request (a script cannot send the notebook by
-  accident), 5 minutes per answer; only extensions approved with `ai` send anything, and what they
-  send goes to the chosen provider.
-* `src/core/ai/ai.h`: the request from b.ai's table, the HTTP request of each API and reading the
-  answer are pure functions (`tests/core/ai`); `ai::Client` sends through `sync::HttpTransport`.
+* **Limits**: at most 200 000 characters and 8 pictures per request (a script cannot send the
+  notebook by accident), 5 minutes per answer; only extensions approved with `ai` send anything,
+  and what they send goes to the chosen provider — or, on the device, nowhere.
+* `src/core/ai`: `ai.h` — the request from b.ai's table, the HTTP request of each API and reading
+  the answer are pure functions; `ai::Client` sends through `sync::HttpTransport` and hands the
+  provider "local" to an `ai::LocalBackend`. `local.h` — the models the app knows, a request
+  written as a model's prompt and its answer read back (LFM3's chat format, compared in
+  `tests/core/ai` with what the model's own template gives), cutting a request to fit.
+  `localfiles.h` — the models' files. `localrunner.h` / `llamarunner.h` — what runs a model:
+  llama.cpp, in a plugin the app loads on first use (`src/app/shell/localai.h`).
 
 **The AI assistant** (built in, `src/core/extensions/builtin/asystent.luau`; Settings → Extensions →
 AI, off by default) is an agent: "AI: ask or ask to do…" asks for a question or a request
-(`b.ask`) and sends it with the page on screen (at most 30 000 characters) and eleven tools —
+(`b.ask`) and sends it with the page on screen (at most 30 000 characters) and twelve tools —
 `search_notes` (`b.search`), `query_notes` (`b.query`, the query language described in the tool's
 description), `list_pages`, `read_page`, the changes `append_to_journal`, `append_to_page`,
-`write_page`, `update_block` (`b.replaceBlock`: a task's status too), and for writing an extension
+`write_page`, `update_block` (`b.replaceBlock`: a task's status too), `look_at_picture` (a picture
+of the notebook — a photo, a scan, a screenshot — with a question about it: a request of its own
+with the picture, `b.ai`'s `images`, whose answer is the tool's result as text; a model that sees
+is needed), and for writing an extension
 `extension_reference` (this document, `b.data("reference")`: the list of its sections, or the
 sections whose heading has the words asked for), `check_extension` (`b.checkExtension`) and
 `write_extension` (checked first and refused while it does not load or when the page is no
@@ -617,7 +690,7 @@ Word count:9: b.replaceBlock: stale: the block changed since it was read (Home.m
 | `b.read: argument 1 must be a string, not nil` | a wrong argument, by its position |
 | `b.ask: cannot wait for an answer here (inside a coroutine or a library callback)` | a question or `b.ai` where the call cannot be suspended |
 | `…: an extension cannot ask a question while it loads` | `b.ask`, `b.choose`, `b.form` or `b.ai` at the top level |
-| `b.ai: …` | the model's or the provider's: no key, no connection, HTTP errors in words, "the request is too long" |
+| `b.ai: …` | the model's or the provider's: no key, no connection, HTTP errors in words, "the request is too long", a picture the notebook does not have; on the device: "the model … is not on this device yet: download it in Settings → Extensions → AI", "… does not see pictures", "this device's processor is too old to run a model" |
 | `value nested too deeply (a cycle?)`, `cannot pass a value of type function` | a table that cannot cross to the app (a control's `args`, a returned value) |
 | `timeout: the extension ran too long` | more than 2 s in one call |
 | `not enough memory` | more than 64 MB |
@@ -866,7 +939,7 @@ Home:7
 | `b.sorted` | 100 000 texts |
 | `b.log`, `print` | 4000 characters a line |
 | `b.timer` | 1 … 86 400 s |
-| `b.ai` | 200 000 characters a request, 64 tools, 5 minutes an answer |
+| `b.ai` | 200 000 characters and 8 pictures a request, 64 tools, 5 minutes an answer; on the device also the model's context (a longer request is cut) and 2 048 tokens an answer |
 | Hooks | 256 in all; three failures in a row take one off |
 | Values crossing | 64 levels of nesting |
 
@@ -907,7 +980,9 @@ Home:7
 | `src/core/extensions/notebookhost.h` | `NotebookHost`: the Host over a `Vault` and its `VaultIndex` — blocks from the index, content-preserving writes (`blockedit.h`, `notebook/journals.h`, `notebook/pages.h`); a dry run that only computes them (`brulion-cli extension …`) |
 | `src/core/extensions/sandbox.h` | `checkExtension()`, `checkExtensionPage()`: an extension loaded in an engine of its own over a dry-run `NotebookHost` — `b.checkExtension`, `brulion-cli extension check / write` |
 | `src/core/extensions/builtin.h` | the built-in extensions (resources `:/extensions/…`), `builtinFor()`: which one a page overrides |
-| `src/core/ai/ai.h` | AI for `b.ai`: the request from a script's table, the HTTP requests of Anthropic's Messages API and of OpenAI-compatible chat APIs, reading their answers and errors; `ai::Client` over `sync::HttpTransport` |
+| `src/core/ai/ai.h` | AI for `b.ai`: the request from a script's table (pictures through an `ai::ImageLoader`), the HTTP requests of Anthropic's Messages API and of OpenAI-compatible chat APIs, reading their answers and errors; `ai::Client` over `sync::HttpTransport`, the provider "local" handed to an `ai::LocalBackend` |
+| `src/core/ai/local.h`, `localfiles.h`, `localrunner.h` | the model on the device: the models the app knows, LFM3's chat format (a request as pieces of text and control tokens, the answer read back, a long request cut), the models' files (downloads), what runs a model and the plugin with it (`llamarunner.h`: llama.cpp, only in builds with `BRULION_LOCAL_AI`) |
+| `src/app/shell/localai.h` | `AppController.localAi`: the chosen model, its download and removal, requests answered on a worker thread |
 | `src/core/extensions/pageextension.h` | extension pages: which pages are extensions, their id, their code with the page's line numbers, permissions, the hash an approval covers; the new-extension page and a built-in's source as a page |
 | `src/app/shell/workspaceextensions.h` | `WorkspaceExtensions` (QML `Workspace.extensions`): the engine for the open notebook, the built-ins the settings switch on, the extension pages and their approval on this device, reloading a page's code when it changes, hooks, the console, questions, messages and the rest timer |
 | `src/cli/commands_extensions.cpp` | `brulion-cli extension …` (docs/CLI.md "Extensions"): this reference (bundled), the extension pages and their state on the device, a sandbox for checks and runs, writing a page |

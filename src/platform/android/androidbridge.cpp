@@ -724,6 +724,12 @@ void AndroidBridge::setGestureExclusion(const QList<QRect> &rects)
     failed("setGestureExclusion"); // also clears the OutOfMemoryError of a failed NewIntArray()
 }
 
+void AndroidBridge::setKeepScreenOn(bool on)
+{
+    QJniObject::callStaticMethod<void>(kClass, "setKeepScreenOn", "(Z)V", jboolean(on));
+    failed("setKeepScreenOn");
+}
+
 void AndroidBridge::deliverPendingActivation()
 {
     const Activation activation = takeActivation();

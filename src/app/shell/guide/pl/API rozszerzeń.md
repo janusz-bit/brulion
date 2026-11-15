@@ -183,7 +183,7 @@ end, { label = "Zapisz spacer" })
 ```
 
 ## AI
-`b.ai("pytanie")` pyta model wybrany w **Ustawieniach → Rozszerzenia → AI** i zwraca jego odpowiedź jako tekst; tabela dodaje `system`, `model`, `maxTokens`, `effort`, `messages` dla rozmowy i `tools`, które model może wywołać. Strona potrzebuje uprawnienia `ai`. Więcej na stronie [[AI]].
+`b.ai("pytanie")` pyta model wybrany w **Ustawieniach → Rozszerzenia → AI** i zwraca jego odpowiedź jako tekst; tabela dodaje `system`, `model`, `maxTokens`, `effort`, `images` (obrazki z notatnika dla modelu, który widzi: `b.ai({ prompt = "Co tu jest napisane?", images = { "paragon.jpg" } })`), `messages` dla rozmowy i `tools`, które model może wywołać. Strona potrzebuje uprawnienia `ai`. Więcej na stronie [[AI]].
 
 ## Luau w skrócie
 - Teksty łączy `..`, można je też pisać w odwrotnych apostrofach z klamrami: `` `{n} stron` ``. Lista to `{ "a", "b" }` i liczy się od 1; `#lista` to jej długość; `for i, element in lista do … end` przechodzi po niej.

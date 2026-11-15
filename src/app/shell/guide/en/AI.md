@@ -1,6 +1,6 @@
 ---
 tags: [documentation]
-aliases: [Artificial intelligence, AI assistant, Claude, ChatGPT, Ollama]
+aliases: [Artificial intelligence, AI assistant, Claude, ChatGPT, Ollama, Model on the device]
 brulion: document
 ---
 # AI
@@ -12,6 +12,7 @@ Open **Settings → Extensions → AI** and choose:
 
 - **Claude** — a key from platform.claude.com (**API keys**). Without a model named, Brulion asks `claude-opus-5-5`; `claude-haiku-5-5` is faster and much cheaper.
 - **OpenAI-compatible** — OpenAI, OpenRouter, or a server of your own: Ollama or LM Studio on your computer (the address, e.g. `http://192.168.1.10:11434/v1`, and the model's name). Your own server needs no key and costs nothing; the phone reaches it at home or through Tailscale. An `http://` address is not encrypted — the settings say so: fine on your home network, anywhere else use `https://`.
+- **On this device** — a small model that runs inside Brulion itself: no key, no account, no internet. See [[#A model on this device]] below.
 
 Press **Check**: the model answers "OK", or you see what is wrong.
 
@@ -20,10 +21,27 @@ Press **Check**: the model answers "OK", or you see what is wrong.
 
 The key stays **only on this device** (not in the notebook, not in sync, not in the logs). Notes go to the provider only when you ask, or when an extension you approved with the `ai` permission does.
 
+## A model on this device
+With **On this device** chosen, the model runs in Brulion — on the phone too — and nothing you ask leaves the device. Choose one of two models by Liquid AI and press **Download** (best over Wi-Fi; on a phone keep Brulion on the screen until it is done — the screen stays on by itself; a download that stops goes on from where it was):
+
+| Model | Size | Good at |
+|---|---|---|
+| **LFM3-VL 2B** | 1.2 GB | **sees pictures**: photos, scans, screenshots, and the text on them |
+| **LFM3 1.7B** | 1.0 GB | text only; the better one at searching the notebook and changing notes |
+
+What to expect:
+
+- It is **small**. A summary of a page, a question about a note, the text of a photographed receipt go well; a long task with many steps may go astray, and its Polish is plainer than Claude's. For serious work choose Claude.
+- It is **slower** than a model in the cloud, most of all on a phone: a fast phone answers a question in about half a minute, a slower one takes longer. The phone's screen stays on while it answers; keep Brulion on the screen — behind another app the model works many times slower and after a while stops until you come back. The model then stays in memory for ten minutes.
+- It takes about **2.5 GB of memory** while it is loaded, and needs a processor from the last years (a phone from about 2018 on, a computer with AVX2).
+- A request too long for it is **cut** — a long page in its middle, a long search result at its end — rather than refused.
+
+The models are Liquid AI's, under their own licence (LFM Open License v1.0), and are not part of Brulion: the app downloads the one you choose from Hugging Face. **Remove** deletes its files. Not every build has this provider: the browser version and some desktop packages do not.
+
 ## The AI assistant
 Switch it on in **Settings → Extensions → AI → AI assistant**. Then the top bar has a **✨** button — on the phone too — with:
 
-- **Ask the AI…** — ask anything about your notes, or ask it to do something in them. The AI **searches and reads the whole notebook** by itself — pages, the journal, tasks with their dates, tags, reminders — so you can ask "What do I have to do this week?", "What did I write about the trip?" or "Add milk to my shopping list". The page on screen goes along (in the journal: today's note).
+- **Ask the AI…** — ask anything about your notes, or ask it to do something in them. The AI **searches and reads the whole notebook** by itself — pages, the journal, tasks with their dates, tags, reminders — so you can ask "What do I have to do this week?", "What did I write about the trip?" or "Add milk to my shopping list". It also **looks at pictures** in your notes when the model can see (Claude, LFM3-VL on the device): "What did I pay for milk? The receipt is in Shopping." The page on screen goes along (in the journal: today's note).
 - **Summarise this page** — a few sentences and the page's tasks.
 - **AI settings…** — the provider, the key and the model.
 
@@ -52,7 +70,7 @@ end, { label = "A haiku for today" })
 ```
 ````
 
-`b.ai("question")` returns the text; a table adds `system`, `model`, `maxTokens`, `effort`, or `messages` for a conversation. While the model writes, Brulion keeps working. In the **Luau console** try `b.ai("What is 2 + 2?")`. When the model cannot be asked — no key, no connection — the command stops with the reason; `pcall(b.ai, "…")` catches it.
+`b.ai("question")` returns the text; a table adds `system`, `model`, `maxTokens`, `effort`, `images` (pictures of the notebook, named as notes embed them: `images = { "receipt.jpg" }`) or `messages` for a conversation. While the model writes, Brulion keeps working. In the **Luau console** try `b.ai("What is 2 + 2?")`. When the model cannot be asked — no key, no connection — the command stops with the reason; `pcall(b.ai, "…")` catches it.
 
 ## Tools: a model that looks things up
 With `tools`, the model can call functions of your code — search the notes, read a page — before it answers; this is how the AI assistant works. A tool has a name, a description that says when to call it, and the shape of its input. A reply that calls tools has `toolCalls`: your code runs them and asks again, with the model's turn (`raw`, unchanged) and every result in one message, until a reply comes without calls.

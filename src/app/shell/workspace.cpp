@@ -162,6 +162,7 @@ Workspace::Workspace(QObject *parent) : EditorHost(parent)
     m_extensions->setNotifier([this](const QString &title, const QString &body) {
         m_reminders->showNotification(u"brulion-rest-timer"_s, title, body);
     });
+    m_extensions->setAiPictures([this](const QString &name, QString *why) { return aiPicture(name, why); });
     m_replacing = new ReplaceSession(this);
     m_sync = new WorkspaceSync(this);
     m_sync->setClock([this] { return now(); });

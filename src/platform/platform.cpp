@@ -10,6 +10,12 @@
 #define NOMINMAX
 #endif
 #include <windows.h>
+#elif !defined(Q_OS_WASM)
+#include <unistd.h>
+#endif
+
+#ifdef Q_OS_ANDROID
+#include "android/androidbridge.h"
 #endif
 
 using namespace Qt::StringLiterals;
@@ -44,6 +50,21 @@ QString logDirectory()
 #endif
 }
 
+qint64 physicalMemoryBytes()
+{
+#if defined(Q_OS_WIN)
+    MEMORYSTATUSEX status;
+    status.dwLength = sizeof(status);
+    return GlobalMemoryStatusEx(&status) ? qint64(status.ullTotalPhys) : 0;
+#elif defined(Q_OS_WASM)
+    return 0;
+#else
+    const long pages = sysconf(_SC_PHYS_PAGES);
+    const long pageSize = sysconf(_SC_PAGESIZE);
+    return pages > 0 && pageSize > 0 ? qint64(pages) * qint64(pageSize) : 0;
+#endif
+}
+
 QString deviceDescription()
 {
 #if defined(Q_OS_WASM)
@@ -62,6 +83,15 @@ QString deviceDescription()
                                    : QString();
     return u"%1%2, %3"_s.arg(product, kernel, QSysInfo::currentCpuArchitecture());
 #endif
+#endif
+}
+
+void keepScreenOn(bool on)
+{
+#ifdef Q_OS_ANDROID
+    AndroidBridge::setKeepScreenOn(on);
+#else
+    Q_UNUSED(on);
 #endif
 }
 

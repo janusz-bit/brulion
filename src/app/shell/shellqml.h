@@ -4,6 +4,7 @@
 //
 //   AppController    singleton — main()'s instance (AppController::instance())
 //   AppSettings      singleton — AppController.settings
+//   LocalAi          uncreatable — AppController.localAi (the model on the device)
 //   Workspace        singleton — AppController.workspace (the EditorHost for the editor)
 //   WorkspaceReminders, WorkspaceSync, WorkspaceGitHub, WorkspaceBackups, WorkspaceExtensions
 //                    uncreatable —      Workspace.reminders / .sync / .github / .backups / .extensions
@@ -101,6 +102,13 @@ struct AppUpdatesForeign {
     QML_FOREIGN(brulion::shell::AppUpdates)
     QML_NAMED_ELEMENT(AppUpdates)
     QML_UNCREATABLE("Use AppController.updates")
+};
+
+struct LocalAiForeign {
+    Q_GADGET
+    QML_FOREIGN(brulion::shell::LocalAi)
+    QML_NAMED_ELEMENT(LocalAi)
+    QML_UNCREATABLE("Use AppController.localAi")
 };
 
 struct WorkspaceRemindersForeign {

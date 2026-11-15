@@ -18,6 +18,7 @@
 #include "workspace.h"
 
 #include "picturesize.h"
+#include "util/paths.h"
 #include "webpicture/picturecache.h"
 #include "webpicture/picturefetcher.h"
 
@@ -25,7 +26,10 @@
 #include <QDir>
 #include <QFileInfo>
 #include <QHash>
+#include <QImage>
+#include <QImageReader>
 #include <QMetaObject>
+#include <QPainter>
 #include <QSet>
 #include <QStandardPaths>
 
@@ -36,6 +40,8 @@ namespace brulion::shell {
 namespace {
 /// The browser's cache size: the files and their data: URLs live in the tab's memory.
 constexpr qint64 BrowserCacheBytes = 50 * 1024 * 1024;
+/// The largest picture file read for a model.
+constexpr qint64 AiPictureFileBytes = 64 * 1024 * 1024;
 
 /// A cached picture as the browser shows it: a data: URL, with the picture's size.
 struct DataUrl {
@@ -295,6 +301,67 @@ QByteArray Workspace::webPictureData(const QString &url, QString *format) const
     if (format)
         *format = webpicture::sniffFormat(data);
     return data;
+}
+
+// ---- A picture for a model (b.ai's `images`) -----------------------------------------------------
+
+std::optional<ai::Image> Workspace::aiPicture(const QString &name, QString *why)
+{
+    const auto fail = [&](const QString &reason) -> std::optional<ai::Image> {
+        if (why)
+            *why = reason;
+        return std::nullopt;
+    };
+    if (!m_vault)
+        return fail(u"no notebook is open"_s);
+    // A path in the notebook as it stands, else as the notes name it (![[paragon.jpg]]).
+    QString path = paths::normalize(name);
+    if (path.isEmpty() || !m_vault->exists(path))
+        path = resolveLink(name.trimmed(), QString());
+    if (path.isEmpty() || !m_vault->exists(path) || !m_vault->reaches(path))
+        return fail(u"no such picture in the notebook"_s);
+    if (!paths::isPicturePath(path))
+        return fail(u"not a picture"_s);
+    if (!editor::canDecodePictureFormat(path))
+        return fail(u"this device cannot read %1 pictures"_s.arg(editor::pictureFormatName(path)));
+    if (QFileInfo(m_vault->absolutePath(path)).size() > AiPictureFileBytes)
+        return fail(u"the file is too large"_s);
+    const QByteArray bytes = readAttachment(path);
+    if (bytes.isEmpty())
+        return fail(u"it cannot be read"_s);
+
+    QBuffer buffer;
+    buffer.setData(bytes);
+    buffer.open(QIODevice::ReadOnly);
+    QImageReader reader(&buffer, QFileInfo(path).suffix().toLatin1());
+    reader.setDecideFormatFromContent(true);
+    reader.setAutoTransform(true); // a phone's photo, the way up it was taken
+    const QSize size = reader.size();
+    if (size.isValid() && std::max(size.width(), size.height()) > AiPictureSide)
+        reader.setScaledSize(size.scaled(AiPictureSide, AiPictureSide, Qt::KeepAspectRatio));
+    QImage image = reader.read();
+    if (image.isNull())
+        return fail(u"it cannot be read as a picture"_s);
+    if (std::max(image.width(), image.height()) > AiPictureSide)
+        image = image.scaled(AiPictureSide, AiPictureSide, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+    // JPEG has no transparency: on white, as a page shows it.
+    QImage flat(image.size(), QImage::Format_RGB888);
+    flat.fill(Qt::white);
+    {
+        QPainter painter(&flat);
+        painter.drawImage(0, 0, image);
+    }
+    QByteArray out;
+    QBuffer written(&out);
+    written.open(QIODevice::WriteOnly);
+    if (flat.save(&written, "JPEG", 85) && !out.isEmpty())
+        return ai::Image{out, u"image/jpeg"_s};
+    // (A build without Qt's JPEG plugin.)
+    out.clear();
+    written.seek(0);
+    if (flat.save(&written, "PNG") && !out.isEmpty())
+        return ai::Image{out, u"image/png"_s};
+    return fail(u"it cannot be prepared for the model"_s);
 }
 
 } // namespace brulion::shell

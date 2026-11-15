@@ -521,11 +521,14 @@ settings, the history — but never the passwords and tokens: `files/secrets` (t
 password, the GitHub token, the AI and Syncthing keys) is left out by `res/xml/backup_rules.xml`
 (Android 9–11, `android:fullBackupContent`) and by both sections of
 `res/xml/data_extraction_rules.xml` (Android 12+, `android:dataExtractionRules`), so after a
-restore or on a new phone Brulion asks for them again. On Android 12+ the notes go to the cloud
+restore or on a new phone Brulion asks for them again. The same rules leave out `files/models`,
+a model downloaded to run on the phone ("A model on the phone" below): over a gigabyte that can be
+downloaded again, and far over Auto Backup's quota of 25 MB for an app — with it Android would back
+up nothing of Brulion at all. On Android 12+ the notes go to the cloud
 only in a backup encrypted with a key of the user's devices (`disableIfNoEncryptionCapabilities`:
 a phone without a screen lock is not backed up to the cloud at all). ctest
-`tst_scripts_android_backup_rules` keeps the manifest, the two rule files and the folder the code
-writes its secrets to in agreement.
+`tst_scripts_android_backup_rules` keeps the manifest, the two rule files and the folders the code
+writes its secrets and the models to in agreement.
 
 ## On-screen keyboard
 
@@ -846,6 +849,99 @@ selection).
 Still to be checked on a real phone: Gboard with Polish and English, underlines and suggestions
 while typing with a keyboard that corrects words by itself.
 
+## A model on the phone
+
+**Settings → Extensions → AI → On this device** runs a small AI model inside the app
+(docs/EXTENSIONS.md "AI"): no key, no account, nothing sent anywhere. Choose LFM3-VL 2B (it sees
+pictures; 1.2 GB) or LFM3 1.7B (text only; 1.0 GB) and press **Download** — over Wi-Fi: the files
+come from Hugging Face into the app's own storage (`files/models`, removed with the app or with
+**Remove**), each checked against its SHA-256. A download that stops goes on from where it was.
+Android's backup and the transfer to a new phone leave the models out ([Backups](#backups)): on
+another phone the model is downloaded again.
+
+* **What it needs**: a 64-bit phone whose processor has the dot product and half-float
+  instructions (ARMv8.2: phones from about 2018 on; an older one is told "this device's processor
+  is too old to run a model"), 1–1.3 GB of storage, and memory: the app grows by 2.4 GB while
+  LFM3-VL is loaded — 1.5 GB of its own and the model's file, 1 GB that Android takes back when
+  it wants ([measured below](#on-a-pixel-9-pro)). A phone with 7 GB of memory or more holds
+  16 384 tokens at once, one with 5 GB 8 192, less 4 096 (12 KB of memory a token).
+* **Speed**: the model is loaded for the first question (some seconds) and stays for ten minutes.
+  The first question of a conversation is the slow one — the assistant's instructions and tools
+  are some 2 500 tokens before the question itself —; what was read stays, so the steps and the
+  questions after it read only what is new. Writing follows token by token, a dozen a second on
+  a fast phone.
+* **While the app is on screen**: Qt for Android pauses the app's event loop while the activity
+  is off the screen, so a download stops there — the server waits: the files come over HTTP/1.1
+  with 4 MB read ahead, where over HTTP/2 Qt would take all the server sends into memory, 3 GB
+  within seconds in a test on a laptop — and after a minute without a byte it ends ("The
+  download stopped"); **Download** then goes on from where it was. An answer is shown only when
+  the app is back — and is hardly worked on meanwhile:
+  Android gives a background app little of the processor and then freezes it
+  ([measured below](#on-a-pixel-9-pro)). So the screen stays on while a model is downloaded or
+  answers (`LocalAi::working()` → `platform::keepScreenOn()`: `FLAG_KEEP_SCREEN_ON` on the
+  activity's window) — many phones turn it off after 30 seconds without a touch, in the middle
+  of an answer. An answer not there five minutes after it was asked ends as "no answer in 5
+  minutes", the time away counted (TODO.md).
+* **In the APK** (`lib/arm64-v8a/`, 9.2 MB, stored uncompressed like every native library):
+  `libbrulion_localai.so` (the model runner, 0.1 MB), llama.cpp — `libllama.so` 4.4 MB,
+  `libmtmd.so` 1.9 MB (pictures), `libggml-base.so` 0.9 MB, `libggml.so` — and its processor
+  code twice, 1.0 MB each: `libggml-cpu-android_armv8.6_1.so` (int8 matrix multiply: phones from
+  about 2021 on) and `libggml-cpu-android_armv8.2_2.so`; the first one the processor can run is
+  loaded (`lib/x86_64/`: AVX2 and SSE4.2 — the emulator's processor has no AVX2, nor has a
+  Chromebook's Celeron). None of them is loaded before a model is first asked: the build copies
+  them into the APK's `lib/<abi>/` beside the app's own library (`src/app/CMakeLists.txt`) and
+  does not name them to Qt as extra libraries (`QT_ANDROID_EXTRA_LIBS`: those, OpenSSL for one,
+  Qt's loader loads at every start) — `scripts/android-build.sh` and the Nix build look into
+  `libs.xml` for that, the emulator test into what Android's loader logs at the start. The app
+  finds the plugin by its name (`QLibrary`), llama.cpp its processor plugin (`dlopen`): the
+  libraries stay inside the APK. All built from llama.cpp's sources by the
+  NDK (`scripts/android-build.sh`: `scripts/llama-source.sh` downloads the release pinned in
+  `3rdparty/llama/pin.json` and checks its SHA-256; `BRULION_LLAMA_SOURCE_DIR` names sources
+  already there — a srclib for F-Droid), with 16 KB segment alignment and no build paths inside.
+  `BRULION_LOCAL_AI=OFF` builds an APK without them (no "On this device" in the settings); 32-bit
+  ABIs never have them.
+* **Stores**: the models are not free software (LFM Open License v1.0: free to use, also
+  commercially below a revenue of 10 million USD a year) and are downloaded only when the user
+  asks; whether a store wants such an app marked (F-Droid's anti-features) or built without the
+  feature is its own rule — see [F-Droid and IzzyOnDroid](#f-droid-and-izzyondroid).
+
+On the emulator (`scripts/android-emulator-test.sh --local-ai`, the debuggable x86_64 APK, the
+model's files copied into the app's storage, 6 GB of memory): "On this device" is offered, the
+files are found, the app's start loaded nothing of the model runner, and "Check" is answered
+twice by a model opened once — the plugin, llama.cpp's libraries and the processor plugin (the
+SSE4.2 one there) loaded from the APK by their names; the window keeps the screen on while the
+model answers and lets it go after.
+
+### On a Pixel 9 Pro
+
+Tensor G4, 16 GB of memory, Android 17 (GrapheneOS), 2026-11-15; the package built
+[beside the released app](#signing), the figures from the event log (`brulion.ai.local`) and
+`dumpsys meminfo`:
+
+* LFM3-VL downloaded in the foreground and checked; opened in 1.5–2.7 s with
+  `ggml-cpu-android_armv8.6_1`, 4 threads, 16 384 tokens at once.
+* **Reading** 145–160 tokens a second, **writing** 11–13 — two thirds and a quarter of a laptop's
+  (docs/PERFORMANCE.md "The model on the device"). "Check" takes half a second. "Summarise this
+  page": 289 tokens read in 1.8 s, 237 written in 19.5 s. A question that needed a search of the
+  notes: the 2 551 tokens of instructions and tools read in 17.6 s, the tool call written in
+  5.7 s, then only the 95 new tokens of 2 719 read (0.9 s) and the answer written in 8.7 s —
+  33 s from the question to the answer. The next question kept 2 131 of its 2 618 tokens.
+* **A photo** in the day's note went along with a question about it, was read with the question
+  in 3.6 s and described fittingly.
+* **Memory** (PSS): the app 472 MiB before, 2 913 MiB with the model — 1.45 GiB of its own and
+  the model's file, 0.98 GiB —, 3 029 MiB after the photo. Behind another app for 45 s the model
+  stayed and answered at once on the return; ten minutes after its last answer it left memory
+  (461 MiB again).
+* **The screen** is kept on from the tap on "Check" to the answer, and not before or after.
+* **Behind another app**: a summary that takes 40 s on screen, asked a moment before Home was
+  pressed, was ready 3 min 52 s later — 32 s after the app's return from 3 min 19 s away. In the
+  background its 643 tokens were read at 18 a second instead of 150; Android froze the process
+  70 s after it left the screen, and once more later.
+
+Still to be checked: a mid-range phone (its speed, and whether Android stops the app behind
+another one while a model is loaded), a download that the app's leaving the screen interrupted,
+a photo straight from the camera.
+
 ## New version
 
 Android does not update an app installed from an APK file, so Brulion tells you about a new
@@ -1068,6 +1164,19 @@ password**: every update must be signed with the same key.
 and updated by later builds from the same machine, but it will not update a version signed with
 the release key (that one has to be uninstalled, which deletes the app's private data).
 
+**Beside the released app**: `BRULION_ANDROID_ID_SUFFIX=.test scripts/android-build.sh` makes
+`dist-android/brulion-<version>-<abis>-test.apk`, the package `io.github.januszbit.brulion.test`
+named "Brulion (test)": an app of its own, with data of its own, that installs next to a Brulion
+signed with the release key and leaves it and its notes alone — the way to try a build on a phone
+in real use (`adb install --user 0 …`, `adb uninstall io.github.januszbit.brulion.test`
+afterwards). Another user profile is no way around the key: Android keeps one signature per
+package for the whole device, so the APK is refused there too. Only the package differs
+(`applicationIdSuffix` in `android/settings.gradle`, the name from
+`android/beside/AndroidManifest.xml`): the code's namespace stays, what is named after the
+package — the FileProvider's authority, androidx's permission — follows it, and none of
+Brulion's receivers is exported, so the two apps do not reach each other. The script checks the
+package and the name of every APK it builds.
+
 ### NixOS
 
 On NixOS the script re-runs itself in `nix shell` (ccache, `jdk21_headless`, unzip). The prebuilt
@@ -1183,6 +1292,7 @@ arm64-v8a APK (`tests/bench/mobile/size-report.py apk`):
 | no QML debugger and profiler plugins (`qmltooling`, 12 libraries) | `src/app/CMakeLists.txt` (`qt_import_plugins(… EXCLUDE_BY_TYPE qmltooling)`) | −1.0 MB |
 | no developer QML: the gallery (`--gallery`), the editor playground (`--editor`), the `--editor-script` scripts and self-tests | the `BRULION_DEV_QML` option in `src/app/CMakeLists.txt` (default `AUTO`: off in Release/MinSizeRel on Android and in the browser, decided at every `cmake`), stubs in `src/app/qml/stubs/` | `libbrulion` −0.77 MB |
 | OpenSSL 3 (HTTPS, above) | `src/app/CMakeLists.txt` | +4.45 MB |
+| the model on the device (2026-11-15): llama.cpp's libraries and the model runner's plugin, [above](#a-model-on-the-phone); the models themselves are downloaded, not packaged | `3rdparty/llama`, `src/app/CMakeLists.txt`; without: `BRULION_LOCAL_AI=OFF` | +9.2 MB (108.6 MB with it) |
 | PDF pages as a drawing background (2026-10-30) through the system's `PdfRenderer` (`PdfPages.kt`, JNI) instead of Qt PDF — Qt PDF for Android is `libQt6Pdf_arm64-v8a.so` 4.53 MB (2.09 MB archived), and in the Qt repository it exists only as an extension aqt does not know | `src/platform/pdfpages_android.cpp`, `android/…/PdfPages.kt` | about 0 MB (a few KB of code) |
 | only the Basic style, no QtQuick.Dialogs (2026-10-30): the system's file pickers through `FilePicker` (choosing files and folders, "Save as" — the same SAF intents as before), QML imports `QtQuick.Controls.Basic` instead of `QtQuick.Controls`, which through optional imports packaged all styles (Material, Universal, Imagine, Fusion, FluentWinUI3) | `src/app/ui/filepicker.h`, a guard in `src/app/CMakeLists.txt` and `scripts/android-build.sh` (`nix/android.nix`) | −15.63 MB (25 files fewer; download −4.6 MB) |
 | the C++ generated from QML compiled with `-Oz` (2026-11-07; it was half of `libbrulion`'s code at `-O3`) | the `BRULION_QML_CODE_FOR_SIZE` option in `src/app/CMakeLists.txt` (Release, MinSizeRel, RelWithDebInfo) | `libbrulion` −5.7 MB |
@@ -1648,7 +1758,7 @@ taps, swipes and types, and `adb exec-out screencap -p > ekran.png` takes a scre
 | `src/platform/android/selftest/` | `brulion_android_selftest` — an APK that tests the bridge on a device/emulator (only with `-DBRULION_ANDROID_SELFTEST=ON`) |
 | `scripts/android-build.sh`, `scripts/android-new-keystore.sh` | building + signing, the release key |
 | `fastlane/metadata/android/`, `scripts/check-fastlane-metadata.sh` | descriptions, icon and screenshots for F-Droid and IzzyOnDroid, and their check — [F-Droid and IzzyOnDroid](#f-droid-and-izzyondroid) |
-| `scripts/android-emulator-test.sh` | end-to-end test on the emulator (Android 16, x86_64); `--keyboard`: the editing toolbar on the keyboard; `--selection`: selecting and copying with a finger; `--folders`: folders, block links, the parts of a link to a page in a folder, and tags with a finger; `--share`: "Share → Brulion"; `--widgets`: widgets and quick add; `--done`: "Done" in a notification (on screen and while the app is closed); `--background`: background check of the notes (a reminder added and deleted while the app is closed, the job run at once, the new reminder's alarm rings without opening Brulion); `--drawing`: text on a drawing from the on-screen keyboard; `--stylus`: stylus pressure, its eraser and side button in the drawing editor; `--web-pictures`: pictures from the internet; `--pickers`: the system file pickers (importing files and a folder, the export's "Save"); `--pdf`: PDF thumbnails, the PDF viewer, pinching, search from Android 15, "Open in another app", "Draw on this page", memory; `--relaunch`: activity recreated during startup (a restart instead of an empty window); `--web-keyboard dist-wasm`: the browser version in Chrome, Brave and Firefox — the toolbar on the keyboard (docs/WEB.md "On-screen keyboard") |
+| `scripts/android-emulator-test.sh` | end-to-end test on the emulator (Android 16, x86_64); `--keyboard`: the editing toolbar on the keyboard; `--selection`: selecting and copying with a finger; `--folders`: folders, block links, the parts of a link to a page in a folder, and tags with a finger; `--share`: "Share → Brulion"; `--widgets`: widgets and quick add; `--done`: "Done" in a notification (on screen and while the app is closed); `--background`: background check of the notes (a reminder added and deleted while the app is closed, the job run at once, the new reminder's alarm rings without opening Brulion); `--drawing`: text on a drawing from the on-screen keyboard; `--stylus`: stylus pressure, its eraser and side button in the drawing editor; `--web-pictures`: pictures from the internet; `--pickers`: the system file pickers (importing files and a folder, the export's "Save"); `--pdf`: PDF thumbnails, the PDF viewer, pinching, search from Android 15, "Open in another app", "Draw on this page", memory; `--relaunch`: activity recreated during startup (a restart instead of an empty window); `--local-ai`: the model on the device answers from the APK's own libraries, the screen kept on meanwhile (the model's files given with `BRULION_LOCAL_MODEL` and `BRULION_LOCAL_PROJECTOR`); `--web-keyboard dist-wasm`: the browser version in Chrome, Brave and Firefox — the toolbar on the keyboard (docs/WEB.md "On-screen keyboard") |
 | `nix/android.nix`, `nix/android/` | APK from the flake: derivation, Qt for Android (`qt.nix`), signing (`sign.nix`), locks (`*.json`) and `update-locks.sh` |
 
 `android/` is `QT_ANDROID_PACKAGE_SOURCE_DIR`: `androiddeployqt` copies it over the Qt template in
@@ -1733,6 +1843,7 @@ loading QML (so that the tap that started the app reaches the UI); as long as no
 | signal `imeChanged(int overlap, bool shown, bool animating)` / `void requestImeState()` | native `nativeImeChanged(Int, Boolean, Boolean)` (from `ImeInsets`, physical pixels, every frame of the slide on Android 11+) / `requestImeState()` — report once more |
 | signal `systemGesturesChanged(int left, int right)` | native `nativeGestureInsetsChanged(Int, Int)` (from `ImeInsets`, physical pixels of the system gesture zones at the edges of the Qt view; reported once more also through `requestImeState()`) |
 | `void setSystemBarsLight(bool light)` | `setSystemBarsLight(Boolean)` — system bar icons dark over a light window (Android 11+, window under the bars) |
+| `void setKeepScreenOn(bool on)` (static; `platform::keepScreenOn()`) | `setKeepScreenOn(Boolean)` — `FLAG_KEEP_SCREEN_ON` on the activity's window, set again for an activity made anew: while a model on the device is downloaded or answers ([above](#a-model-on-the-phone)) |
 | `platform::PdfReader::open(file)` (`src/platform/pdfpages_android.cpp`, not `AndroidBridge`; any thread) | `pdfOpen(String): String` — `{"session", "pages", "size": [w, h] (first page, points), "locked", "error"}` (`PdfPages.kt`: a session of the system's `android.graphics.pdf.PdfRenderer`; `session` 0 — not opened) |
 | `PdfReader::pageSize(page)` (as above, 64 pages at a time) | `pdfPageSizes(Int, Int, Int): String` — `[[w, h], …]` |
 | `PdfReader::render(page, full, clip)` (as above) | `pdfRenderInto(Int, Int, Int, Int, Int, Int, Int, Int, ByteBuffer): Boolean` — the page scaled to `full`, its part `clip` on a white background straight into the RGBA_8888 pixels of the C++ image |

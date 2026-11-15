@@ -352,6 +352,74 @@ private Q_SLOTS:
         QTRY_VERIFY(ws.index()->note(sketch) && ws.index()->note(sketch)->tags.contains(u"excalidraw"_s));
     }
 
+    void picturesForAModel()
+    {
+        // b.ai's `images`: a picture named as the notes name it, found in the notebook, scaled
+        // down and written again as a JPEG; what is no picture of the notebook is refused.
+        const QString root = m_tmp.filePath(u"Model"_s);
+        QImage photo(4000, 3000, QImage::Format_RGB32);
+        photo.fill(QColor(30, 120, 200));
+        QBuffer jpeg;
+        jpeg.open(QIODevice::WriteOnly);
+        QVERIFY(photo.save(&jpeg, "JPEG", 90));
+        QImage icon(200, 100, QImage::Format_ARGB32);
+        icon.fill(Qt::transparent);
+        for (int x = 0; x < 100; ++x) {
+            for (int y = 30; y < 70; ++y)
+                icon.setPixelColor(x, y, QColor(220, 20, 20));
+        }
+        QBuffer png;
+        png.open(QIODevice::WriteOnly);
+        QVERIFY(icon.save(&png, "PNG"));
+        QVERIFY(writeFile(root + u"/Zdjęcia/paragon żabka.jpg"_s, jpeg.data()));
+        QVERIFY(writeFile(root + u"/assets/ikona.png"_s, png.data()));
+        QVERIFY(writeFile(root + u"/assets/zepsuty.png"_s, "to nie jest obrazek"));
+        QVERIFY(writeFile(root + u"/assets/umowa.pdf"_s, "%PDF-1.4"));
+        QVERIFY(writeFile(root + u"/Zakupy.md"_s, "- ![[paragon żabka.jpg]]\n- ![](assets/ikona.png)\n"));
+
+        Workspace ws;
+        QVERIFY(ws.open(root, m_tmp.filePath(u"state-model"_s)));
+        ws.finishIndexing();
+        QString why;
+        // By its name, as an embed names it: the photo, 1568 pixels on its longer side, a JPEG.
+        std::optional<brulion::ai::Image> image = ws.aiPicture(u"paragon żabka.jpg"_s, &why);
+        QVERIFY2(image, qPrintable(why));
+        QCOMPARE(image->mediaType, u"image/jpeg"_s);
+        QVERIFY(image->data.startsWith("\xff\xd8"));
+        QImage sent = QImage::fromData(image->data);
+        QCOMPARE(sent.size(), QSize(1568, 1176));
+        QVERIFY(image->data.size() < jpeg.data().size());
+        QVERIFY(qAbs(sent.pixelColor(700, 500).blue() - 200) < 12);
+        // By its path in the notebook; a small picture keeps its size, its transparent parts white.
+        image = ws.aiPicture(u"assets/ikona.png"_s, &why);
+        QVERIFY2(image, qPrintable(why));
+        sent = QImage::fromData(image->data);
+        QCOMPARE(sent.size(), QSize(200, 100));
+        QVERIFY(sent.pixelColor(150, 20).red() > 240 && sent.pixelColor(150, 20).green() > 240);
+        QVERIFY(sent.pixelColor(50, 50).red() > 180 && sent.pixelColor(50, 50).green() < 90);
+        QVERIFY(ws.aiPicture(u" ikona.png "_s, &why)); // by its name, spaces around it
+
+        // Not there, not a picture, not readable as one, outside the notebook.
+        const auto refused = [&](const QString &name, const QString &reason) {
+            QString w;
+            const bool none = !ws.aiPicture(name, &w);
+            if (!none || !w.contains(reason))
+                qWarning("%s: %s", qPrintable(name), qPrintable(w));
+            return none && w.contains(reason);
+        };
+        QVERIFY(refused(u"brak.jpg"_s, u"no such picture in the notebook"_s));
+        QVERIFY(refused(QString(), u"no such picture in the notebook"_s));
+        QVERIFY(refused(u"umowa.pdf"_s, u"not a picture"_s));
+        QVERIFY(refused(u"Zakupy"_s, u"not a picture"_s));
+        QVERIFY(refused(u"assets/zepsuty.png"_s, u"cannot be read as a picture"_s));
+        QVERIFY(refused(u"../state-model/x.png"_s, u"no such picture in the notebook"_s));
+        QVERIFY(refused(u"/etc/hostname"_s, u"no such picture in the notebook"_s));
+        // No notebook open: nothing to look in.
+        Workspace closed;
+        QVERIFY(!closed.aiPicture(u"ikona.png"_s, &why));
+        QCOMPARE(why, u"no notebook is open"_s);
+    }
+
     void automaticFetchesLimits();
     void browserDataUrlsFollowTheCache();
     void browserNetworkErrorsNameTheBrowsersLimits_data();

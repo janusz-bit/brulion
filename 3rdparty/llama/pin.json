@@ -1,0 +1,9 @@
+{
+  "!comment": "llama.cpp, which runs the model on the device (3rdparty/llama/CMakeLists.txt): one release, compiled from its sources. `hash` is Nix's (fetchFromGitHub: nix/package.nix, nix/android.nix, the dev shell), `sha256` the release archive's (scripts that download it). Update: scripts/llama-pin.sh <tag>.",
+  "owner": "ggml-org",
+  "repo": "llama.cpp",
+  "tag": "v0.9.0",
+  "hash": "sha256-6LqtpfqTAbYUr/wPPBAM/dXHv3LDTg+1A81k/cFcAjY=",
+  "url": "https://github.com/ggml-org/llama.cpp/archive/refs/tags/v0.9.0.tar.gz",
+  "sha256": "5d0f1aaf55fd8629c29a55e81b7cb63b80239f83c33a580963071204896836a8"
+}

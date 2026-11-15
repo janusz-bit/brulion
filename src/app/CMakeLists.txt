@@ -417,3 +417,39 @@ install(TARGETS brulion
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
     # Android: the app is a shared library (libbrulion_<abi>.so) packaged by androiddeployqt.
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
+
+# The model on the device (BRULION_LOCAL_AI, cmake/BrulionLocalAi.cmake): the plugin with the model
+# runner (src/core/ai: brulion_localai), llama.cpp's libraries and its processor plugins
+# (3rdparty/llama) are built with the app and packaged beside it — the app links none of them and
+# loads the plugin on first use (shell/localai.h):
+#   Linux    <lib>/brulion/        (the app looks in ../<lib>/brulion from its program)
+#   Windows  next to brulion.exe
+#   Android  lib/<abi>/ of the APK (found by name)
+if(BRULION_LOCAL_AI_ENABLED)
+    set(_brulion_local_ai brulion_localai ${BRULION_LLAMA_LIBRARIES} ${BRULION_LLAMA_CPU_VARIANTS})
+    add_dependencies(brulion ${_brulion_local_ai})
+    if(ANDROID)
+        # Copied into android-build/libs/<abi>/, where Qt puts the app's own library (and a
+        # sanitizer's runtime): Gradle packages every library there. Not QT_ANDROID_EXTRA_LIBS
+        # as for OpenSSL above — those Qt's loader loads when the app starts, and these wait for
+        # the first question to a model.
+        set(_apk_libs_dir ${CMAKE_CURRENT_BINARY_DIR}/android-build/libs/${CMAKE_ANDROID_ARCH_ABI})
+        set(_apk_libs "")
+        foreach(_lib IN LISTS _brulion_local_ai)
+            set(_copy ${_apk_libs_dir}/lib${_lib}.so)
+            add_custom_command(OUTPUT ${_copy}
+                COMMAND ${CMAKE_COMMAND} -E make_directory ${_apk_libs_dir}
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:${_lib}> ${_copy}
+                DEPENDS ${_lib}
+                COMMENT "Copying lib${_lib}.so to the APK folder"
+                VERBATIM)
+            list(APPEND _apk_libs ${_copy})
+        endforeach()
+        add_custom_target(brulion_local_ai_apk DEPENDS ${_apk_libs})
+        add_dependencies(brulion brulion_local_ai_apk)
+    else()
+        install(TARGETS ${_brulion_local_ai}
+            LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}/brulion NAMELINK_SKIP
+            RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+    endif()
+endif()

@@ -1,10 +1,11 @@
 #pragma once
 // AI for extensions (docs/EXTENSIONS.md "AI"): the requests of b.ai to a model the user chose on
-// this device — Anthropic's Messages API (Claude) or any OpenAI-compatible chat API (OpenAI, or a
-// server of the user's own: Ollama, llama.cpp, LM Studio, OpenRouter …). The key is the user's
+// this device — Anthropic's Messages API (Claude), any OpenAI-compatible chat API (OpenAI, or a
+// server of the user's own: Ollama, llama.cpp, LM Studio, OpenRouter …), or a model that runs on
+// the device itself (the provider "local": ai/local.h, no network). The key is the user's
 // (Settings → Extensions → AI, kept with the app's secrets, never in the notebook). A consumer
 // subscription (Claude Pro/Max, ChatGPT Plus) is not an API key: the providers bill the API
-// separately; a server of one's own needs no key.
+// separately; a server of one's own and the model on the device need no key.
 //
 //   QString error;
 //   const std::optional<ai::Request> request = ai::requestFrom(table, &error);   // b.ai's argument
@@ -12,7 +13,13 @@
 //   client.send(settings, *request, [](const ai::Reply &reply) { … reply.toVariant() … });
 //
 // Building the HTTP request and reading the answer are pure functions; Client sends through a
-// sync::HttpTransport (NetworkHttpTransport in the app, a fake in the tests).
+// sync::HttpTransport (NetworkHttpTransport in the app, a fake in the tests), and hands a request
+// of the provider "local" to a LocalBackend (the app's model runner; a fake in the tests).
+//
+// Pictures: a user's message may carry pictures of the notebook (b.ai's `images`, named as in the
+// notes). The app loads each one through an ImageLoader — found in the notebook, decoded by Qt,
+// scaled down and written again as a JPEG — so no provider and no model reader ever sees a
+// picture file as it came from a sync or an import.
 //
 // Tools (an agent's loop, docs/EXTENSIONS.md "AI"): a request may offer tools ({name,
 // description, input = a JSON schema}); a reply that calls some has `toolCalls` ({id, name,
@@ -41,12 +48,17 @@ inline constexpr int MaxRequestChars = 200000;
 inline constexpr int DefaultMaxTokens = 16000;
 /// The time one request may take (a long answer is written before anything arrives).
 inline constexpr int TimeoutMs = 300000;
+/// The pictures one request may carry.
+inline constexpr int MaxRequestImages = 8;
+
+class LocalBackend;
 
 struct Settings
 {
-    QString provider = QStringLiteral("anthropic"); ///< "anthropic" | "openai" (any compatible API)
+    /// "anthropic" | "openai" (any compatible API) | "local" (a model on the device, ai/local.h)
+    QString provider = QStringLiteral("anthropic");
     QString apiKey; ///< may be empty for a local server
-    QString model; ///< "" = defaultModel(provider)
+    QString model;  ///< "" = defaultModel(provider); "local": a LocalModel's id
     QString baseUrl; ///< "" = the provider's own (https://api.anthropic.com, https://api.openai.com/v1)
     bool browser = false; ///< sent from a web page (Anthropic's API then needs a header for CORS)
 
@@ -54,7 +66,8 @@ struct Settings
     bool usable(QString *why = nullptr) const;
     /// Do requests travel unencrypted over a network: a plain http address that is not this
     /// device's own (localhost, 127.0.0.1, ::1)? The notes sent along and the key can then be
-    /// read on the way — fine for a server at home, said in the settings all the same.
+    /// read on the way — fine for a server at home, said in the settings all the same. Never for
+    /// the model on the device: nothing travels.
     bool unencrypted() const;
 };
 
@@ -73,10 +86,23 @@ struct ToolResult {
     bool isError = false;
 };
 
+/// A picture sent with a message: the bytes of a JPEG (or PNG) file the app wrote itself.
+struct Image {
+    QByteArray data;
+    QString mediaType = QStringLiteral("image/jpeg");
+    friend bool operator==(const Image &, const Image &) = default;
+};
+
+/// Loads the picture a script named (as in the notes: "paragon.jpg", "assets/skan.png") ready to
+/// send; nothing, with `why`, when there is no such picture or it cannot be read.
+using ImageLoader = std::function<std::optional<Image>(const QString &name, QString *why)>;
+
 struct Message
 {
     QString role; ///< "user" | "assistant"
     QString content;
+    /// A user's message: its pictures, which the model sees before its text.
+    QList<Image> images;
     /// An assistant turn as the provider wrote it (Reply::raw: Anthropic's content blocks, an
     /// OpenAI-compatible API's message), sent back verbatim instead of `content`.
     QByteArray raw;
@@ -128,15 +154,17 @@ struct Reply
 };
 
 /// The model used when the settings name none: "claude-opus-5-5" for Anthropic, "" (the user
-/// names one) for an OpenAI-compatible API.
+/// names one) for an OpenAI-compatible API, the first LocalModel's id for "local".
 QString defaultModel(const QString &provider);
 
 /// A request from b.ai's argument: {prompt = "…"} or {messages = {…}}, with system, model,
 /// maxTokens (1–128000), effort and tools ({{name, description, input = schema}}); nothing when it
 /// is not one (`error` says why). A message is {role, content}, an assistant's {role = "assistant",
 /// raw = reply.raw} or a user's {role = "user", results = {{id, content, isError?}}}; the last one
-/// is the user's.
-std::optional<Request> requestFrom(const QVariantMap &table, QString *error);
+/// is the user's. Pictures: `images = {"name", …}` next to `prompt`, or in a user's message with
+/// content — at most MaxRequestImages in a request, each loaded by `images` (without a loader a
+/// request with pictures is refused).
+std::optional<Request> requestFrom(const QVariantMap &table, QString *error, const ImageLoader &images = {});
 
 /// The HTTP request for `request` with `settings`; nothing when it cannot be made (`error`).
 std::optional<sync::HttpRequest> httpRequest(const Settings &settings, const Request &request, QString *error);
@@ -151,11 +179,15 @@ public:
     /// `transport` is not owned and must outlive the requests.
     explicit Client(sync::HttpTransport *transport) : m_transport(transport) { }
 
+    /// What answers the provider "local" (not owned; nullptr: this build runs no model itself).
+    void setLocal(LocalBackend *backend) { m_local = backend; }
+
     /// Sends `request`; `done` is called once, from the event loop (also for errors before sending).
     void send(const Settings &settings, const Request &request, std::function<void(const Reply &)> done);
 
 private:
     sync::HttpTransport *m_transport;
+    LocalBackend *m_local = nullptr;
 };
 
 } // namespace brulion::ai

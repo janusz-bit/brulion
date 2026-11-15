@@ -1,0 +1,394 @@
+#include "localai.h"
+
+#include "log/slowscope.h"
+
+#include <QElapsedTimer>
+#include <QLocale>
+#include <QLoggingCategory>
+#include <QTimer>
+
+#include <algorithm>
+
+using namespace Qt::StringLiterals;
+
+namespace brulion::shell {
+
+Q_LOGGING_CATEGORY(lcLocalAi, "brulion.ai.local")
+
+namespace {
+/// "1.42": seconds as the log writes them.
+QString seconds(qint64 ms)
+{
+    return QString::number(double(ms) / 1000.0, 'f', 2);
+}
+} // namespace
+
+/// The model in memory, on the worker thread: opened for the first request, kept for the next,
+/// let go after a while without one.
+class LocalAiWorker : public QObject {
+public:
+    struct Job {
+        ai::LocalModel model;
+        ai::LocalRunner::Options options;
+        ai::Request request;
+    };
+
+    LocalAiWorker(LocalAi::Opener open, int idleMs, std::atomic<bool> *cancel)
+        : m_open(std::move(open)), m_cancel(cancel)
+    {
+        m_idle.setParent(this); // moves to the worker thread with this object
+        m_idle.setSingleShot(true);
+        m_idle.setInterval(idleMs);
+        connect(&m_idle, &QTimer::timeout, this, [this] { close(QString()); });
+    }
+
+    ai::Reply answer(const Job &job)
+    {
+        m_idle.stop();
+        if (!m_runner || m_openId != job.model.id) {
+            close(QString());
+            QString error;
+            QElapsedTimer opening;
+            opening.start();
+            m_runner = m_open(job.options, &error);
+            if (!m_runner) {
+                qCWarning(lcLocalAi).noquote() << u"cannot open %1: %2"_s.arg(job.model.id, error);
+                ai::Reply failed;
+                failed.error = error.isEmpty() ? u"the model cannot be opened"_s : error;
+                return failed;
+            }
+            m_openId = job.model.id;
+            qCInfo(lcLocalAi).noquote() << u"%1 opened: %2 tokens at once, %3, in %4 s"_s.arg(job.model.id)
+                                                   .arg(m_runner->contextTokens())
+                                                   .arg(m_runner->device(), seconds(opening.elapsed()));
+        }
+        // The times are what tells a slow device from a long prompt: of the tokens read, those
+        // kept from the request before cost nothing.
+        ai::LocalRunner::Result run;
+        const ai::Reply reply = ai::answerLocally(m_runner.get(), job.model, job.request, m_cancel, &run);
+        if (reply.ok)
+            qCInfo(lcLocalAi).noquote()
+                    << u"%1 answered: %2 tokens read in %3 s (%4 kept from before), %5 written in %6 s"_s
+                               .arg(job.model.id)
+                               .arg(run.promptTokens)
+                               .arg(seconds(run.promptMs))
+                               .arg(run.reusedTokens)
+                               .arg(run.outputTokens)
+                               .arg(seconds(run.outputMs));
+        else
+            qCInfo(lcLocalAi).noquote() << u"%1 gave no answer: %2"_s.arg(job.model.id, reply.error);
+        m_idle.start();
+        return reply;
+    }
+
+    /// Lets the model `id` go ("": whichever is open).
+    void close(const QString &id)
+    {
+        if (!m_runner || (!id.isEmpty() && id != m_openId))
+            return;
+        m_idle.stop();
+        qCInfo(lcLocalAi).noquote() << u"%1 left memory"_s.arg(m_openId);
+        m_runner.reset();
+        m_openId.clear();
+    }
+
+private:
+    LocalAi::Opener m_open;
+    std::atomic<bool> *m_cancel;
+    std::unique_ptr<ai::LocalRunner> m_runner;
+    QString m_openId;
+    QTimer m_idle;
+};
+
+LocalAi::LocalAi(const Options &options, QObject *parent)
+    : QObject(parent), m_models(options.models.isEmpty() ? ai::localModels() : options.models), m_files(options.folder)
+{
+    Opener open = options.open;
+    if (open) {
+        m_available = true;
+    } else {
+        const QStringList dirs = options.pluginDirs;
+        m_available = ai::hasLocalRunner(dirs);
+        open = [dirs](const ai::LocalRunner::Options &o, QString *error) {
+            return ai::loadLocalRunner(dirs, o, error);
+        };
+    }
+    m_contextTokens = contextFor(options.memoryBytes);
+    if (!m_models.isEmpty())
+        m_chosen = m_models.first().id;
+
+    connect(&m_files, &ai::LocalModelFiles::progress, this, &LocalAi::downloadChanged);
+    connect(&m_files, &ai::LocalModelFiles::changed, this, &LocalAi::modelsChanged);
+    connect(&m_files, &ai::LocalModelFiles::finished, this, [this](const QString &id, bool ok, const QString &error) {
+        const QString took = logging::formatMs(m_downloadClock.elapsed());
+        if (ok)
+            qCInfo(lcLocalAi).noquote() << u"%1 downloaded: %2 in %3"_s.arg(id, logging::formatBytes(m_downloadBytes),
+                                                                            took);
+        else if (error.isEmpty()) // stopped by the user, or removed meanwhile
+            qCInfo(lcLocalAi).noquote() << u"%1 download stopped after %2"_s.arg(id, took);
+        else
+            qCWarning(lcLocalAi).noquote() << u"%1 download failed after %2: %3"_s.arg(id, took, error);
+        m_downloadError = ok ? QString() : error;
+        m_downloadErrorId = id;
+        Q_EMIT downloadChanged();
+        Q_EMIT modelsChanged(); // what is here of it changed, also when it broke off
+        Q_EMIT downloadFinished(id, ok, error);
+    });
+
+    connect(this, &LocalAi::busyChanged, this, &LocalAi::updateWorking);
+    connect(this, &LocalAi::downloadChanged, this, &LocalAi::updateWorking);
+
+    // The worker thread only where a model can run at all (never in a build without the plugin —
+    // the browser's Qt has no threads either).
+    m_worker = new LocalAiWorker(std::move(open), options.idleMs, &m_cancel);
+    if (m_available) {
+        m_worker->moveToThread(&m_thread);
+        m_thread.setObjectName(u"brulion-local-ai"_s);
+        m_thread.start();
+    }
+}
+
+LocalAi::~LocalAi()
+{
+    // A request being answered stops; the ones still waiting are dropped with the thread.
+    m_cancel.store(true);
+    if (m_thread.isRunning()) {
+        m_thread.quit();
+        m_thread.wait();
+    }
+    delete m_worker;
+}
+
+int LocalAi::contextFor(qint64 memoryBytes)
+{
+    // A loaded model takes some 1.3 GB of the app's own memory, beside its file's pages (1 GB the
+    // system keeps or takes back as it likes); the context itself is the smaller part (some 12 KB
+    // a token: 200 MB for 16 384), so what a phone can spare decides little and speed more:
+    // reading 16 000 tokens takes minutes on one.
+    constexpr qint64 GiB = 1024LL * 1024 * 1024;
+    if (memoryBytes <= 0)
+        return 8192;
+    if (memoryBytes >= 7 * GiB)
+        return 16384;
+    if (memoryBytes >= 5 * GiB)
+        return 8192;
+    return 4096;
+}
+
+int LocalAi::imageTokensFor(int contextTokens)
+{
+    return std::clamp(contextTokens / 8, 256, 1024);
+}
+
+const ai::LocalModel *LocalAi::model(const QString &id) const
+{
+    if (id.isEmpty())
+        return m_models.isEmpty() ? nullptr : &m_models.first();
+    for (const ai::LocalModel &m : m_models) {
+        if (m.id == id)
+            return &m;
+    }
+    return nullptr;
+}
+
+namespace {
+QString sizeText(qint64 bytes)
+{
+    return QLocale().formattedDataSize(bytes, 1, QLocale::DataSizeTraditionalFormat);
+}
+} // namespace
+
+QVariantList LocalAi::choices() const
+{
+    QVariantList out;
+    for (const ai::LocalModel &m : m_models)
+        out.append(QVariantMap{{u"value"_s, m.id}, {u"text"_s, m.name}});
+    return out;
+}
+
+void LocalAi::setChosen(const QString &id)
+{
+    // The default model has an id of its own: "" and it are the same choice — and so is a model
+    // the app does not know (a setting left by another version).
+    const ai::LocalModel *m = model(id);
+    if (!m)
+        m = model(QString());
+    const QString chosen = m ? m->id : QString();
+    if (chosen == m_chosen)
+        return;
+    m_chosen = chosen;
+    Q_EMIT modelChanged();
+    Q_EMIT modelsChanged();
+    Q_EMIT downloadChanged();
+}
+
+QString LocalAi::modelName() const
+{
+    const ai::LocalModel *m = model(m_chosen);
+    return m ? m->name : QString();
+}
+
+QString LocalAi::modelMaker() const
+{
+    const ai::LocalModel *m = model(m_chosen);
+    return m ? m->maker : QString();
+}
+
+QString LocalAi::modelSize() const
+{
+    const ai::LocalModel *m = model(m_chosen);
+    return m ? sizeText(m->bytes()) : QString();
+}
+
+bool LocalAi::modelSees() const
+{
+    const ai::LocalModel *m = model(m_chosen);
+    return m && m->sees();
+}
+
+QString LocalAi::modelLicense() const
+{
+    const ai::LocalModel *m = model(m_chosen);
+    return m ? m->license : QString();
+}
+
+QString LocalAi::modelLicenseUrl() const
+{
+    const ai::LocalModel *m = model(m_chosen);
+    return m ? m->licenseUrl.toString() : QString();
+}
+
+QString LocalAi::modelPageUrl() const
+{
+    const ai::LocalModel *m = model(m_chosen);
+    return m ? m->pageUrl.toString() : QString();
+}
+
+bool LocalAi::downloadingChosen() const
+{
+    const ai::LocalModel *m = model(m_chosen);
+    return m && m_files.downloading() == m->id;
+}
+
+QString LocalAi::downloadError() const
+{
+    const ai::LocalModel *m = model(m_chosen);
+    return m && m->id == m_downloadErrorId ? m_downloadError : QString();
+}
+
+bool LocalAi::downloadingOther() const
+{
+    return !m_files.downloading().isEmpty() && !downloadingChosen();
+}
+
+double LocalAi::progress() const
+{
+    if (!downloadingChosen())
+        return 0.0;
+    return m_files.total() > 0 ? double(m_files.received()) / double(m_files.total()) : 0.0;
+}
+
+QString LocalAi::progressText() const
+{
+    if (!downloadingChosen())
+        return QString();
+    return tr("%1 of %2").arg(sizeText(m_files.received()), sizeText(m_files.total()));
+}
+
+bool LocalAi::has(const QString &id) const
+{
+    const ai::LocalModel *m = model(id);
+    return m && m_files.has(*m);
+}
+
+void LocalAi::download(const QString &id)
+{
+    const ai::LocalModel *m = model(id);
+    if (!m || !m_files.downloading().isEmpty())
+        return;
+    m_downloadError.clear();
+    m_downloadErrorId.clear();
+    // Said before it starts: a download that cannot begin (no room) ends at once, and says so.
+    m_downloadBytes = m->bytes() - m_files.bytesHere(*m);
+    m_downloadClock.start();
+    qCInfo(lcLocalAi).noquote() << u"%1 download: %2 to fetch of %3"_s.arg(m->id, logging::formatBytes(m_downloadBytes),
+                                                                           logging::formatBytes(m->bytes()));
+    m_files.download(*m);
+    Q_EMIT downloadChanged();
+}
+
+void LocalAi::cancelDownload()
+{
+    m_files.cancel();
+}
+
+void LocalAi::remove(const QString &id)
+{
+    const ai::LocalModel *m = model(id);
+    if (!m)
+        return;
+    const ai::LocalModel removed = *m;
+    if (!m_thread.isRunning()) {
+        m_files.remove(removed); // no model ever runs here: only its files
+        return;
+    }
+    // The model leaves memory first (a request it is answering ends), then its files go.
+    m_cancel.store(true);
+    QMetaObject::invokeMethod(m_worker, [this, worker = m_worker, removed] {
+        worker->close(removed.id);
+        m_cancel.store(false);
+        QMetaObject::invokeMethod(this, [this, removed] { m_files.remove(removed); }, Qt::QueuedConnection);
+    });
+}
+
+void LocalAi::updateWorking()
+{
+    const bool working = m_pending > 0 || !m_files.downloading().isEmpty();
+    if (working == m_working)
+        return;
+    m_working = working;
+    Q_EMIT workingChanged();
+}
+
+void LocalAi::finished(std::function<void(const ai::Reply &)> done, const ai::Reply &reply)
+{
+    m_pending = std::max(0, m_pending - 1);
+    Q_EMIT busyChanged();
+    done(reply);
+}
+
+void LocalAi::send(const ai::Settings &settings, const ai::Request &request,
+                   std::function<void(const ai::Reply &)> done)
+{
+    const auto refuse = [&](const QString &why) {
+        ai::Reply reply;
+        reply.error = why;
+        QTimer::singleShot(0, this, [done = std::move(done), reply] { done(reply); });
+    };
+    const ai::LocalModel *m = model(settings.model);
+    if (!m)
+        return refuse(u"no such model on this device: \"%1\" (Settings → Extensions → AI)"_s.arg(settings.model));
+    if (!m_available)
+        return refuse(u"this build of Brulion runs no model on the device"_s);
+    if (!m_files.has(*m))
+        return refuse(
+                u"the model %1 is not on this device yet: download it in Settings → Extensions → AI"_s.arg(m->name));
+
+    LocalAiWorker::Job job;
+    job.model = *m;
+    job.options.modelPath = m_files.pathOf(m->file);
+    if (m->sees())
+        job.options.projectorPath = m_files.pathOf(m->projector);
+    job.options.contextTokens = m_contextTokens;
+    job.options.imageTokens = imageTokensFor(m_contextTokens);
+    job.request = request;
+
+    ++m_pending;
+    Q_EMIT busyChanged();
+    QMetaObject::invokeMethod(m_worker, [this, worker = m_worker, job, done = std::move(done)] {
+        const ai::Reply reply = worker->answer(job);
+        QMetaObject::invokeMethod(this, [this, done, reply] { finished(done, reply); }, Qt::QueuedConnection);
+    });
+}
+
+} // namespace brulion::shell

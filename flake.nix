@@ -118,6 +118,9 @@
           DICPATH = lib.concatMapStringsSep ":" (
             d: "${d}/share/hunspell"
           ) self.packages.${pkgs.stdenv.hostPlatform.system}.brulion.spellDictionaries;
+          # llama.cpp's sources for the model on the device (cmake/BrulionLocalAi.cmake: a build
+          # configured in this shell compiles them in; 3rdparty/llama/pin.json names the release).
+          BRULION_LLAMA_SOURCE_DIR = self.packages.${pkgs.stdenv.hostPlatform.system}.brulion.llamaSrc;
           shellHook = ''
             export CMAKE_GENERATOR=Ninja
             export CMAKE_CXX_COMPILER_LAUNCHER=ccache

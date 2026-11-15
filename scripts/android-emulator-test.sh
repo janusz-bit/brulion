@@ -149,6 +149,26 @@
 # (ACTION_CREATE_DOCUMENT) with the export's file name filled in (EXTRA_TITLE), "Save" writes the
 # ZIP into Download (DocumentsUI opens in the folder used last: the one picked before). Checked on
 # Android 16 (API 36). Screenshots pk-*.png; the same debuggable APK.
+# With --local-ai instead: the model on the device (docs/ANDROID.md "A model on the phone") in the
+# debuggable APK built with the model runner (libbrulion_localai.so and llama.cpp's libraries in
+# lib/x86_64). The default model's files on the host — BRULION_LOCAL_MODEL and
+# BRULION_LOCAL_PROJECTOR, as for ctest's tst_ai_llama (1.3 GB; the test downloads nothing) — are
+# copied into the app's storage (files/models) as a download leaves them; the emulator runs with
+# 6 GB of memory (the AVD's 2 GB hold Android and little more). Settings → Extensions → AI: "On
+# this device" ("Na tym urządzeniu") is offered and chosen, the model's files are found ("Remove"
+# ("Usuń") in place of "Download"), and the app's start loaded nothing of the model runner (the
+# libraries Android's loader was asked for, in the log: Qt's, none of llama.cpp's — they are in
+# the APK, but not among those Qt's loader loads at the start). "Check" ("Sprawdź") gets the
+# model's answer — the plugin and llama.cpp's libraries loaded from the APK by their names, the
+# processor plugin chosen (the emulator's processor has no AVX2: the AVX2 plugin refuses, the
+# SSE4.2 one is taken), the model and its picture part read from the app's storage, an answer
+# written (the log of brulion.ai.local: "… opened: N tokens at once, ggml-cpu-sse42, N threads,
+# in N s", "… answered: N tokens read in N s (N kept from before), N written in N s"), and while
+# it answers the app's window keeps the screen on (FLAG_KEEP_SCREEN_ON among the window's flags
+# in dumpsys, gone again once the answer is there); a second "Check" is answered by the model
+# still in memory (opened once); no crash. Screenshots la-*.png.
+# Pictures are not looked at here (ctest's tst_ai_llama and tst_ai_localplugin do that with the
+# same code on the desktop).
 # --selection, --folders, --share, --widgets, --web-pictures, --done and --pickers find what they tap by its accessible name (UiAutomator reads Qt's
 # accessibility tree; the keyboard's keys from its dump of every window),
 # so they work on other screens and Android versions too (checked: Android 16 and 11, Pixel 6).
@@ -170,6 +190,7 @@
 #        scripts/android-emulator-test.sh --pickers [DEBUG_APP_APK]
 #        scripts/android-emulator-test.sh --pdf [DEBUG_APP_APK]
 #        scripts/android-emulator-test.sh --relaunch [DEBUG_APP_APK]
+#        scripts/android-emulator-test.sh --local-ai [DEBUG_APP_APK]
 #        scripts/android-emulator-test.sh --web-keyboard [SITE_DIR]   (default dist-wasm)
 #   default: dist-android/brulion-<version>-x86_64.apk, dist-android/brulion-selftest-<version>-x86_64.apk
 # Environment (optional):
@@ -183,6 +204,10 @@
 #   BRULION_EMULATOR_GPU     the emulator's -gpu mode (default swangle_indirect)
 #   BRULION_EMULATOR_VULKAN  1: the guest has Vulkan (default 1, but 0 for --web-keyboard: Chrome's
 #                            Vulkan on the host's SwiftShader crashed the emulator in half the runs)
+#   BRULION_EMULATOR_MEMORY  the emulator's memory in MB (default: the AVD's 2 GB; --local-ai: 6144)
+#   BRULION_LOCAL_MODEL      --local-ai: the default model's file on the host, under its name at
+#                            Hugging Face (LFM3-VL-2B-QAD-Q4_0.gguf; src/core/ai/local.cpp)
+#   BRULION_LOCAL_PROJECTOR  --local-ai: its picture part (mmproj-LFM3-VL-2B-Q8_0.gguf)
 #   BRULION_WEBPICTURE_HTTPS --web-pictures: the public https picture (default: Google's logo)
 #   BRULION_WEBPICTURE_PORT  --web-pictures: the host's port of the http picture (default 8765)
 #   BRULION_WEB_PORT         --web-keyboard: the host's port of the site (default 8123)
@@ -212,7 +237,7 @@ esac
 
 if [[ -e /etc/NIXOS && -z ${BRULION_ANDROID_IN_NIX_SHELL:-} ]]; then
   export BRULION_ANDROID_IN_NIX_SHELL=1
-  exec nix shell nixpkgs#jdk21_headless --command bash "$SCRIPT" "$@"
+  exec nix shell nixpkgs#jdk21_headless nixpkgs#unzip --command bash "$SCRIPT" "$@"
 fi
 
 VERSION=$(sed -nE 's/^[[:space:]]*VERSION[[:space:]]+([0-9]+\.[0-9]+\.[0-9]+).*/\1/p' CMakeLists.txt | head -n 1)
@@ -229,6 +254,7 @@ STYLUS=0
 PICKERS=0
 PDF=0
 RELAUNCH=0
+LOCALAI=0
 WEBKEYBOARD=0
 if [[ ${1:-} == --keyboard ]]; then
   KEYBOARD=1
@@ -266,6 +292,9 @@ elif [[ ${1:-} == --pdf ]]; then
 elif [[ ${1:-} == --relaunch ]]; then
   RELAUNCH=1
   shift
+elif [[ ${1:-} == --local-ai ]]; then
+  LOCALAI=1
+  shift
 elif [[ ${1:-} == --web-pictures ]]; then
   WEBPICTURES=1
   shift
@@ -281,9 +310,15 @@ else
   APP_APK=${1:-dist-android/brulion-$VERSION-x86_64.apk}
   SELFTEST_APK=${2:-dist-android/brulion-selftest-$VERSION-x86_64.apk}
   [[ -f $APP_APK ]] || die "$APP_APK not found (build it: BRULION_ANDROID_ABIS=x86_64 BRULION_ANDROID_SELFTEST=1 scripts/android-build.sh)"
-  ((KEYBOARD || SELECTION || FOLDERS || SHARE || WIDGETS || WEBPICTURES || DONE || BACKGROUND || DRAWING || STYLUS || PICKERS || PDF || RELAUNCH)) ||
+  ((KEYBOARD || SELECTION || FOLDERS || SHARE || WIDGETS || WEBPICTURES || DONE || BACKGROUND || DRAWING || STYLUS || PICKERS || PDF || RELAUNCH || LOCALAI)) ||
     [[ -f $SELFTEST_APK ]] ||
     die "$SELFTEST_APK not found"
+fi
+if ((LOCALAI)); then
+  LOCAL_MODEL=${BRULION_LOCAL_MODEL:-}
+  LOCAL_PROJECTOR=${BRULION_LOCAL_PROJECTOR:-}
+  [[ -f $LOCAL_MODEL && -f $LOCAL_PROJECTOR ]] ||
+    die "--local-ai needs the default model's files: BRULION_LOCAL_MODEL and BRULION_LOCAL_PROJECTOR (src/core/ai/local.cpp names them and where they come from)"
 fi
 
 SDK=${ANDROID_SDK_ROOT:-${ANDROID_HOME:-$HOME/.cache/brulion-android-sdk}}
@@ -347,6 +382,11 @@ emulator_args=(-gpu "${BRULION_EMULATOR_GPU:-swangle_indirect}")
 # Firefox draw with GLES (ANGLE on the host), as the emulator's own UI does.
 if [[ ${BRULION_EMULATOR_VULKAN:-$((WEBKEYBOARD ? 0 : 1))} == 0 ]]; then
   emulator_args+=(-feature -Vulkan)
+fi
+# A model on the device takes about 2 GB: more memory than the AVD's own 2 GB.
+emulator_memory=${BRULION_EMULATOR_MEMORY:-$((LOCALAI ? 6144 : 0))}
+if ((emulator_memory > 0)); then
+  emulator_args+=(-memory "$emulator_memory")
 fi
 "${emulator[@]}" -avd "$AVD" -port "$PORT" -no-window -no-audio -no-boot-anim -no-snapshot -wipe-data \
   "${emulator_args[@]}" >"$OUT/emulator.log" 2>&1 &
@@ -480,6 +520,9 @@ toolbar_on_keyboard_report() {
     ((BASH_REMATCH[2] > 0 && BASH_REMATCH[1] == BASH_REMATCH[2]))
 }
 app_shot() { adb exec-out screencap -p >"$OUT/$1.png" || true; }
+# JSON as one of the app's arguments (a route), for Qt's QProcess::splitCommand (Qt for Android
+# splits applicationArguments so): quoted, every literal quote tripled.
+json_arg() { printf '"%s"' "${1//\"/\"\"\"}"; }
 start_app() { # <app arguments> [more am start arguments]
   local try
   for try in 1 2; do
@@ -733,6 +776,119 @@ if ((RELAUNCH)); then
   check "the app restarted itself each time and shows the notebook: no blank window" test "$blank" -eq 0
   check "the tapped notification's note is open (also after the app restarted itself)" test "$note_lost" -eq 0
   check "no crash" bash -c "! cat '$OUT'/rl-logcat-*.txt 2>/dev/null | grep -E 'FATAL EXCEPTION|Fatal signal'"
+  info "Result"
+  echo "logs and screenshots: $(cd "$OUT" && pwd)"
+  ((failures == 0)) || die "$failures check(s) failed"
+  echo "all checks passed"
+  exit 0
+fi
+
+# --- the model on the device (--local-ai) ---------------------------------------------------------
+
+if ((LOCALAI)); then
+  info "The model on the device: $APP_APK (API $android_api, $(adb shell grep MemTotal /proc/meminfo | tr -s ' ' | tr -d '\r'))"
+  # (The listing first: `grep -q` ends at its first match, and unzip then fails on a closed pipe.)
+  listing=$(unzip -l "$APP_APK")
+  for lib in brulion_localai llama mtmd ggml ggml-base ggml-cpu-haswell ggml-cpu-sse42; do
+    grep -q "lib/x86_64/lib$lib\.so\$" <<<"$listing" ||
+      die "$APP_APK has no lib$lib.so: built without the model runner (BRULION_LOCAL_AI=OFF, or no llama.cpp sources)"
+  done
+  adb install -r -g "$APP_APK" >/dev/null
+  adb shell run-as "$PKG" true 2>/dev/null || die "$APP_APK is not debuggable (BRULION_ANDROID_BUILD_TYPE=Debug)"
+  # The model's files where a download leaves them (<app data>/models, under their own names).
+  la_file_whole() { # <name> <bytes>
+    [[ $(adb shell run-as "$PKG" stat -c %s "\"files/models/$1\"" 2>/dev/null | tr -d '\r') == "$2" ]]
+  }
+  adb shell run-as "$PKG" mkdir -p files/models
+  for file in "$LOCAL_MODEL" "$LOCAL_PROJECTOR"; do
+    name=$(basename -- "$file")
+    echo "    copying $name ($(($(stat -c %s "$file") / 1000000)) MB)"
+    adb exec-in "run-as $PKG sh -c 'cat > \"files/models/$name\"'" <"$file"
+    # (adb is back before the device has written the last of it.)
+    wait_for 120 la_file_whole "$name" "$(stat -c %s "$file")" || die "$name did not reach the app's storage whole"
+  done
+  la_log() { adb logcat -d | grep -E ' brulion\.ai\.local *: ' || true; }
+  la_opened() { la_log | grep -c ' opened: ' || true; }
+  # (What the app logs of the model it opened: how much it holds, the processor plugin, the threads.)
+  la_opened_whole() { [[ $(la_log | grep -cE ' opened: [0-9]+ tokens at once, ggml-cpu-[a-z0-9_.]+, [0-9]+ threads') == 1 ]]; }
+  la_files_found() { ui_has 'Usuń' && ui_lacks 'Pobierz'; }
+  # The libraries the app's start loaded (Qt's loader asks Android's for each one of libs.xml,
+  # which logs it): Qt's own, and nothing of the model runner.
+  la_start_loads_no_runner() {
+    grep -q '^libQt6Core' "$OUT/local-ai-loaded-at-start.txt" &&
+      ! grep -E '^lib(brulion_localai|llama|mtmd|ggml)' "$OUT/local-ai-loaded-at-start.txt"
+  }
+  la_answered() { la_log | grep -c ' answered: ' || true; }
+  la_answered_times() { [[ $(la_answered) -ge $1 ]]; } # <count>
+  la_refused() { la_log | grep -qE 'cannot open|gave no answer'; }
+  la_ended() { la_answered_times "$1" || la_refused; }
+  # The app's window asks the screen to stay on (its flags, as the window manager has them).
+  la_keeps_screen_on() {
+    adb shell dumpsys window windows | grep -A 12 -E "Window #[0-9]+ Window\{[^}]* $PKG/" | grep -q 'KEEP_SCREEN_ON'
+  }
+  la_lets_screen_go() { ! la_keeps_screen_on; }
+  # (Looked for from before the tap, twice a second: a model in memory answers within a few.)
+  la_watch_screen() {
+    local _
+    for _ in $(seq 1 240); do
+      la_keeps_screen_on && return 0
+      sleep 0.5
+    done
+    return 1
+  }
+
+  # Settings → Extensions, where the AI's settings are.
+  start_app "--demo --locale pl --route $(json_arg '{"view":"settings","section":"extensions"}')"
+  wait_for 60 ui_has 'Asystent AI, [^"]*' || true
+  adb logcat -d | { grep -oE 'nativeloader: Load [^ ]+\.so' || true; } | sed 's#.*/##' | sort -u >"$OUT/local-ai-loaded-at-start.txt"
+  app_shot la-1-extensions
+  check "the settings' Extensions section is on screen" ui_has 'Asystent AI, [^"]*'
+  # The provider's choices are under the assistant's switch: up the page until they show.
+  la_show() { # <ERE>: the page dragged up until the item so named is on screen, clear of the bottom navigation
+    local _ y
+    for _ in 1 2 3 4 5 6 7 8; do
+      y=$(ui_y "$1")
+      if [[ -n $y ]] && ((y < SCREEN_H * 80 / 100)); then return 0; fi
+      adb shell input swipe $((SCREEN_W / 2)) $((SCREEN_H * 65 / 100)) $((SCREEN_W / 2)) $((SCREEN_H * 40 / 100)) 600
+      sleep 2
+    done
+    echo "    not brought on screen: $1"
+    return 1
+  }
+  la_show 'Na tym urządzeniu' || true
+  app_shot la-2-provider
+  check "the provider \"On this device\" is offered (the app found the model runner in the APK)" ui_has 'Na tym urządzeniu'
+  ui_tap 'Na tym urządzeniu' || true
+  la_show 'Usuń' || true
+  app_shot la-3-on-this-device
+  check "the model's files are found in the app's storage (\"Remove\", no \"Download\")" la_files_found
+  check "the app's start loaded Qt's libraries and nothing of the model runner" la_start_loads_no_runner
+  la_show 'Sprawdź' || true
+  check "the screen is not kept on before a model is asked" la_lets_screen_go
+  la_watch_screen &
+  screen_watch=$!
+  ui_tap 'Sprawdź' || true
+  # The model is read from the storage first (a gigabyte), then it answers.
+  wait_for 300 la_ended 1 || true
+  app_shot la-4-answered
+  la_log | sed 's/^/    /'
+  check "the screen was kept on while the model answered" wait "$screen_watch"
+  sleep 2
+  check "and is let go once the answer is there" la_lets_screen_go
+  check "the model was opened: the plugin, llama.cpp's libraries and a processor plugin this processor can run, loaded from the APK" la_opened_whole
+  check "the model answered \"Check\"" la_answered_times 1
+  # Once more: the model is still in memory.
+  sleep 4
+  ui_tap 'Sprawdź' || true
+  wait_for 120 la_ended 2 || true
+  app_shot la-5-answered-again
+  check "a second \"Check\" is answered" la_answered_times 2
+  check "by the model still in memory (opened once)" test "$(la_opened)" -eq 1
+  check "the app is still running" running
+  adb logcat -d >"$OUT/local-ai-logcat.txt"
+  la_log >"$OUT/local-ai-summary.txt"
+  check "no crash" bash -c "! grep -E 'FATAL EXCEPTION|Fatal signal' '$OUT/local-ai-logcat.txt'"
+  check "no QML errors" bash -c "! grep -E 'TypeError|ReferenceError|Binding loop detected' '$OUT/local-ai-logcat.txt'"
   info "Result"
   echo "logs and screenshots: $(cd "$OUT" && pwd)"
   ((failures == 0)) || die "$failures check(s) failed"
@@ -1108,7 +1264,6 @@ if ((PICKERS)); then
   info "File pickers: $APP_APK on ${SCREEN_W}x$SCREEN_H, density $DENSITY, API $android_api"
   adb install -r -g "$APP_APK" >/dev/null
   adb shell run-as "$PKG" true 2>/dev/null || die "$APP_APK is not debuggable (BRULION_ANDROID_BUILD_TYPE=Debug)"
-  pk_json_arg() { printf '"%s"' "${1//\"/\"\"\"}"; }
   documents_front() { adb shell dumpsys window | grep -E 'mCurrentFocus|mFocusedApp' | grep -q documentsui; }
   brulion_front() { adb shell dumpsys window | grep -E 'mCurrentFocus' | grep -q "$PKG"; }
   # DocumentsUI in the Download folder, until the item so named shows: the folder Download where
@@ -1202,7 +1357,7 @@ if ((PICKERS)); then
   app_shot pk-6-folder-preview
 
   # 3. Export → "Save": ACTION_CREATE_DOCUMENT with the export's name, saved in Download.
-  start_app "--demo --locale pl --route $(pk_json_arg '{"view":"importExport","tab":"export"}')"
+  start_app "--demo --locale pl --route $(json_arg '{"view":"importExport","tab":"export"}')"
   check "the export offers 'Eksportuj…'" wait_for 30 ui_has 'Eksportuj…'
   check "… shown above the bottom navigation" pk_show 'Eksportuj…'
   check "'Eksportuj…' is tapped" ui_tap 'Eksportuj…' first 6
@@ -1807,9 +1962,6 @@ if ((STYLUS)); then
   bash "$d8" --min-api 30 --lib "$platform_jar" --output "$pen_build" "$pen_build/BrulionPen.class" # (#!/bin/bash: not on NixOS)
   adb push "$pen_build/classes.dex" /data/local/tmp/brulion-pen.dex >/dev/null
   pen() { adb shell CLASSPATH=/data/local/tmp/brulion-pen.dex app_process / BrulionPen stroke "$@" | tr -d '\r'; }
-  # A JSON argument for Qt's QProcess::splitCommand (Qt for Android splits applicationArguments
-  # so): quoted, every literal quote tripled.
-  qt_json_arg() { printf '"%s"' "${1//\"/\"\"\"}"; }
 
   ST_VAULT=files/Rysik
   ST_FILE=Rysunki/Nacisk-rysika.svg
@@ -1849,7 +2001,7 @@ if ((STYLUS)); then
   }
   st_simulated() { [[ $(st_line "$1" | cut -d' ' -f1) == true ]]; } # <1-based>
 
-  route=$(qt_json_arg "{\"view\":\"drawing\",\"path\":\"$ST_FILE\"}")
+  route=$(json_arg "{\"view\":\"drawing\",\"path\":\"$ST_FILE\"}")
   start_app "--vault /data/user/0/$PKG/$ST_VAULT --locale pl --route $route"
   check "the app is running" running
   check "the drawing editor is open" wait_for 20 ui_has 'Gotowe'

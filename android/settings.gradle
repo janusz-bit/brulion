@@ -8,9 +8,29 @@
 // library and androidx are reduced to what is used. Qt's Java classes and Brulion's Kotlin are
 // kept whole (proguard-rules.pro): C++ reaches them through JNI by name. Debug builds are not
 // shrunk.
+//
+// BRULION_ANDROID_ID_SUFFIX in the environment (scripts/android-build.sh), ".test": the APK's
+// package is io.github.januszbit.brulion.test, an app of its own that installs beside a released
+// Brulion — its own data, the name "Brulion (test)" under its icon (beside/AndroidManifest.xml,
+// merged over the manifest). For a phone that has the release: an APK signed with another key
+// cannot update that one, and uninstalling it deletes its notes. Only the package changes: the
+// code's namespace (the R class, the Kotlin classes, android:name in the manifest) stays, and
+// what is named after the package at run time (the FileProvider's authority) follows it.
+def idSuffix = System.getenv('BRULION_ANDROID_ID_SUFFIX') ?: ''
+
 gradle.rootProject { project ->
     project.pluginManager.withPlugin('com.android.application') {
         project.android {
+            if (idSuffix) {
+                defaultConfig {
+                    applicationIdSuffix = idSuffix
+                    manifestPlaceholders['brulionLabel'] = "Brulion (${idSuffix.substring(1)})".toString()
+                }
+                sourceSets {
+                    debug.manifest.srcFile 'beside/AndroidManifest.xml'
+                    release.manifest.srcFile 'beside/AndroidManifest.xml'
+                }
+            }
             buildTypes {
                 release {
                     minifyEnabled = true

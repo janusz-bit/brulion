@@ -833,11 +833,22 @@ the gym's, its label is the title (kept in the route for tabs); its "open" nodes
 another view of the extension with their params.
 
 **AI** (Settings → Extensions, group "AI", `objectName` `aiSettings`; docs/EXTENSIONS.md "AI"):
-the AI assistant's switch (`AppSettings.assistantEnabled`), the provider (Claude / OpenAI-compatible:
-`aiProvider`), the API key (a password field; saved when editing finishes, then emptied: "Saved on
-this device", "Forget"), the model and the address (`aiModel`, `aiBaseUrl`; placeholders show the
-defaults), "Check" (`Workspace.extensions.testAi()`: the model's "OK" or the error as a toast; busy
-while `aiPending`). The group's note says what it costs and where the notes go. A command whose
+the AI assistant's switch (`AppSettings.assistantEnabled`), the provider (Claude / OpenAI-compatible
+/ On this device: `aiProvider`; the third only where `AppController.localAi.available`, a build
+with the model runner), the API key (a password field; saved when editing finishes, then emptied:
+"Saved on this device", "Forget"), the model and the address (`aiModel`, `aiBaseUrl`; placeholders
+show the defaults), "Check" (`Workspace.extensions.testAi()`: the model's "OK" or the error as a
+toast; busy while `aiPending`). The group's note says what it costs and where the notes go.
+With **On this device** the key, model and address rows give way to the model's own
+(`AppController.localAi`, `src/app/shell/localai.h` — typed `FINAL` properties about the chosen
+model, so the bindings compile): **Model** (`aiLocalModelSetting`: LFM3-VL 2B / LFM3 1.7B →
+`AppSettings.aiLocalModel`; the description says what the chosen one is good at), **The model's
+files** (`aiLocalFiles`: not here yet with its size and **Download**; while downloading the
+progress as text, a progress bar and **Stop**; "Checking the downloaded files…"; a failed download
+with its reason — it goes on from where it stopped; here: its size and **Remove**) and **Whose
+model** (the maker and the licence, with links). One model downloads at a time (`downloadingOther`
+disables Download on the other). While a model is downloaded or answers (`working`) a phone's
+screen stays on (docs/ANDROID.md "A model on the phone"). A command whose
 extension asks AI shows "Asking AI…" (once per call: an agent asks many times); its result comes
 as the command's own message when the answer arrives; the console shows "Asking AI…" and then the
 value. The assistant's commands ("AI: ask or ask to do…" — an agent over the whole notebook, its
@@ -3948,7 +3959,9 @@ pickers (Android, Windows, GTK / KDE, the portal, the browser's) speak the syste
   the text left under 40 % of it, or a wrapping group such as the accent swatches, or a text
   field); each row decides alone (at 412 px Light background, Dark background and Interface font stay
   beside their text, Theme, Text size and the swatches go under it; at 360 px Dark background
-  goes under too; a long translation stacks by itself). A wrapping group fills the row up to
+  goes under too; a long translation stacks by itself). A wider window stacks a row only when
+  its controls would leave the text a sliver — under 180 px (`minTextWidth`): the AI provider's
+  three choices in a narrow pane, the sidebar open in a small window. A wrapping group fills the row up to
   `ShellSettingRow.evenWrapWidth()`: the accent swatches are one line wherever they fit (the
   seven presets and "Custom…": 8 × 44 px at 412 px, the intro's seven), else even lines (4 + 4 at
   360 px, not 7 + 1). Under its text a control fills the row:

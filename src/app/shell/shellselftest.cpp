@@ -7650,6 +7650,32 @@ void checkAppearance(QQmlApplicationEngine *engine, QQuickWindow *window, AppCon
             window->resize(phone);
             waitFor([&] { return window->size() == phone; });
             settle(200);
+        } else if (!narrow) {
+            // A small window with the page panel open leaves the settings a narrow pane: a row
+            // whose choices would leave its text a sliver (under 180 px) puts them under the text,
+            // filled, as a phone does — Theme and Text size here; a wide window again: beside.
+            const QSize wide = window->size();
+            window->resize(960, wide.height());
+            const auto squeezedShaped = [&] {
+                for (const QString &name : {u"themeModeSetting"_s, u"fontScaleSetting"_s}) {
+                    problem = shapeProblem(name, 1);
+                    if (!problem.isEmpty())
+                        return false;
+                }
+                return true;
+            };
+            const bool stackedInPane = waitFor([&] { return window->width() == 960 && squeezedShaped(); });
+            if (!stackedInPane)
+                std::fprintf(stderr, "selftest: settings rows in a narrow pane: %s\n", qPrintable(problem));
+            check(stackedInPane, "a narrow settings pane (960 px, the page panel open): Motyw and Rozmiar tekstu under "
+                                 "their text, filled");
+            window->resize(wide);
+            const bool besideAgain =
+                    waitFor([&] { return window->size() == wide && rowsShaped(false, true, &problem); });
+            if (!besideAgain)
+                std::fprintf(stderr, "selftest: settings rows, wide again: %s\n", qPrintable(problem));
+            check(besideAgain, "wide again: every control beside its text");
+            settle(200);
         }
     }
 

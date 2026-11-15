@@ -131,7 +131,14 @@ while read -r var; do
   fi
 done < <(grep -oE 'BRULION_[A-Z0-9_]+' "$recipe" | sort -u)
 contains "android-build.sh writes dist-android/" "$build_sh" "OUT_DIR=dist-android"
-contains "android-build.sh names the unsigned APK" "$build_sh" 'apk=$OUT_DIR/brulion-$VERSION-$abi_tag$unsigned_suffix.apk'
+contains "android-build.sh names the unsigned APK" "$build_sh" 'apk=$OUT_DIR/brulion-$VERSION-$abi_tag$id_tag$unsigned_suffix.apk'
+# ($id_tag: "-test" for the package that installs beside a release, nothing without the variable.)
+contains "android-build.sh's package suffix is only what is asked for" "$build_sh" 'ID_SUFFIX=${BRULION_ANDROID_ID_SUFFIX:-}'
+if grep -q 'BRULION_ANDROID_ID_SUFFIX' "$recipe"; then
+  fail "the recipe builds a test package (BRULION_ANDROID_ID_SUFFIX), not io.github.januszbit.brulion"
+else
+  pass "the recipe builds the released package (no BRULION_ANDROID_ID_SUFFIX)"
+fi
 contains "android-build.sh's unsigned suffix" "$build_sh" "unsigned_suffix=-unsigned"
 same "output" 'dist-android/brulion-$$VERSION$$-arm64-v8a-unsigned.apk' "$(build_field output)"
 same "android-build.sh's default ABI is the recipe's" arm64-v8a \

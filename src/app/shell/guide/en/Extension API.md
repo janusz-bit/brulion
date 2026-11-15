@@ -183,7 +183,7 @@ end, { label = "Log a walk" })
 ```
 
 ## AI
-`b.ai("question")` asks the model chosen in **Settings → Extensions → AI** and returns its answer as text; a table adds `system`, `model`, `maxTokens`, `effort`, `messages` for a conversation and `tools` the model may call. The page needs the permission `ai`. More in [[AI]].
+`b.ai("question")` asks the model chosen in **Settings → Extensions → AI** and returns its answer as text; a table adds `system`, `model`, `maxTokens`, `effort`, `images` (pictures of the notebook for a model that sees: `b.ai({ prompt = "What does it say?", images = { "receipt.jpg" } })`), `messages` for a conversation and `tools` the model may call. The page needs the permission `ai`. More in [[AI]].
 
 ## Luau in short
 - Texts are joined with `..`, or written with backticks and braces: `` `{n} pages` ``. A list is `{ "a", "b" }` and counts from 1; `#list` is its length; `for i, item in list do … end` goes through it.

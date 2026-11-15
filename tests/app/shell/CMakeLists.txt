@@ -29,6 +29,9 @@ brulion_add_test(tst_shell_shortcutmap SOURCES tst_shortcutmap.cpp LIBS brulion_
 # must follow (an OFF build runs the tests of a build without the check).
 brulion_add_test(tst_shell_appupdates SOURCES tst_appupdates.cpp ../minihttpserver.h LIBS brulion_shell Qt6::Network)
 target_compile_definitions(tst_shell_appupdates PRIVATE BRULION_UPDATE_CHECK_EXPECTED=$<BOOL:${BRULION_UPDATE_CHECK}>)
+# The model on the device as the app keeps it (localai.h): the chosen model, its download from a
+# local HTTP server and its removal, requests answered on the worker thread by a fake runner.
+brulion_add_test(tst_shell_localai SOURCES tst_localai.cpp LIBS brulion_shell brulion_core_ai Qt6::Network)
 brulion_add_test(tst_shell_workspace SOURCES tst_workspace.cpp LIBS brulion_shell brulion_core_vault brulion_core_markdown)
 # The extensions as the app runs them (workspaceextensions.h), on the sample extensions and their
 # notebook (tests/core/extensions/samples): approval per device, commands with the questions the

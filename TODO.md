@@ -5,14 +5,38 @@ done in the repository simply disappears from the list.
 
 ## Features
 
-* **AI: what is still missing** — extensions can ask a model (`b.ai` with tools, Claude or any
-  OpenAI-compatible API, a server of one's own) and the built-in AI assistant is an agent over the
-  whole notebook — full-text search, queries, reading, changes the user confirms
-  (docs/EXTENSIONS.md "AI"); missing: the providers' own apps reaching the notes from a phone (a
-  remote MCP server: `brulion-cli mcp` over HTTPS with sign-in, for claude.ai's and ChatGPT's
-  connectors), answers streamed as they are written, a conversation that goes on after the answer
-  (a chat view), an assistant in the editor (rewrite the selection, continue a paragraph), search
-  by meaning rather than words (docs/SEMANTIC.md) and a model on the device itself.
+* **AI: what is still missing** — extensions can ask a model (`b.ai` with tools and pictures,
+  Claude, any OpenAI-compatible API, a server of one's own, or a model on the device itself) and
+  the built-in AI assistant is an agent over the whole notebook — full-text search, queries,
+  reading, pictures, changes the user confirms (docs/EXTENSIONS.md "AI"); missing: the providers'
+  own apps reaching the notes from a phone (a remote MCP server: `brulion-cli mcp` over HTTPS with
+  sign-in, for claude.ai's and ChatGPT's connectors), answers streamed as they are written, a
+  conversation that goes on after the answer (a chat view), an assistant in the editor (rewrite
+  the selection, continue a paragraph) and search by meaning rather than words (docs/SEMANTIC.md).
+* **The model on the device: what is still missing** — LFM3-VL 2B and LFM3 1.7B run in the app
+  through llama.cpp on Linux (the Nix package) and Android (docs/EXTENSIONS.md "AI",
+  docs/ARCHITECTURE.md "The model on the device"). Missing:
+  * the AppImage and the Windows builds (their scripts pass no llama.cpp sources yet: on Windows
+    the libraries go next to `brulion.exe` and nothing was built or tried there; the AppImage's
+    older aarch64 compilers do not know the newest ARM variants llama.cpp builds, and linuxdeploy
+    has to keep `usr/lib/brulion` as it is);
+  * measurements on more phones than the Pixel 9 Pro (docs/ANDROID.md "On a Pixel 9 Pro": a
+    mid-range one; the best number of threads per processor — the runner takes half the threads,
+    at most 8, and writes at a quarter of a laptop's speed there) and an Adreno/Mali GPU through
+    llama.cpp's Vulkan or OpenCL backends (the processor only so far: +35 MB of shaders for
+    Vulkan);
+  * a button that stops an answer being written, and the answer shown while it is written;
+  * Android: a model works only while the app is on screen (the screen is kept on meanwhile; no
+    foreground service). Behind another app an answer is worked on at a fraction of the speed
+    and stands still once Android freezes the process — the time away counts towards the five
+    minutes after which it ends as "no answer" — and a download stops (it goes on from there
+    when asked again);
+  * the system text and tools read once and kept on disk between runs (they are read again
+    after the model left memory: some 2 000 tokens for the assistant), a smaller tool set of the
+    assistant for a small model, tool calls kept to the tools' names by a grammar;
+  * other models: a GGUF file of the user's own, a chat format beside LFM3's;
+  * stores: F-Droid's and Google Play's rules for an app that downloads model weights under a
+    licence that is not free software (a store build without it: `BRULION_LOCAL_AI=OFF`).
 * **Extensibility as in Emacs and TiddlyWiki: what is still missing** — extension pages, approval
   per device, live reload, hooks (`save`, `change`) and the Luau console are there
   (docs/EXTENSIONS.md); missing: Luau's type checker on save (`b` as a definition file; the

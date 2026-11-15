@@ -1,8 +1,9 @@
 // AI for extensions (src/core/ai/ai.h): b.ai's requests, the HTTP requests to Anthropic's
-// Messages API and to OpenAI-compatible chat APIs, the answers, refusals and errors, and the
-// client over a fake transport.
+// Messages API and to OpenAI-compatible chat APIs, the answers, refusals and errors, pictures in a
+// request, and the client over a fake transport and a fake model on the device.
 
 #include "ai/ai.h"
+#include "ai/local.h"
 
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -43,6 +44,40 @@ ai::Request ask(const QString &prompt)
     r.messages << ai::textMessage(u"user"_s, prompt);
     return r;
 }
+
+/// A picture loader that knows two pictures and how often it was asked.
+struct Pictures {
+    QStringList asked;
+    ai::ImageLoader loader()
+    {
+        return [this](const QString &name, QString *why) -> std::optional<ai::Image> {
+            asked << name;
+            if (name == u"paragon.jpg")
+                return ai::Image{QByteArray("\xff\xd8 paragon"), u"image/jpeg"_s};
+            if (name == u"Zdjęcia/żółw.png")
+                return ai::Image{QByteArray("\x89PNG zolw"), u"image/png"_s};
+            *why = u"no such picture in the notebook"_s;
+            return std::nullopt;
+        };
+    }
+};
+
+/// A model on the device that answers at once.
+class FakeLocal : public ai::LocalBackend {
+public:
+    QList<ai::Request> requests;
+    QList<ai::Settings> settings;
+    void send(const ai::Settings &s, const ai::Request &request, std::function<void(const ai::Reply &)> done) override
+    {
+        settings << s;
+        requests << request;
+        ai::Reply reply;
+        reply.ok = true;
+        reply.text = u"Z urządzenia."_s;
+        reply.model = s.model;
+        QTimer::singleShot(0, [done, reply] { done(reply); });
+    }
+};
 
 sync::HttpResponse json(int status, const QByteArray &body)
 {
@@ -128,6 +163,11 @@ private Q_SLOTS:
             settings.baseUrl = address;
             QCOMPARE(settings.unencrypted(), unencrypted);
         }
+        // The model on the device sends nothing: an address left from another provider is not used.
+        ai::Settings onDevice;
+        onDevice.provider = u"local"_s;
+        onDevice.baseUrl = address;
+        QVERIFY(!onDevice.unencrypted());
     }
 
     void anthropicRequests()
@@ -462,6 +502,180 @@ private Q_SLOTS:
                                                          {u"id"_s, u"t"_s},
                                                          {u"content"_s, QString(ai::MaxRequestChars + 1, u'a')}}}}}}}},
                         u"too long"_s));
+    }
+
+    void picturesInRequests()
+    {
+        Pictures pictures;
+        QString error;
+        // With a prompt.
+        std::optional<ai::Request> r =
+                ai::requestFrom({{u"prompt"_s, u"Co jest na paragonie?"_s},
+                                 {u"images"_s, QVariantList{u"paragon.jpg"_s, u" Zdjęcia/żółw.png "_s}}},
+                                &error, pictures.loader());
+        QVERIFY2(r, qPrintable(error));
+        QCOMPARE(r->messages.size(), 1);
+        QCOMPARE(r->messages[0].content, u"Co jest na paragonie?"_s);
+        QCOMPARE(r->messages[0].images.size(), 2);
+        QCOMPARE(r->messages[0].images[0], (ai::Image{QByteArray("\xff\xd8 paragon"), u"image/jpeg"_s}));
+        QCOMPARE(r->messages[0].images[1].mediaType, u"image/png"_s);
+        QCOMPARE(pictures.asked, (QStringList{u"paragon.jpg"_s, u"Zdjęcia/żółw.png"_s}));
+        // In a user's message of a conversation (its text may be empty).
+        r = ai::requestFrom(
+                {{u"messages"_s, QVariantList{QVariantMap{{u"role"_s, u"user"_s}, {u"content"_s, u"a"_s}},
+                                              QVariantMap{{u"role"_s, u"assistant"_s}, {u"content"_s, u"b"_s}},
+                                              QVariantMap{{u"role"_s, u"user"_s},
+                                                          {u"content"_s, QString()},
+                                                          {u"images"_s, QVariantList{u"paragon.jpg"_s}}}}}},
+                &error, pictures.loader());
+        QVERIFY2(r, qPrintable(error));
+        QVERIFY(r->messages[0].images.isEmpty());
+        QCOMPARE(r->messages[2].images.size(), 1);
+
+        const auto refused = [&](const QVariantMap &table, const QString &why, const ai::ImageLoader &loader) {
+            QString e;
+            const bool none = !ai::requestFrom(table, &e, loader);
+            if (!none || !e.contains(why))
+                qWarning("got: %s", qPrintable(e));
+            return none && e.contains(why);
+        };
+        const QVariantMap one{{u"prompt"_s, u"?"_s}, {u"images"_s, QVariantList{u"paragon.jpg"_s}}};
+        // Nowhere to load pictures from (brulion-cli, a test).
+        QVERIFY(refused(one, u"cannot be sent from here"_s, {}));
+        // A picture the notebook does not have: the loader's reason, with the name.
+        QVERIFY(refused({{u"prompt"_s, u"?"_s}, {u"images"_s, QVariantList{u"brak.jpg"_s}}},
+                        u"the picture \"brak.jpg\": no such picture in the notebook"_s, pictures.loader()));
+        QVERIFY(refused({{u"prompt"_s, u"?"_s}, {u"images"_s, u"paragon.jpg"_s}}, u"a list of picture names"_s,
+                        pictures.loader()));
+        QVERIFY(refused({{u"prompt"_s, u"?"_s}, {u"images"_s, QVariantList{7}}}, u"a list of picture names"_s,
+                        pictures.loader()));
+        QVERIFY(refused({{u"prompt"_s, u"?"_s}, {u"images"_s, QVariantList{u"  "_s}}}, u"a list of picture names"_s,
+                        pictures.loader()));
+        QVariantList many;
+        for (int i = 0; i <= ai::MaxRequestImages; ++i)
+            many << u"paragon.jpg"_s;
+        QVERIFY(refused({{u"prompt"_s, u"?"_s}, {u"images"_s, many}}, u"at most 8 pictures"_s, pictures.loader()));
+        // Only the user shows pictures.
+        QVERIFY(refused({{u"messages"_s, QVariantList{QVariantMap{{u"role"_s, u"user"_s}, {u"content"_s, u"a"_s}},
+                                                      QVariantMap{{u"role"_s, u"assistant"_s},
+                                                                  {u"content"_s, u"b"_s},
+                                                                  {u"images"_s, QVariantList{u"paragon.jpg"_s}}},
+                                                      QVariantMap{{u"role"_s, u"user"_s}, {u"content"_s, u"c"_s}}}}},
+                        u"only a user's message has pictures"_s, pictures.loader()));
+        // No pictures asked for: no loader needed.
+        QVERIFY(ai::requestFrom({{u"prompt"_s, u"?"_s}}, &error));
+    }
+
+    void picturesInHttpRequests()
+    {
+        ai::Request request = ask(u"Co to?"_s);
+        request.messages[0].images << ai::Image{QByteArray("JPEG bytes"), u"image/jpeg"_s}
+                                   << ai::Image{QByteArray("PNG bytes"), u"image/png"_s};
+        QString error;
+        // Claude: image blocks (base64), then the text.
+        std::optional<sync::HttpRequest> http = ai::httpRequest(claude(), request, &error);
+        QVERIFY2(http, qPrintable(error));
+        QJsonArray content =
+                bodyOf(*http).value(u"messages"_s).toArray().at(0).toObject().value(u"content"_s).toArray();
+        QCOMPARE(content.size(), 3);
+        QCOMPARE(content[0].toObject().value(u"type"_s).toString(), u"image"_s);
+        const QJsonObject source = content[0].toObject().value(u"source"_s).toObject();
+        QCOMPARE(source.value(u"type"_s).toString(), u"base64"_s);
+        QCOMPARE(source.value(u"media_type"_s).toString(), u"image/jpeg"_s);
+        QCOMPARE(QByteArray::fromBase64(source.value(u"data"_s).toString().toLatin1()), QByteArray("JPEG bytes"));
+        QCOMPARE(content[1].toObject().value(u"source"_s).toObject().value(u"media_type"_s).toString(), u"image/png"_s);
+        QCOMPARE(content[2].toObject().value(u"type"_s).toString(), u"text"_s);
+        QCOMPARE(content[2].toObject().value(u"text"_s).toString(), u"Co to?"_s);
+
+        // An OpenAI-compatible API: image_url parts with data: addresses, then the text.
+        ai::Settings openai;
+        openai.provider = u"openai"_s;
+        openai.model = u"llava"_s;
+        openai.baseUrl = u"http://192.168.1.10:11434/v1"_s;
+        http = ai::httpRequest(openai, request, &error);
+        QVERIFY2(http, qPrintable(error));
+        content = bodyOf(*http).value(u"messages"_s).toArray().at(0).toObject().value(u"content"_s).toArray();
+        QCOMPARE(content.size(), 3);
+        QCOMPARE(content[0].toObject().value(u"type"_s).toString(), u"image_url"_s);
+        QCOMPARE(content[0].toObject().value(u"image_url"_s).toObject().value(u"url"_s).toString(),
+                 u"data:image/jpeg;base64,"_s + QString::fromLatin1(QByteArray("JPEG bytes").toBase64()));
+        QCOMPARE(content[1].toObject().value(u"image_url"_s).toObject().value(u"url"_s).toString(),
+                 u"data:image/png;base64,"_s + QString::fromLatin1(QByteArray("PNG bytes").toBase64()));
+        QCOMPARE(content[2].toObject().value(u"text"_s).toString(), u"Co to?"_s);
+
+        // A picture alone: no empty text part.
+        request.messages[0].content.clear();
+        http = ai::httpRequest(claude(), request, &error);
+        QCOMPARE(bodyOf(*http).value(u"messages"_s).toArray().at(0).toObject().value(u"content"_s).toArray().size(), 2);
+        // A message without pictures is a plain text, as before.
+        http = ai::httpRequest(claude(), ask(u"x"_s), &error);
+        QVERIFY(bodyOf(*http).value(u"messages"_s).toArray().at(0).toObject().value(u"content"_s).isString());
+    }
+
+    void theModelOnTheDevice()
+    {
+        // The provider "local": a model the app knows, no key, no address.
+        ai::Settings local;
+        local.provider = u"local"_s;
+        QString why;
+        QVERIFY2(local.usable(&why), qPrintable(why));
+        local.model = u"lfm3-1.7b"_s;
+        QVERIFY(local.usable());
+        local.model = u"claude-opus-5-5"_s; // left from another provider
+        QVERIFY(!local.usable(&why));
+        QVERIFY2(why.contains(u"no such model on this device") && why.contains(u"claude-opus-5-5"), qPrintable(why));
+        QVERIFY(!ai::defaultModel(u"local"_s).isEmpty());
+        QVERIFY(ai::localModel(ai::defaultModel(u"local"_s)));
+        // Nothing goes to the network for it.
+        local.model.clear();
+        QString error;
+        QVERIFY(!ai::httpRequest(local, ask(u"x"_s), &error));
+        QVERIFY2(error.contains(u"no network request"), qPrintable(error));
+
+        // The client hands the request to the model on the device …
+        FakeTransport transport;
+        FakeLocal device;
+        ai::Client client(&transport);
+        client.setLocal(&device);
+        ai::Reply got;
+        int calls = 0;
+        const auto done = [&](const ai::Reply &r) {
+            got = r;
+            ++calls;
+        };
+        ai::Request request = ask(u"Co słychać?"_s);
+        request.messages[0].images << ai::Image{"JPEG", u"image/jpeg"_s};
+        client.send(local, request, done);
+        QCOMPARE(calls, 0);
+        QTRY_COMPARE(calls, 1);
+        QVERIFY(got.ok);
+        QCOMPARE(got.text, u"Z urządzenia."_s);
+        QCOMPARE(device.requests.size(), 1);
+        QCOMPARE(device.requests[0].messages[0].content, u"Co słychać?"_s);
+        QCOMPARE(device.requests[0].messages[0].images.size(), 1);
+        QVERIFY(transport.sent.isEmpty());
+        // … other providers still go to the network …
+        transport.answer = json(
+                200, R"({"model":"claude-opus-5-5","stop_reason":"end_turn","content":[{"type":"text","text":"OK"}]})");
+        client.send(claude(), ask(u"x"_s), done);
+        QTRY_COMPARE(calls, 2);
+        QCOMPARE(got.text, u"OK"_s);
+        QCOMPARE(transport.sent.size(), 1);
+        QCOMPARE(device.requests.size(), 1);
+        // … a model the app does not know is an error, as is a build without a model runner.
+        local.model = u"gpt"_s;
+        client.send(local, ask(u"x"_s), done);
+        QTRY_COMPARE(calls, 3);
+        QVERIFY(!got.ok);
+        QVERIFY2(got.error.contains(u"no such model on this device"), qPrintable(got.error));
+        local.model.clear();
+        ai::Client bare(&transport);
+        bare.send(local, ask(u"x"_s), done);
+        QCOMPARE(calls, 3);
+        QTRY_COMPARE(calls, 4);
+        QVERIFY(!got.ok);
+        QVERIFY2(got.error.contains(u"runs no model on the device"), qPrintable(got.error));
+        QCOMPARE(transport.sent.size(), 1);
     }
 
     void clientOverATransport()

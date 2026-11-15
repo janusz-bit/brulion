@@ -14,7 +14,9 @@
 #     /usr and misses its EGL/GLES headers);
 #   * Gradle 9 from nixpkgs (JDK 21) instead of the Gradle wrapper of Qt's template; Android
 #     Gradle Plugin, Kotlin and androidx from a mitm-cache of recorded downloads
-#     (nix/android/gradle-deps.json).
+#     (nix/android/gradle-deps.json);
+#   * llama.cpp for the model on the device (64-bit ABIs): the sources of the release pinned in
+#     3rdparty/llama/pin.json, compiled by the NDK into libraries of the APK.
 # Update the locks: nix/android/update-locks.sh.
 {
   lib,
@@ -38,6 +40,9 @@
   werror ? false,
   # Also an unsigned Android App Bundle (.aab, Gradle's bundleRelease after the APK).
   withAab ? false,
+  # The model on the device (docs/EXTENSIONS.md "AI"): llama.cpp's libraries and the plugin with
+  # the model runner in the APK. 64-bit ABIs only; false: an APK without them.
+  withLocalAi ? true,
 }:
 
 let
@@ -101,6 +106,34 @@ let
   is64bit = lib.elem abi [
     "arm64-v8a"
     "x86_64"
+  ];
+
+  # llama.cpp's sources, one release (cmake/BrulionLocalAi.cmake).
+  localAi = withLocalAi && is64bit;
+  llamaPin = lib.importJSON ../3rdparty/llama/pin.json;
+  llamaSrc = fetchFromGitHub {
+    inherit (llamaPin)
+      owner
+      repo
+      tag
+      hash
+      ;
+  };
+  # What the APK then has in lib/<abi>/ (3rdparty/llama: the processor plugins packaged for Android).
+  localAiLibs = [
+    "libbrulion_localai.so"
+    "libllama.so"
+    "libmtmd.so"
+    "libggml.so"
+    "libggml-base.so"
+  ]
+  ++ lib.optionals (abi == "arm64-v8a") [
+    "libggml-cpu-android_armv8.6_1.so"
+    "libggml-cpu-android_armv8.2_2.so"
+  ]
+  ++ lib.optionals (abi == "x86_64") [
+    "libggml-cpu-haswell.so"
+    "libggml-cpu-sse42.so"
   ];
   androidBuildDir = "build/src/app/android-build";
   qtAndroidView = "$TMPDIR/qt-android";
@@ -179,7 +212,16 @@ stdenvNoCC.mkDerivation (finalAttrs: {
   ++ lib.optionals (androidOpenssl != null) [
     # The pinned checkout instead of CMake's download (src/app/CMakeLists.txt).
     "-DBRULION_ANDROID_OPENSSL_DIR=${androidOpenssl}"
-  ];
+  ]
+  ++ (
+    if localAi then
+      [
+        "-DBRULION_LOCAL_AI=ON"
+        "-DBRULION_LLAMA_SOURCE_DIR=${llamaSrc}"
+      ]
+    else
+      [ "-DBRULION_LOCAL_AI=OFF" ]
+  );
 
   configurePhase = ''
     runHook preConfigure
@@ -309,6 +351,16 @@ stdenvNoCC.mkDerivation (finalAttrs: {
         [[ $listing == *"lib/${abi}/$ssl"* ]] || fail "OpenSSL ($ssl) missing: no HTTPS"
       done
     ''}
+    ${lib.optionalString localAi ''
+      # The model on the device: the plugin with the model runner, llama.cpp and its processor
+      # plugins — in the APK, but not among the libraries Qt's loader loads when the app starts.
+      for lib in ${lib.concatStringsSep " " localAiLibs}; do
+        [[ $listing == *"lib/${abi}/$lib"* ]] || fail "$lib missing: no model on the device"
+      done
+      if ${gnugrep}/bin/grep -E 'brulion_localai|llama|mtmd|ggml' ${androidBuildDir}/res/values/libs.xml; then
+        fail "the model runner's libraries are loaded when the app starts (libs.xml)"
+      fi
+    ''}
     [[ $listing != *libplugins_qmltooling_* ]] || fail "QML debugging plugins (qmltooling) in a release APK"
     # Only the Basic style, no QtQuick.Dialogs (docs/PERFORMANCE.md L9).
     if ${gnugrep}/bin/grep -qE 'QuickControls2(Material|Universal|Imagine|Fusion|FluentWinUI3)|Controls_(Material|Universal|Imagine|Fusion|FluentWinUI3)|QuickDialogs2|QtQuick_Dialogs' <<<"$listing"; then
@@ -330,7 +382,8 @@ stdenvNoCC.mkDerivation (finalAttrs: {
         min=$(${ndk}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf -lW "$so" |
           awk '$1 == "LOAD" { a = strtonum($NF); if (min == "" || a < min) min = a } END { print min + 0 }')
         if ((min < 16384)); then
-          [[ $so != */libbrulion_* && $so != */libssl_3.so && $so != */libcrypto_3.so ]] ||
+          [[ $so != */libbrulion_* && $so != */libssl_3.so && $so != */libcrypto_3.so &&
+            $so != */libllama.so && $so != */libmtmd.so && $so != */libggml* ]] ||
             fail "$so: LOAD segments aligned to $min bytes"
           misaligned+=("''${so##*/} ($min)")
         fi
@@ -348,6 +401,8 @@ stdenvNoCC.mkDerivation (finalAttrs: {
     inherit
       abi
       withAab
+      withLocalAi
+      llamaSrc
       qtAndroid
       qtHost
       androidComposition
