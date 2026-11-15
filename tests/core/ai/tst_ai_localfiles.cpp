@@ -256,6 +256,10 @@ private Q_SLOTS:
         // still has to send then waits there: it must not pile up in the app's memory (a model
         // is a gigabyte, and a fast network brings it within the minute the system leaves a
         // background app). The server in a thread of its own, this one standing still a second.
+#ifdef Q_OS_WIN
+        QSKIP("Windows takes a whole 64 MB answer over loopback into the system's buffers, a fixed "
+              "send buffer at the server or not: nothing is left waiting there to measure");
+#else
         QThread thread;
         thread.start();
         QObject inThread;
@@ -304,6 +308,7 @@ private Q_SLOTS:
         QVERIFY(finished.wait(60000));
         QVERIFY2(finished[0][1].toBool(), qPrintable(finished[0][2].toString()));
         QVERIFY(contentOf(dir.path() + u"/models/big.gguf"_s) == bytes);
+#endif
     }
 
     void cancelAndGoOn()
