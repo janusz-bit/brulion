@@ -35,6 +35,10 @@ endif()
 
 include(cmake/BrulionWarnings.cmake)
 include(cmake/BrulionWindows.cmake)
+# Exploit mitigations for every target below, the vendored libraries included
+# (-DBRULION_HARDENING=OFF builds without them).
+include(cmake/BrulionHardening.cmake)
+brulion_enable_hardening()
 
 # The desktop (Linux and Windows): the system tray, one instance per session, the command line
 # brulion-cli and the self-tests of the real app (BRULION_DESKTOP_INTEGRATION in the code).
