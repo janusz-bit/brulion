@@ -7,6 +7,16 @@ brulion: document
 
 Here you'll find what changed in every version of Brulion, newest first. Full release notes with downloads are on GitHub: https://github.com/janusz-bit/brulion/releases
 
+## 0.23.0 — November 16, 2026
+
+**New**
+- **AI chat** — talk to the AI assistant as in a messenger: your messages on the right, its answers on the left, and you go on asking — "And next week?", "Move the rent to Friday". While it works it says what it does ("Reading “Shopping”…"), and **Stop** ends it; a change it wants to make is asked in the conversation (**Allow**, **Allow every change of this question**, **No**); an answer that failed has **Try again**. On a wide window your conversations are listed beside the one you read. Every conversation is a page in the folder **AI/**, named after your first question — read it on the phone, search it, link it; its tasks stay out of your lists and a reminder in an answer never rings. See [[AI]].
+
+**Changes**
+- **The ✨ button** opens the chat: **New conversation** (the page on screen goes along), **New conversation beside the page** (in the side panel), **Conversations** and **Summarise this page** (a new conversation). The answers no longer go into today's note: the day's journal gets a link to the conversation. In the palette: **AI chat** and **AI: new conversation**.
+- **The model on the device** keeps its threads on a phone's fast cores and reads the assistant's instructions only once: what it read of them stays on the device for the questions after, also once the model was loaded again.
+- **Extensions**: `b.status("…")` says what a command waiting for an answer is doing (the chat shows it under the AI's dots); `palette = false` keeps a command out of the palette. See [[Extension API]].
+
 ## 0.22.0 — November 15, 2026
 
 **New**

@@ -7,6 +7,16 @@ brulion: document
 
 Tu znajdziesz zmiany w każdej wersji Brulionu, od najnowszej. Pełne opisy wydań z plikami do pobrania są na GitHubie: https://github.com/janusz-bit/brulion/releases
 
+## 0.23.0 — 16 listopada 2026
+
+**Nowe**
+- **Czat z AI** — rozmawiaj z Asystentem AI jak w komunikatorze: Twoje wiadomości po prawej, jego odpowiedzi po lewej, i pytasz dalej — „A w przyszłym tygodniu?”, „Przesuń czynsz na piątek”. Gdy pracuje, mówi, co robi („Czytam „Zakupy”…”), a **Zatrzymaj** je przerywa; o zmianę, którą chce wprowadzić, pyta w rozmowie (**Zgoda**, **Zgoda na wszystkie zmiany tego pytania**, **Nie**); nieudana odpowiedź ma **Spróbuj ponownie**. W szerokim oknie Twoje rozmowy są obok tej, którą czytasz. Każda rozmowa to strona w folderze **AI/**, nazwana od Twojego pierwszego pytania — przeczytasz ją na telefonie, wyszukasz, podlinkujesz; jej zadania nie trafiają do Twoich list, a przypomnienie w odpowiedzi nigdy nie zadzwoni. Zobacz [[AI]].
+
+**Zmiany**
+- **Przycisk ✨** otwiera czat: **Nowa rozmowa** (strona na ekranie idzie razem z pytaniem), **Nowa rozmowa obok strony** (w panelu bocznym), **Rozmowy** i **Streść tę stronę** (nowa rozmowa). Odpowiedzi nie trafiają już do dzisiejszej notatki: dziennik z tego dnia dostaje link do rozmowy. W palecie: **Czat z AI** i **AI: nowa rozmowa**.
+- **Model na urządzeniu** trzyma swoje wątki na szybkich rdzeniach telefonu, a polecenia asystenta czyta tylko raz: to, co z nich przeczytał, zostaje na urządzeniu na kolejne pytania, także gdy model zostanie wczytany od nowa.
+- **Rozszerzenia**: `b.status("…")` mówi, co robi polecenie czekające na odpowiedź (czat pokazuje to pod kropkami AI); `palette = false` trzyma polecenie poza paletą. Zobacz [[API rozszerzeń]].
+
 ## 0.22.0 — 15 listopada 2026
 
 **Nowe**
