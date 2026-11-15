@@ -7,6 +7,32 @@ brulion: document
 
 Here you'll find what changed in every version of Brulion, newest first. Full release notes with downloads are on GitHub: https://github.com/janusz-bit/brulion/releases
 
+## 0.21.1 — November 15, 2026
+
+**New**
+- **Numbers typed into the gym** — the number between **−** and **+** on the gym's "Today" (and in any extension view's stepper) is a field: tap it, type `82,5` and press Enter. **−** and **+** from a number between two steps go to the next step.
+- **Sync with one click** — the sync icon at the bottom of the icon bar on the left syncs at once (Nextcloud or GitHub). A right click or a long press opens the sync center, and so does a click while a sync runs.
+
+**Changes**
+- **Typing in very long pages** — a letter typed into a block changes that block only: the page no longer checks its numbering, its blank lines and its end after every keystroke. In a page of 5000 blocks the page's own work per keystroke is about a tenth of what it was; ticking a task, indenting, undo and redo cost about half.
+- **A sync with nothing to do** — notes that have the size and time of their last sync are no longer read and compared: a notebook of 10,000 files is checked in about 0.3 instead of 0.75 s (besides the server's answer), and a sync after a few changes takes about half as long.
+- **Pages first** — the page panel of the sidebar starts with **Pages**, then **Favorites** and **Recent**. The order you chose in **Settings → Appearance → Layout** stays.
+- **Sturdier builds** — every release is built with the protections Qt's own libraries are built with: a mistake in reading a damaged note stops the program instead of letting it run on. It costs 0–4 % in the parts that read and compute notes.
+- **The AI assistant's confirmation** says when it shows only the beginning of a change and how many characters there are, and its text scrolls instead of ending after 18 lines. **Settings → Extensions → AI** says when the address is not encrypted (`http://` to another machine). See [[AI]].
+- **Extensions** — a view whose function returns nothing, a text or a table that is no node is an error that names the extension and the view (it used to be an empty view); a `nil` among the children of `b.ui.column` or `b.ui.row` is left out; `b.pages` and `b.blocks` take only a table as a filter and refuse a date that is no day. A view that lists the pages of one tag is hundreds of times faster in a large notebook. See [[Extension API]].
+
+**Fixes**
+- **Hidden folders under every name** — the folders Brulion never syncs, backs up or indexes (`.git`, `.obsidian`, `.brulion`, `.trash`) are also left alone under the other names a system opens them by: `.GIT`, `.git.`, `GIT~1` and names with invisible characters. A server, a repository or a backup that named a file there could reach a program's settings.
+- **Titles and tasks are text** — a page title, a task or a file name with `<…>` in it is always shown as written; some places of the interface could take it for formatting.
+- **Servers** — an answer of a Nextcloud or WebDAV server is accepted only up to the size that was asked for (a server that goes on sending no longer fills the memory), a listing of folders without an end stops, and a redirect never sends your login on to another address or port.
+- **Very long runs of accents** — a name or a link with thousands of combining marks no longer stops the app for minutes.
+- **Extensions and trust** — an extension you approved stays approved when you edit it here; when a sync changed its code a moment before your edit was saved, the merged code now waits for **Run** instead of running unread. Code among a page's properties (the frontmatter) never runs. `b.replaceBlock` changes only the lines of notes: an extension allowed to write could rewrite other text files in the notebook's folder. A "change" reaction hears your edits and no longer what the extension itself wrote.
+- **Android backup** — the system's backup and the transfer to a new phone no longer carry the passwords and tokens (Nextcloud, GitHub, AI): Brulion asks for them again on the new phone.
+- **Other users of this computer** can no longer read the history and the search index of your notebooks (Linux).
+- **Focus mode** — **Esc** leaves it again after the AI menu or the assistant's question was closed.
+- **Command line** — `brulion-cli` shows a terminal the control characters a note may carry (escape sequences) as symbols; a pipe or a file gets every byte.
+- **Brulion on your own server (NixOS)** — the app can no longer be shown inside another site's frame (`services.brulion-web.frameAncestors`).
+
 ## 0.21.0 — November 14, 2026
 
 **New**

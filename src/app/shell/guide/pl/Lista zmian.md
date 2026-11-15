@@ -7,6 +7,32 @@ brulion: document
 
 Tu znajdziesz zmiany w każdej wersji Brulionu, od najnowszej. Pełne opisy wydań z plikami do pobrania są na GitHubie: https://github.com/janusz-bit/brulion/releases
 
+## 0.21.1 — 15 listopada 2026
+
+**Nowe**
+- **Liczby wpisywane w Siłowni** — liczba między **−** a **+** w „Dziś” Siłowni (i w każdym polu z krokiem w widoku rozszerzenia) jest polem: stuknij, wpisz `82,5` i naciśnij Enter. **−** i **+** z liczby między dwoma krokami przechodzą do najbliższego kroku.
+- **Synchronizacja jednym kliknięciem** — ikona synchronizacji na dole paska ikon po lewej synchronizuje od razu (Nextcloud albo GitHub). Kliknięcie prawym przyciskiem albo dłuższe przytrzymanie otwiera centrum synchronizacji, tak samo kliknięcie w trakcie synchronizacji.
+
+**Zmiany**
+- **Pisanie na bardzo długich stronach** — litera wpisana w blok zmienia tylko ten blok: strona nie sprawdza już po każdym naciśnięciu klawisza swojej numeracji, pustych wierszy i końca. Na stronie z 5000 bloków własna praca strony przy jednym klawiszu to około jednej dziesiątej tego, co wcześniej; odhaczenie zadania, wcięcie, cofnięcie i ponowienie kosztują około połowy.
+- **Synchronizacja, która nie ma nic do zrobienia** — notatki o rozmiarze i czasie z ostatniej synchronizacji nie są już czytane i porównywane: notatnik z 10 000 plików jest sprawdzany w około 0,3 zamiast 0,75 s (nie licząc odpowiedzi serwera), a synchronizacja po kilku zmianach trwa mniej więcej o połowę krócej.
+- **Najpierw Strony** — panel stron w pasku bocznym zaczyna się od **Stron**, potem są **Ulubione** i **Ostatnie**. Kolejność wybrana w **Ustawienia → Wygląd → Układ** zostaje.
+- **Odporniejszy program** — każde wydanie jest budowane z zabezpieczeniami, z którymi budowane są biblioteki Qt: błąd przy czytaniu uszkodzonej notatki zatrzymuje program, zamiast pozwolić mu działać dalej. Kosztuje to 0–4 % w częściach, które czytają i przeliczają notatki.
+- **Potwierdzenie Asystenta AI** mówi, kiedy pokazuje tylko początek zmiany i ile ma ona znaków, a jego tekst się przewija, zamiast kończyć się po 18 wierszach. **Ustawienia → Rozszerzenia → AI** mówią, kiedy adres nie jest szyfrowany (`http://` do innego komputera). Zobacz [[AI]].
+- **Rozszerzenia** — widok, którego funkcja nic nie zwraca albo zwraca tekst lub tabelę niebędącą elementem, jest błędem z nazwą rozszerzenia i widoku (wcześniej był pustym widokiem); `nil` wśród dzieci `b.ui.column` albo `b.ui.row` jest pomijany; `b.pages` i `b.blocks` przyjmują jako filtr tylko tabelę i odrzucają datę, która nie jest dniem. Widok z listą stron jednego tagu jest w dużym notatniku setki razy szybszy. Zobacz [[API rozszerzeń]].
+
+**Poprawki**
+- **Ukryte foldery pod każdą nazwą** — foldery, których Brulion nigdy nie synchronizuje, nie kopiuje i nie indeksuje (`.git`, `.obsidian`, `.brulion`, `.trash`), są zostawiane w spokoju także pod innymi nazwami, którymi system je otwiera: `.GIT`, `.git.`, `GIT~1` i nazwami z niewidocznymi znakami. Serwer, repozytorium albo kopia zapasowa, które wskazały tam plik, mogły dosięgnąć ustawień innego programu.
+- **Tytuły i zadania to tekst** — tytuł strony, zadanie albo nazwa pliku z `<…>` są zawsze pokazywane tak, jak je napisano; niektóre miejsca interfejsu mogły wziąć je za formatowanie.
+- **Serwery** — odpowiedź serwera Nextcloud albo WebDAV jest przyjmowana tylko do rozmiaru, o który proszono (serwer, który wysyła bez końca, nie zapełnia już pamięci), lista folderów bez końca zostaje przerwana, a przekierowanie nigdy nie wysyła Twojego loginu pod inny adres albo port.
+- **Bardzo długie ciągi akcentów** — nazwa albo link z tysiącami znaków łączących nie zatrzymuje już aplikacji na minuty.
+- **Rozszerzenia i zaufanie** — zatwierdzone rozszerzenie zostaje zatwierdzone, gdy edytujesz je tutaj; gdy synchronizacja zmieniła jego kod tuż przed zapisaniem Twojej edycji, scalony kod czeka teraz na **Uruchom**, zamiast działać nieprzeczytany. Kod wśród właściwości strony (frontmatter) nigdy nie działa. `b.replaceBlock` zmienia tylko wiersze notatek: rozszerzenie z prawem zapisu mogło przepisać inne pliki tekstowe w folderze notatnika. Reakcja „change” słyszy Twoje edycje, a nie to, co rozszerzenie samo zapisało.
+- **Kopia zapasowa Androida** — kopia systemowa i przeniesienie na nowy telefon nie zabierają już haseł i tokenów (Nextcloud, GitHub, AI): na nowym telefonie Brulion poprosi o nie ponownie.
+- **Inni użytkownicy tego komputera** nie mogą już czytać historii i indeksu wyszukiwania Twoich notatników (Linux).
+- **Tryb skupienia** — **Esc** znowu z niego wychodzi po zamknięciu menu AI albo pytania asystenta.
+- **Wiersz poleceń** — `brulion-cli` pokazuje terminalowi znaki sterujące, które może nieść notatka (sekwencje ucieczki), jako symbole; potok albo plik dostaje każdy bajt.
+- **Brulion na własnym serwerze (NixOS)** — aplikacji nie da się już pokazać w ramce na cudzej stronie (`services.brulion-web.frameAncestors`).
+
 ## 0.21.0 — 14 listopada 2026
 
 **Nowe**
