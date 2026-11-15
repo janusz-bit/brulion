@@ -26,7 +26,8 @@ compared with `ef90077`) and a smooth graph (L16, compared with `64d0380` on a G
 * **A sturdier program, at no speed you would notice** (2026-11-15). Every release is now built
   with the protections Qt's own libraries are built with (a mistake in reading a damaged note
   stops the program instead of running on in a wrong state). Measured: 0–4 % more work in the
-  parts that read and compute notes, about 1.7 % on average.
+  parts that read and compute notes, about 1.7 % on average; the Android package is about 2 MB
+  larger (99 instead of 97 MB), the others a few tenths of a megabyte.
 
 * **Switching views without waiting** (2026-11-09, 2026-11-10). Journal, Pages, Search, Tasks and
   Calendar stay in memory once opened: going back to one of them (e.g. from Tasks to the Journal
@@ -1313,6 +1314,11 @@ ES.22), which is also what an optimiser wants without hardening: 60.4 → 56.2 M
 1000 lines, 855 → 811 M for 5000 — back to what the calculator cost before. The binaries were
 checked with `readelf`: PIE, full RELRO (`BIND_NOW`), IBT and shadow stack notes, no executable
 stack. The Windows and Android options are tried at configure time by their toolchains in CI.
+What the packages gained from 0.21.0 to 0.21.1 — the hardening together with that version's
+other changes: the APK 96.8 → 99.0 MB (+2.2 MB: branch protection, stack protectors and the
+checked standard library in every function of the one big library), the AppImages 0.25 MB
+(x86_64) and 0.34 MB (aarch64), the Windows installer 0.14 MB, the browser version 0.04 MB (it
+is built without the options).
 
 **NFC in linear time.** `QString::normalized(NormalizationForm_C)` sorts combining marks with an
 insertion sort and decomposes in place: 16 000 marks above a letter followed by 16 000 below
