@@ -1,0 +1,7 @@
+Nowości w 0.22.0:
+• Model, który działa na Twoim urządzeniu
+• AI ogląda obrazki
+• Na telefonie
+• Drobiazgi
+
+Pełny opis: https://github.com/janusz-bit/brulion/releases/tag/v0.22.0
