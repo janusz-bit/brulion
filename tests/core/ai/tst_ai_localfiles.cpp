@@ -18,6 +18,7 @@
 #include <QThread>
 
 #include <functional>
+#include <utility>
 
 using namespace Qt::StringLiterals;
 using namespace brulion;
@@ -147,13 +148,24 @@ private Q_SLOTS:
         QCOMPARE(contentOf(f.folder() + u"/model.gguf.part"_s), f.modelBytes.left(100 * 1000));
         QVERIFY(!QFile::exists(f.folder() + u"/model.gguf"_s));
 
-        // The next download asks for the rest only.
+        // The next download asks for the rest only. Qt may still send the first download's request
+        // again after the connection broke (its own retry), and on a slow machine that one reaches
+        // the server only now: the requests are told apart by path and range, not by order.
         f.server.breakAfter = -1;
         f.server.requests.clear();
         ended = run(files, f.model);
         QVERIFY2(ended.value(1).toBool(), qPrintable(ended.value(2).toString()));
-        QCOMPARE(f.server.requests.value(0).range, QByteArray("bytes=100000-"));
-        QCOMPARE(f.server.requests.value(1).range, QByteArray());
+        QStringList asked;
+        QList<QByteArray> projectorRanges;
+        bool resumed = false;
+        for (const FileServer::Request &request : std::as_const(f.server.requests)) {
+            asked.append(QString::fromLatin1(request.path + " " + request.range));
+            resumed = resumed || (request.path == "/files/model.gguf" && request.range == "bytes=100000-");
+            if (request.path == "/files/projector.gguf")
+                projectorRanges.append(request.range);
+        }
+        QVERIFY2(resumed, qPrintable(asked.join(u", "_s)));
+        QCOMPARE(projectorRanges, QList<QByteArray>{QByteArray()});
         QCOMPARE(contentOf(files.pathOf(f.model.file)), f.modelBytes);
         QCOMPARE(contentOf(files.pathOf(f.model.projector)), f.projectorBytes);
         QVERIFY(files.has(f.model));
