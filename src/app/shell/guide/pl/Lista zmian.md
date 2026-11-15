@@ -7,6 +7,17 @@ brulion: document
 
 Tu znajdziesz zmiany w każdej wersji Brulionu, od najnowszej. Pełne opisy wydań z plikami do pobrania są na GitHubie: https://github.com/janusz-bit/brulion/releases
 
+## 0.22.0 — 15 listopada 2026
+
+**Nowe**
+- **Model na tym urządzeniu** — wybierz **Na tym urządzeniu** w **Ustawieniach → Rozszerzenia → AI**, naciśnij **Pobierz**, a Asystent AI odpowiada bez klucza, bez konta i bez internetu: nic, o co pytasz, nie opuszcza urządzenia — także na telefonie. Dwa modele firmy Liquid AI: **LFM3-VL 2B** (1,2 GB) widzi obrazki, **LFM3 1.7B** (1,0 GB) czyta tylko tekst i lepiej przeszukuje notatnik. Jest mały i wolniejszy niż model w chmurze: streszczenie, pytanie o notatkę albo tekst ze sfotografowanego paragonu wychodzą dobrze, długie zadanie w wielu krokach może zejść na manowce; szybki telefon odpowiada w mniej więcej pół minuty. Wczytany zajmuje około 2,5 GB pamięci i zwalnia ją dziesięć minut po ostatniej odpowiedzi. W aplikacji na Androida i w paczce Nix na Linuksa; AppImage, wersja na Windows i przeglądarka jeszcze go nie mają. Zobacz [[AI]].
+- **AI ogląda obrazki** — zapytaj o zdjęcie, skan albo zrzut ekranu z notatek („Ile zapłaciłem za mleko? Paragon jest w Zakupach.”), a asystent je obejrzy, gdy model widzi: Claude albo LFM3-VL na urządzeniu. Rozszerzenia podają modelowi obrazki przez `b.ai({ prompt = "…", images = { "paragon.jpg" } })`. Zobacz [[API rozszerzeń]].
+
+**Zmiany**
+- **Ekran telefonu nie gaśnie**, dopóki model na urządzeniu odpowiada albo się pobiera: poza ekranem Android spowalnia aplikację, a potem ją zatrzymuje.
+- **Rejestr zdarzeń** podaje dla modelu na urządzeniu czas wczytania, czytania i pisania każdej odpowiedzi oraz przebieg pobierania (**Ustawienia → Aplikacja → Rejestr zdarzeń**).
+- **Kopia zapasowa Androida** pomija pobrany model: na nowym telefonie pobiera się go od nowa.
+
 ## 0.21.1 — 15 listopada 2026
 
 **Nowe**

@@ -7,6 +7,17 @@ brulion: document
 
 Here you'll find what changed in every version of Brulion, newest first. Full release notes with downloads are on GitHub: https://github.com/janusz-bit/brulion/releases
 
+## 0.22.0 — November 15, 2026
+
+**New**
+- **A model on this device** — choose **On this device** in **Settings → Extensions → AI**, press **Download**, and the AI assistant answers with no key, no account and no internet: nothing you ask leaves the device — on the phone too. Two models by Liquid AI: **LFM3-VL 2B** (1.2 GB) sees pictures, **LFM3 1.7B** (1.0 GB) reads text only and is the better one at searching the notebook. It is small and slower than a model in the cloud: a summary, a question about a note or the text of a photographed receipt go well, a long task with many steps may go astray; a fast phone answers in about half a minute. It takes about 2.5 GB of memory while it is loaded and leaves it ten minutes after its last answer. In the Android app and the Nix package for Linux; the AppImage, the Windows version and the browser do not have it yet. See [[AI]].
+- **The AI looks at pictures** — ask about a photo, a scan or a screenshot in your notes ("What did I pay for milk? The receipt is in Shopping.") and the assistant looks at it, when the model can see: Claude, or LFM3-VL on the device. Extensions pass pictures to a model with `b.ai({ prompt = "…", images = { "receipt.jpg" } })`. See [[Extension API]].
+
+**Changes**
+- **A phone's screen stays on** while the model on the device answers or is downloaded: off the screen Android slows the app down and then stops it.
+- **The event log** says of the model on the device how long it took to load, to read and to write each answer, and how a download went (**Settings → Application → Event log**).
+- **Android backup** leaves a downloaded model out: on a new phone it is downloaded again.
+
 ## 0.21.1 — November 15, 2026
 
 **New**
