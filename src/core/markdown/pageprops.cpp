@@ -6,6 +6,7 @@
 #include "markdown/notemode.h"
 #include "markdown/properties.h"
 #include "text/text.h"
+#include "util/unicode.h"
 
 #include <QDate>
 #include <QDateTime>
@@ -72,7 +73,7 @@ bool isEmptyVariant(const QVariant &v)
 
 QString nfcLower(const QString &s)
 {
-    return s.normalized(QString::NormalizationForm_C).toLower();
+    return unicode::nfc(s).toLower();
 }
 
 bool sameName(const QString &a, const QString &b)

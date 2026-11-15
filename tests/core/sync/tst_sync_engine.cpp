@@ -7,6 +7,8 @@
 #include <QSignalSpy>
 #include <QTest>
 
+#include <limits>
+
 using namespace synctest;
 
 namespace {
@@ -153,6 +155,26 @@ private Q_SLOTS:
         QJsonObject odd = old;
         odd.insert(u"remoteId"_s, 42); // malformed: ignored
         QVERIFY(SyncFileState::fromJson(odd)->remoteId.isEmpty());
+        // When the content was last read: written only when known; older states (none) load as
+        // "never", which no size and time settle.
+        QVERIFY(!state.toJson().contains(u"checkedAt"_s));
+        QCOMPARE(SyncFileState::fromJson(old)->checkedAt, 0);
+        state.mtime = 1'760'000'000'123;
+        QVERIFY(!state.settled());
+        state.checkedAt = *state.mtime + SyncFileState::SettledAfterMs - 1;
+        QVERIFY(!state.settled());
+        state.checkedAt = *state.mtime + SyncFileState::SettledAfterMs;
+        QVERIFY(state.settled());
+        QCOMPARE(SyncFileState::fromJson(state.toJson()), std::optional<SyncFileState>(state));
+        state.mtime.reset(); // no time recorded: nothing to compare with
+        QVERIFY(!state.settled());
+        // Values no clock gives (a damaged store) settle nothing and overflow nothing.
+        state.mtime = std::numeric_limits<qint64>::min();
+        state.checkedAt = std::numeric_limits<qint64>::min();
+        QVERIFY(!state.settled());
+        state.checkedAt = std::numeric_limits<qint64>::max();
+        state.mtime = std::numeric_limits<qint64>::max();
+        QVERIFY(!state.settled());
     }
 
     void actionNames_data()
@@ -708,6 +730,111 @@ private Q_SLOTS:
         QCOMPARE(a.engine->stateOf(u"img.png"_s)->mtime, std::optional<qint64>(1'700'000'456'000));
     }
 
+    void settledNotesAreTrustedBySizeAndMtime()
+    {
+        // A note with the size and modification time of its last sync is not read again
+        // (docs/PERFORMANCE.md L12) — once its content was read at least
+        // SyncFileState::SettledAfterMs after that time. What tells "not read": the same size and
+        // time with other content goes unnoticed, as it always did for a binary file.
+        FakeWebDavServer server;
+        Device a(server, u"laptop"_s);
+        const qint64 now = a.clock->now.toMSecsSinceEpoch();
+        const qint64 minuteAgo = now - 60'000;
+        const qint64 secondAgo = now - 1'000;
+        QVERIFY(writeFileBehind(a.root, u"dawna.md"_s, "zażółć 1\n", minuteAgo));
+        QVERIFY(writeFileBehind(a.root, u"świeża.md"_s, "zażółć 1\n", secondAgo));
+        a.vault->rescan();
+        QCOMPARE(counts(a.sync()), (Counts{.up = 2}));
+        QVERIFY(a.engine->stateOf(u"dawna.md"_s)->settled());
+        QVERIFY(!a.engine->stateOf(u"świeża.md"_s)->settled());
+
+        // A second write within the timestamp's granularity: the note read a second after its
+        // time is read again and uploaded, the settled one is taken as it was.
+        QVERIFY(writeFileBehind(a.root, u"dawna.md"_s, "zażółć 2\n", minuteAgo));
+        QVERIFY(writeFileBehind(a.root, u"świeża.md"_s, "zażółć 2\n", secondAgo));
+        a.vault->rescan();
+        QCOMPARE(counts(a.sync()), (Counts{.up = 1}));
+        QCOMPARE(server.text(u"Notatki/świeża.md"_s), std::optional<QString>(u"zażółć 2\n"_s));
+        QCOMPARE(server.text(u"Notatki/dawna.md"_s), std::optional<QString>(u"zażółć 1\n"_s));
+
+        // Any other time is a change, as before.
+        QVERIFY(writeFileBehind(a.root, u"dawna.md"_s, "zażółć 3\n", minuteAgo + 5));
+        a.vault->rescan();
+        QCOMPARE(counts(a.sync()), (Counts{.up = 1}));
+        QCOMPARE(server.text(u"Notatki/dawna.md"_s), std::optional<QString>(u"zażółć 3\n"_s));
+        // ...and so is another size.
+        QVERIFY(writeFileBehind(a.root, u"dawna.md"_s, "zażółć 3 i pół\n", minuteAgo + 5));
+        a.vault->rescan();
+        QCOMPARE(counts(a.sync()), (Counts{.up = 1}));
+        QCOMPARE(server.text(u"Notatki/dawna.md"_s), std::optional<QString>(u"zażółć 3 i pół\n"_s));
+
+        // The fresh note settles on a later run that reads it and finds it unchanged.
+        a.clock->advance(10'000);
+        QCOMPARE(counts(a.sync()), Counts{});
+        QVERIFY(a.engine->stateOf(u"świeża.md"_s)->settled());
+        QVERIFY(writeFileBehind(a.root, u"świeża.md"_s, "zażółć 9\n", secondAgo));
+        a.vault->rescan();
+        QCOMPARE(counts(a.sync()), Counts{});
+        QCOMPARE(server.text(u"Notatki/świeża.md"_s), std::optional<QString>(u"zażółć 2\n"_s));
+    }
+
+    void aTrustedNoteIsReadBeforeAnythingIsDoneWithIt()
+    {
+        // The size and time only ever stand for "nothing to do". A change on the server makes the
+        // run read the note first: an edit hidden behind the old size and time is merged, and a
+        // deletion on the server does not take it along.
+        FakeWebDavServer server;
+        Device a(server, u"laptop"_s);
+        const qint64 minuteAgo = a.clock->now.toMSecsSinceEpoch() - 60'000;
+        QVERIFY(writeFileBehind(a.root, u"scalana.md"_s, "jeden\ndwa\ntrzy\n", minuteAgo));
+        QVERIFY(writeFileBehind(a.root, u"usuwana.md"_s, "jeden\ndwa\ntrzy\n", minuteAgo));
+        a.vault->rescan();
+        QCOMPARE(counts(a.sync()), (Counts{.up = 2}));
+        QVERIFY(writeFileBehind(a.root, u"scalana.md"_s, "JEDEN\ndwa\ntrzy\n", minuteAgo));
+        QVERIFY(writeFileBehind(a.root, u"usuwana.md"_s, "JEDEN\ndwa\ntrzy\n", minuteAgo));
+        a.vault->rescan();
+        QCOMPARE(counts(a.sync()), Counts{}); // hidden: same size, same time
+
+        server.putText(u"Notatki/scalana.md"_s, u"jeden\ndwa\ntrzy\ncztery\n"_s);
+        server.remove(u"Notatki/usuwana.md"_s);
+        const SyncReport r = a.sync();
+        QCOMPARE(r.merged, 1);
+        QCOMPARE(r.deletedLocal, 0);
+        QCOMPARE(a.read(u"scalana.md"_s), u"JEDEN\ndwa\ntrzy\ncztery\n"_s);
+        QCOMPARE(server.text(u"Notatki/scalana.md"_s), std::optional<QString>(u"JEDEN\ndwa\ntrzy\ncztery\n"_s));
+        // The note deleted on the server was changed here: it stays and goes back up.
+        QCOMPARE(a.read(u"usuwana.md"_s), u"JEDEN\ndwa\ntrzy\n"_s);
+        QCOMPARE(server.text(u"Notatki/usuwana.md"_s), std::optional<QString>(u"JEDEN\ndwa\ntrzy\n"_s));
+        QCOMPARE(counts(a.sync()), Counts{});
+    }
+
+    void aNoteDatedInTheFutureIsReadEveryTimeAndCostsNoSave()
+    {
+        // A note whose time lies after the clock never settles: every run reads it, and a run
+        // that finds it unchanged leaves its state alone (no save of the store for it, run after
+        // run).
+        FakeWebDavServer server;
+        Device a(server, u"laptop"_s);
+        const qint64 now = a.clock->now.toMSecsSinceEpoch();
+        QVERIFY(writeFileBehind(a.root, u"dawna.md"_s, "treść\n", now - 60'000));
+        QVERIFY(writeFileBehind(a.root, u"z przyszłości.md"_s, "treść\n", now + 3'600'000));
+        a.vault->rescan();
+        QCOMPARE(counts(a.sync()), (Counts{.up = 2}));
+        const std::optional<SyncFileState> settledState = a.engine->stateOf(u"dawna.md"_s);
+        const std::optional<SyncFileState> futureState = a.engine->stateOf(u"z przyszłości.md"_s);
+        QVERIFY(settledState && settledState->settled());
+        QVERIFY(futureState && !futureState->settled());
+        a.clock->advance(10'000);
+        QCOMPARE(counts(a.sync()), Counts{});
+        QVERIFY(a.engine->stateOf(u"dawna.md"_s) == settledState);
+        QVERIFY(a.engine->stateOf(u"z przyszłości.md"_s) == futureState);
+        // Read every time: its change of the same size and time is seen.
+        QVERIFY(writeFileBehind(a.root, u"z przyszłości.md"_s, "TREŚĆ\n", now + 3'600'000));
+        a.vault->rescan();
+        QCOMPARE(counts(a.sync()), (Counts{.up = 1}));
+        QCOMPARE(server.text(u"Notatki/z przyszłości.md"_s), std::optional<QString>(u"TREŚĆ\n"_s));
+    }
+
     void syncsTheVaultConfigAndAppliesIt()
     {
         FakeWebDavServer server;
@@ -740,6 +867,38 @@ private Q_SLOTS:
         a.sync();
         QVERIFY(server.text(u"Notatki/.trash/x.md"_s));
         QVERIFY(server.text(u"Notatki/.git/HEAD"_s));
+    }
+
+    void aServerReachesNoIgnoredFolderUnderAnotherName_data()
+    {
+        // What Windows and case-folding storage make the real folder of (paths::isIgnored): a
+        // server that lists such a name must not get a git hook or an Obsidian plugin written.
+        QTest::addColumn<QString>("path");
+        QTest::newRow("git by its short name") << u"GIT~1/hooks/pre-commit"_s;
+        QTest::newRow("git's settings by its short name") << u"git~1/config"_s;
+        QTest::newRow("git with a dot at its end") << u".git./config"_s;
+        QTest::newRow("git as an NTFS stream") << u".git::$INDEX_ALLOCATION/config"_s;
+        QTest::newRow("git with a dotless i") << u".g\u0131t/config"_s;
+        QTest::newRow("git with a zero-width joiner") << u".g\u200Dit/config"_s;
+        QTest::newRow("Obsidian's plugins by the short name") << u"OBSIDI~1/plugins/x/main.js"_s;
+        QTest::newRow("Obsidian's plugins in another case") << u"Projekty/.Obsidian/plugins/x/main.js"_s;
+        QTest::newRow("the app's folder in another case") << u".Brulion/config.json"_s;
+        QTest::newRow("Syncthing's patterns in upper case") << u".STIGNORE"_s;
+    }
+    void aServerReachesNoIgnoredFolderUnderAnotherName()
+    {
+        QFETCH(QString, path);
+        QVERIFY(!sync::isSyncablePath(path));
+        FakeWebDavServer server;
+        server.putText(u"Notatki/"_s + path, u"#!/bin/sh\necho owned\n"_s);
+        server.putText(u"Notatki/a.md"_s, u"a"_s);
+        Device a(server, u"laptop"_s);
+        QCOMPARE(counts(a.sync()), (Counts{.down = 1}));
+        QCOMPARE(filesBelow(a.root), QStringList{u"a.md"_s});
+        QCOMPARE(server.requests("GET").size(), 1);
+        // The server keeps what it has: nothing the device lacks there is deleted.
+        QCOMPARE(counts(a.sync()), Counts{});
+        QVERIFY(server.text(u"Notatki/"_s + path));
     }
 
     void keepsByteOrderMarksAndLineEndingsOfDownloads()
@@ -936,6 +1095,34 @@ private Q_SLOTS:
         QVERIFY(r.errors.first().message.contains(QString::number(status)));
         QVERIFY(!r.failed());
         QCOMPARE(r.stats.failedRequests, 1);
+    }
+
+    void aFileSentLargerThanListedIsLeftForTheNextSync()
+    {
+        // The server lists a note of a few bytes and answers its download with megabytes: what
+        // arrives is not kept, the note is an error of this sync and every other file is synced.
+        FakeWebDavServer server;
+        server.putText(u"Notatki/a.md"_s, u"a"_s);
+        server.putText(u"Notatki/Żółw.md"_s, u"z"_s);
+        Device a(server, u"laptop"_s);
+        bool endless = true;
+        server.hooks.append([&](const HttpRequest &request, const QString &path) -> std::optional<HttpResponse> {
+            if (!endless || request.method != "GET" || !path.endsWith(u"/Żółw.md"_s))
+                return std::nullopt;
+            HttpResponse r = FakeWebDavServer::status(200);
+            r.body = QByteArray(3 * 1024 * 1024, 'z');
+            return r;
+        });
+        const SyncReport r = a.sync();
+        QCOMPARE(counts(r), (Counts{.down = 1, .errors = 1}));
+        QCOMPARE(r.errors.first().path, u"Żółw.md"_s);
+        QCOMPARE(r.errors.first().code, u"oversized"_s);
+        QVERIFY2(r.errors.first().message.contains(u"larger than"_s), qPrintable(r.errors.first().message));
+        QVERIFY(!r.failed());
+        QCOMPARE(a.files(), (QMap<QString, QString>{{u"a.md"_s, u"a"_s}}));
+        endless = false;
+        QCOMPARE(counts(a.sync()), (Counts{.down = 1}));
+        QCOMPARE(a.read(u"Żółw.md"_s), u"z"_s);
     }
 
     void localErrorCodes()

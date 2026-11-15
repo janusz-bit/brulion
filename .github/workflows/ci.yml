@@ -10,7 +10,8 @@
 #              (aqt's `qtpdf`) for drawings' PDF backdrops; a drawing's SVG light and dark in Chrome
 #              (tests/app/drawing/svg-theme-check.mjs);
 #  * lint    — actionlint + shellcheck (workflows, scripts), no QML read made only for a binding's
-#              dependency (scripts/check-qml-reads.sh) and clang-format on the changed lines
+#              dependency (scripts/check-qml-reads.sh), no QML Text left at Qt's AutoText
+#              (scripts/check-qml-text-format.sh) and clang-format on the changed lines
 #              (.clang-format; tools from the flake's nixpkgs, the same as `nix develop`);
 #  * perf    — non-blocking performance smoke: `scripts/perf-check.sh -s` (how running time
 #              scales with input size, and the index's memory; no absolute timings, so shared
@@ -233,6 +234,9 @@ jobs:
       # and the binding's dependency with it (docs/UI.md; also ctest tst_scripts_check_qml_reads).
       - name: QML reads made only for a dependency (scripts/check-qml-reads.sh)
         run: scripts/check-qml-reads.sh
+
+      - name: QML texts that leave their format to Qt (scripts/check-qml-text-format.sh)
+        run: scripts/check-qml-text-format.sh
 
       # Only the changed lines (the existing code is not reformatted wholesale): those of the
       # pushed commits, by hand those since the last release, for a release those since the one

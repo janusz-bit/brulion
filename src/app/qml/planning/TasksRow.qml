@@ -508,6 +508,7 @@ T.ItemDelegate {
                     height: Theme.touchUi ? 24 : 20
                     verticalAlignment: Text.AlignVCenter
                     leftPadding: 2
+                    textFormat: Text.PlainText
                     text: control.where
                     font.family: Theme.fontUi
                     font.pixelSize: Theme.textXs

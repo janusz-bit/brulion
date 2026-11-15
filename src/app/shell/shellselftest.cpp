@@ -5481,15 +5481,19 @@ void checkExtensionPages(QQuickWindow *window, AppController *app, const Check &
                   10000),
           "which draws the extension's nodes");
 
-    // The editor saves a change: loaded again at once, and still approved (this device wrote it).
-    check(ws->write(path, page(u"b.command(\"drugie\", function() return \"dwa\" end, { label = \"Samotest: drugie\" })"_s)),
+    // The editor saves a change: loaded again at once, and still approved (this device wrote it
+    // over the approved code — as PageController saves, EditorHost::writeIfUnchanged).
+    const auto editorSaves = [&](const QString &text) {
+        return ws->writeIfUnchanged(path, text, ws->read(path, nullptr)) == EditorHost::WriteResult::Written;
+    };
+    check(editorSaves(page(u"b.command(\"drugie\", function() return \"dwa\" end, { label = \"Samotest: drugie\" })"_s)),
           "the editor saves a change of the code");
     check(waitFor([&] { return app->commands()->ids().contains(u"ext.rozszerzenie-samotestu.drugie"_s); }, 10000),
           "the new code runs at once");
     check(ext->pageState(path) == u"running" && !app->commands()->ids().contains(u"ext.rozszerzenie-samotestu.pierwsze"_s),
           "approved still, the old command gone");
     // A save that breaks it: the error with its line, the previous version still runs.
-    check(ws->write(path, page(u"b.command(\"drugie\", function() return \"dwa\" end)\nlocal x = = 1"_s)), "a broken save");
+    check(editorSaves(page(u"b.command(\"drugie\", function() return \"dwa\" end)\nlocal x = = 1"_s)), "a broken save");
     check(waitFor([&] { return ext->pageState(path) == u"error"; }, 10000), "the page shows an error");
     check(ext->pageErrorLine(path) == 8, "on the line of the page that has it");
     check(app->commands()->ids().contains(u"ext.rozszerzenie-samotestu.drugie"_s), "the version before the error still runs");

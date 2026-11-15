@@ -35,7 +35,14 @@ struct HttpRequest {
     /// know it (NetworkHttpTransport: uploadProgress / downloadProgress) from the event loop.
     /// Counts as activity for stall detection; never needed for correctness.
     std::function<void(qint64 sent, qint64 received)> onProgress;
+    /// The largest answer body accepted, in bytes; 0 = DefaultMaxBodyBytes. An answer does not end
+    /// where the server said it would: whoever reads one from a network stops here
+    /// (HttpResponse::tooLarge) instead of keeping in memory whatever a server goes on sending.
+    qint64 maxBodyBytes = 0;
+    static constexpr qint64 DefaultMaxBodyBytes = 256LL * 1024 * 1024;
 
+    /// maxBodyBytes, or the default.
+    qint64 bodyLimit() const { return maxBodyBytes > 0 ? maxBodyBytes : DefaultMaxBodyBytes; }
     /// Value of a request header (case-insensitive name), empty when absent.
     QByteArray header(QByteArrayView name) const;
     bool hasHeader(QByteArrayView name) const;
@@ -47,13 +54,24 @@ struct HttpResponse {
     QByteArray body;
     QString networkError;                  ///< transport failure (DNS, refused, TLS, timeout)
     bool timedOut = false;                 ///< the time limit expired
+    /// The body was larger than HttpRequest::bodyLimit(): there is no status and no body, and
+    /// networkError says so — who does not ask sees a failed request, never a cut answer.
+    bool tooLarge = false;
     QByteArray protocol;                   ///< "h2" / "http/1.1" when the transport knows it
 
     /// Value of a response header (any case), empty when absent.
     QByteArray header(QByteArrayView name) const;
+    /// The answer to `request` when its body is over the limit (tooLarge).
+    static HttpResponse oversized(const HttpRequest &request);
 };
 
 using HttpCallback = std::function<void(const HttpResponse &)>;
+
+/// Does a redirect from `origin` to `target` stay with the same server, so that the request's
+/// Authorization header may follow it? The same host and port — another port of a host is
+/// another program, perhaps another user's — or the usual upgrade from http to https, each on
+/// its default port. Never from https down to http, never to another scheme.
+bool isSameServer(const QUrl &origin, const QUrl &target);
 
 /// One finished request, for statistics and logs (no headers, no bodies).
 struct HttpExchange {
@@ -80,8 +98,10 @@ public:
 
 /// HttpTransport over QNetworkAccessManager. Any verb (PROPFIND, MKCOL, …) via
 /// sendCustomRequest; request.timeoutMs aborts the reply (timedOut = true) and also serves as
-/// the transfer (inactivity) timeout. Redirects are followed only within the same host and
-/// never from https to http, so credentials are not sent to other servers. No caching.
+/// the transfer (inactivity) timeout; an answer announced or grown larger than
+/// request.bodyLimit() is aborted too (tooLarge = true). Redirects are followed only to the same
+/// server (host and port; http's default port may become https's) and never from https to http,
+/// so credentials are not sent to other servers. No caching.
 class NetworkHttpTransport : public QObject, public HttpTransport {
     Q_OBJECT
 public:

@@ -60,6 +60,7 @@ BCard {
                 spacing: 0
                 Text {
                     Layout.fillWidth: true
+                    textFormat: Text.PlainText
                     text: root.displayTitle
                     font.family: Theme.fontUi
                     font.pixelSize: Theme.textMd
@@ -71,6 +72,7 @@ BCard {
                 }
                 Text {
                     Layout.fillWidth: true
+                    textFormat: Text.PlainText
                     text: root.kindLabel + " · " + qsTr("%n links", "", AppController.routeInt(root.info, "degree", 0))
                     font.family: Theme.fontUi
                     font.pixelSize: Theme.textSm

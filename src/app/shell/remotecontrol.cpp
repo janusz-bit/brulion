@@ -4,6 +4,7 @@
 #include "appsettings.h"
 #include "commandmodel.h"
 #include "navigation.h"
+#include "util/unicode.h"
 #include "workspace.h"
 #include "workspacesync.h"
 
@@ -540,7 +541,7 @@ void RemoteControl::open(const QJsonObject &params, const ipc::ControlReply &rep
         }
         // 3. A page name as [[links]] read it: a title, or a path suffix ("Projekty/Dom").
         if (route.isEmpty()) {
-            const auto fold = [](const QString &s) { return s.normalized(QString::NormalizationForm_C).toLower(); };
+            const auto fold = [](const QString &s) { return unicode::nfc(s).toLower(); };
             const QString key = fold(notebook::withoutMdExtension(name).trimmed());
             const bool bySuffix = key.contains(u'/');
             QStringList candidates;

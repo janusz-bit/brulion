@@ -10,6 +10,7 @@
 #include "notebook/pages.h"
 #include "text/text.h"
 #include "util/paths.h"
+#include "util/unicode.h"
 #include "vault/vault.h"
 
 #include <algorithm>
@@ -50,7 +51,7 @@ QStringList splitTags(const QVariant &value)
             tag.remove(0, 1);
         if (tag.startsWith(u"[["_s) && tag.endsWith(u"]]"_s))
             tag = tag.mid(2, tag.size() - 4);
-        tag = tag.normalized(QString::NormalizationForm_C).toLower();
+        tag = unicode::nfc(tag).toLower();
         if (!tag.isEmpty() && !out.contains(tag))
             out << tag;
     }
@@ -145,7 +146,7 @@ QString NotebookHost::currentText(const VaultPath &path, bool *ok)
 
 QStringList NotebookHost::pages(const QString &tag)
 {
-    const QString wanted = tag.normalized(QString::NormalizationForm_C).toLower();
+    const QString wanted = unicode::nfc(tag).toLower();
     QStringList out;
     m_index.forEachNote([&](const VaultPath &, const ParsedNote &note) {
         // (note.tags has every tag of the page, its blocks' too: the cheap test first.)
@@ -207,7 +208,7 @@ QVariantList NotebookHost::blocks(const BlockQuery &query)
                 out << blockMap(path, *note, lines, i, 0);
         return out;
     }
-    const QString tag = query.tag.normalized(QString::NormalizationForm_C).toLower();
+    const QString tag = unicode::nfc(query.tag).toLower();
     const QDate from = QDate::fromString(query.from, Qt::ISODate), to = QDate::fromString(query.to, Qt::ISODate);
     struct Hit
     {

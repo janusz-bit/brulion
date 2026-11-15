@@ -2,6 +2,7 @@
 
 #include "indexworkers.h"
 #include "picturesize.h"
+#include "util/unicode.h"
 #include "workspacereminders.h"
 #include "workspacesync.h"
 
@@ -18,6 +19,7 @@
 #include "notebook/journals.h"
 #include "notebook/json.h"
 #include "notebook/pages.h"
+#include "notebook/session.h"
 #include "notebook/periodicnotes.h"
 #include "text/text.h"
 #include "util/paths.h"
@@ -202,6 +204,7 @@ bool Workspace::open(const QString &rootPath, const QString &deviceStatePath, QS
     // Before the vault writes anything there: whether this device kept state of the notebook from
     // earlier opens (History, LocalStore, the index cache) — for the check below.
     const bool knownBefore = !deviceStatePath.isEmpty() && !QDir(deviceStatePath).isEmpty();
+    notebook::keepDeviceStatePrivate(deviceStatePath); // the history and the index hold the notes
     auto vault = std::make_unique<Vault>(rootPath, deviceStatePath);
     vault->setFollowsOutsideLinks(m_followsOutsideLinks); // before the first listing
     if (!vault->open(error))
@@ -610,7 +613,9 @@ bool Workspace::write(const QString &path, const QString &content)
     // (PageController compares with what it wrote).
     if (!m_vault)
         return false;
-    m_extensions->savedByEditor(path, content); // this device's own edit ("save" hooks, trust)
+    // This device's own edit ("save" hooks). Over what text is not known here: an extension
+    // page whose code this changes waits for approval.
+    m_extensions->savedByEditor(path, content);
     const bool ok = m_vault->writeText(path, content, ChangeSource::User);
     if (!ok)
         Q_EMIT errorOccurred(tr("Could not save %1: %2").arg(path, m_vault->errorString()));
@@ -622,7 +627,8 @@ EditorHost::WriteResult Workspace::writeIfUnchanged(const QString &path, const Q
 {
     if (!m_vault)
         return WriteResult::Failed;
-    m_extensions->savedByEditor(path, content); // this device's own edit ("save" hooks, trust)
+    // This device's own edit ("save" hooks) of the text it expects there (an extension's trust).
+    m_extensions->savedByEditor(path, content, expected);
     // A change found on disk is reported by the vault right away (onVaultChanged: fileChanged),
     // so the editor merges it before it saves again.
     switch (m_vault->writeTextIfUnchanged(path, content, expected, ChangeSource::User)) {
@@ -1429,7 +1435,7 @@ QString Workspace::tagPage(const QString &rawTag)
             return *page;
         // A new page is named as the tag was first written (#Praca and #praca: "Praca.md"),
         // whichever spelling was clicked.
-        const QString key = tag.normalized(QString::NormalizationForm_C).toLower();
+        const QString key = unicode::nfc(tag).toLower();
         const QList<TagCount> tags = m_index->tags();
         if (const auto t = std::ranges::find(tags, key, &TagCount::tag); t != tags.end() && !t->display.isEmpty())
             tag = t->display;

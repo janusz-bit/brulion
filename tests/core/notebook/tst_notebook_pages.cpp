@@ -142,6 +142,21 @@ private Q_SLOTS:
         const CreatedPage none = createPage(*env->vault, u" / "_s, QString());
         QVERIFY(none.path.isEmpty());
         QCOMPARE(none.problem.kind, PathProblem::NoName);
+        // Never a page the notebook would not show: in a folder it ignores, also under the
+        // other names storage has for one (Windows' short name of .git and .obsidian).
+        const QList<std::pair<QString, QString>> hiddenTitles{{u"logseq/Plan"_s, u"logseq"_s},
+                                                              {u"node_modules/x"_s, u"node_modules"_s},
+                                                              {u"GIT~1/Plan"_s, u"GIT~1"_s},
+                                                              {u"a/OBSIDI~1/Plan"_s, u"OBSIDI~1"_s}};
+        for (const auto &[title, folder] : hiddenTitles) {
+            const CreatedPage hidden = createPage(*env->vault, title, QString());
+            QVERIFY2(hidden.path.isEmpty() && hidden.problem.kind == PathProblem::HiddenPath, qPrintable(title));
+            QCOMPARE(hidden.problem.name, folder);
+            QCOMPARE(plannedPage(*env->vault, title, QString()).problem.kind, PathProblem::HiddenPath);
+        }
+        QVERIFY(!QFile::exists(env->root + u"/logseq"_s) && !QFile::exists(env->root + u"/GIT~1"_s));
+        // A hidden name typed is a visible one: the dot goes, as always.
+        QCOMPARE(createPage(*env->vault, u".git/Plan"_s, QString()).path, u"git/Plan.md"_s);
     }
 
     void createFolders_data()

@@ -1,4 +1,5 @@
 #include "github/address.h"
+#include "util/unicode.h"
 
 #include <QRegularExpression>
 #include <QSet>
@@ -140,8 +141,7 @@ bool isValidBranchName(QStringView branch)
 
 std::optional<QString> normalizeFolder(const QString &folder)
 {
-    const QStringList segments =
-            folder.trimmed().normalized(QString::NormalizationForm_C).split(u'/', Qt::SkipEmptyParts);
+    const QStringList segments = unicode::nfc(folder.trimmed()).split(u'/', Qt::SkipEmptyParts);
     const bool invalid = std::ranges::any_of(segments, [](const QString &segment) {
         return segment == u"."_s || segment == u".."_s || segment.contains(u'\\')
                || std::ranges::any_of(segment, isAsciiControl);

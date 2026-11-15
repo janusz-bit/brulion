@@ -3,6 +3,7 @@
 #include "markdown/inline_p.h"
 #include "markdown/tokens_p.h"
 #include "util/paths.h"
+#include "util/unicode.h"
 
 #include <QRegularExpression>
 #include <QSet>
@@ -97,9 +98,8 @@ qsizetype tagBodyEnd(QStringView s, qsizetype p)
 
 QString nfc(QStringView s)
 {
-    if (std::ranges::all_of(s, [](QChar c) { return c.unicode() <= 127; }))
-        return s.toString(); // ASCII is NFC already
-    return s.toString().normalized(QString::NormalizationForm_C);
+    // (ASCII as it is; a tag of a hundred thousand combining marks in linear time.)
+    return unicode::nfc(s);
 }
 
 /// Validate a `#tag` body; the cleaned name or an empty string.

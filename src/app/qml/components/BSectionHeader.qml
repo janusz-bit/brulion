@@ -57,6 +57,7 @@ T.AbstractButton {
             Text {
                 id: title
                 anchors.verticalCenter: parent.verticalCenter
+                textFormat: Text.PlainText
                 text: Js.toUpperCase(control.text)
                 font.family: Theme.fontUi
                 font.pixelSize: Theme.textXs
@@ -67,6 +68,7 @@ T.AbstractButton {
             Text {
                 anchors.verticalCenter: parent.verticalCenter
                 visible: control.count >= 0
+                textFormat: Text.PlainText
                 text: control.count
                 font.family: Theme.fontUi
                 font.pixelSize: Theme.textXs

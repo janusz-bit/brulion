@@ -20,6 +20,7 @@ ColumnLayout {
 
         Text {
             Layout.fillWidth: true
+            textFormat: Text.PlainText
             text: section.title
             font.family: Theme.fontUi
             font.pixelSize: Theme.text2xl

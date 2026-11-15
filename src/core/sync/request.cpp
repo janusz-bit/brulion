@@ -26,12 +26,20 @@ struct PendingRequest {
     QByteArray method;
     QUrl url;
     qint64 bytesSent = 0;
+    qint64 maxBodyBytes = 0;
 
-    void finish(const HttpResponse &response)
+    void finish(const HttpResponse &answer)
     {
         if (finished)
             return;
         finished = true;
+        // The limit holds whatever carried the request: a transport that reads no network (the
+        // in-memory server of the tests) hands over all it has.
+        HttpRequest asked;
+        asked.method = method;
+        asked.url = url;
+        asked.maxBodyBytes = maxBodyBytes;
+        const HttpResponse response = answer.body.size() > asked.bodyLimit() ? HttpResponse::oversized(asked) : answer;
         if (timer) {
             timer->stop();
             timer->deleteLater();
@@ -81,6 +89,7 @@ void sendRequest(HttpTransport *transport, QObject *context, const HttpRequest &
     pending->method = request.method;
     pending->url = request.url;
     pending->bytesSent = request.body.size();
+    pending->maxBodyBytes = request.maxBodyBytes;
     if (!transport) {
         post(context, [pending] {
             HttpResponse response;

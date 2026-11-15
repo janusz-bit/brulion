@@ -163,7 +163,7 @@ ColumnLayout {
                     iconName: "external-link"
                     size: "small"
                     variant: "secondary"
-                    onClicked: Qt.openUrlExternally(block.signIn.verificationUrl)
+                    onClicked: Workspace.openUrl(block.signIn.verificationUrl)
                 }
             }
             RowLayout {

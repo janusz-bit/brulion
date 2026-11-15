@@ -6,6 +6,7 @@
 #include "blocklistmodel.h"
 #include "blocktext.h"
 #include "editorhost.h"
+#include "util/unicode.h"
 
 #include "markdown/frontmatter.h"
 #include "markdown/notemode.h"
@@ -32,7 +33,7 @@ namespace {
 
 QString nfcLower(const QString &s)
 {
-    return s.normalized(QString::NormalizationForm_C).toLower();
+    return unicode::nfc(s).toLower();
 }
 
 /// Where property `key` of the page is (`source` when named), else where new ones go.

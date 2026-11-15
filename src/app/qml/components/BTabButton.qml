@@ -66,6 +66,7 @@ T.TabButton {
             }
             Text {
                 anchors.verticalCenter: parent.verticalCenter
+                textFormat: Text.PlainText
                 text: control.text
                 font: control.font
                 color: control.checked || control.hovered ? Theme.fg : Theme.fgMuted

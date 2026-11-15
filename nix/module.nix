@@ -111,6 +111,7 @@ let
   davLocation = "${nextcloud.path}/remote.php/dav/";
 
   cspValue = lib.escape [ "\"" ] (toString webCfg.contentSecurityPolicy);
+  frameAncestorsValue = lib.escape [ "\"" ] (toString webCfg.frameAncestors);
 
   # Explicit types: the site's files only (independent of services.nginx.defaultMimeTypes).
   # application/wasm is required for streaming compilation.
@@ -140,6 +141,12 @@ let
     ''}
     add_header X-Content-Type-Options "nosniff" always;
     add_header Referrer-Policy "no-referrer" always;
+    ${optionalString (webCfg.frameAncestors != null) ''
+      add_header Content-Security-Policy "frame-ancestors ${frameAncestorsValue}" always;
+    ''}
+    ${optionalString (webCfg.frameAncestors == "'self'") ''
+      add_header X-Frame-Options "SAMEORIGIN" always;
+    ''}
     ${optionalString (webCfg.contentSecurityPolicy != null) ''
       add_header Content-Security-Policy "${cspValue}" always;
     ''}
@@ -390,6 +397,21 @@ in
         `Content-Security-Policy` header for the app, or `null` for none. Test a policy in the
         browser's console before using it: the HTML shell has an inline script and
         Emscripten's glue code may need `'unsafe-eval'`.
+      '';
+    };
+
+    frameAncestors = mkOption {
+      type = types.nullOr types.str;
+      default = "'self'";
+      example = "'self' https://cloud.example.com";
+      description = ''
+        Who may show the app inside a frame: the sources of the `frame-ancestors` directive, sent
+        as a `Content-Security-Policy` header of its own next to
+        {option}`services.brulion-web.contentSecurityPolicy` (a browser applies both), and as
+        `X-Frame-Options: SAMEORIGIN` when it is the default `'self'`. A page of another site
+        that frames the app can lead the user's clicks into it (clickjacking): name another
+        origin only for a site of your own that embeds Brulion (Nextcloud's "External sites"
+        on another host). `null` sends neither header.
       '';
     };
 

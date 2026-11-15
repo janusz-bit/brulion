@@ -52,6 +52,10 @@ struct Settings
 
     /// Can a request be sent? `why`: what is missing ("no API key", "no model").
     bool usable(QString *why = nullptr) const;
+    /// Do requests travel unencrypted over a network: a plain http address that is not this
+    /// device's own (localhost, 127.0.0.1, ::1)? The notes sent along and the key can then be
+    /// read on the way — fine for a server at home, said in the settings all the same.
+    bool unencrypted() const;
 };
 
 /// A tool the model may call: its name (letters, digits, "_" and "-", at most 64), what it does

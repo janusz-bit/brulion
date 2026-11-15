@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- What Android's own backup (Android 9–11: Auto Backup to the user's Google account, `adb
+     backup`) leaves out of the app's data. Passwords and tokens stay on the device that was
+     given them: the Nextcloud app password, the GitHub and Microsoft tokens, the AI and
+     Syncthing keys live in files/secrets (QStandardPaths::AppDataLocation + "/secrets").
+     Android 12+ reads data_extraction_rules.xml instead. docs/ANDROID.md, "Backups". -->
+<full-backup-content>
+    <exclude domain="file" path="secrets" />
+</full-backup-content>

@@ -254,6 +254,7 @@ T.Control {
                         anchors.verticalCenter: parent.verticalCenter
                         // Beside the icon (not recognised) or the Enter hint (recognised).
                         width: parent.width - 6 - (naturalResult.map.ok ? enterHint.width : Theme.iconSizeSm)
+                        textFormat: Text.PlainText
                         // "→ Thu, Oct 15 09:00 · tomorrow" (relative word only for yesterday…tomorrow)
                         text: naturalResult.map.ok ? "→ " + naturalResult.map.display
                                                    + (naturalResult.map.relative ? "  ·  " + naturalResult.map.relativeWord : "")
@@ -287,6 +288,7 @@ T.Control {
                 objectName: "datePickerMonthTitle"
                 Layout.fillWidth: true
                 Layout.leftMargin: 4
+                textFormat: Text.PlainText
                 text: Js.toUpperCase(Js.charAt(column.monthTitle, 0)) + Js.sliceFrom(column.monthTitle, 1)
                 font.family: Theme.fontUi
                 font.pixelSize: Theme.textMd
@@ -330,6 +332,7 @@ T.Control {
                         required property string modelData
                         width: control.cellSize
                         height: 22
+                        textFormat: Text.PlainText
                         text: modelData
                         horizontalAlignment: Text.AlignHCenter
                         verticalAlignment: Text.AlignVCenter
@@ -439,6 +442,7 @@ T.Control {
                                 Text {
                                     anchors.centerIn: parent
                                     anchors.verticalCenterOffset: cell.kinds.length > 0 ? -3 : 0
+                                    textFormat: Text.PlainText
                                     text: cell.text
                                     font.family: Theme.fontUi
                                     font.pixelSize: Theme.textSm + 1
@@ -485,6 +489,7 @@ T.Control {
                 color: Theme.fgMuted
             }
             Text {
+                textFormat: Text.PlainText
                 text: qsTr("Time")
                 font.family: Theme.fontUi
                 font.pixelSize: Theme.textBase
@@ -551,6 +556,7 @@ T.Control {
         Text {
             Layout.fillWidth: true
             visible: control.withTime && timeField.invalid
+            textFormat: Text.PlainText
             text: qsTr("Use a 24-hour time, e.g. 18:30")
             color: Theme.dangerText
             font.family: Theme.fontUi

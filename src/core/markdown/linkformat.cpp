@@ -4,6 +4,7 @@
 #include "markdown/lines_p.h"
 #include "markdown/tokens.h"
 #include "text/text.h"
+#include "util/unicode.h"
 
 #include <algorithm>
 
@@ -157,7 +158,7 @@ QString headingFragment(QStringView headingText)
     QStringView line = firstLineOf(headingText);
     if (const auto id = blockIdAtEnd(line))
         line = line.first(id->from);
-    const QString normalized = line.toString().normalized(QString::NormalizationForm_C);
+    const QString normalized = unicode::nfc(line);
     const QString shown = shownText(normalized);
     QString out;
     out.reserve(shown.size());
@@ -177,7 +178,7 @@ QString headingFragment(QStringView headingText)
         }
         out += isBreaking(c) ? QChar(u' ') : c;
     }
-    return out.simplified().normalized(QString::NormalizationForm_C);
+    return unicode::nfc(out.simplified());
 }
 
 QString headingKey(QStringView headingText)

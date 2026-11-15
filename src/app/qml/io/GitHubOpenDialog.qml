@@ -194,7 +194,7 @@ BDialog {
             iconName: "external-link"
             size: "small"
             variant: "ghost"
-            onClicked: Qt.openUrlExternally(dialog.github.tokenUrl)
+            onClicked: Workspace.openUrl(dialog.github.tokenUrl)
         }
     }
     Hint {

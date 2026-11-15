@@ -27,6 +27,13 @@ constexpr int kUnknownSizeFactor = 10;
 constexpr int kMaxBaseDepth = 32;
 /// Answers slower than this get an info line in the log (normal mode).
 constexpr qint64 kSlowAnswerMs = 5000;
+/// The largest answers accepted (HttpRequest::maxBodyBytes). A folder's listing takes some 600
+/// bytes for an entry: this is a folder of two hundred thousand files. Every other answer is a
+/// status with, at most, an error page.
+constexpr qint64 kMaxListingBytes = 128LL * 1024 * 1024;
+constexpr qint64 kMaxStatusBytes = 1024 * 1024;
+/// What a download may hold above its expected size when that is small (see GetOptions::size).
+constexpr qint64 kDownloadSlackBytes = 1024 * 1024;
 
 /// "https://h/a/b/" -> "https://h/a/"; std::nullopt at the root.
 std::optional<QString> parentUrl(const QString &url)
@@ -109,6 +116,22 @@ void WebDavClient::setMinBytesPerSecond(qint64 bytesPerSecond)
 void WebDavClient::setListConcurrency(int count)
 {
     m_listConcurrency = std::max(1, count);
+}
+
+void WebDavClient::setListLimits(const ListLimits &limits)
+{
+    m_listLimits.maxDepth = std::max(1, limits.maxDepth);
+    m_listLimits.maxEntries = std::max<qsizetype>(1, limits.maxEntries);
+}
+
+qint64 WebDavClient::maxDownloadBytes(std::optional<qint64> size)
+{
+    if (!size || *size < 0)
+        return HttpRequest::DefaultMaxBodyBytes;
+    // (A size no file has would overflow twice itself: the default bounds it.)
+    if (*size >= HttpRequest::DefaultMaxBodyBytes)
+        return *size > std::numeric_limits<qint64>::max() / 2 ? std::numeric_limits<qint64>::max() : *size * 2;
+    return std::max(*size * 2, *size + kDownloadSlackBytes);
 }
 
 void WebDavClient::setLogTag(const QString &tag)
@@ -214,6 +237,12 @@ void WebDavClient::addListing(const std::shared_ptr<ListRun> &run, const QString
     m_knownDirs.insert(folder);
     ++run->foldersDone;
     const QString requestUrl = joinUrl(m_baseUrl, raw, true);
+    const auto giveUp = [this, &run](const QString &what) {
+        if (!run->error.isError())
+            run->error = WebDavError::make(WebDavErrorCode::Oversized,
+                                           u"The server lists %1: no notebook is this large"_s.arg(what), m_baseUrl);
+        stopPool(run->pool);
+    };
     for (const DavResource &res : resources) {
         const std::optional<QString> rawRel = relativeRaw(res.href, requestUrl);
         if (!rawRel)
@@ -225,10 +254,19 @@ void WebDavClient::addListing(const std::shared_ptr<ListRun> &run, const QString
         if (*rawRel != path)
             m_remoteNames.insert(path, *rawRel);
         run->entries.append(entryFor(path, res));
+        if (run->entries.size() > m_listLimits.maxEntries) {
+            giveUp(u"more than %1 files and folders"_s.arg(m_listLimits.maxEntries));
+            return;
+        }
         if (!res.isCollection)
             continue;
         m_knownDirs.insert(path);
         if (!(run->options.skipDir && run->options.skipDir(path))) {
+            // (The folder is listed itself; what it holds is deeper than any notebook goes.)
+            if (path.count(u'/') + 1 >= m_listLimits.maxDepth) {
+                giveUp(u"folders more than %1 deep (%2)"_s.arg(m_listLimits.maxDepth).arg(path.left(200)));
+                return;
+            }
             ++run->foldersKnown;
             listDir(run, *rawRel, false);
         }
@@ -254,13 +292,14 @@ void WebDavClient::get(const VaultPath &path, const GetOptions &options, GetCall
 {
     const QString url = urlFor(path);
     const int timeoutMs = options.size ? timeoutFor(*options.size) : unknownSizeTimeout();
-    request("GET", url, {}, {}, timeoutMs, [this, url, done = std::move(done)](const HttpResponse &response) {
-        if (const WebDavError error = check(response, "GET", url, {200}); error.isError()) {
-            done(GetResult{{}, {}, error});
-            return;
-        }
-        done(GetResult{response.body, etagOf(response, "etag", "oc-etag"), {}});
-    });
+    request("GET", url, {}, {}, timeoutMs, maxDownloadBytes(options.size),
+            [this, url, done = std::move(done)](const HttpResponse &response) {
+                if (const WebDavError error = check(response, "GET", url, {200}); error.isError()) {
+                    done(GetResult{{}, {}, error});
+                    return;
+                }
+                done(GetResult{response.body, etagOf(response, "etag", "oc-etag"), {}});
+            });
 }
 
 void WebDavClient::put(const VaultPath &path, const QByteArray &data, const PutOptions &options, PutCallback done)
@@ -313,18 +352,19 @@ void WebDavClient::remove(const VaultPath &path, const RemoveOptions &options, D
     Headers headers;
     if (!options.ifMatch.isEmpty())
         headers.emplaceBack("If-Match", quoteEtag(options.ifMatch).toUtf8());
-    request("DELETE", url, headers, {}, m_timeoutMs, [this, p, url, done = std::move(done)](const HttpResponse &response) {
-        if (response.status == 404) {
-            done({});
-            return;
-        }
-        if (const WebDavError error = check(response, "DELETE", url, {200, 202, 204}); error.isError()) {
-            done(error);
-            return;
-        }
-        forgetKnown(p);
-        done({});
-    });
+    request("DELETE", url, headers, {}, m_timeoutMs, kMaxStatusBytes,
+            [this, p, url, done = std::move(done)](const HttpResponse &response) {
+                if (response.status == 404) {
+                    done({});
+                    return;
+                }
+                if (const WebDavError error = check(response, "DELETE", url, {200, 202, 204}); error.isError()) {
+                    done(error);
+                    return;
+                }
+                forgetKnown(p);
+                done({});
+            });
 }
 
 void WebDavClient::move(const VaultPath &from, const VaultPath &to, const MoveOptions &options, DoneCallback done)
@@ -353,7 +393,7 @@ void WebDavClient::move(const VaultPath &from, const VaultPath &to, const MoveOp
                 {"Destination", destination.toUtf8()},
                 {"Overwrite", options.overwrite ? "T" : "F"},
         };
-        request("MOVE", url, headers, {}, m_timeoutMs,
+        request("MOVE", url, headers, {}, m_timeoutMs, kMaxStatusBytes,
                 [this, p, q, spelledTo, url, done](const HttpResponse &response) {
                     if (const WebDavError error = check(response, "MOVE", url, {201, 204}); error.isError()) {
                         done(error);
@@ -408,14 +448,15 @@ void WebDavClient::mkcol(const VaultPath &path, DoneCallback done)
 {
     const VaultPath p = paths::normalize(path);
     const QString url = urlFor(p, true);
-    request("MKCOL", url, {}, {}, m_timeoutMs, [this, p, url, done = std::move(done)](const HttpResponse &response) {
-        if (const WebDavError error = mkcolResult(response, url); error.isError()) {
-            done(error);
-            return;
-        }
-        m_knownDirs.insert(p);
-        done({});
-    });
+    request("MKCOL", url, {}, {}, m_timeoutMs, kMaxStatusBytes,
+            [this, p, url, done = std::move(done)](const HttpResponse &response) {
+                if (const WebDavError error = mkcolResult(response, url); error.isError()) {
+                    done(error);
+                    return;
+                }
+                m_knownDirs.insert(p);
+                done({});
+            });
 }
 
 void WebDavClient::mkdirs(const VaultPath &path, DoneCallback done)
@@ -482,7 +523,7 @@ int WebDavClient::timeoutFor(qint64 bytes) const
 }
 
 void WebDavClient::request(const QByteArray &method, const QString &url, const Headers &headers, const QByteArray &body,
-                           int timeoutMs, ResponseCallback done)
+                           int timeoutMs, qint64 maxBodyBytes, ResponseCallback done)
 {
     HttpRequest req;
     req.method = method;
@@ -491,6 +532,7 @@ void WebDavClient::request(const QByteArray &method, const QString &url, const H
     req.headers += headers;
     req.body = body;
     req.timeoutMs = timeoutMs;
+    req.maxBodyBytes = maxBodyBytes;
     const quint64 id = ++m_nextRequestId;
     if (m_inFlight.isEmpty())
         m_lastActivity.start(); // idle time counts from the first open request
@@ -553,6 +595,8 @@ WebDavError WebDavClient::check(const HttpResponse &response, const QByteArray &
                                 std::initializer_list<int> ok) const
 {
     if (response.status == 0) {
+        if (response.tooLarge)
+            return WebDavError{WebDavErrorCode::Oversized, 0, response.networkError, url};
         if (response.timedOut)
             return WebDavError{WebDavErrorCode::Timeout, 0, response.networkError, url};
         const QString reason = response.networkError.isEmpty() ? u"no response"_s : response.networkError;
@@ -578,7 +622,7 @@ void WebDavClient::propfindRaw(const QString &rawPath, int depth, PropfindCallba
             {"Depth", QByteArray::number(depth)},
             {"Content-Type", "application/xml; charset=utf-8"},
     };
-    request("PROPFIND", url, headers, propfindBody(), m_timeoutMs,
+    request("PROPFIND", url, headers, propfindBody(), m_timeoutMs, kMaxListingBytes,
             [this, url, done = std::move(done)](const HttpResponse &response) {
                 if (const WebDavError error = check(response, "PROPFIND", url, {200, 207}); error.isError()) {
                     done(error, {});
@@ -613,7 +657,7 @@ void WebDavClient::sendPut(const VaultPath &path, const QByteArray &data, const 
         headers.emplaceBack("If-None-Match", "*");
     if (options.mtime)
         headers.emplaceBack("X-OC-MTime", QByteArray::number(static_cast<qint64>(std::floor(*options.mtime / 1000.0))));
-    request("PUT", urlFor(path), headers, data, timeoutFor(data.size()), std::move(done));
+    request("PUT", urlFor(path), headers, data, timeoutFor(data.size()), kMaxStatusBytes, std::move(done));
 }
 
 void WebDavClient::ensureParents(const VaultPath &path, bool force, DoneCallback done)
@@ -636,7 +680,7 @@ void WebDavClient::ensureParentsFrom(const QStringList &segments, int index, QSt
         return;
     }
     const QString url = urlFor(dir, true);
-    request("MKCOL", url, {}, {}, m_timeoutMs,
+    request("MKCOL", url, {}, {}, m_timeoutMs, kMaxStatusBytes,
             [this, segments, index, dir, force, path, url, done = std::move(done)](const HttpResponse &response) {
                 if (response.status == 409 && !force) {
                     // A folder above is missing although we thought it existed: start over.
@@ -654,7 +698,7 @@ void WebDavClient::ensureParentsFrom(const QStringList &segments, int index, QSt
 
 void WebDavClient::mkcolUrl(const QString &url, int depth, DoneCallback done)
 {
-    request("MKCOL", url, {}, {}, m_timeoutMs,
+    request("MKCOL", url, {}, {}, m_timeoutMs, kMaxStatusBytes,
             [this, url, depth, done = std::move(done)](const HttpResponse &response) {
                 // 409: the parent is missing — create it first (bounded), then retry.
                 const std::optional<QString> parent =
@@ -668,7 +712,7 @@ void WebDavClient::mkcolUrl(const QString &url, int depth, DoneCallback done)
                         done(error);
                         return;
                     }
-                    request("MKCOL", url, {}, {}, m_timeoutMs,
+                    request("MKCOL", url, {}, {}, m_timeoutMs, kMaxStatusBytes,
                             [this, url, done](const HttpResponse &retry) { done(mkcolResult(retry, url)); });
                 });
             });

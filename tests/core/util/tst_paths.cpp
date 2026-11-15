@@ -65,6 +65,88 @@ private Q_SLOTS:
         QVERIFY(paths::isIgnored(QStringLiteral("notes/~syncthing~x.md.tmp")));
         QVERIFY(!paths::isIgnored(QStringLiteral("journals/2026-10-14.md")));
     }
+    void ignoredUnderEveryName_data()
+    {
+        // A path from a server, a repository or an archive must not reach an ignored folder
+        // under another name storage has for it: a file there may be code git or Obsidian runs.
+        QTest::addColumn<QString>("path");
+        QTest::addColumn<bool>("ignored");
+        const auto yes = [](const char *name, const QString &path) { QTest::newRow(name) << path << true; };
+        const auto no = [](const char *name, const QString &path) { QTest::newRow(name) << path << false; };
+        yes("as written", u".git/config"_s);
+        yes("deeper", u"Projekty/.git/hooks/pre-commit"_s);
+        yes("the folder itself", u".obsidian"_s);
+        yes("upper case", u".GIT/hooks/pre-commit"_s);
+        yes("mixed case", u".Obsidian/plugins/x/main.js"_s);
+        yes("mixed case, deeper", u"a/.Git/hooks/x"_s);
+        yes("the app's own folder", u".Brulion/secret.json"_s);
+        yes("the trash", u".TRASH/x.md"_s);
+        yes("a dot at the end (Windows drops it)", u".git./config"_s);
+        yes("dots and spaces at the end", u".git. ./config"_s);
+        yes("a space at the end", u".obsidian /app.json"_s);
+        yes("an NTFS stream of the folder", u".git::$INDEX_ALLOCATION/config"_s);
+        yes("the index stream by name", u".git:$I30:$INDEX_ALLOCATION/config"_s);
+        yes("any stream of a hidden folder", u".obsidian:x/app.json"_s);
+        yes("Windows' short name", u"GIT~1/hooks/pre-commit"_s);
+        yes("short name, lower case", u"git~1/config"_s);
+        yes("short name, another number", u"GIT~4/config"_s);
+        yes("short name of a longer one", u"OBSIDI~1/plugins/a/main.js"_s);
+        yes("short name with two digits", u"OBSID~12/app.json"_s);
+        yes("short name by its hash", u"GI1A2B~1/config"_s);
+        yes("short name by its hash, lower case", u"ob0f3c~2/app.json"_s);
+        yes("short name of the app's folder", u"BRULIO~1/x.json"_s);
+        yes("short name of the trash", u"TRASH~1/x.md"_s);
+        yes("short name of node_modules", u"NODE_M~1/x/index.js"_s);
+        yes("short name with a dot at the end", u"GIT~1./config"_s);
+        yes("dotless i (NTFS: upper case I)", u".g\u0131t/config"_s);
+        yes("long s (upper case S, folded s)", u".ob\u017Fidian/app.json"_s);
+        yes("a zero-width joiner inside", u".g\u200Dit/config"_s);
+        yes("a zero-width space before the dot", u"\u200B.git/config"_s);
+        yes("a variation selector inside", u".obsi\uFE0Fdian/app.json"_s);
+        yes("a tag character (outside the BMP)", u".git"_s + QString::fromUcs4(U"\U000E0041") + u"/config"_s);
+        yes("a soft hyphen in a visible name", u"log\u00ADseq/config.edn"_s);
+        yes("visible, as written", u"logseq/config.edn"_s);
+        yes("visible with a dot at the end", u"node_modules./x.js"_s);
+        yes("visible with a stream type", u"node_modules::$INDEX_ALLOCATION/x.js"_s);
+        yes("Syncthing's patterns in upper case", u".STIGNORE"_s);
+        yes("a hidden temp file in mixed case", u"a/.Brulion-Tmp-x"_s);
+        yes("a temp file", u"a/.syncthing.x.md.tmp"_s);
+        yes("an office lock file", u"a/.~lock.x.odt#"_s);
+        yes("a download in progress", u"a/x.md.part"_s);
+
+        no("a note", u"Projekty/Dom.md"_s);
+        no("Polish names", u"Zwierzęta/Żółw i łódź.md"_s);
+        no("a visible name in another case is a folder of notes", u"Import/Logseq/Strona.md"_s);
+        no("... also all in upper case", u"LOGSEQ/Strona.md"_s);
+        no("a title that starts like a folder", u"logseq: wskazówki.md"_s);
+        no("a longer name", u".gitignore"_s);
+        no("a longer folder name", u".github-notes/x.md"_s);
+        no("a name that only contains one", u"my.git/x.md"_s);
+        no("git without its dot", u"git/x.md"_s);
+        no("a tilde elsewhere", u"Plan~2026.md"_s);
+        no("a number after a tilde, other letters", u"NOTES~1/x.md"_s);
+        no("a short name with an extension is a file's", u"GIT~1.md"_s);
+        no("too short for a short name", u"G~1/x.md"_s);
+        no("letters where the hash has hex digits", u"GIXYZW~1/x.md"_s);
+        no("no number after the tilde", u"GIT~/x.md"_s);
+        no("a hidden folder of the user's", u".archiwum/x.md"_s);
+        no("a dot at a note's end", u"Notatka./x.md"_s);
+        no("an emoji with a variation selector", u"Pomysły \u2764\uFE0F.md"_s);
+        no("a colon in a title", u"Spotkanie 10:30.md"_s);
+        no("empty", QString());
+    }
+    void ignoredUnderEveryName()
+    {
+        QFETCH(QString, path);
+        QFETCH(bool, ignored);
+        QCOMPARE(paths::isIgnored(path), ignored);
+        // ...wherever in the path the folder stands, and with a note under it.
+        if (ignored && !path.isEmpty() && !path.contains(u'/')) {
+            QVERIFY(paths::isIgnored(u"Notatki/"_s + path) || paths::isTempFile(path.toLower()));
+        } else if (!ignored && !path.isEmpty()) {
+            QVERIFY(!paths::isIgnored(u"Notatki/"_s + path));
+        }
+    }
     void syncthingConflict()
     {
         const auto c = paths::parseSyncthingConflict(QStringLiteral("a/Notatka.sync-conflict-20261014-101112-ABCDEFG.md"));

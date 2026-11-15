@@ -121,6 +121,7 @@ T.TextField {
         y: control.topPadding
         width: control.width - (control.leftPadding + control.rightPadding)
         height: control.height - (control.topPadding + control.bottomPadding)
+        textFormat: Text.PlainText
         text: control.placeholderText
         font: control.font
         color: control.placeholderTextColor
@@ -190,6 +191,7 @@ T.TextField {
         Text {
             id: errorLabel
             width: errorRow.width - Theme.iconSizeSm - 4
+            textFormat: Text.PlainText
             text: control.errorText
             color: Theme.dangerText
             font.family: Theme.fontUi

@@ -47,6 +47,7 @@ Row {
                 id: keyLabel
                 anchors.centerIn: parent
                 anchors.verticalCenterOffset: kbd.inverse ? 0 : -0.5
+                textFormat: Text.PlainText
                 text: cap.modelData
                 color: kbd.inverse ? Theme.fgInverse : Theme.fgMuted
                 font.family: Theme.fontUi

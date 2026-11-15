@@ -20,6 +20,20 @@ if(BRULION_BASH)
              COMMAND ${BRULION_BASH} ${CMAKE_CURRENT_SOURCE_DIR}/tst_check_qml_reads.sh
                      ${PROJECT_SOURCE_DIR}/scripts/check-qml-reads.sh ${PROJECT_SOURCE_DIR}/src/app/qml)
 endif()
+# Every Text and Label says how its text is read (docs/UI.md "Text formats"):
+# scripts/check-qml-text-format.sh on small QML files, then on the app's QML — none left at Qt's
+# AutoText, which would take a tag in a page title or a task for markup.
+if(BRULION_BASH)
+    add_test(NAME tst_scripts_check_qml_text_format
+             COMMAND ${BRULION_BASH} ${CMAKE_CURRENT_SOURCE_DIR}/tst_check_qml_text_format.sh
+                     ${PROJECT_SOURCE_DIR}/scripts/check-qml-text-format.sh ${PROJECT_SOURCE_DIR}/src/app/qml)
+endif()
+# Android's own backup leaves out the passwords and tokens (docs/ANDROID.md "Backups"): the
+# manifest, its two rule files and the folder the code writes its secrets to agree.
+if(BRULION_BASH)
+    add_test(NAME tst_scripts_android_backup_rules
+             COMMAND ${BRULION_BASH} ${CMAKE_CURRENT_SOURCE_DIR}/tst_android_backup_rules.sh ${PROJECT_SOURCE_DIR})
+endif()
 # Stand-in AppImages are ELF files made with objcopy; the script reads them with readelf.
 find_program(BRULION_OBJCOPY objcopy)
 find_program(BRULION_READELF readelf)

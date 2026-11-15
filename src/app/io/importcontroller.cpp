@@ -1,6 +1,7 @@
 #include "importcontroller.h"
 
 #include "log/categories.h"
+#include "util/unicode.h"
 
 #include "iobackground.h"
 
@@ -146,7 +147,7 @@ QString defaultImportFolder(const QString &importerName)
 
 std::optional<QString> cleanTargetFolder(const QString &folder)
 {
-    QString unified = folder.trimmed().normalized(QString::NormalizationForm_C);
+    QString unified = unicode::nfc(folder.trimmed());
     unified.replace(u'\\', u'/');
     QStringList segments;
     for (const QStringList parts = unified.split(u'/'); const QString &raw : parts) {

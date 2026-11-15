@@ -77,7 +77,7 @@ clamp(cores − 1, 1, 4)).
 | `--vault <dir>` | the notebook folder |
 | `--state-dir <dir>` | device state (history, lock) |
 | `--no-history` | no version history, no device state |
-| `--format json\|text` | output; JSON by default |
+| `--format json\|text` | output; JSON by default. On a terminal the control characters a note's text or a file's name may carry (escape sequences, a lone carriage return) are shown as symbols (`␛`, `␍`); a pipe or a file gets every byte unchanged |
 | `--compact` | JSON on one line |
 | `--dry-run` | compute changes, write nothing; the result has a unified `diff` (a daily note that does not exist yet: with its template). `page create`: the new page's text; `page rename`/`move`, `folder rename`/`move`: `changes` — `{path, newPath, diff}` of every note whose links or tags would be rewritten; `page`/`file`/`folder delete`: the `files` that would go to the trash (a page: its text as a diff) |
 | `--diff` | also give the diff of written changes |

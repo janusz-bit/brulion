@@ -8,6 +8,7 @@
 #include "markdown/parse_p.h"
 #include "markdown/properties.h"
 #include "util/paths.h"
+#include "util/unicode.h"
 
 #include <algorithm>
 #include <optional>
@@ -24,7 +25,7 @@ namespace {
 /// Comparison key: NFC, lower-case, '\' -> '/', trimmed.
 QString key(QStringView s)
 {
-    return s.toString().normalized(QString::NormalizationForm_C).replace(u'\\', u'/').trimmed().toLower();
+    return unicode::nfc(s).replace(u'\\', u'/').trimmed().toLower();
 }
 
 /// What to match and what to write instead.
@@ -294,7 +295,7 @@ QString tagReplacement(const NoteTag &t, const QString &name, QStringView conten
         return tag.startsWith(u"#[["_s) ? tag : u"#[["_s + tag.sliced(1) + u"]]"_s;
     }
     case TagForm::Property: {
-        const QString n = name.normalized(QString::NormalizationForm_C);
+        const QString n = unicode::nfc(name);
         if (tagSyntax(n).isEmpty())
             return {}; // no tag can hold it
         const QChar before = charAt(content, t.from - 1);
@@ -306,8 +307,7 @@ QString tagReplacement(const NoteTag &t, const QString &name, QStringView conten
             return n;
         return u"[["_s + n + u"]]"_s;
     }
-    case TagForm::Frontmatter:
-        return tagSyntax(name).isEmpty() ? QString() : name.normalized(QString::NormalizationForm_C);
+    case TagForm::Frontmatter: return tagSyntax(name).isEmpty() ? QString() : unicode::nfc(name);
     }
     return {};
 }
@@ -359,7 +359,7 @@ TagRenamePlan planTags(const QString &content, const TagRenamer &rename)
         }
     } else {
         for (QString &n : plan.frontmatterAfter) {
-            const QString name = rename(n.normalized(QString::NormalizationForm_C));
+            const QString name = rename(unicode::nfc(n));
             if (!name.isNull() && name != n && !tagSyntax(name).isEmpty()) {
                 n = name;
                 ++plan.unplacedFrontmatter;

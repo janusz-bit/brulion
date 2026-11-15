@@ -1,6 +1,7 @@
 #include "contentutil.h"
 
 #include "editorhost.h"
+#include "util/unicode.h"
 
 #include "dates/format.h"
 #include "index/vaultindex.h"
@@ -78,7 +79,7 @@ QStringList cleanNames(const QStringList &names)
     QStringList out;
     QSet<QString> seen;
     for (const QString &raw : names) {
-        const QString n = raw.normalized(QString::NormalizationForm_C).simplified();
+        const QString n = unicode::nfc(raw).simplified();
         if (n.size() < 2)
             continue;
         const QString key = n.toCaseFolded();
@@ -424,7 +425,7 @@ QString normalizeTag(const QString &tag)
         t.remove(0, 1);
     if (t.startsWith(u"[["_s) && t.endsWith(u"]]"_s) && t.size() >= 4)
         t = t.mid(2, t.size() - 4);
-    return t.trimmed().normalized(QString::NormalizationForm_C).toLower();
+    return unicode::nfc(t.trimmed()).toLower();
 }
 
 QStringList pageTags(const ParsedNote &note)

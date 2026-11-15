@@ -55,6 +55,7 @@ Rectangle {
     Text {
         id: familyProbe
         visible: false
+        textFormat: Text.PlainText
         text: "0"
         font.family: Theme.fontEditor
         font.pixelSize: root.fontSize
@@ -78,6 +79,7 @@ Rectangle {
         spacing: Theme.space1
         BIcon { name: "calculator"; size: Theme.iconSizeSm - 2; color: Theme.fgFaint; anchors.verticalCenter: parent.verticalCenter }
         Text {
+            textFormat: Text.PlainText
             text: qsTr("Calculation")
             font.family: Theme.fontUi
             font.pixelSize: Theme.textXs

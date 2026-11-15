@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- What leaves the device with Android's own backup and with a transfer to a new phone
+     (Android 12+; older versions read backup_rules.xml). Passwords and tokens stay on the
+     device that was given them (files/secrets, see backup_rules.xml): after a restore or a
+     transfer Brulion asks for them again. Notes go to the cloud only when the backup is encrypted
+     with a key that never leaves the user's devices (the screen lock), never readable by the
+     backup service. docs/ANDROID.md, "Backups". -->
+<data-extraction-rules>
+    <cloud-backup disableIfNoEncryptionCapabilities="true">
+        <exclude domain="file" path="secrets" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="file" path="secrets" />
+    </device-transfer>
+</data-extraction-rules>

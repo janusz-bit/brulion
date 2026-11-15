@@ -330,6 +330,7 @@ T.Popup {
                         }
                         Text {
                             anchors.verticalCenter: parent.verticalCenter
+                            textFormat: Text.PlainText
                             text: hint.text
                             font.family: Theme.fontUi
                             font.pixelSize: Theme.textXs

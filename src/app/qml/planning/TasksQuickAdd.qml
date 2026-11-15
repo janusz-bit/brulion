@@ -75,6 +75,7 @@ ColumnLayout {
         }
         Text {
             Layout.fillWidth: true
+            textFormat: Text.PlainText
             text: root.dateless ? qsTr("Without a date — goes into today's journal")
                                 : qsTr("“%1” — into today's journal").arg(AppController.routeText(parsedHolder.map, "text"))
             font.family: Theme.fontUi

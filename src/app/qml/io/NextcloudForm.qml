@@ -193,7 +193,7 @@ IoCard {
                 iconName: "external-link"
                 size: "small"
                 variant: "ghost"
-                onClicked: Qt.openUrlExternally(form.setup.securityUrl)
+                onClicked: Workspace.openUrl(form.setup.securityUrl)
             }
         }
         Field {
@@ -320,7 +320,7 @@ IoCard {
                     text: qsTr("Create an app password")
                     iconName: "external-link"
                     size: "small"
-                    onClicked: Qt.openUrlExternally("" + form.setup.testResult.securityUrl)
+                    onClicked: Workspace.openUrl("" + form.setup.testResult.securityUrl)
                 }
                 BButton {
                     id: detailsButton

@@ -2,6 +2,7 @@
 #include "dataview/ast_p.h"
 #include "dataview/eval_p.h"
 #include "dataview/messages_p.h"
+#include "util/unicode.h"
 
 #include "util/paths.h"
 
@@ -445,7 +446,7 @@ private:
         if (k.kind == Token::Kind::Tag) {
             next();
             out->kind = Source::Kind::Tag;
-            out->value = k.text.normalized(QString::NormalizationForm_C).toLower();
+            out->value = unicode::nfc(k.text).toLower();
             return out;
         }
         if (k.kind == Token::Kind::String) {

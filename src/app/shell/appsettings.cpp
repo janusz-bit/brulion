@@ -3,8 +3,10 @@
 #include "workspacegithub.h"
 #include "workspacesync.h"
 
+#include "ai/ai.h"
 #include "notebook/journals.h"
 #include "text/text.h"
+#include "util/unicode.h"
 #include "vault/vault.h"
 
 #include <QCoreApplication>
@@ -155,7 +157,7 @@ QString folderIdentity(const QString &folder)
         v.chop(1);
     if (v.isEmpty() || v == u".")
         v = kDefaultServerFolder;
-    return v.normalized(QString::NormalizationForm_C).toCaseFolded();
+    return unicode::nfc(v).toCaseFolded();
 }
 
 /// One folder is the other or holds it: notebooks syncing with them would mix their notes.
@@ -180,7 +182,7 @@ QString serverFolderFromName(const QString &name)
         out.remove(0, 1);
     while (!out.isEmpty() && (out.back() == u'.' || out.back() == u' '))
         out.chop(1);
-    return out.normalized(QString::NormalizationForm_C);
+    return unicode::nfc(out);
 }
 
 /// `value` when it is one of `choices`, else the first of them (the default).
@@ -595,6 +597,14 @@ void AppSettings::setAiBaseUrl(const QString &url)
 {
     if (store(kAiBaseUrl, url.trimmed().left(500), aiBaseUrl()))
         Q_EMIT aiChanged();
+}
+
+bool AppSettings::aiUnencrypted() const
+{
+    ai::Settings settings;
+    settings.provider = aiProvider();
+    settings.baseUrl = aiBaseUrl();
+    return settings.unencrypted();
 }
 
 namespace {

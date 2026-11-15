@@ -4,6 +4,7 @@
 #include "sync/request_p.h"
 #include "sync/url.h"
 #include "sync/util_p.h"
+#include "util/unicode.h"
 
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -87,7 +88,7 @@ QString normalizeFsPath(const QString &path, const QString &home)
         s = trimTrailingSlashes(s);
     if (windowsDrive().match(s).hasMatch())
         s[0] = s.at(0).toLower();
-    return s.normalized(QString::NormalizationForm_C);
+    return unicode::nfc(s);
 }
 
 std::optional<QString> guessHome(const QString &absPath)

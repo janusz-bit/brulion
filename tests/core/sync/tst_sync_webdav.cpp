@@ -424,6 +424,85 @@ private Q_SLOTS:
         QVERIFY(s.server.requests("PROPFIND").isEmpty());
     }
 
+    void listGivesUpOnAServerWithoutAnEnd()
+    {
+        // A server with one more folder in every folder: the listing ends all the same.
+        class EndlessTransport : public HttpTransport {
+        public:
+            int requests = 0;
+            QObject context;
+            void send(const HttpRequest &request, HttpCallback done) override
+            {
+                ++requests;
+                const auto folder = [](const QByteArray &href) {
+                    return "<d:response><d:href>" + href
+                           + "</d:href><d:propstat><d:prop><d:resourcetype><d:collection/></d:resourcetype></d:prop>"
+                             "</d:propstat></d:response>";
+                };
+                const QByteArray self = request.url.path(QUrl::FullyEncoded).toUtf8();
+                HttpResponse r = answer(207, "<d:multistatus xmlns:d=\"DAV:\">" + folder(self)
+                                                     + folder(self + "g%C5%82%C4%85b/") + "</d:multistatus>");
+                QTimer::singleShot(0, &context, [done, r] { done(r); });
+            }
+        };
+        EndlessTransport transport;
+        WebDavClient client(u"https://example.org/dav/Notatki"_s, u"jan"_s, u"x"_s, &transport);
+        const ListResult r = await<ListResult>([&](auto cb) { client.list({}, cb); });
+        QVERIFY(r.error.is(WebDavErrorCode::Oversized));
+        QVERIFY(!r.error.isFatal());
+        QVERIFY2(r.error.message.contains(u"64 deep"_s) && r.error.message.contains(u"głąb/głąb"_s),
+                 qPrintable(r.error.message));
+        QVERIFY(r.entries.isEmpty());
+        QCOMPARE(transport.requests, client.listLimits().maxDepth);
+    }
+
+    void listGivesUpAboveItsLimits_data()
+    {
+        QTest::addColumn<int>("maxDepth");
+        QTest::addColumn<int>("maxEntries");
+        QTest::addColumn<QString>("problem"); // "" = listed
+        // On the server: a/b/c/głęboko.md and nine files beside the folder a — 13 entries, 4 deep.
+        QTest::newRow("defaults") << 64 << 500'000 << QString();
+        QTest::newRow("as deep and as many as allowed") << 4 << 13 << QString();
+        QTest::newRow("a folder too deep") << 3 << 13 << u"folders more than 3 deep (a/b/c)"_s;
+        QTest::newRow("one entry too many") << 4 << 12 << u"more than 12 files and folders"_s;
+        QTest::newRow("limits below one are one") << 0 << 0 << u"more than 1 "_s; // (deep, or files and folders)
+    }
+    void listGivesUpAboveItsLimits()
+    {
+        QFETCH(int, maxDepth);
+        QFETCH(int, maxEntries);
+        QFETCH(QString, problem);
+        Setup s;
+        s.server.putText(u"Notatki/a/b/c/głęboko.md"_s, u"1"_s);
+        for (int i = 0; i < 9; ++i)
+            s.server.putText(u"Notatki/plik%1.md"_s.arg(i), u"x"_s);
+        s.client.setListLimits(ListLimits{maxDepth, maxEntries});
+        const ListResult r = await<ListResult>([&](auto cb) { s.client.list({}, cb); });
+        if (problem.isEmpty()) {
+            QVERIFY2(!r.error.isError(), qPrintable(r.error.message));
+            QCOMPARE(r.entries.size(), 13);
+            return;
+        }
+        QVERIFY(r.error.is(WebDavErrorCode::Oversized));
+        QVERIFY2(r.error.message.contains(problem), qPrintable(r.error.message));
+        QVERIFY(r.entries.isEmpty());
+    }
+
+    void listFailsOnAFolderAnswerWithoutAnEnd()
+    {
+        // (The limit of a folder's answer is 128 MiB: the transport reports what the network one
+        // does when the server sends more.)
+        FixedTransport transport;
+        transport.answer.tooLarge = true;
+        transport.answer.networkError = u"The answer to PROPFIND … is larger than 134217728 bytes"_s;
+        WebDavClient client(u"https://example.org/dav/Notatki"_s, u"jan"_s, u"x"_s, &transport);
+        const ListResult r = await<ListResult>([&](auto cb) { client.list({}, cb); });
+        QVERIFY(r.error.is(WebDavErrorCode::Oversized));
+        QCOMPARE(transport.requests.size(), 1);
+        QCOMPARE(transport.requests.first().maxBodyBytes, qint64(128) * 1024 * 1024);
+    }
+
     void listIgnoresHrefsOutsideTheBase()
     {
         FixedTransport transport;
@@ -509,6 +588,75 @@ private Q_SLOTS:
         QCOMPARE(r.etag, s.server.etag(u"Notatki/a.md"_s));
         const GetResult missing = await<GetResult>([&](auto cb) { s.client.get(u"brak.md"_s, {}, cb); });
         QVERIFY(missing.error.is(WebDavErrorCode::NotFound));
+    }
+
+    void getStopsAtWhatTheFileMayHold()
+    {
+        Setup s;
+        const qsizetype mebibyte = 1024 * 1024;
+        s.server.putFile(u"Notatki/duży.bin"_s, QByteArray(3 * mebibyte, 'x'));
+        // Listed with ten bytes, sent with three mebibytes: more than a file grows meanwhile.
+        const GetResult refused = await<GetResult>([&](auto cb) { s.client.get(u"duży.bin"_s, GetOptions{10}, cb); });
+        QVERIFY(refused.error.is(WebDavErrorCode::Oversized));
+        QVERIFY(!refused.error.isFatal());
+        QVERIFY(refused.data.isEmpty());
+        QVERIFY2(refused.error.message.contains(u"larger than 1048586 bytes"_s), qPrintable(refused.error.message));
+        // Twice the expected size is what a file may have grown to.
+        const GetResult grown =
+                await<GetResult>([&](auto cb) { s.client.get(u"duży.bin"_s, GetOptions{2 * mebibyte}, cb); });
+        QVERIFY2(!grown.error.isError(), qPrintable(grown.error.message));
+        QCOMPARE(grown.data.size(), 3 * mebibyte);
+        // Of unknown size: whatever fits the default.
+        const GetResult unknown = await<GetResult>([&](auto cb) { s.client.get(u"duży.bin"_s, {}, cb); });
+        QCOMPARE(unknown.data.size(), 3 * mebibyte);
+    }
+
+    void downloadLimits_data()
+    {
+        QTest::addColumn<qint64>("size"); // -1: unknown
+        QTest::addColumn<qint64>("limit");
+        const qint64 mebibyte = 1024 * 1024;
+        const qint64 most = std::numeric_limits<qint64>::max();
+        QTest::newRow("unknown") << qint64(-1) << 256 * mebibyte;
+        QTest::newRow("empty") << qint64(0) << mebibyte;
+        QTest::newRow("a note") << qint64(2000) << mebibyte + 2000;
+        QTest::newRow("a mebibyte") << mebibyte << 2 * mebibyte;
+        QTest::newRow("a film") << 150 * mebibyte << 300 * mebibyte;
+        QTest::newRow("above the default") << 300 * mebibyte << 600 * mebibyte;
+        QTest::newRow("no size a file has") << most << most;
+        QTest::newRow("half of that") << most / 2 + 1 << most;
+    }
+    void downloadLimits()
+    {
+        QFETCH(qint64, size);
+        QFETCH(qint64, limit);
+        QCOMPARE(WebDavClient::maxDownloadBytes(size < 0 ? std::nullopt : std::optional<qint64>(size)), limit);
+        if (size < 0)
+            QCOMPARE(WebDavClient::maxDownloadBytes(std::optional<qint64>(-5)), limit); // (a size no server means)
+    }
+
+    void answersToChangesAreSmall()
+    {
+        // PUT, DELETE, MKCOL and MOVE are answered with a status and, at most, an error page.
+        Setup s;
+        s.server.putText(u"Notatki/a.md"_s, u"1"_s);
+        s.server.hooks.append([](const HttpRequest &request, const QString &) -> std::optional<HttpResponse> {
+            if (request.method == "PROPFIND" || request.method == "GET")
+                return std::nullopt;
+            if (request.maxBodyBytes != 1024 * 1024)
+                return FakeWebDavServer::status(599);
+            HttpResponse r = FakeWebDavServer::status(500);
+            r.body = QByteArray(2 * 1024 * 1024, 'e'); // an error page without an end
+            return r;
+        });
+        const PutResult put = await<PutResult>([&](auto cb) { s.client.put(u"b.md"_s, "x", {}, cb); });
+        QVERIFY2(put.error.is(WebDavErrorCode::Oversized), qPrintable(put.error.message));
+        const WebDavError removed = await<WebDavError>([&](auto cb) { s.client.remove(u"a.md"_s, {}, cb); });
+        QVERIFY2(removed.is(WebDavErrorCode::Oversized), qPrintable(removed.message));
+        const WebDavError made = await<WebDavError>([&](auto cb) { s.client.mkcol(u"nowy"_s, cb); });
+        QVERIFY2(made.is(WebDavErrorCode::Oversized), qPrintable(made.message));
+        const WebDavError moved = await<WebDavError>([&](auto cb) { s.client.move(u"a.md"_s, u"c.md"_s, {}, cb); });
+        QVERIFY2(moved.is(WebDavErrorCode::Oversized), qPrintable(moved.message));
     }
 
     void putCreatesMissingParentsOnce()
@@ -848,6 +996,133 @@ private Q_SLOTS:
         QVERIFY(refused.networkError.contains(u"redirect"_s, Qt::CaseInsensitive));
         for (const auto &request : http.requests)
             QVERIFY(request.path != "/target" || request.headers.value("host").startsWith("127.0.0.1"));
+    }
+
+    void networkTransportRefusesRedirectsToAnotherPort()
+    {
+        // Another port of the same host is another program, perhaps another user's: the
+        // Authorization header does not go there.
+        MiniHttpServer other;
+        other.handler = [](const MiniHttpServer::Request &request) {
+            return rawResponse(200, "OK", QByteArray("cel:" + request.headers.value("authorization")));
+        };
+        MiniHttpServer http;
+        const QByteArray target = other.url(u"/target"_s).toUtf8();
+        http.handler = [target](const MiniHttpServer::Request &) {
+            return rawResponse(307, "Temporary Redirect", {}, {{"Location", target}});
+        };
+        QNetworkAccessManager manager;
+        manager.setProxy(QNetworkProxy::NoProxy);
+        NetworkHttpTransport transport(&manager);
+        HttpRequest request;
+        request.method = "GET";
+        request.url = QUrl(http.url(u"/x"_s));
+        request.headers = {{"Authorization", "Basic eA=="}};
+        const HttpResponse r = await<HttpResponse>([&](auto cb) { transport.send(request, cb); });
+        QCOMPARE(r.status, 0);
+        QVERIFY2(r.networkError.contains(u"redirect"_s, Qt::CaseInsensitive), qPrintable(r.networkError));
+        QCOMPARE(http.requests.size(), 1);
+        QVERIFY(other.requests.isEmpty());
+    }
+
+    void redirectsStayWithTheSameServer_data()
+    {
+        QTest::addColumn<QString>("origin");
+        QTest::addColumn<QString>("target");
+        QTest::addColumn<bool>("same");
+        QTest::newRow("another path") << u"https://chmura.pl/dav/"_s << u"https://chmura.pl/remote.php/dav/"_s << true;
+        QTest::newRow("the host in other case") << u"https://chmura.pl/"_s << u"https://Chmura.PL/x"_s << true;
+        QTest::newRow("the default port spelled out")
+                << u"https://chmura.pl/"_s << u"https://chmura.pl:443/x"_s << true;
+        QTest::newRow("http's default port spelled out")
+                << u"http://chmura.pl:80/"_s << u"http://chmura.pl/x"_s << true;
+        QTest::newRow("the same other port") << u"http://dom.lan:8080/"_s << u"http://dom.lan:8080/x"_s << true;
+        QTest::newRow("upgraded to https") << u"http://chmura.pl/"_s << u"https://chmura.pl/"_s << true;
+        QTest::newRow("upgraded on the same port") << u"http://dom.lan:8443/"_s << u"https://dom.lan:8443/"_s << true;
+        QTest::newRow("another host") << u"https://chmura.pl/"_s << u"https://zla.example/"_s << false;
+        QTest::newRow("a host that only starts alike")
+                << u"https://chmura.pl/"_s << u"https://chmura.pl.zla.example/"_s << false;
+        QTest::newRow("another port") << u"https://chmura.pl/"_s << u"https://chmura.pl:8443/"_s << false;
+        QTest::newRow("another port of http") << u"http://dom.lan:8080/"_s << u"http://dom.lan:9090/"_s << false;
+        QTest::newRow("upgraded to another port") << u"http://dom.lan:8080/"_s << u"https://dom.lan/"_s << false;
+        QTest::newRow("upgraded from the default port to another")
+                << u"http://dom.lan/"_s << u"https://dom.lan:8443/"_s << false;
+        QTest::newRow("down to http") << u"https://chmura.pl/"_s << u"http://chmura.pl/"_s << false;
+        QTest::newRow("down to http on https's port") << u"https://chmura.pl/"_s << u"http://chmura.pl:443/"_s << false;
+        QTest::newRow("another scheme") << u"https://chmura.pl/"_s << u"ftp://chmura.pl/"_s << false;
+        QTest::newRow("a file") << u"https://chmura.pl/"_s << u"file:///etc/passwd"_s << false;
+    }
+    void redirectsStayWithTheSameServer()
+    {
+        QFETCH(QString, origin);
+        QFETCH(QString, target);
+        QFETCH(bool, same);
+        QCOMPARE(sync::isSameServer(QUrl(origin), QUrl(target)), same);
+    }
+
+    void networkTransportStopsAtTheBodyLimit_data()
+    {
+        QTest::addColumn<QByteArray>("raw");
+        QTest::addColumn<qint64>("limit");
+        QTest::addColumn<int>("status"); // 0: stopped as too large
+        const QByteArray body(200'000, 'x');
+        const QByteArray unannounced = "HTTP/1.1 200 OK\r\nConnection: close\r\n\r\n" + body;
+        QTest::newRow("as large as the limit") << rawResponse(200, "OK", body) << qint64(200'000) << 200;
+        QTest::newRow("a byte more") << rawResponse(200, "OK", body) << qint64(199'999) << 0;
+        // No length announced: the answer ends where the connection does.
+        QTest::newRow("sent without a length") << unannounced << qint64(50'000) << 0;
+        QTest::newRow("without a length, within the limit") << unannounced << qint64(200'000) << 200;
+        // Announced and never sent: stopped before a byte of it is kept.
+        QTest::newRow("announced only") << QByteArray("HTTP/1.1 200 OK\r\nContent-Length: 4000000000\r\n\r\nabc")
+                                        << qint64(1'000'000) << 0;
+        QTest::newRow("an error page") << rawResponse(500, "Internal Server Error", body) << qint64(1000) << 0;
+        QTest::newRow("an error page within the limit") << rawResponse(404, "Not Found", "brak") << qint64(4) << 404;
+    }
+    void networkTransportStopsAtTheBodyLimit()
+    {
+        QFETCH(QByteArray, raw);
+        QFETCH(qint64, limit);
+        QFETCH(int, status);
+        MiniHttpServer http;
+        http.handler = [raw](const MiniHttpServer::Request &) { return raw; };
+        QNetworkAccessManager manager;
+        manager.setProxy(QNetworkProxy::NoProxy);
+        NetworkHttpTransport transport(&manager);
+        HttpRequest request;
+        request.method = "GET";
+        request.url = QUrl(http.url(u"/du%C5%BCy"_s));
+        request.maxBodyBytes = limit;
+        request.timeoutMs = 20'000;
+        const HttpResponse r = await<HttpResponse>([&](auto cb) { transport.send(request, cb); });
+        QCOMPARE(r.status, status);
+        QCOMPARE(r.tooLarge, status == 0);
+        QVERIFY(!r.timedOut);
+        if (status == 0) {
+            QVERIFY(r.body.isEmpty());
+            QVERIFY2(r.networkError.contains(u"GET"_s) && r.networkError.contains(u"/duży"_s)
+                             && r.networkError.contains(u"larger than %1 bytes"_s.arg(limit)),
+                     qPrintable(r.networkError));
+        } else {
+            QVERIFY(r.networkError.isEmpty());
+            QVERIFY(r.body.size() <= limit);
+        }
+    }
+
+    void theBodyLimitHasADefault()
+    {
+        HttpRequest request;
+        QCOMPARE(request.bodyLimit(), qint64(256) * 1024 * 1024);
+        request.maxBodyBytes = 5;
+        QCOMPARE(request.bodyLimit(), 5);
+        request.maxBodyBytes = -1;
+        QCOMPARE(request.bodyLimit(), HttpRequest::DefaultMaxBodyBytes);
+        request.method = "GET";
+        request.url = QUrl(u"https://jan:haslo@chmura.pl/%C5%BC%C3%B3%C5%82w%201.md"_s);
+        const HttpResponse r = HttpResponse::oversized(request);
+        QVERIFY(r.tooLarge);
+        QCOMPARE(r.status, 0);
+        // (As a person reads the address, and without the password in it.)
+        QCOMPARE(r.networkError, u"The answer to GET https://chmura.pl/żółw 1.md is larger than 268435456 bytes"_s);
     }
 
     void webDavClientOverTheNetworkTransport()

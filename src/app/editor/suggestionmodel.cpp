@@ -2,6 +2,7 @@
 
 #include "blocktext.h"
 #include "editorhost.h"
+#include "util/unicode.h"
 
 #include "dates/format.h"
 #include "dates/local.h"
@@ -257,13 +258,13 @@ QVariantList SuggestionModel::tagItems() const
     QVariantList out;
     if (!m_host)
         return out;
-    const QString typed = m_filter.trimmed().normalized(QString::NormalizationForm_C);
+    const QString typed = unicode::nfc(m_filter.trimmed());
     // Tags in use and pages (a tag names a page, docs/SYNTAX.md §3); the one already typed out
     // (in any letter case) has nothing to complete.
     for (const QVariantList tags = m_host->suggestTags(m_filter.trimmed(), m_limit); const QVariant &v : tags) {
         const QVariantMap t = v.toMap();
         const QString tag = t.value(u"tag"_s).toString();
-        if (tag.isEmpty() || tag.normalized(QString::NormalizationForm_C).compare(typed, Qt::CaseInsensitive) == 0)
+        if (tag.isEmpty() || unicode::nfc(tag).compare(typed, Qt::CaseInsensitive) == 0)
             continue;
         const int count = t.value(u"count"_s).toInt();
         const QString path = t.value(u"path"_s).toString();

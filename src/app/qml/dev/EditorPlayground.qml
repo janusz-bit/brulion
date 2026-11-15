@@ -168,6 +168,7 @@ ApplicationWindow {
             }
             Text {
                 visible: !Theme.compact
+                textFormat: Text.PlainText
                 text: page.conflict ? qsTr("Conflict") : page.dirty ? qsTr("Unsaved") : qsTr("Saved")
                 font.family: Theme.fontUi
                 font.pixelSize: Theme.textSm

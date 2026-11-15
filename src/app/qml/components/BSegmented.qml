@@ -258,6 +258,7 @@ T.Control {
                     id: segmentLabel
                     anchors.verticalCenter: parent.verticalCenter
                     visible: !control.iconOnly
+                    textFormat: Text.PlainText
                     text: segment.text
                     color: segment.isCurrent || segment.hovered ? Theme.fg : Theme.fgMuted
                     font.family: Theme.fontUi

@@ -126,6 +126,38 @@ QString renderText(const Command * /*command*/, const Result &result)
     return out;
 }
 
+QString forTerminal(const QString &text)
+{
+    const auto unsafe = [&text](qsizetype i) {
+        const char16_t c = text[i].unicode();
+        if (c == u'\n' || c == u'\t')
+            return false;
+        if (c == u'\r')
+            return i + 1 >= text.size() || text[i + 1] != u'\n'; // (alone it writes over the line)
+        return c < 0x20 || (c >= 0x7f && c < 0xa0);
+    };
+    qsizetype first = 0;
+    while (first < text.size() && !unsafe(first))
+        ++first;
+    if (first == text.size())
+        return text;
+    QString out;
+    out.reserve(text.size());
+    out += QStringView(text).first(first);
+    for (qsizetype i = first; i < text.size(); ++i) {
+        const char16_t c = text[i].unicode();
+        if (!unsafe(i))
+            out += text[i];
+        else if (c < 0x20)
+            out += QChar(char16_t(0x2400 + c)); // the control's picture: U+241B for ESC
+        else if (c == 0x7f)
+            out += QChar(char16_t(0x2421));
+        else
+            out += QChar(QChar::ReplacementCharacter);
+    }
+    return out;
+}
+
 QString unifiedDiff(const QString &before, const QString &after, const QString &path, const QString &newPath)
 {
     const auto lines = [](const QString &content) {

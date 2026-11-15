@@ -2,6 +2,7 @@
 
 #include "sync/util_p.h"
 #include "util/paths.h"
+#include "util/unicode.h"
 
 #include <QRegularExpression>
 #include <QStringList>
@@ -111,8 +112,7 @@ QString nextcloudDavUrl(const QString &server, const QString &user, const QStrin
     // Web UI pages pasted from the address bar: ".../apps/files/", ".../login".
     s = trimTrailingSlashes(s).remove(webUiPage);
     s = trimTrailingSlashes(s);
-    const QString userPart = QString::fromLatin1(
-        QUrl::toPercentEncoding(user.trimmed().normalized(QString::NormalizationForm_C)));
+    const QString userPart = QString::fromLatin1(QUrl::toPercentEncoding(unicode::nfc(user.trimmed())));
     const QString folderPart = encodePath(paths::normalize(folder.trimmed()));
     QString out = s + u"/remote.php/dav/files/"_s + userPart;
     if (!folderPart.isEmpty())
@@ -152,10 +152,10 @@ std::optional<QString> relativeTo(const QString &pathname, const QString &basePa
     if (p.size() < b.size())
         return std::nullopt;
     // Equal segments are also equal case-folded: one comparison covers both the exact match
-    // and the case-insensitive fallback.
+    // and the case-insensitive fallback. (The exact match first: a listing asks this of the base
+    // folder's segments once for every entry, and normalising them was a tenth of its time.)
     const auto sameSegment = [](const QString &x, const QString &y) {
-        return x.normalized(QString::NormalizationForm_C).toLower()
-               == y.normalized(QString::NormalizationForm_C).toLower();
+        return x == y || unicode::nfc(x).toLower() == unicode::nfc(y).toLower();
     };
     if (!std::ranges::equal(b, p.first(b.size()), sameSegment))
         return std::nullopt;

@@ -1,6 +1,7 @@
 #include "sync/conflicts.h"
 
 #include "util/paths.h"
+#include "util/unicode.h"
 
 #include <QRegularExpression>
 
@@ -35,7 +36,7 @@ QString sanitizeDeviceName(const QString &device)
     static const QRegularExpression unsafe(u"[^\\p{L}\\p{N}_-]+"_s);
     static const QRegularExpression dashes(u"-{2,}"_s);
     static const QRegularExpression edgeDashes(u"^-+|-+$"_s);
-    QString cleaned = device.normalized(QString::NormalizationForm_C);
+    QString cleaned = unicode::nfc(device);
     cleaned.replace(unsafe, u"-"_s);
     cleaned.replace(dashes, u"-"_s);
     cleaned.remove(edgeDashes);

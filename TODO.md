@@ -225,6 +225,13 @@ done in the repository simply disappears from the list.
   keeps the file being written in memory), an Android folder chosen through a cloud document,
   splitting the compression of a large file into chunks in the browser (today a file over 4 MB is
   saved uncompressed).
+* **Approving the extension that was read** — "Run" approves a page's code as it is at the click:
+  code a sync replaced a moment earlier is approved unread. To be decided: approving the version
+  that was shown (its hash) and saying when it changed meanwhile, or a diff against the version
+  approved before.
+* **Sync and import in bounded memory** — a download is kept in memory before it is written (up
+  to the largest file synced, 200 MB, several at a time), and an imported ZIP is unpacked into
+  memory (up to 1.5 GiB): streaming to the file, as backups do, would bound both on a phone.
 
 ## Sharing and collaboration
 
@@ -282,6 +289,9 @@ Details in docs/PERFORMANCE.md, "Next steps":
 * measuring the faster undo on a Raspberry Pi (before the change 214 ms, target < 50 ms) and
   recording its baseline row in tests/bench/baselines/pi.csv — until then the performance check
   on the Pi skips it (L5b);
+* measuring the sync that reads no unchanged note on a Raspberry Pi (before the change 1.35 s for
+  5000 files) and lowering the `syncNoChanges` and `blockDocOps … keystroke` baseline rows in
+  tests/bench/baselines (laptop.csv, pi.csv) in a quiet window (L4, L12 done on 2026-11-15);
 * measuring the QML code compiled for size (`-Oz`) on a real phone against a build with
   `-DBRULION_QML_CODE_FOR_SIZE=OFF`: journal scrolling, opening a long page, the views — on the
   desktop no slowdown was measurable (L20b);

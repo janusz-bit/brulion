@@ -3,6 +3,7 @@
 #include "github/address.h"
 #include "github/gitobjects.h"
 #include "github/reposync_p.h"
+#include "util/unicode.h"
 
 #include "drawing/drawingfile.h"
 #include "drawing/merge.h"
@@ -661,7 +662,7 @@ void RepoSync::planPull(std::shared_ptr<Run> run, const QList<TreeEntry> &entrie
     for (const TreeEntry &entry : entries) {
         if (entry.type == u"tree"_s)
             continue;
-        const VaultPath path = entry.path.normalized(QString::NormalizationForm_C);
+        const VaultPath path = unicode::nfc(entry.path);
         if (!isNotebookPath(path))
             continue; // the repository's own (hidden files, .github, …): never touched
         if (entry.type == u"commit"_s || entry.mode == SubmoduleMode) {

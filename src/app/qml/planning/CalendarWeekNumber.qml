@@ -39,6 +39,7 @@ Item {
         Text {
             visible: root.showWord
             anchors.horizontalCenter: parent.horizontalCenter
+            textFormat: Text.PlainText
             //: Short for "week" above the ISO week number in the calendar's corner
             text: qsTr("Wk")
             font.family: Theme.fontUi
@@ -48,6 +49,7 @@ Item {
         }
         Text {
             anchors.horizontalCenter: parent.horizontalCenter
+            textFormat: Text.PlainText
             text: root.week > 0 ? "" + root.week : ""
             font.family: Theme.fontUi
             font.pixelSize: Theme.textXs

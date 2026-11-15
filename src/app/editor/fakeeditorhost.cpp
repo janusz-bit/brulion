@@ -1,6 +1,7 @@
 #include "fakeeditorhost.h"
 
 #include "markdown/logbook.h"
+#include "util/unicode.h"
 
 #include "blocktext.h"
 
@@ -404,7 +405,7 @@ QVariantList FakeEditorHost::suggestTags(const QString &prefix, int limit) const
     });
     // Tags (with the page they name), then pages no tag names yet (docs/SYNTAX.md §3), one entry
     // per tag key (case-insensitive, not diacritic-insensitive: #zolw is not Żółw).
-    const auto tagKey = [](const QString &name) { return name.normalized(QString::NormalizationForm_C).toLower(); };
+    const auto tagKey = [](const QString &name) { return unicode::nfc(name).toLower(); };
     QVariantList out;
     QSet<QString> seen;
     for (const auto &[tag, count] : std::as_const(tags)) {

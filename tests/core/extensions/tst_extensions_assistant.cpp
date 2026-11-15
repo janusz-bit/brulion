@@ -253,6 +253,47 @@ private Q_SLOTS:
                 qPrintable(journal));
     }
 
+    void aLongChangeSaysHowMuchOfItIsShown_data()
+    {
+        QTest::addColumn<QString>("markdown");
+        QTest::addColumn<int>("shown"); // characters; -1: all of it, with no word about it
+        // Short: the whole change, as it is.
+        QTest::newRow("short") << u"- mleko\n- żółty ser"_s << -1;
+        QTest::newRow("as long as fits") << u"ż"_s.repeated(300) << -1; // 600 bytes
+        // Long: its beginning in whole characters, and how much of the change that is.
+        QTest::newRow("a character more") << (u"ż"_s.repeated(300) + u"a"_s) << 300;
+        // (600 bytes of it: Polish letters take two.)
+        const QString lines = u"- wiersz po polsku: zażółć gęślą jaźń\n"_s.repeated(60);
+        int fits = 0;
+        while (lines.left(fits + 1).toUtf8().size() <= 600)
+            ++fits;
+        QTest::newRow("long") << lines << fits;
+        // Many short lines: the first forty.
+        QTest::newRow("many lines") << u"- a\n"_s.repeated(100).trimmed() << 40 * 4 - 1;
+    }
+    void aLongChangeSaysHowMuchOfItIsShown()
+    {
+        QFETCH(QString, markdown);
+        QFETCH(int, shown);
+        QVERIFY(open(sampleNotes()));
+        Result r = ask(u"Dopisz do zakupów"_s, u"Zakupy"_s);
+        r = m_engine->resume(r.call, calling({call(u"c1"_s, u"append_to_page"_s,
+                                                   {{u"name"_s, u"Zakupy"_s}, {u"markdown"_s, markdown}})}));
+        QCOMPARE(r.status, Status::Suspended);
+        const QString prompt = r.value.toMap().value(u"prompt"_s).toString();
+        const QString details = prompt.section(u"\n\n"_s, 1);
+        if (shown < 0) {
+            QCOMPARE(details, markdown.trimmed());
+            return;
+        }
+        // The first thing under the question: how much of the change is below.
+        const QString note = u"(Poniżej początek: %1 z %2 znaków. Reszty tu nie widać.)\n\n"_s.arg(shown).arg(
+                markdown.trimmed().size());
+        QVERIFY2(details.startsWith(note), qPrintable(details.left(200)));
+        QCOMPARE(details.mid(note.size()), markdown.trimmed().left(shown) + u"\n…"_s);
+        QVERIFY(details.count(u'\n') <= 45);
+    }
+
     void aDeclinedChangeIsNotMade()
     {
         QVERIFY(open(sampleNotes()));

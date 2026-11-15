@@ -515,6 +515,18 @@ silently later. Background: Qt stops the event loop in the background, so the sc
 checked when the app returns to the front; the leftover of an interrupted write (`….zip.XXXXXX`)
 is deleted by the first write after a day.
 
+**The system's own backup** (`android:allowBackup`: Auto Backup to the user's Google account,
+Seedvault, the transfer to a new phone) takes the app's private files — a notebook kept there, the
+settings, the history — but never the passwords and tokens: `files/secrets` (the Nextcloud app
+password, the GitHub token, the AI and Syncthing keys) is left out by `res/xml/backup_rules.xml`
+(Android 9–11, `android:fullBackupContent`) and by both sections of
+`res/xml/data_extraction_rules.xml` (Android 12+, `android:dataExtractionRules`), so after a
+restore or on a new phone Brulion asks for them again. On Android 12+ the notes go to the cloud
+only in a backup encrypted with a key of the user's devices (`disableIfNoEncryptionCapabilities`:
+a phone without a screen lock is not backed up to the cloud at all). ctest
+`tst_scripts_android_backup_rules` keeps the manifest, the two rule files and the folder the code
+writes its secrets to in agreement.
+
 ## On-screen keyboard
 
 The editing toolbar always sits right above the on-screen keyboard — in the journal and on pages,

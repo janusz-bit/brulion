@@ -2,6 +2,7 @@
 
 #include "backup/taskrunner_p.h"
 #include "util/paths.h"
+#include "util/unicode.h"
 #include "vault/vaultconfig.h"
 
 #include <QDateTime>
@@ -244,11 +245,18 @@ WriteTask::Added WriteTask::addOnce(const SourceFile &source)
 {
     QFile file(source.absolutePath);
     const QFileInfo info(source.absolutePath);
+    // A link is no file of the notebook (the vault lists none): one put in a file's place since
+    // the files were listed — by a sync, by another program — would have the backup read what it
+    // points at, a file anywhere on the device. Asked before the file is opened and after.
+    if (info.isSymLink()) {
+        m_result.skipped.append(source.path);
+        return Added::Skip;
+    }
     if (!info.exists()) {
         m_result.vanished.append(source.path);
         return Added::Skip;
     }
-    if (!file.open(QIODevice::ReadOnly | QIODevice::Unbuffered)) {
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Unbuffered) || QFileInfo(source.absolutePath).isSymLink()) {
         m_result.skipped.append(source.path);
         return Added::Skip;
     }
@@ -482,7 +490,7 @@ EntryPath checkEntryPath(const QString &path)
         return EntryPath::Unsafe;
     if (path.size() >= 2 && path.at(1) == u':' && path.at(0).isLetter())
         return EntryPath::Unsafe;
-    if (std::ranges::any_of(path, isControl) || path.normalized(QString::NormalizationForm_C) != path)
+    if (std::ranges::any_of(path, isControl) || unicode::nfc(path) != path)
         return EntryPath::Unsafe;
     // No segment empty or only dots and spaces (Windows drops trailing ones: "..  " is "..").
     const auto dotOrSpace = [](QChar c) { return c == u'.' || c == u' '; };

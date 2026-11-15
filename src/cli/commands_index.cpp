@@ -11,6 +11,7 @@
 #include "singleinstance.h"
 #include "text/text.h"
 #include "util/paths.h"
+#include "util/unicode.h"
 #include "vault/vault.h"
 
 #include <QCoreApplication>
@@ -180,7 +181,7 @@ Result tag(Call &call)
         name = name.mid(2, name.size() - 4).trimmed();
     if (name.isEmpty())
         return call.fail(ExitUsage, u"name_required"_s, tr("Which tag?"));
-    const QString key = name.normalized(QString::NormalizationForm_C).toLower();
+    const QString key = unicode::nfc(name).toLower();
     QString display = name;
     int count = 0;
     QStringList subTags;

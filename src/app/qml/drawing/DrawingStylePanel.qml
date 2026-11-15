@@ -92,6 +92,7 @@ T.Popup {
         }
         contentItem: Text {
             id: choiceText
+            textFormat: Text.PlainText
             text: choice.label
             color: Theme.fg
             font.family: Theme.fontUi

@@ -1081,6 +1081,7 @@ Item {
                 Text {
                     Layout.fillWidth: true
                     visible: DatesHelper.locale !== "en"
+                    textFormat: Text.PlainText
                     text: qsTr("Written in the note as: %1").arg(recurrenceDialog.canonical)
                     font.family: Theme.fontUi
                     font.pixelSize: Theme.textXs

@@ -1,5 +1,6 @@
 #include "ai/ai.h"
 
+#include <QHostAddress>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -120,6 +121,15 @@ bool Settings::usable(QString *why) const
     if (why)
         *why = problem;
     return problem.isEmpty();
+}
+
+bool Settings::unencrypted() const
+{
+    const QUrl url(baseOf(*this));
+    if (url.scheme().compare(u"http"_s, Qt::CaseInsensitive) != 0)
+        return false;
+    const QString host = url.host().toLower();
+    return host != u"localhost" && !host.endsWith(u".localhost") && !QHostAddress(host).isLoopback();
 }
 
 QVariantMap Reply::toVariant() const

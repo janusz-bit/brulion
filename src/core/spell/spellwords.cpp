@@ -4,6 +4,7 @@
 #include "markdown/math.h"
 #include "markdown/tokens.h"
 #include "types.h"
+#include "util/unicode.h"
 
 #include <QRegularExpression>
 
@@ -260,7 +261,7 @@ QString normalizedWord(QStringView word)
         else
             w.append(c);
     }
-    return w.normalized(QString::NormalizationForm_C);
+    return unicode::nfc(w);
 }
 
 QString checkedText(QStringView text, const WordSpan &span)

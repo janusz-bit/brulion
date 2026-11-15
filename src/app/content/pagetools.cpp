@@ -8,6 +8,7 @@
 #include "markdown/rename.h"
 #include "notebook/links.h"
 #include "util/paths.h"
+#include "util/unicode.h"
 #include "vault/vault.h"
 #include "workspace.h"
 
@@ -34,7 +35,7 @@ QString withoutMd(const QString &title)
 
 QString tagKey(const QString &display)
 {
-    return display.normalized(QString::NormalizationForm_C).toLower();
+    return unicode::nfc(display).toLower();
 }
 
 /// The tag that names the page at `path` (docs/SYNTAX.md §3): its key and how it is shown —

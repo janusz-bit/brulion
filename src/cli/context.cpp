@@ -11,6 +11,7 @@
 #include "profile.h" // the app's settings file (BRULION_PROFILE)
 #include "text/text.h"
 #include "util/paths.h"
+#include "util/unicode.h"
 #include "vault/vault.h"
 
 #include <QDir>
@@ -49,7 +50,7 @@ QVariant appSettingsValue(const QString &key)
 
 QString foldName(const QString &name)
 {
-    return name.normalized(QString::NormalizationForm_C).toLower();
+    return unicode::nfc(name).toLower();
 }
 
 } // namespace
@@ -170,6 +171,9 @@ notebook::Notebook *Context::notebook(std::optional<Error> *error)
     auto nb = std::make_unique<notebook::Notebook>();
     notebook::Notebook::Options options;
     options.stateDir = stateDir();
+    // The app's own state folder is the user's alone; one named with --state-dir is as they made it.
+    if (globals.stateDir.trimmed().isEmpty())
+        notebook::keepDeviceStatePrivate(options.stateDir);
     options.watch = serving;
     options.historyReason = u"cli"_s;
     // Folder links to outside: as the app on this device follows them (read only — its one-time

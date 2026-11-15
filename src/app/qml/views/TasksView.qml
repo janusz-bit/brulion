@@ -252,6 +252,7 @@ FocusScope {
                 Text {
                     Layout.fillWidth: true
                     visible: taskModel.totalCount > 0
+                    textFormat: Text.PlainText
                     text: qsTr("%n open", "", taskModel.openCount)
                           + (taskModel.overdueCount > 0 ? " · " + qsTr("%n overdue", "", taskModel.overdueCount) : "")
                           + (taskModel.todayCount > 0 ? " · " + qsTr("%n for today", "", taskModel.todayCount) : "")

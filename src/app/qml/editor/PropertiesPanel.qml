@@ -297,6 +297,7 @@ Item {
                     id: addLabel
                     x: panel.iconWidth + Theme.space1
                     anchors.verticalCenter: parent.verticalCenter
+                    textFormat: Text.PlainText
                     text: qsTr("Add property")
                     font.family: Theme.fontUi
                     font.pixelSize: Theme.textBase
@@ -354,6 +355,7 @@ Item {
         Text {
             id: noteText
             width: panel.stacked ? parent.width : parent.width - noteButton.width - Theme.space3
+            textFormat: Text.PlainText
             text: qsTr("These properties cannot be changed safely in fields.")
             wrapMode: Text.Wrap
             font.family: Theme.fontUi

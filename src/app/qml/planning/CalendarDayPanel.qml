@@ -110,6 +110,7 @@ FocusScope {
                 Text {
                     Layout.fillWidth: true
                     visible: root.relative !== ""
+                    textFormat: Text.PlainText
                     text: root.relative
                     font.family: Theme.fontUi
                     font.pixelSize: Theme.textSm
@@ -118,6 +119,7 @@ FocusScope {
                 }
                 Text {
                     Layout.fillWidth: true
+                    textFormat: Text.PlainText
                     text: root.heading
                     font.family: Theme.fontUi
                     font.pixelSize: Theme.textLg

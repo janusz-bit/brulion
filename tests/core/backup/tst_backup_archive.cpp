@@ -350,6 +350,36 @@ private Q_SLOTS:
         QCOMPARE(entryNames(options.targetPath), QStringList{u"jawne.md"_s});
     }
 
+    void aLinkPutInAFilesPlaceIsNotFollowed()
+    {
+        // The notebook's files are listed, then one of them becomes a link to a file outside the
+        // notebook (a sync, another program): the backup does not carry that file away.
+        QTemporaryDir dir;
+        const QString root = dir.filePath(u"N"_s);
+        writeFile(root + u"/a.md"_s, "a");
+        writeFile(root + u"/żółw.md"_s, "b");
+        writeFile(dir.filePath(u"klucz"_s), "tajny klucz spoza notatnika");
+        Vault vault(root);
+        QVERIFY(vault.open());
+        const Sources sources = collectSources(vault);
+        QCOMPARE(sources.files.size(), 2);
+        QVERIFY(QFile::remove(root + u"/żółw.md"_s));
+        if (!QFile::link(dir.filePath(u"klucz"_s), root + u"/żółw.md"_s)
+            || !QFileInfo(root + u"/żółw.md"_s).isSymLink())
+            QSKIP("no symbolic links here");
+        WriteOptions options;
+        options.targetPath = dir.filePath(u"Brulion-N-2026-11-02-143005.zip"_s);
+        const WriteResult result = runWriter(poolOn(nullptr), sources, options);
+        QVERIFY2(result.ok(), qPrintable(result.detail));
+        QCOMPARE(result.skipped, QStringList{u"żółw.md"_s});
+        QVERIFY(result.vanished.isEmpty());
+        QVERIFY(!result.complete());
+        QCOMPARE(entryNames(options.targetPath), QStringList{u"a.md"_s});
+        QFile archive(options.targetPath);
+        QVERIFY(archive.open(QIODevice::ReadOnly));
+        QVERIFY(!archive.readAll().contains("tajny klucz"));
+    }
+
     void aNameABackupMayNotHoldIsLeftOutAndReported()
     {
         // Legal on Linux, a way out of the notebook elsewhere: never written, so that every backup
@@ -526,6 +556,20 @@ private Q_SLOTS:
         QTest::newRow("hooks in git, deeper") << u"a/.git/hooks/post-commit"_s << ignored;
         QTest::newRow("other device state") << u".brulion/secret.json"_s << ignored;
         QTest::newRow("temporary") << u"a/~syncthing~x.tmp"_s << ignored;
+        // The same folders under the other names storage has for them (paths::isIgnored): an
+        // archive must not put a git hook or an Obsidian plugin where git and Obsidian look.
+        QTest::newRow("git in upper case") << u".GIT/config"_s << ignored;
+        QTest::newRow("git in mixed case, deeper") << u"a/.Git/hooks/post-commit"_s << ignored;
+        QTest::newRow("git with a dot at its end") << u".git./config"_s << ignored;
+        QTest::newRow("git as an NTFS stream") << u".git::$INDEX_ALLOCATION/config"_s << ignored;
+        QTest::newRow("git by its short name") << u"GIT~1/hooks/pre-commit"_s << ignored;
+        QTest::newRow("Obsidian's plugins in another case") << u".OBSIDIAN/plugins/x/main.js"_s << ignored;
+        QTest::newRow("Obsidian by its short name") << u"OBSIDI~1/plugins/x/main.js"_s << ignored;
+        QTest::newRow("other device state in another case") << u".Brulion/secret.json"_s << ignored;
+        QTest::newRow("settings in another case are no settings") << u".Brulion/config.json"_s << ignored;
+        QTest::newRow("the trash in upper case") << u".TRASH/x.md"_s << ignored;
+        QTest::newRow("Syncthing's patterns in upper case") << u".STIGNORE"_s << ignored;
+        QTest::newRow("a folder of notes about Logseq") << u"Import/Logseq/Strona.md"_s << ok;
     }
     void entryPaths()
     {
@@ -557,6 +601,12 @@ private Q_SLOTS:
         QTest::newRow("NUL in a name") << nul << int(ArchiveProblem::UnsafePath);
         QTest::newRow("into the trash") << zip({{".trash/x.md", "owned"}}) << int(ArchiveProblem::IgnoredPath);
         QTest::newRow("into git") << zip({{".git/hooks/pre-commit", "owned"}}) << int(ArchiveProblem::IgnoredPath);
+        QTest::newRow("into git in upper case")
+                << zip({{".GIT/hooks/pre-commit", "owned"}}) << int(ArchiveProblem::IgnoredPath);
+        QTest::newRow("into git by its short name")
+                << zip({{"GIT~1/config", "[core]\nfsmonitor = calc"}}) << int(ArchiveProblem::IgnoredPath);
+        QTest::newRow("into Obsidian's plugins with a dot at the end")
+                << zip({{".obsidian./plugins/x/main.js", "owned"}}) << int(ArchiveProblem::IgnoredPath);
         QTest::newRow("twice") << zip({{"a.md", "1"}, {"a.md", "2"}}) << int(ArchiveProblem::Duplicate);
         QTest::newRow("a file and a folder") << zip({{"a", "1"}, {"a/b.md", "2"}}) << int(ArchiveProblem::Duplicate);
         QTest::newRow("a folder and a file") << zip({{"a/", ""}, {"a", "2"}}) << int(ArchiveProblem::Duplicate);

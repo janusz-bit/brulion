@@ -55,6 +55,7 @@ QString errorCodeName(WebDavErrorCode code)
     case WebDavErrorCode::Timeout: return u"timeout"_s;
     case WebDavErrorCode::Parse: return u"parse"_s;
     case WebDavErrorCode::Cancelled: return u"cancelled"_s;
+    case WebDavErrorCode::Oversized: return u"oversized"_s;
     }
     return {};
 }

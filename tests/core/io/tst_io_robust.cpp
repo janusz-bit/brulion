@@ -18,6 +18,7 @@
 #include <QTest>
 #include <QThread>
 #include <QXmlStreamReader>
+#include <QtEndian>
 
 #include <algorithm>
 #include <memory>
@@ -269,6 +270,48 @@ private Q_SLOTS:
         QStringList warnings;
         QVERIFY(readZip(bomb, &warnings, o).isEmpty());
         QCOMPARE(warnings.size(), 1);
+    }
+
+    void zipEntriesOfImpossibleSizesAreSkipped_data()
+    {
+        QTest::addColumn<int>("level");
+        QTest::addColumn<QStringList>("read");
+        QTest::addColumn<QString>("warning");
+        QTest::newRow("deflated") << 6 << QStringList{u"przed.md"_s, u"po.md"_s} << u"fałsz.md"_s;
+        // (A stored entry of another length than its bytes: the archive itself is refused.)
+        QTest::newRow("stored") << 0 << QStringList() << u"not a valid ZIP"_s;
+    }
+    void zipEntriesOfImpossibleSizesAreSkipped()
+    {
+        // A header that claims more than its compressed bytes can give (deflate expands about
+        // 1032 times at most; a stored entry is as long as it is): skipped before memory is set
+        // aside for the claim, and the entries around it are read.
+        QFETCH(int, level);
+        QFETCH(QStringList, read);
+        QFETCH(QString, warning);
+        ZipWriteOptions written;
+        written.compressionLevel = level;
+        QByteArray zip = writeZip({{u"przed.md"_s, QByteArray("zażółć")},
+                                   {u"fałsz.md"_s, QByteArray(1000, 'x')},
+                                   {u"po.md"_s, QByteArray("gęślą")}},
+                                  written);
+        // The central directory's record of the middle entry: its uncompressed size is at 24.
+        const QByteArray name = u"fałsz.md"_s.toUtf8();
+        const QByteArray signature("PK\x01\x02", 4);
+        qsizetype record = -1;
+        for (qsizetype at = zip.indexOf(signature); at >= 0; at = zip.indexOf(signature, at + 4)) {
+            if (zip.mid(at + 46, name.size()) == name)
+                record = at;
+        }
+        QVERIFY(record > 0);
+        qToLittleEndian(quint32(400u << 20), zip.data() + record + 24);
+        QStringList warnings;
+        QStringList found;
+        for (const FileEntry &entry : readZip(zip, &warnings))
+            found << entry.path;
+        QCOMPARE(found, read);
+        QCOMPARE(warnings.size(), 1);
+        QVERIFY2(warnings.first().contains(warning), qPrintable(warnings.first()));
     }
 
     void deepOutlinesRenderOnASmallStack()

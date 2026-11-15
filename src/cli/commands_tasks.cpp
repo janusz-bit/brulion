@@ -17,6 +17,7 @@
 #include "reminders/snooze.h"
 #include "text/text.h"
 #include "util/paths.h"
+#include "util/unicode.h"
 #include "vault/vault.h"
 
 #include <QFileInfo>
@@ -140,7 +141,7 @@ Result taskList(Call &call)
                 tag.remove(0, 1);
             QueryFilter f;
             f.kind = QueryFilterKind::Tag;
-            f.values = {tag.normalized(QString::NormalizationForm_C).toLower()};
+            f.values = {unicode::nfc(tag).toLower()};
             extra.append(f);
         }
         if (call.flag(u"blocked"_s))

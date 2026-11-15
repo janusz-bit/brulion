@@ -11,6 +11,7 @@
 #include "dates/local.h"
 #include "dates/natural_p.h"
 #include "dates/protect_p.h"
+#include "util/unicode.h"
 
 #include <QBitArray>
 #include <QHash>
@@ -311,8 +312,7 @@ bool weakTokenOk(const Group &g, const Ctx &ctx)
     if ((g.weak == Weakness::Ordinal ? ordinalFollowers() : hourFollowers()).contains(word))
         return true;
     // A Polish infinitive verb ("o 18 zadzwonić") — checked on the original text (ć vs c).
-    return originalSlice(ctx, wordStart, wordEnd).toString().toLower().normalized(QString::NormalizationForm_C).endsWith(
-        u'ć');
+    return unicode::nfc(originalSlice(ctx, wordStart, wordEnd).toString().toLower()).endsWith(u'ć');
 }
 
 bool groupValid(const Group &g, const Ctx &ctx)

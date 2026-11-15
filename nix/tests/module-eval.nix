@@ -58,6 +58,21 @@ let
     };
   };
 
+  # Framed by a site of the administrator's own, and by nobody's rules at all.
+  framedByNextcloud = evalSystem {
+    services.brulion-web = {
+      package = fakeWebBuild;
+      frameAncestors = "'self' https://cloud.example.com";
+      contentSecurityPolicy = "default-src 'self'";
+    };
+  };
+  framedByAnyone = evalSystem {
+    services.brulion-web = {
+      package = fakeWebBuild;
+      frameAncestors = null;
+    };
+  };
+
   withoutPackage = evalSystem { };
   failedAssertions = lib.filter (a: !a.assertion) withoutPackage.config.assertions;
 in
@@ -73,6 +88,8 @@ pkgs.runCommand "brulion-nixos-module"
     toplevel = builtins.unsafeDiscardStringContext main.config.system.build.toplevel.drvPath;
     releaseToplevel = builtins.unsafeDiscardStringContext fromRelease.config.system.build.toplevel.drvPath;
     nginxConf = main.config.environment.etc."nginx/nginx.conf".source;
+    nextcloudFrameConf = framedByNextcloud.config.environment.etc."nginx/nginx.conf".source;
+    anyFrameConf = framedByAnyone.config.environment.etc."nginx/nginx.conf".source;
     autostart = main.config.environment.etc."xdg/autostart/io.github.januszbit.brulion.desktop".source;
     ports = toString main.config.networking.firewall.allowedTCPPorts;
     hasPackage = lib.boolToString (
@@ -98,5 +115,16 @@ pkgs.runCommand "brulion-nixos-module"
     expect 'proxy_pass https://cloud.example.com;'
     expect 'proxy_set_header Host $proxy_host;'
     expect 'proxy_ssl_verify on;'
+    # No other site frames the app (clickjacking), unless the administrator names one.
+    expect "add_header Content-Security-Policy \"frame-ancestors 'self'\" always;"
+    expect 'add_header X-Frame-Options "SAMEORIGIN" always;'
+    grep -qF -- "add_header Content-Security-Policy \"frame-ancestors 'self' https://cloud.example.com\" always;" \
+      "$nextcloudFrameConf" || fail "frameAncestors with another origin is not in the header"
+    grep -qF -- "add_header Content-Security-Policy \"default-src 'self'\" always;" "$nextcloudFrameConf" ||
+      fail "contentSecurityPolicy is no longer sent next to frame-ancestors"
+    ! grep -qF -- 'X-Frame-Options' "$nextcloudFrameConf" ||
+      fail "X-Frame-Options: SAMEORIGIN would refuse the origin frameAncestors allows"
+    ! grep -qE -- 'frame-ancestors|X-Frame-Options' "$anyFrameConf" ||
+      fail "frameAncestors = null must send no frame header"
     touch $out
   ''

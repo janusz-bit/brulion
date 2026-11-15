@@ -163,6 +163,7 @@ T.ItemDelegate {
             y: Theme.touchUi ? 12 : 4
             width: timeMetrics.width
             visible: control.entryTime !== ""
+            textFormat: Text.PlainText
             text: control.entryTime
             font.family: Theme.fontUi
             font.pixelSize: Theme.textSm
@@ -188,6 +189,7 @@ T.ItemDelegate {
             Text {
                 id: title
                 width: parent.width
+                textFormat: Text.PlainText
                 text: control.entryTitle
                 font.family: Theme.fontUi
                 font.pixelSize: Theme.textBase
@@ -205,6 +207,7 @@ T.ItemDelegate {
                 y: title.implicitHeight + 1
                 width: parent.width
                 visible: text !== ""
+                textFormat: Text.PlainText
                 text: control.subtitle
                 font.family: Theme.fontUi
                 font.pixelSize: Theme.textSm

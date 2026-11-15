@@ -30,12 +30,32 @@ const Header *findHeader(const QList<Header> &headers, QByteArrayView name)
 /// Per-request state shared by the reply's handlers.
 struct ReplyState {
     bool timedOut = false;
+    bool tooLarge = false;   ///< aborted: the body is over the request's limit
     QString refusedRedirect; ///< target of a redirect we refused to follow
     qint64 sent = 0;
     qint64 received = 0;
 };
 
+/// The port a URL leads to: its own, or the scheme's.
+int effectivePort(const QUrl &url)
+{
+    return url.port(url.scheme().compare(u"https"_s, Qt::CaseInsensitive) == 0 ? 443 : 80);
+}
+
 } // namespace
+
+bool isSameServer(const QUrl &origin, const QUrl &target)
+{
+    const bool originSecure = origin.scheme().compare(u"https"_s, Qt::CaseInsensitive) == 0;
+    const bool targetSecure = target.scheme().compare(u"https"_s, Qt::CaseInsensitive) == 0;
+    if (!targetSecure && target.scheme().compare(u"http"_s, Qt::CaseInsensitive) != 0)
+        return false;
+    if (target.host().compare(origin.host(), Qt::CaseInsensitive) != 0 || (originSecure && !targetSecure))
+        return false;
+    if (effectivePort(target) == effectivePort(origin))
+        return true;
+    return !originSecure && targetSecure && effectivePort(origin) == 80 && effectivePort(target) == 443;
+}
 
 QByteArray HttpRequest::header(QByteArrayView name) const
 {
@@ -46,6 +66,17 @@ QByteArray HttpRequest::header(QByteArrayView name) const
 bool HttpRequest::hasHeader(QByteArrayView name) const
 {
     return findHeader(headers, name) != nullptr;
+}
+
+HttpResponse HttpResponse::oversized(const HttpRequest &request)
+{
+    HttpResponse response;
+    response.tooLarge = true;
+    // One multi-argument arg(): percent escapes in the URL ("%20") must not count as placeholders.
+    response.networkError = u"The answer to %1 %2 is larger than %3 bytes"_s.arg(
+            QString::fromLatin1(request.method), request.url.toString(QUrl::RemoveUserInfo),
+            QString::number(request.bodyLimit()));
+    return response;
 }
 
 QByteArray HttpResponse::header(QByteArrayView name) const
@@ -108,17 +139,28 @@ void NetworkHttpTransport::send(const HttpRequest &request, HttpCallback done)
     auto state = std::make_shared<ReplyState>();
     const QUrl origin = request.url;
     connect(reply, &QNetworkReply::redirected, reply, [reply, origin, state](const QUrl &target) {
-        // Credentials travel in the Authorization header: never follow to another host or
+        // Credentials travel in the Authorization header: never follow to another server or
         // from https down to http.
-        const bool sameHost = target.host().compare(origin.host(), Qt::CaseInsensitive) == 0;
-        const bool downgrade = origin.scheme() == u"https"_s && target.scheme() != u"https"_s;
-        if (sameHost && !downgrade) {
+        if (isSameServer(origin, target)) {
             Q_EMIT reply->redirectAllowed();
         } else {
             state->refusedRedirect = target.toString(QUrl::RemoveUserInfo);
             reply->abort();
         }
     });
+    // The reply keeps what arrives until it is read at the end: stop at the limit, both when the
+    // server announces more and when it simply goes on sending (the bytes counted are the ones
+    // kept, after decompression).
+    const qint64 limit = request.bodyLimit();
+    const auto stopAbove = [reply, state, limit](qint64 bytes) {
+        if (bytes <= limit || state->tooLarge)
+            return;
+        state->tooLarge = true;
+        reply->abort();
+    };
+    connect(reply, &QNetworkReply::metaDataChanged, reply,
+            [reply, stopAbove] { stopAbove(reply->header(QNetworkRequest::ContentLengthHeader).toLongLong()); });
+    connect(reply, &QNetworkReply::readyRead, reply, [reply, stopAbove] { stopAbove(reply->bytesAvailable()); });
     if (request.onProgress) {
         // Progress counts as activity (stall detection): a big transfer is not a stalled one.
         connect(reply, &QNetworkReply::uploadProgress, reply,
@@ -138,7 +180,16 @@ void NetworkHttpTransport::send(const HttpRequest &request, HttpCallback done)
             reply->abort();
         });
     }
-    connect(reply, &QNetworkReply::finished, this, [this, reply, state, done = std::move(done)] {
+    HttpRequest asked; // what the request was, without what it carried
+    asked.method = request.method;
+    asked.url = request.url;
+    asked.maxBodyBytes = request.maxBodyBytes;
+    connect(reply, &QNetworkReply::finished, this, [this, reply, state, asked, done = std::move(done)] {
+        if (state->tooLarge) {
+            reply->deleteLater();
+            done(HttpResponse::oversized(asked));
+            return;
+        }
         if (!state->refusedRedirect.isEmpty()) {
             reply->deleteLater();
             HttpResponse response;

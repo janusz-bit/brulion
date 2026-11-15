@@ -1,6 +1,7 @@
 #include "io/zip.h"
 
 #include "io/messages_p.h"
+#include "util/unicode.h"
 
 #include <QMutex>
 #include <QScopeGuard>
@@ -29,6 +30,8 @@ constexpr std::u16string_view Cp437High =
 static_assert(Cp437High.size() == 128);
 
 constexpr mz_uint16 Utf8NameFlag = 1u << 11;
+/// More than any deflate stream can expand (about 1032:1), with room for headers.
+constexpr quint64 MaxDeflateRatio = 1100;
 
 QString decodeCp437(const QByteArray &raw)
 {
@@ -112,6 +115,13 @@ bool readInto(QByteArrayView zip, const QString &prefix, int depth, const ZipRea
         }
         if (stat.m_uncomp_size > quint64(options.maxEntrySize)) {
             warn(warnings, IoMessages::tr("“%1” is too large and was skipped.").arg(path));
+            continue;
+        }
+        // A size its compressed bytes cannot give (a forged header: a stored entry is as long as
+        // it is, deflate has its limit): no memory is set aside and cleared for it.
+        if (stat.m_method == 0 ? stat.m_uncomp_size != stat.m_comp_size
+                               : stat.m_uncomp_size > (stat.m_comp_size + 1) * MaxDeflateRatio) {
+            warn(warnings, IoMessages::tr("“%1” is damaged and was skipped.").arg(path));
             continue;
         }
         if (state.total + qint64(stat.m_uncomp_size) > options.maxTotalSize || state.count >= options.maxEntries) {
@@ -207,7 +217,7 @@ QByteArray writeZip(const QList<FileEntry> &entries, const ZipWriteOptions &opti
 
 QString sanitizeArchivePath(QStringView name)
 {
-    QString s = name.toString().normalized(QString::NormalizationForm_C);
+    QString s = unicode::nfc(name);
     s.replace(u'\\', u'/');
     if (s.size() >= 2 && s[1] == u':' && s[0].isLetter())
         s.remove(0, 2);

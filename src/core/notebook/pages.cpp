@@ -5,6 +5,7 @@
 #include "markdown/notemode.h"
 #include "text/text.h"
 #include "util/paths.h"
+#include "util/unicode.h"
 #include "vault/vault.h"
 #include "vault/vaultconfig.h"
 
@@ -117,6 +118,12 @@ CreatedPage plannedPage(const Vault &vault, const QString &title, const QString 
     if (parts.isEmpty())
         return refused<CreatedPage>(PathProblem::NoName);
     const VaultPath wanted = pagePath(folder.isNull() ? vault.config().newPagesFolder : folder, parts);
+    // Never a page the notebook would not show: one in a folder it ignores ("logseq/Plan"), also
+    // under another name storage has for such a folder ("GIT~1/Plan": paths::isIgnored()).
+    if (paths::isIgnored(wanted)) {
+        const auto hidden = std::ranges::find_if(parts, [](const QString &part) { return paths::isIgnored(part); });
+        return refused<CreatedPage>(PathProblem::HiddenPath, hidden != parts.cend() ? *hidden : parts.constLast());
+    }
     CreatedPage out;
     out.wanted = wanted;
     out.path = wanted;
@@ -159,7 +166,7 @@ CreatedFolder plannedFolder(const Vault &vault, const QString &rawPath)
     QStringList segments;
     const QString unified = QString(rawPath).replace(u'\\', u'/');
     for (const QString &raw : unified.split(u'/', Qt::SkipEmptyParts)) {
-        const QString segment = raw.trimmed().normalized(QString::NormalizationForm_C);
+        const QString segment = unicode::nfc(raw.trimmed());
         if (segment.isEmpty() || segment == u"." || segment == u"..")
             continue;
         // Hidden as typed (".notatki": the leading dot would be dropped) or once sanitised

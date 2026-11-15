@@ -2,6 +2,7 @@
 #pragma once
 
 #include "calc/calclocale.h"
+#include "util/unicode.h"
 
 #include <QChar>
 #include <QString>
@@ -20,7 +21,7 @@ inline QString toNfc(QStringView s)
 {
     for (const QChar c : s) {
         if (c.unicode() >= 0x0300)
-            return s.toString().normalized(QString::NormalizationForm_C);
+            return unicode::nfc(s);
     }
     return s.toString();
 }

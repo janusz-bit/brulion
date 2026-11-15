@@ -406,6 +406,41 @@ private Q_SLOTS:
         QCOMPARE(toolName(*findCommand(u"app.long-press"_s)), u"brulion_app_long_press"_s);
     }
 
+    void whatATerminalIsShown_data()
+    {
+        QTest::addColumn<QString>("text");
+        QTest::addColumn<QString>("shown");
+        const auto same = [](const char *name, const QString &text) { QTest::newRow(name) << text << text; };
+        same("empty", QString());
+        same("Polish text", u"Zażółć gęślą jaźń — „cudzysłów” 😀"_s);
+        same("lines and tabs", u"- a\n\t- b\n"_s);
+        same("Windows line ends", u"a\r\nb\r\n"_s);
+        same("a no-break space and a soft hyphen", u"1\u00A0km, wy\u00ADraz"_s);
+        QTest::newRow("a colour") << u"\u001B[31mczerwony\u001B[0m"_s << u"\u241B[31mczerwony\u241B[0m"_s;
+        QTest::newRow("the window's title") << u"\u001B]0;tytuł\u0007"_s << u"\u241B]0;tytuł\u2407"_s;
+        QTest::newRow("the clipboard") << u"\u001B]52;c;cm0gLXJmIH4=\u001B\\"_s
+                                       << u"\u241B]52;c;cm0gLXJmIH4=\u241B\\"_s;
+        QTest::newRow("a line written over") << u"prawda\rfałsz"_s << u"prawda\u240Dfałsz"_s;
+        QTest::newRow("a carriage return at the end") << u"a\r"_s << u"a\u240D"_s;
+        QTest::newRow("backspaces") << u"abc\u0008\u0008\u0008xyz"_s << u"abc\u2408\u2408\u2408xyz"_s;
+        QTest::newRow("NUL and DEL") << (u"a"_s + QChar(char16_t(0)) + u"b\u007Fc"_s) << u"a\u2400b\u2421c"_s;
+        QTest::newRow("an 8-bit CSI") << u"\u009B31mczerwony"_s << u"\uFFFD31mczerwony"_s;
+        QTest::newRow("every C1 control") << u"\u0080\u008D\u009F\u00A0"_s << u"\uFFFD\uFFFD\uFFFD\u00A0"_s;
+        QTest::newRow("after a long text")
+                << (u"ż"_s.repeated(500) + u"\u001Bc"_s) << (u"ż"_s.repeated(500) + u"\u241Bc"_s);
+    }
+    void whatATerminalIsShown()
+    {
+        QFETCH(QString, text);
+        QFETCH(QString, shown);
+        QCOMPARE(forTerminal(text), shown);
+        QCOMPARE(forTerminal(shown), shown); // nothing left to change
+        for (const QChar c : forTerminal(text))
+            QVERIFY2(c == u'\n' || c == u'\t' || c == u'\r'
+                             || (c.unicode() >= 0x20 && (c.unicode() < 0x7f || c.unicode() >= 0xa0)),
+                     qPrintable(QString::number(c.unicode(), 16)));
+    }
+
     void diff()
     {
         QCOMPARE(unifiedDiff(u"- a\n- b\n"_s, u"- a\n- b\n"_s, u"x.md"_s), QString());

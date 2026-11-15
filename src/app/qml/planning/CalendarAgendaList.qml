@@ -196,6 +196,7 @@ FocusScope {
                         border.color: Theme.border
                         Text {
                             anchors.centerIn: parent
+                            textFormat: Text.PlainText
                             text: "" + day.day
                             font.family: Theme.fontUi
                             font.pixelSize: Theme.textLg
@@ -214,6 +215,7 @@ FocusScope {
                         Text {
                             id: dayLabel
                             width: parent.width
+                            textFormat: Text.PlainText
                             text: day.dayTitle
                             font.family: Theme.fontUi
                             font.pixelSize: Theme.textMd
@@ -227,6 +229,7 @@ FocusScope {
                             id: relativeLabel
                             y: dayLabel.implicitHeight
                             width: parent.width
+                            textFormat: Text.PlainText
                             text: root.capitalized(day.isToday ? qsTr("Today") : day.human)
                             // Only the relative words (today, tomorrow, yesterday).
                             visible: day.isToday || Js.indexOf(day.human, " ") < 0
@@ -291,6 +294,7 @@ FocusScope {
                     x: column.markerWidth + Theme.space3
                     y: entries.y + entries.height
                     width: Math.max(0, parent.width - x)
+                    textFormat: Text.PlainText
                     text: day.hasJournal ? qsTr("Only a journal entry.") : qsTr("Nothing planned.")
                     font.family: Theme.fontUi
                     font.pixelSize: Theme.textSm

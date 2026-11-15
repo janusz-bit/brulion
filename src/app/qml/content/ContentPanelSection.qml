@@ -55,6 +55,7 @@ ColumnLayout {
             }
             Text {
                 Layout.fillWidth: true
+                textFormat: Text.PlainText
                 text: section.title
                 font.family: Theme.fontUi
                 font.pixelSize: Theme.textXs
@@ -67,6 +68,7 @@ ColumnLayout {
             }
             Text {
                 visible: section.count >= 0
+                textFormat: Text.PlainText
                 text: "" + section.count
                 font.family: Theme.fontMono
                 font.pixelSize: Theme.textXs

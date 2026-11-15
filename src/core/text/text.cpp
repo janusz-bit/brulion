@@ -1,4 +1,5 @@
 #include "text/text.h"
+#include "util/unicode.h"
 
 #include <algorithm>
 #include <atomic>
@@ -397,7 +398,7 @@ int compareNames(const QString &a, const QString &b)
 
 QString nameSortKey(const QString &name)
 {
-    return (isAscii(name) ? name : name.normalized(QString::NormalizationForm_C)).toLower();
+    return unicode::nfc(name).toLower();
 }
 
 int compareNameKeys(const QString &la, const QString &a, const QString &lb, const QString &b)

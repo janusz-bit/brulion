@@ -123,6 +123,7 @@ T.Button {
                 id: label
                 visible: control.text !== ""
                 anchors.verticalCenter: parent.verticalCenter
+                textFormat: Text.PlainText
                 text: control.text
                 font: control.font
                 color: control.textColor

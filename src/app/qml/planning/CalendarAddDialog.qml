@@ -131,6 +131,7 @@ BDialog {
 
             Text {
                 Layout.fillWidth: true
+                textFormat: Text.PlainText
                 text: qsTr("Time")
                 font.family: Theme.fontUi
                 font.pixelSize: Theme.textSm
@@ -215,6 +216,7 @@ BDialog {
             objectName: "calendarAddTimeHint"
             Layout.fillWidth: true
             visible: text !== ""
+            textFormat: Text.PlainText
             text: timeField.invalid ? control.badTimeHint : control.past ? control.pastHint : ""
             color: timeField.invalid ? Theme.dangerText : Theme.warningText
             font.family: Theme.fontUi
@@ -234,6 +236,7 @@ BDialog {
     Text {
         Layout.fillWidth: true
         Layout.topMargin: Theme.space1
+        textFormat: Text.PlainText
         text: control.mode === "task"
               ? qsTr("Goes into the journal of %1, due that day.").arg(DatesHelper.formatShort(control.date))
               : qsTr("Goes into the journal of %1; the reminder comes at %2.").arg(DatesHelper.formatShort(control.date))

@@ -181,7 +181,7 @@ ColumnLayout {
                 iconName: "external-link"
                 size: "small"
                 variant: "ghost"
-                onClicked: Qt.openUrlExternally(panel.github.webUrl)
+                onClicked: Workspace.openUrl(panel.github.webUrl)
             }
         }
 
@@ -242,7 +242,7 @@ ColumnLayout {
                 text: qsTr("Commit %1").arg(panel.github.headText)
                 iconName: "external-link"
                 variant: "ghost"
-                onClicked: Qt.openUrlExternally(panel.github.headUrl)
+                onClicked: Workspace.openUrl(panel.github.headUrl)
             }
         }
         Hint {
@@ -326,7 +326,7 @@ ColumnLayout {
                 text: qsTr("Open on GitHub")
                 iconName: "external-link"
                 size: "small"
-                onClicked: Qt.openUrlExternally(AppController.routeText(panel.github.proposal, "url"))
+                onClicked: Workspace.openUrl(AppController.routeText(panel.github.proposal, "url"))
             }
             BButton {
                 visible: panel.proposalOpen
@@ -544,7 +544,7 @@ ColumnLayout {
                     iconName: "external-link"
                     size: "small"
                     variant: "ghost"
-                    onClicked: Qt.openUrlExternally(panel.github.tokenUrl)
+                    onClicked: Workspace.openUrl(panel.github.tokenUrl)
                 }
             }
         }

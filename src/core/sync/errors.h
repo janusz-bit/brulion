@@ -25,6 +25,7 @@ enum class WebDavErrorCode {
     Timeout,             ///< no answer within the time limit
     Parse,               ///< the answer is not a WebDAV multistatus (e.g. an HTML login page)
     Cancelled,           ///< the caller cancelled the operation
+    Oversized,           ///< the answer is larger than its request accepts, or a listing has no end
 };
 
 /// A failed WebDAV request. `code == None` means success.

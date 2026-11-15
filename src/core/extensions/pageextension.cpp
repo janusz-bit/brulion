@@ -86,17 +86,14 @@ QStringList linesOf(QStringView content)
     return out;
 }
 
-/// The first line after a leading frontmatter block (0 when there is none).
-qsizetype afterFrontmatter(const QStringList &lines)
+/// The line of linesOf(content) the page's text starts at: after the frontmatter the parser
+/// finds (markdown::findFrontmatter), 0 without one. The same rule as the page's: what a reader
+/// sees as the page's properties is never code that runs, and no code block they see is skipped
+/// (a byte order mark before the first `---`, a `---` that is indented).
+qsizetype firstBodyLine(QStringView content)
 {
-    if (lines.isEmpty() || lines.first().trimmed() != u"---")
-        return 0;
-    for (qsizetype i = 1; i < lines.size(); ++i) {
-        const QString t = lines[i].trimmed();
-        if (t == u"---" || t == u"...")
-            return i + 1;
-    }
-    return 0; // never closed: no frontmatter
+    const std::optional<markdown::FrontmatterBlock> frontmatter = markdown::findFrontmatter(content);
+    return frontmatter ? content.first(frontmatter->bodyStart).count(u'\n') : 0;
 }
 
 /// A code block: its fence lines (close = -1 when it runs to the end) and its own lines.
@@ -106,12 +103,13 @@ struct CodeBlock
     QStringList lines;
 };
 
-QList<CodeBlock> codeBlocks(const QStringList &lines)
+/// The code blocks of a page from its line `first` on (firstBodyLine()).
+QList<CodeBlock> codeBlocks(const QStringList &lines, qsizetype first)
 {
     QList<CodeBlock> out;
     std::optional<Fence> fence;
     bool code = false;
-    for (qsizetype i = afterFrontmatter(lines); i < lines.size(); ++i) {
+    for (qsizetype i = first; i < lines.size(); ++i) {
         const QString &line = lines[i];
         if (!fence) {
             fence = openingFence(line);
@@ -213,7 +211,7 @@ QString extensionId(const QString &title)
 ExtensionCode extensionCode(QStringView content)
 {
     const QStringList lines = linesOf(content);
-    const QList<CodeBlock> blocks = codeBlocks(lines);
+    const QList<CodeBlock> blocks = codeBlocks(lines, firstBodyLine(content));
     ExtensionCode out;
     out.source = padded(lines, blocks);
     QStringList parts;
@@ -231,7 +229,7 @@ ExtensionCode extensionCode(QStringView content)
 QString codeBlockAt(QStringView content, int line)
 {
     const QStringList lines = linesOf(content);
-    for (const CodeBlock &b : codeBlocks(lines)) {
+    for (const CodeBlock &b : codeBlocks(lines, firstBodyLine(content))) {
         const qsizetype end = b.close < 0 ? lines.size() - 1 : b.close;
         if (line >= b.open && line <= end)
             return padded(lines, {b});

@@ -22,6 +22,12 @@ QString deviceStatePath(const QString &appDataDir, const QString &vaultRoot)
     return QDir::cleanPath(appDataDir + u"/vaults/"_s + Vault::idForPath(vaultRoot));
 }
 
+void keepDeviceStatePrivate(const QString &stateDir)
+{
+    if (!stateDir.isEmpty() && QDir().mkpath(stateDir))
+        QFile::setPermissions(stateDir, QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
+}
+
 QString docsNotebookFolder(QStringView language)
 {
     return language == u"pl" ? u"Dokumentacja Brulionu"_s : u"Brulion Documentation"_s;

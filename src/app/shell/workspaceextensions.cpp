@@ -405,11 +405,15 @@ bool WorkspaceExtensions::updatePage(const QString &path)
     if (old != m_pages.constEnd()) {
         // Trust follows this device's own editing: an approved extension saved here by the editor
         // stays approved (unless it now asks for more). Code that arrives from elsewhere (a sync,
-        // an import, another program, an extension's write) waits for approval.
+        // an import, another program, an extension's write) waits for approval — and so does a
+        // save the editor made over other code than the approved: a change that reached the file
+        // a moment before the save is merged into it (PageController::save), and code that was
+        // merged in is not code somebody typed here.
         const auto saved = m_editorSaves.constFind(path);
         if (old->page.hash != entry.page.hash && isApproved(old->page.hash) && saved != m_editorSaves.constEnd()
-            && *saved == contentKey(content)
-            && std::ranges::all_of(entry.page.permissions, [&](const QString &p) { return old->page.permissions.contains(p); }))
+            && saved->text == contentKey(content) && saved->baseHash == old->page.hash
+            && std::ranges::all_of(entry.page.permissions,
+                                   [&](const QString &p) { return old->page.permissions.contains(p); }))
             addApproved(entry.page.hash);
         if (old->page.hash == entry.page.hash && old->page.source == entry.page.source && old->page.title == entry.page.title
             && old->page.description == entry.page.description && old->page.problems == entry.page.problems
@@ -464,11 +468,24 @@ void WorkspaceExtensions::processPages()
         reconcile();
 }
 
-void WorkspaceExtensions::savedByEditor(const QString &path, const QString &content)
+void WorkspaceExtensions::savedByEditor(const QString &path, const QString &content, const std::optional<QString> &base)
 {
     // Only an extension page's own text matters (its trust): every other save costs a lookup.
-    if (m_pages.contains(path))
-        m_editorSaves.insert(path, contentKey(content));
+    if (m_pages.contains(path)) {
+        // The code the save is made over: the extension as the text before it reads. Over the
+        // editor's own save before this one, which processPages() has not looked at yet, it is
+        // the code that one was made over.
+        QString baseHash;
+        if (const auto before = m_editorSaves.constFind(path);
+            base && before != m_editorSaves.constEnd() && before->text == contentKey(*base))
+            baseHash = before->baseHash;
+        else if (base)
+            baseHash =
+                    extensions::readPageExtension(
+                            path, markdown::parseNote(path, *base, m_index ? m_index->config() : VaultConfig()), *base)
+                            .hash;
+        m_editorSaves.insert(path, EditorSave{contentKey(content), baseHash});
+    }
     if (!m_engine || m_engine->hooks(u"save"_s).isEmpty() || !paths::isMarkdown(path))
         return;
     QVariantMap event{{u"page"_s, paths::pageTitle(path)}, {u"path"_s, path}};

@@ -20,6 +20,7 @@ local MAX_RESULT = 12000 -- characters of one tool's result
 local MAX_ROUNDS = 16 -- the model's turns for one question
 local MAX_REFERENCE = 40000 -- characters of the extensions' reference in one result
 local MAX_PREVIEW = 600 -- characters of a change shown in its confirmation
+local MAX_PREVIEW_LINES = 40 -- and lines: the dialog has room for every one of them
 
 local WRITTEN = {
     pl = {
@@ -55,6 +56,7 @@ local INTERFACE = {
         empty = "Ta strona jest pusta.",
         written = "Odpowiedź AI jest w dzisiejszej notatce.",
         cut = "(strona przycięta do %d znaków)",
+        partial = "(Poniżej początek: %d z %d znaków. Reszty tu nie widać.)",
         yes = "Zgoda",
         yesAll = "Zgoda na wszystkie zmiany tego pytania",
         no = "Nie",
@@ -75,6 +77,7 @@ local INTERFACE = {
         empty = "This page is empty.",
         written = "The AI's answer is in today's note.",
         cut = "(the page cut to %d characters)",
+        partial = "(Below is the beginning: %d of %d characters. The rest is not shown here.)",
         yes = "Allow",
         yesAll = "Allow every change of this question",
         no = "No",
@@ -107,6 +110,38 @@ local function cut(s: string, n: number): string
         stop -= 1
     end
     return s:sub(1, stop) .. "\n…"
+end
+
+-- A change as its confirmation shows it: all of it when it is short; else its beginning, under a
+-- line that says so and how much there is — a yes is given to what was read, and what the dialog
+-- has no room for must not look as if it were not there.
+local function preview(s: string): string
+    local seen = s
+    if #seen > MAX_PREVIEW then
+        local stop = MAX_PREVIEW -- (whole UTF-8 characters: a cut never splits one)
+        while stop > 0 and string.byte(seen, stop + 1) ~= nil and string.byte(seen, stop + 1) >= 0x80
+            and string.byte(seen, stop + 1) < 0xC0 do
+            stop -= 1
+        end
+        seen = seen:sub(1, stop)
+    end
+    local at, lines = 0, 0
+    while true do
+        local lineEnd = seen:find("\n", at + 1, true)
+        if lineEnd == nil then
+            break
+        end
+        lines += 1
+        if lines >= MAX_PREVIEW_LINES then
+            seen = seen:sub(1, lineEnd - 1)
+            break
+        end
+        at = lineEnd
+    end
+    if #seen == #s then
+        return s
+    end
+    return string.format(T.partial, utf8.len(seen) or #seen, utf8.len(s) or #s) .. "\n\n" .. seen .. "\n…"
 end
 
 -- The answer as an outline under its question: every line a child item (a list item's own marker
@@ -501,7 +536,7 @@ local function runTool(session: Session, name: string, input: any): (string, boo
         if markdown == "" then
             return "Nothing to add.", true
         end
-        if not confirm(session, string.format(T.appendDay, date, cut(markdown, MAX_PREVIEW))) then
+        if not confirm(session, string.format(T.appendDay, date, preview(markdown))) then
             return DECLINED, true
         end
         local ok, err = pcall(b.appendToJournal, date, markdown)
@@ -516,7 +551,7 @@ local function runTool(session: Session, name: string, input: any): (string, boo
         if page == "" or markdown == "" then
             return "A page's name and what to add are needed.", true
         end
-        if not confirm(session, string.format(T.appendPage, page, cut(markdown, MAX_PREVIEW))) then
+        if not confirm(session, string.format(T.appendPage, page, preview(markdown))) then
             return DECLINED, true
         end
         local before = b.read(page) or ""
@@ -534,8 +569,8 @@ local function runTool(session: Session, name: string, input: any): (string, boo
             return "A page's name is needed.", true
         end
         local before = b.read(page)
-        local what = if before == nil then string.format(T.createPage, page, cut(content, MAX_PREVIEW))
-            else string.format(T.replacePage, page, utf8.len(before) or #before, cut(content, MAX_PREVIEW))
+        local what = if before == nil then string.format(T.createPage, page, preview(content))
+            else string.format(T.replacePage, page, utf8.len(before) or #before, preview(content))
         if not confirm(session, what) then
             return DECLINED, true
         end
@@ -557,7 +592,7 @@ local function runTool(session: Session, name: string, input: any): (string, boo
         end
         local page = pageOfRef(ref)
         local shown = if status ~= nil then "[" .. status .. "] " .. text else text
-        if not confirm(session, string.format(T.changeBlock, page, cut(shown, MAX_PREVIEW))) then
+        if not confirm(session, string.format(T.changeBlock, page, preview(shown))) then
             return DECLINED, true
         end
         local ok, result = pcall(b.replaceBlock, ref, text, status)
@@ -590,7 +625,7 @@ local function runTool(session: Session, name: string, input: any): (string, boo
         if failed then
             return "Not written. " .. report .. " Fix it and check again.", true
         end
-        local what = string.format(if before == nil then T.createExtension else T.replaceExtension, page, cut(content, MAX_PREVIEW))
+        local what = string.format(if before == nil then T.createExtension else T.replaceExtension, page, preview(content))
         if not confirm(session, what) then
             return DECLINED, true
         end

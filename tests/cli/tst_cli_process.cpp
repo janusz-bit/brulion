@@ -775,6 +775,18 @@ private Q_SLOTS:
         QCOMPARE(r.code, 2);
         r = run(dir, {u"page"_s, u"append"_s, u"/etc/passwd"_s, u"x"_s});
         QCOMPARE(r.code, 2);
+        // ...under every name storage has for the hidden folders (paths::isIgnored).
+        for (const QString &path : {u".Brulion/x.md"_s, u".GIT/hooks/x.md"_s, u".git./x.md"_s, u"GIT~1/x.md"_s,
+                                    u".Obsidian/plugins/x.md"_s, u"OBSIDI~1/x.md"_s}) {
+            r = run(dir, {u"page"_s, u"read"_s, path});
+            QVERIFY2(r.code == 2, qPrintable(path + u": "_s + r.errorCode()));
+        }
+        // A page is not created where the notebook would not show it (a hidden name typed loses
+        // its dot, as in the app: ".git/x" is the page "git/x").
+        r = run(dir, {u"page"_s, u"create"_s, u"GIT~1/x"_s, u"--content"_s, u"x"_s});
+        QCOMPARE(r.code, 2);
+        QCOMPARE(r.errorCode(), u"hidden_name"_s);
+        QVERIFY(!QFile::exists(dir + u"/GIT~1"_s));
         // Create (a case twin is that page), delete to the trash.
         r = run(dir, {u"page"_s, u"create"_s, u"Lista zakupów"_s, u"--content"_s, u"- chleb\n"_s});
         QCOMPARE(r.code, 0);

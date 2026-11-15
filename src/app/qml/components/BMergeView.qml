@@ -119,6 +119,7 @@ Item {
             }
             Text {
                 Layout.fillWidth: true
+                textFormat: Text.PlainText
                 text: control.conflictCount === 0 ? qsTr("No conflicts")
                       : qsTr("%1 of %n conflict(s) resolved", "", control.conflictCount).arg(control.resolvedCount)
                 font.family: Theme.fontUi
@@ -236,6 +237,7 @@ Item {
                     }
                     Text {
                         anchors.verticalCenter: parent.verticalCenter
+                        textFormat: Text.PlainText
                         text: toggle.text
                         font.family: Theme.fontUi
                         font.pixelSize: Theme.textXs
@@ -245,6 +247,7 @@ Item {
                         anchors.verticalCenter: parent.verticalCenter
                         visible: !same.open
                         width: Math.max(0, same.width - x - 16)
+                        textFormat: Text.PlainText
                         text: same.lines.length > 0 ? same.lines[0] : ""
                         font.family: Theme.fontMono
                         font.pixelSize: Theme.textXs
@@ -308,6 +311,7 @@ Item {
                     }
                     Text {
                         Layout.fillWidth: true
+                        textFormat: Text.PlainText
                         text: qsTr("Conflict %1").arg(card.conflict + 1)
                         font.family: Theme.fontUi
                         font.pixelSize: Theme.textBase
@@ -379,6 +383,7 @@ Item {
                                     spacing: 6
                                     Text {
                                         Layout.fillWidth: true
+                                        textFormat: Text.PlainText
                                         text: sideButton.label
                                         font.family: Theme.fontUi
                                         font.pixelSize: Theme.textXs

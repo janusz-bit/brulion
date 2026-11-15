@@ -133,6 +133,7 @@ T.Popup {
             leftPadding: Theme.space3
             topPadding: Theme.space1
             bottomPadding: Theme.space1
+            textFormat: Text.PlainText
             text: Js.indexOf(triggerInfo.token(), "⏰") === 0 ? qsTr("Reminder at") : qsTr("Date")
             font.family: Theme.fontUi
             font.pixelSize: Theme.textXs

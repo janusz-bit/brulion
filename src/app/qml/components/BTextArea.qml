@@ -55,6 +55,7 @@ T.TextArea {
         x: control.leftPadding
         y: control.topPadding
         width: control.width - (control.leftPadding + control.rightPadding)
+        textFormat: Text.PlainText
         text: control.placeholderText
         font: control.font
         color: control.placeholderTextColor

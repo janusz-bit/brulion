@@ -758,11 +758,16 @@ Emacs `config.org`). The page's properties (docs/SYNTAX.md §13), in English or 
   the notebook's device state (`LocalStore` `extensions/approved`, never synced; the newest 300);
   prose around the code needs no new approval. Code written on this device stays approved: when
   the app's editor saves an approved page, the new code is approved too — unless it asks for more
-  permissions. Code that changes any other way (a sync, another program, an extension's `b.write`)
+  permissions, and only when the save was made over the approved code (`savedByEditor()` is told
+  the text the editor writes over, `EditorHost::writeIfUnchanged`'s `expected`). A change that
+  reached the file a moment before the save is merged into it by the editor: code that was merged
+  in is not code somebody typed here, so such a save waits like any code from elsewhere. Code that
+  changes any other way (a sync, another program, an extension's `b.write`)
   waits again, and until it is approved the extension does not run at all — neither the new code
   nor the one before it (a page that overrides a built-in leaves the built-in code running
   meanwhile). "New extension" and "Edit the code" of a built-in write pages that are approved at
-  once.
+  once. The code is what the page shows as code: `luau` blocks after the frontmatter the parser
+  finds (`markdown::findFrontmatter`) — nothing a reader sees among the page's properties runs.
 * **Live.** Whenever a page changes, its code is loaded again (only that extension; while a
   question waits, after its answer); its commands and views follow, its variables start anew and
   its calls waiting for an answer are dropped. A save that does not load (a syntax error, an error

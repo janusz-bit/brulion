@@ -98,6 +98,7 @@ T.Control {
                 onClicked: control.actionTriggered()
                 contentItem: Text {
                     id: actionLabel
+                    textFormat: Text.PlainText
                     text: action.text
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter

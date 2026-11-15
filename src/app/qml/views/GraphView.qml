@@ -313,6 +313,7 @@ FocusScope {
         anchors.leftMargin: Theme.narrow ? Theme.space3 : Theme.space4
         anchors.bottomMargin: Theme.narrow ? Theme.space3 : Theme.space4
         width: Math.min(implicitWidth, root.width - zoomControls.width - 3 * Theme.space4)
+        textFormat: Text.PlainText
         text: qsTr("%n nodes", "", graphModel.nodeCount) + " · " + qsTr("%n links", "", graphModel.edgeCount)
               + (graphModel.truncated ? " · " + qsTr("the %n best connected shown", "", graphModel.nodeCount) : "")
         font.family: Theme.fontUi
@@ -348,6 +349,7 @@ FocusScope {
                     border.color: legendItem.color
                 }
                 Text {
+                    textFormat: Text.PlainText
                     text: [qsTr("Page"), qsTr("Journal"), qsTr("Tag"), qsTr("Missing page")][legendItem.index]
                     font.family: Theme.fontUi
                     font.pixelSize: Theme.textXs

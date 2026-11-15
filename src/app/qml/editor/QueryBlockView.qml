@@ -208,6 +208,7 @@ Rectangle {
                 BIcon { name: "filter"; size: Theme.iconSizeSm; color: Theme.fgMuted }
                 Text {
                     id: queryLabel
+                    textFormat: Text.PlainText
                     text: root.dataview ? qsTr("Dataview") : qsTr("Query")
                     font.family: Theme.fontUi
                     font.pixelSize: Theme.textSm

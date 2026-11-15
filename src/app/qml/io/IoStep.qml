@@ -32,6 +32,7 @@ RowLayout {
         Text {
             anchors.centerIn: parent
             visible: !step.done
+            textFormat: Text.PlainText
             text: step.number
             font.family: Theme.fontUi
             font.pixelSize: Theme.textSm

@@ -156,6 +156,7 @@ FocusScope {
                     anchors.leftMargin: root.dots ? 0 : 8
                     horizontalAlignment: root.dots ? Text.AlignHCenter : Text.AlignLeft
                     verticalAlignment: Text.AlignVCenter
+                    textFormat: Text.PlainText
                     text: weekday.modelData
                     font.family: Theme.fontUi
                     font.pixelSize: Theme.textXs
@@ -288,6 +289,7 @@ FocusScope {
                         color: cell.isToday ? Theme.accentSolid : cell.isSelected ? Theme.primary : "transparent"
                         Text {
                             anchors.centerIn: parent
+                            textFormat: Text.PlainText
                             text: "" + cell.day
                             font.family: Theme.fontUi
                             font.pixelSize: Theme.textSm
@@ -387,6 +389,7 @@ FocusScope {
                         Text {
                             visible: cell.overflow
                             leftPadding: 5
+                            textFormat: Text.PlainText
                             text: qsTr("+%n more", "", cell.orderedItems.length - cell.shownPills)
                             font.family: Theme.fontUi
                             font.pixelSize: Theme.textXs

@@ -1,6 +1,7 @@
 #include "text/find.h"
 
 #include "text/text.h"
+#include "util/unicode.h"
 
 #include <algorithm>
 
@@ -44,7 +45,7 @@ FoldedText foldKeepingDiacritics(QStringView s, bool matchCase)
             i = after;
         }
         if (marks)
-            piece = piece.normalized(QString::NormalizationForm_C);
+            piece = unicode::nfc(piece);
         out.text += piece;
         out.map.insert(out.map.size(), piece.size(), start);
     }

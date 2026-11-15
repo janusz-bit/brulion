@@ -4,6 +4,7 @@
 #include "dates/local.h"
 #include "dates/natural_p.h"
 #include "dates/vocabulary_p.h"
+#include "util/unicode.h"
 
 #include <QHash>
 #include <QSet>
@@ -489,10 +490,8 @@ bool followedByWord(const Ctx &ctx, qsizetype pos)
 /// or "sie" typed without diacritics after an hour and before another word ("o 15 sie spotkamy").
 bool monthWordCollides(const Match &m, const Ctx &ctx)
 {
-    const QString original = originalSlice(ctx, m.capturedStart(2), m.capturedEnd(2))
-                                 .toString()
-                                 .toLower()
-                                 .normalized(QString::NormalizationForm_C);
+    const QString original =
+            unicode::nfc(originalSlice(ctx, m.capturedStart(2), m.capturedEnd(2)).toString().toLower());
     if (original == u"się" || original == u"mają")
         return true;
     if (m.capturedView(2) != u"sie" || m.hasCaptured(3))

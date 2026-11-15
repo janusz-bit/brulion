@@ -118,6 +118,7 @@ Rectangle {
             id: title
             x: chevron.x + chevron.width + Theme.space2
             anchors.verticalCenter: parent.verticalCenter
+            textFormat: Text.PlainText
             text: qsTr("Properties")
             font.family: Theme.fontUi
             font.pixelSize: Theme.textSm

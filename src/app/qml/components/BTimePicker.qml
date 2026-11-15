@@ -496,6 +496,7 @@ T.Control {
 
     /// Text of the dial: the UI font with tabular digits (the caller sets size and weight).
     component DialText: Text {
+        textFormat: Text.PlainText
         font.family: Theme.fontUi
         font.features: { "tnum": 1 }
     }

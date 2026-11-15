@@ -1,13 +1,14 @@
 // Vault: construction, cached state, reading, writing and the vault config.
 // See vaultmove.cpp (rename, trash) and vaultscan.cpp (listing, diffing, watching).
 #include "vault/vault.h"
-#include "vault/vault_p.h"
 #include "vault/obsidiansettings.h"
+#include "vault/vault_p.h"
 
 #include "log/slowscope.h"
 
 #include "text/text.h"
 #include "util/paths.h"
+#include "util/unicode.h"
 
 #include <QDir>
 #include <QDirIterator>
@@ -361,7 +362,7 @@ void VaultPrivate::resolveSpelling(const VaultPath &path)
         QDirIterator it(absPath(parent), QDir::AllEntries | QDir::NoDotAndDotDot | QDir::Hidden | QDir::System);
         while (it.hasNext() && found.isEmpty()) {
             const QString name = it.nextFileInfo().fileName();
-            if (name.normalized(QString::NormalizationForm_C) == segment)
+            if (unicode::nfc(name) == segment)
                 found = name;
         }
         if (found.isEmpty())

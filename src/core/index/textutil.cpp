@@ -1,6 +1,7 @@
 #include "index/textutil_p.h"
 
 #include "text/text.h"
+#include "util/unicode.h"
 
 #include <QChar>
 #include <QSet>
@@ -13,11 +14,6 @@ namespace brulion::index_detail {
 using namespace Qt::StringLiterals;
 
 namespace {
-
-bool isAscii(QStringView s)
-{
-    return std::ranges::all_of(s, [](QChar c) { return c.unicode() < 0x80; });
-}
 
 bool isBlank(QChar c)
 {
@@ -108,12 +104,12 @@ qsizetype trailingIdStart(QStringView line)
 
 QString nfc(QStringView s)
 {
-    return isAscii(s) ? s.toString() : s.toString().normalized(QString::NormalizationForm_C);
+    return unicode::nfc(s); // (ASCII as it is, any other text in linear time)
 }
 
 QString nfc(const QString &s)
 {
-    return isAscii(s) ? s : s.normalized(QString::NormalizationForm_C);
+    return unicode::nfc(s);
 }
 
 QString lower(const QString &s)

@@ -84,7 +84,10 @@ BDialog {
             text: dialog.details
             textFormat: Text.PlainText
             wrapMode: Text.Wrap
-            maximumLineCount: 18
+            // Everything the assistant asks a yes for is shown (it sends at most 40 lines of 600
+            // characters and says when that is a beginning): the dialog scrolls. The limit is
+            // for an extension that asks with a text of any length.
+            maximumLineCount: 120
             elide: Text.ElideRight
         }
     }

@@ -240,6 +240,7 @@ Item {
                 x: index * (card.cell + card.gap)
                 width: card.cell
                 horizontalAlignment: Text.AlignHCenter
+                textFormat: Text.PlainText
                 text: modelData
                 font.family: Theme.fontUi
                 font.pixelSize: Theme.textXs
@@ -272,6 +273,7 @@ Item {
 
                 Text {
                     anchors.centerIn: parent
+                    textFormat: Text.PlainText
                     text: AppController.routeText(dayCell.modelData, "day")
                     font.family: Theme.fontUi
                     font.pixelSize: Theme.textXs

@@ -304,6 +304,12 @@ private:
 QJsonObject envelope(const Context &context, const Command *command, const Result &result);
 /// The text of --format text.
 QString renderText(const Command *command, const Result &result);
+/// `text` as a terminal may be shown it: the control characters a note's text or a file's name
+/// can carry — escape sequences that move the cursor, set the window's title or write to the
+/// clipboard, a lone carriage return that writes over the line — become their symbols (U+2400 …),
+/// DEL and the C1 controls the replacement character. Line breaks and tabs stay. Only for a
+/// terminal: a pipe or a file gets every byte as it is.
+QString forTerminal(const QString &text);
 /// A unified diff of two texts ("--- a/path", "+++ b/path", "@@ …"), 3 lines of context; "" when
 /// equal. `newPath`: the file's path after the change when it moves ("/dev/null": deleted).
 QString unifiedDiff(const QString &before, const QString &after, const QString &path,

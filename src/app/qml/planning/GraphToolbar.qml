@@ -123,6 +123,7 @@ BCard {
         Text {
             Layout.fillWidth: true
             visible: root.searching && root.results.length === 0
+            textFormat: Text.PlainText
             text: qsTr("No such page in the graph.")
             font.family: Theme.fontUi
             font.pixelSize: Theme.textSm

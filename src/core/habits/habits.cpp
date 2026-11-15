@@ -2,6 +2,7 @@
 #include "habits/habits.h"
 
 #include "markdown/inline.h"
+#include "util/unicode.h"
 
 #include <QHash>
 
@@ -229,7 +230,7 @@ QString habitName(QStringView text)
 
 QString habitKey(QStringView name)
 {
-    return name.toString().normalized(QString::NormalizationForm_C).toCaseFolded().simplified();
+    return unicode::nfc(name).toCaseFolded().simplified();
 }
 
 bool isCheckTag(QStringView tag)

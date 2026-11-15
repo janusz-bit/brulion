@@ -40,6 +40,14 @@ namespace brulion::notebook {
 /// "<appDataDir>/vaults/<Vault::idForPath(vaultRoot)>" — shared by the app and brulion-cli.
 QString deviceStatePath(const QString &appDataDir, const QString &vaultRoot);
 
+/// Makes the device state folder (when it is missing) and closes it to the device's other users
+/// (owner-only), also one an older version left open: the history of every note, the texts a
+/// sync merges with and the search index hold the notes, whatever the notebook's own folder
+/// allows (one shared with others, a home directory others may read). For the folder Brulion
+/// chose (deviceStatePath()); one the user names (brulion-cli --state-dir) keeps the permissions
+/// they gave it.
+void keepDeviceStatePrivate(const QString &stateDir);
+
 /// The folder name (in the app's data folder) of the documentation notebook the app writes in
 /// `language`: "Dokumentacja Brulionu" for "pl", "Brulion Documentation" for anything else.
 QString docsNotebookFolder(QStringView language);

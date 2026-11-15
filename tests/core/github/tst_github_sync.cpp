@@ -149,7 +149,31 @@ private Q_SLOTS:
     void executableBitKept();
     void wholeRepository();
     void guards();
+    void otherNamesOfHiddenFoldersStayOut();
 };
+
+void TestGitHubSync::otherNamesOfHiddenFoldersStayOut()
+{
+    // A repository's tree may name a hidden folder by what Windows also calls it (its short
+    // name): such files are the repository's, like the hidden folders themselves — written into
+    // the notebook they would be git's settings and hooks or an Obsidian plugin.
+    FakeGitHub github;
+    QMap<QString, QByteArray> files = sampleRepo();
+    files.insert(u"Notatki/GIT~1/config"_s, "[core]\n\tfsmonitor = calc\n");
+    files.insert(u"Notatki/git~1/hooks/pre-commit"_s, "#!/bin/sh\necho owned\n");
+    files.insert(u"Notatki/OBSIDI~1/plugins/x/main.js"_s, "owned()\n");
+    files.insert(u"Notatki/Dziennik/BRULIO~1/config.json"_s, "{}\n");
+    github.createRepo(u"jan"_s, u"notatki"_s, files);
+    Notebook nb(&github, u"Notatki"_s);
+
+    const PullReport report = nb.pull();
+    QVERIFY2(!report.failed(), qPrintable(report.error.message + report.refused));
+    QCOMPARE(report.downloaded, 3);
+    QCOMPARE(nb.files(), (QStringList{u"Dziennik/2026-11-07.md"_s, u"Zażółć gęślą.md"_s, u"obrazy/kot.png"_s}));
+    QCOMPARE(github.count("GET", u"/git/blobs/"_s), 3);
+    // ...and the notebook, which has none of them, does not call them removed.
+    QVERIFY(nb.changes().isEmpty());
+}
 
 void TestGitHubSync::firstPullDownloadsTheFolder()
 {

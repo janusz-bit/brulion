@@ -2,6 +2,7 @@
 
 #include "markdown/inline_p.h"
 #include "markdown/lines_p.h"
+#include "util/unicode.h"
 
 #include <QRegularExpression>
 #include <QSet>
@@ -271,7 +272,7 @@ QStringList uniqueCaseInsensitive(const QStringList &items)
     QSet<QString> seen;
     QStringList out;
     for (const QString &s : items) {
-        const QString key = s.normalized(QString::NormalizationForm_C).toLower();
+        const QString key = unicode::nfc(s).toLower();
         if (seen.contains(key))
             continue;
         seen.insert(key);

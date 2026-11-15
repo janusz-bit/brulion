@@ -180,6 +180,7 @@ FocusScope {
                     spacing: 1
                     Text {
                         anchors.horizontalCenter: parent.horizontalCenter
+                        textFormat: Text.PlainText
                         text: root.weekdayShortNames()[dayHead.dayOfWeek - 1]
                         font.family: Theme.fontUi
                         font.pixelSize: Theme.textXs
@@ -197,6 +198,7 @@ FocusScope {
                         color: dayHead.isToday ? Theme.accentSolid : dayHead.isSelected ? Theme.primary : "transparent"
                         Text {
                             anchors.centerIn: parent
+                            textFormat: Text.PlainText
                             text: "" + dayHead.day
                             font.family: Theme.fontUi
                             font.pixelSize: Theme.textMd
@@ -258,6 +260,7 @@ FocusScope {
                                     id: allDayText
                                     anchors.verticalCenter: parent.verticalCenter
                                     width: allDayRow.width - (allDayState.visible ? allDayState.width + allDayRow.spacing : 0)
+                                    textFormat: Text.PlainText
                                     text: allDayPill.more ? qsTr("+%n more", "", dayHead.allDay.length - root.allDayRows + 1)
                                                           : AppController.routeText(allDayPill.entry, "title")
                                     font.family: Theme.fontUi
@@ -311,6 +314,7 @@ FocusScope {
             x: 4
             y: root.headerHeight + 3
             width: root.gutter - 8
+            textFormat: Text.PlainText
             text: qsTr("all day")
             font.family: Theme.fontUi
             font.pixelSize: Theme.textXs
@@ -365,6 +369,7 @@ FocusScope {
                         width: root.gutter - 8
                         y: -height / 2
                         horizontalAlignment: Text.AlignRight
+                        textFormat: Text.PlainText
                         text: (hourRow.index < 10 ? "0" : "") + hourRow.index + ":00"
                         font.family: Theme.fontUi
                         font.pixelSize: Theme.textXs
@@ -452,6 +457,7 @@ FocusScope {
                                     }
                                     Text {
                                         width: eventRow.width - (eventState.visible ? eventState.width + eventRow.spacing : 0)
+                                        textFormat: Text.PlainText
                                         text: (event.variant === "alarm" ? "⏰ " : "") + event.time
                                         font.family: Theme.fontUi
                                         font.pixelSize: Theme.textXs
@@ -464,6 +470,7 @@ FocusScope {
                                 Text {
                                     width: parent.width
                                     visible: event.height > 2 * root.pillHeight - 6
+                                    textFormat: Text.PlainText
                                     text: AppController.routeText(event.entry, "title")
                                     font.family: Theme.fontUi
                                     font.pixelSize: Theme.textXs

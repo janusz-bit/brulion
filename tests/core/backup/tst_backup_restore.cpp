@@ -417,6 +417,10 @@ private Q_SLOTS:
         QTest::newRow("zip slip") << QByteArray("../poza.md");
         QTest::newRow("into the trash") << QByteArray(".trash/x.md");
         QTest::newRow("into git") << QByteArray(".git/hooks/pre-commit");
+        QTest::newRow("into git in upper case") << QByteArray(".GIT/hooks/pre-commit");
+        QTest::newRow("into git with a dot at its end") << QByteArray(".git./config");
+        QTest::newRow("into git by its short name") << QByteArray("GIT~1/config");
+        QTest::newRow("into Obsidian's plugins in another case") << QByteArray(".Obsidian/plugins/x/main.js");
     }
     void hostileBackupIsRefusedBeforeAnything()
     {

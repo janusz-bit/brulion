@@ -42,6 +42,13 @@ struct ListResult {
     WebDavError error;
 };
 
+/// Where a listing gives up (error Oversized): more than any notebook holds, and what a server
+/// that invents a folder in every folder would otherwise go on listing for ever.
+struct ListLimits {
+    int maxDepth = 64;              ///< segments of the deepest path; a folder that deep is one too many
+    qsizetype maxEntries = 500'000; ///< files and folders in all
+};
+
 struct StatResult {
     std::optional<RemoteEntry> entry; ///< std::nullopt when the path does not exist
     WebDavError error;
@@ -49,7 +56,9 @@ struct StatResult {
 
 struct GetOptions {
     /// Expected size in bytes (e.g. from the listing): the time limit grows with it. Without
-    /// it a download gets ten times the base timeout.
+    /// it a download gets ten times the base timeout. It also bounds the answer (error
+    /// Oversized): twice the size, or a mebibyte more for small files — room for a file that
+    /// grew since it was listed, not for a server that never stops sending.
     std::optional<qint64> size;
 };
 
@@ -116,6 +125,11 @@ public:
     void setMinBytesPerSecond(qint64 bytesPerSecond);
     /// Parallel PROPFIND requests while listing (default 4).
     void setListConcurrency(int count);
+    /// Where list() gives up (the defaults of ListLimits; at least 1 each).
+    void setListLimits(const ListLimits &limits);
+    ListLimits listLimits() const { return m_listLimits; }
+    /// The largest answer accepted to a download of the expected `size` (GetOptions::size).
+    static qint64 maxDownloadBytes(std::optional<qint64> size);
 
     /// Prefix of this client's log lines ("#42" during sync run 42, "test" for a connection
     /// test; "" = none). Every finished request is logged to brulion.net: a debug line per
@@ -189,8 +203,9 @@ private:
     std::optional<QString> relativeRaw(const QString &href, const QString &requestUrl) const;
     int timeoutFor(qint64 bytes) const;
     int unknownSizeTimeout() const;
+    /// `maxBodyBytes`: the largest answer accepted (HttpRequest::maxBodyBytes).
     void request(const QByteArray &method, const QString &url, const Headers &headers, const QByteArray &body,
-                 int timeoutMs, ResponseCallback done);
+                 int timeoutMs, qint64 maxBodyBytes, ResponseCallback done);
     WebDavError check(const HttpResponse &response, const QByteArray &method, const QString &url,
                       std::initializer_list<int> ok) const;
     /// MKCOL: 405 (exists already), 200 and 201 are success.
@@ -229,6 +244,7 @@ private:
     int m_timeoutMs = 60'000;
     qint64 m_minBytesPerSecond = 16 * 1024;
     int m_listConcurrency = 4;
+    ListLimits m_listLimits;
     /// Folders known to exist on the server ("" = base).
     QSet<QString> m_knownDirs;
     /// Normalised path -> path as spelled on the server, when they differ (NFD names); see

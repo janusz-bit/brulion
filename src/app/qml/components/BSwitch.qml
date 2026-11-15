@@ -108,6 +108,7 @@ T.Switch {
             Text {
                 id: titleText
                 width: parent.width
+                textFormat: Text.PlainText
                 text: control.text
                 font: control.font
                 color: Theme.fg
@@ -117,6 +118,7 @@ T.Switch {
                 id: descriptionText
                 width: parent.width
                 visible: control.description !== ""
+                textFormat: Text.PlainText
                 text: control.description
                 font.family: Theme.fontUi
                 font.pixelSize: Theme.textSm

@@ -36,8 +36,14 @@ bool isPdfPath(const VaultPath &path);
 QString stripMarkdownExtension(const VaultPath &path);
 /// "a/b/Page.md" -> "Page".
 QString pageTitle(const VaultPath &path);
-/// Paths that must never be indexed: .brulion/, .trash/, .git/, .obsidian/, logseq/, .stfolder,
-/// .stversions/, node_modules/, and temp files of sync tools/editors.
+/// Paths that must never be indexed, read as notes or written by anything that takes a path from
+/// outside (a server's listing, a repository's tree, a backup archive, an import, a command
+/// line): .brulion/, .trash/, .git/, .obsidian/, logseq/, .stfolder, .stversions/, node_modules/,
+/// .github/, and temp files of sync tools/editors. A hidden name counts under every name storage
+/// has for it — any letter case (".GIT", ".Obsidian"), dots and spaces at its end (".git."), an
+/// NTFS stream (".git::$INDEX_ALLOCATION"), Windows' short name ("GIT~1", "OBSIDI~1"), ignorable
+/// code points inside it —, since a file written there may be code git or Obsidian runs. Visible
+/// names keep their case: "Import/Logseq/…" is a folder of notes.
 bool isIgnored(const VaultPath &path);
 bool isTempFile(const QString &fileName);
 

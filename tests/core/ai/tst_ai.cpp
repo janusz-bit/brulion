@@ -101,6 +101,35 @@ private Q_SLOTS:
         QVERIFY(refused({{u"prompt"_s, u"x"_s}, {u"effort"_s, u"ogromny"_s}}, u"effort must be"_s));
     }
 
+    void addressesThatAreNotEncrypted_data()
+    {
+        QTest::addColumn<QString>("address");
+        QTest::addColumn<bool>("unencrypted");
+        QTest::newRow("the provider's own") << QString() << false;
+        QTest::newRow("https") << u"https://api.example.com/v1"_s << false;
+        QTest::newRow("this device") << u"http://localhost:11434/v1"_s << false;
+        QTest::newRow("this device by number") << u"http://127.0.0.1:11434/v1"_s << false;
+        QTest::newRow("this device, IPv6") << u"http://[::1]:11434/v1"_s << false;
+        QTest::newRow("a name of this device") << u"http://ollama.localhost/v1"_s << false;
+        QTest::newRow("a server at home") << u"http://192.168.1.10:11434/v1"_s << true;
+        QTest::newRow("a name at home") << u"http://serwer.lan:11434/v1"_s << true;
+        QTest::newRow("the internet") << u"http://api.example.com/v1"_s << true;
+        QTest::newRow("in capitals") << u"HTTP://API.EXAMPLE.COM/v1"_s << true;
+        QTest::newRow("a host that only starts like this device") << u"http://localhost.example.com/v1"_s << true;
+        QTest::newRow("no address at all") << u"zażółć"_s << false;
+    }
+    void addressesThatAreNotEncrypted()
+    {
+        QFETCH(QString, address);
+        QFETCH(bool, unencrypted);
+        for (const QString &provider : {u"anthropic"_s, u"openai"_s}) {
+            ai::Settings settings;
+            settings.provider = provider;
+            settings.baseUrl = address;
+            QCOMPARE(settings.unencrypted(), unencrypted);
+        }
+    }
+
     void anthropicRequests()
     {
         QString error;

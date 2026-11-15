@@ -8,6 +8,7 @@
 #include "markdown/parse.h"
 #include "markdown/parse_p.h"
 #include "markdown/properties.h"
+#include "util/unicode.h"
 
 #include <QRegularExpression>
 
@@ -85,7 +86,7 @@ QStringView slice(QStringView s, Range r)
 /// The tag `name` (NFC) at `range` of a text that starts at document offset `offset`.
 NoteTag noteTag(const QString &name, Range range, qsizetype offset, int line, TagForm form)
 {
-    return NoteTag{.name = name.normalized(QString::NormalizationForm_C),
+    return NoteTag{.name = unicode::nfc(name),
                    .from = offset + range.first,
                    .to = offset + range.second,
                    .line = line,

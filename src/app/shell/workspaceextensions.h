@@ -17,7 +17,8 @@
 // The Workspace tells it about the notebook: indexReady() (scan every page once), notesChanged()
 // (the pages a change touched: an extension page loads again, "change" hooks), savedByEditor()
 // (this device's editor saved a page: "save" hooks; an approved extension's new code stays
-// approved — the code someone writes here is theirs, code that arrives by sync waits).
+// approved — the code someone writes here is theirs, code that arrives by sync waits, and so
+// does a save made over a text that arrived: what the editor merged in is not its own).
 //
 // Views (ExtensionViewModel) render through render() and act(); a view renders again after
 // changed() (a command or an action finished, an extension was switched on or off).
@@ -41,6 +42,7 @@
 
 #include <functional>
 #include <memory>
+#include <optional>
 
 namespace brulion {
 class Vault;
@@ -154,8 +156,12 @@ public:
     void indexReady();
     /// Notes changed (created, modified, deleted, renamed: both paths), already in the index.
     void notesChanged(const QStringList &paths);
-    /// This device's editor is about to write `content` to `path` (its own save).
-    void savedByEditor(const QString &path, const QString &content);
+    /// This device's editor is about to write `content` to `path` (its own save). `base`: the
+    /// text it writes over — what it last read or wrote there (EditorHost::writeIfUnchanged's
+    /// `expected`). Trust follows only a save made over the code that was approved: a save
+    /// without a base, or over other code that arrived meanwhile and was merged in, waits like
+    /// any code from elsewhere.
+    void savedByEditor(const QString &path, const QString &content, const std::optional<QString> &base = std::nullopt);
 
     // ---- extension pages (Settings → Extensions, the page's state line) -------------------------
     /// The state of the extension page `path` (ExtensionRow::state), "" when it is none.
@@ -240,6 +246,12 @@ private:
         QString message;
         int errorLine = -1;
     };
+    /// What the editor is writing to a page: the key of its text, and the extension's hash in
+    /// the text it writes over ("": unknown).
+    struct EditorSave {
+        QByteArray text;
+        QString baseHash;
+    };
 
     void reload();
     bool ensureEngine();
@@ -302,7 +314,7 @@ private:
     QSet<QString> m_approved; // hashes approved on this device (LocalStore)
     QStringList m_approvedOrder;
     QSet<QString> m_off; // page extensions switched off here (by id)
-    QHash<QString, QByteArray> m_editorSaves; // path → SHA-1 of the text the editor wrote
+    QHash<QString, EditorSave> m_editorSaves; // by path: the save the editor made last
     QHash<QString, QString> m_loadedKeys; // engine id → what was loaded (a key of its source)
     QHash<QString, extensions::Extension> m_lastGood; // engine id → the last version that loaded
     QHash<QString, QString> m_loadErrors; // engine id → why the last load failed

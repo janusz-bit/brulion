@@ -18,6 +18,8 @@
 #include <io.h>
 #include <windows.h>
 #include <shellapi.h>
+#else
+#include <unistd.h>
 #endif
 
 using namespace Qt::StringLiterals;
@@ -28,22 +30,37 @@ namespace {
 
 std::atomic_bool g_verbose{false};
 
+/// Is the stream a terminal (and not a pipe or a file)?
+bool isTerminal(FILE *stream)
+{
+#ifdef Q_OS_WIN
+    return _isatty(_fileno(stream)) != 0;
+#else
+    return isatty(fileno(stream)) != 0;
+#endif
+}
+
+/// `text` to a stream: every byte to a pipe or a file, to a terminal without the control
+/// characters a note's text or a file's name may carry (forTerminal()).
+void writeTo(FILE *stream, const QString &text)
+{
+    const QByteArray bytes = (isTerminal(stream) ? forTerminal(text) : text).toUtf8();
+    std::fwrite(bytes.constData(), 1, size_t(bytes.size()), stream);
+    std::fflush(stream);
+}
+
 /// Qt's messages (the vault's log lines …) go to standard error with -v only: standard output is
 /// the JSON, standard error stays quiet for agents.
 void messageHandler(QtMsgType type, const QMessageLogContext &, const QString &message)
 {
     if (!g_verbose && type != QtFatalMsg)
         return;
-    const QByteArray line = message.toUtf8() + '\n';
-    std::fwrite(line.constData(), 1, size_t(line.size()), stderr);
-    std::fflush(stderr);
+    writeTo(stderr, message + u'\n');
 }
 
 void print(const QString &text)
 {
-    const QByteArray bytes = text.toUtf8();
-    std::fwrite(bytes.constData(), 1, size_t(bytes.size()), stdout);
-    std::fflush(stdout);
+    writeTo(stdout, text);
 }
 
 /// The arguments after the program's name. Linux: argv, read as UTF-8 whatever the locale (LANG=C

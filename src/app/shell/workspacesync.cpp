@@ -505,6 +505,9 @@ QString WorkspaceSync::errorText(const QString &code, const QString &fallback) c
         return tr("This address does not lead to a WebDAV folder. Check the server address.");
     if (code == u"insufficient-storage")
         return tr("There is no space left on the server.");
+    if (code == u"oversized")
+        return tr("The server sent more data than Brulion accepts, so the sync was stopped. Check the folder on the "
+                  "server.");
     if (code == u"server")
         return tr("The server reported an error. Brulion will try again later.");
     if (code == u"stalled")

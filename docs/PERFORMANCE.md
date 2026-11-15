@@ -13,6 +13,21 @@ compared with `ef90077`) and a smooth graph (L16, compared with `64d0380` on a G
 
 ### What got better
 
+* **Typing in very long pages** (2026-11-15). A keystroke used to make the page check itself
+  from top to bottom — its numbering, its blank lines, its end. Now a letter typed into a block
+  changes that block and nothing else: in a page of 5000 blocks the page's own work per keystroke
+  is about a tenth of what it was (0.12 instead of 1.3 ms on a computer), and ticking a task,
+  indenting, undo and redo in such a page cost about half.
+* **A sync that has nothing to do** (2026-11-15). A notebook of 10,000 files in which nothing
+  changed is checked in about 0.3 instead of 0.75 s (besides the server's answer): notes that
+  have the size and time of their last sync are no longer read and compared, and the sync state
+  is no longer read from disk a second time. A sync after a few changes takes about half as long
+  (0.44 instead of 0.9 s).
+* **A sturdier program, at no speed you would notice** (2026-11-15). Every release is now built
+  with the protections Qt's own libraries are built with (a mistake in reading a damaged note
+  stops the program instead of running on in a wrong state). Measured: 0–4 % more work in the
+  parts that read and compute notes, about 1.7 % on average.
+
 * **Switching views without waiting** (2026-11-09, 2026-11-10). Journal, Pages, Search, Tasks and
   Calendar stay in memory once opened: going back to one of them (e.g. from Tasks to the Journal
   on a phone) shows it at once, where it was scrolled, instead of building it again for 0.5–1 s.
@@ -1218,6 +1233,97 @@ three Android 16-only checks there: permissions and a notification cleared by "D
 `wasm-smoke.mjs` (`--selftest --glyphs --keyboard`, `--keyboard-phone`, `--index-notes 3000`);
 the desktop Release build with `-Oz` and `BRULION_WERROR` (the whole ctest suite, 291 tests).
 
+### L4 and L12: typing in place, a sync that reads nothing; hardened builds (2026-11-15)
+
+Measured on the reference laptop's CPU (i5-13450HX) while other builds ran on it, so every pair
+was taken alternately (base, new, base, new …) with the same `tests/bench` sources built in both
+trees; the times are the ranges of those runs, the hardening costs are instruction counts
+(`bench_x fn -perf -perfcounter instructions`), which do not depend on the load. The baselines
+in `tests/bench/baselines/laptop.csv` are not ratcheted yet (a quiet window is needed:
+`perf-check.sh -u`); the old ones pass.
+
+**L4: `BlockDocument::setBody` for a block that is being typed in.** A body edit used to run
+the whole normalisation after every keystroke: re-derive every item, renumber the lists around
+the block, check the blank lines before and after it, the page's end, a snapshot of every
+version for the change list — all linear in the page. Now the document remembers that the block
+it normalised last is the one edited again (`m_typing`: its uid and the document's epoch, which
+every other operation advances), and for it only the block's own text is replaced when the edit
+kept what the rest of the page depends on: the block's kind, marker column and prefix, no
+display formula opened, the separation from its neighbours, a leading rule that is still one
+(`setBody`, `typingSettled`); the lines of the blocks after it are shifted when the body gained
+or lost one. Anything else takes the long way as before, and so does the first edit of a block.
+The two ways give the same document and the same change list: `tst_markdown_blockdoc` types
+scripted and random edits into pairs of documents, one with the shortcut switched off
+(`setTypingShortcut(false)`), and compares them after every step; each condition of the
+shortcut was removed in turn (mutation testing) and the tests fail without it. Next to it:
+`rowChanges` compares the uid lists first, `countLineBreaks` is branch-free, `toString()`
+reserves, `renumberChildren` plans before it writes.
+
+| `blockDocOps`, 5000 blocks (ms) | before | after |
+|---|---|---|
+| setBody (typing in one block) | 1.2 | 0.0043 |
+| setBody the long way (shortcut off) | 1.2 | 0.47 |
+| keystroke (setBody + version + the change list) | 1.3 | 0.12 |
+| version + diff | 1.3 | 0.10–0.12 |
+| toggleTask ×2 | 2.5 | 0.95 |
+| indent + outdent | 2.5 | 0.96 |
+| split + merge | 2.5 | 1.5 |
+| insertAfter + remove | 2.5 | 1.6 |
+| moveDown + moveUp | 2.4 | 1.4–1.5 |
+| undo + redo | 2.0 | 1.2 |
+
+The keystroke-to-frame budget below was not measured again: what is left of a keystroke in a
+5000-block outline is the model's and Qt Quick's work.
+
+**L12: a sync that reads nothing.** `SyncRun::readLocal` now trusts a note whose size and
+modification time are those of its last sync, as it always did for binary files — but only a
+*settled* one: its content was read at least `SyncFileState::SettledAfterMs` (3 s) after that
+modification time (`checkedAt`, like git's racy index: a second write within the storage's
+timestamp granularity must not hide behind the first). The trust only serves to conclude
+"nothing to do": before a merge, an upload, a download or a deletion the note is read after
+all (`syncPath`). A note dated in the future is read every time and costs no save of its state.
+The other half was outside the phases: `LocalStore::reload()` parsed the whole `store.json`
+(10 000 states and merge bases) again although the bytes on disk were the ones it had written;
+it now keeps the bytes it read or wrote last and returns when they are the same.
+
+| 10 000 files (ms) | before | after |
+|---|---|---|
+| `syncNoChanges` | 733–749 | 295–298 |
+| `syncFewChanges` | 866–916 | 429–450 |
+| `firstSync` | ~840 | ~840 |
+| phase "transfer" of `syncNoChanges` | ~280 | 38–43 |
+| `LocalStore::reload` (outside the phases) | ~250 | 0 |
+
+The rest of a no-change sync is the listing: remote 197–229 ms (the in-memory server's XML),
+local 11 ms, compare 28 ms. The Pi is still to be measured.
+
+**Hardened builds** (`cmake/BrulionHardening.cmake`, docs/ARCHITECTURE.md "Build, test,
+packaging"). Instructions per iteration of the core benchmarks, Release, GCC 16.2:
+
+| build | against | cost |
+|---|---|---|
+| nixpkgs' default hardening (its compiler wrapper: stack protector, stack clash protection, `_FORTIFY_SOURCE=3`, RELRO bound at start, zeroed call-used registers) | no hardening at all | +7.8 % (geometric mean) |
+| Brulion's options on top: zero-initialised locals, `-fcf-protection=full`, `_GLIBCXX_ASSERTIONS`, PIE (the rest of its list is what nixpkgs gives already; it counts in the builds outside Nix — AppImage, Windows, Android) | nixpkgs' default | +1.7 % (geometric mean; 0–4 % per benchmark) |
+
+The one benchmark above that range was the calculator (`evaluateLongBlock` +7.2 %):
+`-ftrivial-auto-var-init=zero` clears every local that is declared without an initialiser,
+class objects too, and `calc::Value`'s factories declared a `Value` and then filled it in. They
+now build the value in one expression through private constructors (C++ Core Guidelines C.41,
+ES.22), which is also what an optimiser wants without hardening: 60.4 → 56.2 M instructions for
+1000 lines, 855 → 811 M for 5000 — back to what the calculator cost before. The binaries were
+checked with `readelf`: PIE, full RELRO (`BIND_NOW`), IBT and shadow stack notes, no executable
+stack. The Windows and Android options are tried at configure time by their toolchains in CI.
+
+**NFC in linear time.** `QString::normalized(NormalizationForm_C)` sorts combining marks with an
+insertion sort and decomposes in place: 16 000 marks above a letter followed by 16 000 below
+take it 4.1 s, 160 000 letters after one decomposed pair 3.7–4 s, and four times that for twice
+the text — a file name or a link in a note that came from anywhere could stop the app for hours.
+`unicode::nfc` (`util/unicode.h`) returns ASCII as it is, hands short text to Qt, and
+normalises long text in pieces that start where no composition reaches across (a starter that
+is no Hangul vowel or final); a piece with more than 64 marks stays as written. 400 000
+characters of each of those texts take 1–23 ms (`tst_unicode`, which also checks that every
+text Qt normalises in reasonable time comes out the same).
+
 ### Budgets
 
 Desktop = the laptop above (the graph: a GitHub runner, see its row), phone = Pi 4 (floor) and the
@@ -1249,12 +1355,10 @@ The L-items of the October 2026 performance plan, with the numbers they should m
 | L1b | cheaper merge of prepared notes on the GUI thread: link lookup keys (`cleanTarget`, NFC, lower case) and the name table's keys computed by the loader's workers; fewer redraws while loading (the browser's cold load: +11–16 % to "ready", 30 %–2.5× more draws since journals come first); measure the Pi and the Android emulator (L1/L2 of wave 5 not measured there yet) | laptop 10k index ready 0.96 / 0.83 s → 0.6 s; Pi ≤ 6 s cold, ≤ 3 s warm |
 | L5b | measure undo / redo on the Pi (`bench-matrix.sh` typing on the 5000-block outline, Release) and record the `blockDocOps` 5000 blocks undo+redo baseline in `pi.csv` (`perf-check.sh -u` in a quiet window; until then the Pi's check skips the row) | Pi undo 214 ms → < 50 ms |
 | L3b | measure the after-a-save fan-out on the Pi (`bench_reminders` afterEdit, small profile) and ratchet its `pi.csv` row (`perf-check.sh -m pi -u` in a quiet window; the row now measures the cached path, so the old 963 ms baseline only passes it loosely) | Pi 0.95 s → < 0.2 s |
-| L4 | `BlockDocument` fast path for body-only edits | keystroke core 1.3 ms → < 0.3 ms |
 | L7 | cheaper page opening (header summary and linked references from the index) | Pi open 653 ms → ~400 ms |
 | L9b | the developer and self-test QML (`qml/dev`, `qml/content/*SelfTest.qml`) in a folder outside `src/app` (qmlimportscanner scans the target's source folder whole, and its `-exclude` does not work there), so that releases leave out QtTest, QuickTest and `Qt.labs.folderlistmodel` | APK −0.84 MB, wasm −0.27 MB (before wasm-opt) |
 | L10 | lazy cold views and dialogs, `BIcon` without a `Loader` | Pi demo first content −0.3 s |
 | L16b | measure the graph on the Raspberry Pi (`bench-matrix.sh views graph`, offscreen: the software renderer's image node, 3 000-note vault; must not regress) and in the Android emulator probe (`android-batch.sh probe`, the scene graph on GLES); check it by hand on a phone, on Windows with a GPU (Direct3D 11) and in a phone's browser; if `rebuild()` (VaultIndex::graph and the filters, GUI thread) costs a phone > 50 ms, move its pure part onto the worker | phone: GUI stall during the layout < 33 ms, settled < 3 s |
-| L12 | sync: size + mtime quick check for unchanged text files | no-change sync ≥ 3× faster (laptop 10k 419 ms, Pi 5k 1.35 s) |
 | L18 | search indexing of big documents in bounded slices | no stall > 16 ms after ready |
 | L19 | measure the PDF viewer on real devices (the emulator: 174 MB PSS at 800 %, above): PSS with a 100+ MB scanned lecture zoomed in on a phone (if above 350 MB, base pictures at half resolution on touch devices), time to the first page of a 300-page lecture, Qt PDF timings in a Release build | phone PSS < 350 MB; first page < 0.5 s |
 | L20b | measure the generated QML at `-Oz` on a phone (L20): a Release APK built with `-DBRULION_QML_CODE_FOR_SIZE=OFF` against the default one, `android-batch.sh probe` or the Pixel — journal scroll, opening a 5000-block page, the views; if a view loses more than 10 %, compile its few hot files at the build type's level | no phone slowdown > 10 % |
@@ -1267,7 +1371,10 @@ drawn through the scene graph, above; the phones: L16b). Also
 open: serving brotli for the web build (9.4 instead of 13.7 MB; GitHub Pages serves gzip only) and
 the ~90 ms later content on a desktop first start (above). On 2026-11-07 L20 (the generated QML code for size, Android's
 library without exported static-library symbols and with RELR, no QML source in Android and
-browser releases: APK −13.2 MB, wasm −6.0 MB raw / −1.4 MB gzip, above; the phone: L20b).
+browser releases: APK −13.2 MB, wasm −6.0 MB raw / −1.4 MB gzip, above; the phone: L20b). On
+2026-11-15 L4 (typing in place: the keystroke's core 1.3 → 0.12 ms, above) and L12 (a sync that
+reads no settled note and no second copy of its state: 0.74 → 0.30 s at 10k, above; the Pi is
+still to be measured).
 
 ### How to run the benchmarks
 

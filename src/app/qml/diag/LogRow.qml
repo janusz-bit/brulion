@@ -63,6 +63,7 @@ Item {
         width: row.timeWidth
         height: row.metaHeight
         verticalAlignment: Text.AlignVCenter
+        textFormat: Text.PlainText
         text: row.timeText
         font.family: Theme.fontMono
         font.pixelSize: Theme.textXs
@@ -81,6 +82,7 @@ Item {
         y: row.pad
         height: row.metaHeight
         verticalAlignment: Text.AlignVCenter
+        textFormat: Text.PlainText
         text: row.letter
         font { family: Theme.fontMono; pixelSize: Theme.textXs; weight: Theme.weightSemiBold }
         color: row.levelColor
@@ -92,6 +94,7 @@ Item {
         width: row.stacked ? implicitWidth : row.groupWidth
         height: row.metaHeight
         verticalAlignment: Text.AlignVCenter
+        textFormat: Text.PlainText
         text: row.groupText
         font.family: Theme.fontUi
         font.pixelSize: Theme.textXs
@@ -110,6 +113,7 @@ Item {
         Text {
             id: repeatText
             anchors.centerIn: parent
+            textFormat: Text.PlainText
             text: "×" + row.repeat
             font.family: Theme.fontUi
             font.pixelSize: Theme.textXs

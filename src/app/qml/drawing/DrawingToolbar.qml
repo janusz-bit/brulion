@@ -266,6 +266,7 @@ Rectangle {
         contentItem: Item {
             Text {
                 anchors.centerIn: parent
+                textFormat: Text.PlainText
                 text: "A"
                 font.family: Theme.fontUi
                 // 16 → 11 px … 36 → 22 px: the sizes told apart within the button.

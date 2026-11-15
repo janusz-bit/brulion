@@ -2236,6 +2236,7 @@ FocusScope {
                     BIcon { name: "triangle-alert"; size: Theme.iconSize; color: Theme.warningText; Layout.alignment: Qt.AlignTop }
                     Text {
                         Layout.fillWidth: true
+                        textFormat: Text.PlainText
                         text: qsTr("This page was also changed elsewhere and the changes could not be merged automatically. Your version is kept and not saved until you decide.")
                         font.family: Theme.fontUi
                         font.pixelSize: Theme.textSm
@@ -2806,6 +2807,7 @@ FocusScope {
                     BIcon { name: "image"; size: Theme.iconSizeSm; color: Theme.fgMuted; anchors.verticalCenter: parent.verticalCenter }
                     Text {
                         anchors.verticalCenter: parent.verticalCenter
+                        textFormat: Text.PlainText
                         text: qsTr("Drop to add to this page")
                         font.family: Theme.fontUi
                         font.pixelSize: Theme.textSm

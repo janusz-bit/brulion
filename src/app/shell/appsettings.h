@@ -87,6 +87,9 @@ class AppSettings : public QObject {
     Q_PROPERTY(QString aiModel READ aiModel WRITE setAiModel NOTIFY aiChanged FINAL)
     Q_PROPERTY(QString aiBaseUrl READ aiBaseUrl WRITE setAiBaseUrl NOTIFY aiChanged FINAL)
     Q_PROPERTY(bool hasAiKey READ hasAiKey NOTIFY aiChanged FINAL)
+    /// The address is plain http to another machine (ai::Settings::unencrypted()): the settings
+    /// say that notes and the key can be read on the way.
+    Q_PROPERTY(bool aiUnencrypted READ aiUnencrypted NOTIFY aiChanged FINAL)
 
     // ---- Editor -------------------------------------------------------------------------
     /// "sans" (default, Inter) | "serif" (Literata) (Theme.editorFont).
@@ -271,6 +274,7 @@ public:
     QString aiModel() const;
     void setAiModel(const QString &model);
     QString aiBaseUrl() const;
+    bool aiUnencrypted() const;
     void setAiBaseUrl(const QString &url);
     bool hasAiKey() const;
     /// Stores the AI key ("" forgets it); false when it could not be written.

@@ -310,6 +310,7 @@ FocusScope {
                         y: Theme.space1
                         height: dayHeader.textHeight
                         verticalAlignment: Text.AlignVCenter
+                        textFormat: Text.PlainText
                         text: DatesHelper.formatHuman(dayHeader.section)
                         font { family: Theme.fontUi; pixelSize: Theme.textSm; weight: Theme.weightMedium }
                         color: Theme.fgMuted

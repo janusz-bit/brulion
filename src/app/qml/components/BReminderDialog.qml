@@ -221,6 +221,7 @@ BDialog {
                 spacing: 0
                 Text {
                     Layout.fillWidth: true
+                    textFormat: Text.PlainText
                     text: control.valid ? DatesHelper.formatShort(control.at) : qsTr("Pick a date and time")
                     font.family: Theme.fontUi
                     font.pixelSize: Theme.textMd
@@ -231,6 +232,7 @@ BDialog {
                 Text {
                     Layout.fillWidth: true
                     visible: control.valid
+                    textFormat: Text.PlainText
                     text: control.past ? qsTr("This time has already passed")
                                        : (control.alarm ? qsTr("Alarm") : qsTr("Notification")) + " · " + DatesHelper.formatHuman(control.at)
                     font.family: Theme.fontUi
@@ -351,6 +353,7 @@ BDialog {
                         color: Theme.fgMuted
                     }
                     Text {
+                        textFormat: Text.PlainText
                         text: qsTr("Repeat")
                         font.family: Theme.fontUi
                         font.pixelSize: Theme.textBase
@@ -385,6 +388,7 @@ BDialog {
                     visible: control.repeatKind === "custom"
                     spacing: Theme.space2
                     Text {
+                        textFormat: Text.PlainText
                         text: qsTr("Every")
                         font.family: Theme.fontUi
                         font.pixelSize: Theme.textBase
@@ -479,6 +483,7 @@ BDialog {
                     Text {
                         Layout.fillWidth: true
                         visible: DatesHelper.locale !== "en"
+                        textFormat: Text.PlainText
                         text: qsTr("Written in the note as: %1").arg(control.canonicalRule)
                         font.family: Theme.fontUi
                         font.pixelSize: Theme.textXs
@@ -488,6 +493,7 @@ BDialog {
                     Text {
                         Layout.fillWidth: true
                         visible: control.nextDates.length > 0
+                        textFormat: Text.PlainText
                         text: qsTr("Next: %1").arg(control.nextDatesText)
                         font.family: Theme.fontUi
                         font.pixelSize: Theme.textXs

@@ -243,6 +243,8 @@ private Q_SLOTS:
         QCOMPARE(errorCodeName(WebDavErrorCode::None), QString());
         QCOMPARE(errorCodeName(WebDavErrorCode::Timeout), u"timeout"_s);
         QCOMPARE(errorCodeName(WebDavErrorCode::Parse), u"parse"_s);
+        QCOMPARE(errorCodeName(WebDavErrorCode::Oversized), u"oversized"_s);
+        QVERIFY(!WebDavError::make(WebDavErrorCode::Oversized, u"x"_s).isFatal());
         QCOMPARE(errorCodeName(SyncErrorCode::RemoteEmpty), u"remote-empty"_s);
         QCOMPARE(errorCodeName(SyncErrorCode::LocalEmpty), u"local-empty"_s);
         QVERIFY((SyncError{SyncErrorCode::RemoteBusy, u"zajęty"_s}.is(SyncErrorCode::RemoteBusy)));

@@ -347,6 +347,7 @@ turn on TLS.
 | `precompress` | `true` | `.gz`/`.br` files next to the originals, computed once at build time (only for files in the store) |
 | `brotli` | `true` | also serves brotli (the `ngx_brotli` module, like `services.nginx.recommendedBrotliSettings`) |
 | `contentSecurityPolicy` | `null` | the `Content-Security-Policy` header; before turning it on, check the policy in the browser console (the HTML shell has an inline script, Emscripten's code may need `'unsafe-eval'`) |
+| `frameAncestors` | `"'self'"` | who may show the app inside a frame: a `Content-Security-Policy: frame-ancestors …` header of its own (and `X-Frame-Options: SAMEORIGIN` for the default), so that no other site's page can frame the app and lead clicks into it; name another origin for a site of your own that embeds Brulion (`"'self' https://cloud.example.com"`), `null` sends no header |
 | `openFirewall` | `false` | opens the host's ports (80, with TLS also 443) |
 
 Headers: `brulion.js`, `brulion.wasm` and `qtloader.js` are fetched with `?v=<content hash>` —

@@ -7,9 +7,12 @@
 #include "extensions/engine.h"
 #include "extensions/host.h"
 #include "extensions/pageextension.h"
+#include "markdown/frontmatter.h"
 #include "markdown/parse.h"
 
 #include <QTest>
+
+#include <optional>
 
 using namespace Qt::StringLiterals;
 using namespace brulion;
@@ -149,6 +152,60 @@ private Q_SLOTS:
         // Inline code is no fence; neither is a "```" line inside another fence.
         QCOMPARE(extensionCode(u"```luau``` nie\nx"_s).blocks, 0);
         QCOMPARE(extensionCode(QString()).blocks, 0);
+    }
+
+    void whatThePageShowsAsPropertiesIsNeverCode_data()
+    {
+        QTest::addColumn<QString>("content");
+        QTest::addColumn<QString>("code");
+        QTest::addColumn<int>("firstLine");
+        // Frontmatter that holds what would be code blocks anywhere else: a block of text, a list.
+        const QString frontmatter = u"---\n"
+                                    "tags: [extension]\n"
+                                    "opis: |\n"
+                                    "  ```luau\n"
+                                    "  ukryty()\n"
+                                    "  ```\n"
+                                    "lista:\n"
+                                    "  - ```lua\n"
+                                    "    drugi_ukryty()\n"
+                                    "    ```\n"
+                                    "---\n"_s;
+        const QString page = frontmatter + u"```luau\nwidoczny()\n```\n"_s;
+        QTest::newRow("frontmatter") << page << u"widoczny()"_s << 12;
+        // A byte order mark (Notepad): the parser reads the frontmatter all the same.
+        QTest::newRow("after a byte order mark") << (u"\uFEFF"_s + page) << u"widoczny()"_s << 12;
+        QTest::newRow("Windows line ends") << QString(page).replace(u"\n"_s, u"\r\n"_s) << u"widoczny()"_s << 12;
+        QTest::newRow("closed with dots")
+                << (QString(frontmatter).chopped(4) + u"...\n```luau\nwidoczny()\n```\n"_s) << u"widoczny()"_s << 12;
+        QTest::newRow("spaces after the dashes")
+                << (u"---  \ntags: [extension]\nopis: |\n  ```luau\n  ukryty()\n  ```\n--- \t\n"
+                    "```luau\nwidoczny()\n```\n"_s)
+                << u"widoczny()"_s << 8;
+        QTest::newRow("nothing after it") << QString(frontmatter).chopped(1) << QString() << -1;
+        // No frontmatter for the parser, none here: the reader sees these code blocks as code.
+        QTest::newRow("dashes that are indented")
+                << u"  ---\n```luau\npierwszy()\n```\n  ---\n```luau\ndrugi()\n```\n"_s << u"pierwszy()\n\ndrugi()"_s
+                << 2;
+        QTest::newRow("dashes that are never closed") << u"---\n```luau\nkod()\n```\n"_s << u"kod()"_s << 2;
+        QTest::newRow("dashes after a line of text") << u"tekst\n---\n```luau\nkod()\n```\n---\n"_s << u"kod()"_s << 3;
+    }
+    void whatThePageShowsAsPropertiesIsNeverCode()
+    {
+        QFETCH(QString, content);
+        QFETCH(QString, code);
+        QFETCH(int, firstLine);
+        const ExtensionCode found = extensionCode(content);
+        QCOMPARE(found.code, code);
+        QCOMPARE(found.firstLine, firstLine);
+        // The same rule as the parser's: its frontmatter and the code never overlap.
+        const std::optional<markdown::FrontmatterBlock> frontmatter = markdown::findFrontmatter(content);
+        if (frontmatter && found.firstLine >= 0)
+            QVERIFY2(found.firstLine >= frontmatter->bodyStartLine,
+                     qPrintable(QString::number(frontmatter->bodyStartLine)));
+        // What the caret finds in the frontmatter is no code block either.
+        if (frontmatter)
+            QCOMPARE(codeBlockAt(content, 4), QString());
     }
 
     void codeBlockAtALine()

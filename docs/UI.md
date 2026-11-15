@@ -3995,6 +3995,17 @@ pickers (Android, Windows, GTK / KDE, the portal, the browser's) speak the syste
   stayed put when a narrower window wrapped the text again).
   `scripts/check-qml-reads.sh` finds such statements (ctest `tst_scripts_check_qml_reads`, CI's
   lint job); the playground's `refreshtest` checks the views (`tst_editor_qml_refresh`, `_touch`).
+* **Text formats**: every `Text` and `Label` says how its text is read. Text that comes from a
+  note — a page's title, a task, a file name, a line in the merge view, what an extension
+  wrote — is shown with `textFormat: Text.PlainText` (`BText` and the other `B*` components do
+  that themselves); markup that Brulion makes, with the note's text escaped (`InlineRenderer`,
+  `TextHelper.escapeHtml`), says `Text.StyledText` or `Text.RichText`. Qt's default,
+  `Text.AutoText`, decides by the text: one with a tag before its first line break is styled, so
+  a title `<img src="file://server/share/x.png">` made Qt fetch the picture (on Windows from
+  another machine, with the user's sign-in — the engine's URL guard does not see a picture inside
+  rich text) and `<font size=7>` redrew the row; it also costs a scan of every string.
+  `scripts/check-qml-text-format.sh` finds a `Text` or `Label` without a `textFormat` (ctest
+  `tst_scripts_check_qml_text_format`, CI's lint job).
 * **C++ helpers** (QML singletons): `DatesHelper` (natural-language dates, human formatting,
   recurrence rules, localised names, month grids — all values are strings, no JS `Date`),
   `TextHelper` (diacritic folding, fuzzy ranking for palettes, escaping), `DiffHelper` (Myers

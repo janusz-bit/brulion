@@ -1459,7 +1459,9 @@ Item {
                 }
                 ShellSettingRow {
                     title: qsTr("Address")
-                    description: qsTr("Empty: the provider's own. A server of your own: e.g. http://192.168.1.10:11434/v1 (Ollama).")
+                    description: AppSettings.aiUnencrypted
+                                 ? qsTr("Not encrypted: the notes sent to the AI and the key can be read on the network on the way to this address. Fine for a server at home; anywhere else use https.")
+                                 : qsTr("Empty: the provider's own. A server of your own: e.g. http://192.168.1.10:11434/v1 (Ollama).")
                     BTextField {
                         objectName: "aiAddressSetting"
                         Layout.preferredWidth: Theme.compact ? -1 : 260

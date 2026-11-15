@@ -11,7 +11,7 @@ Brulion can ask an AI model about your notes — on the computer and on the phon
 Open **Settings → Extensions → AI** and choose:
 
 - **Claude** — a key from platform.claude.com (**API keys**). Without a model named, Brulion asks `claude-opus-5-5`; `claude-haiku-5-5` is faster and much cheaper.
-- **OpenAI-compatible** — OpenAI, OpenRouter, or a server of your own: Ollama or LM Studio on your computer (the address, e.g. `http://192.168.1.10:11434/v1`, and the model's name). Your own server needs no key and costs nothing; the phone reaches it at home or through Tailscale.
+- **OpenAI-compatible** — OpenAI, OpenRouter, or a server of your own: Ollama or LM Studio on your computer (the address, e.g. `http://192.168.1.10:11434/v1`, and the model's name). Your own server needs no key and costs nothing; the phone reaches it at home or through Tailscale. An `http://` address is not encrypted — the settings say so: fine on your home network, anywhere else use `https://`.
 
 Press **Check**: the model answers "OK", or you see what is wrong.
 

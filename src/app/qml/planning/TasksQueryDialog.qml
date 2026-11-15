@@ -82,11 +82,13 @@ BDialog {
     }
 
     component CodeText: Text {
+        textFormat: Text.PlainText
         font.family: Theme.fontMono
         font.pixelSize: Theme.textSm
         color: Theme.link
     }
     component SmallText: Text {
+        textFormat: Text.PlainText
         font.family: Theme.fontUi
         font.pixelSize: Theme.textSm
         color: Theme.fg
@@ -95,6 +97,7 @@ BDialog {
 
     Text {
         Layout.fillWidth: true
+        textFormat: Text.PlainText
         text: qsTr("Paste this block into any page: it lists the same tasks there and stays up to date. You can change it like any other text.")
         font.family: Theme.fontUi
         font.pixelSize: Theme.textBase
@@ -172,6 +175,7 @@ BDialog {
             spacing: Theme.space1
             Text {
                 Layout.fillWidth: true
+                textFormat: Text.PlainText
                 text: qsTr("More to try")
                 font.family: Theme.fontUi
                 font.pixelSize: Theme.textSm

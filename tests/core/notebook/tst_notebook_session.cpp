@@ -316,6 +316,43 @@ private Q_SLOTS:
         QCOMPARE(decodeText("\xEF\xBB\xBFżółw"), u"żółw"_s);
     }
 
+    void theDeviceStateIsTheOwnersAlone()
+    {
+        // The history, the texts a sync merges with and the search index hold the notes: their
+        // folder is closed to other users of the device — a new one, and one an older version
+        // left open.
+#ifdef Q_OS_WIN
+        QSKIP("Windows: a user's files are closed to others by the profile's access list, not by these permissions");
+#endif
+        QTemporaryDir dir;
+        const auto others = QFileDevice::ReadGroup | QFileDevice::WriteGroup | QFileDevice::ExeGroup | QFileDevice::ReadOther
+                            | QFileDevice::WriteOther | QFileDevice::ExeOther;
+        const auto owner = QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner;
+        const QString open = dir.filePath(u"dane/vaults/żółw"_s);
+        QVERIFY(QDir().mkpath(open));
+        QVERIFY(QFile::setPermissions(open, owner | others));
+        if (!(QFileInfo(open).permissions() & QFileDevice::ReadOther))
+            QSKIP("no permissions for others on this file system");
+        QVERIFY(QFile(open + u"/store.json"_s).open(QIODevice::WriteOnly));
+        keepDeviceStatePrivate(open);
+        QCOMPARE(QFileInfo(open).permissions() & others, QFileDevice::Permissions{});
+        QVERIFY(QFileInfo(open).permissions().testFlags(owner));
+        QVERIFY(QFileInfo::exists(open + u"/store.json"_s)); // what was there stays
+        const QString fresh = dir.filePath(u"dane/vaults/nowy"_s);
+        keepDeviceStatePrivate(fresh);
+        QVERIFY(QFileInfo(fresh).isDir());
+        QCOMPARE(QFileInfo(fresh).permissions() & others, QFileDevice::Permissions{});
+        // The folders above it are as the system makes them: only the notebook's state is closed.
+        QVERIFY(QFileInfo(dir.filePath(u"dane"_s)).permissions().testFlags(owner));
+        // No state folder (brulion-cli --no-history): nothing is made.
+        keepDeviceStatePrivate(QString());
+        // A notebook opened with it keeps working there.
+        const QString root = vaultDir({{u"a.md"_s, "- a\n"}});
+        Notebook notebook;
+        QVERIFY(notebook.open(root, {fresh, false, u"cli"_s, {}, {}}));
+        QVERIFY(notebook.lock(1000));
+    }
+
     void documentationNotebookFolders()
     {
         // Each language's documentation has its own folder; both are recognised whatever the UI

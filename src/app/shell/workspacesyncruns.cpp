@@ -180,6 +180,8 @@ QString WorkspaceSync::fileErrorText(const QString &code, int status) const
         return tr("The file is too large for the server.");
     if (code == u"insufficient-storage")
         return tr("There is no space left on the server.");
+    if (code == u"oversized")
+        return tr("The server sent more than this file should hold — the next sync tries again.");
     if (code == u"server")
         return tr("The server reported an error — Brulion will try again.");
     if (code == u"conflict")
@@ -241,6 +243,8 @@ QString WorkspaceSync::shortErrorText(const QString &code) const
         return tr("not a WebDAV address");
     if (code == u"insufficient-storage")
         return tr("no space left on the server");
+    if (code == u"oversized")
+        return tr("the server sent too much data");
     if (code == u"server")
         return tr("server error");
     if (code == u"local-empty")

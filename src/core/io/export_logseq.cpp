@@ -18,6 +18,7 @@
 #include "markdown/tokens.h"
 #include "text/text.h"
 #include "util/paths.h"
+#include "util/unicode.h"
 
 #include <QRegularExpression>
 
@@ -452,9 +453,8 @@ private:
             if (!target || !target->parsed)
                 continue;
             const QString key = t.name.toLower();
-            const bool alias = std::ranges::any_of(target->parsed->aliases, [&](const QString &a) {
-                return a.normalized(QString::NormalizationForm_C).toLower() == key;
-            });
+            const bool alias = std::ranges::any_of(target->parsed->aliases,
+                                                   [&](const QString &a) { return unicode::nfc(a).toLower() == key; });
             const QString name = pageName(vault, *page);
             if (alias || name.compare(t.name, Qt::CaseInsensitive) == 0 || markdown::tagSyntax(name).isEmpty())
                 continue;

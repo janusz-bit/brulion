@@ -272,6 +272,7 @@ IoCard {
                         spacing: Theme.space1
                         BIcon { name: tile.icon; size: Theme.iconSizeSm; color: Theme.fgMuted }
                         Text {
+                            textFormat: Text.PlainText
                             text: "" + tile.value
                             font.family: Theme.fontUi
                             font.pixelSize: Theme.textXl

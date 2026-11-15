@@ -2,6 +2,7 @@
 // malformed input and concurrent use.
 #include "log/redact.h"
 
+#include <QElapsedTimer>
 #include <QTest>
 #include <QThread>
 #include <QUrl>
@@ -29,6 +30,8 @@ private Q_SLOTS:
     void scopedSecret();
     void malformedInput();
     void largeInput();
+    void hostileInputStaysLinear_data();
+    void hostileInputStaysLinear();
     void concurrent();
 };
 
@@ -193,6 +196,63 @@ void TestLogRedact::largeInput()
     const QString out = redact(big);
     QVERIFY(out.endsWith(u"password=***"_s));
     QCOMPARE(out.size(), big.size() - 2);
+}
+
+void TestLogRedact::hostileInputStaysLinear_data()
+{
+    QTest::addColumn<QString>("unit");
+    QTest::addColumn<QString>("tail");
+    // Texts no log line has, which a page's name, a server's answer or an error can carry into
+    // one: every piece is where a pattern starts looking, and none of them ends where it would.
+    QTest::newRow("dots") << u"a."_s << QString();
+    QTest::newRow("hyphens") << u"a-"_s << QString();
+    QTest::newRow("pluses") << u"a+"_s << QString();
+    QTest::newRow("schemes without an end") << u"ab+cd.ef-"_s << QString();
+    QTest::newRow("addresses without a user") << u"x://a "_s << QString();
+    QTest::newRow("addresses in a row") << u"x://a"_s << QString();
+    QTest::newRow("tokens without a dot") << u"eyJab-"_s << QString();
+    QTest::newRow("tokens with one dot") << u"eyJabcd.abcd-"_s << QString();
+    QTest::newRow("keys without a value") << u"token-"_s << QString();
+    QTest::newRow("keys in a query") << u"&token"_s << QString();
+    QTest::newRow("quoted keys") << u"\"token\""_s << QString();
+    QTest::newRow("quotes and backslashes") << u"\"token\":\"\\"_s << QString();
+    QTest::newRow("header names") << u"cookie "_s << QString();
+    QTest::newRow("groups of five") << u"abcde-"_s << QString();
+    QTest::newRow("Basic without a token") << u"Basic "_s << QString();
+    QTest::newRow("at signs") << u"@"_s << QString();
+    QTest::newRow("equals signs") << u"="_s << QString();
+    // The same, with an end that lets every piece begin a match and none of them finish it.
+    QTest::newRow("dots, then an address without a user") << u"a."_s << u"b://serwer/ścieżka"_s;
+    QTest::newRow("hyphens, then an address without a user") << u"a-"_s << u"b://serwer"_s;
+    QTest::newRow("tokens, then one dot") << u"eyJab-"_s << u".abcd"_s;
+    QTest::newRow("tokens, then two dots and a space") << u"eyJab-"_s << u".abcd. x"_s;
+    QTest::newRow("keys, then no equals sign") << u"token."_s << u" x"_s;
+    QTest::newRow("quoted keys, then no value") << u"\"a.token."_s << u"\" x"_s;
+    QTest::newRow("a query without a value") << u"&a.token."_s << u" x"_s;
+}
+
+void TestLogRedact::hostileInputStaysLinear()
+{
+    QFETCH(QString, unit);
+    QFETCH(QString, tail);
+    const QString hostile = unit.repeated(int(200'000 / unit.size())) + tail;
+    QElapsedTimer timer;
+    timer.start();
+    // One secret for every pattern, after the hostile text.
+    const QString secrets = u"\nhttps://jan:tajne1@chmura.pl/dav\nAuthorization: Basic dGFqbmUyOnRham5l\n"
+                            "{\"appPassword\":\"tajne3\"} wysłano Bearer dGFqbmU0dGFqbmU0 na /x?code=tajne5&y=1\n"
+                            "password=tajne6 hasło abcde-fghij-klmno-pqrst-uvwxy i eyJhbGciOiJ.eyJzdWIiOiI.dGFqbmU3"_s;
+    const QString masked = redact(secrets);
+    QVERIFY2(!masked.contains(u"tajne"_s) && !masked.contains(u"dGFqbmU"_s) && !masked.contains(u"abcde-fghij"_s)
+                     && !masked.contains(u"eyJ"_s),
+             qPrintable(masked));
+    timer.restart();
+    const QString out = redact(hostile + secrets);
+    const qint64 elapsed = timer.elapsed();
+    // What follows the hostile text is masked as it is alone: no pattern gave up on the whole.
+    QVERIFY2(out.endsWith(masked), qPrintable(out.right(300)));
+    qInfo("%lld characters in %lld ms", static_cast<long long>(hostile.size()), static_cast<long long>(elapsed));
+    QVERIFY2(elapsed < 1500 * BRULION_TEST_SLOWDOWN, qPrintable(u"%1 ms"_s.arg(elapsed)));
 }
 
 void TestLogRedact::concurrent()

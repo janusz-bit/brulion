@@ -30,6 +30,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <optional>
 
 using namespace Qt::StringLiterals;
 using namespace brulion;
@@ -225,11 +226,13 @@ class TestShellExtensions : public QObject {
             m_ext->approve(kFolder + u'/' + file);
     }
 
-    /// Workspace::write: this device's editor saves a page.
-    bool editorSaves(const QString &path, const QString &content)
+    /// Workspace::writeIfUnchanged: this device's editor saves a page over the text it has
+    /// (`base`; by default what is in the file, as for an editor that follows it).
+    bool editorSaves(const QString &path, const QString &content, const std::optional<QString> &base = std::nullopt)
     {
-        m_ext->savedByEditor(path, content);
-        return m_vault->writeText(path, content, ChangeSource::User);
+        const QString expected = base ? *base : disk(path);
+        m_ext->savedByEditor(path, content, expected);
+        return m_vault->writeTextIfUnchanged(path, content, expected, ChangeSource::User) == WriteOutcome::Written;
     }
 
     /// Another program or a sync changes a page.
@@ -412,6 +415,99 @@ private Q_SLOTS:
         QVERIFY(editorSaves(u"Projekty.md"_s, written + u"- dopisek\n"_s));
         QTRY_COMPARE(disk(u"Projekty.md"_s), written);
         QTRY_COMPARE(consoleLines(u"Indeks projektów przepisany"_s), 2);
+    }
+
+    void aSaveOverATextThatArrivedWaits()
+    {
+        // Another program changes an approved extension a moment before the editor saves its own
+        // change of the page: the vault finds the other text, the editor merges it in and saves
+        // the result at once (PageController::save). The code that arrived is in that save and
+        // nobody here has read it: the page waits for approval, as if it had arrived alone.
+        const QString path = page(u"Link check"_s);
+        m_ext->approve(path);
+        QCOMPARE(m_ext->pageState(path), u"running"_s);
+        const QString approved = disk(path);
+        QString typed = approved; // what somebody is typing here: the page's text, not its code
+        typed.replace(u"It only reads: no permissions."_s, u"Tylko czyta: żadnych uprawnień."_s);
+        QString arrived = approved; // what arrives: other code
+        arrived.replace(u"b.ui.heading(`Broken links: "_s, u"b.ui.heading(`Stolen: "_s);
+        QString merged = arrived;
+        merged.replace(u"It only reads: no permissions."_s, u"Tylko czyta: żadnych uprawnień."_s);
+        QVERIFY(typed != approved && arrived != approved && merged != arrived);
+        // The file changes behind the vault's back (Syncthing, an agent's command line) …
+        QFile file(m_dir + u'/' + path);
+        QVERIFY(file.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        file.write(arrived.toUtf8());
+        file.close();
+        // … the editor's save finds it, and the merged text is saved over what arrived, before
+        // any event is handled.
+        QVERIFY(!editorSaves(path, typed, approved));
+        QVERIFY(editorSaves(path, merged, arrived));
+        QCOMPARE(disk(path), merged);
+        QTRY_COMPARE(m_ext->pageState(path), u"approval"_s);
+        QString error;
+        QVERIFY(m_ext->render(u"link-check"_s, u"broken"_s, {}, &error).isEmpty());
+        // Read and approved, it runs.
+        m_ext->approve(path);
+        QCOMPARE(textsOf(m_ext->render(u"link-check"_s, u"broken"_s, {}, &error), u"heading"_s),
+                 QStringList{u"Stolen: 4"_s});
+    }
+
+    void trustFollowsTheTextEditedHere()
+    {
+        const QString path = page(u"Link check"_s);
+        m_ext->approve(path);
+        QString error;
+        // The page's text changes here, its code does not: nothing to approve, and the code edited
+        // next is edited over that text.
+        QString text = disk(path);
+        text.replace(u"It only reads: no permissions."_s, u"Tylko czyta: żadnych uprawnień."_s);
+        QVERIFY(editorSaves(path, text));
+        QCOMPARE(m_ext->pageState(path), u"running"_s);
+        // (Saved again before the first save was looked at: one edit after the other, both here.)
+        QString code = text;
+        code.replace(u"b.ui.heading(`Broken links: "_s, u"b.ui.heading(`Zerwane: "_s);
+        QVERIFY(editorSaves(path, code));
+        QTRY_COMPARE(textsOf(m_ext->render(u"link-check"_s, u"broken"_s, {}, &error), u"heading"_s),
+                     QStringList{u"Zerwane: 4"_s});
+        QCOMPARE(m_ext->pageState(path), u"running"_s);
+        // The same in two steps, each looked at before the next: text, then code.
+        text = code;
+        text.replace(u"Tylko czyta: żadnych uprawnień."_s, u"Tylko czyta: nie ma uprawnień."_s);
+        QVERIFY(editorSaves(path, text));
+        QTest::qWait(20);
+        code = text;
+        code.replace(u"b.ui.heading(`Zerwane: "_s, u"b.ui.heading(`Urwane: "_s);
+        QVERIFY(editorSaves(path, code));
+        QTRY_COMPARE(textsOf(m_ext->render(u"link-check"_s, u"broken"_s, {}, &error), u"heading"_s),
+                     QStringList{u"Urwane: 4"_s});
+        QCOMPARE(m_ext->pageState(path), u"running"_s);
+        code.replace(u"b.ui.heading(`Urwane: "_s, u"b.ui.heading(`Zerwane: "_s);
+        text = code;
+        text.replace(u"Tylko czyta: nie ma uprawnień."_s, u"Tylko czyta: żadnych uprawnień."_s);
+        QVERIFY(editorSaves(path, text));
+        code = text;
+        QTRY_COMPARE(textsOf(m_ext->render(u"link-check"_s, u"broken"_s, {}, &error), u"heading"_s),
+                     QStringList{u"Zerwane: 4"_s});
+        // Text that arrives with the approved code in it changes no trust either: the code edited
+        // over it here stays approved.
+        QString synced = code;
+        synced.replace(u"Tylko czyta: żadnych uprawnień."_s, u"Czyta."_s);
+        QVERIFY(syncBrings(path, synced));
+        QCOMPARE(m_ext->pageState(path), u"running"_s);
+        // (Saved before the text that arrived was looked at, as a save that finds it does.)
+        QString again = synced;
+        again.replace(u"b.ui.heading(`Zerwane: "_s, u"b.ui.heading(`Brak stron: "_s);
+        QVERIFY(editorSaves(path, again));
+        QTRY_COMPARE(textsOf(m_ext->render(u"link-check"_s, u"broken"_s, {}, &error), u"heading"_s),
+                     QStringList{u"Brak stron: 4"_s});
+        // A save that does not say over which text it was made (Workspace::write: a task ticked
+        // in the agenda) changes no code; when it does, it waits.
+        QString blind = again;
+        blind.replace(u"b.ui.heading(`Brak stron: "_s, u"b.ui.heading(`Na ślepo: "_s);
+        m_ext->savedByEditor(path, blind);
+        QVERIFY(m_vault->writeText(path, blind, ChangeSource::User));
+        QTRY_COMPARE(m_ext->pageState(path), u"approval"_s);
     }
 
     void codeAnExtensionWritesWaits()

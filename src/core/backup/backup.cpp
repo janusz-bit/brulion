@@ -1,6 +1,7 @@
 #include "backup/backup.h"
 
 #include "util/paths.h"
+#include "util/unicode.h"
 #include "vault/vault.h"
 #include "vault/vaultconfig.h"
 
@@ -97,7 +98,7 @@ QString backupFileName(const QString &notebookName, const QDateTime &now)
 std::optional<QDateTime> backupFileTime(const QString &fileName, const QString &notebookName)
 {
     static const QRegularExpression stampShape(u"^[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{6}$"_s);
-    const QString name = fileName.normalized(QString::NormalizationForm_C);
+    const QString name = unicode::nfc(fileName);
     const QString prefix = u"Brulion-"_s + notebookFilePart(notebookName) + u'-';
     if (!name.startsWith(prefix) || !name.endsWith(u".zip"_s))
         return std::nullopt;

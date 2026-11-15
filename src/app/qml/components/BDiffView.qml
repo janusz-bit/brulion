@@ -238,6 +238,7 @@ Item {
     }
 
     component Gutter: Text {
+        textFormat: Text.PlainText
         width: control.gutterWidth
         horizontalAlignment: Text.AlignRight
         rightPadding: 8
@@ -248,6 +249,7 @@ Item {
     }
 
     component Sign: Text {
+        textFormat: Text.PlainText
         font.family: Theme.fontMono
         font.pixelSize: Theme.textSm
         font.weight: Theme.weightSemiBold
@@ -283,6 +285,7 @@ Item {
                 }
                 Text {
                     anchors.verticalCenter: parent.verticalCenter
+                    textFormat: Text.PlainText
                     text: skip.text
                     font.family: Theme.fontUi
                     font.pixelSize: Theme.textXs

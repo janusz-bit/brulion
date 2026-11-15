@@ -80,6 +80,7 @@ Item {
                     id: titleText
                     objectName: "calendarTitle"
                     width: Math.min(parent.width, implicitWidth)
+                    textFormat: Text.PlainText
                     text: root.stacked ? root.shortTitle : root.title
                     font.family: Theme.fontUi
                     font.pixelSize: root.stacked ? Theme.textLg : Theme.textXl
