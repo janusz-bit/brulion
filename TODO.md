@@ -328,6 +328,13 @@ Details in docs/PERFORMANCE.md, "Next steps":
 * measuring the sync that reads no unchanged note on a Raspberry Pi (before the change 1.35 s for
   5000 files) and lowering the `syncNoChanges` and `blockDocOps … keystroke` baseline rows in
   tests/bench/baselines (laptop.csv, pi.csv) in a quiet window (L4, L12 done on 2026-11-15);
+* measuring typing in source mode (Ctrl+E) on a long page in the app, on a phone and a Raspberry
+  Pi (docs/PERFORMANCE.md "Source mode: one edit, not the page": the hand-over alone went from
+  18–21 to 0.5–0.6 ms per keystroke at 500 KB on the Pi; the highlighter's and the TextEdit's own
+  work per keystroke is not measured);
+* precompiled headers for cold builds (the Pi, CI after a Qt update; QOwnNotes uses them in its
+  developer builds): measure `target_precompile_headers` with the Qt headers against ccache alone
+  (ccache needs `sloppiness = pch_defines,time_macros`; MSVC, Android and the browser too);
 * measuring the QML code compiled for size (`-Oz`) on a real phone against a build with
   `-DBRULION_QML_CODE_FOR_SIZE=OFF`: journal scrolling, opening a long page, the views — on the
   desktop no slowdown was measurable (L20b);

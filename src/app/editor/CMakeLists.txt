@@ -2,7 +2,8 @@
 # PageController (+ DayClock: the date for every open page; LazyHtmlMimeData: a copy's HTML rendered
 # on request; StreamSelection: a selection over several days of the journal stream), MarkdownHighlighter, RichTextPills (the
 # rounded chips of the rendered text), LinkPreview (what a link's hover preview shows), SuggestionModel,
-# EditorInput (TextEdit text and input-method helpers), SpellCheck (spell checking on a worker thread:
+# EditorInput (TextEdit text and input-method helpers), SourceTextSync (source mode: the TextEdit's
+# edits handed to PageController one at a time), SpellCheck (spell checking on a worker thread:
 # the core module spell over the platform's backends, src/platform/spellbackends.h), QueryResultModel
 # (live ```query results), the pure helpers of blocktext.h and the
 # in-memory FakeEditorHost (playground, tests; queries run on the real index module), MermaidView
@@ -52,6 +53,7 @@ qt_add_library(brulion_editor STATIC
     suggestionmodel.h suggestionmodel.cpp
     fakeeditorhost.h fakeeditorhost.cpp
     editorinput.h editorinput.cpp
+    sourcetextsync.h sourcetextsync.cpp
     mermaidview.h mermaidview.cpp
     chartview.h chartview.cpp
     blockviews.h blockviews.cpp

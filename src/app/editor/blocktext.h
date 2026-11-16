@@ -337,6 +337,26 @@ int snapToCharacter(QStringView text, int pos);
 /// itself when nothing but the terminators differs.
 QString restoreLineEndings(const QString &original, const QString &edited, const QString &eol);
 
+/// One edit of a text in `original`'s own terms (sourceEditOf()): `removed` characters at `from`
+/// replaced by `inserted`.
+struct SourceEdit {
+    qsizetype from = 0;
+    qsizetype removed = 0;
+    QString inserted;
+};
+
+/// restoreLineEndings() for one edit, without the whole text: `original` as a TextEdit shows it
+/// (every "\r\n" and "\r" one "\n") had `removed` characters at `from` replaced by `inserted` (a
+/// TextEdit's text: line breaks "\n"). Returns that edit of `original` itself — its untouched line
+/// terminators kept, the inserted line breaks as `eol` — in O(from + removed) and no copy of the
+/// text (source mode's keystroke, SourceTextSync). A lone "\r" never becomes one line break with
+/// a "\n" placed after it (it is written "\r\n" then). nullopt when the range is not in `original`.
+std::optional<SourceEdit> sourceEditOf(QStringView original, qsizetype from, qsizetype removed, QStringView inserted,
+                                       QStringView eol);
+
+/// `text` as a TextEdit shows it: every "\r\n" and lone "\r" a "\n" (`text` itself without "\r").
+QString shownText(const QString &text);
+
 /// The difference between two versions of a text as one replaced range (common prefix and suffix
 /// left out): where an edit happened — for the fence lines typed in a block (blocktext.cpp) and a
 /// caret carried through an edit. Undo steps hold markdown::BlockDocument::Delta, not these.

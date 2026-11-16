@@ -21,8 +21,15 @@
 
 class QQuickItem;
 class QQuickTextDocument;
+class QTextDocument;
 
 namespace brulion::editor {
+
+/// The exact plain text of a QTextDocument (EditorInput::plainText()); "" for null.
+QString documentPlainText(const QTextDocument *document);
+/// A QTextDocument's paragraph separators and frame markers in `text` (its raw text, or a part of
+/// it: QTextCursor::selectedText()) turned into "\n", in place.
+void mapDocumentSeparators(QString &text);
 
 class EditorInput : public QObject {
     Q_OBJECT

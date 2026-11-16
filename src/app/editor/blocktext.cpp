@@ -1407,6 +1407,101 @@ QString restoreLineEndings(const QString &original, const QString &edited, const
     return original.left(source[p]) + middle + original.mid(source[shown.size() - s]);
 }
 
+namespace {
+
+/// A place in a text with its own line endings and the same place as a TextEdit shows it.
+struct ShownWalk {
+    qsizetype index = 0; ///< in the text
+    qsizetype shown = 0; ///< as shown (every "\r\n" and lone "\r" one "\n")
+};
+
+/// Moves `walk` forward to the shown position `target`, from one "\r" to the next: between them
+/// both count alike (a text without "\r" before the target: one search of what lies before it).
+/// False when `target` is past the end.
+bool walkTo(QStringView text, ShownWalk &walk, qsizetype target)
+{
+    while (walk.shown < target) {
+        // Searched no further than the target could be (a "\r" past it changes nothing).
+        const qsizetype reach = std::min(text.size(), walk.index + (target - walk.shown));
+        const qsizetype found = text.sliced(walk.index, reach - walk.index).indexOf(u'\r');
+        const qsizetype cr = found < 0 ? -1 : walk.index + found;
+        if (cr < 0 && reach - walk.index == target - walk.shown) {
+            walk.index = reach;
+            walk.shown = target;
+            return true;
+        }
+        const qsizetype stop = cr < 0 ? text.size() : cr;
+        walk.shown += stop - walk.index;
+        walk.index = stop;
+        if (cr < 0)
+            return false;
+        walk.index += walk.index + 1 < text.size() && text[walk.index + 1] == u'\n' ? 2 : 1;
+        ++walk.shown;
+    }
+    return true;
+}
+
+} // namespace
+
+std::optional<SourceEdit> sourceEditOf(QStringView original, qsizetype from, qsizetype removed, QStringView inserted,
+                                       QStringView eol)
+{
+    if (from < 0 || removed < 0)
+        return std::nullopt;
+    ShownWalk walk;
+    if (!walkTo(original, walk, from))
+        return std::nullopt;
+    const ShownWalk start = walk;
+    if (!walkTo(original, walk, from + removed))
+        return std::nullopt;
+    // The range reported may be wider than what changed (several edits of one undo step, formats
+    // only): only what differs is replaced, so the line terminators around it keep their bytes.
+    const QString was = shownText(original.sliced(start.index, walk.index - start.index).toString());
+    if (was == inserted)
+        return SourceEdit{start.index, 0, {}};
+    const auto [p, s] = commonEnds(was, inserted);
+    walk = start;
+    walkTo(original, walk, from + p);
+    const qsizetype first = walk.index;
+    walkTo(original, walk, from + removed - s);
+    SourceEdit edit{first, walk.index - first, {}};
+    const QStringView middle = inserted.sliced(p, inserted.size() - p - s);
+    if (eol == u"\n" || !middle.contains(u'\n')) {
+        edit.inserted = middle.toString();
+    } else {
+        // Bare line feeds only (an `inserted` with its own "\r\n" keeps them).
+        edit.inserted.reserve(middle.size() + middle.size() / 16);
+        for (qsizetype k = 0; k < middle.size(); ++k) {
+            if (middle[k] == u'\n' && (p + k == 0 || inserted[p + k - 1] != u'\r'))
+                edit.inserted += eol;
+            else
+                edit.inserted += middle[k];
+        }
+    }
+    // "\r" right before "\n" would be one line break where the TextEdit shows two: a lone "\r"
+    // before the edit, or an inserted one (eol "\r") before the text after it, becomes "\r\n".
+    const qsizetype end = edit.from + edit.removed;
+    const QChar next = !edit.inserted.isEmpty() ? edit.inserted.front()
+                       : end < original.size()  ? original[end]
+                                                : QChar();
+    if (edit.from > 0 && original[edit.from - 1] == u'\r' && next == u'\n') {
+        --edit.from;
+        ++edit.removed;
+        edit.inserted.prepend(u"\r\n"_s);
+    }
+    if (edit.inserted.endsWith(u'\r') && end < original.size() && original[end] == u'\n')
+        edit.inserted += u'\n';
+    return edit;
+}
+
+QString shownText(const QString &text)
+{
+    if (!text.contains(u'\r'))
+        return text;
+    QString shown = text;
+    return shown.replace(u"\r\n"_s, u"\n"_s).replace(u'\r', u'\n');
+}
+
 TextDelta TextDelta::between(const QString &before, const QString &after)
 {
     const auto [p, s] = commonEnds(before, after);

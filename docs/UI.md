@@ -2051,7 +2051,11 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   scrolled at all), a tap places
   the cursor and a long press selects the word under the finger (a TapHandler on an item above
   the TextEdit, which leaves a finger's taps alone too when it does not select by dragging; the
-  system's selection handles take a selection on where the platform has them).
+  system's selection handles take a selection on where the platform has them). Each edit reaches
+  the controller alone (`SourceTextSync`: where `QTextDocument::contentsChange` says the text
+  changed, the file's line endings kept by `sourceEditOf`), not the whole page per keystroke; once
+  typing pauses and before a save the two texts are compared once (docs/PERFORMANCE.md "Source
+  mode: one edit, not the page").
 * Drawings (an SVG with an embedded scene, a `.excalidraw` scene, a drawing of Obsidian's Excalidraw
   plugin — `![[Szkic.excalidraw]]`, `![[Szkic.excalidraw.md]]`, a page embed `![[Plan]]` of a
   plugin file, not a transclusion then —, docs/SYNTAX.md §2 "Drawings"; the embeds' `drawing` and

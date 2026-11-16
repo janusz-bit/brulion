@@ -235,6 +235,18 @@ public:
     void setSourceMode(bool on);
     QString sourceText() const;
     void setSourceText(const QString &text);
+    /// What editSourceText() did with an edit.
+    enum class SourceEditResult {
+        Applied,   ///< applied: sourceTextChanged emitted once
+        Unchanged, ///< the range already holds that text (a change of formats only)
+        Refused,   ///< the page is read-only (editRefused emitted, as setSourceText does)
+        Unfit,     ///< not in source mode, or the range is not in the text
+    };
+    /// Source mode: `removed` characters at `from` of the text the source editor shows (sourceText
+    /// with every line break "\n") replaced by `inserted` — one keystroke without the whole text
+    /// (SourceTextSync; the line endings as setSourceText keeps them, sourceEditOf()). After
+    /// Refused or Unfit the caller hands over whole texts instead (setSourceText).
+    SourceEditResult editSourceText(qsizetype from, qsizetype removed, const QString &inserted);
     int editingRow() const;
     void setEditingRow(int row);
     int cursorPosition() const { return m_cursor; }
@@ -1033,6 +1045,9 @@ Q_SIGNALS:
     void zoomChanged();
     void sourceModeChanged();
     void sourceTextChanged();
+    /// Source mode's text is about to be saved or applied to the blocks: a SourceTextSync compares
+    /// it with its TextEdit's first (SourceTextSync::verify(), which may set sourceText).
+    void sourceTextWanted();
     void editingRowChanged();
     void cursorPositionChanged();
     void selectedRowChanged();
