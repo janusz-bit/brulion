@@ -137,6 +137,13 @@ Only what needs OS APIs; compiled per target (no `#ifdef`s in core). `platform.h
   launcher's startup notification (`StartupNotify=true`) itself, through Qt's xcb plugin, which
   says "remove" once the process shows a window — a 1×1 tooltip window off the screen (nothing
   elsewhere).
+* **Crash report** (`crashreport.h`; tests/platform `tst_crashreport`): `installCrashReport()`,
+  first in `main()` — Linux with glibc (the desktop, the AppImage, the Nix package, the test runs
+  of CI): on SIGSEGV, SIGBUS, SIGFPE, SIGILL or SIGABRT stderr gets the signal, the faulting
+  address, the crashing thread's name and id and that thread's stack (`backtrace_symbols_fd`:
+  exported symbols by name, the rest as `file(+offset)` for `addr2line -f -C -e <file>
+  <offset>` with the same build), then the process dies of the same signal (exit status and core
+  dump unchanged). Nothing elsewhere and in sanitizer builds, whose own reports win.
 * **PDF pages** (`pdfpages.h`; tests/platform `tst_pdfpages`): `pdfAvailable()`, `pdfInfo(file,
   pageSizes)` — the pages and their sizes in points (all, or the first page's only), a
   password-protected file `locked` —,

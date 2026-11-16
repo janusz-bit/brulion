@@ -1,4 +1,5 @@
 #include "appidentity.h" // Windows: the AppUserModelID of the toasts (src/platform)
+#include "crashreport.h" // a crash's signal, thread and stack on stderr (src/platform)
 #include "pdfpages.h"    // the PDF renderer's name for the event log (src/platform)
 #include "platform.h"
 #include "ui/devtools.h"      // design system dev tools: --gallery, --screenshot, --size … (devtools.h)
@@ -95,6 +96,8 @@ QString argValue(const QStringList &args, const QString &option)
 
 int main(int argc, char *argv[])
 {
+    // A crash prints its signal, thread and stack before the process dies (Linux; crashreport.h).
+    brulion::platform::installCrashReport();
 #ifdef BRULION_DESKTOP_INTEGRATION
     // `brulion cli …` (also `Brulion.AppImage cli …`, the AppImage's one entry point): the command
     // line for scripts and AI agents (docs/CLI.md) — before anything of the app: no window, no

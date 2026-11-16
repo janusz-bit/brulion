@@ -14,7 +14,9 @@
 #                of the notebook used where it is; pure, tested everywhere), spelldictionaries (where
 #                Hunspell's dictionaries are; pure, tested everywhere), spellbackends (spell checking
 #                of the editor: one backend per build, below), traywindow (the tray calendar placed
-#                by Wayland's layer shell: one backend per build, below). Tests: tests/platform.
+#                by Wayland's layer shell: one backend per build, below), crashreport (a crash's
+#                signal, thread and stack on stderr: Linux with glibc, nothing elsewhere). Tests:
+#                tests/platform.
 qt_add_library(brulion_platform STATIC
     platform.h platform.cpp
     autostart.h autostart.cpp
@@ -29,6 +31,7 @@ qt_add_library(brulion_platform STATIC
     spelldictionaries.h spelldictionaries.cpp
     spellbackends.h
     traywindow.h
+    crashreport.h crashreport.cpp
 )
 target_include_directories(brulion_platform PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(brulion_platform PUBLIC brulion_core Qt6::Gui)

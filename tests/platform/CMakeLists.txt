@@ -36,3 +36,8 @@ brulion_add_test(tst_spelldictionaries SOURCES tst_spelldictionaries.cpp LIBS br
 # "none" (a build without Hunspell): no languages, no backends.
 brulion_add_test(tst_spellbackends SOURCES tst_spellbackends.cpp LIBS brulion_platform brulion_core_spell)
 target_compile_definitions(tst_spellbackends PRIVATE BRULION_TEST_SPELL_BACKEND="${BRULION_SPELL_BACKEND_USED}")
+# What a crash prints (crashreport.h): child processes crash on the main thread and on a named
+# thread (a null write) and abort(); stderr names the signal, the address and the thread and holds
+# a stack, and each still dies of its signal. Linux with glibc only (skipped elsewhere and in
+# sanitizer builds).
+brulion_add_test(tst_crashreport SOURCES tst_crashreport.cpp LIBS brulion_platform)
