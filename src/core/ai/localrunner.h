@@ -22,6 +22,7 @@
 #include <QStringList>
 
 #include <atomic>
+#include <functional>
 #include <memory>
 
 namespace brulion::ai {
@@ -64,8 +65,14 @@ public:
         int topK = 50;
         float repeatPenalty = 1.1f;
         quint32 seed = 0xB2011017;
-        int timeoutMs = 0;                         ///< 0: no limit
+        /// The longest it may go without getting anywhere — a batch of the prompt read, a token
+        /// written — (0: no limit): a slow device writes on, a stuck one ends.
+        int timeoutMs = 0;
         const std::atomic<bool> *cancel = nullptr; ///< set from another thread: stop now
+        /// Called after every token of the answer with what the model has written so far (its
+        /// last letters only once they are whole), the tokens written and the time writing them
+        /// took, on the thread that generates.
+        std::function<void(const QList<local::Piece> &written, int tokens, qint64 writingMs)> written;
     };
 
     enum Status {
@@ -110,8 +117,11 @@ QString pluginName(const QString &file);
 /// answer within ai::TimeoutMs is an error, as for a provider on the network. `cancel` (set from
 /// another thread) stops it. Blocks until the answer is there. `run`, when given, gets what the
 /// runner said of its last try — the counts and the times the app's log tells an answer by.
+/// `partial`, when given, gets the answer while it is written (local::partial), each time it
+/// changes, on the runner's thread.
 Reply answerLocally(LocalRunner *runner, const LocalModel &model, Request request,
-                    const std::atomic<bool> *cancel = nullptr, LocalRunner::Result *run = nullptr);
+                    const std::atomic<bool> *cancel = nullptr, LocalRunner::Result *run = nullptr,
+                    const PartialCallback &partial = {});
 
 /// The plugin's file name without "lib" and its extension, and the function it exports:
 ///   extern "C" brulion::ai::LocalRunner *brulion_localai_open(const brulion::ai::LocalRunner::Options *, QString

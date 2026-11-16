@@ -262,6 +262,10 @@ Q_SIGNALS:
     void chatFailed(const QString &path, const QString &error);
     /// What the conversation's turn does now (b.status; "" = nothing to say).
     void chatStatus(const QString &path, const QString &text);
+    /// What the model has written so far of its answer and its thoughts in the conversation's
+    /// turn (each of its requests starts with ""), as it writes; `tokens` written in `writingMs`
+    /// (0: not known).
+    void chatPartial(const QString &path, const QString &text, const QString &thoughts, int tokens, qint64 writingMs);
 
 private:
     /// An extension page of the notebook as read from the index.
@@ -367,6 +371,9 @@ private:
     ai::Client *aiClient();
     std::unique_ptr<sync::NetworkHttpTransport> m_transport;
     std::unique_ptr<ai::Client> m_aiClient;
+    QHash<int, ai::Pending> m_aiRequests; // by call: the requests on their way (stopped with it)
+    /// Stops every request on its way (their engine is gone).
+    void stopAiRequests();
     int m_aiPending = 0;
     quint64 m_generation = 0; // a new engine: answers for the old one are dropped
     int m_revision = 0;

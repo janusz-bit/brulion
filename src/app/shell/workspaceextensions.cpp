@@ -227,6 +227,7 @@ void WorkspaceExtensions::detach()
     m_pendingPaths.clear();
     m_pagesTimer.stop();
     m_calls.clear();
+    stopAiRequests();
     m_questionCall = 0;
     ++m_generation;
     m_approved.clear();
@@ -279,6 +280,7 @@ void WorkspaceExtensions::reload()
     m_engine.reset();
     m_host.reset();
     m_calls.clear();
+    stopAiRequests(); // (a model on the device stops writing for nobody)
     for (const QString &chat : std::as_const(chats))
         Q_EMIT chatFailed(chat, tr("The AI assistant was loaded again meanwhile: try again."));
     m_questionCall = 0;
@@ -638,14 +640,35 @@ void WorkspaceExtensions::dispatchAi(int call, const QVariantMap &request)
         return;
     }
     const QPointer<WorkspaceExtensions> self(this);
-    aiClient()->send(m_aiSettings, *r, [self, call, generation](const ai::Reply &reply) {
-        if (self)
-            self->finishAi(call, reply.toVariant(), generation);
-    });
+    // A chat's turn shows the answer while it is written: each request of its loop anew.
+    ai::PartialCallback partial;
+    if (!ctx.chat.isEmpty()) {
+        Q_EMIT chatPartial(ctx.chat, QString(), QString(), 0, 0);
+        partial = [self, chat = ctx.chat](const ai::Partial &p) {
+            if (self)
+                Q_EMIT self->chatPartial(chat, p.text, p.thoughts, p.tokens, p.writingMs);
+        };
+    }
+    m_aiRequests.insert(call, aiClient()->send(
+                                      m_aiSettings, *r,
+                                      [self, call, generation](const ai::Reply &reply) {
+                                          if (self)
+                                              self->finishAi(call, reply.toVariant(), generation);
+                                      },
+                                      partial));
+}
+
+void WorkspaceExtensions::stopAiRequests()
+{
+    const QHash<int, ai::Pending> requests = std::exchange(m_aiRequests, {});
+    for (ai::Pending request : requests)
+        request.stop();
 }
 
 void WorkspaceExtensions::finishAi(int call, const QVariantMap &reply, quint64 generation)
 {
+    if (generation == m_generation)
+        m_aiRequests.remove(call);
     m_aiPending = std::max(0, m_aiPending - 1);
     Q_EMIT aiPendingChanged();
     if (generation != m_generation || !m_engine || !m_engine->waitingCalls().contains(call)) {
@@ -681,7 +704,12 @@ bool WorkspaceExtensions::runChat(const QString &path, const QVariantList &messa
         Q_EMIT chatFailed(path, tr("The AI assistant is off: switch it on in Settings → Extensions → AI."));
         return false;
     }
-    const QVariantMap ctx{{u"page"_s, page}, {u"selection"_s, QString()}, {u"messages"_s, messages}};
+    // (The conversation's own page by its name, as b.read names pages: its tools leave it out.)
+    const QString conversation = path.endsWith(u".md"_s, Qt::CaseInsensitive) ? path.chopped(3) : path;
+    const QVariantMap ctx{{u"page"_s, page},
+                          {u"selection"_s, QString()},
+                          {u"messages"_s, messages},
+                          {u"conversation"_s, conversation}};
     cancelQuestion();
     m_current = CallContext{};
     m_current.chat = path;
@@ -711,7 +739,11 @@ void WorkspaceExtensions::stopChat(const QString &path)
             m_questionChat.clear();
             Q_EMIT questionChanged();
         }
-        m_engine->cancel(call); // (a model's answer on its way finds no call: finishAi drops it)
+        m_engine->cancel(call); // (an answer on its way finds no call: finishAi drops it)
+        if (auto request = m_aiRequests.find(call); request != m_aiRequests.end()) {
+            request->stop(); // (the model stops writing, the provider's connection closes)
+            m_aiRequests.erase(request);
+        }
         it = m_calls.erase(it);
     }
     if (m_reconcilePending && !isWaiting())

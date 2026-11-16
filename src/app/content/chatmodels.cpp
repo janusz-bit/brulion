@@ -115,6 +115,15 @@ QString ChatMessageModel::renderMessage(const QString &markdown, const markdown:
     return parts.join(QString());
 }
 
+QString ChatMessageModel::render(const QString &markdown) const
+{
+    shell::Workspace *ws = workspace();
+    if (markdown.isEmpty() || !ws || !ws->isOpen())
+        return QString();
+    return renderMessage(markdown, renderContext(vaultIndex(), m_path, effectiveToday(QString(), ws),
+                                                 uiLocale(m_locale), paletteFromMap(m_palette)));
+}
+
 void ChatMessageModel::refresh()
 {
     QList<Row> next;

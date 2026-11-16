@@ -6,8 +6,9 @@ import Brulion
 // ChatView — route "chat" (docs/UI.md "AI chat"): conversations with the AI assistant, as in a
 // messenger. Each conversation is a page in AI/ (Workspace.chats, core chat/chat.h): the user's
 // messages on the right, the AI's on the left — rendered note text (ChatMessageModel: links open
-// their pages) —, under them what the AI does now ("Czytam „Dom”…", Workspace.chats.status) with
-// Stop, a change it asks a yes for as a card with the question's options (the question of its
+// their pages) —, under them the answer as the model writes it (Workspace.chats.partial; before
+// it, the end of what the model thinks: chats.thoughts; under it how fast it writes, chats.speed)
+// and what the AI does now ("Czytam „Dom”…", Workspace.chats.status) with Stop, a change it asks a yes for as a card with the question's options (the question of its
 // turn: Workspace.extensions.questionChat — the dialog asks it only while no chat shows the
 // conversation), a failed turn with Try again; at the bottom the field (Enter sends with a
 // keyboard, Shift+Enter is a new line; on touch the send button) and, before a new conversation's
@@ -47,6 +48,12 @@ FocusScope {
     readonly property bool failedHere: root.chats.failure !== "" && root.chats.failedPath === root.path
     readonly property string questionText: Workspace.extensions.questionTitle
     readonly property int questionTitleEnd: Js.indexOf(root.questionText, "\n")
+
+    /// The list follows the answer being written while it is at its end (scrolled up: it stays).
+    property bool following: true
+    /// The answer as it is written: what the model thinks first, then its words.
+    readonly property bool liveShown: root.busyHere && !root.asking
+                                      && (root.chats.partial !== "" || root.chats.thoughts !== "")
 
     /// The conversation this view tells Workspace.chats it shows ("" none).
     property string registered
@@ -98,6 +105,7 @@ FocusScope {
         if (sent === "")
             return
         input.text = ""
+        root.following = true
         if (root.path === "") {
             root.path = sent
             root.starting = false
@@ -128,7 +136,14 @@ FocusScope {
     Connections {
         target: root.chats
         function onWritten(path: string) {
-            if (path === root.path)
+            if (path !== root.path)
+                return
+            // At once: the answer's message is a row before the answer being written goes.
+            messages.refreshNow()
+            toEnd.restart()
+        }
+        function onPartialChanged() {
+            if (root.liveShown && root.following)
                 toEnd.restart()
         }
     }
@@ -326,6 +341,7 @@ FocusScope {
                 Accessible.role: Accessible.List
                 Accessible.name: root.title
                 onHeightChanged: if (list.atYEnd) toEnd.restart()
+                onMovementEnded: root.following = list.atYEnd
 
                 delegate: Item {
                     id: message
@@ -424,11 +440,67 @@ FocusScope {
                         width: parent.width
                         spacing: Theme.space2
 
-                        // What the AI does now, and Stop.
+                        // The answer as the model writes it — before it, what the model thinks.
+                        Rectangle {
+                            id: live
+                            objectName: "chatLive"
+                            readonly property bool writing: root.chats.partial !== ""
+                            readonly property real maxWidth: Math.min(footerColumn.width * 0.92, 720)
+                            visible: root.liveShown
+                            Layout.preferredWidth: Math.min(live.maxWidth, Math.max(live.writing ? liveBody.implicitWidth : liveThoughts.implicitWidth, 24) + 2 * Theme.space3)
+                            implicitHeight: (live.writing ? liveBody.height : liveThoughts.height) + 2 * Theme.space2 + 2
+                            radius: Theme.radiusXl
+                            color: Theme.bgElevated
+                            border.color: Theme.borderSubtle
+                            Accessible.role: Accessible.StaticText
+                            Accessible.name: live.writing ? qsTr("AI") + ": " + root.chats.partial : qsTr("The AI thinks: %1").arg(root.chats.thoughts)
+
+                            BRichText {
+                                id: liveBody
+                                objectName: "chatPartial"
+                                x: Theme.space3
+                                y: Theme.space2 + 1
+                                width: live.width - 2 * Theme.space3
+                                visible: live.writing
+                                html: live.writing ? messages.render(root.chats.partial) : ""
+                                font.family: Theme.fontEditor
+                                font.pixelSize: Theme.textBase
+                                color: Theme.fg
+                            }
+                            BText {
+                                id: liveThoughts
+                                objectName: "chatThoughts"
+                                x: Theme.space3
+                                y: Theme.space2 + 1
+                                width: live.width - 2 * Theme.space3
+                                visible: !live.writing
+                                // Plain text: the model's own words, never markup.
+                                text: root.chats.thoughts
+                                textFormat: Text.PlainText
+                                variant: "muted"
+                                font.italic: true
+                                font.pixelSize: Theme.textSm
+                                wrapMode: Text.Wrap
+                            }
+                        }
+
+                        // How fast the model writes (the model on the device: it knows).
+                        BText {
+                            objectName: "chatSpeed"
+                            Layout.leftMargin: Theme.space3
+                            visible: root.liveShown && root.chats.speed !== ""
+                            text: root.chats.speed
+                            variant: "caption"
+                            color: Theme.fgFaint
+                            Accessible.name: qsTr("The AI writes %1").arg(root.chats.speed)
+                        }
+
+                        // What the AI does now (not while its words come: they show it, and a
+                        // spinner's frames would take the processor from a model on the device).
                         RowLayout {
                             objectName: "chatWorking"
                             Layout.fillWidth: true
-                            visible: root.busyHere && !root.asking
+                            visible: root.busyHere && !root.asking && (root.chats.status !== "" || !root.liveShown)
                             spacing: Theme.space2
                             Rectangle {
                                 Layout.maximumWidth: Math.min(parent.width, 520)
@@ -445,6 +517,7 @@ FocusScope {
                                     spacing: Theme.space2
                                     BSpinner {
                                         size: Theme.iconSizeSm
+                                        calm: true
                                     }
                                     BText {
                                         objectName: "chatStatus"

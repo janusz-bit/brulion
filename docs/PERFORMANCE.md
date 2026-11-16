@@ -1340,9 +1340,8 @@ kept 2 131 of its 2 618 tokens and read the rest, a note's photo among them, in 
 "Summarise this page" read 289 tokens in 1.8 s and wrote 237 in 19.5 s. That is two thirds of
 the laptop's speed at reading and a quarter at writing.
 
-What the runner changed after those figures (measured on the laptop — below —, not on the phone
-yet: the next run of the package beside the released app does, by the same lines of the event
-log):
+What the runner changed after those figures (measured on the laptop — below —, and on the phone
+on 2026-11-16, further down: 15–20 tokens a second written there now, against 11–13):
 
 * **Its threads stay.** Without a pool of its own llama.cpp starts its threads for every step and
   ends them after it (`ggml_graph_compute` with no `ggml_threadpool` attached) — for every token
@@ -1408,6 +1407,79 @@ Tokens a second. On a PC the pool alone changes nothing (Linux puts a thread tha
 started on an idle fast core): what counts there is one thread per performance core, not two on
 one core's SMT siblings, and no spinning when the processor is shared — writing twice as fast as
 v0.22.0's beside a busy processor, reading at three quarters of its speed then.
+
+**Against PocketPal, on the Pixel 9 Pro** (2026-11-16; the user found PocketPal, with the same
+model, faster than Brulion's AI chat). PocketPal 1.23.0's own benchmark there — LFM3-VL-2B
+Q4_K_M, 6 threads, flash attention off, 512 tokens read, 128 written —: **69 tokens a second
+read, 16.5 written**. llama.cpp's `llama-bench` of the release Brulion pins (v0.9.0, built for
+Android with every processor plugin, pushed to `/data/local/tmp`), Brulion's QAD-Q4_0 file, the
+same 512 / 128, a pause of 40 s between runs (a phone heats up):
+
+| Threads (llama-bench) | Plugin | Reading | Writing |
+|---|---|---|---|
+| **4 on cores 4–7, spinning (Brulion's)** | `android_armv8.6_1` (Brulion's) | **147–149** | **17.8–18.2** |
+| 4 on cores 4–7, spinning | `android_armv9.0_1` (SVE2) | 113–128 | 16.7–24.2 (its first run, the coolest phone) |
+| 4 on cores 4–7, asleep between steps (`--poll 0`) | `android_armv9.0_1` | 130 | 22.6 (against 24.2 spinning, the same series) |
+| 3 on cores 5–7 | `android_armv8.6_1` | 87 | 12.6 |
+| 6 wherever the system puts them (PocketPal's count) | `android_armv9.0_1` | 104 | 16.0 |
+| 6 on cores 0, 1 and 4–7 | `android_armv9.0_1` | 57 | 15.4 |
+| 8 | `android_armv9.0_1` | 82 | 7.3 |
+| **The GPU: Mali-G715, llama.cpp's Vulkan backend, every layer** | — | **40** | **19** |
+
+Tokens a second. Brulion's runner writes as fast as PocketPal and reads twice as fast (its Q4_0
+laid out anew for the int8 matrix instructions); SVE2 brings nothing but slower reading, so the
+APK keeps `armv8.6` and `armv8.2_2`. The GPU writes as fast as the processor — the same memory
+bound — but reads four times slower (no integer dot product on this Mali, no matrix cores), and
+the assistant reads more than it writes (2 300 tokens of instructions, search results, pages): no
+Vulkan in the APK (it would add 35 MB of shaders). Its writing stays even when the processor's
+does not, though: a hot phone's.
+
+So the difference was the chat's, not the model's:
+
+* **Nothing showed until the end.** An answer of the assistant is several requests (a search, a
+  page read, the answer), each with thoughts first — 1 000 to 1 500 tokens of a question in all,
+  over a minute on the phone — and the chat showed its dots until the last one ended. PocketPal
+  shows every token. Now the chat does too (docs/UI.md "AI chat"): the thoughts from the first
+  token, the answer as it is written, how fast (the speed over the last two seconds,
+  `WorkspaceChats.speed`); the first thoughts of a question show within 0.6–1.8 s of the model's
+  start (`shown from` in the event log).
+* **The conversation found itself.** Its page in `AI/` holds the question word for word, so the
+  first search found it, the model read it — its own question, nothing more — and searched again:
+  on the laptop 8 requests and 71 s for "Co mam do zrobienia w projekcie remontu?" over the sample
+  notebook, 6 and 49 s once the assistant's tools left the conversation out (`ctx.conversation`);
+  without thinking (`effort = "low"`) 2 requests and 7.5 s, but an answer that missed the
+  project's tasks — the thinking stays.
+* **Stop did not stop the model.** The chat dropped the answer and the model wrote on to its end
+  (up to 2 048 tokens: minutes on a phone), the next question waiting behind it. A stopped turn
+  now ends its request (`ai::Pending::stop`: the runner's flag, a provider's connection).
+* **The app's frames took the model's cores.** While the model wrote, the top bar's ✨ spinner and
+  the chat's turned at the screen's rate, and Qt Quick drew the whole window anew for every frame:
+  a Qt thread of the app used 55–60 % of a core all through a turn (`/proc/<pid>/task/*/stat`
+  sampled over adb), beside the model's four threads on the four fast cores, which spin between
+  steps and wait for the slowest at every operation — and they got 55–100 % of theirs. With the
+  spinners below, the same thread uses 10 % and the model's threads 92–99 % each; the first
+  request of a question wrote 253 tokens at 20.1 a second (PocketPal's benchmark: 16.5). On the laptop the same kind of load — one
+  thread busy 30 % of the time on one of the model's cores (`uiload.py`, 5 ms of every 16) —
+  took writing from 40 to 30 tokens a second asleep between steps and from 48 to 38 spinning;
+  one busy 6 % (1 ms of 16) from 40 to 37 and 48 to 45. The two spinners now turn in steps ten
+  times a second (`BSpinner.calm`), the chat's is hidden while words come, and the words are
+  shown ten times a second at most.
+* **A hot phone.** Charging over USB after twenty minutes of benchmarks, the Pixel capped its X4
+  core at 0.7–1.4 GHz (of 3.1) and the A720s at 1.8 GHz (of 2.6), thermal status 1, the skin at
+  39 °C: the model wrote 1.2–7 tokens a second in the app — a long turn's context counts too:
+  llama-bench on the hot phone wrote 14.9 tokens a second at no depth, 11.9 after 4 096 tokens,
+  9.3 after 8 192 — and a request that wrote 710 tokens took 280 s. Leaving the capped X4 out
+  (3 threads on the A720s) was no clear gain there: 11.9–13.7 against 13.4 with it, steadier
+  though. A phone that is charging heats up within a minute or two of answering. Five minutes for the whole
+  request ended such a turn as "no answer"; the limit is now five minutes without progress (no
+  part of the request read, no token written: `LocalRunner::Params::timeoutMs`), and a request
+  the chat streams from a provider on the network ends only after five minutes without data
+  (`HttpRequest::timeoutWhileIdle`).
+* **A small model goes round in circles.** On the phone the same question took the model 14
+  requests in ten minutes (searches, queries and pages again and again, its context growing to
+  9 600 tokens with every result kept: a result is up to 12 000 characters) where the laptop's
+  took 6 — a fact of a 2B model, not of the runner; shorter tool results and fewer tools for a
+  small model are in TODO.md.
 
 Its memory (the app of the Nix package, 16 384 tokens at once, "Check" pressed): the process
 grows from 201 to 2 504 MiB resident — 1.3 GiB of its own and 1.0 GiB of the model's file. Its

@@ -19,6 +19,7 @@
 
 #include <QDir>
 #include <QFile>
+#include <QLocale>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
@@ -70,9 +71,21 @@ struct Model : ai::LocalBackend {
     QList<ai::Reply> replies;
     bool hold = false;
     std::function<void()> held;
-    void send(const ai::Settings &, const ai::Request &request, std::function<void(const ai::Reply &)> done) override
+    /// What the model writes before each answer, in order (shown as partial answers).
+    QList<ai::Partial> writing;
+    ai::PartialCallback partial; ///< the last request's
+    std::shared_ptr<std::atomic<bool>> stopped; ///< the last request's
+    void send(const ai::Settings &, const ai::Request &request, std::function<void(const ai::Reply &)> done,
+              ai::PartialCallback watch, std::shared_ptr<std::atomic<bool>> stop) override
     {
         requests << request;
+        partial = watch;
+        stopped = stop;
+        for (const ai::Partial &p : std::as_const(writing))
+            QTimer::singleShot(0, [watch, p] {
+                if (watch)
+                    watch(p);
+            });
         const ai::Reply reply = replies.isEmpty() ? answer(u"Dobrze."_s) : replies.takeFirst();
         if (hold) {
             held = [done, reply] { done(reply); };
@@ -279,6 +292,100 @@ private Q_SLOTS:
         m_model.release();
         QCoreApplication::processEvents();
         QVERIFY(ws->read(path).endsWith(u"- 🧑 Jeszcze raz?\n"_s));
+    }
+
+    void theAnswerAsItIsWritten()
+    {
+        auto ws = open(notes());
+        shell::WorkspaceChats *chats = ws->chats();
+        m_model.hold = true;
+        m_model.writing = {{QString(), u"Użytkownik pyta o jutro."_s, 20, 1000},
+                           {u"Jutro masz"_s, u"Użytkownik pyta o jutro."_s, 60, 3000}};
+        m_model.replies = {answer(u"Jutro masz jogę."_s)};
+        const QString path = chats->send(QString(), u"Co jutro?"_s);
+        QVERIFY(m_model.partial); // (the chat watches its requests)
+        QTRY_COMPARE(chats->partial(), u"Jutro masz"_s);
+        QCOMPARE(chats->thoughts(), u"Użytkownik pyta o jutro."_s);
+        QCOMPARE(chats->speed(), QLocale().toString(20.0, 'f', 1) + u" tok/s"_s); // 40 tokens in the last 2 s
+        QCOMPARE(chats->running(), path);
+        // The answer's message is written while the answer being written is still there; then
+        // the turn ends and it goes: a view never shows neither.
+        bool bothThere = false;
+        connect(chats, &shell::WorkspaceChats::written, this, [&](const QString &p) {
+            if (p == path && ws->read(path).contains(u"- 🤖"_s))
+                bothThere = chats->partial() == u"Jutro masz" && chats->running() == path;
+        });
+        m_model.release();
+        QTRY_COMPARE(chats->running(), QString());
+        QVERIFY(bothThere);
+        QCOMPARE(chats->partial(), QString());
+        QCOMPARE(chats->thoughts(), QString());
+        QCOMPARE(chats->speed(), QString());
+        QVERIFY(ws->read(path).endsWith(u"- 🤖 Jutro masz jogę.\n"_s));
+
+        // Each request of the turn starts anew: what the first wrote goes when a tool has run.
+        m_model.writing = {{u"Sprawdzę."_s, QString()}};
+        m_model.replies = {calling(u"search_notes"_s, {{u"query"_s, u"joga"_s}}), answer(u"Joga jest jutro."_s)};
+        const qsizetype before = m_model.requests.size();
+        QCOMPARE(chats->send(path, u"Na pewno?"_s), path);
+        QTRY_COMPARE(chats->partial(), u"Sprawdzę."_s);
+        QCOMPARE(chats->speed(), QString()); // (no counts: a provider on the network)
+        m_model.release(); // the tool runs, the next request goes out (at once)
+        QCOMPARE(m_model.requests.size(), before + 2);
+        QCOMPARE(chats->partial(), QString());
+        QTRY_COMPARE(chats->partial(), u"Sprawdzę."_s);
+        m_model.release();
+        QTRY_COMPARE(chats->running(), QString());
+        QCOMPARE(chats->partial(), QString());
+        QVERIFY(ws->read(path).endsWith(u"- 🤖 Joga jest jutro.\n"_s));
+    }
+
+    void stopStopsTheModel()
+    {
+        // Stop: the model on the device stops writing — it holds up no other question.
+        auto ws = open(notes());
+        shell::WorkspaceChats *chats = ws->chats();
+        m_model.hold = true;
+        const QString path = chats->send(QString(), u"Długie pytanie"_s);
+        QTRY_COMPARE(m_model.requests.size(), 1);
+        QVERIFY(m_model.stopped && !m_model.stopped->load());
+        chats->stop();
+        QVERIFY(m_model.stopped->load());
+        QTRY_COMPARE(ws->extensions()->aiPending(), 0);
+        // The extensions loaded again while it writes: it stops too.
+        QVERIFY(chats->retry(path));
+        QTRY_COMPARE(m_model.requests.size(), 2);
+        QVERIFY(!m_model.stopped->load());
+        ws->extensions()->reloadAll();
+        QVERIFY(m_model.stopped->load());
+        m_model.release();
+    }
+
+    void theThoughtsEndAndTheSpeed()
+    {
+        using shell::WorkspaceChats;
+        QCOMPARE(WorkspaceChats::thoughtsTail(u"  Krótko.  "_s), u"Krótko."_s);
+        QString words;
+        for (int i = 0; i < 80; ++i)
+            words += u"słowo%1 "_s.arg(i);
+        const QString tail = WorkspaceChats::thoughtsTail(words, 100);
+        QVERIFY2(tail.startsWith(u"…słowo"_s) && tail.endsWith(u"słowo79"_s) && tail.size() <= 101, qPrintable(tail));
+        // One long word: its end.
+        const QString one = WorkspaceChats::thoughtsTail(QString(300, u'ż'), 100);
+        QCOMPARE(one, u"…"_s + QString(100, u'ż'));
+
+        // The speed now: over the last two seconds, not since the start — a phone that slowed
+        // down (hot) says so at once.
+        QList<std::pair<qint64, int>> samples;
+        for (int t = 1; t <= 80; ++t)
+            samples.append({qint64(t) * 50, t}); // 20 a second for 4 s
+        QCOMPARE(WorkspaceChats::tokensPerSecond(samples), 20.0);
+        for (int t = 81; t <= 90; ++t)
+            samples.append({4000 + qint64(t - 80) * 200, t}); // then 5 a second for 2 s
+        QCOMPARE(WorkspaceChats::tokensPerSecond(samples), 5.0);
+        // At the start (less than a second): since the writing began.
+        QCOMPARE(WorkspaceChats::tokensPerSecond({{100, 2}, {300, 6}}), 20.0);
+        QCOMPARE(WorkspaceChats::tokensPerSecond({}), 0.0);
     }
 
     void theAssistantOff()

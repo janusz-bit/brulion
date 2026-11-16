@@ -7,6 +7,7 @@
 //   // escaped HTML, never a note's own), markdown (its text, for Copy), line (its first line in the
 //   // page)
 //   // page: the page the conversation is about ("" none), title: the page's name without the date
+//   // render(markdown): an answer being written as a message shows it
 //
 //   ChatListModel { workspace: Workspace; locale: DatesHelper.locale }
 //   // roles: path, title (the name without its date), date ("2026-11-15", "" without one),
@@ -56,6 +57,9 @@ public:
     QHash<int, QByteArray> roleNames() const override;
     /// The Markdown of the message at `row` ("" for a bad row).
     Q_INVOKABLE QString textAt(int row) const;
+    /// `markdown` as a message of this conversation shows it (renderMessage): the answer being
+    /// written, before it is one of the rows.
+    Q_INVOKABLE QString render(const QString &markdown) const;
 
     /// A message's Markdown as the bubble shows it: its blocks as rich text, one paragraph each —
     /// indented by their depth, a list item after its bullet or number (a task's box from the

@@ -886,8 +886,9 @@ another phone the model is downloaded again.
   ([measured below](#on-a-pixel-9-pro)). So the screen stays on while a model is downloaded or
   answers (`LocalAi::working()` → `platform::keepScreenOn()`: `FLAG_KEEP_SCREEN_ON` on the
   activity's window) — many phones turn it off after 30 seconds without a touch, in the middle
-  of an answer. An answer not there five minutes after it was asked ends as "no answer in 5
-  minutes", the time away counted (TODO.md).
+  of an answer. An answer that gets nowhere for five minutes — no part of the request read, no
+  token written — ends as "the model on this device got nowhere for 5 minutes" (a slow phone
+  writes on as long as it writes; frozen behind another app, the time away counts: TODO.md).
 * **In the APK** (`lib/arm64-v8a/`, 9.2 MB, stored uncompressed like every native library):
   `libbrulion_localai.so` (the model runner, 0.1 MB), llama.cpp — `libllama.so` 4.4 MB,
   `libmtmd.so` 1.9 MB (pictures), `libggml-base.so` 0.9 MB, `libggml.so` — and its processor
@@ -943,6 +944,15 @@ Tensor G4, 16 GB of memory, Android 17 (GrapheneOS), 2026-11-15; the package bui
   pressed, was ready 3 min 52 s later — 32 s after the app's return from 3 min 19 s away. In the
   background its 643 tokens were read at 18 a second instead of 150; Android froze the process
   70 s after it left the screen, and once more later.
+
+Again on 2026-11-16 (Brulion 0.24.0's package beside the released app; docs/PERFORMANCE.md
+"The model on the device" has the whole of it): the event log says `4 threads on cores 4-7,
+spinning` — Android lets the app read `cpu_capacity` —; the instructions and tools came from the
+disk (`2266 from the disk`, 0.4–0.6 s); a cool phone wrote 18.8–20.1 tokens a second, the chat
+showing the model's first thoughts 0.6–1.9 s after it started; llama-bench of the same llama.cpp
+read 147–149 and wrote about 18 (PocketPal's own benchmark of the model: 69 and 16.5), the GPU
+(Mali-G715, Vulkan) 40 and 19. Charging over USB, the phone capped its X4 core within minutes of
+answering and the model wrote at 3–9 tokens a second until it cooled.
 
 Still to be checked: a mid-range phone (its speed, and whether Android stops the app behind
 another one while a model is loaded), a download that the app's leaving the screen interrupted,

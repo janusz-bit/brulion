@@ -347,8 +347,39 @@ local function pageOfRef(ref: string): string
     return (path:match("([^/]+)$") or path):gsub("%.md$", "")
 end
 
--- One question's agent: its yes to every change, the pages it changed.
-type Session = { all: boolean, changed: { string } }
+-- One question's agent: its yes to every change, the pages it changed, the page of the
+-- conversation it answers in (the chat's: never one of its tools' finds — it matches the question
+-- word for word, and a small model reads it instead of the notes; "" none).
+type Session = { all: boolean, changed: { string }, conversation: string }
+
+-- Is `name` the session's conversation: its path ("AI/2026-11-16 Co mam jutro", ".md" or not, a
+-- ref's "#L…" after it) or, without a folder, its title (b.search names pages by their titles)?
+local function isConversation(session: Session, name: string): boolean
+    if session.conversation == "" or name == "" then
+        return false
+    end
+    local own = b.fold(session.conversation)
+    local page = b.fold((name:gsub("#.*$", ""):gsub("%.md$", "")))
+    if page:find("/", 1, true) then
+        return page == own
+    end
+    return page == (own:match("([^/]+)$") or own)
+end
+
+-- `items` (b.search's, b.query's) without the conversation's own, nor a line that only links to it
+-- (the day's "🤖 [[AI/…]]").
+local function withoutConversation(session: Session, items: { any }): { any }
+    local link = "[[" .. b.fold(session.conversation) .. "]]"
+    local kept = {}
+    for _, item in items do
+        local text = b.fold(str(item.text) .. " " .. str(item.excerpt))
+        if not (isConversation(session, str(item.ref)) or (item.ref == nil and isConversation(session, str(item.page)))
+            or (session.conversation ~= "" and text:find(link, 1, true) ~= nil)) then
+            table.insert(kept, item)
+        end
+    end
+    return kept
+end
 
 local function confirm(session: Session, what: string): boolean
     if session.all then
@@ -490,7 +521,10 @@ local function runTool(session: Session, name: string, input: any): (string, boo
         end
         local limit = math.clamp(tonumber(input.limit) or 15, 1, 50)
         b.status(string.format(T.searching, query))
-        local hits = b.search(query, limit)
+        local hits = withoutConversation(session, b.search(query, limit + 2))
+        while #hits > limit do
+            table.remove(hits)
+        end
         if #hits == 0 then
             return "Nothing found for \"" .. query .. "\".", false
         end
@@ -501,15 +535,23 @@ local function runTool(session: Session, name: string, input: any): (string, boo
         if not ok then
             return tostring(result), true
         end
-        if #result.items == 0 then
-            return "No items (" .. str(result.total) .. " in total).", false
+        local items = withoutConversation(session, result.items)
+        local total = tonumber(result.total) or #items
+        total -= #result.items - #items
+        if #items == 0 then
+            return "No items (" .. str(total) .. " in total).", false
         end
-        return str(result.total) .. " items" .. (if result.total > #result.items then ", the first " .. #result.items else "")
-            .. ":\n" .. itemLines(result.items), false
+        return str(total) .. " items" .. (if total > #items then ", the first " .. #items else "")
+            .. ":\n" .. itemLines(items), false
     elseif name == "list_pages" then
         local tag = trim(str(input.tag))
         b.status(T.listing)
-        local pages = b.pages(if tag ~= "" then { tag = tag } else {})
+        local pages = {}
+        for _, page in b.pages(if tag ~= "" then { tag = tag } else {}) do
+            if not isConversation(session, page) then
+                table.insert(pages, page)
+            end
+        end
         if #pages == 0 then
             return "No pages.", false
         end
@@ -520,6 +562,9 @@ local function runTool(session: Session, name: string, input: any): (string, boo
         local more = if #pages > #shown then "\n… and " .. (#pages - #shown) .. " more" else ""
         return #pages .. " pages: " .. table.concat(shown, "; ") .. more, false
     elseif name == "read_page" then
+        if isConversation(session, trim(str(input.name))) then
+            return "That page is this conversation itself: its messages are the ones above. Look in the other notes.", true
+        end
         b.status(string.format(T.reading, trim(str(input.name))))
         local text = b.read(str(input.name))
         if text == nil then
@@ -665,7 +710,7 @@ end
 
 -- One turn of a conversation of the chat: ctx.messages ({role, content}, the user's last), ctx.page
 -- (the page it is about, "" none: its text goes along before the first message, read again each
--- turn). Returns the AI's message: its answer, the pages it changed, a note on a page cut short.
+-- turn), ctx.conversation (the conversation's own page, which its tools do not find). Returns the AI's message: its answer, the pages it changed, a note on a page cut short.
 b.command("chat", function(ctx)
     local history = ctx.messages
     if type(history) ~= "table" or #history == 0 then
@@ -685,7 +730,7 @@ b.command("chat", function(ctx)
         end
         table.insert(messages, { role = if str(m.role) == "assistant" then "assistant" else "user", content = content })
     end
-    local session: Session = { all = false, changed = {} }
+    local session: Session = { all = false, changed = {}, conversation = str(ctx.conversation) }
     local system: string = W.system
     local answer: string? = nil
     for _ = 1, MAX_ROUNDS do

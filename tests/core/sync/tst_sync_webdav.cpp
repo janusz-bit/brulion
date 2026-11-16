@@ -7,6 +7,7 @@
 #include "sync/http.h"
 #include "sync/webdavclient.h"
 
+#include <QElapsedTimer>
 #include <QLoggingCategory>
 #include <QNetworkAccessManager>
 #include <QNetworkProxy>
@@ -930,6 +931,66 @@ private Q_SLOTS:
         QCOMPARE(r.status, 404);
         QCOMPARE(r.body, QByteArray("brak"));
         QVERIFY(r.networkError.isEmpty());
+    }
+
+    void networkTransportHandsTheBodyOnAsItComes()
+    {
+        // request.onData: the body as it arrives (a model's answer as server-sent events), all of
+        // it in the response too; an error's body is not handed on.
+        const QByteArray events = "data: {\"tekst\": \"Zażółć\"}\n\ndata: [DONE]\n\n";
+        MiniHttpServer http;
+        http.handler = [&](const MiniHttpServer::Request &request) {
+            if (request.path == "/brak")
+                return rawResponse(404, "Not Found", "brak");
+            return rawResponse(200, "OK", events, {{"Content-Type", "text/event-stream"}});
+        };
+        QNetworkAccessManager manager;
+        manager.setProxy(QNetworkProxy::NoProxy);
+        NetworkHttpTransport transport(&manager);
+        HttpRequest request;
+        request.method = "POST";
+        request.url = QUrl(http.url(u"/v1/messages"_s));
+        QByteArray handed;
+        request.onData = [&](QByteArrayView piece) { handed += piece.toByteArray(); };
+        HttpResponse r = await<HttpResponse>([&](auto cb) { transport.send(request, cb); });
+        QCOMPARE(r.status, 200);
+        QCOMPARE(r.body, events);
+        QCOMPARE(handed, events);
+        handed.clear();
+        request.url = QUrl(http.url(u"/brak"_s));
+        r = await<HttpResponse>([&](auto cb) { transport.send(request, cb); });
+        QCOMPARE(r.status, 404);
+        QCOMPARE(r.body, QByteArray("brak"));
+        QVERIFY(handed.isEmpty());
+    }
+
+    void networkTransportStopsARequest()
+    {
+        // request.abort: a request on its way ends as a broken connection would.
+        MiniHttpServer http; // never answers
+        QNetworkAccessManager manager;
+        manager.setProxy(QNetworkProxy::NoProxy);
+        NetworkHttpTransport transport(&manager);
+        HttpRequest request;
+        request.method = "POST";
+        request.url = QUrl(http.url(u"/v1/messages"_s));
+        request.abort = std::make_shared<HttpAbort>();
+        QTimer::singleShot(50, [abort = request.abort] { abort->abort(); });
+        QElapsedTimer clock;
+        clock.start();
+        const HttpResponse r = await<HttpResponse>([&](auto cb) { transport.send(request, cb); });
+        QVERIFY(clock.elapsed() < 5000);
+        QCOMPARE(r.status, 0);
+        QVERIFY(!r.networkError.isEmpty());
+        QVERIFY(!r.timedOut);
+        QVERIFY(request.abort->aborted());
+        request.abort->abort(); // (again, after the end: nothing)
+        // Stopped before it was sent: it ends at once.
+        request.abort = std::make_shared<HttpAbort>();
+        request.abort->abort();
+        const HttpResponse early = await<HttpResponse>([&](auto cb) { transport.send(request, cb); });
+        QCOMPARE(early.status, 0);
+        QVERIFY(!early.networkError.isEmpty());
     }
 
     void networkTransportReportsRefusedConnections()

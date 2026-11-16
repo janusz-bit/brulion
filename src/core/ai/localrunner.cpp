@@ -41,7 +41,7 @@ QString pluginName(const QString &file)
 }
 
 Reply answerLocally(LocalRunner *runner, const LocalModel &model, Request request, const std::atomic<bool> *cancel,
-                    LocalRunner::Result *run)
+                    LocalRunner::Result *run, const PartialCallback &partial)
 {
     if (run)
         *run = {};
@@ -71,9 +71,23 @@ Reply answerLocally(LocalRunner *runner, const LocalModel &model, Request reques
     params.repeatPenalty = model.repeatPenalty;
     params.timeoutMs = TimeoutMs;
     params.cancel = cancel;
+    Partial shown; // (what `partial` got last)
 
     LocalRunner::Result result;
     for (int attempt = 0; attempt < 12; ++attempt) {
+        if (partial) {
+            // (Of the request as it is now: a shortened one is another.)
+            params.written = [&partial, &shown, &model, &request](const QList<local::Piece> &written, int tokens,
+                                                                  qint64 writingMs) {
+                Partial now = local::partial(model.format, written, request);
+                now.tokens = tokens;
+                now.writingMs = writingMs;
+                if (now != shown) {
+                    shown = now;
+                    partial(now);
+                }
+            };
+        }
         result = runner->generate(local::prompt(model.format, request), params);
         if (result.status != LocalRunner::TooLong)
             break;
@@ -99,7 +113,9 @@ Reply answerLocally(LocalRunner *runner, const LocalModel &model, Request reques
     }
     switch (result.status) {
     case LocalRunner::Ok: break;
-    case LocalRunner::TimedOut: failed.error = u"no answer in %1 minutes"_s.arg(TimeoutMs / 60000); return failed;
+    case LocalRunner::TimedOut:
+        failed.error = u"the model on this device got nowhere for %1 minutes"_s.arg(TimeoutMs / 60000);
+        return failed;
     case LocalRunner::Cancelled: failed.error = u"stopped"_s; return failed;
     case LocalRunner::TooLong:
     case LocalRunner::Failed:

@@ -7,6 +7,8 @@
 #include "log/categories.h"
 #include "util/paths.h"
 
+#include <QLocale>
+
 using namespace Qt::StringLiterals;
 
 namespace brulion::shell {
@@ -43,6 +45,77 @@ WorkspaceChats::WorkspaceChats(Workspace *workspace, WorkspaceExtensions *extens
         if (!m_running.isEmpty() && m_running.compare(path, Qt::CaseInsensitive) == 0)
             stop();
     });
+    // The answer as it is written: shown ten times a second at most (a provider streams a word at
+    // a time, every change renders the message anew, and a model on the device shares the
+    // processor with that).
+    m_partialTimer.setSingleShot(true);
+    m_partialTimer.setInterval(100);
+    connect(&m_partialTimer, &QTimer::timeout, this, [this] {
+        const double rate = tokensPerSecond(m_samples);
+        setPartial(m_nextPartial, m_nextThoughts,
+                   rate > 0 ? tr("%1 tok/s").arg(QLocale().toString(rate, 'f', 1)) : QString());
+    });
+    connect(m_extensions, &WorkspaceExtensions::chatPartial, this,
+            [this](const QString &turn, const QString &text, const QString &thoughts, int tokens, qint64 writingMs) {
+                if (turn != m_turn || m_turn.isEmpty())
+                    return;
+                m_nextPartial = text;
+                m_nextThoughts = thoughtsTail(thoughts);
+                if (text.isEmpty() && thoughts.isEmpty() && tokens == 0) {
+                    m_partialTimer.stop(); // (a new request: at once)
+                    m_samples.clear();
+                    setPartial(QString(), QString(), QString());
+                    return;
+                }
+                if (tokens > 0) {
+                    m_samples.append({writingMs, tokens});
+                    while (m_samples.size() > 200)
+                        m_samples.removeFirst();
+                }
+                if (!m_partialTimer.isActive())
+                    m_partialTimer.start();
+            });
+}
+
+double WorkspaceChats::tokensPerSecond(const QList<std::pair<qint64, int>> &samples, qint64 windowMs)
+{
+    if (samples.isEmpty())
+        return 0;
+    const auto &[lastMs, lastTokens] = samples.last();
+    // The first sample within the window.
+    qsizetype from = samples.size() - 1;
+    while (from > 0 && lastMs - samples.at(from - 1).first <= windowMs)
+        --from;
+    const auto &[firstMs, firstTokens] = samples.at(from);
+    if (lastMs - firstMs >= windowMs / 2 && lastTokens > firstTokens)
+        return 1000.0 * (lastTokens - firstTokens) / double(lastMs - firstMs);
+    // Too short a window yet: since the writing began.
+    return lastMs > 0 ? 1000.0 * lastTokens / double(lastMs) : 0;
+}
+
+QString WorkspaceChats::thoughtsTail(const QString &thoughts, int chars)
+{
+    const QString text = thoughts.trimmed();
+    if (text.size() <= chars)
+        return text;
+    qsizetype from = text.size() - chars;
+    // From the next word on (a long word: where it is).
+    const qsizetype space = text.indexOf(u' ', from);
+    if (space >= 0 && space < text.size() - chars / 2)
+        from = space + 1;
+    if (text.at(from).isLowSurrogate())
+        ++from;
+    return u"…"_s + text.mid(from).trimmed();
+}
+
+void WorkspaceChats::setPartial(const QString &text, const QString &thoughts, const QString &speed)
+{
+    if (text == m_partial && thoughts == m_thoughts && speed == m_speed)
+        return;
+    m_partial = text;
+    m_thoughts = thoughts;
+    m_speed = speed;
+    Q_EMIT partialChanged();
 }
 
 QString WorkspaceChats::folder() const { return chat::folder(); }
@@ -124,6 +197,9 @@ bool WorkspaceChats::runTurn(const QString &path)
     m_turn = path;
     m_running = path;
     m_status.clear();
+    m_partialTimer.stop();
+    m_samples.clear();
+    setPartial(QString(), QString(), QString());
     if (m_failedPath.compare(path, Qt::CaseInsensitive) == 0) {
         m_failedPath.clear();
         m_failure.clear();
@@ -139,15 +215,18 @@ void WorkspaceChats::answered(const QString &turn, const QString &text)
     if (turn.isEmpty() || turn != m_turn)
         return; // (a stopped turn's)
     const QString path = m_running;
-    endTurn();
     bool ok = false;
     const QString content = m_workspace->exists(path) ? m_workspace->read(path, &ok) : QString();
     if (!ok || !m_workspace->write(path, chat::appendMessage(content, chat::Role::Assistant, text))) {
         qCWarning(logging::lcApp) << "AI chat: the answer could not be written to" << path;
+        endTurn();
         setFailure(path, tr("The answer could not be saved."));
         return;
     }
+    // Written before the turn ends: a view shows the message in place of the answer being
+    // written, never neither of them.
     Q_EMIT written(path);
+    endTurn();
 }
 
 void WorkspaceChats::failed(const QString &turn, const QString &error)
@@ -177,6 +256,9 @@ void WorkspaceChats::reset()
     m_status.clear();
     m_failedPath.clear();
     m_failure.clear();
+    m_partialTimer.stop();
+    m_samples.clear();
+    setPartial(QString(), QString(), QString());
     Q_EMIT stateChanged();
 }
 
@@ -185,6 +267,9 @@ void WorkspaceChats::endTurn()
     m_turn.clear();
     m_running.clear();
     m_status.clear();
+    m_partialTimer.stop();
+    m_samples.clear();
+    setPartial(QString(), QString(), QString());
     Q_EMIT stateChanged();
 }
 

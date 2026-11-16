@@ -344,7 +344,8 @@ private Q_SLOTS:
             QList<ai::Request> requests;
             QList<ai::Settings> settings;
             void send(const ai::Settings &s, const ai::Request &request,
-                      std::function<void(const ai::Reply &)> done) override
+                      std::function<void(const ai::Reply &)> done, ai::PartialCallback,
+                      std::shared_ptr<std::atomic<bool>>) override
             {
                 settings << s;
                 requests << request;

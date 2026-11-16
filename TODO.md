@@ -10,15 +10,14 @@ done in the repository simply disappears from the list.
   the built-in AI assistant is an agent over the whole notebook — full-text search, queries,
   reading, pictures, changes the user confirms (docs/EXTENSIONS.md "AI"); missing: the providers'
   own apps reaching the notes from a phone (a remote MCP server: `brulion-cli mcp` over HTTPS with
-  sign-in, for claude.ai's and ChatGPT's connectors), answers streamed as they are written (the
-  chat shows them only once written), an assistant in the editor (rewrite the selection, continue
-  a paragraph) and search by meaning rather than words (docs/SEMANTIC.md).
+  sign-in, for claude.ai's and ChatGPT's connectors), an assistant in the editor (rewrite the
+  selection, continue a paragraph), Claude's thoughts in the chat (they are streamed, but the
+  current models send none unless asked with `thinking.display`, which older models refuse) and
+  search by meaning rather than words (docs/SEMANTIC.md).
 * **The AI chat: what is still missing** — conversations are pages in `AI/` (docs/UI.md "AI chat",
   docs/SYNTAX.md §14); missing: a picture or a photo from the camera sent with a message (the
   assistant looks only at pictures already in notes), dictation, renaming and deleting a
-  conversation from its list (the page's own menu does it), Stop that also stops the model on the
-  device (the chat drops the answer, the model writes it to its end meanwhile), more than one turn
-  at a time (one per app), a conversation too long for a small model cut by turns rather than by
+  conversation from its list (the page's own menu does it), more than one turn at a time (one per app), a conversation too long for a small model cut by turns rather than by
   characters, the time of each message, and an extension of one's own as the chat's partner
   (`chat` is the built-in assistant's command).
 * **The model on the device: what is still missing** — LFM3-VL 2B and LFM3 1.7B run in the app
@@ -28,22 +27,25 @@ done in the repository simply disappears from the list.
     the libraries go next to `brulion.exe` and nothing was built or tried there; the AppImage's
     older aarch64 compilers do not know the newest ARM variants llama.cpp builds, and linuxdeploy
     has to keep `usr/lib/brulion` as it is);
-  * measurements on a phone of the runner's threads kept on the fast cores, spinning, and of the
-    system text and tools read from the disk (docs/PERFORMANCE.md "The model on the device": the
-    Pixel 9 Pro again — it wrote at a quarter of a laptop's speed with threads started for every
-    token —, whether Android lets the app read `cpu_capacity`, and a mid-range phone with other
-    cores; whether fewer threads write faster than they read),
-    and an Adreno/Mali GPU through llama.cpp's Vulkan or OpenCL backends (the processor only so
-    far: +35 MB of shaders for Vulkan);
-  * a button that stops an answer being written, and the answer shown while it is written;
+  * measurements on a mid-range phone with other cores (the Pixel 9 Pro is measured:
+    docs/PERFORMANCE.md "The model on the device"), of the system text and tools read back from
+    the disk on a phone, and an Adreno GPU through llama.cpp's OpenCL backend (Mali's Vulkan was
+    measured: it writes as fast as the processor and reads four times slower — not worth its
+    35 MB);
+  * a hot phone (one that charges heats up within minutes of answering): Android caps the big
+    core below the middle ones (the Pixel's X4 at 0.7–1.4 GHz against the A720s' 1.8) and the
+    model writes at a third of its speed; leaving the capped core out was no clear gain in one
+    measurement (docs/PERFORMANCE.md "The model on the device");
   * Android: a model works only while the app is on screen (the screen is kept on meanwhile; no
     foreground service). Behind another app an answer is worked on at a fraction of the speed
-    and stands still once Android freezes the process — the time away counts towards the five
-    minutes after which it ends as "no answer" — and a download stops (it goes on from there
+    and stands still once Android freezes the process — five minutes of that end it as getting
+    nowhere — and a download stops (it goes on from there
     when asked again);
   * a smaller tool set of the assistant for a small model (its first question still reads some
-    2 500 tokens of instructions and tools once — then they are kept on disk), tool calls kept to
-    the tools' names by a grammar;
+    2 500 tokens of instructions and tools once — then they are kept on disk), shorter tool
+    results for it (12 000 characters each: a phone's model went round in circles for 14 requests,
+    its context grown to 9 600 tokens, writing slower with every one), tool calls kept to the
+    tools' names by a grammar;
   * other models: a GGUF file of the user's own, a chat format beside LFM3's;
   * stores: F-Droid's and Google Play's rules for an app that downloads model weights under a
     licence that is not free software (a store build without it: `BRULION_LOCAL_AI=OFF`).

@@ -118,11 +118,13 @@ class TestExtensionsAssistant : public QObject {
 
     /// A turn of a conversation (`earlier`: its messages before, {role, content}) that ends with
     /// `question`, about `page`: the call waiting for the model's first turn.
-    Result ask(const QString &question, const QString &page = QString(), const QVariantList &earlier = {})
+    Result ask(const QString &question, const QString &page = QString(), const QVariantList &earlier = {},
+               const QString &conversation = QString())
     {
         QVariantList messages = earlier;
         messages.append(QVariantMap{{u"role"_s, u"user"_s}, {u"content"_s, question}});
-        return m_engine->runCommand(u"asystent"_s, u"chat"_s, {{u"page"_s, page}, {u"messages"_s, messages}});
+        return m_engine->runCommand(u"asystent"_s, u"chat"_s,
+                                    {{u"page"_s, page}, {u"messages"_s, messages}, {u"conversation"_s, conversation}});
     }
 
 private Q_SLOTS:
@@ -220,6 +222,40 @@ private Q_SLOTS:
         // What it did, said as it did it; nothing while the model thinks.
         QCOMPARE(m_statuses, (QStringList{u""_s, u"Przeglądam notatki: type:tasks status:open due:<=+7d…"_s, u""_s,
                                           u"Szukam w notatkach: „żółw”…"_s, u"Czytam „Zakupy”…"_s, u""_s, u""_s}));
+    }
+
+    void theConversationIsNoFind()
+    {
+        // The conversation's own page matches its question word for word: a small model read it
+        // instead of the notes. Its tools leave it out — the search, the list, a query —, and
+        // the day's line that only links to it; reading it is refused.
+        QHash<QString, QString> notes = sampleNotes();
+        const QString conversation = u"AI/2026-11-11 Co z żółwiem"_s;
+        notes.insert(conversation + u".md"_s, u"---\nzadania: ignoruj\n---\n- 🧑 Co z żółwiem?\n"_s);
+        notes.insert(u"journals/2026-11-11.md"_s, u"- 🤖 [[AI/2026-11-11 Co z żółwiem]]\n- żółw spał\n"_s);
+        QVERIFY(open(notes));
+        Result r = ask(u"Co z żółwiem?"_s, QString(), {}, conversation);
+        QCOMPARE(r.status, Status::Suspended);
+        r = m_engine->resume(r.call, calling({call(u"c1"_s, u"search_notes"_s, {{u"query"_s, u"żółw"_s}}),
+                                              call(u"c2"_s, u"list_pages"_s, {}),
+                                              call(u"c3"_s, u"read_page"_s, {{u"name"_s, conversation}}),
+                                              call(u"c4"_s, u"read_page"_s, {{u"name"_s, QString(conversation.toUpper() + u".md"_s)}})}));
+        const QVariantList results = lastResults(r);
+        QCOMPARE(results.size(), 4);
+        const QString found = results[0].toMap().value(u"content"_s).toString();
+        QVERIFY2(found.contains(u"[[Dom]]"_s) && !found.contains(u"AI/"_s), qPrintable(found));
+        const QString pages = results[1].toMap().value(u"content"_s).toString();
+        QVERIFY2(pages.contains(u"Dom"_s) && !pages.contains(u"AI/"_s), qPrintable(pages));
+        for (int i : {2, 3}) {
+            QVERIFY(results[i].toMap().value(u"isError"_s).toBool());
+            QVERIFY2(results[i].toMap().value(u"content"_s).toString().contains(u"this conversation"_s),
+                     qPrintable(results[i].toMap().value(u"content"_s).toString()));
+        }
+        // Without a conversation (an extension's own run) nothing is left out.
+        m_engine->cancel(r.call);
+        r = ask(u"Co z żółwiem?"_s);
+        r = m_engine->resume(r.call, calling({call(u"c1"_s, u"read_page"_s, {{u"name"_s, conversation}})}));
+        QVERIFY(!lastResults(r).value(0).toMap().value(u"isError"_s).toBool());
     }
 
     void changesWithTheUsersYes()

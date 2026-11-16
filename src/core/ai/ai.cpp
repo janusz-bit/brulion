@@ -318,7 +318,8 @@ std::optional<Request> requestFrom(const QVariantMap &table, QString *error, con
     return r;
 }
 
-std::optional<sync::HttpRequest> httpRequest(const Settings &settings, const Request &request, QString *error)
+std::optional<sync::HttpRequest> httpRequest(const Settings &settings, const Request &request, QString *error,
+                                             bool stream)
 {
     QString why;
     if (!settings.usable(&why)) {
@@ -455,6 +456,13 @@ std::optional<sync::HttpRequest> httpRequest(const Settings &settings, const Req
         if (request.maxTokens > 0)
             body.insert(http.url.host() == u"api.openai.com" ? u"max_completion_tokens"_s : u"max_tokens"_s,
                         request.maxTokens);
+        // (The counts come in a last event of their own.)
+        if (stream)
+            body.insert(u"stream_options"_s, QJsonObject{{u"include_usage"_s, true}});
+    }
+    if (stream) {
+        body.insert(u"stream"_s, true);
+        http.timeoutWhileIdle = true; // (a long answer goes on as long as it keeps coming)
     }
     if (!http.url.isValid() || (http.url.scheme() != u"https" && http.url.scheme() != u"http")) {
         if (error)
@@ -544,30 +552,348 @@ Reply readReply(const Settings &settings, const sync::HttpResponse &response)
     return reply;
 }
 
-void Client::send(const Settings &settings, const Request &request, std::function<void(const Reply &)> done)
+// ---- An answer read while it comes ---------------------------------------------------------------
+
+StreamReader::StreamReader(const QString &provider) : m_anthropic(provider == kAnthropic) { }
+
+bool StreamReader::feed(QByteArrayView piece)
 {
-    QString error;
-    if (settings.provider == kLocal && settings.usable(&error)) {
-        if (m_local) {
-            m_local->send(settings, request, std::move(done));
+    // Server-sent events: lines ending in \n, \r\n or \r; "data: …" lines, joined, make an event's
+    // data, an empty line ends it; "event:", "id:", comments (":") and the rest are not needed.
+    bool changed = false;
+    const auto line = [&](QByteArrayView text) {
+        if (text.isEmpty()) {
+            if (!m_data.isEmpty())
+                changed = event(std::exchange(m_data, {})) || changed;
             return;
         }
-        Reply reply;
-        reply.error = u"this build of Brulion runs no model on the device"_s;
-        QTimer::singleShot(0, [done = std::move(done), reply] { done(reply); });
-        return;
+        if (!text.startsWith("data:"))
+            return;
+        QByteArrayView value = text.sliced(5);
+        if (value.startsWith(' '))
+            value = value.sliced(1);
+        if (!m_data.isEmpty())
+            m_data += '\n';
+        m_data += value;
+    };
+    for (const char c : piece) {
+        if (c == '\r' || (c == '\n' && !m_afterCr)) {
+            line(m_line);
+            m_line.clear();
+        } else if (c != '\n') {
+            m_line += c;
+        }
+        m_afterCr = c == '\r'; // (the \n of a \r\n ends no second line)
     }
-    const std::optional<sync::HttpRequest> http = httpRequest(settings, request, &error);
-    if (!http || !m_transport) {
-        Reply reply;
-        reply.error = error.isEmpty() ? u"no network here"_s : error;
-        // From the event loop, as an answer would come.
-        QTimer::singleShot(0, [done = std::move(done), reply] { done(reply); });
-        return;
+    return changed;
+}
+
+bool StreamReader::event(const QByteArray &data)
+{
+    if (data == "[DONE]")
+        return false;
+    const QJsonDocument doc = QJsonDocument::fromJson(data);
+    if (!doc.isObject())
+        return false;
+    const QJsonObject event = doc.object();
+    // Anthropic: {"type": "error", "error": {"type", "message"}}; OpenAI: {"error": {"message"}}.
+    if (const QJsonValue err = event.value(u"error"_s); !err.isUndefined() && !err.isNull()) {
+        m_error = err.isObject() ? err.toObject().value(u"message"_s).toString() : err.toString();
+        if (m_error.isEmpty())
+            m_error = u"the provider stopped the answer"_s;
+        return false;
     }
-    m_transport->send(*http, [settings, done = std::move(done)](const sync::HttpResponse &response) {
-        done(readReply(settings, response));
+    return m_anthropic ? anthropicEvent(event) : openAiEvent(event);
+}
+
+bool StreamReader::anthropicEvent(const QJsonObject &event)
+{
+    const QString type = event.value(u"type"_s).toString();
+    const qsizetype index = event.value(u"index"_s).toInteger(-1);
+    if (type == u"message_start") {
+        m_message = event.value(u"message"_s).toObject();
+        return false;
+    }
+    if (type == u"content_block_start" && index >= 0 && index < 4096) {
+        while (m_blocks.size() <= index) {
+            m_blocks.append(QJsonObject());
+            m_inputs.append(QString());
+        }
+        m_blocks[index] = event.value(u"content_block"_s).toObject();
+        const QString kind = m_blocks[index].value(u"type"_s).toString();
+        if (kind == u"text" || kind == u"thinking") {
+            const QString key = kind == u"text" ? u"text"_s : u"thinking"_s;
+            const QString start = m_blocks[index].value(key).toString();
+            if (start.isEmpty())
+                return false;
+            (kind == u"text" ? m_partial.text : m_partial.thoughts) += start;
+            return true;
+        }
+        return false;
+    }
+    if (type == u"content_block_delta" && index >= 0 && index < m_blocks.size()) {
+        QJsonObject &block = m_blocks[index];
+        const QJsonObject delta = event.value(u"delta"_s).toObject();
+        const QString kind = delta.value(u"type"_s).toString();
+        const auto append = [&](const QString &key, const QString &more) {
+            block.insert(key, QString(block.value(key).toString() + more));
+        };
+        if (kind == u"text_delta") {
+            const QString more = delta.value(u"text"_s).toString();
+            append(u"text"_s, more);
+            m_partial.text += more;
+            return !more.isEmpty();
+        }
+        if (kind == u"thinking_delta") {
+            const QString more = delta.value(u"thinking"_s).toString();
+            append(u"thinking"_s, more);
+            m_partial.thoughts += more;
+            return !more.isEmpty();
+        }
+        if (kind == u"signature_delta")
+            append(u"signature"_s, delta.value(u"signature"_s).toString());
+        else if (kind == u"input_json_delta")
+            m_inputs[index] += delta.value(u"partial_json"_s).toString();
+        else if (kind == u"citations_delta") {
+            QJsonArray citations = block.value(u"citations"_s).toArray();
+            citations.append(delta.value(u"citation"_s));
+            block.insert(u"citations"_s, citations);
+        }
+        return false;
+    }
+    if (type == u"content_block_stop" && index >= 0 && index < m_blocks.size()) {
+        QJsonObject &block = m_blocks[index];
+        if (block.value(u"type"_s).toString() == u"tool_use" || block.value(u"type"_s).toString() == u"server_tool_use") {
+            // The input as one JSON object ("" when the call takes no arguments).
+            const QJsonDocument input = QJsonDocument::fromJson(m_inputs[index].toUtf8());
+            if (input.isObject())
+                block.insert(u"input"_s, input.object());
+            else if (m_inputs[index].trimmed().isEmpty() && !block.value(u"input"_s).isObject())
+                block.insert(u"input"_s, QJsonObject());
+        }
+        return false;
+    }
+    if (type == u"message_delta") {
+        const QJsonObject delta = event.value(u"delta"_s).toObject();
+        for (auto it = delta.constBegin(); it != delta.constEnd(); ++it)
+            m_message.insert(it.key(), it.value());
+        // The counts so far (output_tokens: all of the answer's).
+        QJsonObject usage = m_message.value(u"usage"_s).toObject();
+        const QJsonObject more = event.value(u"usage"_s).toObject();
+        for (auto it = more.constBegin(); it != more.constEnd(); ++it) {
+            if (!it.value().isNull())
+                usage.insert(it.key(), it.value());
+        }
+        m_message.insert(u"usage"_s, usage);
+    }
+    return false;
+}
+
+bool StreamReader::openAiEvent(const QJsonObject &event)
+{
+    if (const QString model = event.value(u"model"_s).toString(); !model.isEmpty())
+        m_model = model;
+    if (const QJsonValue usage = event.value(u"usage"_s); usage.isObject())
+        m_usage = usage.toObject();
+    const QJsonArray choices = event.value(u"choices"_s).toArray();
+    bool changed = false;
+    for (const QJsonValue value : choices) {
+        const QJsonObject choice = value.toObject();
+        if (choice.value(u"index"_s).toInteger(0) != 0)
+            continue; // (the first choice is the answer)
+        const QJsonObject delta = choice.value(u"delta"_s).toObject();
+        if (const QString more = delta.value(u"content"_s).toString(); !more.isEmpty()) {
+            m_text += more;
+            m_partial.text += more;
+            changed = true;
+        }
+        if (const QString more = delta.value(u"refusal"_s).toString(); !more.isEmpty())
+            m_refusal += more;
+        // Thoughts: llama.cpp's server, vLLM and DeepSeek say reasoning_content, others reasoning.
+        for (const QString &key : {u"reasoning_content"_s, u"reasoning"_s}) {
+            const QString more = delta.value(key).toString();
+            if (more.isEmpty())
+                continue;
+            m_thoughtsKey = key;
+            m_partial.thoughts += more;
+            changed = true;
+        }
+        for (const QJsonValue v : delta.value(u"tool_calls"_s).toArray()) {
+            const QJsonObject call = v.toObject();
+            const QJsonObject function = call.value(u"function"_s).toObject();
+            // A call by its index; a server that gives none: a new call when it has an id.
+            qsizetype at = call.value(u"index"_s).toInteger(-1);
+            if (at < 0)
+                at = call.contains(u"id"_s) || m_calls.isEmpty() ? m_calls.size() : m_calls.size() - 1;
+            if (at >= 256)
+                continue;
+            while (m_calls.size() <= at)
+                m_calls.append(OpenAiCall());
+            OpenAiCall &c = m_calls[at];
+            if (const QString id = call.value(u"id"_s).toString(); !id.isEmpty())
+                c.id = id;
+            if (const QString name = function.value(u"name"_s).toString(); !name.isEmpty())
+                c.name += name;
+            c.arguments += function.value(u"arguments"_s).toString();
+        }
+        if (const QString finish = choice.value(u"finish_reason"_s).toString(); !finish.isEmpty())
+            m_finish = finish;
+    }
+    return changed;
+}
+
+QJsonObject StreamReader::message() const
+{
+    if (m_anthropic) {
+        QJsonObject message = m_message;
+        // After a fallback in the middle of the answer (the server's: the same request on another
+        // model, on the same stream), what came before its last `fallback` block is sent back
+        // without the declined part's thinking and tool calls — its text is the answer's start.
+        qsizetype boundary = -1;
+        for (qsizetype i = 0; i < m_blocks.size(); ++i) {
+            if (m_blocks.at(i).value(u"type"_s).toString() == u"fallback")
+                boundary = i;
+        }
+        QJsonArray content;
+        for (qsizetype i = 0; i < m_blocks.size(); ++i) {
+            const QJsonObject &block = m_blocks.at(i);
+            if (block.isEmpty())
+                continue;
+            const QString type = block.value(u"type"_s).toString();
+            if (i < boundary && type != u"text" && type != u"fallback")
+                continue;
+            content.append(block);
+        }
+        message.insert(u"content"_s, content);
+        return message;
+    }
+    QJsonObject message{{u"role"_s, u"assistant"_s}};
+    message.insert(u"content"_s, !m_text.isEmpty() || m_calls.isEmpty() ? QJsonValue(m_text) : QJsonValue());
+    if (!m_partial.thoughts.isEmpty())
+        message.insert(m_thoughtsKey, m_partial.thoughts);
+    if (!m_refusal.isEmpty())
+        message.insert(u"refusal"_s, m_refusal);
+    if (!m_calls.isEmpty()) {
+        QJsonArray calls;
+        for (const OpenAiCall &call : m_calls)
+            calls.append(QJsonObject{{u"id"_s, call.id},
+                                     {u"type"_s, u"function"_s},
+                                     {u"function"_s, QJsonObject{{u"name"_s, call.name}, {u"arguments"_s, call.arguments}}}});
+        message.insert(u"tool_calls"_s, calls);
+    }
+    QJsonObject completion{{u"model"_s, m_model},
+                           {u"choices"_s, QJsonArray{QJsonObject{{u"index"_s, 0},
+                                                                 {u"message"_s, message},
+                                                                 {u"finish_reason"_s, m_finish}}}}};
+    if (!m_usage.isEmpty())
+        completion.insert(u"usage"_s, m_usage);
+    return completion;
+}
+
+Reply readStream(const Settings &settings, const sync::HttpResponse &response)
+{
+    if (response.timedOut) {
+        Reply reply;
+        reply.error = u"nothing more came for %1 minutes"_s.arg(TimeoutMs / 60000);
+        return reply;
+    }
+    // An error's answer (JSON), no answer at all, or a server that answered at once.
+    if (response.status < 200 || response.status >= 300 || response.body.trimmed().startsWith('{'))
+        return readReply(settings, response);
+    StreamReader reader(settings.provider);
+    reader.feed(response.body);
+    reader.feed("\n\n"); // (a last event without its empty line)
+    if (!reader.error().isEmpty()) {
+        Reply reply;
+        reply.error = u"the provider stopped the answer: "_s + oneLine(reader.error());
+        return reply;
+    }
+    sync::HttpResponse whole = response;
+    whole.body = QJsonDocument(reader.message()).toJson(QJsonDocument::Compact);
+    return readReply(settings, whole);
+}
+
+// ---- Requests -----------------------------------------------------------------------------------
+
+void Pending::State::finish(const Reply &reply)
+{
+    if (over)
+        return;
+    over = true;
+    partial = {};
+    if (std::function<void(const Reply &)> f = std::exchange(done, {}))
+        f(reply);
+}
+
+void Pending::stop()
+{
+    if (!m_state || m_state->over)
+        return;
+    m_state->stopped->store(true);
+    m_state->partial = {};
+    // Said at once — whatever the transport or the model do now is not waited for.
+    std::function<void(const Reply &)> done = std::exchange(m_state->done, {});
+    m_state->over = true;
+    if (m_state->abort)
+        m_state->abort->abort();
+    Reply reply;
+    reply.error = u"stopped"_s;
+    QTimer::singleShot(0, [done = std::move(done), reply] {
+        if (done)
+            done(reply);
     });
+}
+
+Pending Client::send(const Settings &settings, const Request &request, std::function<void(const Reply &)> done,
+                     PartialCallback partial)
+{
+    Pending pending;
+    pending.m_state = std::make_shared<Pending::State>();
+    const std::shared_ptr<Pending::State> state = pending.m_state;
+    state->done = std::move(done);
+    state->partial = std::move(partial);
+    const auto fail = [&](const QString &why) {
+        Reply reply;
+        reply.error = why;
+        // From the event loop, as an answer would come.
+        QTimer::singleShot(0, [state, reply] { state->finish(reply); });
+        return pending;
+    };
+    // (Partial answers go through `state`: none after the end or a stop.)
+    PartialCallback onPartial;
+    if (state->partial)
+        onPartial = [state](const Partial &p) {
+            if (state->over || !state->partial)
+                return;
+            const PartialCallback f = state->partial; // (it may stop the request)
+            f(p);
+        };
+
+    QString error;
+    if (settings.provider == kLocal && settings.usable(&error)) {
+        if (!m_local)
+            return fail(u"this build of Brulion runs no model on the device"_s);
+        m_local->send(settings, request, [state](const Reply &reply) { state->finish(reply); }, onPartial,
+                      state->stopped);
+        return pending;
+    }
+    const bool stream = bool(onPartial);
+    std::optional<sync::HttpRequest> http = httpRequest(settings, request, &error, stream);
+    if (!http || !m_transport)
+        return fail(error.isEmpty() ? u"no network here"_s : error);
+    state->abort = std::make_shared<sync::HttpAbort>();
+    http->abort = state->abort;
+    if (stream) {
+        auto reader = std::make_shared<StreamReader>(settings.provider);
+        http->onData = [reader, onPartial](QByteArrayView piece) {
+            if (reader->feed(piece))
+                onPartial(reader->partial());
+        };
+    }
+    m_transport->send(*http, [settings, state, stream](const sync::HttpResponse &response) {
+        state->finish(stream ? readStream(settings, response) : readReply(settings, response));
+    });
+    return pending;
 }
 
 } // namespace brulion::ai

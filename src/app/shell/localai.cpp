@@ -6,6 +6,8 @@
 #include <QElapsedTimer>
 #include <QLocale>
 #include <QLoggingCategory>
+#include <QMutex>
+#include <QMutexLocker>
 #include <QTimer>
 
 #include <algorithm>
@@ -32,10 +34,11 @@ public:
         ai::LocalModel model;
         ai::LocalRunner::Options options;
         ai::Request request;
+        std::shared_ptr<std::atomic<bool>> stopped; ///< set: it stops (never null)
+        ai::PartialCallback partial;                ///< on this thread (none: nobody watches)
     };
 
-    LocalAiWorker(LocalAi::Opener open, int idleMs, std::atomic<bool> *cancel)
-        : m_open(std::move(open)), m_cancel(cancel)
+    LocalAiWorker(LocalAi::Opener open, int idleMs) : m_open(std::move(open))
     {
         m_idle.setParent(this); // moves to the worker thread with this object
         m_idle.setSingleShot(true);
@@ -45,7 +48,14 @@ public:
 
     ai::Reply answer(const Job &job)
     {
+        if (job.stopped->load()) {
+            ai::Reply stopped; // (stopped while it waited: the model is not even opened)
+            stopped.error = u"stopped"_s;
+            return stopped;
+        }
         m_idle.stop();
+        QElapsedTimer asked;
+        asked.start();
         if (!m_runner || m_openId != job.model.id) {
             close(QString());
             QString error;
@@ -65,18 +75,34 @@ public:
         }
         // The times are what tells a slow device from a long prompt: of the tokens read, those
         // kept from the request before and those of the state on disk cost (almost) nothing.
+        // (And how long the first word took to show: what a user waits for.)
         ai::LocalRunner::Result run;
-        const ai::Reply reply = ai::answerLocally(m_runner.get(), job.model, job.request, m_cancel, &run);
+        qint64 firstMs = -1;
+        ai::PartialCallback partial;
+        if (job.partial)
+            partial = [&](const ai::Partial &p) {
+                if (firstMs < 0)
+                    firstMs = asked.elapsed();
+                job.partial(p);
+            };
+        const ai::Reply reply =
+                ai::answerLocally(m_runner.get(), job.model, job.request, job.stopped.get(), &run, partial);
+        // (The tools it called by their names: an agent's turns are told apart by them.)
+        QStringList called;
+        for (const ai::ToolCall &call : reply.toolCalls)
+            called << call.name;
         if (reply.ok)
             qCInfo(lcLocalAi).noquote()
-                    << u"%1 answered: %2 tokens read in %3 s (%4 kept from before, %5 from the disk), %6 written in %7 s"_s
+                    << u"%1 answered: %2 tokens read in %3 s (%4 kept from before, %5 from the disk), %6 written in %7 s%8%9"_s
                                .arg(job.model.id)
                                .arg(run.promptTokens)
                                .arg(seconds(run.promptMs))
                                .arg(run.reusedTokens)
                                .arg(run.storedTokens)
                                .arg(run.outputTokens)
-                               .arg(seconds(run.outputMs));
+                               .arg(seconds(run.outputMs))
+                               .arg(firstMs >= 0 ? u", shown from %1 s"_s.arg(seconds(firstMs)) : QString(),
+                                    called.isEmpty() ? QString() : u", called "_s + called.join(u", "_s));
         else
             qCInfo(lcLocalAi).noquote() << u"%1 gave no answer: %2"_s.arg(job.model.id, reply.error);
         m_idle.start();
@@ -96,7 +122,6 @@ public:
 
 private:
     LocalAi::Opener m_open;
-    std::atomic<bool> *m_cancel;
     std::unique_ptr<ai::LocalRunner> m_runner;
     QString m_openId;
     QTimer m_idle;
@@ -146,7 +171,7 @@ LocalAi::LocalAi(const Options &options, QObject *parent)
 
     // The worker thread only where a model can run at all (never in a build without the plugin —
     // the browser's Qt has no threads either).
-    m_worker = new LocalAiWorker(std::move(open), options.idleMs, &m_cancel);
+    m_worker = new LocalAiWorker(std::move(open), options.idleMs);
     if (m_available) {
         m_worker->moveToThread(&m_thread);
         m_thread.setObjectName(u"brulion-local-ai"_s);
@@ -157,7 +182,7 @@ LocalAi::LocalAi(const Options &options, QObject *parent)
 LocalAi::~LocalAi()
 {
     // A request being answered stops; the ones still waiting are dropped with the thread.
-    m_cancel.store(true);
+    stopAll();
     if (m_thread.isRunning()) {
         m_thread.quit();
         m_thread.wait();
@@ -338,14 +363,13 @@ void LocalAi::remove(const QString &id)
         m_files.remove(removed); // no model ever runs here: only its files
         return;
     }
-    // The model leaves memory first (a request it is answering ends), then its files go — and
-    // the states kept on disk (of any model: the next request keeps them again).
-    m_cancel.store(true);
+    // The model leaves memory first (the requests not answered yet end: "stopped"), then its
+    // files go — and the states kept on disk (of any model: the next request keeps them again).
+    stopAll();
     QMetaObject::invokeMethod(m_worker, [this, worker = m_worker, removed, states = m_stateFolder] {
         worker->close(removed.id);
         if (!states.isEmpty())
             QDir(states).removeRecursively();
-        m_cancel.store(false);
         QMetaObject::invokeMethod(this, [this, removed] { m_files.remove(removed); }, Qt::QueuedConnection);
     });
 }
@@ -366,8 +390,17 @@ void LocalAi::finished(std::function<void(const ai::Reply &)> done, const ai::Re
     done(reply);
 }
 
-void LocalAi::send(const ai::Settings &settings, const ai::Request &request,
-                   std::function<void(const ai::Reply &)> done)
+void LocalAi::stopAll()
+{
+    for (const std::weak_ptr<std::atomic<bool>> &stop : std::as_const(m_stops)) {
+        if (const std::shared_ptr<std::atomic<bool>> flag = stop.lock())
+            flag->store(true);
+    }
+    m_stops.clear();
+}
+
+void LocalAi::send(const ai::Settings &settings, const ai::Request &request, std::function<void(const ai::Reply &)> done,
+                   ai::PartialCallback partial, std::shared_ptr<std::atomic<bool>> stopped)
 {
     const auto refuse = [&](const QString &why) {
         ai::Reply reply;
@@ -393,6 +426,39 @@ void LocalAi::send(const ai::Settings &settings, const ai::Request &request,
     job.options.stateDir = m_stateFolder;
     job.options.spinWait = m_spinWait;
     job.request = request;
+    job.stopped = stopped ? std::move(stopped) : std::make_shared<std::atomic<bool>>(false);
+    m_stops.removeIf([](const std::weak_ptr<std::atomic<bool>> &stop) { return stop.expired(); });
+    m_stops.append(job.stopped);
+    if (partial) {
+        // From the worker to the event loop: the latest only, when they come faster than they are
+        // read (a busy screen), never one after the answer (that comes after them).
+        struct Latest {
+            QMutex mutex;
+            ai::Partial value;
+            bool posted = false;
+        };
+        const auto latest = std::make_shared<Latest>();
+        job.partial = [this, latest, partial = std::move(partial)](const ai::Partial &p) {
+            {
+                const QMutexLocker lock(&latest->mutex);
+                latest->value = p;
+                if (std::exchange(latest->posted, true))
+                    return;
+            }
+            QMetaObject::invokeMethod(
+                    this,
+                    [latest, partial] {
+                        ai::Partial value;
+                        {
+                            const QMutexLocker lock(&latest->mutex);
+                            value = latest->value;
+                            latest->posted = false;
+                        }
+                        partial(value);
+                    },
+                    Qt::QueuedConnection);
+        };
+    }
 
     ++m_pending;
     Q_EMIT busyChanged();

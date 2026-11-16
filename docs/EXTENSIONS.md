@@ -295,6 +295,7 @@ The function gets one table, `ctx`:
 | `ctx.block` | with `block = true`: the block under the caret (above, "Blocks") |
 | `ctx.selection` | always `""` so far |
 | `ctx.messages` | only in a turn of the AI chat (the AI assistant's `chat`, "AI"): the conversation's messages `{ role = "user" \| "assistant", content }`, the user's last |
+| `ctx.conversation` | only in a turn of the AI chat: the name of the conversation's own page (`"AI/2026-11-16 Co mam jutro"`) |
 
 With **`block = true`** the command works on the block under the caret: the palette offers it only
 in an editor (not in the Markdown source), and the page is saved first, so the block is read as
@@ -461,6 +462,14 @@ whole number from 1 to 128000 (Claude gets 16000 without one); `effort` is `"low
 `"high"`, `"xhigh"` or `"max"`: Claude's effort, and for a model on the device `"low"` means an
 answer without thinking first.
 
+`b.ai` returns once the answer is written. The app's own AI chat shows it while it is written
+(docs/UI.md "AI chat"): its requests go out with a watcher (`ai::Client::send`'s `partial`) — a
+provider on the network then streams the answer as server-sent events (`"stream": true`;
+`ai::StreamReader` reads Anthropic's events and an OpenAI-compatible API's chunks, with their
+thoughts, into the same reply an answer at once gives, a server-side fallback's boundary
+included), the model on the device hands on its tokens — and a stopped turn stops its request
+(`ai::Pending::stop`: the connection closed, the model's writing ended).
+
 **Pictures**: `images = {"paragon.jpg", …}` next to `prompt` — or in a user's message of
 `messages` — shows the model pictures of the notebook, named as notes embed them
 (`![[paragon.jpg]]`) or by their path (`assets/skan.png`); at most 8 in a request. The app finds
@@ -612,12 +621,18 @@ end, { label = "Ask my notes (AI)" })
     most 8, kept in a pool for as long as the model is loaded. On Android they spin between two
     tokens (the system keeps other work off those cores); elsewhere they sleep, so that a busy
     processor does not stall them.
+  * What it writes is handed on token by token (`LocalRunner::Params::written`, read by
+    `local::partial`: its thoughts, its words without a tool call being written): the chat shows
+    it as it comes. A request stopped (`stopped`, the chat's Stop) ends its writing at the next
+    token; one still waiting is never started.
   * How fast it is on a device is in the event log (`brulion.ai.local`): `lfm3-vl-2b opened:
     8192 tokens at once, ggml-cpu-alderlake, 6 threads on cores 0,2,4,6,8,10, in 1.42 s` — the
     processor plugin taken, its threads and their cores (on Android also that they spin:
     `ggml-cpu-android_armv8.6_1, 4 threads on cores 4-7, spinning`) and the time the files took to load —, and of every answer `answered: 1520 tokens read
-    in 0.61 s (1400 kept from before, 0 from the disk), 85 written in 1.90 s`: reading costs only
-    the tokens neither kept in memory nor read from the disk. A
+    in 0.61 s (1400 kept from before, 0 from the disk), 85 written in 1.90 s, shown from 0.62 s,
+    called search_notes`: reading costs only the tokens neither kept in memory nor read from the
+    disk; "shown from" is when the first of its words or thoughts was there to show (a request
+    the chat watches), "called" the tools it asked for, by name. A
     download is there too, from `lfm3-vl-2b download: 1.2 GB to fetch of 1.2 GB` to `downloaded:
     1.2 GB in 3 min 05 s`, `download stopped after 41.0 s` (by the user) or the warning `download
     failed after 1 min 02 s: …` with the reason.
@@ -650,7 +665,11 @@ the chat). The app gives it the conversation's messages (`ctx.messages`, the use
 page it is about (`ctx.page`); today's date and that page's text (at most 30 000 characters, read
 again each turn) go before the first message — not into the system text, which stays the same from
 day to day, so that a model on the device keeps what it read of it —; what the command returns is
-the AI's message, which the app writes into the conversation. Twelve tools —
+the AI's message, which the app writes into the conversation. The conversation's own page
+(`ctx.conversation`) is none of its tools' finds — not in a search, a query or the list of
+pages, nor the day's line that only links to it, and reading it is refused: it holds the question
+word for word, and a small model read it instead of the notes (on a phone that cost minutes).
+Twelve tools —
 `search_notes` (`b.search`), `query_notes` (`b.query`, the query language described in the tool's
 description), `list_pages`, `read_page`, the changes `append_to_journal`, `append_to_page`,
 `write_page`, `update_block` (`b.replaceBlock`: a task's status too), `look_at_picture` (a picture

@@ -34,6 +34,8 @@ struct ReplyState {
     QString refusedRedirect; ///< target of a redirect we refused to follow
     qint64 sent = 0;
     qint64 received = 0;
+    QByteArray body; ///< what was read while it came (HttpRequest::onData): the body's start
+    bool aborted = false; ///< stopped by its sender (HttpRequest::abort)
 };
 
 /// The port a URL leads to: its own, or the scheme's.
@@ -160,7 +162,24 @@ void NetworkHttpTransport::send(const HttpRequest &request, HttpCallback done)
     };
     connect(reply, &QNetworkReply::metaDataChanged, reply,
             [reply, stopAbove] { stopAbove(reply->header(QNetworkRequest::ContentLengthHeader).toLongLong()); });
-    connect(reply, &QNetworkReply::readyRead, reply, [reply, stopAbove] { stopAbove(reply->bytesAvailable()); });
+    if (request.onData) {
+        // Read as it comes, kept for the response too (the limit counts all of it).
+        connect(reply, &QNetworkReply::readyRead, reply, [reply, state, stopAbove, onData = request.onData] {
+            const QVariant status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute);
+            if (!status.isValid() || status.toInt() < 200 || status.toInt() >= 300) {
+                stopAbove(reply->bytesAvailable()); // (an error's body: read at the end)
+                return;
+            }
+            const QByteArray piece = reply->readAll();
+            state->body += piece;
+            stopAbove(state->body.size());
+            if (!state->tooLarge && !piece.isEmpty())
+                onData(piece);
+        });
+    } else {
+        connect(reply, &QNetworkReply::readyRead, reply, [reply, stopAbove] { stopAbove(reply->bytesAvailable()); });
+    }
+
     if (request.onProgress) {
         // Progress counts as activity (stall detection): a big transfer is not a stalled one.
         connect(reply, &QNetworkReply::uploadProgress, reply,
@@ -174,7 +193,7 @@ void NetworkHttpTransport::send(const HttpRequest &request, HttpCallback done)
                     onProgress(state->sent, state->received);
                 });
     }
-    if (request.timeoutMs > 0) {
+    if (request.timeoutMs > 0 && !request.timeoutWhileIdle) {
         QTimer::singleShot(request.timeoutMs, reply, [reply, state] {
             state->timedOut = true;
             reply->abort();
@@ -190,6 +209,13 @@ void NetworkHttpTransport::send(const HttpRequest &request, HttpCallback done)
             done(HttpResponse::oversized(asked));
             return;
         }
+        if (state->aborted) {
+            reply->deleteLater();
+            HttpResponse response;
+            response.networkError = u"Stopped"_s;
+            done(response);
+            return;
+        }
         if (!state->refusedRedirect.isEmpty()) {
             reply->deleteLater();
             HttpResponse response;
@@ -197,11 +223,24 @@ void NetworkHttpTransport::send(const HttpRequest &request, HttpCallback done)
             done(response);
             return;
         }
-        finish(reply, state->timedOut, done);
+        finish(reply, state->timedOut, state->body, done);
     });
+    // Stopped by its sender: it ends from the event loop (never inside send(), even when it was
+    // stopped before), as a broken connection.
+    if (request.abort)
+        request.abort->onAbort([reply = QPointer<QNetworkReply>(reply), state] {
+            if (!reply || reply->isFinished())
+                return;
+            state->aborted = true;
+            QTimer::singleShot(0, reply, [reply] {
+                if (reply && !reply->isFinished())
+                    reply->abort();
+            });
+        });
 }
 
-void NetworkHttpTransport::finish(QNetworkReply *reply, bool timedOut, const HttpCallback &done)
+void NetworkHttpTransport::finish(QNetworkReply *reply, bool timedOut, const QByteArray &read,
+                                  const HttpCallback &done)
 {
     reply->deleteLater();
     HttpResponse response;
@@ -222,7 +261,7 @@ void NetworkHttpTransport::finish(QNetworkReply *reply, bool timedOut, const Htt
         response.protocol = reply->attribute(QNetworkRequest::Http2WasUsedAttribute).toBool() ? "h2" : "http/1.1";
         for (const auto &[name, value] : reply->rawHeaderPairs())
             response.headers.insert(name.toLower(), value);
-        response.body = reply->readAll();
+        response.body = read + reply->readAll();
     }
     done(response);
 }

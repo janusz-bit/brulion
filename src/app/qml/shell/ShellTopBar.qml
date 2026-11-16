@@ -308,6 +308,7 @@ Rectangle {
                 anchors.centerIn: parent
                 visible: bar.aiBusy
                 size: Theme.iconSize
+                calm: true // (an answer takes minutes on a phone, whose model needs the cores)
             }
         }
         // Reading mode (docs/UI.md "Reading mode"): a device setting for every page and the journal,

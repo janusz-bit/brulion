@@ -155,11 +155,31 @@ private Q_SLOTS:
               r.promptTokens, r.promptMs, r.outputTokens, r.outputMs, qPrintable(reply.text));
 
         // With thoughts first: they end with the model's own token, then the answer.
+        // What it has written is handed on token by token (the chat shows it): one more token
+        // each time, the last of them the whole answer.
         const ai::Request thinking = question(u"What is 17 + 25? Answer with the number."_s, true);
-        const LocalRunner::Result t = runner->generate(ai::local::prompt(kFormat, thinking), params(400));
+        LocalRunner::Params watched = params(400);
+        QList<QList<Piece>> written;
+        QList<int> counts;
+        qint64 lastMs = -1;
+        bool timesGrow = true;
+        watched.written = [&](const QList<Piece> &pieces, int tokens, qint64 ms) {
+            written << pieces;
+            counts << tokens;
+            timesGrow = timesGrow && ms >= lastMs;
+            lastMs = ms;
+        };
+        const LocalRunner::Result t = runner->generate(ai::local::prompt(kFormat, thinking), watched);
         QVERIFY2(t.status == LocalRunner::Ok, qPrintable(t.error));
         QVERIFY(t.pieces.contains(Piece{u"</think>"_s, true, {}}));
         QVERIFY2(ai::local::reply(kFormat, t.pieces, thinking, t.complete).text.contains(u"42"), qPrintable(textOf(t)));
+        QCOMPARE(counts.size(), t.outputTokens);
+        for (qsizetype i = 0; i < counts.size(); ++i)
+            QCOMPARE(counts.at(i), int(i + 1));
+        QVERIFY(timesGrow);
+        QCOMPARE(written.last(), t.pieces);
+        QCOMPARE(ai::local::partial(kFormat, written.last(), thinking).text,
+                 ai::local::reply(kFormat, t.pieces, thinking, t.complete).text);
     }
 
     void keepsWhatItRead()

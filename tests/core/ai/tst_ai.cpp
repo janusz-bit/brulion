@@ -29,6 +29,108 @@ public:
     }
 };
 
+/// A provider that streams: its body comes in `pieces` (request.onData, from the event loop), then
+/// the whole answer; a request stopped meanwhile (request.abort) ends as a broken connection.
+class StreamingTransport : public sync::HttpTransport
+{
+public:
+    QList<sync::HttpRequest> sent;
+    QList<QByteArray> pieces;
+    int status = 200;
+    bool aborted = false;
+    void send(const sync::HttpRequest &request, sync::HttpCallback done) override
+    {
+        sent << request;
+        auto broken = std::make_shared<bool>(false);
+        if (request.abort)
+            request.abort->onAbort([this, broken] {
+                aborted = true;
+                *broken = true;
+            });
+        QByteArray body;
+        for (const QByteArray &piece : std::as_const(pieces)) {
+            body += piece;
+            QTimer::singleShot(0, [request, piece, broken] {
+                if (!*broken && request.onData)
+                    request.onData(piece);
+            });
+        }
+        QTimer::singleShot(0, [done, body, broken, code = status] {
+            sync::HttpResponse r;
+            if (*broken) {
+                r.networkError = u"Operation canceled"_s;
+            } else {
+                r.status = code;
+                r.body = body;
+            }
+            done(r);
+        });
+    }
+};
+
+/// `text` cut into pieces at the given byte offsets (inside a letter too).
+QList<QByteArray> cutAt(const QByteArray &text, const QList<qsizetype> &at)
+{
+    QList<QByteArray> out;
+    qsizetype from = 0;
+    for (const qsizetype to : at) {
+        out << text.mid(from, to - from);
+        from = to;
+    }
+    out << text.mid(from);
+    return out;
+}
+
+/// Every way to cut `text` in two, and byte by byte: the reader sees the same events.
+QList<QList<QByteArray>> cuttings(const QByteArray &text)
+{
+    QList<QList<QByteArray>> out;
+    for (qsizetype i = 1; i < text.size(); i += 7)
+        out << cutAt(text, {i});
+    QList<qsizetype> bytes;
+    for (qsizetype i = 1; i < text.size(); ++i)
+        bytes << i;
+    out << cutAt(text, bytes);
+    return out;
+}
+
+/// A streamed Anthropic answer: thoughts, Polish words, a tool call whose input comes in parts.
+const QByteArray kAnthropicStream =
+        "event: message_start\r\n"
+        "data: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_1\",\"type\":\"message\",\"role\":\"assistant\","
+        "\"model\":\"claude-opus-5-5\",\"content\":[],\"stop_reason\":null,\"usage\":{\"input_tokens\":120,\"output_tokens\":1}}}\r\n"
+        "\r\n"
+        ": a comment, and a ping\n"
+        "event: ping\ndata: {\"type\": \"ping\"}\n\n"
+        "event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"thinking\",\"thinking\":\"\",\"signature\":\"\"}}\n\n"
+        "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\"Szukam zadań\"}}\n\n"
+        "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"signature_delta\",\"signature\":\"c2lnbg==\"}}\n\n"
+        "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\n"
+        "event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":1,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\n"
+        "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"text_delta\",\"text\":\"Zaraz sprawdzę \"}}\n\n"
+        "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"text_delta\",\"text\":\"żółte karteczki.\"}}\n\n"
+        "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":1}\n\n"
+        "event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":2,\"content_block\":{\"type\":\"tool_use\",\"id\":\"toolu_1\",\"name\":\"search_notes\",\"input\":{}}}\n\n"
+        "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":2,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"{\\\"query\\\": \\\"karte\"}}\n\n"
+        "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":2,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"czki\\\"}\"}}\n\n"
+        "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":2}\n\n"
+        "event: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"tool_use\",\"stop_sequence\":null},\"usage\":{\"output_tokens\":42}}\n\n"
+        "event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n";
+
+/// A streamed OpenAI-compatible answer (llama.cpp's server): thoughts, words, a call in parts.
+const QByteArray kOpenAiStream =
+        "data: {\"id\":\"c1\",\"object\":\"chat.completion.chunk\",\"model\":\"qwen\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":null}}]}\n\n"
+        "data: {\"model\":\"qwen\",\"choices\":[{\"index\":0,\"delta\":{\"reasoning_content\":\"Użytkownik pyta\"}}]}\n\n"
+        "data: {\"model\":\"qwen\",\"choices\":[{\"index\":0,\"delta\":{\"reasoning_content\":\" o zakupy.\"}}]}\n\n"
+        "data: {\"model\":\"qwen\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"Sprawdzę \"}}]}\n\n"
+        "data: {\"model\":\"qwen\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"listę.\"}}]}\n\n"
+        "data: {\"model\":\"qwen\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_7\",\"type\":\"function\",\"function\":{\"name\":\"read_page\",\"arguments\":\"\"}}]}}]}\n\n"
+        "data: {\"model\":\"qwen\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"{\\\"name\\\":\"}}]}}]}\n\n"
+        "data: {\"model\":\"qwen\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\" \\\"Zakupy\\\"}\"}}]}}]}\n\n"
+        "data: {\"model\":\"qwen\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"tool_calls\"}]}\n\n"
+        "data: {\"model\":\"qwen\",\"choices\":[],\"usage\":{\"prompt_tokens\":300,\"completion_tokens\":25}}\n\n"
+        "data: [DONE]\n\n";
+
 QJsonObject bodyOf(const sync::HttpRequest &r) { return QJsonDocument::fromJson(r.body).object(); }
 
 ai::Settings claude()
@@ -67,10 +169,15 @@ class FakeLocal : public ai::LocalBackend {
 public:
     QList<ai::Request> requests;
     QList<ai::Settings> settings;
-    void send(const ai::Settings &s, const ai::Request &request, std::function<void(const ai::Reply &)> done) override
+    QList<bool> partials; ///< each request: was it watched as it was written
+    std::shared_ptr<std::atomic<bool>> stopped;
+    void send(const ai::Settings &s, const ai::Request &request, std::function<void(const ai::Reply &)> done,
+              ai::PartialCallback partial, std::shared_ptr<std::atomic<bool>> stop) override
     {
         settings << s;
         requests << request;
+        partials << bool(partial);
+        stopped = stop;
         ai::Reply reply;
         reply.ok = true;
         reply.text = u"Z urządzenia."_s;
@@ -676,6 +783,243 @@ private Q_SLOTS:
         QVERIFY(!got.ok);
         QVERIFY2(got.error.contains(u"runs no model on the device"), qPrintable(got.error));
         QCOMPARE(transport.sent.size(), 1);
+    }
+
+    void streamedRequests()
+    {
+        // Asked to stream: Anthropic's "stream", an OpenAI-compatible API's too, with the counts.
+        QString error;
+        const auto anthropic = ai::httpRequest(claude(), ask(u"Hej"_s), &error, true);
+        QVERIFY(anthropic);
+        QCOMPARE(bodyOf(*anthropic).value(u"stream"_s).toBool(), true);
+        ai::Settings openai;
+        openai.provider = u"openai"_s;
+        openai.model = u"qwen"_s;
+        openai.baseUrl = u"http://localhost:8080/v1"_s;
+        const auto compatible = ai::httpRequest(openai, ask(u"Hej"_s), &error, true);
+        QVERIFY(compatible);
+        QCOMPARE(bodyOf(*compatible).value(u"stream"_s).toBool(), true);
+        QCOMPARE(bodyOf(*compatible).value(u"stream_options"_s).toObject().value(u"include_usage"_s).toBool(), true);
+        // Not asked: neither (b.ai's requests stay as they were).
+        const auto plain = ai::httpRequest(openai, ask(u"Hej"_s), &error);
+        QVERIFY(!bodyOf(*plain).contains(u"stream"_s));
+        QVERIFY(!bodyOf(*plain).contains(u"stream_options"_s));
+    }
+
+    void anthropicStreams()
+    {
+        // However the body is cut — inside a letter, between \r and \n —, the reader sees the
+        // same: the thoughts and the words as they come, then the answer readReply would read.
+        for (const QList<QByteArray> &pieces : cuttings(kAnthropicStream)) {
+            ai::StreamReader reader(u"anthropic"_s);
+            QList<ai::Partial> seen;
+            for (const QByteArray &piece : pieces) {
+                if (reader.feed(piece))
+                    seen << reader.partial();
+            }
+            QCOMPARE(reader.partial().thoughts, u"Szukam zadań"_s);
+            QCOMPARE(reader.partial().text, u"Zaraz sprawdzę żółte karteczki."_s);
+            QVERIFY(!seen.isEmpty() && seen.size() <= 3);
+            QVERIFY(reader.error().isEmpty());
+            if (pieces.size() > 2) { // byte by byte: every change on its own
+                QCOMPARE(seen.size(), 3); // the thoughts, then the words in two steps
+                QCOMPARE(seen.first(), (ai::Partial{QString(), u"Szukam zadań"_s}));
+                QCOMPARE(seen.at(1).text, u"Zaraz sprawdzę "_s);
+            }
+        }
+        sync::HttpResponse response = json(200, kAnthropicStream);
+        const ai::Reply reply = ai::readStream(claude(), response);
+        QVERIFY2(reply.ok, qPrintable(reply.error));
+        QCOMPARE(reply.text, u"Zaraz sprawdzę żółte karteczki."_s);
+        QCOMPARE(reply.model, u"claude-opus-5-5"_s);
+        QCOMPARE(reply.stopReason, u"tool_use"_s);
+        QCOMPARE(reply.inputTokens, 120);
+        QCOMPARE(reply.outputTokens, 42);
+        QCOMPARE(reply.toolCalls.size(), 1);
+        QCOMPARE(reply.toolCalls.first().id, u"toolu_1"_s);
+        QCOMPARE(reply.toolCalls.first().name, u"search_notes"_s);
+        QCOMPARE(reply.toolCalls.first().input, (QVariantMap{{u"query"_s, u"karteczki"_s}}));
+        // The turn as the provider gives it at once: the thinking block with its signature.
+        const QJsonArray raw = QJsonDocument::fromJson(reply.raw).array();
+        QCOMPARE(raw.size(), 3);
+        QCOMPARE(raw.at(0).toObject(), (QJsonObject{{u"type"_s, u"thinking"_s},
+                                                    {u"thinking"_s, u"Szukam zadań"_s},
+                                                    {u"signature"_s, u"c2lnbg=="_s}}));
+        QCOMPARE(raw.at(2).toObject().value(u"input"_s).toObject(),
+                 (QJsonObject{{u"query"_s, u"karteczki"_s}}));
+    }
+
+    void anthropicStreamsEdgeCases()
+    {
+        // A call without arguments: its input is {}.
+        const QByteArray noInput =
+                "data: {\"type\":\"message_start\",\"message\":{\"model\":\"claude-opus-5-5\",\"usage\":{\"input_tokens\":5}}}\n\n"
+                "data: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"tool_use\",\"id\":\"t\",\"name\":\"list_pages\",\"input\":{}}}\n\n"
+                "data: {\"type\":\"content_block_stop\",\"index\":0}\n\n"
+                "data: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"tool_use\"},\"usage\":{\"output_tokens\":9}}\n\n";
+        ai::Reply reply = ai::readStream(claude(), json(200, noInput));
+        QVERIFY(reply.ok);
+        QCOMPARE(reply.toolCalls.size(), 1);
+        QCOMPARE(reply.toolCalls.first().input, QVariantMap());
+
+        // A fallback in the middle (the server's: another model goes on on the same stream): the
+        // declined part's thinking and tool call are not sent back, its words stay the start.
+        const QByteArray fallback =
+                "data: {\"type\":\"message_start\",\"message\":{\"model\":\"claude-opus-4-8\",\"usage\":{\"input_tokens\":5}}}\n\n"
+                "data: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"thinking\",\"thinking\":\"\",\"signature\":\"\"}}\n\n"
+                "data: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\"hm\"}}\n\n"
+                "data: {\"type\":\"content_block_start\",\"index\":1,\"content_block\":{\"type\":\"text\",\"text\":\"Zacz\"}}\n\n"
+                "data: {\"type\":\"content_block_start\",\"index\":2,\"content_block\":{\"type\":\"tool_use\",\"id\":\"t\",\"name\":\"read_page\",\"input\":{}}}\n\n"
+                "data: {\"type\":\"content_block_start\",\"index\":3,\"content_block\":{\"type\":\"fallback\",\"model\":\"claude-opus-4-8\"}}\n\n"
+                "data: {\"type\":\"content_block_start\",\"index\":4,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\n"
+                "data: {\"type\":\"content_block_delta\",\"index\":4,\"delta\":{\"type\":\"text_delta\",\"text\":\"ynam.\"}}\n\n"
+                "data: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"output_tokens\":9}}\n\n";
+        reply = ai::readStream(claude(), json(200, fallback));
+        QVERIFY(reply.ok);
+        QCOMPARE(reply.text, u"Zaczynam."_s);
+        QVERIFY(reply.toolCalls.isEmpty());
+        QStringList types;
+        for (const QJsonValue block : QJsonDocument::fromJson(reply.raw).array())
+            types << block.toObject().value(u"type"_s).toString();
+        QCOMPARE(types, (QStringList{u"text"_s, u"fallback"_s, u"text"_s}));
+
+        // An error in the stream: an error, not a cut answer.
+        const QByteArray overloaded =
+                "data: {\"type\":\"message_start\",\"message\":{\"model\":\"claude-opus-5-5\"}}\n\n"
+                "event: error\ndata: {\"type\":\"error\",\"error\":{\"type\":\"overloaded_error\",\"message\":\"Overloaded\"}}\n\n";
+        reply = ai::readStream(claude(), json(200, overloaded));
+        QVERIFY(!reply.ok);
+        QCOMPARE(reply.error, u"the provider stopped the answer: Overloaded"_s);
+        // A refusal: as one that came at once.
+        reply = ai::readStream(claude(), json(200, "data: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"refusal\"}}\n\n"));
+        QVERIFY(!reply.ok);
+        QVERIFY(reply.error.contains(u"declined"_s));
+        // An HTTP error's JSON, and a server that answered at once although asked to stream.
+        reply = ai::readStream(claude(), json(401, R"({"type":"error","error":{"type":"authentication_error","message":"bad key"}})"));
+        QVERIFY(!reply.ok);
+        QVERIFY(reply.error.contains(u"API key"_s));
+        reply = ai::readStream(claude(), json(200, R"({"model":"m","stop_reason":"end_turn","content":[{"type":"text","text":"Od razu."}]})"));
+        QVERIFY(reply.ok);
+        QCOMPARE(reply.text, u"Od razu."_s);
+        // No connection.
+        reply = ai::readStream(claude(), sync::HttpResponse());
+        QVERIFY(!reply.ok);
+        QVERIFY(reply.error.startsWith(u"no connection"_s));
+    }
+
+    void openAiCompatibleStreams()
+    {
+        ai::Settings openai;
+        openai.provider = u"openai"_s;
+        for (const QList<QByteArray> &pieces : cuttings(kOpenAiStream)) {
+            ai::StreamReader reader(openai.provider);
+            for (const QByteArray &piece : pieces)
+                reader.feed(piece);
+            QCOMPARE(reader.partial(), (ai::Partial{u"Sprawdzę listę."_s, u"Użytkownik pyta o zakupy."_s}));
+        }
+        const ai::Reply reply = ai::readStream(openai, json(200, kOpenAiStream));
+        QVERIFY2(reply.ok, qPrintable(reply.error));
+        QCOMPARE(reply.text, u"Sprawdzę listę."_s);
+        QCOMPARE(reply.model, u"qwen"_s);
+        QCOMPARE(reply.stopReason, u"tool_calls"_s);
+        QCOMPARE(reply.inputTokens, 300);
+        QCOMPARE(reply.outputTokens, 25);
+        QCOMPARE(reply.toolCalls.size(), 1);
+        QCOMPARE(reply.toolCalls.first().id, u"call_7"_s);
+        QCOMPARE(reply.toolCalls.first().name, u"read_page"_s);
+        QCOMPARE(reply.toolCalls.first().input, (QVariantMap{{u"name"_s, u"Zakupy"_s}}));
+        // The message sent back as the server wrote it: its thoughts under the server's name.
+        const QJsonObject raw = QJsonDocument::fromJson(reply.raw).object();
+        QCOMPARE(raw.value(u"reasoning_content"_s).toString(), u"Użytkownik pyta o zakupy."_s);
+        QCOMPARE(raw.value(u"tool_calls"_s).toArray().first().toObject().value(u"function"_s).toObject()
+                         .value(u"arguments"_s).toString(),
+                 u"{\"name\": \"Zakupy\"}"_s);
+
+        // Only tool calls: content null, as at once. OpenRouter's "reasoning"; an error event.
+        const QByteArray calls =
+                "data: {\"model\":\"m\",\"choices\":[{\"index\":0,\"delta\":{\"reasoning\":\"hmm\",\"tool_calls\":[{\"id\":\"a\",\"function\":{\"name\":\"list_pages\",\"arguments\":\"{}\"}}]}}]}\n\n"
+                "data: {\"model\":\"m\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"tool_calls\"}]}\n\n";
+        const QJsonObject onlyCalls = QJsonDocument::fromJson(ai::readStream(openai, json(200, calls)).raw).object();
+        QVERIFY(onlyCalls.value(u"content"_s).isNull());
+        QCOMPARE(onlyCalls.value(u"reasoning"_s).toString(), u"hmm"_s);
+        const ai::Reply failed =
+                ai::readStream(openai, json(200, "data: {\"error\":{\"message\":\"model unloaded\"}}\n\n"));
+        QCOMPARE(failed.error, u"the provider stopped the answer: model unloaded"_s);
+    }
+
+    void clientStreamsAndStops()
+    {
+        // With a `partial`, the request streams: the words as they come, then the reply.
+        StreamingTransport transport;
+        transport.pieces = cutAt(kAnthropicStream, {300, 900, 1400});
+        ai::Client client(&transport);
+        QList<ai::Partial> partials;
+        ai::Reply got;
+        int calls = 0;
+        client.send(
+                claude(), ask(u"Co mam?"_s),
+                [&](const ai::Reply &r) {
+                    got = r;
+                    ++calls;
+                },
+                [&](const ai::Partial &p) { partials << p; });
+        QTRY_COMPARE(calls, 1);
+        QVERIFY(got.ok);
+        QCOMPARE(got.toolCalls.size(), 1);
+        QVERIFY(!partials.isEmpty());
+        QCOMPARE(partials.last(), (ai::Partial{u"Zaraz sprawdzę żółte karteczki."_s, u"Szukam zadań"_s}));
+        QCOMPARE(bodyOf(transport.sent.first()).value(u"stream"_s).toBool(), true);
+
+        // Stopped on its way: "stopped" at once (from the event loop), the connection closed,
+        // nothing more of it — no partial, no second `done`.
+        partials.clear();
+        calls = 0;
+        ai::Pending pending = client.send(
+                claude(), ask(u"Co mam?"_s),
+                [&](const ai::Reply &r) {
+                    got = r;
+                    ++calls;
+                },
+                [&](const ai::Partial &p) { partials << p; });
+        pending.stop();
+        QVERIFY(pending.stopped());
+        QVERIFY(transport.aborted);
+        QCOMPARE(calls, 0);
+        QTRY_COMPARE(calls, 1);
+        QCOMPARE(got.error, u"stopped"_s);
+        QTest::qWait(20);
+        QCOMPARE(calls, 1);
+        QVERIFY(partials.isEmpty());
+        pending.stop(); // (again: nothing)
+        QCOMPARE(calls, 1);
+
+        // Without a partial nothing streams (b.ai's requests).
+        client.send(claude(), ask(u"x"_s), [&](const ai::Reply &) { ++calls; });
+        QVERIFY(!bodyOf(transport.sent.last()).contains(u"stream"_s));
+        QTRY_COMPARE(calls, 2);
+    }
+
+    void clientHandsTheModelOnTheDeviceItsWatchers()
+    {
+        FakeLocal local;
+        FakeTransport transport;
+        ai::Client client(&transport);
+        client.setLocal(&local);
+        ai::Settings device;
+        device.provider = u"local"_s;
+        int calls = 0;
+        ai::Pending pending = client.send(device, ask(u"Hej"_s), [&](const ai::Reply &) { ++calls; },
+                                          [](const ai::Partial &) {});
+        QCOMPARE(local.partials, QList<bool>{true});
+        QVERIFY(local.stopped && !local.stopped->load());
+        pending.stop(); // the model on the device sees it
+        QVERIFY(local.stopped->load());
+        QTRY_COMPARE(calls, 1);
+        QTest::qWait(20);
+        QCOMPARE(calls, 1); // (its own answer, late, is dropped)
+        client.send(device, ask(u"Hej"_s), [&](const ai::Reply &) { ++calls; });
+        QCOMPARE(local.partials, (QList<bool>{true, false}));
+        QTRY_COMPARE(calls, 2);
     }
 
     void clientOverATransport()

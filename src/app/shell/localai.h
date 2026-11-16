@@ -128,9 +128,11 @@ public:
     QString folder() const { return m_files.folder(); }
 
     /// Answers `request` with the model `settings.model` names ("": the default). `done` is called
-    /// once, from the event loop: the answer, or why there is none (not downloaded, no plugin …).
-    void send(const ai::Settings &settings, const ai::Request &request,
-              std::function<void(const ai::Reply &)> done) override;
+    /// once, from the event loop: the answer, or why there is none (not downloaded, no plugin,
+    /// "stopped" …); `partial` gets the answer while it is written (from the event loop, the
+    /// latest only when they come faster than it is read); `stopped` set stops it.
+    void send(const ai::Settings &settings, const ai::Request &request, std::function<void(const ai::Reply &)> done,
+              ai::PartialCallback partial = {}, std::shared_ptr<std::atomic<bool>> stopped = {}) override;
 
     /// The tokens a model may hold at once on a device with `memoryBytes` of memory, and the most
     /// a picture may take of them.
@@ -151,6 +153,8 @@ Q_SIGNALS:
 private:
     const ai::LocalModel *model(const QString &id) const;
     void finished(std::function<void(const ai::Reply &)> done, const ai::Reply &reply);
+    /// Stops every request not answered yet.
+    void stopAll();
     void updateWorking();
 
     QList<ai::LocalModel> m_models;
@@ -166,7 +170,8 @@ private:
     qint64 m_downloadBytes = 0;    ///< what it had to fetch
     int m_pending = 0;
     bool m_working = false;
-    std::atomic<bool> m_cancel{false};
+    /// The requests not answered yet (set: they stop — the app ends, their model is removed).
+    QList<std::weak_ptr<std::atomic<bool>>> m_stops;
     QThread m_thread;
     LocalAiWorker *m_worker = nullptr; ///< lives in m_thread
 };

@@ -153,6 +153,11 @@ public:
     {
         prompts << prompt;
         params << p;
+        // Token by token, as a runner hands on what is written.
+        if (p.written && answer.status == Ok) {
+            for (qsizetype i = 1; i <= answer.pieces.size(); ++i)
+                p.written(answer.pieces.mid(0, i), int(i), 50 * i); // (a token a piece, 20 a second)
+        }
         Result r = answer;
         r.promptTokens = int(joined(prompt.pieces).size() / 3);
         r.promptLimit = context - p.reserveTokens;
@@ -768,6 +773,46 @@ private Q_SLOTS:
         QVERIFY(joined(ai::local::prompt(kFormat, request).pieces).contains(marker));
     }
 
+    void whatIsWrittenSoFar()
+    {
+        ai::Request request = ask(u"Co mam o kotach?"_s);
+        request.tools << kSearch;
+        // Thinking: its thoughts only.
+        QList<Piece> written{text(u"Poszukam "_s)};
+        QCOMPARE(ai::local::partial(kFormat, written, request), (ai::Partial{QString(), u"Poszukam"_s}));
+        written << text(u"o kotach.\n"_s) << tag(u"</think>"_s) << text(u"\n\nSzukam"_s);
+        QCOMPARE(ai::local::partial(kFormat, written, request), (ai::Partial{u"Szukam"_s, u"Poszukam o kotach."_s}));
+        // A call being written is no part of its words.
+        written << text(u".\n"_s) << tag(u"<tool_call>"_s) << text(u"\n"_s) << tag(u"<function="_s)
+                << text(u"search_notes>\n"_s) << tag(u"<parameter="_s) << text(u"query>\nko"_s);
+        QCOMPARE(ai::local::partial(kFormat, written, request), (ai::Partial{u"Szukam."_s, u"Poszukam o kotach."_s}));
+        // Without thinking: words from the first token; another format: nothing.
+        QCOMPARE(ai::local::partial(kFormat, {text(u"OK"_s)}, ask(u"x"_s, false)), (ai::Partial{u"OK"_s, QString()}));
+        QCOMPARE(ai::local::partial(u"inny"_s, {text(u"OK"_s)}, request), ai::Partial());
+    }
+
+    void answeredWhileWritten()
+    {
+        // `partial` gets what the model has written each time it changes, then the reply comes.
+        const ai::LocalModel &model = *ai::localModel(QString());
+        FakeRunner runner;
+        runner.answer.pieces = {text(u"Myślę"_s), tag(u"</think>"_s), text(u"Jutro "_s), text(u"masz jogę."_s)};
+        QList<ai::Partial> seen;
+        const ai::Reply reply = ai::answerLocally(&runner, model, ask(u"Co jutro?"_s), nullptr, nullptr,
+                                                  [&](const ai::Partial &p) { seen << p; });
+        QVERIFY2(reply.ok, qPrintable(reply.error));
+        QCOMPARE(reply.text, u"Jutro masz jogę."_s);
+        // (Every token: its count and time change — the chat shows the speed — even when the
+        // words do not, as at the end of the thoughts.)
+        QCOMPARE(seen, (QList<ai::Partial>{{QString(), u"Myślę"_s, 1, 50},
+                                           {QString(), u"Myślę"_s, 2, 100},
+                                           {u"Jutro"_s, u"Myślę"_s, 3, 150},
+                                           {u"Jutro masz jogę."_s, u"Myślę"_s, 4, 200}}));
+        // Without one, the runner is asked for nothing of the kind.
+        ai::answerLocally(&runner, model, ask(u"Co jutro?"_s));
+        QVERIFY(!runner.params.last().written);
+    }
+
     void answeredThroughARunner()
     {
         const ai::LocalModel &model = *ai::localModel(QString());
@@ -915,7 +960,7 @@ private Q_SLOTS:
         runner.answer.status = ai::LocalRunner::TimedOut;
         reply = ai::answerLocally(&runner, sees, ask(u"?"_s));
         QVERIFY(!reply.ok);
-        QCOMPARE(reply.error, u"no answer in 5 minutes"_s);
+        QCOMPARE(reply.error, u"the model on this device got nowhere for 5 minutes"_s);
         runner.answer.status = ai::LocalRunner::Cancelled;
         std::atomic<bool> cancel{false};
         reply = ai::answerLocally(&runner, sees, ask(u"?"_s), &cancel);

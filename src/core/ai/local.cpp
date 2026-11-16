@@ -462,7 +462,15 @@ QString valueJson(const QString &text, const QString &type)
     return valid && !value.isString() ? trimmed : jsonText(text);
 }
 
-Reply lfm3Reply(const QList<Piece> &generated, const Request &request, bool complete)
+/// What the model wrote, read: its thoughts, its words, the tools it calls.
+struct Written {
+    bool thinking = false; ///< the request let it think
+    QString thoughts;
+    QString content;
+    QList<Call> calls;
+};
+
+Written lfm3Written(const QList<Piece> &generated, const Request &request, bool complete)
 {
     const bool thinking = thinks(request);
     bool inThoughts = thinking;
@@ -566,6 +574,16 @@ Reply lfm3Reply(const QList<Piece> &generated, const Request &request, bool comp
         content = thoughts;
         thoughts.clear();
     }
+    return Written{thinking, thoughts, content, calls};
+}
+
+Reply lfm3Reply(const QList<Piece> &generated, const Request &request, bool complete)
+{
+    const Written written = lfm3Written(generated, request, complete);
+    const bool thinking = written.thinking;
+    const QString &thoughts = written.thoughts;
+    const QString &content = written.content;
+    const QList<Call> &calls = written.calls;
 
     Reply reply;
     reply.ok = true;
@@ -667,6 +685,15 @@ Reply reply(const QString &format, const QList<Piece> &generated, const Request 
     Reply reply;
     reply.error = u"unknown model format \"%1\""_s.arg(format);
     return reply;
+}
+
+Partial partial(const QString &format, const QList<Piece> &generated, const Request &request)
+{
+    if (format != kLfm3)
+        return Partial();
+    const Written written = lfm3Written(generated, request, /*complete*/ false);
+    // (A text in front of a call that is being written may be its start: the blank before it.)
+    return Partial{written.content.trimmed(), written.thoughts.trimmed()};
 }
 
 int shorten(Request *request, int chars)

@@ -16,12 +16,39 @@
 #include <QUrl>
 
 #include <functional>
+#include <memory>
 #include <utility>
 
 class QNetworkAccessManager;
 class QNetworkReply;
 
 namespace brulion::sync {
+
+/// Stops a request on its way (HttpRequest::abort): abort() — from the thread that sent it — ends
+/// it as a broken connection would (`done` gets a networkError), or does nothing when it is over.
+/// The transport says how it stops one (onAbort); a transport that cannot lets it run to its end.
+class HttpAbort {
+public:
+    void abort()
+    {
+        m_aborted = true;
+        if (std::function<void()> hook = std::exchange(m_hook, {}))
+            hook();
+    }
+    bool aborted() const { return m_aborted; }
+    /// The transport's: how to stop its request — at once when abort() came first.
+    void onAbort(std::function<void()> hook)
+    {
+        if (m_aborted)
+            hook();
+        else
+            m_hook = std::move(hook);
+    }
+
+private:
+    bool m_aborted = false;
+    std::function<void()> m_hook;
+};
 
 struct HttpRequest {
     QByteArray method; ///< "GET", "PUT", "PROPFIND", "MKCOL", …
@@ -31,6 +58,9 @@ struct HttpRequest {
     /// Time limit in ms for the whole exchange; 0 = none. Transports that support it abort
     /// the request when it expires; WebDavClient enforces it independently as well.
     int timeoutMs = 0;
+    /// timeoutMs counts only the time without data: an answer read while it comes (onData) may
+    /// take longer as long as it keeps coming.
+    bool timeoutWhileIdle = false;
     /// Transfer progress (payload bytes sent, bytes received so far), called by transports that
     /// know it (NetworkHttpTransport: uploadProgress / downloadProgress) from the event loop.
     /// Counts as activity for stall detection; never needed for correctness.
@@ -40,6 +70,12 @@ struct HttpRequest {
     /// (HttpResponse::tooLarge) instead of keeping in memory whatever a server goes on sending.
     qint64 maxBodyBytes = 0;
     static constexpr qint64 DefaultMaxBodyBytes = 256LL * 1024 * 1024;
+    /// The answer's body as it arrives, piece by piece in order (an answer read while it comes: a
+    /// model's, as server-sent events), from the event loop — only a 2xx answer's. The response
+    /// still carries all of it. A transport that does not know it hands nothing here.
+    std::function<void(QByteArrayView piece)> onData;
+    /// Lets the sender stop the request on its way (HttpAbort::abort); none: it cannot be stopped.
+    std::shared_ptr<HttpAbort> abort;
 
     /// maxBodyBytes, or the default.
     qint64 bodyLimit() const { return maxBodyBytes > 0 ? maxBodyBytes : DefaultMaxBodyBytes; }
@@ -101,7 +137,8 @@ public:
 /// the transfer (inactivity) timeout; an answer announced or grown larger than
 /// request.bodyLimit() is aborted too (tooLarge = true). Redirects are followed only to the same
 /// server (host and port; http's default port may become https's) and never from https to http,
-/// so credentials are not sent to other servers. No caching.
+/// so credentials are not sent to other servers. No caching. request.onData gets the body as it
+/// arrives; request.abort stops the reply (networkError "Stopped").
 class NetworkHttpTransport : public QObject, public HttpTransport {
     Q_OBJECT
 public:
@@ -119,7 +156,8 @@ public:
     void setMaxRedirects(int count);
 
 private:
-    void finish(QNetworkReply *reply, bool timedOut, const HttpCallback &done);
+    /// `read`: the body's start, read while it came (HttpRequest::onData).
+    void finish(QNetworkReply *reply, bool timedOut, const QByteArray &read, const HttpCallback &done);
 
     QPointer<QNetworkAccessManager> m_manager;
     int m_maxRedirects = 5;

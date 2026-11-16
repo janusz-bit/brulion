@@ -191,6 +191,21 @@ quint64 readNumber(const uchar *at, int bytes)
     return value;
 }
 
+/// How many bytes of `utf8` are whole letters: without a last one whose bytes are still coming.
+qsizetype wholeLetters(const QByteArray &utf8)
+{
+    qsizetype end = utf8.size();
+    // Back over the continuation bytes to the letter's first byte, then: are all its bytes here?
+    qsizetype first = end;
+    while (first > 0 && end - first < 4 && (uchar(utf8.at(first - 1)) & 0xC0) == 0x80)
+        --first;
+    if (first == 0)
+        return end; // (no first byte: nothing to wait for)
+    const uchar lead = uchar(utf8.at(first - 1));
+    const qsizetype length = lead < 0x80 ? 1 : (lead & 0xE0) == 0xC0 ? 2 : (lead & 0xF0) == 0xE0 ? 3 : (lead & 0xF8) == 0xF0 ? 4 : 1;
+    return end - (first - 1) >= length ? end : first - 1;
+}
+
 class LlamaRunner final : public LocalRunner {
 public:
     ~LlamaRunner() override = default;
@@ -282,7 +297,8 @@ private:
     QHash<QByteArray, int32_t> m_pictureCells; ///< a picture (the hash of its file) → its cells' value
     // The request being answered (the abort callback of llama.cpp reads these).
     const std::atomic<bool> *m_cancel = nullptr;
-    QElapsedTimer m_timer;
+    QElapsedTimer m_timer;    ///< since the request came
+    QElapsedTimer m_progress; ///< since the last step that got anywhere (a batch read, a token written)
     int m_timeoutMs = 0;
 };
 
@@ -404,7 +420,7 @@ bool LlamaRunner::aborted(void *self)
     const auto *r = static_cast<const LlamaRunner *>(self);
     if (r->m_cancel && r->m_cancel->load(std::memory_order_relaxed))
         return true;
-    return r->m_timeoutMs > 0 && r->m_timer.elapsed() > r->m_timeoutMs;
+    return r->m_timeoutMs > 0 && r->m_progress.elapsed() > r->m_timeoutMs;
 }
 
 /// Plain text as tokens: nothing in it is a control token. llama.cpp's tokenizer still reads some
@@ -717,6 +733,7 @@ LlamaRunner::Read LlamaRunner::readTokens(Lane &lane, const llama_token *tokens,
         }
         lane.cells.insert(lane.cells.end(), tokens + done, tokens + done + n);
         done += n;
+        m_progress.start();
     }
     return Read::Ok;
 }
@@ -912,6 +929,7 @@ LocalRunner::Result LlamaRunner::generate(const local::Prompt &prompt, const Par
 {
     Result r;
     m_timer.start();
+    m_progress.start();
     m_cancel = params.cancel;
     m_timeoutMs = params.timeoutMs;
     // (What llama.cpp's abort callback reads: only while this request is answered.)
@@ -929,7 +947,7 @@ LocalRunner::Result LlamaRunner::generate(const local::Prompt &prompt, const Par
             r.error = u"stopped"_s;
             return true;
         }
-        if (params.timeoutMs > 0 && m_timer.elapsed() > params.timeoutMs) {
+        if (params.timeoutMs > 0 && m_progress.elapsed() > params.timeoutMs) {
             r.status = TimedOut;
             r.error = u"no answer in time"_s;
             return true;
@@ -1078,6 +1096,15 @@ LocalRunner::Result LlamaRunner::generate(const local::Prompt &prompt, const Par
             words += bytes;
         }
         ++r.outputTokens;
+        if (params.written) {
+            // What it has written so far, shown before the token is read (that step takes the
+            // time of a token): its last letters once they are whole.
+            QList<local::Piece> written = r.pieces;
+            const qsizetype whole = wholeLetters(words);
+            if (whole > 0)
+                written.append(local::Piece{QString::fromUtf8(words.left(whole)), false, {}});
+            params.written(written, r.outputTokens, m_timer.elapsed() - r.promptMs);
+        }
         Read read = readTokens(lane, &token, 1, true);
         if (read == Read::NoRoom && others > 0) {
             // No free cell beside the other lane's: it goes, and the token is read again.

@@ -894,13 +894,26 @@ journal; the assistant's agent answers (docs/EXTENSIONS.md "AI").
   Above them a row with the page it is about (a chip that opens it), "Open the conversation as a
   page" (`chatOpenPage`) and, without the list, "New conversation". New messages scroll the list to
   its end (`WorkspaceChats.written`, the model's count).
-* **While the AI answers** (`Workspace.chats.running` is this conversation): a card under the last
-  message with a spinner and what the AI does (`chatStatus`: `Workspace.chats.status` from
-  `b.status` — "Czytam „Dom”…" —, else "The AI is answering…"); the send button becomes **Stop**
-  (`chatStop`: `Workspace.chats.stop()`, nothing is written for that turn and the question stays
-  for Try again). One turn at a time in the whole app: in another conversation the field says the
-  AI is answering elsewhere and sending waits. The turn goes on when the view closes: its answer is
-  written into the page anyway (`WorkspaceChats`).
+* **While the AI answers** (`Workspace.chats.running` is this conversation): the answer as the
+  model writes it, as PocketPal shows it — a card like the AI's messages (`chatLive`): first the
+  end of what the model thinks, a few lines in small grey italics (`chatThoughts`,
+  `Workspace.chats.thoughts`: plain text, the model's own words; a model that shows its thinking —
+  the one on the device, a server's that sends `reasoning_content`), then its words rendered as
+  its message will be (`chatPartial`: `ChatMessageModel.render(Workspace.chats.partial)`), at most
+  ten times a second, the list following them while it is at its end (scrolled up, it stays).
+  Each request of the assistant's loop starts the card anew: after a tool call the next round's
+  thoughts. The written answer's message takes the card's place in one frame
+  (`WorkspaceChats.written` comes before the turn ends; the view refreshes its model at once).
+  Under it, while no words come or a tool runs, a spinner and what the AI does (`chatWorking`,
+  `chatStatus`: `Workspace.chats.status` from `b.status` — "Czytam „Dom”…" —, else "The AI is
+  answering…"); while the words come there is no spinner: its frames would take a fast core from a
+  model on the device (docs/PERFORMANCE.md "The model on the device"). The send button becomes
+  **Stop** (`chatStop`: `Workspace.chats.stop()`: nothing is written for that turn, the question
+  stays for Try again, and the request itself ends — the model on the device stops writing, a
+  provider's connection is closed —, so it holds up no other question). One turn at a time in the
+  whole app: in another conversation the field says the AI is answering elsewhere and sending
+  waits. The turn goes on when the view closes: its answer is written into the page anyway
+  (`WorkspaceChats`).
 * **A change to allow**: the question of this conversation's turn (`Workspace.extensions
   .questionChat`, kind "choose") as a card (`chatQuestion`, the accent's border): the first line in
   bold, the lines after it as plain monospace text on a well (`chatQuestionDetails`: they quote
@@ -926,7 +939,12 @@ page)` writes the message (a new conversation: its page, then the journal's line
 turn (`WorkspaceExtensions::runChat` → the assistant's `chat` with `chat::history()` of the page and
 its page); `chatAnswered` appends the AI's message where the page is now (a rename followed; a page
 deleted meanwhile ends the turn), `chatFailed` keeps the reason; `retry(path)`, `stop()`,
-`dismissFailure()`, `isConversation(path)`, `showing()` / `isShown()`.
+`dismissFailure()`, `isConversation(path)`, `showing()` / `isShown()`; `partial` and `thoughts`
+(`partialChanged`, coalesced to ten a second; `thoughtsTail()`: the last 240 characters from a word
+on) from `WorkspaceExtensions::chatPartial` — every request of a chat's turn goes out with an
+`ai::PartialCallback` (`ai::Client::send`: a provider on the network streams its answer, the model
+on the device hands on its tokens) and is stopped (`ai::Pending::stop`) with the turn, or when the
+extensions load again.
 
 ## Statistics and focus mode
 

@@ -68,11 +68,15 @@ const QList<LocalModel> &localModels();
 const LocalModel *localModel(const QString &id);
 
 /// What answers a request of the provider "local": the app's model runner (src/app/shell/localai.h)
-/// in builds that have one. `done` is called once, from the event loop.
+/// in builds that have one. `done` is called once, from the event loop; `partial` (when given)
+/// gets the answer while the model writes it, from the event loop; `stopped` set (Pending::stop,
+/// or the backend's own: a model removed) ends the request — a model writing it stops, one still
+/// waiting is never asked.
 class LocalBackend {
 public:
     virtual ~LocalBackend() = default;
-    virtual void send(const Settings &settings, const Request &request, std::function<void(const Reply &)> done) = 0;
+    virtual void send(const Settings &settings, const Request &request, std::function<void(const Reply &)> done,
+                      PartialCallback partial, std::shared_ptr<std::atomic<bool>> stopped) = 0;
 };
 
 namespace local {
@@ -119,6 +123,10 @@ bool hasImages(const Request &request);
 /// OpenAI-style assistant message — content, reasoning_content, tool_calls with the arguments in
 /// the order and the words the model wrote — which prompt() writes back exactly.
 Reply reply(const QString &format, const QList<Piece> &generated, const Request &request, bool complete);
+
+/// What the model has written so far of its answer (after prompt(…) of `request`): its words
+/// and its thoughts as reply() would read them, without a tool call it is writing.
+Partial partial(const QString &format, const QList<Piece> &generated, const Request &request);
 
 /// Takes about `chars` characters out of `request` so that it fits a small model's context: from
 /// its longest texts first — a tool's result loses its end, a message its middle (its start and
