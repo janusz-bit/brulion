@@ -66,9 +66,12 @@ endif()
 if(_pdf_backend STREQUAL "qtpdf")
     find_package(Qt6 REQUIRED COMPONENTS Pdf)
     # Seen by every target that links brulion_platform (Qt's finalizer walks their libraries in
-    # their own directories; found here, the target is this directory's only).
+    # their own directories; found here, the target is this directory's only). Qt 6.12 finds it
+    # already with Gui (its QPdfPlugin's dependencies) in the top directory, where every
+    # directory sees it — and where only that directory may make it global.
     get_target_property(_pdf_global Qt6::Pdf IMPORTED_GLOBAL)
-    if(NOT _pdf_global)
+    get_directory_property(_pdf_here_targets IMPORTED_TARGETS)
+    if(NOT _pdf_global AND "Qt6::Pdf" IN_LIST _pdf_here_targets)
         set_target_properties(Qt6::Pdf PROPERTIES IMPORTED_GLOBAL TRUE)
     endif()
     target_sources(brulion_platform PRIVATE pdfpages_qtpdf.cpp)
