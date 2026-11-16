@@ -447,7 +447,7 @@ FocusScope {
                             readonly property bool writing: root.chats.partial !== ""
                             readonly property real maxWidth: Math.min(footerColumn.width * 0.92, 720)
                             visible: root.liveShown
-                            Layout.preferredWidth: Math.min(live.maxWidth, Math.max(live.writing ? liveBody.implicitWidth : liveThoughts.implicitWidth, 24) + 2 * Theme.space3)
+                            Layout.preferredWidth: Math.min(live.maxWidth, Math.max(live.writing ? Math.max(liveSettled.implicitWidth, liveTail.implicitWidth) : liveThoughts.implicitWidth, 24) + 2 * Theme.space3)
                             implicitHeight: (live.writing ? liveBody.height : liveThoughts.height) + 2 * Theme.space2 + 2
                             radius: Theme.radiusXl
                             color: Theme.bgElevated
@@ -455,17 +455,38 @@ FocusScope {
                             Accessible.role: Accessible.StaticText
                             Accessible.name: live.writing ? qsTr("AI") + ": " + root.chats.partial : qsTr("The AI thinks: %1").arg(root.chats.thoughts)
 
-                            BRichText {
+                            // Its finished blocks, rendered when one is finished; the block being
+                            // written, rendered at every change — alone (the docs' "Calculating
+                            // text layouts can be a slow operation"), and kept out of the others'
+                            // batches (Item.DynamicMutabilityGroup, Qt 6.12).
+                            Column {
                                 id: liveBody
                                 objectName: "chatPartial"
                                 x: Theme.space3
                                 y: Theme.space2 + 1
                                 width: live.width - 2 * Theme.space3
                                 visible: live.writing
-                                html: live.writing ? messages.render(root.chats.partial) : ""
-                                font.family: Theme.fontEditor
-                                font.pixelSize: Theme.textBase
-                                color: Theme.fg
+                                spacing: liveSettled.html !== "" ? 10 : 0 // (a paragraph's gap, as renderMessage's)
+                                BRichText {
+                                    id: liveSettled
+                                    objectName: "chatPartialSettled"
+                                    width: parent.width
+                                    visible: liveSettled.html !== ""
+                                    html: root.chats.partialSettled !== "" ? messages.render(root.chats.partialSettled) : ""
+                                    font.family: Theme.fontEditor
+                                    font.pixelSize: Theme.textBase
+                                    color: Theme.fg
+                                }
+                                BRichText {
+                                    id: liveTail
+                                    objectName: "chatPartialTail"
+                                    width: parent.width
+                                    html: live.writing ? messages.render(root.chats.partialTail) : ""
+                                    mutability: Item.DynamicMutabilityGroup
+                                    font.family: Theme.fontEditor
+                                    font.pixelSize: Theme.textBase
+                                    color: Theme.fg
+                                }
                             }
                             BText {
                                 id: liveThoughts
@@ -476,6 +497,7 @@ FocusScope {
                                 visible: !live.writing
                                 // Plain text: the model's own words, never markup.
                                 text: root.chats.thoughts
+                                mutabilityGroup: Item.DynamicMutabilityGroup
                                 textFormat: Text.PlainText
                                 variant: "muted"
                                 font.italic: true

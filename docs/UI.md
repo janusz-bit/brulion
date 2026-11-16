@@ -860,7 +860,10 @@ is on, the top bar has its ✨ button (`ShellTopBar`, `topBarAi`, on phones too)
 today's note when it exists), "New conversation beside the page" (`aiAskBeside`: in the side panel;
 wide windows with a page), "Conversations" (`aiChats`), "Summarise this page" (`aiSummarize`: a new
 conversation that asks for it at once; disabled without a page) and "AI settings…"; a spinner in
-its place while a model answers (`aiPending`).
+its place while a model answers (`aiPending`) — turning in steps ten times a second
+(`BSpinner.calm`), and none while a chat view shows the turn (`Workspace.chats.runningShown`: the
+chat shows what the AI does; every frame of a spinner is the whole window drawn again, processor
+time a model on the device loses).
 
 The palette also has "New extension", "Reload extensions" (a fresh VM, every extension loaded
 again) and "Extensions" (Settings → Extensions). Extension commands carry the extension's title as
@@ -899,8 +902,15 @@ journal; the assistant's agent answers (docs/EXTENSIONS.md "AI").
   end of what the model thinks, a few lines in small grey italics (`chatThoughts`,
   `Workspace.chats.thoughts`: plain text, the model's own words; a model that shows its thinking —
   the one on the device, a server's that sends `reasoning_content`), then its words rendered as
-  its message will be (`chatPartial`: `ChatMessageModel.render(Workspace.chats.partial)`), at most
-  ten times a second, the list following them while it is at its end (scrolled up, it stays).
+  its message will be (`chatPartial`: `ChatMessageModel.render()` of `Workspace.chats.partial`), at
+  most ten times a second, the list following them while it is at its end (scrolled up, it stays).
+  The words are two texts: the answer's finished blocks (`chatPartialSettled`, `partialSettled`:
+  rendered again only when a block is finished — Qt's "Calculating text layouts can be a slow
+  operation") and the block being written (`chatPartialTail`, `partialTail`, `WorkspaceChats::
+  splitWritten()`: cut before the last block at the margin after a blank line, never inside a code
+  block), which with the thoughts has `mutabilityGroup: Item.DynamicMutabilityGroup` (Qt 6.12;
+  `BRichText.mutability`): the renderer keeps it out of the other texts' batches, which are not
+  uploaded again with it. Under them, with the model on the device, its speed (`chatSpeed`).
   Each request of the assistant's loop starts the card anew: after a tool call the next round's
   thoughts. The written answer's message takes the card's place in one frame
   (`WorkspaceChats.written` comes before the turn ends; the view refreshes its model at once).

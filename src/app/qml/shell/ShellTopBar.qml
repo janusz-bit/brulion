@@ -94,6 +94,9 @@ Rectangle {
     ShellRouteTitles { id: titles }
     /// A model is answering (b.ai: the assistant or another extension).
     readonly property bool aiBusy: Workspace.extensions !== null && Workspace.extensions.aiPending > 0
+    /// The chat on screen shows what the AI does (its words as they come): the ✨ does not spin —
+    /// every frame of it would be the whole window drawn again, the model's processor time.
+    readonly property bool aiSpins: bar.aiBusy && !Workspace.chats.runningShown
     /// The page the AI menu is about (set as it opens): the one on screen; in the journal's stream
     /// today's note when it exists; "" for none.
     property string aiPage: ""
@@ -301,12 +304,12 @@ Rectangle {
             id: aiButton
             objectName: "topBarAi"
             visible: AppSettings.assistantEnabled
-            iconName: bar.aiBusy ? "" : "sparkles"
+            iconName: bar.aiSpins ? "" : "sparkles"
             label: bar.aiBusy ? qsTr("The AI is answering…") : qsTr("AI assistant")
             onClicked: bar.openAiMenu()
             BSpinner {
                 anchors.centerIn: parent
-                visible: bar.aiBusy
+                visible: bar.aiSpins
                 size: Theme.iconSize
                 calm: true // (an answer takes minutes on a phone, whose model needs the cores)
             }

@@ -1463,7 +1463,16 @@ So the difference was the chat's, not the model's:
   took writing from 40 to 30 tokens a second asleep between steps and from 48 to 38 spinning;
   one busy 6 % (1 ms of 16) from 40 to 37 and 48 to 45. The two spinners now turn in steps ten
   times a second (`BSpinner.calm`), the chat's is hidden while words come, and the words are
-  shown ten times a second at most.
+  shown ten times a second at most. Then, with Qt 6.12 (docs/ARCHITECTURE.md), only the content's
+  own frames are left: the ✨ stands still while a chat view shows the turn
+  (`WorkspaceChats.runningShown`), the answer is two texts — its finished blocks rendered once,
+  the block being written alone at every change (Qt's documentation: "Calculating text layouts
+  can be a slow operation") — and that block and the thoughts have `mutabilityGroup:
+  Item.DynamicMutabilityGroup`, so the renderer does not upload the rest of the window's text
+  again with them. Frames drawn while a streamed answer comes (`qt.scenegraph.time.renderloop`
+  counted, the app offscreen against a server that streams 15 pieces a second): 0.23.0 60 a
+  second (the spinners at the screen's rate), the spinners in steps 19 while the model thinks and
+  16 while it writes, with these changes 9 and 11 — the words' own updates.
 * **A hot phone.** Charging over USB after twenty minutes of benchmarks, the Pixel capped its X4
   core at 0.7–1.4 GHz (of 3.1) and the A720s at 1.8 GHz (of 2.6), thermal status 1, the skin at
   39 °C: the model wrote 1.2–7 tokens a second in the app — a long turn's context counts too:

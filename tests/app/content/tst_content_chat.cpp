@@ -307,7 +307,18 @@ private Q_SLOTS:
         QTRY_COMPARE(chats->partial(), u"Jutro masz"_s);
         QCOMPARE(chats->thoughts(), u"Użytkownik pyta o jutro."_s);
         QCOMPARE(chats->speed(), QLocale().toString(20.0, 'f', 1) + u" tok/s"_s); // 40 tokens in the last 2 s
+        QCOMPARE(chats->partialSettled(), QString()); // (one block, being written)
+        QCOMPARE(chats->partialTail(), u"Jutro masz"_s);
         QCOMPARE(chats->running(), path);
+        // Shown in a view: the top bar's ✨ need not spin.
+        QSignalSpy shownSpy(chats, &shell::WorkspaceChats::runningShownChanged);
+        QVERIFY(!chats->runningShown());
+        chats->showing(path, true);
+        QVERIFY(chats->runningShown());
+        chats->showing(path, false);
+        QVERIFY(!chats->runningShown());
+        QCOMPARE(shownSpy.size(), 2);
+        chats->showing(path, true); // (and the end of the turn ends it)
         // The answer's message is written while the answer being written is still there; then
         // the turn ends and it goes: a view never shows neither.
         bool bothThere = false;
@@ -321,6 +332,8 @@ private Q_SLOTS:
         QCOMPARE(chats->partial(), QString());
         QCOMPARE(chats->thoughts(), QString());
         QCOMPARE(chats->speed(), QString());
+        QVERIFY(!chats->runningShown());
+        chats->showing(path, false);
         QVERIFY(ws->read(path).endsWith(u"- 🤖 Jutro masz jogę.\n"_s));
 
         // Each request of the turn starts anew: what the first wrote goes when a tool has run.
@@ -373,6 +386,20 @@ private Q_SLOTS:
         // One long word: its end.
         const QString one = WorkspaceChats::thoughtsTail(QString(300, u'ż'), 100);
         QCOMPARE(one, u"…"_s + QString(100, u'ż'));
+
+        // The answer being written, cut where its block being written starts: before the last
+        // block at the margin after a blank line, never inside a code block.
+        const auto split = [](const QString &markdown) { return WorkspaceChats::splitWritten(markdown); };
+        using Parts = std::pair<QString, QString>;
+        QCOMPARE(split(u"Akapit."_s), Parts(QString(), u"Akapit."_s));
+        QCOMPARE(split(u"Pierwszy.\n\nDrugi"_s), Parts(u"Pierwszy."_s, u"Drugi"_s));
+        QCOMPARE(split(u"Lista:\n\n- a\n- b\n\nKoniec"_s), Parts(u"Lista:\n\n- a\n- b"_s, u"Koniec"_s));
+        QCOMPARE(split(u"Kod:\n\n```\nx\n\ny\n"_s), Parts(u"Kod:"_s, u"```\nx\n\ny\n"_s));
+        QCOMPARE(split(u"```\na\n\nb\n```\n\nPo kodzie"_s), Parts(u"```\na\n\nb\n```"_s, u"Po kodzie"_s));
+        QCOMPARE(split(u"~~~~\na\n```\n\nwciąż kod"_s), Parts(QString(), u"~~~~\na\n```\n\nwciąż kod"_s));
+        QCOMPARE(split(u"- a\n\n  dalej punktu a"_s), Parts(QString(), u"- a\n\n  dalej punktu a"_s));
+        QCOMPARE(split(u"Raz.\n\n"_s), Parts(QString(), u"Raz.\n\n"_s));
+        QCOMPARE(split(QString()), Parts(QString(), QString()));
 
         // The speed now: over the last two seconds, not since the start — a phone that slowed
         // down (hot) says so at once.

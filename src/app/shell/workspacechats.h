@@ -12,6 +12,7 @@
 //   Workspace.chats.send(path, "A pojutrze?")                         // the next message
 //   Workspace.chats.running / status / stop()                         // the turn on its way
 //   Workspace.chats.partial / thoughts                                // its answer as it is written
+//   Workspace.chats.partialSettled / partialTail                      // …its finished blocks, the one being written
 //   Workspace.chats.failedPath / failure / retry(path)                // a turn that failed
 //
 // Single-threaded (the GUI thread).
@@ -37,6 +38,13 @@ class WorkspaceChats : public QObject {
     /// The answer of the running turn as the model writes it ("" none yet: it thinks, or calls a
     /// tool); each of the turn's requests to the model starts anew. Markdown, the model's words.
     Q_PROPERTY(QString partial READ partial NOTIFY partialChanged FINAL)
+    /// `partial` cut where its block being written starts (splitWritten()): its finished blocks,
+    /// which change only when a block is finished — a view renders them once —, and that block.
+    Q_PROPERTY(QString partialSettled READ partialSettled NOTIFY settledChanged FINAL)
+    Q_PROPERTY(QString partialTail READ partialTail NOTIFY partialChanged FINAL)
+    /// A chat view shows the conversation whose turn runs (isShown(running)): what the AI does is
+    /// on screen there, so the top bar's ✨ need not spin (no frame drawn for it).
+    Q_PROPERTY(bool runningShown READ runningShown NOTIFY runningShownChanged FINAL)
     /// The end of what the model thinks meanwhile (a model that shows it: the one on the device),
     /// a few lines: "" none.
     Q_PROPERTY(QString thoughts READ thoughts NOTIFY partialChanged FINAL)
@@ -55,6 +63,14 @@ public:
     QString failedPath() const { return m_failedPath; }
     QString failure() const { return m_failure; }
     QString partial() const { return m_partial; }
+    QString partialSettled() const { return m_settled; }
+    QString partialTail() const { return m_tail; }
+    bool runningShown() const { return m_runningShown; }
+
+    /// `markdown` being written as {its finished blocks, the block being written}: cut before the
+    /// last line that starts a block at the margin after a blank line, outside a code block
+    /// ("" and all of it when there is none). Each part renders as it would within the whole.
+    static std::pair<QString, QString> splitWritten(const QString &markdown);
     QString thoughts() const { return m_thoughts; }
     QString speed() const { return m_speed; }
 
@@ -99,6 +115,9 @@ Q_SIGNALS:
     void shownChanged();
     /// partial or thoughts changed (at most ten times a second).
     void partialChanged();
+    /// partialSettled changed: a block of the answer was finished.
+    void settledChanged();
+    void runningShownChanged();
 
 private:
     bool runTurn(const QString &path);
@@ -107,6 +126,7 @@ private:
     void setFailure(const QString &path, const QString &failure);
     void endTurn();
     void setPartial(const QString &text, const QString &thoughts, const QString &speed);
+    void updateRunningShown();
 
     Workspace *m_workspace = nullptr;
     WorkspaceExtensions *m_extensions = nullptr;
@@ -117,6 +137,9 @@ private:
     QString m_failure;
     QHash<QString, int> m_shown; // by path, lower case: the chat views showing it
     QString m_partial;
+    QString m_settled;
+    QString m_tail;
+    bool m_runningShown = false;
     QString m_thoughts;
     QString m_speed;
     QString m_nextPartial; // what comes, said by m_partialTimer

@@ -39,6 +39,10 @@ Item {
     property color color: Theme.fg
     property color linkColor: Theme.link
     property int horizontalAlignment: Text.AlignLeft
+    /// The renderer's hint how often the text changes (Item.mutabilityGroup, on the items that
+    /// draw it): Item.DynamicMutabilityGroup for one that changes many times a second — an answer
+    /// being written —, so that the text around it is not uploaded again with it.
+    property int mutability: Item.AutoMutabilityGroup
     /// What a screen reader says for the text ("": the text is ignored by it, the caller's item
     /// speaks for it).
     property string accessibleName
@@ -72,6 +76,7 @@ Item {
 
     Text {
         id: plain
+        mutabilityGroup: root.mutability
         width: root.width
         // Its implicit height, but never 0: a rich text's height growing from 0 makes QQuickText lay
         // it out a second time (QQuickText::geometryChange, Qt 6.11); from 1 px its first layout
@@ -114,6 +119,7 @@ Item {
     component RichEdit: TextEdit {
         id: edit
         readonly property bool cut: tints.truncated
+        mutabilityGroup: root.mutability
         width: root.width
         // No input of its own (the caller's handlers decide what a press does).
         enabled: false

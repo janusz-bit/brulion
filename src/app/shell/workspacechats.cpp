@@ -45,6 +45,8 @@ WorkspaceChats::WorkspaceChats(Workspace *workspace, WorkspaceExtensions *extens
         if (!m_running.isEmpty() && m_running.compare(path, Qt::CaseInsensitive) == 0)
             stop();
     });
+    connect(this, &WorkspaceChats::stateChanged, this, &WorkspaceChats::updateRunningShown);
+    connect(this, &WorkspaceChats::shownChanged, this, &WorkspaceChats::updateRunningShown);
     // The answer as it is written: shown ten times a second at most (a provider streams a word at
     // a time, every change renders the message anew, and a model on the device shares the
     // processor with that).
@@ -108,14 +110,71 @@ QString WorkspaceChats::thoughtsTail(const QString &thoughts, int chars)
     return u"…"_s + text.mid(from).trimmed();
 }
 
+std::pair<QString, QString> WorkspaceChats::splitWritten(const QString &markdown)
+{
+    qsizetype cut = -1;
+    bool blank = false; // the line before was blank
+    QString fence;      // the open code block's fence ("```", "~~~~"), "" outside one
+    for (qsizetype at = 0; at < markdown.size();) {
+        qsizetype end = markdown.indexOf(u'\n', at);
+        if (end < 0)
+            end = markdown.size();
+        const QStringView line = QStringView(markdown).sliced(at, end - at);
+        const QStringView trimmed = line.trimmed();
+        // A fence: up to three spaces, then ``` or ~~~ (one closes only its own kind, as long).
+        qsizetype indent = 0;
+        while (indent < line.size() && indent < 4 && line.at(indent) == u' ')
+            ++indent;
+        const QStringView rest = line.sliced(indent);
+        qsizetype run = 0;
+        while (run < rest.size() && (rest.at(run) == u'`' || rest.at(run) == u'~') && rest.at(run) == rest.at(0))
+            ++run;
+        const bool isFence = indent < 4 && run >= 3;
+        if (fence.isEmpty()) {
+            if (blank && at > 0 && !line.isEmpty() && !line.at(0).isSpace())
+                cut = at; // a block at the margin after a blank line
+            if (isFence)
+                fence = rest.left(run).toString();
+        } else if (isFence && rest.at(0) == fence.at(0) && run >= fence.size() && rest.sliced(run).trimmed().isEmpty()) {
+            fence.clear();
+        }
+        blank = trimmed.isEmpty();
+        at = end + 1;
+    }
+    if (cut <= 0)
+        return {QString(), markdown};
+    QString settled = markdown.left(cut);
+    while (!settled.isEmpty() && settled.back().isSpace())
+        settled.chop(1);
+    return {settled, markdown.mid(cut)};
+}
+
 void WorkspaceChats::setPartial(const QString &text, const QString &thoughts, const QString &speed)
 {
     if (text == m_partial && thoughts == m_thoughts && speed == m_speed)
         return;
+    const bool newText = text != m_partial;
     m_partial = text;
     m_thoughts = thoughts;
     m_speed = speed;
+    if (newText) {
+        auto [settled, tail] = splitWritten(text);
+        m_tail = tail;
+        if (settled != m_settled) {
+            m_settled = settled;
+            Q_EMIT settledChanged();
+        }
+    }
     Q_EMIT partialChanged();
+}
+
+void WorkspaceChats::updateRunningShown()
+{
+    const bool shown = isShown(m_running);
+    if (shown == m_runningShown)
+        return;
+    m_runningShown = shown;
+    Q_EMIT runningShownChanged();
 }
 
 QString WorkspaceChats::folder() const { return chat::folder(); }

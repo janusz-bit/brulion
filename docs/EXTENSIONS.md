@@ -693,7 +693,7 @@ after the first answer, a note when the page it is about went cut); sixteen turn
 answer end with a word about it, in the notebook's language. The top bar's ✨ button opens the chat
 while the assistant is on (docs/UI.md "Top bar": a new conversation about the page on screen — in
 the journal's stream today's note —, one beside it in the side panel, the conversations, a summary
-of the page as a new conversation; a spinner while `aiPending`). Like the gym, its source can run
+of the page as a new conversation; a spinner while `aiPending`, none while a chat view shows the turn — `WorkspaceChats.runningShown`). Like the gym, its source can run
 from a page of the notebook and be changed there: a page tagged as an extension, with
 `permissions: [write, ai]`, that holds the source and is titled "Asystent AI" / "AI assistant" (or
 has `overrides: asystent`) — copied by hand so far: Settings has "Edit the code" for the gym only.
