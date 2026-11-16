@@ -94,8 +94,8 @@ jobs:
     if: github.event_name != 'push' || github.ref_type == 'tag' || contains(join(github.event.commits.*.message, ' '), '[ci]')
     runs-on: ubuntu-24.04
     # Warm cache: ~35 min (the build 13, ctest 19); a cold one (new compiler, Qt or flags) builds
-    # for ~40 min before ctest (Qt 6.12, 2026-11-16).
-    timeout-minutes: 90
+    # for 67 min before ctest (Qt 6.12, 2026-11-16).
+    timeout-minutes: 100
     env:
       CCACHE_DIR: ${{ github.workspace }}/.ccache
       CCACHE_BASEDIR: ${{ github.workspace }}

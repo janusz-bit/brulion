@@ -905,18 +905,20 @@ ApplicationWindow {
         if (window.at()) check(!page.sourceMode && page.blocks.count > 10, "back to blocks")
         // Zooming into a block and out again: the breadcrumb's room above the blocks goes
         // with it (an inactive Loader kept its height: a blank band above the first block).
+        // The header's height follows once the view laid it out again: waited for (a slow
+        // sanitizer run had the old height one tick later).
         if (window.at()) {
             window.headerBefore = window.listHeader() ? window.listHeader().height : -1
             page.zoomInto(rowOf("Przygotowanie"))
         }
-        if (window.at()) check(page.zoomBlock >= 0 && window.listHeader()
+        if (window.at()) window.waitStep(page.zoomBlock >= 0 && window.listHeader()
                     && window.listHeader().height > window.headerBefore,
                     "zooming in shows the breadcrumb above the blocks: " + window.headerBefore + " → "
                     + (window.listHeader() ? window.listHeader().height : -1))
         if (window.at()) page.zoomOut()
     }
     function selfTestOutlinePart4(): void {
-        if (window.at()) check(page.zoomBlock < 0 && window.listHeader()
+        if (window.at()) window.waitStep(page.zoomBlock < 0 && window.listHeader()
                     && window.listHeader().height === window.headerBefore,
                     "zooming out leaves no room for the breadcrumb: "
                     + (window.listHeader() ? window.listHeader().height : -1) + " (was " + window.headerBefore + ")")
