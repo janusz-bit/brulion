@@ -348,8 +348,10 @@ info "Bundling Qt and packing $appimage"
   # linuxdeploy-plugin-qt copies the folder of every QML import whole, so `import QtQuick` brings
   # all of qml/QtQuick: every Qt Quick Controls style and QtQuick.Dialogs, which Brulion never
   # loads (QtQuick.Controls.Basic, FilePicker; docs/PERFORMANCE.md L9). Out before packing; the
-  # second run only packs (and deploys what the remaining files need).
-  for style in Material Universal Imagine Fusion FluentWinUI3; do
+  # second run only packs (and deploys what the remaining files need). Native too: the style that
+  # stands for the platform's own, whose library links Fusion's in Qt 6.12 (x86_64), so with it
+  # left the second run brought Fusion back.
+  for style in Material Universal Imagine Fusion FluentWinUI3 Native; do
     rm -rf -- "$APPDIR/usr/qml/QtQuick/Controls/$style"
     rm -f -- "$APPDIR/usr/lib/libQt6QuickControls2$style"*.so*
   done
@@ -403,12 +405,12 @@ done
 # Only the Basic style, no QtQuick.Dialogs (pruned above; docs/PERFORMANCE.md L9), no QtQuick.Pdf;
 # libQt6Pdf itself is there (the PDF pages of drawings' backdrops).
 unused_qml=""
-for path in qml/QtQuick/Dialogs qml/QtQuick/Pdf qml/QtQuick/Controls/{Material,Universal,Imagine,Fusion,FluentWinUI3} \
+for path in qml/QtQuick/Dialogs qml/QtQuick/Pdf qml/QtQuick/Controls/{Material,Universal,Imagine,Fusion,FluentWinUI3,Native} \
   plugins/imageformats/libqpdf.so; do
   [[ ! -e $check_dir/squashfs-root/usr/$path ]] || unused_qml+=" $path"
 done
 for lib in "$check_dir"/squashfs-root/usr/lib/libQt6QuickDialogs2* "$check_dir"/squashfs-root/usr/lib/libQt6PdfQuick* \
-  "$check_dir"/squashfs-root/usr/lib/libQt6QuickControls2{Material,Universal,Imagine,Fusion,FluentWinUI3}*; do
+  "$check_dir"/squashfs-root/usr/lib/libQt6QuickControls2{Material,Universal,Imagine,Fusion,FluentWinUI3,Native}*; do
   [[ ! -e $lib ]] || unused_qml+=" ${lib##*/}"
 done
 [[ -z $unused_qml ]] || die "unused Qt Quick styles, QtQuick.Dialogs or QtQuick.Pdf in the AppImage: $unused_qml"
