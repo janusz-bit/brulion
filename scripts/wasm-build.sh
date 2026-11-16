@@ -13,9 +13,9 @@
 #   BRULION_CACHE  toolchain cache [${XDG_CACHE_HOME:-~/.cache}]
 #   EMSDK          emsdk checkout [$BRULION_CACHE/brulion-emsdk/emsdk]
 #   QT_ROOT        aqt install root [$BRULION_CACHE/brulion-qt]
-#   QT_WASM        Qt for WebAssembly [$QT_ROOT/6.11.2/wasm_singlethread]
+#   QT_WASM        Qt for WebAssembly [$QT_ROOT/6.12.0/wasm_singlethread]
 #   QT_HOST        desktop Qt of the same version, for moc/rcc/qmlcachegen/lrelease
-#                  [$QT_ROOT/6.11.2/gcc_64]
+#                  [$QT_ROOT/6.12.0/gcc_64]
 #   BUILD_DIR [build-wasm]  DIST_DIR [dist-wasm]  BUILD_TYPE [MinSizeRel]  JOBS [nproc]
 #   SINGLE_FILE    the single-file version [dist-wasm-single/brulion.html]
 #
@@ -27,10 +27,10 @@ script=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0
 cd "$(dirname "$script")/.."
 root=$PWD
 
-# Qt 6.11 requires exactly this Emscripten (QT_EMCC_RECOMMENDED_VERSION in Qt's CMake files;
-# doc.qt.io/qt-6.11/wasm.html). Bump both together.
-QT_VERSION=6.11.2
-EMSDK_VERSION=4.0.7
+# Qt 6.12 requires exactly this Emscripten (QT_EMCC_RECOMMENDED_VERSION in Qt's CMake files;
+# doc.qt.io/qt-6.12/wasm.html). Bump both together.
+QT_VERSION=6.12.0
+EMSDK_VERSION=5.0.5
 AQT_VERSION=3.3.0
 
 cache=${BRULION_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}}

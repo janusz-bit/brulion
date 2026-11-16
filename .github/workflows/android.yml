@@ -1,5 +1,5 @@
 # Signed Android APK (artifact "brulion-android-apk") built with scripts/android-build.sh
-# (Qt 6.11.2 for Android via aqt, NDK r27c, JDK 21, Kotlin unit tests + Android lint; R8 and
+# (Qt 6.12.0 for Android via aqt, NDK r27c, JDK 21, Kotlin unit tests + Android lint; R8 and
 # OpenSSL 3 for HTTPS, which CMake downloads from KDAB/android_openssl at the commit and SHA-256
 # sums pinned in src/app/CMakeLists.txt) — see docs/ANDROID.md. Runs by hand, for a push to main
 # with "[ci]" in a commit message (and changes in the paths below; see the job's `if`), and from
@@ -67,7 +67,7 @@ concurrency:
 
 env:
   # Keep in sync with scripts/android-build.sh.
-  QT_VERSION: 6.11.2
+  QT_VERSION: 6.12.0
   AQT_VERSION: 3.3.0
   NDK_VERSION: 27.2.12479018
   SDK_CMAKE_VERSION: 3.31.6
@@ -98,7 +98,7 @@ jobs:
         with:
           enable-cache: false
 
-      # The runner's default NDK (ANDROID_NDK_ROOT) is a newer r27; Qt 6.11.2 is built with r27c.
+      # The runner's default NDK (ANDROID_NDK_ROOT) is a newer r27; Qt 6.12.0 is built with r27c.
       - id: sdk
         name: Android SDK paths
         run: |

@@ -4,7 +4,7 @@
 # without the marker runs nothing (its run shows up with every job skipped):
 #  * nix     — `nix flake check` (with the whole ctest suite: checks.<system>.tests) + `nix build .#brulion` on
 #              x86_64 and aarch64 (the Raspberry Pi / NixOS targets);
-#  * linux   — plain CMake build with Qt 6.11.2 from aqt, -Werror, AddressSanitizer +
+#  * linux   — plain CMake build with Qt 6.12.0 from aqt, -Werror, AddressSanitizer +
 #              UndefinedBehaviorSanitizer at -O1 (asserts on), ccache kept between runs, ctest
 #              with the GUI tests side by side (fast feedback, independent of nixpkgs); Qt PDF
 #              (aqt's `qtpdf`) for drawings' PDF backdrops; a drawing's SVG light and dark in Chrome
@@ -46,7 +46,7 @@ concurrency:
   cancel-in-progress: ${{ github.ref_type == 'branch' }}
 
 env:
-  QT_VERSION: 6.11.2
+  QT_VERSION: 6.12.0
 
 jobs:
   nix:
@@ -90,7 +90,7 @@ jobs:
         run: nix build .#brulion -L --print-out-paths
 
   linux:
-    name: Linux (Qt 6.11.2 from aqt, GCC, -Werror, sanitizers)
+    name: Linux (Qt 6.12.0 from aqt, GCC, -Werror, sanitizers)
     if: github.event_name != 'push' || github.ref_type == 'tag' || contains(join(github.event.commits.*.message, ' '), '[ci]')
     runs-on: ubuntu-24.04
     # Warm cache: ~20 min; a cold one (new compiler, Qt or flags): ~30 min.

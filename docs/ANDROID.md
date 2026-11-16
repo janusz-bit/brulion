@@ -1,6 +1,6 @@
 # Brulion on Android
 
-Brulion on Android is the same C++/Qt Quick app as on the desktop (Qt 6.11 for Android), with a
+Brulion on Android is the same C++/Qt Quick app as on the desktop (Qt 6.12 for Android), with a
 native part in Kotlin (`android/src/io/github/januszbit/brulion/android/`) that:
 
 * gives access to the notes folder on shared storage ("All files access"),
@@ -1130,20 +1130,20 @@ scripts/android-build.sh --help     # all environment variables
 It needs a **Linux x86_64** host (the NDK and the Qt tools exist only for x86_64) — not the
 Raspberry Pi.
 
-### Versions (Qt 6.11.2)
+### Versions (Qt 6.12.0)
 
 | Component | Version | Source |
 |---|---|---|
-| Qt for Android | 6.11.2 `android_arm64_v8a` (optionally `armv7`, `x86_64`, `x86`) | aqt (`aqtinstall` 3.3.0) → `~/.cache/brulion-qt` |
-| Host Qt (moc, rcc, qmlcachegen, androiddeployqt…) | 6.11.2 `linux_gcc_64` — the same version | aqt |
-| Android NDK | r27c (`27.2.12479018`) — required by Qt 6.11 | `sdkmanager` |
+| Qt for Android | 6.12.0 `android_arm64_v8a` (optionally `armv7`, `x86_64`, `x86`) | aqt (`aqtinstall` 3.3.0) → `~/.cache/brulion-qt` |
+| Host Qt (moc, rcc, qmlcachegen, androiddeployqt…) | 6.12.0 `linux_gcc_64` — the same version | aqt |
+| Android NDK | r27c (`27.2.12479018`) — required by Qt 6.12 | `sdkmanager` |
 | Android SDK | platform `android-36`, build-tools `36.0.0` | `sdkmanager` |
 | CMake + Ninja | 3.31.6 (SDK package `cmake;3.31.6`) | `sdkmanager` |
-| JDK | 21 (Qt 6.11 recommends 21; 17+ works) | system / nixpkgs `jdk21_headless` |
-| Gradle / Android Gradle Plugin | 9.3.1 / 9.0.0 (Qt 6.11 template, built-in Kotlin support) | Gradle wrapper from Qt |
+| JDK | 21 (Qt 6.12 recommends 21; 17+ works) | system / nixpkgs `jdk21_headless` |
+| Gradle / Android Gradle Plugin | 9.8.2 / 9.2.1 (Qt 6.12 template, built-in Kotlin support) | Gradle wrapper from Qt |
 | minSdk / targetSdk / compileSdk | 28 / 36 / 36 | `src/app/CMakeLists.txt` |
 | OpenSSL (HTTPS) | 3.1.8, KDAB android_openssl `b71f147` | downloaded by CMake, checked by SHA-256 (`src/app/CMakeLists.txt`) |
-| Build from source (`BRULION_ANDROID_QT=source`, F-Droid) | Qt 6.11.2 (6 modules) and OpenSSL 3.5.9 from source | [Building from source](#building-from-source-f-droid) |
+| Build from source (`BRULION_ANDROID_QT=source`, F-Droid) | Qt 6.12.0 (6 modules) and OpenSSL 3.5.9 from source | [Building from source](#building-from-source-f-droid) |
 
 Variables (all optional): `QT_ROOT`, `QT_VERSION`, `QT_HOST_PATH`, `ANDROID_SDK_ROOT`
 (by default `~/.cache/brulion-android-sdk`; its `cmdline-tools` install missing packages),
@@ -1223,7 +1223,7 @@ First installation of the tools on the laptop (the script does the same when som
 missing):
 
 ```sh
-uvx --from aqtinstall==3.3.0 aqt install-qt all_os android 6.11.2 android_arm64_v8a \
+uvx --from aqtinstall==3.3.0 aqt install-qt all_os android 6.12.0 android_arm64_v8a \
   -O ~/.cache/brulion-qt --autodesktop      # + linux_gcc_64 (host Qt)
 JAVA_HOME=$(nix build --no-link --print-out-paths nixpkgs#jdk21_headless)/lib/openjdk \
   ~/.cache/brulion-android-sdk/cmdline-tools/latest/bin/sdkmanager \
@@ -1361,7 +1361,7 @@ OpenSSL, no `qmltooling`, 16 KB alignment).
 
 | Component | Source (`nix/android.nix`) |
 |---|---|
-| Qt for Android 6.11.2 (qtbase, qtdeclarative, qtsvg) | `.7z` archives from the Qt repository (the same ones aqt downloads), separately per module and ABI, SHA-256 hashes published by Qt — `nix/android/qt-android.json`, `nix/android/qt.nix` |
+| Qt for Android 6.12.0 (qtbase, qtdeclarative, qtsvg) | `.7z` archives from the Qt repository (the same ones aqt downloads), separately per module and ABI, SHA-256 hashes published by Qt — `nix/android/qt-android.json`, `nix/android/qt.nix` |
 | Host Qt (moc, rcc, qmlcachegen, androiddeployqt, lrelease…) | nixpkgs `qt6` — **the same version** as Qt for Android (checked at evaluation) |
 | SDK (platform 36, build-tools 36.0.0), NDK r27c, CMake 3.31.6 + Ninja | nixpkgs `androidenv` (the SDK licence accepted in `flake.nix`) |
 | Gradle / AGP | Gradle 9 from nixpkgs (JDK 21) instead of the wrapper from Qt's template; AGP 9.0.0, Kotlin, androidx — from `nix/android/gradle-deps.json` (mitm-cache), shared by all ABIs |
@@ -1450,10 +1450,10 @@ BRULION_ANDROID_QT=source BRULION_ANDROID_SIGN=0 scripts/android-build.sh # unsi
    set by the script) — the sources are checked. The script itself verifies the SONAME, the
    dependency `libssl_3.so → libcrypto_3.so`, the 16 KB alignment and the version in the library.
    About 1 min per ABI.
-2. **`scripts/android-qt-from-source.sh`** — Qt **6.11.2** from the official source archives
-   (`download.qt.io/official_releases/qt/6.11/6.11.2/submodules/`, the SHA-256 of each module
+2. **`scripts/android-qt-from-source.sh`** — Qt **6.12.0** from the official source archives
+   (`download.qt.io/official_releases/qt/6.12/6.12.0/submodules/`, the SHA-256 of each module
    pinned in the script, matching Qt's `.sha256` files), in the aqt layout
-   (`$QT_ROOT/6.11.2/gcc_64` and `…/android_arm64_v8a`, by default
+   (`$QT_ROOT/6.12.0/gcc_64` and `…/android_arm64_v8a`, by default
    `QT_ROOT=~/.cache/brulion-qt-source`):
    * **Host Qt** (the tools the cross build runs: moc, rcc, qmlcachegen, qmltyperegistrar,
      qmlimportscanner, qsb, svgtoqml, androiddeployqt, lrelease, lupdate) and Qt's translations
@@ -1526,7 +1526,7 @@ NDK, the SDK packages, Qt and OpenSSL match the scripts, the `versionCode` follo
 `src/app/CMakeLists.txt`, the APK path, the variables set). The main decisions:
 
 * **srclibs instead of downloading in `prebuild`** — F-Droid prefers sources from git repositories
-  described in `fdroiddata/srclibs/`: `Qt5@v6.11.2` (the `qt5.git` super-repository;
+  described in `fdroiddata/srclibs/`: `Qt5@v6.12.0` (the `qt5.git` super-repository;
   `init-repository --module-subset=…` fetches only the six modules needed) and
   `OpenSSL@openssl-3.5.9`. Both srclibs already exist in fdroiddata; the recipe
   `net.sourceforge.kid3`, for example, builds Qt 6 the same way. Without srclibs the scripts
@@ -1582,7 +1582,7 @@ Verified 2026-11-04 exactly like this (the image `registry.gitlab.com/fdroid/fdr
 — Debian 13, JDK 21 — and the steps of the "fdroid build" job from fdroiddata's CI: `fetchsrclibs`,
 then `fdroid build --test --on-server --no-tarball`, with a copy of the recipe pointing to the
 local repository): `fdroid lint` and `fdroid readmeta` without remarks, `fdroid rewritemeta`
-changes nothing, the srclibs `Qt5@v6.11.2` (+ `init-repository`, about 2 min) and
+changes nothing, the srclibs `Qt5@v6.12.0` (+ `init-repository`, about 2 min) and
 `OpenSSL@openssl-3.5.9` downloaded, the F-Droid scanner without errors (after `scandelete`), the
 build of host Qt and Qt for Android and the APK — **"Successfully built
 io.github.januszbit.brulion:8001"**, output `tmp/io.github.januszbit.brulion_8001.apk` (88.2 MB,
@@ -1635,7 +1635,7 @@ F-Droid will not accept a built-in update mechanism next to its own):
 
 * `.github/workflows/android.yml`: `BRULION_ANDROID_QT=source` and `BRULION_UPDATE_CHECK=OFF` in
   the `build` step; instead of the aqt caches — `actions/cache` for
-  `~/.cache/brulion-qt-source/6.11.2` (key with the hash of `scripts/android-qt-from-source.sh`)
+  `~/.cache/brulion-qt-source/6.12.0` (key with the hash of `scripts/android-qt-from-source.sh`)
   and `~/.cache/brulion-openssl`; the first build ~1 h on the runner (4 cores), then minutes.
   `SOURCE_DATE_EPOCH` from the tag's commit (already the default). JDK 21, NDK r27c, build-tools
   36.0.0 — the same as on the buildserver (the runner has the Temurin JDK, the buildserver
@@ -1709,7 +1709,7 @@ None of the below has been sent. The order:
    > Offline-first Markdown notes: a block outliner with daily journals, a calendar,
    > reminders and alarms, calculations, and Syncthing/Nextcloud sync. Plain `.md` files in a
    > folder (compatible with Obsidian/Logseq vaults). C++/Qt 6 (Qt Quick) with a small Kotlin
-   > part; Qt 6.11.2 and OpenSSL 3.5 are built from source (srclibs Qt5, OpenSSL) by the
+   > part; Qt 6.12.0 and OpenSSL 3.5 are built from source (srclibs Qt5, OpenSSL) by the
    > project's scripts. AGPL-3.0-or-later.
    >
    > * [x] The app complies with the inclusion criteria

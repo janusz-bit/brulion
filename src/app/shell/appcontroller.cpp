@@ -1846,9 +1846,19 @@ QDateTime AppController::now() const
     return m_clock ? m_clock() : QDateTime::currentDateTime();
 }
 
-QString AppController::routeText(const QVariantMap &route, const QString &key) const
+namespace {
+/// A route as a map: {} for null, undefined or anything else that is no object.
+QVariantMap routeMap(const QVariant &route)
 {
-    const QVariant value = route.value(key);
+    if (route.metaType().id() == QMetaType::QVariantMap)
+        return route.toMap();
+    return route.isValid() && route.canConvert<QVariantMap>() ? route.toMap() : QVariantMap();
+}
+} // namespace
+
+QString AppController::routeText(const QVariant &route, const QString &key) const
+{
+    const QVariant value = routeMap(route).value(key);
     if (value.isNull()) // also the invalid value of a missing key
         return {};
     switch (value.typeId()) {
@@ -1864,9 +1874,9 @@ QString AppController::routeText(const QVariantMap &route, const QString &key) c
     }
 }
 
-int AppController::routeInt(const QVariantMap &route, const QString &key, int fallback) const
+int AppController::routeInt(const QVariant &route, const QString &key, int fallback) const
 {
-    const QVariant value = route.value(key);
+    const QVariant value = routeMap(route).value(key);
     if (value.isNull())
         return fallback;
     bool ok = false;
@@ -1874,9 +1884,9 @@ int AppController::routeInt(const QVariantMap &route, const QString &key, int fa
     return ok ? n : fallback;
 }
 
-bool AppController::routeFlag(const QVariantMap &route, const QString &key) const
+bool AppController::routeFlag(const QVariant &route, const QString &key) const
 {
-    const QVariant value = route.value(key);
+    const QVariant value = routeMap(route).value(key);
     if (value.isNull())
         return false;
     switch (value.typeId()) {
@@ -1968,9 +1978,9 @@ QStringList AppController::folderChain(const QString &folder) const
     return out;
 }
 
-QStringList AppController::routeStrings(const QVariantMap &route, const QString &key) const
+QStringList AppController::routeStrings(const QVariant &route, const QString &key) const
 {
-    const QVariant value = route.value(key);
+    const QVariant value = routeMap(route).value(key);
     return value.isNull() ? QStringList() : value.toStringList();
 }
 
@@ -1982,9 +1992,9 @@ QVariantList AppController::folderChoices(const QString &query, const QString &o
                                 currentFolder, moving, {rootName, newFolderText, createText});
 }
 
-QVariantList AppController::routeList(const QVariantMap &route, const QString &key) const
+QVariantList AppController::routeList(const QVariant &route, const QString &key) const
 {
-    const QVariant value = route.value(key);
+    const QVariant value = routeMap(route).value(key);
     return value.isNull() ? QVariantList() : value.toList();
 }
 
@@ -2016,9 +2026,10 @@ QVariantList AppController::recentPagesExcept(const QString &path, int limit) co
     return out;
 }
 
-QVariantMap AppController::routeWith(const QVariantMap &base, const QVariantMap &route, const QStringList &keys) const
+QVariantMap AppController::routeWith(const QVariant &baseValue, const QVariant &routeValue, const QStringList &keys) const
 {
-    QVariantMap out = base;
+    QVariantMap out = routeMap(baseValue);
+    const QVariantMap route = routeMap(routeValue);
     for (const QString &key : keys) {
         if (const auto it = route.constFind(key); it != route.constEnd())
             out.insert(key, *it);

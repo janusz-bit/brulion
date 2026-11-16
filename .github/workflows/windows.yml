@@ -1,5 +1,5 @@
 # Windows x86_64, the test version (artifact "brulion-windows": the portable ZIP and the Inno Setup
-# installer) built with scripts/windows-build.ps1: Qt 6.11.2 for MSVC 2022 from aqt, a CMake +
+# installer) built with scripts/windows-build.ps1: Qt 6.12.0 for MSVC 2022 from aqt, a CMake +
 # Ninja Release build, the unit tests and the QML self-tests offscreen, windeployqt, the packages,
 # then both checked on the runner without Qt on PATH (the ZIP unpacked into a fresh folder, the
 # installer installed and uninstalled silently for the current user; brulion-cli --version and the
@@ -37,7 +37,7 @@ concurrency:
   cancel-in-progress: ${{ github.ref_type == 'branch' }}
 
 env:
-  QT_VERSION: 6.11.2
+  QT_VERSION: 6.12.0
 
 jobs:
   windows:
@@ -66,7 +66,7 @@ jobs:
       # The essential Qt modules (qtbase, qtdeclarative, qtsvg, qttools, qttranslations) hold all
       # the CMake files find: Core, Gui, Network, Qml, Quick, QuickControls2, Svg, Widgets, Test,
       # LinguistTools, GuiPrivate (DBus is for Linux only). aqtinstall 3.3.0 (the latest release)
-      # does not know the Windows repository layout of Qt 6.11 (qt6_6112_msvc2022_64/, aqtinstall
+      # does not know the Windows repository layout of Qt 6.11 and later (qt6_6120_msvc2022_64/, aqtinstall
       # PR #1000, merged after 3.3.0): its master at a pinned commit until a release has it.
       # Qt PDF (`qtpdf`): the PDF pages of drawings' backdrops (src/platform/pdfpages_qtpdf.cpp).
       - uses: jurplel/install-qt-action@v4

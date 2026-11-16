@@ -5,7 +5,7 @@ Builds, tests and packages Brulion for Windows x86_64 (the test version, docs/WI
 
 .DESCRIPTION
 Steps (all by default, in this order; -Steps picks some):
-  build    CMake (Ninja, Release) + MSVC 2022 against Qt 6.11.2 msvc2022_64; spell checking's
+  build    CMake (Ninja, Release) + MSVC 2022 against Qt 6.12.0 msvc2022_64; spell checking's
            Hunspell (compiled in from its release, BRULION_HUNSPELL_SOURCE_DIR) and the Polish and
            English dictionaries of LibreOffice are downloaded first (pinned SHA-256) into
            <BuildDir>\deps
@@ -28,9 +28,9 @@ Steps (all by default, in this order; -Steps picks some):
 
 CI: .github/workflows/windows.yml (windows-2022, Qt from aqt through jurplel/install-qt-action,
 MSVC from ilammy/msvc-dev-cmd). Locally, in PowerShell from the repository root, with Visual Studio
-2022 (C++ workload, it brings CMake and Ninja), Qt 6.11.2 msvc2022_64 (e.g.
-`aqt install-qt windows desktop 6.11.2 win64_msvc2022_64 -O C:\Qt`) and Inno Setup 6:
-  powershell -ExecutionPolicy Bypass -File scripts\windows-build.ps1 -QtDir C:\Qt\6.11.2\msvc2022_64
+2022 (C++ workload, it brings CMake and Ninja), Qt 6.12.0 msvc2022_64 (e.g.
+`aqt install-qt windows desktop 6.12.0 win64_msvc2022_64 -O C:\Qt`) and Inno Setup 6:
+  powershell -ExecutionPolicy Bypass -File scripts\windows-build.ps1 -QtDir C:\Qt\6.12.0\msvc2022_64
 Without the Visual Studio environment (cl.exe not on PATH) the script loads it with vswhere.
 
 .PARAMETER Steps
@@ -102,7 +102,7 @@ function Enter-Msvc {
 
 function Assert-Qt {
     if (-not $QtDir -or -not (Test-Path (Join-Path $QtDir 'lib\cmake\Qt6\Qt6Config.cmake'))) {
-        Fail "No Qt for MSVC at '$QtDir': pass -QtDir <Qt>\6.11.2\msvc2022_64 (or set QT_ROOT_DIR)"
+        Fail "No Qt for MSVC at '$QtDir': pass -QtDir <Qt>\6.12.0\msvc2022_64 (or set QT_ROOT_DIR)"
     }
 }
 

@@ -107,8 +107,8 @@ private Q_SLOTS:
         // Not an object: nothing.
         QCOMPARE(m.stringField(QVariant(u"tekst"_s), u"length"_s), QString());
         QCOMPARE(m.stringField(QVariant(), u"title"_s), QString());
-        QCOMPARE(m.fieldAt({row({{u"a"_s, 1}})}, 0, u"a"_s), QVariant(1));
-        QVERIFY(!m.fieldAt({row({{u"a"_s, 1}})}, 1, u"a"_s).isValid());
+        QCOMPARE(m.fieldAt(QVariantList{row({{u"a"_s, 1}})}, 0, u"a"_s), QVariant(1));
+        QVERIFY(!m.fieldAt(QVariantList{row({{u"a"_s, 1}})}, 1, u"a"_s).isValid());
         QVERIFY(!m.fieldAt({}, -1, u"a"_s).isValid());
     }
 
@@ -116,7 +116,7 @@ private Q_SLOTS:
     {
         UiModels m;
         const QVariantList rows = m.segmentRows(
-                {u"dzień"_s, row({{u"value"_s, u"week"_s}, {u"text"_s, u"Tydzień"_s}, {u"icon"_s, u"calendar"_s}}), 5,
+                QVariantList{u"dzień"_s, row({{u"value"_s, u"week"_s}, {u"text"_s, u"Tydzień"_s}, {u"icon"_s, u"calendar"_s}}), 5,
                  row({{u"value"_s, 2}})});
         QCOMPARE(rows.size(), 4);
         QCOMPARE(field(rows, u"text"_s), (QStringList{u"dzień"_s, u"Tydzień"_s, u"5"_s, QString()}));
@@ -138,7 +138,7 @@ private Q_SLOTS:
     void crumbs()
     {
         UiModels m;
-        const QVariantList rows = m.crumbRows({u"Dziennik"_s, row({{u"title"_s, u"2026"_s}, {u"icon"_s, u"folder"_s}}),
+        const QVariantList rows = m.crumbRows(QVariantList{u"Dziennik"_s, row({{u"title"_s, u"2026"_s}, {u"icon"_s, u"folder"_s}}),
                                                u"Październik"_s, u"Środa"_s, u"Notatka"_s});
         QCOMPARE(field(rows, u"title"_s),
                  (QStringList{u"Dziennik"_s, u"2026"_s, u"Październik"_s, u"Środa"_s, u"Notatka"_s}));
@@ -176,13 +176,29 @@ private Q_SLOTS:
     {
         UiModels m;
         const QVariantList rows = m.withDefaults(
-                {row({{u"kind"_s, u"embed"_s}, {u"title"_s, u"Ogród"_s}}),
+                QVariantList{row({{u"kind"_s, u"embed"_s}, {u"title"_s, u"Ogród"_s}}),
                  row({{u"kind"_s, u"block"_s}, {u"title"_s, QVariant::fromValue(nullptr)}, {u"depth"_s, 2}})},
                 row({{u"kind"_s, QString()}, {u"title"_s, QString()}, {u"depth"_s, 0}}));
         QCOMPARE(field(rows, u"kind"_s), (QStringList{u"embed"_s, u"block"_s}));
         QCOMPARE(field(rows, u"title"_s), (QStringList{u"Ogród"_s, QString()}));
         QCOMPARE(field(rows, u"depth"_s), (QStringList{u"0"_s, u"2"_s}));
         QVERIFY(m.withDefaults({}, row({{u"a"_s, 1}})).isEmpty());
+    }
+
+    void undefinedIsEmpty()
+    {
+        // A missing field passed on from QML (undefined): an empty list or map, never an error —
+        // Qt 6.12 throws a TypeError for undefined given to a QVariantList or QVariantMap.
+        UiModels m;
+        QVERIFY(m.withDefaults(QVariant(), QVariant()).isEmpty());
+        QCOMPARE(m.withDefaults(QVariantList{row({{u"a"_s, 1}})}, QVariant()), (QVariantList{row({{u"a"_s, 1}})}));
+        QVERIFY(m.segmentRows(QVariant()).isEmpty());
+        QVERIFY(m.crumbRows(QVariant::fromValue(nullptr)).isEmpty());
+        QVERIFY(m.enabledRows(u"nie lista"_s).isEmpty());
+        QVERIFY(m.stringFields(QVariant(), u"a"_s).isEmpty());
+        QVERIFY(!m.fieldAt(QVariant(), 0, u"a"_s).isValid());
+        QCOMPARE(m.indexOfValue(QVariant(), 1), -1);
+        QCOMPARE(m.stringFields(QStringList{u"x"_s}, u"a"_s), QStringList{QString()});
     }
 
     void paletteFilterRanksAndMarks()

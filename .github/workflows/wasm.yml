@@ -1,4 +1,4 @@
-# Browser version (Qt 6.11.2 for WebAssembly) built with scripts/wasm-build.sh — see docs/WEB.md:
+# Browser version (Qt 6.12.0 for WebAssembly) built with scripts/wasm-build.sh — see docs/WEB.md:
 # the site (offline PWA for any web server; relative URLs, so any base path works; artifact
 # brulion-web) and the same app in one HTML file opened from disk (scripts/wasm-single-file.py;
 # artifact brulion-web-html). Runs by hand and for a push to main with "[ci]" in a commit message
@@ -50,10 +50,10 @@ concurrency:
   cancel-in-progress: ${{ github.ref_type == 'branch' }}
 
 env:
-  # Keep in sync with scripts/wasm-build.sh (Qt 6.11 requires exactly Emscripten 4.0.7).
-  QT_VERSION: 6.11.2
+  # Keep in sync with scripts/wasm-build.sh (Qt 6.12 requires exactly Emscripten 5.0.5).
+  QT_VERSION: 6.12.0
   AQT_VERSION: 3.3.0
-  EMSDK_VERSION: 4.0.7
+  EMSDK_VERSION: 5.0.5
 
 jobs:
   build:

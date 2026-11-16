@@ -580,14 +580,15 @@ public:
     // ---- Route parameters for compiled QML ------------------------------------------------
     // Views get their route as `property var route` (a QVariantMap); reading `route.key` there
     // is not compiled by qmlcachegen, these are (also for other maps held in `var`, e.g. the
-    // results of Workspace calls). All accept a missing key and a null route.
+    // results of Workspace calls). All accept a missing key and a null or undefined route — a
+    // QVariant, not a QVariantMap: Qt 6.12 throws a TypeError for undefined passed as a map.
     /// The value of `key` as text ("" when missing or null; a number as its text: 12 → "12").
-    Q_INVOKABLE QString routeText(const QVariantMap &route, const QString &key) const;
+    Q_INVOKABLE QString routeText(const QVariant &route, const QString &key) const;
     /// The value of `key` as an int (`fallback` when missing, null or not a number).
-    Q_INVOKABLE int routeInt(const QVariantMap &route, const QString &key, int fallback) const;
+    Q_INVOKABLE int routeInt(const QVariant &route, const QString &key, int fallback) const;
     /// JavaScript's truthiness of the value of `key` (`if (route.key)`): false when missing,
     /// null, false, 0, NaN or ""; true otherwise (also for the text "false" and an empty list).
-    Q_INVOKABLE bool routeFlag(const QVariantMap &route, const QString &key) const;
+    Q_INVOKABLE bool routeFlag(const QVariant &route, const QString &key) const;
 
     // ---- The shell's compiled QML (no functions as values) ------------------------------------
     /// A toast with a button, without a function to run (compiled QML): its id (> 0);
@@ -617,9 +618,9 @@ public:
     Q_INVOKABLE QStringList folderChain(const QString &folder) const;
     /// The value of `key` as a list of strings ([] when missing or null; one string → [it]), as
     /// routeText() for lists: the specials of Workspace.moveImpact() / folderInfo().
-    Q_INVOKABLE QStringList routeStrings(const QVariantMap &route, const QString &key) const;
+    Q_INVOKABLE QStringList routeStrings(const QVariant &route, const QString &key) const;
     /// The value of `key` as a list ([] when missing or null): the specials of folderInfo().
-    Q_INVOKABLE QVariantList routeList(const QVariantMap &route, const QString &key) const;
+    Q_INVOKABLE QVariantList routeList(const QVariant &route, const QString &key) const;
     /// Move the tray calendar `popup` to trayPopupPosition() for its size (a QPoint result's x
     /// and y cannot be read by compiled QML); under Wayland anchor it to the work area's
     /// bottom-right corner through the layer shell instead (src/platform/traywindow.h).
@@ -638,7 +639,7 @@ public:
                                            const QString &createText) const;
     /// `base` plus the `keys` that `route` has (even null ones): a view's route made from
     /// another's parameters (JournalsView's one day as a PageView route).
-    Q_INVOKABLE QVariantMap routeWith(const QVariantMap &base, const QVariantMap &route, const QStringList &keys) const;
+    Q_INVOKABLE QVariantMap routeWith(const QVariant &base, const QVariant &route, const QStringList &keys) const;
 
 Q_SIGNALS:
     void statusChanged();

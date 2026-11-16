@@ -88,7 +88,15 @@ private Q_SLOTS:
         if (value.isValid())
             route.insert(u"key"_s, value);
         QCOMPARE(app->routeText(route, u"key"_s), text);
-        QCOMPARE(app->routeText({}, u"key"_s), QString());
+        QCOMPARE(app->routeText(QVariantMap(), u"key"_s), QString());
+        // A route that is no map — undefined, null — reads as an empty one (Qt 6.12 throws a
+        // TypeError for undefined passed to a QVariantMap: these take a QVariant).
+        QCOMPARE(app->routeText(QVariant(), u"key"_s), QString());
+        QCOMPARE(app->routeText(QVariant::fromValue(nullptr), u"key"_s), QString());
+        QVERIFY(!app->routeFlag(QVariant(), u"key"_s));
+        QCOMPARE(app->routeInt(QVariant(), u"key"_s, 5), 5);
+        QVERIFY(app->routeList(QVariant(), u"key"_s).isEmpty());
+        QVERIFY(app->routeStrings(QVariant(), u"key"_s).isEmpty());
     }
 
     void routeInt_data()
@@ -155,7 +163,7 @@ private Q_SLOTS:
                                   {u"source"_s, QVariant::fromValue(nullptr)},
                                   {u"fromTag"_s, true}};
         const QVariantMap page =
-                app->routeWith({{u"view"_s, u"page"_s}, {u"path"_s, u"journals/2026-10-14.md"_s}}, journal,
+                app->routeWith(QVariantMap{{u"view"_s, u"page"_s}, {u"path"_s, u"journals/2026-10-14.md"_s}}, journal,
                                {u"line"_s, u"blockId"_s, u"heading"_s, u"source"_s, u"open"_s});
         // The keys asked for that the route has (a null one too); `date`, `fromTag` not.
         QCOMPARE(page, (QVariantMap{{u"view"_s, u"page"_s},
@@ -164,9 +172,9 @@ private Q_SLOTS:
                                     {u"blockId"_s, u"żółw-1"_s},
                                     {u"source"_s, QVariant::fromValue(nullptr)}}));
         // A key of the base the route also has: the route's.
-        QCOMPARE(app->routeWith({{u"view"_s, u"page"_s}}, {{u"view"_s, u"tag"_s}}, {u"view"_s}),
+        QCOMPARE(app->routeWith(QVariantMap{{u"view"_s, u"page"_s}}, QVariantMap{{u"view"_s, u"tag"_s}}, {u"view"_s}),
                  (QVariantMap{{u"view"_s, u"tag"_s}}));
-        QCOMPARE(app->routeWith({{u"view"_s, u"page"_s}}, {}, {u"line"_s}), (QVariantMap{{u"view"_s, u"page"_s}}));
+        QCOMPARE(app->routeWith(QVariantMap{{u"view"_s, u"page"_s}}, QVariant(), {u"line"_s}), (QVariantMap{{u"view"_s, u"page"_s}}));
     }
 
     // ---- SearchView's recent searches -----------------------------------------------------------

@@ -5,7 +5,7 @@ block outliner with daily journals, calendar, reminders and alarms, calculations
 live queries, sync through Syncthing (plain folder) or Nextcloud (WebDAV), import/export from
 other apps.
 
-One C++/QML code base, four targets, all built against **Qt 6.11.2** (CMake accepts ≥ 6.8):
+One C++/QML code base, four targets, all built against **Qt 6.12.0** (CMake accepts ≥ 6.12 for the app — its QML uses `Item.mutabilityGroup` —, ≥ 6.8 for brulion-cli alone):
 
 | Target | How | Vault storage | Reminders |
 |---|---|---|---|
@@ -647,30 +647,30 @@ redirect check does not apply there); a failed one is told as CORS or mixed cont
   wall-clock times run alone (`RUN_SERIAL`: `tst_shell_workspace_perf`, `tst_scroll_jumps_qml`).
   A fresh build directory starts the longest tests first (`tests/ctest-costs.txt` becomes
   ctest's cost data until ctest has its own timings).
-* Nix: `nix develop` (Qt 6.11 from nixpkgs, CMake, Ninja, ccache, clang-tools, gdb);
+* Nix: `nix develop` (Qt 6.12 from nixpkgs, CMake, Ninja, ccache, clang-tools, gdb);
   `nix build .#brulion` (builds without the tests — doCheck = false —, validates the desktop file and AppStream
   metainfo, runs `brulion-cli`); `nix build .#brulion-cli` (the command line alone, `nix/cli.nix`); NixOS module `programs.brulion` (+ autostart hidden in the tray) and
   `services.brulion-web` (the browser version behind nginx) — docs/NIXOS.md; `nix flake check` (also the whole ctest suite: `checks.<system>.tests`).
 * Windows (test version): `scripts/windows-build.ps1` — MSVC 2022 (`/utf-8`, `/permissive-`,
-  `/Zc:__cplusplus`, `/bigobj`, `/W4` without `/WX`), Qt 6.11.2 `win64_msvc2022_64`, `windeployqt`
+  `/Zc:__cplusplus`, `/bigobj`, `/W4` without `/WX`), Qt 6.12.0 `win64_msvc2022_64`, `windeployqt`
   + the app-local MSVC runtime → portable ZIP + Inno Setup installer (`packaging/windows/`: the
   `.iss`, the icon, the executables' version resources); the desktop integration
   (`BRULION_DESKTOP`: tray, single instance over a named pipe of this user, brulion-cli, the QML
   self-tests) as on Linux; `BRULION_PROFILE` (src/ipc/profile.h) isolates test runs there; the
   toast bus uses the Windows SDK's C++/WinRT headers and `WindowsApp.lib`; the installer has the
   task "autostart" (the Run value) and the AppUserModelID on its shortcuts — docs/WINDOWS.md.
-* Linux: `scripts/appimage-build.sh` (Qt 6.11.2 from aqt, linuxdeploy; the Qt Quick styles and
+* Linux: `scripts/appimage-build.sh` (Qt 6.12.0 from aqt, linuxdeploy; the Qt Quick styles and
   QtQuick.Dialogs that linuxdeploy-plugin-qt copies with `qml/QtQuick` are removed before packing,
   and so is its AppRun hook, which set `QT_QPA_PLATFORMTHEME=gtk2` on GNOME and XFCE; the XDG
   portal's platform theme is kept for the file pickers, and the check asks Qt which theme it tries
   first under GNOME) → AppImage x86_64 +
   aarch64, each with a `.zsync` file for AppImageUpdate (checked before publishing by
   `scripts/appimage-update-check.sh`); desktop entry and metainfo in `packaging/`.
-* Android: `scripts/android-build.sh` — Qt 6.11.2 for Android from aqt with host tools of the
+* Android: `scripts/android-build.sh` — Qt 6.12.0 for Android from aqt with host tools of the
   same version, NDK r27c, JDK 21; ABIs `BRULION_ANDROID_ABIS` (default arm64-v8a; armeabi-v7a,
   x86_64, x86 → one multi-ABI APK); `android/` holds the manifest, resources and Kotlin
   sources (+ Kotlin unit tests); signed APK in GitHub Actions — docs/ANDROID.md.
-* WebAssembly: `scripts/wasm-build.sh` — Qt 6.11.2 `wasm_singlethread` + matching emsdk; our
+* WebAssembly: `scripts/wasm-build.sh` — Qt 6.12.0 `wasm_singlethread` + matching emsdk; our
   HTML shell, manifest and service worker in `wasm/` (offline PWA; the shell gives every
   `setTimeout` with a wait 2 ms more, as Qt 6.11.2's dispatcher stops all its timers when one
   runs early — docs/WEB.md "Technical limitations"); `scripts/wasm-single-file.py` packs the

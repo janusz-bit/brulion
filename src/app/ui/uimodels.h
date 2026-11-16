@@ -41,6 +41,9 @@ class UiModels : public QObject {
 public:
     explicit UiModels(QObject *parent = nullptr);
 
+    // (Lists and maps come as QVariant: undefined — a missing field — is an empty one. Qt 6.12
+    // throws a TypeError for undefined passed as a QVariantList or QVariantMap.)
+
     /// JavaScript's `a === b` (jsStrictEquals()).
     Q_INVOKABLE bool strictEquals(const QVariant &a, const QVariant &b) const;
     /// `object[key]` as text: String(value) of a present, defined, non-null key, else "" (a
@@ -55,35 +58,35 @@ public:
     /// `object[key]` as it is (undefined when missing).
     Q_INVOKABLE QVariant field(const QVariant &object, const QString &key) const;
     /// `list[index][key]` as it is (undefined when out of range or missing).
-    Q_INVOKABLE QVariant fieldAt(const QVariantList &list, int index, const QString &key) const;
+    Q_INVOKABLE QVariant fieldAt(const QVariant &list, int index, const QString &key) const;
 
     /// Every row of `rows` with the keys of `defaults` it lacks or holds as undefined or null (the
     /// others keep their values) — rows that differ in their keys for delegates that
     /// require them all (`required property string title` would read a missing one as "undefined").
-    Q_INVOKABLE QVariantList withDefaults(const QVariantList &rows, const QVariantMap &defaults) const;
+    Q_INVOKABLE QVariantList withDefaults(const QVariant &rows, const QVariant &defaults) const;
 
     /// BSegmented's model: rows { value, text, iconName } from { value, text, icon }. An object row
     /// keeps its value as it is (undefined when missing), its text and icon as strings ("" when
     /// missing); any other row (a plain string, a number) is { value: it, text: String(it),
     /// iconName: "" }.
-    Q_INVOKABLE QVariantList segmentRows(const QVariantList &model) const;
+    Q_INVOKABLE QVariantList segmentRows(const QVariant &model) const;
     /// The first row whose `value` is `value` (===); -1 when none.
-    Q_INVOKABLE int indexOfValue(const QVariantList &rows, const QVariant &value) const;
+    Q_INVOKABLE int indexOfValue(const QVariant &rows, const QVariant &value) const;
     /// BBreadcrumb's model: rows { title, icon } (strings) from objects { title, icon? } or plain
     /// values (String(value)).
-    Q_INVOKABLE QVariantList crumbRows(const QVariantList &model) const;
+    Q_INVOKABLE QVariantList crumbRows(const QVariant &model) const;
     /// The rows of `rows` that are not disabled (`enabled: false` hides one; a missing `enabled`
     /// keeps it), as they are — BCommandPalette's commands.
-    Q_INVOKABLE QVariantList enabledRows(const QVariantList &rows) const;
+    Q_INVOKABLE QVariantList enabledRows(const QVariant &rows) const;
     /// The parts BBreadcrumb shows of crumbRows() `rows`: { title, icon, partIndex } — the first
     /// `head` ones, a "…" part (partIndex -1) standing for those between when there are any and
     /// `dots` is set, and the last `tail` ones; all of them when head + tail covers them.
-    Q_INVOKABLE QVariantList shownCrumbs(const QVariantList &rows, int head, int tail, bool dots) const;
+    Q_INVOKABLE QVariantList shownCrumbs(const QVariant &rows, int head, int tail, bool dots) const;
     /// The rows of `rows` whose `key` (as text) is one of `values`, in the order of `values` (a value
     /// no row has is left out) — e.g. the segments of the modes a platform offers.
-    Q_INVOKABLE QVariantList rowsByKey(const QVariantList &rows, const QString &key, const QStringList &values) const;
+    Q_INVOKABLE QVariantList rowsByKey(const QVariant &rows, const QString &key, const QStringList &values) const;
     /// The `key` strings of `rows` (BBreadcrumb: the titles it measures).
-    Q_INVOKABLE QStringList stringFields(const QVariantList &rows, const QString &key) const;
+    Q_INVOKABLE QStringList stringFields(const QVariant &rows, const QString &key) const;
 };
 
 /// BPalette's results: the items whose title (or subtitle, at half weight) matches `query` fuzzily,

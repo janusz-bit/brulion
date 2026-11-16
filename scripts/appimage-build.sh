@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 #
 # Builds Brulion's Linux AppImage for the architecture of this machine (x86_64 or aarch64):
-# Qt 6.11.2 from aqt, a CMake Release build + unit tests, `cmake --install` into an AppDir,
+# Qt 6.12.0 from aqt, a CMake Release build + unit tests, `cmake --install` into an AppDir,
 # then linuxdeploy + linuxdeploy-plugin-qt bundle Qt (libraries; xcb, Wayland and offscreen
 # platform plugins; the QML modules that src/app/qml imports) and pack the AppImage. Spell checking:
 # the system's Hunspell (libhunspell-dev, bundled by linuxdeploy) with the Polish and English
@@ -22,7 +22,7 @@
 #                    root) and exit
 #
 # Environment (all optional):
-#   QT_VERSION              Qt version (default 6.11.2)
+#   QT_VERSION              Qt version (default 6.12.0)
 #   QT_ROOT                 aqt install root (default ~/.cache/brulion-qt), shared with
 #                           scripts/android-build.sh and scripts/wasm-build.sh
 #   QT_DIR                  desktop Qt (default $QT_ROOT/$QT_VERSION/gcc_64, on aarch64 .../gcc_arm64);
@@ -53,7 +53,7 @@ die() {
   exit 1
 }
 
-QT_VERSION=${QT_VERSION:-6.11.2}
+QT_VERSION=${QT_VERSION:-6.12.0}
 AQT_VERSION=3.3.0
 CMAKE_MIN=3.24
 # linuxdeploy releases (tags) and the SHA-256 of their AppImages. Bump together.

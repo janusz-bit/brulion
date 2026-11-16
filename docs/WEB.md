@@ -29,13 +29,13 @@ PWA (it can be "installed" from the browser menu), and it keeps notes in the bro
 
 | Component | Version | Source |
 |---|---|---|
-| Qt for WebAssembly | 6.11.2 `wasm_singlethread` | `aqt install-qt all_os wasm 6.11.2 wasm_singlethread` (aqtinstall 3.3.0) |
-| Host Qt (moc, rcc, qmlcachegen, lrelease…) | 6.11.2 `linux_gcc_64` | `aqt install-qt linux desktop 6.11.2 linux_gcc_64` |
-| Emscripten | **4.0.7** | `emsdk install 4.0.7 && emsdk activate 4.0.7` |
+| Qt for WebAssembly | 6.12.0 `wasm_singlethread` | `aqt install-qt all_os wasm 6.12.0 wasm_singlethread` (aqtinstall 3.3.0) |
+| Host Qt (moc, rcc, qmlcachegen, lrelease…) | 6.12.0 `linux_gcc_64` | `aqt install-qt linux desktop 6.12.0 linux_gcc_64` |
+| Emscripten | **5.0.5** | `emsdk install 5.0.5 && emsdk activate 5.0.5` |
 
-Qt 6.11 requires **exactly** Emscripten 4.0.7 (documentation
-[doc.qt.io/qt-6.11/wasm.html](https://doc.qt.io/qt-6.11/wasm.html): "The supported version of
-Emscripten for 6.11.2 is Emscripten 4.0.7"; the same in `QT_EMCC_RECOMMENDED_VERSION` in
+Qt 6.12 requires **exactly** Emscripten 5.0.5 (documentation
+[doc.qt.io/qt-6.12/wasm.html](https://doc.qt.io/qt-6.12/wasm.html): "The supported version of
+Emscripten for 6.12.0 is Emscripten 5.0.5"; the same in `QT_EMCC_RECOMMENDED_VERSION` in
 `lib/cmake/Qt6/QtPublicWasmToolchainHelpers.cmake`). Emscripten does not guarantee ABI compatibility
 between versions, so another emsdk (e.g. `emscripten` from nixpkgs, currently 6.0.x) will not do.
 The build script checks the `emcc` version and stops on a mismatch. When bumping Qt, change
@@ -48,7 +48,7 @@ executable and point to `C:/…`. That is why we build with plain `cmake` and th
 ## Building
 
 ```sh
-scripts/wasm-build.sh --setup   # first time: emsdk 4.0.7 + Qt 6.11.2 (wasm + host) into ~/.cache
+scripts/wasm-build.sh --setup   # first time: emsdk 5.0.5 + Qt 6.12.0 (wasm + host) into ~/.cache
 scripts/wasm-build.sh           # configure + build + assemble the site in dist-wasm/
 scripts/wasm-build.sh --clean   # from scratch
 scripts/wasm-build.sh --assemble  # only reassemble dist-wasm/ from an existing build
@@ -62,7 +62,7 @@ and configurable through environment variables:
 | `BRULION_CACHE` | `${XDG_CACHE_HOME:-~/.cache}` |
 | `EMSDK` | `$BRULION_CACHE/brulion-emsdk/emsdk` |
 | `QT_ROOT` | `$BRULION_CACHE/brulion-qt` (shared with the Android build) |
-| `QT_WASM` / `QT_HOST` | `$QT_ROOT/6.11.2/wasm_singlethread` / `$QT_ROOT/6.11.2/gcc_64` |
+| `QT_WASM` / `QT_HOST` | `$QT_ROOT/6.12.0/wasm_singlethread` / `$QT_ROOT/6.12.0/gcc_64` |
 | `BUILD_DIR` / `DIST_DIR` | `build-wasm` / `dist-wasm` |
 | `BUILD_TYPE` | `MinSizeRel` (smallest `.wasm`) |
 | `JOBS` | `nproc` |

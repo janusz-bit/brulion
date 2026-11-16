@@ -15,7 +15,7 @@
 # Usage: scripts/android-build.sh [--help]
 #
 # Environment (all optional):
-#   QT_VERSION                   Qt version (default 6.11.2)
+#   QT_VERSION                   Qt version (default 6.12.0)
 #   BRULION_ANDROID_QT=source    Qt built from source by scripts/android-qt-from-source.sh
 #                                (default aqt: The Qt Company's prebuilt Qt); implies
 #                                BRULION_ANDROID_OPENSSL=source (Qt's build needs OpenSSL's headers)
@@ -26,7 +26,7 @@
 #   ANDROID_SDK_ROOT             Android SDK (else ANDROID_HOME, else ~/.cache/brulion-android-sdk);
 #                                missing packages are installed with its cmdline-tools (sdkmanager)
 #   ANDROID_NDK_ROOT             NDK (default $ANDROID_SDK_ROOT/ndk/$NDK_VERSION)
-#   NDK_VERSION                  default 27.2.12479018 (r27c, the NDK of Qt 6.11)
+#   NDK_VERSION                  default 27.2.12479018 (r27c, the NDK of Qt 6.12)
 #   JAVA_HOME                    JDK 21 (17+ works); default: the `java` on PATH
 #   BRULION_ANDROID_ABIS         ABIs, space separated (default "arm64-v8a"; also armeabi-v7a,
 #                                x86_64, x86 — one multi-ABI APK)
@@ -130,7 +130,7 @@ fi
 
 # --- configuration ---------------------------------------------------------------------------
 
-QT_VERSION=${QT_VERSION:-6.11.2}
+QT_VERSION=${QT_VERSION:-6.12.0}
 QT_SOURCE=${BRULION_ANDROID_QT:-aqt}
 case $QT_SOURCE in
   aqt) QT_ROOT=${QT_ROOT:-$HOME/.cache/brulion-qt} ;;
@@ -204,7 +204,7 @@ export JAVA_HOME
 export PATH="$JAVA_HOME/bin:$PATH"
 java_major=$("$JAVA_HOME/bin/java" -XshowSettings:properties -version 2>&1 |
   sed -nE 's/^[[:space:]]*java\.specification\.version = ([0-9]+).*/\1/p')
-((${java_major:-0} >= 17)) || die "JDK ${java_major:-?} is too old: Gradle 9 / AGP 9 need 17+, Qt 6.11 recommends 21"
+((${java_major:-0} >= 17)) || die "JDK ${java_major:-?} is too old: Gradle 9 / AGP 9 need 17+, Qt 6.12 recommends 21"
 echo "JDK $java_major: $JAVA_HOME"
 
 # --- Android SDK and NDK ------------------------------------------------------------------------
@@ -268,7 +268,7 @@ if [[ $OPENSSL_SOURCE == source ]]; then
   export BRULION_ANDROID_OPENSSL_DIR=$BRULION_OPENSSL_OUT
 fi
 if [[ $QT_SOURCE == source ]]; then
-  [[ $QT_VERSION == 6.11.2 ]] || die "scripts/android-qt-from-source.sh builds Qt 6.11.2, not QT_VERSION=$QT_VERSION"
+  [[ $QT_VERSION == 6.12.0 ]] || die "scripts/android-qt-from-source.sh builds Qt 6.12.0, not QT_VERSION=$QT_VERSION"
   info "Qt from source (scripts/android-qt-from-source.sh)"
   QT_ROOT=$QT_ROOT BRULION_ANDROID_ABIS=$abis_env JOBS=$JOBS bash "$ROOT/scripts/android-qt-from-source.sh"
   QT_HOST_PATH=${QT_HOST_PATH:-$QT_ROOT/$QT_VERSION/gcc_64}

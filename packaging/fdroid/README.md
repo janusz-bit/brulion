@@ -7,7 +7,7 @@ scripts and the project version; once merged, fdroiddata's copy is the one F-Dro
 adds the builds of new tags). The file is exactly what `fdroid rewritemeta` writes (no comments,
 sorted categories), so it can be copied into fdroiddata as it is.
 
-The APK is built entirely from source: Qt 6.11.2 (srclib `Qt5`, the qt5.git super-repository, only
+The APK is built entirely from source: Qt 6.12.0 (srclib `Qt5`, the qt5.git super-repository, only
 the modules the app uses) and OpenSSL 3.5 (srclib `OpenSSL`) are compiled with the NDK by
 `scripts/android-qt-from-source.sh` and `scripts/android-openssl-from-source.sh`, which
 `scripts/android-build.sh` runs with `BRULION_ANDROID_QT=source` — no prebuilt Qt (aqt) or OpenSSL

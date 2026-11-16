@@ -75,6 +75,19 @@ QVariantMap crumbOf(const QVariant &row)
 
 } // namespace
 
+namespace {
+/// A list from a value QML passed: [] for undefined, null or anything that is no list.
+QVariantList listOf(const QVariant &value)
+{
+    switch (value.metaType().id()) {
+    case QMetaType::QVariantList: return value.toList();
+    case QMetaType::QStringList: return value.toList();
+    default: break;
+    }
+    return isJsValue(value) && value.canConvert<QVariantList>() ? value.toList() : QVariantList();
+}
+} // namespace
+
 QVariantMap objectOf(const QVariant &value)
 {
     if (value.metaType().id() == QMetaType::QVariantMap || (isJsValue(value) && value.canConvert<QVariantMap>()))
@@ -170,15 +183,18 @@ QVariant UiModels::field(const QVariant &object, const QString &key) const
     return objectOf(object).value(key);
 }
 
-QVariant UiModels::fieldAt(const QVariantList &list, int index, const QString &key) const
+QVariant UiModels::fieldAt(const QVariant &listValue, int index, const QString &key) const
 {
+    const QVariantList list = listOf(listValue);
     if (index < 0 || index >= list.size())
         return {};
     return objectOf(list.at(index)).value(key);
 }
 
-QVariantList UiModels::withDefaults(const QVariantList &rows, const QVariantMap &defaults) const
+QVariantList UiModels::withDefaults(const QVariant &rowsValue, const QVariant &defaultsValue) const
 {
+    const QVariantList rows = listOf(rowsValue);
+    const QVariantMap defaults = objectOf(defaultsValue);
     QVariantList out;
     out.reserve(rows.size());
     for (const QVariant &r : rows) {
@@ -193,8 +209,9 @@ QVariantList UiModels::withDefaults(const QVariantList &rows, const QVariantMap 
     return out;
 }
 
-QVariantList UiModels::segmentRows(const QVariantList &model) const
+QVariantList UiModels::segmentRows(const QVariant &modelValue) const
 {
+    const QVariantList model = listOf(modelValue);
     QVariantList out;
     out.reserve(model.size());
     for (const QVariant &m : model) {
@@ -210,15 +227,17 @@ QVariantList UiModels::segmentRows(const QVariantList &model) const
     return out;
 }
 
-int UiModels::indexOfValue(const QVariantList &rows, const QVariant &value) const
+int UiModels::indexOfValue(const QVariant &rowsValue, const QVariant &value) const
 {
+    const QVariantList rows = listOf(rowsValue);
     const auto it = std::ranges::find_if(
             rows, [&value](const QVariant &row) { return jsStrictEquals(objectOf(row).value(u"value"_s), value); });
     return it == rows.cend() ? -1 : int(it - rows.cbegin());
 }
 
-QVariantList UiModels::crumbRows(const QVariantList &model) const
+QVariantList UiModels::crumbRows(const QVariant &modelValue) const
 {
+    const QVariantList model = listOf(modelValue);
     QVariantList out;
     out.reserve(model.size());
     for (const QVariant &m : model)
@@ -226,8 +245,9 @@ QVariantList UiModels::crumbRows(const QVariantList &model) const
     return out;
 }
 
-QVariantList UiModels::shownCrumbs(const QVariantList &rows, int head, int tail, bool dots) const
+QVariantList UiModels::shownCrumbs(const QVariant &rowsValue, int head, int tail, bool dots) const
 {
+    const QVariantList rows = listOf(rowsValue);
     const auto part = [](const QVariant &row, int index) {
         QVariantMap shown = crumbOf(row);
         shown.insert(u"partIndex"_s, index);
@@ -246,8 +266,9 @@ QVariantList UiModels::shownCrumbs(const QVariantList &rows, int head, int tail,
     return out;
 }
 
-QVariantList UiModels::enabledRows(const QVariantList &rows) const
+QVariantList UiModels::enabledRows(const QVariant &rowsValue) const
 {
+    const QVariantList rows = listOf(rowsValue);
     QVariantList out;
     out.reserve(rows.size());
     for (const QVariant &r : rows) {
@@ -259,8 +280,9 @@ QVariantList UiModels::enabledRows(const QVariantList &rows) const
     return out;
 }
 
-QVariantList UiModels::rowsByKey(const QVariantList &rows, const QString &key, const QStringList &values) const
+QVariantList UiModels::rowsByKey(const QVariant &rowsValue, const QString &key, const QStringList &values) const
 {
+    const QVariantList rows = listOf(rowsValue);
     QVariantList out;
     for (const QString &value : values) {
         const auto it = std::ranges::find_if(rows, [&](const QVariant &row) { return stringField(row, key) == value; });
@@ -270,8 +292,9 @@ QVariantList UiModels::rowsByKey(const QVariantList &rows, const QString &key, c
     return out;
 }
 
-QStringList UiModels::stringFields(const QVariantList &rows, const QString &key) const
+QStringList UiModels::stringFields(const QVariant &rowsValue, const QString &key) const
 {
+    const QVariantList rows = listOf(rowsValue);
     QStringList out;
     out.reserve(rows.size());
     for (const QVariant &r : rows)

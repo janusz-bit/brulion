@@ -102,7 +102,12 @@ FocusScope {
             if (root.following)
                 toEndLater.restart()
         }
-        onRowsInserted: (parent, first, last) => {
+    }
+    // (A Connections with typed parameters: Qt 6.12's qmlcachegen compiles no handler whose
+    // QModelIndex parameter it has to guess.)
+    Connections {
+        target: logModel
+        function onRowsInserted(parent: var, first: int, last: int) {
             if (!root.following)
                 root.newCount += last - first + 1
         }

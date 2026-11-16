@@ -4,10 +4,10 @@ The repository is a Nix flake. It provides:
 
 | Output | What it is |
 |---|---|
-| `packages.<system>.brulion` (= `default`) | the desktop app (C++/Qt 6.11 from nixpkgs): `bin/brulion`, menu entry, icons, AppStream metadata |
+| `packages.<system>.brulion` (= `default`) | the desktop app (C++/Qt 6.12 from nixpkgs): `bin/brulion`, menu entry, icons, AppStream metadata |
 | `nixosModules.default` | NixOS module: `programs.brulion` (the app, autostart in the tray) and `services.brulion-web` (the browser version through nginx) |
 | `overlays.default` | adds `pkgs.brulion` (built with the nixpkgs of whoever uses the overlay) |
-| `devShells.<system>.default` | developer environment (Qt 6.11, CMake, Ninja, ccache, clang-tools, gdb…) |
+| `devShells.<system>.default` | developer environment (Qt 6.12, CMake, Ninja, ccache, clang-tools, gdb…) |
 | `checks.<system>.*` | package with tests, NixOS module, formatting of `.nix` files, test in a virtual machine |
 | `formatter.<system>` | `nix fmt` (nixfmt for all `.nix` files) |
 
@@ -397,7 +397,7 @@ CAs).
 ## Working on the code
 
 ```sh
-nix develop                    # Qt 6.11, cmake, ninja, ccache, clang-tools, gdb, nixfmt
+nix develop                    # Qt 6.12, cmake, ninja, ccache, clang-tools, gdb, nixfmt
 scripts/dev-build.sh           # configure + build in ./build (Debug, -Werror, with a lock)
 scripts/dev-build.sh -t tst_dates tst_dates   # just one test (target + regex)
 ./build/src/app/brulion        # run; without a screen: QT_QPA_PLATFORM=offscreen

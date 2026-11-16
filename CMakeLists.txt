@@ -21,7 +21,10 @@ option(BRULION_BUILD_APP "Build the app (Qt Quick); OFF builds the core librarie
 option(BRULION_UPDATE_CHECK "Ask GitHub for a newer version (Android, Windows); OFF for store builds" ON)
 
 if(BRULION_BUILD_APP)
-    find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Network Qml Quick QuickControls2 Svg LinguistTools)
+    # 6.12: the QML uses Item.mutabilityGroup (the renderer keeps text that changes often out of
+    # the batches of the rest: docs/PERFORMANCE.md "The model on the device"). brulion-cli alone
+    # builds with 6.8.
+    find_package(Qt6 6.12 REQUIRED COMPONENTS Core Gui Network Qml Quick QuickControls2 Svg LinguistTools)
 else()
     # LinguistTools: brulion-cli's Polish messages (src/cli/CMakeLists.txt); without it English.
     find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Network OPTIONAL_COMPONENTS LinguistTools)

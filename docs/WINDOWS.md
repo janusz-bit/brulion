@@ -1,7 +1,7 @@
 # Brulion on Windows (test version)
 
 Since version 0.4.5 Brulion has a **test version** for Windows 10 and 11 (x86_64): the same program as on
-Linux (C++20 + Qt 6.11.2, Qt Quick), built with the MSVC 2022 compiler. It is in every release
+Linux (C++20 + Qt 6.12.0, Qt Quick), built with the MSVC 2022 compiler. It is in every release
 in two forms:
 
 | File | What it is |
@@ -255,7 +255,7 @@ Application → Check for new versions** turns it off.
 
 ### In CI
 
-`.github/workflows/windows.yml` (runner `windows-2022`): Qt 6.11.2 `win64_msvc2022_64` from aqt
+`.github/workflows/windows.yml` (runner `windows-2022`): Qt 6.12.0 `win64_msvc2022_64` from aqt
 (`jurplel/install-qt-action`, cached; aqtinstall from a pinned commit of the master branch, because release
 3.3.0 does not know the Qt 6.11 repository layout for Windows) together with the **Qt PDF** module (`modules:
 qtpdf`, a Qt repository extension: PDF thumbnails, the PDF viewer with search, and PDF pages
@@ -271,17 +271,17 @@ check → artifact `brulion-windows` (ZIP + installer). It runs like `appimage.y
 ### Locally
 
 Needed: Visual Studio 2022 with the "Desktop development with C++" workload (it has CMake
-and Ninja), Qt 6.11.2 for MSVC (the Qt installer or aqt newer than 3.3.0:
-`aqt install-qt windows desktop 6.11.2 win64_msvc2022_64 -O C:\Qt -m qtpdf`; without `qtpdf` Brulion
+and Ninja), Qt 6.12.0 for MSVC (the Qt installer or aqt newer than 3.3.0:
+`aqt install-qt windows desktop 6.12.0 win64_msvc2022_64 -O C:\Qt -m qtpdf`; without `qtpdf` Brulion
 builds without PDFs: no thumbnails, PDF viewer or PDF backdrop — a PDF then opens
 in the system's default app), Inno Setup 6 (`winget install JRSoftware.InnoSetup`). A clone with Git for Windows
 keeps LF line endings thanks to `.gitattributes` (`* -text`) — the tests compare bytes. In PowerShell
 in the repository directory:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\windows-build.ps1 -QtDir C:\Qt\6.11.2\msvc2022_64
+powershell -ExecutionPolicy Bypass -File scripts\windows-build.ps1 -QtDir C:\Qt\6.12.0\msvc2022_64
 # only selected steps:
-scripts\windows-build.ps1 -QtDir C:\Qt\6.11.2\msvc2022_64 -Steps build,test
+scripts\windows-build.ps1 -QtDir C:\Qt\6.12.0\msvc2022_64 -Steps build,test
 ```
 
 Without an MSVC environment (no `cl.exe` in `PATH`) the script loads it by itself (`vswhere` + `vcvars64.bat`);

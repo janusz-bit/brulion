@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: AGPL-3.0-or-later
 #
-# Builds Qt 6.11.2 for Android from Qt's source archives (for builds without prebuilt Qt, e.g.
+# Builds Qt 6.12.0 for Android from Qt's source archives (for builds without prebuilt Qt, e.g.
 # F-Droid): first the host Qt with the tools a cross build runs (moc, rcc, qmlcachegen,
 # qmltyperegistrar, qmlimportscanner, androiddeployqt, qsb, lrelease…) and Qt's translations,
 # then Qt for Android with the NDK (r27c) — only the modules Brulion's Android build uses:
 #   host:    qtbase qtshadertools qtsvg qtdeclarative qttools (Linguist tools only) qttranslations
 #   Android: qtbase qtshadertools qtsvg qtdeclarative
 # Both in the layout aqt installs (scripts/android-build.sh reads it), under QT_ROOT:
-#   $QT_ROOT/6.11.2/gcc_64              host Qt (QT_HOST_PATH)
-#   $QT_ROOT/6.11.2/android_<arch>      Qt for Android, one per ABI
+#   $QT_ROOT/6.12.0/gcc_64              host Qt (QT_HOST_PATH)
+#   $QT_ROOT/6.12.0/android_<arch>      Qt for Android, one per ABI
 # Idempotent: a module whose stamp (version, sources, options) matches is not built again.
 # Takes ~30 min with 6 jobs on a 16-core x86_64 (F-Droid's build server image, measured); needs
 # ~13 GB of disk while building (deleted afterwards), ~400 MB installed.
@@ -21,8 +21,8 @@
 #                                libssl_3.so at run time): the output of
 #                                scripts/android-openssl-from-source.sh (ssl_3/<abi>/include)
 #   QT_ROOT                      install root (default ~/.cache/brulion-qt-source)
-#   BRULION_QT_SOURCE_DIR        a Qt source tree with qtbase/, qtdeclarative/… at v6.11.2 (e.g.
-#                                F-Droid's srclib Qt5@v6.11.2 after `init-repository`) instead of
+#   BRULION_QT_SOURCE_DIR        a Qt source tree with qtbase/, qtdeclarative/… at v6.12.0 (e.g.
+#                                F-Droid's srclib Qt5@v6.12.0 after `init-repository`) instead of
 #                                the pinned source archives
 #   BRULION_QT_DOWNLOADS         where the archives are downloaded (default ~/.cache/brulion-src-downloads)
 #   BRULION_ANDROID_ABIS         ABIs, space separated (default "arm64-v8a"; also armeabi-v7a, x86_64, x86)
@@ -55,16 +55,16 @@ case ${1:-} in
   *) die "unknown argument: $1 (see --help)" ;;
 esac
 
-QT_VERSION=6.11.2
-# SHA-256 of https://download.qt.io/official_releases/qt/6.11/6.11.2/submodules/<module>-everywhere-src-6.11.2.tar.xz
+QT_VERSION=6.12.0
+# SHA-256 of https://download.qt.io/official_releases/qt/6.12/6.12.0/submodules/<module>-everywhere-src-6.12.0.tar.xz
 # (the same values Qt publishes in <archive>.sha256). Update together with QT_VERSION.
 declare -A QT_SHA256=(
-  [qtbase]=5b2e00eccaf5a4d8c14134ffa0ea8dfd0a35ae1ffc7f8d87fa4305a1ed23cf22
-  [qtshadertools]=805046b8b7757665586890b375940047e874ae3ab00adb6d3f2b38fc6b200b1c
-  [qtsvg]=d594337feca84c26fb67fe87b85e6a5c12fda404b611d905f9d138210c311876
-  [qtdeclarative]=215b7b70517e380123eabc6b92243f3c47b6f016a91d126057dbe53551c6b430
-  [qttools]=9ea75af35c512f7e09e61c8c3af3997f13b4d43bb099cf43fcec470126b4041e
-  [qttranslations]=021684c1a7937a9fabc3b056a6698ad5978794caf9ac190fd6cc11399e67c014
+  [qtbase]=a951bd163c7b80fc6b8c88d7668fb56abf91c152373e13c10666763238131307
+  [qtshadertools]=c7d84f436e1aaef39fdcadebf2bd71bdf24dc69497e13f2e0198873cbbfea2ab
+  [qtsvg]=e4ab39534ec97987b1b9b60ef7f4d3253d5912a69f8c713a01753174a4029331
+  [qtdeclarative]=311f3a2603e1973bb59baef9dfa740a376de713157d4782ee043681e889c9260
+  [qttools]=8dab8f3611496486a470ad5f115ceea584f36bc22a2b8b6f6ebdbafbb8160693
+  [qttranslations]=85929c0c30d6f273f23bd879bb69803ea17b010ab73cab2f8abf95357f6f6bbb
 )
 # In build order (each module needs the ones before it).
 HOST_MODULES=(qtbase qtshadertools qtsvg qtdeclarative qttools qttranslations)

@@ -47,7 +47,7 @@
 
 let
   # Keep in sync with scripts/android-build.sh and src/app/CMakeLists.txt (compile/target SDK).
-  ndkVersion = "27.2.12479018"; # r27c, the NDK Qt 6.11 is built with
+  ndkVersion = "27.2.12479018"; # r27c, the NDK Qt 6.12 is built with
   buildToolsVersion = "36.0.0";
   platformVersion = "36";
   cmakeVersion = "3.31.6";

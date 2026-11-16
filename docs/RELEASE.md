@@ -27,8 +27,8 @@ Tests in GitHub Actions do not start on their own at every push. They run:
 | `.github/workflows/windows.yml` | by hand, a push to `main` with the `[ci]` marker (changes in `src/`, `tests/`, `packaging/windows/`…), from `release.yml` | `scripts/windows-build.ps1` on `windows-2022` (Qt 6.11.2 MSVC 2022 from aqt, MSVC, Ninja): a Release build, offscreen tests, `windeployqt`, the portable ZIP and the Inno Setup installer, both checked without Qt in `PATH` (the unpacked ZIP, a silent per-user install, the shell's self-test, a silent uninstall) → the artifact `brulion-windows` (the test version, docs/WINDOWS.md) |
 | `.github/workflows/release.yml` | a `v*` tag or by hand | checks the version, creates a draft release, runs the tests (`ci.yml` without **perf**), the four builds above + `git archive`, attaches the files and `SHA256SUMS.txt`, publishes the release and rebuilds the F-Droid repository on GitHub Pages with its APK, the download page with its files and its browser version in `app/` (`fdroid.yml`; not for a pre-release or an APK signed with a throwaway key) |
 
-The tools' versions are pinned in the scripts (Qt 6.11.2, aqtinstall 3.3.0, NDK r27c, Emscripten
-4.0.7, linuxdeploy with SHA-256 sums); `dependabot.yml` updates the GitHub actions once a month in
+The tools' versions are pinned in the scripts (Qt 6.12.0, aqtinstall 3.3.0, NDK r27c, Emscripten
+5.0.5, linuxdeploy with SHA-256 sums); `dependabot.yml` updates the GitHub actions once a month in
 one PR. The downloaded Qt, NDK and emsdk are in `actions/cache` (keys with the versions — after a
 version bump they are downloaded afresh once).
 
@@ -231,7 +231,7 @@ F-Droid after a few days.
 
 What breaks the F-Droid build (check before tagging when it changes):
 
-* the versions pinned in the scripts (Qt 6.11.2 and the SHA-256 of its modules in
+* the versions pinned in the scripts (Qt 6.12.0 and the SHA-256 of its modules in
   `scripts/android-qt-from-source.sh`, OpenSSL in `scripts/android-openssl-from-source.sh`, the
   NDK, the SDK packages in `scripts/android-build.sh`) — the recipe in fdroiddata has them
   separately (srclibs `Qt5@v…`, `OpenSSL@openssl-…`, `ndk:`, `sdkmanager …`): after a bump the
@@ -269,7 +269,7 @@ Verified 2026-10-14 on the laptop (podman, `ubuntu:22.04`, g++-12): the build, 1
 x86_64 AppImage of 43 MB with the xcb/Wayland/offscreen plugins, a start without a display for
 10 s.
 
-The AppImage contains Qt 6.11.2 (the libraries, the xcb/Wayland/offscreen plugins, the QML modules
+The AppImage contains Qt 6.12.0 (the libraries, the xcb/Wayland/offscreen plugins, the QML modules
 used in `src/app/qml`) and runs on systems with a glibc no older than the building system's:
 x86_64 — Ubuntu 22.04+, Debian 12+, Fedora 36+; aarch64 — glibc ≥ 2.39 (Qt for arm64 is built on
 Ubuntu 24.04).

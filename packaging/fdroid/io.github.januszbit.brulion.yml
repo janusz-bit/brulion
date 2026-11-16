@@ -24,7 +24,7 @@ Builds:
       - apt-get install -y --no-install-recommends g++ make
     output: dist-android/brulion-$$VERSION$$-arm64-v8a-unsigned.apk
     srclibs:
-      - Qt5@v6.11.2
+      - Qt5@v6.12.0
       - OpenSSL@openssl-3.5.9
     prebuild:
       - sdkmanager 'platforms;android-36' 'build-tools;36.0.0' 'cmake;3.31.6'

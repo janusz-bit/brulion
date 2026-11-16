@@ -248,7 +248,7 @@ Pandoc Markdown document for Word, LibreOffice, PDF or EPUB).
   did (live sync progress and the history of runs are in the sync center); share or save it
   and send it to us — it stays on the device and never contains passwords, tokens or note
   contents.
-* Built with C++20 and Qt 6.11 Quick; GUI-free core libraries with thousands of unit tests.
+* Built with C++20 and Qt 6.12 Quick; GUI-free core libraries with thousands of unit tests.
 
 * **The guide inside**: the full user guide is a notebook of its own, "Brulion Documentation" on
   the desktop and Android — switch to it and back with "Switch notebook" (the first letter of the
@@ -721,7 +721,7 @@ Wszystkie skróty: [docs/UI.md](docs/UI.md#keyboard-shortcuts-desktop).
 
 ## Dla programistów
 
-C++20 + Qt 6.11 (Qt Quick/QML), CMake, testy QtTest. Logika (parser Markdown, indeks
+C++20 + Qt 6.12 (Qt Quick/QML), CMake, testy QtTest. Logika (parser Markdown, indeks
 i wyszukiwarka, kalkulator, daty, synchronizacja, przypomnienia, import/eksport) to
 biblioteki bez GUI w `src/core`, wspólne dla Linuksa, Androida i WebAssembly.
 

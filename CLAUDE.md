@@ -2,7 +2,7 @@
 
 Offline-first Markdown notes app (Obsidian-style files + Logseq-style block outliner and
 journals, calendar, reminders/alarms, calculations, Syncthing/Nextcloud sync) written in
-**C++20 + Qt 6.11 (Qt Quick/QML)** for NixOS/Linux, Android and the browser (WebAssembly).
+**C++20 + Qt 6.12 (Qt Quick/QML)** for NixOS/Linux, Android and the browser (WebAssembly).
 Read before changing code:
 
 * `docs/SYNTAX.md` — the Markdown dialect (single source of truth for parsing/rendering).
