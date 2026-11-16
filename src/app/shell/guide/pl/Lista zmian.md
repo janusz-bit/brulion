@@ -7,6 +7,17 @@ brulion: document
 
 Tu znajdziesz zmiany w każdej wersji Brulionu, od najnowszej. Pełne opisy wydań z plikami do pobrania są na GitHubie: https://github.com/janusz-bit/brulion/releases
 
+## 0.24.0 — 16 listopada 2026
+
+**Nowe**
+- **Czat z AI na żywo** — odpowiedź pojawia się słowo po słowie, a przed nią to, co model myśli, małymi szarymi literami; z modelem na urządzeniu widać też, jak szybko pisze („16,7 tok/s”, z ostatnich dwóch sekund). Tak samo z Claude, z serwerem zgodnym z OpenAI i z modelem na urządzeniu. Zobacz [[AI]].
+
+**Zmiany**
+- **Zatrzymaj** zatrzymuje też model: model na urządzeniu przestaje pisać, a połączenie z dostawcą zostaje zamknięte, więc następne pytanie nie czeka za przerwaną odpowiedzią.
+- **Asystent nie znajduje już własnej rozmowy**, gdy przeszukuje albo wylicza notatki — rozmowa zawiera Twoje pytanie słowo w słowo, a mały model czytał ją zamiast notatek i tracił na tym minuty na telefonie.
+- **Wskaźniki pracy AI** (na górnym pasku i w czacie) obracają się skokowo, gdy model pracuje: rysowanie okna sześćdziesiąt razy na sekundę zabierało na telefonie procesor modelowi.
+- **Wolny albo nagrzany telefon** pisze dalej: odpowiedź modelu na urządzeniu kończy się dopiero po pięciu minutach bez żadnego postępu, a nie pięć minut po pytaniu.
+
 ## 0.23.0 — 16 listopada 2026
 
 **Nowe**

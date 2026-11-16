@@ -7,6 +7,17 @@ brulion: document
 
 Here you'll find what changed in every version of Brulion, newest first. Full release notes with downloads are on GitHub: https://github.com/janusz-bit/brulion/releases
 
+## 0.24.0 — November 16, 2026
+
+**New**
+- **The AI chat as it is written** — the answer appears word by word, and before it what the model is thinking, in small grey letters; with the model on the device you also see how fast it writes ("16.7 tok/s", over the last two seconds). With Claude, an OpenAI-compatible server and the model on the device alike. See [[AI]].
+
+**Changes**
+- **Stop** stops the model too: the model on the device stops writing and a provider's connection is closed, so your next question does not wait behind the stopped answer.
+- **The assistant no longer finds its own conversation** when it searches or lists your notes — it holds your question word for word, and a small model read it instead of your notes, losing minutes on a phone.
+- **The AI's spinners** (on the top bar and in the chat) turn in steps while the model works: drawing the window sixty times a second took the processor from the model on a phone.
+- **A slow or hot phone** writes on: an answer of the model on the device ends only after five minutes without any progress, no longer five minutes after the question.
+
 ## 0.23.0 — November 16, 2026
 
 **New**
