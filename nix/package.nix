@@ -46,7 +46,7 @@ in
 stdenv.mkDerivation (finalAttrs: {
   pname = "brulion";
   # Updated by scripts/release.sh together with CMakeLists.txt (the first `version = "...";` line).
-  version = "0.22.0";
+  version = "0.23.0";
 
   src = lib.fileset.toSource {
     root = ../.;
