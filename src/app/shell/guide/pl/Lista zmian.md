@@ -15,7 +15,8 @@ Tu znajdziesz zmiany w każdej wersji Brulionu, od najnowszej. Pełne opisy wyda
 **Zmiany**
 - **Zatrzymaj** zatrzymuje też model: model na urządzeniu przestaje pisać, a połączenie z dostawcą zostaje zamknięte, więc następne pytanie nie czeka za przerwaną odpowiedzią.
 - **Asystent nie znajduje już własnej rozmowy**, gdy przeszukuje albo wylicza notatki — rozmowa zawiera Twoje pytanie słowo w słowo, a mały model czytał ją zamiast notatek i tracił na tym minuty na telefonie.
-- **Wskaźniki pracy AI** (na górnym pasku i w czacie) obracają się skokowo, gdy model pracuje: rysowanie okna sześćdziesiąt razy na sekundę zabierało na telefonie procesor modelowi.
+- **Mniej rysowania, gdy AI odpowiada**: wskaźniki pracy AI obracają się skokowo, ✨ na górnym pasku stoi, gdy czat pokazuje odpowiedź, a na nowo układa się tylko pisany akapit — rysowanie okna sześćdziesiąt razy na sekundę zabierało na telefonie procesor modelowi.
+- **Qt 6.12** — Brulion jest budowany z Qt 6.12 na wszystkich platformach (wersja w przeglądarce z Emscripten 5.0.5).
 - **Wolny albo nagrzany telefon** pisze dalej: odpowiedź modelu na urządzeniu kończy się dopiero po pięciu minutach bez żadnego postępu, a nie pięć minut po pytaniu.
 
 ## 0.23.0 — 16 listopada 2026

@@ -15,7 +15,8 @@ Here you'll find what changed in every version of Brulion, newest first. Full re
 **Changes**
 - **Stop** stops the model too: the model on the device stops writing and a provider's connection is closed, so your next question does not wait behind the stopped answer.
 - **The assistant no longer finds its own conversation** when it searches or lists your notes — it holds your question word for word, and a small model read it instead of your notes, losing minutes on a phone.
-- **The AI's spinners** (on the top bar and in the chat) turn in steps while the model works: drawing the window sixty times a second took the processor from the model on a phone.
+- **Less drawing while the AI answers**: the AI's spinners turn in steps, the ✨ on the top bar stands still while the chat shows the answer, and only the paragraph being written is laid out again — drawing the window sixty times a second took the processor from the model on a phone.
+- **Qt 6.12** — Brulion is built with Qt 6.12 on every platform (the browser version with Emscripten 5.0.5).
 - **A slow or hot phone** writes on: an answer of the model on the device ends only after five minutes without any progress, no longer five minutes after the question.
 
 ## 0.23.0 — November 16, 2026
