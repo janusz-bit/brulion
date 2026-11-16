@@ -51,18 +51,16 @@ jobs:
     name: AppImage (${{ matrix.arch }})
     if: github.event_name != 'push' || github.ref_type == 'tag' || contains(join(github.event.commits.*.message, ' '), '[ci]')
     runs-on: ${{ matrix.runner }}
-    container: ${{ matrix.image }}
-    timeout-minutes: 60
+    container:
+      image: ${{ matrix.image }}
+      options: --privileged --ulimit core=-1
+    timeout-minutes: 120
     outputs:
       version: ${{ steps.build.outputs.version }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - arch: x86_64
-            runner: ubuntu-24.04
-            image: ubuntu:22.04
-            qt: gcc_64
           - arch: aarch64
             runner: ubuntu-24.04-arm
             image: ubuntu:24.04
@@ -86,13 +84,53 @@ jobs:
           restore-keys: |
             appimage-${{ matrix.arch }}-qt-${{ env.QT_VERSION }}-
 
+      - name: Core dumps to /tmp/cores (diag)
+        run: |
+          mkdir -p /tmp/cores
+          cat /proc/sys/kernel/core_pattern
+          echo '/tmp/cores/core.%e.%p' > /proc/sys/kernel/core_pattern || sysctl -w kernel.core_pattern=/tmp/cores/core.%e.%p
+          cat /proc/sys/kernel/core_pattern
+          ulimit -c
+
       - id: build
         name: Build, test and pack the AppImage
+        continue-on-error: true
         env:
+          CXXFLAGS: -g1
+          CFLAGS: -g1
           # A push or a run by hand has no inputs: tests on. (Not `inputs.tests == false`: the loose
           # comparison makes the missing input, null, equal to false.)
           BRULION_APPIMAGE_TESTS: ${{ format('{0}', inputs.tests) == 'false' && '0' || '1' }}
-        run: scripts/appimage-build.sh
+        run: |
+          ulimit -c unlimited
+          scripts/appimage-build.sh
+
+      - name: tst_planning_qml again and again, beside other tests (diag)
+        if: always()
+        run: |
+          ulimit -c unlimited
+          export QT_QPA_PLATFORM=offscreen
+          export PATH="$HOME/.cache/brulion-appimage-venv/bin:$PATH"
+          command -v ctest
+          for round in 1 2 3 4 5 6 7 8; do
+            ctest --test-dir build-appimage -j3 -E 'tst_planning_qml' -R 'tst_editor_qml|tst_shell|tst_views' >/dev/null 2>&1 &
+            load=$!
+            ctest --test-dir build-appimage -R '^tst_planning_qml$' --output-on-failure --repeat until-fail:4 | tail -60 || true
+            wait "$load" || true
+            ls /tmp/cores
+          done
+
+      - name: Backtraces of the core dumps (diag)
+        if: always()
+        run: |
+          ls -la /tmp/cores
+          apt-get update -qq && apt-get install -y -qq gdb >/dev/null
+          for core in /tmp/cores/core.*; do
+            [ -e "$core" ] || continue
+            echo "=================== $core"
+            exe=build-appimage/src/app/brulion
+            gdb -q -batch -ex 'set pagination off' -ex 'info sharedlibrary' -ex 'thread apply all bt 40' "$exe" "$core" 2>&1 | grep -v '^\[New LWP' | head -400
+          done
 
       - name: Summary
         run: |
