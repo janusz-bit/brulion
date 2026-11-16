@@ -4301,8 +4301,9 @@ docs/WEB.md). A new emoji in the UI or the syntax: add it to `brulionEmoji()`, r
 Every binding, signal handler and function of the app's QML is compiled to C++ ahead of time
 by qmlcachegen (Qt Quick Compiler); none is left to the QML interpreter. ctest
 `tst_qml_compiled` reads qmlcachegen's statistics of the build and lists anything that is not
-compiled, with qmlcachegen's reason; builds with `BRULION_WERROR` (`scripts/dev-build.sh`, CI) fail
-on it right after linking the app:
+compiled, with qmlcachegen's reason, and anything that took it longer than 30 seconds to compile
+("Short functions" below); builds with `BRULION_WERROR` (`scripts/dev-build.sh`, CI) fail on it
+right after linking the app:
 
 ```sh
 cmake --build build --target brulion
@@ -4452,6 +4453,19 @@ UI through the C++ helpers `DevEvents`, `DevTest`, `DevBlock`, `DevRecord`
 (`src/app/ui/devtesting.h`), C++ self-tests call typed QML functions through
 `uidriver::callQml()`, which converts each argument to the declared type.
 
+**Short functions.** qmlcachegen's time over one function grows steeply with its branches — every
+`if` and above all every `&&` / `||` / `??` of its conditions: in Qt 6.12 about with their fourth
+power (generated self-test steps with three `&&` each, on a Raspberry Pi 4: 12 steps 5 s, 24 steps
+87 s; the same 24 steps in two functions 11 s, in four 2 s). A self-test with 157 steps in one
+function took qmlcachegen 25 minutes on each CI runner (Qt 6.11: seconds), and the builds ran out
+of time. Long sequences go into parts of at most about 20 steps and 20 short-circuit operators,
+called in order — the playground's step functions do so (`desktopSteps()` calls
+`desktopStepsPart1()` …): `at()` counts the steps across the parts, so a step's number does not
+change. Constants the parts share are computed once in the calling function and passed as typed
+parameters. The check above also fails on any binding or function that took qmlcachegen longer than
+30 seconds (`-DBRULION_QML_MAX_COMPILE_SECONDS=<s>`, 0 for no limit) and names the slowest one in
+every build.
+
 ### The QML engine's garbage collector
 
 `main.cpp` sets `QV4_GC_TIMELIMIT=0` before the engine exists (a value the user set wins): the
@@ -4580,7 +4594,11 @@ The playground's self-tests (`--editor-script selftest`, `clock`, … and the fi
 run on one step runner (EditorPlayground: `runSteps()`, `stepTimer`), compiled to C++ like the rest
 of the QML ("Compiled QML"): a test's steps are a function that writes each step as
 `if (window.at()) { … }`, in order; each tick of the runner calls it once and `at()` is true for the
-one step to run then (`stepIndex`). A helper standing for several steps calls `at()` for each of
+one step to run then (`stepIndex`). A test longer than about 20 steps writes them in parts — the
+function calls `stepsPart1()`, `stepsPart2()` … in order, each with at most about 20 steps
+("Compiled QML", "Short functions": qmlcachegen's time over one function grows steeply with its
+steps); a new step goes into the part where it belongs, a part that grew past that is split. A
+helper standing for several steps calls `at()` for each of
 them; steps for one kind of device only sit in an `if (Theme.touchUi)` (a condition that holds for
 the whole run). A step waiting for something asynchronous repeats itself (at most `waitLimit`
 times): `if (window.at()) window.waitStep(ready, "what")`, or `window.waiting(ready)` alone for a

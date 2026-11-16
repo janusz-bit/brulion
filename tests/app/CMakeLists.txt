@@ -37,12 +37,13 @@ brulion_add_test(tst_ui_themepalette
 
 # Every binding and function of the app's QML is compiled to C++ (docs/UI.md "Compiled QML"):
 # qmlcachegen's statistics of the app's build, cmake/BrulionQmlCompiledCheck.cmake lists what is
-# left to the interpreter.
+# left to the interpreter and what took qmlcachegen longer than BRULION_QML_MAX_COMPILE_SECONDS.
 if(TARGET brulion AND (NOT DEFINED QT_QML_GENERATE_AOTSTATS OR QT_QML_GENERATE_AOTSTATS))
     add_test(NAME tst_qml_compiled
              COMMAND ${CMAKE_COMMAND}
                      -DLIST=$<TARGET_PROPERTY:brulion,BINARY_DIR>/.rcc/qmlcache/module_brulion.aotstatslist
                      -DSOURCE_DIR=${PROJECT_SOURCE_DIR}
+                     -DMAX_SECONDS=${BRULION_QML_MAX_COMPILE_SECONDS}
                      -P ${PROJECT_SOURCE_DIR}/cmake/BrulionQmlCompiledCheck.cmake)
 endif()
 

@@ -211,6 +211,18 @@ QtObject {
 
     // ---- Desktop ------------------------------------------------------------------------------------
     function desktopSteps(): void {
+        desktopStepsPart1()
+        desktopStepsPart2()
+        desktopStepsPart3()
+        desktopStepsPart4()
+        desktopStepsPart5()
+        desktopStepsPart6()
+        desktopStepsPart7()
+        desktopStepsPart8()
+        desktopStepsPart9()
+        desktopStepsPart10()
+    }
+    function desktopStepsPart1(): void {
         if (window.at()) window.waitStep(page.loaded && rowOf("Przygotowanie") > 0, "the outline is open")
         // ---- Esc, Shift+↓ twice, Ctrl+C -----------------------------------------------------------
         if (window.at()) {
@@ -256,6 +268,8 @@ QtObject {
             key(Qt.Key_Escape, 0)
         }
         if (window.at()) check(page.selectedRow < 0 && page.selectionCount === 0, "Esc clears the selection")
+    }
+    function desktopStepsPart2(): void {
         // ---- Shift+↑ from the first line of an edited block; Shift+↓ from inside one ---------------
         if (window.at()) editor.startEditing(rowOf("Skuć"), 0)
         if (window.at()) window.waitStep(edit() !== null && edit().activeFocus, "Skuć is edited")
@@ -286,6 +300,8 @@ QtObject {
         if (window.at()) check(page.editingRow < 0 && page.selectionCount === selectableCount(),
                     "the second Ctrl+A selects every block: " + page.selectionCount + " of " + selectableCount())
         if (window.at()) key(Qt.Key_Escape, 0)
+    }
+    function desktopStepsPart3(): void {
         // ---- Ctrl+click picks single blocks: gaps, copying, no moving, Shift+click after it ------------
         if (window.at()) {
             center(rowOf("Zadzwonić"))
@@ -349,6 +365,8 @@ QtObject {
         if (window.at()) check(!page.selectionPicked && page.selectionAnchorRow === rowOf("Ekipa może") && page.selectedRow === rowOf("Położyć"),
                     "Shift+click then selects a range from the block picked last: " + page.selectionAnchorRow + "–" + page.selectedRow)
         if (window.at()) key(Qt.Key_Escape, 0)
+    }
+    function desktopStepsPart4(): void {
         // ---- Shift+click; Delete and Ctrl+Z ---------------------------------------------------------
         if (window.at()) {
             test.rowA = rowOf("Zmierzyć")
@@ -405,6 +423,8 @@ QtObject {
             window.lastNotice = ""
             test.staleUndo.run()
         }
+    }
+    function desktopStepsPart5(): void {
         if (window.at()) check(window.pageText() === test.textBefore && window.lastNotice !== "",
                     "a Cofnij whose edit was undone already undoes nothing else, and says so: " + window.lastNotice)
         // ---- Alt+↓ and Tab on a range ------------------------------------------------------------
@@ -465,6 +485,8 @@ QtObject {
             page.stopEditing()
         }
         if (window.at()) window.waitStep(window.pageText() === test.textBefore, "undone")
+    }
+    function desktopStepsPart6(): void {
         // ---- Shift+click on a calculation and on a table (frames, not text) ---------------------------
         if (window.at()) {
             test.rowA = rowOf("Koszty")
@@ -514,6 +536,8 @@ QtObject {
             tap(window.menuItemNamed(textMenu(), "editTextCopy"))
         }
         if (window.at()) window.waitStep(clip() === "Jadę" && !textMenu().opened, "its Kopiuj copies the selected text")
+    }
+    function desktopStepsPart7(): void {
         // ---- The same menu walked by keyboard: the highlighted item takes the keys inside the menu,
         //      Escape gives them back to the text, still selected ----------------------------------------
         if (window.at()) {
@@ -550,6 +574,8 @@ QtObject {
             page.undo()
             page.stopEditing()
         }
+    }
+    function desktopStepsPart8(): void {
         // ---- The block menu: of another block, of a selected one --------------------------------------
         if (window.at()) {
             center(rowOf("Plan remontu"))
@@ -587,6 +613,8 @@ QtObject {
         if (window.at()) check(window.findShown(delegateAt(rowOf("Wywieźć")), "selectionBand") !== null && edgeOf(rowOf("Prace")) !== "",
                     "the band is there again after its blocks were scrolled away")
         if (window.at()) key(Qt.Key_Escape, 0)
+    }
+    function desktopStepsPart9(): void {
         // ---- A mouse drag from one block into another; at the view's edge the list scrolls -------------
         if (window.at()) list.positionViewAtBeginning()
         if (window.at()) {
@@ -643,6 +671,8 @@ QtObject {
             events.mouseWheel(bar, bar.width / 2, bar.height / 2, Qt.NoButton, Qt.NoModifier, 0, -120, -1)
         }
         if (window.at()) window.waitStep(list.contentY > test.contentBefore + 10, "the wheel over the scroll bar scrolls the list")
+    }
+    function desktopStepsPart10(): void {
         // ---- A document: a drag over three paragraphs --------------------------------------------------
         if (window.at()) { page.path = host.documentPath }
         if (window.at()) window.waitStep(page.loaded && page.documentMode && rowOf("Pierwszego dnia") > 0, "the document is open")
@@ -689,6 +719,14 @@ QtObject {
     // (Qt Quick hands a finger's moves over with the next frame, not when they are sent: whatever a
     // gesture does is waited for, in slow sanitizer runs too.)
     function touchSteps(): void {
+        touchStepsPart1()
+        touchStepsPart2()
+        touchStepsPart3()
+        touchStepsPart4()
+        touchStepsPart5()
+        touchStepsPart6()
+    }
+    function touchStepsPart1(): void {
         if (window.at()) window.waitStep(page.loaded && rowOf("Przygotowanie") > 0, "the outline is open")
         if (window.at()) center(rowOf("Zadzwonić"))
         // ---- A long press on a block's text: the selection mode ----------------------------------------
@@ -706,6 +744,8 @@ QtObject {
                    && page.editingRow < 0 && editor.selectionMode, "a tap on another block extends the selection (no editing)")
         if (window.at()) tap(shown(toolbar(), "selectionCopy"))
         if (window.at()) window.waitStep(Js.indexOf(clip(), "- [/] Zadzwonić do hydraulika") === 0 && Js.indexOf(clip(), "- [ ] Położyć hydroizolację") > 0, "Kopiuj copies it")
+    }
+    function touchStepsPart2(): void {
         // ---- "One by one": taps pick single blocks ---------------------------------------------------
         if (window.at()) {
             const pick = shown(toolbar(), "selectionPickMode") as T.AbstractButton
@@ -737,6 +777,8 @@ QtObject {
                    && endGrip() !== null))
             window.checkWait("then a tap moves the selection's end again, from the block picked last (the grips are back): "
                    + page.selectionAnchorRow + "–" + page.selectedRow)
+    }
+    function touchStepsPart3(): void {
         // ---- The end grip -------------------------------------------------------------------------------
         // The band ends below Prace's children (a selected parent brings them along). Położyć in
         // the middle keeps its grip and Kolejność, where the finger goes, clear of the view's
@@ -789,6 +831,8 @@ QtObject {
             tap(shown(toolbar(), "selectionDelete"))
         }
         if (window.at()) window.waitStep(Js.indexOf(window.pageText(), "Zadzwonić do hydraulika") < 0, "Usuń deletes them again")
+    }
+    function touchStepsPart4(): void {
         if (window.at()) key(Qt.Key_Z, Qt.ControlModifier)
         if (window.at()) window.waitStep(window.pageText() === test.textBefore, "Ctrl+Z brings them back")
         if (window.at()) check(editor.selectionMode && page.selectionAnchorRow === rowOf("Zadzwonić") && page.selectedRow === rowOf("Kolejność"),
@@ -820,6 +864,8 @@ QtObject {
         if (window.at()) window.waitStep(!editor.dragSelecting && editor.selectionMode && list.interactive
                    && page.selectionAnchorRow === rowOf("Zmierzyć"), "the lifted finger leaves the selection in the selection mode")
         if (window.at()) key(Qt.Key_Back, 0)
+    }
+    function touchStepsPart5(): void {
         // ---- The editing toolbar's "Select" -------------------------------------------------------------
         if (window.at()) {
             test.rowA = rowOf("Skuć")
@@ -846,6 +892,8 @@ QtObject {
         if (window.at()) window.waitStep(page.selectionAnchorRow === rowOf("Skuć") && page.selectedRow === rowOf("Położyć")
                    && editor.toolbarMode === "selection", "Shift+↓ extends it, the tools stay")
         if (window.at()) key(Qt.Key_Back, 0)
+    }
+    function touchStepsPart6(): void {
         // ---- The bullet's menu: Select ------------------------------------------------------------------
         if (window.at()) pressBullet(rowOf("Kolejność"))
         if (window.at()) window.waiting(window.blockMenuOpen())

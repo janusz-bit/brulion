@@ -350,6 +350,15 @@ QtObject {
     }
 
     function steps(): void {
+        stepsPart1()
+        stepsPart2()
+        stepsPart3()
+        stepsPart4()
+        stepsPart5()
+        stepsPart6()
+        stepsPart7()
+    }
+    function stepsPart1(): void {
         if (window.at()) {
             host.setFile(path, content)
             host.setFile("Ogród.md", "---\nźródło: Wikipedia\nstatus: gotowe\n---\n- grządki\n")
@@ -445,6 +454,8 @@ QtObject {
             key(field, Qt.Key_Escape, 0)
         }
         if (window.at()) window.waitStep(inRow("koszt", "propertyNumberField") === null, "Escape closes the field")
+    }
+    function stepsPart2(): void {
         // ---- checkbox ----------------------------------------------------------------------------------
         if (window.at()) window.tapItem(inRow("gotowe", "propertyCheckBox"))
         if (window.at() && !window.waiting(line("gotowe:") === "gotowe: true"))
@@ -461,6 +472,8 @@ QtObject {
         }
         if (window.at()) window.waitStep(!dateDialog().opened, "the dialog closes")
         if (window.at()) check(line("termin:") === "termin: 2026-10-16", "“jutro” is written as a date: " + line("termin:"))
+    }
+    function stepsPart3(): void {
         // ---- list: Enter adds, Backspace in the empty field takes the last, × removes --------------
         tapOpens("autorzy", "propertyListAdd", "propertyListField", "“+” opens the list's field")
         if (window.at()) {
@@ -538,6 +551,8 @@ QtObject {
         }
         if (window.at() && !window.waiting(line("budżet:") === "budżet: 1200" && line("koszt:") === ""))
             window.checkWait("renamed: " + line("budżet:"))
+    }
+    function stepsPart4(): void {
         // ---- the type menu: text → list -----------------------------------------------------------------
         openMenu("status")
         if (window.at()) {
@@ -592,6 +607,8 @@ QtObject {
         }
         if (window.at() && !window.waiting(line("źródło:") === "źródło: Wikipedia"))
             window.checkWait("the value: " + line("źródło:"))
+    }
+    function stepsPart5(): void {
         // ---- adding a key the page has: refused, its value kept ---------------------------------------------
         if (window.at()) {
             original = text()
@@ -664,6 +681,8 @@ QtObject {
             page.undo()
         }
         if (window.at()) window.waitStep(text() === "- pierwszy\n- drugi\n", "one undo step takes it back")
+    }
+    function stepsPart6(): void {
         // ---- a hidden note-mode frontmatter and shown `key::` lines: the draft adds to the frontmatter --
         if (window.at()) page.path = hiddenPath
         if (window.at()) window.waitStep(page.loaded && page.path === hiddenPath && page.pageProperties.visibleRow === 1
@@ -712,6 +731,8 @@ QtObject {
             window.tapItem(inRowAt(1, "autorzy", "propertyTypeButton"))
         }
         if (window.at()) window.waitStep(menuOpenAt(1), "the menu of `autorzy::`")
+    }
+    function stepsPart7(): void {
         if (window.at()) {
             const sub = typeItem(panelMenuAt(1))
             check(sub !== null && sub.enabled, "the menu has “Typ”")

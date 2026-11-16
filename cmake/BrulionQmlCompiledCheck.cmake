@@ -2,19 +2,23 @@
 # reads the ahead-of-time compilation statistics qmlcachegen writes next to each compiled QML
 # file (<file>.cpp.aotstats, listed in .rcc/qmlcache/module_brulion.aotstatslist) and lists every
 # binding or function left to the QML interpreter, as file:line:column: name: qmlcachegen's reason.
+# It also lists every one that took qmlcachegen longer than MAX_SECONDS to compile, and names the
+# slowest: qmlcachegen's time grows steeply with the branches of one function (Qt 6.12 took 25
+# minutes over a self-test's 157 steps in one function; docs/UI.md "Compiled QML").
 #
 #   cmake -DLIST=<build>/src/app/.rcc/qmlcache/module_brulion.aotstatslist
 #         [-DSOURCE_DIR=<repository>]   # paths relative to it in the report
 #         [-DFILTER=<regex>]            # only files whose path matches (e.g. "/qml/editor/")
+#         [-DMAX_SECONDS=<s>]           # the longest compilation allowed (default 30; 0: no limit)
 #         [-DREPORT_ONLY=ON]            # list and count, but do not fail
 #         -P cmake/BrulionQmlCompiledCheck.cmake
 #
-# Fails (exit code 1) when anything is not compiled, or when the statistics are missing (the app
-# not built, or QT_QML_GENERATE_AOTSTATS=OFF). A binding qmlcachegen skips because there is
-# nothing to compile (a QQmlScriptString property such as Connections' `target` script) counts as
-# compiled. The statistics are JSON in qmlcachegen's fixed layout (formatRevision 1, one key per
-# line, keys sorted), read line by line: CMake's string(JSON) would parse the whole document again
-# for every value.
+# Fails (exit code 1) when anything is not compiled or took longer than MAX_SECONDS, or when the
+# statistics are missing (the app not built, or QT_QML_GENERATE_AOTSTATS=OFF). A binding
+# qmlcachegen skips because there is nothing to compile (a QQmlScriptString property such as
+# Connections' `target` script) counts as compiled. The statistics are JSON in qmlcachegen's fixed
+# layout (formatRevision 1, one key per line, keys sorted), read line by line: CMake's
+# string(JSON) would parse the whole document again for every value.
 cmake_minimum_required(VERSION 3.24)
 
 if(NOT LIST)
@@ -25,8 +29,19 @@ if(NOT EXISTS "${LIST}")
         "QT_QML_GENERATE_AOTSTATS on, the default)")
 endif()
 
+if(NOT DEFINED MAX_SECONDS OR MAX_SECONDS STREQUAL "")
+    set(MAX_SECONDS 30)
+endif()
+if(NOT MAX_SECONDS MATCHES "^[0-9]+$")
+    message(FATAL_ERROR "BrulionQmlCompiledCheck: MAX_SECONDS must be a whole number of seconds")
+endif()
+math(EXPR _max_us "${MAX_SECONDS} * 1000000")
+
 file(STRINGS "${LIST}" _stats_files)
 set(_total 0)
+set(_slow "")
+set(_slowest_us -1)
+set(_slowest "")
 set(_compiled 0)
 set(_failures "")
 set(_files 0)
@@ -48,7 +63,11 @@ foreach(_stats IN LISTS _stats_files)
     set(_entries_total 0)
     set(_entries_compiled 0)
     set(_entries_failed "")
+    set(_entries_slow "")
+    set(_entries_slowest_us -1)
+    set(_entries_slowest "")
     set(_result "")
+    set(_duration 0)
     set(_column "")
     set(_name "")
     set(_line "")
@@ -57,6 +76,8 @@ foreach(_stats IN LISTS _stats_files)
             set(_result "${CMAKE_MATCH_1}")
         elseif(_l MATCHES "^ *\"column\": ([0-9]+),?$")
             set(_column "${CMAKE_MATCH_1}")
+        elseif(_l MATCHES "^ *\"durationMicroseconds\": ([0-9]+),?$")
+            set(_duration "${CMAKE_MATCH_1}")
         elseif(_l MATCHES "^ *\"functionName\": \"(.*)\",?$")
             set(_name "${CMAKE_MATCH_1}")
         elseif(_l MATCHES "^ *\"line\": ([0-9]+),?$")
@@ -65,6 +86,19 @@ foreach(_stats IN LISTS _stats_files)
             # "message" is the last key of an entry.
             set(_message "${CMAKE_MATCH_1}")
             math(EXPR _entries_total "${_entries_total} + 1")
+            # Whole tenths of a second, for the report.
+            math(EXPR _tenths "(${_duration} + 50000) / 100000")
+            string(REGEX REPLACE "([0-9])$" ".\\1" _seconds "${_tenths}")
+            if(_seconds MATCHES "^\\.")
+                set(_seconds "0${_seconds}")
+            endif()
+            if(_duration GREATER _entries_slowest_us)
+                set(_entries_slowest_us "${_duration}")
+                set(_entries_slowest "${_line}:${_column}: ${_name}: ${_seconds} s")
+            endif()
+            if(MAX_SECONDS GREATER 0 AND _duration GREATER _max_us)
+                list(APPEND _entries_slow "${_line}:${_column}: ${_name}: ${_seconds} s to compile")
+            endif()
             # 0 = compiled, 1 = skipped, 2 = failed.
             if(_result STREQUAL "0" OR (_result STREQUAL "1" AND _message MATCHES "nothing to do"))
                 math(EXPR _entries_compiled "${_entries_compiled} + 1")
@@ -90,10 +124,20 @@ foreach(_stats IN LISTS _stats_files)
                 foreach(_e IN LISTS _entries_failed)
                     list(APPEND _failures "${_file}:${_e}")
                 endforeach()
+                foreach(_e IN LISTS _entries_slow)
+                    list(APPEND _slow "${_file}:${_e}")
+                endforeach()
+                if(_entries_slowest_us GREATER _slowest_us)
+                    set(_slowest_us "${_entries_slowest_us}")
+                    set(_slowest "${_file}:${_entries_slowest}")
+                endif()
             endif()
             set(_entries_total 0)
             set(_entries_compiled 0)
             set(_entries_failed "")
+            set(_entries_slow "")
+            set(_entries_slowest_us -1)
+            set(_entries_slowest "")
         endif()
     endforeach()
 endforeach()
@@ -110,9 +154,17 @@ endif()
 foreach(_f IN LISTS _failures)
     message("${_f}")
 endforeach()
+foreach(_s IN LISTS _slow)
+    message("${_s}")
+endforeach()
+list(LENGTH _slow _slow_count)
 message("QML compiled to C++: ${_compiled} of ${_total} bindings and functions (${_percent} %) in ${_files} files; "
-    "${_failed} left to the interpreter.")
+    "${_failed} left to the interpreter. The slowest to compile: ${_slowest}.")
 if(_failed GREATER 0 AND NOT REPORT_ONLY)
     message(FATAL_ERROR "Not every binding and function of the app's QML is compiled to C++ "
         "(docs/UI.md \"Compiled QML\").")
+endif()
+if(_slow_count GREATER 0 AND NOT REPORT_ONLY)
+    message(FATAL_ERROR "${_slow_count} of the app's QML functions and bindings took qmlcachegen longer than "
+        "${MAX_SECONDS} s to compile: split them into smaller functions (docs/UI.md \"Compiled QML\").")
 endif()

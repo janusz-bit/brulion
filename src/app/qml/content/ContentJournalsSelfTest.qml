@@ -252,6 +252,13 @@ Item {
     }
 
     function runSteps(): void {
+        runStepsPart1()
+        runStepsPart2()
+        runStepsPart3()
+        runStepsPart4()
+        runStepsPart5()
+    }
+    function runStepsPart1(): void {
         // ---- A notebook with two months of days ------------------------------------------
         if (test.at())
             test.waitFor(Workspace.ready && test.days.count >= 2 && test.dayLoaded(0))
@@ -310,6 +317,8 @@ Item {
         }
         if (test.at())
             test.waitFor(Workspace.config.journalMode === "outline" && !test.dayAt(0).controller.documentMode)
+    }
+    function runStepsPart2(): void {
         // ---- The touch toolbar on a keyboard (simulated) -----------------------------------------
         if (test.at()) {
             test.list.positionViewAtBeginning()
@@ -401,6 +410,8 @@ Item {
             test.check(Js.indexOf(content, "Dopisane później ąę") >= 0, "an older day's edit is saved when it scrolls away")
             test.check(Js.indexOf(content, "zażółć") >= 0, "the word being composed is saved too")
         }
+    }
+    function runStepsPart3(): void {
         // ---- A day scrolled away with deferred work queued (no TypeError, ctest) ----------------
         if (test.at())
             test.list.positionViewAtIndex(30, ListView.Beginning)
@@ -447,6 +458,8 @@ Item {
             test.tracked.controller.selectedRow = -1
             test.list.positionViewAtBeginning()
         }
+    }
+    function runStepsPart4(): void {
         // ---- Selecting blocks in a day with a finger: the selection mode --------------------------
         if (test.at()) {
             // The long day (taller than the frame).
@@ -560,6 +573,8 @@ Item {
                        "the drag ends with the day's blocks selected, nothing edited")
             c.clearSelection()
         }
+    }
+    function runStepsPart5(): void {
         // ---- Enter at the end of a zoomed paragraph at the bottom of a long day -------------------
         // A paragraph has no children: the zoom ends, the day grows back to all its blocks, and
         // the stream keeps the new block below the paragraph (at the day's bottom) in view; Ctrl+Z

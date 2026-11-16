@@ -288,6 +288,11 @@ QtObject {
     Component.onCompleted: window.runSteps("refreshtest")
 
     function steps(): void {
+        stepsPart1()
+        stepsPart2()
+        stepsPart3()
+    }
+    function stepsPart1(): void {
         if (window.at()) window.waitStep(page.loaded && window.viewRow("query") > 0, "the sample page is open")
         // ---- A query's results: as many rows again, one of them taller -----------------------------
         if (window.at()) list().positionViewAtIndex(window.viewRow("query"), ListView.Beginning)
@@ -333,6 +338,8 @@ QtObject {
                    + DatesHelper.today + ")")
         if (window.at()) DatesHelper.fixedNow = nowBefore
         if (window.at()) window.waitStep(todayCell() === DatesHelper.today, "and the day before again when the clock is set back")
+    }
+    function stepsPart2(): void {
         // ---- A language change while the dialog exists ------------------------------------------------
         if (window.at()) dialog().repeatKind = "weekly"
         if (window.at()) window.waitStep(weekdays() !== null && weekdays().visible && dialogInLanguage(), "a weekly repeat: the weekday buttons, the rule and the picker in the app's language")
@@ -370,6 +377,8 @@ QtObject {
         if (window.at()) window.width = widthBefore
         if (window.at() && !window.waiting(sameCalc() && near(secondLineY(), calcLinesBefore) && calcAligned()))
             window.checkWait("and back at the old width (" + calcState() + ")")
+    }
+    function stepsPart3(): void {
         // ---- The page's header changing its height while the view is further down ---------------------
         if (window.at()) {
             headerBefore = headerHeight()

@@ -787,6 +787,13 @@ ApplicationWindow {
     }
     function selfTestOutline(): void {
         const r = window.baseRow
+        selfTestOutlinePart1(r)
+        selfTestOutlinePart2(r)
+        selfTestOutlinePart3(r)
+        selfTestOutlinePart4()
+        selfTestOutlinePart5()
+    }
+    function selfTestOutlinePart1(r: int): void {
         if (window.at()) editor.startEditing(r, -1)
         if (window.at()) check(editor.activeEditor && editor.activeEditor.row === r && editor.activeEditor.activeFocus, "editing starts with focus")
         if (window.at()) check(key(Qt.Key_Return, Qt.NoModifier), "Enter handled")
@@ -819,6 +826,8 @@ ApplicationWindow {
         if (window.at()) check(info(r + 1).plainText === "Nowe zadanie ąę", "Ctrl+Z undoes the merge")
         if (window.at()) { key(Qt.Key_Z, Qt.ControlModifier | Qt.ShiftModifier) }
         if (window.at()) check(Js.indexOf(info(r).plainText, "Nowe zadanie ąę") > 0, "Ctrl+Shift+Z redoes")
+    }
+    function selfTestOutlinePart2(r: int): void {
         if (window.at()) { key(Qt.Key_Return, Qt.ControlModifier) }
         if (window.at()) check(info(r).taskStatus === "doing", "Ctrl+Enter cycles the task: " + info(r).taskStatus)
         if (window.at()) { editor.activeEditor.cursorPosition = 0; key(Qt.Key_Up, Qt.NoModifier) }
@@ -864,6 +873,8 @@ ApplicationWindow {
         if (window.at()) { key(Qt.Key_Return, Qt.NoModifier) }
         if (window.at()) check(Js.indexOf(editor.activeEditor.text, "[[Remont kuchni]] [[Remo]]") > 0 && !editor.suggestions.opened,
                     "Up + Enter links the new page: " + editor.activeEditor.text)
+    }
+    function selfTestOutlinePart3(r: int): void {
         // `#` offers pages too (a tag names a page, docs/SYNTAX.md §3) — also after a written
         // date on the line (here the merged "⏳ 2026-10-18") —; a name with a space is written
         // #[[…]].
@@ -903,6 +914,8 @@ ApplicationWindow {
                     "zooming in shows the breadcrumb above the blocks: " + window.headerBefore + " → "
                     + (window.listHeader() ? window.listHeader().height : -1))
         if (window.at()) page.zoomOut()
+    }
+    function selfTestOutlinePart4(): void {
         if (window.at()) check(page.zoomBlock < 0 && window.listHeader()
                     && window.listHeader().height === window.headerBefore,
                     "zooming out leaves no room for the breadcrumb: "
@@ -937,6 +950,8 @@ ApplicationWindow {
                     && editor.activeEditor.activeFocus && editor.activeEditor.row === window.zoomTextRow + 1,
                     "Ctrl+Shift+Z ends the zoom again: zoom " + page.zoomBlock + ", row " + page.editingRow)
         if (window.at()) typeKeys("Źdźbło")
+    }
+    function selfTestOutlinePart5(): void {
         if (window.at()) check(info(window.zoomTextRow + 1).plainText === "Źdźbło" && page.zoomBlock < 0,
                     "typing goes into the new block: " + info(window.zoomTextRow + 1).plainText)
         if (window.at()) key(Qt.Key_Z, Qt.ControlModifier) // the typing
@@ -956,6 +971,12 @@ ApplicationWindow {
         }
     }
     function selfTestKeys(): void {
+        selfTestKeysPart1()
+        selfTestKeysPart2()
+        selfTestKeysPart3()
+        selfTestKeysPart4()
+    }
+    function selfTestKeysPart1(): void {
         // ---- Real key events (window -> Keys -> TextEdit), Polish text --------------------
         if (window.at()) { window.realRow = page.insertBlockAfter(rowOf("Ekipa może"), "") }
         if (window.at()) typeKeys("Żółw ąę")
@@ -982,6 +1003,8 @@ ApplicationWindow {
         if (window.at()) { page.setBody(window.realRow, "w\u00a0domu i\u00a0w\u00a0pracy"); editor.startEditing(window.realRow, -1) }
         if (window.at()) typeKeys("!")
         if (window.at()) check(Js.indexOf(page.sourceText, "w\u00a0domu i\u00a0w\u00a0pracy!") >= 0, "no-break spaces are kept when typing")
+    }
+    function selfTestKeysPart2(): void {
         // ---- Input method composition (Android keyboards compose every word) ---------------
         if (window.at()) { window.realRow = page.insertBlockAfter(window.realRow, ""); window.countBefore = page.blocks.count }
         // A block is prose: the keyboard capitalises its first letter (unlike the date fields).
@@ -1004,6 +1027,8 @@ ApplicationWindow {
         if (window.at()) realKey(Qt.Key_Return, 0, "")
         if (window.at()) check(Js.indexOf(info(window.realRow + 1).plainText, "Remont kuchni") >= 0 && editor.activeEditor.preeditText === "",
                     "accepting a completion commits the composed word: " + info(window.realRow + 1).plainText)
+    }
+    function selfTestKeysPart3(): void {
         // ---- Typing after the edited block scrolled far away ---------------------------------
         if (window.at()) {
             let md = ""
@@ -1061,6 +1086,8 @@ ApplicationWindow {
             check(page.zoomBlock < 0 && rowOf("Na dole strony") < 0, "and the heading is gone with the zoom: " + page.zoomBlock)
             page.zoomTo(-1)
         }
+    }
+    function selfTestKeysPart4(): void {
         // Zooming out (the breadcrumb) while a block far down the page is edited: the rows
         // above it come back, the edited block stays in view.
         if (window.at()) {
@@ -1131,6 +1158,11 @@ ApplicationWindow {
         }
     }
     function selfTestDialogs(): void {
+        selfTestDialogsPart1()
+        selfTestDialogsPart2()
+        selfTestDialogsPart3()
+    }
+    function selfTestDialogsPart1(): void {
         // ---- Table cells: typed text is in the document before the cell is left -------------
         // With a mouse, a table takes no room below its grid until it is selected or edited
         // (the "+ Row / + Column" buttons): its height never changes under a resting pointer.
@@ -1179,6 +1211,8 @@ ApplicationWindow {
         }
         if (window.at()) { page.save() }
         if (window.at()) check(!page.dirty && Js.indexOf(host.file(page.path), "[[Remont kuchni]]") > 0, "saved to the host")
+    }
+    function selfTestDialogsPart2(): void {
         // ---- Dates and times typed in the dialogs count without their own Enter ------------
         // (Android's keyboard showed Next, a Tab, as the action key of these fields, so Enter
         // never came; a time typed but not confirmed was dropped on Save.)
@@ -1241,6 +1275,8 @@ ApplicationWindow {
         if (window.at()) check(window.timeField.text === "25:99" && !window.reminderBox().acceptEnabled,
                     "it stays in its field with the hint after leaving it")
         if (window.at()) { window.timeField.forceActiveFocus(); window.timeField.selectAll(); typeKeys("7") }
+    }
+    function selfTestDialogsPart3(): void {
         if (window.at()) realKey(Qt.Key_Return, 0, "")
         if (window.at()) {
             const box = window.reminderBox()
@@ -1273,6 +1309,12 @@ ApplicationWindow {
         }
     }
     function selfTestQueries(): void {
+        selfTestQueriesPart1()
+        selfTestQueriesPart2()
+        selfTestQueriesPart3()
+        selfTestQueriesPart4()
+    }
+    function selfTestQueriesPart1(): void {
         // ---- Live query results: tasks from the vault, checkable in their own files ----------
         if (window.at()) {
             const row = viewRow("query")
@@ -1309,6 +1351,8 @@ ApplicationWindow {
                     && editor.activeEditor.plain() === "Zażółć gęślą",
                     "real Enter at the start of the first block puts an empty block above it")
         if (window.at()) realKey(Qt.Key_Z, Qt.ControlModifier, "")
+    }
+    function selfTestQueriesPart2(): void {
         if (window.at()) {
             check(page.sourceText === "- Zażółć gęślą\n- jaźń\n" && page.blocks.count === 2,
                   "real Ctrl+Z takes the block at the start away: " + Js.stringify(page.sourceText))
@@ -1342,6 +1386,8 @@ ApplicationWindow {
                   "after Ctrl+Z the first row shows its own block")
         }
         if (window.at()) realKey(Qt.Key_Z, Qt.ControlModifier | Qt.ShiftModifier, "")
+    }
+    function selfTestQueriesPart3(): void {
         if (window.at()) check(page.sourceText === "- jaźń\n- Zażółć gęślą\n" && page.editingRow === 0 && editor.activeEditor
                     && editor.activeEditor.activeFocus && editor.activeEditor.row === 0 && editor.activeEditor.plain() === "jaźń"
                     && editor.activeEditor.cursorPosition === 2,
@@ -1375,6 +1421,8 @@ ApplicationWindow {
         if (window.at()) realKey(Qt.Key_Z, Qt.ControlModifier, "")
         if (window.at()) check(page.blocks.count === 3 && page.editingRow === 1, "real Ctrl+Z takes the empty paragraph away")
         if (window.at()) realKey(Qt.Key_Z, Qt.ControlModifier | Qt.ShiftModifier, "")
+    }
+    function selfTestQueriesPart4(): void {
         if (window.at()) check(page.blocks.count === 4 && info(1).kind === "paragraph" && info(1).plainText === ""
                     && page.editingRow === 2 && editor.activeEditor && editor.activeEditor.row === 2
                     && editor.activeEditor.plain() === "Pierwszy akapit źdźbła",
@@ -1419,8 +1467,20 @@ ApplicationWindow {
         return item ? window.findItem(window.embedViewOf(item), name) : null
     }
     function selfTestDocument(): void {
+        selfTestDocumentPart1()
+        selfTestDocumentPart2()
+        selfTestDocumentPart3()
+        selfTestDocumentPart4()
+        selfTestDocumentPart5()
+        selfTestDocumentPart6()
+        selfTestDocumentPart7()
+        selfTestDocumentPart8()
+    }
+    function selfTestDocumentPart1(): void {
         // ---- Document mode (docs/UI.md "Note modes"): the trip plan reads as a document --------
         if (window.at()) { page.save(); page.path = host.documentPath }
+    }
+    function selfTestDocumentPart2(): void {
         if (window.at()) {
             check(page.loaded && page.mode === "document" && editor.documentMode, "the document sample opens as a document")
             const para = rowOf("Pierwszego dnia")
@@ -1460,6 +1520,8 @@ ApplicationWindow {
             check(after !== null && Math.abs(after.y - (nestedItem.y + nestedItem.height)) < 0.5,
                   "the next nested item starts where this one ends: the guide runs on unbroken")
         }
+    }
+    function selfTestDocumentPart3(): void {
         if (window.at()) editor.startEditing(rowOf("Niedziela"), -1)
         if (window.at()) realKey(Qt.Key_Return, 0, "")
         if (window.at()) check(page.editingRow === rowOf("Niedziela") + 1 && info(page.editingRow).kind === "listItem",
@@ -1484,6 +1546,8 @@ ApplicationWindow {
         if (window.at()) realKey(Qt.Key_Tab, 0, "")
         if (window.at()) check(info(rowOf("Z powrotem bryczką")).depth === 2, "Tab indents a list item")
         if (window.at()) realKey(Qt.Key_Backtab, 0, "")
+    }
+    function selfTestDocumentPart4(): void {
         if (window.at()) check(info(rowOf("Z powrotem bryczką")).depth === 1, "Shift+Tab outdents it")
         if (window.at()) editor.startEditing(rowOf("Pierwszego dnia"), 0)
         if (window.at()) realKey(Qt.Key_Up, 0, "")
@@ -1564,6 +1628,8 @@ ApplicationWindow {
             window.waits = 0
         }
         if (window.at()) editor.listView.positionViewAtIndex(window.realRow, ListView.Center)
+    }
+    function selfTestDocumentPart5(): void {
         if (window.at()) {
             const item = window.shownItem(window.realRow)
             const holder = window.embedPart(item, "webPicturePlaceholder")
@@ -1625,6 +1691,8 @@ ApplicationWindow {
             else if (item)
                 window.embedViewOf(item).webMenu("https://example.com/mapa", "example.com", frame, 10, 10)
         }
+    }
+    function selfTestDocumentPart6(): void {
         if (window.at()) {
             const menu = editor.webPictureMenu
             check(menu !== null && menu.visible, "a right-click on the picture opens its menu")
@@ -1717,6 +1785,8 @@ ApplicationWindow {
             check(window.webImageSave().checked && window.webImageUrl().text === "", "again with “Zapisz w notatniku” checked and no address")
             window.webImageBox().reject()
         }
+    }
+    function selfTestDocumentPart7(): void {
         if (window.at()) window.waitStep(!window.webImageBox().visible, "and closes again")
         // The journal stream caps document headings at the size of a day's date: smaller, in
         // the same order.
@@ -1761,6 +1831,8 @@ ApplicationWindow {
         // The touch toolbar of a document leads with the writing tools (list, task, [[, #, /),
         // indentation after them (off in a paragraph); an outline keeps indentation first.
         if (window.at()) { Theme.forceTouch = true; editor.startEditing(rowOf("Pierwszego dnia"), 0); window.waits = 0 }
+    }
+    function selfTestDocumentPart8(): void {
         if (window.at()) {
             const list = window.findItem(editor, "toolbarList")
             const writing = window.findItem(editor, "toolbarWritingDocument")
@@ -2054,6 +2126,12 @@ ApplicationWindow {
     function clockFaceSteps(): void {
         const c = window.clock
         const face = window.clockFace(c)
+        clockFaceStepsPart1(c, face)
+        clockFaceStepsPart2(c)
+        clockFaceStepsPart3(c, face)
+        clockFaceStepsPart4(c, face)
+    }
+    function clockFaceStepsPart1(c: BTimePicker, face: Item): void {
         if (window.at()) check(face.width === c.dialSize && face.height === c.dialSize,
                     "the face is the dial's size: " + face.width + "×" + face.height + ", dial " + c.dialSize)
         // ---- The numbers never overlap, down to the smallest dial (the dialog's 180 px floor;
@@ -2127,6 +2205,8 @@ ApplicationWindow {
             window.clockPick(c, 5, 0)
             check(c.time === "18:30" && window.clockPicks.length === 0, "the hub is no value")
         }
+    }
+    function clockFaceStepsPart2(c: BTimePicker): void {
         // ---- Taps and drags (a finger on touch UIs, the mouse elsewhere) ------------------
         if (window.at()) { c.time = "18:30"; c.mode = "hour"; clockTap(c, c.outerRadius, 7 * 30) }
         if (window.at()) check(c.time === "07:30" && c.mode === "minute", "a tap on 07 (outer ring) picks it and moves on to the minutes: " + c.time + " " + c.mode)
@@ -2150,6 +2230,8 @@ ApplicationWindow {
         if (window.at()) check(c.time === "01:30", "a drag from the number 11 across 12 o'clock to 01: " + c.time)
         if (window.at()) { c.time = "18:30"; c.mode = "minute"; clockDrag(c, 60, 180, 270) }
         if (window.at()) check(c.time === "18:45", "a drag inside the ring, off the numbers: " + c.time)
+    }
+    function clockFaceStepsPart3(c: BTimePicker, face: Item): void {
         if (window.at()) { c.time = "18:32"; c.mode = "minute"; clockDrag(c, c.outerRadius, 32 * 6, 44 * 6) }
         if (window.at()) check(c.time === "18:44", "a drag from between the numbers (32) to 44: " + c.time)
         // ---- Keys, and the focus ring for the keyboard only --------------------------------
@@ -2171,6 +2253,8 @@ ApplicationWindow {
         if (window.at()) check(c.mode === "hour" && c.time === "00:59", "Left, then Home: hour 00: " + c.time + " " + c.mode)
         if (window.at()) clockTap(c, c.outerRadius, 90)
         if (window.at()) check(face.activeFocus && !clockRing(c).visible && c.time === "03:59", "a tap hides the focus ring again: " + c.time)
+    }
+    function clockFaceStepsPart4(c: BTimePicker, face: Item): void {
         if (window.at()) {
             window.clockOther = focusableComponent.createObject(window.contentItem) as Item
             window.clockOther.forceActiveFocus()
@@ -2208,6 +2292,12 @@ ApplicationWindow {
     }
     function clockDialogSteps(): void {
         const c = window.clock
+        clockDialogStepsPart1(c)
+        clockDialogStepsPart2()
+        clockDialogStepsPart3()
+        clockDialogStepsPart4()
+    }
+    function clockDialogStepsPart1(c: BTimePicker): void {
         // ---- The dialog -----------------------------------------------------------------------
         if (window.at()) {
             c.visible = false
@@ -2265,6 +2355,8 @@ ApplicationWindow {
             check(window.dialogPicker().time === "10:00", "no time: the dialog opens on the current time: " + window.dialogPicker().time)
             window.clockDialog.reject()
         }
+    }
+    function clockDialogStepsPart2(): void {
         // ---- The date picker's clock: created when asked for, after the typed time ---------
         if (window.at()) {
             if (!waitUntil(!window.clockDialog.visible))
@@ -2332,6 +2424,8 @@ ApplicationWindow {
                   && window.reminderDialog.acceptEnabled, "a time from the clock replaces an invalid typed one: " + window.reminderDialog.at)
             window.reminderDialog.reject()
         }
+    }
+    function clockDialogStepsPart3(): void {
         // ---- The calendar's add dialog ------------------------------------------------------
         if (window.at()) {
             if (!waitUntil(!window.reminderDialog.visible))
@@ -2419,6 +2513,8 @@ ApplicationWindow {
                   "a time half typed keeps Add disabled quietly, the hint still the applied time's: " + hint)
         }
         if (window.at()) typeKeys("30")
+    }
+    function clockDialogStepsPart4(): void {
         if (window.at()) {
             check(window.addDialog.time === "09:30" && window.addDialog.acceptEnabled, "typing does not change the time: " + window.addDialog.time)
             realKey(Qt.Key_Return, 0, "")
@@ -2638,6 +2734,15 @@ ApplicationWindow {
     function taskStatusSteps(): void {
         const gesture = window.touchRun ? "a long press" : "a right-click"
         const tap = window.touchRun ? "a tap" : "a click"
+        taskStatusStepsPart1(gesture, tap)
+        taskStatusStepsPart2()
+        taskStatusStepsPart3()
+        taskStatusStepsPart4()
+        taskStatusStepsPart5(gesture)
+        taskStatusStepsPart6(gesture)
+        taskStatusStepsPart7()
+    }
+    function taskStatusStepsPart1(gesture: string, tap: string): void {
         if (window.at()) {
             window.taskRow = rowOf("Kupić płytki")
             editor.listView.positionViewAtIndex(window.taskRow, ListView.Center)
@@ -2686,6 +2791,8 @@ ApplicationWindow {
             page.undo()
         }
         if (window.at()) check(info(window.taskRow).taskStatus === "todo", "undo brings the checkbox back")
+    }
+    function taskStatusStepsPart2(): void {
         // ---- Ctrl+Shift+Enter while editing: the menu at the caret, keys, the caret kept -------
         if (window.at()) {
             window.taskRow = rowOf("Wywieźć gruz")
@@ -2755,6 +2862,8 @@ ApplicationWindow {
                   "Ctrl+Shift+Enter on a selected heading opens no status menu")
             editor.startEditing(window.taskRow, -1)
         }
+    }
+    function taskStatusStepsPart3(): void {
         if (window.at()) window.waitStep(editor.activeEditor !== null && editor.activeEditor.activeFocus
                  && editor.activeEditor.row === window.taskRow, "the heading is edited")
         if (window.at()) realKey(Qt.Key_Return, Qt.ControlModifier | Qt.ShiftModifier, "")
@@ -2812,6 +2921,8 @@ ApplicationWindow {
             page.stopEditing()
             window.taskRow = page.insertMarkdown(page.lastVisibleRow(), "Akapit o płytkach")
         }
+    }
+    function taskStatusStepsPart4(): void {
         if (window.at()) editor.startEditing(rowOf("Akapit o płytkach"), -1)
         if (window.at()) typeKeys(" /zadanie")
         if (window.at()) window.waitStep(editor.suggestionsOpen && window.suggestionAt(0, "command") === "task", "“/zadanie” offers “Zadanie: do zrobienia”")
@@ -2830,6 +2941,8 @@ ApplicationWindow {
         if (window.at()) check(info(window.taskRow).taskStatus === "doing" && Js.indexOf(pageText(), "- DOING Odebrać kafelki") > 0,
                     "the Logseq keyword follows: " + fileLineOf(pageText(), "kafelki"))
         if (window.at()) page.stopEditing()
+    }
+    function taskStatusStepsPart5(gesture: string): void {
         // ---- A query result's checkbox: its own menu, the task in its own file ----------------
         if (window.at()) {
             page.save()
@@ -2872,6 +2985,8 @@ ApplicationWindow {
         if (window.at() && !window.waiting(fileLine("Zakupy.md", "Śrubki") === "- Śrubki do półki #zakupy"))
             window.checkWait("“No status” on a result removes the task's checkbox in its file: " + fileLine("Zakupy.md", "Śrubki"))
         if (window.at()) window.waitStep(resultTaskBox("Śrubki") === null && queryResultsSettled(), "the result is no task any more")
+    }
+    function taskStatusStepsPart6(gesture: string): void {
         // ---- An embedded section's task (Budżet domowy#Październik) --------------------------
         if (window.at()) editor.listView.positionViewAtIndex(rowOf("Budżet na październik") + 1, ListView.Center)
         if (window.at()) window.waitStep(embedTaskBox() !== null, "the embedded section shows its task's checkbox")
@@ -2895,6 +3010,8 @@ ApplicationWindow {
             window.checkWait("an embedded task's status is written in its own file: " + fileLine("Budżet domowy.md", "czynsz"))
         if (window.at()) check(fileLine("Budżet domowy.md", "Prąd") === "- Prąd: 250 zł", "the line above it is left alone")
         if (window.at()) window.waitStep(embedView() !== null && Js.indexOf(Js.stringify(embedView().shown), "Prąd") >= 0, "the embed follows once the menu closed")
+    }
+    function taskStatusStepsPart7(): void {
         // ---- The touch toolbar: the task button held down opens the menu above it --------------
         if (window.at()) {
             Theme.forceTouch = true
@@ -3287,9 +3404,19 @@ ApplicationWindow {
         const touch = window.touchRun
         const gesture = touch ? "a long press" : "a right-click"
         const doc = "Wyjazd w Tatry"
+        blockLinksStepsPart1()
+        blockLinksStepsPart2(touch, doc)
+        blockLinksStepsPart3(doc)
+        blockLinksStepsPart4(doc)
+        blockLinksStepsPart5(touch, doc)
+        blockLinksStepsPart6(touch, gesture)
+        blockLinksStepsPart7(touch)
+    }
+    function blockLinksStepsPart1(): void {
         if (window.at()) page.path = host.documentPath
         if (window.at()) window.waitStep(page.loaded && page.documentMode && rowOf("Plan") > 0, "the document is open")
-
+    }
+    function blockLinksStepsPart2(touch: bool, doc: string): void {
         if (!touch) {
             // ---- A heading's link from a right-click on its text --------------------------------
             if (window.at()) {
@@ -3356,6 +3483,8 @@ ApplicationWindow {
                         "a finger's long press on text selects the block and opens no block menu")
             if (window.at()) editor.leaveSelectionMode()
         }
+    }
+    function blockLinksStepsPart3(doc: string): void {
         // ---- Ctrl+Shift+C: editing, selected, nothing; the palette's heading link -----------------
         if (window.at()) {
             page.stopEditing()
@@ -3391,6 +3520,8 @@ ApplicationWindow {
         if (window.at() && !window.waiting(window.lastNotice === editor.copyFailure("noRow")))
             window.checkWait("with nothing selected it says what to do: " + window.lastNotice)
         if (window.at()) check(pageText() === window.textBefore, "and changes nothing")
+    }
+    function blockLinksStepsPart4(doc: string): void {
         // ---- Following copied links: scroll, select, flash — twice; a missing heading ------------
         if (window.at()) {
             window.linkRow = page.insertBlockAfter(page.lastVisibleRow(),
@@ -3431,6 +3562,8 @@ ApplicationWindow {
         if (window.at()) tapLinkIn(window.linkRow, "#Nieistniej")
         if (window.at() && !window.waiting(Js.indexOf(window.lastNotice, "Nieistniejący") >= 0 && window.lastNotice !== ""))
             window.checkWait("a missing heading is said: " + window.lastNotice)
+    }
+    function blockLinksStepsPart5(touch: bool, doc: string): void {
         // ---- The touch toolbar's "More": the block menu above the bar ------------------------------
         if (window.at()) {
             page.selectedRow = -1
@@ -3503,6 +3636,8 @@ ApplicationWindow {
             KeyboardInsets.simulated = -1
             Theme.forceTouch = DevTools.touch
         }
+    }
+    function blockLinksStepsPart6(touch: bool, gesture: string): void {
         // ---- An outline: the bullet's menu; a calc block's (desktop) ------------------------------
         if (window.at()) page.path = host.samplePath
         if (window.at()) window.waitStep(page.loaded && !page.documentMode && rowOf("Kolejność") > 0, "the outline is open")
@@ -3568,6 +3703,8 @@ ApplicationWindow {
             check(Js.indexOf(window.expectedLink, "#^" + info(window.targetRow).blockId + "]]") > 0, "the table's link: " + window.expectedLink)
             editor.copyCurrentLink("blockLink") // the palette's "Copy link to block"
         }
+    }
+    function blockLinksStepsPart7(touch: bool): void {
         if (window.at() && !window.waiting(clipboardText() === window.expectedLink))
             window.checkWait("the palette then copies the table's link: " + clipboardText())
         if (window.at()) {
@@ -3730,6 +3867,12 @@ ApplicationWindow {
     /// The steps of keyboardTest() (see the step runner).
     function keyboardSteps(): void {
         const lh = editor.lineHeight
+        keyboardStepsPart1(lh)
+        keyboardStepsPart2(lh)
+        keyboardStepsPart3()
+        keyboardStepsPart4(lh)
+    }
+    function keyboardStepsPart1(lh: int): void {
         if (window.at()) {
             KeyboardInsets.simulated = 0
             // A text block at the end of the long page (the last rows may be a query or code).
@@ -3786,6 +3929,8 @@ ApplicationWindow {
         if (window.at()) KeyboardInsets.simulate(320, true)
         if (window.at()) check(dockedOn(320) && near(editor.listView.contentY, window.contentBefore) && KeyboardInsets.animating,
                     "320 px, still sliding: the toolbar follows, the text does not move")
+    }
+    function keyboardStepsPart2(lh: int): void {
         if (window.at()) KeyboardInsets.simulate(320, false)
         if (window.at() && !window.waiting(caretBottom() <= slotTop() - lh / 2))
             window.checkWait("the keyboard settled: the caret is scrolled above the toolbar: " + caretBottom() + " ≤ " + slotTop())
@@ -3832,6 +3977,8 @@ ApplicationWindow {
             const slot = toolbarSlot()
             fingerTap(slot, slot.width - 24, slot.height / 2)
         }
+    }
+    function keyboardStepsPart3(): void {
         if (window.at()) check(editor.toolbarMode === "source" && editor.sourceTextEdit.activeFocus
                     && editor.sourceTextEdit.cursorPosition === 0,
                     "source mode: a tap on the bar beside its buttons leaves the caret where it was: "
@@ -3881,6 +4028,8 @@ ApplicationWindow {
         if (window.at()) window.waitStep(editor.editingTable !== null && window.cellInput() !== null
                        && window.cellInput().activeFocus
                        && (editor.editingTable.editRow !== window.baseRow || editor.editingTable.editColumn !== window.pasteRow), "the toolbar's next cell moves to the next cell")
+    }
+    function keyboardStepsPart4(lh: int): void {
         if (window.at()) {
             const left = window.cellText(window.baseRow, window.pasteRow)
             check(Js.endsWith(left, "Kminek"), "the word being composed is kept in the cell left: " + left)

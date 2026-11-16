@@ -251,11 +251,17 @@ endif()
 # left to the interpreter (docs/UI.md "Compiled QML"; ctest tst_qml_compiled checks the same).
 option(BRULION_QML_COMPILED_CHECK "Fail the build when any of the app's QML is not compiled to C++"
     ${BRULION_WERROR})
+# The check (and tst_qml_compiled) also fails on a binding or function that took qmlcachegen longer
+# than this to compile: its time grows steeply with the branches of one function (docs/UI.md
+# "Compiled QML", "Short functions"). 0: no limit.
+set(BRULION_QML_MAX_COMPILE_SECONDS 30 CACHE STRING
+    "The longest qmlcachegen may take over one of the app's QML functions or bindings (seconds, 0: no limit)")
 if(BRULION_QML_COMPILED_CHECK AND (NOT DEFINED QT_QML_GENERATE_AOTSTATS OR QT_QML_GENERATE_AOTSTATS))
     add_custom_command(TARGET brulion POST_BUILD
         COMMAND ${CMAKE_COMMAND}
                 -DLIST=${CMAKE_CURRENT_BINARY_DIR}/.rcc/qmlcache/module_brulion.aotstatslist
                 -DSOURCE_DIR=${PROJECT_SOURCE_DIR}
+                -DMAX_SECONDS=${BRULION_QML_MAX_COMPILE_SECONDS}
                 -P ${PROJECT_SOURCE_DIR}/cmake/BrulionQmlCompiledCheck.cmake
         VERBATIM)
 endif()

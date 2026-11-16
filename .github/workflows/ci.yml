@@ -93,8 +93,9 @@ jobs:
     name: Linux (Qt 6.12.0 from aqt, GCC, -Werror, sanitizers)
     if: github.event_name != 'push' || github.ref_type == 'tag' || contains(join(github.event.commits.*.message, ' '), '[ci]')
     runs-on: ubuntu-24.04
-    # Warm cache: ~20 min; a cold one (new compiler, Qt or flags): ~30 min.
-    timeout-minutes: 60
+    # Warm cache: ~35 min (the build 13, ctest 19); a cold one (new compiler, Qt or flags) builds
+    # for ~40 min before ctest (Qt 6.12, 2026-11-16).
+    timeout-minutes: 90
     env:
       CCACHE_DIR: ${{ github.workspace }}/.ccache
       CCACHE_BASEDIR: ${{ github.workspace }}

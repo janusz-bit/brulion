@@ -244,6 +244,12 @@ QtObject {
     }
 
     function steps(): void {
+        stepsPart1()
+        stepsPart2()
+        stepsPart3()
+        stepsPart4()
+    }
+    function stepsPart1(): void {
         if (test.window.at()) {
             test.row = test.window.viewRow("table")
             check(test.row >= 0, "the sample has a table")
@@ -298,6 +304,8 @@ QtObject {
         }
         if (test.window.at()) test.closeCell()
         if (test.window.at()) test.undoes(1, "one undo step takes the column back")
+    }
+    function stepsPart2(): void {
         // ---- The alignment --------------------------------------------------------------------------
         test.openOn(0, 1)
         if (test.window.at())
@@ -334,6 +342,8 @@ QtObject {
         if (test.window.at()) test.closeCell()
         if (test.window.at()) test.undoes(1, "one undo step brings the column back")
         test.editedCellMenuSteps()
+    }
+    function stepsPart3(): void {
         // ---- Sorting from the header ----------------------------------------------------------------
         test.openOn(-1, 2)
         if (test.window.at()) check(test.item("tableColumnMenu", "tableSortAscending").enabled, "the header's column sorts")
@@ -390,6 +400,8 @@ QtObject {
             check(Js.indexOf(test.clipboard(), "=[") < 0 && Js.indexOf(test.clipboard(), "Fuga #zakupy,2,38,76") > 0,
                   "formulas as their results")
         if (test.window.at()) test.closeCell()
+    }
+    function stepsPart4(): void {
         // ---- A chart of the table ----------------------------------------------------------------------
         if (test.window.at()) {
             test.chartRow = test.page.insertBlockAfter(test.row, "```chart\ntype: bar\ny: Razem\n```")

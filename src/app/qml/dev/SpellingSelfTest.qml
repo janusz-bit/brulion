@@ -102,6 +102,10 @@ QtObject {
     }
 
     function steps(): void {
+        stepsPart1()
+        stepsPart2()
+    }
+    function stepsPart1(): void {
         if (test.window.at()) {
             SpellCheck.useWordLists(Js.withKey(Js.withKey({}, "pl", test.polishWords), "en", test.englishWords))
             SpellCheck.languageSetting = "pl,en"
@@ -158,7 +162,8 @@ QtObject {
         if (test.window.at())
             check(SpellCheck.ignoredWords.indexOf("kotta") >= 0 && SpellCheck.personalWords.length === 0,
                   "ignored, not added to the dictionary")
-
+    }
+    function stepsPart2(): void {
         // ---- Add to the dictionary ------------------------------------------------------------
         test.editBlock("Brulion jest")
         if (test.window.at())

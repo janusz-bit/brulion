@@ -272,6 +272,12 @@ QtObject {
     readonly property list<string> tableMembers: ["startCell"]
 
     function steps(): void {
+        stepsPart1()
+        stepsPart2()
+        stepsPart3()
+        stepsPart4()
+    }
+    function stepsPart1(): void {
         if (window.at()) {
             host.setFile("Firma.md", "- Strona firmy\n")
             host.setFile("Firma/Adam cośtam.md", "- Adam\n")
@@ -350,6 +356,8 @@ QtObject {
         }
         if (window.at()) window.waitStep(page.editingRow < 0 && textOf(row, "") !== null, "editing ends")
         if (window.at()) check(window.fileLineOf(window.pageText(), "Zapytać") === firstLine, "the file is unchanged")
+    }
+    function stepsPart2(): void {
         // ---- 2b. a nested tag: one chip, its parent a link of its own ---------------------------------
         if (window.at()) {
             tagRow = rowWith("Etykieta", "")
@@ -422,6 +430,8 @@ QtObject {
         if (window.at()) list().positionViewAtEnd()
         partClick("an embed", rowWith("![[Strona z linkiem]]", ""))
         partClick("a query result", rowWith("", "query"))
+    }
+    function stepsPart3(): void {
         // ---- 6. Alt+Enter on the edited raw line ----------------------------------------------------
         if (window.at()) list().positionViewAtIndex(row, ListView.Center)
         altEnter("Firma", 2, false)
@@ -464,6 +474,8 @@ QtObject {
                 EditorInput.sendKey(field, Qt.Key_Escape, 0, "")
         }
         if (window.at()) check(Js.indexOf(window.pageText(), "| [[Firma/Adam cośtam]] | biuro |") >= 0, "the cell is unchanged")
+    }
+    function stepsPart4(): void {
         // ---- 7. a (simulated) screen reader: every link an accessible link item ----------------------
         if (window.at()) {
             list().positionViewAtIndex(row, ListView.Center)

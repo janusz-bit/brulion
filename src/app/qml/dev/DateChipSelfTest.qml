@@ -176,6 +176,14 @@ QtObject {
     }
 
     function steps(): void {
+        stepsPart1()
+        stepsPart2()
+        stepsPart3()
+        stepsPart4()
+        stepsPart5()
+        stepsPart6()
+    }
+    function stepsPart1(): void {
         if (window.at()) show("Kupić płytki")
         if (window.at()) check(Js.indexOf(line("Kupić płytki"), due) > 0, "the sample task: " + line("Kupić płytki"))
         // ---- 📅: a day later, undo -------------------------------------------------------------
@@ -223,6 +231,8 @@ QtObject {
                   "the chosen date and time are written: " + line("Kupić płytki"))
             page.undo()
         }
+    }
+    function stepsPart2(): void {
         // ---- 📅: the date dialog switched to "Reminder": the date becomes a ⏰ in its place ----------
         chipGesture("date:", false)
         if (window.at()) window.waitStep(menuOpen(), "the menu opens for the reminder")
@@ -256,6 +266,8 @@ QtObject {
             page.undo()
         }
         if (window.at()) check(Js.indexOf(line("Kupić płytki"), due) > 0, "undo brings the date back")
+    }
+    function stepsPart3(): void {
         // ---- A plain click / tap on the 📅 chip: the date dialog on it; its "+" ------------------------
         if (window.at()) clickChip()
         if (window.at()) window.waitStep(dateDialog() !== null && dateDialog().opened,
@@ -317,6 +329,8 @@ QtObject {
             page.undo()
         }
         if (window.at()) check(Js.indexOf(line("Zadzwonić do hydraulika"), reminder) > 0, "two undo steps put the reminder back")
+    }
+    function stepsPart4(): void {
         // ---- ⏰: "Change date and time…" opens the reminder dialog ------------------------------------
         chipGesture("reminder:", false)
         if (window.at()) window.waitStep(menuOpen(), "the menu opens for the reminder dialog")
@@ -368,6 +382,8 @@ QtObject {
             page.undo()
         }
         if (window.at()) check(Js.indexOf(line("Kupić płytki"), due) > 0, "one undo step puts the priority back")
+    }
+    function stepsPart5(): void {
         // ---- #tag and [[link]]: the link menu -------------------------------------------------------
         chipGesture("tag:", true)
         if (window.at()) window.waitStep(linkMenuOpen(), gesture + " on a #tag opens the link menu")
@@ -387,6 +403,8 @@ QtObject {
         if (window.at()) window.tapItem(linkItem("linkMenuCopy"))
         if (window.at() && !window.waiting(!linkMenuOpen() && page.clipboardText() === "[[Castorama]]"))
             window.checkWait("“Kopiuj link” copies the link: " + page.clipboardText())
+    }
+    function stepsPart6(): void {
         // ---- 🔁: a quick rule; the reminder's Priority submenu ---------------------------------------
         if (window.at()) show("Podlać kwiaty")
         chipGesture("recur:", false)
