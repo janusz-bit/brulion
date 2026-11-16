@@ -36,7 +36,7 @@ struct Fixture {
     MarkdownHighlighter highlighter;
     SourceTextSync sync;
 
-    explicit Fixture(const QString &content, int saveDelay = 0, bool reloads = true)
+    explicit Fixture(const QString &content, int saveDelay = 0, bool reloads = true, bool highlighted = true)
     {
         host.setFile(Page, content);
         page.setNow(u"2026-11-16 10:00"_s);
@@ -45,7 +45,8 @@ struct Fixture {
         page.setPath(Page);
         page.setSourceMode(true);
         highlighter.setMode(u"source"_s);
-        highlighter.attach(&doc);
+        if (highlighted)
+            highlighter.attach(&doc);
         sync.setController(&page);
         sync.setDocument(&doc);
         doc.setPlainText(page.sourceText());
@@ -301,11 +302,19 @@ private Q_SLOTS:
         QCOMPARE(f.page.text(), u"- a\n"_s);
     }
 
+    void keystrokeCostsTheEditNotThePage_data()
+    {
+        QTest::addColumn<bool>("highlighted");
+        QTest::newRow("plain") << false;
+        QTest::newRow("highlighted") << true;
+    }
+
     void keystrokeCostsTheEditNotThePage()
     {
+        QFETCH(bool, highlighted);
         // A 500 KB page: a keystroke used to hand over the whole text (copied, compared, its line
         // endings mapped back: O(page)); now it hands over the edit. Timed against that old way.
-        Fixture f(pageOf(9000, u"\r\n"_s), 100000, false);
+        Fixture f(pageOf(9000, u"\r\n"_s), 100000, false, highlighted);
         QVERIFY(f.page.sourceText().size() > 500'000);
         const int middle = f.size() / 2;
         constexpr int Keys = 60;
@@ -318,7 +327,7 @@ private Q_SLOTS:
         QCOMPARE(shownText(f.page.sourceText()), f.shown());
 
         // The old way (SourceEditor.qml before: the TextEdit's whole text on every change).
-        Fixture old(pageOf(9000, u"\r\n"_s), 100000, false);
+        Fixture old(pageOf(9000, u"\r\n"_s), 100000, false, highlighted);
         old.sync.setActive(false);
         QString last = old.shown();
         timer.restart();
@@ -332,10 +341,22 @@ private Q_SLOTS:
         }
         const qint64 whole = timer.nsecsElapsed();
         QCOMPARE(old.page.sourceText(), f.page.sourceText());
-        qInfo("500 KB page, %d keystrokes: %.2f ms each by edits, %.2f ms each by whole texts", Keys,
-              double(edits) / Keys / 1e6, double(whole) / Keys / 1e6);
-        // (The highlighter's own work per keystroke is in both; measured: 5–20× apart.)
-        QVERIFY2(edits * 3 < whole, "a keystroke in source mode costs about as much as the whole page");
+
+        // The document's own work (insertion, layout, highlighting): in both.
+        Fixture base(pageOf(9000, u"\r\n"_s), 100000, false, highlighted);
+        base.sync.setActive(false);
+        timer.restart();
+        for (int k = 0; k < Keys; ++k)
+            base.type(middle + k, u"ż"_s);
+        const qint64 document = timer.nsecsElapsed();
+        // What handing a keystroke over costs on top of the document's own work.
+        const qint64 byEdits = std::max<qint64>(edits - document, 0);
+        const qint64 byWhole = std::max<qint64>(whole - document, 0);
+        qInfo("500 KB page, %d keystrokes: the document %.2f ms each, handing over %.3f ms each by edits, "
+              "%.3f ms each by whole texts",
+              Keys, double(document) / Keys / 1e6, double(byEdits) / Keys / 1e6, double(byWhole) / Keys / 1e6);
+        // (Measured, Debug on x86_64: 0.1 ms against 4 ms; the document itself took 3–4 ms.)
+        QVERIFY2(byEdits * 3 < byWhole, "a keystroke in source mode costs about as much as the whole page");
     }
 };
 

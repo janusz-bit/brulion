@@ -1328,8 +1328,8 @@ private Q_SLOTS:
             QVERIFY2(brulion::editor::shownText(result) == expected,
                      qPrintable(
                              u"round %1: %2 → %3"_s.arg(round).arg(original.toHtmlEscaped(), result.toHtmlEscaped())));
-            // The file's bytes outside the edited range are untouched (but for a lone "\r" right
-            // before it, which may become "\r\n").
+            // The file's bytes outside the reported range are untouched (but for a lone "\r" right
+            // before it, which may become "\r\n"); the edit may be narrower than the range.
             const auto indexOf = [&original](int position) {
                 qsizetype i = 0;
                 for (int k = 0; k < position; ++k)
@@ -1337,8 +1337,8 @@ private Q_SLOTS:
                 return i;
             };
             const qsizetype start = indexOf(from);
-            QCOMPARE(edit->from + edit->removed, indexOf(from + removed));
-            QVERIFY(edit->from == start || (edit->from == start - 1 && original.at(start - 1) == u'\r'));
+            QVERIFY(edit->from + edit->removed <= indexOf(from + removed));
+            QVERIFY(edit->from >= start || (edit->from == start - 1 && original.at(start - 1) == u'\r'));
         }
     }
 

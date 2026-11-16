@@ -26,6 +26,7 @@
 // the TextEdit's text taken and the session hands over whole texts from then on.
 #pragma once
 
+#include "editorhost.h"
 #include "pagecontroller.h"
 
 #include <QObject>
