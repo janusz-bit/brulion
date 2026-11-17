@@ -388,26 +388,73 @@ emulator_memory=${BRULION_EMULATOR_MEMORY:-$((LOCALAI ? 6144 : 0))}
 if ((emulator_memory > 0)); then
   emulator_args+=(-memory "$emulator_memory")
 fi
-"${emulator[@]}" -avd "$AVD" -port "$PORT" -no-window -no-audio -no-boot-anim -no-snapshot -wipe-data \
-  "${emulator_args[@]}" >"$OUT/emulator.log" 2>&1 &
-emulator_pid=$!
+emulator_pid=""
 http_pid=""
+watchdog_pid=""
 cleanup() {
+  [[ -z $watchdog_pid ]] || kill "$watchdog_pid" 2>/dev/null || true
   [[ -z $http_pid ]] || kill "$http_pid" 2>/dev/null || true
   adb emu kill >/dev/null 2>&1 || true
   sleep 3
-  kill "$emulator_pid" 2>/dev/null || true
+  [[ -z $emulator_pid ]] || kill "$emulator_pid" 2>/dev/null || true
 }
 trap cleanup EXIT
-
-timeout 120 "$SDK/platform-tools/adb" -s "$SERIAL" wait-for-device || die "the emulator did not come up (see $OUT/emulator.log)"
-for _ in $(seq 1 120); do
-  [[ $(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r') == 1 ]] && break
-  sleep 2
-done
-[[ $(adb shell getprop sys.boot_completed | tr -d '\r') == 1 ]] || die "the emulator did not finish booting"
-adb shell input keyevent 82 >/dev/null 2>&1 || true # unlock
-echo "booted: $(adb shell getprop ro.build.version.release | tr -d '\r') (API $(adb shell getprop ro.build.version.sdk | tr -d '\r'))"
+emulator_alive() { [[ -n $emulator_pid ]] && kill -0 "$emulator_pid" 2>/dev/null; }
+stop_emulator() { # a hung emulator: its qemu killed (its launcher, steam-run's bwrap, ends with it)
+  local -a qemu
+  mapfile -t qemu < <(pgrep -f "qemu-system-[^ ]* -avd $AVD -port $PORT " || true)
+  ((${#qemu[@]} == 0)) || kill -KILL "${qemu[@]}" 2>/dev/null || true
+  [[ -z $emulator_pid ]] || kill -KILL "$emulator_pid" 2>/dev/null || true
+  wait "$emulator_pid" 2>/dev/null || true
+}
+# A frozen emulator (its process alive, adb's calls to it waiting forever) is stopped once it has
+# not answered adb for 3 minutes, as a crashed one: the waiting calls fail and the test goes on
+# (the web keyboard test starts the emulator again). A drop of adb's connection (the screen turned,
+# adb root) lasts seconds.
+start_watchdog() {
+  [[ -z $watchdog_pid ]] || kill "$watchdog_pid" 2>/dev/null || true
+  (
+    trap - EXIT
+    silent_since=""
+    while kill -0 "$emulator_pid" 2>/dev/null; do
+      sleep 15
+      if timeout 20 "$SDK/platform-tools/adb" -s "$SERIAL" shell true >/dev/null 2>&1; then
+        silent_since=""
+      elif [[ -z $silent_since ]]; then
+        silent_since=$SECONDS
+      elif ((SECONDS - silent_since >= 180)); then
+        echo "    the emulator has not answered adb for 3 minutes: it is stopped" >&2
+        stop_emulator
+        break
+      fi
+    done
+  ) &
+  watchdog_pid=$!
+}
+# The emulator started (a fresh device: -wipe-data) and booted, its screen unlocked. Its log goes to
+# emulator.log, an earlier one's (a crashed emulator started again) to emulator-<n>.log.
+emulator_starts=0
+start_emulator() {
+  if ((emulator_starts > 0)); then
+    mv -f -- "$OUT/emulator.log" "$OUT/emulator-$emulator_starts.log" 2>/dev/null || true
+  fi
+  emulator_starts=$((emulator_starts + 1))
+  "${emulator[@]}" -avd "$AVD" -port "$PORT" -no-window -no-audio -no-boot-anim -no-snapshot -wipe-data \
+    "${emulator_args[@]}" >"$OUT/emulator.log" 2>&1 &
+  emulator_pid=$!
+  timeout 120 "$SDK/platform-tools/adb" -s "$SERIAL" wait-for-device || die "the emulator did not come up (see $OUT/emulator.log)"
+  local _
+  for _ in $(seq 1 120); do
+    [[ $(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r') == 1 ]] && break
+    emulator_alive || die "the emulator stopped while booting (see $OUT/emulator.log)"
+    sleep 2
+  done
+  [[ $(adb shell getprop sys.boot_completed | tr -d '\r') == 1 ]] || die "the emulator did not finish booting"
+  adb shell input keyevent 82 >/dev/null 2>&1 || true # unlock
+  start_watchdog
+  echo "booted: $(adb shell getprop ro.build.version.release | tr -d '\r') (API $(adb shell getprop ro.build.version.sdk | tr -d '\r'))"
+}
+start_emulator
 
 failures=0
 check() { # <description> <command...>
@@ -439,6 +486,7 @@ wait_for() { # <seconds> <command...>
   local deadline=$((SECONDS + $1))
   while ((SECONDS < deadline)); do
     "${@:2}" && return 0
+    emulator_alive || return 1
     sleep 3
   done
   return 1
@@ -1616,7 +1664,7 @@ if ((WIDGETS)); then
   adb install -r -g "$APP_APK" >/dev/null
   adb root >/dev/null 2>&1 || true
   sleep 3
-  adb wait-for-device
+  timeout 120 "$SDK/platform-tools/adb" -s "$SERIAL" wait-for-device || die "adb did not reach the emulator after adb root"
   adb shell run-as "$PKG" true 2>/dev/null || die "$APP_APK is not debuggable (BRULION_ANDROID_BUILD_TYPE=Debug)"
   adb shell am start -n "$QUICK_ADD" >/dev/null 2>&1 ||
     die "cannot start the (not exported) QuickAddActivity: a google_apis image with adb root is needed"
@@ -2531,6 +2579,26 @@ HTML
     [[ -f $file ]] && sha256sum "$file" | grep -q "^$3 " && echo "$file"
   }
   installed() { adb shell pm list packages "$1" | tr -d '\r' | grep -qx "package:$1"; }
+  # A browser on the device: its APK installed (Chrome comes with the image), allowed to notify, a
+  # debug app (it reads its command line or configuration file).
+  declare -A WK_APKFILE=()
+  wk_prepare_browser() { # <browser>
+    local pkg=${WK_PKG[$1]} apk=${WK_APKFILE[$1]:-}
+    if [[ -n $apk ]]; then
+      echo "    installing $1 ($(basename -- "$apk"))"
+      adb install -r -g "$apk" >/dev/null || die "$1 did not install"
+    fi
+    adb shell pm grant "$pkg" android.permission.POST_NOTIFICATIONS >/dev/null 2>&1 || true
+    adb shell am set-debug-app --persistent "$pkg" >/dev/null 2>&1 || true
+  }
+  # The browsers' command lines and configuration (on a fresh device: after a start of the emulator).
+  wk_prepare_device() {
+    local f
+    for f in chrome-command-line brave-command-line; do
+      adb shell "echo '_ --disable-fre --no-default-browser-check --no-first-run --disable-signin-promo --unsafely-treat-insecure-origin-as-secure=$WK_ORIGIN' > /data/local/tmp/$f" || true
+    done
+    adb push "$OUT/geckoview-config.yaml" /data/local/tmp/org.mozilla.firefox-geckoview-config.yaml >/dev/null || true
+  }
   browsers=()
   for b in ${BRULION_WEB_BROWSERS:-chrome brave firefox}; do
     pkg=${WK_PKG[$b]:-}
@@ -2544,21 +2612,14 @@ HTML
         "https://archive.mozilla.org/pub/fenix/releases/$FENIX_VERSION/android/fenix-$FENIX_VERSION-android-x86_64/fenix-$FENIX_VERSION.multi.android-x86_64.apk" \
         "$FENIX_SHA256") || die "Firefox $FENIX_VERSION: download failed or wrong checksum" ;;
     esac
-    if [[ -n $apk ]]; then
-      echo "    installing $b ($(basename -- "$apk"))"
-      adb install -r -g "$apk" >/dev/null || die "$b did not install"
-    fi
+    WK_APKFILE[$b]=$apk
+    wk_prepare_browser "$b"
     check "$b is installed ($pkg)" installed "$pkg" || continue
-    adb shell pm grant "$pkg" android.permission.POST_NOTIFICATIONS >/dev/null 2>&1 || true
-    adb shell am set-debug-app --persistent "$pkg" >/dev/null 2>&1 || true
     echo "    $b $(adb shell dumpsys package "$pkg" | tr -d '\r' | sed -nE 's/^ *versionName=//p' | head -n 1)"
     browsers+=("$b")
   done
-  for f in chrome-command-line brave-command-line; do
-    adb shell "echo '_ --disable-fre --no-default-browser-check --no-first-run --disable-signin-promo --unsafely-treat-insecure-origin-as-secure=$WK_ORIGIN' > /data/local/tmp/$f" || true
-  done
   printf 'prefs:\n  dom.securecontext.allowlist: "10.0.2.2"\n' >"$OUT/geckoview-config.yaml"
-  adb push "$OUT/geckoview-config.yaml" /data/local/tmp/org.mozilla.firefox-geckoview-config.yaml >/dev/null || true
+  wk_prepare_device
 
   # A run's last report: "count windowHeight overlap shown animating editing settled toolbarBottom
   # contentBottom legacyOverlap containerHeight innerWidth" (empty before the app's first one).
@@ -2601,18 +2662,24 @@ HTML
       exit !($8 >= 0 && d <= 1 && ($4 == 1 || $13 > 0)) }' <<<"$s"
   }
   # adb's connection to the emulator back (it drops now and then, also while the screen turns).
+  # Not back within 3 minutes — an emulator hung in its crash handler stays "offline" — the
+  # emulator is stopped, as a crashed one (it used to be waited for up to 16 minutes, each time).
   wk_adb_ready() {
-    local _
-    for _ in $(seq 1 30); do
+    local deadline=$((SECONDS + 180))
+    while ((SECONDS < deadline)); do
       "$SDK/platform-tools/adb" -s "$SERIAL" shell true >/dev/null 2>&1 && return 0
+      emulator_alive || return 1
       sleep 2
-      timeout 30 "$SDK/platform-tools/adb" -s "$SERIAL" wait-for-device >/dev/null 2>&1 || true
+      timeout 20 "$SDK/platform-tools/adb" -s "$SERIAL" wait-for-device >/dev/null 2>&1 || true
     done
+    echo "    adb has not reached the emulator for 3 minutes: the emulator is stopped"
+    stop_emulator
     return 1
   }
   wk_turn() { # <0 portrait | 1 landscape>: the screen's rotation set (and read back)
     local _ now=""
     for _ in 1 2 3 4 5; do
+      emulator_alive || return 1
       wk_adb_ready || true
       adb shell settings put system accelerometer_rotation 0 >/dev/null 2>&1 || true
       adb shell settings put system user_rotation "$1" >/dev/null 2>&1 || true
@@ -2640,6 +2707,7 @@ HTML
     adb shell am start -a android.intent.action.VIEW -d "'$WK_ORIGIN/seed.html'" -p "$pkg" >/dev/null
     for i in $(seq 1 30); do
       sleep 3
+      emulator_alive || return 1
       xy=$(ui_find_all "$WK_DISMISS" | head -n 1 || true)
       if [[ -n $xy && $xy != "$last" ]]; then
         echo "    tapping away a first-run screen of $1 at $xy"
@@ -2669,6 +2737,7 @@ HTML
     for i in $(seq 1 60); do
       sleep 3
       wk_ready_since "$2" "$base" && return 0
+      emulator_alive || return 1
       xy=$(ui_find_all "$WK_DISMISS" | head -n 1 || true)
       # The same place twice: not a dialog's button (a heading on the browser's home page).
       if [[ -n $xy && $xy != "$last" ]]; then
@@ -2707,7 +2776,7 @@ HTML
         return 0
       fi
       sleep 2
-      adb wait-for-device
+      wk_adb_ready || break
     done
     rm -f "$1.gz"
     return 1
@@ -2741,7 +2810,7 @@ print(last)' "$OUT/report.jsonl" "$1"
       top=$(ime_top 2>/dev/null || true)
       [[ -n $top ]] && break
       sleep 2
-      adb wait-for-device
+      wk_adb_ready || break
     done
     echo "$top"
   }
@@ -2886,21 +2955,47 @@ print(last)' "$OUT/report.jsonl" "$1"
 
   # A run with a failed check runs once more (BRULION_WEB_RETRY=0: never): on the emulator a
   # browser now and then misses a tap or answers late. Both runs are in the report; a real fault
-  # fails both. The emulator itself gone (a crash) ends the test.
+  # fails both.
   retried=()
-  for b in "${browsers[@]}"; do
-    wk_first_start "$b"
+  wk_browser() { # <browser>: its first start and runs; 3 when the emulator stopped meanwhile
+    local mode before
+    wk_first_start "$1"
+    emulator_alive || return 3
     for mode in content visual; do
       before=$failures
-      wk_run "$b" "$mode"
-      kill -0 "$emulator_pid" 2>/dev/null || die "the emulator stopped (see $OUT/emulator.log)"
+      wk_run "$1" "$mode"
+      emulator_alive || return 3
       if ((failures > before)) && [[ ${BRULION_WEB_RETRY:-1} != 0 ]]; then
-        echo "    $b-$mode: $((failures - before)) check(s) failed — once more"
-        retried+=("$b-$mode")
+        echo "    $1-$mode: $((failures - before)) check(s) failed — once more"
+        retried+=("$1-$mode")
         failures=$before
-        wk_run "$b" "$mode"
-        kill -0 "$emulator_pid" 2>/dev/null || die "the emulator stopped (see $OUT/emulator.log)"
+        wk_run "$1" "$mode"
+        emulator_alive || return 3
       fi
+    done
+  }
+  # The emulator itself crashes now and then on GitHub's runners (4 vCPUs): a segfault of its
+  # renderer ("DisplaySurfaceGlContextHelper context was preempted by others" in its log) while a
+  # browser's window comes or goes — in 7 of 9 runs of November 2026 (Chrome, Brave or Firefox, at
+  # any of their steps), never on the 16-core dev machine. That is no fault of the page: the
+  # emulator is started again (a fresh device, the browsers installed again) and the browser's
+  # runs are repeated, its checks counted once; a third crash ends the test. (Before, the dead
+  # emulator ended the test, or its adb retries waited until the job's 60 minutes were up.)
+  restarted=()
+  for b in "${browsers[@]}"; do
+    for attempt in 1 2 3; do
+      before_browser=$failures
+      status=0
+      wk_browser "$b" || status=$?
+      ((status == 3)) || break
+      wait "$emulator_pid" 2>/dev/null || true
+      ((attempt < 3)) || die "the emulator stopped three times (see $OUT/emulator*.log)"
+      echo "    the emulator stopped during $b ($(grep -m 1 -oE 'context was preempted|Segmentation fault|FATAL.*' "$OUT/emulator.log" || echo 'see its log')): started again, $b once more"
+      restarted+=("$b")
+      failures=$before_browser
+      start_emulator
+      for pb in "${browsers[@]}"; do wk_prepare_browser "$pb"; done
+      wk_prepare_device
     done
   done
   adb reverse --remove-all >/dev/null 2>&1 || true
@@ -2909,6 +3004,10 @@ print(last)' "$OUT/report.jsonl" "$1"
   if ((${#retried[@]})); then
     echo "run twice: ${retried[*]}"
     [[ -z ${GITHUB_ACTIONS:-} ]] || echo "::warning::web keyboard: run twice after a failed check: ${retried[*]}"
+  fi
+  if ((${#restarted[@]})); then
+    echo "the emulator started again for: ${restarted[*]} (its earlier logs: $OUT/emulator-*.log)"
+    [[ -z ${GITHUB_ACTIONS:-} ]] || echo "::warning::web keyboard: the emulator crashed and was started again for: ${restarted[*]}"
   fi
   ((failures == 0)) || die "$failures check(s) failed"
   echo "all checks passed"
