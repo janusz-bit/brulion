@@ -839,21 +839,89 @@ void checkTaskStatusMenus(QQuickWindow *window, AppController *app, const Check 
         auto *model = agenda ? qobject_cast<QAbstractItemModel *>(agenda->property("calendar").value<QObject *>())
                              : nullptr;
         const QString tomorrow = app->today(1);
-        QQuickItem *header = agenda ? named(agenda, u"agendaDay_"_s + tomorrow) : nullptr;
-        QQuickItem *list = header;
-        while (list && !isA(list, "QQuickListView"))
-            list = list->parentItem();
-        check(header && list && model, "the agenda shows tomorrow's day header");
-        if (header && list && model) {
-            QQuickItem *day = header;
-            while (day && !day->property("isSelected").isValid())
-                day = day->parentItem();
+        // Asked of the list and its model, not of the delegates' geometry: the days are reused
+        // delegates (reuseItems) and one scrolled away keeps its last place, and the reminder's
+        // deletion above reaches the model after its refresh delay, rebuilding every day (each one
+        // held a time of it) — on a slow machine after the header was found (CI's Windows job: the
+        // tap missed the day, a stale delegate was asked whether it was selected).
+        QQuickItem *list =
+                agenda ? findShown(agenda, [](QQuickItem *item) { return isA(item, "QQuickListView"); }) : nullptr;
+        const int agendaDateRole = model ? model->roleNames().key("date", -1) : -1;
+        const int agendaItemsRole = model ? model->roleNames().key("items", -1) : -1;
+        const auto rowOfDate = [&](const QString &date) {
+            for (int r = 0; model && r < model->rowCount(); ++r) {
+                if (model->data(model->index(r, 0), agendaDateRole).toString() == date)
+                    return r;
+            }
+            return -1;
+        };
+        const auto holdsPills = [&] {
+            for (int r = 0; model && r < model->rowCount(); ++r) {
+                const QVariantList items = model->data(model->index(r, 0), agendaItemsRole).toList();
+                for (const QVariant &item : items) {
+                    QVariant entry = item;
+                    if (entry.canConvert<QJSValue>())
+                        entry = entry.value<QJSValue>().toVariant();
+                    if (entry.toMap().value(u"title"_s).toString().contains(u"ciśnienie"_s))
+                        return true;
+                }
+            }
+            return false;
+        };
+        check(model && waitFor([&] { return !holdsPills(); }, 5000), "the agenda drops the reminder of a deleted page");
+        settle(200);
+        // Tomorrow's day at the top of the list, its header tapped where the list says it is.
+        const int tomorrowRow = rowOfDate(tomorrow);
+        QPointer<QQuickItem> day;
+        QQuickItem *header = nullptr;
+        QPointF tap;
+        const auto rowAt = [list](QPointF scenePos) {
+            const QPointF p = list->mapFromScene(scenePos);
+            if (!QRectF(0, 0, list->width(), list->height()).contains(p))
+                return -1;
+            int at = -1;
+            QMetaObject::invokeMethod(list, "indexAt", Q_RETURN_ARG(int, at),
+                                      Q_ARG(qreal, p.x() + list->property("contentX").toReal()),
+                                      Q_ARG(qreal, p.y() + list->property("contentY").toReal()));
+            return at;
+        };
+        if (list && tomorrowRow >= 0) {
+            QMetaObject::invokeMethod(list, "positionViewAtIndex", Q_ARG(int, tomorrowRow),
+                                      Q_ARG(int, 0 /* ListView.Beginning */));
+            waitFor([&] {
+                QQuickItem *item = nullptr;
+                QMetaObject::invokeMethod(list, "itemAtIndex", Q_RETURN_ARG(QQuickItem *, item),
+                                          Q_ARG(int, tomorrowRow));
+                header = item ? findShownNamed(item, u"agendaDay_"_s + tomorrow) : nullptr;
+                day = item;
+                if (header)
+                    tap = pointIn(header, 0.4, 0.5);
+                return header && rowAt(tap) == tomorrowRow;
+            });
+        }
+        check(header && day && rowAt(tap) == tomorrowRow, "the agenda shows tomorrow's day header");
+        if (header && day && model) {
             const QString start = model->property("rangeStart").toString();
             const qreal contentY = list->property("contentY").toReal();
-            tapOrClick(window, pointIn(header, 0.4, 0.5), touch);
-            check(waitFor([&] { return model->property("anchorDate").toString() == tomorrow; })
-                          && day && day->property("isSelected").toBool(),
-                  "a tap / click on a day's header in the agenda selects the day");
+            tapOrClick(window, tap, touch);
+            const bool selected = waitFor([&] {
+                return model->property("anchorDate").toString() == tomorrow && day
+                       && day->property("isSelected").toBool();
+            });
+            if (!selected) {
+                std::fprintf(stderr,
+                             "selftest: the agenda's tap at (%.1f, %.1f), row %d of %d (the list says %d): anchor %s, "
+                             "the day %s, contentY %.1f -> %.1f, range %s -> %s\n",
+                             tap.x(), tap.y(), tomorrowRow, model->rowCount(), rowAt(tap),
+                             qPrintable(model->property("anchorDate").toString()),
+                             !day ? "deleted"
+                             : day->property("date").toString() == tomorrow
+                                     ? (day->property("isSelected").toBool() ? "selected" : "not selected")
+                                     : "reused for another day",
+                             contentY, list->property("contentY").toReal(), qPrintable(start),
+                             qPrintable(model->property("rangeStart").toString()));
+            }
+            check(selected, "a tap / click on a day's header in the agenda selects the day");
             check(model->property("rangeStart").toString() == start
                           && qAbs(list->property("contentY").toReal() - contentY) < 1,
                   "the agenda stays where it is when a day is picked");

@@ -952,6 +952,15 @@ hidden) nothing purple remains, the bottom navigation comes back, and the toolba
 recorded (Brave shows the strip from #60074).
 The script records the readings (`samples-<browser>-<mode>.jsonl`), prints them as rows for the
 `tst_keyboardinsets` test and counts how many times the Qt window changed height when the keyboard opened.
+A run with a failed check runs once more (a browser on the emulator now and then misses a tap). On
+GitHub's runners the emulator itself crashes in most runs (2026-11: 7 of 9 — a segfault of its
+renderer, "DisplaySurfaceGlContextHelper context was preempted by others" in `emulator.log`, while a
+browser's window comes or goes; never on a 16-core machine): the script then starts it again (a
+fresh device, the browsers installed again), repeats that browser's runs and counts their checks
+once; a third crash ends the test. Its waits give up as soon as the emulator is gone, and an
+emulator that stops answering adb for 3 minutes (frozen) is stopped and treated the same way
+(before, a bare `adb wait-for-device` waited for the crashed device until the job's 60 minutes were
+up).
 
 Result from 2026-10-28 (Android 16, Pixel 6, 1080×2400, density 420): in Chrome 133, Brave 1.97.59
 and Firefox 157.0.1 the toolbar sits on the keyboard (Firefox: 0 px; Chrome and Brave: on their
