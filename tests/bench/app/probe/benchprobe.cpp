@@ -10,10 +10,12 @@
 //   BENCH_OUT        JSON-lines output (default stderr)
 //   BENCH_T0         CLOCK_MONOTONIC ns at launch (the runner sets it just before exec); times
 //                    in the output are ms since then (default: the library's load)
-//   BENCH_SCENARIO   startup | open-page | typing | select-copy | search | switcher | views |
+//   BENCH_SCENARIO   startup | open-page | typing | source-typing | select-copy | search |
+//                    switcher | views |
 //                    graph | journal-scroll | page-scroll | page-resize | switch-pages | idle |
 //                    idle-edit | workload (see buildScenario())
-//   BENCH_PAGE       page path for open-page / typing / select-copy / idle-edit / page-scroll /
+//   BENCH_PAGE       page path for open-page / typing / source-typing / select-copy / idle-edit /
+//                    page-scroll /
 //                    page-resize ("Bench/Konspekt 5000.md")
 //   BENCH_RESIZE_WIDTH page-resize: the narrower window width (default 920)
 //   BENCH_SCROLL_WAIT page-scroll: ms between the page's first block on screen and the first
@@ -824,6 +826,80 @@ private:
         action(u"mem"_s, [this] { markMem(u"typing_end"_s); });
     }
 
+    /// The visible TextEdit with the longest text (source mode's: the whole file).
+    QQuickItem *longestTextEdit()
+    {
+        QQuickItem *best = nullptr;
+        int bestLength = 0;
+        walk(m_window ? m_window->contentItem() : nullptr, [&](QQuickItem *it) {
+            if (!it->isVisible())
+                return false;
+            for (const QMetaObject *mo = it->metaObject(); mo; mo = mo->superClass()) {
+                if (QByteArray(mo->className()).startsWith("QQuickTextEdit")) {
+                    const int length = it->property("length").toInt();
+                    if (length > bestLength) {
+                        best = it;
+                        bestLength = length;
+                    }
+                    return false;
+                }
+            }
+            return true;
+        });
+        return best;
+    }
+
+    /// source-typing: the page in source mode (Ctrl+E: the whole file in one TextEdit), the caret
+    /// at the end of the line in the middle of the file, then the bursts and Enters of `typing`
+    /// and a few Backspaces.
+    void sourceTypingSteps()
+    {
+        action(u"source_mode"_s, [this] {
+            QObject *ctl = nullptr;
+            pageEditor(m_page, &ctl);
+            if (!ctl) {
+                emitJson({{u"ev"_s, u"error"_s}, {u"what"_s, u"no controller for "_s + m_page}});
+                return;
+            }
+            connect(ctl, SIGNAL(saved()), this, SLOT(onSaved()));
+            mark(u"source_start"_s);
+            ctl->setProperty("sourceMode", true);
+        });
+        waitUntil(u"source_shown"_s, [this] {
+            QQuickItem *e = longestTextEdit();
+            return e && e->property("length").toInt() > 1000;
+        }, 30000);
+        action(u"source_caret"_s, [this] {
+            QQuickItem *e = longestTextEdit();
+            if (!e)
+                return;
+            const QString text = e->property("text").toString();
+            const qsizetype lineEnd = text.indexOf(u'\n', text.size() / 2);
+            e->forceActiveFocus();
+            e->setProperty("cursorPosition", int(lineEnd < 0 ? text.size() : lineEnd));
+            emitJson({{u"ev"_s, u"note"_s}, {u"what"_s, u"source"_s}, {u"chars"_s, int(text.size())}});
+        });
+        waitUntil(u"editing"_s, [this] { return focusIsText(); }, 10000);
+        wait(400);
+        waitSettled(u"edit_settled"_s, 600, 30000);
+        for (int burst = 0; burst < 3; ++burst) {
+            action(u"burst"_s, [this, burst] { mark(u"burst_start:"_s + QString::number(burst)); });
+            typeString(u" ala ma kota zażółć"_s, 120);
+            action(u"burst_end"_s, [this, burst] { mark(u"burst_end:"_s + QString::number(burst)); });
+            wait(1800);
+        }
+        for (int i = 0; i < 5; ++i) {
+            keyStep(Qt::Key_Return, Qt::NoModifier, u"enter"_s, 250);
+            action(u"type"_s, [this] { typeChar(u'x'); });
+            wait(250);
+        }
+        for (int i = 0; i < 5; ++i)
+            keyStep(Qt::Key_Backspace, Qt::NoModifier, u"backspace"_s, 250);
+        wait(1500);
+        waitSettled(u"typing_settled"_s, 1000, 30000);
+        action(u"mem"_s, [this] { markMem(u"typing_end"_s); });
+    }
+
     /// Select every block of the page and copy it (docs/UI.md "Selecting and copying"), three
     /// times: Ctrl+A (the block's text), Ctrl+A (every block: PageController::selectAll()),
     /// Ctrl+C (copySelection(): the Markdown, its HTML, the clipboard), Escape, editing again.
@@ -1285,6 +1361,9 @@ private:
         } else if (s == u"typing") {
             openPageSteps(m_page, u"1"_s);
             typingSteps();
+        } else if (s == u"source-typing") {
+            openPageSteps(m_page, u"1"_s);
+            sourceTypingSteps();
         } else if (s == u"select-copy") {
             openPageSteps(m_page, u"1"_s);
             selectCopySteps();

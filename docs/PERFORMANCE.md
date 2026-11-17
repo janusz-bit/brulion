@@ -17,7 +17,10 @@ compared with `ef90077`) and a smooth graph (L16, compared with `64d0380` on a G
   keystroke used to hand the whole page over to be compared and saved — on a page of 500 KB
   about 18–21 ms on a Raspberry Pi 4 (a slower phone), more than half of what a frame may take,
   and again for each change of highlighting. Now only the typed text is handed over: about
-  0.5–0.6 ms on that page, 0.06–0.1 ms on a page of 100 KB.
+  0.5–0.6 ms on that page, 0.06–0.1 ms on a page of 100 KB. In the app on a computer a letter
+  typed into such a page now shows in the next frame (11.5 instead of 12.6 ms, the slowest
+  twentieth 12.6 instead of 27 ms), Enter and Backspace in half the time (11–12 instead of 24–26
+  ms).
 * **Typing in very long pages** (2026-11-15). A keystroke used to make the page check itself
   from top to bottom — its numbering, its blank lines, its end. Now a letter typed into a block
   changes that block and nothing else: in a page of 5000 blocks the page's own work per keystroke
@@ -1574,10 +1577,35 @@ copied from the sources, 50 keystrokes in the middle of a page of Polish list li
 
 What is left grows with the page, but at memory speed: `QString::replace` moves the text after
 the edit, and the walk to the edit searches for `\r` up to it. The highlighter's and the
-TextEdit's own work per keystroke is the same both ways and not in these numbers; the whole app
-in source mode on a phone is not measured yet. `tst_editor_sourcesync` times both ways on a
-500 KB page in one process (`keystrokeCostsTheEditNotThePage`; it fails when they are less than 3×
-apart).
+TextEdit's own work per keystroke is the same both ways and not in these numbers.
+`tst_editor_sourcesync` times both ways on a 500 KB page in one process
+(`keystrokeCostsTheEditNotThePage`, with and without the highlighter): the `QTextDocument`'s own
+work per keystroke — insertion, layout, highlighting, 3.2–3.9 ms there in a Debug build — is
+timed alone and taken off both, and the test fails when what is left is less than 3× apart
+(Debug, x86_64: 0–0.2 ms by edits against 3.9–4.3 ms by whole texts).
+
+**In the app** (`tests/bench/app`, scenario `source-typing`: the page opened, source mode on, the
+caret at the end of the middle line, three bursts of 19 keys 120 ms apart, five Enter + a letter,
+five Backspaces; the reference laptop, Release, Xvfb, 10 runs per build in two alternating rounds;
+medians of the runs' medians, min–max in brackets; base = `6e4e15f2`, the commit before):
+
+| `source-typing-outline5000` (`Bench/Konspekt 5000.md`, 0.5 MB) | before | after |
+|---|---:|---:|
+| letter: handling | 6.0 ms [5.3–6.6] | 1.6 ms [1.5–1.7] |
+| letter: handling, p95 | 20.7 ms | 1.9 ms |
+| letter → frame / p95 | 12.6 / 26.8 ms | 11.5 / 12.6 ms |
+| Enter: handling / → frame | 20.1 / 25.7 ms | 1.8 / 11.3 ms |
+| Backspace: handling / → frame | 18.0 / 23.5 ms | 1.6 / 11.6 ms |
+| GUI blocked after a burst (the autosave) / its longest stall | 315 / 97 ms | 315 / 98 ms |
+| CPU time of the whole run | 15.5 s | 14.7 s |
+
+`source-typing-medium` (`Bench/Średnia strona.md`, 32 KB): a letter's handling 0.8 → 0.6 ms
+(p95 16.1 → 0.7 ms, → frame p95 22.7 → 12.4 ms), Enter 0.8 → 0.5 ms, Backspace 0.7 → 0.4 ms
+(p95 15.0 → 0.6 ms); the autosave the same (250 / 241 ms blocked). Every key now shows in the
+next frame (llvmpipe's ~11 ms frame); before, a keystroke paid for the whole page (and again
+for the change of highlighting it caused), and on the long page Enter and Backspace missed a
+frame. What a burst's autosave blocks in source mode (about twice what it blocks in the outline;
+not looked into yet) is unchanged: TODO.md.
 
 The fuzzing that came first (a standalone program: random typing, pastes with `\r\n` and `\r`,
 deletions across lines, undo and redo, edit blocks, select-all, character and block formats and a
