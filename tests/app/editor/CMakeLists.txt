@@ -44,6 +44,12 @@ brulion_add_test(tst_editor_suggestions
 brulion_add_test(tst_editor_highlighter
     SOURCES tst_editor_highlighter.cpp
     LIBS brulion_editor)
+# Source mode's TextEdit handing its edits to PageController one at a time (SourceTextSync): random
+# edits, undo / redo and formats over every kind of line ending, the fallbacks, the safety net and a
+# keystroke's cost on a 500 KB page against handing over the whole text.
+brulion_add_test(tst_editor_sourcesync
+    SOURCES tst_editor_sourcesync.cpp
+    LIBS brulion_editor)
 # Spell checking (SpellCheck on its worker thread over word-list backends; MarkdownHighlighter's
 # underlines): verdicts pending then in, batches, the cache, languages from the setting and the UI
 # language, the personal dictionary and ignored words (no flicker: wrong words stay marked until

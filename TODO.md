@@ -328,6 +328,17 @@ Details in docs/PERFORMANCE.md, "Next steps":
 * measuring the sync that reads no unchanged note on a Raspberry Pi (before the change 1.35 s for
   5000 files) and lowering the `syncNoChanges` and `blockDocOps … keystroke` baseline rows in
   tests/bench/baselines (laptop.csv, pi.csv) in a quiet window (L4, L12 done on 2026-11-15);
+* measuring typing in source mode (Ctrl+E) on a long page in the app on a phone and a Raspberry
+  Pi (`tests/bench/app` scenario `source-typing`; docs/PERFORMANCE.md "Source mode: one edit, not
+  the page": on the laptop a keystroke's handling went from 6 to 1.6 ms at 500 KB, Enter from 20
+  to 1.8 ms);
+* the autosave after typing in source mode blocks the GUI for 250–315 ms in all (its longest
+  stall ~97 ms) on the reference laptop, on a 32 KB page as on a 0.5 MB one — about twice what
+  it blocks in the outline (docs/PERFORMANCE.md "Source mode: one edit, not the page"): find
+  where it goes (`tests/bench/app/profile-cases.sh`, an `autosave` window) and cut it;
+* precompiled headers for cold builds (the Pi, CI after a Qt update; QOwnNotes uses them in its
+  developer builds): measure `target_precompile_headers` with the Qt headers against ccache alone
+  (ccache needs `sloppiness = pch_defines,time_macros`; MSVC, Android and the browser too);
 * measuring the QML code compiled for size (`-Oz`) on a real phone against a build with
   `-DBRULION_QML_CODE_FOR_SIZE=OFF`: journal scrolling, opening a long page, the views — on the
   desktop no slowdown was measurable (L20b);

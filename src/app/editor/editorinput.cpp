@@ -43,17 +43,27 @@ void EditorInput::replaceRanges(QQuickTextDocument *document, const QVariantList
     cursor.endEditBlock();
 }
 
-QString EditorInput::plainText(QQuickTextDocument *document) const
+void mapDocumentSeparators(QString &text)
 {
-    if (!document || !document->textDocument())
-        return {};
-    QString text = document->textDocument()->toRawText();
     for (QChar &c : text) {
         // Block separators and frame markers of QTextDocument (what toPlainText() maps too).
         if (c == QChar::ParagraphSeparator || c.unicode() == 0xfdd0 || c.unicode() == 0xfdd1)
             c = u'\n';
     }
+}
+
+QString documentPlainText(const QTextDocument *document)
+{
+    if (!document)
+        return {};
+    QString text = document->toRawText();
+    mapDocumentSeparators(text);
     return text;
+}
+
+QString EditorInput::plainText(QQuickTextDocument *document) const
+{
+    return document ? documentPlainText(document->textDocument()) : QString();
 }
 
 bool EditorInput::commitPreedit(QQuickItem *item) const

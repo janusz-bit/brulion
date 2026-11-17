@@ -8,6 +8,7 @@
 #include "markdown/blockdocument.h"
 #include "markdown/parse.h"
 
+#include <QRandomGenerator>
 #include <QTest>
 
 using namespace brulion;
@@ -1229,6 +1230,116 @@ private Q_SLOTS:
         QFETCH(QString, eol);
         QFETCH(QString, expected);
         QCOMPARE(brulion::editor::restoreLineEndings(original, edited, eol), expected);
+    }
+
+    void sourceEditOf_data()
+    {
+        // One edit of what a TextEdit shows (line breaks "\n") placed in the file's own text:
+        // untouched terminators kept, typed line breaks as the document's, a lone "\r" never
+        // merged with a "\n" after it into one line break.
+        QTest::addColumn<QString>("original");
+        QTest::addColumn<int>("from");
+        QTest::addColumn<int>("removed");
+        QTest::addColumn<QString>("inserted");
+        QTest::addColumn<QString>("eol");
+        QTest::addColumn<QString>("expected");
+        QTest::newRow("lf typed") << u"- źdźbło\n"_s << 8 << 0 << u"!"_s << u"\n"_s << u"- źdźbło!\n"_s;
+        QTest::newRow("crlf typed after a line")
+                << u"- a\r\n- b\r\n"_s << 7 << 0 << u"ąę"_s << u"\r\n"_s << u"- a\r\n- bąę\r\n"_s;
+        QTest::newRow("crlf new line") << u"- a\r\n- b\r\n"_s << 3 << 0 << u"\n- nowy"_s << u"\r\n"_s
+                                       << u"- a\r\n- nowy\r\n- b\r\n"_s;
+        QTest::newRow("crlf joined lines") << u"ab\r\ncd\r\n"_s << 2 << 1 << QString() << u"\r\n"_s << u"abcd\r\n"_s;
+        QTest::newRow("crlf line removed")
+                << u"- a\r\n- b\r\n- c\r\n"_s << 4 << 4 << QString() << u"\r\n"_s << u"- a\r\n- c\r\n"_s;
+        QTest::newRow("mixed endings kept") << u"a\r\nb\nc\rd"_s << 3 << 0 << u"X"_s << u"\n"_s << u"a\r\nbX\nc\rd"_s;
+        QTest::newRow("pasted crlf kept") << u"a\nb"_s << 1 << 0 << u"\r\nx\r\n"_s << u"\r\n"_s << u"a\r\nx\r\n\nb"_s;
+        QTest::newRow("all replaced") << u"x\r\n"_s << 0 << 2 << u"y\nz"_s << u"\r\n"_s << u"y\r\nz"_s;
+        QTest::newRow("into empty") << QString() << 0 << 0 << u"a\nb"_s << u"\r\n"_s << u"a\r\nb"_s;
+        QTest::newRow("at the very end") << u"a\r\nb"_s << 3 << 0 << u"\n📅"_s << u"\r\n"_s << u"a\r\nb\r\n📅"_s;
+        QTest::newRow("bom kept") << u"﻿- 📅 jutro\r\n"_s << 11 << 0 << u" 🔁"_s << u"\r\n"_s
+                                  << u"﻿- 📅 jutro 🔁\r\n"_s;
+        QTest::newRow("lone cr file") << u"a\rb\r"_s << 3 << 0 << u"\nc"_s << u"\r"_s << u"a\rb\rc\r"_s;
+        QTest::newRow("line break after a lone cr") << u"a\nb\rc"_s << 4 << 0 << u"\n"_s << u"\n"_s << u"a\nb\r\n\nc"_s;
+        QTest::newRow("deleted up to a lone cr") << u"a\rX\nb"_s << 2 << 1 << QString() << u"\n"_s << u"a\r\n\nb"_s;
+        QTest::newRow("inserted cr before a lf") << u"a\nb"_s << 1 << 0 << u"\n"_s << u"\r"_s << u"a\r\n\nb"_s;
+        // Qt may report a wider range than what changed (formats only, several edits of one undo
+        // step): the terminators in it that did not change keep their bytes.
+        QTest::newRow("formats only, mixed endings")
+                << u"a\r\nb\nc\rd"_s << 0 << 7 << u"a\nb\nc\nd"_s << u"\n"_s << u"a\r\nb\nc\rd"_s;
+        QTest::newRow("wide range, one change")
+                << u"a\r\nb\r\nc"_s << 0 << 5 << u"a\nbX\nc"_s << u"\n"_s << u"a\r\nbX\r\nc"_s;
+    }
+
+    void sourceEditOf()
+    {
+        QFETCH(QString, original);
+        QFETCH(int, from);
+        QFETCH(int, removed);
+        QFETCH(QString, inserted);
+        QFETCH(QString, eol);
+        QFETCH(QString, expected);
+        const std::optional<brulion::editor::SourceEdit> edit =
+                brulion::editor::sourceEditOf(original, from, removed, inserted, eol);
+        QVERIFY(edit);
+        QString result = original;
+        result.replace(edit->from, edit->removed, edit->inserted);
+        QCOMPARE(result, expected);
+        // What the TextEdit shows after the edit.
+        QString shown = brulion::editor::shownText(original);
+        shown.replace(from, removed, inserted);
+        QCOMPARE(brulion::editor::shownText(result), brulion::editor::shownText(shown));
+    }
+
+    void sourceEditOutsideTheText()
+    {
+        using brulion::editor::sourceEditOf;
+        QVERIFY(!sourceEditOf(u"ab\r\ncd"_s, 6, 0, u"x"_s, u"\r\n"_s)); // the text shows 5 characters
+        QVERIFY(!sourceEditOf(u"ab\r\ncd"_s, 4, 2, QString(), u"\r\n"_s));
+        QVERIFY(!sourceEditOf(u"ab"_s, -1, 0, u"x"_s, u"\n"_s));
+        QVERIFY(!sourceEditOf(u"ab"_s, 0, -1, u"x"_s, u"\n"_s));
+        QVERIFY(sourceEditOf(u"ab\r\ncd"_s, 5, 0, u"x"_s, u"\r\n"_s)); // the end itself
+    }
+
+    void sourceEditsMatchTheShownText()
+    {
+        // Random edits of random files with every kind of line ending: the edited file always
+        // shows what the TextEdit shows, and the text before and after the edit keeps its bytes.
+        QRandomGenerator rng(20261116);
+        const QStringList breaks{u"\n"_s, u"\r\n"_s, u"\r"_s};
+        const QStringList pieces{u"ż"_s, u"\n"_s, u"zażółć\ngęślą"_s, u"😀"_s, u"\n\n"_s, u" "_s, QString()};
+        for (int round = 0; round < 3000; ++round) {
+            QString original;
+            const int lines = rng.bounded(6);
+            for (int l = 0; l < lines; ++l)
+                original += u"wiersz %1"_s.arg(l) + breaks.at(rng.bounded(3));
+            if (rng.bounded(2))
+                original += u"koniec"_s;
+            const QString eol = breaks.at(rng.bounded(3));
+            const QString shown = brulion::editor::shownText(original);
+            const int from = rng.bounded(int(shown.size()) + 1);
+            const int removed = rng.bounded(int(shown.size()) - from + 1);
+            const QString inserted = pieces.at(rng.bounded(pieces.size()));
+            const auto edit = brulion::editor::sourceEditOf(original, from, removed, inserted, eol);
+            QVERIFY(edit);
+            QString result = original;
+            result.replace(edit->from, edit->removed, edit->inserted);
+            QString expected = shown;
+            expected.replace(from, removed, inserted);
+            QVERIFY2(brulion::editor::shownText(result) == expected,
+                     qPrintable(
+                             u"round %1: %2 → %3"_s.arg(round).arg(original.toHtmlEscaped(), result.toHtmlEscaped())));
+            // The file's bytes outside the reported range are untouched (but for a lone "\r" right
+            // before it, which may become "\r\n"); the edit may be narrower than the range.
+            const auto indexOf = [&original](int position) {
+                qsizetype i = 0;
+                for (int k = 0; k < position; ++k)
+                    i += original.at(i) == u'\r' && i + 1 < original.size() && original.at(i + 1) == u'\n' ? 2 : 1;
+                return i;
+            };
+            const qsizetype start = indexOf(from);
+            QVERIFY(edit->from + edit->removed <= indexOf(from + removed));
+            QVERIFY(edit->from >= start || (edit->from == start - 1 && original.at(start - 1) == u'\r'));
+        }
     }
 
     void textDeltas_data()

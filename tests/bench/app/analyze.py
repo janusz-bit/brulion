@@ -508,8 +508,8 @@ def m_workload(run):
 
 
 SCENARIOS = {
-    "startup": m_startup, "open-page": m_open_page, "typing": m_typing, "select-copy": m_select_copy,
-    "search": m_search,
+    "startup": m_startup, "open-page": m_open_page, "typing": m_typing, "source-typing": m_typing,
+    "select-copy": m_select_copy, "search": m_search,
     "switcher": m_switcher, "views": m_views, "graph": m_graph, "journal-scroll": m_journal_scroll,
     "page-scroll": m_page_scroll, "page-resize": m_page_resize,
     "switch-pages": m_switch_pages, "idle": m_idle, "idle-edit": m_idle, "workload": m_workload,

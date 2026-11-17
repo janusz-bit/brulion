@@ -627,6 +627,11 @@ bool PageController::save()
         return false; // never overwrite the other version before the conflict is resolved
     if (!m_dirty)
         return true;
+    if (m_sourceMode) {
+        Q_EMIT sourceTextWanted();
+        if (!m_dirty)
+            return true; // saved meanwhile (a repair by the sync saves at once without a save delay)
+    }
     static const QRegularExpression blank(u"^[\\s\\-*+]*$"_s);
     QString content;
     // Another program (an agent's brulion-cli, Syncthing) may have changed the file a moment ago,
@@ -4641,6 +4646,27 @@ void PageController::setSourceText(const QString &edited)
     Q_EMIT sourceTextChanged();
 }
 
+PageController::SourceEditResult PageController::editSourceText(qsizetype from, qsizetype removed,
+                                                                const QString &inserted)
+{
+    if (!m_sourceMode)
+        return SourceEditResult::Unfit;
+    if (refusesEdit())
+        return SourceEditResult::Refused;
+    const std::optional<SourceEdit> edit =
+            sourceEditOf(m_sourceText, from, removed, inserted, m_model->document().eol());
+    if (!edit)
+        return SourceEditResult::Unfit;
+    // A change of formats only (highlighting, line heights) reports its range with the same text.
+    if (QStringView(m_sourceText).sliced(edit->from, edit->removed) == edit->inserted)
+        return SourceEditResult::Unchanged;
+    m_sourceText.replace(edit->from, edit->removed, edit->inserted);
+    m_sourceEdited = true;
+    markDirty();
+    Q_EMIT sourceTextChanged();
+    return SourceEditResult::Applied;
+}
+
 void PageController::setSourceMode(bool on)
 {
     if (m_sourceMode == on || (on && refusesEdit()))
@@ -4652,6 +4678,7 @@ void PageController::setSourceMode(bool on)
         m_sourceEdited = false;
         m_sourceMode = true;
     } else {
+        Q_EMIT sourceTextWanted();
         m_sourceMode = false;
         const QString edited = std::exchange(m_sourceText, {});
         if (m_sourceEdited && edited != text())
