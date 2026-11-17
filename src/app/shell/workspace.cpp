@@ -579,7 +579,9 @@ void Workspace::onVaultChanged(const QList<VaultChange> &changes)
     ++m_revision;
     Q_EMIT revisionChanged();
     // Deletions and restores move files through the trash (.trash is not tracked itself).
-    if (std::ranges::any_of(changes, [](const VaultChange &c) { return c.type != ChangeType::Modified; })) {
+    const bool listChanged =
+            std::ranges::any_of(changes, [](const VaultChange &c) { return c.type != ChangeType::Modified; });
+    if (listChanged) {
         m_trashCount = -1;
         Q_EMIT trashChanged();
     }
@@ -595,6 +597,8 @@ void Workspace::onVaultChanged(const QList<VaultChange> &changes)
         // An extension page loads again, "change" hooks run (docs/EXTENSIONS.md).
         m_extensions->notesChanged(changed);
         Q_EMIT filesChanged(changed);
+        if (listChanged)
+            Q_EMIT fileListChanged();
     }
 }
 

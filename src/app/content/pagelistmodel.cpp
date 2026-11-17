@@ -2,6 +2,7 @@
 
 #include "contentutil.h"
 #include "index/vaultindex.h"
+#include "text/text.h"
 #include "util/paths.h"
 #include "vault/vault.h"
 #include "workspace.h"
@@ -218,15 +219,35 @@ void PageListModel::refresh()
 
 void PageListModel::sortPages(QList<Page> &pages) const
 {
-    const auto byTitle = [](const Page &a, const Page &b) {
+    // The names' sort keys are computed once per page (compareNames() computes both keys on
+    // every comparison: for 10,000 pages some 250,000 normalised, lower-cased copies per sort).
+    struct Keyed {
+        QString titleKey;
+        QString folderKey;
+        Page page;
+    };
+    const bool byFolder = m_sortKey == u"folder";
+    QList<Keyed> keyed;
+    keyed.reserve(pages.size());
+    for (Page &p : pages) {
+        QString titleKey = text::nameSortKey(p.title);
+        QString folderKey = byFolder ? text::nameSortKey(p.folder) : QString();
+        keyed.append({std::move(titleKey), std::move(folderKey), std::move(p)});
+    }
+    const auto byTitle = [](const Keyed &ka, const Keyed &kb) {
+        const Page &a = ka.page;
+        const Page &b = kb.page;
         // Daily notes in date order, whatever their file name format ("16.05.2026").
-        const int c = !a.journalDate.isEmpty() && !b.journalDate.isEmpty() ? a.journalDate.compare(b.journalDate)
-                                                                           : compareNames(a.title, b.title);
+        const int c = !a.journalDate.isEmpty() && !b.journalDate.isEmpty()
+                              ? a.journalDate.compare(b.journalDate)
+                              : text::compareNameKeys(ka.titleKey, a.title, kb.titleKey, b.title);
         return c != 0 ? c < 0 : a.path < b.path;
     };
-    const auto byKey = [this](const Page &a, const Page &b) -> std::strong_ordering {
-        if (m_sortKey == u"folder")
-            return compareNames(a.folder, b.folder) <=> 0;
+    const auto byKey = [this, byFolder](const Keyed &ka, const Keyed &kb) -> std::strong_ordering {
+        const Page &a = ka.page;
+        const Page &b = kb.page;
+        if (byFolder)
+            return text::compareNameKeys(ka.folderKey, a.folder, kb.folderKey, b.folder) <=> 0;
         if (m_sortKey == u"modified")
             return a.modified <=> b.modified;
         if (m_sortKey == u"backlinks")
@@ -236,12 +257,14 @@ void PageListModel::sortPages(QList<Page> &pages) const
         return std::strong_ordering::equal;
     };
     const bool reverseTitle = m_descending && m_sortKey == u"title";
-    std::ranges::stable_sort(pages, [&](const Page &a, const Page &b) {
+    std::ranges::stable_sort(keyed, [&](const Keyed &a, const Keyed &b) {
         if (const auto c = byKey(a, b); c != 0)
             return m_descending ? c > 0 : c < 0;
         // Ties (and the title sort itself) by title; reversed only when sorting by title.
         return reverseTitle ? byTitle(b, a) : byTitle(a, b);
     });
+    for (qsizetype i = 0; i < keyed.size(); ++i)
+        pages[i] = std::move(keyed[i].page);
 }
 
 QVariant PageListModel::data(const QModelIndex &index, int role) const

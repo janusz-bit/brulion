@@ -11,6 +11,7 @@
 #include "markdown/markdown.h"
 #include "notebook/json.h"
 #include "reminders/calendar.h"
+#include "text/text.h"
 #include "vault/vault.h"
 
 #include <QAbstractItemModelTester>
@@ -1925,6 +1926,62 @@ private Q_SLOTS:
         QVERIFY(model.indexOf(u"Projekty/Archiwum/Stare.md"_s) >= 0);
         model.collapseAll();
         QCOMPARE(paths(), (QStringList{ u"assets"_s, u"Projekty"_s, u"Pusty"_s, u"A.md"_s, u"b.md"_s }));
+    }
+
+    // An edit of a page's text (every autosave) leaves the tree alone: no rebuild, no model
+    // signal; files that come, go or change their name still refresh it.
+    void folderTreeIgnoresEdits()
+    {
+        auto ws = open({{u"Projekty/Dom.md"_s, u"- x\n"_s}, {u"Łąka.md"_s, u"- y\n"_s}});
+        FolderTreeModel model;
+        model.setWorkspace(ws.get());
+        model.setExpanded(u"Projekty"_s, true);
+        QCOMPARE(model.count(), 3);
+        QSignalSpy changed(&model, &QAbstractItemModel::dataChanged);
+        QSignalSpy inserted(&model, &QAbstractItemModel::rowsInserted);
+        QSignalSpy reset(&model, &QAbstractItemModel::modelReset);
+        QSignalSpy listChanged(ws.get(), &Workspace::fileListChanged);
+        QSignalSpy filesChanged(ws.get(), &Workspace::filesChanged);
+        QVERIFY(ws->writeFile(u"Projekty/Dom.md"_s, u"- x, zmieniony\n"_s));
+        QVERIFY(ws->writeFile(u"Łąka.md"_s, u"- y, zmieniona\n"_s));
+        QCOMPARE(filesChanged.size(), 2);
+        QCOMPARE(listChanged.size(), 0);
+        QTest::qWait(300); // past the tree's 80 ms debounce
+        QCOMPARE(changed.size(), 0);
+        QCOMPARE(inserted.size(), 0);
+        QCOMPARE(reset.size(), 0);
+
+        QVERIFY(ws->writeFile(u"Projekty/Ogród.md"_s, u"- nowy\n"_s));
+        QCOMPARE(listChanged.size(), 1);
+        QTRY_COMPARE(model.count(), 4);
+        QCOMPARE(model.indexOf(u"Projekty/Ogród.md"_s), 2); // Dom, Ogród in Polish order
+        QVERIFY(!ws->createFolder(u"Pusty"_s).isEmpty());
+        QTRY_VERIFY(model.indexOf(u"Pusty"_s) >= 0);
+        QVERIFY(listChanged.size() >= 2);
+    }
+
+    // The tree sorts with each name's key computed once: the order is text::compareNames()'s.
+    void folderTreeSortsByCompareNames()
+    {
+        const QStringList names{u"Ćwiczenia 10"_s, u"ćwiczenia 2"_s, u"Cwiczenia"_s, u"żaba"_s,    u"Zebra"_s,
+                                u"źdźbło"_s,       u"Łąka"_s,        u"lato 007"_s,  u"Lato 7a"_s, u"Ąę"_s};
+        QHash<QString, QString> files;
+        for (const QString &n : names)
+            files.insert(n + u".md"_s, u"- x\n"_s);
+        for (const QString &n : {u"Żółw"_s, u"zoo"_s, u"Apteka 3"_s, u"apteka 20"_s})
+            files.insert(n + u"/plik.md"_s, u"- x\n"_s);
+        auto ws = open(files);
+        FolderTreeModel model;
+        model.setWorkspace(ws.get());
+        QStringList titles;
+        for (int i = 0; i < model.rowCount(); ++i)
+            titles.append(model.data(model.index(i), FolderTreeModel::TitleRole).toString());
+        const auto byName = [](const QString &a, const QString &b) { return brulion::text::compareNames(a, b) < 0; };
+        QStringList folders{u"Żółw"_s, u"zoo"_s, u"Apteka 3"_s, u"apteka 20"_s};
+        std::ranges::stable_sort(folders, byName);
+        QStringList pages = names;
+        std::ranges::stable_sort(pages, byName);
+        QCOMPARE(titles, folders + pages); // folders first
     }
 
     // The tree follows the vault with inserted and removed rows (never a reset while rows stay:

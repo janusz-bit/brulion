@@ -414,7 +414,9 @@ in rendered text" below).
   full height, so the lines run on from row to row, below the row's background (the selected
   row's pill covers them), in `Theme.guideOnSunken` (`borderStrong` in the light, `border` in the
   dark: the tree lies on `bgSunken`); both densities and the 8-px steps below the fourth level. Vault changes reach it as inserted and removed rows (never a reset
-  while rows stay: the list keeps its place, Syncthing's deliveries included); open folders are
+  while rows stay: the list keeps its place, Syncthing's deliveries included) — only changes of
+  the list of files (`Workspace::fileListChanged`: a file or folder created, deleted or renamed),
+  never an edit of a page's text (every autosave); open folders are
   remembered per notebook (device-local), follow renamed and moved folders and are forgotten
   with deleted ones. A tap opens or closes a folder and opens a page; the open page or daily
   note is revealed (its folders opened, scrolled into view) and highlighted on every route

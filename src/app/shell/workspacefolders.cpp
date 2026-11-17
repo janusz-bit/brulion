@@ -160,6 +160,7 @@ void Workspace::notifyFolderChange(const QStringList &changed, bool byUser)
     m_trashCount = -1;
     Q_EMIT trashChanged();
     Q_EMIT filesChanged(changed);
+    Q_EMIT fileListChanged();
     if (byUser)
         m_sync->notifyLocalChange();
 }

@@ -484,6 +484,8 @@ FocusScope {
             JournalListModel {
                 id: days
                 workspace: Workspace
+                // Hidden (kept by ShellRouteView): edits only mark the days stale until it is shown.
+                active: root.visible
                 today: DatesHelper.today
                 // route.date: once the days are known.
                 onRefreshed: {

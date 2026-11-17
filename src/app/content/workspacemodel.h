@@ -8,6 +8,17 @@
 // moves, insertions, dataChanged), so delegates — e.g. a journal day being edited — survive
 // background updates (sync, Syncthing, another pane saving). Large reorderings fall back to a
 // model reset.
+//
+// `active` (default true): a list nobody sees computes nothing. While it is false — the view
+// kept hidden by ShellRouteView (All pages, Search, the Journal while a page is shown) —, a change
+// of the files or the index only marks the rows stale; they are computed once when `active`
+// becomes true again (docs/PERFORMANCE.md "Only what is on screen"). The first fill, a new
+// workspace and changes of the model's own properties (a filter, a folder) are computed as
+// before, also while inactive.
+//
+// A subclass that knows which notes its rows come from overrides affectedBy(): a change of the
+// index (VaultIndex::changesSince() since the last refresh) that touches none of them is skipped
+// — the references of a page do not change while that page itself is being typed in.
 #pragma once
 
 #include <QAbstractListModel>
@@ -22,6 +33,7 @@
 
 namespace brulion {
 class VaultIndex;
+struct IndexChanges;
 }
 
 namespace brulion::shell {
@@ -35,6 +47,9 @@ class WorkspaceListModel : public QAbstractListModel {
     /// The shell's Workspace (QML: the `Workspace` singleton); null = no rows.
     Q_PROPERTY(QObject *workspace READ workspaceObject WRITE setWorkspaceObject NOTIFY workspaceChanged FINAL)
     Q_PROPERTY(int count READ count NOTIFY countChanged FINAL)
+    /// The rows follow the changes of the files and the index (false: they are only marked
+    /// stale, and computed again when this is true again — a hidden view).
+    Q_PROPERTY(bool active READ isActive WRITE setActive NOTIFY activeChanged FINAL)
 
 public:
     explicit WorkspaceListModel(QObject *parent = nullptr);
@@ -48,6 +63,10 @@ public:
     VaultIndex *vaultIndex() const;
 
     int count() const { return rowCount(); }
+    bool isActive() const { return m_active; }
+    void setActive(bool active);
+    /// A change came while inactive: the rows are computed again when the model is active.
+    bool isStale() const { return m_stale; }
     int rowCount(const QModelIndex &parent = {}) const override;
 
     /// Recompute the rows now (tests; normally coalesced after changes).
@@ -56,6 +75,7 @@ public:
 Q_SIGNALS:
     void workspaceChanged();
     void countChanged();
+    void activeChanged();
     /// The rows were recomputed (after every refresh, also when nothing changed).
     void refreshed();
 
@@ -70,6 +90,10 @@ protected:
     void setRefreshDelay(int ms) { m_refreshDelay = ms; }
     /// Called when the workspace changes or a vault opens/closes (before the refresh).
     virtual void workspaceReset() { }
+    /// Whether the rows can differ after `changes` of the index since the last refresh (only
+    /// asked for a complete log without changed names: anything can differ otherwise). Default:
+    /// always — the rows are computed again after every change.
+    virtual bool affectedBy(const IndexChanges &changes) const;
     /// Every role of row `row` by name ({} for a bad row): the subclasses' get().
     QVariantMap rowMap(int row) const;
 
@@ -80,6 +104,11 @@ protected:
 
 private:
     void connectWorkspace();
+    /// The files or the index changed: refresh after the delay, or only mark stale while inactive.
+    void contentChanged();
+    /// The index changed since the last refresh only in notes the rows do not come from
+    /// (affectedBy()); then the rows count as computed at the index's current version.
+    bool unaffectedByIndexChanges();
     /// countChanged() when the row count differs from the last one told.
     void publishCount();
 
@@ -87,6 +116,11 @@ private:
     QTimer m_timer;
     int m_refreshDelay = 120;
     int m_lastCount = 0;
+    bool m_active = true;
+    bool m_stale = false;
+    /// The index (VaultIndex::serial(), 0 = none) and its version the rows were computed at.
+    quint64 m_indexSerial = 0;
+    int m_indexVersion = -1;
 };
 
 template<typename Row, typename KeyFn, typename SameFn>

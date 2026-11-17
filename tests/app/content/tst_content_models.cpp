@@ -5,7 +5,7 @@
 // the tag list, the page list (Polish order, sorting, filters, backlink counts), search results
 // (scopes, folders, highlight positions, diacritics), the history list (newest first, reasons,
 // restore, deleted pages), the outline and the page tools (rename impact, title checks, summary,
-// wiki links, export).
+// wiki links, export); lists that are not `active` (a hidden view) only go stale.
 #include "historymodel.h"
 #include "journallistmodel.h"
 #include "outlinemodel.h"
@@ -17,6 +17,7 @@
 
 #include "workspace.h"
 
+#include "text/text.h"
 #include "vault/history.h"
 #include "vault/vault.h"
 
@@ -680,6 +681,154 @@ private Q_SLOTS:
         QCOMPARE(resets.size(), 0);
         QVERIFY(!value(model, 0, "modifiedLabel").toString().isEmpty());
         QCOMPARE(model.rowOf(u"Zebra.md"_s), 0);
+    }
+
+    // The page list sorts with each title's key computed once: the order is text::compareNames()'s
+    // (digits by value, Polish letters after their base letters, case ignored), also by folder.
+    void pageListSortsByCompareNames()
+    {
+        const QStringList titles{
+                u"Ćwiczenia 10"_s, u"ćwiczenia 2"_s, u"Cwiczenia"_s, u"żaba"_s, u"Zebra"_s, u"źdźbło"_s, u"Łąka"_s,
+                u"lato 007"_s,     u"Lato 7a"_s,     u"Ąę"_s,        u"a"_s,    u"B"_s,     u"ósemka"_s, u"Osa"_s};
+        QHash<QString, QString> files;
+        for (qsizetype i = 0; i < titles.size(); ++i)
+            files.insert((i % 2 ? u"Ź folder/"_s : u"a folder/"_s) + titles.at(i) + u".md"_s, u"- x\n"_s);
+        auto ws = open(files);
+        PageListModel model;
+        model.setWorkspace(ws.get());
+        model.refreshNow();
+        QStringList expected = titles;
+        std::ranges::stable_sort(
+                expected, [](const QString &a, const QString &b) { return brulion::text::compareNames(a, b) < 0; });
+        QCOMPARE(column(model, "title"), expected);
+        model.setDescending(true);
+        model.refreshNow();
+        std::ranges::reverse(expected);
+        QCOMPARE(column(model, "title"), expected);
+        // By folder: "a folder" before "Ź folder", titles in order within each.
+        model.setDescending(false);
+        model.setSortKey(u"folder"_s);
+        model.refreshNow();
+        QStringList folders = column(model, "folder");
+        QCOMPARE(folders.first(), u"a folder"_s);
+        QCOMPARE(folders.last(), u"Ź folder"_s);
+        QVERIFY(std::ranges::is_sorted(
+                folders, [](const QString &a, const QString &b) { return brulion::text::compareNames(a, b) < 0; }));
+    }
+
+    // A page's references are computed again only when a note they come from changes, or one that
+    // may now add some (a new link or tag naming the page; for mentions, any other note): typing
+    // in the page itself — every autosave — computes nothing, also for the unlinked mentions,
+    // which read the text of the whole notebook.
+    void referencesSkipEditsOfThePageItself()
+    {
+        auto ws = open({{u"Cel.md"_s, u"- strona celu\n"_s},
+                        {u"Źródło.md"_s, u"- link do [[Cel]]\n"_s},
+                        {u"Inna.md"_s, u"- tu jest Cel bez linku\n"_s},
+                        {u"Obca.md"_s, u"- nic\n"_s}});
+        BacklinksModel linked;
+        linked.setWorkspace(ws.get());
+        linked.setPath(u"Cel.md"_s);
+        linked.refreshNow();
+        BacklinksModel unlinked;
+        unlinked.setWorkspace(ws.get());
+        unlinked.setPath(u"Cel.md"_s);
+        unlinked.setMode(u"unlinked"_s);
+        unlinked.refreshNow();
+        QCOMPARE(linked.refCount(), 1);
+        QCOMPARE(unlinked.refCount(), 1);
+        QSignalSpy linkedRefreshed(&linked, &WorkspaceListModel::refreshed);
+        QSignalSpy unlinkedRefreshed(&unlinked, &WorkspaceListModel::refreshed);
+
+        // The page itself, twice (two autosaves).
+        QVERIFY(ws->writeFile(u"Cel.md"_s, u"- strona celu, zmieniona\n"_s));
+        QVERIFY(ws->writeFile(u"Cel.md"_s, u"- strona celu, zmieniona dwa razy\n"_s));
+        QTest::qWait(400); // past the refresh delay (120 ms)
+        QCOMPARE(linkedRefreshed.size(), 0);
+        QCOMPARE(unlinkedRefreshed.size(), 0);
+
+        // A note without a link: the linked list stays, the mentions are looked for again.
+        QVERIFY(ws->writeFile(u"Obca.md"_s, u"- nic, a teraz Cel\n"_s));
+        QTRY_COMPARE(unlinked.refCount(), 2);
+        QTest::qWait(300);
+        QCOMPARE(linkedRefreshed.size(), 0);
+
+        // The note the reference comes from: its row follows.
+        QVERIFY(ws->writeFile(u"Źródło.md"_s, u"- nowy tekst z [[Cel]]\n"_s));
+        QTRY_COMPARE(linkedRefreshed.size(), 1);
+        QCOMPARE(outline(linked), (QStringList{u"Źródło (1)"_s, u"  0: nowy tekst z Cel"_s}));
+        // A note that links to the page now, and a tag naming it.
+        QVERIFY(ws->writeFile(u"Obca.md"_s, u"- teraz z [[Cel]]\n"_s));
+        QTRY_COMPARE(linked.refCount(), 2);
+        QVERIFY(ws->writeFile(u"Inna.md"_s, u"- otagowana #Cel\n"_s));
+        QTRY_COMPARE(linked.refCount(), 3);
+        // A link taken out of a note the rows came from.
+        QVERIFY(ws->writeFile(u"Źródło.md"_s, u"- bez linku\n"_s));
+        QTRY_COMPARE(linked.refCount(), 2);
+        // A new page (names changed): computed again.
+        const qsizetype before = linkedRefreshed.size();
+        QVERIFY(ws->writeFile(u"Nowa.md"_s, u"- [[Cel]]\n"_s));
+        QTRY_VERIFY(linkedRefreshed.size() > before);
+        QCOMPARE(linked.refCount(), 3);
+    }
+
+    // A list that is not active (its view kept hidden) computes nothing when notes change: it only
+    // goes stale, and is computed at once when it becomes active again. Its first fill and changes
+    // of its own properties are computed while inactive too.
+    void inactiveListsGoStale()
+    {
+        auto ws = open({{u"Alfa.md"_s, u"- a\n"_s}, {u"Beta.md"_s, u"- b\n"_s}});
+        PageListModel model;
+        model.setActive(false);
+        QSignalSpy refreshed(&model, &WorkspaceListModel::refreshed);
+        model.setWorkspace(ws.get()); // the first fill
+        QTRY_COMPARE(model.rowCount(), 2);
+        QTest::qWait(200);
+        const qsizetype filled = refreshed.size();
+        QVERIFY(!model.isStale());
+
+        QVERIFY(ws->writeFile(u"Gamma.md"_s, u"- g\n"_s));
+        QVERIFY(ws->writeFile(u"Alfa.md"_s, u"- a, zmieniona\n"_s));
+        QTest::qWait(400); // past the refresh delay (120 ms)
+        QCOMPARE(refreshed.size(), filled);
+        QCOMPARE(model.rowCount(), 2);
+        QVERIFY(model.isStale());
+
+        // Shown again: computed before anything reads it.
+        QSignalSpy activeChanged(&model, &WorkspaceListModel::activeChanged);
+        model.setActive(true);
+        QCOMPARE(activeChanged.size(), 1);
+        QCOMPARE(refreshed.size(), filled + 1);
+        QVERIFY(!model.isStale());
+        QCOMPARE(column(model, "title"), (QStringList{u"Alfa"_s, u"Beta"_s, u"Gamma"_s}));
+
+        // Active: changes follow as before (after the delay).
+        QVERIFY(ws->writeFile(u"Delta.md"_s, u"- d\n"_s));
+        QTRY_COMPARE(model.rowCount(), 4);
+
+        // Hidden again with nothing changed: shown again, nothing is computed.
+        QTest::qWait(200);
+        model.setActive(false);
+        const qsizetype before = refreshed.size();
+        model.setActive(true);
+        QCOMPARE(refreshed.size(), before);
+
+        // The model's own properties are computed while inactive (the view's filter field).
+        model.setActive(false);
+        model.setFilter(u"gam"_s);
+        QTRY_COMPARE(column(model, "title"), (QStringList{u"Gamma"_s}));
+
+        // The other lists of the kept views (Journal, Search) follow the same rule.
+        JournalListModel days;
+        days.setActive(false);
+        days.setWorkspace(ws.get());
+        QTRY_COMPARE(days.rowCount(), 1); // today, before its file exists
+        QTest::qWait(200);
+        QVERIFY(ws->writeFile(u"journals/2026-10-13.md"_s, u"- wczoraj\n"_s));
+        QTest::qWait(400);
+        QCOMPARE(days.rowCount(), 1);
+        days.setActive(true);
+        QCOMPARE(days.rowCount(), 2);
     }
 
     // ---- Search ---------------------------------------------------------------------------------

@@ -244,12 +244,27 @@ GroupedRefsModel::Row GroupedRefsModel::rowFor(const Group &g)
     return row;
 }
 
+bool GroupedRefsModel::mayNowReference(const QString &note) const
+{
+    Q_UNUSED(note);
+    return true;
+}
+
+bool GroupedRefsModel::affectedBy(const IndexChanges &changes) const
+{
+    return std::ranges::any_of(
+            changes.notes, [this](const VaultPath &note) { return m_sources.contains(note) || mayNowReference(note); });
+}
+
 void GroupedRefsModel::refresh()
 {
     QList<Group> groups;
     if (workspace() && vaultIndex() && workspace()->isOpen())
         groups = collect();
     const auto dropDocs = qScopeGuard([this] { m_docs.clear(); });
+    m_sources.clear();
+    for (const Group &g : std::as_const(groups))
+        m_sources.insert(g.path);
 
     QList<Row> next;
     QSet<QString> keys;
@@ -416,6 +431,24 @@ QStringList BacklinksModel::names() const
         out.append(note->aliases);
     out.removeAll(QString());
     return out;
+}
+
+bool BacklinksModel::mayNowReference(const QString &note) const
+{
+    const VaultIndex *idx = vaultIndex();
+    const QString target = paths::normalize(m_path);
+    if (!idx || target.isEmpty())
+        return false; // no page: no rows
+    if (m_mode == u"unlinked")
+        return note != target;
+    if (!idx->note(target))
+        return true; // a page not written yet: unresolved links name it, not its path
+    const QList<ResolvedLink> links = idx->outgoingLinks(note);
+    if (std::ranges::any_of(links, [&](const ResolvedLink &l) { return l.target == target; }))
+        return true;
+    const ParsedNote *parsed = idx->note(note);
+    return parsed
+           && std::ranges::any_of(parsed->tags, [&](const QString &tag) { return idx->resolveTag(tag) == target; });
 }
 
 QList<GroupedRefsModel::Group> BacklinksModel::collect()

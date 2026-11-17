@@ -113,6 +113,8 @@ FocusScope {
     SearchResultModel {
         id: results
         workspace: Workspace
+        // Hidden (kept by ShellRouteView): edits do not run the search again until it is shown.
+        active: root.visible
         onQueryChanged: list.currentIndex = 0
     }
 

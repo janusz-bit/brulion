@@ -737,6 +737,9 @@ Q_SIGNALS:
     void taskStatusHistoryChanged();
     /// Files changed (paths, in change order) — after the index was updated.
     void filesChanged(const QStringList &paths);
+    /// The list of files or folders changed — one was created, deleted or renamed (after
+    /// filesChanged()); an edit of a file's content alone does not emit it (the folder tree).
+    void fileListChanged();
     /// A path was renamed or moved (pages: links were rewritten already).
     void pathRenamed(const QString &oldPath, const QString &newPath);
     /// A folder was renamed or moved (after the pathRenamed() of the files in it): routes, the

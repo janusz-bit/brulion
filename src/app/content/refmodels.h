@@ -139,8 +139,12 @@ protected:
     };
     /// The groups to show, in order (subclasses).
     virtual QList<Group> collect() = 0;
+    /// Whether `note` (changed, not one the rows came from) may now add rows: default yes.
+    virtual bool mayNowReference(const QString &note) const;
 
     void refresh() override;
+    /// Only changes of the notes the rows came from, or of notes that may now add rows.
+    bool affectedBy(const IndexChanges &changes) const override;
     int rows() const override { return int(m_rows.size()); }
 
     QDate effectiveToday() const;
@@ -180,6 +184,8 @@ private:
     const Row *taskRow(int row) const;
 
     QList<Row> m_rows;
+    /// The notes of every group of the last refresh (shown or past the limit).
+    QSet<QString> m_sources;
     /// Parsed documents of the notes rendered during one refresh.
     mutable QHash<QString, std::shared_ptr<markdown::BlockDocument>> m_docs;
     QVariantMap m_paletteMap;
@@ -229,6 +235,9 @@ Q_SIGNALS:
 
 protected:
     QList<Group> collect() override;
+    /// Linked: the note links to the page or has a tag naming it (a page not written yet: any
+    /// note may). Unlinked: any other note (mentions are looked for outside the page only).
+    bool mayNowReference(const QString &note) const override;
 
 private:
     /// Groups in the order their pages were first seen.

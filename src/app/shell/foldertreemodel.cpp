@@ -44,7 +44,9 @@ void FolderTreeModel::setWorkspace(Workspace *workspace)
             loadExpanded();
             refresh();
         });
-        connect(m_workspace, &Workspace::filesChanged, this, [this] { m_refreshTimer.start(); });
+        // Only what the tree shows: files and folders that come, go or change their name — not
+        // an edit of a page's text (every autosave), which left the whole tree to be built again.
+        connect(m_workspace, &Workspace::fileListChanged, this, [this] { m_refreshTimer.start(); });
         connect(m_workspace, &Workspace::configChanged, this, [this] { m_refreshTimer.start(); });
         connect(m_workspace, &Workspace::folderRenamed, this, &FolderTreeModel::onFolderRenamed);
     }
@@ -162,11 +164,24 @@ void FolderTreeModel::rebuildChildren()
         }
         m_children[paths::dirname(f.path)].append(std::move(e));
     }
+    // Each name's sort key is computed once (text::compareNames() computes both keys on every
+    // comparison: tens of thousands of allocations for a notebook of 10,000 files).
+    struct Keyed {
+        QString key;
+        Entry entry;
+    };
+    QList<Keyed> keyed;
     for (auto [folder, entries] : m_children.asKeyValueRange()) {
         // In the journals folder: the newest first (years and months as folders too).
         const bool inJournals =
                 !m_journalsFolder.isEmpty() && (folder == m_journalsFolder || folder.startsWith(journalsPrefix));
-        std::ranges::sort(entries, [&](const Entry &a, const Entry &b) {
+        keyed.clear();
+        keyed.reserve(entries.size());
+        for (Entry &e : entries)
+            keyed.append({text::nameSortKey(e.name), std::move(e)});
+        std::ranges::sort(keyed, [&](const Keyed &ka, const Keyed &kb) {
+            const Entry &a = ka.entry;
+            const Entry &b = kb.entry;
             if (a.isDir != b.isDir)
                 return a.isDir;
             // The journals folder first among its siblings.
@@ -180,9 +195,11 @@ void FolderTreeModel::rebuildChildren()
                 if (a.journalDate != b.journalDate)
                     return a.journalDate > b.journalDate;
             }
-            const int c = text::compareNames(a.name, b.name);
+            const int c = text::compareNameKeys(ka.key, a.name, kb.key, b.name);
             return inJournals && a.isDir ? c > 0 : c < 0;
         });
+        for (qsizetype i = 0; i < keyed.size(); ++i)
+            entries[i] = std::move(keyed[i].entry);
     }
 }
 

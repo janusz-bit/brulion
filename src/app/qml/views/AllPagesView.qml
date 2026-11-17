@@ -125,6 +125,8 @@ FocusScope {
     PageListModel {
         id: pages
         workspace: Workspace
+        // Hidden (kept by ShellRouteView): edits only mark the list stale, it is computed when shown.
+        active: root.visible
         folder: root.folder
         filter: filterField.text
         locale: DatesHelper.locale
