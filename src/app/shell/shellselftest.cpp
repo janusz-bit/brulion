@@ -162,6 +162,40 @@ bool takesPressAtCentre(QQuickWindow *window, QQuickItem *item)
     return false;
 }
 
+/// The button of the toast shown (objectName "toastAction") tapped after the app went to view
+/// `view`: once it stays where it is there and a press at its centre reaches it — the toasts follow
+/// the view's bottom edge (Main.qml: the bottom navigation's room), and a fixed pause after the
+/// navigation tapped beside the button now and then on CI's Windows job. False, with the numbers
+/// on stderr, when it is gone or keeps moving (a toast with an action lasts 7 s).
+bool tapToastAction(QQuickWindow *window, AppController *app, const QString &view, bool touch)
+{
+    QElapsedTimer timer;
+    timer.start();
+    QQuickItem *button = nullptr;
+    QPointF at(-1, -1);
+    const bool steady = uidriver::waitFor(
+            [&] {
+                QQuickItem *found = app->currentView() == view
+                                            ? uidriver::shownNamed(window->contentItem(), u"toastAction"_s)
+                                            : nullptr;
+                const QPointF now = found ? pointIn(found) : QPointF(-1, -1);
+                const bool still = found && found == button && now == at && takesPressAtCentre(window, found);
+                button = found;
+                at = now;
+                if (!still)
+                    uidriver::settle(100);
+                return still;
+            },
+            3000);
+    if (steady)
+        tapOrClick(window, at, touch);
+    else
+        std::fprintf(stderr, "selftest: the toast's button in the view %s (now %s): %s at (%.1f, %.1f) after %lld ms\n",
+                     qPrintable(view), qPrintable(app->currentView()), button ? "moving or covered" : "not shown",
+                     at.x(), at.y(), qlonglong(timer.elapsed()));
+    return steady;
+}
+
 /// `word` typed on an on-screen keyboard that still composes it: preedit text of `item`, nothing
 /// committed (Android's keyboards keep every word so until a space or a tap elsewhere).
 void composeWord(QQuickItem *item, const QString &word)
@@ -5153,12 +5187,9 @@ void checkFindAndReplace(QQuickWindow *window, AppController *app, const Check &
     QQuickItem *undo = nullptr;
     check(waitFor([&] { return (undo = named(u"toastAction"_s)) != nullptr; }), "the toast offers Undo");
     app->navigate({ { u"view"_s, u"tasks"_s } });
-    settle(250);
-    undo = named(u"toastAction"_s);
-    if (undo)
-        tapOrClick(window, pointIn(undo), touch);
-    check(undo && waitFor([&] { return ws->readFile(other) == u"- zolw w innej notatce\n"_s; }, 5000),
-          "Undo restores the notes after leaving the view");
+    const bool undone = tapToastAction(window, app, u"tasks"_s, touch)
+                        && waitFor([&] { return ws->readFile(other) == u"- zolw w innej notatce\n"_s; }, 5000);
+    check(undone, "Undo restores the notes after leaving the view");
     closeMenus(window);
     ws->writeFile(note, QString());
     ws->deletePage(note);
@@ -6344,11 +6375,8 @@ void checkCleanup(QQuickWindow *window, AppController *app, const Check &check)
           }),
           "the toast offers Undo");
     app->navigate({ { u"view"_s, u"trash"_s } });
-    settle(250);
-    undo = shownNamed(window->contentItem(), u"toastAction"_s);
-    if (undo)
-        tapOrClick(window, pointIn(undo), touch);
-    check(undo && waitFor([&] { return ws->exists(picture); }), "Undo restores the file after leaving the view");
+    check(tapToastAction(window, app, u"trash"_s, touch) && waitFor([&] { return ws->exists(picture); }),
+          "Undo restores the file after leaving the view");
 
     // Leave the sample notebook as it was for the checks after this one.
     for (const QString &path : { note, picture, linkedPicture, u"Sprzątanie z obrazem.md"_s })
