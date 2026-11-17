@@ -313,50 +313,55 @@ private Q_SLOTS:
     {
         QFETCH(bool, highlighted);
         // A 500 KB page: a keystroke used to hand over the whole text (copied, compared, its line
-        // endings mapped back: O(page)); now it hands over the edit. Timed against that old way.
+        // endings mapped back: O(page)); now it hands over the edit. Both ways are timed by what
+        // they do themselves, not the document's own work (insertion, layout, highlighting: 3-4 ms
+        // a keystroke here in a Debug build, the same both ways), so that a busy machine (CI runs
+        // tests in parallel) does not hide the difference in that work's noise.
         Fixture f(pageOf(9000, u"\r\n"_s), 100000, false, highlighted);
         QVERIFY(f.page.sourceText().size() > 500'000);
+        // The sync's slot alone: a clock started by a slot connected before it and read by one
+        // connected after it (slots run in the order they were connected; the highlighter's,
+        // connected first, makes its changes of formats before the clock starts).
+        f.sync.setDocument(nullptr);
+        QElapsedTimer clock;
+        qint64 edits = 0;
+        QObject::connect(&f.doc, &QTextDocument::contentsChange, &f.sync, [&clock] { clock.start(); });
+        f.sync.setDocument(&f.doc);
+        QObject::connect(&f.doc, &QTextDocument::contentsChange, &f.sync,
+                         [&clock, &edits] { edits += clock.nsecsElapsed(); });
         const int middle = f.size() / 2;
         constexpr int Keys = 60;
         QElapsedTimer timer;
         timer.start();
         for (int k = 0; k < Keys; ++k)
             f.type(middle + k, u"ż"_s);
-        const qint64 edits = timer.nsecsElapsed();
+        const qint64 all = timer.nsecsElapsed();
         QCOMPARE(f.sync.wholeTexts(), 0);
+        QVERIFY(f.sync.edits() >= Keys);
         QCOMPARE(shownText(f.page.sourceText()), f.shown());
 
-        // The old way (SourceEditor.qml before: the TextEdit's whole text on every change).
+        // The old way (SourceEditor.qml before: the TextEdit's whole text on every change; once a
+        // keystroke here, though a change of formats paid for it again).
         Fixture old(pageOf(9000, u"\r\n"_s), 100000, false, highlighted);
         old.sync.setActive(false);
         QString last = old.shown();
-        timer.restart();
+        qint64 whole = 0;
         for (int k = 0; k < Keys; ++k) {
             old.type(middle + k, u"ż"_s);
+            timer.restart();
             const QString text = documentPlainText(&old.doc);
             if (text != last) {
                 last = text;
                 old.page.setSourceText(text);
             }
+            whole += timer.nsecsElapsed();
         }
-        const qint64 whole = timer.nsecsElapsed();
         QCOMPARE(old.page.sourceText(), f.page.sourceText());
-
-        // The document's own work (insertion, layout, highlighting): in both.
-        Fixture base(pageOf(9000, u"\r\n"_s), 100000, false, highlighted);
-        base.sync.setActive(false);
-        timer.restart();
-        for (int k = 0; k < Keys; ++k)
-            base.type(middle + k, u"ż"_s);
-        const qint64 document = timer.nsecsElapsed();
-        // What handing a keystroke over costs on top of the document's own work.
-        const qint64 byEdits = std::max<qint64>(edits - document, 0);
-        const qint64 byWhole = std::max<qint64>(whole - document, 0);
-        qInfo("500 KB page, %d keystrokes: the document %.2f ms each, handing over %.3f ms each by edits, "
+        qInfo("500 KB page, %d keystrokes: %.2f ms each in all, handing over %.3f ms each by edits, "
               "%.3f ms each by whole texts",
-              Keys, double(document) / Keys / 1e6, double(byEdits) / Keys / 1e6, double(byWhole) / Keys / 1e6);
-        // (Measured, Debug on x86_64: 0.1 ms against 4 ms; the document itself took 3–4 ms.)
-        QVERIFY2(byEdits * 3 < byWhole, "a keystroke in source mode costs about as much as the whole page");
+              Keys, double(all) / Keys / 1e6, double(edits) / Keys / 1e6, double(whole) / Keys / 1e6);
+        // (Measured, Debug on x86_64: about 0.1 ms against 4.2 ms.)
+        QVERIFY2(edits * 3 < whole, "a keystroke in source mode costs about as much as the whole page");
     }
 };
 

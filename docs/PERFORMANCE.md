@@ -1579,10 +1579,12 @@ What is left grows with the page, but at memory speed: `QString::replace` moves 
 the edit, and the walk to the edit searches for `\r` up to it. The highlighter's and the
 TextEdit's own work per keystroke is the same both ways and not in these numbers.
 `tst_editor_sourcesync` times both ways on a 500 KB page in one process
-(`keystrokeCostsTheEditNotThePage`, with and without the highlighter): the `QTextDocument`'s own
-work per keystroke — insertion, layout, highlighting, 3.2–3.9 ms there in a Debug build — is
-timed alone and taken off both, and the test fails when what is left is less than 3× apart
-(Debug, x86_64: 0–0.2 ms by edits against 3.9–4.3 ms by whole texts).
+(`keystrokeCostsTheEditNotThePage`, with and without the highlighter), each by what it does
+itself — the sync's slot between two slots that read a clock, the whole text's copy, comparison
+and `setSourceText` — not the `QTextDocument`'s own work (insertion, layout, highlighting,
+3.2–3.9 ms a keystroke there in a Debug build, the same both ways; a first version subtracted it
+and failed on a busy CI runner). It fails when they are less than 3× apart (Debug, x86_64: about
+0.1 ms by edits against 4.2 ms by whole texts; 24 copies at once on 16 cores: at least 21×).
 
 **In the app** (`tests/bench/app`, scenario `source-typing`: the page opened, source mode on, the
 caret at the end of the middle line, three bursts of 19 keys 120 ms apart, five Enter + a letter,

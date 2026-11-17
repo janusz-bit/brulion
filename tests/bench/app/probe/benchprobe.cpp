@@ -865,10 +865,13 @@ private:
             mark(u"source_start"_s);
             ctl->setProperty("sourceMode", true);
         });
-        waitUntil(u"source_shown"_s, [this] {
-            QQuickItem *e = longestTextEdit();
-            return e && e->property("length").toInt() > 1000;
-        }, 30000);
+        waitUntil(
+                u"source_shown"_s,
+                [this] {
+                    QQuickItem *e = longestTextEdit();
+                    return e && e->property("length").toInt() > 1000;
+                },
+                30000);
         action(u"source_caret"_s, [this] {
             QQuickItem *e = longestTextEdit();
             if (!e)
