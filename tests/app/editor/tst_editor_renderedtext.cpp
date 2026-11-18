@@ -12,6 +12,7 @@
 #include <QAbstractTextDocumentLayout>
 #include <QFontMetricsF>
 #include <QQuickWindow>
+#include <QSGRendererInterface>
 #include <QSignalSpy>
 #include <QTest>
 #include <QTextBlock>
@@ -317,14 +318,29 @@ private Q_SLOTS:
         QCOMPARE(it->implicitHeight(), LineHeight);
     }
 
+    void drawsAFrame_data()
+    {
+        QTest::addColumn<bool>("software");
+        QTest::addColumn<QString>("markdown");
+        for (const bool software : {false, true}) {
+            const char *api = software ? "software" : "scene graph";
+            QTest::addRow("%s, shapes", api) << software << u"tekst `kod` #tag [[Inna]]"_s;
+            // The underline is the only shape, in a frame after one without any (the batch
+            // renderer once left such a node out).
+            QTest::addRow("%s, no shapes", api) << software << u"tekst [[Inna]]"_s;
+        }
+    }
     void drawsAFrame()
     {
+        QFETCH(bool, software);
+        QFETCH(QString, markdown);
+        QQuickWindow::setGraphicsApi(software ? QSGRendererInterface::Software : QSGRendererInterface::Unknown);
         QQuickWindow window;
         window.resize(400, 120);
         window.setColor(Qt::white);
         auto *it = new RenderedTextItem(window.contentItem());
         static_cast<QQmlParserStatus *>(it)->classBegin();
-        it->setHtml(InlineRenderer(context()).render(u"tekst `kod` #tag"_s));
+        it->setHtml(InlineRenderer(context()).render(markdown));
         it->setFont(font());
         it->setLineHeight(LineHeight);
         it->setColor(Qt::black);
@@ -334,6 +350,10 @@ private Q_SLOTS:
         QVERIFY(QTest::qWaitForWindowExposed(&window));
         const QImage frame = window.grabWindow();
         QVERIFY(!frame.isNull());
+        // (The graphics API is chosen once per process: offscreen it is the software renderer for
+        // both rows, under X11 the first row's.)
+        if (software != (window.rendererInterface()->graphicsApi() == QSGRendererInterface::Software))
+            QSKIP("this graphics API is not available here");
         // The tag's pill is drawn (its colour in the middle of its shape, left of the text) and the
         // text is (dark pixels).
         bool dark = false;
@@ -342,9 +362,20 @@ private Q_SLOTS:
                 dark = qGray(frame.pixel(x, y)) < 100;
         }
         QVERIFY(dark);
-        const RenderedTextItem::Shape tag = it->shapes().last();
-        const QColor inside = frame.pixelColor(int(tag.rect.left() + 2), int(tag.rect.center().y()));
-        QVERIFY2(inside != QColor(Qt::white), qPrintable(inside.name()));
+        if (!it->shapes().isEmpty()) {
+            const RenderedTextItem::Shape tag = it->shapes().last();
+            const QColor inside = frame.pixelColor(int(tag.rect.left() + 2), int(tag.rect.center().y()));
+            QVERIFY2(inside != QColor(Qt::white), qPrintable(inside.name()));
+        }
+        // The hovered link's underline: drawn in the next frame, nothing laid out again.
+        it->setHoveredLink(u"page:Inna"_s);
+        QCOMPARE(it->overlays().size(), 1);
+        const QRectF line = it->overlays().first().rect;
+        const QImage hovered = window.grabWindow();
+        const QColor under = hovered.pixelColor(int(line.center().x()), int(line.center().y()));
+        QVERIFY2(under != QColor(Qt::white), qPrintable(under.name()));
+        QCOMPARE(it->layoutCount(), 1);
+        QQuickWindow::setGraphicsApi(QSGRendererInterface::Unknown);
     }
 };
 

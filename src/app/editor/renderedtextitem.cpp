@@ -56,6 +56,8 @@ public:
             appendChildNode(&over);
         }
     }
+    /// Every node the item draws, made with its first frame: nodes added to it later were not
+    /// drawn in the app (Qt 6.12, both renderers).
     ~RootNode() override
     {
         // The geometry nodes are members: taken out before QSGNode deletes its children.
@@ -70,7 +72,7 @@ public:
     QSGGeometryNode over;
     QSGVertexColorMaterial overMaterial;
     QSGTextNode *text = nullptr;   ///< (a child: deleted with the node)
-    QSGImageNode *image = nullptr; ///< software: the shapes painted (a child)
+    QSGImageNode *image = nullptr; ///< software: the shapes painted (a child, under the text)
 };
 
 using Vertex = QSGGeometry::ColoredPoint2D;
@@ -138,12 +140,15 @@ void addRoundedRect(QList<Vertex> &v, const QRectF &rect, qreal radius, const QC
     }
 }
 
-void fill(QSGGeometryNode &node, const QList<Vertex> &vertices)
+void fill(QSGGeometryNode &node, QList<Vertex> vertices)
 {
+    // Never empty: the batch renderer leaves out a node that had no vertices and does not draw it
+    // once it has some (Qt 6.12); one invisible triangle keeps it in its batch.
+    if (vertices.isEmpty())
+        vertices = {vertex({}, Qt::transparent), vertex({}, Qt::transparent), vertex({}, Qt::transparent)};
     QSGGeometry *g = node.geometry();
     g->allocate(int(vertices.size()));
-    if (!vertices.isEmpty())
-        std::memcpy(g->vertexData(), vertices.constData(), vertices.size() * sizeof(Vertex));
+    std::memcpy(g->vertexData(), vertices.constData(), vertices.size() * sizeof(Vertex));
     node.markDirty(QSGNode::DirtyGeometry);
 }
 
@@ -692,53 +697,49 @@ QSGNode *RenderedTextItem::updatePaintNode(QSGNode *old, UpdatePaintNodeData *)
         fill(root->over, over);
         m_shapesDirty = false;
     }
-    if (m_shapesDirty && software) {
-        // One image of the item's size with every shape (only when there are any).
-        if (root->image) {
-            root->removeChildNode(root->image);
-            delete std::exchange(root->image, nullptr);
-        }
-        if (!m_shapes.isEmpty() || !m_overlays.isEmpty()) {
-            const qreal dpr = win->effectiveDevicePixelRatio();
-            QRectF bounds;
-            for (const QList<Shape> *list : {&m_shapes, &m_overlays}) {
-                for (const Shape &s : *list)
-                    bounds = bounds.united(s.rect);
-            }
-            bounds = bounds.adjusted(-1, -1, 1, 1).toAlignedRect();
-            QImage canvas((bounds.size() * dpr).toSize(), QImage::Format_ARGB32_Premultiplied);
-            canvas.setDevicePixelRatio(dpr);
-            canvas.fill(Qt::transparent);
-            QPainter painter(&canvas);
-            painter.setRenderHint(QPainter::Antialiasing);
-            painter.setPen(Qt::NoPen);
-            painter.translate(-bounds.topLeft());
-            for (const QList<Shape> *list : {&m_shapes, &m_overlays}) {
-                for (const Shape &s : *list) {
-                    painter.setBrush(s.color);
-                    const qreal radius = s.kind == Shape::Kind::Pill        ? s.rect.height() / 2
-                                         : s.kind == Shape::Kind::Underline ? 0
-                                                                            : m_boxRadius;
-                    painter.drawRoundedRect(s.rect, radius, radius);
-                }
-            }
-            painter.end();
+    if (!root->text) {
+        // The nodes of every frame, in drawing order: shapes (software: one image), text, overlays.
+        root->text = win->createTextNode();
+        if (software) {
             root->image = win->createImageNode();
-            root->image->setTexture(win->createTextureFromImage(canvas));
-            root->image->setOwnsTexture(true);
-            root->image->setRect(bounds);
-            root->prependChildNode(root->image);
+            root->appendChildNode(root->image);
+            root->appendChildNode(root->text);
+        } else {
+            root->insertChildNodeAfter(root->text, &root->under);
         }
+    }
+    if (m_shapesDirty && software) {
+        // One image with every shape (a transparent pixel when there is none).
+        const qreal dpr = win->effectiveDevicePixelRatio();
+        QRectF bounds;
+        for (const QList<Shape> *list : {&m_shapes, &m_overlays}) {
+            for (const Shape &s : *list)
+                bounds = bounds.united(s.rect);
+        }
+        bounds = bounds.isNull() ? QRectF(0, 0, 1, 1) : QRectF(bounds.adjusted(-1, -1, 1, 1).toAlignedRect());
+        QImage canvas((bounds.size() * dpr).toSize(), QImage::Format_ARGB32_Premultiplied);
+        canvas.setDevicePixelRatio(dpr);
+        canvas.fill(Qt::transparent);
+        QPainter painter(&canvas);
+        painter.setRenderHint(QPainter::Antialiasing);
+        painter.setPen(Qt::NoPen);
+        painter.translate(-bounds.topLeft());
+        for (const QList<Shape> *list : {&m_shapes, &m_overlays}) {
+            for (const Shape &s : *list) {
+                painter.setBrush(s.color);
+                const qreal radius = s.kind == Shape::Kind::Pill        ? s.rect.height() / 2
+                                     : s.kind == Shape::Kind::Underline ? 0
+                                                                        : m_boxRadius;
+                painter.drawRoundedRect(s.rect, radius, radius);
+            }
+        }
+        painter.end();
+        root->image->setTexture(win->createTextureFromImage(canvas, QQuickWindow::TextureHasAlphaChannel));
+        root->image->setOwnsTexture(true);
+        root->image->setRect(bounds);
         m_shapesDirty = false;
     }
     if (m_textDirty) {
-        if (!root->text) {
-            root->text = win->createTextNode();
-            if (software)
-                root->appendChildNode(root->text);
-            else
-                root->insertChildNodeAfter(root->text, &root->under);
-        }
         root->text->clear();
         root->text->setColor(m_color);
         root->text->setLinkColor(m_linkColor);
