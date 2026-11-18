@@ -89,6 +89,17 @@ private Q_SLOTS:
         QVERIFY(!error.isEmpty());
         held.close();
         QCOMPARE(replace(again.fileName(), file.fileName(), &error), brulion::vaultutil::Replaced::Done);
+        // Paths the system cleans (a doubled separator, as a notebook at a drive's root once gave:
+        // "E://…") are cleaned before the "\\?\" prefix, which would keep the empty name.
+        QFile third(dir.path() + u"/.brulion-tmp-00112233445566aa"_s);
+        QVERIFY(third.open(QIODevice::WriteOnly));
+        QCOMPARE(third.write("- jajka\n"), qint64(8));
+        third.close();
+        QCOMPARE(replace(dir.path() + u"//.brulion-tmp-00112233445566aa"_s, dir.path() + u"//Zakupy.md"_s, &error),
+                 brulion::vaultutil::Replaced::Done);
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        QCOMPARE(file.readAll(), QByteArray("- jajka\n"));
+        file.close();
 #else
         QVERIFY(!brulion::vaultutil::fileReplace()); // (std::filesystem::rename(): POSIX rename())
 #endif

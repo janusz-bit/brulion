@@ -5,6 +5,7 @@
 #include "vault/vaultconfig.h"
 
 #include <QCoreApplication>
+#include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QRandomGenerator>
@@ -212,7 +213,7 @@ bool stampsVouch(const ReadMark &mark, std::optional<qint64> fine, std::optional
     // clock, now (the stamp of a file just written) minus the file's stamp exceeds two ticks plus
     // the time since the mark (an upper bound of the time from the read to now).
     const qint64 since = mark.since.isValid() ? mark.since.nsecsElapsed() : std::numeric_limits<qint64>::max() / 2;
-    return fine && nowStamp && *nowStamp - *fine >= kRacyNs + since;
+    return fine && nowStamp && fineStampAge(*nowStamp, *fine) >= kRacyNs + since;
 }
 
 bool stillAsRead(const QString &absolutePath, const ReadMark &mark, std::optional<qint64> nowStamp)
@@ -262,7 +263,7 @@ StampedSave saveAtomicallyStamped(const QString &absolutePath, QByteArrayView by
     QFile temp;
     for (int attempt = 0;; ++attempt) {
         const QString name = u".brulion-tmp-%1"_s.arg(QRandomGenerator::global()->generate64(), 16, 16, QChar(u'0'));
-        temp.setFileName(dir + u'/' + name);
+        temp.setFileName(QDir(dir).filePath(name)); // ("E:/" at a drive's root: no "E://")
         if (temp.open(QIODevice::WriteOnly | QIODevice::NewOnly))
             break;
         if (attempt >= 8 || !temp.exists()) {
@@ -291,7 +292,7 @@ StampedSave saveAtomicallyStamped(const QString &absolutePath, QByteArrayView by
     if (beforeRename)
         beforeRename();
     // A rename refused for a moment (Windows: a virus scanner, an indexer or a sync client holding
-    // one of the files) is tried again for about a second (kReplaceWaitsMs); the stamp before it is
+    // one of the files) is tried again for 0.3 s (kReplaceWaitsMs); the stamp before it is
     // taken again each time (what changed while waiting is not ours), and so is the caller's check.
     const FileReplace replace = fileReplace() ? fileReplace() : &replaceWithStd;
     Replaced result = Replaced::Failed;
@@ -353,10 +354,7 @@ std::optional<qint64> fineMtime(const QString &absolutePath)
     const std::filesystem::file_time_type time = std::filesystem::last_write_time(path, error);
     if (error)
         return std::nullopt;
-    const qint64 ns = std::chrono::duration_cast<std::chrono::nanoseconds>(time.time_since_epoch()).count();
-    if (ns % 1'000'000 == 0)
-        return std::nullopt;
-    return ns;
+    return fineStampOf(time.time_since_epoch());
 }
 
 QString decodeUtf8(const QByteArray &bytes)

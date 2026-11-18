@@ -434,8 +434,13 @@ std::optional<VaultChange> VaultPrivate::applyModified(const DiskEntry &entry, C
     rememberContent(path, *bytes, /*asText=*/false, hash);
     watchFile(path);
     if (same) {
-        settleIfDue(path);   // (an unsettled file compared: diff())
-        return std::nullopt; // touched, or the echo of our own write
+        // Touched, or the echo of our own write. A new stamp on coarse storage can hide another
+        // write of the same size within its tick: compared by content until the tick is over.
+        if (unsettled.contains(path))
+            settleIfDue(path); // (an unsettled file compared: diff())
+        else
+            noteUnsettled(entry.stat, false);
+        return std::nullopt;
     }
     noteUnsettled(entry.stat, false);
     return VaultChange{ChangeType::Modified, path, {}, source};

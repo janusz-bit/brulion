@@ -2,6 +2,7 @@
 
 #include "vault/filesync.h"
 
+#include <QDir>
 #include <QFileDevice>
 #include <QString>
 
@@ -60,13 +61,31 @@ bool syncFile(QFileDevice &file, QString *error)
     return false;
 }
 
+/// The system's clean-up of a path, as Qt's own long-path form does first
+/// (QFSFileEnginePrivate::longFileName()): the "\\?\" prefix turns it off, so without it a
+/// doubled separator stays an empty name and a trailing dot or space stays part of one ("Dr./a.md"
+/// is in the folder "Dr" that QDir made). As it was when the system cannot say.
+QString fullPathName(const QString &path)
+{
+    const std::wstring in = QDir::toNativeSeparators(path).toStdWString();
+    DWORD size = GetFullPathNameW(in.c_str(), 0, nullptr, nullptr);
+    if (size == 0)
+        return path;
+    std::wstring out(size, L'\0');
+    size = GetFullPathNameW(in.c_str(), size, out.data(), nullptr);
+    if (size == 0 || size >= out.size())
+        return path;
+    out.resize(size);
+    return QString::fromStdWString(out);
+}
+
 vaultutil::Replaced replaceFile(const QString &from, const QString &to, QString *error)
 {
     // What QSaveFile's commit() does too (QFileSystemEngine::renameOverwriteFile()): one move that
     // replaces the file. No MOVEFILE_COPY_ALLOWED: both lie in one folder, and a copy would not be
     // atomic.
-    const std::wstring source = extendedLengthPath(from).toStdWString();
-    const std::wstring target = extendedLengthPath(to).toStdWString();
+    const std::wstring source = extendedLengthPath(fullPathName(from)).toStdWString();
+    const std::wstring target = extendedLengthPath(fullPathName(to)).toStdWString();
     if (MoveFileExW(source.c_str(), target.c_str(), MOVEFILE_REPLACE_EXISTING))
         return vaultutil::Replaced::Done;
     const DWORD code = GetLastError();

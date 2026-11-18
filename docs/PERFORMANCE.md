@@ -1963,8 +1963,13 @@ and what follows it on the next turns. The small page's whole autosave is now be
   the platform's `FileReplace` calls `MoveFileExW(MOVEFILE_REPLACE_EXISTING)` with Qt's
   extended-length paths (`platform::extendedLengthPath`), and only ERROR_ACCESS_DENIED / ERROR_SHARING_VIOLATION /
   ERROR_LOCK_VIOLATION — a virus scanner or an indexer holding the file just closed — are tried
-  again, for about a second (`kReplaceWaitsMs`, as git for Windows and LLVM wait; 90 ms before),
-  the compare-and-swap before each attempt. Still to check on a real Windows machine: a long-path
+  again, for 0.3 s (`kReplaceWaitsMs`; 90 ms before — not the second git for Windows waits: the
+  GUI thread's next vault call waits for the write in flight, and an editor's failed save is tried
+  again after 2, 4, 8 … s anyway), the compare-and-swap before each attempt. The rename cleans its
+  paths with `GetFullPathNameW()` before the `\\?\` prefix, as Qt does (the prefix turns the
+  clean-up off: a notebook at a drive's root, a folder name with a trailing dot), and
+  `fineMtime()` finds whole milliseconds in the clock's own ticks (MSVC's 100 ns ticks from 1601
+  overflow 64 bits as nanoseconds: FAT's stamps looked fine-grained). Still to check on a real Windows machine: a long-path
   save, a save while Defender scans (and the leftover cleanup of a temporary file it held), a
   read-only note, a save on a FAT USB stick and on an SMB share.
 

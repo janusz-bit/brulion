@@ -10,6 +10,7 @@
 #include <QLoggingCategory>
 #include <QStringList>
 
+#include <chrono>
 #include <functional>
 #include <optional>
 
@@ -131,16 +132,17 @@ struct StampedSave {
 /// taking the folder's stamps around each step (StampedSave). `beforeRename` (tests) runs between
 /// the sync and the rename. `expect`: the file must still be what the caller read (stillAsRead(),
 /// checked right before every attempt of the rename), else nothing is written (`changed`). A
-/// rename refused for a moment (FileReplace's Busy) is tried again for about a second. Without a
+/// rename refused for a moment (FileReplace's Busy) is tried again for 0.3 s. Without a
 /// file sync of its own (filesync.h: none set) it is saveAtomically() without stamps (`expect`
 /// checked before QSaveFile's commit, which syncs).
 StampedSave saveAtomicallyStamped(const QString &absolutePath, QByteArrayView bytes,
                                   const std::function<void()> &beforeRename = {}, const ReadMark *expect = nullptr);
 
-/// The waits between the attempts of a rename refused for a moment (ms): 10 + 20 + … + 400, about
-/// a second in all — a virus scanner looks at a new file for a few to a few hundred milliseconds;
-/// git for Windows and LLVM wait as long.
-inline constexpr int kReplaceWaitsMs[] = {10, 20, 40, 80, 160, 320, 400};
+/// The waits between the attempts of a rename refused for a moment (ms): 10 + 20 + … + 160, 0.3 s
+/// in all — a virus scanner looks at a new file for a few to a few hundred milliseconds. Not
+/// longer: the GUI thread's next vault call waits for the write in flight (Z1), and an editor's
+/// failed save is tried again after 2, 4, 8 … s anyway (PageController), without blocking anyone.
+inline constexpr int kReplaceWaitsMs[] = {10, 20, 40, 80, 160};
 
 /// The name of a temporary file that one of Brulion's own atomic writes leaves behind when it is
 /// stopped between writing it and renaming it over its file (a crash, a kill, a power cut, a
@@ -167,6 +169,28 @@ bool removeLeftoverTemp(const QString &absolutePath, qint64 nowMs);
 /// HFS+, the browser's file system — where a change by another program right after one of ours
 /// could keep it).
 std::optional<qint64> fineMtime(const QString &absolutePath);
+
+/// fineMtime() of a file time given as its clock's time since its epoch: nullopt for whole
+/// milliseconds (coarse), else nanoseconds modulo 2^64 — exact where they fit in 64 bits (the
+/// clocks of libstdc++ and libc++), the same wrapped count where they do not (MSVC's 100 ns ticks
+/// from 1601: ~1.3e19 ns in 2026). Stamps are only compared with each other: equal, or
+/// fineStampAge(). Whole milliseconds are found in the clock's own ticks, where nothing overflows.
+template<class Rep, class Period>
+std::optional<qint64> fineStampOf(std::chrono::duration<Rep, Period> since)
+{
+    if ((since % std::chrono::milliseconds(1)).count() == 0)
+        return std::nullopt;
+    const auto seconds = std::chrono::duration_cast<std::chrono::seconds>(since);
+    const auto rest = std::chrono::duration_cast<std::chrono::nanoseconds>(since - seconds);
+    return qint64(quint64(seconds.count()) * 1'000'000'000ull + quint64(rest.count()));
+}
+
+/// `later` − `earlier` of two fineMtime() stamps of the same clock (modulo 2^64: right for any
+/// two stamps less than 292 years apart).
+inline qint64 fineStampAge(qint64 later, qint64 earlier)
+{
+    return qint64(quint64(later) - quint64(earlier));
+}
 
 /// UTF-8 bytes to text with a leading byte order mark removed.
 QString decodeUtf8(const QByteArray &bytes);

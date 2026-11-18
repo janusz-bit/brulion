@@ -9,7 +9,7 @@
 //    another program's write of the same size in the same tick is found by the next listing — after
 //    an own write, after another program's write, after a read — until the tick has passed;
 //  * a rename refused for a moment (FileReplace's Busy: Windows' virus scanners and indexers) is
-//    tried again for about a second, the compare-and-swap before every attempt; a final failure
+//    tried again for 0.3 s, the compare-and-swap before every attempt; a final failure
 //    leaves no temporary file. A failing sync says why.
 // The coarse times are simulated: a file sync that cuts the temporary file's time to an even second
 // (as FAT keeps it), files of other programs written with whole-second times, and rewrites that
@@ -253,7 +253,7 @@ private Q_SLOTS:
         if (stamps == "coarse"_L1)
             writeCoarse(abs, before, 60);
         else
-            plantFine(abs, before, 1500); // (not older than the save's read, whatever the load)
+            plantFine(abs, before, 3'600'000); // (from the future: never older than the read, whatever the load)
         QVERIFY(f.open());
         Writer writer;
         writer.attach(*f.vault, mode == "async thread"_L1);
@@ -353,6 +353,7 @@ private Q_SLOTS:
         writeCoarse(abs, "- pierwsza\n", 3600);
         QVERIFY(f.open());
         writeCoarse(abs, "- druga wersja\n");
+        f.clock.now = QDateTime::currentDateTime(); // (the write is recent by the vault's clock, whatever the load)
         QCOMPARE(shortChanges(f.vault->rescan()), QStringList{u"modify:Notatka.md@external"_s});
         QVERIFY(rewriteKeepingStamp(abs, "- trzecia ąę\n")); // (15 bytes, as the second)
         QCOMPARE(shortChanges(f.vault->rescan()), QStringList{u"modify:Notatka.md@external"_s});
@@ -364,6 +365,47 @@ private Q_SLOTS:
         QVERIFY(f.vault->rescan().isEmpty());
     }
 
+    // Another program touches a note (the same bytes, a new coarse stamp), then writes other bytes
+    // of the same size within that tick: the touch is no change, the write is found by content.
+    void touchThenSameTick()
+    {
+        Fixture f;
+        const QString abs = f.root() + u"/Notatka.md"_s;
+        writeCoarse(abs, "- wersja A\n", 3600);
+        f.clock.now = QDateTime::currentDateTime();
+        QVERIFY(f.open());
+        QCOMPARE(f.text(u"Notatka.md"_s), u"- wersja A\n"_s);
+        writeCoarse(abs, "- wersja A\n");
+        f.clock.now = QDateTime::currentDateTime();
+        QVERIFY(f.vault->rescan().isEmpty());
+        QVERIFY(rewriteKeepingStamp(abs, "- wersja B\n")); // (the same size, the same tick)
+        QCOMPARE(shortChanges(f.vault->rescan()), QStringList{u"modify:Notatka.md@external"_s});
+        QCOMPARE(f.text(u"Notatka.md"_s), u"- wersja B\n"_s);
+    }
+
+    // Whole milliseconds are coarse in every clock — also MSVC's 100 ns ticks from 1601, whose
+    // count in nanoseconds does not fit in 64 bits (2026: ~1.3e19) — and differences of stamps are
+    // right where the nanoseconds wrap.
+    void fineStampOfAnyClock()
+    {
+        using Ticks = std::chrono::duration<qint64, std::ratio<1, 10'000'000>>; // MSVC's file_clock
+        // 2026-11-18 12:00:00 UTC in 100 ns ticks since 1601-01-01 (11 644 473 600 s before 1970).
+        const Ticks noon{(qint64(1'763'467'200) + qint64(11'644'473'600)) * 10'000'000};
+        QVERIFY(!vaultutil::fineStampOf(noon));                                     // FAT's whole seconds
+        QVERIFY(!vaultutil::fineStampOf(noon + std::chrono::milliseconds(10)));     // exFAT's 10 ms
+        const std::optional<qint64> a = vaultutil::fineStampOf(noon + Ticks(1234)); // NTFS: 123.4 µs
+        const std::optional<qint64> b = vaultutil::fineStampOf(noon + std::chrono::seconds(2) + Ticks(5678));
+        QVERIFY(a && b);
+        QCOMPARE(vaultutil::fineStampAge(*b, *a), qint64(2'000'444'400));
+        QCOMPARE(vaultutil::fineStampAge(*a, *b), qint64(-2'000'444'400));
+        // libstdc++'s nanoseconds from 2174 (negative now) and libc++'s from 1970: exact.
+        const std::chrono::nanoseconds before2174{-qint64(4'674'196'800) * 1'000'000'000 + 123'456'789};
+        QCOMPARE(vaultutil::fineStampOf(before2174), std::optional<qint64>(before2174.count()));
+        const std::chrono::nanoseconds since1970{qint64(1'763'467'200) * 1'000'000'000 + 7};
+        QCOMPARE(vaultutil::fineStampOf(since1970), std::optional<qint64>(since1970.count()));
+        QVERIFY(!vaultutil::fineStampOf(std::chrono::nanoseconds(qint64(1'763'467'200) * 1'000'000'000)));
+    }
+
     // A note read (by an editor, the index) right after another program wrote it, which writes
     // again in the same tick with the same size: found by the next listing.
     void readThenSameTick()
@@ -372,6 +414,7 @@ private Q_SLOTS:
         f.clock.now = QDateTime::currentDateTime();
         const QString abs = f.root() + u"/Notatka.md"_s;
         writeCoarse(abs, "- wersja A\n");
+        f.clock.now = QDateTime::currentDateTime(); // (the write is recent by the vault's clock, whatever the load)
         QVERIFY(f.open());
         QCOMPARE(f.text(u"Notatka.md"_s), u"- wersja A\n"_s);
         QVERIFY(rewriteKeepingStamp(abs, "- wersja B\n"));
@@ -402,7 +445,7 @@ private Q_SLOTS:
         QVERIFY(f.historyContents(path).contains(QString::fromUtf8(theirs)));
     }
 
-    // A rename refused for a moment is tried again (about a second), the compare-and-swap before
+    // A rename refused for a moment is tried again (0.3 s), the compare-and-swap before
     // every attempt; a refusal that lasts, or another failure, fails the write without a trace.
     void busyRename_data()
     {
@@ -455,7 +498,7 @@ private Q_SLOTS:
             QVERIFY2(f.vault->errorString().contains(u"zajęty przez skaner (test)"_s),
                      qPrintable(f.vault->errorString()));
         if (calls == int(std::size(vaultutil::kReplaceWaitsMs)) + 1)
-            QVERIFY(timer.elapsed() >= 1000); // (all the waits)
+            QVERIFY(timer.elapsed() >= 300); // (all the waits: 0.31 s)
     }
 
     // A failing sync says why, and leaves no temporary file.
