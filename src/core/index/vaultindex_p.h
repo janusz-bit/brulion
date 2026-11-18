@@ -66,13 +66,17 @@ struct NameCandidate {
 
 /// Per-note record of the index. Once attached, `path`, `content`, `note` and `contentKey` never
 /// change — a change of the note attaches a new record — since the index cache's snapshots share
-/// records and read those members on other threads; only `links`, `refs`, `seq` and the lazy caches
-/// below change, on the index's thread.
+/// records and read those members on other threads; only `links`, `refs`, `seq`, `unresolvedPlans`
+/// and the lazy caches below change, on the index's thread.
 struct Entry {
     VaultPath path;
     QString content;
     ParsedNote note;
-    quint64 seq = 0;            ///< update sequence number (higher = more recently updated)
+    quint64 seq = 0; ///< update sequence number (higher = more recently updated)
+    /// The complete plans of the path-based links that resolve to nothing (index into `links`,
+    /// plan): when a note of that name comes (a load merges the journals before the pages they
+    /// link to), relinking them only looks keys up. Null when every link resolves.
+    std::unique_ptr<QList<std::pair<int, ResolvePlan>>> unresolvedPlans;
     quint64 contentKey = 0;     ///< VaultIndex::contentKey(content)
     QList<PathLink> links;      ///< path-based links
     QList<int> refs;            ///< indices into note.links of `((id))` / `!((id))` references
@@ -122,6 +126,11 @@ struct IndexAccess {
     /// "sorted", "byRelevance", "paths", "attachments", "tags", "tasks", "reminders", "journals",
     /// "missing", "tagTargets", "queryNotes", "propertyKeys"; -1 for another name.
     static int buildCount(const VaultIndex &index, std::string_view list);
+    /// Everything the index keeps about its notes, but the change log, the search index and the
+    /// derived lists — every record (its links with their resolution, block references, names,
+    /// recency) and every map (names, links by key and target, block ids, tags, task ids, note
+    /// folders, attachments) — as sorted lines (tests: two indexes hold the same state).
+    static QStringList describeState(const VaultIndex &index);
 };
 
 /// One change of the index in its change log (VaultIndex::changesSince()).
@@ -164,6 +173,28 @@ bool journalLess(const JournalRef &a, const JournalRef &b);
 
 /// A note's record from its text and parse (pure: any thread); `seq` 0.
 std::unique_ptr<Entry> makeEntry(const VaultPath &path, const QString &content, ParsedNote note);
+
+/// A folder holding a note and its pathKey() (VaultIndex::Private::noteFolders).
+using FolderKey = std::pair<VaultPath, QString>;
+/// The folders of `path` with their keys, deepest first.
+QList<FolderKey> noteFolderKeys(const VaultPath &path);
+
+/// What filing a note in the index derives from the note alone (NFC, lower case, the link plans;
+/// VaultIndex::Private::attachNote()): computed with the PreparedNote on the index loader's workers
+/// (VaultIndex::prepare(): every plan complete), so the merge on the index's thread only looks up
+/// and inserts; a note put on the index's thread computes them there (its plans derive their keys
+/// as the lookups need them). Used once, never kept.
+struct NoteKeys {
+    NameTable::NoteNames names;
+    QList<FolderKey> folders;   ///< noteFolderKeys() of the path
+    QSet<QString> nameLinkKeys; ///< the link keys naming the note (relinked when it is new)
+    /// Each of note.tags with the blocks carrying it (at least 1: a page-level tag), in order.
+    QList<std::pair<QString, int>> tagBlocks;
+    QList<ResolvePlan> plans; ///< the targets of Entry::links, in the same order
+};
+
+/// The keys of a note's record (pure: any thread); `completePlans`: every plan's keys derived now.
+NoteKeys makeNoteKeys(const Entry &e, bool completePlans);
 
 /// The tags a note carries as a whole page: frontmatter `tags`, the leading `tags::` block, and
 /// tags found in no ordinary block (keys, lower-case NFC).
@@ -231,6 +262,7 @@ struct VaultIndex::Private {
     /// is never changed once attached but for its links and lazy caches — a change replaces it).
     std::unordered_map<VaultPath, std::shared_ptr<Entry>> entries;
     QSet<VaultPath> attachmentSet;
+    qsizetype journalNotes = 0; ///< entries with a journal date (VaultIndex::journalCount())
     index_detail::NameTable names;
     // Compact per-key sets (smallsets_p.h): nearly every key names one or two notes.
     QHash<QString, index_detail::PathSet> sourcesByKey;    ///< link key -> notes with such links
@@ -251,8 +283,8 @@ struct VaultIndex::Private {
         QList<std::pair<VaultPath, int>> others; ///< other spellings (nearly always empty)
     };
     QHash<QString, NoteFolder> noteFolders; ///< pathKey(folder) -> (VaultIndex::noteFolder())
-    /// Count the note at `path` in its folders and their ancestors (`delta` +1 / −1).
-    void countNoteFolders(const VaultPath &path, int delta);
+    /// Count a note in its folders and their ancestors (noteFolderKeys(); `delta` +1 / −1).
+    void countNoteFolders(const QList<index_detail::FolderKey> &folders, int delta);
 
     SearchIndex search;
     QSet<VaultPath> searchDirty;
@@ -323,11 +355,12 @@ struct VaultIndex::Private {
     /// have changed (the note's names when new, aliases when they changed).
     QSet<QString> putNote(const VaultPath &path, const QString &content, bool updateSearch,
                           std::optional<quint64> keepSeq = std::nullopt);
-    /// putNote() of a prepared record (its seq is set here).
-    QSet<QString> putEntry(std::unique_ptr<Entry> e, bool updateSearch, std::optional<quint64> keepSeq);
+    /// putNote() of a prepared record and its keys (its seq is set here).
+    QSet<QString> putEntry(std::unique_ptr<Entry> e, index_detail::NoteKeys keys, bool updateSearch,
+                           std::optional<quint64> keepSeq);
     /// Add a note to every map; `countFolders` false: its folders still count it (re-put at the
     /// same path after detachNote(…, countFolders = false)).
-    void attachNote(std::shared_ptr<Entry> e, bool countFolders = true);
+    void attachNote(std::shared_ptr<Entry> e, index_detail::NoteKeys &keys, bool countFolders = true);
     /// Remove a note from every map; returns it (nullptr when unknown). `countFolders` false
     /// leaves it in noteFolders, for a note put back at the same path.
     std::shared_ptr<Entry> detachNote(const VaultPath &path, bool discardSearch, bool countFolders = true);
@@ -335,7 +368,9 @@ struct VaultIndex::Private {
     /// change; nullopt when the index does not know `path`.
     std::optional<QSet<QString>> forget(const VaultPath &path);
     void fileLink(const VaultPath &source, const index_detail::PathLink &link, bool add);
-    void resolveLinks(Entry &e);
+    /// Resolve the note's path-based links (`plans`: their targets, NoteKeys::plans) and file them;
+    /// the plans of links that resolve to nothing are kept (Entry::unresolvedPlans).
+    void resolveLinks(Entry &e, QList<index_detail::ResolvePlan> &plans);
     void unlinkOutgoing(const Entry &e);
     /// Re-resolve the links filed under one of `keys` in every note except `skip`; the notes
     /// whose links now resolve elsewhere are logged in `pending`.

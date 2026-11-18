@@ -65,8 +65,9 @@ struct LoaderShared {
     std::atomic<qsizetype> next{0};
 
     std::deque<Result> results;
-    int inFlight = 0; ///< notes workers are reading and preparing (count against maxPending)
-    qint64 pendingBytes = 0;
+    int inFlight = 0;        ///< notes workers are reading and preparing (count against maxPending)
+    int held = 0;            ///< results the owner took (Private::ready) and has not released yet
+    qint64 pendingBytes = 0; ///< of `results` and the held ones
     int maxPending = 256;
     qint64 maxPendingBytes = 64LL << 20;
     bool cancelled = false;
@@ -101,6 +102,11 @@ struct IndexLoader::Private {
     Options options;
     std::shared_ptr<LoaderShared> s = std::make_shared<LoaderShared>();
 
+    /// Results taken from the workers' queue in one go (refill()), merged one by one: the owner
+    /// locks the queue and wakes the workers once per batch, not once per note.
+    std::deque<Result> ready;
+    int released = 0; ///< results of the batch merged since the last refill()
+    qint64 releasedBytes = 0;
     bool started = false;
     bool done = false;
     bool searchAdopted = false;
@@ -221,7 +227,8 @@ struct IndexLoader::Private {
                 }
             }
         }
-        r.bytes = r.read.bytes.size() + 2 * r.read.text.size() + 1024;
+        // (The prepared note's planned links too: a few hundred bytes each.)
+        r.bytes = r.read.bytes.size() + 2 * r.read.text.size() + 1024 + 512 * r.prepared.note().links.size();
         return r;
     }
 
@@ -237,7 +244,7 @@ struct IndexLoader::Private {
                 std::unique_lock lock(s.mutex);
                 s.workersCv.wait(lock, [&] {
                     return s.cancelled
-                           || (qsizetype(s.results.size()) + s.inFlight < s.maxPending
+                           || (qsizetype(s.results.size()) + s.held + s.inFlight < s.maxPending
                                && s.pendingBytes < s.maxPendingBytes);
                 });
                 if (s.cancelled)
@@ -320,16 +327,35 @@ struct IndexLoader::Private {
 
     std::optional<Result> pop()
     {
+        if (ready.empty())
+            refill();
+        if (ready.empty())
+            return std::nullopt;
+        Result r = std::move(ready.front());
+        ready.pop_front();
+        ++released;
+        releasedBytes += r.bytes;
+        return r;
+    }
+
+    /// Release the merged results of the last batch (space for the workers) and take every result
+    /// that is ready.
+    void refill()
+    {
         std::lock_guard lock(s->mutex);
+        const bool freed = released > 0;
+        s->held -= released;
+        s->pendingBytes -= releasedBytes;
+        released = 0;
+        releasedBytes = 0;
         if (s->results.empty()) {
             s->posted = false; // the next result wakes the owner again
-            return std::nullopt;
+        } else {
+            s->held += int(s->results.size());
+            ready.swap(s->results); // (`ready` is empty)
         }
-        Result r = std::move(s->results.front());
-        s->results.pop_front();
-        s->pendingBytes -= r.bytes;
-        s->workersCv.notify_all();
-        return r;
+        if (freed)
+            s->workersCv.notify_all();
     }
 
     void merge(Result r)
@@ -377,7 +403,7 @@ struct IndexLoader::Private {
     qsizetype pendingResults() const
     {
         std::lock_guard lock(s->mutex);
-        return qsizetype(s->results.size());
+        return qsizetype(s->results.size() + ready.size());
     }
 
     bool notesMerged() const { return mergedNotes >= noteCount(); }
@@ -565,7 +591,7 @@ IndexLoader::Step IndexLoader::step(int budgetMs)
     d->checkDone();
     if (d->done)
         return Step::Done;
-    if (!d->threaded() || d->nextAttachment < d->attachments.size())
+    if (!d->threaded() || d->nextAttachment < d->attachments.size() || !d->ready.empty())
         return Step::More;
     std::lock_guard lock(d->s->mutex);
     return d->s->results.empty() ? Step::Waiting : Step::More;

@@ -113,6 +113,10 @@ inline void compareIndexes(const VaultIndex &a, const VaultIndex &b, const QStri
 {
     const QByteArray ctx = step.toUtf8();
     QVERIFY2(a.paths() == b.paths(), ctx.constData());
+    for (const VaultIndex *i : {&a, &b}) { // the counts without the lists
+        QVERIFY2(i->noteCount() == i->paths().size(), ctx.constData());
+        QVERIFY2(i->journalCount() == i->journals().size(), ctx.constData());
+    }
     QVERIFY2(a.attachments() == b.attachments(), ctx.constData());
     const QList<VaultPath> all = a.paths() + a.attachments();
     for (const VaultPath &p : all) {

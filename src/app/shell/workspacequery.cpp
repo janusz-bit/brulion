@@ -96,8 +96,8 @@ struct DataviewEntry {
 // ---- Caches of the lists asked for again and again ------------------------------------------------
 
 struct Workspace::ListCaches {
-    RecentCaches<CalendarCache> ranges{MaxCachedRanges}; ///< the side panel's month, a picked day, …
-    RecentCaches<QueryCache> queries{MaxCachedQueries};  ///< the ```query blocks of the open pages
+    RecentCaches<CalendarCache> ranges{MaxCachedRanges};    ///< the side panel's month, a picked day, …
+    RecentCaches<QueryCache> queries{MaxCachedQueries};     ///< the ```query blocks of the open pages
     RecentCaches<DataviewEntry> dataview{MaxCachedQueries}; ///< the ```dataview blocks of the open pages
 };
 
@@ -119,7 +119,7 @@ QStringList Workspace::cachedLists() const
 
 int Workspace::journalCount() const
 {
-    return m_index ? int(m_index->journals().size()) : 0;
+    return m_index ? int(m_index->journalCount()) : 0;
 }
 
 QVariantList Workspace::journals(int offset, int limit) const
@@ -130,9 +130,9 @@ QVariantList Workspace::journals(int offset, int limit) const
     const QList<JournalRef> all = m_index->journals();
     for (qsizetype i = std::max(0, offset); i < all.size() && out.size() < limit; ++i) {
         const JournalRef &j = all.at(i);
-        out.append(QVariantMap{ { u"date"_s, j.date.toString(Qt::ISODate) },
-                                { u"path"_s, j.path },
-                                { u"title"_s, paths::pageTitle(j.path) } });
+        out.append(QVariantMap{{u"date"_s, j.date.toString(Qt::ISODate)},
+                               {u"path"_s, j.path},
+                               {u"title"_s, paths::pageTitle(j.path)}});
     }
     return out;
 }
@@ -209,10 +209,10 @@ QVariantList Workspace::unlinkedReferences(const QString &path) const
     if (!m_index)
         return out;
     for (const UnlinkedRef &r : m_index->unlinkedReferences(paths::normalize(path))) {
-        out.append(QVariantMap{ { u"path"_s, r.path },
-                                { u"title"_s, paths::pageTitle(r.path) },
-                                { u"line"_s, r.line },
-                                { u"excerpt"_s, r.excerpt } });
+        out.append(QVariantMap{{u"path"_s, r.path},
+                               {u"title"_s, paths::pageTitle(r.path)},
+                               {u"line"_s, r.line},
+                               {u"excerpt"_s, r.excerpt}});
     }
     return out;
 }
@@ -223,9 +223,8 @@ QVariantList Workspace::tagList() const
     if (!m_index)
         return out;
     for (const QList<TagCount> all = m_index->tags(); const TagCount &t : all) {
-        out.append(QVariantMap{ { u"tag"_s, t.tag },
-                                { u"display"_s, t.display.isEmpty() ? t.tag : t.display },
-                                { u"count"_s, t.count } });
+        out.append(QVariantMap{
+                {u"tag"_s, t.tag}, {u"display"_s, t.display.isEmpty() ? t.tag : t.display}, {u"count"_s, t.count}});
     }
     return out;
 }
@@ -275,9 +274,13 @@ QVariantMap Workspace::queryItem(const QueryItem &item) const
 
 QVariantMap Workspace::runQuery(const QString &source, const QString &currentPath)
 {
-    QVariantMap out{ { u"ok"_s, false },        { u"error"_s, QString() },   { u"type"_s, u"blocks"_s },
-                     { u"total"_s, 0 },         { u"items"_s, QVariantList() }, { u"groups"_s, QVariantList() },
-                     { u"complete"_s, !indexing() } };
+    QVariantMap out{{u"ok"_s, false},
+                    {u"error"_s, QString()},
+                    {u"type"_s, u"blocks"_s},
+                    {u"total"_s, 0},
+                    {u"items"_s, QVariantList()},
+                    {u"groups"_s, QVariantList()},
+                    {u"complete"_s, !indexing()}};
     if (!m_index || !m_vault) {
         out.insert(u"error"_s, tr("No notebook is open."));
         return out;
@@ -307,7 +310,7 @@ QVariantMap Workspace::runQuery(const QString &source, const QString &currentPat
         QVariantList groupItems;
         for (const QueryItem &item : group.items)
             groupItems.append(queryItem(item));
-        groups.append(QVariantMap{ { u"key"_s, group.key }, { u"label"_s, group.label }, { u"items"_s, groupItems } });
+        groups.append(QVariantMap{{u"key"_s, group.key}, {u"label"_s, group.label}, {u"items"_s, groupItems}});
     }
     out.insert(u"ok"_s, true);
     out.insert(u"type"_s, notebook::queryTypeName(result.type));
@@ -319,9 +322,14 @@ QVariantMap Workspace::runQuery(const QString &source, const QString &currentPat
 
 QVariantMap Workspace::runDataview(const QString &source, const QString &currentPath)
 {
-    QVariantMap out{{u"ok"_s, false},  {u"error"_s, QString()},      {u"type"_s, u"list"_s},
-                    {u"total"_s, 0},   {u"items"_s, QVariantList()}, {u"groups"_s, QVariantList()},
-                    {u"columns"_s, QStringList()}, {u"complete"_s, !indexing()}};
+    QVariantMap out{{u"ok"_s, false},
+                    {u"error"_s, QString()},
+                    {u"type"_s, u"list"_s},
+                    {u"total"_s, 0},
+                    {u"items"_s, QVariantList()},
+                    {u"groups"_s, QVariantList()},
+                    {u"columns"_s, QStringList()},
+                    {u"complete"_s, !indexing()}};
     if (!m_index || !m_vault) {
         out.insert(u"error"_s, tr("No notebook is open."));
         return out;

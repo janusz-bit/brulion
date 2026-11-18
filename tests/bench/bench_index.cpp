@@ -38,6 +38,7 @@
 #include <limits>
 #include <map>
 #include <memory>
+#include <numeric>
 #include <vector>
 
 using namespace brulion;
@@ -540,6 +541,52 @@ private Q_SLOTS:
 #else
         Q_UNUSED(notes);
         QSKIP("no VaultIndex::prepare() in this tree");
+#endif
+    }
+
+    // The owner's part of a load (L1b): every note prepared beforehand (not timed), then merged
+    // with updatePrepared() in the loader's order — the journals newest first, then the rest by
+    // path, recency by path (reserveSequence()) — in one batch: what the GUI thread does with the
+    // workers' results, without the vault's bookkeeping of the reads.
+    void mergePrepared_data() { addSizeRows({1000, 10000}, {1000, 10000}); }
+    void mergePrepared()
+    {
+        QFETCH(int, notes);
+#ifdef BENCH_HAS_LOADER
+        const QList<bench::VaultFile> &all = files(notes);
+        const VaultConfig config;
+        std::vector<PreparedNote> prepared; // move-only
+        QList<qsizetype> order;             // merge order: indices into `all`
+        QHash<qsizetype, quint64> rank;     // position in path order
+        std::unique_ptr<VaultIndex> idx;
+        bench::timeOnce(
+                [&] {
+                    QList<qsizetype> byPath(all.size());
+                    std::iota(byPath.begin(), byPath.end(), qsizetype(0));
+                    std::ranges::sort(byPath, {}, [&](qsizetype i) { return all[i].path; });
+                    QList<qsizetype> journals;
+                    for (qsizetype r = 0; r < byPath.size(); ++r) {
+                        rank.insert(byPath[r], quint64(r));
+                        (all[byPath[r]].path.startsWith(config.journalsFolder + u'/') ? journals : order)
+                                .append(byPath[r]);
+                    }
+                    std::ranges::reverse(journals);
+                    order = journals + order;
+                    prepared.reserve(size_t(all.size()));
+                    for (const bench::VaultFile &f : all)
+                        prepared.push_back(VaultIndex::prepare(f.path, f.content, config));
+                    idx = std::make_unique<VaultIndex>(config);
+                },
+                [&] {
+                    VaultIndex::Batch batch(*idx);
+                    const quint64 base = idx->reserveSequence(all.size());
+                    for (const qsizetype i : std::as_const(order))
+                        idx->updatePrepared(std::move(prepared[size_t(i)]), base + rank.value(i));
+                });
+        QCOMPARE(idx->paths().size(), qsizetype(notes));
+#else
+        Q_UNUSED(notes);
+        QSKIP("no VaultIndex::updatePrepared() in this tree");
 #endif
     }
 

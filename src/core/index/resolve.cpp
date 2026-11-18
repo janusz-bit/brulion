@@ -3,6 +3,10 @@
 #include "index/textutil_p.h"
 #include "util/paths.h"
 
+#include <QVarLengthArray>
+
+#include <algorithm>
+
 namespace brulion::index_detail {
 
 using namespace Qt::StringLiterals;
@@ -147,15 +151,27 @@ VaultPath pickBest(const PathSet &paths)
 // NameTable
 // ---------------------------------------------------------------------------------------------
 
+NameTable::NoteNames NameTable::NoteNames::of(const VaultPath &path, const QStringList &aliases)
+{
+    NoteNames out{index_detail::pathKey(path), index_detail::noteNameKey(path), {}};
+    for (const QString &a : aliases) {
+        if (QString k = index_detail::aliasKey(a); !k.isEmpty())
+            out.aliasKeys.append(std::move(k));
+    }
+    return out;
+}
+
 void NameTable::addNote(const VaultPath &path, const QStringList &aliases)
 {
-    add(&NameTable::m_byPath, pathKey(path), path);
-    add(&NameTable::m_noteNames, noteNameKey(path), path);
-    for (const QString &a : aliases) {
-        const QString k = aliasKey(a);
-        if (!k.isEmpty())
-            add(&NameTable::m_aliases, k, path);
-    }
+    addNote(path, NoteNames::of(path, aliases));
+}
+
+void NameTable::addNote(const VaultPath &path, const NoteNames &names)
+{
+    add(&NameTable::m_byPath, names.pathKey, path);
+    add(&NameTable::m_noteNames, names.nameKey, path);
+    for (const QString &k : names.aliasKeys)
+        add(&NameTable::m_aliases, k, path);
 }
 
 void NameTable::removeNote(const VaultPath &path, const QStringList &aliases)
@@ -187,13 +203,28 @@ void NameTable::clear()
     m_base = nullptr;
 }
 
+QStringList NameTable::describe() const
+{
+    QStringList out;
+    const std::pair<const char *, const Map *> maps[] = {
+            {"path", &m_byPath}, {"note", &m_noteNames}, {"file", &m_fileNames}, {"alias", &m_aliases}};
+    for (const auto &[name, map] : maps) {
+        for (auto it = map->cbegin(); it != map->cend(); ++it)
+            out.append(QLatin1StringView(name) + u' ' + it.key() + u" -> "_s + it->sorted().join(u'|'));
+    }
+    if (m_base)
+        out.append(u"overlay"_s);
+    out.sort();
+    return out;
+}
+
 void NameTable::overlay(const NameTable *base)
 {
     clear();
     m_base = base;
 }
 
-const PathSet *NameTable::find(Map NameTable::*field, const QString &key) const
+const PathSet *NameTable::find(Map NameTable::*field, QStringView key) const
 {
     const Map &map = this->*field;
     const auto it = map.constFind(key);
@@ -243,29 +274,27 @@ void NameTable::remove(Map NameTable::*field, const QString &key, const VaultPat
 
 VaultPath NameTable::resolve(const QString &target, const VaultPath &from, TargetForm form) const
 {
-    const QString t = cleanTarget(target, form);
-    if (t.isEmpty())
-        return from;
-    if (!t.contains(u'/') && !t.startsWith(u'.'))
-        return resolveBare(t, from);
-    const QString norm = paths::normalize(t);
-    if (norm.isEmpty())
-        return {};
-    const bool attachmentFirst = isAttachmentExtension(paths::extension(norm));
-    const bool explicitRelative = t.startsWith(u"./") || t.startsWith(u"../");
-    const QString fromDir = from.isEmpty() ? QString() : paths::dirname(paths::normalize(from));
-    if (explicitRelative && !from.isEmpty()) {
-        if (const VaultPath hit = lookupPath(paths::join(fromDir, t), attachmentFirst); !hit.isEmpty())
+    return resolve(ResolvePlan(target, from, form));
+}
+
+VaultPath NameTable::resolve(const ResolvePlan &plan) const
+{
+    using Kind = ResolvePlan::Kind;
+    switch (plan.m_kind) {
+    case Kind::Nothing: return {};
+    case Kind::From: return plan.m_from;
+    case Kind::Bare:
+    case Kind::Path: break;
+    }
+    // Bare: 1) the file at the vault root, 2) the file in the linking file's folder. Path: the
+    // explicitly relative path, the exact path, the path under the linking file's folder.
+    for (int i = 0; i < plan.probeCount(); ++i) {
+        if (const VaultPath hit = lookupPath(plan.probe(i), plan.m_attachmentFirst); !hit.isEmpty())
             return hit;
     }
-    if (const VaultPath exact = lookupPath(norm, attachmentFirst); !exact.isEmpty())
-        return exact;
-    if (!fromDir.isEmpty() && !explicitRelative && !t.startsWith(u'/')) {
-        if (const VaultPath hit = lookupPath(paths::join(fromDir, t), attachmentFirst); !hit.isEmpty())
-            return hit;
-    }
-    const VaultPath byName = lookupName(lower(norm));
-    return byName.isEmpty() ? lookupAlias(t) : byName;
+    // 3) base name (shortest path, then alphabetical), 4) aliases.
+    const VaultPath byName = lookupName(plan.name());
+    return byName.isEmpty() ? lookupAlias(plan) : byName;
 }
 
 VaultPath NameTable::resolveNote(const QString &target, TargetForm form) const
@@ -292,67 +321,62 @@ VaultPath NameTable::notePath(const QString &path) const
     return spelled.isEmpty() ? VaultPath() : lookupNote(lower(spelled), spelled);
 }
 
-VaultPath NameTable::resolveBare(const QString &target, const VaultPath &from) const
+VaultPath NameTable::lookupPath(const ResolvePlan::Probe &probe, bool attachmentFirst) const
 {
-    const QString lowered = lower(nfc(target));
-    const bool attachmentFirst = isAttachmentExtension(paths::extension(lowered));
-    // 1) the file at the vault root, 2) the file in the linking file's folder.
-    if (const VaultPath hit = lookupPath(target, attachmentFirst); !hit.isEmpty())
-        return hit;
-    if (const QString fromDir = paths::dirname(from); !fromDir.isEmpty()) {
-        if (const VaultPath hit = lookupPath(paths::join(fromDir, target), attachmentFirst); !hit.isEmpty())
-            return hit;
-    }
-    // 3) base name (shortest path, then alphabetical), 4) aliases.
-    const VaultPath byName = lookupName(lowered);
-    return byName.isEmpty() ? lookupAlias(target) : byName;
-}
-
-VaultPath NameTable::lookupPath(const QString &path, bool attachmentFirst) const
-{
-    const QString spelled = nfc(path);
-    const QString key = lower(spelled);
-    if (hasMarkdownSuffix(key))
-        return lookupExact(key, spelled);
+    if (probe.markdown)
+        return lookupExact(probe.key, probe.spelled);
     if (attachmentFirst) {
-        const VaultPath file = lookupExact(key, spelled);
-        return file.isEmpty() ? lookupNote(key, spelled) : file;
+        const VaultPath file = lookupExact(probe.key, probe.spelled);
+        return file.isEmpty() ? lookupNote(probe.key, probe.spelled) : file;
     }
-    const VaultPath note = lookupNote(key, spelled);
-    return note.isEmpty() ? lookupExact(key, spelled) : note;
+    const VaultPath note = lookupNote(probe.key, probe.spelled);
+    return note.isEmpty() ? lookupExact(probe.key, probe.spelled) : note;
 }
 
-VaultPath NameTable::lookupExact(const QString &key, const QString &spelled) const
+VaultPath NameTable::lookupExact(QStringView key, QStringView spelled, QLatin1StringView suffix) const
 {
-    const PathSet *set = find(&NameTable::m_byPath, key);
+    // `key` + `suffix` without a heap allocation for the usual lengths (the map is searched by
+    // a view: QHash's heterogeneous lookup).
+    QVarLengthArray<QChar, 256> joined;
+    QStringView full = key;
+    if (!suffix.isEmpty()) {
+        joined.append(key.data(), key.size());
+        for (const char c : suffix)
+            joined.append(QLatin1Char(c));
+        full = QStringView(joined.constData(), joined.size());
+    }
+    const PathSet *set = find(&NameTable::m_byPath, full);
     if (!set)
         return {};
+    // nfc(a) == spelled + suffix
+    const auto spelledAs = [&](const VaultPath &a) {
+        const QString n = nfc(a);
+        return n.size() == spelled.size() + suffix.size() && QStringView(n).startsWith(spelled)
+               && QStringView(n).sliced(spelled.size()) == suffix;
+    };
     return set->min([&](const VaultPath &a, const VaultPath &b) {
-        const bool aExact = nfc(a) == spelled;
-        return aExact != (nfc(b) == spelled) ? aExact : betterPath(a, b);
+        const bool aExact = spelledAs(a);
+        return aExact != spelledAs(b) ? aExact : betterPath(a, b);
     });
 }
 
-VaultPath NameTable::lookupNote(const QString &key, const QString &spelled) const
+VaultPath NameTable::lookupNote(QStringView key, QStringView spelled) const
 {
-    const VaultPath md = lookupExact(key + u".md"_s, spelled + u".md"_s);
-    return md.isEmpty() ? lookupExact(key + u".markdown"_s, spelled + u".markdown"_s) : md;
+    const VaultPath md = lookupExact(key, spelled, QLatin1StringView(".md"));
+    return md.isEmpty() ? lookupExact(key, spelled, QLatin1StringView(".markdown")) : md;
 }
 
-VaultPath NameTable::lookupName(const QString &lowerPath) const
+VaultPath NameTable::lookupName(const ResolvePlan::Name &name) const
 {
-    const QString ext = paths::extension(lowerPath);
-    const bool md = isMarkdownExtension(ext);
     const auto notes = [&] {
-        const QString stem = md ? paths::stripMarkdownExtension(lowerPath) : lowerPath;
-        return pickBySuffix(find(&NameTable::m_noteNames, paths::basename(stem)), stem, notePathKey);
+        return pickBySuffix(find(&NameTable::m_noteNames, name.noteBase), name.stem, notePathKey);
     };
     const auto files = [&]() -> VaultPath {
-        if (md || !hasAny(&NameTable::m_fileNames))
+        if (name.markdown || !hasAny(&NameTable::m_fileNames))
             return {};
-        return pickBySuffix(find(&NameTable::m_fileNames, paths::basename(lowerPath)), lowerPath, pathKey);
+        return pickBySuffix(find(&NameTable::m_fileNames, name.fileBase), name.path, pathKey);
     };
-    if (isAttachmentExtension(ext)) {
+    if (name.attachment) {
         const VaultPath f = files();
         return f.isEmpty() ? notes() : f;
     }
@@ -366,6 +390,107 @@ VaultPath NameTable::lookupAlias(const QString &target) const
         return {};
     const PathSet *set = find(&NameTable::m_aliases, aliasKey(target));
     return set ? pickBest(*set) : VaultPath();
+}
+
+VaultPath NameTable::lookupAlias(const ResolvePlan &plan) const
+{
+    if (!hasAny(&NameTable::m_aliases))
+        return {};
+    const PathSet *set = find(&NameTable::m_aliases, plan.aliasKey());
+    return set ? pickBest(*set) : VaultPath();
+}
+
+// ---------------------------------------------------------------------------------------------
+// ResolvePlan
+// ---------------------------------------------------------------------------------------------
+
+ResolvePlan::ResolvePlan(const QString &target, const VaultPath &from, TargetForm form)
+{
+    m_target = cleanTarget(target, form);
+    m_from = from;
+    if (m_target.isEmpty()) {
+        m_kind = Kind::From;
+        return;
+    }
+    if (!m_target.contains(u'/') && !m_target.startsWith(u'.')) {
+        m_kind = Kind::Bare;
+        m_lowered = lower(nfc(m_target));
+        m_attachmentFirst = isAttachmentExtension(paths::extension(m_lowered));
+        m_fromDir = paths::dirname(from);
+        m_probeCount = m_fromDir.isEmpty() ? 1 : 2;
+        return;
+    }
+    m_lowered = paths::normalize(m_target); // (Path: the normalised target, not lower-cased)
+    if (m_lowered.isEmpty()) {
+        m_kind = Kind::Nothing;
+        return;
+    }
+    m_kind = Kind::Path;
+    m_attachmentFirst = isAttachmentExtension(paths::extension(m_lowered));
+    m_explicitRelative = m_target.startsWith(u"./") || m_target.startsWith(u"../");
+    m_fromDir = from.isEmpty() ? QString() : paths::dirname(paths::normalize(from));
+    const bool relativeFirst = m_explicitRelative && !from.isEmpty();
+    const bool underFrom = !m_fromDir.isEmpty() && !m_explicitRelative && !m_target.startsWith(u'/');
+    m_probeCount = 1 + (relativeFirst || underFrom ? 1 : 0);
+}
+
+QString ResolvePlan::probePath(int i) const
+{
+    if (m_kind == Kind::Bare)
+        return i == 0 ? m_target : paths::join(m_fromDir, m_target);
+    // Path: [the explicitly relative path], the exact path, [the path under the file's folder].
+    const bool relativeFirst = m_explicitRelative && !m_from.isEmpty();
+    if (i == 0 && relativeFirst)
+        return paths::join(m_fromDir, m_target);
+    if (i == (relativeFirst ? 1 : 0))
+        return m_lowered;
+    return paths::join(m_fromDir, m_target);
+}
+
+const ResolvePlan::Probe &ResolvePlan::probe(int i) const
+{
+    std::optional<Probe> &p = m_probes[i];
+    if (!p) {
+        Probe made;
+        made.spelled = nfc(probePath(i));
+        made.key = lower(made.spelled);
+        made.markdown = hasMarkdownSuffix(made.key);
+        p = std::move(made);
+    }
+    return *p;
+}
+
+const ResolvePlan::Name &ResolvePlan::name() const
+{
+    if (!m_name) {
+        Name n;
+        n.path = m_kind == Kind::Bare ? m_lowered : lower(m_lowered);
+        const QString ext = paths::extension(n.path);
+        n.markdown = isMarkdownExtension(ext);
+        n.attachment = isAttachmentExtension(ext);
+        n.stem = n.markdown ? paths::stripMarkdownExtension(n.path) : n.path;
+        n.noteBase = paths::basename(n.stem);
+        n.fileBase = paths::basename(n.path);
+        m_name = std::move(n);
+    }
+    return *m_name;
+}
+
+const QString &ResolvePlan::aliasKey() const
+{
+    if (!m_aliasKey)
+        m_aliasKey = index_detail::aliasKey(m_target);
+    return *m_aliasKey;
+}
+
+void ResolvePlan::complete() const
+{
+    if (m_kind != Kind::Bare && m_kind != Kind::Path)
+        return;
+    for (int i = 0; i < probeCount(); ++i)
+        probe(i);
+    name();
+    aliasKey();
 }
 
 } // namespace brulion::index_detail

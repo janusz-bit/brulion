@@ -19,8 +19,8 @@
 #include "notebook/journals.h"
 #include "notebook/json.h"
 #include "notebook/pages.h"
-#include "notebook/session.h"
 #include "notebook/periodicnotes.h"
+#include "notebook/session.h"
 #include "text/text.h"
 #include "util/paths.h"
 #include "vault/vault.h"
@@ -81,6 +81,11 @@ QString foldStateKey(const QString &path)
 /// Milliseconds of indexing per event-loop turn while the index is built in the background.
 constexpr int kIndexBudgetMs = 12;
 
+/// While the index loads, its changes reach the views (EditorHost::indexChanged) at most this
+/// often — the first merge's at once, then the merges of each interval together, and the rest
+/// when the index is complete (docs/PERFORMANCE.md, L1b).
+constexpr int kLoadNotifyMs = 250;
+
 /// Interval of the repeating timer that runs the index chunks. In the browser it must not be 0:
 /// Qt 6.11's single-threaded WebAssembly event dispatcher re-arms its browser timeout only after
 /// it fired a timer with a non-zero interval, so a repeating 0 ms timer fires once and then holds
@@ -95,7 +100,7 @@ constexpr int kIndexIntervalMs = 0;
 
 QVariantMap pageEntry(const QString &path)
 {
-    return { { u"path"_s, path }, { u"title"_s, paths::pageTitle(path) } };
+    return {{u"path"_s, path}, {u"title"_s, paths::pageTitle(path)}};
 }
 
 QString lineOf(const QString &text)
@@ -150,6 +155,8 @@ Workspace::Workspace(QObject *parent) : EditorHost(parent)
 #endif
     m_indexTimer.setInterval(kIndexIntervalMs);
     connect(&m_indexTimer, &QTimer::timeout, this, &Workspace::indexChunk);
+    m_loadNotifyTimer.setSingleShot(true);
+    connect(&m_loadNotifyTimer, &QTimer::timeout, this, &Workspace::flushLoadChanges);
     m_impactTimer.setInterval(0);
     connect(&m_impactTimer, &QTimer::timeout, this, &Workspace::moveImpactStep);
 
@@ -245,7 +252,7 @@ bool Workspace::open(const QString &rootPath, const QString &deviceStatePath, QS
         // The journals' folder and file names, how notes are read: every name may differ.
         bumpRevisions(true, true);
     });
-    connect(m_index.get(), &VaultIndex::changed, this, &EditorHost::indexChanged);
+    connect(m_index.get(), &VaultIndex::changed, this, &Workspace::onIndexChanged);
 #ifndef Q_OS_WASM
     // Other programs (Syncthing, editors) change files: watch the folders (and the files open in
     // editors, see editorOpened()), rescan when the app comes back to the foreground
@@ -337,6 +344,9 @@ void Workspace::close()
     m_sync->detach();
     m_github->detach();
     m_indexTimer.stop();
+    m_loadNotifyTimer.stop();
+    m_loadChangesPending = false;
+    m_loadNotified.invalidate();
     cancelMoveImpact(); // its planner reads the index
     m_impacts = ImpactCache();
     const bool wasIndexing = indexing();
@@ -450,19 +460,51 @@ void Workspace::indexFile(const QString &path)
     }
 }
 
+void Workspace::onIndexChanged()
+{
+    if (m_inIndexChunk) {
+        // The loader merged notes: passed on at once when nothing was for a while, else with the
+        // next merges (the timer).
+        m_loadChangesPending = true;
+        if (!m_loadNotified.isValid() || m_loadNotified.elapsed() >= kLoadNotifyMs)
+            flushLoadChanges();
+        else if (!m_loadNotifyTimer.isActive())
+            m_loadNotifyTimer.start(int(kLoadNotifyMs - m_loadNotified.elapsed()));
+        return;
+    }
+    // Any other change (an edit, a file changed on disk, finishIndexing()): at once, with the
+    // merges held back so far (one signal: the views read the index as it is now).
+    m_loadChangesPending = false;
+    m_loadNotifyTimer.stop();
+    Q_EMIT indexChanged();
+}
+
+void Workspace::flushLoadChanges()
+{
+    m_loadNotifyTimer.stop();
+    if (!m_loadChangesPending)
+        return;
+    m_loadChangesPending = false;
+    m_loadNotified.start();
+    Q_EMIT indexChanged();
+}
+
 void Workspace::indexChunk()
 {
     if (!m_index || !indexing()) {
         m_indexTimer.stop();
         return;
     }
+    m_inIndexChunk = true;
     const notebook::IndexLoader::Step step = m_loader->step(kIndexBudgetMs);
+    m_inIndexChunk = false;
     Q_EMIT indexProgressChanged();
     switch (step) {
     case notebook::IndexLoader::Step::More: break;
     case notebook::IndexLoader::Step::Waiting: m_indexTimer.stop(); break; // onIndexResultsReady()
     case notebook::IndexLoader::Step::Done:
         m_indexTimer.stop();
+        flushLoadChanges(); // the views see the whole index before `ready`
         Q_EMIT indexingChanged();
         indexingFinished();
         break;
@@ -977,7 +1019,7 @@ QVariantList Workspace::suggestPages(const QString &prefix, int limit) const
     if (!m_index)
         return out;
     for (const PageSuggestion &s : m_index->suggestPages(prefix, limit)) {
-        QVariantMap m{ { u"path"_s, s.path }, { u"title"_s, s.title }, { u"folder"_s, paths::dirname(s.path) } };
+        QVariantMap m{{u"path"_s, s.path}, {u"title"_s, s.title}, {u"folder"_s, paths::dirname(s.path)}};
         if (!s.alias.isEmpty())
             m.insert(u"alias"_s, s.alias);
         out.append(m);
@@ -1582,7 +1624,7 @@ void Workspace::openUrl(const QUrl &url)
 {
     // Only links meant for the browser / mail client; never file:, javascript: or app schemes
     // from note content.
-    static const QStringList allowed{ u"http"_s, u"https"_s, u"mailto"_s };
+    static const QStringList allowed{u"http"_s, u"https"_s, u"mailto"_s};
     if (!url.isValid() || !allowed.contains(url.scheme().toLower())) {
         qCWarning(lcWorkspace) << "Refusing to open" << url.scheme() << "link";
         return;

@@ -2223,6 +2223,13 @@ the delegates:
   before (`invalidateRendering()`, also for another palette, language, day or host): every row
   renders again when it is asked for.
 
+While a notebook loads, every merge of the index loader adds names, so each one would make
+every visible editor render all its rows again and the lists compute again: `Workspace` passes
+the loader's merges on as `EditorHost::indexChanged` at most every 250 ms (the first at once, the
+rest together, all of them before `ready`), any other change of the index — an edit, a file
+changed on disk, `finishIndexing()` — at once (with the merges held back so far), so a save's
+`indexChanged` still comes before its `revisionChanged`.
+
 `PageController.active` (QML: `active: root.visible` in PageView, `day.visible` in
 ContentJournalDay): an editor that is not shown — the days of the hidden Journal, the page of a
 hidden view or a closed side panel — only marks its rendering stale when the index changes, and

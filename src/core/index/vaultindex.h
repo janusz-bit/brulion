@@ -21,12 +21,15 @@ namespace brulion {
 namespace index_detail {
 struct IndexAccess;
 struct Entry;
+struct NoteKeys;
 } // namespace index_detail
 
 class SearchIndex;
 
 /// A note prepared away from the index's thread (VaultIndex::prepare()): its text, ParsedNote and
-/// derived lookup keys, ready for VaultIndex::updatePrepared(). Move-only.
+/// derived lookup keys — the keys it is filed under (NFC, lower case) and the planned resolution
+/// of its links —, ready for VaultIndex::updatePrepared(), which then only looks up and inserts.
+/// Move-only.
 class PreparedNote {
 public:
     PreparedNote();
@@ -46,6 +49,7 @@ public:
 private:
     friend class VaultIndex;
     std::unique_ptr<index_detail::Entry> m_entry;
+    std::unique_ptr<index_detail::NoteKeys> m_keys;
     QString m_parseFingerprint;
 };
 
@@ -452,6 +456,10 @@ public:
     const ParsedNote *note(const VaultPath &path) const;
     /// All note paths, sorted (code units).
     QList<VaultPath> paths() const;
+    /// paths().size() and journals().size() without building either list (a count read after
+    /// every change, also while a notebook loads).
+    qsizetype noteCount() const;
+    qsizetype journalCount() const;
     /// Visit every note in the order of paths() — cheaper than note() for each path (no lookups).
     /// `visit` must not change the index.
     void forEachNote(const std::function<void(const VaultPath &path, const ParsedNote &note)> &visit) const;

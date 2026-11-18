@@ -331,6 +331,60 @@ int IndexAccess::buildCount(const VaultIndex &index, std::string_view list)
     return -1;
 }
 
+QStringList IndexAccess::describeState(const VaultIndex &index)
+{
+    const VaultIndex::Private &d = *index.d;
+    QStringList out;
+    for (const auto &[path, e] : d.entries) {
+        QStringList links;
+        for (const PathLink &l : e->links)
+            links.append(u"%1:%2>%3"_s.arg(l.link).arg(l.key, l.target));
+        QStringList refs;
+        for (const int r : e->refs)
+            refs.append(QString::number(r));
+        QStringList names;
+        for (const NameCandidate &n : e->names)
+            names.append(n.folded + u'/' + n.alias);
+        out.append(u"note %1 seq %2 key %3 links [%4] refs [%5] names [%6] folded %7"_s.arg(path)
+                           .arg(e->seq)
+                           .arg(e->contentKey)
+                           .arg(links.join(u' '), refs.join(u' '), names.join(u' '), e->foldedPath));
+    }
+    for (const VaultPath &a : d.attachmentSet)
+        out.append(u"attachment "_s + a);
+    for (const QString &line : d.names.describe())
+        out.append(u"name "_s + line);
+    const auto sets = [&out](const char *what, const QHash<QString, PathSet> &map) {
+        for (auto it = map.cbegin(); it != map.cend(); ++it)
+            out.append(QLatin1StringView(what) + u' ' + it.key() + u" -> "_s + it->sorted().join(u'|'));
+    };
+    const auto counts = [&out](const char *what, const auto &map) {
+        for (auto it = map.cbegin(); it != map.cend(); ++it) {
+            QStringList items;
+            for (const VaultPath &p : it->keys())
+                items.append(p + u'*' + QString::number(it->value(p)));
+            out.append(QLatin1StringView(what) + u' ' + it.key() + u" -> "_s + items.join(u'|'));
+        }
+    };
+    sets("sourcesByKey", d.sourcesByKey);
+    counts("incoming", d.incoming);
+    counts("unresolved", d.unresolved);
+    sets("blockOwners", d.blockOwners);
+    sets("blockRefSources", d.blockRefSources);
+    counts("tag", d.tagIndex);
+    sets("taskIdOwners", d.taskIdOwners);
+    sets("taskDependents", d.taskDependents);
+    for (auto it = d.noteFolders.cbegin(); it != d.noteFolders.cend(); ++it) {
+        QStringList others;
+        for (const auto &[spelled, notes] : it->others)
+            others.append(spelled + u'*' + QString::number(notes));
+        out.append(u"folder %1 -> %2*%3 [%4]"_s.arg(it.key(), it->spelled).arg(it->notes).arg(others.join(u'|')));
+    }
+    out.append(u"seq %1"_s.arg(d.seq));
+    out.sort();
+    return out;
+}
+
 void appendTasks(const Entry &e, QList<TaskRef> &out)
 {
     // (A page whose tasks are ignored lists none: tasks(), tasksOf(), SYNTAX §5.)
@@ -381,6 +435,38 @@ std::unique_ptr<Entry> makeEntry(const VaultPath &path, const QString &content, 
         e->names.append(NameCandidate{text::foldKey(alias), alias});
     e->foldedPath = text::foldKey(paths::stripMarkdownExtension(path));
     return e;
+}
+
+QList<FolderKey> noteFolderKeys(const VaultPath &path)
+{
+    QList<FolderKey> out;
+    for (qsizetype slash = path.lastIndexOf(u'/'); slash > 0; slash = path.lastIndexOf(u'/', slash - 1)) {
+        VaultPath folder = path.left(slash);
+        QString key = index_detail::pathKey(folder);
+        out.append({std::move(folder), std::move(key)});
+    }
+    return out;
+}
+
+NoteKeys makeNoteKeys(const Entry &e, bool completePlans)
+{
+    NoteKeys k;
+    k.names = NameTable::NoteNames::of(e.path, e.note.aliases);
+    k.folders = noteFolderKeys(e.path);
+    k.nameLinkKeys = entryKeys(e);
+    if (!e.note.tags.isEmpty()) {
+        const QHash<QString, int> perTag = tagBlockCounts(e.note);
+        k.tagBlocks.reserve(e.note.tags.size());
+        for (const QString &tag : e.note.tags)
+            k.tagBlocks.append({tag, std::max(1, perTag.value(tag))});
+    }
+    k.plans.reserve(e.links.size());
+    for (const PathLink &l : e.links) {
+        k.plans.append(ResolvePlan(e.note.links.at(l.link).target, e.path, TargetForm::Parsed));
+        if (completePlans)
+            k.plans.constLast().complete();
+    }
+    return k;
 }
 
 bool relevanceLess(const Entry &a, const Entry &b)
@@ -616,19 +702,21 @@ std::optional<QSet<QString>> VaultIndex::Private::forget(const VaultPath &path)
 QSet<QString> VaultIndex::Private::putNote(const VaultPath &path, const QString &content, bool updateSearch,
                                            std::optional<quint64> keepSeq)
 {
-    return putEntry(index_detail::makeEntry(path, content, markdown::parseNote(path, content, config)), updateSearch,
-                    keepSeq);
+    std::unique_ptr<Entry> e = index_detail::makeEntry(path, content, markdown::parseNote(path, content, config));
+    NoteKeys keys = index_detail::makeNoteKeys(*e, false);
+    return putEntry(std::move(e), std::move(keys), updateSearch, keepSeq);
 }
 
-QSet<QString> VaultIndex::Private::putEntry(std::unique_ptr<Entry> e, bool updateSearch, std::optional<quint64> keepSeq)
+QSet<QString> VaultIndex::Private::putEntry(std::unique_ptr<Entry> e, NoteKeys noteKeys, bool updateSearch,
+                                            std::optional<quint64> keepSeq)
 {
     const VaultPath path = e->path;
     // The same path: its folders keep counting it (the spelling stays put while it is edited).
     const std::shared_ptr<Entry> prev = detachNote(path, false, false);
     e->seq = keepSeq ? *keepSeq : ++seq;
-    QSet<QString> keys = prev ? QSet<QString>() : entryKeys(*e);
+    QSet<QString> keys = prev ? QSet<QString>() : std::move(noteKeys.nameLinkKeys);
     const Entry *added = e.get();
-    attachNote(std::move(e), !prev);
+    attachNote(std::move(e), noteKeys, !prev);
     if (updateSearch)
         markSearch(path);
     if (prev && prev->note.aliases != added->note.aliases) {
@@ -641,15 +729,16 @@ QSet<QString> VaultIndex::Private::putEntry(std::unique_ptr<Entry> e, bool updat
     return keys;
 }
 
-void VaultIndex::Private::attachNote(std::shared_ptr<Entry> owned, bool countFolders)
+void VaultIndex::Private::attachNote(std::shared_ptr<Entry> owned, NoteKeys &keys, bool countFolders)
 {
     Entry &e = *owned;
     const ParsedNote &note = e.note;
     const VaultPath path = e.path;
     entries[path] = std::move(owned);
-    names.addNote(path, note.aliases);
+    journalNotes += note.journalDate ? 1 : 0;
+    names.addNote(path, keys.names);
     if (countFolders)
-        countNoteFolders(path, 1);
+        countNoteFolders(keys.folders, 1);
     for (const int r : std::as_const(e.refs))
         multiAdd(blockRefSources, note.links[r].blockId, path);
     for (auto it = note.blockIds.cbegin(); it != note.blockIds.cend(); ++it)
@@ -660,24 +749,19 @@ void VaultIndex::Private::attachNote(std::shared_ptr<Entry> owned, bool countFol
         for (const QString &dep : t.dependsOn)
             multiAdd(taskDependents, dep, path);
     }
-    if (!note.tags.isEmpty()) {
-        const QHash<QString, int> perTag = tagBlockCounts(note);
-        for (const QString &tag : note.tags) {
-            const auto [t, added] = tagIndex.tryEmplace(tag);
-            if (added)
-                cache.tagTargets.reset(); // a tag in use more
-            t->set(path, std::max(1, perTag.value(tag)));
-        }
+    for (const auto &[tag, blocks] : keys.tagBlocks) {
+        const auto [t, added] = tagIndex.tryEmplace(tag);
+        if (added)
+            cache.tagTargets.reset(); // a tag in use more
+        t->set(path, blocks);
     }
-    resolveLinks(e);
+    resolveLinks(e, keys.plans);
 }
 
-void VaultIndex::Private::countNoteFolders(const VaultPath &path, int delta)
+void VaultIndex::Private::countNoteFolders(const QList<FolderKey> &folders, int delta)
 {
     using Spelling = std::pair<VaultPath, int>;
-    for (qsizetype slash = path.lastIndexOf(u'/'); slash > 0; slash = path.lastIndexOf(u'/', slash - 1)) {
-        const VaultPath folder = path.left(slash);
-        const QString key = index_detail::pathKey(folder);
+    for (const auto &[folder, key] : folders) {
         if (delta > 0) {
             NoteFolder &f = noteFolders[key];
             if (f.notes == 0 || f.spelled == folder) {
@@ -722,10 +806,11 @@ std::shared_ptr<VaultIndex::Private::Entry> VaultIndex::Private::detachNote(cons
     std::shared_ptr<Entry> owned = std::move(it->second);
     entries.erase(it);
     const Entry &e = *owned;
+    journalNotes -= e.note.journalDate ? 1 : 0;
     unlinkOutgoing(e);
     names.removeNote(path, e.note.aliases);
     if (countFolders)
-        countNoteFolders(path, -1);
+        countNoteFolders(noteFolderKeys(path), -1);
     for (const int r : e.refs)
         multiRemove(blockRefSources, e.note.links[r].blockId, path);
     for (auto b = e.note.blockIds.cbegin(); b != e.note.blockIds.cend(); ++b)
@@ -765,10 +850,18 @@ void VaultIndex::Private::fileLink(const VaultPath &source, const PathLink &link
         countRemove(map, key, source);
 }
 
-void VaultIndex::Private::resolveLinks(Entry &e)
+void VaultIndex::Private::resolveLinks(Entry &e, QList<ResolvePlan> &plans)
 {
-    for (PathLink &l : e.links) {
-        l.target = names.resolve(e.note.links.at(l.link).target, e.path, TargetForm::Parsed);
+    Q_ASSERT(plans.size() == e.links.size());
+    for (qsizetype i = 0; i < e.links.size(); ++i) {
+        PathLink &l = e.links[i];
+        l.target = names.resolve(plans[i]);
+        if (l.target.isEmpty() && !l.key.isEmpty()) {
+            plans[i].complete();
+            if (!e.unresolvedPlans)
+                e.unresolvedPlans = std::make_unique<QList<std::pair<int, ResolvePlan>>>();
+            e.unresolvedPlans->append({int(i), std::move(plans[i])});
+        }
         if (!l.key.isEmpty())
             multiAdd(sourcesByKey, l.key, e.path);
         fileLink(e.path, l, true);
@@ -788,24 +881,37 @@ void VaultIndex::Private::relink(const QSet<QString> &keys, const VaultPath &ski
 {
     if (keys.isEmpty())
         return;
-    QSet<VaultPath> sources;
-    for (const QString &k : keys) {
-        const auto it = sourcesByKey.constFind(k);
-        if (it == sourcesByKey.constEnd())
-            continue;
-        it->forEach([&](const VaultPath &s) {
-            if (s != skip)
-                sources.insert(s);
-        });
-    }
-    for (const VaultPath &s : std::as_const(sources)) {
+    // Most changes bring one key (a new note without aliases): compared, not hashed.
+    const QString *onlyKey = keys.size() == 1 ? &*keys.cbegin() : nullptr;
+    const auto relinkSource = [&](const VaultPath &s) {
+        if (s == skip)
+            return;
         Entry *e = mutableEntry(s);
         if (!e)
-            continue;
-        for (PathLink &l : e->links) {
-            if (!keys.contains(l.key))
+            return;
+        for (qsizetype i = 0; i < e->links.size(); ++i) {
+            PathLink &l = e->links[i];
+            if (onlyKey ? l.key != *onlyKey : !keys.contains(l.key))
                 continue;
-            const VaultPath next = names.resolve(e->note.links.at(l.link).target, s, TargetForm::Parsed);
+            // The plan kept while it resolved to nothing, else a new one (kept if it still does).
+            QList<std::pair<int, ResolvePlan>> *kept = e->unresolvedPlans.get();
+            qsizetype at = -1;
+            for (qsizetype k = 0; kept && k < kept->size() && at < 0; ++k)
+                at = kept->at(k).first == int(i) ? k : -1;
+            std::optional<ResolvePlan> made;
+            if (at < 0)
+                made.emplace(e->note.links.at(l.link).target, s, TargetForm::Parsed);
+            const VaultPath next = names.resolve(at >= 0 ? kept->at(at).second : *made);
+            if (next.isEmpty() && at < 0) {
+                made->complete();
+                if (!kept)
+                    kept = (e->unresolvedPlans = std::make_unique<QList<std::pair<int, ResolvePlan>>>()).get();
+                kept->append({int(i), std::move(*made)});
+            } else if (!next.isEmpty() && at >= 0) {
+                kept->removeAt(at);
+                if (kept->isEmpty())
+                    e->unresolvedPlans.reset();
+            }
             if (next == l.target)
                 continue;
             fileLink(s, l, false);
@@ -814,7 +920,22 @@ void VaultIndex::Private::relink(const QSet<QString> &keys, const VaultPath &ski
             pending.notes.insert(s);
             cache.missing.reset();
         }
+    };
+    if (onlyKey) {
+        // (Relinking changes no source set: iterated as it is.)
+        if (const auto it = sourcesByKey.constFind(*onlyKey); it != sourcesByKey.constEnd())
+            it->forEach(relinkSource);
+        return;
     }
+    QSet<VaultPath> sources;
+    for (const QString &k : keys) {
+        const auto it = sourcesByKey.constFind(k);
+        if (it == sourcesByKey.constEnd())
+            continue;
+        it->forEach([&](const VaultPath &s) { sources.insert(s); });
+    }
+    for (const VaultPath &s : std::as_const(sources))
+        relinkSource(s);
 }
 
 void VaultIndex::Private::markSearch(const VaultPath &path)
@@ -1051,6 +1172,7 @@ void VaultIndex::rename(const VaultPath &oldPath, const VaultPath &newPath, cons
 void VaultIndex::clear()
 {
     d->entries.clear();
+    d->journalNotes = 0;
     d->attachmentSet.clear();
     d->names.clear();
     d->sourcesByKey.clear();
@@ -1134,6 +1256,7 @@ PreparedNote VaultIndex::prepareParsed(const VaultPath &path, const QString &con
 {
     PreparedNote out;
     out.m_entry = index_detail::makeEntry(path, content, std::move(note));
+    out.m_keys = std::make_unique<NoteKeys>(index_detail::makeNoteKeys(*out.m_entry, true));
     out.m_parseFingerprint = parseFingerprint(config);
     return out;
 }
@@ -1152,9 +1275,10 @@ void VaultIndex::updatePrepared(PreparedNote prepared, std::optional<quint64> se
     const QString &content = prepared.m_entry->content;
     if (const Private::Entry *e = d->entry(path); e && e->content == content)
         return;
-    const QSet<QString> keys = prepared.m_parseFingerprint != parseFingerprint(d->config)
-                                       ? d->putNote(path, content, true, sequence) // prepared with an older config
-                                       : d->putEntry(std::move(prepared.m_entry), true, sequence);
+    const QSet<QString> keys =
+            prepared.m_parseFingerprint != parseFingerprint(d->config)
+                    ? d->putNote(path, content, true, sequence) // prepared with an older config
+                    : d->putEntry(std::move(prepared.m_entry), std::move(*prepared.m_keys), true, sequence);
     d->relink(keys, path);
     d->markChanged();
 }

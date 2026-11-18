@@ -28,8 +28,8 @@ using brulion::shell::Workspace;
 
 namespace {
 
-const QStringList Words = { u"notatka"_s, u"zadanie"_s, u"żółw"_s,  u"łódź"_s, u"projekt"_s, u"spotkanie"_s,
-                            u"raport"_s,  u"zakupy"_s,  u"kawa"_s, u"ogród"_s, u"dom"_s,     u"praca"_s };
+const QStringList Words = {u"notatka"_s, u"zadanie"_s, u"żółw"_s, u"łódź"_s,  u"projekt"_s, u"spotkanie"_s,
+                           u"raport"_s,  u"zakupy"_s,  u"kawa"_s, u"ogród"_s, u"dom"_s,     u"praca"_s};
 
 /// Deterministic synthetic note `i` (as in tests/core/index/tst_index_perf.cpp), with reminders
 /// around "now" so the reminder scheduler has real work at start-up.
@@ -51,13 +51,15 @@ QPair<QString, QByteArray> syntheticNote(int i, int total)
         switch (k % 6) {
         case 0: lines << u"- [ ] %1 numer %2 📅 2026-%3-%4 #%1"_s.arg(w).arg(k).arg(month, day); break;
         case 1: lines << u"  - szczegóły %1 [[%2]] ^b%3x%4"_s.arg(w, target).arg(i).arg(k); break;
-        case 2: lines << u"- Tekst o %1 i %2 ((b%3x1))"_s.arg(w, Words[(k * 3) % Words.size()]).arg((i + 1) % total); break;
+        case 2:
+            lines << u"- Tekst o %1 i %2 ((b%3x1))"_s.arg(w, Words[(k * 3) % Words.size()]).arg((i + 1) % total);
+            break;
         case 3: lines << u"- [x] zrobione %1 ✅ 2026-%2-%3"_s.arg(w, month, day); break;
         case 4: lines << u"- przypomnienie %1 ⏰ 2026-%2-%3 09:30"_s.arg(w, month, day); break;
         default: lines << u"Akapit %1: %2 [[Nieistniejąca %1]] https://example.com/%3"_s.arg(k).arg(w).arg(i);
         }
     }
-    return { path, lines.join(u'\n').toUtf8() };
+    return {path, lines.join(u'\n').toUtf8()};
 }
 
 class NullSink : public brulion::NotificationSink {
@@ -165,7 +167,8 @@ private Q_SLOTS:
         QVERIFY(sink.scheduledCount > 0);
         QVERIFY2(openMs < 15000 * BRULION_TEST_SLOWDOWN, qPrintable(u"open() took %1 ms"_s.arg(openMs)));
         // The point of chunked indexing: no long freeze while the notebook loads.
-        QVERIFY2(indexingStall < 1500 * BRULION_TEST_SLOWDOWN, qPrintable(u"the UI thread stalled for %1 ms"_s.arg(indexingStall)));
+        QVERIFY2(indexingStall < 1500 * BRULION_TEST_SLOWDOWN,
+                 qPrintable(u"the UI thread stalled for %1 ms"_s.arg(indexingStall)));
 
         // The full-text index was built in the background meanwhile: the first search is fast.
         QCOMPARE(ws.index()->pendingSearchDocuments(), 0);
@@ -205,6 +208,56 @@ private Q_SLOTS:
         const qint64 writeMs = t.elapsed();
         qDebug("perf: one edit (write + index update) %lld ms", writeMs);
         QVERIFY2(writeMs < 2000, qPrintable(u"an edit took %1 ms"_s.arg(writeMs)));
+    }
+
+    // While the index loads, its merges reach the views at most every 250 ms (each one used to
+    // make every visible page render all its rows and the lists compute again), the first at
+    // once; the whole index before `ready`; an edit meanwhile at once, before revisionChanged.
+    void loadNotifiesTheViewsInBatches()
+    {
+        NullSink sink;
+        Workspace ws;
+        ws.sync()->setSyncthingDiscovery(false);
+        ws.reminders()->setSink(&sink);
+        QElapsedTimer clock;
+        QList<qint64> notified;      // indexChanged while indexing (ms since open())
+        QList<qsizetype> notesKnown; // the index's notes then
+        QStringList order;           // indexChanged / revisionChanged / ready, in order
+        connect(&ws, &brulion::EditorHost::indexChanged, this, [&] {
+            order.append(u"index"_s);
+            if (ws.indexing()) {
+                notified.append(clock.elapsed());
+                notesKnown.append(ws.index()->paths().size());
+            }
+        });
+        connect(&ws, &Workspace::revisionChanged, this, [&] { order.append(u"revision"_s); });
+        connect(&ws, &Workspace::readyChanged, this, [&] {
+            order.append(u"ready"_s);
+            QCOMPARE(ws.index()->paths().size(), qsizetype(m_total)); // the views saw it all
+        });
+        QSignalSpy ready(&ws, &Workspace::readyChanged);
+        clock.start();
+        QVERIFY(ws.open(m_tmp.filePath(u"vault"_s), QString())); // no device state: no index cache
+        QVERIFY(ws.indexing());
+        order.clear();
+        // An edit while loading (the first merges are in by now): passed on at once.
+        QTRY_VERIFY_WITH_TIMEOUT(!notified.isEmpty(), 60000 * BRULION_TEST_SLOWDOWN);
+        if (ws.indexing()) {
+            order.clear();
+            QVERIFY(ws.write(u"Nowa.md"_s, u"- napisana w trakcie [[Strona 1]]\n"_s));
+            QCOMPARE(order.mid(0, 2), (QStringList{u"index"_s, u"revision"_s}));
+        }
+        QVERIFY(ready.wait(120000 * BRULION_TEST_SLOWDOWN) || ws.ready());
+        const qint64 loadMs = clock.elapsed();
+        QVERIFY(order.contains(u"ready"_s));
+        QVERIFY(order.lastIndexOf(u"index"_s, order.indexOf(u"ready"_s)) >= 0); // indexChanged, then ready
+        // Merges every turn of the event loop; passed on at most every 250 ms (the edit's at once:
+        // one more), so a load of `loadMs` notifies at most loadMs / 250 + 3 times.
+        qDebug("perf: %lld indexChanged while %d notes loaded in %lld ms", qint64(notified.size()), m_total, loadMs);
+        QVERIFY2(notified.size() <= loadMs / 250 + 3,
+                 qPrintable(u"%1 notifications in %2 ms"_s.arg(notified.size()).arg(loadMs)));
+        for (qsizetype i = 1; i < notesKnown.size(); ++i)
+            QVERIFY(notesKnown[i] >= notesKnown[i - 1]);
     }
 
     void reopenWithState()
