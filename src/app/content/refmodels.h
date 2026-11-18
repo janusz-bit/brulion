@@ -23,6 +23,7 @@
 
 #include "workspacemodel.h"
 
+#include "markdown/blockdocument.h"
 #include "markdown/inlinerenderer.h"
 
 #include <QDate>
@@ -32,10 +33,6 @@
 
 #include <memory>
 #include <optional>
-
-namespace brulion::markdown {
-class BlockDocument;
-}
 
 namespace brulion::content {
 
@@ -201,8 +198,9 @@ private:
     mutable QMultiHash<QString, RenderRead> m_renderReads;
     /// Whether a row would read something else from `note` now.
     bool renderReadsChanged(const QString &note) const;
-    /// Parsed documents of the notes rendered during one refresh.
-    mutable QHash<QString, std::shared_ptr<markdown::BlockDocument>> m_docs;
+    /// The blocks of the notes rendered during one refresh, found by line (BlockDocument::Locator:
+    /// one block of a note parsed, not the whole note).
+    mutable QHash<QString, std::shared_ptr<const markdown::BlockDocument::Locator>> m_locators;
     QVariantMap m_paletteMap;
     markdown::Palette m_palette;
     QString m_locale = QStringLiteral("pl");

@@ -844,12 +844,15 @@ BlockDocument::PositionalOptions BlockDocument::positionalOptions(int i) const
 
 void BlockDocument::derive(int i)
 {
-    Item &it = m_items[i];
+    deriveItem(m_items[i], positionalOptions(i));
+}
+
+void BlockDocument::deriveItem(Item &it, const PositionalOptions &positional)
+{
     BlockEntry &e = it.entry;
     // A block is parsed on its own; frontmatter and page properties are only possible at the
     // top of the document. Everything set here depends only on `own` and these two options
     // (takeDerived() copies it).
-    const PositionalOptions positional = positionalOptions(i);
     StructureOptions options;
     options.frontmatter = positional.frontmatter;
     options.pageProperties = positional.properties;
@@ -893,6 +896,102 @@ void BlockDocument::derive(int i)
     }
     it.contIndent = cont.isEmpty() ? defaultContIndent(e.prefix) : cont;
     e.body = body.join(u'\n');
+}
+
+// ---------------------------------------------------------------------------------------------
+// Locator: one block of a note, as setContent() would split and derive it
+// ---------------------------------------------------------------------------------------------
+
+BlockDocument::Locator::Locator(const QString &content, const ParsedNote &note)
+    : m_text(content.startsWith(QChar::ByteOrderMark) ? content.sliced(1) : content)
+{
+    // setContent()'s lines (text::splitLines(): "\n", "\r\n", a lone "\r"), without copying them.
+    const qsizetype n = m_text.size();
+    m_starts.append(0);
+    for (qsizetype i = 0; i < n; ++i) {
+        const QChar c = m_text.at(i);
+        if (c != u'\n' && c != u'\r')
+            continue;
+        m_ends.append(i);
+        if (c == u'\r' && i + 1 < n && m_text.at(i + 1) == u'\n')
+            ++i;
+        m_starts.append(i + 1);
+    }
+    m_ends.append(n);
+    const int lineCount = int(m_starts.size());
+
+    // setContent()'s block starts: the top-level nodes and the list items nested in included list
+    // items — the note's blocks are those nodes in the same pre-order (parents first).
+    const QList<Block> &blocks = note.blocks;
+    QList<bool> included(blocks.size(), false);
+    for (qsizetype i = 0; i < blocks.size(); ++i) {
+        const Block &b = blocks.at(i);
+        const bool listChild = b.parent >= 0 && b.parent < i && b.kind == BlockKind::ListItem
+                               && blocks.at(b.parent).kind == BlockKind::ListItem && included.at(b.parent);
+        if ((b.parent < 0 || listChild) && b.line >= 0 && b.line < lineCount) {
+            included[i] = true;
+            m_blockStarts.append(b.line);
+        }
+    }
+    std::ranges::sort(m_blockStarts);
+    m_blockStarts.erase(std::ranges::unique(m_blockStarts).begin(), m_blockStarts.end());
+    // Text before the first block (a comment) is a paragraph block of its own.
+    const int firstStart = m_blockStarts.isEmpty() ? lineCount : m_blockStarts.first();
+    int firstText = -1;
+    for (int k = 0; k < firstStart; ++k) {
+        if (!isBlank(lineText(k))) {
+            firstText = k;
+            break;
+        }
+    }
+    if (firstText >= 0)
+        m_blockStarts.prepend(firstText);
+    m_leadingEmpty = (firstText >= 0 ? firstText : firstStart) == 0;
+}
+
+QStringView BlockDocument::Locator::lineText(int k) const
+{
+    return QStringView(m_text).sliced(m_starts.at(k), m_ends.at(k) - m_starts.at(k));
+}
+
+BlockDocument::Item BlockDocument::Locator::itemAt(int j) const
+{
+    const int lineCount = int(m_starts.size());
+    const int from = m_blockStarts.at(j);
+    const int to = j + 1 < m_blockStarts.size() ? m_blockStarts.at(j + 1) : lineCount;
+    int last = to - 1;
+    while (last > from && isBlank(lineText(last)))
+        --last;
+    const QStringView text(m_text);
+    const qsizetype next = last + 1 < lineCount ? m_starts.at(last + 1) : text.size();
+    const qsizetype end = to < lineCount ? m_starts.at(to) : text.size();
+    Item it;
+    it.own = text.sliced(m_starts.at(from), m_ends.at(last) - m_starts.at(from)).toString();
+    it.eol = text.sliced(m_ends.at(last), next - m_ends.at(last)).toString();
+    it.entry.trailing = text.sliced(next, end - next).toString();
+    it.entry.line = from;
+    return it;
+}
+
+std::optional<BlockEntry> BlockDocument::Locator::entryAtLine(int line) const
+{
+    if (line < 0 || line >= m_starts.size())
+        return std::nullopt; // (indexAtLine(): past the last block's lines)
+    const auto after = std::ranges::upper_bound(m_blockStarts, line);
+    const int s = int(after - m_blockStarts.cbegin()) - 1;
+    if (s < 0)
+        return std::nullopt;
+    // positionalOptions(): frontmatter only first (no blank lines before it), page properties
+    // only after frontmatter blocks — those before it are derived to know (one in practice).
+    bool onlyFrontmatter = true;
+    for (int j = 0; j < s && onlyFrontmatter; ++j) {
+        Item before = itemAt(j);
+        deriveItem(before, {j == 0 && m_leadingEmpty, true});
+        onlyFrontmatter = before.entry.kind == BlockKind::Frontmatter;
+    }
+    Item it = itemAt(s);
+    deriveItem(it, {s == 0 && m_leadingEmpty, onlyFrontmatter});
+    return it.entry;
 }
 
 /// What derive() sets, from a block with the same text and options (keep the two in step).

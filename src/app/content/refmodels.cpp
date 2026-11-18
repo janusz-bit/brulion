@@ -208,11 +208,11 @@ void GroupedRefsModel::fillRef(Ref &r, const QString &path) const
     crumbs.removeAll(QString());
     r.breadcrumb = crumbs.join(u" › "_s);
 
-    std::shared_ptr<markdown::BlockDocument> &doc = m_docs[path];
-    if (!doc)
-        doc = std::make_shared<markdown::BlockDocument>(idx->content(path));
-    if (const int i = doc->indexAtLine(block.line); i >= 0) {
-        const markdown::BlockEntry &entry = doc->at(i);
+    std::shared_ptr<const markdown::BlockDocument::Locator> &blocks = m_locators[path];
+    if (!blocks)
+        blocks = std::make_shared<const markdown::BlockDocument::Locator>(idx->content(path), *note);
+    // The block as the editor holds it (BlockDocument): only that block of the note parsed.
+    if (const std::optional<markdown::BlockEntry> entry = blocks->entryAtLine(block.line)) {
         markdown::RenderContext ctx = renderContext(idx, path, effectiveToday(), uiLocaleValue(), m_palette);
         // The row draws the editor's checkbox for tasks (ContentRefRow), not a text glyph.
         ctx.taskCheckbox = false;
@@ -232,7 +232,7 @@ void GroupedRefsModel::fillRef(Ref &r, const QString &path) const
                 m_renderReads.insert(*to, {path, target, id, {}, text});
             return text;
         };
-        r.html = markdown::InlineRenderer(ctx).renderBlock(entry.body, entry.kind);
+        r.html = markdown::InlineRenderer(ctx).renderBlock(entry->body, entry->kind);
     }
     if (r.html.isEmpty())
         r.html = markdown::InlineRenderer::escape(r.text);
@@ -294,7 +294,7 @@ void GroupedRefsModel::refresh()
     QList<Group> groups;
     if (workspace() && vaultIndex() && workspace()->isOpen())
         groups = collect();
-    const auto dropDocs = qScopeGuard([this] { m_docs.clear(); });
+    const auto dropLocators = qScopeGuard([this] { m_locators.clear(); });
     m_sources.clear();
     m_renderReads.clear();
     for (const Group &g : std::as_const(groups))
