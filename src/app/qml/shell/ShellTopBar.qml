@@ -72,8 +72,9 @@ Rectangle {
     /// actions too (favorite, history, side panel, trash), but not Rename (its name is its date).
     readonly property string journalPagePath: {
         const date = titles.field(AppController.currentRoute, "date")
-        // (Read for real: a bare `void Workspace.revision` is compiled away with the dependency.)
-        if (Workspace.revision < 0 || bar.routeView !== "journal" || date === "")
+        // Follows the names (the daily note created or deleted; read for real: a bare `void
+        // Workspace.namesRevision` is compiled away with the dependency), only on a journal route.
+        if (bar.routeView !== "journal" || date === "" || Workspace.namesRevision < 0)
             return ""
         const path = bar.routePath !== "" ? bar.routePath : Workspace.journalPath(date)
         return Workspace.exists(path) ? path : ""
@@ -88,8 +89,8 @@ Rectangle {
     readonly property bool favorite: onPage && Workspace.favorites.length >= 0 && Workspace.isFavorite(bar.pagePath)
                                      && Workspace.exists(bar.pagePath)
     /// The page's tasks are ignored (`tasks:: ignore`): the menu offers to show them again. (Read
-    /// for real after each change of the notes: Workspace.revision.)
-    readonly property bool tasksIgnored: onPage && Workspace.revision >= 0 && Workspace.tasksIgnored(bar.pagePath)
+    /// again when some note's properties changed: Workspace.propertiesRevision.)
+    readonly property bool tasksIgnored: onPage && Workspace.propertiesRevision >= 0 && Workspace.tasksIgnored(bar.pagePath)
 
     ShellRouteTitles { id: titles }
     /// A model is answering (b.ai: the assistant or another extension).

@@ -1349,6 +1349,81 @@ private Q_SLOTS:
         QVERIFY(tools.headerTag().isEmpty() && tools.subTags().isEmpty() && tools.tagChips().isEmpty());
     }
 
+    // The header's summary is computed again only for changes it shows: an edit of an unrelated
+    // page (every autosave while typing there) computes nothing; the page's own edits, a new
+    // referrer, a note that stopped linking, a sub-tag's count and the names do.
+    void pageToolsSummaryFollowsOnlyWhatItShows()
+    {
+        auto ws = open({
+                {u"Praca.md"_s, u"- strona tagu, słów pięć\n"_s},
+                {u"Notatka.md"_s, u"- [[Praca]] i #praca/raporty\n"_s},
+                {u"Obca.md"_s, u"- zażółć gęślą jaźń\n"_s},
+                {u"Druga.md"_s, u"- nic o pracy\n"_s},
+        });
+        PageTools tools;
+        tools.setWorkspace(ws.get());
+        tools.setPath(u"Praca.md"_s);
+        const auto settle = [] {
+            for (int i = 0; i < 3; ++i)
+                QCoreApplication::processEvents();
+        };
+        settle();
+        const auto summary = [&] { return tools.summary(u"Praca.md"_s); };
+        QCOMPARE(summary().value(u"backlinks"_s).toInt(), 1);
+        int computed = tools.summariesComputed();
+
+        // An unrelated page, typed in several times.
+        for (const QString &text : {u"- zażółć gęślą jaźń, więcej\n"_s, u"- zażółć gęślą jaźń, jeszcze więcej\n"_s}) {
+            QVERIFY(ws->writeFile(u"Obca.md"_s, text));
+            settle();
+        }
+        QCOMPARE(tools.summariesComputed(), computed);
+
+        // The page itself.
+        QSignalSpy changed(&tools, &PageTools::summaryChanged);
+        QVERIFY(ws->writeFile(u"Praca.md"_s, u"- strona tagu, słów teraz sześć\n"_s));
+        QCOMPARE(tools.summariesComputed(), computed); // (not inside the save: on the next turn)
+        settle();
+        QCOMPARE(tools.summariesComputed(), ++computed);
+        QCOMPARE(changed.size(), 1);
+
+        // A new referrer: a page that did not link here does now.
+        QVERIFY(ws->writeFile(u"Druga.md"_s, u"- teraz o [[Praca]]\n"_s));
+        settle();
+        QCOMPARE(tools.summariesComputed(), ++computed);
+        QCOMPARE(tools.summary(u"Praca.md"_s).value(u"backlinks"_s).toInt(), 2);
+        // ... and stops (it is among the referrers kept from the last summary).
+        QVERIFY(ws->writeFile(u"Druga.md"_s, u"- znowu nic\n"_s));
+        settle();
+        QCOMPARE(tools.summariesComputed(), ++computed);
+        QCOMPARE(summary().value(u"backlinks"_s).toInt(), 1);
+
+        // A sub-tag's count: another block of a note carrying it (its tags stay the same).
+        QCOMPARE(tools.subTags().size(), 1);
+        QCOMPARE(tools.subTags().first().toMap().value(u"count"_s).toInt(), 1);
+        QVERIFY(ws->writeFile(u"Notatka.md"_s, u"- [[Praca]] i #praca/raporty\n- znów #praca/raporty\n"_s));
+        settle();
+        QCOMPARE(tools.summariesComputed(), ++computed);
+        QCOMPARE(tools.subTags().first().toMap().value(u"count"_s).toInt(), 2);
+        // A new sub-tag in a note that carried none.
+        QVERIFY(ws->writeFile(u"Obca.md"_s, u"- zażółć #praca/spotkania\n"_s));
+        settle();
+        QCOMPARE(tools.summariesComputed(), ++computed);
+        QCOMPARE(tools.subTags().size(), 2);
+
+        // The page's edit waits for the next turn; a new page (the names) computes at once, and the
+        // waiting computation finds nothing left to do.
+        QVERIFY(ws->writeFile(u"Praca.md"_s, u"- a\n"_s));
+        QVERIFY(ws->writeFile(u"Nowa.md"_s, u"- świeża\n"_s));
+        settle();
+        QCOMPARE(tools.summariesComputed(), ++computed);
+
+        // Again an unrelated edit: nothing.
+        QVERIFY(ws->writeFile(u"Nowa.md"_s, u"- świeża, dalej\n"_s));
+        settle();
+        QCOMPARE(tools.summariesComputed(), computed);
+    }
+
     // The side panel's calendar (ContentMiniCalendar): marks of a range and the entries of a day.
     void calendarMarksAndEntries()
     {

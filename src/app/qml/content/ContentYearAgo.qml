@@ -17,7 +17,10 @@ Item {
     property int limit: 6
     readonly property string yearAgo: root.date !== "" ? DatesHelper.addMonths(root.date, -12) : ""
     readonly property string journalPath: {
-        if (root.yearAgo === "" || Workspace.revision < 0 || root.journalDays(root.yearAgo).length === 0)
+        // (Only while shown — the side panel of a hidden Journal stays — following the names: that
+        // day's journal created or deleted.)
+        if (!root.visible || root.yearAgo === "" || Workspace.namesRevision < 0
+                || root.journalDays(root.yearAgo).length === 0)
             return ""
         return tools.journalPathFor(root.yearAgo)
     }

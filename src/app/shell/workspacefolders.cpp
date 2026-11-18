@@ -157,6 +157,7 @@ void Workspace::notifyFolderChange(const QStringList &changed, bool byUser)
 {
     ++m_revision;
     Q_EMIT revisionChanged();
+    bumpRevisions(true, false); // (folders have no properties)
     m_trashCount = -1;
     Q_EMIT trashChanged();
     Q_EMIT filesChanged(changed);

@@ -215,9 +215,9 @@ FocusScope {
     /// The page's day ("YYYY-MM-DD") when it is a daily note, else "".
     readonly property string journalDate: page.path !== "" ? Workspace.journalDate(page.path) : ""
     /// The page's week or month when it is a weekly or monthly note (Workspace.periodicNoteOf:
-    /// { period, start, end, label, template, … }), else {}. (Read again as the notebook changes:
-    /// another file name format.)
-    readonly property var periodic: page.path !== "" && Workspace.revision >= 0 && journalDate === ""
+    /// { period, start, end, label, template, … }), else {}. (Read again as the names change:
+    /// another file name format, the note or its template created or deleted.)
+    readonly property var periodic: page.path !== "" && journalDate === "" && Workspace.namesRevision >= 0
                                     ? Workspace.periodicNoteOf(page.path) : ({})
     /// Top bar title: daily notes by their date, weekly and monthly notes by their period; other
     /// pages use the shell's default (file name).

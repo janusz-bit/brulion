@@ -114,8 +114,9 @@ BDialog {
     /// The rows: the root, the folders matching the query, a new folder of the typed name —
     /// { folder, title, subtitle, icon, create, disabled } (AppController.folderChoices).
     readonly property list<var> rows: {
-        // (Read for real: a bare `void Workspace.revision` is compiled away with the dependency.)
-        if (!visible || Workspace.revision < 0)
+        // (The folders: Workspace.namesRevision, read for real: a bare `void` read is compiled away
+        // with the dependency.)
+        if (!visible || Workspace.namesRevision < 0)
             return []
         return AppController.folderChoices(query, mode === "move" && isDir ? path : "", currentFolder, mode === "move",
                                            qsTr("Notebook root"), qsTr("New folder “%1”"),

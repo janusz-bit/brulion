@@ -694,7 +694,8 @@ FocusScope {
                         // "- [ ] …" and "⏰ jutro 9:00" on one line.
                         description: qsTr("Every day gets its own page. Write what happened, plans, tasks (-\u2060\u00a0[\u00a0]\u00a0…) and reminders (⏰\u00a0tomorrow\u00a09:00); earlier days appear below.")
                         // A new notebook (at most today's note): notes from another app are one tap away.
-                        actionText: Workspace.pageCount <= 1 ? qsTr("Import notes") : ""
+                        // (days.count first: only an empty journal follows the page count.)
+                        actionText: days.count <= 1 && Workspace.pageCount <= 1 ? qsTr("Import notes") : ""
                         actionIcon: "download"
                         onActionTriggered: AppController.navigate({ view: "importExport", tab: "import" })
                     }
@@ -729,8 +730,11 @@ FocusScope {
                 showFooter: false
                 preferredWidth: Theme.dialogWidthSm
 
-                // (Read for real: a bare `void Workspace.revision` is compiled away with the dependency.)
-                readonly property var marks: Workspace.revision >= 0 ? Workspace.journalMarks(jumpPicker.cells) : ({})
+                // The days with a journal: only while the dialog is open, following the names
+                // (journals created or deleted; read for real: a bare `void Workspace.namesRevision`
+                // is compiled away with the dependency).
+                readonly property var marks: jumpDialog.visible && Workspace.namesRevision >= 0
+                                             ? Workspace.journalMarks(jumpPicker.cells) : ({})
 
                 BDatePicker {
                     id: jumpPicker

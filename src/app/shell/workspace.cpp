@@ -227,6 +227,8 @@ bool Workspace::open(const QString &rootPath, const QString &deviceStatePath, QS
             m_loader->configChanged();
         m_impacts = ImpactCache(); // the settings a move rebases are the new ones
         Q_EMIT configChanged();
+        // The journals' folder and file names, how notes are read: every name may differ.
+        bumpRevisions(true, true);
     });
     connect(m_index.get(), &VaultIndex::changed, this, &EditorHost::indexChanged);
 #ifndef Q_OS_WASM
@@ -292,6 +294,7 @@ bool Workspace::open(const QString &rootPath, const QString &deviceStatePath, QS
     Q_EMIT openChanged();
     Q_EMIT configChanged();
     Q_EMIT revisionChanged();
+    bumpRevisions(true, true);
     Q_EMIT favoritesChanged();
     Q_EMIT recentPagesChanged();
     Q_EMIT indexingChanged();
@@ -341,6 +344,7 @@ void Workspace::close()
     Q_EMIT openChanged();
     Q_EMIT configChanged();
     Q_EMIT revisionChanged();
+    bumpRevisions(true, true);
     Q_EMIT favoritesChanged();
     Q_EMIT recentPagesChanged();
     Q_EMIT trashChanged();
@@ -505,6 +509,9 @@ void Workspace::indexingFinished()
     m_backups->start();
     // Every note is known: the extensions written in the notebook can be found and run.
     m_extensions->indexReady();
+    // Every note is in the index now: its names and properties (while it was read, the narrow
+    // revisions stood still; PageTools and All pages' folders follow the index meanwhile).
+    bumpRevisions(true, true);
     setReady(false);
 #ifdef Q_OS_WASM
     {
@@ -531,6 +538,19 @@ void Workspace::setReady(bool wasReady)
         Q_EMIT readyChanged();
 }
 
+void Workspace::bumpRevisions(bool names, bool properties)
+{
+    // Both counters first: a handler of one signal reads the other already up to date.
+    if (names)
+        ++m_namesRevision;
+    if (properties)
+        ++m_propertiesRevision;
+    if (names)
+        Q_EMIT namesRevisionChanged();
+    if (properties)
+        Q_EMIT propertiesRevisionChanged();
+}
+
 qreal Workspace::indexProgress() const
 {
     if (!m_vault || !indexing())
@@ -541,6 +561,18 @@ qreal Workspace::indexProgress() const
 void Workspace::onVaultChanged(const QList<VaultChange> &changes)
 {
     QStringList changed;
+    // The page properties of the changed notes before the change (propertiesRevision: compared
+    // with them afterwards, O(changed notes); a note that is not there has none).
+    QHash<QString, Properties> before;
+    for (const VaultChange &c : changes) {
+        for (const QString &path : {c.path, c.oldPath}) {
+            if (path.isEmpty() || before.contains(path))
+                continue;
+            const ParsedNote *note = m_index->note(path);
+            before.insert(path, note ? note->properties : Properties());
+        }
+    }
+    const int versionBefore = m_index->version();
     {
         VaultIndex::Batch batch(*m_index);
         for (const VaultChange &c : changes) {
@@ -576,11 +608,20 @@ void Workspace::onVaultChanged(const QList<VaultChange> &changes)
                 changed.append(c.path);
         }
     }
-    ++m_revision;
-    Q_EMIT revisionChanged();
     // Deletions and restores move files through the trash (.trash is not tracked itself).
     const bool listChanged =
             std::ranges::any_of(changes, [](const VaultChange &c) { return c.type != ChangeType::Modified; });
+    bool propertiesChanged = false;
+    for (auto it = before.cbegin(); it != before.cend() && !propertiesChanged; ++it) {
+        const ParsedNote *note = m_index->note(it.key());
+        propertiesChanged = (note ? note->properties : Properties()) != it.value();
+    }
+    // (An index that does not log that far back: any name may have changed.)
+    const IndexChanges indexChanges = m_index->changesSince(versionBefore);
+    const bool namesChanged = listChanged || !indexChanges.complete || indexChanges.names;
+    ++m_revision;
+    Q_EMIT revisionChanged();
+    bumpRevisions(namesChanged, propertiesChanged);
     if (listChanged) {
         m_trashCount = -1;
         Q_EMIT trashChanged();

@@ -7,20 +7,27 @@
 //   tools.renameImpact(page.path)   // { notes: 3, links: 5, tags: 2, queries: 1 }
 //
 // With a `path` it also keeps that page's summary() for the page header as typed properties
-// (folderParts, aliasChips, tagChips, headerTag, subTags), again whenever the notebook changes
-// (Workspace revision, indexing) — read compiled in QML, unlike members of a returned map:
+// (folderParts, aliasChips, tagChips, headerTag, subTags) — read compiled in QML, unlike members of
+// a returned map. It is computed again only when the notebook changed in a way it shows: the page
+// itself (on the next event-loop turn, once for a burst of autosaves), the names
+// (Workspace::namesRevision: pages created, deleted, renamed, aliases), the index being read, or a
+// changed note (VaultIndex::changesSince()) that linked or tagged the page or carried one of the
+// tags the summary shows (its own, the one naming the page, that tag's sub-tags) at the last
+// summary, or does now. Typing in another page computes nothing:
 //
 //   PageTools { id: headerTools; workspace: Workspace; path: page.path }
 #pragma once
 
 #include <QObject>
 #include <QPointer>
+#include <QSet>
 #include <QUrl>
 #include <QVariantList>
 #include <QVariantMap>
 
 namespace brulion {
 class VaultIndex;
+struct IndexChanges;
 }
 
 namespace brulion::shell {
@@ -59,6 +66,8 @@ public:
     QVariantList tagChips() const;
     QVariantMap headerTag() const;
     QVariantList subTags() const;
+    /// How many times the summary was computed for `path` (tests: what an edit elsewhere costs).
+    int summariesComputed() const { return m_summariesComputed; }
 
     /// What renaming `path` rewrites: { notes (other notes linking to it by name or path, or
     /// carrying a tag that names it, or a ```query naming it), links (those links, and the query
@@ -125,17 +134,40 @@ Q_SIGNALS:
     void summaryChanged();
 
 private:
-    /// summary()'s `tag` of `path`.
-    static QVariantMap tagInfo(const VaultIndex *index, const QString &path, int references);
-
     QByteArray exportData(const QString &path, const QString &format) const;
 
+    /// What the summary of `path` reads beyond the note itself: the notes linking to it or carrying
+    /// a tag it shows, and those tags' keys (`tagPrefix`: the sub-tags of the tag naming the page).
+    struct Reads {
+        QSet<QString> notes;
+        QSet<QString> tags;
+        QString tagPrefix;
+    };
+    /// summary()'s `tag` of `path`; `reads` (when given) gets the tags it shows and their notes.
+    static QVariantMap tagInfo(const VaultIndex *index, const QString &path, int references, Reads *reads);
+    /// summary(); `reads` (when given) gets what it read.
+    QVariantMap summaryOf(const QString &rawPath, Reads *reads) const;
     /// summary(m_path) again (nothing for no path); summaryChanged() when it differs.
     void refreshSummary();
+    /// The notebook changed (revision, names): the summary computed again when it changed what
+    /// the summary shows — at once, but for an edit of the page alone (every autosave while it is
+    /// typed in: the words of the whole page), which waits for the next event-loop turn.
+    void notebookChanged();
+    void refreshLater();
+    void refreshPosted();
+    enum class Affected { No, PageOnly, Yes };
+    /// What the index's changes since the last summary mean for it.
+    Affected summaryAffected(const VaultIndex &index, const IndexChanges &changes) const;
 
     QPointer<shell::Workspace> m_workspace;
     QString m_path;
     QVariantMap m_summary;
+    /// What the last summary read, and of which state of which index.
+    Reads m_reads;
+    quint64 m_indexSerial = 0;
+    int m_indexVersion = -1;
+    bool m_refreshPosted = false;
+    int m_summariesComputed = 0;
 };
 
 } // namespace brulion::content

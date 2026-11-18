@@ -96,8 +96,9 @@ Rectangle {
     readonly property string currentPath: {
         if (sidebar.routeView === "page")
             return sidebar.routePath
-        // (Read for real: a bare `void Workspace.revision` is compiled away with the dependency.)
-        if (sidebar.routeView !== "journal" || Workspace.revision < 0)
+        // (The names: the daily note created or deleted. Read for real: a bare `void
+        // Workspace.namesRevision` is compiled away with the dependency.)
+        if (sidebar.routeView !== "journal" || Workspace.namesRevision < 0)
             return ""
         const date = AppController.routeText(AppController.currentRoute, "date")
         const p = sidebar.routePath !== "" ? sidebar.routePath : (date !== "" ? Workspace.journalPath(date) : "")
@@ -611,7 +612,7 @@ Rectangle {
                 // An empty folder opens too (folder-open) and says why nothing appears under it.
                 subtitle: isDir && expanded && !hasChildren ? qsTr("Empty folder") : ""
                 /// A page's own icon (docs/UI.md "Page icon and cover"), following its edits.
-                readonly property var pageIcon: !isDir && Workspace.revision >= 0 ? Workspace.pageIconOf(path) : ({})
+                readonly property var pageIcon: !isDir && Workspace.propertiesRevision >= 0 ? Workspace.pageIconOf(path) : ({})
                 readonly property string pageIconKind: AppController.routeText(pageIcon, "kind")
                 readonly property string pageIconName: AppController.routeText(pageIcon, "name")
                 iconName: special === "journals" ? fileIcon
@@ -833,7 +834,7 @@ Rectangle {
         required property string path
         required property string title
         property string fallbackIcon
-        readonly property var pageIcon: Workspace.revision >= 0 ? Workspace.pageIconOf(pageRow.path) : ({})
+        readonly property var pageIcon: Workspace.propertiesRevision >= 0 ? Workspace.pageIconOf(pageRow.path) : ({})
         readonly property string pageIconKind: AppController.routeText(pageIcon, "kind")
         readonly property string pageIconName: AppController.routeText(pageIcon, "name")
         width: parent.width
