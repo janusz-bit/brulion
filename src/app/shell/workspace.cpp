@@ -19,8 +19,8 @@
 #include "notebook/journals.h"
 #include "notebook/json.h"
 #include "notebook/pages.h"
-#include "notebook/periodicnotes.h"
 #include "notebook/session.h"
+#include "notebook/periodicnotes.h"
 #include "text/text.h"
 #include "util/paths.h"
 #include "vault/vault.h"
@@ -100,7 +100,7 @@ constexpr int kIndexIntervalMs = 0;
 
 QVariantMap pageEntry(const QString &path)
 {
-    return {{u"path"_s, path}, {u"title"_s, paths::pageTitle(path)}};
+    return { { u"path"_s, path }, { u"title"_s, paths::pageTitle(path) } };
 }
 
 QString lineOf(const QString &text)
@@ -1019,7 +1019,7 @@ QVariantList Workspace::suggestPages(const QString &prefix, int limit) const
     if (!m_index)
         return out;
     for (const PageSuggestion &s : m_index->suggestPages(prefix, limit)) {
-        QVariantMap m{{u"path"_s, s.path}, {u"title"_s, s.title}, {u"folder"_s, paths::dirname(s.path)}};
+        QVariantMap m{ { u"path"_s, s.path }, { u"title"_s, s.title }, { u"folder"_s, paths::dirname(s.path) } };
         if (!s.alias.isEmpty())
             m.insert(u"alias"_s, s.alias);
         out.append(m);
@@ -1624,7 +1624,7 @@ void Workspace::openUrl(const QUrl &url)
 {
     // Only links meant for the browser / mail client; never file:, javascript: or app schemes
     // from note content.
-    static const QStringList allowed{u"http"_s, u"https"_s, u"mailto"_s};
+    static const QStringList allowed{ u"http"_s, u"https"_s, u"mailto"_s };
     if (!url.isValid() || !allowed.contains(url.scheme().toLower())) {
         qCWarning(lcWorkspace) << "Refusing to open" << url.scheme() << "link";
         return;

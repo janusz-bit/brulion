@@ -28,8 +28,8 @@ using brulion::shell::Workspace;
 
 namespace {
 
-const QStringList Words = {u"notatka"_s, u"zadanie"_s, u"żółw"_s, u"łódź"_s,  u"projekt"_s, u"spotkanie"_s,
-                           u"raport"_s,  u"zakupy"_s,  u"kawa"_s, u"ogród"_s, u"dom"_s,     u"praca"_s};
+const QStringList Words = { u"notatka"_s, u"zadanie"_s, u"żółw"_s,  u"łódź"_s, u"projekt"_s, u"spotkanie"_s,
+                            u"raport"_s,  u"zakupy"_s,  u"kawa"_s, u"ogród"_s, u"dom"_s,     u"praca"_s };
 
 /// Deterministic synthetic note `i` (as in tests/core/index/tst_index_perf.cpp), with reminders
 /// around "now" so the reminder scheduler has real work at start-up.
@@ -51,15 +51,13 @@ QPair<QString, QByteArray> syntheticNote(int i, int total)
         switch (k % 6) {
         case 0: lines << u"- [ ] %1 numer %2 📅 2026-%3-%4 #%1"_s.arg(w).arg(k).arg(month, day); break;
         case 1: lines << u"  - szczegóły %1 [[%2]] ^b%3x%4"_s.arg(w, target).arg(i).arg(k); break;
-        case 2:
-            lines << u"- Tekst o %1 i %2 ((b%3x1))"_s.arg(w, Words[(k * 3) % Words.size()]).arg((i + 1) % total);
-            break;
+        case 2: lines << u"- Tekst o %1 i %2 ((b%3x1))"_s.arg(w, Words[(k * 3) % Words.size()]).arg((i + 1) % total); break;
         case 3: lines << u"- [x] zrobione %1 ✅ 2026-%2-%3"_s.arg(w, month, day); break;
         case 4: lines << u"- przypomnienie %1 ⏰ 2026-%2-%3 09:30"_s.arg(w, month, day); break;
         default: lines << u"Akapit %1: %2 [[Nieistniejąca %1]] https://example.com/%3"_s.arg(k).arg(w).arg(i);
         }
     }
-    return {path, lines.join(u'\n').toUtf8()};
+    return { path, lines.join(u'\n').toUtf8() };
 }
 
 class NullSink : public brulion::NotificationSink {
@@ -167,8 +165,7 @@ private Q_SLOTS:
         QVERIFY(sink.scheduledCount > 0);
         QVERIFY2(openMs < 15000 * BRULION_TEST_SLOWDOWN, qPrintable(u"open() took %1 ms"_s.arg(openMs)));
         // The point of chunked indexing: no long freeze while the notebook loads.
-        QVERIFY2(indexingStall < 1500 * BRULION_TEST_SLOWDOWN,
-                 qPrintable(u"the UI thread stalled for %1 ms"_s.arg(indexingStall)));
+        QVERIFY2(indexingStall < 1500 * BRULION_TEST_SLOWDOWN, qPrintable(u"the UI thread stalled for %1 ms"_s.arg(indexingStall)));
 
         // The full-text index was built in the background meanwhile: the first search is fast.
         QCOMPARE(ws.index()->pendingSearchDocuments(), 0);

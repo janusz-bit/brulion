@@ -338,8 +338,6 @@ struct IndexLoader::Private {
         return r;
     }
 
-    /// Release the merged results of the last batch (space for the workers) and take every result
-    /// that is ready.
     /// Give the merged results' space back to the workers (they may be waiting for it). Call
     /// with the mutex held.
     void releaseLocked()
@@ -353,6 +351,7 @@ struct IndexLoader::Private {
         s->workersCv.notify_all();
     }
 
+    /// Release the merged results of the last batch and take every result that is ready.
     void refill()
     {
         std::lock_guard lock(s->mutex);
