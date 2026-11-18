@@ -20,11 +20,12 @@ compared with `ef90077`) and a smooth graph (L16, compared with `64d0380` on a G
   the Journal, Pages, Search, Tasks and Calendar are kept ready in the background (2026-11-10),
   that happened after every pause. Now a list that is not on screen only notes that it is out of
   date and catches up when you open it, the folder tree changes only when files come or go, and a
-  list leaves out the changes that cannot concern it. Measured on a computer: the time the window
-  does not respond after a save fell from 0.24 to 0.10 s on a small page, from 0.65 to 0.22–0.24 s
-  on pages of 5000 blocks; typing in a 5000-block document shows a letter in 17 instead of 33 ms
-  (the slowest twentieth 20 instead of 69 ms). More is on the way ("Only what is on screen, only
-  what changed" below).
+  list leaves out the changes that cannot concern it; the save itself reads and checks the file
+  once instead of four times, and the editor draws again only what read the changed note.
+  Measured on a computer with all those views ready: the time the window does not respond after
+  a pause in typing fell from about 0.6 s to 0.01 s on an ordinary page (the program's own work
+  for a save from 85 ms to 2 ms), and from 0.75–0.8 s to 0.07–0.09 s on pages of 5000 blocks;
+  there what is left is reading the long page again, which is moving to the background next.
 
 * **No more hitches a minute after typing** (2026-11-18). A minute after every pause in typing
   the app used to write its ready index of the notebook again (L2), on the interface thread in
