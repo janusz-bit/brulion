@@ -344,3 +344,9 @@ brulion_add_test(tst_editor_mermaid
 brulion_add_test(tst_editor_tables
     SOURCES tst_editor_tables.cpp
     LIBS brulion_editor brulion_core_chart brulion_core_diagram)
+# What an index change renders again in an open page (BlockListModel::followIndex()): rows follow
+# what they read of other notes, an unrelated note's edit changes nothing, an inactive controller
+# catches up once.
+brulion_add_test(tst_editor_indexrender
+    SOURCES tst_editor_indexrender.cpp
+    LIBS brulion_editor)

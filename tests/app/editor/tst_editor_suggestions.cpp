@@ -39,6 +39,23 @@ QStringList values(const SuggestionModel &m, const QString &key)
     return out;
 }
 
+/// A host counting what the popup asks of the index.
+class CountingHost : public FakeEditorHost {
+public:
+    mutable int pageAsks = 0;
+    mutable int blockAsks = 0;
+    QVariantList suggestPages(const QString &prefix, int limit) const override
+    {
+        ++pageAsks;
+        return FakeEditorHost::suggestPages(prefix, limit);
+    }
+    QVariantList suggestBlocks(const QString &text, int limit) const override
+    {
+        ++blockAsks;
+        return FakeEditorHost::suggestBlocks(text, limit);
+    }
+};
+
 /// Incubates asynchronous QML objects only when told to: the delegates a list view builds ahead
 /// of its viewport stay half-made until then, as on a slow phone between two keystrokes.
 class HeldIncubation : public QQmlIncubationController {
@@ -528,6 +545,40 @@ private Q_SLOTS:
         host.setFile(u"B.md"_s, u"- y #beta\n"_s);
         Q_EMIT host.indexChanged();
         QCOMPARE(titles(m).size(), 4);
+    }
+
+    // The popup closed (clear(), BlockEditor.closeSuggestions()): no mode is left behind, so an
+    // index change — every save — ranks no page names and sorts no blocks.
+    void closedPopupDoesNoIndexWork()
+    {
+        CountingHost host;
+        host.setFile(u"Projekty.md"_s, u"- plan remontu ^plan1\n"_s);
+        host.setFile(u"Zakupy.md"_s, u"- [ ] Mleko, jaja ^mleko\n"_s);
+        SuggestionModel m;
+        m.setHost(&host);
+        for (const QString &mode : {u"pages"_s, u"blocks"_s}) {
+            m.setTrigger({{u"mode"_s, mode}, {u"filter"_s, u"pl"_s}});
+            QVERIFY(m.count() > 0);
+            // Open: it follows the index.
+            int asks = host.pageAsks + host.blockAsks;
+            Q_EMIT host.indexChanged();
+            QVERIFY(host.pageAsks + host.blockAsks > asks);
+            QSignalSpy modeChanged(&m, &SuggestionModel::modeChanged);
+            m.clear();
+            QCOMPARE(modeChanged.size(), 1);
+            QCOMPARE(m.mode(), QString());
+            QCOMPARE(m.filter(), QString());
+            QCOMPARE(m.count(), 0);
+            asks = host.pageAsks + host.blockAsks;
+            host.setFile(u"Łódź.md"_s, u"- Piotrkowska\n"_s);
+            Q_EMIT host.indexChanged();
+            Q_EMIT host.indexChanged();
+            QCOMPARE(host.pageAsks + host.blockAsks, asks);
+            QCOMPARE(m.count(), 0);
+            // Cleared again: nothing changes, nothing is told.
+            m.clear();
+            QCOMPARE(modeChanged.size(), 1);
+        }
     }
 };
 

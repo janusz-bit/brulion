@@ -269,8 +269,17 @@ public:
     bool english() const { return m_english; }
     void setToday(QDate today);
     QDate today() const { return m_today; }
-    /// Everything rendered may look different (index changed, links resolve differently).
+    /// Everything rendered may look different (links resolve differently, other colours, another
+    /// host): every row renders again.
     void invalidateRendering();
+    /// The host's index changed (EditorHost::indexChanged; docs/UI.md "What an index change
+    /// renders again"): only what read a changed note renders again — rows whose rendering read
+    /// something else of other notes now (a linked page's icon, the text of a `((id))` or
+    /// `[[Page#^id]]` block, a `⛔ id` task), embeds and transclusions of a changed note, tables
+    /// whose cells read one, charts of queries. A change of names (a note, attachment or alias
+    /// added, removed or renamed), a change log that does not reach back, another index or
+    /// another vault configuration: invalidateRendering().
+    void followIndex();
 
     // --- Table filters (view only: nothing is written; docs/SYNTAX.md §9) ------------------------
     /// The filter of column `column` of the table in `row` (calc::tableValueMatches(); "" none).
@@ -283,6 +292,22 @@ Q_SIGNALS:
     void visibleCountChanged();
 
 private:
+    /// What rendered text read of other notes through the host (RenderContext's pageIcon,
+    /// linkedBlockText, blockText, taskDependency) and what it got: followIndex() asks again and
+    /// renders the row again only when the answer differs. (How links resolve — resolvePage,
+    /// resolveLinkPart, journal titles — changes only with names: everything renders again then.)
+    struct RenderRead {
+        enum Kind : quint8 { Icon, LinkedBlock, BlockText, TaskDependency };
+        Kind kind = Icon;
+        bool own = true;  ///< read through renderContext() (this page), else renderContextFor(fromPath)
+        QString fromPath; ///< the note the text is written in
+        QString target;   ///< the link target as written; BlockText, TaskDependency: the id
+        QString id;       ///< LinkedBlock: the block id
+        QString note;     ///< Icon: the note the link leads to (asked again only when it changed)
+        QString value;    ///< what was read, comparable (readValue())
+    };
+    /// By kind, place and target: a construct rendered again replaces its entry.
+    using RenderReads = QHash<QString, RenderRead>;
     struct RowState {
         // Structural state (recomputed after every change, compared to emit dataChanged).
         int displayDepth = 0;
@@ -326,6 +351,16 @@ private:
         QVariantList transclusions;
         bool dependsOnRefs = false; ///< `((id))`, `[[…#^id]]`: re-render on any change of the page
         bool dependsOnCalc = false; ///< inline calculations: re-render when the calc scope may change
+        // What the rendered roles read of other notes (followIndex()). Table cells keep theirs with
+        // cellHtml (cleared together).
+        RenderReads htmlReads;
+        RenderReads propertyReads;
+        RenderReads tableReads;
+        RenderReads transclusionReads;
+        /// The notes the transclusions show or looked for (not this page: refresh() follows it),
+        /// and the `!((id))` blocks they found through the host: id -> its text then.
+        QSet<QString> transclusionSources;
+        QHash<QString, QString> transclusionBlocks;
         /// A task's subtask progress the html shows ("3/5"): re-rendered when its subtasks change.
         markdown::SubtaskProgress htmlProgress;
         int htmlCalcEpoch = -1;     ///< m_calcEpoch the html's inline calculations saw
@@ -363,6 +398,29 @@ private:
     /// titles, links resolved from `path` through the host (its resolvers never hold the model).
     markdown::RenderContext baseRenderContext(const QString &path) const;
     markdown::RenderContext renderContext(int docIndex) const;
+    /// The callbacks of `ctx` (for text written on `path`; `own`: renderContext()) also record
+    /// what they read into the RenderReads a recording names (Recording, m_recording).
+    void recordReads(markdown::RenderContext &ctx, const QString &path, bool own) const;
+    /// While alive, what rendering reads of other notes goes into `into`.
+    class Recording {
+    public:
+        Recording(const BlockListModel &model, RenderReads *into) : m_slot(model.m_recording), m_previous(*m_slot)
+        {
+            *m_slot = into;
+        }
+        ~Recording() { *m_slot = m_previous; }
+        Recording(const Recording &) = delete;
+        Recording &operator=(const Recording &) = delete;
+
+    private:
+        std::shared_ptr<RenderReads *> m_slot;
+        RenderReads *m_previous;
+    };
+    /// Contexts to ask what a RenderRead reads now (built once per followIndex()).
+    struct ReadContexts;
+    /// Some read of `reads` gives something else now; `notes`: the notes changed (an icon is asked
+    /// again only when its note changed).
+    bool readsChanged(const RenderReads &reads, const QSet<QString> &notes, ReadContexts &contexts) const;
     void ensureEmbeds(int row) const;
     /// The embeds role entry of a picture from the internet (EditorHost::webPicture).
     QVariantMap webEmbed(const Embed &em) const;
@@ -444,6 +502,16 @@ private:
     bool m_english = false;
     QDate m_today;
     mutable std::optional<VaultConfig> m_config;
+    mutable QVariantMap m_configSource; ///< the host's vaultConfig() m_config was made from
+    /// Where rendering records what it reads (nullptr: nowhere); shared with the render contexts'
+    /// callbacks, which may outlive the model.
+    std::shared_ptr<RenderReads *> m_recording = std::make_shared<RenderReads *>(nullptr);
+    /// The index version everything rendered is current with (followIndex()), of the index with
+    /// that serial (0: none followed yet).
+    quint64 m_indexSerial = 0;
+    int m_indexVersion = -1;
+    /// Follow the host's index from its current version on (everything renders again).
+    void syncIndexVersion();
 };
 
 } // namespace brulion::editor

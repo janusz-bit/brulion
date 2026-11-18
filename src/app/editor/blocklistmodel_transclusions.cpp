@@ -114,6 +114,14 @@ public:
     }
 
     bool usedOwnPage() const { return m_local; }
+    /// Remember the notes read or looked for (not this page) in `sources`, and the blocks of other
+    /// notes found by their id through the host in `blocks` (id -> text): what an index change
+    /// that touches them shows anew (BlockListModel::followIndex()).
+    void recordInto(QSet<QString> *sources, QHash<QString, QString> *blocks)
+    {
+        m_sources = sources;
+        m_blocks = blocks;
+    }
 
     /// `fromPath`: the note it is written in ("" = the model's page).
     QVariantMap build(const Transclusion &t, const QString &fromPath = QString())
@@ -193,6 +201,8 @@ private:
         }
         if (const auto it = m_docs.constFind(path); it != m_docs.constEnd())
             return Source{path, it->first, it->second.get()};
+        if (m_sources)
+            m_sources->insert(path);
         // Only notes are read (never another file a link resolved to: a scene, a canvas).
         if (!m_host || !paths::isMarkdown(path))
             return std::nullopt;
@@ -213,6 +223,8 @@ private:
                 return {m_ownPath, {}};
         }
         const QString text = m_host ? m_host->blockText(id) : QString();
+        if (m_blocks)
+            m_blocks->insert(id, text);
         if (text.isEmpty())
             return {};
         // EditorHost has no "where is this block": its block suggestions carry the ids.
@@ -383,6 +395,8 @@ private:
     const markdown::BlockDocument &m_own;
     QString m_ownPath;
     bool m_local = false;
+    QSet<QString> *m_sources = nullptr;
+    QHash<QString, QString> *m_blocks = nullptr;
     QHash<QString, std::pair<QString, std::shared_ptr<markdown::BlockDocument>>> m_docs;
 };
 
@@ -448,14 +462,25 @@ void BlockListModel::ensureTransclusions(int row) const
     st.transclusionsValid = true;
     st.transclusionsLocal = false;
     st.transclusions.clear();
+    st.transclusionReads.clear();
+    st.transclusionSources.clear();
+    st.transclusionBlocks.clear();
     if (!isTextView(cachedShape(row).view))
         return;
     const QList<Transclusion> list = transclusionsOf(m_doc.at(i).body);
+    if (list.isEmpty())
+        return;
+    // What the embeds read of other notes: followIndex() builds them again when one changes.
+    const Recording recording(*this, &st.transclusionReads);
     Builder builder(*this);
+    builder.recordInto(&st.transclusionSources, &st.transclusionBlocks);
     for (const Transclusion &t : list) {
-        // (A page that is an Obsidian Excalidraw plugin drawing is an embed of its drawing.)
-        if (drawingPageOf(t).isEmpty())
+        // (A page that is an Obsidian Excalidraw plugin drawing is an embed of its drawing — a
+        // transclusion again once it is none.)
+        if (const QString drawing = drawingPageOf(t); drawing.isEmpty())
             st.transclusions.append(builder.build(t));
+        else
+            st.transclusionSources.insert(drawing);
     }
     st.transclusionsLocal = builder.usedOwnPage();
 }

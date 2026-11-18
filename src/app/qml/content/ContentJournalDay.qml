@@ -129,6 +129,8 @@ FocusScope {
         id: page
         objectName: "journalDayController"
         host: Workspace
+        // The hidden Journal's days: index changes wait until the stream is shown again.
+        active: day.visible
         path: day.path
         allowNewBlockIds: !AppController.inDocsVault // the documentation's pages stay as shipped
         readOnly: AppSettings.readingMode // docs/UI.md "Reading mode"

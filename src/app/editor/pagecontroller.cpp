@@ -300,7 +300,7 @@ void PageController::setHost(EditorHost *host)
     flush(); // load() below replaces the text: unsaved edits are written (or copied) first
     if (m_host) {
         disconnect(m_host, nullptr, this, nullptr);
-        disconnect(m_host, nullptr, m_model, nullptr); // indexChanged, pdfThumbnailChanged below
+        disconnect(m_host, nullptr, m_model, nullptr); // pdfThumbnailChanged below
     }
     m_host = host;
     m_model->setHost(host);
@@ -309,11 +309,7 @@ void PageController::setHost(EditorHost *host)
         connect(m_host, &EditorHost::fileChanged, this, &PageController::onFileChanged);
         connect(m_host, &EditorHost::saveOpenEditorsRequested, this, &PageController::flush);
         connect(m_host, &EditorHost::editsDiscarded, this, &PageController::onEditsDiscarded);
-        connect(m_host, &EditorHost::indexChanged, m_model, &BlockListModel::invalidateRendering);
-        connect(m_host, &EditorHost::indexChanged, this, [this] {
-            m_notebookTypes.reset();
-            updateLook(); // the cover's file may have come or gone
-        });
+        connect(m_host, &EditorHost::indexChanged, this, &PageController::onIndexChanged);
         connect(m_host, &EditorHost::webPictureChanged, this, &PageController::onWebPictureChanged);
         connect(m_host, &EditorHost::pdfThumbnailChanged, m_model, &BlockListModel::pdfThumbnailChanged);
     }
@@ -523,6 +519,28 @@ void PageController::setReadOnly(bool on)
     }
     m_readOnly = on;
     Q_EMIT readOnlyChanged();
+}
+
+void PageController::setActive(bool active)
+{
+    if (active == m_active)
+        return;
+    m_active = active;
+    if (m_active && m_indexStale)
+        onIndexChanged();
+    Q_EMIT activeChanged();
+}
+
+void PageController::onIndexChanged()
+{
+    m_notebookTypes.reset();
+    // Hidden: nothing is rendered for nobody; the changes are followed at once when shown (the
+    // index's change log tells what changed meanwhile).
+    m_indexStale = !m_active;
+    if (m_indexStale)
+        return;
+    m_model->followIndex();
+    updateLook(); // the cover's file may have come or gone
 }
 
 bool PageController::refusesEdit()

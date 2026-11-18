@@ -101,8 +101,11 @@ public:
     Q_INVOKABLE void setTrigger(const QVariantMap &trigger);
     /// Item `row` as a map (all roles by name); empty for an invalid row.
     Q_INVOKABLE QVariantMap get(int row) const;
-    /// Recompute the items (e.g. after the index changed).
+    /// Recompute the items (e.g. after the index changed: only while there is a mode).
     Q_INVOKABLE void refresh();
+    /// The popup closed: no mode, filter or token, no items — an index change computes nothing
+    /// until the next trigger (a `[[` once completed ranked every page name after every save).
+    Q_INVOKABLE void clear();
 
 Q_SIGNALS:
     void hostChanged();

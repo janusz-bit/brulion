@@ -10,6 +10,7 @@
 
 #include "calc/calc.h"
 #include "chart/chart.h"
+#include "index/vaultindex.h"
 #include "markdown/inline.h"
 #include "markdown/linkformat.h"
 #include "markdown/math.h"
@@ -92,6 +93,22 @@ bool hasInlineCalc(const QString &text)
 bool hasBlockRef(const QString &text)
 {
     return text.contains(u"((") || text.contains(u"#^");
+}
+
+/// RenderRead values, comparable: a page icon, a block's text, a task dependency.
+QString iconValue(const markdown::PageIcon &icon)
+{
+    return QString::number(int(icon.kind)) + u':' + icon.name;
+}
+
+QString textValue(const std::optional<QString> &text)
+{
+    return text ? u'1' + *text : u"0"_s;
+}
+
+QString dependencyValue(const std::optional<markdown::TaskDependencyView> &dep)
+{
+    return dep ? (dep->open ? u"o"_s : u"c"_s) + dep->text : u"0"_s;
 }
 
 /// The uids of the document's blocks, in order.
@@ -983,6 +1000,8 @@ QVariantMap BlockListModel::computeTableData(int i) const
     // reference shows that block's text: never cached, the table follows every page change.
     st.resultsUseScope = formulas || hasInlineCalc(e.body);
     st.resultsUseRefs = hasBlockRef(e.body);
+    // (The reads of cells cached by text stay with them: kept and cleared with cellHtml.)
+    const Recording recording(*this, &st.tableReads);
     std::optional<markdown::InlineRenderer> renderer;
     const auto cellHtml = [&](const QString &cell) -> QString {
         if (QStringView(cell).trimmed().isEmpty())
@@ -1187,8 +1206,10 @@ void BlockListModel::setTableFilterOpen(int row, bool open)
 
 const VaultConfig &BlockListModel::vaultConfig() const
 {
-    if (!m_config)
-        m_config = vaultConfigFromMap(m_host ? m_host->vaultConfig() : QVariantMap());
+    if (!m_config) {
+        m_configSource = m_host ? m_host->vaultConfig() : QVariantMap();
+        m_config = vaultConfigFromMap(m_configSource);
+    }
     return *m_config;
 }
 
@@ -1220,6 +1241,97 @@ std::function<markdown::PageIcon(const QString &)> pageIconResolver(const QPoint
 }
 
 } // namespace
+
+struct BlockListModel::ReadContexts {
+    std::optional<markdown::RenderContext> own;
+    QHash<QString, markdown::RenderContext> foreign;
+};
+
+void BlockListModel::recordReads(markdown::RenderContext &ctx, const QString &path, bool own) const
+{
+    const std::shared_ptr<RenderReads *> slot = m_recording;
+    const QPointer<EditorHost> host = m_host;
+    // (Called only while a recording is on: *slot is set.)
+    const auto record = [slot, path, own](RenderRead::Kind kind, const QString &target, const QString &id,
+                                          const QString &note, QString value) {
+        const QString key = QString::number(int(kind)) + (own ? u"o"_s : u"f"_s) + path + u'\n' + target + u'\n' + id;
+        (*slot)->insert(key, RenderRead{kind, own, path, target, id, note, std::move(value)});
+    };
+    if (ctx.pageIcon) {
+        ctx.pageIcon = [slot, host, path, record, inner = std::move(ctx.pageIcon)](const QString &target) {
+            const markdown::PageIcon icon = inner(target);
+            if (*slot && host) {
+                // (An unresolved link has no icon until names change: everything renders again then.)
+                const QString note = host->resolveLink(target, path);
+                if (!note.isEmpty())
+                    record(RenderRead::Icon, target, QString(), note, iconValue(icon));
+            }
+            return icon;
+        };
+    }
+    if (ctx.linkedBlockText) {
+        ctx.linkedBlockText = [slot, record, inner = std::move(ctx.linkedBlockText)](const QString &target,
+                                                                                     const QString &id) {
+            std::optional<QString> text = inner(target, id);
+            if (*slot)
+                record(RenderRead::LinkedBlock, target, id, QString(), textValue(text));
+            return text;
+        };
+    }
+    if (ctx.blockText) {
+        ctx.blockText = [slot, record, inner = std::move(ctx.blockText)](const QString &id) {
+            std::optional<QString> text = inner(id);
+            if (*slot)
+                record(RenderRead::BlockText, id, QString(), QString(), textValue(text));
+            return text;
+        };
+    }
+    if (ctx.taskDependency) {
+        ctx.taskDependency = [slot, record, inner = std::move(ctx.taskDependency)](const QString &id) {
+            std::optional<markdown::TaskDependencyView> dep = inner(id);
+            if (*slot)
+                record(RenderRead::TaskDependency, id, QString(), QString(), dependencyValue(dep));
+            return dep;
+        };
+    }
+}
+
+bool BlockListModel::readsChanged(const RenderReads &reads, const QSet<QString> &notes, ReadContexts &contexts) const
+{
+    for (const RenderRead &read : reads) {
+        // A page's icon is in its own text; the texts of blocks and tasks are asked for again
+        // (a block may have moved to another note, a task id be taken by another one).
+        if (read.kind == RenderRead::Icon && !notes.contains(read.note))
+            continue;
+        const markdown::RenderContext *ctx = nullptr;
+        if (read.own) {
+            if (!contexts.own)
+                contexts.own = renderContext(0);
+            ctx = &*contexts.own;
+        } else {
+            auto it = contexts.foreign.find(read.fromPath);
+            if (it == contexts.foreign.end())
+                it = contexts.foreign.insert(read.fromPath, renderContextFor(read.fromPath, QString(), 0));
+            ctx = &*it;
+        }
+        QString now;
+        switch (read.kind) {
+        case RenderRead::Icon:
+            now = iconValue(ctx->pageIcon ? ctx->pageIcon(read.target) : markdown::PageIcon());
+            break;
+        case RenderRead::LinkedBlock:
+            now = textValue(ctx->linkedBlockText ? ctx->linkedBlockText(read.target, read.id) : std::nullopt);
+            break;
+        case RenderRead::BlockText: now = textValue(ctx->blockText ? ctx->blockText(read.target) : std::nullopt); break;
+        case RenderRead::TaskDependency:
+            now = dependencyValue(ctx->taskDependency ? ctx->taskDependency(read.target) : std::nullopt);
+            break;
+        }
+        if (now != read.value)
+            return true;
+    }
+    return false;
+}
 
 QString BlockListModel::linkUrlAt(int row, const QString &text, int position) const
 {
@@ -1307,6 +1419,7 @@ markdown::RenderContext BlockListModel::renderContext(int docIndex) const
             return r.value;
         return r.hasError() ? u"#ERR"_s : QString();
     };
+    recordReads(ctx, m_path, true);
     return ctx;
 }
 
@@ -1339,6 +1452,7 @@ markdown::RenderContext BlockListModel::renderContextFor(const QString &path, co
             return r.value;
         return r.hasError() ? u"#ERR"_s : QString();
     };
+    recordReads(ctx, path, false);
     return ctx;
 }
 
@@ -1349,6 +1463,8 @@ QString BlockListModel::renderHtml(int i) const
     if (st.htmlValid)
         return st.html;
     const BlockShape s = shapeOf(e);
+    st.htmlReads.clear();
+    const Recording recording(*this, &st.htmlReads);
     const markdown::InlineRenderer renderer(renderContext(i));
     int offset = 0;
     QString html = detail::renderBodyHtml(e, s, renderer, &offset);
@@ -2000,6 +2116,8 @@ void BlockListModel::ensureProperties(int row) const
     if (cachedShape(row).view != BlockView::Frontmatter)
         return;
     st.propertiesInfo = frontmatterPropertiesInfo(e.body);
+    st.propertyReads.clear();
+    const Recording recording(*this, &st.propertyReads);
     // Text values and list items are inline Markdown shown as rich text: links and tags work,
     // everything else is escaped (rendered like table cells).
     std::optional<markdown::InlineRenderer> renderer;
@@ -2036,15 +2154,26 @@ void BlockListModel::ensureProperties(int row) const
     st.properties = std::move(out);
 }
 
+void BlockListModel::syncIndexVersion()
+{
+    const VaultIndex *index = m_host ? m_host->taskIndex() : nullptr;
+    m_indexSerial = index ? index->serial() : 0;
+    m_indexVersion = index ? index->version() : -1;
+}
+
 void BlockListModel::invalidateRendering()
 {
     m_config.reset(); // the journal file format may have changed (links to days)
+    // What is rendered from now on reads the index as it is now (followIndex() asks again what
+    // changes after this).
+    syncIndexVersion();
     for (RowState &st : m_state) {
         st.htmlValid = false;
         st.embedsValid = false;
         st.transclusionsValid = false;
         st.propertiesValid = false; // links in values resolve differently
         st.cellHtml.clear();
+        st.tableReads.clear();
     }
     // Table cells are rendered too (links resolve differently, other colours); charts: the index
     // may give a query other results, the language its messages.
@@ -2064,6 +2193,103 @@ void BlockListModel::invalidateRendering()
     if (!m_rows.isEmpty())
         Q_EMIT dataChanged(index(0), index(int(m_rows.size()) - 1),
                            {HtmlRole, EmbedsRole, OnlyEmbedsRole, TransclusionsRole, PropertiesRole});
+    emitRowsChanged(tableRows, {TableDataRole});
+    emitRowsChanged(chartRows, {ChartDataRole});
+}
+
+void BlockListModel::followIndex()
+{
+    const VaultIndex *index = m_host ? m_host->taskIndex() : nullptr;
+    // Without an index (or another one, another configuration) nothing tells what changed.
+    if (!index || index->serial() != m_indexSerial || (m_config && m_host->vaultConfig() != m_configSource)) {
+        invalidateRendering();
+        return;
+    }
+    if (index->version() == m_indexVersion)
+        return;
+    const IndexChanges changes = index->changesSince(m_indexVersion);
+    if (!changes.complete || changes.names) {
+        invalidateRendering();
+        return;
+    }
+    m_indexVersion = index->version();
+    if (changes.notes.isEmpty())
+        return;
+    // (This page's own text is followed by refresh(): its rows render again as it is edited.)
+    const QSet<QString> notes(changes.notes.cbegin(), changes.notes.cend());
+    ReadContexts contexts;
+    QList<int> htmlRows;
+    QList<int> embedRows;
+    QList<int> transclusionRows;
+    QList<int> propertyRows;
+    QList<int> tableRows;
+    QList<int> chartRows;
+    const auto foundBlocksChanged = [this](const QHash<QString, QString> &blocks) {
+        for (auto it = blocks.cbegin(); it != blocks.cend(); ++it) {
+            if ((m_host ? m_host->blockText(it.key()) : QString()) != it.value())
+                return true;
+        }
+        return false;
+    };
+    const auto showsChanged = [&notes](const QVariant &embed) {
+        return notes.contains(embed.toMap().value(u"path"_s).toString());
+    };
+    for (int row = 0; row < m_rows.size(); ++row) {
+        const int i = docIndexOfRow(row);
+        const quint64 uid = m_rows.at(row);
+        if (i < 0 || !m_state.contains(uid))
+            continue; // never asked for: rendered when it is, from the index as it is then
+        // (Nothing below adds states: the reference stays valid.)
+        RowState &st = stateFor(uid);
+        if (st.htmlValid && readsChanged(st.htmlReads, notes, contexts)) {
+            const QString before = st.html;
+            st.htmlValid = false;
+            if (renderHtml(i) != before)
+                htmlRows.append(row);
+        }
+        // A drawing of a note (`![[Plan]]`, an Obsidian Excalidraw plugin file) changed.
+        if (st.embedsValid && std::ranges::any_of(std::as_const(st.embeds), showsChanged)) {
+            const QVariantList before = st.embeds;
+            const bool onlyBefore = st.onlyEmbeds;
+            st.embedsValid = false;
+            ensureEmbeds(row);
+            if (st.embeds != before || st.onlyEmbeds != onlyBefore)
+                embedRows.append(row);
+        }
+        if (st.transclusionsValid
+            && (st.transclusionSources.intersects(notes) || readsChanged(st.transclusionReads, notes, contexts)
+                || foundBlocksChanged(st.transclusionBlocks))) {
+            const QVariantList before = st.transclusions;
+            st.transclusionsValid = false;
+            ensureTransclusions(row);
+            if (st.transclusions != before)
+                transclusionRows.append(row);
+        }
+        if (st.propertiesValid && readsChanged(st.propertyReads, notes, contexts)) {
+            const QVariantList before = st.properties;
+            st.propertiesValid = false;
+            ensureProperties(row);
+            if (st.properties != before)
+                propertyRows.append(row);
+        }
+        if (!st.tableReads.isEmpty() && readsChanged(st.tableReads, notes, contexts)) {
+            st.cellHtml.clear();
+            st.tableReads.clear();
+            if (cachedShape(row).view == BlockView::Table && updateTable(st, i))
+                tableRows.append(row);
+        }
+        // A chart of a query: its results may be others (a table's or a calc block's follows the
+        // page, refresh()).
+        if (st.chartValid && st.chartData.value(u"query"_s).toBool()) {
+            const BlockShape &shape = cachedShape(row);
+            if (shape.view == BlockView::Chart && updateChart(st, i, shape.editText))
+                chartRows.append(row);
+        }
+    }
+    emitRowsChanged(htmlRows, {HtmlRole});
+    emitRowsChanged(embedRows, {EmbedsRole, OnlyEmbedsRole});
+    emitRowsChanged(transclusionRows, {TransclusionsRole});
+    emitRowsChanged(propertyRows, {PropertiesRole});
     emitRowsChanged(tableRows, {TableDataRole});
     emitRowsChanged(chartRows, {ChartDataRole});
 }

@@ -2852,6 +2852,8 @@ FocusScope {
     function closeSuggestions(): void {
         if (suggestions)
             suggestions.close()
+        // No mode left behind: a closed popup computes nothing when the index changes.
+        suggestionModel.clear()
     }
     Component {
         id: suggestionComponent

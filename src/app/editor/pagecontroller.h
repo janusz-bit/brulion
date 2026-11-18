@@ -194,6 +194,11 @@ class PageController : public QObject {
     /// (their text is applied and saved as usual). Changes from outside (sync, another editor)
     /// still reload the page.
     Q_PROPERTY(bool readOnly READ readOnly WRITE setReadOnly NOTIFY readOnlyChanged FINAL)
+    /// The editor is shown (default true; QML: false for an editor not visible — a day of the
+    /// hidden Journal, the page of a hidden view). While inactive, a change of the host's index
+    /// only marks the rendering stale; it is followed (BlockListModel::followIndex(), the page's
+    /// look) once when the controller is active again — before its next frame.
+    Q_PROPERTY(bool active READ active WRITE setActive NOTIFY activeChanged FINAL)
     /// The page's properties (see "Page properties" in the file comment): { items: [{ key, source
     /// ("yaml" | "logseq"), type, value (one line), raw (the typed value), items, empty, editable,
     /// multiline, linkDate }], tags: [{ name, source, property, editable }], aliases (the same; the
@@ -292,6 +297,10 @@ public:
     bool allowNewBlockIds() const { return m_allowNewBlockIds; }
     bool readOnly() const { return m_readOnly; }
     void setReadOnly(bool on);
+    bool active() const { return m_active; }
+    void setActive(bool active);
+    /// An index change is waiting for the controller to be active again.
+    bool indexStale() const { return m_indexStale; }
     void setAllowNewBlockIds(bool allow);
     /// Colours the renderer uses (from `palette`).
     const markdown::Palette &rendererPalette() const { return m_model->palette(); }
@@ -1066,6 +1075,7 @@ Q_SIGNALS:
     void modeChanged();
     void allowNewBlockIdsChanged();
     void readOnlyChanged();
+    void activeChanged();
     /// An edit was asked for while readOnly (a click on text, a checkbox, a menu's change, a key)
     /// and nothing was changed: the editor says so (once in a while) and offers to leave the mode.
     void editRefused();
@@ -1118,6 +1128,8 @@ private:
     void onFileChanged(const QString &path);
     void onEditsDiscarded(const QString &path);
     void onWebPictureChanged(const QString &url);
+    /// EditorHost::indexChanged: followed now while active, else when active again.
+    void onIndexChanged();
     /// Tell the hosts which file this editor shows (EditorHost::editorOpened/editorClosed).
     void showFile(EditorHost *host, const QString &path);
     void markDirty();
@@ -1329,6 +1341,8 @@ private:
     int m_keylessSource = -1;
     bool m_allowNewBlockIds = true;
     bool m_readOnly = false;
+    bool m_active = true;
+    bool m_indexStale = false; ///< an index change not followed yet (inactive)
     QVariantMap m_pageProperties;
     QString m_pagePropertiesText; ///< the text pageProperties was read from
     Properties m_lookProperties;  ///< the page properties `look` is read from (keys lower case)

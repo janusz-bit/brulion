@@ -700,6 +700,8 @@ FocusScope {
         id: page
         objectName: "pageController" // the shell's self-test finds the editor by it
         host: Workspace
+        // Hidden (a view ShellRouteView keeps, a closed side panel): index changes wait until shown.
+        active: root.visible
         // The documentation's pages stay as shipped (they are brought up to date on every open).
         allowNewBlockIds: !AppController.inDocsVault
         // Reading mode (docs/UI.md "Reading mode"): a device setting.
