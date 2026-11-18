@@ -2,9 +2,7 @@
 
 #include "vault/filesync.h"
 
-#include <QDir>
 #include <QFileDevice>
-#include <QFileInfo>
 #include <QString>
 
 #include <cerrno>
@@ -24,6 +22,19 @@
 using namespace Qt::StringLiterals;
 
 namespace brulion::platform {
+
+QString extendedLengthPath(const QString &absolute)
+{
+    QString native = absolute;
+    native.replace(u'/', u'\\');
+    if (native.startsWith(u"\\\\?\\"_s) || native.startsWith(u"\\\\.\\"_s))
+        return native;                // (already one, or a device)
+    if (native.startsWith(u"\\\\"_s)) // \\server\share\… -> \\?\UNC\server\share\…
+        return u"\\\\?\\UNC\\"_s + native.sliced(2);
+    if (native.size() >= 3 && native.at(0).isLetter() && native.at(1) == u':' && native.at(2) == u'\\')
+        return u"\\\\?\\"_s + native;
+    return native; // not absolute: the prefix would not resolve it
+}
 
 namespace {
 
@@ -49,26 +60,14 @@ bool syncFile(QFileDevice &file, QString *error)
     return false;
 }
 
-/// A path for the wide Win32 calls as Qt's own file calls give them (QFile made the temporary
-/// file): native separators, absolute, with the extended-length prefix — so a note deeper than
-/// MAX_PATH (260) characters is renamed like QSaveFile renames it, without the system's
-/// LongPathsEnabled. ("\\?\" also turns off the system's clean-up of the path: cleanPath() does it.)
-std::wstring win32Path(const QString &path)
-{
-    QString native = QDir::toNativeSeparators(QDir::cleanPath(QFileInfo(path).absoluteFilePath()));
-    if (native.startsWith(u"\\\\?\\"_s) || native.startsWith(u"\\\\.\\"_s))
-        return native.toStdWString();
-    if (native.startsWith(u"\\\\"_s)) // \\server\share\… -> \\?\UNC\server\share\…
-        return (u"\\\\?\\UNC\\"_s + native.sliced(2)).toStdWString();
-    return (u"\\\\?\\"_s + native).toStdWString();
-}
-
 vaultutil::Replaced replaceFile(const QString &from, const QString &to, QString *error)
 {
     // What QSaveFile's commit() does too (QFileSystemEngine::renameOverwriteFile()): one move that
     // replaces the file. No MOVEFILE_COPY_ALLOWED: both lie in one folder, and a copy would not be
     // atomic.
-    if (MoveFileExW(win32Path(from).c_str(), win32Path(to).c_str(), MOVEFILE_REPLACE_EXISTING))
+    const std::wstring source = extendedLengthPath(from).toStdWString();
+    const std::wstring target = extendedLengthPath(to).toStdWString();
+    if (MoveFileExW(source.c_str(), target.c_str(), MOVEFILE_REPLACE_EXISTING))
         return vaultutil::Replaced::Done;
     const DWORD code = GetLastError();
     if (error)
