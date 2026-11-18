@@ -2,7 +2,8 @@
 //
 // API overview (namespace brulion)
 //
-//   Vault : QObject — one vault folder; everything is synchronous on the owner's thread.
+//   Vault : QObject — one vault folder; everything is synchronous on the owner's thread, except
+//     writeTextIfUnchangedAsync() (an editor's autosave), whose work runs on an injected writer.
 //     Vault(rootPath, deviceStatePath, parent)  deviceStatePath = this vault's AppData folder:
 //         History in <dir>/history, LocalStore in <dir>/store.json. Empty = no History and an
 //         in-memory LocalStore. Vault::idForPath(root) gives the id to name that folder by
@@ -21,6 +22,9 @@
 //                             thread = readText() split in two (the index loader's workers)
 //     writeText(p, text, source) / writeBinary(p, bytes, source)
 //     writeTextIfUnchanged(p, text, expected, source) -> WriteOutcome (compare-and-swap)
+//     writeTextIfUnchangedAsync(AsyncTextWrite) -> ticket: the same, its work on the writer set by
+//                             setWriteExecutor(start) (none: at once, on this thread);
+//                             waitForWrites(), hasWritesInFlight(), reportingWrite()
 //     create(p, text) -> unique path ("Nowa notatka 2.md"), createFolder(p)
 //     rename(from, to, source)  files and folders (one Renamed change per file)
 //     remove(p, source) -> moves to .trash/, removePermanently(p, source)
@@ -71,6 +75,24 @@
 //    save or an agent's edit never overwrites what another program wrote a moment ago. A file
 //    holding other text is taken in instead (reported as External, kept in History) and Changed
 //    is returned, so the caller merges and tries again.
+//  * writeTextIfUnchangedAsync() is writeTextIfUnchanged() in two halves (Zed's save): on the
+//    vault's thread it only takes the text (implicitly shared, O(1)) and what the vault knows of
+//    the file; the writer (one thread, setWriteExecutor()) reads the file and compares its exact
+//    text with `expected`, snapshots the old bytes into History, writes atomically (QSaveFile with
+//    fsync), stats the file and its folder, hashes the bytes and runs the caller's afterWrite (the
+//    app parses the note there); back on the vault's thread the result is merged — the file's stat,
+//    hash and content, the folder's stamp for the echo (above) — `done` gets the outcome and then
+//    changed() reports the write. A file the vault does not know in a known folder, a stat that
+//    differs from the known one or content that changed behind it (anything but the plain case)
+//    is written by writeTextIfUnchanged() instead, on the vault's thread, with the same outcome.
+//    Every other vault call that reads or changes files (read*, write*, create*, rename, remove*,
+//    restore, emptyTrash, saveConfig, rescan, processPendingEvents, adoptRead, open) first waits
+//    for the writes in flight and merges them, so it sees their result: a write never lands after
+//    a rename or a deletion of its file. The watcher's batches wait while a write is in flight (at
+//    most 2 s, then they wait for the write): its echo is the vault's own, never External. The
+//    destructor waits for writes in flight without reporting them (close an app's notebook with
+//    waitForWrites() first). Queries (files(), stat(), exists()) answer what the vault knew before
+//    the write until it is merged.
 //  * remove() moves to ".trash/<path>"; when taken, " (yyyyMMdd-HHmmss)" (then " … 2", …) is
 //    inserted before the extension. The original location is remembered in the LocalStore,
 //    otherwise derived from the trash path. restore() picks a free path ("Name 2.md") when the
@@ -93,8 +115,17 @@
 //    cache: stat (size, mtime) first, content hash for text files, so touches and the echoes
 //    of the vault's own writes produce nothing. The echo of an own save costs no listing: a
 //    folder still at the modification time (ns) the save left it at — when the vault knew its
-//    entries at the time right before the save — holds what the vault knows (on storage with
-//    whole-millisecond times, and after other changes there, the folder is listed). Other
+//    entries at the time right before the save, and the folder kept its time while the data was
+//    written and synced (the save writes its temporary file itself and stamps the folder after
+//    creating it and right before the rename, so only those two system calls are trusted) —
+//    holds what the vault knows. The folder is listed instead on storage with whole-millisecond
+//    times, after other changes there, and where the folder's times follow the kernel's clock
+//    tick: Linux before 6.13 and every current Android kernel stamp ext4, f2fs and btrfs with
+//    the scheduler tick (4 ms), whose nanoseconds pass for fine-grained — another program's
+//    change in the same tick would keep the stamp. Such a kernel shows itself at the first own
+//    saves (a step of the save right after a look at the stamp leaves it as it was; multigrain
+//    times since Linux 6.13 never do), and from then on that vault lists every echo, as before
+//    the shortcut existed. Other
 //    files' attribute-only changes (touch, chmod) arriving in the same batch as that echo are
 //    found by the next rescan(), as in-place rewrites are; so is an entry another program adds
 //    within the same clock tick right after the save, on kernels without fine-grained file
@@ -197,6 +228,21 @@ struct DetachedRead {
     QString error; ///< why, when !ok (the "%2" of "Cannot read %1: %2")
 };
 
+/// A compare-and-swap write whose work runs away from the vault's thread (see
+/// Vault::writeTextIfUnchangedAsync()).
+struct AsyncTextWrite {
+    VaultPath path;
+    QString content;
+    QString expected;
+    ChangeSource source = ChangeSource::User;
+    /// On the writing thread after `content` was written (only then): `text` is the file's text as
+    /// readText() gives it. It must touch only what it captures (the app parses the note there).
+    std::function<void(const QString &text)> afterWrite = {};
+    /// On the vault's thread with the outcome, right before changed() reports what the write did
+    /// (Written: Modified; Changed: the other program's change, External).
+    std::function<void(WriteOutcome)> done = {};
+};
+
 /// Where a trashed file or folder came from.
 struct TrashInfo {
     VaultPath original;  ///< empty when it cannot be determined
@@ -293,6 +339,29 @@ public:
     /// editor's three-way merge, an agent's edit applied again) and writes again.
     WriteOutcome writeTextIfUnchanged(const VaultPath &path, const QString &content, const QString &expected,
                                       ChangeSource source = ChangeSource::User);
+    /// writeTextIfUnchanged() with its work on the writer (see the semantics): returns a ticket
+    /// (> 0) at once; `write.done` follows with the outcome on this thread — from the event loop,
+    /// from the next vault call that waits for writes, or before this returns (no writer, or the
+    /// file is not in the plain case). One writer thread keeps the writes in order.
+    quint64 writeTextIfUnchangedAsync(AsyncTextWrite write);
+    /// Where writeTextIfUnchangedAsync() runs its work: `start` runs a job on another thread (one
+    /// at a time, in order: a pool of one thread at normal priority). Empty (the default;
+    /// WebAssembly): at once, on this thread. Whatever runs `start` must outlive the vault.
+    void setWriteExecutor(std::function<void(std::function<void()>)> start);
+    /// Writes of writeTextIfUnchangedAsync() not merged yet.
+    bool hasWritesInFlight() const;
+    /// Wait for the writes in flight and merge them (their `done`, then changed()).
+    void waitForWrites();
+    /// While changed() reports the result of writeTextIfUnchangedAsync(): its ticket; 0 otherwise.
+    quint64 reportingWrite() const;
+    /// True when the file is known to hold `text` — the very string (not an equal one) a merged
+    /// writeTextIfUnchangedAsync() wrote there, and the vault has seen nothing else there since —
+    /// without reading it (an editor recognising the echo of its own save in O(1)). False means
+    /// "unknown": read it.
+    bool holdsText(const VaultPath &path, const QString &text) const;
+    /// Tests: runs on the writing thread of every write between syncing its temporary file and
+    /// renaming it over the file (another program's change at the worst moment).
+    void setBeforeRenameHook(std::function<void(const VaultPath &path)> hook);
     /// Write a new file at `path`, or at "Name 2.ext", "Name 3.ext", … when `path` is taken
     /// (case-insensitively, by files or folders, known or on disk). Folders that exist in another
     /// letter case are used as they are spelled ("projekty/Dom.md" goes into "Projekty/"), never

@@ -55,9 +55,9 @@
 //     VaultIndex::changed, PageController saved / dirtyChanged, every model's reset / layout /
 //     data / rows signals with the rows they name, QTimer::timeout labelled by the timer's parent
 //     or, parentless, by its interval and the first span in it — "timer:save" is the parentless
-//     single-shot timer with the controller's saveDelay in which a PageController emits saved or
-//     dirtyChanged: its autosave —, QML Timers) and of other brulion:: signals; the GUI
-//     thread's CPU and instructions at every lag tick (fanout_deferred_cpu_ms: work under 12 ms);
+//     single-shot timer with the controller's saveDelay in which a PageController emits saved,
+//     dirtyChanged or saveStarted (a background save sent): its autosave —, QML Timers) and of other brulion:: signals;
+//     the GUI thread's CPU and instructions at every lag tick (fanout_deferred_cpu_ms: work under 12 ms);
 //   * fsync / fdatasync / rename / renameat / renameat2 / linkat on the GUI thread (interposed:
 //     the probe defines them and calls the next definition, dlsym(RTLD_NEXT)), counts elsewhere;
 //   * per stall the GUI thread's CPU time and instructions.
@@ -433,7 +433,7 @@ public:
         }
         if (!stack.empty() && stack.back().firstChild < 0)
             stack.back().firstChild = name;
-        if (info.kind == Plain && (name == m_savedId || name == m_dirtyId)) {
+        if (info.kind == Plain && (name == m_savedId || name == m_dirtyId || name == m_saveStartedId)) {
             // PageController's autosave: the parentless single-shot timer with its saveDelay in
             // which the controller saves (other parentless timers may have the same interval —
             // PageListModel's refresh delay is 400 ms too).
@@ -507,6 +507,7 @@ private:
                     "VaultIndex.changed",
                     "PageController.saved",
                     "PageController.dirtyChanged",
+                    "PageController.saveStarted",
             };
             const QByteArray full = shortName + '.' + sig;
             if (encl == &QTimer::staticMetaObject && sig == "timeout") {
@@ -541,6 +542,7 @@ private:
     QHash<QString, int> m_ids;
     const int m_savedId = nameId(u"PageController.saved"_s);
     const int m_dirtyId = nameId(u"PageController.dirtyChanged"_s);
+    const int m_saveStartedId = nameId(u"PageController.saveStarted"_s);
 };
 SpanTracker g_spans;
 

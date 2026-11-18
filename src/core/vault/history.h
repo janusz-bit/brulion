@@ -28,6 +28,8 @@
 // the same version (the dedupe hash is over the bytes). Content is written before the
 // index, so an interrupted snapshot leaves at most an orphan that prune() removes. Index files
 // are re-read on every call, so two History objects on one directory never act on stale data.
+// Thread-safe: the vault snapshots on its writing thread (Vault::writeTextIfUnchangedAsync())
+// while the app lists or restores versions on its own.
 #pragma once
 
 #include "types.h"
@@ -37,6 +39,7 @@
 #include <QDateTime>
 #include <QHash>
 #include <QList>
+#include <QMutex>
 #include <QString>
 #include <QStringList>
 
@@ -81,6 +84,9 @@ public:
     bool snapshot(const VaultPath &path, const QString &content, const QString &reason);
     /// Record the raw bytes of a version (what the file held, whatever its encoding).
     bool snapshotBytes(const VaultPath &path, QByteArrayView bytes, const QString &reason);
+    /// The same at the given time instead of the clock's (a snapshot taken on another thread for
+    /// a write the vault's thread timed).
+    bool snapshotBytesAt(const VaultPath &path, QByteArrayView bytes, const QString &reason, const QDateTime &at);
 
     /// Snapshots of `path`, newest first.
     QList<HistoryEntry> list(const VaultPath &path) const;
@@ -123,12 +129,15 @@ private:
         QList<Stored> entries;
     };
 
+    bool snapshotLocked(const VaultPath &path, QByteArrayView bytes, const QString &reason, qint64 time);
     QString indexFile(const VaultPath &path) const;
     QString objectFile(const QString &id) const;
     std::optional<Index> loadFile(const QString &file) const;
     QList<Stored> load(const VaultPath &path) const;
-    bool save(const VaultPath &path, const QList<Stored> &entries);
-    bool writeFile(const QString &file, QByteArrayView bytes);
+    struct IndexStamp;
+    /// `written`: the stamp of the index file as written (none when it was removed or unknown).
+    bool save(const VaultPath &path, const QList<Stored> &entries, std::optional<IndexStamp> *written = nullptr);
+    bool writeFile(const QString &file, QByteArrayView bytes, std::optional<IndexStamp> *written = nullptr);
     void removeObjects(const QList<Stored> &all, const QList<Stored> &kept);
     static QList<Stored> retain(const QList<Stored> &entries, qint64 now, int maxPerPath, int maxAgeDays,
                                 int keepAtLeast);
@@ -147,6 +156,7 @@ private:
     qint64 now() const;
     bool fail(const QString &message);
 
+    mutable QMutex m_mutex; ///< every public function holds it (the private ones run under it)
     QString m_dir;
     std::function<QDateTime()> m_clock;
     HistoryPolicy m_policy;

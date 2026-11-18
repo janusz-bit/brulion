@@ -71,35 +71,52 @@ QString History::dir() const
 
 void History::setClock(std::function<QDateTime()> clock)
 {
+    const QMutexLocker lock(&m_mutex);
     m_clock = clock ? std::move(clock) : std::function<QDateTime()>(systemNow);
 }
 
 void History::setPolicy(HistoryPolicy policy)
 {
+    const QMutexLocker lock(&m_mutex);
     m_policy = policy;
 }
 
 HistoryPolicy History::policy() const
 {
+    const QMutexLocker lock(&m_mutex);
     return m_policy;
 }
 
 QString History::errorString() const
 {
+    const QMutexLocker lock(&m_mutex);
     return m_error;
 }
 
 bool History::snapshot(const VaultPath &path, const QString &content, const QString &reason)
 {
-    return snapshotBytes(path, content.toUtf8(), reason);
+    const QByteArray bytes = content.toUtf8();
+    const QMutexLocker lock(&m_mutex);
+    return snapshotLocked(path, bytes, reason, now());
 }
 
 bool History::snapshotBytes(const VaultPath &path, QByteArrayView bytes, const QString &reason)
 {
+    const QMutexLocker lock(&m_mutex);
+    return snapshotLocked(path, bytes, reason, now());
+}
+
+bool History::snapshotBytesAt(const VaultPath &path, QByteArrayView bytes, const QString &reason, const QDateTime &at)
+{
+    const QMutexLocker lock(&m_mutex);
+    return snapshotLocked(path, bytes, reason, at.toMSecsSinceEpoch());
+}
+
+bool History::snapshotLocked(const VaultPath &path, QByteArrayView bytes, const QString &reason, qint64 time)
+{
     const VaultPath p = paths::normalize(path);
     if (p.isEmpty())
         return fail(tr("History: empty path"));
-    const qint64 time = now();
     // Throttled by the newest snapshot this session knows, if the index is still as it left it:
     // no reading, no parsing, no hashing (the same answer as below, which returns true as well).
     if (const auto memo = m_newest.constFind(p);
@@ -122,13 +139,16 @@ bool History::snapshotBytes(const VaultPath &path, QByteArrayView bytes, const Q
         return false;
     entries.append(entry);
     const QList<Stored> kept = retain(entries, time, m_policy.maxPerPath, m_policy.maxAgeDays, m_policy.keepAtLeast);
-    if (!save(p, kept)) {
+    // The stamp of the index file as this save wrote it (from its temporary file, before the
+    // rename): another instance's index renamed over it afterwards has another one.
+    std::optional<IndexStamp> written;
+    if (!save(p, kept, &written)) {
         QFile::remove(objectFile(entry.id));
         return false;
     }
     removeObjects(entries, kept);
     if (!kept.isEmpty())
-        rememberNewest(p, index, kept.constLast(), indexStamp(index));
+        rememberNewest(p, index, kept.constLast(), written);
     return true;
 }
 
@@ -153,6 +173,7 @@ void History::rememberNewest(const VaultPath &path, const QString &file, const S
 
 QList<HistoryEntry> History::list(const VaultPath &path) const
 {
+    const QMutexLocker lock(&m_mutex);
     const QList<Stored> entries = load(paths::normalize(path));
     QList<HistoryEntry> out;
     out.reserve(entries.size());
@@ -187,6 +208,7 @@ QByteArray History::readBytes(const QString &id, bool *ok) const
 
 QStringList History::paths() const
 {
+    const QMutexLocker lock(&m_mutex);
     QStringList out;
     QDirIterator it(m_dir + u"/index"_s, {u"*.json"_s}, QDir::Files);
     while (it.hasNext()) {
@@ -199,6 +221,7 @@ QStringList History::paths() const
 
 bool History::rename(const VaultPath &from, const VaultPath &to)
 {
+    const QMutexLocker lock(&m_mutex);
     const VaultPath a = paths::normalize(from);
     const VaultPath b = paths::normalize(to);
     if (a == b || a.isEmpty() || b.isEmpty())
@@ -213,6 +236,7 @@ bool History::rename(const VaultPath &from, const VaultPath &to)
 
 bool History::remove(const VaultPath &path)
 {
+    const QMutexLocker lock(&m_mutex);
     const VaultPath p = paths::normalize(path);
     const QList<Stored> entries = load(p);
     if (!save(p, {}))
@@ -223,6 +247,7 @@ bool History::remove(const VaultPath &path)
 
 int History::prune(int maxPerPath, int maxAgeDays, int keepAtLeast)
 {
+    const QMutexLocker lock(&m_mutex);
     const qint64 time = now();
     int removed = 0;
     QSet<QString> live;
@@ -309,7 +334,7 @@ QList<History::Stored> History::load(const VaultPath &path) const
     return index->entries;
 }
 
-bool History::save(const VaultPath &path, const QList<Stored> &entries)
+bool History::save(const VaultPath &path, const QList<Stored> &entries, std::optional<IndexStamp> *written)
 {
     m_newest.remove(path); // (snapshotBytes() remembers what it saved)
     const QString file = indexFile(path);
@@ -327,14 +352,18 @@ bool History::save(const VaultPath &path, const QList<Stored> &entries)
                                  {u"hash"_s, e.hash}});
     }
     const QJsonObject object{{u"path"_s, path}, {u"entries"_s, array}};
-    return writeFile(file, QJsonDocument(object).toJson(QJsonDocument::Compact));
+    return writeFile(file, QJsonDocument(object).toJson(QJsonDocument::Compact), written);
 }
 
-bool History::writeFile(const QString &file, QByteArrayView bytes)
+bool History::writeFile(const QString &file, QByteArrayView bytes, std::optional<IndexStamp> *written)
 {
-    QString error;
-    if (!QDir().mkpath(QFileInfo(file).absolutePath()) || !vaultutil::saveAtomically(file, bytes, &error))
-        return fail(tr("Cannot write %1: %2").arg(file, error));
+    QDir().mkpath(QFileInfo(file).absolutePath()); // (a failure: the save says why)
+    const vaultutil::StampedSave save = vaultutil::saveAtomicallyStamped(file, bytes);
+    if (!save.ok)
+        return fail(tr("Cannot write %1: %2").arg(file, save.error));
+    if (written)
+        *written =
+                save.fileMtime ? std::optional<IndexStamp>(IndexStamp{*save.fileMtime, save.fileSize}) : std::nullopt;
     return true;
 }
 

@@ -20,6 +20,7 @@
 #include <QVariantList>
 #include <QVariantMap>
 
+#include <functional>
 #include <optional>
 
 namespace brulion {
@@ -83,6 +84,22 @@ public:
             return WriteResult::Changed;
         return write(path, content) ? WriteResult::Written : WriteResult::Failed;
     }
+    using WriteDone = std::function<void(WriteResult)>;
+    /// writeIfUnchanged() whose work may run elsewhere (an editor's autosave: the shell's vault
+    /// reads, compares, writes and parses on its writer thread). `done` follows on this thread
+    /// with the result — later, or before this returns —, before fileChanged() reports the
+    /// write. An editor starts one at a time per page. Default: writeIfUnchanged() at once.
+    virtual void writeIfUnchangedAsync(const QString &path, const QString &content, const QString &expected,
+                                       WriteDone done)
+    {
+        done(writeIfUnchanged(path, content, expected));
+    }
+    /// Wait for the writes writeIfUnchangedAsync() started: their `done` has run when this
+    /// returns. Every other file operation of the host waits for them too. Default: none.
+    virtual void waitForWrites() { }
+    /// True when the file is known to hold `text` (the very string an editor's write left there,
+    /// nothing else seen since) without reading it; false: unknown. Default: false.
+    virtual bool holdsText(const QString & /*path*/, const QString & /*text*/) const { return false; }
     /// An editor shows `path` now / no longer shows it (PageController: loading, following a
     /// rename, another path or host, destruction). The host may watch the files editors show
     /// for programs that rewrite them in place; several editors can show one file. Default:

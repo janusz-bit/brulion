@@ -792,31 +792,58 @@ void VaultPrivate::scheduleCheck(const VaultPath &path)
         batchTimer.start();
 }
 
-void VaultPrivate::noteOwnWrite(const VaultPath &dir, std::optional<qint64> before)
+bool VaultPrivate::foreignBatchPending(const VaultPath &dir) const
+{
+    // A batch already queued for the folder may hold another program's change — unless it is the
+    // echo of an own write that left the folder at its known stamp.
+    return pendingDirs.contains(dir) && !ownEchoes.contains(dir);
+}
+
+void VaultPrivate::noteOwnWrite(const VaultPath &dir, const vaultutil::StampedSave &save, bool pendingBefore)
 {
     // Only from the stamp at which the vault knew the folder: what other programs did to its
-    // entries since is still to be seen. A batch already queued for the folder may hold such a
-    // change too — unless it is the echo of an own write that left the folder at that stamp.
+    // entries since is still to be seen. Between `before` and `after` the write itself changed
+    // them twice (the temporary file, the rename), each a single system call; while the data was
+    // written and synced the folder must have kept its stamp (`afterTemp` == `beforeRename`), or
+    // another program changed it meanwhile.
+    // Kernels that stamp files with their clock tick (Linux before 6.13, Android's) let two own
+    // steps right after a query of the stamp keep it: then another program's change in the same
+    // tick would keep it too, and no own write is trusted again (fine-grained times — multigrain
+    // since Linux 6.13 — always move a stamp that was looked at).
+    if ((save.before && save.afterTemp && *save.before == *save.afterTemp)
+        || (save.beforeRename && save.after && *save.beforeRename == *save.after))
+        coarseFolderTimes = true;
     const auto known = folderStamps.constFind(dir);
-    const bool fromKnown = before && known != folderStamps.cend() && *known == *before
-                           && (!pendingDirs.contains(dir) || ownEchoes.contains(dir));
-    const std::optional<qint64> after = fromKnown ? vaultutil::fineMtime(absPath(dir)) : std::nullopt;
-    // A write that left the stamp as it was cannot be told from another program's change after
-    // it (timestamps coarser than they look): the echo lists the folder.
-    if (!after || *after == *before) {
+    const bool trusted = !coarseFolderTimes && !pendingBefore && save.before && save.afterTemp && save.beforeRename
+                         && save.after && known != folderStamps.cend() && *known == *save.before
+                         && *save.afterTemp == *save.beforeRename;
+    if (!trusted) {
         folderStamps.remove(dir);
         ownEchoes.remove(dir);
         return;
     }
     if (!echoClock.isValid())
         echoClock.start();
-    folderStamps.insert(dir, *after);
+    folderStamps.insert(dir, *save.after);
     // The echo comes with the next batch; one that waits longer is not trusted.
     ownEchoes.insert(dir, echoClock.elapsed() + std::max<qint64>(2000, 2LL * batchTimer.interval()));
 }
 
 void VaultPrivate::processPendingEvents()
 {
+    if (!writes.isEmpty()) {
+        // The batch may hold the echo of a write in flight: it waits for the write's result
+        // (mergeWrite() starts it again) — at most kMaxEchoWaitMs, then for the write itself.
+        if (!batchDeferred.isValid()) {
+            batchDeferred.start();
+            writeWaitTimer.start(kMaxEchoWaitMs);
+        }
+        if (batchDeferred.elapsed() < kMaxEchoWaitMs)
+            return;
+        waitForWrites();
+    }
+    batchDeferred.invalidate();
+    writeWaitTimer.stop();
     batchTimer.stop();
     ScanScope scope{.dirs = std::exchange(pendingDirs, {}), .files = std::exchange(pendingFiles, {})};
     if (!ownEchoes.isEmpty()) {
@@ -918,6 +945,7 @@ void Vault::setRescanInterval(int msec)
 
 QList<VaultChange> Vault::rescan()
 {
+    d->waitForWrites();
     if (!d->isOpen)
         return {};
     // A full rescan covers everything queued by the watcher.
@@ -937,6 +965,7 @@ QList<VaultChange> Vault::rescan()
 
 void Vault::processPendingEvents()
 {
+    d->waitForWrites();
     d->processPendingEvents();
 }
 

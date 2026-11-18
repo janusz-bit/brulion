@@ -18,6 +18,24 @@ using namespace vaulttest;
 
 namespace {
 
+/// Whether the file system's folder times are fine-grained (multigrain): a change right after a
+/// look at the stamp always moves it. Kernels that stamp with their clock tick (Linux before
+/// 6.13, Android) keep it — the vault then lists every echo of its own saves.
+bool fineFolderTimes(const QString &dir)
+{
+    for (int i = 0; i < 3; ++i) {
+        const std::optional<qint64> before = vaultutil::fineMtime(dir);
+        const QString probe = dir + u"/.brulion-tmp-probe"_s;
+        if (QFile file(probe); !file.open(QIODevice::WriteOnly))
+            return false;
+        const std::optional<qint64> after = vaultutil::fineMtime(dir);
+        QFile::remove(probe);
+        if (!before || !after || *before == *after)
+            return false;
+    }
+    return true;
+}
+
 qint64 diskMtime(const QString &abs)
 {
     return QFileInfo(abs).fileTime(QFileDevice::FileModificationTime, QTimeZone(QTimeZone::UTC)).toMSecsSinceEpoch();
@@ -360,6 +378,7 @@ private Q_SLOTS:
         f.write(path, "- start\n");
         for (int i = 0; i < 30; ++i)
             f.write(folder + u"inna %1 ąę.md"_s.arg(i), "- inna\n");
+        const bool fine = fineFolderTimes(QFileInfo(f.root() + u'/' + path).absolutePath());
         QVERIFY(f.open());
         f.vault->startWatching();
         QString content = f.text(path);
@@ -372,7 +391,7 @@ private Q_SLOTS:
             QTest::qWait(200); // the echo arrives and is handled
             f.vault->processPendingEvents();
 #ifdef Q_OS_LINUX
-            if (vaultutil::fineMtime(f.root()))
+            if (fine)
                 QCOMPARE(f.vault->listedFolders(), listed);
 #else
             Q_UNUSED(listed)

@@ -5,14 +5,27 @@
 
 #include <QFile>
 #include <QFileInfo>
+#include <QRandomGenerator>
 #include <QRegularExpression>
 #include <QSaveFile>
 #include <QSet>
 #include <QThread>
 
 #include <algorithm>
+#include <cerrno>
 #include <chrono>
+#include <cstdlib>
+#include <cstring>
 #include <filesystem>
+
+// fsync() of the C library: saveAtomicallyStamped() syncs its temporary file itself, so the
+// folder's entries change only by the creation of that file and the rename (QSaveFile syncs
+// inside commit(), right before its rename). A feature test, not a platform switch: without it
+// (MSVC's C library) the save is QSaveFile's.
+#if __has_include(<unistd.h>)
+#include <unistd.h>
+#define BRULION_VAULT_OWN_SYNC 1
+#endif
 
 using namespace Qt::StringLiterals;
 
@@ -122,12 +135,77 @@ bool saveAtomically(const QString &absolutePath, QByteArrayView bytes, QString *
     }
 }
 
+namespace {
+
+std::filesystem::path fsPath(const QString &absolutePath)
+{
+    const QByteArray utf8 = absolutePath.toUtf8();
+    return std::filesystem::path(
+            std::u8string(reinterpret_cast<const char8_t *>(utf8.constData()), static_cast<size_t>(utf8.size())));
+}
+
+} // namespace
+
+StampedSave saveAtomicallyStamped(const QString &absolutePath, QByteArrayView bytes,
+                                  const std::function<void()> &beforeRename)
+{
+    StampedSave out;
+#ifdef BRULION_VAULT_OWN_SYNC
+    const QFileInfo target(absolutePath);
+    const QString dir = target.absolutePath();
+    out.before = fineMtime(dir);
+    QFile temp;
+    for (int attempt = 0;; ++attempt) {
+        const QString name = u".brulion-tmp-%1"_s.arg(QRandomGenerator::global()->generate64(), 16, 16, QChar(u'0'));
+        temp.setFileName(dir + u'/' + name);
+        if (temp.open(QIODevice::WriteOnly | QIODevice::NewOnly))
+            break;
+        if (attempt >= 8 || !temp.exists()) {
+            out.error = temp.errorString();
+            return out;
+        }
+    }
+    out.afterTemp = fineMtime(dir);
+    const auto failed = [&](const QString &why) {
+        out.error = why;
+        temp.close();
+        temp.remove();
+        return out;
+    };
+    if (target.exists())
+        temp.setPermissions(target.permissions()); // (QSaveFile keeps them too)
+    if (temp.write(bytes.data(), bytes.size()) != bytes.size() || !temp.flush())
+        return failed(temp.errorString());
+    if (::fsync(temp.handle()) != 0)
+        return failed(QString::fromLocal8Bit(std::strerror(errno)));
+    out.fileMtime = fineMtime(temp.fileName());
+    out.fileSize = temp.size();
+    temp.close();
+    if (beforeRename)
+        beforeRename();
+    out.beforeRename = fineMtime(dir);
+    std::error_code error;
+    std::filesystem::rename(fsPath(temp.fileName()), fsPath(absolutePath), error);
+    if (error) {
+        out.error = QString::fromStdString(error.message());
+        QFile::remove(temp.fileName());
+        out.before = out.afterTemp = out.beforeRename = out.fileMtime = std::nullopt;
+        return out;
+    }
+    out.after = fineMtime(dir);
+    out.ok = true;
+#else
+    if (beforeRename)
+        beforeRename();
+    out.ok = saveAtomically(absolutePath, bytes, &out.error);
+#endif
+    return out;
+}
+
 std::optional<qint64> fineMtime(const QString &absolutePath)
 {
     // QFileInfo has milliseconds only: std::filesystem reads the nanoseconds.
-    const QByteArray utf8 = absolutePath.toUtf8();
-    const std::filesystem::path path(
-            std::u8string(reinterpret_cast<const char8_t *>(utf8.constData()), static_cast<size_t>(utf8.size())));
+    const std::filesystem::path path = fsPath(absolutePath);
     std::error_code error;
     const std::filesystem::file_time_type time = std::filesystem::last_write_time(path, error);
     if (error)

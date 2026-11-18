@@ -5779,6 +5779,202 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         QCOMPARE(host.file(u"B.md"_s), u"- bb\n"_s);
     }
 
+    // --- background saves (saveInBackground: the host's write completes later) ----------------------
+
+    void backgroundSaveCompletesLater()
+    {
+        Fixture f(u"- a\n- b\n"_s, 10000);
+        f.host.setDeferWrites(true);
+        QSignalSpy saved(&f.page, &PageController::saved);
+        f.page.setEditText(0, u"a źdźbło"_s, 8);
+        QVERIFY(f.page.dirty());
+        f.page.saveInBackground();
+        QVERIFY(f.page.writeInFlight());
+        QCOMPARE(f.host.pendingWrites(), 1);
+        // Until the write is done the merge base stays the file's text.
+        QCOMPARE(f.page.savedText(), u"- a\n- b\n"_s);
+        QVERIFY(f.page.dirty());
+        QCOMPARE(saved.size(), 0);
+        f.host.completeWrites();
+        QVERIFY(!f.page.writeInFlight());
+        QCOMPARE(f.page.savedText(), u"- a źdźbło\n- b\n"_s);
+        QCOMPARE(f.host.file(Page), u"- a źdźbło\n- b\n"_s);
+        QVERIFY(!f.page.dirty());
+        QCOMPARE(saved.size(), 1);
+        QCOMPARE(f.host.casRefusals(), 0);
+    }
+
+    // The autosave timer saves in the background.
+    void autosaveTimerSavesInTheBackground()
+    {
+        Fixture f(u"- a\n"_s, 30);
+        f.host.setDeferWrites(true);
+        f.page.setEditText(0, u"a ąę"_s, 4);
+        QTRY_COMPARE(f.host.pendingWrites(), 1);
+        QVERIFY(f.page.writeInFlight());
+        QCOMPARE(f.host.pendingWriteText(0), u"- a ąę\n"_s);
+        f.host.completeWrites();
+        QVERIFY(!f.page.dirty());
+    }
+
+    // Edits made while a write is in flight keep the page dirty and are saved next, over the text
+    // in flight; only one write is in flight at a time.
+    void editsDuringABackgroundSaveAreSavedNext()
+    {
+        Fixture f(u"- a\n"_s, 10000);
+        f.host.setDeferWrites(true);
+        f.page.setEditText(0, u"a 1"_s, 3);
+        f.page.saveInBackground();
+        f.page.setEditText(0, u"a 1 2"_s, 5);
+        f.page.saveInBackground(); // in flight: nothing more is sent
+        QCOMPARE(f.host.pendingWrites(), 1);
+        f.host.completeWrites();
+        QCOMPARE(f.page.savedText(), u"- a 1\n"_s);
+        QVERIFY(f.page.dirty());
+        f.page.saveInBackground();
+        QCOMPARE(f.host.pendingWrites(), 1);
+        f.host.completeWrites();
+        QCOMPARE(f.host.file(Page), u"- a 1 2\n"_s);
+        QVERIFY(!f.page.dirty());
+        QCOMPARE(f.host.casRefusals(), 0);
+        // Edits that come back to the text in flight: clean once it is written.
+        f.page.setEditText(0, u"a 1 2 3"_s, 7);
+        f.page.saveInBackground();
+        f.page.setEditText(0, u"a 1 2 3 4"_s, 9);
+        f.page.setEditText(0, u"a 1 2 3"_s, 7);
+        f.host.completeWrites();
+        QVERIFY(!f.page.dirty());
+    }
+
+    // save() (navigation, closing, the app going to the background) waits for the write in
+    // flight, then writes what is left synchronously.
+    void saveWaitsForTheWriteInFlight()
+    {
+        Fixture f(u"- a\n"_s, 10000);
+        f.host.setDeferWrites(true);
+        f.page.setEditText(0, u"a 1"_s, 3);
+        f.page.saveInBackground();
+        f.page.setEditText(0, u"a 1 ółw"_s, 7);
+        QVERIFY(f.page.save());
+        QCOMPARE(f.host.pendingWrites(), 0);
+        QVERIFY(!f.page.writeInFlight());
+        QCOMPARE(f.host.file(Page), u"- a 1 ółw\n"_s);
+        QCOMPARE(f.page.savedText(), u"- a 1 ółw\n"_s);
+        QVERIFY(!f.page.dirty());
+        QCOMPARE(f.host.casRefusals(), 0);
+        QCOMPARE(f.page.savedLineAt(0), 0); // (saves, waiting for nothing)
+    }
+
+    // Another program changed the file before the write's compare: the result arrives as Changed,
+    // the change is merged and the merged text saved — or a real conflict waits for the user.
+    void backgroundSaveFindsAnotherProgramsChange()
+    {
+        Fixture f(u"- a\n- b\n"_s, 10000);
+        f.page.setMergeFunction([](const QString &base, const QString &local, const QString &remote) {
+            if (remote == base + u"- od agenta: żółw\n"_s)
+                return MergeOutcome{local + u"- od agenta: żółw\n"_s, true};
+            return MergeOutcome{local, false};
+        });
+        f.host.setDeferWrites(true);
+        QSignalSpy merged(&f.page, &PageController::externallyChanged);
+        f.page.setEditText(0, u"a lokalnie"_s, 10);
+        f.page.saveInBackground();
+        f.host.setFile(Page, u"- a\n- b\n- od agenta: żółw\n"_s); // between the start and the compare
+        f.host.completeWrites();
+        QCOMPARE(f.host.casRefusals(), 1);
+        QCOMPARE(merged.size(), 1);
+        QCOMPARE(f.text(), u"- a lokalnie\n- b\n- od agenta: żółw\n"_s);
+        QVERIFY(f.page.dirty());
+        // The merged text goes out again by itself (outside the delivery of the result).
+        QTRY_COMPARE(f.host.pendingWrites(), 1);
+        f.host.completeWrites();
+        QCOMPARE(f.host.file(Page), u"- a lokalnie\n- b\n- od agenta: żółw\n"_s);
+        QVERIFY(!f.page.dirty());
+
+        // A real conflict: nothing is overwritten.
+        f.page.setEditText(1, u"b lokalnie"_s, 10);
+        f.page.saveInBackground();
+        f.host.setFile(Page, u"- a zdalnie\n"_s);
+        f.host.completeWrites();
+        QVERIFY(f.page.conflict());
+        QCOMPARE(f.host.file(Page), u"- a zdalnie\n"_s);
+        QCOMPARE(f.host.pendingWrites(), 0);
+        QTest::qWait(20);
+        QCOMPARE(f.host.pendingWrites(), 0);
+    }
+
+    // A failed write is reported with its result: the page stays dirty and the next save writes it.
+    void backgroundSaveFails()
+    {
+        Fixture f(u"- a\n"_s, 10000);
+        f.host.setDeferWrites(true);
+        QSignalSpy failed(&f.page, &PageController::saveFailed);
+        f.page.setEditText(0, u"a 1"_s, 3);
+        f.page.saveInBackground();
+        f.host.setFailWrites(true);
+        f.host.completeWrites();
+        QCOMPARE(failed.size(), 1);
+        QVERIFY(f.page.dirty());
+        QVERIFY(!f.page.writeInFlight());
+        QCOMPARE(f.page.savedText(), u"- a\n"_s);
+        f.host.setFailWrites(false);
+        f.page.saveInBackground();
+        f.host.completeWrites();
+        QCOMPARE(f.host.file(Page), u"- a 1\n"_s);
+        QVERIFY(!f.page.dirty());
+    }
+
+    // The page goes (destroyed, another path or host) while its write is in flight: the write
+    // completes first and nothing of it lands on the next page.
+    void pageGoesDuringABackgroundSave_data()
+    {
+        QTest::addColumn<QString>("how");
+        QTest::newRow("destroyed") << u"destroyed"_s;
+        QTest::newRow("another path") << u"path"_s;
+        QTest::newRow("another host") << u"host"_s;
+        QTest::newRow("edits discarded") << u"discarded"_s;
+    }
+    void pageGoesDuringABackgroundSave()
+    {
+        QFETCH(QString, how);
+        FakeEditorHost host;
+        FakeEditorHost other;
+        host.setFile(Page, u"- a\n"_s);
+        host.setFile(u"Inna.md"_s, u"- inna\n"_s);
+        other.setFile(Page, u"- w innym\n"_s);
+        host.setDeferWrites(true);
+        auto page = std::make_unique<PageController>();
+        page->setSaveDelay(10000);
+        page->setHost(&host);
+        page->setPath(Page);
+        page->setEditText(0, u"a ostatnie"_s, 10);
+        page->saveInBackground();
+        QVERIFY(page->writeInFlight());
+        if (how == "destroyed"_L1) {
+            page.reset();
+            QCOMPARE(host.file(Page), u"- a ostatnie\n"_s);
+        } else if (how == "path"_L1) {
+            page->setPath(u"Inna.md"_s);
+            QCOMPARE(host.file(Page), u"- a ostatnie\n"_s);
+            QCOMPARE(page->text(), u"- inna\n"_s);
+            QVERIFY(!page->dirty());
+            QCOMPARE(page->savedText(), u"- inna\n"_s);
+        } else if (how == "host"_L1) {
+            page->setHost(&other);
+            QCOMPARE(host.file(Page), u"- a ostatnie\n"_s);
+            QCOMPARE(page->text(), u"- w innym\n"_s);
+            QCOMPARE(other.file(Page), u"- w innym\n"_s);
+        } else {
+            Q_EMIT host.editsDiscarded(Page);
+            QVERIFY(!page->dirty());
+            host.completeWrites();
+            QVERIFY(!page->dirty());
+            QVERIFY(!page->writeInFlight());
+        }
+        QCOMPARE(host.pendingWrites(), 0);
+        QCOMPARE(host.casRefusals(), 0);
+    }
+
     // --- external changes ---------------------------------------------------------------------------
 
     void externalChangeReloadsWhenClean()

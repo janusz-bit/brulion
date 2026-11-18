@@ -366,6 +366,18 @@ def save_metrics(run):
             m["save_fsync_n"] = len(fs)
             rn = [(t, d) for t, d, k in run["io"] if k.startswith("rename") and inside(t)]
             m["save_rename_ms"] = sum(d for _, d in rn)
+            # A save in the background (PageController.saveStarted inside the timer): its result
+            # is merged later from the event loop — the vault's merge, the editor's `saved`, the
+            # index update and the direct fan-out of Vault.changed. Its outermost spans outside the
+            # save timer: what the merge costs the GUI thread.
+            merge = [x for x in spans if not x.qml and x.depth == 0 and not inside(x.t)
+                     and x.name in ("Vault.changed", "PageController.saved", "PageController.dirtyChanged")
+                     and saves[0].t <= x.t < max(s.end for s in saves) + FANOUT_MS]
+            if merge:
+                m["save_merge_ms"] = sum(x.incl for x in merge)
+                m["save_merge_cpu_ms"] = sum(x.icpu for x in merge)
+                if insns:
+                    m["save_merge_insns_M"] = sum(x.iins for x in merge)
             fa, save_end = saves[0].t, max(x.end for x in saves)
             fb = save_end + FANOUT_MS
             if win:

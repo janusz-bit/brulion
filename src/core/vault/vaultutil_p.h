@@ -66,6 +66,31 @@ QByteArray utf8Bom();
 /// tenth of a second, as Syncthing and editors do; any other failure is final. `error`: why not.
 bool saveAtomically(const QString &absolutePath, QByteArrayView bytes, QString *error);
 
+/// What saveAtomicallyStamped() saw of the folder around its own changes of the folder's entries.
+struct StampedSave {
+    bool ok = false;
+    QString error; ///< why not, when !ok
+    /// The folder's fineMtime(): right before the temporary file was created, right after it was
+    /// created, right before the rename over the file and right after it. Equal `afterTemp` and
+    /// `beforeRename`: nothing changed the folder's entries while the data was written and synced,
+    /// so between `before` and `after` only the creation of the temporary file and the rename
+    /// happened there (each one system call) — unless another program changed it in the same
+    /// clock tick. nullopt where unknown (coarse times, the fallback without a sync of its own).
+    std::optional<qint64> before, afterTemp, beforeRename, after;
+    /// The written file's fineMtime() and size, taken from the temporary file before the rename
+    /// (another program's file renamed over it later has another stamp).
+    std::optional<qint64> fileMtime;
+    qint64 fileSize = -1;
+};
+
+/// saveAtomically() that writes the temporary file itself (`.brulion-tmp-…` in the same folder,
+/// the existing file's permissions), syncs it to the disk and only then renames it over the file,
+/// taking the folder's stamps around each step (StampedSave). `beforeRename` (tests) runs between
+/// the sync and the rename. Where the C library has no fsync() (MSVC) it is saveAtomically()
+/// without stamps.
+StampedSave saveAtomicallyStamped(const QString &absolutePath, QByteArrayView bytes,
+                                  const std::function<void()> &beforeRename = {});
+
 /// The modification time of the folder (or file) at `absolutePath` in nanoseconds (of the file
 /// system's clock, not the Unix epoch), when the file system keeps it finer than milliseconds:
 /// nullopt when it cannot be read or is a whole millisecond (coarse timestamps — FAT, exFAT,

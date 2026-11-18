@@ -288,6 +288,7 @@ bool FakeEditorHost::setTaskStatus(const QString &path, int line, const QString 
 
 QString FakeEditorHost::read(const QString &path, bool *ok)
 {
+    waitForWrites();
     const auto it = m_files.constFind(path);
     if (ok)
         *ok = it != m_files.constEnd();
@@ -296,6 +297,7 @@ QString FakeEditorHost::read(const QString &path, bool *ok)
 
 bool FakeEditorHost::write(const QString &path, const QString &content)
 {
+    waitForWrites();
     if (m_failWrites)
         return false;
     m_files.insert(path, content);
@@ -308,12 +310,46 @@ bool FakeEditorHost::write(const QString &path, const QString &content)
 EditorHost::WriteResult FakeEditorHost::writeIfUnchanged(const QString &path, const QString &content,
                                                          const QString &expected)
 {
+    waitForWrites();
+    return compareAndWrite(path, content, expected);
+}
+
+void FakeEditorHost::writeIfUnchangedAsync(const QString &path, const QString &content, const QString &expected,
+                                           WriteDone done)
+{
+    if (!m_deferWrites) {
+        EditorHost::writeIfUnchangedAsync(path, content, expected, std::move(done));
+        return;
+    }
+    m_pendingWrites.append(PendingWrite{path, content, expected, std::move(done)});
+}
+
+void FakeEditorHost::completeWrites(int count)
+{
+    while (!m_pendingWrites.isEmpty() && count-- != 0) {
+        PendingWrite write = m_pendingWrites.takeFirst();
+        const WriteResult result = compareAndWrite(write.path, write.content, write.expected);
+        write.done(result);
+        if (result != WriteResult::Failed)
+            Q_EMIT fileChanged(write.path);
+    }
+}
+
+EditorHost::WriteResult FakeEditorHost::compareAndWrite(const QString &path, const QString &content,
+                                                        const QString &expected)
+{
     const auto it = m_files.constFind(path);
     if (it != m_files.constEnd() && *it != expected) {
         ++m_casRefusals;
         return WriteResult::Changed;
     }
-    return write(path, content) ? WriteResult::Written : WriteResult::Failed;
+    if (m_failWrites)
+        return WriteResult::Failed;
+    m_files.insert(path, content);
+    ++m_writeCount;
+    Q_EMIT written(path);
+    filesChanged();
+    return WriteResult::Written;
 }
 
 QVariantList FakeEditorHost::suggestPages(const QString &prefix, int limit) const
@@ -789,6 +825,7 @@ void FakeEditorHost::overwriteTextAsset(const QString &path, const QString &cont
 
 void FakeEditorHost::externalWrite(const QString &path, const QString &content)
 {
+    waitForWrites(); // (as the shell's vault takes a change in only after its own writes)
     m_files.insert(path, content);
     Q_EMIT fileChanged(path);
     filesChanged();
@@ -796,6 +833,7 @@ void FakeEditorHost::externalWrite(const QString &path, const QString &content)
 
 void FakeEditorHost::removeFile(const QString &path)
 {
+    waitForWrites();
     if (m_files.remove(path)) {
         Q_EMIT fileChanged(path);
         filesChanged();
