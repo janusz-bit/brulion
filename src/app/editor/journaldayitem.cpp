@@ -1017,16 +1017,27 @@ QSGNode *JournalDayItem::updatePaintNode(QSGNode *old, UpdatePaintNodeData *)
         return nullptr;
     }
     const qreal dpr = win->effectiveDevicePixelRatio();
-    auto *previous = static_cast<DayNode *>(old);
-    if (previous && !m_nodesDirty && qFuzzyCompare(previous->dpr, dpr))
-        return previous;
-    // A new node with every decoration (nodes added to a drawn node later were not drawn: see
-    // RenderedTextItem's RootNode); the sprites' textures go over to it.
-    auto *root = new DayNode;
-    root->dpr = dpr;
-    if (previous && qFuzzyCompare(previous->dpr, dpr))
-        root->textures = std::exchange(previous->textures, {});
-    delete previous;
+    // One root node for the item's life (Qt Quick removes the node it gave out itself when another
+    // one comes back: the item must not delete it); its children are made again when the
+    // decorations change, the sprites' textures kept.
+    auto *root = static_cast<DayNode *>(old);
+    if (!root) {
+        root = new DayNode;
+        root->dpr = dpr;
+        m_nodesDirty = true;
+    }
+    if (!qFuzzyCompare(root->dpr, dpr)) {
+        qDeleteAll(root->textures);
+        root->textures.clear();
+        root->dpr = dpr;
+        m_nodesDirty = true;
+    }
+    if (!m_nodesDirty)
+        return root;
+    while (QSGNode *child = root->firstChild()) {
+        root->removeChildNode(child);
+        delete child;
+    }
     QHash<QString, QSGTexture *> used;
     for (const Decoration &deco : std::as_const(m_decorations)) {
         if (deco.kind == Decoration::Kind::Rect) {

@@ -17,6 +17,7 @@
 #include <QSignalSpy>
 #include <QTest>
 
+#include <cmath>
 #include <memory>
 
 using namespace brulion::editor;
@@ -343,6 +344,38 @@ private Q_SLOTS:
         QVERIFY(f.value(0, "height") != before);
         f.item->setProperty("touchUi", true);
         QCOMPARE(f.value(0, "topPad"), 4.0);
+    }
+
+    void finiteGeometry_data()
+    {
+        QTest::addColumn<QString>("markdown");
+        QTest::addColumn<bool>("touch");
+        const QString day =
+                u"- Spotkanie z zespołem o synchronizacji #praca\n- [ ] Wysłać notatki 📅 2026-10-16 🔁 co "
+                u"tydzień\n- Lista zakupów:\n  - mleko\n  - chleb\n    - razowy\n- Link do [[Kraków]] i #pomysł\n"_s;
+        QTest::newRow("chips, nesting") << day << false;
+        QTest::newRow("chips, nesting, touch") << day << true;
+    }
+    void finiteGeometry()
+    {
+        // Every rectangle drawn is finite (a NaN or an infinite one makes the software renderer
+        // paint nothing more).
+        QFETCH(QString, markdown);
+        QFETCH(bool, touch);
+        Fixture f(markdown, false, touch);
+        QVERIFY(f.item->drawable());
+        for (const JournalDayItem::Decoration &d : f.item->decorations()) {
+            const QRectF r = d.rect;
+            QVERIFY2(std::isfinite(r.x()) && std::isfinite(r.y()) && std::isfinite(r.width())
+                             && std::isfinite(r.height()) && r.width() < 2000 && r.height() < 2000,
+                     qPrintable(
+                             u"%1: %2,%3 %4x%5"_s.arg(d.sprite).arg(r.x()).arg(r.y()).arg(r.width()).arg(r.height())));
+        }
+        for (QQuickItem *child : f.item->childItems()) {
+            const QRectF r(child->position(), child->size());
+            QVERIFY2(std::isfinite(r.x()) && std::isfinite(r.y()) && r.width() < 2000 && r.height() < 2000,
+                     qPrintable(u"%1,%2 %3x%4"_s.arg(r.x()).arg(r.y()).arg(r.width()).arg(r.height())));
+        }
     }
 
     void sprites()
