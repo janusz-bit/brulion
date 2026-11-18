@@ -95,7 +95,9 @@ Item {
         Binding {
             target: richLinks
             property: "font"
-            value: layer.edit !== null ? layer.edit.font : layer.plainText.font
+            // (Any other text item — a RenderedTextItem for a moment while a screen reader starts
+            // and BlockText goes back to rich text — leaves the default font.)
+            value: layer.edit !== null ? layer.edit.font : layer.plainText !== null ? layer.plainText.font : layer.defaultFont
             when: layer.edit !== null || layer.plainText !== null
         }
 

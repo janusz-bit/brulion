@@ -83,6 +83,13 @@ bool ownsMember(const QObject *object, const QByteArray &name)
     return false;
 }
 
+/// A block's rendered text drawn from its runs (RenderedTextItem, BRULION_TEXT_ITEM=1): its `text`
+/// is the renderer's HTML it shows, as a rich-text Text's is.
+bool isRenderedTextItem(const QObject *item)
+{
+    return ownsProperty(item, "renderedText") && ownsMember(item, "linkAt") && ownsProperty(item, "text");
+}
+
 bool ownsMembers(const QObject *object, const QList<QByteArray> &names)
 {
     return std::ranges::all_of(names, [&](const QByteArray &name) { return ownsMember(object, name); });
@@ -381,8 +388,9 @@ QQuickItem *DevTest::findRendered(QQuickItem *root) const
             root,
             [](QQuickItem *item) {
                 // Text.RichText and TextEdit.RichText are both 1.
-                return ownsProperty(item, "textFormat") && item->property("textFormat").toInt() == 1
-                       && ownsMember(item, "linkAt");
+                return (ownsProperty(item, "textFormat") && item->property("textFormat").toInt() == 1
+                        && ownsMember(item, "linkAt"))
+                       || isRenderedTextItem(item);
             },
             shownItem);
 }
@@ -410,7 +418,8 @@ QQuickItem *DevTest::findTextContaining(QQuickItem *root, const QString &needle)
     return firstWhere(
             root,
             [&](QQuickItem *item) {
-                return ownsProperty(item, "textFormat") && item->property("text").toString().contains(needle);
+                return (ownsProperty(item, "textFormat") || isRenderedTextItem(item))
+                       && item->property("text").toString().contains(needle);
             },
             shownItem);
 }

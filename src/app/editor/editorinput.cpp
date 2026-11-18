@@ -16,6 +16,12 @@
 
 namespace brulion::editor {
 
+bool EditorInput::textItem()
+{
+    static const bool on = qEnvironmentVariableIntValue("BRULION_TEXT_ITEM") == 1;
+    return on;
+}
+
 EditorInput::EditorInput(QObject *parent) : QObject(parent) {}
 
 void EditorInput::replaceRanges(QQuickTextDocument *document, const QVariantList &ranges,
