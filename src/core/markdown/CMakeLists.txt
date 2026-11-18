@@ -2,7 +2,7 @@
 # YAML frontmatter, typed page properties with verified single-property edits (pageprops.h), pure content edits (token edits of the token menus: tokenedit.h), journals, templates, note modes (outline / document), the
 # links Brulion copies (heading fragments, the heading matcher),
 # BlockDocument (block editor model) with what a block selection copies (blockclipboard.h) and
-# InlineRenderer (Qt rich text). Public headers:
+# InlineRenderer (Qt rich text) and RenderedText (its output as text with style runs). Public headers:
 # markdown.h (overview) and the headers it includes; internal headers end in _p.h.
 brulion_add_core_module(markdown
     SOURCES
@@ -26,6 +26,7 @@ brulion_add_core_module(markdown
         parse.h parse_p.h parse.cpp
         properties.h properties.cpp
         rename.h rename.cpp
+        renderedtext.h renderedtext.cpp
         structure_p.h structure.cpp
         taskdeps.h taskdeps.cpp
         tasks.h tasks.cpp
