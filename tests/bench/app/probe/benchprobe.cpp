@@ -719,6 +719,12 @@ private:
         extra.insert(u"t"_s, msOf(t));
         emitJson(extra);
     }
+    /// A mark with the GUI thread's counters now: CPU ms and user-space instructions.
+    void markCounters(const QString &name)
+    {
+        const Counters c = readCounters();
+        mark(name, c.wall, {{u"cpu_ms"_s, double(c.cpu) / 1e6}, {u"insns"_s, double(c.insns)}});
+    }
     void markMem(const QString &name, bool gc = false)
     {
         if (gc && m_engine) {
@@ -1326,14 +1332,16 @@ private:
     void openPageSteps(const QString &page, const QString &tag)
     {
         action(u"nav:"_s + tag, [this, page, tag] {
-            m_series = true; // the GUI thread's counters while the page opens (open<tag>_insns_M)
+            markCounters(u"open_counters_start:"_s + tag); // open<tag>_insns_M
             mark(u"nav_start:"_s + tag);
             navigate({{u"view"_s, u"page"_s}, {u"path"_s, page}});
             mark(u"nav_returned:"_s + tag);
         });
         waitUntil(u"page_content:"_s + tag, [this, page] { return pageShown(page); }, 120000);
         waitSettled(u"page_settled:"_s + tag, 1000, 120000);
-        action(u"series_off"_s, [this] { m_series = false; });
+        // (To the settled page, not to its first blocks: a view may show its first blocks before
+        // or after the rest of the opening's work.)
+        action(u"open_counters_end:"_s + tag, [this, tag] { markCounters(u"open_counters_end:"_s + tag); });
     }
 
     void startEditing(const QString &page, int row)
@@ -1758,7 +1766,7 @@ private:
     void pageScrollSteps()
     {
         action(u"nav:1"_s, [this] {
-            m_series = true; // the GUI thread's counters: open1_insns_M, scroll_insns_M
+            markCounters(u"open_counters_start:1"_s); // open1_insns_M
             mark(u"nav_start:1"_s);
             navigate({{u"view"_s, u"page"_s}, {u"path"_s, m_page}});
             mark(u"nav_returned:1"_s);
@@ -1767,13 +1775,18 @@ private:
         if (m_scrollWait >= 0) {
             wait(m_scrollWait);
         } else {
+            // The GUI thread's counters 500 ms apart while idle (scroll_insns_M subtracts them).
             waitSettled(u"page_settled:1"_s, 1000, 120000);
-            action(u"idle_ref"_s, [this] { mark(u"idle_ref_start"_s); });
+            action(u"open_counters_end:1"_s, [this] { markCounters(u"open_counters_end:1"_s); });
+            action(u"scroll_idle_start"_s, [this] { markCounters(u"scroll_idle_start"_s); });
             wait(500);
-            action(u"idle_ref_end"_s, [this] { mark(u"idle_ref_end"_s); });
+            action(u"scroll_idle_end"_s, [this] { markCounters(u"scroll_idle_end"_s); });
         }
         action(u"mem"_s, [this] { markMem(u"page:1"_s); });
-        action(u"scroll_start"_s, [this] { mark(u"scroll_start"_s); });
+        action(u"scroll_start"_s, [this] {
+            markCounters(u"scroll_counters_start"_s);
+            mark(u"scroll_start"_s);
+        });
         for (int i = 0; i < 80; ++i) {
             action(u"wheel"_s, [this] { wheel(-120, u"down"_s); });
             wait(40);
@@ -1782,10 +1795,10 @@ private:
             action(u"wheel"_s, [this] { wheel(120, u"up"_s); });
             wait(40);
         }
-        action(u"scroll_end"_s, [this] {
-            mark(u"scroll_end"_s);
-            m_series = false;
-        });
+        action(u"scroll_end"_s, [this] { mark(u"scroll_end"_s); });
+        // (The last notch's smooth scroll ends within 200 ms.)
+        wait(500);
+        action(u"scroll_counters_end"_s, [this] { markCounters(u"scroll_counters_end"_s); });
         waitSettled(u"scroll_settled"_s, 1000, 60000);
         action(u"mem"_s, [this] { markMem(u"scrolled"_s); });
     }
@@ -1799,21 +1812,21 @@ private:
     {
         openPageSteps(m_page, u"1"_s);
         action(u"mem"_s, [this] { markMem(u"page:1"_s); });
-        // The GUI thread's counters at every lag tick from 500 ms of idle before the first resize
-        // (the idle rate) to the end: each resize's instructions (resize_insns_M).
+        // The GUI thread's counters read 500 ms apart: once idle (the idle cost), then from each
+        // resize's request on (resize_insns_M: what the new width cost, whatever else runs).
         action(u"resize_base"_s, [this] {
             m_resizeBase = m_window ? m_window->width() : 1280;
-            m_series = true;
-            mark(u"idle_ref_start"_s);
+            markCounters(u"resize_idle_start"_s);
         });
         wait(500);
-        action(u"idle_ref_end"_s, [this] { mark(u"idle_ref_end"_s); });
+        action(u"resize_idle_end"_s, [this] { markCounters(u"resize_idle_end"_s); });
         for (int i = 0; i < 12; ++i) {
             const bool narrow = i % 2 == 0;
             action(u"resize"_s, [this, narrow] {
                 if (!m_window)
                     return;
                 const int w = narrow ? m_resizeWidth : m_resizeBase;
+                markCounters(u"resize_start"_s);
                 Action a;
                 a.kind = u"resize"_s;
                 a.label = QString::number(w);
@@ -1835,9 +1848,10 @@ private:
                         return true;
                     },
                     5000, false);
-            wait(600);
+            wait(500);
+            action(u"resize_end"_s, [this] { markCounters(u"resize_end"_s); });
+            wait(100);
         }
-        action(u"series_off"_s, [this] { m_series = false; });
         waitSettled(u"resize_settled"_s, 1000, 60000);
     }
 

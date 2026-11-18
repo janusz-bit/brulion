@@ -189,11 +189,11 @@ def m_open_page(run):
             f = frame_after(run, pc["prevPoll"])
             if f is not None:
                 out["open%s_frame_ms" % tag] = f - t0
-                # The GUI thread's user-space instructions from the navigation to that frame (the
-                # probe's counter series, where the scenario records one).
-                a, b = cpu_at(run, t0), cpu_at(run, f)
-                if a and b and b[2] > a[2]:
-                    out["open%s_insns_M" % tag] = (b[2] - a[2]) / 1e6
+        # The GUI thread's user-space instructions from the navigation until the page has settled
+        # (the probe reads its counters at both; the idle second the settling waits for included).
+        a, b = mk.get("open_counters_start:" + tag), mk.get("open_counters_end:" + tag)
+        if a and b and "insns" in a and "insns" in b:
+            out["open%s_insns_M" % tag] = (b["insns"] - a["insns"]) / 1e6
         ps = mk.get("page_settled:" + tag)
         if ps:
             out["open%s_settled_ms" % tag] = ps["t"] - t0
@@ -611,11 +611,11 @@ def m_page_scroll(run):
     out = {k: v for k, v in m_open_page(run).items() if k.startswith("open1_") or k.endswith(":page:1")}
     out.update(m_journal_scroll(run))
     mk = run["marks"]
-    rate = idle_rate(run)
-    if rate and "scroll_start" in mk and "scroll_end" in mk:
-        a, b = cpu_at(run, mk["scroll_start"]["t"]), cpu_at(run, mk["scroll_end"]["t"])
-        if a and b and b[2] > a[2]:
-            out["scroll_insns_M"] = (b[2] - a[2] - rate[1] * (b[0] - a[0])) / 1e6
+    a, b = mk.get("scroll_counters_start"), mk.get("scroll_counters_end")
+    i0, i1 = mk.get("scroll_idle_start"), mk.get("scroll_idle_end")
+    if a and b and i0 and i1 and "insns" in b and i1["t"] > i0["t"]:
+        rate = (i1["insns"] - i0["insns"]) / (i1["t"] - i0["t"])
+        out["scroll_insns_M"] = (b["insns"] - a["insns"] - rate * (b["t"] - a["t"])) / 1e6
     return out
 
 
@@ -624,22 +624,26 @@ def m_page_resize(run):
     longest GUI stall within 500 ms of the request."""
     out = {k: v for k, v in m_open_page(run).items() if k.startswith("open1_") or k.endswith(":page:1")}
     acts = [x for x in run["actions"] if x["kind"] == "resize" and x["t2"] > 0]
-    frames, stalls, insns = [], [], []
-    rate = idle_rate(run)
+    frames, stalls = [], []
     for a in acts:
         f = frame_after(run, a["t2"])
         if f is not None:
             frames.append(f - a["t0"])
         stalls.append(max([d for _, d in stalls_in(run, a["t0"], a["t0"] + 500)], default=0.0))
-        # The GUI thread's user-space instructions in the 500 ms after the request, less its idle
-        # rate (the lag ticks): what the new width cost, whatever else runs on the machine.
-        before, after = cpu_at(run, a["t0"]), cpu_at(run, a["t0"] + 500)
-        if rate and before and after and after[2] > before[2]:
-            insns.append((after[2] - before[2] - rate[1] * (after[0] - before[0])) / 1e6)
     out.update(dist("resize_frame", frames))
     out.update(dist("resize_stall", stalls))
+    # The GUI thread's user-space instructions over the 500 ms from each request (the probe reads
+    # its counters at both ends), less those of 500 ms of idle before the first resize.
+    starts = [m for m in run["marklist"] if m.get("name") == "resize_start"]
+    ends = [m for m in run["marklist"] if m.get("name") == "resize_end"]
+    mk = run["marks"]
+    idle = 0.0
+    if "resize_idle_start" in mk and "resize_idle_end" in mk and "insns" in mk["resize_idle_end"]:
+        idle = mk["resize_idle_end"]["insns"] - mk["resize_idle_start"]["insns"]
+    insns = [(e["insns"] - s0["insns"] - idle) / 1e6 for s0, e in zip(starts, ends) if "insns" in s0 and "insns" in e]
     if insns:
         out.update(dist("resize_insns_M", insns))
+        out["resize_idle_insns_M"] = idle / 1e6
     return out
 
 

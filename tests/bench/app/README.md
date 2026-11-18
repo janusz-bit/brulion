@@ -112,17 +112,19 @@ nix develop -c nix shell nixpkgs#xvfb nixpkgs#perf -c env CUR=build-rel/src/app/
   `BENCH_SCROLL_WAIT` ms after its first block is on screen (`200`: a reader who scrolls at once) —
   80 wheel steps down and 80 up, 40 ms apart: `frame_interval_*`, `frames_gt33` / `frames_gt50`,
   `scroll_stall_*` as `journal-scroll`; memory and items at `page:1` (before) and `scrolled`;
-  `scroll_insns_M` (settled runs): the GUI thread's user-space instructions over the scroll less
-  its idle rate of 500 ms before it — the number to compare on a loaded machine.
+  `scroll_insns_M` (settled runs): the GUI thread's user-space instructions from the first notch to
+  500 ms after the last, less its idle rate of 500 ms before it — the number to compare on a
+  loaded machine.
 * `page-resize`: `BENCH_PAGE` opened and settled, then the window made `BENCH_RESIZE_WIDTH` (920:
   the text column narrower than the 680 px editor width, the sidebar still shown) wide and back
   six times, 600 ms apart: `resize_frame_*` (the request → the frame after the window has its new
   width) and `resize_stall_*` (the longest GUI stall within 500 ms of each request): every row
   that exists lays its text out again; `resize_insns_M_*` the GUI thread's user-space instructions
-  in the 500 ms after each request less its idle rate (500 ms of idle before the first resize).
-* `open-page`, `page-scroll`, `page-resize`: `open<n>_insns_M`, the GUI thread's user-space
-  instructions from the navigation to the frame that shows the page (the probe records the
-  thread's counters while a page opens).
+  in the 500 ms after each request less those of 500 ms of idle before the first resize.
+* `open-page`, `page-scroll` (settled runs), `page-resize`: `open<n>_insns_M`, the GUI thread's
+  user-space instructions from the navigation until the page has settled (the probe reads the
+  thread's counters at both; to the first blocks would compare views that show them before or
+  after the rest of the opening's work).
 * `switch-pages`: 200 page openings: time to the page's frame, heap / RSS / item count every 20.
 
 ## Autosave: where the GUI thread's time goes
