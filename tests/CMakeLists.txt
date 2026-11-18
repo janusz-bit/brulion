@@ -18,6 +18,11 @@ function(brulion_add_test name)
     target_compile_definitions(${name} PRIVATE BRULION_TEST_DATA="${PROJECT_SOURCE_DIR}/tests/data"
                                                 BRULION_TEST_SLOWDOWN=${BRULION_TEST_SLOWDOWN})
     brulion_set_warnings(${name})
+    # The app's file calls for the vault's own writes (tests/common/testfilesync.cpp), where the
+    # directory asks for them (tests/app: BRULION_TEST_FILE_SYNC).
+    if(BRULION_TEST_FILE_SYNC AND TARGET brulion_test_filesync)
+        target_link_libraries(${name} PRIVATE brulion_test_filesync)
+    endif()
     add_test(NAME ${name} COMMAND ${name})
     # QtTest stops a single test function after QTEST_FUNCTION_TIMEOUT (300 s by default) on its
     # own, before ctest's TIMEOUT: scale it too, so only ctest's limit applies.
@@ -43,6 +48,14 @@ function(brulion_test_profile var name)
         set(${var}_DIRS "" PARENT_SCOPE)
     endif()
 endfunction()
+
+# The app's file calls for the vault's own writes, installed before main() by an object linked
+# into a test (BRULION_TEST_FILE_SYNC, brulion_add_test()): src/platform/filesync.h.
+if(TARGET brulion_platform)
+    add_library(brulion_test_filesync OBJECT common/testfilesync.cpp)
+    target_link_libraries(brulion_test_filesync PUBLIC brulion_platform)
+    brulion_set_warnings(brulion_test_filesync)
+endif()
 
 add_subdirectory(core)
 # The app's areas (src/app): design system helpers, the editor, the shell, the views, the QML.

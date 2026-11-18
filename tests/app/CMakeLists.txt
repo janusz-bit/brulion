@@ -1,3 +1,7 @@
+# Every test of the app writes notes as the app does: the platform's file sync, stamps and rename
+# (brulion_add_test(), tests/common/testfilesync.cpp), not QSaveFile's fallback of brulion-cli.
+set(BRULION_TEST_FILE_SYNC ON)
+
 # Unit tests of the design system's C++ helpers (library brulion_ui_helpers, src/app/ui):
 # fuzzy matching, line diffs and conflict hunks, the QML-facing dates API. GUI-free
 # (QTEST_GUILESS_MAIN); the app executable is not needed.
