@@ -477,9 +477,13 @@ bool BacklinksModel::mayNowReference(const QString &note) const
         return note != target;
     if (!idx->note(target))
         return true; // a page not written yet: unresolved links name it, not its path
-    const QList<ResolvedLink> links = idx->outgoingLinks(note);
-    if (std::ranges::any_of(links, [&](const ResolvedLink &l) { return l.target == target; }))
-        return true;
+    // (A link of the page to itself — `[[#heading]]`, its own name — is no backlink: backlinks()
+    // leaves it out, so typing in the page computes nothing.)
+    if (note != target) {
+        const QList<ResolvedLink> links = idx->outgoingLinks(note);
+        if (std::ranges::any_of(links, [&](const ResolvedLink &l) { return l.target == target; }))
+            return true;
+    }
     const ParsedNote *parsed = idx->note(note);
     return parsed
            && std::ranges::any_of(parsed->tags, [&](const QString &tag) { return idx->resolveTag(tag) == target; });

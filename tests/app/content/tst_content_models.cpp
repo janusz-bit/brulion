@@ -740,9 +740,9 @@ private Q_SLOTS:
         QSignalSpy linkedRefreshed(&linked, &WorkspaceListModel::refreshed);
         QSignalSpy unlinkedRefreshed(&unlinked, &WorkspaceListModel::refreshed);
 
-        // The page itself, twice (two autosaves).
-        QVERIFY(ws->writeFile(u"Cel.md"_s, u"- strona celu, zmieniona\n"_s));
-        QVERIFY(ws->writeFile(u"Cel.md"_s, u"- strona celu, zmieniona dwa razy\n"_s));
+        // The page itself, twice (two autosaves), with links to itself (no backlinks).
+        QVERIFY(ws->writeFile(u"Cel.md"_s, u"- strona celu, zmieniona [[Cel]]\n"_s));
+        QVERIFY(ws->writeFile(u"Cel.md"_s, u"- strona celu, zmieniona dwa razy [[Cel]] [[#Nagłówek]]\n"_s));
         QTest::qWait(400); // past the refresh delay (120 ms)
         QCOMPARE(linkedRefreshed.size(), 0);
         QCOMPARE(unlinkedRefreshed.size(), 0);
