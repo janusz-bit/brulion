@@ -5,14 +5,16 @@
 // KeyboardInsets and GestureInsets are the instances main() creates and feeds (keyboardsources.h). Also TouchFlick
 // (brulion_ui_touch): an attached type, `ListView { TouchFlick.enabled: true }`; and RowScroll
 // (brulion_ui_scroll), the scroll bar geometry of BRowScrollBar; SmoothScroll (brulion_ui_smoothscroll),
-// the wheel's and the scroll bars' browser-like scrolling (the instance main() installs); and FilePicker (brulion_ui_files),
-// the system's file picker (`FilePicker { fileMode: FilePicker.OpenFiles }`).
+// the wheel's and the scroll bars' browser-like scrolling (the instance main() installs); Icons (brulion_ui_icons),
+// BIcon's image URLs; and FilePicker (brulion_ui_files), the system's file picker (`FilePicker { fileMode:
+// FilePicker.OpenFiles }`).
 #pragma once
 
 #include "dateshelper.h"
 #include "diffhelper.h"
 #include "filepicker.h"
 #include "gestureinsets.h"
+#include "iconprovider.h"
 #include "jshelper.h"
 #include "later.h"
 #include "keyboardinsets.h"
@@ -176,6 +178,16 @@ struct SmoothScrollForeign {
 public:
     /// The application's filter (installed by main(), else on first use here).
     static SmoothScroll *create(QQmlEngine *, QJSEngine *) { return cppOwned(SmoothScroll::instance()); }
+};
+
+// BIcon's image URLs (iconprovider.h); the engine that creates it gets the image provider.
+struct IconsForeign {
+    Q_GADGET
+    QML_FOREIGN(brulion::ui::Icons)
+    QML_NAMED_ELEMENT(Icons)
+    QML_SINGLETON
+public:
+    static Icons *create(QQmlEngine *engine, QJSEngine *) { return Icons::forEngine(engine); }
 };
 
 struct FilePickerForeign {

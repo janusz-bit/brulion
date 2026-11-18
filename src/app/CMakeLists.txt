@@ -133,9 +133,10 @@ set_source_files_properties(qml/theme/Theme.qml qml/components/LinkPreviews.qml 
     PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
 # The generated QML type registration includes the helper headers by file name.
 target_include_directories(brulion PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/ui)
-target_link_libraries(brulion PRIVATE brulion_ui_helpers brulion_ui_touch brulion_ui_smoothscroll brulion_ui_scroll brulion_ui_network brulion_ui_fonts
+target_link_libraries(brulion PRIVATE brulion_ui_helpers brulion_ui_touch brulion_ui_smoothscroll brulion_ui_scroll brulion_ui_icons brulion_ui_network brulion_ui_fonts
     brulion_ui_files brulion_ui_layoutdump)
-# Lucide icons (assets/icons, ISC licence) as :/icons/<name>.svg, used by BIcon; the logo as
+# Lucide icons (assets/icons, ISC licence) as :/icons/<name>.svg, used by BIcon (through
+# image://bicon/…, ui/iconprovider.h); the logo as
 # :/images/logo.svg.
 file(GLOB _brulion_icons CONFIGURE_DEPENDS ${PROJECT_SOURCE_DIR}/assets/icons/*.svg)
 qt_add_resources(brulion brulion_icons
