@@ -286,6 +286,21 @@ int History::prune(int maxPerPath, int maxAgeDays, int keepAtLeast)
     return removed;
 }
 
+int History::removeLeftovers(qint64 nowMs)
+{
+    const QMutexLocker lock(&m_mutex);
+    int removed = 0;
+    for (const QString &folder : {QString(m_dir + u"/index"_s), QString(m_dir + u"/objects"_s)}) {
+        // (Hidden: the temporary files' names start with a dot. No links, no subfolders.)
+        QDirIterator it(folder, {u".brulion-tmp-*"_s}, QDir::Files | QDir::Hidden | QDir::System);
+        while (it.hasNext()) {
+            if (vaultutil::removeLeftoverTemp(it.next(), nowMs))
+                ++removed;
+        }
+    }
+    return removed;
+}
+
 QString History::indexFile(const VaultPath &path) const
 {
     const QByteArray key = QCryptographicHash::hash(path.toUtf8(), QCryptographicHash::Sha1).toHex();

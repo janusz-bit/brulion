@@ -71,15 +71,15 @@
 //    are written exactly as given. A path that is a symlink to a file (or one leading nowhere) is
 //    refused: QSaveFile would write through it — or create its target —, wherever it points.
 //  * writeTextIfUnchanged() writes only when the file still holds the text the caller last saw
-//    (read from the disk, not the cache; a missing file always qualifies): an editor's debounced
-//    save or an agent's edit never overwrites what another program wrote a moment ago. A file
-//    holding other text is taken in instead (reported as External, kept in History) and Changed
-//    is returned, so the caller merges and tries again.
+//    (read from the disk, not the cache; a missing file always qualifies), checked once more right
+//    before the rename (the bytes again on coarse storage): an editor's save or an agent's edit
+//    never overwrites what another program wrote a moment ago, or meanwhile. Such a file is taken
+//    in instead (reported as External, kept in History) and Changed is returned: merge, try again.
 //  * writeTextIfUnchangedAsync() is writeTextIfUnchanged() in two halves (Zed's save): on the
 //    vault's thread it only takes the text (implicitly shared, O(1)) and what the vault knows of
 //    the file; the writer (one thread, setWriteExecutor()) reads the file and compares its exact
-//    text with `expected`, snapshots the old bytes into History, writes atomically (QSaveFile with
-//    fsync), stats the file and its folder, hashes the bytes and runs the caller's afterWrite (the
+//    text with `expected`, snapshots the old bytes into History, writes atomically (the check
+//    above, fsync), stats the file and its folder, hashes the bytes and runs the caller's afterWrite (the
 //    app parses the note there); back on the vault's thread the result is merged — the file's stat,
 //    hash and content, the folder's stamp for the echo (above) — `done` gets the outcome and then
 //    changed() reports the write. A file the vault does not know in a known folder, a stat that

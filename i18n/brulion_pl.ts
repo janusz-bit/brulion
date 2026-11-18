@@ -18700,6 +18700,13 @@ Kliknij, aby zsynchronizować teraz · prawy przycisk: centrum synchronizacji</t
         <translation>dowiązania do plików są pomijane</translation>
     </message>
     <message>
+        <location filename="../src/core/vault/vault.cpp" line="938"/>
+        <location filename="../src/core/vault/vaultutil.cpp" line="189"/>
+        <source>another program changed it meanwhile</source>
+        <extracomment>The reason in &quot;Cannot write %1: %2&quot;</extracomment>
+        <translation>inny program zmienił go w międzyczasie</translation>
+    </message>
+    <message>
         <location filename="../src/core/vault/vault.cpp" line="672"/>
         <source>it is larger than %1 MB</source>
         <extracomment>The reason in &quot;Cannot read %1: %2&quot;; %1 = 1024</extracomment>

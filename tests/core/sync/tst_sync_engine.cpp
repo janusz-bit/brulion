@@ -96,12 +96,15 @@ private Q_SLOTS:
                                  u".brulion/config.json"_s, u"Notatki/Łódź.md"_s, u"Import/Logseq/pages/Strona.md"_s,
                                  u"Projekty/Node_Modules.md"_s, u"assets/zdjęcie.png"_s})
             QVERIFY2(sync::isSyncablePath(p), qPrintable(p));
-        for (const QString &p : {u".trash/a.md"_s, u".obsidian/app.json"_s, u".git/HEAD"_s, u"logseq/config.edn"_s,
-                                 u".brulion/cache.json"_s, u"~syncthing~a.md.tmp"_s, u"a/.brulion-tmp-1"_s, QString(),
-                                 u"x.md.part"_s,
-                                 // Hidden folders in another letter case (case-insensitive storage).
-                                 u".GIT/hooks/pre-commit"_s, u".Obsidian/plugins/x/main.js"_s, u".Brulion/config.json"_s,
-                                 u".Stignore"_s, u".TRASH/a.md"_s})
+        for (const QString &p :
+             {u".trash/a.md"_s, u".obsidian/app.json"_s, u".git/HEAD"_s, u"logseq/config.edn"_s,
+              u".brulion/cache.json"_s, u"~syncthing~a.md.tmp"_s, u"a/.brulion-tmp-1"_s, QString(), u"x.md.part"_s,
+              // The leftovers of interrupted writes (vaultutil::isLeftoverTempName()).
+              u"Dziennik/.brulion-tmp-0123456789abcdef"_s, u".brulion-tmp-3f2504e0-4f89-41d3-9a0c-0305e82c3301"_s,
+              u".BRULION-TMP-0123456789abcdef"_s,
+              // Hidden folders in another letter case (case-insensitive storage).
+              u".GIT/hooks/pre-commit"_s, u".Obsidian/plugins/x/main.js"_s, u".Brulion/config.json"_s, u".Stignore"_s,
+              u".TRASH/a.md"_s})
             QVERIFY2(!sync::isSyncablePath(p), qPrintable(p));
     }
 

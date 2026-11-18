@@ -31,12 +31,15 @@ void WriteJob::run()
         if (QFileInfo(folder).isSymLink())
             return fallback(); // (a followed folder link or one that is not the vault's)
     }
+    // What the file is right before the read: the rename below goes over nothing else.
+    vaultutil::ReadMark mark = vaultutil::markBeforeRead(absolute);
     const QFileInfo info(absolute);
-    if (info.isSymLink() || !info.isFile() || !sameStat(statOf(info, path), known))
+    if (mark.absent || info.isSymLink() || !info.isFile() || !sameStat(statOf(info, path), known))
         return fallback();
     vaultutil::ContentRead read = vaultutil::readContent(absolute, kVaultMaxReadBytes);
     if (!read.ok())
         return fallback();
+    mark.bytes = read.bytes;
     // The exact bytes decide, never a hash (sync can bring content crafted to collide).
     if (vaultutil::decodeUtf8(read.bytes) != expected) {
         readHash = text::fnv1a64Hex(read.bytes);
@@ -59,7 +62,13 @@ void WriteJob::run()
         && !history->snapshotBytesAt(path, read.bytes, historyReason, at))
         historyError = history->errorString();
     const std::function<void()> hook = beforeRename ? std::function<void()>([this] { beforeRename(path); }) : nullptr;
-    save = vaultutil::saveAtomicallyStamped(absolute, data, hook);
+    save = vaultutil::saveAtomicallyStamped(absolute, data, hook, &mark);
+    if (save.changed) {
+        // Another program wrote the file while this one wrote and synced its own (the same check
+        // as above, right before the rename): its text stays, mergeWrite() takes it in.
+        result = Result::Changed;
+        return;
+    }
     if (!save.ok) {
         error = save.error;
         result = Result::Failed;
@@ -249,6 +258,7 @@ void VaultPrivate::mergeWrite(const std::shared_ptr<WriteJob> &job)
         trackFile(*job->written);
         // Known hash = what was written: the watcher's echo of this write is recognised as such.
         rememberContent(path, job->data, true, job->dataHash);
+        noteUnsettled(*job->written, true, job->save.fineStamps);
         if (watcher)
             noteOwnWrite(job->dir, job->save, job->pendingBefore);
         watchFile(path);

@@ -163,9 +163,14 @@ void VaultPrivate::listChildren(const VaultPath &dir, const QString &dirRel, boo
                         out.trees.insert(path); // a new folder found by a shallow listing
                     todo.append(Folder{path, rel, true});
                 }
-            } else if (info.isFile() && !info.isSymLink() && vaultutil::isTracked(path) && !out.files.contains(path)) {
+            } else if (info.isFile() && !info.isSymLink()) {
                 // Links to files are never followed, wherever they point (vault.h, "Semantics").
-                out.files.insert(path, DiskEntry{rel, statOf(info, path)});
+                if (vaultutil::isTracked(path)) {
+                    if (!out.files.contains(path))
+                        out.files.insert(path, DiskEntry{rel, statOf(info, path)});
+                } else if (vaultutil::isLeftoverTempName(name)) {
+                    out.leftovers.append(rel); // (removed by open() once old enough)
+                }
             }
         }
     }
@@ -293,7 +298,8 @@ ScanDiff VaultPrivate::diff(const DiskListing &listing) const
         const FileStat &known = *files.constFind(path);
         if (const auto disk = listing.files.constFind(path); disk == listing.files.cend())
             out.vanishedFiles.append(known);
-        else if (!sameStat(disk->stat, known) || staleContent.contains(path))
+        else if (!sameStat(disk->stat, known) || staleContent.contains(path)
+                 || (!unsettled.isEmpty() && unsettled.contains(path)))
             out.modifiedFiles.append(*disk);
     }
     for (const VaultPath &dir : std::as_const(candidateDirs)) {
@@ -427,8 +433,16 @@ std::optional<VaultChange> VaultPrivate::applyModified(const DiskEntry &entry, C
     trackFile(entry.stat);
     rememberContent(path, *bytes, /*asText=*/false, hash);
     watchFile(path);
-    if (same)
-        return std::nullopt; // touched, or the echo of our own write
+    if (same) {
+        // Touched, or the echo of our own write. A new stamp on coarse storage can hide another
+        // write of the same size within its tick: compared by content until the tick is over.
+        if (unsettled.contains(path))
+            settleIfDue(path); // (an unsettled file compared: diff())
+        else
+            noteUnsettled(entry.stat, false);
+        return std::nullopt;
+    }
+    noteUnsettled(entry.stat, false);
     return VaultChange{ChangeType::Modified, path, {}, source};
 }
 
@@ -441,10 +455,12 @@ bool VaultPrivate::adoptFile(const DiskEntry &entry, const QHash<VaultPath, QStr
         return false; // gone again
     rememberDiskName(path, entry.diskRel);
     trackFile(entry.stat);
-    if (bytes)
+    if (bytes) {
         rememberContent(path, *bytes);
-    else if (const auto it = hashCache.constFind(path); it != hashCache.cend() && !it->isEmpty())
+        noteUnsettled(entry.stat, false);
+    } else if (const auto it = hashCache.constFind(path); it != hashCache.cend() && !it->isEmpty()) {
         hashes.insert(path, *it); // read while looking for renames
+    }
     watchFile(path);
     return true;
 }
