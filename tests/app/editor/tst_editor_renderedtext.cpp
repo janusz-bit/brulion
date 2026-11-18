@@ -100,7 +100,8 @@ private Q_SLOTS:
         QTest::newRow("wide") << longText() << 900.0;
         QTest::newRow("line breaks") << u"pierwsza\ndruga linia\n\ntrzecia"_s << 400.0;
         QTest::newRow("chips") << u"[ ] zadanie 📅 2026-10-20 ⏰ 2026-10-14 09:00 🔁 co tydzień"_s << 200.0;
-        QTest::newRow("long word") << u"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"_s << 120.0;
+        QTest::newRow("long word")
+                << u"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"_s << 120.0;
         QTest::newRow("emoji") << u"🙂 uśmiech 👍🏽 i 👨‍👩‍👧 rodzina"_s << 120.0;
     }
     void linesMatchTheRichText()
@@ -160,8 +161,8 @@ private Q_SLOTS:
         for (qsizetype k = 0; k < shapes.size(); ++k) {
             const QRectF a = shapes[k].rect;
             const QRectF e = expected[k].rect;
-            QVERIFY2(std::abs(a.x() - e.x()) < 0.5 && std::abs(a.y() - e.y()) < 0.5 && std::abs(a.width() - e.width()) < 0.5
-                             && std::abs(a.height() - e.height()) < 0.5,
+            QVERIFY2(std::abs(a.x() - e.x()) < 0.5 && std::abs(a.y() - e.y()) < 0.5
+                             && std::abs(a.width() - e.width()) < 0.5 && std::abs(a.height() - e.height()) < 0.5,
                      qPrintable(u"%1: %2,%3 %4×%5 vs %6,%7 %8×%9"_s.arg(k)
                                         .arg(a.x())
                                         .arg(a.y())
@@ -203,6 +204,18 @@ private Q_SLOTS:
         QCOMPARE(it->layoutCount(), 2);
         QCOMPARE(heights.size(), 1);
         QVERIFY(it->implicitHeight() < 3 * LineHeight);
+        // Lines no width broke stay at any width that holds them: no layout (a window resized).
+        const auto shortText = item(u"krótki tekst\ndruga linia"_s, 600);
+        QCOMPARE(shortText->layoutCount(), 1);
+        shortText->setWidth(400);
+        shortText->setWidth(900);
+        QCOMPARE(shortText->layoutCount(), 1);
+        shortText->setWidth(40); // too narrow: wrapped
+        QCOMPARE(shortText->layoutCount(), 2);
+        QVERIFY(shortText->lineCount() > 2);
+        shortText->setWidth(600); // was wrapped: laid out again
+        QCOMPARE(shortText->layoutCount(), 3);
+        QCOMPARE(shortText->lineCount(), 2);
         // Empty text: no lines, no height.
         const auto empty = item(QString(), 300);
         QCOMPARE(empty->lineCount(), 0);

@@ -5,10 +5,10 @@
 
 #include <QFontMetricsF>
 #include <QPainter>
-#include <QSGImageNode>
-#include <QSGRendererInterface>
 #include <QQuickWindow>
 #include <QSGGeometryNode>
+#include <QSGImageNode>
+#include <QSGRendererInterface>
 #include <QSGTextNode>
 #include <QSGVertexColorMaterial>
 #include <QTextBoundaryFinder>
@@ -478,8 +478,16 @@ void RenderedTextItem::relayout()
     else if (lines > 0)
         height = m_layout->lineAt(lines - 1).y() + m_layout->lineAt(lines - 1).height();
     qreal natural = 0;
-    for (int k = 0; k < lines; ++k)
-        natural = std::max(natural, m_layout->lineAt(k).naturalTextWidth());
+    m_softWrapped = false;
+    for (int k = 0; k < lines; ++k) {
+        const QTextLine line = m_layout->lineAt(k);
+        natural = std::max(natural, line.naturalTextWidth());
+        // A line the width broke: not the last one, not ended by a line break.
+        const int end = line.textStart() + line.textLength();
+        if (k + 1 < lines && (end < 1 || m_layout->text().at(end - 1) != QChar::LineSeparator))
+            m_softWrapped = true;
+    }
+    m_naturalWidth = natural;
     setImplicitSize(std::ceil(natural), height);
     m_textDirty = true;
     computeShapes();
@@ -553,8 +561,8 @@ void RenderedTextItem::computeShapes()
                 icons.append(pill);
             }
             if (color.alpha() > 0)
-                shapes.append({first.background == RenderedBackground::Pill ? Shape::Kind::Pill : Shape::Kind::Box, rect,
-                               color});
+                shapes.append({first.background == RenderedBackground::Pill ? Shape::Kind::Pill : Shape::Kind::Box,
+                               rect, color});
         }
         k = last;
     }
@@ -576,9 +584,9 @@ void RenderedTextItem::computeOverlays()
         // The find bar's matches (InlineRenderer::withFindHighlight: a tinted span per match; in a
         // link or a chip, a span with a text colour, a pill).
         if (!m_findQuery.isEmpty() && m_findColor.alpha() > 0) {
-            const QList<text::TextRange> matches = text::findMatches(
-                    QStringView(m_shown.text).first(m_shownLength), m_findQuery,
-                    {m_findCase, m_findDiacritics, m_findWholeWord});
+            const QList<text::TextRange> matches =
+                    text::findMatches(QStringView(m_shown.text).first(m_shownLength), m_findQuery,
+                                      {m_findCase, m_findDiacritics, m_findWholeWord});
             for (const text::TextRange &match : matches) {
                 qsizetype at = match.start;
                 while (at < match.end()) {
@@ -601,9 +609,10 @@ void RenderedTextItem::computeOverlays()
                         const qreal baseline = segment.line.y() + segment.line.ascent();
                         const qreal top = baseline - metrics.ascent() + m_inset;
                         const qreal bottom = baseline + metrics.descent() - m_inset;
-                        overlays.append({pill ? Shape::Kind::Pill : Shape::Kind::Find,
-                                         QRectF(segment.x1, top, segment.x2 - segment.x1, std::max<qreal>(1, bottom - top)),
-                                         m_findColor});
+                        overlays.append(
+                                {pill ? Shape::Kind::Pill : Shape::Kind::Find,
+                                 QRectF(segment.x1, top, segment.x2 - segment.x1, std::max<qreal>(1, bottom - top)),
+                                 m_findColor});
                     }
                     at = std::max(end, at + 1);
                 }
@@ -632,8 +641,8 @@ void RenderedTextItem::computeOverlays()
                         const qreal baseline = segment.line.y() + segment.line.ascent();
                         const qreal width = std::max<qreal>(1, std::round(metrics.lineWidth()));
                         const qreal y = std::round(baseline + metrics.underlinePos());
-                        overlays.append({Shape::Kind::Underline, QRectF(segment.x1, y, segment.x2 - segment.x1, width),
-                                         color});
+                        overlays.append(
+                                {Shape::Kind::Underline, QRectF(segment.x1, y, segment.x2 - segment.x1, width), color});
                     }
                     at = std::max(end, at + 1);
                 }
@@ -650,8 +659,16 @@ void RenderedTextItem::computeOverlays()
 void RenderedTextItem::geometryChange(const QRectF &newGeometry, const QRectF &oldGeometry)
 {
     QQuickItem::geometryChange(newGeometry, oldGeometry);
-    if (isComponentComplete() && !qFuzzyCompare(newGeometry.width() + 1, m_laidOutWidth + 1))
-        relayout();
+    if (!isComponentComplete() || qFuzzyCompare(newGeometry.width() + 1, m_laidOutWidth + 1))
+        return;
+    // Left-aligned lines that no width broke stay as they are at any width that holds them (most
+    // blocks: a window or a side panel resized lays out only the wrapped ones, as QQuickText does).
+    if (m_layout && !m_softWrapped && !m_truncated && m_alignment != Qt::AlignHCenter
+        && newGeometry.width() >= m_naturalWidth + 0.5) {
+        m_laidOutWidth = newGeometry.width();
+        return;
+    }
+    relayout();
 }
 
 void RenderedTextItem::itemChange(ItemChange change, const ItemChangeData &value)
@@ -685,7 +702,8 @@ QSGNode *RenderedTextItem::updatePaintNode(QSGNode *old, UpdatePaintNodeData *)
         QList<Vertex> under;
         QList<Vertex> over;
         for (const Shape &s : std::as_const(m_shapes))
-            addRoundedRect(under, s.rect, s.kind == Shape::Kind::Pill ? s.rect.height() / 2 : m_boxRadius, s.color, true);
+            addRoundedRect(under, s.rect, s.kind == Shape::Kind::Pill ? s.rect.height() / 2 : m_boxRadius, s.color,
+                           true);
         for (const Shape &s : std::as_const(m_overlays)) {
             if (s.kind == Shape::Kind::Underline)
                 addRoundedRect(over, s.rect, 0, s.color, false);

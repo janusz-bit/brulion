@@ -73,7 +73,8 @@ class RenderedTextItem : public QQuickItem {
     Q_PROPERTY(int horizontalAlignment READ horizontalAlignment WRITE setHorizontalAlignment NOTIFY
                        horizontalAlignmentChanged FINAL)
     Q_PROPERTY(bool wrap READ wrap WRITE setWrap NOTIFY wrapChanged FINAL)
-    Q_PROPERTY(int maximumLineCount READ maximumLineCount WRITE setMaximumLineCount NOTIFY maximumLineCountChanged FINAL)
+    Q_PROPERTY(
+            int maximumLineCount READ maximumLineCount WRITE setMaximumLineCount NOTIFY maximumLineCountChanged FINAL)
     Q_PROPERTY(bool truncated READ truncated NOTIFY truncatedChanged FINAL)
     Q_PROPERTY(int lineCount READ lineCount NOTIFY layoutChanged FINAL)
     /// The radius of a box (inline code, a highlight; Theme.radiusXs) and the inset of shapes.
@@ -240,6 +241,8 @@ private:
     QList<Shape> m_overlays;
     QList<RichTextPill> m_iconShapes;
     qreal m_laidOutWidth = -1;
+    qreal m_naturalWidth = 0;   ///< the widest line
+    bool m_softWrapped = false; ///< a line was broken by the width (not by a line break)
     int m_layoutCount = 0;
     bool m_textDirty = true;   ///< the text node needs new glyphs
     bool m_shapesDirty = true; ///< the geometry nodes need new vertices
