@@ -12,7 +12,7 @@
 // `active` (default true): a list nobody sees computes nothing. While it is false — the view
 // kept hidden by ShellRouteView (All pages, Search, the Journal while a page is shown) —, a change
 // of the files or the index only marks the rows stale; they are computed once when `active`
-// becomes true again (docs/PERFORMANCE.md "Only what is on screen"). The first fill, a new
+// becomes true again (docs/PERFORMANCE.md "Only what is on screen, only what changed"). The first fill, a new
 // workspace and changes of the model's own properties (a filter, a folder) are computed as
 // before, also while inactive.
 //

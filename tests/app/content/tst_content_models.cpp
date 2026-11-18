@@ -772,6 +772,50 @@ private Q_SLOTS:
         QCOMPARE(linked.refCount(), 3);
     }
 
+    // What the rows show of other notes — the icon of a page they link to (the page itself
+    // too), the text of a `[[Page#^id]]` block — follows that note, although it is not where the
+    // rows come from; typing in the page that does not change what they show computes nothing.
+    void referencesFollowWhatTheyShowOfOtherNotes()
+    {
+        auto ws = open({{u"Cel.md"_s, u"- strona celu\n- blok docelowy ^abc\n"_s},
+                        {u"Źródło.md"_s, u"- [[Cel]] i [[Cel#^abc]] oraz [[Inna]]\n"_s},
+                        {u"Inna.md"_s, u"- inna strona\n"_s}});
+        BacklinksModel linked;
+        linked.setWorkspace(ws.get());
+        linked.setPath(u"Cel.md"_s);
+        linked.refreshNow();
+        QCOMPARE(linked.refCount(), 1);
+        const auto html = [&linked] { return linked.data(linked.index(1), BacklinksModel::HtmlRole).toString(); };
+        QVERIFY(html().contains(u"blok docelowy"_s));
+        QSignalSpy refreshed(&linked, &WorkspaceListModel::refreshed);
+
+        // Typing in the page outside the block the row shows: nothing to compute.
+        QVERIFY(ws->writeFile(u"Cel.md"_s, u"- strona celu, zmieniona\n- blok docelowy ^abc\n"_s));
+        QTest::qWait(400); // past the refresh delay (120 ms)
+        QCOMPARE(refreshed.size(), 0);
+
+        // The block the row shows: its new text.
+        QVERIFY(ws->writeFile(u"Cel.md"_s, u"- strona celu, zmieniona\n- blok poprawiony ^abc\n"_s));
+        QTRY_VERIFY(html().contains(u"blok poprawiony"_s));
+        QVERIFY(!html().contains(u"blok docelowy"_s));
+
+        // The page's icon, in front of the links to it.
+        const QString withoutIcon = html();
+        QVERIFY(ws->writeFile(u"Cel.md"_s,
+                              u"---\nicon: 🚀\n---\n- strona celu, zmieniona\n- blok poprawiony ^abc\n"_s));
+        QTRY_VERIFY(html() != withoutIcon);
+
+        // Another page the row links to: its icon too.
+        const QString beforeOther = html();
+        QVERIFY(ws->writeFile(u"Inna.md"_s, u"---\nicon: 🌳\n---\n- inna strona\n"_s));
+        QTRY_VERIFY(html() != beforeOther);
+        // …but not its text, which the row does not show.
+        const qsizetype count = refreshed.size();
+        QVERIFY(ws->writeFile(u"Inna.md"_s, u"---\nicon: 🌳\n---\n- inna strona, zmieniona\n"_s));
+        QTest::qWait(400);
+        QCOMPARE(refreshed.size(), count);
+    }
+
     // A list that is not active (its view kept hidden) computes nothing when notes change: it only
     // goes stale, and is computed at once when it becomes active again. Its first fill and changes
     // of its own properties are computed while inactive too.

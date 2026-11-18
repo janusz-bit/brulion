@@ -501,8 +501,14 @@ FocusScope {
             Connections {
                 target: root
                 function onRouteChanged() {
-                    if (!root.single && AppController.routeFlag(root.route, "date"))
+                    if (root.single || !AppController.routeFlag(root.route, "date"))
+                        return
+                    // Hidden (ShellRouteView sets the route before it shows the view): the days
+                    // may be stale until it is shown — scroll once they are computed again.
+                    if (days.active)
                         root.scrollToDate(AppController.routeText(root.route, "date"))
+                    else
+                        scrollToRouteLater.restart()
                 }
             }
 

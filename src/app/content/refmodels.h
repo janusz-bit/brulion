@@ -31,6 +31,7 @@
 #include <QVariantMap>
 
 #include <memory>
+#include <optional>
 
 namespace brulion::markdown {
 class BlockDocument;
@@ -186,6 +187,20 @@ private:
     QList<Row> m_rows;
     /// The notes of every group of the last refresh (shown or past the limit).
     QSet<QString> m_sources;
+    /// What the rendered rows read from other notes — a linked page's icon, the text of a
+    /// `[[Page#^id]]` block —, by the note it was read from (the link's resolved path). A change
+    /// of that note affects the rows only when what they read differs: typing in the page
+    /// itself, which every row links to, computes nothing (renderReadsChanged()).
+    struct RenderRead {
+        QString fromPath;
+        QString target;
+        QString blockId; ///< empty: the page's icon
+        markdown::PageIcon icon;
+        std::optional<QString> text;
+    };
+    mutable QMultiHash<QString, RenderRead> m_renderReads;
+    /// Whether a row would read something else from `note` now.
+    bool renderReadsChanged(const QString &note) const;
     /// Parsed documents of the notes rendered during one refresh.
     mutable QHash<QString, std::shared_ptr<markdown::BlockDocument>> m_docs;
     QVariantMap m_paletteMap;

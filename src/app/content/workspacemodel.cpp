@@ -79,6 +79,8 @@ void WorkspaceListModel::setActive(bool active)
 
 void WorkspaceListModel::contentChanged()
 {
+    if (!m_active && m_stale)
+        return; // computed when shown, whatever else changes meanwhile
     if (unaffectedByIndexChanges())
         return;
     if (m_active)
@@ -98,6 +100,7 @@ bool WorkspaceListModel::unaffectedByIndexChanges()
     const VaultIndex *idx = vaultIndex();
     if (!idx || m_indexSerial != idx->serial() || m_indexVersion < 0)
         return false;
+    // (The same version: no changed notes — whether that is nothing is the subclass's call.)
     const IndexChanges changes = idx->changesSince(m_indexVersion);
     if (!changes.complete || changes.names || affectedBy(changes))
         return false;

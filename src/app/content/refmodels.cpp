@@ -216,6 +216,22 @@ void GroupedRefsModel::fillRef(Ref &r, const QString &path) const
         markdown::RenderContext ctx = renderContext(idx, path, effectiveToday(), uiLocaleValue(), m_palette);
         // The row draws the editor's checkbox for tasks (ContentRefRow), not a text glyph.
         ctx.taskCheckbox = false;
+        // What the row reads from other notes, remembered for affectedBy().
+        ctx.pageIcon = [this, idx, path, inner = std::move(ctx.pageIcon)](const QString &target) {
+            const markdown::PageIcon icon = inner(target);
+            if (const std::optional<QString> to = idx->resolveLink(target, path))
+                m_renderReads.insert(*to, {path, target, {}, icon, {}});
+            return icon;
+        };
+        ctx.linkedBlockText = [this, idx, path, inner = std::move(ctx.linkedBlockText)](const QString &target,
+                                                                                        const QString &id) {
+            std::optional<QString> text = inner(target, id);
+            const std::optional<QString> to =
+                    target.isEmpty() ? std::optional<QString>(path) : idx->resolveLink(target, path);
+            if (to)
+                m_renderReads.insert(*to, {path, target, id, {}, text});
+            return text;
+        };
         r.html = markdown::InlineRenderer(ctx).renderBlock(entry.body, entry.kind);
     }
     if (r.html.isEmpty())
@@ -250,10 +266,27 @@ bool GroupedRefsModel::mayNowReference(const QString &note) const
     return true;
 }
 
+bool GroupedRefsModel::renderReadsChanged(const QString &note) const
+{
+    const auto [from, to] = m_renderReads.equal_range(note);
+    if (from == to)
+        return false;
+    return std::any_of(from, to, [&](const RenderRead &read) {
+        // (The link resolves as before: a change of names refreshes without asking.)
+        const markdown::RenderContext at =
+                renderContext(vaultIndex(), read.fromPath, effectiveToday(), uiLocaleValue(), m_palette);
+        return read.blockId.isEmpty() ? at.pageIcon(read.target) != read.icon
+                                      : at.linkedBlockText(read.target, read.blockId) != read.text;
+    });
+}
+
 bool GroupedRefsModel::affectedBy(const IndexChanges &changes) const
 {
-    return std::ranges::any_of(
-            changes.notes, [this](const VaultPath &note) { return m_sources.contains(note) || mayNowReference(note); });
+    // (No changed notes — the revision that follows the index's own signal for the same save,
+    // a folder made: the rows depend on notes only.)
+    return std::ranges::any_of(changes.notes, [this](const VaultPath &note) {
+        return m_sources.contains(note) || mayNowReference(note) || renderReadsChanged(note);
+    });
 }
 
 void GroupedRefsModel::refresh()
@@ -263,6 +296,7 @@ void GroupedRefsModel::refresh()
         groups = collect();
     const auto dropDocs = qScopeGuard([this] { m_docs.clear(); });
     m_sources.clear();
+    m_renderReads.clear();
     for (const Group &g : std::as_const(groups))
         m_sources.insert(g.path);
 
