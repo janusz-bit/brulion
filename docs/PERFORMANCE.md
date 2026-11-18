@@ -1743,6 +1743,46 @@ The base numbers are 3–5× those of the budget table (41 ms on the small page)
 before the views were built ahead. A run's first burst may start before every kept view exists
 (the measurement does not control it yet: Z9 below).
 
+**Step 2: Z2–Z9 (the same day).** Ten analyses of the code (the table below) became seven
+branches, merged here: the vault's own write (Z2: one read of the file, the hash computed once,
+the sorted file lists patched in place, the echo of an own write recognised by its folder's
+nanosecond stamp without a listing — `bench_vault:ownSaveEcho`, 10,000 notes in one folder:
+echo 159 → 0.009 ms, write 55 → 4.7 ms), narrow revisions (Z4: `Workspace.namesRevision`,
+`propertiesRevision`; `PageTools` only for what its summary read), hidden Tasks, Calendar and the
+side panel's local graph (Z5), the editor's re-rendering after an index change (Z3:
+`BlockListModel::followIndex`, `PageController.active`; Z7) and its keystroke (Z6: "Typing: a
+keystroke costs the block" below), the index cache and the search index off the GUI thread (Z8:
+"No more hitches a minute after typing" below), and the probe's attribution of a save (Z9: signal
+spans, fsync, instructions — tests/bench/app/README.md "Autosave: where the GUI thread's time
+goes"). Three reviews of the merged code (data safety of the vault, the editor, stale data in the
+models) found eight smaller faults, fixed with tests; one more came from the measurement itself
+(a page's links to itself made its own edits compute its backlinks: `mayNowReference`).
+
+Measured with that attribution (`bench-matrix.sh typing`, the 10k vault, Release `-g1`,
+`BENCH_WAIT_KEPT=1` — all five kept views exist before the first burst —, 4 runs per build in two
+alternating rounds; main = c8bc2135, step 1 = 0f6bab95, all = the merged branch, the 5000-block
+pages again after the self-link fix, 3 runs; instruction counts are user-space instructions of the
+GUI thread per save, spread < 1 %, the milliseconds are wall time on a machine loaded by other
+agents' builds, load 15–25):
+
+| per autosave (median) | main | step 1 | all |
+|---|---|---|---|
+| small page: instructions, the save itself / what follows it | 352 M / 2406 M | 352 M / 828 M | **1.0 M / 4.6 M** |
+| small page: GUI CPU, the save / what follows | 85 / 488 ms | 82 / 184 ms | **1.8 / 3 ms** |
+| small page: GUI blocked after a burst | 635 ms | 254 ms | **11 ms** |
+| small page: rows signalled changed | 12,655 | 11,480 | **0** |
+| 5000-block outline: instructions, save / what follows | 724 M / 3107 M | 731 M / 1534 M | **220 M / 361 M** |
+| 5000-block outline: GUI blocked after a burst | 740 ms | 425 ms | **69 ms** |
+| 5000-block document: instructions, save / what follows | 795 M / 2972 M | 802 M / 1370 M | **258 M / 434 M** |
+| 5000-block document: GUI blocked after a burst | 804 ms | 352 ms | **89 ms** |
+| 5000-block document: key → frame, median / p95 | 41 / 73 ms | 32 / 54 ms | **23 / 35 ms** (loaded machine) |
+
+On the small page an autosave now costs the GUI thread about 2 ms of CPU (the fsync of the
+write, 3–5 ms of wall time, waits on top of it); a burst's 1.7 s afterwards hold 3 ms of work.
+What is left on the 5000-block pages is the save itself: `Vault.changed` — the note parsed again
+and merged into the index, ~40–46 ms — and the write with its read-compare, ~12–18 ms; that is Z1,
+the save on a worker (in progress).
+
 **What is left — ten analyses of the code (2026-11-18).** Read from the code, not measured one by
 one; the estimates are for the 10k notebook on the desktop (a phone: ×4–6).
 
@@ -1930,7 +1970,7 @@ emulator (optimistic), web = headless Chromium (×4 CPU = phone). ✅ meets, ⚠
 | GUI stall while indexing / after ready | < 50 ms desktop, < 100 ms phone | ✅ 28 ms indexing, 0 ms after ready (wave 5) | ❌ Pi 0.54 / 0.45 s before wave 5 (L1b; the full-text part of it off the GUI thread since L18) | – |
 | keystroke → frame (≤ 5000 blocks) | p95 < 16 ms desktop, < 33 ms phone | ✅ small page 11 ms; ✅ 5000-block outline p95 15 ms, document 13 ms ("Typing: a keystroke costs the block"; was 15 / 20 ms in the same session) | ✅ small page; ⚠️ outline p95 42 ms | – |
 | Enter / undo | < 50 ms desktop, < 100 ms phone | ✅ 15 / 13 ms (L5; base in the same session 15 / 32 ms) | ✅ Enter 38 ms; undo 214 ms before L5, not measured since (L5b) | – |
-| autosave stall (the longest stall after a save; the Zed-like aim: < 8 ms of GUI time) | < 50 ms desktop, < 100 ms phone | ⚠️ small page 51 ms (99 ms on main with the views built ahead, 41 ms before them); ❌ 5000 blocks 132–134 ms (198–236 ms on main), 500 KB page 88 ms before 2026-11-10 | ✅ small page 29 ms; ❌ 500 KB page 0.2 s | – |
+| autosave stall (the longest stall after a save; the Zed-like aim: < 8 ms of GUI time) | < 50 ms desktop, < 100 ms phone | ✅ small page 11 ms (2 ms of CPU; 226 ms on main with the views built ahead, 41 ms before them); ⚠️ 5000 blocks 67–89 ms (236–254 ms on main; the parse, Z1) | ✅ small page 29 ms; ❌ 500 KB page 0.2 s | – |
 | open page (5000 blocks) | frame < 150 ms desktop, < 300 ms phone | ✅ 113 ms | ❌ Pi 653 ms (L7) | – |
 | Tasks / Calendar / Agenda | < 200 ms desktop, < 500 ms phone | ✅ 133–166 ms | ❌ Pi 0.73–1.28 s before L3, not measured since (L3b, L10) | – |
 | Graph (4000 nodes; 1200 phones) | settled < 1.5 s desktop, < 3 s phone; GUI stall during the layout < 16 ms desktop, < 33 ms phone | ❌ not the laptop (unreachable): a GitHub runner with llvmpipe, CPU-rendered frames — stall 219 ms (was 958 ms), settled 2.0 s (`views`; was 8.3 s), 9.2 s with drags (was 40 s), first frame 0.13 s (was 1.07 s); the GUI thread's own sync 0.1–6 ms | ❌ Pi 2.6 s before L16, emulator 1.5 s; not measured since (L16b) | – |
