@@ -106,6 +106,12 @@ private Q_SLOTS:
                         "BIcon");
 
         m_engine = std::make_unique<QQmlEngine>();
+        // On Windows every executable is built into the build folder's top, next to the app's own
+        // module "Brulion" (its qmldir points into the app's resources, which this test lacks):
+        // this test's "Brulion" is the one registered above, so that folder is no import path here.
+        QStringList paths = m_engine->importPathList();
+        paths.removeAll(QCoreApplication::applicationDirPath());
+        m_engine->setImportPathList(paths);
         // The provider before Icons gives the engine one of its own (Icons::forEngine keeps it).
         m_provider = new IconImageProvider(m_folder);
         m_engine->addImageProvider(IconImageProvider::providerId(), m_provider);
