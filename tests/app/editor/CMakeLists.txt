@@ -362,3 +362,11 @@ brulion_add_test(tst_editor_indexrender
 brulion_add_test(tst_editor_renderedtext
     SOURCES tst_editor_renderedtext.cpp
     LIBS brulion_editor brulion_core_markdown)
+# One item per page, its foundations (docs/UI.md "One item per page (Z10 stage C)"): RowHeightTree
+# against a naive list (random edits of every kind, exact fixed-point sums), ScrollAnchor (what is
+# on screen stays through height changes, edits, a removed and re-inserted anchor, folds, moves,
+# the ends, "scroll to block"; random changes followed by uid) and PageRows on a list model and on
+# BlockListModel with another device's changes merged in and folds.
+brulion_add_test(tst_editor_rowheights
+    SOURCES tst_editor_rowheights.cpp
+    LIBS brulion_editor brulion_core_markdown)

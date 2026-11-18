@@ -5,7 +5,8 @@
 # EditorInput (TextEdit text and input-method helpers), SourceTextSync (source mode: the TextEdit's
 # edits handed to PageController one at a time), SpellCheck (spell checking on a worker thread:
 # the core module spell over the platform's backends, src/platform/spellbackends.h), QueryResultModel
-# (live ```query results), the pure helpers of blocktext.h and the
+# (live ```query results), RowHeightTree, ScrollAnchor and PageRows (one item per page: the rows'
+# heights, the scroll position as a row and an offset), the pure helpers of blocktext.h and the
 # in-memory FakeEditorHost (playground, tests; queries run on the real index module), MermaidView
 # (a ```mermaid block drawn by the core module diagram), ChartView (a ```chart block: core module chart).
 # A static library so tests/app/editor links it without the app; the app's QML module "Brulion"
@@ -50,6 +51,9 @@ qt_add_library(brulion_editor STATIC
     richtextpills.h richtextpills.cpp
     richtextlinks.h richtextlinks.cpp
     renderedtextitem.h renderedtextitem.cpp
+    rowheighttree.h rowheighttree.cpp
+    scrollanchor.h scrollanchor.cpp
+    pagerows.h pagerows.cpp
     linkpreview.h linkpreview.cpp
     suggestionmodel.h suggestionmodel.cpp
     fakeeditorhost.h fakeeditorhost.cpp
