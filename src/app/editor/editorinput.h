@@ -33,9 +33,14 @@ void mapDocumentSeparators(QString &text);
 
 class EditorInput : public QObject {
     Q_OBJECT
+    /// Blocks' rendered text drawn by RenderedTextItem instead of rich text (environment
+    /// BRULION_TEXT_ITEM=1; off by default: docs/UI.md "Rendered text without rich text").
+    Q_PROPERTY(bool textItem READ textItem CONSTANT FINAL)
 
 public:
     explicit EditorInput(QObject *parent = nullptr);
+
+    static bool textItem();
 
     /// The exact plain text of a TextEdit's document: paragraph separators become "\n", every
     /// other character (no-break spaces, U+2028) is kept. "" for null.

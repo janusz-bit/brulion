@@ -31,6 +31,7 @@
 #include "dates/names.h"
 #include "markdown/inline.h"
 #include "markdown/pagelook.h"
+#include "markdown/renderedtext.h"
 #include "types.h"
 
 #include <QDate>
@@ -199,6 +200,24 @@ public:
     /// HTML-escape plain text for rich text (& < > " escaped, line breaks as <br/>).
     static QString escape(QStringView text);
 
+    /// render() / renderBlock() with the source range of each piece of the HTML (positions in
+    /// `text` / `body`): verbatim text character by character, every construct (a link, a chip, an
+    /// escape, a delimiter left as text) as a whole; hidden syntax has none. The HTML is exactly
+    /// render()'s / renderBlock()'s.
+    TracedHtml renderTraced(QStringView text) const;
+    TracedHtml renderBlockTraced(QStringView body, BlockKind kind) const;
+    /// render() / renderBlock() as RenderedText (markdown/renderedtext.h) with its source map:
+    /// runsToHtml() of it is render()'s HTML.
+    RenderedText renderRuns(QStringView text) const;
+    RenderedText renderBlockRuns(QStringView body, BlockKind kind) const;
+
+    /// Called with every render() and renderBlock() (`kind` nullopt for render()) and its HTML —
+    /// for tests only (the parity test checks renderRuns against every rendering of the renderer
+    /// tests). nullptr (the default): none.
+    using RenderObserver = void (*)(const InlineRenderer &renderer, QStringView text, std::optional<BlockKind> kind,
+                                    const QString &html);
+    static void setRenderObserver(RenderObserver observer);
+
     /// `html` (this renderer's output) with the links whose href is `href` underlined: anchors as
     /// links are written — `<a href="H" style="color:C;text-decoration:none">`, the colour value
     /// without ';' — get `text-decoration:underline`. Chips (no colour), tags (a background) and
@@ -231,9 +250,11 @@ private:
     /// body} in increasing order (empty: the text is the body). Maps `reminder:` ranges back.
     using SourceRuns = QList<std::pair<qsizetype, qsizetype>>;
 
-    /// `taskMarker`: a leading task marker is recognised (list item bodies only).
+    /// `taskMarker`: a leading task marker is recognised (list item bodies only). `trace`: the
+    /// source anchors of the top-level HTML (positions in the body, through `runs`).
     QString renderInline(QStringView text, bool topLevel, int depth, const SourceRuns &runs = {},
-                         bool taskMarker = true) const;
+                         bool taskMarker = true, QList<HtmlSourceAnchor> *trace = nullptr) const;
+    QString renderBlockImpl(QStringView body, BlockKind kind, QList<HtmlSourceAnchor> *trace) const;
 
     RenderContext m_ctx;
 };

@@ -12,7 +12,10 @@ import Brulion
 // shapes under the text: a text with any is shown by a read-only rich-text TextEdit whose
 // RichTextPills takes Qt's square backgrounds off before they are painted and gives the
 // rectangles BTintShapes draws (pills for chips and tags, small radii for code and highlights);
-// the fixed line height is the same. Any other text stays a Text (cheaper rows).
+// the fixed line height is the same. Any other text stays a Text (cheaper rows). With
+// BRULION_TEXT_ITEM=1 (EditorInput.textItem, off by default) a block whose RenderedText the item can
+// draw is shown by a RenderedTextItem instead — one C++ item laid out from the runs and drawn
+// through the scene graph, in the same Loader (docs/UI.md "Rendered text without rich text").
 // Clicks on links are handled (page:, tag:, block:, ext:, task:,
 // reminder:, day:); a click elsewhere — also on a date, 🔁 or priority chip — starts editing with
 // the caret at the clicked position. Shift+click selects the blocks from the edited or selected one
@@ -63,14 +66,35 @@ Item {
     /// Text or TextEdit still lays its rich text out), but kept as it was; when editing stops it
     /// takes the latest. (The block's height while edited is the editor's: implicitHeight.)
     readonly property string html: root.editing ? root.keptHtml : root.liveHtml
-    readonly property string liveHtml: root.live && !root.editing ? root.block.rowData.html : ""
+    readonly property string liveHtml: root.live && !root.editing && !root.textItem ? root.block.rowData.html : ""
     /// liveHtml as it was when editing started (followed while the block is not edited).
     property string keptHtml
     onLiveHtmlChanged: {
         if (!root.editing)
             root.keptHtml = root.liveHtml
     }
-    Component.onCompleted: root.keptHtml = root.liveHtml
+    Component.onCompleted: {
+        root.keptRuns = root.liveRuns
+        root.keptHtml = root.liveHtml
+    }
+    /// The rendered text drawn by a RenderedTextItem from its runs instead of rich text
+    /// (BRULION_TEXT_ITEM=1, docs/UI.md "Rendered text without rich text"): not with a screen
+    /// reader on (BLinkTargets' links are the rich text's), not for the html view's fixed-pitch
+    /// text, and only for text the item draws (RenderedText::drawable: no formula with fonts of
+    /// its own, nothing that is not well formed) — any other block keeps the rich text.
+    readonly property bool textItemWanted: EditorInput.textItem && !DeviceInfo.screenReader && !root.mono
+    readonly property renderedText liveRuns: root.textItemWanted && root.live && !root.editing
+                                             ? root.block.rowData.renderedText : root.noRuns
+    /// liveRuns as they were when editing started (followed while the block is not edited).
+    property renderedText keptRuns
+    /// (No runs: what liveRuns is without the item.)
+    property renderedText noRuns
+    onLiveRunsChanged: {
+        if (!root.editing)
+            root.keptRuns = root.liveRuns
+    }
+    readonly property renderedText runs: root.editing ? root.keptRuns : root.liveRuns
+    readonly property bool textItem: root.textItemWanted && root.runs.drawable
     /// The rendered text with the find bar's matches tinted (docs/UI.md "Find and replace").
     readonly property string findHtml: {
         const find = root.find
@@ -81,14 +105,23 @@ Item {
     }
     /// The text has a span with a background colour (InlineRenderer's chips and tags, inline code,
     /// highlights): the TextEdit with rounded shapes shows it.
-    readonly property bool tinted: Js.indexOf(findHtml, "background-color:") >= 0
+    readonly property bool tinted: !root.textItem && Js.indexOf(findHtml, "background-color:") >= 0
     /// The item showing the rendered text: linkAt(), the anchor of the token and link menus.
-    readonly property Item renderedItem: tinted && tintedEdit !== null ? tintedEdit : rendered
+    readonly property Item renderedItem: root.textItem && runsItem !== null ? runsItem
+                                         : tinted && tintedEdit !== null ? tintedEdit : rendered
     /// The tinted text's TextEdit (null while the text has no tints).
-    readonly property TextEdit tintedEdit: tintedLoader.item !== null ? (tintedLoader.item as TintedText).edit : null
+    readonly property TextEdit tintedEdit: tintedHolder !== null ? tintedHolder.edit : null
+    readonly property TintedText tintedHolder: tintedLoader.item as TintedText
+    /// The RenderedTextItem (null unless `textItem`). (While the Loader changes its component the
+    /// item may be the other one: the casts give null.)
+    readonly property RenderedTextItem runsItem: runsHolder !== null && root.textItem ? runsHolder.text : null
+    readonly property RunsText runsHolder: tintedLoader.item as RunsText
 
     /// The link at a point of the rendered text ("" = none).
     function linkAt(x: real, y: real): string {
+        const runs = root.runsItem
+        if (root.textItem && runs)
+            return runs.linkAt(x, y)
         const edit = root.tintedEdit
         return root.tinted && edit ? edit.linkAt(x, y) : rendered.linkAt(x, y)
     }
@@ -104,7 +137,11 @@ Item {
         menuScene = scene
     }
     /// The shown rich text: the rendered HTML with hoveredLink underlined.
-    readonly property string shownHtml: TextHelper.hoveredLinkHtml(root.findHtml, root.hoveredLink)
+    /// (With the RenderedTextItem: its text while a link is hovered — the item underlines it itself;
+    /// "" else, so nothing is made for rows nobody points at.)
+    readonly property string shownHtml: root.textItem
+                                        ? (root.hoveredLink !== "" && root.runsItem !== null ? root.runsItem.text : "")
+                                        : TextHelper.hoveredLinkHtml(root.findHtml, root.hoveredLink)
     function trackLink(x: real, y: real): void {
         const link = root.editing ? "" : root.linkAt(x, y)
         const hovered = link !== "" && !Js.startsWith(link, "task:") && !root.editor.editsOnClick(link) ? link : ""
@@ -134,9 +171,9 @@ Item {
         // it out a second time (QQuickText::geometryChange, Qt 6.11); from 1 px its first layout
         // gives it the rest without another.
         height: Math.max(1, implicitHeight)
-        visible: !root.editing && !root.tinted
+        visible: !root.editing && !root.tinted && !root.textItem
         textFormat: Text.RichText
-        text: root.tinted ? "" : root.shownHtml
+        text: root.tinted || root.textItem ? "" : root.shownHtml
         wrapMode: Text.Wrap
         horizontalAlignment: root.align
         font.family: root.fontFamily
@@ -153,12 +190,64 @@ Item {
     }
     // A text with tinted spans: the same text, font, colours and line height in a read-only
     // rich-text TextEdit (it exposes its document), the spans' rounded shapes drawn under it.
+    // (The same Loader shows a RenderedTextItem: no other object per row.)
     Loader {
         id: tintedLoader
         width: parent.width
-        active: root.tinted
+        active: root.tinted || root.textItem
         visible: !root.editing
-        sourceComponent: TintedText {}
+        sourceComponent: root.textItem ? runsComponent : tintedComponent
+    }
+    Component {
+        id: tintedComponent
+        TintedText {}
+    }
+    Component {
+        id: runsComponent
+        RunsText {}
+    }
+    // The rendered text drawn from its runs (RenderedTextItem): the same font, colours and line
+    // height; the hovered link and the find bar's matches drawn over the same layout; page icons
+    // (rare) by a Repeater of BIcon at the places the item reserves.
+    component RunsText: Item {
+        readonly property RenderedTextItem text: runsText
+        width: tintedLoader.width
+        implicitHeight: runsText.implicitHeight
+        RenderedTextItem {
+            id: runsText
+            width: parent.width
+            renderedText: root.runs
+            font.family: root.fontFamily
+            font.pixelSize: root.fontPx
+            font.weight: root.fontWeight
+            font.italic: root.quoted
+            font.strikeout: root.block.taskStatus === "cancelled"
+            lineHeight: root.lineHeightPx
+            horizontalAlignment: root.align
+            color: root.textColor
+            linkColor: Theme.link
+            boxRadius: Theme.radiusXs
+            hoveredLink: root.hoveredLink
+            findQuery: root.find !== null && root.live ? root.find.appliedQuery : ""
+            findMatchCase: root.find !== null && root.find.matchCase
+            findMatchDiacritics: root.find !== null && root.find.matchDiacritics
+            findWholeWord: root.find !== null && root.find.wholeWord
+            findColor: root.editor !== null ? root.editor.findHitColor : root.textColor
+            Accessible.role: Accessible.StaticText
+            Accessible.name: root.live ? root.block.plainText : ""
+
+            Repeater {
+                model: runsText.iconShapes
+                delegate: BIcon {
+                    required property richTextPill modelData
+                    x: modelData.x + (modelData.width - width) / 2
+                    y: modelData.y + (modelData.height - height) / 2
+                    name: modelData.icon
+                    size: Math.round(Math.min(modelData.width, modelData.height) * 0.9)
+                    color: modelData.color
+                }
+            }
+        }
     }
     // The TextEdit inside an item of its own: a Loader reads its item's implicit width, which makes
     // a wrapped TextEdit lay its text out twice more (unwrapped for the width, then wrapped again).

@@ -41,6 +41,11 @@ QString BlockRowData::html() const
     return value(Html, "html", &BlockRowData::htmlChanged).toString();
 }
 
+RenderedTextRef BlockRowData::renderedText() const
+{
+    return value(RenderedText, "renderedText", &BlockRowData::renderedTextChanged).value<RenderedTextRef>();
+}
+
 QString BlockRowData::editText() const
 {
     return value(EditText, "editText", &BlockRowData::editTextChanged).toString();

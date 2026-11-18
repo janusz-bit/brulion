@@ -130,7 +130,11 @@
 //                  body given to renderBlock()); with resolveLinkPart a link [[A/B/C]] is one
 //                  part:K:TARGET link per parent part (linkPartUrl / parseLinkPartUrl);
 //                  withHoveredLink(html, href) (the hover underline), linkUrlAt(text, position)
-//                  (the link at a caret)
+//                  (the link at a caret); renderRuns / renderBlockRuns -> RenderedText,
+//                  renderTraced / renderBlockTraced -> the HTML with the source range of its pieces
+//   renderedtext.h  RenderedText{text, elements, runs (style bits, colours, pill/box, href, icon),
+//                  objects (page icons), source map, spellings}: the renderer's HTML as text with
+//                  style runs (renderedTextFromHtml), runsToHtml() gives the HTML back exactly
 #pragma once
 
 #include "markdown/blockclipboard.h"
@@ -150,6 +154,7 @@
 #include "markdown/parse.h"
 #include "markdown/properties.h"
 #include "markdown/rename.h"
+#include "markdown/renderedtext.h"
 #include "markdown/taskdeps.h"
 #include "markdown/tasks.h"
 #include "markdown/templates.h"

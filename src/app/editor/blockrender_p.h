@@ -18,6 +18,10 @@ namespace brulion::editor::detail {
 QString renderBodyHtml(const markdown::BlockEntry &entry, const BlockShape &shape,
                        const markdown::InlineRenderer &renderer, int *renderOffset = nullptr);
 
+/// renderBodyHtml() with the source anchors of its pieces (positions in the block's body).
+markdown::TracedHtml renderBodyTraced(const markdown::BlockEntry &entry, const BlockShape &shape,
+                                      const markdown::InlineRenderer &renderer, int *renderOffset = nullptr);
+
 /// The visible text of renderer output (tags removed, entities decoded) — for measuring.
 QString richTextToPlain(const QString &html);
 

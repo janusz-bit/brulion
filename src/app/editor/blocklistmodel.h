@@ -152,6 +152,9 @@ public:
         TaskDatedRole,
         /// `visible` under a name a delegate can take as a required property (Item has `visible`).
         ShownRole,
+        /// The `html` as markdown::RenderedText with its source map (RenderedTextRef, for
+        /// RenderedTextItem: docs/UI.md "Rendered text without rich text"); rendered only when read.
+        RenderedTextRole,
     };
 
     /// Nested embeds rendered inside a transclusion (deeper ones become a "depth" note).
@@ -340,6 +343,9 @@ private:
         bool htmlValid = false;
         bool embedsValid = false;
         QString html;
+        /// `html` as RenderedText (renderedTextAt()): valid while `runsHtml` is `html` itself.
+        std::shared_ptr<const markdown::RenderedText> runs;
+        QString runsHtml;
         QVariantList embeds;
         bool onlyEmbeds = false;
         QVariantList calcResults;
@@ -376,8 +382,8 @@ private:
         QHash<QString, QString> transclusionBlocks;
         /// A task's subtask progress the html shows ("3/5"): re-rendered when its subtasks change.
         markdown::SubtaskProgress htmlProgress;
-        int htmlCalcEpoch = -1;     ///< m_calcEpoch the html's inline calculations saw
-        int renderOffset = 0;       ///< offset of the rendered text in the body (reminder: ranges)
+        int htmlCalcEpoch = -1; ///< m_calcEpoch the html's inline calculations saw
+        int renderOffset = 0;   ///< offset of the rendered text in the body (reminder: ranges)
         // Calculations: calcResults / tableData are current while resultsValid and, when they
         // read calc variables (resultsUseScope: calc blocks, tables with formulas or inline
         // calculations in cells), resultsEpoch == m_calcEpoch (the block's own text and
@@ -404,7 +410,12 @@ private:
     const RowState *stateOf(int row) const;
     RowState &stateFor(quint64 uid) const;
     const BlockShape &cachedShape(int row) const;
-    QString renderHtml(int docIndex) const;
+    /// `traced`: the rendering with its source anchors (positions in the block's body) — the
+    /// same HTML, made again when it was cached without them.
+    QString renderHtml(int docIndex, markdown::TracedHtml *traced = nullptr) const;
+    /// The renderedText role: renderHtml() with its source anchors read into RenderedText (kept
+    /// while the HTML is).
+    std::shared_ptr<const markdown::RenderedText> renderedTextAt(int docIndex) const;
     /// The subtask progress of the list item at `docIndex` (its descendants' tasks, SYNTAX §5).
     markdown::SubtaskProgress subtaskProgressAt(int docIndex) const;
     /// What every rendering of the editor shares: today, the language, the colours, journal
@@ -517,8 +528,8 @@ private:
     bool m_calcFlagsValid = false;
     /// Something reads calc variables: calc blocks, tables with formulas, rendered inline calculations.
     mutable bool m_hasCalcConsumers = false;
-    QList<quint64> m_rows;              ///< uid per model row (mirrors the document after replays)
-    QHash<quint64, int> m_docIndex;      ///< uid -> document index
+    QList<quint64> m_rows;          ///< uid per model row (mirrors the document after replays)
+    QHash<quint64, int> m_docIndex; ///< uid -> document index
     mutable QHash<quint64, RowState> m_state;
     /// Rows refresh(true) may have work for although their own text is unchanged — calc blocks,
     /// tables, charts, html with `((id))` or inline calculations, transclusions of this page — by

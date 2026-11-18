@@ -142,7 +142,8 @@ private Q_SLOTS:
         const QString resolved = f.html(1);
         QSignalSpy changed(f.model(), &QAbstractItemModel::dataChanged);
         QVERIFY(f.change(u"Nowa strona.md"_s, u"- nowa, świeża\n"_s));
-        QVERIFY(changes(changed, *f.model()).contains(u"0-2:html,embeds,onlyEmbeds,transclusions,properties"_s));
+        QVERIFY(changes(changed, *f.model())
+                        .contains(u"0-2:html,renderedText,embeds,onlyEmbeds,transclusions,properties"_s));
         QVERIFY(f.html(0) != unresolved);
         QCOMPARE(f.html(1), resolved);
         // A rename: the old name no longer resolves.
@@ -176,7 +177,7 @@ private Q_SLOTS:
         const QString plain = f.html(2);
         QSignalSpy changed(f.model(), &QAbstractItemModel::dataChanged);
         QVERIFY(f.change(u"Inna.md"_s, u"- Blok po zmianie, gęś ^inny1\n- Drugi blok\n"_s));
-        QCOMPARE(changes(changed, *f.model()), QStringList{u"0-1:html"_s});
+        QCOMPARE(changes(changed, *f.model()), QStringList{u"0-1:html,renderedText"_s});
         QVERIFY(f.html(0).contains(u"Blok po zmianie, gęś"_s));
         QVERIFY(f.html(1).contains(u"Blok po zmianie"_s));
         QCOMPARE(f.html(2), plain);
@@ -201,7 +202,8 @@ private Q_SLOTS:
         QVERIFY(f.html(0).contains(u"🚀"_s));
         QCOMPARE(f.html(1), other);
         QVERIFY(f.cellHtml(0, 0).contains(u"🚀"_s));
-        QCOMPARE(changes(changed, *f.model()), (QStringList{u"0-0:html"_s, u"%1-%1:tableData"_s.arg(table)}));
+        QCOMPARE(changes(changed, *f.model()),
+                 (QStringList{u"0-0:html,renderedText"_s, u"%1-%1:tableData"_s.arg(table)}));
     }
 
     // Hidden (a day of the hidden Journal): index changes only make it stale; shown again, it
@@ -220,7 +222,7 @@ private Q_SLOTS:
         QVERIFY(f.html(0).contains(u"Blok z innej strony"_s));
         f.page.setActive(true);
         QVERIFY(!f.page.indexStale());
-        QCOMPARE(changes(changed, *f.model()), (QStringList{u"0-0:html"_s, u"1-1:transclusions"_s}));
+        QCOMPARE(changes(changed, *f.model()), (QStringList{u"0-0:html,renderedText"_s, u"1-1:transclusions"_s}));
         QVERIFY(f.html(0).contains(u"Blok ukryty, ćma"_s));
         QVERIFY(shownText(f.transclusions(1)).contains(u"ukryta treść"_s));
         // Active again without a change in between: nothing to do.
@@ -240,7 +242,7 @@ private Q_SLOTS:
         QVERIFY(f.change(u"Trzecia.md"_s, u"- znowu inna treść\n"_s));
         QCOMPARE(changes(changed, *f.model()), QStringList());
         QVERIFY(f.change(u"Inna.md"_s, u"- Blok po raz trzeci, żaba ^inny1\n"_s));
-        QCOMPARE(changes(changed, *f.model()), QStringList{u"0-0:html"_s});
+        QCOMPARE(changes(changed, *f.model()), QStringList{u"0-0:html,renderedText"_s});
         QVERIFY(f.html(0).contains(u"żaba"_s));
     }
 };

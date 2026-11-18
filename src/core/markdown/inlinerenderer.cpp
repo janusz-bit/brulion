@@ -1,5 +1,5 @@
-#include "text/find.h"
 #include "markdown/inlinerenderer.h"
+#include "text/find.h"
 
 #include "dates/format.h"
 #include "dates/recurrence.h"
@@ -24,6 +24,7 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 
 namespace brulion::markdown {
 
@@ -31,6 +32,9 @@ using namespace detail;
 using namespace Qt::StringLiterals;
 
 namespace {
+
+/// InlineRenderer::setRenderObserver() (tests).
+std::atomic<InlineRenderer::RenderObserver> g_observer = nullptr;
 
 /// Labels of links are rendered with the inline renderer again (emphasis, code); deeper nesting
 /// is shown as text.
@@ -411,26 +415,128 @@ QString textPiece(QStringView text, qsizetype from, qsizetype to, bool nextShown
     return escapeText(joined);
 }
 
-QString assemble(QStringView text, const QList<Piece> &pieces)
+/// Where the source anchors of a traced rendering go (InlineRenderer::renderTraced()), and the
+/// runs mapping the rendered text back to the body.
+struct Trace {
+    QList<HtmlSourceAnchor> *anchors = nullptr;
+    const QList<Range> *runs = nullptr;
+};
+
+/// Position in the block body of position `p` of a text built from verbatim runs of it.
+qsizetype toBody(const QList<Range> &runs, qsizetype p)
+{
+    if (runs.isEmpty())
+        return p;
+    auto it = std::ranges::upper_bound(runs, p, {}, &Range::first);
+    if (it != runs.begin())
+        --it;
+    return it->second + (p - it->first);
+}
+
+/// The length of escapeText() of one character that is not a line break.
+qsizetype escapedLength(QChar c)
+{
+    switch (c.unicode()) {
+    case u'&': return 5;
+    case u'<':
+    case u'>': return 4;
+    case u'"': return 6;
+    default: return 1;
+    }
+}
+
+/// The anchors of text [from, to) of `text` written by escapeText() at `htmlAt`: one per stretch
+/// without a line break inside one run, one per line break (its `<br/>`).
+void traceText(QStringView text, qsizetype from, qsizetype to, qsizetype htmlAt, const Trace &trace)
+{
+    const QList<Range> &runs = *trace.runs;
+    const auto runStart = [&](qsizetype i) {
+        return std::ranges::any_of(runs, [i](const Range &r) { return r.first == i; });
+    };
+    qsizetype segment = from;
+    qsizetype segmentHtml = htmlAt;
+    qsizetype h = htmlAt;
+    const auto close = [&](qsizetype end) {
+        if (end > segment) {
+            const qsizetype body = toBody(runs, segment);
+            trace.anchors->append({segmentHtml, h, body, body + (end - segment)});
+        }
+    };
+    for (qsizetype i = from; i < to;) {
+        if (i > segment && runStart(i)) {
+            close(i);
+            segment = i;
+            segmentHtml = h;
+        }
+        const QChar c = text[i];
+        if (c == u'\r' || c == u'\n') {
+            close(i);
+            const qsizetype length = c == u'\r' && i + 1 < to && text[i + 1] == u'\n' ? 2 : 1;
+            const qsizetype body = toBody(runs, i);
+            trace.anchors->append({h, h + 5, body, body + length});
+            h += 5;
+            i += length;
+            segment = i;
+            segmentHtml = h;
+            continue;
+        }
+        h += escapedLength(c);
+        ++i;
+    }
+    close(to);
+}
+
+QString assemble(QStringView text, const QList<Piece> &pieces, const Trace &trace)
 {
     QString out;
+    const auto anchor = [&](qsizetype htmlFrom, qsizetype htmlTo, qsizetype from, qsizetype to) {
+        if (trace.anchors && htmlTo > htmlFrom)
+            trace.anchors->append({htmlFrom, htmlTo, toBody(*trace.runs, from), toBody(*trace.runs, to)});
+    };
+    const qsizetype first = trace.anchors ? trace.anchors->size() : 0;
     for (qsizetype k = 0; k < pieces.size(); ++k) {
         const Piece &p = pieces[k];
         switch (p.type) {
         case Piece::Type::Text: {
             const bool nextShown =
                     k + 1 < pieces.size() && !(pieces[k + 1].type == Piece::Type::Html && pieces[k + 1].html.isEmpty());
-            out += textPiece(text, p.from, p.to, nextShown);
+            const QString html = textPiece(text, p.from, p.to, nextShown);
+            if (trace.anchors)
+                traceText(text, p.from, p.to, out.size(), trace);
+            out += html;
             break;
         }
-        case Piece::Type::Html: out += p.html; break;
-        case Piece::Type::Delim: out += p.closeTags + QString(p.remaining, p.ch) + p.openTags; break;
+        case Piece::Type::Html:
+            anchor(out.size(), out.size() + p.html.size(), p.from, p.to);
+            out += p.html;
+            break;
+        case Piece::Type::Delim:
+            anchor(out.size() + p.closeTags.size(), out.size() + p.closeTags.size() + p.remaining, p.from, p.to);
+            out += p.closeTags + QString(p.remaining, p.ch) + p.openTags;
+            break;
         }
     }
+    qsizetype chopped = 0;
     while (out.endsWith(u"<br/>"))
         out.chop(5);
-    while (out.startsWith(u"<br/>"))
+    while (out.startsWith(u"<br/>")) {
         out.remove(0, 5);
+        chopped += 5;
+    }
+    if (trace.anchors) {
+        // The anchors of what the line breaks taken off the ends leave.
+        QList<HtmlSourceAnchor> &anchors = *trace.anchors;
+        QList<HtmlSourceAnchor> kept;
+        for (qsizetype k = first; k < anchors.size(); ++k) {
+            HtmlSourceAnchor a = anchors[k];
+            a.htmlFrom = std::clamp<qsizetype>(a.htmlFrom - chopped, 0, out.size());
+            a.htmlTo = std::clamp<qsizetype>(a.htmlTo - chopped, 0, out.size());
+            if (a.htmlTo > a.htmlFrom)
+                kept.append(a);
+        }
+        anchors.resize(first);
+        anchors.append(kept);
+    }
     return out;
 }
 
@@ -602,7 +708,7 @@ QString InlineRenderer::withFindHighlight(QStringView html, QStringView query, b
         add(c, i, i + 1);
         ++i;
     }
-    const QList<text::TextRange> matches = text::findMatches(shown, query, { matchCase, matchDiacritics, wholeWord });
+    const QList<text::TextRange> matches = text::findMatches(shown, query, {matchCase, matchDiacritics, wholeWord});
     if (matches.isEmpty())
         return html.toString();
     const QString open = u"<span style=\"background-color:"_s + safeColor(color.toString()) + u"\">"_s;
@@ -640,26 +746,45 @@ QString InlineRenderer::escape(QStringView text)
 
 QString InlineRenderer::render(QStringView text) const
 {
-    return renderInline(text, true, 0);
+    QString html = renderInline(text, true, 0);
+    if (const RenderObserver observer = g_observer.load(std::memory_order_relaxed))
+        observer(*this, text, std::nullopt, html);
+    return html;
 }
 
-namespace {
-
-/// Position in the block body of position `p` of a text built from verbatim runs of it.
-qsizetype toBody(const QList<Range> &runs, qsizetype p)
+void InlineRenderer::setRenderObserver(RenderObserver observer)
 {
-    if (runs.isEmpty())
-        return p;
-    auto it = std::ranges::upper_bound(runs, p, {}, &Range::first);
-    if (it != runs.begin())
-        --it;
-    return it->second + (p - it->first);
+    g_observer.store(observer, std::memory_order_relaxed);
 }
 
-} // namespace
+TracedHtml InlineRenderer::renderTraced(QStringView text) const
+{
+    TracedHtml out;
+    out.html = renderInline(text, true, 0, {}, true, &out.anchors);
+    return out;
+}
+
+TracedHtml InlineRenderer::renderBlockTraced(QStringView body, BlockKind kind) const
+{
+    TracedHtml out;
+    out.html = renderBlockImpl(body, kind, &out.anchors);
+    return out;
+}
+
+RenderedText InlineRenderer::renderRuns(QStringView text) const
+{
+    const TracedHtml traced = renderTraced(text);
+    return renderedTextFromHtml(traced.html, traced.anchors);
+}
+
+RenderedText InlineRenderer::renderBlockRuns(QStringView body, BlockKind kind) const
+{
+    const TracedHtml traced = renderBlockTraced(body, kind);
+    return renderedTextFromHtml(traced.html, traced.anchors);
+}
 
 QString InlineRenderer::renderInline(QStringView text, bool topLevel, int depth, const SourceRuns &runs,
-                                     bool taskMarker) const
+                                     bool taskMarker, QList<HtmlSourceAnchor> *trace) const
 {
     if (text.isEmpty())
         return {};
@@ -900,8 +1025,8 @@ QString InlineRenderer::renderInline(QStringView text, bool topLevel, int depth,
                 // joins them: adjacent spans of one background are one pill (RichTextPills).
                 if (const QList<LinkPathPart> parts = linkPathParts(item.target); parts.size() >= 2) {
                     const QString tint = u"style=\"color:"_s + safeColor(pal.tag.foreground)
-                                         + u";text-decoration:none;background-color:"_s
-                                         + safeColor(pal.tag.background) + u"\">"_s;
+                                         + u";text-decoration:none;background-color:"_s + safeColor(pal.tag.background)
+                                         + u"\">"_s;
                     const QStringView target(item.target);
                     for (qsizetype k = 0; k < parts.size(); ++k) {
                         const bool last = k + 1 == parts.size();
@@ -1062,10 +1187,18 @@ QString InlineRenderer::renderInline(QStringView text, bool topLevel, int depth,
     }
     QList<Piece> pieces = buildPieces(text, kept);
     processEmphasis(pieces, m_ctx.palette);
-    return assemble(text, pieces);
+    return assemble(text, pieces, Trace{depth == 0 ? trace : nullptr, &runs});
 }
 
 QString InlineRenderer::renderBlock(QStringView body, BlockKind kind) const
+{
+    QString html = renderBlockImpl(body, kind, nullptr);
+    if (const RenderObserver observer = g_observer.load(std::memory_order_relaxed))
+        observer(*this, body, kind, html);
+    return html;
+}
+
+QString InlineRenderer::renderBlockImpl(QStringView body, BlockKind kind, QList<HtmlSourceAnchor> *trace) const
 {
     const QList<text::Line> lines = text::splitLines(body);
     // The lines from `from` on without their quote prefixes (bullets shown as "•"), plus the
@@ -1109,8 +1242,8 @@ QString InlineRenderer::renderBlock(QStringView body, BlockKind kind) const
         return out;
     };
     switch (kind) {
-    case BlockKind::ListItem: return render(body);
-    case BlockKind::Paragraph: return renderInline(body, true, 0, {}, false);
+    case BlockKind::ListItem: return renderInline(body, true, 0, {}, true, trace);
+    case BlockKind::Paragraph: return renderInline(body, true, 0, {}, false, trace);
     case BlockKind::Heading: {
         const QString first = lines.first().text;
         if (const auto atx = matchAtxHeading(first)) {
@@ -1122,7 +1255,7 @@ QString InlineRenderer::renderBlock(QStringView body, BlockKind kind) const
                 --k;
             if (k < e && (k == 0 || isSpaceOrTab(title[k - 1])))
                 title = trimEndBlanks(QStringView(title).first(k)).toString();
-            return renderInline(title, true, 0, {{0, atx->prefixLength}}, false);
+            return renderInline(title, true, 0, {{0, atx->prefixLength}}, false, trace);
         }
         // Setext: the lines above the underline (line breaks normalised to "\n").
         QString text;
@@ -1133,12 +1266,12 @@ QString InlineRenderer::renderBlock(QStringView body, BlockKind kind) const
             runs.append({text.size(), lines[k].start});
             text += lines[k].text;
         }
-        return renderInline(runs.isEmpty() ? body : QStringView(text), true, 0, runs, false);
+        return renderInline(runs.isEmpty() ? body : QStringView(text), true, 0, runs, false, trace);
     }
     case BlockKind::Quote: {
         SourceRuns runs;
         const QString text = stripQuotes(0, runs);
-        return renderInline(text, true, 0, runs, false);
+        return renderInline(text, true, 0, runs, false, trace);
     }
     case BlockKind::Callout: {
         QStringView first = QStringView(lines.first().text);
@@ -1156,17 +1289,39 @@ QString InlineRenderer::renderBlock(QStringView body, BlockKind kind) const
         }
         SourceRuns runs;
         const QString rest = stripQuotes(1, runs);
-        const QString restHtml = renderInline(rest, true, 0, runs, false);
-        QString out = u"<b>"_s + renderInline(title, true, 0, {{0, titleStart}}, false) + u"</b>"_s;
+        QList<HtmlSourceAnchor> restAnchors;
+        QList<HtmlSourceAnchor> titleAnchors;
+        const QString restHtml = renderInline(rest, true, 0, runs, false, trace ? &restAnchors : nullptr);
+        const QString titleHtml =
+                renderInline(title, true, 0, {{0, titleStart}}, false, trace ? &titleAnchors : nullptr);
+        QString out = u"<b>"_s + titleHtml + u"</b>"_s;
+        const qsizetype restAt = out.size() + 5;
         if (!restHtml.isEmpty())
             out += u"<br/>"_s + restHtml;
+        if (trace) {
+            for (const HtmlSourceAnchor &a : std::as_const(titleAnchors))
+                trace->append({a.htmlFrom + 3, a.htmlTo + 3, a.sourceFrom, a.sourceTo});
+            if (!restHtml.isEmpty()) {
+                for (const HtmlSourceAnchor &a : std::as_const(restAnchors))
+                    trace->append({a.htmlFrom + restAt, a.htmlTo + restAt, a.sourceFrom, a.sourceTo});
+            }
+        }
         return out;
     }
     case BlockKind::Rule: return u"<hr/>"_s;
-    case BlockKind::Html: return escapeText(body);
+    case BlockKind::Html: break;
     case BlockKind::Code:
     case BlockKind::Table:
-    case BlockKind::Frontmatter: return u"<pre>"_s + esc(body) + u"</pre>"_s;
+    case BlockKind::Frontmatter: {
+        const QString html = esc(body);
+        if (trace && !html.isEmpty())
+            trace->append({5, 5 + html.size(), 0, body.size()});
+        return u"<pre>"_s + html + u"</pre>"_s;
+    }
+    }
+    if (trace) {
+        const QList<Range> none;
+        traceText(body, 0, body.size(), 0, Trace{trace, &none});
     }
     return escapeText(body);
 }
