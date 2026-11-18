@@ -516,7 +516,9 @@ mounts IDBFS (a mirror in IndexedDB) on it in three directories:
 In the browser the index is built single-threaded (`wasm_singlethread`: `IndexLoader` without a thread
 pool, piece by piece on the GUI thread, as before); on the first visit the full-text index
 is completed piece by piece after the "ready" index, on later visits it comes from the
-cache. Saving the cache (encoding in 8 ms slices, about 5 s after the index is ready) is
+cache. Saving the cache (no thread to encode it on: in 4 ms slices on the GUI thread about 5 s
+after the index is ready and 10 minutes after the first unsaved change, at once when Qt reports
+the app inactive or the notebook closes — `IndexCacheKeeper::saveIfDirty()`) is
 a **cache mount**: a separate IndexedDB database saved in its own
 transaction. IDBFS saves each mount in one transaction, and `QuotaExceededError` aborts the whole
 transaction — if the index lived in the app data, a file that does not fit the storage quota

@@ -1,6 +1,8 @@
 // Full-text search (SearchIndex, VaultIndex::search) and suggestions (suggestPages,
-// suggestBlocks).
+// suggestBlocks); the background upkeep on a search worker (VaultIndex::setSearchWorker()) ends
+// where a synchronous rebuild does, whatever arrives while a job is out.
 #include "fixture.h"
+#include "indexcompare.h"
 
 #include <QCoreApplication>
 #include <QElapsedTimer>
@@ -9,9 +11,15 @@
 #include <QSignalSpy>
 #include <QTest>
 
+#include <QThreadPool>
+
+#include <deque>
+#include <functional>
+#include <thread>
 #include <type_traits>
 
 using namespace brulion;
+using brulion::testing::describeSearch;
 using namespace Qt::StringLiterals;
 
 namespace {
@@ -38,6 +46,47 @@ QStringList suggestionPaths(const QList<PageSuggestion> &list)
     for (const PageSuggestion &s : list)
         out.append(s.path);
     return out;
+}
+
+/// A note's text for the worker tests (Polish, with the note's own words).
+QString workerNote(int i, int version)
+{
+    return u"# Notatka %1\n- Zażółć gęślą jaźń, wersja %2 o %3\n- spotkanie numer %1 w Łodzi\n"_s.arg(i)
+            .arg(version)
+            .arg(version % 2 ? u"łosiu"_s : u"żubrze"_s);
+}
+
+/// The search results of `index` for the worker tests' queries.
+QStringList workerResults(const VaultIndex &index)
+{
+    QStringList out;
+    for (const QString &q :
+         {u"zazolc"_s, u"losiu"_s, u"zubrze"_s, u"wersja 3"_s, u"spotkanie 7"_s, u"notatka"_s, u"lodzi"_s, u"duzy"_s})
+        out += describeSearch(index.search(q)) << u"--"_s;
+    return out;
+}
+
+/// The same notes indexed from scratch, every document built at once.
+QStringList freshResults(const VaultIndex &index)
+{
+    VaultIndex fresh;
+    for (const VaultPath &path : index.paths())
+        fresh.update(path, index.content(path));
+    fresh.flushSearch();
+    return workerResults(fresh);
+}
+
+/// Wait until `index` has no pending full-text document (the event loop runs).
+bool waitSearchBuilt(const VaultIndex &index, const std::function<void()> &pump = {})
+{
+    QElapsedTimer t;
+    t.start();
+    while (index.pendingSearchDocuments() > 0 && t.elapsed() < 20000) {
+        if (pump)
+            pump();
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 5);
+    }
+    return index.pendingSearchDocuments() == 0;
 }
 
 } // namespace
@@ -284,6 +333,114 @@ private Q_SLOTS:
         QCOMPARE(index.pendingSearchDocuments(), 1);
         QCOMPARE(index.search(u"inny tytul"_s).first().path, u"Notatki/Strona 3.md"_s);
         QCOMPARE(index.pendingSearchDocuments(), 0);
+    }
+
+    // ---- the search worker (VaultIndex::setSearchWorker()) ----------------------------------------
+
+    // Jobs run when the test says so: an edit, a removal, a flushSearch() and the index's end
+    // while a job is out. A stale document is dropped, the note prepared again; the results end
+    // equal to a synchronous rebuild.
+    void searchWorkerDropsStaleDocuments()
+    {
+        std::deque<std::function<void()>> jobs;
+        auto index = std::make_unique<VaultIndex>();
+        index->setSearchWorker([&jobs](std::function<void()> job) { jobs.push_back(std::move(job)); });
+        for (int i = 0; i < 20; ++i)
+            index->update(u"Strony/Notatka %1.md"_s.arg(i), workerNote(i, 0));
+        QCOMPARE(index->pendingSearchDocuments(), 20);
+        QTRY_COMPARE(jobs.size(), size_t(1)); // after the quiet time, one job at a time
+        QCOMPARE(index->pendingSearchDocuments(), 20);
+        // While its documents are prepared: an edit, a removal.
+        index->update(u"Strony/Notatka 3.md"_s, workerNote(3, 1));
+        index->remove(u"Strony/Notatka 5.md"_s);
+        QCOMPARE(index->pendingSearchDocuments(), 20); // (both still out, both pending again)
+        {
+            std::function<void()> job = std::move(jobs.front());
+            jobs.pop_front();
+            std::thread worker(job); // on another thread, as on the pool
+            worker.join();
+        }
+        QCoreApplication::processEvents();            // the delivery: 18 documents in, two dropped
+        QCOMPARE(index->pendingSearchDocuments(), 2); // Notatka 3 again, Notatka 5 to remove
+        // search() catches up at once (flushSearch): the edit found, nothing pending.
+        QCOMPARE(hitPaths(index->search(u"wersja 1 losiu"_s)), QStringList{u"Strony/Notatka 3.md"_s});
+        QCOMPARE(index->pendingSearchDocuments(), 0);
+        QCOMPARE(workerResults(*index), freshResults(*index));
+        // A job out when search() builds everything itself: its late documents are dropped.
+        index->update(u"Strony/Notatka 7.md"_s, workerNote(7, 3));
+        QTRY_COMPARE(jobs.size(), size_t(1));
+        index->flushSearch();
+        index->update(u"Strony/Notatka 7.md"_s, workerNote(7, 4)); // and edited again since
+        QCOMPARE(index->pendingSearchDocuments(), 1);
+        {
+            std::function<void()> job = std::move(jobs.front());
+            jobs.pop_front();
+            job();
+        }
+        QCoreApplication::processEvents();
+        QCOMPARE(index->pendingSearchDocuments(), 1); // the version 3 document did not count
+        QVERIFY(waitSearchBuilt(*index, [&] {
+            while (!jobs.empty()) {
+                std::function<void()> job = std::move(jobs.front());
+                jobs.pop_front();
+                job();
+            }
+        }));
+        QCOMPARE(workerResults(*index), freshResults(*index)); // ("losiu": not the dropped version 3)
+        // The index goes while a job is out: the job delivers nothing (no crash).
+        index->update(u"Strony/Notatka 8.md"_s, workerNote(8, 5));
+        QTRY_COMPARE(jobs.size(), size_t(1));
+        index.reset();
+        std::thread late(jobs.front());
+        late.join();
+        jobs.clear();
+        QCoreApplication::processEvents();
+    }
+
+    // Scripted edits — small and a large note, renames, removals, bursts — on a real pool, with
+    // a manual worker that runs jobs late, and inline: every way ends where a synchronous rebuild
+    // does.
+    void searchWorkerMatchesASynchronousBuild_data()
+    {
+        QTest::addColumn<QString>("worker");
+        QTest::newRow("thread pool") << u"pool"_s;
+        QTest::newRow("inline") << u"inline"_s;
+    }
+    void searchWorkerMatchesASynchronousBuild()
+    {
+        QFETCH(QString, worker);
+        QThreadPool pool;
+        pool.setMaxThreadCount(2);
+        VaultIndex index;
+        if (worker == u"pool")
+            index.setSearchWorker([&pool](std::function<void()> job) { pool.start(std::move(job)); });
+        QString big;
+        for (int i = 0; i < 3000; ++i)
+            big += u"- Duży akapit %1: żółta łąka, źródło i gęś\n"_s.arg(i);
+        for (int i = 0; i < 60; ++i)
+            index.update(u"Strony/Notatka %1.md"_s.arg(i), workerNote(i, 0));
+        index.update(u"Duży.md"_s, big);
+        QVERIFY(waitSearchBuilt(index));
+        QCOMPARE(workerResults(index), freshResults(index));
+        QRandomGenerator rng(20261118);
+        for (int round = 0; round < 6; ++round) {
+            for (int k = 0; k < 15; ++k) {
+                const int i = int(rng.bounded(60));
+                const VaultPath path = u"Strony/Notatka %1.md"_s.arg(i);
+                switch (rng.bounded(4)) {
+                case 0: index.remove(path); break;
+                case 1: index.rename(path, u"Inne/Notatka %1 ćma.md"_s.arg(i), workerNote(i, round + 1)); break;
+                default: index.update(path, workerNote(i, round + k + 1));
+                }
+                if (k % 5 == 0) // a pause now and then: jobs go out, edits arrive while they run
+                    QTest::qWait(int(rng.bounded(400)));
+            }
+            index.update(u"Duży.md"_s, big + u"- dopisek %1 o łosiu\n"_s.arg(round));
+            QTest::qWait(int(rng.bounded(350)));
+        }
+        QVERIFY(waitSearchBuilt(index));
+        QCOMPARE(workerResults(index), freshResults(index));
+        pool.waitForDone();
     }
 
     void searchFindsDiacriticInsensitive()

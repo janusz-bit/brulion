@@ -13,6 +13,16 @@ compared with `ef90077`) and a smooth graph (L16, compared with `64d0380` on a G
 
 ### What got better
 
+* **No more hitches a minute after typing** (2026-11-18). A minute after every pause in typing
+  the app used to write its ready index of the notebook again (L2), on the interface thread in
+  small pieces: about 0.16 s of work at 10,000 notes on a computer, spread over a third of a
+  second — on a phone 0.5–1 s of stuttering scrolling while you read. Now it is written when
+  Brulion goes to the background or the notebook closes, and while you keep working at most
+  every 10 minutes; the interface only takes a quick copy (about 5 ms at 10,000 notes), the
+  rest happens on another core. Likewise after editing a very long note the search index used
+  to read the whole note on the interface thread (about 9 ms for a note of 200 KB, 43 ms for
+  1 MB, several times that on a phone); now that happens on another core too and the interface
+  only takes the result (0.2–0.4 ms).
 * **Typing in the Markdown source of long pages** (2026-11-16). In source mode (Ctrl+E) every
   keystroke used to hand the whole page over to be compared and saved — on a page of 500 KB
   about 18–21 ms on a Raspberry Pi 4 (a slower phone), more than half of what a frame may take,
@@ -497,7 +507,8 @@ raw lines stored as offsets into the note where they are one piece of it), the f
 directory checked per note by path, byte size and the content key of the text just read; identity
 = format, `markdown::ParserVersion`, `SearchIndex::FormatVersion`, Qt and app versions, the
 config's parse fingerprint, the vault id. 10 000 notes: 18.9 MB (0.82× the
-vault), encoded in 122 ms (in 8 ms slices on the GUI thread), all notes and the full-text index
+vault), encoded in 122 ms (in 8 ms slices on the GUI thread; since 2026-11-18 on a pool thread
+from a snapshot, "Index cache and search upkeep off the GUI thread" below), all notes and the full-text index
 decoded in 129 ms on one thread (k 1.03 / 1.06 between 10 000 and 50 000).
 
 | `openFromDisk` from the cache | 1 000 notes | 10 000 notes | 50 000 notes |
@@ -1625,6 +1636,86 @@ texts — the old way. After 250 ms without an edit (`SourceTextSync::VerifyDela
 (`PageController::sourceTextWanted`), the two texts are compared once; a difference (none is
 known) is logged, the TextEdit's text taken, and the session goes on with whole texts.
 
+### Index cache and search upkeep off the GUI thread (L18, 2026-11-18)
+
+Two kinds of background work after edits still ran on the GUI thread, in slices: the index
+cache (L2) and the full-text document of a changed note. The GUI thread now only takes a copy
+and merges a result; the work runs on the index pool (`indexworkers.h`; WebAssembly, without
+threads, keeps the slices).
+
+**The index cache.** `IndexCacheKeeper` re-encoded the whole cache 60 s after every pause in
+the index's changes — at 10 000 notes 158 ms of encoding (18.9 MB) in 8 ms slices on a 1 ms
+timer, so the GUI thread was ~89 % busy for a third of a second after every pause in typing (on
+a 120 Hz phone 0.5–1 s of dropped frames while the user reads or scrolls). Now:
+
+* **When:** after a load that parsed (5 s, once), when the app asks — `saveIfDirty()`, called by
+  `Workspace` when the application state leaves Active (Inactive, Hidden or Suspended: another
+  window has the focus, the phone shows another app; the second such state finds nothing to do)
+  and in `close()`
+  — and, while the app stays in front, at the latest `Policy::maxDirtyMs` (10 min) after the
+  first unsaved change; a pause in typing no longer starts or postpones anything.
+* **Where:** `indexcache::SnapshotTaker` copies what a file holds on the GUI thread in steps of
+  `Policy::sliceMs` (4 ms; given up when the index or its full-text index changes in between,
+  tried again 2 s later) — the notes' records are shared (`std::shared_ptr<Entry>`: a change
+  attaches a new record, so a snapshot's stay as they were) and the posting lists implicitly
+  shared, so a step costs reference counts, not data. The `Snapshot` is immutable: `encode()` and
+  `QSaveFile` run on a pool thread, which the workspace's pool waits for when the app ends
+  (`QThreadPool`'s destructor). Snapshots are numbered: a write never replaces the file of a newer
+  one (a periodic save still writing when the notebook closes). `saveIfDirty()` takes its snapshot
+  at once (nobody is looking), first building up to 16 pending full-text documents.
+* **The file** is unchanged (format 2): a snapshot taken while a few full-text documents were
+  pending writes the documents it has (each with its note's content key; `adoptSearch()` on load
+  keeps the current ones and builds the rest), and the keeper stays dirty until a complete one is
+  written. Before, such a cache had no search section at all, so the next load built every
+  document again.
+
+Laptop (i5-13450HX, Release, unpinned, a shared machine in a quieter hour — 1-minute load
+6–16 —, `bench.sh -r 5`, medians, `compare`: no row changed beyond max(10 %, noise); base =
+`0f6bab95`, both trees with this branch's `tests/bench`):
+
+| | 1 000 notes | 10 000 notes | 50 000 notes |
+|---|---:|---:|---:|
+| `cacheEncode` — base: the GUI thread's work per save, in 8 ms slices | 14.0 ms | 159 ms | 885 ms |
+| `cacheEncode` — now on a pool thread (snapshot + encoding) | 14.3 ms | 159 ms | 847 ms |
+| `cacheSnapshot` — the GUI thread's work per save now, in ≤ 4 ms steps | 0.26 ms | 5.2 ms | 49 ms |
+
+At 10 000 notes a periodic save costs the GUI thread two steps of a few milliseconds instead of
+some 20 slices of 8 ms, at most every 10 minutes instead of a minute after every pause. A first
+version copied every note's `ParsedNote` (its dozen implicitly shared members: a cache miss
+each): 23–33 ms at 10 000 notes; sharing the records cut that by ~5×. (The copy of the posting
+lists — one per term — is the smaller part.)
+
+**The full-text document of a changed note (L18).** 300 ms after the last change `searchTick`
+tokenised the changed notes (`SearchIndex::prepare`) on the GUI thread, at least one note per
+8 ms slice — a 1 MB note in one go. With a worker (`VaultIndex::setSearchWorker()`, given by
+`IndexLoader::start()` from its pool) the index hands the dirty notes (at most 64 notes or 256 K
+characters per job, one job at a time; removals are dropped right away) with shared copies of
+their texts to the pool and applies each prepared document with `SearchIndex::set()` only while
+the note still has the content key it was prepared from and was not marked again meanwhile
+(`searchInFlight` holds the job's ticket per note; an edit meanwhile drops the document, the note
+is prepared again). `flushSearch()` — `search()` calls it — stays synchronous: it builds the
+notes still out on the worker too, and their late documents are dropped. Measured:
+
+| one note re-indexed in a vault of 1000 | 50 KB | 200 KB | 1 MB |
+|---|---:|---:|---:|
+| `searchLargeNote` (parse + tokenise + apply; the GUI thread's work before, also now in `flushSearch()`) | 2.6 ms | 9.9 ms | 43 ms |
+| `searchApplyLargeNote` (the GUI thread's work now: `set()` of the prepared document) | 0.09 ms | 0.19 ms | 0.41 ms |
+
+`searchLargeNote` itself is unchanged: 42.7 against 43.2 ms for 1 MB, six interleaved runs of
+each tree at load ~10 (a `bench.sh` round, base first, showed +7 % within its ±100 % noise).
+(The parse of the note, `VaultIndex::update()` after a save, still runs on the GUI thread — L4/L12
+made it once per save.) Diffing the postings of the changed terms only was not needed: replacing
+a 1 MB note's document costs less than half a millisecond.
+
+Tests: `tst_index_cache` (a snapshot given up on index and full-text changes, immutable while the
+index changes on another thread, equal bytes in steps and at once, a partial search section
+adopted), `tst_index_search` (stale documents dropped while a job is out, `flushSearch()` and the
+index's end with a job out, scripted edits on a pool and inline equal to a synchronous build),
+`tst_notebook_indexcache` (written on `saveIfDirty()` and not after pauses, after `maxDirtyMs`
+while changes never pause, a keeper closed while writing, the files load to the edited index),
+`tst_shell_workspace_wiring` (the app inactive writes the cache, the next open takes every note
+from it).
+
 ### Budgets
 
 Desktop = the laptop above (the graph: a GitHub runner, see its row), phone = Pi 4 (floor) and the
@@ -1635,7 +1726,7 @@ emulator (optimistic), web = headless Chromium (×4 CPU = phone). ✅ meets, ⚠
 |---|---|---|---|---|
 | start → first content | desktop < 1 s, phone < 2 s | ✅ 0.40 s (10k), 0.39 s demo | ✅ Pi demo 1.25 s, 10k 1.57 s | ✅ repeat 0.61 s, ×4 CPU 1.64 s; ❌ first visit at 20 Mbit/s 7.3–7.4 s (L9; 8.4–8.5 s before in the same session) |
 | index ready | desktop < 2 s at 10k; phone < 10 s at 10k | ✅ 0.96 s, 0.83 s from the index cache (wave 5; was 1.89 s) | ❌ Pi 15 s before wave 5, not measured since (L1b) | ✅ 1k cold 1.3 s, warm 1.1 s (×4 CPU 5.8 / 4.7 s; was 1.1 / 5.2 s in the same session) |
-| GUI stall while indexing / after ready | < 50 ms desktop, < 100 ms phone | ✅ 28 ms indexing, 0 ms after ready (wave 5) | ❌ Pi 0.54 / 0.45 s before wave 5 (L1b, L18) | – |
+| GUI stall while indexing / after ready | < 50 ms desktop, < 100 ms phone | ✅ 28 ms indexing, 0 ms after ready (wave 5) | ❌ Pi 0.54 / 0.45 s before wave 5 (L1b; the full-text part of it off the GUI thread since L18) | – |
 | keystroke → frame (≤ 5000 blocks) | p95 < 16 ms desktop, < 33 ms phone | ✅ small page; ⚠️ 5000-block outline p95 23 ms | ✅ small page; ⚠️ outline p95 42 ms | – |
 | Enter / undo | < 50 ms desktop, < 100 ms phone | ✅ 15 / 13 ms (L5; base in the same session 15 / 32 ms) | ✅ Enter 38 ms; undo 214 ms before L5, not measured since (L5b) | – |
 | autosave stall | < 50 ms desktop, < 100 ms phone | ✅ small page 41 ms; ❌ 500 KB page 88 ms | ✅ small page 29 ms; ❌ 500 KB page 0.2 s | – |
@@ -1660,7 +1751,6 @@ The L-items of the October 2026 performance plan, with the numbers they should m
 | L9b | the developer and self-test QML (`qml/dev`, `qml/content/*SelfTest.qml`) in a folder outside `src/app` (qmlimportscanner scans the target's source folder whole, and its `-exclude` does not work there), so that releases leave out QtTest, QuickTest and `Qt.labs.folderlistmodel` | APK −0.84 MB, wasm −0.27 MB (before wasm-opt) |
 | L10 | lazy cold views and dialogs, `BIcon` without a `Loader` | Pi demo first content −0.3 s |
 | L16b | measure the graph on the Raspberry Pi (`bench-matrix.sh views graph`, offscreen: the software renderer's image node, 3 000-note vault; must not regress) and in the Android emulator probe (`android-batch.sh probe`, the scene graph on GLES); check it by hand on a phone, on Windows with a GPU (Direct3D 11) and in a phone's browser; if `rebuild()` (VaultIndex::graph and the filters, GUI thread) costs a phone > 50 ms, move its pure part onto the worker | phone: GUI stall during the layout < 33 ms, settled < 3 s |
-| L18 | search indexing of big documents in bounded slices | no stall > 16 ms after ready |
 | L19 | measure the PDF viewer on real devices (the emulator: 174 MB PSS at 800 %, above): PSS with a 100+ MB scanned lecture zoomed in on a phone (if above 350 MB, base pictures at half resolution on touch devices), time to the first page of a 300-page lecture, Qt PDF timings in a Release build | phone PSS < 350 MB; first page < 0.5 s |
 | L20b | measure the generated QML at `-Oz` on a phone (L20): a Release APK built with `-DBRULION_QML_CODE_FOR_SIZE=OFF` against the default one, `android-batch.sh probe` or the Pixel — journal scroll, opening a 5000-block page, the views; if a view loses more than 10 %, compile its few hot files at the build type's level | no phone slowdown > 10 % |
 
@@ -1675,7 +1765,9 @@ library without exported static-library symbols and with RELR, no QML source in 
 browser releases: APK −13.2 MB, wasm −6.0 MB raw / −1.4 MB gzip, above; the phone: L20b). On
 2026-11-15 L4 (typing in place: the keystroke's core 1.3 → 0.12 ms, above) and L12 (a sync that
 reads no settled note and no second copy of its state: 0.74 → 0.30 s at 10k, above; the Pi is
-still to be measured).
+still to be measured). On 2026-11-18 L18 (a big note's full-text document tokenised on a worker,
+the GUI thread applies it in 0.2–0.4 ms) with the index cache written from a snapshot on a
+worker (above: "Index cache and search upkeep off the GUI thread").
 
 ### How to run the benchmarks
 

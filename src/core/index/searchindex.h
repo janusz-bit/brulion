@@ -83,6 +83,10 @@ public:
     qsizetype size() const { return m_byId.size(); }
     /// Number of distinct terms in the dictionary.
     qsizetype termCount() const { return qsizetype(m_postings.size()); }
+    /// Changes with every set(), remove(), clear() and squeeze(), unique among all indexes (one
+    /// moved in has another): tells the index cache's snapshot whether the index changed between
+    /// two of its steps. 0 for an index never changed.
+    quint64 revision() const { return m_revision; }
 
     /// Best `limit` documents for `query`, highest score first (ties by id).
     QList<Hit> search(QStringView query, int limit) const;
@@ -112,12 +116,15 @@ private:
     struct Expansion;
     QList<Expansion> expand(const QString &term, bool prefix) const;
     double fieldScore(Posting posting, qsizetype df) const;
+    /// A new revision().
+    void touch();
 
     std::map<QString, PostingList> m_postings; ///< ordered: prefix ranges via lower_bound
     QList<Doc> m_docs;
     QList<int> m_free;
     QHash<QString, int> m_byId;
     std::array<quint64, FieldCount> m_totalLength{};
+    quint64 m_revision = 0;
 };
 
 } // namespace brulion

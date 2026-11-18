@@ -82,16 +82,20 @@
 //                  prepareParsed() -> PreparedNote (any thread), updatePrepared(prepared,
 //                  sequence), reserveSequence(n), adoptSearch(SearchIndex) (documents kept by
 //                  content key), setSearchBuiltElsewhere(on), contentKey(text), parseFingerprint;
-//                  SearchIndex::prepare(title, aliases, content) -> Document, set(id, doc, key)
+//                  SearchIndex::prepare(title, aliases, content) -> Document, set(id, doc, key);
+//                  setSearchWorker(start): changed notes tokenised on a pool, applied here while
+//                  their text is unchanged
 //   indexcache.h   the index cache on the device (docs/PERFORMANCE.md L2): Identity::current(config,
 //                  vaultId), Reader::open(bytes, identity, &why) -> find(path) -> Record{size,
 //                  contentKey, …}, decodeNote(record, path, content, config) (any thread),
-//                  searchDecoder() (in steps); Writer(index, identity, stat).step(ms, &bytes)
-//                  (slices; Aborted when the index changes), encode(index, identity, stat)
+//                  searchDecoder() (in steps); SnapshotTaker(index, identity, stat).step(ms)
+//                  (Aborted when the index changes) -> take() / Snapshot::take() — an immutable
+//                  copy sharing the index's data —, Writer(snapshot).step(ms, &bytes) and
+//                  encode(snapshot) on any thread, encode(index, identity, stat)
 //
-// Not thread-safe: use a VaultIndex from one thread (the static prepare functions and the cache's
-// decoder excepted). Results are snapshots (copies); pointers from note() stay valid until the
-// next change.
+// Not thread-safe: use a VaultIndex from one thread (the static prepare functions, the cache's
+// decoder and the encoding of a snapshot excepted). Results are snapshots (copies); pointers
+// from note() stay valid until the next change.
 #pragma once
 
 #include "index/indexcache.h"

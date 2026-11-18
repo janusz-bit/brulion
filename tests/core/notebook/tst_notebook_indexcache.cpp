@@ -3,9 +3,11 @@
 // taken from the cache only while its path, size and text match (a touched file is a hit, a
 // same-size same-time edit a miss), another journal configuration or a corrupt file makes the
 // whole cache unused; the full-text index comes from the cache (or is rebuilt when the cache had
-// none); the keeper saves after a load that parsed, after quiet changes, never for small notebooks
-// nor above its size limit (indexCacheBudget() where storage has a quota), and reports a folder it
-// cannot write.
+// none); the keeper saves after a load that parsed, when the app asks (going to the background,
+// closing) and at the latest a while after the first unsaved change — not again after every pause
+// in typing —, the encoding and the file on a pool thread (inline without one), never for small
+// notebooks nor above its size limit (indexCacheBudget() where storage has a quota), and reports a
+// folder it cannot write; a file written after edits loads to the index the edits made.
 #include "notebook/indexcachekeeper.h"
 #include "notebook/indexloader.h"
 
@@ -16,6 +18,7 @@
 #include "vault/vault.h"
 
 #include <QDir>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QSignalSpy>
 #include <QTemporaryDir>
@@ -218,7 +221,8 @@ private Q_SLOTS:
             QCOMPARE(describeSearch(second.index->search(q)), describeSearch(fresh->search(q)));
     }
 
-    // Written while the full-text index was incomplete: no search section; a warm load builds it.
+    // Written while the full-text index was incomplete: the documents it had; a warm load builds
+    // the rest (in the background, or at once for a search).
     void cacheWithoutSearch()
     {
         QTemporaryDir tmp;
@@ -233,19 +237,17 @@ private Q_SLOTS:
         }
         Loaded second = load(root, cache, 2, pool);
         QCOMPARE(second.stats.cache, u"used"_s);
-        QVERIFY(!second.stats.searchFromCache);
+        QVERIFY(second.stats.searchFromCache);
         QCOMPARE(second.stats.fromCache, 23);
-        // Built by the loader's search thread — unless that never got a thread before every note
-        // was merged (a runner that starts threads late: the owner parses the notes itself), when
-        // the index builds every document itself. Never a part of them.
-        const qsizetype pending = second.index->pendingSearchDocuments();
-        QVERIFY2(pending == 0 || pending == 23, qPrintable(QString::number(pending)));
+        // The documents the file lacked are built again (on the search worker, or by search()).
+        QVERIFY(second.index->pendingSearchDocuments() > 0);
         const std::unique_ptr<VaultIndex> fresh = serialIndex(root);
         QCOMPARE(describeSearch(second.index->search(u"zolw"_s)), describeSearch(fresh->search(u"zolw"_s)));
     }
 
-    // The keeper: saves soon after a load that parsed, again after quiet changes; nothing for
-    // small notebooks, nothing above the size limit; a folder it cannot write is reported.
+    // The keeper: saves soon after a load that parsed, again at the latest maxDirtyMs after a
+    // change; nothing for small notebooks, nothing above the size limit; a folder it cannot write
+    // is reported.
     void keeperSaves()
     {
         QTemporaryDir tmp;
@@ -257,7 +259,7 @@ private Q_SLOTS:
         l.index->flushSearch();
         IndexCacheKeeper::Policy policy;
         policy.firstSaveQuietMs = 10;
-        policy.quietMs = 50;
+        policy.maxDirtyMs = 50;
         policy.minNotes = 10;
         pool.setMaxThreadCount(2);
         IndexCacheKeeper keeper(*l.vault, *l.index,
@@ -270,7 +272,8 @@ private Q_SLOTS:
         QVERIFY(QFileInfo::exists(cache));
         QVERIFY(saved.first().at(0).toLongLong() > 0);
         QVERIFY(!keeper.isDirty());
-        // A change: saved again once quiet.
+        QTRY_VERIFY(!keeper.isSaving());
+        // A change: saved again soon (maxDirtyMs).
         l.index->update(u"Nowa.md"_s, u"- nowa"_s);
         QTRY_VERIFY(keeper.isDirty() || saved.count() == 2);
         QVERIFY(saved.wait(5000) || saved.count() == 2);
@@ -293,6 +296,161 @@ private Q_SLOTS:
         QVERIFY(!limited.saveNow());
         QCOMPARE(failed.count(), 1);
         QCOMPARE(QFileInfo(cache).size(), oldSize);
+    }
+
+    // Changes are saved when the app asks (saveIfDirty(): the app goes to the background, the
+    // notebook closes) and after maxDirtyMs of unsaved changes — however often they come: not
+    // 60 s after every pause in typing. The file written loads to the index the edits made.
+    void keeperSavesWhenAskedNotAfterEachChange_data()
+    {
+        QTest::addColumn<int>("threads");
+        QTest::newRow("pool") << 2;
+        QTest::newRow("inline") << 0;
+    }
+    void keeperSavesWhenAskedNotAfterEachChange()
+    {
+        QFETCH(int, threads);
+        QTemporaryDir tmp;
+        const QString root = tmp.path() + u"/Zeszyt żółwia"_s;
+        const QString cache = tmp.path() + u"/stan/index-cache.bin"_s;
+        writeVault(root, 30);
+        QThreadPool pool;
+        pool.setMaxThreadCount(threads + 1);
+        const WorkerPool workers =
+                threads > 0 ? WorkerPool{threads, [&pool](std::function<void()> j) { pool.start(std::move(j)); }}
+                            : WorkerPool{};
+        {
+            Loaded l = load(root, QString(), threads, pool);
+            l.index->flushSearch();
+            IndexCacheKeeper::Policy policy;
+            policy.firstSaveQuietMs = 600000;
+            policy.maxDirtyMs = 600000;
+            policy.minNotes = 10;
+            IndexCacheKeeper keeper(*l.vault, *l.index, workers, cache, policy);
+            QSignalSpy saved(&keeper, &IndexCacheKeeper::saved);
+            keeper.loaded(l.stats);
+            QVERIFY(keeper.isDirty());
+            // Edits on disk and in the index, with pauses: nothing is written meanwhile.
+            for (int i = 0; i < 5; ++i) {
+                const QString path = u"Strony/Strona %1.md"_s.arg(i);
+                const QByteArray text = "- zmieniona strona " + QByteArray::number(i) + " o źdźble [[Żółw]]\n";
+                writeFile(root, path, text);
+                l.index->update(path, QString::fromUtf8(text));
+                QTest::qWait(30);
+            }
+            writeFile(root, u"Nowa ćma.md"_s, "- nowa ćma #owady\n");
+            l.index->update(u"Nowa ćma.md"_s, u"- nowa ćma #owady\n"_s);
+            QVERIFY(QFile::remove(root + u"/Strony/Strona 9.md"_s));
+            l.index->remove(u"Strony/Strona 9.md"_s);
+            l.vault->rescan(); // the vault's sizes of the edited files
+            QTest::qWait(200);
+            QCOMPARE(saved.count(), 0);
+            QVERIFY(!QFileInfo::exists(cache));
+            // The app goes to the background: written (on the pool, or right here inline).
+            keeper.saveIfDirty();
+            QVERIFY(!keeper.isDirty());
+            if (threads == 0) {
+                QCOMPARE(saved.count(), 1);
+                QVERIFY(!keeper.isSaving());
+            } else {
+                QTRY_COMPARE(saved.count(), 1);
+            }
+            QVERIFY(QFileInfo::exists(cache));
+            // Nothing new: asking again writes nothing.
+            keeper.saveIfDirty();
+            QTest::qWait(50);
+            QCOMPARE(saved.count(), 1);
+            QVERIFY(!keeper.isSaving());
+        }
+        pool.waitForDone();
+        // Loaded from that file: the index the edits made, every note from the cache.
+        Loaded warm = load(root, cache, threads, pool);
+        QCOMPARE(warm.stats.cache, u"used"_s);
+        QCOMPARE(warm.stats.parsed, 0);
+        QVERIFY(warm.stats.searchFromCache);
+        const std::unique_ptr<VaultIndex> fresh = serialIndex(root, warm.vault->config());
+        compareIndexes(*warm.index, *fresh, u"saved after edits"_s);
+        for (const QString &q : {u"zdzblo"_s, u"ćma"_s, u"spotkanie 9"_s, u"zmieniona strona"_s})
+            QCOMPARE(describeSearch(warm.index->search(q)), describeSearch(fresh->search(q)));
+    }
+
+    // While the app stays in front, changes that never pause are written maxDirtyMs after the
+    // first of them (a pause does not postpone it); the file (encoded on the pool, or in slices
+    // on this thread) loads.
+    void keeperSavesAfterTheLongestWait_data()
+    {
+        QTest::addColumn<int>("threads");
+        QTest::newRow("pool") << 1;
+        QTest::newRow("inline, in slices") << 0;
+    }
+    void keeperSavesAfterTheLongestWait()
+    {
+        QFETCH(int, threads);
+        QTemporaryDir tmp;
+        const QString root = tmp.path() + u"/N"_s;
+        const QString cache = tmp.path() + u"/index-cache.bin"_s;
+        writeVault(root, 20);
+        QThreadPool pool;
+        Loaded l = load(root, QString(), 0, pool);
+        l.index->flushSearch();
+        IndexCacheKeeper::Policy policy;
+        policy.firstSaveQuietMs = 600000;
+        policy.maxDirtyMs = 300;
+        policy.minNotes = 10;
+        pool.setMaxThreadCount(2);
+        policy.sliceMs = 1;
+        const WorkerPool workers =
+                threads > 0 ? WorkerPool{threads, [&pool](std::function<void()> j) { pool.start(std::move(j)); }}
+                            : WorkerPool{};
+        IndexCacheKeeper keeper(*l.vault, *l.index, workers, cache, policy);
+        QSignalSpy saved(&keeper, &IndexCacheKeeper::saved);
+        IndexLoader::Stats used = l.stats;
+        used.cache = u"used"_s;
+        used.parsed = 0;
+        used.searchFromCache = true;
+        keeper.loaded(used); // nothing to save after the load
+        QVERIFY(!keeper.isDirty());
+        QElapsedTimer clock;
+        clock.start();
+        int edit = 0;
+        while (saved.count() == 0 && clock.elapsed() < 10000) {
+            l.index->update(u"Pisanie.md"_s, u"- tekst pisany bez przerwy %1"_s.arg(++edit));
+            QTest::qWait(40);
+        }
+        QCOMPARE(saved.count(), 1);
+        QVERIFY2(clock.elapsed() < 3000, qPrintable(QString::number(clock.elapsed())));
+        pool.waitForDone();
+        Loaded warm = load(root, cache, 0, pool);
+        QCOMPARE(warm.stats.cache, u"used"_s);
+        QCOMPARE(warm.stats.fromCache, 23);
+    }
+
+    // The keeper goes (the notebook closes) while its file is written on the pool: the write
+    // finishes; a save of an older snapshot never replaces a newer file.
+    void keeperClosesWhileWriting()
+    {
+        QTemporaryDir tmp;
+        const QString root = tmp.path() + u"/N"_s;
+        const QString cache = tmp.path() + u"/index-cache.bin"_s;
+        writeVault(root, 20);
+        QThreadPool pool;
+        pool.setMaxThreadCount(2);
+        Loaded l = load(root, QString(), 0, pool);
+        l.index->flushSearch();
+        IndexCacheKeeper::Policy policy;
+        policy.minNotes = 10;
+        {
+            IndexCacheKeeper keeper(*l.vault, *l.index,
+                                    WorkerPool{1, [&pool](std::function<void()> j) { pool.start(std::move(j)); }},
+                                    cache, policy);
+            keeper.loaded(l.stats);
+            keeper.saveIfDirty();
+            QVERIFY(keeper.isSaving());
+        }
+        pool.waitForDone();
+        Loaded warm = load(root, cache, 0, pool);
+        QCOMPARE(warm.stats.cache, u"used"_s);
+        QCOMPARE(warm.stats.parsed, 0);
     }
 
     void keeperReportsAFolderItCannotWrite()

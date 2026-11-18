@@ -221,7 +221,8 @@ private Q_SLOTS:
         }
     }
 
-    // Closed right after indexing, before the first save: the cache is written at close (once).
+    // Closed right after indexing, before the first save: the cache is written at close (on the
+    // index pool, which the workspace waits for when it goes).
     void indexCacheSavedAtClose()
     {
         const QString root = newRoot();
@@ -244,6 +245,48 @@ private Q_SLOTS:
         QVERIFY(ws.open(root, state));
         QTRY_VERIFY_WITH_TIMEOUT(ws.ready(), 20000);
         QCOMPARE(ws.indexStats().fromCache, 15);
+    }
+
+    // The app goes to the background: the index cache gets the changes then — not while the
+    // user works (no save after a pause in typing), and not again without new changes.
+    void indexCacheSavedWhenTheAppIsInactive()
+    {
+        const QString root = newRoot();
+        const QString state = root + u"-state"_s;
+        for (int i = 0; i < 15; ++i)
+            writeRaw(root + u"/Strona %1.md"_s.arg(i), "- źdźbło trawy\n");
+        brulion::notebook::IndexCacheKeeper::Policy policy;
+        policy.firstSaveQuietMs = 600000;
+        policy.minNotes = 10;
+        const QString cache = state + u"/index-cache.bin"_s;
+        Workspace ws;
+        ws.setIndexCachePolicy(policy);
+        QVERIFY(ws.open(root, state));
+        QTRY_VERIFY_WITH_TIMEOUT(ws.ready(), 20000);
+        QVERIFY(ws.indexCacheKeeper());
+        QVERIFY(!QFileInfo::exists(cache));
+        ws.applicationStateChanged(Qt::ApplicationInactive);
+        QTRY_VERIFY_WITH_TIMEOUT(QFileInfo::exists(cache), 10000);
+        QTRY_VERIFY(!ws.indexCacheKeeper()->isSaving());
+        const qint64 first = QFileInfo(cache).size();
+        ws.applicationStateChanged(Qt::ApplicationActive);
+        // A change, a pause: nothing written while the app is in front.
+        writeRaw(root + u"/Nowa łąka.md"_s, "- nowa łąka pełna kwiatów, długi tekst o niej\n");
+        QVERIFY(!ws.vault()->rescan().isEmpty());
+        QTRY_VERIFY_WITH_TIMEOUT(ws.index()->contains(u"Nowa łąka.md"_s), 10000);
+        QTRY_VERIFY(ws.indexCacheKeeper()->isDirty());
+        QTest::qWait(700);
+        QCOMPARE(QFileInfo(cache).size(), first);
+        ws.applicationStateChanged(Qt::ApplicationSuspended);
+        QTRY_VERIFY_WITH_TIMEOUT(QFileInfo(cache).size() != first, 10000);
+        QVERIFY(!ws.indexCacheKeeper()->isDirty());
+        ws.close();
+        Workspace again;
+        again.setIndexCachePolicy(policy);
+        QVERIFY(again.open(root, state));
+        QTRY_VERIFY_WITH_TIMEOUT(again.ready(), 20000);
+        QCOMPARE(again.indexStats().fromCache, 16);
+        QCOMPARE(again.search(u"laka"_s).size(), 1);
     }
 
     // The storage refused the cache (the browser's quota, WasmStorage::cacheNotSaved()): the open
@@ -279,7 +322,7 @@ private Q_SLOTS:
         QTRY_VERIFY_WITH_TIMEOUT(ws.ready(), 20000);
         QVERIFY(ws.indexCacheKeeper());
         ws.close();
-        QVERIFY(QFileInfo::exists(cache));
+        QTRY_VERIFY(QFileInfo::exists(cache)); // (written on the index pool after close())
     }
 
     // ---- Quick capture ----------------------------------------------------------------------------

@@ -2,8 +2,11 @@
 // exactly (the frozen corpus and the live guide notes), the encoding is frozen by a golden digest,
 // every identity field is checked, and hostile input — truncation, flipped bytes, absurd lengths
 // and counts, deep nesting, overlapping or copied records — is refused without crashing (CI runs
-// this under ASan/UBSan); the writer aborts when the index changes and leaves the search section
-// out while it is incomplete.
+// this under ASan/UBSan); a snapshot taken in steps gives up when the index or its full-text index
+// changes in between, carries an incomplete full-text index (a load builds only what is missing)
+// but none built elsewhere, and encodes, in steps
+// or at once and on another thread, the file of the index as it was when it was taken — whatever
+// the index does meanwhile.
 #include "index/indexcache.h"
 #include "index/indexcache_p.h"
 
@@ -20,6 +23,7 @@
 #include <QTest>
 
 #include <limits>
+#include <thread>
 #include <tuple>
 
 using namespace brulion;
@@ -402,39 +406,123 @@ private Q_SLOTS:
         }
     }
 
-    // The writer gives up when the index changes between its steps, and writes no search section
-    // while the full-text index is incomplete.
-    void writerAborts()
+    // The snapshot gives up when the index changes between its steps, and holds no search
+    // section while the full-text index is incomplete.
+    void snapshotAborts()
     {
         std::unique_ptr<VaultIndex> index = corpusIndex();
         {
-            indexcache::Writer writer(*index, testIdentity(), fakeStat());
-            QByteArray out;
-            QCOMPARE(writer.step(0, &out), indexcache::Writer::State::More);
+            indexcache::SnapshotTaker taker(*index, testIdentity(), fakeStat());
+            QCOMPARE(taker.step(0), indexcache::SnapshotTaker::State::More);
             index->update(u"Nowa.md"_s, u"- zmiana w trakcie"_s);
-            QCOMPARE(writer.step(1000, &out), indexcache::Writer::State::Aborted);
+            QCOMPARE(taker.step(1000), indexcache::SnapshotTaker::State::Aborted);
+            QVERIFY(!taker.take());
         }
         QVERIFY(index->pendingSearchDocuments() > 0);
-        indexcache::Writer writer(*index, testIdentity(), fakeStat());
+        indexcache::SnapshotTaker taker(*index, testIdentity(), fakeStat());
+        int steps = 0;
+        while (taker.step(0) == indexcache::SnapshotTaker::State::More)
+            ++steps;
+        QVERIFY(steps >= index->paths().size() - 1); // a note per step at least
+        const std::shared_ptr<const indexcache::Snapshot> snapshot = taker.take();
+        QVERIFY(snapshot);
+        QVERIFY(snapshot->hasSearch()); // with the edited note's document pending
+        QVERIFY(!snapshot->searchComplete());
+        QCOMPARE(snapshot->noteCount(), index->paths().size());
+        indexcache::Writer writer(snapshot);
         QByteArray out;
         while (writer.step(1, &out) == indexcache::Writer::State::More) { }
-        QVERIFY(!writer.hasSearch());
+        QVERIFY(writer.hasSearch());
+        const QByteArray whole = out;
+        QCOMPARE(writer.step(1000, &out), indexcache::Writer::State::Done); // done: nothing appended
+        QCOMPARE(out, whole);
+        QCOMPARE(out, indexcache::encode(*snapshot)); // in steps or at once: the same bytes
         const auto reader = indexcache::Reader::open(out, testIdentity());
         QVERIFY(reader);
-        QVERIFY(!reader->hasSearch());
+        QVERIFY(reader->hasSearch());
+        // Adopted by an index of the same notes: only the pending note's document is built again,
+        // the results those of a full build.
+        {
+            indexcache::Reader::SearchDecoder decoder = reader->searchDecoder();
+            decoder.step(std::numeric_limits<int>::max());
+            QVERIFY(!decoder.failed());
+            VaultIndex adopted;
+            for (const VaultPath &p : index->paths())
+                adopted.update(p, index->content(p));
+            adopted.setSearchBuiltElsewhere(true);
+            adopted.adoptSearch(decoder.take());
+            QCOMPARE(adopted.pendingSearchDocuments(), 1);
+            for (const QString &q : {u"zmiana trakcie"_s, u"zolw"_s, u"spotkanie"_s, u"notatka 12"_s})
+                QCOMPARE(describeSearch(adopted.search(q)), describeSearch(index->search(q)));
+        }
+        // Built elsewhere (an index loader's thread): no search section.
+        index->setSearchBuiltElsewhere(true);
+        QVERIFY(!indexcache::Snapshot::take(*index, testIdentity(), fakeStat())->hasSearch());
+        index->setSearchBuiltElsewhere(false);
         QCOMPARE(reader->noteCount(), index->paths().size());
         QCOMPARE(writer.notesWritten(), index->paths().size());
         // A note without a stat (not in the vault's listing) gets no record.
-        indexcache::Writer partial(*index, testIdentity(), [](const VaultPath &p) -> std::optional<FileStat> {
-            if (p == u"Nowa.md")
-                return std::nullopt;
-            return FileStat{p, false, 1, 1};
-        });
-        out.clear();
-        while (partial.step(100, &out) == indexcache::Writer::State::More) { }
-        const auto r2 = indexcache::Reader::open(out, testIdentity());
+        const QByteArray partial =
+                indexcache::encode(*index, testIdentity(), [](const VaultPath &p) -> std::optional<FileStat> {
+                    if (p == u"Nowa.md")
+                        return std::nullopt;
+                    return FileStat{p, false, 1, 1};
+                });
+        const auto r2 = indexcache::Reader::open(partial, testIdentity());
         QVERIFY(r2);
         QCOMPARE(r2->find(u"Nowa.md"_s)->length, 0);
+    }
+
+    // A full-text change between two steps (the background search upkeep changes no version of
+    // the index) gives up too: the documents and the posting lists must belong together.
+    void snapshotAbortsOnSearchChanges()
+    {
+        std::unique_ptr<VaultIndex> index = corpusIndex();
+        index->update(u"Żółw.md"_s, u"- żółw w ogrodzie"_s);
+        {
+            indexcache::SnapshotTaker taker(*index, testIdentity(), fakeStat());
+            QCOMPARE(taker.step(0), indexcache::SnapshotTaker::State::More);
+            index->flushSearch(); // the document of the edit, no version change
+            QCOMPARE(taker.step(1000), indexcache::SnapshotTaker::State::Aborted);
+        }
+        indexcache::SnapshotTaker complete(*index, testIdentity(), fakeStat());
+        QCOMPARE(complete.step(0), indexcache::SnapshotTaker::State::More);
+        index->setSearchBuiltElsewhere(false);
+        index->adoptSearch(SearchIndex()); // every document dropped, built again in the background
+        QCOMPARE(complete.step(1000), indexcache::SnapshotTaker::State::Aborted);
+        // Unchanged between the steps: done, complete.
+        index->flushSearch();
+        indexcache::SnapshotTaker again(*index, testIdentity(), fakeStat());
+        indexcache::SnapshotTaker::State state = indexcache::SnapshotTaker::State::More;
+        while (state == indexcache::SnapshotTaker::State::More)
+            state = again.step(0);
+        QCOMPARE(state, indexcache::SnapshotTaker::State::Done);
+        QVERIFY(again.take()->searchComplete());
+    }
+
+    // The snapshot is the index as it was: edits, removals and a cleared index afterwards change
+    // nothing in the file encoded from it (on another thread here), byte for byte.
+    void snapshotIsImmutable()
+    {
+        std::unique_ptr<VaultIndex> index = corpusIndex();
+        const QByteArray before = indexcache::encode(*index, testIdentity(), fakeStat());
+        const std::shared_ptr<const indexcache::Snapshot> snapshot =
+                indexcache::Snapshot::take(*index, testIdentity(), fakeStat());
+        QVERIFY(snapshot->hasSearch());
+        QByteArray encoded;
+        std::thread worker([&] { encoded = indexcache::encode(*snapshot); });
+        const QList<VaultPath> paths = index->paths();
+        for (qsizetype i = 0; i < paths.size(); ++i) {
+            if (i % 3 == 0)
+                index->remove(paths[i]);
+            else
+                index->update(paths[i], u"- zmieniona treść %1 źdźbło\n"_s.arg(i));
+        }
+        index->flushSearch();
+        worker.join();
+        QCOMPARE(encoded, before);
+        index->clear();
+        QCOMPARE(indexcache::encode(*snapshot), before);
     }
 };
 

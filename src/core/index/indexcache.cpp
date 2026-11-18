@@ -65,6 +65,29 @@ constexpr quint32 ByteOrderMark = 0x01020304;
 constexpr qint64 FooterSize = 48;
 constexpr int MaxVariantDepth = 32;
 
+// ---- snapshots ----------------------------------------------------------------------------------
+
+/// A full-text index as a snapshot holds it: its documents' slots and its posting lists in term
+/// order (each list shared with the index's).
+struct SearchCopy {
+    struct Doc {
+        QString id;
+        quint64 contentKey = 0;
+        SearchIndex::FieldCounts length{};
+        bool used = false;
+    };
+    QList<Doc> docs;
+    QList<std::pair<QString, SearchIndexAccess::PostingList>> postings;
+};
+
+void copyDocs(const SearchIndex &search, SearchCopy &out)
+{
+    const QList<SearchIndexAccess::Doc> &docs = SearchIndexAccess::docs(search);
+    out.docs.reserve(docs.size());
+    for (const SearchIndexAccess::Doc &d : docs)
+        out.docs.append({d.id, d.contentKey, d.length, d.used});
+}
+
 // ---- writing ------------------------------------------------------------------------------------
 
 class Out {
@@ -520,10 +543,10 @@ void writeRaw(Out &o, const BlockSource &raw)
     }
 }
 
-/// The search section in steps (the index must not change in between: the Writer aborts first).
+/// The search section in steps, from a snapshot's copy of the full-text index.
 class SearchEncoder {
 public:
-    explicit SearchEncoder(const SearchIndex &search) : m_search(search) { }
+    explicit SearchEncoder(const SearchCopy &search) : m_search(search) { }
 
     /// Append to `body` until `timer` passed `budgetMs` (nullptr: all); true when done.
     bool step(QByteArray &body, const QElapsedTimer *timer, int budgetMs)
@@ -532,7 +555,7 @@ public:
         Out o(body);
         if (!m_started) {
             m_started = true;
-            const QList<A::Doc> &docs = A::docs(m_search);
+            const QList<SearchCopy::Doc> &docs = m_search.docs;
             m_renumbered = QList<int>(docs.size(), -1);
             qsizetype used = 0;
             for (qsizetype i = 0; i < docs.size(); ++i) {
@@ -540,7 +563,7 @@ public:
                     m_renumbered[i] = int(used++);
             }
             o.varint(quint64(used));
-            for (const A::Doc &d : docs) {
+            for (const SearchCopy::Doc &d : docs) {
                 if (!d.used)
                     continue;
                 o.str(d.id);
@@ -548,14 +571,13 @@ public:
                 for (const quint32 n : d.length)
                     o.varint(n);
             }
-            o.varint(quint64(A::postings(m_search).size()));
+            o.varint(quint64(m_search.postings.size()));
             if (timer && timer->elapsed() >= budgetMs)
                 return false;
         }
-        const auto &postings = A::postings(m_search);
-        auto it = m_last.isNull() ? postings.begin() : postings.upper_bound(m_last);
-        for (; it != postings.end(); ++it) {
-            const auto &[term, list] = *it;
+        const auto &postings = m_search.postings;
+        while (m_next < postings.size()) {
+            const auto &[term, list] = postings.at(m_next++);
             o.str(term);
             o.varint(quint64(list.size()));
             int previous = -1;
@@ -566,19 +588,17 @@ public:
                 for (const quint32 n : p.tf)
                     o.varint(n);
             }
-            if (timer && timer->elapsed() >= budgetMs) {
-                m_last = term;
-                return std::next(it) == postings.end();
-            }
+            if (timer && timer->elapsed() >= budgetMs)
+                return m_next == postings.size();
         }
         return true;
     }
 
 private:
-    const SearchIndex &m_search;
+    const SearchCopy &m_search;
     bool m_started = false;
     QList<int> m_renumbered;
-    QString m_last; ///< the last term written (resume after it)
+    qsizetype m_next = 0; ///< the next term to write
 };
 
 } // namespace
@@ -795,8 +815,12 @@ std::optional<ParsedNote> decodeNote(QByteArrayView body, const VaultPath &path,
 
 QByteArray encodeSearch(const SearchIndex &search)
 {
+    SearchCopy copy;
+    copyDocs(search, copy);
+    for (const auto &[term, list] : SearchIndexAccess::postings(search))
+        copy.postings.append({term, list});
     QByteArray body;
-    SearchEncoder encoder(search);
+    SearchEncoder encoder(copy);
     while (!encoder.step(body, nullptr, 0)) { }
     return body;
 }
@@ -1147,31 +1171,149 @@ Reader::SearchDecoder Reader::searchDecoder() const
     return SearchDecoder(std::move(p));
 }
 
+// ---- Snapshot, SnapshotTaker -------------------------------------------------------------------------
+
+struct Snapshot::Data {
+    Identity identity;
+    struct Note {
+        VaultPath path;
+        std::optional<FileStat> stat;
+        /// The index's record (its note, text and content key), shared; null: none (a bug).
+        std::shared_ptr<const index_detail::Entry> entry;
+    };
+    QList<Note> notes;
+    bool withSearch = false;
+    bool searchComplete = false; ///< no document was pending
+    SearchCopy search;
+};
+
+Snapshot::Snapshot() : d(std::make_unique<Data>()) { }
+Snapshot::~Snapshot() = default;
+
+qsizetype Snapshot::noteCount() const
+{
+    return d->notes.size();
+}
+
+bool Snapshot::hasSearch() const
+{
+    return d->withSearch;
+}
+
+bool Snapshot::searchComplete() const
+{
+    return d->withSearch && d->searchComplete;
+}
+
+std::shared_ptr<const Snapshot> Snapshot::take(const VaultIndex &index, Identity identity, const StatFn &stat)
+{
+    SnapshotTaker taker(index, std::move(identity), stat);
+    while (taker.step(std::numeric_limits<int>::max()) == SnapshotTaker::State::More) { }
+    return taker.take();
+}
+
+struct SnapshotTaker::Private {
+    const VaultIndex &index;
+    StatFn stat;
+    std::unique_ptr<Snapshot> snapshot;
+    bool started = false;
+    bool done = false;
+    int version = 0;
+    quint64 searchRevision = 0;
+    QList<VaultPath> paths;
+    qsizetype next = 0;
+    bool docsCopied = false;
+    QString lastTerm; ///< the last term copied (resume after it)
+
+    Private(const VaultIndex &i, StatFn s) : index(i), stat(std::move(s)) { }
+};
+
+SnapshotTaker::SnapshotTaker(const VaultIndex &index, Identity identity, StatFn stat)
+    : d(std::make_unique<Private>(index, std::move(stat)))
+{
+    d->snapshot.reset(new Snapshot());
+    d->snapshot->d->identity = std::move(identity);
+}
+
+SnapshotTaker::~SnapshotTaker() = default;
+
+SnapshotTaker::State SnapshotTaker::step(int budgetMs)
+{
+    if (d->done)
+        return State::Done;
+    QElapsedTimer timer;
+    timer.start();
+    Snapshot::Data &out = *d->snapshot->d;
+    const SearchIndex &search = index_detail::IndexAccess::search(d->index);
+    if (!d->started) {
+        d->started = true;
+        d->version = d->index.version();
+        d->searchRevision = search.revision();
+        out.withSearch = !index_detail::IndexAccess::searchBuiltElsewhere(d->index);
+        out.searchComplete = index_detail::IndexAccess::searchComplete(d->index);
+        d->paths = d->index.paths();
+        out.notes.reserve(d->paths.size());
+    } else if (d->index.version() != d->version || (out.withSearch && search.revision() != d->searchRevision)) {
+        return State::Aborted;
+    }
+    while (d->next < d->paths.size()) {
+        // at(): the list shares the index's, operator[] would copy it.
+        const VaultPath &path = d->paths.at(d->next++);
+        out.notes.append(
+                {path, d->stat ? d->stat(path) : std::nullopt, index_detail::IndexAccess::sharedEntry(d->index, path)});
+        if (timer.elapsed() >= budgetMs)
+            return State::More;
+    }
+    if (out.withSearch) {
+        using A = SearchIndexAccess;
+        if (!d->docsCopied) {
+            d->docsCopied = true;
+            copyDocs(search, out.search);
+            out.search.postings.reserve(qsizetype(A::postings(search).size()));
+            if (timer.elapsed() >= budgetMs)
+                return State::More;
+        }
+        const auto &postings = A::postings(search);
+        auto it = d->lastTerm.isNull() ? postings.begin() : postings.upper_bound(d->lastTerm);
+        // The clock is read every 256 terms: copying one costs two reference counts.
+        for (int n = 1; it != postings.end(); ++it, ++n) {
+            out.search.postings.append({it->first, it->second}); // shared
+            if ((n & 255) == 0 && timer.elapsed() >= budgetMs && std::next(it) != postings.end()) {
+                d->lastTerm = it->first;
+                return State::More;
+            }
+        }
+    }
+    d->done = true;
+    return State::Done;
+}
+
+std::shared_ptr<const Snapshot> SnapshotTaker::take()
+{
+    if (!d->done || !d->snapshot)
+        return nullptr;
+    return std::shared_ptr<const Snapshot>(std::move(d->snapshot));
+}
+
 // ---- Writer ------------------------------------------------------------------------------------------
 
 struct Writer::Private {
-    const VaultIndex &index;
-    Identity identity;
-    StatFn stat;
-    int version = 0;
+    std::shared_ptr<const Snapshot> snapshot;
     bool started = false;
-    bool withSearch = false;
-    QList<VaultPath> paths;
     qsizetype next = 0;
     QByteArray directory;
     qsizetype written = 0;
     quint64 searchOffset = 0;
     quint64 searchLength = 0;
     bool searchDone = false;
+    bool done = false;
     std::optional<SearchEncoder> searchEncoder;
     QByteArray searchBody;
 
-    Private(const VaultIndex &i, Identity id, StatFn s) : index(i), identity(std::move(id)), stat(std::move(s)) { }
+    explicit Private(std::shared_ptr<const Snapshot> s) : snapshot(std::move(s)) { }
 };
 
-Writer::Writer(const VaultIndex &index, Identity identity, StatFn stat)
-    : d(std::make_unique<Private>(index, std::move(identity), std::move(stat)))
-{ }
+Writer::Writer(std::shared_ptr<const Snapshot> snapshot) : d(std::make_unique<Private>(std::move(snapshot))) { }
 
 Writer::~Writer() = default;
 
@@ -1182,34 +1324,32 @@ qsizetype Writer::notesWritten() const
 
 bool Writer::hasSearch() const
 {
-    return d->withSearch;
+    return d->snapshot && d->snapshot->d->withSearch;
 }
 
 Writer::State Writer::step(int budgetMs, QByteArray *out)
 {
+    if (d->done)
+        return State::Done; // (the file is whole: nothing more to append)
     QElapsedTimer timer;
     timer.start();
     Out o(*out);
     Out dir(d->directory);
+    static const Snapshot::Data empty;
+    const Snapshot::Data &s = d->snapshot ? *d->snapshot->d : empty;
     if (!d->started) {
         d->started = true;
-        d->version = d->index.version();
-        d->withSearch = index_detail::IndexAccess::searchComplete(d->index);
-        d->paths = d->index.paths();
         out->clear();
-        out->append(encodeHeader(d->identity));
-        dir.varint(quint64(d->paths.size()));
+        out->append(encodeHeader(s.identity));
+        dir.varint(quint64(s.notes.size()));
     }
-    if (d->index.version() != d->version)
-        return State::Aborted;
-    while (d->next < d->paths.size()) {
-        // at(): the list shares the index's, operator[] would copy it.
-        const VaultPath &path = d->paths.at(d->next++);
-        const index_detail::Entry *e = index_detail::IndexAccess::entry(d->index, path);
-        const std::optional<FileStat> st = d->stat ? d->stat(path) : std::nullopt;
+    while (d->next < s.notes.size()) {
+        const Snapshot::Data::Note &n = s.notes.at(d->next++);
+        const std::optional<FileStat> &st = n.stat;
         // Without the file's size the record could never be used: the note is parsed on load.
+        const index_detail::Entry *e = n.entry.get();
         const std::optional<QByteArray> body = e && st ? detail::encodeNote(e->note, e->content) : std::nullopt;
-        dir.str(path);
+        dir.str(n.path);
         dir.varint(quint64(st ? std::max<qint64>(0, st->size) : 0));
         dir.zigzag(st ? st->mtime : 0);
         dir.u64(e ? e->contentKey : 0);
@@ -1226,9 +1366,9 @@ Writer::State Writer::step(int budgetMs, QByteArray *out)
         if (timer.elapsed() >= budgetMs)
             return State::More;
     }
-    if (d->withSearch && !d->searchDone) {
+    if (s.withSearch && !d->searchDone) {
         if (!d->searchEncoder)
-            d->searchEncoder.emplace(index_detail::IndexAccess::search(d->index));
+            d->searchEncoder.emplace(s.search);
         if (!d->searchEncoder->step(d->searchBody, &timer, budgetMs))
             return State::More;
         d->searchDone = true;
@@ -1245,20 +1385,27 @@ Writer::State Writer::step(int budgetMs, QByteArray *out)
     o.u64(text::fnv1a64(d->directory));
     o.u64(dirOffset);
     o.u64(quint64(d->directory.size()));
-    o.u64(d->withSearch ? d->searchOffset : 0);
-    o.u64(d->withSearch ? d->searchLength : 0);
-    o.u32(quint32(d->paths.size()));
+    o.u64(s.withSearch ? d->searchOffset : 0);
+    o.u64(s.withSearch ? d->searchLength : 0);
+    o.u32(quint32(s.notes.size()));
     o.u32(0);
     o.raw(FooterMagic, 8);
+    d->done = true;
     return State::Done;
+}
+
+QByteArray encode(const Snapshot &snapshot)
+{
+    // A Writer needs shared ownership; the caller keeps the snapshot alive meanwhile.
+    Writer writer(std::shared_ptr<const Snapshot>(std::shared_ptr<const Snapshot>(), &snapshot));
+    QByteArray out;
+    while (writer.step(std::numeric_limits<int>::max(), &out) == Writer::State::More) { }
+    return out;
 }
 
 QByteArray encode(const VaultIndex &index, const Identity &identity, const StatFn &stat)
 {
-    Writer writer(index, identity, stat);
-    QByteArray out;
-    while (writer.step(std::numeric_limits<int>::max(), &out) == Writer::State::More) { }
-    return out;
+    return encode(*Snapshot::take(index, identity, stat));
 }
 
 } // namespace indexcache

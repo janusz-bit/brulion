@@ -42,8 +42,10 @@
 //                (or takes notes from the index cache), merges in slices on the owner's thread;
 //                inline without threads (WebAssembly)
 //   indexcachekeeper.h IndexCacheKeeper(vault, index, pool, path, Policy): loaded(stats),
-//                saveNow(), saved(bytes, ms) / saveFailed(error) — <device state>/index-cache.bin
-//                written in slices after a load that parsed and after quiet changes
+//                saveIfDirty() (the app inactive, the notebook closing), saveNow(), saved(bytes, ms)
+//                / saveFailed(error) — <device state>/index-cache.bin written after a load that
+//                parsed, on saveIfDirty() and at the latest Policy::maxDirtyMs after a change; a
+//                snapshot taken on the owner's thread, encoded and written on the pool
 //   itemref.h    ItemRef "Dom.md#L12@3f9a01bc" / "Dom.md#^id" / "^id" / "((id))": parse, format,
 //                lineHash, resolve(content, ref) -> Ok | Moved | Stale | NotFound
 //   json.h       QJsonObject of tasks, reminders, blocks, query results, search hits, calendar

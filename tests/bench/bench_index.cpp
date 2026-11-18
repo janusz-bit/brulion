@@ -473,9 +473,10 @@ private Q_SLOTS:
 #endif
     }
 
-    // The index cache: encoding a whole index with its full-text index (the keeper's work on
-    // the GUI thread, in slices there), and decoding every note and the full-text index on one
-    // thread (what a warm load shares out to the workers).
+    // The index cache: encoding a whole index with its full-text index (the keeper's work: on a
+    // pool thread since the snapshot, in slices on the GUI thread before), the snapshot (the GUI
+    // thread's part of it now), and decoding every note and the full-text index on one thread
+    // (what a warm load shares out to the workers).
     void cacheEncode_data() { addSizeRows({1000, 10000, 50000}, {1000, 10000}); }
     void cacheEncode()
     {
@@ -491,6 +492,24 @@ private Q_SLOTS:
 #else
         Q_UNUSED(notes);
         QSKIP("no index cache in this tree");
+#endif
+    }
+
+    void cacheSnapshot_data() { addSizeRows({1000, 10000, 50000}, {1000, 10000}); }
+    void cacheSnapshot()
+    {
+        QFETCH(int, notes);
+#if defined(BENCH_HAS_CACHE) && defined(BRULION_INDEX_CACHE_SNAPSHOT)
+        VaultIndex &idx = index(notes);
+        const auto identity = indexcache::Identity::current(idx.config(), u"bench"_s);
+        const auto stat = [](const VaultPath &p) -> std::optional<FileStat> { return FileStat{p, false, 1, 1}; };
+        std::shared_ptr<const indexcache::Snapshot> snapshot;
+        bench::timeOnce([&] { snapshot.reset(); }, [&] { snapshot = indexcache::Snapshot::take(idx, identity, stat); });
+        QCOMPARE(snapshot->noteCount(), qsizetype(notes));
+        QVERIFY(snapshot->hasSearch());
+#else
+        Q_UNUSED(notes);
+        QSKIP("no index cache snapshot in this tree");
 #endif
     }
 
@@ -609,6 +628,34 @@ private Q_SLOTS:
             idx.flushSearch();
         }
         idx.remove(path);
+    }
+
+    // The owner's thread's part of that update with a search worker (VaultIndex::
+    // setSearchWorker()): set() of the document prepared on the worker (old postings out, new in).
+    void searchApplyLargeNote_data()
+    {
+        QTest::addColumn<int>("kb");
+        for (int kb : bench::sizes({50, 200, 1000}, {50, 200}))
+            QTest::newRow(qPrintable(u"%1 KB note"_s.arg(kb))) << kb;
+    }
+    void searchApplyLargeNote()
+    {
+        QFETCH(int, kb);
+        VaultIndex &idx = index(1000);
+        SearchIndex search;
+        for (const VaultPath &p : idx.paths())
+            search.set(p, p, {}, idx.content(p));
+        bench::Rng r{quint64(kb)};
+        const QString big = bench::documentNote(r, 99999, 500, qsizetype(kb) * 1024);
+        const QString path = u"Strony/Duża notatka.md"_s;
+        const SearchIndex::Document a = SearchIndex::prepare(path, {}, big);
+        const QString edited = big + u"\nkoniec\n"_s;
+        const SearchIndex::Document b = SearchIndex::prepare(path, {}, edited);
+        search.set(path, a);
+        int flip = 0;
+        QBENCHMARK {
+            search.set(path, (flip++ & 1) ? a : b);
+        }
     }
 
     // ---- search and suggestions -------------------------------------------------------------

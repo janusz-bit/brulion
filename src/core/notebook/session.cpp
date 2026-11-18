@@ -191,7 +191,8 @@ VaultIndex &Notebook::index()
         IndexCacheKeeper::Policy policy;
         policy.minNotes = m_cacheMinNotes;
         m_cacheKeeper = std::make_unique<IndexCacheKeeper>(*m_vault, *m_index, m_workers, options.cachePath, policy);
-        // Watch mode (MCP): saved after quiet changes like the app; else at close.
+        // Watch mode (MCP): saved after changes as in the app (at the latest maxDirtyMs after
+        // the first); else at close.
         if (m_watch)
             m_cacheKeeper->loaded(m_indexStats);
     }
