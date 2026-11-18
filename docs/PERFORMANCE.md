@@ -1791,7 +1791,7 @@ On the small page an autosave now costs the GUI thread about 2 ms of CPU (the fs
 write, 3–5 ms of wall time, waits on top of it); a burst's 1.7 s afterwards hold 3 ms of work.
 What is left on the 5000-block pages is the save itself: `Vault.changed` — the note parsed again
 and merged into the index, ~40–46 ms — and the write with its read-compare, ~12–18 ms; that is Z1,
-the save on a worker (in progress).
+the save on a writer thread (next section: 0.8–1 ms of it left on the GUI thread).
 
 **What is left — ten analyses of the code (2026-11-18).** Read from the code, not measured one by
 one; the estimates are for the 10k notebook on the desktop (a phone: ×4–6).
@@ -1874,8 +1874,19 @@ merge of the result from the event loop, new with this change):
 
 What the GUI thread still does after a save of a big page: the merge's `Vault.changed` (9–11 ms
 at 5000 blocks: the index's patch of its derived lists with the note, the direct fan-out of
-`fileChanged`/`indexChanged`) and, 200 ms later, a hidden list's refresh
-(`timer:200ms(WorkspaceListModel.refreshed)`, ~29 ms a save: the longest stall now) — Z3–Z5.
+`fileChanged`/`indexChanged`) and, 200 ms later, a list's refresh
+(`timer:200ms(WorkspaceListModel.refreshed)`, ~29 ms a save: the longest stall in these runs) —
+the page's own linked references, computed again because the page links to itself
+(`BacklinksModel::mayNowReference` counted those links; fixed on the branch since, "Step 2" above).
+
+Since merged: the temporary file's sync comes from the platform layer (`vault/filesync.h`, set by
+`platform::installFileSync()`: fsync, Windows' `_commit`; core takes no platform `#if`; without one,
+as in brulion-cli, the writes are QSaveFile's and the echo lists the folder). A review of the
+merged change found and fixed: `Vault::stat()` / `exists()` of a path being written now wait for
+that write (a GitHub pull's or a sync's "unchanged since the plan" guard read the stat before the
+editor's write and then wrote the server's version over it), the own write refuses a read-only
+note as QSaveFile does and tries a refused rename again, a failed background save is tried again
+after 2, 4, 8 … s, and a write dropped because its notebook closed reports Failed.
 
 ### Typing: a keystroke costs the block (2026-11-18)
 
