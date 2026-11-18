@@ -360,8 +360,10 @@ no setting: every panel starts with the defaults below, a drawer opened again is
   page; `ContentBacklinks { sectioned: true; showUnlinked: false }`), **Unlinked mentions**
   (folded at first; "Link" per mention and "Link all"), **Local graph** (`ContentLocalGraph`: the
   page and the pages it links to or that link to it — `GraphModel` with `focusPath`, depth 1, no
-  tags, at most 200 nodes — in a 160–240 px square fitted to them; a click on a node opens it, "Open
-  graph" opens the graph view on the page). A picture or a PDF has only its Backlinks.
+  tags, at most 200 nodes, read from the page's neighbourhood only, not the whole graph, and built
+  again only when one of its notes or a note linking to it changes; out of sight (`shown: false`) a
+  change only marks it stale — in a 160–240 px square fitted to them; a click on a node opens it,
+  "Open graph" opens the graph view on the page). A picture or a PDF has only its Backlinks.
 * **A journal day** (also the journal stream: the day being written, else today) — **Day plan**
   (`ContentDayPlan`, `Workspace.dayPlan()` = `reminders/dayplan.h`: the blocks with a due date, a
   scheduled date or reminders that day, one row per block — a task due today with a reminder at

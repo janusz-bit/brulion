@@ -1,7 +1,8 @@
 // The graph: ForceLayout (seeded determinism, convergence, Barnes–Hut close to the exact
 // forces, pinned nodes, tick estimates), GraphModel (kinds, toggles for tags / missing pages /
-// journals / orphans, local graph depth 1 and 2, the node cap, positions kept across index
-// changes, search with Polish letters), the worker (GraphSimulation: threaded and inline runs equal
+// journals / orphans, local graph depth 1 and 2 — read from the focus's neighbourhood, equal to
+// the whole graph cut, skipping changes elsewhere, stale while hidden —, the node cap, positions
+// kept across index changes, search with Polish letters), the worker (GraphSimulation: threaded and inline runs equal
 // to manual steps, fast cooling, pause / resume, coalesced frames, dragging during a run, rebuilds
 // and destruction mid-run, reduced motion — also rebuilt before it is shown —, pacing, a new frame
 // interval mid-run), the scene-graph geometry (discs, rings, segments, chunks of 16-bit indices,
@@ -18,6 +19,7 @@
 #include <QFontMetricsF>
 #include <QImage>
 #include <QPainter>
+#include <QRandomGenerator>
 #include <QSignalSpy>
 #include <QTest>
 
@@ -70,6 +72,132 @@ Files bigVault(int pages, int linksPerPage)
         files.append({u"Strona %1.md"_s.arg(p), content});
     }
     return files;
+}
+
+/// A vault for local graphs: links, block references, tags naming pages or not, aliases,
+/// templates, daily notes, attachments and missing pages (deterministic for `seed`).
+Files localVault(quint32 seed)
+{
+    QRandomGenerator rng(seed);
+    Files files;
+    constexpr int Pages = 40;
+    for (int p = 0; p < Pages; ++p) {
+        QString content = p % 7 == 0 ? u"---\naliases: [Alias %1]\ntags: projekt\n---\n"_s.arg(p) : QString();
+        content += u"- blok strony %1 ^b%1\n"_s.arg(p);
+        for (int l = 0, n = rng.bounded(5); l < n; ++l) {
+            const int target = rng.bounded(3) == 0 ? rng.bounded(Pages) : (p + 1 + rng.bounded(4)) % Pages;
+            switch (rng.bounded(9)) {
+            case 0: content += u"- odsyłacz ((b%1))\n"_s.arg(target); break;
+            case 1: content += u"- #projekt i #żółw\n"_s; break;
+            case 2: content += u"- tag strony #[[Strona %1]]\n"_s.arg(target); break;
+            case 3: content += u"- przez alias [[Alias %1]]\n"_s.arg(target - target % 7); break;
+            case 4: content += u"- [[Nieistniejąca %1]] i ![[obraz.png]]\n"_s.arg(target % 3); break;
+            case 5: content += u"- [markdown](Strona%20%1.md)\n"_s.arg(target); break;
+            default: content += u"- [[Strona %1]]\n"_s.arg(target); break;
+            }
+        }
+        files.append({u"Strona %1.md"_s.arg(p), content});
+    }
+    files.append({u"journals/2026-10-15.md"_s, u"- dziś o [[Strona 1]] #dziennik\n"_s});
+    files.append({u"journals/2026-10-16.md"_s, u"- jutro o [[Strona 2]] i [[Strona 1]]\n"_s});
+    files.append({u"templates/journal.md"_s, u"- [[Strona 1]] #dziennik\n- [[Strona 3]]\n"_s});
+    files.append({u"Żółw.md"_s, u"- strona, którą nazywa #żółw, o [[Strona 5]]\n"_s});
+    files.append({u"Samotna.md"_s, u"Bez linków\n"_s});
+    return files;
+}
+
+/// The local graph as GraphModel cut it from the whole graph(): nodes (after the filters, in
+/// graph()'s order) within `depth` of `focus`, the best connected `maxNodes` of them, and the
+/// undirected edges among them ("a|b", a < b).
+std::pair<QStringList, QSet<QString>> localByWholeGraph(const brulion::VaultIndex &index, const QString &focus,
+                                                        int depth, bool tags, bool journals, int maxNodes)
+{
+    const brulion::GraphData g = index.graph(tags, false);
+    QStringList ids;
+    QHash<QString, int> at;
+    for (const brulion::GraphNode &n : g.nodes) {
+        if (!n.isTag && n.id != focus && n.id.startsWith(u"templates/"_s, Qt::CaseInsensitive))
+            continue;
+        const brulion::ParsedNote *note = index.note(n.id);
+        if (!journals && note && note->journalDate)
+            continue;
+        at.insert(n.id, int(ids.size()));
+        ids << n.id;
+    }
+    QList<QSet<int>> adj(ids.size());
+    for (const brulion::GraphEdge &e : g.edges) {
+        const int a = at.value(e.source, -1);
+        const int b = at.value(e.target, -1);
+        if (a >= 0 && b >= 0 && a != b) {
+            adj[a].insert(b);
+            adj[b].insert(a);
+        }
+    }
+    QList<int> dist(ids.size(), -1);
+    const int f = at.value(focus, -1);
+    QList<int> queue{f};
+    dist[f] = 0;
+    for (qsizetype qi = 0; qi < queue.size(); ++qi) {
+        const int u = queue.at(qi);
+        if (dist[u] >= depth)
+            continue;
+        for (const int v : std::as_const(adj[u])) {
+            if (dist[v] < 0) {
+                dist[v] = dist[u] + 1;
+                queue.append(v);
+            }
+        }
+    }
+    QList<int> kept;
+    for (int i = 0; i < ids.size(); ++i) {
+        if (dist[i] >= 0)
+            kept << i;
+    }
+    if (kept.size() > maxNodes) {
+        QList<int> order = kept;
+        std::ranges::stable_sort(order, [&](int a, int b) {
+            if ((a == f) != (b == f))
+                return a == f;
+            return adj[a].size() > adj[b].size();
+        });
+        order.resize(maxNodes);
+        std::ranges::sort(order);
+        kept = order;
+    }
+    QStringList nodes;
+    QSet<QString> edges;
+    const QSet<int> keptSet(kept.cbegin(), kept.cend());
+    for (const int i : std::as_const(kept)) {
+        nodes << ids.at(i);
+        for (const int j : std::as_const(adj[i])) {
+            if (keptSet.contains(j))
+                edges.insert(std::min(ids.at(i), ids.at(j)) + u'|' + std::max(ids.at(i), ids.at(j)));
+        }
+    }
+    return {nodes, edges};
+}
+
+/// The model's nodes (in order) and undirected edges ("a|b", a < b).
+std::pair<QStringList, QSet<QString>> graphOf(const GraphModel &m)
+{
+    QStringList nodes;
+    for (const auto &n : m.nodes())
+        nodes << n.id;
+    QSet<QString> edges;
+    for (const auto &[a, b] : m.edges()) {
+        const QString x = nodes.at(a);
+        const QString y = nodes.at(b);
+        edges.insert(std::min(x, y) + u'|' + std::max(x, y));
+    }
+    return {nodes, edges};
+}
+
+/// Apply one change to the index now (changed() at once: the model's delay 0 rebuilds it).
+template<typename Fn>
+void edit(brulion::VaultIndex &index, Fn &&fn)
+{
+    brulion::VaultIndex::Batch batch(index);
+    fn();
 }
 
 QList<std::pair<int, int>> ring(int n)
@@ -339,6 +467,121 @@ private Q_SLOTS:
         m.setFocusPath(u"Nie ma.md"_s);
         QVERIFY(m.focusMissing());
         QCOMPARE(m.nodeCount(), 7);
+    }
+
+    // A note's local graph is read from its neighbourhood (not the whole graph()), and equals
+    // graph() cut by the filters, the depth and the cap: the same nodes in the same order, the
+    // same edges — links, block references, tags naming pages, #tag nodes, aliases; templates
+    // and hidden daily notes not passed through.
+    void localGraphEqualsTheWholeGraphCut_data()
+    {
+        QTest::addColumn<quint32>("seed");
+        QTest::addColumn<bool>("tags");
+        QTest::addColumn<bool>("journals");
+        QTest::addColumn<int>("maxNodes");
+        QTest::newRow("plain") << 1u << false << true << 4000;
+        QTest::newRow("tags") << 2u << true << true << 4000;
+        QTest::newRow("no journals") << 3u << false << false << 4000;
+        QTest::newRow("tags, no journals") << 4u << true << false << 4000;
+        QTest::newRow("capped") << 5u << false << true << 6;
+        QTest::newRow("tags, capped") << 6u << true << true << 5;
+    }
+    void localGraphEqualsTheWholeGraphCut()
+    {
+        QFETCH(quint32, seed);
+        QFETCH(bool, tags);
+        QFETCH(bool, journals);
+        QFETCH(int, maxNodes);
+        auto index = makeIndex(localVault(seed));
+        GraphModel m;
+        m.setActive(false);
+        m.setShowTags(tags);
+        m.setShowJournals(journals);
+        m.setMaxNodes(maxNodes);
+        m.setVaultIndex(index.get());
+        QStringList focuses{u"Żółw.md"_s, u"Samotna.md"_s, u"templates/journal.md"_s};
+        if (journals)
+            focuses << u"journals/2026-10-15.md"_s;
+        for (int p = 0; p < 40; p += 3)
+            focuses << u"Strona %1.md"_s.arg(p);
+        int cut = 0;
+        for (const QString &focus : std::as_const(focuses)) {
+            for (int depth = 1; depth <= 3; ++depth) {
+                m.setFocusPath(focus);
+                m.setDepth(depth);
+                const QByteArray ctx = (focus + u" depth "_s + QString::number(depth)).toUtf8();
+                QVERIFY2(m.localBuild(), ctx.constData());
+                QVERIFY2(!m.focusMissing(), ctx.constData());
+                const auto [nodes, edges] = localByWholeGraph(*index, focus, depth, tags, journals, maxNodes);
+                const auto [shownNodes, shownEdges] = graphOf(m);
+                QVERIFY2(shownNodes == nodes, ctx.constData());
+                QVERIFY2(shownEdges == edges, ctx.constData());
+                if (m.truncated())
+                    ++cut;
+            }
+        }
+        QCOMPARE(cut > 0, maxNodes < 100);
+        // A hidden daily note, missing pages or no focus: the whole graph, as before.
+        m.setFocusPath(u"Strona 1.md"_s);
+        m.setShowMissing(true);
+        QVERIFY(!m.localBuild());
+        m.setShowMissing(false);
+        m.setFocusPath(QString());
+        QVERIFY(!m.localBuild());
+    }
+
+    // Typing in a page outside the local graph builds nothing; a change of one of its notes, a
+    // note that links to it and a name changing anywhere build it again. Hidden (`shown` false), a
+    // change only marks it stale: it is built when shown again.
+    void localGraphSkipsChangesElsewhere()
+    {
+        auto index = makeIndex(smallVault());
+        GraphModel m;
+        m.setActive(false);
+        m.setRefreshDelay(0);
+        m.setFocusPath(u"D.md"_s);
+        m.setVaultIndex(index.get());
+        QVERIFY(m.localBuild());
+        QCOMPARE(graphOf(m).first, (QStringList{u"B.md"_s, u"D.md"_s, u"E.md"_s}));
+        const int built = m.rebuildCount();
+        edit(*index, [&] { index->update(u"Samotna.md"_s, u"Bez linków, zmieniona\n"_s); });
+        QCOMPARE(m.rebuildCount(), built);
+        // A links on to E, a node of the graph's edge: nothing of D's depth 1 changes.
+        edit(*index, [&] { index->update(u"A.md"_s, u"Link do [[B]] i [[C]] oraz [[E]] #projekt\n"_s); });
+        QCOMPARE(m.rebuildCount(), built);
+        // A note that now links to the focus joins it.
+        edit(*index, [&] { index->update(u"Samotna.md"_s, u"Teraz o [[D]]\n"_s); });
+        QCOMPARE(m.rebuildCount(), built + 1);
+        QCOMPARE(graphOf(m).first, (QStringList{u"B.md"_s, u"D.md"_s, u"E.md"_s, u"Samotna.md"_s}));
+        // One of its notes changes (E links to B now): an edge more.
+        edit(*index, [&] { index->update(u"E.md"_s, u"Ostatnia, o [[B]]\n"_s); });
+        QCOMPARE(m.rebuildCount(), built + 2);
+        QVERIFY(graphOf(m).second.contains(u"B.md|E.md"_s));
+        // A new page anywhere (names changed): built again.
+        edit(*index, [&] { index->update(u"Nowa.md"_s, u"Nic\n"_s); });
+        QCOMPARE(m.rebuildCount(), built + 3);
+        // Hidden: stale until shown.
+        QSignalSpy shown(&m, &GraphModel::shownChanged);
+        m.setShown(false);
+        QCOMPARE(shown.count(), 1);
+        edit(*index, [&] { index->update(u"Nowa.md"_s, u"Też o [[D]]\n"_s); });
+        QCOMPARE(m.rebuildCount(), built + 3);
+        QVERIFY(m.isStale());
+        QVERIFY(m.indexOf(u"Nowa.md"_s) < 0);
+        m.setShown(true);
+        QVERIFY(!m.isStale());
+        QCOMPARE(m.rebuildCount(), built + 4);
+        QVERIFY(m.indexOf(u"Nowa.md"_s) >= 0);
+        // Hidden with a change elsewhere: shown again, nothing is built.
+        m.setShown(false);
+        edit(*index, [&] { index->update(u"C.md"_s, u"Tylko [[A]], zmieniona\n"_s); });
+        m.setShown(true);
+        QCOMPARE(m.rebuildCount(), built + 4);
+        // The whole graph (no focus) follows every change as before.
+        m.setFocusPath(QString());
+        const int whole = m.rebuildCount();
+        edit(*index, [&] { index->update(u"C.md"_s, u"Tylko [[A]], znowu\n"_s); });
+        QCOMPARE(m.rebuildCount(), whole + 1);
     }
 
     void nodeCap()

@@ -34,6 +34,8 @@ Item {
     TaskListModel {
         id: tasks
         vaultIndex: PlanningContext.vaultIndex
+        // Out of sight (the panel hidden, another route shown): index changes only mark it stale.
+        active: root.visible
         today: root.date !== "" ? root.date : DatesHelper.today
         weekStart: DatesHelper.weekStart
         locale: DatesHelper.locale

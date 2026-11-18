@@ -145,14 +145,19 @@ CalendarModel::CalendarModel(QObject *parent) : QAbstractListModel(parent)
 {
     m_refreshTimer.setSingleShot(true);
     m_refreshTimer.setInterval(120ms);
-    connect(&m_refreshTimer, &QTimer::timeout, this, [this] { rebuild(false); });
+    connect(&m_refreshTimer, &QTimer::timeout, this, &CalendarModel::refreshFromIndex);
     m_midnightTimer.setSingleShot(true);
     connect(&m_midnightTimer, &QTimer::timeout, this, [this] {
         if (!m_today.isValid()) { // following the system clock, as currentDay() does
             Q_EMIT todayChanged();
             if (!m_anchor.isValid())
                 Q_EMIT anchorDateChanged();
-            rebuild(true);
+            if (m_active) {
+                rebuild(true);
+            } else {
+                m_stale = true;
+                m_staleReset = true;
+            }
         }
         scheduleMidnight();
     });
@@ -206,6 +211,9 @@ OverdueCache::Found OverdueCache::tasks(const VaultIndex &index, QDate today, in
             all, [](const Overdue *a, const Overdue *b) { return dates::compareDateSpecs(a->due, b->due) < 0; });
     Found found;
     found.total = int(all.size());
+    found.notes.reserve(qsizetype(m_notes.values().size()));
+    for (const auto &[path, list] : m_notes.values())
+        found.notes.append(path);
     for (qsizetype i = 0; i < all.size() && i < max; ++i)
         found.tasks.append(*all.at(i));
     return found;
@@ -463,6 +471,29 @@ void CalendarModel::setAgendaDays(int days)
         requestRebuild(true);
 }
 
+void CalendarModel::setActive(bool active)
+{
+    if (m_active == active)
+        return;
+    m_active = active;
+    Q_EMIT activeChanged();
+    if (!m_active) {
+        // A rebuild on its way waits for the view to be shown.
+        if (m_refreshTimer.isActive()) {
+            m_refreshTimer.stop();
+            m_stale = true;
+        }
+        return;
+    }
+    // What changed while hidden, at once: the view shown again shows it in its first frame.
+    if (m_stale && !m_completing) {
+        if (m_staleReset)
+            rebuild(true);
+        else
+            refreshFromIndex();
+    }
+}
+
 void CalendarModel::setRefreshDelay(int msec)
 {
     msec = std::max(0, msec);
@@ -687,10 +718,55 @@ std::pair<QDate, QDate> CalendarModel::rangeFor(QDate a) const
 
 void CalendarModel::scheduleRefresh()
 {
+    if (!m_active) {
+        m_stale = true;
+        return;
+    }
     if (m_refreshTimer.interval() == 0)
-        rebuild(false);
+        refreshFromIndex();
     else
         m_refreshTimer.start();
+}
+
+void CalendarModel::refreshFromIndex()
+{
+    m_refreshTimer.stop();
+    m_stale = false;
+    if (!unaffectedByIndexChanges())
+        rebuild(false);
+}
+
+namespace {
+
+/// The note can have calendar entries: a daily note, a task with a date, a reminder.
+bool hasCalendarEntries(const ParsedNote &note)
+{
+    if (note.journalDate || !note.reminders.isEmpty())
+        return true;
+    return std::ranges::any_of(note.tasks, [](const Task &t) { return t.due || t.scheduled || t.start || t.doneDate; });
+}
+
+} // namespace
+
+bool CalendarModel::unaffectedByIndexChanges()
+{
+    if (!m_index || m_builtSerial != m_index->serial() || m_builtVersion < 0)
+        return false;
+    if (m_builtVersion == m_index->version())
+        return true;
+    const IndexChanges changes = m_index->changesSince(m_builtVersion);
+    if (!changes.complete)
+        return false;
+    // (Names do not matter: an entry shows its own note's title and text; a renamed note is
+    // among the changed ones under both paths.)
+    for (const VaultPath &path : changes.notes) {
+        if (m_notes.contains(path))
+            return false;
+        if (const ParsedNote *note = m_index->note(path); note && hasCalendarEntries(*note))
+            return false;
+    }
+    m_builtVersion = m_index->version();
+    return true;
 }
 
 QVariantMap CalendarModel::itemMap(const CalendarItem &item, QDate today) const
@@ -739,8 +815,15 @@ QVariantMap CalendarModel::itemMap(const CalendarItem &item, QDate today) const
 
 void CalendarModel::rebuild(bool forceReset)
 {
+    m_refreshTimer.stop();
     m_rebuildPending = false;
     m_resetPending = false;
+    m_stale = false;
+    m_staleReset = false;
+    ++m_rebuilds;
+    m_builtSerial = m_index ? m_index->serial() : 0;
+    m_builtVersion = m_index ? m_index->version() : -1;
+    QSet<VaultPath> notes;
     const QDate today = currentDay();
     const auto [from, to] = rangeFor(anchor());
     const bool rangeMoved = from != m_rangeStart || to != m_rangeEnd;
@@ -754,6 +837,7 @@ void CalendarModel::rebuild(bool forceReset)
             m_calendar = std::make_shared<CalendarCache>();
         const QList<CalendarItem> items = m_calendar->items(*m_index, from, to);
         for (const CalendarItem &item : items) {
+            notes.insert(item.path);
             Day &day = byDate[item.date];
             day.date = item.date;
             if (item.kind == CalendarItem::Journal) {
@@ -795,8 +879,10 @@ void CalendarModel::rebuild(bool forceReset)
     if (m_index) {
         if (!m_overdueTasks)
             m_overdueTasks = std::make_shared<OverdueCache>();
-        const auto [found, total] = m_overdueTasks->tasks(*m_index, today, MaxOverdue);
+        const auto [found, total, overdueNotes] = m_overdueTasks->tasks(*m_index, today, MaxOverdue);
         overdueCount = total;
+        for (const VaultPath &path : overdueNotes)
+            notes.insert(path);
         const dates::UiLocale loc = uiLocale(m_locale);
         for (const OverdueCache::Overdue &item : found) {
             const Task &task = item.task;
@@ -831,34 +917,55 @@ void CalendarModel::rebuild(bool forceReset)
         }
     }
 
+    m_notes = std::move(notes);
     const bool sameRows = !forceReset && !rangeMoved
                           && std::ranges::equal(std::as_const(days), std::as_const(m_days), {}, &Day::date, &Day::date);
+    int maxAllDay = 0;
+    for (const Day &day : std::as_const(days))
+        maxAllDay = std::max(maxAllDay, int(std::ranges::count_if(day.items, isAllDay)));
+    const int first = firstHour <= lastHour ? firstHour : 8;
+    const int last = firstHour <= lastHour ? lastHour : 18;
+    bool changed = !sameRows;
     if (sameRows) {
-        m_days = std::move(days);
-        if (!m_days.isEmpty())
-            Q_EMIT dataChanged(createIndex(0, 0), createIndex(int(m_days.size()) - 1, 0));
+        // Only the days whose entries changed (an autosave touches one or two of 42).
+        QList<int> changedRows;
+        for (qsizetype i = 0; i < days.size(); ++i) {
+            if (days.at(i) == m_days.at(i))
+                continue;
+            m_days[i] = std::move(days[i]);
+            changedRows.append(int(i));
+        }
+        for (const int row : std::as_const(changedRows))
+            Q_EMIT dataChanged(createIndex(row, 0), createIndex(row, 0));
+        changed = !changedRows.isEmpty();
     } else {
         beginResetModel();
         m_days = std::move(days);
         endResetModel();
+        m_rowOf.clear();
+        for (qsizetype i = 0; i < m_days.size(); ++i)
+            m_rowOf.insert(m_days.at(i).date, int(i));
     }
-    m_rowOf.clear();
-    for (qsizetype i = 0; i < m_days.size(); ++i)
-        m_rowOf.insert(m_days.at(i).date, int(i));
+    changed = changed || forceReset || itemCount != m_itemCount || overdueCount != m_overdueCount
+              || first != m_firstHour || last != m_lastHour || maxAllDay != m_maxAllDay || overdue != m_overdue;
     m_rangeStart = from;
     m_rangeEnd = to;
     m_agendaStart = m_mode == u"agenda" ? from : QDate();
-    m_itemCount = itemCount;
-    m_overdue = std::move(overdue);
-    m_overdueCount = overdueCount;
-    m_firstHour = firstHour <= lastHour ? firstHour : 8;
-    m_lastHour = firstHour <= lastHour ? lastHour : 18;
-    m_maxAllDay = 0;
-    for (const Day &day : std::as_const(m_days))
-        m_maxAllDay = std::max(m_maxAllDay, int(std::ranges::count_if(day.items, isAllDay)));
-    ++m_revision;
-    Q_EMIT rangeChanged();
-    Q_EMIT itemsChanged();
+    const bool rangeShown = forceReset || rangeMoved || weekStartDay() != m_rangeWeekStart;
+    m_rangeWeekStart = weekStartDay();
+    if (changed) {
+        m_itemCount = itemCount;
+        m_overdue = std::move(overdue);
+        m_overdueCount = overdueCount;
+        m_firstHour = first;
+        m_lastHour = last;
+        m_maxAllDay = maxAllDay;
+        ++m_revision;
+    }
+    if (rangeShown)
+        Q_EMIT rangeChanged();
+    if (changed)
+        Q_EMIT itemsChanged();
 }
 
 void CalendarModel::scheduleMidnight()

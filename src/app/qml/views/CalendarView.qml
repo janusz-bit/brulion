@@ -122,8 +122,9 @@ FocusScope {
     }
     /// The note of the period in the header's title (the anchor's month or week) exists.
     readonly property bool periodHasNote: {
-        // (Read for real: a bare `void Workspace.revision` is compiled away with the dependency.)
-        if (mode === "agenda" || cal.anchorDate === "" || Workspace.revision < 0)
+        // Hidden: nothing is asked (the file check) until shown. (Read for real: a bare
+        // `void Workspace.revision` is compiled away with the dependency.)
+        if (!root.visible || mode === "agenda" || cal.anchorDate === "" || Workspace.revision < 0)
             return false
         return AppController.routeFlag(Workspace.periodicNote(mode === "week" ? "week" : "month", cal.anchorDate), "exists")
     }
@@ -234,6 +235,8 @@ FocusScope {
     CalendarModel {
         id: cal
         vaultIndex: PlanningContext.vaultIndex
+        // Hidden (kept by ShellRouteView): index changes only mark the days stale, computed when shown.
+        active: root.visible
         mode: root.mode
         today: DatesHelper.today
         weekStart: DatesHelper.weekStart

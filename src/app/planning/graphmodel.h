@@ -9,7 +9,10 @@
 //   default: templates link to everything they will be used for; tags and missing pages only
 //   templates link to go with them). The local graph's centre is shown even when it is a template.
 // * Local graph: with `focusPath` set (a node id: a page path) only the nodes within `depth`
-//   (1–3) links of it are kept.
+//   (1–3) links of it are kept. For a note's local graph without missing pages (the side panel,
+//   the graph view's local mode) only that neighbourhood is read from the index (outgoing links,
+//   backlinks, tags naming the pages, the notes carrying a #tag node) instead of the whole
+//   notebook's graph() — the same nodes and edges as graph() cut to it.
 // * `maxNodes` caps the graph (the best connected nodes win, the focus always stays):
 //   `truncated` / `totalNodeCount` tell the view. Phones and the browser use a lower cap.
 // * The simulation runs on a worker thread while `active` (GraphSimulation; inline on the GUI
@@ -25,7 +28,12 @@
 // * Dragging (beginDrag / dragTo / endDrag): the dragged node follows the pointer at once (the
 //   mirror), the worker pins it and keeps the simulation warm.
 // * Index changes are applied after `refreshDelay` ms: nodes keep their positions, new ones
-//   start next to a neighbour, and the simulation is reheated a little.
+//   start next to a neighbour, and the simulation is reheated a little. A local graph skips a
+//   change that touches none of its notes and links none of the changed notes to it (typing in
+//   another page); names changing anywhere rebuild it. While `shown` is false (the view or the
+//   side panel's section is out of sight) an index change only marks the graph stale: it is built
+//   again when `shown` is true again. (`active` only pauses the simulation: tests step an inactive
+//   model by hand and still see the index's changes.)
 // * Deterministic: the same index, settings and `seed` give the same layout (see ForceLayout),
 //   threaded or not, whatever the frame timing.
 //
@@ -40,9 +48,10 @@
 #include <QHash>
 #include <QList>
 #include <QObject>
-#include <QPointer>
 #include <QPointF>
+#include <QPointer>
 #include <QRectF>
+#include <QSet>
 #include <QTimer>
 #include <QVariantList>
 #include <QVariantMap>
@@ -76,6 +85,9 @@ class GraphModel : public QObject {
     Q_PROPERTY(int maxNodes READ maxNodes WRITE setMaxNodes NOTIFY settingsChanged FINAL)
     /// Run the simulation (bind to the view's visibility).
     Q_PROPERTY(bool active READ active WRITE setActive NOTIFY activeChanged FINAL)
+    /// The graph is on screen and follows the index (false: an index change only marks it stale;
+    /// it is built again when this is true again). Default true.
+    Q_PROPERTY(bool shown READ shown WRITE setShown NOTIFY shownChanged FINAL)
     Q_PROPERTY(bool reducedMotion READ reducedMotion WRITE setReducedMotion NOTIFY reducedMotionChanged FINAL)
     /// Least milliseconds between two frames of a moving layout (default 16; the browser 33).
     Q_PROPERTY(int frameInterval READ frameInterval WRITE setFrameInterval NOTIFY frameIntervalChanged FINAL)
@@ -142,6 +154,8 @@ public:
     void setMaxNodes(int max);
     bool active() const { return m_active; }
     void setActive(bool active);
+    bool shown() const { return m_shown; }
+    void setShown(bool shown);
     bool reducedMotion() const { return m_reducedMotion; }
     void setReducedMotion(bool on);
     int frameInterval() const { return m_frameInterval; }
@@ -167,6 +181,13 @@ public:
     /// Frames applied / dropped because they belonged to an older run (tests).
     int framesApplied() const { return m_framesApplied; }
     int staleFramesDropped() const { return m_staleFrames; }
+
+    /// An index change came while inactive: the graph is built when the model is active again.
+    bool isStale() const { return m_stale; }
+    /// Builds of the graph (tests: a change elsewhere builds nothing).
+    int rebuildCount() const { return m_rebuilds; }
+    /// The last build read only the focus's neighbourhood (not the whole notebook's graph()).
+    bool localBuild() const { return m_localBuild; }
 
     bool running() const { return m_running; }
     double alpha() const { return m_simOwned ? m_alpha : m_layout.alpha(); }
@@ -221,6 +242,7 @@ Q_SIGNALS:
     void vaultIndexChanged();
     void settingsChanged();
     void activeChanged();
+    void shownChanged();
     void reducedMotionChanged();
     void frameIntervalChanged();
     void refreshDelayChanged();
@@ -234,6 +256,11 @@ Q_SIGNALS:
 
 private:
     void scheduleRebuild();
+    /// The index changed (the debounce is over): rebuild unless the local graph cannot differ.
+    void rebuildFromIndex();
+    /// The local graph cannot differ after the index's changes since it was built (see above);
+    /// then it counts as built at the index's current version.
+    bool unaffectedByIndexChanges();
     void rebuild();
     void updateRunning();
     void settingsEdited();
@@ -260,6 +287,7 @@ private:
     QString m_locale = QStringLiteral("pl");
     int m_maxNodes = 4000;
     bool m_active = true;
+    bool m_shown = true;
     bool m_reducedMotion = false;
     int m_frameInterval = 16;
 
@@ -295,6 +323,17 @@ private:
     int m_staleFrames = 0;
 
     QTimer m_refreshTimer;
+    bool m_stale = false;
+    int m_rebuilds = 0;
+    /// What the last build read: the index (serial, version), whether it was a neighbourhood
+    /// (m_localBuild), its notes and #tags, and those a changed note must link to to join it
+    /// (closer than `depth` to the focus; every reached node when the cap cut it: the degrees
+    /// decide which nodes stay).
+    quint64 m_builtSerial = 0;
+    int m_builtVersion = -1;
+    bool m_localBuild = false;
+    QSet<QString> m_localIds;
+    QSet<QString> m_joinIds;
 };
 
 } // namespace brulion::planning

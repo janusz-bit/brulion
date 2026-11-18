@@ -162,6 +162,8 @@ FocusScope {
     TaskListModel {
         id: taskModel
         vaultIndex: PlanningContext.vaultIndex
+        // Hidden (kept by ShellRouteView): index changes only mark the list stale, it is computed when shown.
+        active: root.visible
         today: DatesHelper.today
         weekStart: DatesHelper.weekStart
         locale: DatesHelper.locale
