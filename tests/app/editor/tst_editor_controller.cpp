@@ -5924,6 +5924,27 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         QVERIFY(!f.page.dirty());
     }
 
+    // A failed background save is tried again a little later by itself (the user may have stopped
+    // typing: the edits made during the write found their timer swallowed).
+    void backgroundSaveFailureIsRetried()
+    {
+        Fixture f(u"- a\n"_s, 10000);
+        f.host.setDeferWrites(true);
+        QSignalSpy failed(&f.page, &PageController::saveFailed);
+        f.page.setEditText(0, u"a 1"_s, 3);
+        f.page.saveInBackground();
+        f.page.setEditText(0, u"a 1 żółw"_s, 8); // during the write
+        f.host.setFailWrites(true);
+        f.host.completeWrites();
+        QCOMPARE(failed.size(), 1);
+        QVERIFY(f.page.dirty());
+        f.host.setFailWrites(false);
+        QTRY_COMPARE_WITH_TIMEOUT(f.host.pendingWrites(), 1, 5000); // the retry, after 2 s
+        f.host.completeWrites();
+        QCOMPARE(f.host.file(Page), u"- a 1 żółw\n"_s);
+        QVERIFY(!f.page.dirty());
+    }
+
     // The page goes (destroyed, another path or host) while its write is in flight: the write
     // completes first and nothing of it lands on the next page.
     void pageGoesDuringABackgroundSave_data()

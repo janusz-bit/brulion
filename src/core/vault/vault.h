@@ -91,8 +91,9 @@
 //    a rename or a deletion of its file. The watcher's batches wait while a write is in flight (at
 //    most 2 s, then they wait for the write): its echo is the vault's own, never External. The
 //    destructor waits for writes in flight without reporting them (close an app's notebook with
-//    waitForWrites() first). Queries (files(), stat(), exists()) answer what the vault knew before
-//    the write until it is merged.
+//    waitForWrites() first). stat() and exists() of a path being written wait for that write (a
+//    caller that checks a stat before it writes sees it); files() and the other queries answer what
+//    the vault knew before the write until it is merged.
 //  * remove() moves to ".trash/<path>"; when taken, " (yyyyMMdd-HHmmss)" (then " … 2", …) is
 //    inserted before the extension. The original location is remembered in the LocalStore,
 //    otherwise derived from the trash path. restore() picks a free path ("Name 2.md") when the

@@ -1323,6 +1323,10 @@ private:
     quint64 m_writeGeneration = 0;
     bool m_editedSinceSent = false;
     int m_saveAttempts = 0;
+    /// Background saves that failed in a row (disk full, the storage gone, a locked file): tried
+    /// again after 2, 4, 8 … s (at most 30 s, 6 times), not only at the next edit or flush.
+    int m_failedSaves = 0;
+    QTimer m_retryTimer;
     bool m_editsDiscarded = false; ///< a restore took this page away: nothing is written until load()
     QString m_savedText;
     /// What markDirty() worked out about typing in one block (typedStillDirty()): with block `uid`'s

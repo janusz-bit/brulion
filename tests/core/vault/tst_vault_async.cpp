@@ -164,10 +164,12 @@ private Q_SLOTS:
             });
         });
         QCOMPARE(f.text(u"a.md"_s), u"- moje\n"_s); // (as an editor read it: the vault knows its content)
+        // (Before the write: stat() of a path being written waits for that write.)
+        const qint64 known = f.vault->stat(u"a.md"_s)->mtime;
         auto result = std::make_shared<Result>();
         startWrite(*f.vault, u"a.md"_s, u"- moje i nowe\n"_s, u"- moje\n"_s, result);
         const QByteArray other = sameStat ? QByteArray("- obce\n") : QByteArray("- obce zdanie źdźbła\n");
-        writeBehind(f.root(), u"a.md"_s, other, sameStat ? f.vault->stat(u"a.md"_s)->mtime : 0);
+        writeBehind(f.root(), u"a.md"_s, other, sameStat ? known : 0);
         gate.release();
         f.vault->waitForWrites();
         QCOMPARE(result->outcome, WriteOutcome::Changed);
@@ -182,7 +184,8 @@ private Q_SLOTS:
     void operationsDuringAWrite_data()
     {
         QTest::addColumn<QString>("operation");
-        for (const char *op : {"rename", "remove", "removePermanently", "restore", "write", "read", "rescan", "create"})
+        for (const char *op : {"rename", "remove", "removePermanently", "restore", "write", "read", "rescan", "create",
+                               "stat", "exists"})
             QTest::newRow(op) << QString::fromLatin1(op);
     }
     void operationsDuringAWrite()
@@ -236,6 +239,13 @@ private Q_SLOTS:
         } else if (operation == "create"_L1) {
             QCOMPARE(f.vault->create(path, u"- inna\n"_s), u"Projekty/łódź 2.md"_s);
             QCOMPARE(f.read(path), newest.toUtf8());
+        } else if (operation == "stat"_L1) {
+            // The stat after the write (a sync's guard before it writes compares it).
+            const std::optional<FileStat> st = f.vault->stat(path);
+            QVERIFY(st);
+            QCOMPARE(st->size, qint64(newest.toUtf8().size()));
+        } else if (operation == "exists"_L1) {
+            QVERIFY(f.vault->exists(path));
         }
         QVERIFY(result->done);
         QCOMPARE(result->outcome, WriteOutcome::Written);
@@ -441,6 +451,34 @@ private Q_SLOTS:
         startWrite(*f.vault, u"Zamknięte/a.md"_s, u"- 1\n"_s, u"- 0\n"_s, retry);
         f.vault->waitForWrites();
         QCOMPARE(retry->outcome, WriteOutcome::Written);
+    }
+
+    // A note made read-only is not written over (QSaveFile refused it; the own write's rename would
+    // not), by an async save or a plain one, and no temporary file is left.
+    void readOnlyNoteNotOverwritten_data() { modes_data(); }
+    void readOnlyNoteNotOverwritten()
+    {
+#ifdef Q_OS_UNIX
+        if (::getuid() == 0)
+            QSKIP("root writes over read-only files");
+#endif
+        QFETCH(bool, threaded);
+        Fixture f;
+        Writer writer;
+        f.write(u"Archiwum/zamknięta.md"_s, "- stała treść\n");
+        QVERIFY(f.open());
+        writer.attach(*f.vault, threaded);
+        const QString abs = f.root() + u"/Archiwum/zamknięta.md"_s;
+        QVERIFY(QFile::setPermissions(abs, QFileDevice::ReadOwner | QFileDevice::ReadGroup));
+        auto result = std::make_shared<Result>();
+        startWrite(*f.vault, u"Archiwum/zamknięta.md"_s, u"- zmieniona\n"_s, u"- stała treść\n"_s, result);
+        f.vault->waitForWrites();
+        QCOMPARE(result->outcome, WriteOutcome::Failed);
+        QVERIFY(!f.vault->writeText(u"Archiwum/zamknięta.md"_s, u"- zmieniona\n"_s));
+        QVERIFY(QFile::setPermissions(abs, QFileDevice::ReadOwner | QFileDevice::WriteOwner));
+        QCOMPARE(f.read(u"Archiwum/zamknięta.md"_s), QByteArray("- stała treść\n"));
+        const QStringList left = QDir(f.root() + u"/Archiwum"_s).entryList(QDir::Files | QDir::Hidden);
+        QCOMPARE(left, QStringList{u"zamknięta.md"_s});
     }
 
     // Not the plain case (a file the vault does not know yet): written at once, same outcome.

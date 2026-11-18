@@ -1282,12 +1282,17 @@ QList<FileStat> Vault::folders() const
 bool Vault::exists(const VaultPath &path) const
 {
     const VaultPath p = paths::normalize(path);
+    d->waitForWritesTo(p);
     return !p.isEmpty() && (d->files.contains(p) || d->dirs.contains(p));
 }
 
 std::optional<FileStat> Vault::stat(const VaultPath &path) const
 {
-    return d->knownStat(paths::normalize(path));
+    // A write of this path in flight first: a caller checking the stat before it writes (a sync's
+    // "unchanged since the plan" guard) must see the editor's write, not the stat before it.
+    const VaultPath p = paths::normalize(path);
+    d->waitForWritesTo(p);
+    return d->knownStat(p);
 }
 
 VaultPath Vault::existingCase(const VaultPath &path) const

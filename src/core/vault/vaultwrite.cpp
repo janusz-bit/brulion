@@ -156,6 +156,12 @@ void VaultPrivate::waitForWrites()
         mergeWrite(writes.constFirst());
 }
 
+void VaultPrivate::waitForWritesTo(const VaultPath &path)
+{
+    if (std::ranges::any_of(writes, [&](const std::shared_ptr<WriteJob> &job) { return job->path == path; }))
+        waitForWrites();
+}
+
 void VaultPrivate::abandonWrites()
 {
     for (const std::shared_ptr<WriteJob> &job : std::as_const(writes)) {
@@ -175,8 +181,13 @@ void VaultPrivate::mergeWrite(const std::shared_ptr<WriteJob> &job)
     writes.removeOne(job);
     const std::function<void(WriteOutcome)> done = std::exchange(job->done, {});
     job->afterWrite = {};
-    if (job->generation != generation || !isOpen)
-        return; // the notebook was opened again meanwhile (open() waits: never, in fact)
+    if (job->generation != generation || !isOpen) {
+        // The notebook was closed or opened again meanwhile (open() and an app's close wait: hardly
+        // ever): the writer is told it failed, so it does not wait for an answer forever.
+        if (done)
+            done(WriteOutcome::Failed);
+        return;
+    }
     const VaultPath &path = job->path;
     QList<VaultChange> changes;
     WriteOutcome outcome = WriteOutcome::Written;

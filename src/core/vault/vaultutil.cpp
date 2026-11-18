@@ -4,6 +4,7 @@
 #include "vault/filesync.h"
 #include "vault/vaultconfig.h"
 
+#include <QCoreApplication>
 #include <QFile>
 #include <QFileInfo>
 #include <QRandomGenerator>
@@ -166,6 +167,11 @@ StampedSave saveAtomicallyStamped(const QString &absolutePath, QByteArrayView by
         return out;
     }
     const QFileInfo target(absolutePath);
+    // A file made read-only is not written over (as QSaveFile refuses it): the rename would.
+    if (target.exists() && !target.isWritable()) {
+        out.error = QCoreApplication::translate("QSaveFile", "Existing file %1 is not writable").arg(absolutePath);
+        return out;
+    }
     const QString dir = target.absolutePath();
     out.before = fineMtime(dir);
     QFile temp;
@@ -197,9 +203,18 @@ StampedSave saveAtomicallyStamped(const QString &absolutePath, QByteArrayView by
     temp.close();
     if (beforeRename)
         beforeRename();
-    out.beforeRename = fineMtime(dir);
+    // A rename refused for a moment (Windows: a virus scanner, an indexer or a sync client holding
+    // the file) is tried again after a tenth of a second, as saveAtomically() does; the stamp before
+    // it is taken again each time (what changed while waiting is not ours).
     std::error_code error;
-    std::filesystem::rename(fsPath(temp.fileName()), fsPath(absolutePath), error);
+    for (int attempt = 1;; ++attempt) {
+        out.beforeRename = fineMtime(dir);
+        error.clear();
+        std::filesystem::rename(fsPath(temp.fileName()), fsPath(absolutePath), error);
+        if (!error || attempt == 4)
+            break;
+        QThread::msleep(15 * attempt); // 15 + 30 + 45 ms
+    }
     if (error) {
         out.error = QString::fromStdString(error.message());
         QFile::remove(temp.fileName());

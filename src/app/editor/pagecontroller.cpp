@@ -226,6 +226,11 @@ PageController::PageController(QObject *parent)
     m_saveTimer.setSingleShot(true);
     m_saveTimer.setInterval(400ms);
     connect(&m_saveTimer, &QTimer::timeout, this, &PageController::saveInBackground);
+    m_retryTimer.setSingleShot(true);
+    connect(&m_retryTimer, &QTimer::timeout, this, [this] {
+        if (m_dirty && !m_conflict && !m_writeInFlight)
+            saveInBackground();
+    });
     connect(m_undo, &QUndoStack::canUndoChanged, this, &PageController::undoStateChanged);
     connect(m_undo, &QUndoStack::canRedoChanged, this, &PageController::undoStateChanged);
     // The leading "# Title" (titleRow) follows every change of the first blocks.
@@ -676,6 +681,7 @@ void PageController::backgroundWriteDone(quint64 generation, const QString &cont
     switch (result) {
     case EditorHost::WriteResult::Written:
         m_saveAttempts = 0;
+        m_failedSaves = 0;
         m_savedText = content;
         if (!m_exists) {
             m_exists = true;
@@ -690,9 +696,14 @@ void PageController::backgroundWriteDone(quint64 generation, const QString &cont
             m_saveTimer.start();
         return;
     case EditorHost::WriteResult::Failed:
-        // Still dirty: the next edit, a flush or save() writes it again.
+        // Still dirty: tried again a little later (also when the user stopped typing: an edit made
+        // during the write found the timer swallowed), and by the next edit, a flush or save().
         m_saveAttempts = 0;
         Q_EMIT saveFailed();
+        if (m_dirty && !m_conflict && !m_editsDiscarded && m_failedSaves < 6) {
+            m_retryTimer.start(std::min(30'000, 2'000 << m_failedSaves));
+            ++m_failedSaves;
+        }
         return;
     case EditorHost::WriteResult::Changed: break;
     }

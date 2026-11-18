@@ -751,7 +751,9 @@ void Workspace::writeIfUnchangedAsync(const QString &path, const QString &conten
         case WriteOutcome::Changed: done(WriteResult::Changed); return;
         case WriteOutcome::Failed: break;
         }
-        Q_EMIT errorOccurred(tr("Could not save %1: %2").arg(path, m_vault ? m_vault->errorString() : QString()));
+        // (A write the vault dropped because the notebook closed meanwhile: no message.)
+        if (m_vault && m_vault->isOpen())
+            Q_EMIT errorOccurred(tr("Could not save %1: %2").arg(path, m_vault->errorString()));
         done(WriteResult::Failed);
     };
     m_vault->writeTextIfUnchangedAsync(std::move(write));

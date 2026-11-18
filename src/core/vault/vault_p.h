@@ -256,6 +256,8 @@ public:
     quint64 writeAsync(AsyncTextWrite write);
     /// Wait for every write in flight and merge them, oldest first.
     void waitForWrites();
+    /// waitForWrites() when a write of `path` is in flight (stat(), exists()).
+    void waitForWritesTo(const VaultPath &path);
     /// Merge a finished job (no-op when merged already): Vault state, `done`, changed().
     void mergeWrite(const std::shared_ptr<WriteJob> &job);
     /// The destructor: wait for the writer, report nothing.
