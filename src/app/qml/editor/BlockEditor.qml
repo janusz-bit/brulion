@@ -81,6 +81,11 @@ FocusScope {
     /// from the start — so the editor has its final height as soon as it exists. (A list that
     /// created them as it grew made the day grow after the journal list had placed it.)
     property bool autoHeight: false
+    /// The blocks are drawn by something else (a day of the journal stream not being edited:
+    /// JournalDayItem, docs/UI.md "A journal day as one item"): the list makes no rows and takes
+    /// no input until this is false again. The editor itself — its controller, geometry and
+    /// functions — stays.
+    property bool rowsDrawn: false
     /// A page of at most this many rows is created whole (docs/UI.md "Scrolling performance"): the
     /// rows on screen at once, as on any page, the others in the background — the list's cache,
     /// which ListView fills asynchronously between frames — so scrolling it creates no rows and
@@ -2310,9 +2315,9 @@ FocusScope {
         TouchFlick.enabled: true
         anchors.fill: parent
         anchors.topMargin: conflictBanner.y + conflictBanner.height + (conflictBanner.active ? Theme.space2 : 0)
-        visible: !editor.controller || !editor.controller.sourceMode
+        visible: (!editor.controller || !editor.controller.sourceMode) && !editor.rowsDrawn
         focus: true
-        model: editor.controller ? editor.controller.blocks : null
+        model: editor.controller && !editor.rowsDrawn ? editor.controller.blocks : null
         reuseItems: false
         readonly property int rowCache: editor.autoHeight ? 0 : editor.wholePage ? editor.wholePageCache : 1600
         cacheBuffer: rowCache
@@ -2735,7 +2740,8 @@ FocusScope {
         PointHandler {
             id: dragPointer
             target: null
-            enabled: editor.controller !== null && !editor.controller.sourceMode
+            // (Rows drawn elsewhere: their item passes a press on once the rows exist.)
+            enabled: editor.controller !== null && !editor.controller.sourceMode && !editor.rowsDrawn
             onActiveChanged: {
                 if (!active) {
                     editor.dragReleased()
@@ -2764,7 +2770,7 @@ FocusScope {
     DropArea {
         id: fileDrop
         anchors.fill: list
-        enabled: editor.controller !== null && !editor.controller.sourceMode
+        enabled: editor.controller !== null && !editor.controller.sourceMode && !editor.rowsDrawn
         keys: ["text/uri-list"]
         onEntered: (drag) => drag.accepted = drag.hasUrls
         onDropped: (drop) => {

@@ -362,3 +362,9 @@ brulion_add_test(tst_editor_indexrender
 brulion_add_test(tst_editor_renderedtext
     SOURCES tst_editor_renderedtext.cpp
     LIBS brulion_editor brulion_core_markdown)
+# JournalDayItem (journaldayitem.h): a journal day drawn by one item — which days it draws, the
+# rows' geometry by BlockDelegate's formulas, what is under a point, links, hover, the model
+# followed without laying unchanged texts out again, the sprites, a frame drawn offscreen.
+brulion_add_test(tst_editor_journalday
+    SOURCES tst_editor_journalday.cpp
+    LIBS brulion_editor brulion_core_markdown)

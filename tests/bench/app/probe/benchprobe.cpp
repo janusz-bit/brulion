@@ -866,6 +866,11 @@ private:
                 ++n;
                 return false;
             }
+            // A journal day drawn as one item (BRULION_JOURNAL_DAY_ITEM=1): its rows.
+            if (typeName(it) == "brulion::editor::JournalDayItem") {
+                n += it->property("shownRows").toInt();
+                return false;
+            }
             return true;
         });
         return n;

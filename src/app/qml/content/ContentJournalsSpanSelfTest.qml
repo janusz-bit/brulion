@@ -92,10 +92,15 @@ Item {
         return d !== null && d.controller.loaded && test.blockText(d, 0) !== null
     }
     function blockText(day: ContentJournalDay, row: int): Item {
+        // (A day drawn as one item, BRULION_JOURNAL_DAY_ITEM=1: the item's text of the row; input
+        // there goes to the day as on the editor's rows.)
+        if (day !== null && day.drawn)
+            return day.drawnBlocks !== null ? day.drawnBlocks.textItemOf(row) : null
         test._row = day !== null ? day.editor.listView.itemAtIndex(row) : null
         return test._row !== null ? test.richTextIn(test._row) : null
     }
-    /// The rendered rich text under `item` (a Text or TextEdit showing rich text), visible only.
+    /// The rendered text under `item` (a Text or TextEdit showing rich text, a RenderedTextItem),
+    /// visible only.
     function richTextIn(item: Item): Item {
         if (item === null || !item.visible)
             return null
@@ -105,6 +110,10 @@ Item {
         const edit = item as TextEdit
         if (edit !== null && edit.textFormat === TextEdit.RichText)
             return edit
+        // (BRULION_TEXT_ITEM=1: the rendered text drawn from its runs.)
+        const runs = item as RenderedTextItem
+        if (runs !== null)
+            return runs
         const n = DevTest.childCount(item)
         for (let i = 0; i < n; ++i) {
             const found = test.richTextIn(DevTest.childAt(item, i))

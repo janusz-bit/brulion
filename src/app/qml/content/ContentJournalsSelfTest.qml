@@ -60,6 +60,12 @@ Item {
     property real contentBefore: 0
     property int linesBefore: 0
     property int dragStep: 0
+    /// A day drawn as one item (BRULION_JOURNAL_DAY_ITEM=1): its row, its rows' geometry as the
+    /// item drew them (drawnRowsText()), where a tap went and the caret it should give.
+    property int drawnRow: -1
+    property string drawnRows: ""
+    property int expectedCaret: -1
+    property int shownBefore: 0
     property int linkRow: -1
     /// The zoomed paragraph of the long day and the day's text before it was added.
     property int zoomRow: -1
@@ -126,10 +132,15 @@ Item {
     }
     /// The rendered text of `row` in `day` (null when its block is not shown).
     function blockText(day: ContentJournalDay, row: int): Item {
+        // (A day drawn as one item, BRULION_JOURNAL_DAY_ITEM=1: the item's text of the row; input
+        // there goes to the day as on the editor's rows.)
+        if (day !== null && day.drawn)
+            return day.drawnBlocks !== null ? day.drawnBlocks.textItemOf(row) : null
         test._row = day !== null ? day.editor.listView.itemAtIndex(row) : null
         return test._row !== null ? test.richTextIn(test._row) : null
     }
-    /// The rendered rich text under `item` (a Text or TextEdit showing rich text), visible only.
+    /// The rendered text under `item` (a Text or TextEdit showing rich text, a RenderedTextItem),
+    /// visible only.
     function richTextIn(item: Item): Item {
         if (item === null || !item.visible)
             return null
@@ -139,6 +150,10 @@ Item {
         const edit = item as TextEdit
         if (edit !== null && edit.textFormat === TextEdit.RichText)
             return edit
+        // (BRULION_TEXT_ITEM=1: the rendered text drawn from its runs.)
+        const runs = item as RenderedTextItem
+        if (runs !== null)
+            return runs
         const n = DevTest.childCount(item)
         for (let i = 0; i < n; ++i) {
             const found = test.richTextIn(DevTest.childAt(item, i))
@@ -203,6 +218,20 @@ Item {
         test._at = item.mapToItem(test.list, 0, item.height)
         return test._at.y
     }
+    /// The bottom of `row` of `day` in the list: its delegate's, or where the day's item draws it
+    /// (1e9: neither).
+    function rowBottom(day: ContentJournalDay, row: int): real {
+        if (day === null)
+            return 1e9
+        test._row = day.editor.listView.itemAtIndex(row)
+        if (test._row !== null)
+            return test.bottomInList(test._row)
+        const drawn = day.drawnBlocks
+        if (drawn === null)
+            return 1e9
+        test._at = drawn.mapToItem(test.list, 0, drawn.rowY(row) + drawn.rowHeight(row))
+        return test._at.y
+    }
     /// A finger dragging over the list (QtTest's TestEvent), one move per step (none without it).
     function dragSteps(): void {
         const x = test.list.width / 2
@@ -241,14 +270,141 @@ Item {
                     md += "- Dzień " + n + ", punkt " + b + "\n"
                 md += "- Zobacz [[#Cel podróży]]\n"
             }
-            for (let b = 0; n !== 45 && b < 10; ++b)
+            if (n === 50 || n === 51) {
+                // Every kind of plain block (a day drawn as one item: the same rows as the editor's).
+                md = n === 50 ? test.outlineDay() : test.documentDay()
+            }
+            for (let b = 0; n !== 45 && n !== 50 && n !== 51 && b < 10; ++b)
                 md += "- Dzień " + n + ", notatka " + b + ": zażółć gęślą jaźń\n"
             Workspace.writeFile(path, md)
         }
     }
+    /// An outline day with headings, nested items, tasks of every status, a quote, a folded parent,
+    /// inline styles, links and tags; a long item that wraps.
+    function outlineDay(): string {
+        let long = ""
+        for (let i = 0; i < 12; ++i)
+            long += "zażółć gęślą jaźń, źdźbło i łódź "
+        return "## Plan dnia\n"
+               + "- Kawa z Basią w [[Kraków]] #dom\n"
+               + "  - " + long + "\n"
+               + "    - głębiej: **pogrubione**, *kursywa*, `kod` i ==zaznaczenie==\n"
+               + "- [ ] Zadzwonić do hydraulika\n"
+               + "- [ ] Zamówić farbę 📅 2026-10-20\n"
+               + "- [x] Zrobione\n"
+               + "- [-] Odwołane\n"
+               + "- [/] W trakcie\n"
+               + "- [>] Odłożone\n"
+               + "- > Cytat z książki o historii Krakowa\n"
+               + "- Rodzic zwinięty\n  collapsed:: true\n  - ukryte dziecko\n"
+               + "- ### Wieczór\n"
+               + "- ostatni punkt\n"
+    }
+    /// A document day: a title, a wrapping paragraph, a numbered list with a nested item, tasks, a
+    /// rule, a heading and a quote.
+    function documentDay(): string {
+        let long = ""
+        for (let i = 0; i < 12; ++i)
+            long += "zażółć gęślą jaźń, źdźbło i łódź "
+        return "---\nbrulion: document\n---\n# Dzień w dokumencie\n\n" + long + "\n\n"
+               + "1. pierwszy\n2. drugi\n   - zagnieżdżony\n3. trzeci\n\n"
+               + "- [ ] zadanie w dokumencie\n- [x] zrobione w dokumencie\n\n***\n\n## Podsumowanie\n\n"
+               + "> Cytat na koniec.\n"
+    }
     /// The date of the list's first row.
     function firstDate(): string {
         return AppController.routeText(test.days.get(0), "date")
+    }
+
+    // ---- A day drawn as one item (BRULION_JOURNAL_DAY_ITEM=1) ------------------------------------
+    function fixed(x: real): string {
+        return Js.toFixed(x, 2)
+    }
+    /// A row as the day's JournalDayItem draws it: top, height, first line's centre, its text's place
+    /// and width ("hidden": not shown).
+    function drawnRowText(drawn: JournalDayItem, row: int): string {
+        test._rect = drawn.textRectOf(row)
+        if (test._rect.width <= 0)
+            return "hidden"
+        return test.fixed(drawn.rowY(row)) + " " + test.fixed(drawn.rowHeight(row)) + " "
+               + test.fixed(drawn.firstLineCenterOf(row)) + " text " + test.fixed(test._rect.x) + " "
+               + test.fixed(test._rect.y) + " " + test.fixed(test._rect.width)
+    }
+    function drawnRowsText(day: ContentJournalDay): string {
+        let out = ""
+        for (let r = 0; r < day.controller.blocks.count; ++r)
+            out += test.drawnRowText(day.drawnBlocks, r) + ";"
+        return out
+    }
+    /// The same of the editor's row (BlockDelegate): its BlockText (a quote's in its frame; a rule's
+    /// line item) in the list's content.
+    function delegateRowText(day: ContentJournalDay, row: int): string {
+        const item = day.editor.listView.itemAtIndex(row) as BlockDelegate
+        if (item === null || !item.shown)
+            return "hidden"
+        const text = item.view === "rule" ? item.contentItem : day.blockTextOf(item.contentItem) as Item
+        if (text === null)
+            return "no text"
+        test._at = text.mapToItem(day.editor.listView.contentItem, 0, 0)
+        return test.fixed(item.y) + " " + test.fixed(item.height) + " " + test.fixed(item.firstLineCenter) + " text "
+               + test.fixed(test._at.x) + " " + test.fixed(test._at.y) + " " + test.fixed(text.width)
+    }
+    function delegateRowsText(day: ContentJournalDay): string {
+        let out = ""
+        for (let r = 0; r < day.controller.blocks.count; ++r)
+            out += test.delegateRowText(day, r) + ";"
+        return out
+    }
+    /// The first row whose two descriptions differ ("" none).
+    property list<string> _partsA
+    property list<string> _partsB
+    function firstDifference(a: string, b: string): string {
+        test._partsA = Js.split(a, ";")
+        test._partsB = Js.split(b, ";")
+        if (test._partsA.length !== test._partsB.length)
+            return "rows: drawn " + test._partsA.length + ", editor " + test._partsB.length
+        for (let i = 0; i < test._partsA.length; ++i) {
+            const p = test._partsA[i]
+            const q = test._partsB[i]
+            if (p !== q)
+                return "drawn " + p + ", editor " + q
+        }
+        return ""
+    }
+    /// Steps: the day `n` days ago, drawn as one item, and then its editor's rows — the same rows,
+    /// the day where it was with its height.
+    function drawnParitySteps(n: int, what: string): void {
+        if (test.at()) {
+            test.list.positionViewAtBeginning()
+            test.drawnRow = test.days.rowOfDate(DatesHelper.addDays(DatesHelper.today, -n))
+        }
+        // (Created anew: a day made earlier may have its editor's rows.)
+        if (test.at())
+            test.waitFor(test.dayAt(test.drawnRow) === null)
+        if (test.at())
+            test.list.positionViewAtIndex(test.drawnRow, ListView.Beginning)
+        if (test.at())
+            test.waitFor(test.dayLoaded(test.drawnRow) && test.dayAt(test.drawnRow).drawnBlocks !== null)
+        if (test.at()) {
+            const day = test.dayAt(test.drawnRow)
+            test.tracked = day
+            test.check(day.drawn && day.drawnBlocks.drawable && day.editor.listView.count === 0
+                       && day.drawnBlocks.shownRows >= 8,
+                       what + ": drawn by one item, its editor makes no rows (" + day.drawnBlocks.shownRows + " rows)")
+            test.drawnRows = test.drawnRowsText(day)
+            test.dayHeight = day.height
+            test.slotY = test.topInList(day)
+            test.contentBefore = test.list.contentY
+            day.materialize()
+            const rows = test.delegateRowsText(day)
+            test.check(!day.drawn && day.editor.listView.count === day.controller.blocks.count,
+                       what + ": materialized, the editor's rows")
+            const difference = test.firstDifference(test.drawnRows, rows)
+            test.check(difference === "", what + ": every row where the item drew it — " + difference)
+            test.check(Math.abs(day.height - test.dayHeight) < 0.01 && Math.abs(test.topInList(day) - test.slotY) < 0.01
+                       && Math.abs(test.list.contentY - test.contentBefore) < 0.01,
+                       what + ": the day keeps its height and place: " + day.height + " = " + test.dayHeight)
+        }
     }
 
     function runSteps(): void {
@@ -257,6 +413,8 @@ Item {
         runStepsPart3()
         runStepsPart4()
         runStepsPart5()
+        runStepsPart6()
+        runStepsPart7()
     }
     function runStepsPart1(): void {
         // ---- A notebook with two months of days ------------------------------------------
@@ -442,9 +600,9 @@ Item {
         }
         if (test.at()) {
             const day = test.tracked
-            const head = day !== null ? day.editor.listView.itemAtIndex(0) as Item : null
-            test.check(head !== null && day.controller.isHeading(0) && test.bottomInList(head) < 0,
-                       "the day's heading is above the visible part")
+            const bottom = test.rowBottom(day, 0)
+            test.check(day !== null && day.controller.isHeading(0) && bottom < 0,
+                       "the day's heading is above the visible part: " + bottom)
             if (day !== null)
                 day.editor.activateLink(day.controller.lastVisibleRow(), "page:#Cel%20podr%C3%B3%C5%BCy")
         }
@@ -708,6 +866,100 @@ Item {
         }
         if (test.at())
             test.check(test.fileHas(test.trackedPath, "po północy — dalej"), "typing goes on in the edited day")
+    }
+
+    function runStepsPart6(): void {
+        // ---- A day drawn as one item (BRULION_JOURNAL_DAY_ITEM=1) --------------------------------
+        // The rows the item draws are the editor's: an outline day of every kind of plain block
+        // and a document day; switched to the rows, the day keeps its height and place.
+        if (!EditorInput.journalDayItem)
+            return
+        test.drawnParitySteps(50, "an outline day")
+        test.drawnParitySteps(51, "a document day")
+    }
+    function runStepsPart7(): void {
+        if (!EditorInput.journalDayItem)
+            return
+        // ---- A tap on a drawn day's text: that block edited, the caret where the finger was -----
+        if (test.at()) {
+            test.list.positionViewAtBeginning()
+            test.drawnRow = test.days.rowOfDate(DatesHelper.addDays(DatesHelper.today, -52))
+        }
+        if (test.at())
+            test.waitFor(test.dayAt(test.drawnRow) === null)
+        if (test.at())
+            test.list.positionViewAtIndex(test.drawnRow, ListView.Beginning)
+        if (test.at())
+            test.waitFor(test.dayLoaded(test.drawnRow) && test.dayAt(test.drawnRow).drawnBlocks !== null
+                         && !test.list.moving)
+        if (test.at()) {
+            const day = test.dayAt(test.drawnRow)
+            test.tracked = day
+            const drawn = day.drawnBlocks
+            test._rect = drawn.textRectOf(2)
+            test.check(day.drawn && test._rect.width > 120, "a plain day is drawn")
+            test.dayHeight = day.height
+            test.slotY = test.topInList(day)
+            // "Dzień 52, notatka 2: zażółć gęślą jaźń": the finger on "notatka" (110 px in).
+            const x = test._rect.x + 110
+            const y = test._rect.y + drawn.lineHeights[0] / 2
+            test.expectedCaret = drawn.textPositionAt(x, y)
+            events.touchPress(drawn, x, y)
+            events.touchRelease(drawn, x, y)
+        }
+        if (test.at())
+            test.waitFor(test.editing(test.tracked))
+        if (test.at()) {
+            const day = test.tracked
+            const caret = day.editor.activeEditor.cursorPosition
+            test.check(day.controller.editingRow === 2 && Math.abs(caret - test.expectedCaret) <= 1,
+                       "a tap on a drawn day's text edits that block, the caret where the finger was: " + caret + " ~ "
+                       + test.expectedCaret)
+            test.check(!day.drawn && Math.abs(test.topInList(day) - test.slotY) < 0.01
+                       && Math.abs(day.height - test.dayHeight) < 1,
+                       "the day keeps its place and height: " + day.height + " = " + test.dayHeight)
+            day.controller.stopEditing()
+            test.list.positionViewAtBeginning()
+        }
+        // ---- A task box and a fold arrow tapped on a drawn day: done, no rows made -----------------
+        if (test.at())
+            test.drawnRow = test.days.rowOfDate(DatesHelper.addDays(DatesHelper.today, -50))
+        if (test.at())
+            test.waitFor(test.dayAt(test.drawnRow) === null)
+        if (test.at())
+            test.list.positionViewAtIndex(test.drawnRow, ListView.Beginning)
+        if (test.at())
+            test.waitFor(test.dayLoaded(test.drawnRow) && test.dayAt(test.drawnRow).drawn && !test.list.moving)
+        if (test.at()) {
+            const day = test.dayAt(test.drawnRow)
+            test.tracked = day
+            test.trackedPath = day.path
+            // "- [ ] Zadzwonić do hydraulika" is row 4.
+            test._rect = day.drawnBlocks.partRect(4, "taskBox")
+            events.touchPress(day.drawnBlocks, test._rect.x + test._rect.width / 2, test._rect.y + test._rect.height / 2)
+            events.touchRelease(day.drawnBlocks, test._rect.x + test._rect.width / 2, test._rect.y + test._rect.height / 2)
+        }
+        if (test.at())
+            test.waitFor(test.fileHas(test.trackedPath, "- [x] Zadzwonić do hydraulika"))
+        if (test.at()) {
+            const day = test.tracked
+            test.check(day.drawn, "a task box tapped on a drawn day: done, the day still drawn")
+            test.shownBefore = day.drawnBlocks.shownRows
+            test.dayHeight = day.height
+            // "- Rodzic zwinięty" (folded) is row 11: its arrow shows on touch UIs.
+            test._rect = day.drawnBlocks.partRect(11, "arrow")
+            test.check(test._rect.width > 0, "a folded block's arrow is drawn")
+            events.touchPress(day.drawnBlocks, test._rect.x + test._rect.width / 2, test._rect.y + test._rect.height / 2)
+            events.touchRelease(day.drawnBlocks, test._rect.x + test._rect.width / 2, test._rect.y + test._rect.height / 2)
+        }
+        if (test.at())
+            test.waitFor(test.tracked.drawnBlocks !== null && test.tracked.drawnBlocks.shownRows === test.shownBefore + 1)
+        if (test.at()) {
+            const day = test.tracked
+            test.check(day.drawn && day.height > test.dayHeight, "its arrow unfolds it: one more row, still drawn")
+            day.controller.toggleFold(11)
+            test.list.positionViewAtBeginning()
+        }
     }
 
     /// A step is running. QtTest's events process events before they return (a touch sequence's

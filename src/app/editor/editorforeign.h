@@ -13,6 +13,7 @@
 #include "editorhost.h"
 #include "editorinput.h"
 #include "fakeeditorhost.h"
+#include "journaldayitem.h"
 #include "linkpreview.h"
 #include "markdownhighlighter.h"
 #include "mermaidview.h"
@@ -117,6 +118,13 @@ struct RenderedTextItemForeign {
     Q_GADGET
     QML_FOREIGN(brulion::editor::RenderedTextItem)
     QML_NAMED_ELEMENT(RenderedTextItem)
+};
+
+// A journal day drawn as one item (journaldayitem.h).
+struct JournalDayItemForeign {
+    Q_GADGET
+    QML_FOREIGN(brulion::editor::JournalDayItem)
+    QML_NAMED_ELEMENT(JournalDayItem)
 };
 
 struct RenderedTextRefForeign {

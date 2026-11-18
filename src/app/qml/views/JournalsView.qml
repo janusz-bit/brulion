@@ -149,6 +149,9 @@ FocusScope {
     readonly property list<string> pageRouteKeys: ["line", "blockId", "heading", "source", "open"]
     /// The day whose editor had the caret last (side panel context, editing state).
     property ContentJournalDay activeDay: null
+    // The stream's commands act on its editor's rows (a day drawn as one item makes them: docs/UI.md
+    // "A journal day as one item").
+    onActiveDayChanged: if (root.activeDay !== null) root.activeDay.materialize()
     /// The editor and the page of activeDay (null with none).
     readonly property BlockEditor activeEditor: activeDay !== null ? activeDay.editor : null
     readonly property PageController activeController: activeDay !== null ? activeDay.controller : null
@@ -375,6 +378,9 @@ FocusScope {
             /// The editor of the day at a scene point (EditorScroller), null in a gap.
             function editorAt(scene: point): BlockEditor {
                 const day = journals.dayAt(scene)
+                // (A selection dragged into a day drawn as one item: its rows are made.)
+                if (day)
+                    day.materialize()
                 return day ? day.editor : null
             }
             /// (A mapped point: a Q_INVOKABLE's point result is read through a typed property.)

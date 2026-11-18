@@ -3358,6 +3358,74 @@ breaks, widths and positions with a `QTextDocument` of the fixed line height, th
 layouts, links, source positions, the cut, Polish no-break spaces and emoji. Status and numbers:
 docs/PERFORMANCE.md "Z10 stage A: rendered text from runs".
 
+### A journal day as one item: `JournalDayItem` (Z10 stage A2)
+
+A day of the journal stream is one `ContentJournalDay` with its own `BlockEditor`, and the editor
+makes a `BlockDelegate` (some 45 objects) for every block when the day is created — most of a day's
+cost. With **`BRULION_JOURNAL_DAY_ITEM=1`** (`EditorInput.journalDayItem`, off by default; it turns
+`EditorInput.textItem` on too, so that the rows a day switches to lay their text out with the same
+code) a day that is not being edited is drawn by one C++ item instead
+(`src/app/editor/journaldayitem.h`):
+
+* **The editor stays, its rows do not** (`BlockEditor.rowsDrawn`: the list has no model, is hidden
+  and takes no input; its drop area and drag tracker are off). The day's controller, find bar,
+  stream selection and every function of the editor are there as before, and the item takes the
+  editor's geometry from it (`contentX`, `gutter`, `headingSize()`, `firstLineCenter()` of its line
+  probes, …): only BlockDelegate's own formulas (paddings by the block before, the marker columns,
+  the task box, the "Add date" room, the content's place and width) are repeated in C++.
+* **What it draws**: every shown block of the views `text`, `heading`, `quote` and `rule` — the guide
+  lines, the line from a parent's bullet to its children, fold arrows (on hover; always when folded
+  or on touch UIs), bullets with their halo, task boxes of every status, a document's list numbers,
+  headings, a quote's bar, a rule's line — and the block's rendered text, one `RenderedTextItem`
+  per block made from C++ (no QML object per block; a page's app icons in the text as sprites). Bars
+  and lines are rectangle nodes, the round shapes and icons sprites (`spriteImage()`: painted once
+  per key and device pixel ratio, textures from the scene graph's atlas), so the software renderer
+  draws them too. Its rows are BlockDelegate's to the pixel: `tst_content_journals_qml_dayitem`
+  compares every row's top, height, first line and text with the editor's rows the day switches to.
+* **A day it does not draw shows its editor's rows, the whole day** (`drawable` false): a table,
+  code, a calculation, a query, a formula, a diagram, a chart, a picture or an embedded page, the
+  page properties, a callout, raw HTML, text it cannot draw (`RenderedText::drawable`). Hosting such
+  blocks as QML delegates placed by the item would need the delegates anyway: every block view reads
+  its `BlockDelegate` and the editor through it (`block.editor.*`). That is stage C's work (one item
+  per page with a height sum tree, rich blocks hosted); for a journal the whole day is the simpler
+  correct unit.
+* **The rows are made when something needs them** (`ContentJournalDay.materialize()`, synchronous —
+  the list's `forceLayout()`: every row in the same event, with the heights the item had, so nothing
+  moves): a mouse press on the day (a drag from it selects blocks, as on the rows), a finger's tap or
+  long press (a finger's press alone does not: most presses on a phone scroll the stream), a
+  right-click, a middle click, files dragged over it; editing, a selection (also the part of a
+  selection over several days), a zoom, a conflict, a title above the properties; the day becoming
+  the stream's active day (today when the stream opens: the stream's commands act on it), the end
+  of a selection moving into it, `begin()`, a screen reader. The day keeps its rows from then on.
+* **Input goes on to the editor's own functions.** The item says what is under a point (`partAt()`:
+  text, the "Add date" button, task box, number, bullet, fold arrow, the strip under the blocks) and
+  the day calls what that part of a row calls — a text's `blockTappedWith()`, `openDateDialogAt()`,
+  `activateLink()` or `editAt()` with the point in the new row's text (the caret lands where the
+  finger was), the bullet's zoom, the box's `toggleTask()`, the arrow's `toggleFold()`, the menus
+  (`openBlockMenu()` at the marker, `openTaskStatusMenu()`, `openDateMenu()` / `openBlockLinkMenu()`,
+  `openBlockMenuAt()` at the pointer), `openLinkInTab()`, `longPressText()`. A press that made the
+  rows keeps the item (drawing nothing: `opacity` 0) until it ends, and its moves go on to the
+  editor's drag tracker (`dragPressed()` / `dragMoved()` / `dragReleased()`). Taps on a task box or a
+  fold arrow change the page without making the rows.
+* **Hover is drawn by the item** (`setHover()`): the row's fold arrow, a bullet's halo, a task box's
+  tint, the link under the pointer underlined in its row only, the cursor, link previews
+  (`LinkPreviews.hover()` with the item); an open task's "Add date" is a real `BIconButton` placed on
+  the hovered row (one per day, while hovered), whose click opens the menu at the row's own button.
+* **Accessibility.** With a screen reader on (`DeviceInfo.screenReader`) days are never drawn: the
+  editor's rows make each block an accessible item and its links accessible items of their own
+  (`BLinkTargets`). Qt Quick gives items created from C++ no accessible role or name without its
+  private API (`QQuickAccessibleAttached`); the drawn item is a `List` named by the day's date.
+* Left as they are: the fold arrow turns without its animation, a task box's colour changes at once,
+  a quote's bar has square ends (a 1.5 px radius in the row), the round shapes are pictures at
+  fractional positions (antialiased a little differently).
+
+`tst_editor_journalday` checks the item alone (which days it draws, the rows' geometry by the
+formulas, parts and links under points, hover, a fold, a task and another device's change followed
+without laying unchanged texts out again, the sprites, a frame); `tst_content_journals_qml_dayitem`
+and `tst_content_journals_span_qml(_touch)_dayitem` run the journal's self-tests with it (real mouse
+and touch input through the drawn days). Numbers: docs/PERFORMANCE.md "Z10 stage A2: a journal day
+as one item".
+
 ### The scroll bar: `RowScroll` (`src/app/ui/rowscroll.h`)
 
 Qt's attached scroll bar (`T.ScrollBar.vertical: BScrollBar {}`) takes its position and size

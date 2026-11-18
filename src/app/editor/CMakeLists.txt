@@ -50,6 +50,7 @@ qt_add_library(brulion_editor STATIC
     richtextpills.h richtextpills.cpp
     richtextlinks.h richtextlinks.cpp
     renderedtextitem.h renderedtextitem.cpp
+    journaldayitem.h journaldayitem.cpp
     linkpreview.h linkpreview.cpp
     suggestionmodel.h suggestionmodel.cpp
     fakeeditorhost.h fakeeditorhost.cpp
