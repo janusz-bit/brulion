@@ -1393,13 +1393,22 @@ private Q_SLOTS:
         }
         QCOMPARE(tools.summariesComputed(), computed);
 
-        // The page itself.
+        // The page itself: computed again, on the next turn. Its words are no part of the header's
+        // summary (summary() counts them): a new word changes nothing the header shows.
         QSignalSpy changed(&tools, &PageTools::summaryChanged);
         QVERIFY(ws->writeFile(u"Praca.md"_s, u"- strona tagu, słów teraz sześć\n"_s));
         QCOMPARE(tools.summariesComputed(), computed); // (not inside the save: on the next turn)
         settle();
         QCOMPARE(tools.summariesComputed(), ++computed);
+        QCOMPARE(changed.size(), 0);
+        QCOMPARE(summary().value(u"words"_s).toInt(), 5);
+        // A tag of its own does.
+        QVERIFY(ws->writeFile(u"Praca.md"_s, u"tags:: żółty\n\n- strona tagu, słów teraz sześć\n"_s));
+        settle();
+        QCOMPARE(tools.summariesComputed(), ++computed);
         QCOMPARE(changed.size(), 1);
+        QCOMPARE(tools.tagChips().size(), 1);
+        QCOMPARE(tools.tagChips().first().toMap().value(u"key"_s).toString(), u"żółty"_s);
 
         // A new referrer: a page that did not link here does now.
         QVERIFY(ws->writeFile(u"Druga.md"_s, u"- teraz o [[Praca]]\n"_s));

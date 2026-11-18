@@ -8,8 +8,9 @@
 //
 // With a `path` it also keeps that page's summary() for the page header as typed properties
 // (folderParts, aliasChips, tagChips, headerTag, subTags) — read compiled in QML, unlike members of
-// a returned map. It is computed again only when the notebook changed in a way it shows: the page
-// itself (on the next event-loop turn, once for a burst of autosaves), the names
+// a returned map; without the word count, which the header does not show. It is computed again
+// only when the notebook changed in a way it shows: the page itself (on the next event-loop turn,
+// once for a burst of autosaves), the names
 // (Workspace::namesRevision: pages created, deleted, renamed, aliases), the index being read, or a
 // changed note (VaultIndex::changesSince()) that linked or tagged the page or carried one of the
 // tags the summary shows (its own, the one naming the page, that tag's sub-tags) at the last
@@ -151,7 +152,7 @@ private:
     void refreshSummary();
     /// The notebook changed (revision, names): the summary computed again when it changed what
     /// the summary shows — at once, but for an edit of the page alone (every autosave while it is
-    /// typed in: the words of the whole page), which waits for the next event-loop turn.
+    /// typed in), which waits for the next event-loop turn.
     void notebookChanged();
     void refreshLater();
     void refreshPosted();
