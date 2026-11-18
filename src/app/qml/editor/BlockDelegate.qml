@@ -177,7 +177,8 @@ Item {
                                                       : textView ? textContent.firstLineCenter
                                                       : contentFirstLineCenter)
 
-    width: ListView.view ? ListView.view.width : 0
+    // (Hosted by a PageItem, not by a list: the editor's width.)
+    width: ListView.view ? ListView.view.width : editor ? editor.width : 0
     height: shown ? Math.ceil(bodyBottom + bottomPad) : 0
     visible: shown
     // Title above the properties panel: the two delegates trade places on screen.

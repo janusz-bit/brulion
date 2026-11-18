@@ -814,6 +814,12 @@ private:
         extra.insert(u"t"_s, msOf(t));
         emitJson(extra);
     }
+    /// A mark with the GUI thread's counters now: CPU ms and user-space instructions.
+    void markCounters(const QString &name)
+    {
+        const Counters c = readCounters();
+        mark(name, c.wall, {{u"cpu_ms"_s, double(c.cpu) / 1e6}, {u"insns"_s, double(c.insns)}});
+    }
     void markMem(const QString &name, bool gc = false)
     {
         if (gc && m_engine) {
@@ -953,7 +959,8 @@ private:
         });
         return n;
     }
-    /// Visible BlockDelegates under `root` (the whole window when null).
+    /// Visible BlockDelegates under `root` (the whole window when null), and the rows a PageItem
+    /// draws itself (BRULION_PAGE_ITEM=1: its `drawnRowCount`; its hosted rows are BlockDelegates).
     int visibleBlocks(QQuickItem *root = nullptr)
     {
         if (!m_window)
@@ -962,10 +969,13 @@ private:
         walk(root ? root : m_window->contentItem(), [&n](QQuickItem *it) {
             if (!it->isVisible())
                 return false;
-            if (typeName(it) == "BlockDelegate") {
+            const QByteArray type = typeName(it);
+            if (type == "BlockDelegate") {
                 ++n;
                 return false;
             }
+            if (it->inherits("brulion::editor::PageItem"))
+                n += it->property("drawnRowCount").toInt();
             return true;
         });
         return n;
@@ -1500,12 +1510,16 @@ private:
     void openPageSteps(const QString &page, const QString &tag)
     {
         action(u"nav:"_s + tag, [this, page, tag] {
+            markCounters(u"open_counters_start:"_s + tag); // open<tag>_insns_M
             mark(u"nav_start:"_s + tag);
             navigate({{u"view"_s, u"page"_s}, {u"path"_s, page}});
             mark(u"nav_returned:"_s + tag);
         });
         waitUntil(u"page_content:"_s + tag, [this, page] { return pageShown(page); }, 120000);
         waitSettled(u"page_settled:"_s + tag, 1000, 120000);
+        // (To the settled page, not to its first blocks: a view may show its first blocks before
+        // or after the rest of the opening's work.)
+        action(u"open_counters_end:"_s + tag, [this, tag] { markCounters(u"open_counters_end:"_s + tag); });
     }
 
     void startEditing(const QString &page, int row)
@@ -1930,17 +1944,27 @@ private:
     void pageScrollSteps()
     {
         action(u"nav:1"_s, [this] {
+            markCounters(u"open_counters_start:1"_s); // open1_insns_M
             mark(u"nav_start:1"_s);
             navigate({{u"view"_s, u"page"_s}, {u"path"_s, m_page}});
             mark(u"nav_returned:1"_s);
         });
         waitUntil(u"page_content:1"_s, [this] { return pageShown(m_page); }, 120000);
-        if (m_scrollWait >= 0)
+        if (m_scrollWait >= 0) {
             wait(m_scrollWait);
-        else
+        } else {
+            // The GUI thread's counters 500 ms apart while idle (scroll_insns_M subtracts them).
             waitSettled(u"page_settled:1"_s, 1000, 120000);
+            action(u"open_counters_end:1"_s, [this] { markCounters(u"open_counters_end:1"_s); });
+            action(u"scroll_idle_start"_s, [this] { markCounters(u"scroll_idle_start"_s); });
+            wait(500);
+            action(u"scroll_idle_end"_s, [this] { markCounters(u"scroll_idle_end"_s); });
+        }
         action(u"mem"_s, [this] { markMem(u"page:1"_s); });
-        action(u"scroll_start"_s, [this] { mark(u"scroll_start"_s); });
+        action(u"scroll_start"_s, [this] {
+            markCounters(u"scroll_counters_start"_s);
+            mark(u"scroll_start"_s);
+        });
         for (int i = 0; i < 80; ++i) {
             action(u"wheel"_s, [this] { wheel(-120, u"down"_s); });
             wait(40);
@@ -1950,6 +1974,9 @@ private:
             wait(40);
         }
         action(u"scroll_end"_s, [this] { mark(u"scroll_end"_s); });
+        // (The last notch's smooth scroll ends within 200 ms.)
+        wait(500);
+        action(u"scroll_counters_end"_s, [this] { markCounters(u"scroll_counters_end"_s); });
         waitSettled(u"scroll_settled"_s, 1000, 60000);
         action(u"mem"_s, [this] { markMem(u"scrolled"_s); });
     }
@@ -1963,13 +1990,21 @@ private:
     {
         openPageSteps(m_page, u"1"_s);
         action(u"mem"_s, [this] { markMem(u"page:1"_s); });
-        action(u"resize_base"_s, [this] { m_resizeBase = m_window ? m_window->width() : 1280; });
+        // The GUI thread's counters read 500 ms apart: once idle (the idle cost), then from each
+        // resize's request on (resize_insns_M: what the new width cost, whatever else runs).
+        action(u"resize_base"_s, [this] {
+            m_resizeBase = m_window ? m_window->width() : 1280;
+            markCounters(u"resize_idle_start"_s);
+        });
+        wait(500);
+        action(u"resize_idle_end"_s, [this] { markCounters(u"resize_idle_end"_s); });
         for (int i = 0; i < 12; ++i) {
             const bool narrow = i % 2 == 0;
             action(u"resize"_s, [this, narrow] {
                 if (!m_window)
                     return;
                 const int w = narrow ? m_resizeWidth : m_resizeBase;
+                markCounters(u"resize_start"_s);
                 Action a;
                 a.kind = u"resize"_s;
                 a.label = QString::number(w);
@@ -1991,7 +2026,9 @@ private:
                         return true;
                     },
                     5000, false);
-            wait(600);
+            wait(500);
+            action(u"resize_end"_s, [this] { markCounters(u"resize_end"_s); });
+            wait(100);
         }
         waitSettled(u"resize_settled"_s, 1000, 60000);
     }

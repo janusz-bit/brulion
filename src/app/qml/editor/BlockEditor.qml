@@ -102,6 +102,13 @@ FocusScope {
     onAutoHeightChanged: updateWholePage()
     /// The cache of a page created whole: past the end of any page of wholePageRows rows.
     readonly property int wholePageCache: 10000000
+    /// The page's rows are one PageItem (PageItemView) instead of the list's delegates: Z10 stage C
+    /// behind BRULION_PAGE_ITEM=1, pages only (a journal day keeps its rows), not with a screen
+    /// reader (the item's rows are no accessible items yet). The list stays, without rows, as the
+    /// holder of the keyboard (docs/UI.md "One item per page (Z10 stage C)").
+    readonly property bool usesPageItem: EditorInput.pageItem && !autoHeight && !DeviceInfo.screenReader
+    /// The PageItemView while usesPageItem (null else).
+    final property PageItemView pageView: pageViewLoader.item as PageItemView
 
     // ---- Geometry shared by the delegates ---------------------------------------------------
     /// The page is shown as a document (Obsidian-like), not as an outline.
@@ -617,7 +624,14 @@ FocusScope {
     /// The list to its beginning.
     Later {
         id: topLater
-        onTriggered: if (editor.alive) list.positionViewAtBeginning()
+        onTriggered: {
+            if (!editor.alive)
+                return
+            if (editor.pageView)
+                editor.pageView.page.positionAtBeginning()
+            else
+                list.positionViewAtBeginning()
+        }
     }
     /// The list to `row` (ListView.Contain) while there is a page.
     Later {
@@ -626,7 +640,10 @@ FocusScope {
         onTriggered: {
             if (!editor.alive || !editor.controller)
                 return
-            list.positionViewAtIndex(positionLater.row, ListView.Contain)
+            if (editor.pageView)
+                editor.pageView.page.ensureRowVisible(positionLater.row)
+            else
+                list.positionViewAtIndex(positionLater.row, ListView.Contain)
         }
     }
     /// ensureRowVisible(): the list to `row` when it has no delegate there.
@@ -635,7 +652,13 @@ FocusScope {
         property int row: -1
         onTriggered: {
             const row = rowVisibleLater.row
-            if (!editor.alive || !editor.controller || row < 0 || row >= list.count)
+            if (!editor.alive || !editor.controller || row < 0)
+                return
+            if (editor.pageView) {
+                editor.pageView.page.ensureRowVisible(row)
+                return
+            }
+            if (row >= list.count)
                 return
             if (list.itemAtIndex(row) === null)
                 list.positionViewAtIndex(row, ListView.Contain)
@@ -730,6 +753,14 @@ FocusScope {
             if (!editor.alive)
                 return
             const row = findTargetLater.row
+            if (editor.pageView) {
+                editor.pageView.page.positionAtRow(row, ListView.Contain)
+                editor.pageView.page.forceLayout()
+                const shown = editor.pageView.page.rowItem(row) as BlockDelegate
+                if (shown && !findTargetLater.editable)
+                    shown.flash()
+                return
+            }
             list.positionViewAtIndex(row, ListView.Contain)
             list.forceLayout()
             const item = list.itemAtIndex(row) as BlockDelegate
@@ -795,6 +826,15 @@ FocusScope {
             if (!editor.alive)
                 return
             const row = revealedLater.row
+            if (editor.pageView) {
+                // (The revealed row is selected, so its delegate is hosted: it flashes.)
+                editor.pageView.page.positionAtRow(row, ListView.Center)
+                editor.pageView.page.forceLayout()
+                const hosted = editor.pageView.page.rowItem(row) as BlockDelegate
+                if (hosted)
+                    hosted.flash()
+                return
+            }
             // (autoHeight: the list never scrolls — the journal stream does, below.)
             list.positionViewAtIndex(row, ListView.Center)
             // The row's delegate exists once the list has been laid out there.
@@ -1298,6 +1338,10 @@ FocusScope {
             return
         if (editor.scroller) {
             editor.scroller.ensureVisible(item, rect)
+            return
+        }
+        if (editor.pageView) {
+            editor.pageView.ensureVisible(item, rect, editor.lineHeight)
             return
         }
         mapPoint(item, listContent, rect.x, rect.y)
@@ -2312,7 +2356,7 @@ FocusScope {
         anchors.topMargin: conflictBanner.y + conflictBanner.height + (conflictBanner.active ? Theme.space2 : 0)
         visible: !editor.controller || !editor.controller.sourceMode
         focus: true
-        model: editor.controller ? editor.controller.blocks : null
+        model: editor.controller && !editor.usesPageItem ? editor.controller.blocks : null
         reuseItems: false
         readonly property int rowCache: editor.autoHeight ? 0 : editor.wholePage ? editor.wholePageCache : 1600
         cacheBuffer: rowCache
@@ -2379,7 +2423,7 @@ FocusScope {
             onHeightChanged: if (!list.userMoved && list.showsTop) list.positionViewAtBeginning()
             Loader {
                 width: parent.width
-                active: editor.header !== null
+                active: editor.header !== null && !editor.usesPageItem
                 sourceComponent: editor.header
             }
             // The first property of a page that shows none (addProperty()): only the add row.
@@ -2387,7 +2431,7 @@ FocusScope {
                 objectName: "propertyDraft"
                 x: editor.contentX
                 width: editor.contentWidth
-                active: editor.propertyDraft && editor.controller !== null
+                active: editor.propertyDraft && editor.controller !== null && !editor.usesPageItem
                 visible: active
                 sourceComponent: Rectangle {
                     implicitHeight: draftPanel.implicitHeight + 2 * Theme.space1
@@ -2409,7 +2453,7 @@ FocusScope {
             Loader {
                 x: editor.contentX
                 width: editor.contentWidth
-                active: editor.controller !== null && editor.controller.zoomBlock >= 0
+                active: editor.controller !== null && editor.controller.zoomBlock >= 0 && !editor.usesPageItem
                 // An inactive Loader keeps the implicit height of the item it had (Qt 6.11): hidden,
                 // the Column leaves no room for it after zooming out.
                 visible: active
@@ -2425,7 +2469,7 @@ FocusScope {
 
         footer: Item {
             width: list.width
-            height: editor.bottomSpace
+            height: editor.usesPageItem ? 0 : editor.bottomSpace
             TapHandler {
                 onTapped: {
                     // (Reading mode: a tap under the blocks, often the end of a scroll, does nothing.)
@@ -2492,6 +2536,16 @@ FocusScope {
             id: scrollBarComponent
             BRowScrollBar {}
         }
+    }
+
+    // The page's rows as one item (usesPageItem): over the list, under everything drawn over the
+    // list (the toolbars, the drop hint).
+    Loader {
+        id: pageViewLoader
+        anchors.fill: list
+        active: editor.usesPageItem && editor.controller !== null
+        visible: active && !editor.controller.sourceMode
+        sourceComponent: PageItemView { editorItem: editor }
     }
 
     // ---- Selecting blocks by dragging -------------------------------------------------------------

@@ -362,3 +362,21 @@ brulion_add_test(tst_editor_indexrender
 brulion_add_test(tst_editor_renderedtext
     SOURCES tst_editor_renderedtext.cpp
     LIBS brulion_editor brulion_core_markdown)
+# One item per page, its foundations (docs/UI.md "One item per page (Z10 stage C)"): RowHeightTree
+# against a naive list (random edits of every kind, exact fixed-point sums), ScrollAnchor (what is
+# on screen stays through height changes, edits, a removed and re-inserted anchor, folds, moves,
+# the ends, "scroll to block"; random changes followed by uid) and PageRows on a list model and on
+# BlockListModel with another device's changes merged in and folds.
+brulion_add_test(tst_editor_rowheights
+    SOURCES tst_editor_rowheights.cpp
+    LIBS brulion_editor brulion_core_markdown)
+# PageItem (one item per page, Z10 stage C): only the rows on screen laid out (also after a width
+# change), the Flickable driven, the anchor keeping the screen through edits and measurements,
+# "scroll to block" exact, rich rows hosted by a QML delegate and released, folds, links, a frame —
+# offscreen with the software renderer (Qt Quick's QML module for the Flickable and the delegate).
+get_filename_component(_brulion_editor_qml_root "${Qt6Qml_DIR}/../../../${QT6_INSTALL_QML}" ABSOLUTE)
+brulion_add_test(tst_editor_pageitem
+    SOURCES tst_editor_pageitem.cpp
+    LIBS brulion_editor brulion_core_markdown Qt6::Qml Qt6::Quick)
+set_tests_properties(tst_editor_pageitem PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QML_IMPORT_PATH=${_brulion_editor_qml_root}")

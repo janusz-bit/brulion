@@ -2267,6 +2267,66 @@ rarely; the largest, the new-page dialog, is ~450 objects.
 Not measured on the Raspberry Pi or a phone (the plan's estimate was the Pi demo's first content
 −0.3 s; L10b below).
 
+### Z10 stage C: one item per page, the foundations (2026-11-18)
+
+The design and what exists of it: docs/UI.md "One item per page (Z10 stage C)". Built: the rows'
+heights in a Fenwick tree (`RowHeightTree`), the scroll position as a row and an offset
+(`ScrollAnchor`), both kept in step with the model (`PageRows`), `RenderedTextItem`'s layout and
+drawing shared as `RenderedTextLayout`, and `PageItem`: a page's text rows drawn by one item, only
+those near the view laid out, every other row (tasks, code, tables, frames, pictures, the edited
+row…) hosted as the editor's own `BlockDelegate`. Behind `BRULION_PAGE_ITEM=1`, off by default.
+
+**The tree and the anchor** (`bench_rowheights`, Release, QtTest's `-perf -perfcounter
+instructions`: user-space instructions, deterministic; wall times on the loaded machine were
+noise):
+
+| | 1000 rows | 5000 rows | 100 000 rows |
+|---|---:|---:|---:|
+| the row at a y and where it starts, 1000 lookups | 0.25 M | 0.29 M | 0.35 M |
+| 1000 rows measured (`setHeight`) | 0.22 M | 0.25 M | 0.28 M |
+| a row inserted and removed again (two O(n) rebuilds) | 0.08 M | 0.38 M | 7.5 M |
+| three rows moved down and back | 0.08 M | 0.37 M | 7.4 M |
+| a scrolling frame: a wheel step, the rows in view and margins, 10 measured | 4.8 k | 5.2 k | 6.0 k |
+
+About 250 instructions a lookup and 38 per row for a rebuild: an Enter on a 5000-block page costs
+the tree ~0.05 ms, on a page of 100 000 rows ~1 ms — below what the model's own row signals cost
+there; a B-tree with O(log n) splices (Zed's `SumTree`) is not needed for pages of this size.
+
+**The page, `BRULION_PAGE_ITEM=0` against `=1` with the same binary** (Release `-g1`,
+`BRULION_LOCAL_AI=OFF`, Xvfb + llvmpipe, the 10 000-note bench vault; `run-bench.py` through
+`ENVS`-style labels as `bench-matrix.sh` runs them, labels alternating; GUI-thread user-space
+instructions read by the probe at both ends of each step — `resize_insns_M`, `scroll_insns_M`,
+`open<n>_insns_M`, new here, tests/bench/app/README.md —, spread ≤ 3 % except where shown; the
+milliseconds from the runs on a quiet machine, load 5–10, 3 runs; the instruction counts from 6
+runs, 3 × 2 rounds, load 20–40). The rows the item does not draw are rich text here
+(`BRULION_TEXT_ITEM` off, the default):
+
+| | list (`=0`) | item (`=1`) |
+|---|---:|---:|
+| `page-resize-small` (3 blocks: the window's own cost of a new width), M instructions per resize | 574 | 558 |
+| `page-resize-medium` (300 blocks, a page the list creates whole): M instructions per resize | 1915 | 569 |
+| … request → frame, median / max (quiet) | 258 / 310 ms | 102 / 144 ms |
+| `page-resize-outline5000` (5000 blocks: the list's rows in its cache only): M instructions | 900–983 | 728 |
+| … request → frame, median / max (load ≈ 10) | 205 / 290 ms | 127 / 163 ms |
+| `page-scroll-document5000`, 160 wheel notches: M instructions | 2238 [2095–2366] | 399–561 [195–634] |
+| … frames over 33 ms / frame interval p95 (load ≈ 10) | 3 / 20.6 ms | 2 / 20.1 ms |
+| `open-outline5000`, a page opened again on a settled app: M instructions to the settled page | 2412 | 1988 |
+| … navigation → the frame that shows it (quiet) | 155 ms | 150 ms |
+| `page-resize-medium`: heap / RSS after opening, items in the window | 586 / 814 MB, 21 738 | 509 / 729 MB, 11 768 |
+
+What it says: on the 300-block page, which the list creates whole, a new width cost the editor
+~1340 M instructions (every row's rich text laid out again) and costs the item ~10 M (the rows near
+the view, of which only the wrapped ones are laid out again); the page holds 78 MB less heap and
+10 000 fewer items. On the 5000-block outline the list had only its cache's rows to lay out, and
+what is left with the item (~170 M a resize over the small page) is mostly its hosted rows — the
+tasks' rich-text `TextEdit`s with `RichTextPills`, kept within one and a half screens (a perf
+profile of the resizes: `QTextDocumentLayout` and `RichTextPills::refresh` under the hosted
+delegates; `PageItem::layoutRow` and `RenderedTextLayout` together under 2 %). Scrolling creates
+no delegate for text rows any more: a fifth of the GUI work. Opening costs about the same (the
+model and the page's header are most of it); the first frame shows the page as soon. The next
+step that pays most is drawing the task boxes in the item, so that tasks need no delegate (docs/UI.md
+"State": what is not done yet).
+
 ### Budgets
 
 Desktop = the laptop above (the graph: a GitHub runner, see its row), phone = Pi 4 (floor) and the
@@ -2304,6 +2364,7 @@ The L-items of the October 2026 performance plan, with the numbers they should m
 | L16b | measure the graph on the Raspberry Pi (`bench-matrix.sh views graph`, offscreen: the software renderer's image node, 3 000-note vault; must not regress) and in the Android emulator probe (`android-batch.sh probe`, the scene graph on GLES); check it by hand on a phone, on Windows with a GPU (Direct3D 11) and in a phone's browser; if `rebuild()` (VaultIndex::graph and the filters, GUI thread) costs a phone > 50 ms, move its pure part onto the worker | phone: GUI stall during the layout < 33 ms, settled < 3 s |
 | L19 | measure the PDF viewer on real devices (the emulator: 174 MB PSS at 800 %, above): PSS with a 100+ MB scanned lecture zoomed in on a phone (if above 350 MB, base pictures at half resolution on touch devices), time to the first page of a 300-page lecture, Qt PDF timings in a Release build | phone PSS < 350 MB; first page < 0.5 s |
 | L20b | measure the generated QML at `-Oz` on a phone (L20): a Release APK built with `-DBRULION_QML_CODE_FOR_SIZE=OFF` against the default one, `android-batch.sh probe` or the Pixel — journal scroll, opening a 5000-block page, the views; if a view loses more than 10 %, compile its few hot files at the build type's level | no phone slowdown > 10 % |
+| Z10-C | one item per page by default (docs/UI.md "One item per page (Z10 stage C)", its State and migration): task boxes drawn by the item (most of what a new width still costs on the 5000-block outline is its hosted task rows), fold arrows, the selection's band and drag-selection; every `list.*` use of `BlockEditor` and the self-tests behind the row contracts; the idle measurer and a pool of hosted delegates; the linked references under the rows; accessibility; then the switch on and the `ListView` path gone | a new width costs the editor ~10 M instructions instead of ~1340 M on a 300-block page (measured, "Z10 stage C" above), at any page size; no page created whole (−78 MB heap on that page) |
 
 The Z-items of "Only what is on screen, only what changed" (above) come first (Z1 done on
 2026-11-18: the save on a writer thread): Z1–Z9 remove most

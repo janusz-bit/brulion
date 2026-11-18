@@ -208,6 +208,11 @@ def m_open_page(run):
             if g0 and i is not None and i < len(gins) and gins[i] > 0:
                 out["open%s_frame_insns_M" % tag] = gins[i] - g0["gins"]
                 out["open%s_frame_cpu_ms" % tag] = run["frame_gcpu"][i] - g0["gcpu"]
+        # The GUI thread's user-space instructions from the navigation until the page has settled
+        # (the probe reads its counters at both; the idle second the settling waits for included).
+        a, b = mk.get("open_counters_start:" + tag), mk.get("open_counters_end:" + tag)
+        if a and b and "insns" in a and "insns" in b:
+            out["open%s_insns_M" % tag] = (b["insns"] - a["insns"]) / 1e6
         ps = mk.get("page_settled:" + tag)
         if ps:
             out["open%s_settled_ms" % tag] = ps["t"] - t0
@@ -623,9 +628,16 @@ def m_journal_scroll(run):
 
 
 def m_page_scroll(run):
-    """page-scroll: the opening as open-page's first round, then the wheel's frames as journal-scroll."""
+    """page-scroll: the opening as open-page's first round, then the wheel's frames as journal-scroll;
+    the GUI thread's user-space instructions over the scroll less its idle rate (settled runs)."""
     out = {k: v for k, v in m_open_page(run).items() if k.startswith("open1_") or k.endswith(":page:1")}
     out.update(m_journal_scroll(run))
+    mk = run["marks"]
+    a, b = mk.get("scroll_counters_start"), mk.get("scroll_counters_end")
+    i0, i1 = mk.get("scroll_idle_start"), mk.get("scroll_idle_end")
+    if a and b and i0 and i1 and "insns" in b and i1["t"] > i0["t"]:
+        rate = (i1["insns"] - i0["insns"]) / (i1["t"] - i0["t"])
+        out["scroll_insns_M"] = (b["insns"] - a["insns"] - rate * (b["t"] - a["t"])) / 1e6
     return out
 
 
@@ -642,6 +654,18 @@ def m_page_resize(run):
         stalls.append(max([d for _, d in stalls_in(run, a["t0"], a["t0"] + 500)], default=0.0))
     out.update(dist("resize_frame", frames))
     out.update(dist("resize_stall", stalls))
+    # The GUI thread's user-space instructions over the 500 ms from each request (the probe reads
+    # its counters at both ends), less those of 500 ms of idle before the first resize.
+    starts = [m for m in run["marklist"] if m.get("name") == "resize_start"]
+    ends = [m for m in run["marklist"] if m.get("name") == "resize_end"]
+    mk = run["marks"]
+    idle = 0.0
+    if "resize_idle_start" in mk and "resize_idle_end" in mk and "insns" in mk["resize_idle_end"]:
+        idle = mk["resize_idle_end"]["insns"] - mk["resize_idle_start"]["insns"]
+    insns = [(e["insns"] - s0["insns"] - idle) / 1e6 for s0, e in zip(starts, ends) if "insns" in s0 and "insns" in e]
+    if insns:
+        out.update(dist("resize_insns_M", insns))
+        out["resize_idle_insns_M"] = idle / 1e6
     return out
 
 

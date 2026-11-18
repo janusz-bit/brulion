@@ -53,3 +53,8 @@ brulion_add_bench(bench_vault SOURCES bench_vault.cpp LIBS brulion_core_vault)
 brulion_add_bench(bench_sync SOURCES bench_sync.cpp LIBS brulion_sync_testsupport)
 brulion_add_bench(bench_reminders SOURCES bench_reminders.cpp LIBS brulion_core_reminders)
 brulion_add_bench(bench_io SOURCES bench_io.cpp LIBS brulion_core_io)
+# One item per page (Z10 stage C): the editor's height sum tree and scroll anchor (pure, in
+# brulion_editor).
+if(TARGET brulion_editor)
+    brulion_add_bench(bench_rowheights SOURCES bench_rowheights.cpp LIBS brulion_editor)
+endif()

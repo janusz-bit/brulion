@@ -18,7 +18,7 @@ GUI thread's time goes" below).
 | `build-probe.sh <dir>` | builds `libbenchprobe.so` against the dev shell's Qt (a throw-away CMake project in `<dir>`; Qt's CorePrivate and GuiPrivate headers) |
 | `make-bench-vault.py <dir>` | a deterministic synthetic notebook: 10 000 notes (≈ 650 journal days over two years + pages in 40 folders, links, tags, tasks with dates and reminders, a few queries), `Bench/Konspekt 5000.md` (5000-block outline), `Bench/Dokument 5000.md` (5000-block document), `Bench/Mała strona.md`; `<dir>.pages.txt` lists 50 pages for page switching |
 | `run-bench.py` | runs one scenario N times (fresh working copy of the vault per run; `--start first\|warm\|cold`; Xvfb or offscreen); writes one JSONL per run |
-| `bench-matrix.sh` | the whole matrix for several labelled builds (`BINS="base=… cur=…"`), group by group (`startup-big-short`: first + warm starts only, for slow machines; `page-scroll`, `page-resize`: the 300-block and 5000-block pages) |
+| `bench-matrix.sh` | the whole matrix for several labelled builds (`BINS="base=… cur=…"`; `ENVS="cur=VAR=value"`: one label's environment, e.g. the same binary with `BRULION_PAGE_ITEM=1`), group by group (`startup-big-short`: first + warm starts only, for slow machines; `page-scroll`, `page-resize`: the 300-block and 5000-block pages) |
 | `analyze.py <dir>…` | metrics per run → median / min / max / p25 / p75 per metric and label (`--csv`, `--json`) |
 | `timeline.py run.jsonl` | one run's events in time order (marks, input, stalls with their CPU, model signals, signal spans ≥ `--span-ms`, the GUI thread's file system calls, frame gaps) |
 | `perf-scenario.sh` + `perf-slice.py` | a scenario under `perf record` (CLOCK_MONOTONIC) and the GUI thread's samples sliced by the probe's windows (`after_ready`, `stalls:100@content:ready`, `autosave`, `save`, `fanout`, `keys`, …) |
@@ -126,12 +126,20 @@ nix develop -c nix shell nixpkgs#xvfb nixpkgs#perf -c env CUR=build-rel/src/app/
 * `page-scroll`: `BENCH_PAGE` opened (`open1_*` as `open-page`), then — once it has settled, or
   `BENCH_SCROLL_WAIT` ms after its first block is on screen (`200`: a reader who scrolls at once) —
   80 wheel steps down and 80 up, 40 ms apart: `frame_interval_*`, `frames_gt33` / `frames_gt50`,
-  `scroll_stall_*` as `journal-scroll`; memory and items at `page:1` (before) and `scrolled`.
+  `scroll_stall_*` as `journal-scroll`; memory and items at `page:1` (before) and `scrolled`;
+  `scroll_insns_M` (settled runs): the GUI thread's user-space instructions from the first notch to
+  500 ms after the last, less its idle rate of 500 ms before it — the number to compare on a
+  loaded machine.
 * `page-resize`: `BENCH_PAGE` opened and settled, then the window made `BENCH_RESIZE_WIDTH` (920:
   the text column narrower than the 680 px editor width, the sidebar still shown) wide and back
   six times, 600 ms apart: `resize_frame_*` (the request → the frame after the window has its new
   width) and `resize_stall_*` (the longest GUI stall within 500 ms of each request): every row
-  that exists lays its text out again.
+  that exists lays its text out again; `resize_insns_M_*` the GUI thread's user-space instructions
+  in the 500 ms after each request less those of 500 ms of idle before the first resize.
+* `open-page`, `page-scroll` (settled runs), `page-resize`: `open<n>_insns_M`, the GUI thread's
+  user-space instructions from the navigation until the page has settled (the probe reads the
+  thread's counters at both; to the first blocks would compare views that show them before or
+  after the rest of the opening's work).
 * `switch-pages`: 200 page openings: time to the page's frame, heap / RSS / item count every 20.
 
 ## Autosave: where the GUI thread's time goes

@@ -4,6 +4,7 @@
 // RichTextPills, RichTextLinks, RenderedTextItem (+ the value type renderedText), LinkPreview, SuggestionModel,
 // QueryResultModel, StreamSelection, FakeEditorHost, the EditorInput and SpellCheck singletons; EditorHost as an
 // uncreatable interface type), so qmllint/qmlcachegen see their full API from the library's extracted metatypes.
+// Also PageItem (one item per page, Z10 stage C).
 #pragma once
 
 #include "blocklistmodel.h"
@@ -18,6 +19,7 @@
 #include "mermaidview.h"
 #include "notefind.h"
 #include "pagecontroller.h"
+#include "pageitem.h"
 #include "queryresultmodel.h"
 #include "renderedtextitem.h"
 #include "richtextlinks.h"
@@ -117,6 +119,12 @@ struct RenderedTextItemForeign {
     Q_GADGET
     QML_FOREIGN(brulion::editor::RenderedTextItem)
     QML_NAMED_ELEMENT(RenderedTextItem)
+};
+
+struct PageItemForeign {
+    Q_GADGET
+    QML_FOREIGN(brulion::editor::PageItem)
+    QML_NAMED_ELEMENT(PageItem)
 };
 
 struct RenderedTextRefForeign {
