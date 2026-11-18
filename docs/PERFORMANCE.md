@@ -13,6 +13,19 @@ compared with `ef90077`) and a smooth graph (L16, compared with `64d0380` on a G
 
 ### What got better
 
+* **Typing in a big notebook, after the save** (2026-11-18). When you pause typing, Brulion saves
+  the page; in a notebook of 10,000 notes the program then also recomputed lists you were not
+  looking at — All pages sorted all 10,000 pages again, the folder tree in the sidebar was built
+  anew, the references of the page you were typing in were looked for again in every note. Since
+  the Journal, Pages, Search, Tasks and Calendar are kept ready in the background (2026-11-10),
+  that happened after every pause. Now a list that is not on screen only notes that it is out of
+  date and catches up when you open it, the folder tree changes only when files come or go, and a
+  list leaves out the changes that cannot concern it. Measured on a computer: the time the window
+  does not respond after a save fell from 0.24 to 0.10 s on a small page, from 0.65 to 0.22–0.24 s
+  on pages of 5000 blocks; typing in a 5000-block document shows a letter in 17 instead of 33 ms
+  (the slowest twentieth 20 instead of 69 ms). More is on the way ("Only what is on screen, only
+  what changed" below).
+
 * **Typing in the Markdown source of long pages** (2026-11-16). In source mode (Ctrl+E) every
   keystroke used to hand the whole page over to be compared and saved — on a page of 500 KB
   about 18–21 ms on a Raspberry Pi 4 (a slower phone), more than half of what a frame may take,
@@ -1056,7 +1069,12 @@ bottom navigation — Journal, All pages, Search, Tasks, Calendar — once it ha
 next frame, where it was scrolled. Their cost while hidden: memory (at most five views a pane;
 the journal's days are a lazy list, only the days that were on screen exist) and keeping their
 models up to date with edits, which follow the index's change log (`QueryCache`,
-`CalendarCache`: a fraction of a millisecond per edit). Other views — a page, Graph, Habits,
+`CalendarCache`: a fraction of a millisecond per edit). Not all of it was that cheap: the lists
+of the Journal, All pages and Search were computed again 120 ms after every save while hidden —
+All pages its 10,000 rows with their backlink counts and a sort — and that, with the views built
+ahead (below), made every autosave in a big notebook 2–3× slower. Since 2026-11-18 those lists
+compute nothing while hidden (`WorkspaceListModel.active`: they go stale and are computed when
+shown; "Only what is on screen, only what changed"). Other views — a page, Graph, Habits,
 Settings… — are still made per route and deleted when left, so the shell self-test's "5n"
 (rounds of views and pages leave no more editors than the first round) holds. The kept views
 go when the pane shows no route (the split pane closed).
@@ -1625,6 +1643,108 @@ texts — the old way. After 250 ms without an edit (`SourceTextSync::VerifyDela
 (`PageController::sourceTextWanted`), the two texts are compared once; a difference (none is
 known) is logged, the TextEdit's text taken, and the session goes on with whole texts.
 
+### Only what is on screen, only what changed (2026-11-18)
+
+Why Brulion did not feel as smooth as Zed while typing in a big notebook. Zed's editor is not
+faster at drawing — Qt's scene graph draws as fast (the graph since L16) — but it follows four
+rules everywhere: (1) only what is on screen is computed and laid out, (2) a change notifies
+only what depends on it (per-entity `notify`/events, not a global counter), (3) heavy work —
+writing the file, parsing — runs on a background executor over a cheap snapshot, the main
+thread only merges the result (it waits at most ~1 ms for it, `Buffer::reparse`), and (4) the
+editor is one element that lays out and paints only the visible lines (`DisplayMap`,
+`LineLayoutCache`). Zed's save (`Worktree::write_file`) runs in `background_spawn`, without
+fsync, and records the new mtime before the watcher's echo arrives, so its own write produces no
+event (read in Zed's source at df5cf7b7). Brulion broke all four rules after each autosave.
+
+**What an autosave cost (attribution).** A perf profile of main (c8bc2135) on a GitHub runner
+(Release `-g1`, Xvfb, the 10k vault; the workflow was a throw-away branch) sliced to the GUI
+thread's samples in the 1.7 s after each typing burst: about 80 ms per save on the small page,
+about 100 ms on the 5000-block outline. Of that, inclusive:
+
+| what (GUI thread, after a save) | small page | 5000-block outline |
+|---|---|---|
+| list models refreshing (`WorkspaceListModel::refresh`) | 66 % | 57 % |
+| … All pages' sort (`PageListModel::sortPages`, a hidden view) | 27 % | 19 % |
+| … the sidebar's folder tree rebuilt and sorted (`FolderTreeModel::rebuildChildren`) | 23 % | 17 % |
+| … of those two: `compareNames` (NFC + lower case of both names per comparison) | 44 % | 32 % |
+| the save itself (`PageController::save` → vault → `onVaultChanged`, index parse) | ~11 % | 20 % |
+| QML bindings re-evaluated (`QQmlBinding::update`) | 14 % | 15 % |
+
+fsync was not the problem there (15 `fdatasync` of 13 ms in all over the run, strace), and a
+desktop's disk rarely is; on a phone's flash it can be (below). Most of the cost came from views
+the user did not see: since "Built ahead" (2026-11-10) the Journal, All pages and Search exist
+hidden from the start, and their lists were computed again after every change.
+
+**What changed (step 1).**
+
+* `WorkspaceListModel.active` (QML: `active: root.visible` in AllPagesView, SearchView,
+  JournalsView): while it is false a change of the files or the index only marks the rows stale;
+  they are computed synchronously when the model is active again, so the view shows them in its
+  first frame. The first fill, a new workspace and changes of the model's own properties are
+  computed as before. A date route given to the hidden Journal scrolls once its days are computed
+  again.
+* `WorkspaceListModel::affectedBy(IndexChanges)`: the index's change log since the last refresh
+  (`VaultIndex::changesSince`) decides whether a change can concern the rows; a complete log
+  without changed names that touches none of them is skipped. `GroupedRefsModel` knows the notes
+  its groups come from, `BacklinksModel::mayNowReference` the notes that may now add a row
+  (linked: a link to the page or a tag naming it; unlinked: any other note), and the rows remember
+  what their rendering read from other notes (a linked page's icon, the text of a `[[Page#^id]]`
+  block) and compute again only when that differs. Typing in a page no longer looks for its linked
+  references or its unlinked mentions (a scan of the whole notebook's text) again.
+* `FolderTreeModel` follows `Workspace::fileListChanged` (a file or folder created, deleted or
+  renamed) instead of every `filesChanged`: its rows depend on paths only.
+* `FolderTreeModel` and `PageListModel` sort with each name's key computed once
+  (`text::nameSortKey` + `compareNameKeys`, the same order as `compareNames`).
+
+**Measured** (`bench-matrix.sh typing`, the 10k vault, Release `-g1` of c8bc2135 and of the
+branch, Xvfb + llvmpipe on the 16-core x86_64 desktop with other agents' work on it, 5 runs each,
+median [min–max]; `autosave_blocked` sums the GUI stalls > 12 ms in the 1.7 s after a burst,
+`autosave_stall_max` is the longest of them):
+
+| typing (ms) | base | branch |
+|---|---|---|
+| small page: autosave blocked | 239 [224–248] | **97** [84–193] |
+| small page: longest stall | 99 [95–99] | **51** [43–92] |
+| small page: key → frame, median / p95 | 8.8 / 10.9 | 9.0 / 12.6 (noise) |
+| 5000-block outline: autosave blocked | 663 [380–1162] | **243** [227–292] |
+| 5000-block outline: longest stall | 198 [123–465] | **134** [105–153] |
+| 5000-block outline: key → frame, median / p95 | 16.4 / 20.2 | **12.9 / 16.7** |
+| 5000-block document: autosave blocked | 649 [477–782] | **222** [178–385] |
+| 5000-block document: longest stall | 236 [152–307] | **132** [109–219] |
+| 5000-block document: key → frame, median / p95 | 33.4 / 69.3 | **16.8 / 20.3** |
+
+The base numbers are 3–5× those of the budget table (41 ms on the small page): those were taken
+before the views were built ahead. A run's first burst may start before every kept view exists
+(the measurement does not control it yet: Z9 below).
+
+**What is left — ten analyses of the code (2026-11-18).** Read from the code, not measured one by
+one; the estimates are for the 10k notebook on the desktop (a phone: ×4–6).
+
+| # | where | what still runs per save (or per key) | fix |
+|---|---|---|---|
+| Z1 | `Vault::writeTextIfUnchanged` → `writeFile` → `onVaultChanged` → `indexFile` | the whole save on the GUI thread: the file read 4 times, hashed 6–7 times, decoded 3 times; `QSaveFile::commit` (fdatasync); the History snapshot (3 fsyncs when not throttled, and the history index JSON read every time); the note parsed again (20–50 ms at 500 KB) | first without threads: pass the bytes and the hash through, index the text just written; then Zed's way — a per-vault serial worker does read-compare, History, atomic write, stat and `VaultIndex::prepare`, the GUI thread merges (`adoptRead`/`updatePrepared` exist); every other vault operation on that path waits for the write in flight; `PageController` keeps a save generation, `flush()` stays synchronous for navigation, close and Android's pause; inline on WebAssembly |
+| Z2 | `vaultscan.cpp` `processPendingEvents` → `reconcile` | the watcher's echo of our own write, 50 ms later: the folder listed (a stat per entry) and every known file walked (`verifyListing`, `diff`), 1–50 ms, much more on Android's FUSE storage; plus a full rescan every 120 s and on every return to the app | the parent folder's stat recorded after our write skips the listing; diff only the listed folder's children; rescans listed on a worker |
+| Z3 | `BlockListModel::invalidateRendering` (every live editor, the hidden Journal's days too) | after every index change every row's HTML, embeds, tables and charts dropped and `dataChanged` over all rows (5–40 ms) | invalidate only rows whose rendering read a changed note (`changesSince`), `PageController.active` for hidden editors |
+| Z4 | `Workspace.revision` in QML (~30 bindings) and `Vault::files()` | `files()` copied and re-sorted after every write (`trackFile` drops the sorted list); hidden All pages' `subfolders` (twice), the calendar grids' `periodicNoteStarts`, `PageTools::refreshSummary` (a regex over the page, all tags twice) — 10–25 ms | narrow notifications (`namesRevision`, `propertiesRevision`), visibility first in hidden bindings, the sorted list patched in place |
+| Z5 | `TaskListModel`, `CalendarModel`, the local graph | hidden Tasks and Calendar rebuild 120–150 ms after every change (whole-list passes, `dataChanged` over all rows, a 24-key map per calendar item); the side panel's local graph builds `VaultIndex::graph()` of the whole notebook for depth 1 | `active` as above, nothing when the changed notes have no dated items, per-row/per-day changes, a neighbourhood graph |
+| Z6 | the keystroke | O(page) per key: `markDirty()` serialises the page (`textToSave`), `BlockListModel::apply` rebuilds its index and walks every row, `OutlineModel` rebuilds on any `dataChanged`, the edited block's hidden rich text re-renders and lays out on every key, two completion detects per key | freeze the edited row's HTML, dirty by the edited block, a typing fast path in `apply` (cross-checked against the long way), narrow roles, `OutlineModel` only for headings |
+| Z7 | `SuggestionModel` | after one `[[` or `((` completion every save ranks all 10k names / sorts all blocks again, per editor (the mode is never reset on close) | reset on close, refresh only while open |
+| Z8 | `IndexCacheKeeper`, the search index | 60 s after every pause the whole 19 MB index cache is encoded in 8 ms slices on the GUI thread (122 ms at 10k; 0.5–1 s of dropped frames on a phone); a changed note is tokenised whole on the GUI thread 300 ms after a save (22 ms at 500 KB) | write when the app goes inactive or closes (and a long cap), ≤ 4 ms slices; `SearchIndex::prepare` on a worker |
+| Z9 | the measurement | `autosave_blocked` misses work under 12 ms (the 8 ms aim is invisible), has no phases, and does not know whether the kept views exist | probe spans of the save's signals and timers (`qt_register_signal_spy_callbacks`), fsync/rename interposed, CPU and instructions per stall, `kept_views`, `BENCH_WAIT_KEPT`; a core `saveRoundTrip` row with a scaling limit (a save is O(1) in the notebook's size) |
+| Z10 | the editor itself (Zed's rule 4) | each row is a QML delegate with a rich-text `QTextDocument` (0.1–0.2 MB a row, ~45 objects + ~25 components); pages up to 1000 rows are created whole, so a new width lays every row out (337 ms on an 1100-row outline) | in stages: (A) a C++ item drawing a block's rendered text from a cached `QTextLayout` through `QSGTextNode` instead of rich `Text`/`TextEdit` (runs from `InlineRenderer` instead of HTML); (A2) a journal day as one item; (C) one item per page with a height sum tree, anchor scrolling and only the visible rows laid out, rich blocks hosted as QML delegates; (B) the edited row last, for cross-block selection rather than speed |
+
+Also found: on Android the GitHub change list (`localChanges`, 700 ms after a save) walks every
+file when a repository is linked, the home-screen widgets are refreshed through JNI 2 s after each
+pause even when nothing they show changed, `store.json` is rewritten whole for any small UI-state
+write, and the QML garbage collector runs whole collections (`QV4_GC_TIMELIMIT=0`, a workaround
+for an incremental-GC bug in Qt 6.11.2 — keep it; collect while idle instead).
+
+**Rejected: a new renderer** (SDL3 GPU or our own `QRhi` glyph atlas). SDL_gpu has only Vulkan,
+Metal and Direct3D 12 back ends — no GLES (older Android devices), no browser (its WebGPU back end
+is an open pull request) — and gives no text shaping, IME, accessibility or widgets; Qt's RHI
+already drives Vulkan, Metal, Direct3D and GL/GLES/WebGL under the scene graph. The time goes to
+work on the GUI thread, not to drawing; Zed's speed comes from the rules above, which Qt allows.
+
 ### Budgets
 
 Desktop = the laptop above (the graph: a GitHub runner, see its row), phone = Pi 4 (floor) and the
@@ -1636,9 +1756,9 @@ emulator (optimistic), web = headless Chromium (×4 CPU = phone). ✅ meets, ⚠
 | start → first content | desktop < 1 s, phone < 2 s | ✅ 0.40 s (10k), 0.39 s demo | ✅ Pi demo 1.25 s, 10k 1.57 s | ✅ repeat 0.61 s, ×4 CPU 1.64 s; ❌ first visit at 20 Mbit/s 7.3–7.4 s (L9; 8.4–8.5 s before in the same session) |
 | index ready | desktop < 2 s at 10k; phone < 10 s at 10k | ✅ 0.96 s, 0.83 s from the index cache (wave 5; was 1.89 s) | ❌ Pi 15 s before wave 5, not measured since (L1b) | ✅ 1k cold 1.3 s, warm 1.1 s (×4 CPU 5.8 / 4.7 s; was 1.1 / 5.2 s in the same session) |
 | GUI stall while indexing / after ready | < 50 ms desktop, < 100 ms phone | ✅ 28 ms indexing, 0 ms after ready (wave 5) | ❌ Pi 0.54 / 0.45 s before wave 5 (L1b, L18) | – |
-| keystroke → frame (≤ 5000 blocks) | p95 < 16 ms desktop, < 33 ms phone | ✅ small page; ⚠️ 5000-block outline p95 23 ms | ✅ small page; ⚠️ outline p95 42 ms | – |
+| keystroke → frame (≤ 5000 blocks) | p95 < 16 ms desktop, < 33 ms phone | ✅ small page; ⚠️ 5000 blocks p95 17–20 ms (outline / document, 2026-11-18; the document was 69 ms) | ✅ small page; ⚠️ outline p95 42 ms | – |
 | Enter / undo | < 50 ms desktop, < 100 ms phone | ✅ 15 / 13 ms (L5; base in the same session 15 / 32 ms) | ✅ Enter 38 ms; undo 214 ms before L5, not measured since (L5b) | – |
-| autosave stall | < 50 ms desktop, < 100 ms phone | ✅ small page 41 ms; ❌ 500 KB page 88 ms | ✅ small page 29 ms; ❌ 500 KB page 0.2 s | – |
+| autosave stall (the longest stall after a save; the Zed-like aim: < 8 ms of GUI time) | < 50 ms desktop, < 100 ms phone | ⚠️ small page 51 ms (99 ms on main with the views built ahead, 41 ms before them); ❌ 5000 blocks 132–134 ms (198–236 ms on main), 500 KB page 88 ms before 2026-11-10 | ✅ small page 29 ms; ❌ 500 KB page 0.2 s | – |
 | open page (5000 blocks) | frame < 150 ms desktop, < 300 ms phone | ✅ 113 ms | ❌ Pi 653 ms (L7) | – |
 | Tasks / Calendar / Agenda | < 200 ms desktop, < 500 ms phone | ✅ 133–166 ms | ❌ Pi 0.73–1.28 s before L3, not measured since (L3b, L10) | – |
 | Graph (4000 nodes; 1200 phones) | settled < 1.5 s desktop, < 3 s phone; GUI stall during the layout < 16 ms desktop, < 33 ms phone | ❌ not the laptop (unreachable): a GitHub runner with llvmpipe, CPU-rendered frames — stall 219 ms (was 958 ms), settled 2.0 s (`views`; was 8.3 s), 9.2 s with drags (was 40 s), first frame 0.13 s (was 1.07 s); the GUI thread's own sync 0.1–6 ms | ❌ Pi 2.6 s before L16, emulator 1.5 s; not measured since (L16b) | – |
@@ -1663,6 +1783,9 @@ The L-items of the October 2026 performance plan, with the numbers they should m
 | L18 | search indexing of big documents in bounded slices | no stall > 16 ms after ready |
 | L19 | measure the PDF viewer on real devices (the emulator: 174 MB PSS at 800 %, above): PSS with a 100+ MB scanned lecture zoomed in on a phone (if above 350 MB, base pictures at half resolution on touch devices), time to the first page of a 300-page lecture, Qt PDF timings in a Release build | phone PSS < 350 MB; first page < 0.5 s |
 | L20b | measure the generated QML at `-Oz` on a phone (L20): a Release APK built with `-DBRULION_QML_CODE_FOR_SIZE=OFF` against the default one, `android-batch.sh probe` or the Pixel — journal scroll, opening a 5000-block page, the views; if a view loses more than 10 %, compile its few hot files at the build type's level | no phone slowdown > 10 % |
+
+The Z-items of "Only what is on screen, only what changed" (above) come first: Z1–Z9 remove most
+of an autosave's GUI time in a big notebook, Z10 is the editor's rewrite in stages.
 
 Done in wave 5 (2026-10-29, above): L1 (parse on worker threads), L2 (the index cache), L8 (the
 memory diet); on 2026-10-30 L5 (delta undo/redo, above; the Pi still to be measured: L5b), L9 (native file
