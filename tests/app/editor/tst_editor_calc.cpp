@@ -683,9 +683,9 @@ Akapit końcowy `= y + z`
                 QString text = f.edit(row);
                 if (view == u"calc")
                     text = rng.bounded(2u) ? pick(calcTexts) : text + u"\nw = 1"_s;
-                else if (view == u"table")
-                    text = text; // tables are edited by cells
-                else if (rng.bounded(3u) == 0)
+                else if (view == u"table") {
+                    // tables are edited by cells: the text as it is
+                } else if (rng.bounded(3u) == 0)
                     text = pick(texts);
                 else
                     text.insert(int(rng.bounded(quint32(text.size() + 1))),
