@@ -614,17 +614,28 @@ FocusScope {
     readonly property bool statsFooterShown: AppSettings.wordCountShown && !Theme.narrow && !root.inSidePanel
                                              && root.statsAvailable && root.visible
     // A page that loads makes the counts available and the footer shown at once: one count for
-    // both, after this turn of the event loop — off the way to the page's first frame (a 5000-block
-    // page took two full counts, 2 × 30 ms, before it showed).
+    // both, after this turn of the event loop, on a worker thread (PageController.countPageStats:
+    // a 5000-block page took two full counts, 2 × 30 ms, before it showed, and one count — a
+    // posted call still runs before the first frame — 330 M instructions; docs/PERFORMANCE.md "L7").
     onStatsAvailableChanged: countLater.restart()
     onStatsFooterShownChanged: if (statsFooterShown) countLater.restart()
     Later {
         id: countLater
-        onTriggered: root.countNow()
+        onTriggered: root.countInBackground()
     }
+    /// The counts now (the page menu shows them as it opens).
     function countNow(): void {
         statsTimer.stop()
         root.pageStats = root.statsAvailable ? page.pageStats() : ({})
+        root.countSelection()
+    }
+    /// The counts from a worker thread (pageStats follows: onPageStatsCounted below).
+    function countInBackground(): void {
+        statsTimer.stop()
+        if (root.statsAvailable)
+            page.countPageStats()
+        else
+            root.pageStats = ({})
         root.countSelection()
     }
     function scheduleCount(): void {
@@ -661,7 +672,12 @@ FocusScope {
     }
     Timer {
         id: statsTimer
-        onTriggered: root.pageStats = root.statsAvailable ? page.pageStats() : ({})
+        onTriggered: {
+            if (root.statsAvailable)
+                page.countPageStats()
+            else
+                root.pageStats = ({})
+        }
     }
     Timer {
         id: selectionTimer
@@ -680,6 +696,7 @@ FocusScope {
         function onSourceTextChanged() { root.scheduleCount() }
         function onSelectionChanged() { if (root.statsFooterShown) selectionTimer.restart() }
         function onPathChanged() { root.pageStats = ({}); root.selectionStats = ({}) }
+        function onPageStatsCounted(stats: var) { if (root.statsAvailable) root.pageStats = stats }
         function onEditingRowChanged() { if (root.statsFooterShown) selectionTimer.restart() }
     }
     Connections {
