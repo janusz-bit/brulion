@@ -25,9 +25,10 @@
 //   BENCH_IDLE_MS    idle duration (default 30000)
 //   BENCH_TIMEOUT_MS whole-run watchdog (default 240000): exit code 3
 //   BENCH_KEEP       1: do not quit at the end
-//   BENCH_WAIT_KEPT  1: typing / source-typing wait until every kept view of the main pane
+//   BENCH_WAIT_KEPT  1: typing / source-typing / journal-scroll wait until every kept view of the main pane
 //                    (ShellRouteView's KeptLoaders: Tasks, Calendar, Journal, All pages, Search,
 //                    built ahead 1.2 s after ready, one per 0.4 s) exists before the first burst
+//                    (the scroll)
 //   BENCH_SPANS      signal spans in the typing windows: 1 (default) the watched signals and
 //                    every other signal of a brulion:: class taking >= BENCH_SPAN_MIN_US (200 us)
 //                    inclusive; "watched" only the watched ones; 0 none
@@ -1742,6 +1743,8 @@ private:
 
     void journalScrollSteps()
     {
+        // (BENCH_WAIT_KEPT=1: the views built ahead are not built during the scroll.)
+        waitKeptSteps();
         action(u"scroll_start"_s, [this] { mark(u"scroll_start"_s); });
         for (int i = 0; i < 80; ++i) {
             action(u"wheel"_s, [this] { wheel(-120, u"down"_s); });

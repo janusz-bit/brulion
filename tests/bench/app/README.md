@@ -108,6 +108,13 @@ nix develop -c nix shell nixpkgs#xvfb nixpkgs#perf -c env CUR=build-rel/src/app/
   runs), `run_frames` / `run_frame_p95_ms` / `run_frame_max_ms`, per drag `*_move_frame` (a move →
   the frame showing it) and `*_frame_p95_ms`, `zoom_frame`.
 * `idle`: CPU % of one core, wakeups/s per thread and the timer events that fired, frames/s.
+* `journal-scroll` (the 10 000-note vault, the journal from its top): 80 wheel steps down, 40 ms
+  apart: `frame_interval_*`, `frames_gt33` / `frames_gt50`, `scroll_stall_*` (GUI stalls between the
+  first step and 300 ms after the last), memory and items at `scrolled`. The views built ahead
+  (below) are built 1.2 s after `ready`, often during the scroll: `BENCH_WAIT_KEPT=1` waits for them
+  first, so that the stalls are the journal's (docs/PERFORMANCE.md "Z10 stage A2"). The "blocks
+  shown" of the start-up's `content` count a journal day drawn as one item (`JournalDayItem`) by its
+  rows.
 * `page-scroll`: `BENCH_PAGE` opened (`open1_*` as `open-page`), then — once it has settled, or
   `BENCH_SCROLL_WAIT` ms after its first block is on screen (`200`: a reader who scrolls at once) —
   80 wheel steps down and 80 up, 40 ms apart: `frame_interval_*`, `frames_gt33` / `frames_gt50`,
@@ -156,7 +163,7 @@ end + 1.7 s fits unless a save takes over 300 ms) the probe records, on the GUI 
   exist: ShellRouteView's KeptLoaders — Tasks, Calendar, Journal, All pages, Search — with an
   item), `of` and `loading`: views built ahead 1.2 s after `ready`, one every 0.4 s, may or may not
   exist during the first burst. `BENCH_WAIT_KEPT=1` waits (at most 30 s, mark `kept_ready`) until
-  all of them exist and the app has settled before typing.
+  all of them exist and the app has settled before typing (and before `journal-scroll`'s scroll).
 
 What the callbacks see (checked with Qt 6.12 on a test object): `signal_begin` / `signal_end` wrap
 every **direct** connection of an emission — string-based (`SIGNAL`/`SLOT`), pointer-to-member and
