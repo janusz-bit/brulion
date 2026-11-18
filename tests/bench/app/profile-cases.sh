@@ -59,10 +59,10 @@ for c in "$@"; do
         --vault "$VAULTS/demo" --scenario startup ;;
     startup-big) perf_case $c "mark:qapp..window" "mark:window..first_frame" indexing "stalls:300@ready..settled" after_ready -- \
         --vault "$big" --scenario startup ;;
-    typing-small) perf_case $c keys autosave -- --vault "$big" --scenario typing \
+    typing-small) perf_case $c keys autosave save fanout -- --vault "$big" --scenario typing \
         --env "BENCH_PAGE=Bench/Mała strona.md" --env BENCH_ROW=3 ;;
-    typing-outline) perf_case $c keys autosave -- --vault "$big" --scenario typing --env "BENCH_PAGE=Bench/Konspekt 5000.md" ;;
-    typing-document) perf_case $c keys autosave -- --vault "$big" --scenario typing --env "BENCH_PAGE=Bench/Dokument 5000.md" ;;
+    typing-outline) perf_case $c keys autosave save fanout -- --vault "$big" --scenario typing --env "BENCH_PAGE=Bench/Konspekt 5000.md" ;;
+    typing-document) perf_case $c keys autosave save fanout -- --vault "$big" --scenario typing --env "BENCH_PAGE=Bench/Dokument 5000.md" ;;
     open-outline) perf_case $c "mark:nav_start:1..page_content:1" "mark:page_content:1..page_settled:1" \
         "mark:nav_start:2..page_settled:2" -- --vault "$big" --scenario open-page --env "BENCH_PAGE=Bench/Konspekt 5000.md" ;;
     open-document) perf_case $c "mark:nav_start:1..page_content:1" "mark:page_content:1..page_settled:1" -- \

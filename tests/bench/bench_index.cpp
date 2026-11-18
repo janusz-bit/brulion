@@ -5,7 +5,8 @@
 // full-text search (exact, prefix, diacritics, fuzzy, many results), page/block suggestions,
 // the query language, backlinks / unlinked references and the vault-wide lists; moving and
 // renaming (planRelocation, the move dialog's and the drag's notebook::relocationImpact), tags as
-// pages on page open and the `#` completion (relocationVault(): 1250 / 5000 / 20000 notes).
+// pages on page open and the `#` completion (relocationVault(): 1250 / 5000 / 20000 notes); a save's
+// round trip as the app's GUI thread runs it (saveRoundTrip: 1000 / 3000 / 10000 notes on disk).
 #include "benchdata.h"
 
 #include "index/index.h"
@@ -47,6 +48,16 @@ namespace {
 struct Fixture {
     QList<bench::VaultFile> files;
     std::unique_ptr<VaultIndex> index; ///< built and search-flushed
+};
+
+/// saveRoundTrip(): bench::makeVault(notes) and a 5 KB note on disk, opened with a device state
+/// folder (History), indexed from the disk, Vault::changed handled as Workspace::onVaultChanged.
+struct SaveFixture {
+    std::unique_ptr<QTemporaryDir> root, state;
+    std::unique_ptr<Vault> vault;
+    std::unique_ptr<VaultIndex> index;
+    QString path, a, b; ///< the saved note and its two texts (b: one more word typed)
+    int handled = 0;    ///< changes handled
 };
 
 /// The note the most links point to (pageTarget() favours pages 0–9).
@@ -118,9 +129,68 @@ class BenchIndex : public QObject {
     std::map<int, std::unique_ptr<Fixture>> m_fixtures;
     std::map<int, std::unique_ptr<QTemporaryDir>> m_disk;
     std::map<int, std::unique_ptr<QTemporaryDir>> m_cacheDirs; ///< cacheFile(notes), removed at exit
-    std::map<int, std::unique_ptr<Fixture>> m_relocation; ///< relocationVault(), no search index
-    std::unique_ptr<QTemporaryDir> m_moveDir;             ///< relocationVault(5000) on disk
+    std::map<int, std::unique_ptr<Fixture>> m_relocation;      ///< relocationVault(), no search index
+    std::unique_ptr<QTemporaryDir> m_moveDir;                  ///< relocationVault(5000) on disk
     std::unique_ptr<Vault> m_moveVault;
+    std::map<int, std::unique_ptr<SaveFixture>> m_save; ///< one size at a time
+
+    /// saveRoundTrip()'s notebook of `notes` notes (made once per process; the other sizes' are
+    /// dropped first: three on-disk vaults with their indexes would not fit the Pi).
+    SaveFixture &saveFixture(int notes)
+    {
+        for (auto it = m_save.begin(); it != m_save.end();)
+            it = it->first == notes ? std::next(it) : m_save.erase(it);
+        auto &f = m_save[notes];
+        if (f)
+            return *f;
+        f = std::make_unique<SaveFixture>();
+        bench::Rng r{5};
+        f->path = u"Bench/Zapis.md"_s;
+        f->a = bench::documentNote(r, 4242, 500, 5 * 1024);
+        f->b = f->a + u"\n- nowe słowo zażółć\n"_s;
+        bench::reportInput(u"saveRoundTrip note"_s, f->a);
+        QList<bench::VaultFile> all = files(notes);
+        all.append({f->path, f->a});
+        f->root = bench::makeTempDir();
+        f->state = bench::makeTempDir();
+        if (!bench::writeVault(f->root->path(), all))
+            qFatal("cannot write the benchmark vault");
+        f->vault = std::make_unique<Vault>(f->root->path(), f->state->path());
+        if (!f->vault->open())
+            qFatal("cannot open the benchmark vault");
+        f->index = std::make_unique<VaultIndex>(f->vault->config());
+        {
+            VaultIndex::Batch batch(*f->index);
+            for (const FileStat &file : f->vault->markdownFiles()) {
+                bool ok = false;
+                const QString content = f->vault->readText(file.path, &ok);
+                if (ok)
+                    f->index->update(file.path, content);
+            }
+        }
+        f->index->flushSearch(); // the app's state once its full-text index has caught up
+        // Workspace::onVaultChanged: every changed note read back and indexed in one batch.
+        SaveFixture *fx = f.get();
+        QObject::connect(fx->vault.get(), &Vault::changed, fx->index.get(), [fx](const QList<VaultChange> &changes) {
+            VaultIndex::Batch batch(*fx->index);
+            for (const VaultChange &c : changes) {
+                ++fx->handled;
+                switch (c.type) {
+                case ChangeType::Created:
+                case ChangeType::Modified: {
+                    bool ok = false;
+                    const QString content = fx->vault->readText(c.path, &ok);
+                    if (ok)
+                        fx->index->update(c.path, content);
+                    break;
+                }
+                case ChangeType::Deleted: fx->index->remove(c.path); break;
+                case ChangeType::Renamed: fx->index->rename(c.oldPath, c.path, fx->vault->readText(c.path)); break;
+                }
+            }
+        });
+        return *f;
+    }
 
     /// The index of relocationVault(notes) (once per process; the full-text index not built).
     Fixture &relocation(int notes)
@@ -1026,6 +1096,63 @@ private Q_SLOTS:
             count = idx.suggestTags(prefix, 20).size();
         }
         QVERIFY(count > 0);
+    }
+
+    // ---- saving ---------------------------------------------------------------------------------
+
+    // One save as the app's GUI thread runs it (PageController's autosave ->
+    // Workspace::writeIfUnchanged): Vault::writeTextIfUnchanged() of a 5 KB note in a notebook on
+    // disk with a device state folder — the compare-and-swap reads the file, History, the atomic
+    // write (QSaveFile: fsync, rename) —, Vault::changed handled as Workspace::onVaultChanged does
+    // (the note read back, VaultIndex::update() in a batch), then changesSince() of the version
+    // before (what every list model asks next, WorkspaceModel). "throttled": History's own policy
+    // (one snapshot per note per 5 minutes: a typing session stores none after the first);
+    // "history stored": a snapshot on every save (throttle 0). No file system watcher (the app's
+    // echo of the write is found unchanged by its hash). A save must not grow with the notebook
+    // (limits.csv: k <= 0.25).
+    void saveRoundTrip_data()
+    {
+        QTest::addColumn<int>("notes");
+        QTest::addColumn<bool>("history");
+        for (int n : bench::sizes({1000, 3000, 10000}, {1000, 3000, 10000})) {
+            QTest::newRow(qPrintable(u"%1 notes throttled"_s.arg(n))) << n << false;
+            QTest::newRow(qPrintable(u"%1 notes history stored"_s.arg(n))) << n << true;
+        }
+    }
+    void saveRoundTrip()
+    {
+        QFETCH(int, notes);
+        QFETCH(bool, history);
+        SaveFixture &f = saveFixture(notes);
+        HistoryPolicy policy;
+        if (history)
+            policy.throttleSeconds = 0;
+        QVERIFY(f.vault->history());
+        f.vault->history()->setPolicy(policy);
+        bool onDisk = false;
+        const QString current = f.vault->readText(f.path, &onDisk);
+        QVERIFY(onDisk);
+        bool flip = current == f.a;
+        int version = f.index->version();
+        int failed = 0;
+        qsizetype changed = 0;
+        const int handledBefore = f.handled;
+        QBENCHMARK {
+            const QString &next = flip ? f.b : f.a;
+            const QString &expected = flip ? f.a : f.b;
+            flip = !flip;
+            if (f.vault->writeTextIfUnchanged(f.path, next, expected) != WriteOutcome::Written)
+                ++failed;
+            const IndexChanges changes = f.index->changesSince(version);
+            version = f.index->version();
+            changed += changes.notes.size();
+        }
+        QCOMPARE(failed, 0);
+        QVERIFY(f.handled > handledBefore);
+        QVERIFY(changed > 0);
+        QCOMPARE(f.index->content(f.path), flip ? f.a : f.b); // the text written last
+        qInfo("[bench] saveRoundTrip %d notes%s: %lld history entries", notes, history ? " history stored" : "",
+              qlonglong(f.vault->history()->list(f.path).size()));
     }
 
     // ---- vault-wide lists -----------------------------------------------------------------------

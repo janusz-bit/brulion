@@ -25,6 +25,12 @@
 //   BENCH_IDLE_MS    idle duration (default 30000)
 //   BENCH_TIMEOUT_MS whole-run watchdog (default 240000): exit code 3
 //   BENCH_KEEP       1: do not quit at the end
+//   BENCH_WAIT_KEPT  1: typing / source-typing wait until every kept view of the main pane
+//                    (ShellRouteView's KeptLoaders: Tasks, Calendar, Journal, All pages, Search,
+//                    built ahead 1.2 s after ready, one per 0.4 s) exists before the first burst
+//   BENCH_SPANS      signal spans in the typing windows: 1 (default) the watched signals and
+//                    every other signal of a brulion:: class taking >= BENCH_SPAN_MIN_US (200 us)
+//                    inclusive; "watched" only the watched ones; 0 none
 //
 // What it records (raw, analysed by tests/bench/app/analyze.py):
 //   * marks: preload (library constructor), qapp (QCoreApplication constructed), window
@@ -39,7 +45,31 @@
 //     was handled synchronously, t2 after the release; the frame that shows the change is the
 //     first frame whose sync starts after t1;
 //   * memory (VmRSS, VmHWM, RssAnon, malloc in-use) and CPU (getrusage) at marks;
-//   * model signals of a watched QAbstractItemModel (search results).
+//   * model signals of a watched QAbstractItemModel (search results);
+//   * typing windows (each burst of typing up to 2.4 s after it: the autosave and its fan-out):
+//     signal spans through Qt's signal spy callbacks (qt_register_signal_spy_callbacks, registered
+//     only then, GUI thread only) — inclusive and self wall time, thread CPU time
+//     (CLOCK_THREAD_CPUTIME_ID) and user-space instructions (perf_event_open, exclude_kernel:
+//     allowed with perf_event_paranoid 2) of the watched signals (Vault::changed, Workspace's
+//     revisionChanged / fileChanged / filesChanged / fileListChanged / indexChanged,
+//     VaultIndex::changed, PageController saved / dirtyChanged, every model's reset / layout /
+//     data / rows signals with the rows they name, QTimer::timeout labelled by the timer's parent
+//     or, parentless, by its interval and the first span in it — "timer:save" is the parentless
+//     single-shot timer with the controller's saveDelay in which a PageController emits saved or
+//     dirtyChanged: its autosave —, QML Timers) and of other brulion:: signals; the GUI
+//     thread's CPU and instructions at every lag tick (fanout_deferred_cpu_ms: work under 12 ms);
+//   * fsync / fdatasync / rename / renameat / renameat2 / linkat on the GUI thread (interposed:
+//     the probe defines them and calls the next definition, dlsym(RTLD_NEXT)), counts elsewhere;
+//   * per stall the GUI thread's CPU time and instructions.
+//
+// Signal spans, what Qt's callbacks see (verified with Qt 6.12, see tests/bench/app/README.md):
+// signal_begin / signal_end wrap every direct connection of an emission — string-based
+// (SIGNAL/SLOT), pointer-to-member and lambda alike — so a span's inclusive time holds its
+// direct slots whatever their kind; slot_begin / slot_end (not used) fire only for string-based
+// connections; queued connections run later, outside the span. QML handlers and bindings
+// (`onX:`, Connections, property bindings re-evaluated by a NOTIFY signal) run before
+// signal_begin, through QAbstractDeclarativeData::signalEmitted: the probe wraps that hook too
+// while spans are on and records their time as a span of the same name with the flag `qml`.
 #include <QAbstractItemModel>
 #include <QClipboard>
 #include <QCoreApplication>
@@ -57,13 +87,21 @@
 #include <QQuickWindow>
 #include <QRandomGenerator>
 #include <QTimer>
+#include <QtCore/private/qmetaobject_p.h>
+#include <QtCore/private/qobject_p.h>
 #include <qpa/qwindowsysteminterface.h>
 
+#include <dlfcn.h>
+#include <fcntl.h>
+#include <linux/perf_event.h>
 #include <malloc.h>
 #include <sys/resource.h>
+#include <sys/syscall.h>
 #include <time.h>
 #include <unistd.h>
 
+#include <atomic>
+#include <cerrno>
 #include <cstdio>
 #include <functional>
 #include <mutex>
@@ -87,6 +125,135 @@ qint64 g_preload = 0;
 double msOf(qint64 ns)
 {
     return double(ns - g_t0) / 1e6;
+}
+
+// ---- GUI-thread counters: wall, thread CPU, user-space instructions ------------------------------
+
+pid_t currentTid()
+{
+    thread_local const pid_t tid = pid_t(syscall(SYS_gettid));
+    return tid;
+}
+std::atomic<pid_t> g_guiTid{0};
+bool onGuiThread()
+{
+    const pid_t gui = g_guiTid.load(std::memory_order_relaxed);
+    return gui != 0 && currentTid() == gui;
+}
+
+qint64 threadCpuNs()
+{
+    timespec ts;
+    clock_gettime(CLOCK_THREAD_CPUTIME_ID, &ts);
+    return qint64(ts.tv_sec) * 1000000000LL + ts.tv_nsec;
+}
+
+/// User-space instructions retired by the thread that opened it (the GUI thread). A hybrid CPU
+/// (Intel P- and E-cores: cpu_core, cpu_atom) gets one counter per core PMU, summed: a generic
+/// hardware event counts on one of them only.
+struct InsnCounter {
+    std::vector<int> fds;
+    QStringList pmus;
+    QString error;
+    static int openOne(quint64 config)
+    {
+        perf_event_attr attr{};
+        attr.size = sizeof(attr);
+        attr.type = PERF_TYPE_HARDWARE;
+        attr.config = config;
+        attr.exclude_kernel = 1;
+        attr.exclude_hv = 1;
+        attr.exclude_idle = 1;
+        return int(syscall(SYS_perf_event_open, &attr, 0 /* this thread */, -1, -1, PERF_FLAG_FD_CLOEXEC));
+    }
+    void open()
+    {
+        for (const char *pmu : {"cpu_core", "cpu_atom"}) {
+            QFile f(u"/sys/bus/event_source/devices/%1/type"_s.arg(QLatin1StringView(pmu)));
+            if (!f.open(QIODevice::ReadOnly))
+                continue;
+            const quint64 type = f.readAll().trimmed().toULongLong();
+            // PERF_PMU_TYPE_SHIFT (32): a generic hardware event on one PMU of a hybrid CPU.
+            const int fd = openOne(PERF_COUNT_HW_INSTRUCTIONS | (type << 32));
+            if (fd >= 0) {
+                fds.push_back(fd);
+                pmus.append(QString::fromLatin1(pmu));
+            } else {
+                error = QString::fromLocal8Bit(strerror(errno));
+            }
+        }
+        if (fds.empty()) {
+            const int fd = openOne(PERF_COUNT_HW_INSTRUCTIONS);
+            if (fd >= 0) {
+                fds.push_back(fd);
+                pmus.append(u"generic"_s);
+            } else {
+                error = QString::fromLocal8Bit(strerror(errno));
+            }
+        }
+    }
+    qint64 read() const
+    {
+        qint64 sum = 0;
+        for (const int fd : fds) {
+            quint64 v = 0;
+            if (::read(fd, &v, sizeof(v)) == ssize_t(sizeof(v)))
+                sum += qint64(v);
+        }
+        return sum;
+    }
+};
+InsnCounter g_insns;
+
+struct Counters {
+    qint64 wall = 0, cpu = 0, insns = 0;
+    Counters operator-(const Counters &o) const { return {wall - o.wall, cpu - o.cpu, insns - o.insns}; }
+    Counters &operator+=(const Counters &o)
+    {
+        wall += o.wall;
+        cpu += o.cpu;
+        insns += o.insns;
+        return *this;
+    }
+};
+Counters readCounters()
+{
+    return {monoNs(), threadCpuNs(), g_insns.read()};
+}
+
+// ---- file system calls on the GUI thread (interposed below, outside this namespace) ------------
+
+enum IoKind { IoFsync, IoFdatasync, IoRename, IoRenameat, IoRenameat2, IoLinkat, IoKinds };
+const char *const kIoNames[IoKinds] = {"fsync", "fdatasync", "rename", "renameat", "renameat2", "linkat"};
+struct IoRec {
+    qint64 t0, t1;
+    int kind;
+};
+std::vector<IoRec> *g_io = nullptr; ///< GUI thread only (created by the probe)
+std::atomic<qint64> g_ioOtherN[IoKinds];
+std::atomic<qint64> g_ioOtherNs[IoKinds];
+
+template<typename F>
+auto timedIo(int kind, F &&call)
+{
+    const qint64 t0 = monoNs();
+    auto r = call();
+    const int savedErrno = errno;
+    const qint64 t1 = monoNs();
+    if (onGuiThread()) {
+        if (g_io && g_io->size() < 200000)
+            g_io->push_back({t0, t1, kind});
+    } else {
+        g_ioOtherN[kind].fetch_add(1, std::memory_order_relaxed);
+        g_ioOtherNs[kind].fetch_add(t1 - t0, std::memory_order_relaxed);
+    }
+    errno = savedErrno;
+    return r;
+}
+template<typename Fn>
+Fn nextDefinition(const char *name)
+{
+    return reinterpret_cast<Fn>(dlsym(RTLD_NEXT, name));
 }
 
 QByteArray envOr(const char *name, const QByteArray &fallback)
@@ -168,6 +335,252 @@ QJsonObject threadStats()
     return out;
 }
 
+/// The short name of a class for span names: "brulion::Vault" -> "Vault", QML types without
+/// their "_QMLTYPE_n" suffix.
+QByteArray shortClass(const char *className)
+{
+    QByteArray n(className);
+    for (const char *cut : {"_QMLTYPE_", "_QML_"}) {
+        const qsizetype i = n.indexOf(cut);
+        if (i > 0)
+            n.truncate(i);
+    }
+    const qsizetype colon = n.lastIndexOf("::");
+    return colon >= 0 ? n.mid(colon + 2) : n;
+}
+
+/// Signal spans on the GUI thread (see the header). Fed by Qt's signal spy callbacks and by the
+/// wrapped QAbstractDeclarativeData::signalEmitted (the QML part of an emission).
+class SpanTracker {
+public:
+    enum Kind { Unwatched = -1, Plain, Generic, Timer, QmlTimer, ModelCount, ModelRange, ModelRows };
+    struct Info {
+        int name = -1;
+        int kind = Unwatched;
+    };
+    struct Open {
+        QObject *sender;
+        int signal;
+        int name;
+        int kind;
+        bool qml;
+        int rows;
+        Counters start;
+        Counters child;
+        int firstChild = -1;        ///< the name of the first span nested in it
+        bool parentless = false;    ///< a QTimer without a parent
+        bool saveCandidate = false; ///< … single-shot, with the controller's saveDelay
+        bool save = false;          ///< … and a PageController saved or changed its dirty state in it
+    };
+    struct Rec {
+        qint64 t0;
+        int name;
+        int depth;
+        Counters incl, self;
+        int rows;
+        bool qml;
+    };
+
+    bool enabled = false;
+    bool catchAll = true;
+    qint64 genericMinNs = 200000;
+    int saveDelay = 400;
+    const QObject *skip[3] = {nullptr, nullptr, nullptr}; ///< the probe and its timers
+    qint64 emissions = 0;                                 ///< every GUI-thread emission seen
+    std::vector<Open> stack;
+    std::vector<Rec> recs;
+    QStringList names;
+
+    void begin(QObject *sender, int signal, void **argv, bool qml)
+    {
+        if (!enabled || !onGuiThread())
+            return;
+        if (!qml)
+            ++emissions;
+        if (sender == skip[0] || sender == skip[1] || sender == skip[2])
+            return;
+        const Info info = classify(sender, signal);
+        if (info.kind == Unwatched)
+            return;
+        int name = info.name;
+        int rows = -1;
+        bool parentless = false, candidate = false;
+        switch (info.kind) {
+        case Timer: {
+            auto *t = static_cast<QTimer *>(sender);
+            parentless = !t->parent();
+            candidate = parentless && t->isSingleShot() && t->interval() == saveDelay;
+            name = parentless ? nameId(u"timer:%1ms"_s.arg(t->interval()))
+                              : nameId(u"timer:"_s
+                                       + QString::fromLatin1(shortClass(t->parent()->metaObject()->className())));
+            break;
+        }
+        case QmlTimer: name = qmlTimerName(sender); break;
+        case ModelCount:
+            if (auto *m = qobject_cast<QAbstractItemModel *>(sender))
+                rows = m->rowCount();
+            break;
+        case ModelRange: // dataChanged(topLeft, bottomRight, roles)
+            if (argv && argv[1] && argv[2])
+                rows = static_cast<const QModelIndex *>(argv[2])->row()
+                       - static_cast<const QModelIndex *>(argv[1])->row() + 1;
+            break;
+        case ModelRows: // rowsInserted / rowsRemoved / rowsMoved(parent, first, last, …)
+            if (argv && argv[2] && argv[3])
+                rows = *static_cast<const int *>(argv[3]) - *static_cast<const int *>(argv[2]) + 1;
+            break;
+        default: break;
+        }
+        if (!stack.empty() && stack.back().firstChild < 0)
+            stack.back().firstChild = name;
+        if (info.kind == Plain && (name == m_savedId || name == m_dirtyId)) {
+            // PageController's autosave: the parentless single-shot timer with its saveDelay in
+            // which the controller saves (other parentless timers may have the same interval —
+            // PageListModel's refresh delay is 400 ms too).
+            for (Open &o : stack)
+                o.save = o.save || o.saveCandidate;
+        }
+        Open open{sender, signal, name, info.kind, qml, rows, readCounters(), {}};
+        open.parentless = parentless;
+        open.saveCandidate = candidate;
+        stack.push_back(open);
+    }
+    void end(QObject *sender, int signal, bool qml)
+    {
+        // The sender may be gone (an emission that deleted it): only compared, never used.
+        if (!enabled || stack.empty() || !onGuiThread())
+            return;
+        const Open &top = stack.back();
+        if (top.sender != sender || top.signal != signal || top.qml != qml)
+            return; // a signal not tracked (or one begun before the spans were switched on)
+        const Counters incl = readCounters() - top.start;
+        const Counters self = incl - top.child;
+        Open done = top;
+        stack.pop_back();
+        if (!stack.empty())
+            stack.back().child += incl;
+        if (done.save) {
+            done.name = nameId(u"timer:save"_s);
+        } else if (done.parentless && done.firstChild >= 0) {
+            // A parentless timer is named by what it does first: "timer:400ms(model:PageListModel…)".
+            done.name = nameId(names.at(done.name) + u'(' + names.at(done.firstChild) + u')');
+        }
+        if (done.kind != Generic || incl.wall >= genericMinNs)
+            recs.push_back({done.start.wall, done.name, int(stack.size()), incl, self, done.rows, done.qml});
+    }
+    int nameId(const QString &name)
+    {
+        auto it = m_ids.constFind(name);
+        if (it != m_ids.constEnd())
+            return it.value();
+        names.append(name);
+        m_ids.insert(name, int(names.size() - 1));
+        return int(names.size() - 1);
+    }
+
+private:
+    Info classify(QObject *sender, int signal)
+    {
+        const QMetaObject *mo = sender->metaObject();
+        const auto key = std::make_pair(static_cast<const void *>(mo), signal);
+        const auto it = m_cache.constFind(key);
+        if (it != m_cache.constEnd())
+            return it.value();
+        Info info;
+        const QMetaMethod m = QMetaObjectPrivate::signal(mo, signal);
+        if (m.isValid()) {
+            const QMetaObject *encl = m.enclosingMetaObject();
+            const QByteArray cls = encl->className();
+            const QByteArray sig = m.name();
+            const QByteArray shortName = shortClass(cls.constData());
+            static const QList<QByteArray> watched = {
+                    "Vault.changed",
+                    "Workspace.revisionChanged",
+                    "Workspace.fileChanged",
+                    "Workspace.filesChanged",
+                    "Workspace.fileListChanged",
+                    "EditorHost.indexChanged",
+                    "EditorHost.revisionChanged",
+                    "EditorHost.fileChanged",
+                    "EditorHost.filesChanged",
+                    "EditorHost.fileListChanged",
+                    "VaultIndex.changed",
+                    "PageController.saved",
+                    "PageController.dirtyChanged",
+            };
+            const QByteArray full = shortName + '.' + sig;
+            if (encl == &QTimer::staticMetaObject && sig == "timeout") {
+                info.kind = Timer;
+            } else if (cls == "QQmlTimer" && sig == "triggered") {
+                info.kind = QmlTimer;
+            } else if (encl == &QAbstractItemModel::staticMetaObject
+                       && (sig == "modelReset" || sig == "layoutChanged" || sig == "dataChanged"
+                           || sig == "rowsInserted" || sig == "rowsRemoved" || sig == "rowsMoved")) {
+                info.kind = sig == "dataChanged" ? ModelRange : (sig.startsWith("rows") ? ModelRows : ModelCount);
+                info.name = nameId(u"model:"_s + QString::fromLatin1(shortClass(mo->className())) + u'.'
+                                   + QString::fromLatin1(sig));
+            } else if (watched.contains(full)) {
+                info.kind = Plain;
+                info.name = nameId(QString::fromLatin1(full));
+            } else if (catchAll && cls.startsWith("brulion::")) {
+                info.kind = Generic;
+                info.name = nameId(QString::fromLatin1(full));
+            }
+        }
+        m_cache.insert(key, info);
+        return info;
+    }
+    int qmlTimerName(QObject *t)
+    {
+        const QObject *p = t->parent();
+        return nameId(u"QmlTimer:"_s + (p ? QString::fromLatin1(shortClass(p->metaObject()->className())) : u"-"_s)
+                      + u':' + QString::number(t->property("interval").toInt()) + u"ms"_s);
+    }
+
+    QHash<std::pair<const void *, int>, Info> m_cache; ///< every emission looks here first
+    QHash<QString, int> m_ids;
+    const int m_savedId = nameId(u"PageController.saved"_s);
+    const int m_dirtyId = nameId(u"PageController.dirtyChanged"_s);
+};
+SpanTracker g_spans;
+
+void spySignalBegin(QObject *caller, int signalIndex, void **argv)
+{
+    g_spans.begin(caller, signalIndex, argv, false);
+}
+void spySignalEnd(QObject *caller, int signalIndex)
+{
+    g_spans.end(caller, signalIndex, false);
+}
+QSignalSpyCallbackSet g_spySet = {spySignalBegin, nullptr, spySignalEnd, nullptr};
+void (*g_declarativeSignalEmitted)(QAbstractDeclarativeData *, QObject *, int, void **) = nullptr;
+void declarativeSignalEmitted(QAbstractDeclarativeData *data, QObject *sender, int signalIndex, void **argv)
+{
+    g_spans.begin(sender, signalIndex, argv, true);
+    if (g_declarativeSignalEmitted)
+        g_declarativeSignalEmitted(data, sender, signalIndex, argv);
+    g_spans.end(sender, signalIndex, true);
+}
+
+void spansOn()
+{
+    g_spans.stack.clear();
+    g_spans.enabled = true;
+    if (!g_declarativeSignalEmitted && QAbstractDeclarativeData::signalEmitted != declarativeSignalEmitted)
+        g_declarativeSignalEmitted = QAbstractDeclarativeData::signalEmitted;
+    if (g_declarativeSignalEmitted)
+        QAbstractDeclarativeData::signalEmitted = declarativeSignalEmitted;
+    qt_register_signal_spy_callbacks(&g_spySet);
+}
+void spansOff()
+{
+    qt_register_signal_spy_callbacks(nullptr);
+    if (g_declarativeSignalEmitted)
+        QAbstractDeclarativeData::signalEmitted = g_declarativeSignalEmitted;
+    g_spans.enabled = false;
+    g_spans.stack.clear();
+}
+
 struct Frame {
     qint64 sync = 0;
     qint64 synced = 0; ///< afterSynchronizing: the end of the sync (the GUI thread waits until then)
@@ -196,6 +609,19 @@ public:
         m_scrollWait = envOr("BENCH_SCROLL_WAIT", "-1").toInt();
         m_resizeWidth = envOr("BENCH_RESIZE_WIDTH", "920").toInt();
         m_keep = qgetenv("BENCH_KEEP") == "1";
+        m_waitKept = qgetenv("BENCH_WAIT_KEPT") == "1";
+        const QByteArray spans = envOr("BENCH_SPANS", "1");
+        m_spans = spans != "0";
+        g_spans.catchAll = spans != "watched";
+        g_spans.genericMinNs = envOr("BENCH_SPAN_MIN_US", "200").toLongLong() * 1000;
+        g_spans.skip[0] = this;
+        g_spans.skip[1] = &m_lag;
+        g_spans.skip[2] = &m_poll;
+        // The constructor runs on the GUI thread (Q_COREAPP_STARTUP_FUNCTION): its counters.
+        g_guiTid.store(currentTid());
+        g_insns.open();
+        g_io = new std::vector<IoRec>();
+        g_io->reserve(4096);
         const QByteArray pagesFile = qgetenv("BENCH_PAGES");
         if (!pagesFile.isEmpty()) {
             QFile f(QString::fromUtf8(pagesFile));
@@ -210,6 +636,11 @@ public:
                   {u"pid"_s, qint64(getpid())},
                   {u"t0ns"_s, QString::number(g_t0)},
                   {u"args"_s, QJsonArray::fromStringList(QCoreApplication::arguments())}});
+        emitJson({{u"ev"_s, u"note"_s},
+                  {u"what"_s, u"counters"_s},
+                  {u"insns"_s, QJsonArray::fromStringList(g_insns.pmus)},
+                  {u"insnsError"_s, g_insns.error},
+                  {u"guiTid"_s, qint64(g_guiTid.load())}});
         mark(u"preload"_s, g_preload);
         mark(u"qapp"_s);
         qApp->installEventFilter(this);
@@ -224,7 +655,8 @@ public:
         // the gap between qapp and the first lag tick ("exec" mark).
         QTimer::singleShot(0, this, [this] {
             mark(u"exec"_s, 0, {{u"qpa"_s, QGuiApplication::platformName()}});
-            m_lastLag = monoNs();
+            m_lastLagCounters = readCounters();
+            m_lastLag = m_lastLagCounters.wall;
             m_lag.start();
             m_poll.start();
             const int timeout = envOr("BENCH_TIMEOUT_MS", "240000").toInt();
@@ -338,15 +770,19 @@ private:
 
     void lagTick()
     {
-        const qint64 t = monoNs();
+        const Counters c = readCounters();
+        const qint64 t = c.wall;
         const qint64 gap = t - m_lastLag;
         if (gap > 12000000LL) { // > 12 ms between 4 ms ticks: the GUI thread was busy
-            m_stalls.push_back({m_lastLag, t});
+            m_stalls.push_back({m_lastLag, t, c.cpu - m_lastLagCounters.cpu, c.insns - m_lastLagCounters.insns});
             // "Settled" ignores short ones (a frame's sync, preemption on a loaded machine).
             if (gap > 24000000LL)
                 m_lastStallEnd = t;
         }
+        if (m_series)
+            m_cpuSeries.push_back(c);
         m_lastLag = t;
+        m_lastLagCounters = c;
     }
 
     std::vector<Frame> framesCopy()
@@ -693,6 +1129,8 @@ private:
         if (m_finished)
             return;
         m_finished = true;
+        spansOff();
+        m_series = false;
         m_lag.stop();
         m_poll.stop();
         markMem(u"end"_s);
@@ -703,10 +1141,13 @@ private:
             swap.append(msOf(f.swap));
         }
         emitJson({{u"ev"_s, u"frames"_s}, {u"sync"_s, sync}, {u"synced"_s, synced}, {u"swap"_s, swap}});
+        // [start ms, duration ms, GUI thread CPU ms, user-space instructions in millions]
         QJsonArray st;
-        for (const auto &s : m_stalls)
-            st.append(QJsonArray{msOf(s.first), double(s.second - s.first) / 1e6});
+        for (const Stall &s : m_stalls)
+            st.append(QJsonArray{msOf(s.start), double(s.end - s.start) / 1e6, double(s.cpu) / 1e6,
+                                 double(s.insns) / 1e6});
         emitJson({{u"ev"_s, u"stalls"_s}, {u"list"_s, st}});
+        emitSpans();
         QJsonArray acts;
         for (const Action &a : m_actions)
             acts.append(QJsonObject{{u"kind"_s, a.kind},
@@ -727,6 +1168,136 @@ private:
         m_out = stderr;
         if (!m_keep || code != 0)
             QCoreApplication::exit(code);
+    }
+
+    /// The signal spans, the GUI thread's counters of the typing windows and its file system calls.
+    void emitSpans()
+    {
+        QJsonArray list;
+        for (const SpanTracker::Rec &r : g_spans.recs)
+            list.append(QJsonArray{msOf(r.t0), r.name, r.depth, double(r.incl.wall) / 1e6, double(r.self.wall) / 1e6,
+                                   double(r.incl.cpu) / 1e6, double(r.self.cpu) / 1e6, double(r.incl.insns) / 1e6,
+                                   double(r.self.insns) / 1e6, r.rows, r.qml ? 1 : 0});
+        emitJson(
+                {{u"ev"_s, u"spans"_s},
+                 {u"fields"_s, QJsonArray{u"t"_s, u"name"_s, u"depth"_s, u"incl_ms"_s, u"self_ms"_s, u"incl_cpu_ms"_s,
+                                          u"self_cpu_ms"_s, u"incl_insns_M"_s, u"self_insns_M"_s, u"rows"_s, u"qml"_s}},
+                 {u"names"_s, QJsonArray::fromStringList(g_spans.names)},
+                 {u"list"_s, list}});
+        QJsonArray t, cpu, insns;
+        for (const Counters &c : m_cpuSeries) {
+            t.append(msOf(c.wall));
+            cpu.append(double(c.cpu) / 1e6);
+            insns.append(double(c.insns));
+        }
+        emitJson({{u"ev"_s, u"cpu"_s}, {u"t"_s, t}, {u"cpu"_s, cpu}, {u"insns"_s, insns}});
+        QJsonArray io;
+        if (g_io) {
+            for (const IoRec &r : std::as_const(*g_io))
+                io.append(QJsonArray{msOf(r.t0), double(r.t1 - r.t0) / 1e6, QString::fromLatin1(kIoNames[r.kind])});
+        }
+        QJsonObject other;
+        for (int k = 0; k < IoKinds; ++k) {
+            if (const qint64 n = g_ioOtherN[k].load())
+                other.insert(QString::fromLatin1(kIoNames[k]),
+                             QJsonObject{{u"n"_s, n}, {u"ms"_s, double(g_ioOtherNs[k].load()) / 1e6}});
+        }
+        emitJson({{u"ev"_s, u"io"_s}, {u"list"_s, io}, {u"other_threads"_s, other}});
+    }
+
+    // ---- kept views -----------------------------------------------------------------------------
+    struct KeptViews {
+        int built = 0, total = 0, loading = 0;
+    };
+    /// The kept views of the panes that build them ahead (ShellRouteView.preloadViews: the main
+    /// pane): its KeptLoaders (Loaders with `kept` and `everShown`), built = Loader.Ready with an
+    /// item. Trees without them: total 0.
+    KeptViews keptViews()
+    {
+        KeptViews k;
+        walk(m_window ? m_window->contentItem() : nullptr, [&](QQuickItem *it) {
+            if (typeName(it) != "ShellRouteView")
+                return true;
+            if (!it->property("preloadViews").toBool())
+                return false;
+            const QList<QQuickItem *> kids = it->childItems();
+            for (QQuickItem *c : kids) {
+                const QMetaObject *mo = c->metaObject();
+                if (mo->indexOfProperty("kept") < 0 || mo->indexOfProperty("everShown") < 0)
+                    continue;
+                ++k.total;
+                const int status = c->property("status").toInt(); // Loader: Null 0, Ready 1, Loading 2
+                if (status == 1 && c->property("item").value<QObject *>())
+                    ++k.built;
+                else if (status == 2)
+                    ++k.loading;
+            }
+            return false;
+        });
+        return k;
+    }
+    /// BENCH_WAIT_KEPT=1: until every kept view exists (at most 30 s), then settled again.
+    void waitKeptSteps()
+    {
+        if (!m_waitKept)
+            return;
+        waitUntil(
+                u"kept_wait"_s,
+                [this] {
+                    const KeptViews k = keptViews();
+                    const bool timedOut = monoNs() - m_stepStart > 30000000000LL;
+                    if (k.built < k.total && !timedOut)
+                        return false;
+                    mark(u"kept_ready"_s, 0, {{u"n"_s, k.built}, {u"of"_s, k.total}, {u"timedOut"_s, timedOut}});
+                    return true;
+                },
+                40000, false);
+        waitSettled(u"kept_settled"_s, 1000, 60000);
+    }
+
+    /// Three bursts of typing (120 ms between keys: a fast typist), each followed by 2.4 s in which
+    /// the 400 ms autosave and its fan-out run (the save's end + 1.7 s fits unless the save takes
+    /// over 300 ms) — the typing windows: signal spans on (BENCH_SPANS)
+    /// and the GUI thread's counters at every lag tick, from 1 s of idle editing before the first
+    /// burst (the idle rate fanout_deferred_cpu_ms subtracts) to the end of the last window.
+    void burstSteps()
+    {
+        action(u"idle_ref"_s, [this] {
+            m_series = true;
+            mark(u"idle_ref_start"_s);
+        });
+        wait(1000);
+        action(u"idle_ref_end"_s, [this] { mark(u"idle_ref_end"_s); });
+        for (int burst = 0; burst < 3; ++burst) {
+            action(u"burst"_s, [this, burst] {
+                const KeptViews k = keptViews();
+                mark(u"kept_views:"_s + QString::number(burst), 0,
+                     {{u"n"_s, k.built}, {u"of"_s, k.total}, {u"loading"_s, k.loading}});
+                m_emissionsAtOn = g_spans.emissions;
+                m_recsAtOn = qint64(g_spans.recs.size());
+                if (m_spans)
+                    spansOn();
+                mark(u"burst_start:"_s + QString::number(burst));
+            });
+            typeString(u" ala ma kota zażółć"_s, 120);
+            action(u"burst_end"_s, [this, burst] { mark(u"burst_end:"_s + QString::number(burst)); });
+            wait(2400);
+            action(u"window_end"_s, [this, burst] {
+                spansOff();
+                mark(u"window_end:"_s + QString::number(burst), 0,
+                     {{u"emissions"_s, g_spans.emissions - m_emissionsAtOn},
+                      {u"spans"_s, qint64(g_spans.recs.size()) - m_recsAtOn}});
+            });
+        }
+        action(u"series_off"_s, [this] { m_series = false; });
+    }
+    /// The autosave timer's interval (PageController.saveDelay; 400 ms in trees without it): the
+    /// spans call the parentless single-shot QTimer with that interval "timer:save".
+    void takeSaveDelay(QObject *ctl)
+    {
+        const QVariant delay = ctl ? ctl->property("saveDelay") : QVariant();
+        if (delay.isValid())
+            g_spans.saveDelay = delay.toInt();
     }
 
     // ---- scenarios ------------------------------------------------------------------------------
@@ -790,21 +1361,16 @@ private:
 
     void typingSteps()
     {
+        waitKeptSteps();
         startEditing(m_page, m_row);
         action(u"watch_saved"_s, [this] {
             QObject *ctl = nullptr;
             pageEditor(m_page, &ctl);
             if (ctl)
                 connect(ctl, SIGNAL(saved()), this, SLOT(onSaved()));
+            takeSaveDelay(ctl);
         });
-        // Three bursts of typing (120 ms between keys: a fast typist), each followed by a pause
-        // in which the 400 ms autosave runs.
-        for (int burst = 0; burst < 3; ++burst) {
-            action(u"burst"_s, [this, burst] { mark(u"burst_start:"_s + QString::number(burst)); });
-            typeString(u" ala ma kota zażółć"_s, 120);
-            action(u"burst_end"_s, [this, burst] { mark(u"burst_end:"_s + QString::number(burst)); });
-            wait(1800);
-        }
+        burstSteps();
         // Structure edits: Enter (a new block), Tab / Shift+Tab (indent, outdent), undo, redo.
         for (int i = 0; i < 5; ++i) {
             keyStep(Qt::Key_Return, Qt::NoModifier, u"enter"_s, 250);
@@ -854,6 +1420,7 @@ private:
     /// and a few Backspaces.
     void sourceTypingSteps()
     {
+        waitKeptSteps();
         action(u"source_mode"_s, [this] {
             QObject *ctl = nullptr;
             pageEditor(m_page, &ctl);
@@ -862,6 +1429,7 @@ private:
                 return;
             }
             connect(ctl, SIGNAL(saved()), this, SLOT(onSaved()));
+            takeSaveDelay(ctl);
             mark(u"source_start"_s);
             ctl->setProperty("sourceMode", true);
         });
@@ -885,12 +1453,7 @@ private:
         waitUntil(u"editing"_s, [this] { return focusIsText(); }, 10000);
         wait(400);
         waitSettled(u"edit_settled"_s, 600, 30000);
-        for (int burst = 0; burst < 3; ++burst) {
-            action(u"burst"_s, [this, burst] { mark(u"burst_start:"_s + QString::number(burst)); });
-            typeString(u" ala ma kota zażółć"_s, 120);
-            action(u"burst_end"_s, [this, burst] { mark(u"burst_end:"_s + QString::number(burst)); });
-            wait(1800);
-        }
+        burstSteps();
         for (int i = 0; i < 5; ++i) {
             keyStep(Qt::Key_Return, Qt::NoModifier, u"enter"_s, 250);
             action(u"type"_s, [this] { typeChar(u'x'); });
@@ -1300,7 +1863,8 @@ private:
                             counts.insert(it.key(), it.value());
                         e.insert(u"events"_s, counts);
                         mark(u"idle_end:"_s + tag, 0, e);
-                        m_lastLag = monoNs();
+                        m_lastLagCounters = readCounters();
+                        m_lastLag = m_lastLagCounters.wall;
                         m_lag.start();
                         m_poll.start();
                         m_idleDone = true;
@@ -1427,7 +1991,16 @@ private:
     qint64 m_lastLag = 0;
     qint64 m_lastStallEnd = 0;
     qint64 m_lastFalsePoll = 0;
-    std::vector<std::pair<qint64, qint64>> m_stalls;
+    struct Stall {
+        qint64 start, end, cpu, insns;
+    };
+    std::vector<Stall> m_stalls;
+    Counters m_lastLagCounters;
+    bool m_series = false; ///< the GUI thread's counters at every lag tick (the typing windows)
+    std::vector<Counters> m_cpuSeries;
+    bool m_spans = true;
+    bool m_waitKept = false;
+    qint64 m_emissionsAtOn = 0, m_recsAtOn = 0;
     std::vector<Action> m_actions;
     QList<qint64> m_modelEvents, m_savedEvents;
     qint64 m_idleFrames = 0;
@@ -1451,6 +2024,45 @@ void startProbe()
 }
 
 } // namespace
+
+// ---- interposed file system calls (LD_PRELOAD: these definitions come first; each calls the next
+// one, libc's). Timed on the GUI thread, counted on the others (timedIo()). ----------------------
+extern "C" {
+int fsync(int fd)
+{
+    static const auto next = nextDefinition<int (*)(int)>("fsync");
+    return timedIo(IoFsync, [&] { return next(fd); });
+}
+int fdatasync(int fd)
+{
+    static const auto next = nextDefinition<int (*)(int)>("fdatasync");
+    return timedIo(IoFdatasync, [&] { return next(fd); });
+}
+int rename(const char *from, const char *to) __THROW
+{
+    static const auto next = nextDefinition<int (*)(const char *, const char *)>("rename");
+    return timedIo(IoRename, [&] { return next(from, to); });
+}
+int renameat(int fromDir, const char *from, int toDir, const char *to) __THROW
+{
+    static const auto next = nextDefinition<int (*)(int, const char *, int, const char *)>("renameat");
+    return timedIo(IoRenameat, [&] { return next(fromDir, from, toDir, to); });
+}
+int renameat2(int fromDir, const char *from, int toDir, const char *to, unsigned int flags) __THROW
+{
+    static const auto next = nextDefinition<int (*)(int, const char *, int, const char *, unsigned int)>("renameat2");
+    if (!next) {
+        errno = ENOSYS;
+        return -1;
+    }
+    return timedIo(IoRenameat2, [&] { return next(fromDir, from, toDir, to, flags); });
+}
+int linkat(int fromDir, const char *from, int toDir, const char *to, int flags) __THROW
+{
+    static const auto next = nextDefinition<int (*)(int, const char *, int, const char *, int)>("linkat");
+    return timedIo(IoLinkat, [&] { return next(fromDir, from, toDir, to, flags); });
+}
+}
 
 __attribute__((constructor)) static void benchProbeLoaded()
 {

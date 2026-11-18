@@ -14,6 +14,12 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import analyze  # noqa: E402
 
+# The autosave rows of the typing scenarios (analyze.save_metrics(): the probe's signal spans and
+# file system calls) and a typed letter's key -> frame split.
+SAVE_ROWS = ["save_sync_ms", "save_write_ms", "save_fsync_ms", "save_vault_changed_ms", "save_cpu_ms", "save_insns_M",
+             "fanout_deferred_cpu_ms", "fanout_insns_M", "fanout_model_resets", "fanout_rows_changed", "kept_views",
+             "char_wait_med", "char_gui_med", "char_render_med"]
+
 KEY = [
     ("startup", "startup-demo-warm", ["first_frame_ms", "content_frame_ms", "settled_ms", "rss_mb:settled"]),
     ("startup", "startup-demo-cold", ["first_frame_ms", "content_frame_ms", "settled_ms"]),
@@ -29,18 +35,18 @@ KEY = [
     ("open page", "open-document5000", ["open1_sync_ms", "open1_frame_ms", "open1_settled_ms", "open1_stall_max",
                                         "open2_frame_ms", "open2_settled_ms", "rss_mb:page:1"]),
     ("typing", "typing-small", ["char_handle_med", "char_frame_med", "char_frame_p95", "enter_frame_med",
-                                "tab_frame_med", "undo_frame_med", "autosave_blocked_med"]),
+                                "tab_frame_med", "undo_frame_med", "autosave_blocked_med"] + SAVE_ROWS),
     ("typing", "typing-outline5000", ["char_handle_med", "char_frame_med", "char_frame_p95", "enter_frame_med",
                                       "tab_frame_med", "shift-tab_frame_med", "undo_frame_med", "redo_frame_med",
-                                      "autosave_blocked_med", "autosave_stall_max_med"]),
+                                      "autosave_blocked_med", "autosave_stall_max_med"] + SAVE_ROWS),
     ("typing", "typing-document5000", ["char_handle_med", "char_frame_med", "char_frame_p95", "enter_frame_med",
                                        "undo_frame_med", "redo_frame_med", "autosave_blocked_med",
-                                       "autosave_stall_max_med"]),
+                                       "autosave_stall_max_med"] + SAVE_ROWS),
     ("source mode", "source-typing-medium", ["char_handle_med", "char_frame_med", "char_frame_p95",
-                                             "enter_frame_med", "backspace_frame_med", "autosave_blocked_med"]),
+                                             "enter_frame_med", "backspace_frame_med", "autosave_blocked_med"] + SAVE_ROWS),
     ("source mode", "source-typing-outline5000", ["char_handle_med", "char_frame_med", "char_frame_p95",
                                                   "enter_frame_med", "backspace_frame_med", "autosave_blocked_med",
-                                                  "autosave_stall_max_med"]),
+                                                  "autosave_stall_max_med"] + SAVE_ROWS),
     ("search", "search-10k", ["slow_char_frame_med", "slow_results_med", "slow_query_blocked_med",
                               "fast_results_med", "many_results_med", "many_query_blocked_med"]),
     ("switcher", "switcher-10k", ["open0_frame_ms", "slow_char_handle_med", "slow_char_frame_med",
@@ -59,6 +65,16 @@ KEY = [
                             "settled_pan_move_frame_p95", "settled_pan_frame_p95_ms", "rss_mb:graph"]),
     ("journal", "journal-scroll-10k", ["frame_interval_med", "frame_interval_p95", "frame_interval_max", "frames_gt33",
                                        "scroll_stall_max"]),
+    ("page scroll", "page-scroll-medium", ["open1_frame_ms", "frame_interval_p95", "frame_interval_max", "frames_gt33",
+                                          "scroll_stall_max", "rss_mb:scrolled"]),
+    ("page scroll", "page-scroll-document5000", ["open1_frame_ms", "frame_interval_p95", "frame_interval_max",
+                                                 "frames_gt33", "scroll_stall_max", "rss_mb:scrolled"]),
+    ("page scroll", "page-scroll-document5000-early", ["frame_interval_p95", "frame_interval_max", "frames_gt33",
+                                                       "scroll_stall_max"]),
+    ("page resize", "page-resize-medium", ["resize_frame_med", "resize_frame_max", "resize_stall_med",
+                                           "resize_stall_max"]),
+    ("page resize", "page-resize-outline5000", ["resize_frame_med", "resize_frame_max", "resize_stall_med",
+                                                "resize_stall_max"]),
     ("navigation", "switch-pages-10k", ["nav_frame_med", "nav_frame_p95", "nav_frame_max", "heap_mb_per_100_navs",
                                         "rss_mb_per_100_navs", "rss_mb_at200", "items_at200"]),
     ("idle", "idle-demo", ["cpu_pct", "wakeups_per_s", "frames_per_s"]),

@@ -1879,6 +1879,35 @@ paths) and under the build lock, with a 3k-note vault (`make-bench-vault.py … 
 Attribution: `tests/bench/app/profile-cases.sh` (perf with probe windows, qmlprofiler,
 heaptrack). Details: [tests/bench/app/README.md](../tests/bench/app/README.md).
 
+**An autosave's cost on the GUI thread** (the Zed-like budget: < 8 ms per save). `autosave_blocked`
+only sums stalls over 12 ms; in the typing windows of `typing` and `source-typing` (each burst
+and the 2.4 s after it) the probe also records signal spans through Qt's signal spy callbacks
+(QtCore's private `QSignalSpyCallbackSet`, GUI thread only, with the QML part of each emission
+through the wrapped `QAbstractDeclarativeData::signalEmitted`) — inclusive and self wall time,
+thread CPU time and user-space instructions (`perf_event_open` with `exclude_kernel`, allowed by
+`perf_event_paranoid` 2; both PMUs of a hybrid Intel CPU) —, the GUI thread's `fsync` / `rename`
+calls (interposed) and its CPU at every lag tick. `analyze.py` turns them into `save_sync_ms`
+(the `timer:save` span: PageController's whole synchronous save), `save_write_ms` (up to
+`Vault::changed`), `save_fsync_ms`, `save_vault_changed_ms`, `save_cpu_ms`, `save_insns_M`,
+`sig_<signal>_ms`, `fanout_deferred_cpu_ms` / `fanout_insns_M` (the GUI thread's CPU from the
+save's end over 1.7 s minus its idle rate: the deferred work, pieces under 12 ms included),
+`fanout_model_resets`, `fanout_rows_changed` and the top spans by self time; `kept_views` says
+how many of the views ShellRouteView builds ahead existed when the burst began, and
+`BENCH_WAIT_KEPT=1` waits for all of them first. Instructions are the number to compare on a
+shared machine (wall times there include the other builds). What the callbacks see and miss
+(queued connections, QML handlers): the README's "Autosave: where the GUI thread's time goes".
+The core row beside it is `bench_index:saveRoundTrip` (a save's write, `Vault::changed`, index
+update and `changesSince()` without the GUI, 1000 / 3000 / 10 000 notes on disk).
+
+```sh
+nix develop -c tests/bench/app/build-probe.sh /tmp/probe
+nix develop -c nix shell nixpkgs#xvfb -c env -u WAYLAND_DISPLAY -u DISPLAY BINS="cur=…/brulion" \
+  PROBE=/tmp/probe/libbenchprobe.so VAULT_DEMO=/tmp/vaults/demo VAULT_BIG=/tmp/vaults/big10k \
+  OUT=/tmp/save RUNS=3 tests/bench/app/bench-matrix.sh typing
+tests/bench/app/analyze.py /tmp/save | grep -E 'save_|fanout_|sig_|top|kept'
+tests/bench/app/timeline.py /tmp/save/typing-outline5000-cur-00.jsonl --span-ms 0.5   # one run's spans
+```
+
 **Android and browser (`tests/bench/mobile/`).** APK size reports (`android-apk.sh`,
 `size-report.py`), an emulator probe build (a debuggable measurement copy, never shipped),
 launcher starts and `dumpsys meminfo` (`android-batch.sh release|probe`), idle and alarms; the
@@ -1928,6 +1957,7 @@ sync with the arrays in the script):
 | sync | `bench_sync:syncNoChanges` 10000 files (Pi: 5000) | L12 |
 | open vault, threads | `bench_index:openFromDisk` 10000 notes loader 4 workers (Pi: 3) | L1 (wave 5) |
 | open vault, cache | `bench_index:openFromDisk` 10000 notes loader warm cache 4 workers (Pi: 3) | L2 (wave 5) |
+| a save | `bench_index:saveRoundTrip` 10000 notes throttled | an autosave's write, `Vault::changed`, index update and `changesSince()` (no baseline row yet: only its scaling limit counts until `-u` records one) |
 
 Scaling limits (`limits.csv`): `foldKey` / `foldKeyWithMap` polish k ≤ 1.2 (N1),
 `searchLargeNote` k ≤ 1.3 (N1), `parsePathological` inline HTML and one paragraph of `<`
@@ -1936,7 +1966,8 @@ k ≤ 1.3 (N6), `unlinkedLongLine` k ≤ 1.3 (N6), `htmlToMarkdown` flat and nes
 `selectAllCopy` Markdown and plain text, `clipboardHtml` k ≤ 1.3 (measured k 0.98–1.10), from wave
 5 `openFromDisk` loader 4 workers and loader warm cache 4 workers, `cacheEncode`, `cacheDecode`, from
 L5 `blockDocOps` undo+redo (measured k 1.15) k ≤ 1.3 — 1.5 for all of them in the Pi's small
-profile (3 workers); index heap at 10 000 notes
+profile (3 workers); `saveRoundTrip` throttled k ≤ 0.25 between 3000 and 10 000 notes in both
+profiles (a save must not grow with the notebook); index heap at 10 000 notes
 ≤ 233 MiB (wave 5: 220.6 MiB measured; it was ≤ 560 MiB before). The Pi baseline has no loader
 rows and no undo+redo row yet (record them with `-u` in a quiet window; L1b, L5b).
 
