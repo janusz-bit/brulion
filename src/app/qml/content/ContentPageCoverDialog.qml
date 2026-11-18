@@ -25,8 +25,9 @@ BDialog {
     readonly property string coverKind: dialog.controller ? AppController.routeText(dialog.controller.look.cover, "kind") : ""
     readonly property string coverTarget: dialog.controller ? AppController.routeText(dialog.controller.look.cover, "target") : ""
     readonly property bool hasCover: coverKind !== ""
-    /// The notebook's pictures matching the search (Workspace.pictureAttachments), read while open.
-    readonly property list<var> pictures: dialog.opened && Workspace.revision >= 0
+    /// The notebook's pictures matching the search (Workspace.pictureAttachments), read while open,
+    /// again when the names change (a picture added, deleted, renamed).
+    readonly property list<var> pictures: dialog.opened && Workspace.namesRevision >= 0
                                     ? Workspace.pictureAttachments(searchField.text, 60) : []
 
     /// Write the cover `target` (a vault path or a URL; "" removes it) and close.

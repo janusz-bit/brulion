@@ -58,7 +58,8 @@ Item {
     }
     readonly property list<var> dayItems: !root.visible || root.placeholder !== "" || Workspace.revision < 0
                                           ? [] : tools.calendarEntries(root.selectedDate)
-    readonly property bool hasJournal: root.visible && root.placeholder === "" && Workspace.revision >= 0
+    // (The day's journal: the names, not every save.)
+    readonly property bool hasJournal: root.visible && root.placeholder === "" && Workspace.namesRevision >= 0
                                        && root.journalDates(root.selectedDate).length > 0
 
     Flickable {

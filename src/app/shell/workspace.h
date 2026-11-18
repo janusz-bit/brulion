@@ -38,9 +38,12 @@
 //   device-local state                 favorites, recentPages, foldState(path) (LocalStore)
 //
 // Changes: every Vault change (own writes, other views, Syncthing/Nextcloud, other programs)
-// updates the index and bumps `revision`; fileChanged(path) is emitted for every changed file,
-// also for EditorHost::write(): the same page may be open in a second pane that must reload,
-// and the saving editor recognises its own text. writeFile() (QML views) is the same as write().
+// updates the index and bumps `revision` — and only when they changed, the narrow
+// `namesRevision` (files, folders, aliases) and `propertiesRevision`, which
+// bindings that do not read the notes' text follow instead (docs/UI.md "Following changes");
+// fileChanged(path) is emitted for every changed file, also for EditorHost::write(): the same
+// page may be open in a second pane that must reload, and the saving editor recognises its own
+// text. writeFile() (QML views) is the same as write().
 //
 // Everything is synchronous on the GUI thread; dates are local "YYYY-MM-DD" strings.
 #pragma once
@@ -141,10 +144,22 @@ class Workspace : public EditorHost, public QueryHost {
     Q_PROPERTY(int journalCount READ journalCount NOTIFY indexChanged FINAL)
     /// Number of items in the trash (a deleted folder counts once).
     Q_PROPERTY(int trashCount READ trashCount NOTIFY trashChanged FINAL)
-    /// Grows with every change of the vault's files (bind lists to it to refresh them).
+    /// Grows with every change of the vault's files, an edit of a page's text included (every
+    /// autosave): bind to it only what reads the notes' content. Narrower ones below.
     Q_PROPERTY(int revision READ revision NOTIFY revisionChanged FINAL)
+    /// Grows when the set of names may have changed: a file or folder was created, deleted or
+    /// renamed, aliases changed (VaultIndex::changesSince(…).names), the notebook was opened or
+    /// closed, its configuration changed (the journals' folder and file names), the index was
+    /// read (indexing finished). Not on an edit of a page's text: what reads only which files,
+    /// folders, journals and page names exist binds to this (exists(), journalPath(), subfolders(),
+    /// switcherPages(), folder choices).
+    Q_PROPERTY(int namesRevision READ namesRevision NOTIFY namesRevisionChanged FINAL)
+    /// Grows when some note's page properties (ParsedNote::properties: frontmatter, `key:: value`)
+    /// changed — compared per changed note — and when the notebook was opened or closed, its
+    /// configuration changed or the index was read: pageIconOf(), tasksIgnored().
+    Q_PROPERTY(int propertiesRevision READ propertiesRevision NOTIFY propertiesRevisionChanged FINAL)
     /// Number of Markdown pages.
-    Q_PROPERTY(int pageCount READ pageCount NOTIFY revisionChanged FINAL)
+    Q_PROPERTY(int pageCount READ pageCount NOTIFY namesRevisionChanged FINAL)
     /// Pages without the daily notes and conflict copies (the sidebar's "Pages" count).
     Q_PROPERTY(int pagesWithoutJournals READ pagesWithoutJournals NOTIFY indexChanged FINAL)
     /// Vault configuration (see vaultConfig()).
@@ -217,6 +232,8 @@ public:
     int journalCount() const;
     int trashCount() const;
     int revision() const { return m_revision; }
+    int namesRevision() const { return m_namesRevision; }
+    int propertiesRevision() const { return m_propertiesRevision; }
     int pageCount() const;
     int pagesWithoutJournals() const;
 
@@ -730,6 +747,9 @@ Q_SIGNALS:
     void readyChanged();
     void trashChanged();
     void revisionChanged();
+    /// (After revisionChanged() when both change.)
+    void namesRevisionChanged();
+    void propertiesRevisionChanged();
     void configChanged();
     void favoritesChanged();
     void recentPagesChanged();
@@ -792,6 +812,9 @@ private:
     /// Folders produce no Vault change of their own (only files do): tell the lists and the tree,
     /// and for the user's own changes (`byUser`) the sync (an empty folder travels too).
     void notifyFolderChange(const QStringList &paths, bool byUser = true);
+    /// Bump the narrow revisions asked for and emit their signals (in this order). `revision`
+    /// is the caller's: it bumps and signals it before.
+    void bumpRevisions(bool names, bool properties);
 
     std::unique_ptr<Vault> m_vault;
     /// Copies importAttachment() stored in this session that discardImport() may still remove.
@@ -824,6 +847,8 @@ private:
     QTimer m_indexTimer;
     QElapsedTimer m_indexClock; ///< since open() (the event log's "Index ready" line)
     int m_revision = 0;
+    int m_namesRevision = 0;
+    int m_propertiesRevision = 0;
     mutable int m_trashCount = -1;
     // Children of this object (parented: QML never takes them over); detached by close().
     WorkspaceReminders *m_reminders = nullptr;

@@ -39,8 +39,8 @@ BDialog {
     readonly property bool named: Js.replaceRegExp(nameField.typedText, "[\\/\\\\\\s]", "g", "") !== ""
     /// Folder mode: why Create would make no new folder of the name typed, in the core's words
     /// (Workspace.folderProblem: createFolder's own checks), "" when it would make one. Asked
-    /// again when the notebook changes (Workspace.revision: a folder made or removed meanwhile).
-    readonly property string folderProblem: dialog.folderMode && dialog.visible && dialog.named && Workspace.revision >= 0
+    /// again when the names change (Workspace.namesRevision: a folder made or removed meanwhile).
+    readonly property string folderProblem: dialog.folderMode && dialog.visible && dialog.named && Workspace.namesRevision >= 0
                                             ? Workspace.folderProblem(dialog.folderPathOf(nameField.typedText)) : ""
     /// Folder mode: the folder the name typed asks for (in `folder`).
     function folderPathOf(name: string): string {

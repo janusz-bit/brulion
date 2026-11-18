@@ -148,8 +148,9 @@ FocusScope {
         if (shell.currentView === "page")
             return shell.routePath
         const date = routeTitles.field(AppController.currentRoute, "date")
-        // (Read for real: a bare `void Workspace.revision` is compiled away with the dependency.)
-        if (shell.currentView !== "journal" || date === "" || Workspace.revision < 0)
+        // (The names: the daily note created or deleted. Read for real: a bare `void
+        // Workspace.namesRevision` is compiled away with the dependency.)
+        if (shell.currentView !== "journal" || date === "" || Workspace.namesRevision < 0)
             return ""
         const path = shell.routePath !== "" ? shell.routePath : Workspace.journalPath(date)
         return Workspace.exists(path) ? path : ""
@@ -717,10 +718,10 @@ FocusScope {
     BQuickSwitcher {
         id: switcher
         objectName: "shellSwitcher"
-        // Workspace.revision: refresh when pages come and go while it is open. Closed (visible
-        // stays true until the exit transition ends), it neither queries nor follows the
-        // revision: every save bumps it.
-        pages: switcher.visible && Workspace.revision >= 0 ? Workspace.switcherPages(switcher.query, 60) : []
+        // Workspace.namesRevision: refresh when pages come and go (or their aliases change) while
+        // it is open. Closed (visible stays true until the exit transition ends), it neither
+        // queries nor follows the names.
+        pages: switcher.visible && Workspace.namesRevision >= 0 ? Workspace.switcherPages(switcher.query, 60) : []
         // The top bar's search field opens it: "> " turns to the commands, the last result
         // searches the notes' text.
         placeholderText: qsTr("Go to page… (> for commands)")

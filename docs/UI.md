@@ -3611,7 +3611,8 @@ A page can have an **icon** — an emoji or one of the app's icons — and a **c
 page properties (docs/SYNTAX.md §4 "Page icon and cover": `icon`, `banner`, `banner_y`, the keys
 Obsidian's Iconize and Banners plugins and Logseq read), so they go with the file to other devices
 and apps. `PageController.look` ({ icon, cover }) follows the page's text as it is edited (in source
-mode its own edits, and what was typed there once the source is left); the lists follow the index (`Workspace.pageIconOf(path)`, `Workspace.revision`).
+mode its own edits, and what was typed there once the source is left); the lists follow the index (`Workspace.pageIconOf(path)`, `Workspace.propertiesRevision`: not every
+save, only a change of some note's properties).
 
 * **Setting them**: the page menu ⋯ — "Add icon…" / "Change icon…", "Add cover…" / "Change
   cover…" —, a click on the icon in the header, the cover's "Change cover". Each change is one
@@ -4145,6 +4146,27 @@ pickers (Android, Windows, GTK / KDE, the portal, the browser's) speak the syste
   stayed put when a narrower window wrapped the text again).
   `scripts/check-qml-reads.sh` finds such statements (ctest `tst_scripts_check_qml_reads`, CI's
   lint job); the playground's `refreshtest` checks the views (`tst_editor_qml_refresh`, `_touch`).
+* **Following changes**: a binding follows the narrowest counter that covers what it reads —
+  Zed-like targeted notifications, not one global counter. `Workspace.revision` grows with every
+  change of a file, an edit of a page's text included: every autosave while typing re-runs what
+  follows it, also in the views `ShellRouteView` keeps hidden. So only what reads the notes'
+  content follows it (the side panel's calendar dots and day plan, the calendar grids, Settings'
+  checks of the configuration). `Workspace.namesRevision` grows when the set of names may have
+  changed — a file or folder created, deleted or renamed, aliases (the index's
+  `changesSince().names`), open / close, the configuration, the index read: `exists()`,
+  `journalPath()`, `journalDates()` / `journalMarks()`, `subfolders()`, `switcherPages()`,
+  `pictureAttachments()`, the folder choices, `periodicNoteOf()`, and `pageCount` notify with it.
+  `Workspace.propertiesRevision` grows when some changed note's page properties differ from
+  before (compared in `onVaultChanged()`, O(changed notes)): `pageIconOf()`, `tasksIgnored()`.
+  Cheap tests come first and gate the read (`switcher.visible && Workspace.namesRevision >= 0`,
+  `days.count <= 1 && Workspace.pageCount <= 1`, a dialog's `visible`): a binding whose condition
+  stops before the counter does not subscribe to it at all. A hidden kept view that must keep its
+  rows as they were (scrolled where it was) holds the counter in a property that a
+  `Binding { when: root.visible; restoreMode: Binding.RestoreNone }` updates only while shown (All
+  pages' folders, `subfoldersAt`). C++ helpers do the same: `PageTools`' header summary is
+  computed again only for changes it shows, an edit of the page itself on the next event-loop
+  turn (pagetools.h), lists
+  follow `fileListChanged()` or `IndexChanges` (`WorkspaceListModel.active`, `affectedBy()`).
 * **Text formats**: every `Text` and `Label` says how its text is read. Text that comes from a
   note — a page's title, a task, a file name, a line in the merge view, what an extension
   wrote — is shown with `textFormat: Text.PlainText` (`BText` and the other `B*` components do

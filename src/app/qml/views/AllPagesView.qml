@@ -27,9 +27,24 @@ FocusScope {
     /// The filter text, trimmed.
     readonly property string filterText: Js.trim(filterField.text)
     readonly property bool filtering: filterText !== ""
-    /// The folder's direct subfolders: [{ path, name, pages }] (Workspace.subfolders).
-    readonly property list<var> subfolders: Workspace.revision >= 0 && Workspace.journalCount >= 0 && !filtering
+    /// The folder's direct subfolders: [{ path, name, pages }] (Workspace.subfolders: a walk of every
+    /// file). They follow the names (Workspace.namesRevision: files and folders created, deleted,
+    /// renamed — not an edit of a page's text) through `subfoldersAt`, which stands still while the
+    /// view is hidden (ShellRouteView keeps it): the rows stay as they were, the list scrolled where
+    /// it was, and are read again once shown when anything changed meanwhile. While the notebook
+    /// is still being read the page counts follow the index (Workspace.journalCount: its changes).
+    readonly property list<var> subfolders: !root.filtering && root.subfoldersAt >= 0
+                                            && (!Workspace.indexing || !root.visible || Workspace.journalCount >= 0)
                                             ? Workspace.subfolders(root.folder) : []
+    /// Workspace.namesRevision while shown (the Binding below), its last value while hidden.
+    property int subfoldersAt: 0
+    Binding {
+        target: root
+        property: "subfoldersAt"
+        value: Workspace.namesRevision
+        when: root.visible
+        restoreMode: Binding.RestoreNone
+    }
     /// No highlighted matches (a daily note's title).
     readonly property list<var> noMatches: []
     readonly property bool wide: width >= 760
@@ -375,8 +390,9 @@ FocusScope {
                 required property list<var> titleMatches
 
                 readonly property string shownTitle: journalDate !== "" ? DatesHelper.formatLong(journalDate) : row.title
-                /// The page's own icon (docs/UI.md "Page icon and cover"), following its edits.
-                readonly property var pageIcon: Workspace.revision >= 0 ? Workspace.pageIconOf(row.path) : ({})
+                /// The page's own icon (docs/UI.md "Page icon and cover"), following its edits (the
+                /// notes' properties: not every keystroke's save).
+                readonly property var pageIcon: Workspace.propertiesRevision >= 0 ? Workspace.pageIconOf(row.path) : ({})
 
                 // Full width (ListView places delegates at x 0); the row itself is inset.
                 readonly property real margin: root.rowMargin

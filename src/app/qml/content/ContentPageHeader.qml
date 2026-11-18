@@ -116,13 +116,12 @@ Item {
                                           : journalDate === DatesHelper.addDays(DatesHelper.today, -1) ? qsTr("Yesterday")
                                           : journalDate === DatesHelper.addDays(DatesHelper.today, 1) ? qsTr("Tomorrow") : ""
     readonly property bool documentMode: controller ? controller.documentMode : false
-    // Workspace.revision: the summary follows saves (frontmatter edits), renames — the tags naming
-    // a renamed page are rewritten after it moved — and other devices. Workspace.indexing: a page
-    // opened while the notebook is still being read (at start-up) gets its tags and aliases once
-    // the index has it. Both read for real: qmlcachegen compiles a bare `void Workspace.revision`
-    // away, and the binding's dependency with it (the tag strip of a renamed page came only with
-    // some later change).
-    // (PageTools does it: summaryTools below.)
+    // The summary follows the notebook (PageTools, summaryTools below): edits of this page
+    // (frontmatter, aliases, tags), the names (renames — the tags naming a renamed page are
+    // rewritten after it moved —, pages created or deleted), the notes linking or tagging it, any
+    // change of the notebook's tags, other devices; a page opened while the notebook is still being
+    // read (at start-up) gets its tags and aliases once the index has it. An edit of another page
+    // computes nothing (pagetools.h).
     PageTools {
         id: summaryTools
         workspace: Workspace

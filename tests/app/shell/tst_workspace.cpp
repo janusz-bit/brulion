@@ -1928,6 +1928,92 @@ private Q_SLOTS:
         QCOMPARE(paths(), (QStringList{ u"assets"_s, u"Projekty"_s, u"Pusty"_s, u"A.md"_s, u"b.md"_s }));
     }
 
+    // The narrow revisions (docs/UI.md "Following changes"): an edit of a page's text — every
+    // autosave — bumps `revision` alone; names and properties grow only when they changed.
+    void namesAndPropertiesRevisions()
+    {
+        auto ws = open({{u"Dom.md"_s, u"- zażółć\n"_s},
+                        {u"Łąka.md"_s, u"---\naliases: [Pole]\nicon: 🌼\n---\n- gęślą jaźń\n"_s}});
+        QVERIFY(ws->ready());
+        QSignalSpy revision(ws.get(), &Workspace::revisionChanged);
+        QSignalSpy names(ws.get(), &Workspace::namesRevisionChanged);
+        QSignalSpy properties(ws.get(), &Workspace::propertiesRevisionChanged);
+        const auto counts = [&] { return QList<int>{int(revision.size()), int(names.size()), int(properties.size())}; };
+        const auto reset = [&] {
+            revision.clear();
+            names.clear();
+            properties.clear();
+        };
+        const int pageCount = ws->pageCount();
+
+        // A body edit, also of a page with properties: the revision only.
+        QVERIFY(ws->writeFile(u"Dom.md"_s, u"- zażółć gęślą\n"_s));
+        QVERIFY(ws->writeFile(u"Łąka.md"_s, u"---\naliases: [Pole]\nicon: 🌼\n---\n- gęślą jaźń, więcej\n"_s));
+        QCOMPARE(counts(), (QList<int>{2, 0, 0}));
+        reset();
+
+        // An `icon:` edit: properties, not names.
+        const int before = ws->propertiesRevision();
+        const QVariantMap iconBefore = ws->pageIconOf(u"Łąka.md"_s);
+        QCOMPARE(iconBefore.value(u"kind"_s).toString(), u"emoji"_s);
+        QVERIFY(ws->writeFile(u"Łąka.md"_s, u"---\naliases: [Pole]\nicon: 🌻\n---\n- gęślą jaźń, więcej\n"_s));
+        QCOMPARE(counts(), (QList<int>{1, 0, 1}));
+        QCOMPARE(ws->propertiesRevision(), before + 1);
+        QVERIFY(ws->pageIconOf(u"Łąka.md"_s) != iconBefore);
+        reset();
+
+        // An alias change: the names (links may resolve elsewhere), and the properties it is one of.
+        QVERIFY(ws->writeFile(u"Łąka.md"_s, u"---\naliases: [Polana]\nicon: 🌻\n---\n- gęślą jaźń, więcej\n"_s));
+        QCOMPARE(revision.size(), 1);
+        QCOMPARE(names.size(), 1);
+        reset();
+
+        // A new page: the names (and its properties, none here, change nothing).
+        const int namesBefore = ws->namesRevision();
+        QVERIFY(ws->writeFile(u"Nowa.md"_s, u"- świeża\n"_s));
+        QCOMPARE(counts(), (QList<int>{1, 1, 0}));
+        QCOMPARE(ws->namesRevision(), namesBefore + 1);
+        QCOMPARE(ws->pageCount(), pageCount + 1);
+        reset();
+        // A new page with properties: both.
+        QVERIFY(ws->writeFile(u"Ikona.md"_s, u"---\nicon: 🦔\n---\n- jeż\n"_s));
+        QCOMPARE(counts(), (QList<int>{1, 1, 1}));
+        reset();
+
+        // A rename: the names (the page's properties move with it: they were somewhere else).
+        QVERIFY(!ws->renamePage(u"Dom.md"_s, u"Dóm"_s).isEmpty());
+        QVERIFY(revision.size() >= 1);
+        QVERIFY(names.size() >= 1);
+        reset();
+
+        // A folder (no file of its own): the names alone.
+        QVERIFY(!ws->createFolder(u"Źródła"_s).isEmpty());
+        QCOMPARE(names.size(), 1);
+        QCOMPARE(properties.size(), 0);
+        reset();
+
+        // A deletion: the names, and the properties of the page that went.
+        QVERIFY(!ws->deletePage(u"Ikona.md"_s).isEmpty());
+        QVERIFY(names.size() >= 1);
+        QVERIFY(properties.size() >= 1);
+        reset();
+
+        // `tasks: ignore` (the top bar's menu follows it); text after it changes nothing.
+        QVERIFY(ws->writeFile(u"Nowa.md"_s, u"---\ntasks: ignore\n---\n- świeża\n"_s));
+        QCOMPARE(counts(), (QList<int>{1, 0, 1}));
+        QVERIFY(ws->tasksIgnored(u"Nowa.md"_s));
+        reset();
+        QVERIFY(ws->writeFile(u"Nowa.md"_s, u"---\ntasks: ignore\n---\n- świeża, druga\n"_s));
+        QCOMPARE(counts(), (QList<int>{1, 0, 0}));
+
+        // Closing: both (every name went).
+        reset();
+        ws->close();
+        QCOMPARE(names.size(), 1);
+        QCOMPARE(properties.size(), 1);
+        QCOMPARE(ws->pageCount(), 0);
+    }
+
     // An edit of a page's text (every autosave) leaves the tree alone: no rebuild, no model
     // signal; files that come, go or change their name still refresh it.
     void folderTreeIgnoresEdits()

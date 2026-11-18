@@ -126,7 +126,7 @@ struct References {
     int tagged = 0;
 };
 
-References pageReferences(const VaultIndex *idx, const QString &path)
+References pageReferences(const VaultIndex *idx, const QString &path, QSet<QString> *linkingOut)
 {
     QSet<QString> linking;
     const QList<Backlink> backlinks = idx->backlinks(path);
@@ -135,22 +135,32 @@ References pageReferences(const VaultIndex *idx, const QString &path)
     const QList<TagReference> tagged = idx->tagReferences(path);
     for (const TagReference &r : tagged)
         linking.insert(r.path);
-    return {int(linking.size()), int(tagged.size())};
+    const References refs{int(linking.size()), int(tagged.size())};
+    if (linkingOut)
+        linkingOut->unite(linking);
+    return refs;
 }
 
-/// summary()'s journalDate, aliases, tags, properties and words of the indexed note.
-void noteSummary(QVariantMap &out, const ParsedNote &note, const VaultIndex *idx)
+/// summary()'s journalDate, aliases, tags, properties and words of the indexed note. The page's
+/// own tags go to `tagsOut`, the notes carrying them (whose spelling may be shown) to `notesOut`.
+void noteSummary(QVariantMap &out, const ParsedNote &note, const VaultIndex *idx, QSet<QString> *notesOut,
+                 QSet<QString> *tagsOut)
 {
     if (note.journalDate)
         out.insert(u"journalDate"_s, isoDate(*note.journalDate));
     out.insert(u"aliases"_s, note.aliases);
 
+    const QStringList own = pageTags(note);
+    if (tagsOut)
+        tagsOut->unite(QSet<QString>(own.cbegin(), own.cend()));
     QHash<QString, QString> display;
     const QList<TagCount> all = idx->tags();
-    for (const TagCount &t : all)
+    for (const TagCount &t : all) {
         display.insert(t.tag, t.display.isEmpty() ? t.tag : t.display);
+        if (notesOut && own.contains(t.tag))
+            notesOut->unite(QSet<QString>(t.paths.cbegin(), t.paths.cend()));
+    }
     QVariantList tags;
-    const QStringList own = pageTags(note);
     for (const QString &t : own)
         tags.append(QVariantMap{{u"tag"_s, t}, {u"display"_s, display.value(t, t)}});
     out.insert(u"tags"_s, tags);
@@ -205,9 +215,10 @@ void PageTools::setWorkspace(shell::Workspace *workspace)
         disconnect(m_workspace, nullptr, this, nullptr);
     m_workspace = workspace;
     if (m_workspace) {
-        // (The page header's summary follows saves, renames, other devices, and the index being
-        // read at start-up.)
-        connect(m_workspace, &shell::Workspace::revisionChanged, this, &PageTools::refreshSummary);
+        // (The page header's summary follows saves of what it shows, renames, other devices, and
+        // the index being read at start-up.)
+        connect(m_workspace, &shell::Workspace::revisionChanged, this, &PageTools::notebookChanged);
+        connect(m_workspace, &shell::Workspace::namesRevisionChanged, this, &PageTools::notebookChanged);
         connect(m_workspace, &shell::Workspace::indexingChanged, this, &PageTools::refreshSummary);
     }
     Q_EMIT workspaceChanged();
@@ -225,11 +236,90 @@ void PageTools::setPath(const QString &path)
 
 void PageTools::refreshSummary()
 {
-    const QVariantMap summary = m_path.isEmpty() ? QVariantMap() : this->summary(m_path);
+    Reads reads;
+    const QVariantMap summary = m_path.isEmpty() ? QVariantMap() : summaryOf(m_path, &reads);
+    if (!m_path.isEmpty())
+        ++m_summariesComputed;
+    m_reads = std::move(reads);
+    const VaultIndex *idx = m_workspace ? m_workspace->index() : nullptr;
+    m_indexSerial = idx ? idx->serial() : 0;
+    m_indexVersion = idx ? idx->version() : -1;
     if (summary == m_summary)
         return;
     m_summary = summary;
     Q_EMIT summaryChanged();
+}
+
+void PageTools::notebookChanged()
+{
+    if (m_path.isEmpty())
+        return; // (the summary is empty already)
+    const VaultIndex *idx = m_workspace ? m_workspace->index() : nullptr;
+    if (!idx || idx->serial() != m_indexSerial) {
+        refreshSummary(); // another notebook, or none
+        return;
+    }
+    if (idx->version() == m_indexVersion)
+        return; // (names after the revision: seen already)
+    const IndexChanges changes = idx->changesSince(m_indexVersion);
+    if (!changes.complete || changes.names) {
+        refreshSummary();
+        return;
+    }
+    switch (summaryAffected(*idx, changes)) {
+    case Affected::No: m_indexVersion = idx->version(); break;
+    case Affected::PageOnly: refreshLater(); break;
+    case Affected::Yes: refreshSummary(); break;
+    }
+}
+
+void PageTools::refreshLater()
+{
+    if (m_refreshPosted)
+        return;
+    m_refreshPosted = true;
+    QMetaObject::invokeMethod(this, &PageTools::refreshPosted, Qt::QueuedConnection);
+}
+
+void PageTools::refreshPosted()
+{
+    m_refreshPosted = false;
+    const VaultIndex *idx = m_workspace ? m_workspace->index() : nullptr;
+    // (Computed meanwhile for another change: nothing left.)
+    if (!m_path.isEmpty() && idx && idx->serial() == m_indexSerial && idx->version() == m_indexVersion)
+        return;
+    refreshSummary();
+}
+
+PageTools::Affected PageTools::summaryAffected(const VaultIndex &index, const IndexChanges &changes) const
+{
+    const VaultPath path = paths::normalize(m_path);
+    // A page not written yet: what names it is unresolved links and tags, cheap to read again.
+    if (!index.note(path))
+        return Affected::Yes;
+    bool page = false;
+    for (const VaultPath &changed : changes.notes) {
+        if (changed == path) {
+            page = true;
+            continue;
+        }
+        // A note it read: a referrer (it may have stopped linking), a carrier of a tag shown (its
+        // count, its spelling).
+        if (m_reads.notes.contains(changed))
+            return Affected::Yes;
+        const ParsedNote *note = index.note(changed);
+        if (!note)
+            continue; // removed: it read nothing of it (else it were above)
+        // A note that carries such a tag now, or links here now.
+        for (const QString &tag : note->tags) {
+            if (m_reads.tags.contains(tag) || (!m_reads.tagPrefix.isEmpty() && tag.startsWith(m_reads.tagPrefix)))
+                return Affected::Yes;
+        }
+        const QList<ResolvedLink> links = index.outgoingLinks(changed);
+        if (std::ranges::any_of(links, [&path](const ResolvedLink &l) { return l.target == path; }))
+            return Affected::Yes;
+    }
+    return page ? Affected::PageOnly : Affected::No;
 }
 
 QVariantList PageTools::folderParts() const
@@ -368,6 +458,11 @@ QString PageTools::validateTitle(const QString &rawPath, const QString &rawTitle
 
 QVariantMap PageTools::summary(const QString &rawPath) const
 {
+    return summaryOf(rawPath, nullptr);
+}
+
+QVariantMap PageTools::summaryOf(const QString &rawPath, Reads *reads) const
+{
     const QString path = paths::normalize(rawPath);
     QVariantMap out{ { u"exists"_s, false },
                      { u"title"_s, paths::pageTitle(path) },
@@ -392,29 +487,39 @@ QVariantMap PageTools::summary(const QString &rawPath) const
     const VaultIndex *idx = m_workspace->index();
     const ParsedNote *note = idx ? idx->note(path) : nullptr;
     if (note)
-        noteSummary(out, *note, idx);
+        noteSummary(out, *note, idx, reads ? &reads->notes : nullptr, reads ? &reads->tags : nullptr);
     // Pages linking here or carrying a tag that names this page — also for a page not written
     // yet (a link's or a tag's): what already names it.
     if (idx && (note || !path.isEmpty())) {
-        const References refs = pageReferences(idx, path);
+        const References refs = pageReferences(idx, path, reads ? &reads->notes : nullptr);
         out.insert(u"backlinks"_s, refs.pages);
-        out.insert(u"tag"_s, tagInfo(idx, path, refs.tagged));
+        out.insert(u"tag"_s, tagInfo(idx, path, refs.tagged, reads));
     }
     return out;
 }
 
-QVariantMap PageTools::tagInfo(const VaultIndex *idx, const QString &path, int references)
+QVariantMap PageTools::tagInfo(const VaultIndex *idx, const QString &path, int references, Reads *reads)
 {
     const PageTag tag = pageTag(idx, path);
     QVariantList subTags;
     const QString prefix = tag.key + u'/';
     if (idx && !tag.key.isEmpty()) {
+        // The tags that may name the page (pageTag() picks among them by their use).
+        QStringList naming = idx->tagsNaming(path);
+        naming.append(tag.key);
+        if (reads) {
+            reads->tags.unite(QSet<QString>(naming.cbegin(), naming.cend()));
+            reads->tagPrefix = prefix;
+        }
         const QList<TagCount> all = idx->tags();
         for (const TagCount &t : all) {
-            if (t.tag.startsWith(prefix))
+            const bool sub = t.tag.startsWith(prefix);
+            if (sub)
                 subTags.append(QVariantMap{{u"tag"_s, t.tag},
                                            {u"display"_s, t.display.isEmpty() ? t.tag : t.display},
                                            {u"count"_s, t.count}});
+            if (reads && (sub || naming.contains(t.tag)))
+                reads->notes.unite(QSet<QString>(t.paths.cbegin(), t.paths.cend()));
         }
     }
     return {{u"key"_s, tag.key},

@@ -15,8 +15,10 @@ Item {
     id: root
 
     property string date
-    /// The rows (Workspace.dayPlan), followed through Workspace.revision.
-    readonly property list<var> rows: root.date === "" || Workspace.revision < 0 ? [] : UiModels.withDefaults(
+    /// The rows (Workspace.dayPlan), followed through Workspace.revision (what blocks say: every
+    /// save) while shown — the section folded makes no plan (its Loader), but the side panel of a
+    /// Journal that ShellRouteView keeps hidden stays.
+    readonly property list<var> rows: !root.visible || root.date === "" || Workspace.revision < 0 ? [] : UiModels.withDefaults(
             Workspace.dayPlan(root.date), {
         time: "", title: "", path: "", line: 0, status: "", due: false, scheduled: false, reminder: false,
         alarm: false, recurring: false
