@@ -20,6 +20,7 @@
 #include <QTimeZone>
 
 #include <algorithm>
+#include <cstdlib>
 
 using namespace Qt::StringLiterals;
 using namespace std::chrono_literals;
@@ -537,6 +538,7 @@ bool VaultPrivate::untrackFile(const VaultPath &path)
     contents.remove(path);
     bomPaths.remove(path);
     staleContent.remove(path);
+    unsettled.remove(path);
     diskNames.remove(path);
     removeChild(childFiles, path);
     sortedFilesValid = false;
@@ -666,6 +668,7 @@ void VaultPrivate::reset()
     contents.clear();
     bomPaths.clear();
     staleContent.clear();
+    unsettled.clear();
     childFiles.clear();
     childDirs.clear();
     sortedFiles.clear();
@@ -777,8 +780,45 @@ void VaultPrivate::takeRead(const VaultPath &path, const std::optional<FileStat>
         staleContent.insert(path);
         scheduleCheck(path);
     } else {
+        const bool sameAsKnown = hashes.value(path) == hash;
         rememberContent(path, bytes, asText, hash);
+        if (sameAsKnown && unsettled.contains(path))
+            settleIfDue(path);
+        else
+            noteUnsettled(*before, false);
     }
+}
+
+void VaultPrivate::noteUnsettled(const FileStat &stat, bool ownWrite, std::optional<bool> fineStamp)
+{
+    const VaultPath &path = stat.path;
+    const qint64 nowMs = now().toMSecsSinceEpoch();
+    // Only what listings compare by content (a binary file's verification would report it
+    // modified each time). Another program's write is recent by its own stamp (whose clock may be
+    // a network server's: off by more than kSettleMs, such a write is not caught here).
+    const bool recent = ownWrite || std::abs(nowMs - stat.mtime) < vaultutil::kSettleMs;
+    if (!recent || !comparesContent(stat)
+        || (fineStamp ? *fineStamp : vaultutil::fineMtime(absPath(path)).has_value())) {
+        unsettled.remove(path);
+        return;
+    }
+    if (!unsettled.contains(path) && unsettled.size() >= kMaxUnsettled) {
+        auto oldest = unsettled.begin(); // (rare: thousands of notes written within seconds)
+        for (auto it = unsettled.begin(); it != unsettled.end(); ++it) {
+            if (*it < *oldest)
+                oldest = it;
+        }
+        unsettled.erase(oldest);
+    }
+    unsettled.insert(path, nowMs);
+}
+
+void VaultPrivate::settleIfDue(const VaultPath &path)
+{
+    // A comparison after the tick has passed saw any write of that tick; later ones move the stamp.
+    if (const auto it = unsettled.constFind(path);
+        it != unsettled.cend() && now().toMSecsSinceEpoch() - *it >= vaultutil::kSettleMs)
+        unsettled.erase(it);
 }
 
 void VaultPrivate::snapshotCached(const VaultPath &path, ChangeSource reason)
@@ -850,7 +890,8 @@ void VaultPrivate::refreshKnownContent(const VaultPath &path, bool asText, qint6
     // Text is read when History needs its content or when it is small enough to verify that
     // nothing changed behind an unchanged stat; binary content only when its hash is unknown
     // and the size alone cannot tell. Nothing above the cache limit is ever read here.
-    const bool needed = textual ? (!hashes.contains(path) || !contents.contains(path) || size <= kVerifyBytes)
+    const bool needed = textual ? (!hashes.contains(path) || !contents.contains(path) || size <= kVerifyBytes
+                                   || unsettled.contains(path))
                                 : (!hashes.contains(path) && size == newSize);
     if (!needed || size > ContentCache::kMaxItemBytes)
         return;
@@ -875,13 +916,28 @@ void VaultPrivate::refreshKnownContent(const VaultPath &path, bool asText, qint6
 }
 
 bool VaultPrivate::writeFile(const VaultPath &path, const QByteArray &bytes, ChangeSource source, bool asText,
-                             QList<VaultChange> &changes, const DiskRead *read)
+                             QList<VaultChange> &changes, const DiskRead *read, const vaultutil::ReadMark *expect,
+                             bool *changedMeanwhile)
 {
     if (path.isEmpty())
         return fail(Vault::tr("Cannot write: empty path"));
-    if (!read) // (the caller who read it resolved its spelling just before)
+    if (!read && !expect) // (the caller who read it resolved its spelling just before)
         resolveSpelling(path);
     const std::optional<FileStat> disk = diskStat(path);
+    // A compare-and-swap: changed since the caller's read (or there now, when nothing was), the
+    // file is taken in (External, its predecessor in History) instead of being written over.
+    const auto changedSinceRead = [&] {
+        if (changedMeanwhile)
+            *changedMeanwhile = true;
+        if (vaultutil::isTracked(path)) {
+            if (files.contains(path))
+                staleContent.insert(path); // (read again: an unchanged stat proves nothing here)
+            changes += reconcile(ScanScope{{}, {}, {path}}, ChangeSource::External);
+        }
+        //: The reason in "Cannot write %1: %2"
+        const QString why = Vault::tr("another program changed it meanwhile");
+        return fail(Vault::tr("Cannot write %1: %2").arg(path, why));
+    };
     // The caller's read stands for the file only while its stat is the one it read behind.
     if (read && (!disk || !sameStat(*disk, read->stat) || read->bytes.size() > ContentCache::kMaxItemBytes))
         read = nullptr;
@@ -892,13 +948,16 @@ bool VaultPrivate::writeFile(const VaultPath &path, const QByteArray &bytes, Cha
     // Such links are not listed either.
     if (!disk && QFileInfo(absPath(path)).isSymLink())
         return fail(Vault::tr("Cannot write %1: it is a link that does not lead to a file").arg(path));
+    if (expect
+        && (expect->absent ? disk.has_value() : !disk || disk->size != expect->size || disk->mtime != expect->mtimeMs))
+        return changedSinceRead();
     const bool tracked = vaultutil::isTracked(path);
     if (tracked) {
         // Case-insensitive storage (Android shared storage, Windows, macOS): `path` reaches a
         // known file spelled differently; update that one instead of tracking a duplicate.
         if (!files.contains(path) && disk) {
             if (const std::optional<VaultPath> variant = storedCaseVariant(path, *disk))
-                return writeFile(*variant, bytes, source, asText, changes);
+                return writeFile(*variant, bytes, source, asText, changes, nullptr, expect, changedMeanwhile);
         }
         const auto known = files.constFind(path);
         const bool changedBehind = known == files.cend() ? disk.has_value() : (!disk || !sameStat(*disk, *known));
@@ -928,7 +987,9 @@ bool VaultPrivate::writeFile(const VaultPath &path, const QByteArray &bytes, Cha
     const bool pendingBefore = foreignBatchPending(dir);
     const std::function<void()> hook =
             beforeRenameHook ? std::function<void()>([this, &path] { beforeRenameHook(path); }) : nullptr;
-    const vaultutil::StampedSave save = vaultutil::saveAtomicallyStamped(absPath(path), data, hook);
+    const vaultutil::StampedSave save = vaultutil::saveAtomicallyStamped(absPath(path), data, hook, expect);
+    if (save.changed)
+        return changedSinceRead();
     if (!save.ok)
         return fail(Vault::tr("Cannot write %1: %2").arg(path, save.error));
     if (!tracked)
@@ -941,18 +1002,19 @@ bool VaultPrivate::writeFile(const VaultPath &path, const QByteArray &bytes, Cha
         noteOwnWrite(dir, save, pendingBefore);
     // Known hash = what we wrote: the watcher's echo of this write is recognised as such.
     rememberContent(path, data, asText, dataHash);
+    noteUnsettled(*written, true, save.fineStamps);
     watchFile(path);
     changes.append(VaultChange{existed ? ChangeType::Modified : ChangeType::Created, path, {}, source});
     return true;
 }
 
 bool VaultPrivate::write(const VaultPath &path, const QByteArray &bytes, ChangeSource source, bool asText,
-                         const DiskRead *read)
+                         const DiskRead *read, const vaultutil::ReadMark *expect, bool *changedMeanwhile)
 {
     if (!requireOpen() || !requireStorage())
         return false;
     QList<VaultChange> changes;
-    const bool ok = writeFile(path, bytes, source, asText, changes, read);
+    const bool ok = writeFile(path, bytes, source, asText, changes, read, expect, changedMeanwhile);
     finish(changes);
     return ok;
 }
@@ -972,6 +1034,24 @@ VaultPath VaultPrivate::create(const VaultPath &path, const QByteArray &bytes, C
         return isTakenCaseInsensitive(candidate) || existsOnDisk(candidate);
     });
     return write(target, bytes, source, asText) ? target : VaultPath();
+}
+
+void VaultPrivate::removeLeftovers(const QStringList &rels)
+{
+    // A write stopped between its temporary file and the rename (a crash, a kill, a power cut)
+    // leaves the file behind: the vault ignores it, sync and backups leave it out, but it takes
+    // space and shows in file managers. Only those found while listing the vault's own folders
+    // (links it does not follow are never entered) and old enough (vaultutil::removeLeftoverTemp()).
+    const qint64 nowMs = now().toMSecsSinceEpoch();
+    int removed = 0;
+    for (const QString &rel : rels) {
+        if (vaultutil::removeLeftoverTemp(absOfDiskRel(rel), nowMs))
+            ++removed;
+    }
+    if (history)
+        removed += history->removeLeftovers(nowMs);
+    if (removed > 0)
+        qCInfo(lcVault).noquote() << u"Removed %1 leftover temporary file(s) of interrupted writes"_s.arg(removed);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -1153,6 +1233,7 @@ bool Vault::open(QString *error)
     d->isOpen = true;
     d->error.clear();
     d->noteListing(listing, true);
+    d->removeLeftovers(listing.leftovers);
     const bool configDiffers = d->loadConfig();
     if (watch)
         d->startWatching();
@@ -1389,7 +1470,13 @@ WriteOutcome Vault::writeTextIfUnchanged(const VaultPath &rawPath, const QString
     // written it a moment ago, before its change reached the vault. (A link to a file, or a file
     // in a linked folder the vault does not follow, is none: write() refuses it.)
     std::optional<DiskRead> read;
-    if (const std::optional<FileStat> disk = d->diskStat(path); disk && !disk->isDir) {
+    // What the file is right before the read: the write's rename goes over nothing else (a file
+    // that appeared meanwhile included). Only for what the vault sees: a file, or nothing at all
+    // (a link or a file behind one is refused by write(), as before).
+    vaultutil::ReadMark mark = vaultutil::markBeforeRead(d->absPath(path));
+    const std::optional<FileStat> disk = d->diskStat(path);
+    const bool marked = disk ? !disk->isDir : mark.absent;
+    if (disk && !disk->isDir) {
         bool ok = false;
         QByteArray bytes = d->readDisk(path, kMaxReadBytes, &ok);
         if (!ok) {
@@ -1408,11 +1495,15 @@ WriteOutcome Vault::writeTextIfUnchanged(const VaultPath &rawPath, const QString
             }
             return WriteOutcome::Changed;
         }
+        mark.bytes = bytes;
         read = DiskRead{*disk, std::move(bytes)};
     }
     // The write checks the content it just compared without reading the file again.
-    return d->write(path, content.toUtf8(), source, true, read ? &*read : nullptr) ? WriteOutcome::Written
-                                                                                   : WriteOutcome::Failed;
+    bool changedMeanwhile = false;
+    if (d->write(path, content.toUtf8(), source, true, read ? &*read : nullptr, marked ? &mark : nullptr,
+                 &changedMeanwhile))
+        return WriteOutcome::Written;
+    return changedMeanwhile ? WriteOutcome::Changed : WriteOutcome::Failed;
 }
 
 VaultPath Vault::create(const VaultPath &path, const QString &content, ChangeSource source)

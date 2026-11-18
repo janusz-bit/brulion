@@ -113,6 +113,11 @@ public:
     /// number of snapshots removed from indexes.
     int prune(int maxPerPath = 50, int maxAgeDays = 90, int keepAtLeast = 5);
 
+    /// Removes what interrupted writes of indexes and snapshots left in History's folders
+    /// (vaultutil::removeLeftoverTemp(): old enough before `nowMs`, ms since the epoch); returns how
+    /// many. The vault calls it when it opens.
+    int removeLeftovers(qint64 nowMs);
+
     /// Description of the last error.
     QString errorString() const;
 

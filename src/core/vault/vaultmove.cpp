@@ -94,6 +94,8 @@ void VaultPrivate::moveFileState(const VaultPath &from, const FileStat &to)
     const std::optional<QByteArray> content = contents.take(from);
     const bool bom = bomPaths.contains(from);
     const bool stale = staleContent.contains(from);
+    const std::optional<qint64> unsettledAt =
+            unsettled.contains(from) ? std::optional<qint64>(unsettled.value(from)) : std::nullopt;
     untrackFile(from);
     moveFileWatch(from, to.path);
     if (history && !history->rename(from, to.path))
@@ -111,6 +113,8 @@ void VaultPrivate::moveFileState(const VaultPath &from, const FileStat &to)
         staleContent.insert(to.path);
         scheduleCheck(to.path);
     }
+    if (unsettledAt)
+        unsettled.insert(to.path, *unsettledAt); // (a rename keeps the stamp)
     watchFile(to.path);
 }
 

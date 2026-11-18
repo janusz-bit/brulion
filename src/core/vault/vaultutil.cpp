@@ -12,14 +12,15 @@
 #include <QSaveFile>
 #include <QSet>
 #include <QThread>
+#include <QTimeZone>
 
 #include <algorithm>
 #include <atomic>
-#include <cerrno>
 #include <chrono>
 #include <cstdlib>
-#include <cstring>
 #include <filesystem>
+#include <iterator>
+#include <limits>
 
 using namespace Qt::StringLiterals;
 
@@ -27,6 +28,7 @@ namespace brulion::vaultutil {
 
 namespace {
 std::atomic<FileSync> g_fileSync{nullptr};
+std::atomic<FileReplace> g_fileReplace{nullptr};
 } // namespace
 
 void setFileSync(FileSync sync)
@@ -37,6 +39,16 @@ void setFileSync(FileSync sync)
 FileSync fileSync()
 {
     return g_fileSync.load();
+}
+
+void setFileReplace(FileReplace replace)
+{
+    g_fileReplace.store(replace);
+}
+
+FileReplace fileReplace()
+{
+    return g_fileReplace.load();
 }
 
 QString configFolder()
@@ -152,18 +164,91 @@ std::filesystem::path fsPath(const QString &absolutePath)
             std::u8string(reinterpret_cast<const char8_t *>(utf8.constData()), static_cast<size_t>(utf8.size())));
 }
 
+/// std::filesystem::rename(): the rename when the platform sets none (filesync.h).
+Replaced replaceWithStd(const QString &from, const QString &to, QString *error)
+{
+    std::error_code code;
+    std::filesystem::rename(fsPath(from), fsPath(to), code);
+    if (!code)
+        return Replaced::Done;
+    if (error)
+        *error = QString::fromStdString(code.message());
+    // (Windows' refusals of a held file map to permission_denied in the C++ libraries.)
+    return code == std::errc::permission_denied || code == std::errc::device_or_resource_busy ? Replaced::Busy
+                                                                                              : Replaced::Failed;
+}
+
+qint64 mtimeMsOf(const QFileInfo &info)
+{
+    return info.fileTime(QFileDevice::FileModificationTime, QTimeZone(QTimeZone::UTC)).toMSecsSinceEpoch();
+}
+
+QString changedMeanwhile()
+{
+    //: The reason in "Cannot write %1: %2"
+    return QCoreApplication::translate("brulion::Vault", "another program changed it meanwhile");
+}
+
 } // namespace
 
+ReadMark markBeforeRead(const QString &absolutePath)
+{
+    ReadMark mark;
+    const QFileInfo info(absolutePath);
+    if (!info.exists() && !info.isSymLink()) {
+        mark.absent = true;
+    } else {
+        mark.size = info.size();
+        mark.mtimeMs = mtimeMsOf(info);
+        mark.fineMtime = fineMtime(absolutePath);
+    }
+    mark.since.start();
+    return mark;
+}
+
+bool stampsVouch(const ReadMark &mark, std::optional<qint64> fine, std::optional<qint64> nowStamp)
+{
+    // Not racy: the read came at least a tick after the file's last change. In the file system's
+    // clock, now (the stamp of a file just written) minus the file's stamp exceeds two ticks plus
+    // the time since the mark (an upper bound of the time from the read to now).
+    const qint64 since = mark.since.isValid() ? mark.since.nsecsElapsed() : std::numeric_limits<qint64>::max() / 2;
+    return fine && nowStamp && *nowStamp - *fine >= kRacyNs + since;
+}
+
+bool stillAsRead(const QString &absolutePath, const ReadMark &mark, std::optional<qint64> nowStamp)
+{
+    const QFileInfo info(absolutePath);
+    if (mark.absent)
+        return !info.exists() && !info.isSymLink();
+    if (info.isSymLink() || !info.isFile() || info.size() != mark.size || mtimeMsOf(info) != mark.mtimeMs)
+        return false;
+    const std::optional<qint64> fine = fineMtime(absolutePath);
+    if (fine != mark.fineMtime)
+        return false;
+    if (stampsVouch(mark, fine, nowStamp))
+        return true;
+    // The stamps cannot tell: the bytes decide (this one file's, read again).
+    const ContentRead now = readContent(absolutePath, mark.bytes.size());
+    return now.ok() && now.bytes == mark.bytes;
+}
+
 StampedSave saveAtomicallyStamped(const QString &absolutePath, QByteArrayView bytes,
-                                  const std::function<void()> &beforeRename)
+                                  const std::function<void()> &beforeRename, const ReadMark *expect)
 {
     StampedSave out;
     const FileSync sync = fileSync();
     if (!sync) {
-        // No sync of its own (filesync.h): QSaveFile's, without stamps.
+        // No sync of its own (filesync.h): QSaveFile's, without stamps. What the caller read is
+        // checked before the commit (which syncs, then renames).
         if (beforeRename)
             beforeRename();
+        if (expect && !stillAsRead(absolutePath, *expect, std::nullopt)) {
+            out.changed = true;
+            out.error = changedMeanwhile();
+            return out;
+        }
         out.ok = saveAtomically(absolutePath, bytes, &out.error);
+        out.fineStamps = out.ok && fineMtime(absolutePath).has_value();
         return out;
     }
     const QFileInfo target(absolutePath);
@@ -190,40 +275,74 @@ StampedSave saveAtomicallyStamped(const QString &absolutePath, QByteArrayView by
         out.error = why;
         temp.close();
         temp.remove();
+        out.before = out.afterTemp = out.beforeRename = out.fileMtime = std::nullopt;
         return out;
     };
     if (target.exists())
         temp.setPermissions(target.permissions()); // (QSaveFile keeps them too)
     if (temp.write(bytes.data(), bytes.size()) != bytes.size() || !temp.flush())
         return failed(temp.errorString());
-    if (!sync(temp))
-        return failed(QString::fromLocal8Bit(std::strerror(errno)));
+    QString syncError;
+    if (!sync(temp, &syncError))
+        return failed(syncError);
     out.fileMtime = fineMtime(temp.fileName());
     out.fileSize = temp.size();
     temp.close();
     if (beforeRename)
         beforeRename();
     // A rename refused for a moment (Windows: a virus scanner, an indexer or a sync client holding
-    // the file) is tried again after a tenth of a second, as saveAtomically() does; the stamp before
-    // it is taken again each time (what changed while waiting is not ours).
-    std::error_code error;
-    for (int attempt = 1;; ++attempt) {
+    // one of the files) is tried again for about a second (kReplaceWaitsMs); the stamp before it is
+    // taken again each time (what changed while waiting is not ours), and so is the caller's check.
+    const FileReplace replace = fileReplace() ? fileReplace() : &replaceWithStd;
+    Replaced result = Replaced::Failed;
+    QString replaceError;
+    for (std::size_t attempt = 0;; ++attempt) {
+        if (expect && !stillAsRead(absolutePath, *expect, out.fileMtime)) {
+            out.changed = true;
+            return failed(changedMeanwhile());
+        }
         out.beforeRename = fineMtime(dir);
-        error.clear();
-        std::filesystem::rename(fsPath(temp.fileName()), fsPath(absolutePath), error);
-        if (!error || attempt == 4)
+        replaceError.clear();
+        result = replace(temp.fileName(), absolutePath, &replaceError);
+        if (result != Replaced::Busy || attempt == std::size(kReplaceWaitsMs))
             break;
-        QThread::msleep(15 * attempt); // 15 + 30 + 45 ms
+        QThread::msleep(kReplaceWaitsMs[attempt]);
     }
-    if (error) {
-        out.error = QString::fromStdString(error.message());
-        QFile::remove(temp.fileName());
-        out.before = out.afterTemp = out.beforeRename = out.fileMtime = std::nullopt;
-        return out;
-    }
+    if (result != Replaced::Done)
+        return failed(replaceError);
     out.after = fineMtime(dir);
+    out.fineStamps = out.fileMtime.has_value();
     out.ok = true;
     return out;
+}
+
+bool isLeftoverTempName(QStringView name)
+{
+    static const QRegularExpression own(
+            u"^\\.brulion-tmp-(?:[0-9a-f]{16}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+            u"|CaseProbe-[A-Za-z0-9]{6})\\z"_s);
+    return name.startsWith(u".brulion-tmp-"_s) && own.matchView(name).hasMatch();
+}
+
+bool removeLeftoverTemp(const QString &absolutePath, qint64 nowMs)
+{
+    // A fresh look (lstat): no link, no folder, our own name only.
+    const QFileInfo info(absolutePath);
+    if (info.isSymLink() || !info.isFile() || !isLeftoverTempName(info.fileName()))
+        return false;
+    qint64 newest = std::numeric_limits<qint64>::min();
+    for (const QFileDevice::FileTime which :
+         {QFileDevice::FileModificationTime, QFileDevice::FileMetadataChangeTime, QFileDevice::FileBirthTime}) {
+        const QDateTime time = info.fileTime(which, QTimeZone(QTimeZone::UTC));
+        if (time.isValid())
+            newest = std::max(newest, time.toMSecsSinceEpoch());
+    }
+    // (No time at all, or one from the future — another device's clock, a clock set back: kept.)
+    if (newest == std::numeric_limits<qint64>::min() || nowMs - newest < kLeftoverAgeMs)
+        return false;
+    // remove() unlinks the entry: had another program put a link there since the look above, the
+    // link would go, never what it points to.
+    return QFile::remove(absolutePath);
 }
 
 std::optional<qint64> fineMtime(const QString &absolutePath)

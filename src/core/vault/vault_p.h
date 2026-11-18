@@ -50,6 +50,9 @@ struct DiskListing {
     /// Listed folders' modification times (ns, vaultutil::fineMtime()) taken before listing them;
     /// folders without a fine-grained one are left out.
     QHash<VaultPath, qint64> stamps;
+    /// Regular files with the name of a leftover of an own atomic write
+    /// (vaultutil::isLeftoverTempName()), relative to the root as spelled on disk.
+    QStringList leftovers;
 
     /// True when the listing shows every child of `dir`: the folder was listed, lies in a
     /// listed tree, or is gone from a folder that was listed — and neither it nor a folder
@@ -229,6 +232,12 @@ public:
     /// The bookkeeping after reading a tracked file (readFile(), Vault::adoptRead()).
     void takeRead(const VaultPath &path, const std::optional<FileStat> &before, const QByteArray &bytes, bool asText,
                   const QString &hash);
+    /// `stat` (the file's, just recorded with its content) as written by the vault itself
+    /// (`ownWrite`: its stamp is now) or found (its stamp may be old): unsettled while its time is
+    /// coarse and recent — `fineStamp` when the caller knows, else fineMtime() asked.
+    void noteUnsettled(const FileStat &stat, bool ownWrite, std::optional<bool> fineStamp = std::nullopt);
+    /// The content of an unsettled file was just compared: settled once the tick has passed.
+    void settleIfDue(const VaultPath &path);
     void snapshotCached(const VaultPath &path, ChangeSource reason);
     void snapshotCached(const VaultPath &path, const QString &reason);
     bool usesBom(const VaultPath &path) const;
@@ -238,10 +247,15 @@ public:
     /// `read`: the file's content the caller read a moment ago (its stat still matches the disk).
     void refreshKnownContent(const VaultPath &path, bool asText, qint64 newSize, QList<VaultChange> &changes,
                              const DiskRead *read);
+    /// `expect`: write only over the file the caller read (vaultutil::ReadMark; a compare-and-swap),
+    /// checked here and right before the rename — else the file is taken in and false returned
+    /// with `changedMeanwhile` set.
     bool writeFile(const VaultPath &path, const QByteArray &bytes, ChangeSource source, bool asText,
-                   QList<VaultChange> &changes, const DiskRead *read = nullptr);
+                   QList<VaultChange> &changes, const DiskRead *read = nullptr,
+                   const vaultutil::ReadMark *expect = nullptr, bool *changedMeanwhile = nullptr);
     bool write(const VaultPath &path, const QByteArray &bytes, ChangeSource source, bool asText,
-               const DiskRead *read = nullptr);
+               const DiskRead *read = nullptr, const vaultutil::ReadMark *expect = nullptr,
+               bool *changedMeanwhile = nullptr);
     /// After an own atomic write into `dir` (`save`: the folder's stamps around its steps; called
     /// once the written file is tracked): when the vault knew the folder's entries at `save.before`
     /// and nothing but the write's own steps changed them (StampedSave; never on storage whose
@@ -280,6 +294,8 @@ public:
     void abandonWrites();
     VaultPath create(const VaultPath &path, const QByteArray &bytes, ChangeSource source, bool asText);
     QDateTime now() const;
+    /// open(): removes the leftovers of interrupted own writes (DiskListing::leftovers, History's).
+    void removeLeftovers(const QStringList &rels);
 
     // --- config (vault.cpp)
     /// Loads .brulion/config.json — or, without it, the settings of `.obsidian/` — into
@@ -398,6 +414,14 @@ public:
     /// Files whose content on disk is known to differ from `hashes` although their stat did not
     /// change (coarse timestamps): the next reconcile treats them as modified.
     QSet<VaultPath> staleContent;
+    /// Text files whose stat cannot vouch for their content yet (noteUnsettled()): written — by
+    /// the vault or another program — on storage with coarse file times less than
+    /// vaultutil::kSettleMs ago, so another write within the same tick, of the same size, would
+    /// keep the stat. Listings compare their content (diff(): as if modified, applyModified():
+    /// this one file read and hashed) until one after the tick has passed (settleIfDue()). Value:
+    /// when it was marked (the vault's clock, ms since the epoch).
+    QHash<VaultPath, qint64> unsettled;
+    static constexpr qsizetype kMaxUnsettled = 4096;
     /// Children of each folder ("" = the vault folder) among `files` and `dirs`: diffs of a
     /// listing look at the listed folders' children only, not at every known file.
     QHash<VaultPath, QSet<VaultPath>> childFiles;
