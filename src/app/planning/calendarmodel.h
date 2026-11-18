@@ -37,7 +37,15 @@
 // DST changes cannot shift a day. Created from QML, the model builds its days once, when the
 // component is complete (not once per property set on creation). The range's entries come from
 // a CalendarCache and the overdue list from an OverdueCache: after an index change only the
-// changed notes are computed again.
+// changed notes are computed again. A change of notes that have no calendar entries (no journal
+// date, task dates or reminders) and gave none to the range or the overdue list (most autosaves)
+// computes nothing; otherwise only the days whose entries changed get dataChanged, and
+// itemsChanged (with `revision`) comes only when something the model shows changed.
+//
+// `active` (default true): while false — CalendarView kept hidden by ShellRouteView — an index
+// change (or midnight) only marks the days stale; they are computed once when `active` is true
+// again, before the view's next frame. The first fill and changes of the model's own properties
+// (mode, anchor, …) are computed as before, also while inactive.
 #pragma once
 
 #include "index/notecache.h"
@@ -49,6 +57,7 @@
 #include <QHash>
 #include <QPointer>
 #include <QQmlParserStatus>
+#include <QSet>
 #include <QTimer>
 #include <QVariantList>
 #include <QVariantMap>
@@ -74,6 +83,7 @@ public:
     struct Found {
         QList<Overdue> tasks; ///< by due date (ties: page path, then document order), at most `max`
         int total = 0;        ///< how many there are
+        QList<VaultPath> notes; ///< the notes with overdue tasks (all of them), sorted
     };
     /// The tasks due before `today`.
     Found tasks(const VaultIndex &index, QDate today, int max);
@@ -115,6 +125,9 @@ class CalendarModel : public QAbstractListModel, public QQmlParserStatus {
     Q_PROPERTY(int agendaDays READ agendaDays WRITE setAgendaDays NOTIFY agendaDaysChanged FINAL)
     /// Debounce of rebuilds after index changes, ms (default 120).
     Q_PROPERTY(int refreshDelay READ refreshDelay WRITE setRefreshDelay NOTIFY refreshDelayChanged FINAL)
+    /// The days follow the index and the clock (false: a change only marks them stale; they are
+    /// computed again when this is true again — a hidden view).
+    Q_PROPERTY(bool active READ isActive WRITE setActive NOTIFY activeChanged FINAL)
 
     Q_PROPERTY(QString rangeStart READ rangeStart NOTIFY rangeChanged FINAL)
     Q_PROPERTY(QString rangeEnd READ rangeEnd NOTIFY rangeChanged FINAL)
@@ -141,7 +154,7 @@ class CalendarModel : public QAbstractListModel, public QQmlParserStatus {
     /// Week mode: earliest / latest hour with a timed entry in the range (defaults 8 / 18).
     Q_PROPERTY(int firstHour READ firstHour NOTIFY itemsChanged FINAL)
     Q_PROPERTY(int lastHour READ lastHour NOTIFY itemsChanged FINAL)
-    /// Grows with every rebuild (bind day panels to it).
+    /// Grows with every rebuild that changed what the model shows (bind day panels to it).
     Q_PROPERTY(int revision READ revision NOTIFY itemsChanged FINAL)
     /// The most all-day entries (allDayEntries()) of a day of the range.
     Q_PROPERTY(int maxAllDay READ maxAllDay NOTIFY itemsChanged FINAL)
@@ -207,6 +220,12 @@ public:
     void setAgendaDays(int days);
     int refreshDelay() const { return m_refreshTimer.interval(); }
     void setRefreshDelay(int msec);
+    bool isActive() const { return m_active; }
+    void setActive(bool active);
+    /// An index change came while inactive: the days are computed when the model is active again.
+    bool isStale() const { return m_stale; }
+    /// Rebuilds that computed the days (tests: a change without calendar entries computes nothing).
+    int rebuildCount() const { return m_rebuilds; }
 
     QString rangeStart() const;
     QString rangeEnd() const;
@@ -263,6 +282,7 @@ Q_SIGNALS:
     void localeChanged();
     void agendaDaysChanged();
     void refreshDelayChanged();
+    void activeChanged();
     void rangeChanged();
     void itemsChanged();
 
@@ -273,6 +293,8 @@ private:
         QVariantList items;
         int timed = 0;
         QStringList kinds;
+
+        friend bool operator==(const Day &, const Day &) = default;
     };
 
     QDate currentDay() const;
@@ -284,6 +306,12 @@ private:
     /// agenda its weekday in the first week of the range after (before) the one holding it.
     QDate stepped(int periods) const;
     void scheduleRefresh();
+    /// The index changed (the debounce is over): rebuild unless no changed note can show here.
+    void refreshFromIndex();
+    /// Nothing the days or the overdue list show can differ since the last rebuild: the changed
+    /// notes gave no entries then (m_notes) and have none now. Then the days count as computed
+    /// at the index's current version.
+    bool unaffectedByIndexChanges();
     /// rebuild(forceReset), or once when the QML component is complete.
     void requestRebuild(bool forceReset);
     void rebuild(bool forceReset);
@@ -308,6 +336,7 @@ private:
     /// The agenda's first day while it is shown (invalid in the other modes): kept while the
     /// anchor moves inside the agenda's range.
     QDate m_agendaStart;
+    Qt::DayOfWeek m_rangeWeekStart = Qt::Monday; ///< effectiveWeekStart as rangeChanged() last told
     QList<Day> m_days;
     QHash<QDate, int> m_rowOf;
     int m_itemCount = 0;
@@ -318,11 +347,21 @@ private:
     int m_revision = 0;
     int m_maxAllDay = 0;
 
+    /// The notes the days' entries (journals included) and the overdue list came from.
+    QSet<VaultPath> m_notes;
+    /// The index (serial, version) the days were computed at.
+    quint64 m_builtSerial = 0;
+    int m_builtVersion = -1;
+    int m_rebuilds = 0;
+
     QTimer m_refreshTimer;
     QTimer m_midnightTimer;
     bool m_completing = false;     ///< between classBegin() and componentComplete()
     bool m_rebuildPending = false; ///< a rebuild was requested meanwhile
     bool m_resetPending = false;   ///< … with forceReset
+    bool m_active = true;
+    bool m_stale = false;      ///< an index change (or midnight) came while inactive
+    bool m_staleReset = false; ///< … that needs a reset (midnight: today moved)
 };
 
 } // namespace brulion::planning

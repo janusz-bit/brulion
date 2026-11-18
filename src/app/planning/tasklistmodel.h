@@ -39,7 +39,15 @@
 // Created from QML, the model builds its rows once, when the component is complete (not once
 // per property set on creation); afterwards every change of a property rebuilds at once.
 // After an index change only the changed notes are evaluated again (a QueryCache) and their
-// tasks merged into the sorted list; rows then move, appear or disappear as before.
+// tasks merged into the sorted list; rows then move, appear or disappear as before, and only the
+// rows whose data changed (a changed note's tasks, a moved section count, a fold) get dataChanged.
+// A change of notes that had no listed tasks and have none now (most autosaves) computes nothing
+// more (docs/PERFORMANCE.md "Only what is on screen").
+//
+// `active` (default true): while false — TasksView kept hidden by ShellRouteView, the side
+// panel's day tasks out of sight — an index change only marks the rows stale; they are computed
+// once when `active` is true again, before the view's next frame. The first fill and changes of
+// the model's own properties (filters, today, …) are computed as before, also while inactive.
 //
 // Header roles: rowType, section, sectionLabel, sectionCount, collapsed.
 // A task row's section is the section it is shown in; depth: 0, or how deep a subtask is nested;
@@ -125,6 +133,9 @@ class TaskListModel : public QAbstractListModel, public QQmlParserStatus {
     Q_PROPERTY(int vaultTaskCount READ vaultTaskCount NOTIFY countsChanged FINAL)
     /// Debounce of rebuilds after index changes, ms (default 150).
     Q_PROPERTY(int refreshDelay READ refreshDelay WRITE setRefreshDelay NOTIFY refreshDelayChanged FINAL)
+    /// The rows follow the index (false: an index change only marks them stale; they are computed
+    /// again when this is true again — a hidden view).
+    Q_PROPERTY(bool active READ isActive WRITE setActive NOTIFY activeChanged FINAL)
 
 public:
     enum Role {
@@ -228,6 +239,12 @@ public:
     int vaultTaskCount() const { return m_vaultTasks; }
     int refreshDelay() const { return m_refreshTimer.interval(); }
     void setRefreshDelay(int msec);
+    bool isActive() const { return m_active; }
+    void setActive(bool active);
+    /// An index change came while inactive: the rows are computed when the model is active again.
+    bool isStale() const { return m_stale; }
+    /// Rebuilds that evaluated the query (tests: a change without tasks computes nothing).
+    int rebuildCount() const { return m_rebuilds; }
 
     /// Collapse / expand a section.
     Q_INVOKABLE void toggleSection(const QString &key);
@@ -294,10 +311,13 @@ Q_SIGNALS:
     void collapsedSectionsChanged();
     void countsChanged();
     void refreshDelayChanged();
+    void activeChanged();
 
 private:
     struct Item {
         TaskRef ref;
+        QString key;       ///< "path:line" (taskKey(), made once)
+        quint64 built = 0; ///< the rebuild that made the item (m_buildSerial)
         QString section;
         QString pageTitle;
         QString folder;
@@ -330,6 +350,16 @@ private:
         int item = -1;   ///< index into m_items
         int depth = 0;   ///< a subtask's nesting under the task it follows
         int subtasks = 0; ///< the subtasks listed under it (layoutTasks())
+        // What the row shows besides its item (rebuildRows()): compared to tell changed rows.
+        int sectionCount = 0;   ///< tasks shown in its section
+        bool folded = false;    ///< a task whose subtasks are hidden
+        bool collapsed = false; ///< a header of a collapsed section
+    };
+    /// Which rows rebuildRows() signals as changed besides those whose own fields changed.
+    enum class ItemsChanged {
+        None,  ///< no item was made again (a fold, a collapsed section)
+        Fresh, ///< the items made by this rebuild (Item::built == m_buildSerial)
+        All,   ///< every row (the rich text of every task may differ: names, locale, a full build)
     };
 
     QDate currentDay() const;
@@ -349,7 +379,10 @@ private:
     /// m_folded's keys after the tasks moved (layoutTasks()).
     void followFoldedTasks();
     QString rowKey(const Row &row) const;
-    void rebuildRows();
+    void rebuildRows(ItemsChanged changed = ItemsChanged::None);
+    /// The query evaluated again only for notes that had no listed task and have none now (and
+    /// no name changed): nothing to do but the vault's task count.
+    bool unchangedRows(const QSet<VaultPath> &changed, const QList<Item> &fresh) const;
     void filtersEdited();
     /// Set a filter member to `value`: filtersChanged() and a rebuild when it changed.
     void setFilter(QString &filter, const QString &value);
@@ -396,9 +429,19 @@ private:
     int m_todayCount = 0;
     int m_vaultTasks = 0;
 
+    QHash<VaultPath, int> m_itemsOfNote; ///< listed tasks per note (m_items)
+    quint64 m_buildSerial = 0;           ///< rebuilds that made items (Item::built)
+    /// The index (serial, version) the rich text of the items was made for: a change of names
+    /// since then renders every task again (links to pages that appeared or went).
+    quint64 m_renderSerial = 0;
+    int m_renderVersion = -1;
+    int m_rebuilds = 0;
+
     QTimer m_refreshTimer;
     bool m_completing = false;     ///< between classBegin() and componentComplete()
     bool m_rebuildPending = false; ///< a rebuild was requested meanwhile
+    bool m_active = true;
+    bool m_stale = false;
 };
 
 } // namespace brulion::planning

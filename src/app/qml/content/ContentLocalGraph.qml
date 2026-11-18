@@ -7,7 +7,9 @@ import Brulion
 // the pages it links to or that link to it (GraphModel with `focusPath`, depth 1, no tags), laid
 // out by the graph view's own simulation in a small square that fits them all. A click on a node
 // opens it; "Open graph" opens the graph view on this page (route depth 1). Made only while its
-// section is open (the layout runs on a worker, and stops while the panel is hidden).
+// section is open (the layout runs on a worker, and stops while the panel is hidden). Only the
+// page's neighbourhood is read from the index, and only changes that touch it build it again;
+// out of sight they wait until it is shown (`shown`).
 //
 //   ContentLocalGraph { path: page.path }
 Item {
@@ -39,6 +41,8 @@ Item {
         frameInterval: DeviceInfo.platform === "wasm" ? 33 : 16
         reducedMotion: Theme.reducedMotion
         active: root.visible && root.path !== "" && Application.state === Qt.ApplicationActive
+        // Out of sight: index changes only mark the graph stale, it is built again when shown.
+        shown: root.visible
         vaultIndex: root.path !== "" ? PlanningContext.vaultIndex : null
     }
 

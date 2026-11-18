@@ -1,8 +1,10 @@
 // CalendarModel: month / week / agenda ranges for both week starts, Polish and English titles,
 // entries per day (journals, due / scheduled / reminders / alarms / done, timed first), overdue
 // tasks, recurring series, a month with a DST change, marks for the date picker, navigation and
-// how the model updates (dataChanged instead of resets); kept across random edits, its entries
-// and overdue list equal what calendarItems() and a scan of every task give.
+// how the model updates (dataChanged instead of resets, only for the days that changed; edits of
+// notes without entries compute nothing; a hidden model only goes stale); kept across random
+// edits, its entries and overdue list equal what calendarItems() and a scan of every task give,
+// and a view reading only the signalled days shows the same.
 #include "calendarmodel.h"
 #include "planningtest.h"
 #include "centraleuropeantime.h"
@@ -105,6 +107,14 @@ const QStringList RandomLines = {
         u"- blok o żółwiu ^b1"_s,
         u"- [ ] zepsute 📅 2026-13-45"_s,
 };
+
+/// Apply one change to the index now (changed() at once: the models' delay 0 rebuilds them).
+template<typename Fn>
+void edit(brulion::VaultIndex &index, Fn &&fn)
+{
+    brulion::VaultIndex::Batch batch(index);
+    fn();
+}
 
 } // namespace
 
@@ -834,6 +844,162 @@ private Q_SLOTS:
         QCOMPARE(overdueOf(m), overdueByScan(*index, QDate(2026, 10, 15), &count));
         QCOMPARE(m.overdueCount(), count);
         QCOMPARE(m.overdue().size(), CalendarModel::MaxOverdue);
+    }
+
+    // A hidden calendar (CalendarView kept by ShellRouteView) computes nothing after index
+    // changes: it only goes stale, and is computed when active again.
+    void inactiveCalendarGoesStale()
+    {
+        auto index = makeIndex({{u"Dom.md"_s, u"- [ ] A 📅 2026-10-16\n"_s}});
+        CalendarModel m;
+        m.setRefreshDelay(0);
+        m.setToday(u"2026-10-15"_s);
+        m.setActive(false);
+        m.setVaultIndex(index.get()); // the first fill
+        QCOMPARE(itemsOn(m, u"2026-10-16"_s).size(), 1);
+        const int built = m.rebuildCount();
+        edit(*index, [&] { index->update(u"Dom.md"_s, u"- [ ] A 📅 2026-10-16\n- [ ] B 📅 2026-10-16\n"_s); });
+        QCOMPARE(m.rebuildCount(), built);
+        QCOMPARE(itemsOn(m, u"2026-10-16"_s).size(), 1);
+        QVERIFY(m.isStale());
+        QSignalSpy activeChanged(&m, &CalendarModel::activeChanged);
+        m.setActive(true);
+        QCOMPARE(activeChanged.size(), 1);
+        QVERIFY(!m.isStale());
+        QCOMPARE(itemsOn(m, u"2026-10-16"_s).size(), 2);
+        // A debounced change on its way when the view is hidden waits for it.
+        m.setRefreshDelay(120);
+        edit(*index, [&] { index->update(u"Dom.md"_s, u"- [ ] A 📅 2026-10-17\n"_s); });
+        m.setActive(false);
+        QTest::qWait(250);
+        QCOMPARE(itemsOn(m, u"2026-10-16"_s).size(), 2);
+        m.setActive(true);
+        QCOMPARE(itemsOn(m, u"2026-10-16"_s).size(), 0);
+        QCOMPARE(itemsOn(m, u"2026-10-17"_s).size(), 1);
+        // The model's own properties are computed while inactive (the view's navigation).
+        m.setActive(false);
+        m.next();
+        QCOMPARE(m.rangeStart(), u"2026-10-26"_s);
+    }
+
+    // An autosave of a note without calendar entries (no journal date, task dates or reminders,
+    // before and after) computes nothing; an edit that keeps a day's entries signals nothing; a
+    // date moved signals only its two days.
+    void editsWithoutDatesComputeNothing()
+    {
+        auto index = makeIndex({{u"Dom.md"_s, u"- [ ] A 📅 2026-10-16\n- [ ] B 📅 2026-10-20\n"_s},
+                                {u"Notatka.md"_s, u"- zwykły tekst o żółwiu\n"_s},
+                                {u"journals/2026-10-15.md"_s, u"- dziś\n"_s}});
+        CalendarModel m;
+        m.setRefreshDelay(0);
+        m.setToday(u"2026-10-15"_s);
+        m.setVaultIndex(index.get());
+        QSignalSpy resets(&m, &QAbstractItemModel::modelReset);
+        QSignalSpy changes(&m, &QAbstractItemModel::dataChanged);
+        QSignalSpy items(&m, &CalendarModel::itemsChanged);
+        QSignalSpy range(&m, &CalendarModel::rangeChanged);
+        const int built = m.rebuildCount();
+        const int revision = m.revision();
+        edit(*index, [&] { index->update(u"Notatka.md"_s, u"- zwykły tekst o żółwiu, zmieniony\n- [[Dom]]\n"_s); });
+        QCOMPARE(m.rebuildCount(), built);
+        // A daily note of the range: computed again, but its day shows the same.
+        edit(*index, [&] { index->update(u"journals/2026-10-15.md"_s, u"- dziś, więcej tekstu\n"_s); });
+        QCOMPARE(m.rebuildCount(), built + 1);
+        for (const QSignalSpy *spy : {&resets, &changes, &items, &range})
+            QCOMPARE(spy->count(), 0);
+        QCOMPARE(m.revision(), revision);
+        // B moves to the next day: those two days.
+        edit(*index, [&] { index->update(u"Dom.md"_s, u"- [ ] A 📅 2026-10-16\n- [ ] B 📅 2026-10-21\n"_s); });
+        QCOMPARE(resets.count(), 0);
+        QStringList days;
+        for (const QList<QVariant> &args : std::as_const(changes)) {
+            for (int r = args.at(0).toModelIndex().row(); r <= args.at(1).toModelIndex().row(); ++r)
+                days << role(m, r, CalendarModel::DateRole).toString();
+        }
+        QCOMPARE(days, (QStringList{u"2026-10-20"_s, u"2026-10-21"_s}));
+        QCOMPARE(items.count(), 1);
+        QCOMPARE(range.count(), 0);
+        QCOMPARE(m.revision(), revision + 1);
+        // A note without entries gets one: computed.
+        edit(*index, [&] { index->update(u"Notatka.md"_s, u"- zwykły tekst ⏰ 2026-10-22 10:00\n"_s); });
+        QCOMPARE(itemsOn(m, u"2026-10-22"_s).size(), 1);
+        // … and loses it again.
+        edit(*index, [&] { index->update(u"Notatka.md"_s, u"- zwykły tekst\n"_s); });
+        QCOMPARE(itemsOn(m, u"2026-10-22"_s).size(), 0);
+    }
+
+    // Kept across random edits through the index's signal (notes without entries skipped, only
+    // changed days signalled), the days equal a model built afresh, and a view that reads only the
+    // days the model signals shows what the model holds.
+    void signalledDaysMatchAFreshModel_data()
+    {
+        QTest::addColumn<quint32>("seed");
+        QTest::addColumn<QString>("mode");
+        QTest::newRow("month") << 13u << u"month"_s;
+        QTest::newRow("week") << 31u << u"week"_s;
+        QTest::newRow("agenda") << 2026u << u"agenda"_s;
+    }
+    void signalledDaysMatchAFreshModel()
+    {
+        QFETCH(quint32, seed);
+        QFETCH(QString, mode);
+        QRandomGenerator rng(seed);
+        const QStringList paths = {
+                u"journals/2026-10-14.md"_s, u"Dom.md"_s, u"Ż.md"_s, u"żółw.md"_s, u"x/Ala.md"_s, u"Notatka.md"_s};
+        const QStringList plainLines = {u"- zwykła notatka o żółwiu"_s, u"- link do [[Dom]]"_s, u"Akapit bez dat."_s,
+                                        u"- [ ] zadanie bez daty"_s};
+        auto index = makeIndex({});
+        CalendarModel m;
+        m.setRefreshDelay(0);
+        m.setToday(u"2026-10-15"_s);
+        m.setMode(mode);
+        m.setVaultIndex(index.get());
+        const auto dayText = [&m](int r) {
+            QStringList keys;
+            for (const QVariant &v : role(m, r, CalendarModel::ItemsRole).toList())
+                keys << v.toMap().value(u"key"_s).toString() + u'=' + v.toMap().value(u"title"_s).toString() + u'/'
+                                + v.toMap().value(u"variant"_s).toString();
+            return role(m, r, CalendarModel::DateRole).toString() + u' '
+                   + role(m, r, CalendarModel::JournalPathRole).toString() + u' '
+                   + role(m, r, CalendarModel::KindsRole).toStringList().join(u',') + u": "_s + keys.join(u", "_s);
+        };
+        brulion::planning::test::ModelMirror mirror(&m, dayText);
+        int skipped = 0;
+        for (int step = 0; step < 80; ++step) {
+            const QString path = paths[rng.bounded(int(paths.size()))];
+            const int built = m.rebuildCount();
+            const int revision = m.revision();
+            QSignalSpy items(&m, &CalendarModel::itemsChanged);
+            edit(*index, [&] {
+                if (rng.bounded(100) < 85) {
+                    const bool plain = rng.bounded(3) == 0;
+                    const QStringList &lines = plain ? plainLines : RandomLines;
+                    QString content;
+                    for (int n = 1 + rng.bounded(4); n > 0; --n)
+                        content += lines[rng.bounded(int(lines.size()))] + u'\n';
+                    index->update(path, content);
+                } else {
+                    index->remove(path);
+                }
+            });
+            if (m.rebuildCount() == built)
+                ++skipped;
+            const QByteArray ctx = u"step %1"_s.arg(step).toUtf8();
+            QVERIFY2(mirror.rows == mirror.current(), ctx.constData());
+            QCOMPARE(m.revision() - revision, int(items.count()));
+            CalendarModel fresh;
+            fresh.setToday(u"2026-10-15"_s);
+            fresh.setMode(mode);
+            fresh.setVaultIndex(index.get());
+            QVERIFY2(entriesOf(m) == entriesOf(fresh), ctx.constData());
+            QVERIFY2(overdueOf(m) == overdueOf(fresh), ctx.constData());
+            QCOMPARE(m.overdueCount(), fresh.overdueCount());
+            QCOMPARE(m.itemCount(), fresh.itemCount());
+            QCOMPARE(m.maxAllDay(), fresh.maxAllDay());
+            QCOMPARE(m.firstHour(), fresh.firstHour());
+            QCOMPARE(m.lastHour(), fresh.lastHour());
+        }
+        QVERIFY2(skipped >= 5, qPrintable(QString::number(skipped)));
     }
 
     void cachedRangeMatchesCalendarItems()

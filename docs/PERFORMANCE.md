@@ -1067,14 +1067,29 @@ about as long. Now a pane (`ShellTabPane`, `ShellRouteView.keepViews`) keeps the
 bottom navigation — Journal, All pages, Search, Tasks, Calendar — once it has shown them: hidden
 (`visible: false`, nothing drawn or laid out), each with its own route, and shown again in the
 next frame, where it was scrolled. Their cost while hidden: memory (at most five views a pane;
-the journal's days are a lazy list, only the days that were on screen exist) and keeping their
-models up to date with edits, which follow the index's change log (`QueryCache`,
-`CalendarCache`: a fraction of a millisecond per edit). Not all of it was that cheap: the lists
-of the Journal, All pages and Search were computed again 120 ms after every save while hidden —
-All pages its 10,000 rows with their backlink counts and a sort — and that, with the views built
-ahead (below), made every autosave in a big notebook 2–3× slower. Since 2026-11-18 those lists
-compute nothing while hidden (`WorkspaceListModel.active`: they go stale and are computed when
-shown; "Only what is on screen, only what changed"). Other views — a page, Graph, Habits,
+the journal's days are a lazy list, only the days that were on screen exist) — and, since
+2026-11-18, next to nothing per edit: their models have an `active` property bound to the view's
+`visible` (`WorkspaceListModel` for Journal, All pages and Search; `TaskListModel` and
+`CalendarModel` for Tasks, Calendar and the side panel's day tasks; `GraphModel.shown` for the side
+panel's local graph). Hidden, an index change only marks a model stale; it is computed once, at
+once, when the view is shown again (before its first frame), with whatever changed meanwhile. The
+first fill (built ahead) and changes of the model's own properties (a filter, the anchor) are still
+computed while hidden. Shown, they compute only what changed: an autosave of a note without tasks
+(before and after) costs Tasks one look at the changed notes' list and nothing else — no merge, no
+layout, no row signals —; an edit of a task signals `dataChanged` only for the rows of that note's
+tasks (and the rows whose section count or fold changed), not for every row; the row keys are made
+once per task. The calendar skips a change of notes without calendar entries (no daily-note date,
+task dates or reminders) that gave none to its range or its overdue list, and signals only the days
+whose entries changed (`itemsChanged`, `revision` only when something shown changed). The weekly and
+monthly notes the calendar's grids and header mark (`Workspace.periodicNoteStarts()`, a walk over
+every file's name, and `periodicNote()`, a file check) are not asked while the calendar is hidden.
+The side panel's local graph reads only the page's neighbourhood (outgoing links, backlinks, the
+tags naming the pages, the notes carrying a #tag node) instead of the whole notebook's `graph()`,
+and skips a change unless one of its notes changed, a changed note links to it, or a name changed
+(`VaultIndex::changesSince()`). Until then it was not that cheap: the lists of the Journal, All pages and Search were computed
+again 120 ms after every save while hidden — All pages its 10,000 rows with their backlink counts
+and a sort —, Tasks and Calendar rebuilt every row, and with the views built ahead (below) that
+made every autosave in a big notebook 2–3× slower ("Only what is on screen, only what changed"). Other views — a page, Graph, Habits,
 Settings… — are still made per route and deleted when left, so the shell self-test's "5n"
 (rounds of views and pages leave no more editors than the first round) holds. The kept views
 go when the pane shows no route (the split pane closed).

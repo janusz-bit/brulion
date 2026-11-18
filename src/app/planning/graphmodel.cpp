@@ -35,6 +35,180 @@ double nodeRadius(GraphModel::Kind kind, int degree)
     }
 }
 
+/// The local graph of a note read from the index around it (GraphModel's local build): the nodes
+/// within `depth` links of the focus and the edges among them, exactly those of graph() (without
+/// missing pages) that GraphModel's own cut keeps — pages hidden by the filters (templates,
+/// journals) are not passed through, as GraphModel drops them before it walks the graph.
+class Neighbourhood {
+public:
+    Neighbourhood(const VaultIndex &index, const QString &focus, const QString &templatesPrefix, bool showTags,
+                  bool showJournals, bool showTemplates)
+        : m_index(index)
+        , m_focus(focus)
+        , m_templatesPrefix(templatesPrefix)
+        , m_showTags(showTags)
+        , m_showJournals(showJournals)
+        , m_showTemplates(showTemplates)
+    { }
+
+    struct Result {
+        GraphData graph;
+        QSet<QString> ids;   ///< every node reached (the focus included)
+        QSet<QString> inner; ///< those closer than `depth` to the focus
+        /// More nodes than the cap: every node's degree in the whole (filtered) graph, which
+        /// decides which of them stay.
+        QHash<QString, int> degree;
+    };
+
+    Result build(int depth, int maxNodes)
+    {
+        Result r;
+        QHash<QString, int> dist{{m_focus, 0}};
+        QStringList queue{m_focus};
+        for (qsizetype qi = 0; qi < queue.size(); ++qi) {
+            const QString u = queue.at(qi);
+            const int d = dist.value(u);
+            if (d >= depth)
+                continue;
+            r.inner.insert(u);
+            for (const QStringList next = neighbours(u); const QString &v : next) {
+                if (!dist.contains(v)) {
+                    dist.insert(v, d + 1);
+                    queue.append(v);
+                }
+            }
+        }
+        r.ids = QSet<QString>(queue.cbegin(), queue.cend());
+        // Nodes in graph()'s order: notes by path, then #tags as first met (the first note by
+        // path carrying the tag, the tag's place in it).
+        QStringList pages;
+        QList<std::pair<std::pair<QString, qsizetype>, QString>> tags;
+        for (const QString &id : std::as_const(queue)) {
+            if (m_index.note(id)) {
+                pages.append(id);
+            } else {
+                const QString tag = id.sliced(1);
+                const QList<VaultPath> carriers = tagNotes(tag);
+                const ParsedNote *first = carriers.isEmpty() ? nullptr : m_index.note(carriers.first());
+                tags.append({{carriers.isEmpty() ? QString() : carriers.first(), first ? first->tags.indexOf(tag) : 0},
+                             id});
+            }
+        }
+        std::ranges::sort(pages);
+        std::ranges::sort(tags);
+        for (const QString &path : std::as_const(pages))
+            r.graph.nodes.append(GraphNode{path, m_index.note(path)->title, 0, false, false});
+        for (const auto &tag : std::as_const(tags))
+            r.graph.nodes.append(GraphNode{tag.second, tag.second, 0, true, false});
+        for (const QString &path : std::as_const(pages)) {
+            for (const QString &target : outOf(path)) {
+                if (r.ids.contains(target))
+                    r.graph.edges.append(GraphEdge{path, target});
+            }
+        }
+        if (queue.size() > maxNodes) {
+            for (const QString &id : std::as_const(queue))
+                r.degree.insert(id, int(neighbours(id).size()));
+        }
+        return r;
+    }
+
+private:
+    /// A node GraphModel keeps before it walks the graph: a note (not a hidden template or daily
+    /// note) or a #tag node.
+    bool visible(const QString &id) const
+    {
+        const ParsedNote *note = m_index.note(id);
+        if (!note)
+            return m_showTags && id.startsWith(u'#');
+        if (!m_showTemplates && !m_templatesPrefix.isEmpty() && id != m_focus
+            && id.startsWith(m_templatesPrefix, Qt::CaseInsensitive))
+            return false;
+        return m_showJournals || !note->journalDate;
+    }
+
+    /// graph()'s edges from note `path`: the notes its links and block references resolve to,
+    /// the notes its tags name, its other tags as #tag nodes (with showTags).
+    const QStringList &outOf(const QString &path)
+    {
+        if (const auto it = m_out.constFind(path); it != m_out.cend())
+            return *it;
+        QStringList targets;
+        if (const ParsedNote *note = m_index.note(path)) {
+            for (const QList<ResolvedLink> links = m_index.outgoingLinks(path); const ResolvedLink &l : links) {
+                if (!l.target.isEmpty() && l.target != path && m_index.note(l.target))
+                    targets.append(l.target);
+            }
+            for (const QString &tag : note->tags) {
+                if (const std::optional<VaultPath> page = m_index.resolveTag(tag)) {
+                    if (*page != path)
+                        targets.append(*page);
+                } else if (m_showTags) {
+                    targets.append(u'#' + tag);
+                }
+            }
+        }
+        return *m_out.insert(path, targets);
+    }
+
+    /// The notes carrying `tag` (VaultIndex::tags()), sorted.
+    QList<VaultPath> tagNotes(const QString &tag)
+    {
+        if (!m_tagsRead) {
+            for (const QList<TagCount> all = m_index.tags(); const TagCount &t : all)
+                m_tagNotes.insert(t.tag, t.paths);
+            m_tagsRead = true;
+        }
+        return m_tagNotes.value(tag);
+    }
+
+    /// The visible nodes sharing an edge with `id` (either way), without `id` itself.
+    QStringList neighbours(const QString &id)
+    {
+        QStringList out;
+        QSet<QString> seen{id};
+        const auto add = [&](const QString &v) {
+            if (!seen.contains(v)) {
+                seen.insert(v);
+                if (visible(v))
+                    out.append(v);
+            }
+        };
+        const bool note = m_index.note(id) != nullptr;
+        if (note) {
+            for (const QString &v : outOf(id))
+                add(v);
+        }
+        // Notes with an edge to `id`: candidates from the backlinks and the tags naming it (or,
+        // for a #tag node, the notes carrying it), each confirmed by its own edges.
+        QList<VaultPath> sources;
+        if (note) {
+            for (const QList<Backlink> links = m_index.backlinks(id); const Backlink &b : links)
+                sources.append(b.path);
+            sources.append(m_index.tagsTo(id));
+        } else if (id.startsWith(u'#')) {
+            sources = tagNotes(id.sliced(1));
+        }
+        for (const VaultPath &v : std::as_const(sources)) {
+            if (seen.contains(v) || !visible(v))
+                continue;
+            if (outOf(v).contains(id))
+                add(v);
+        }
+        return out;
+    }
+
+    const VaultIndex &m_index;
+    QString m_focus;
+    QString m_templatesPrefix;
+    bool m_showTags;
+    bool m_showJournals;
+    bool m_showTemplates;
+    QHash<QString, QStringList> m_out;
+    QHash<QString, QList<VaultPath>> m_tagNotes;
+    bool m_tagsRead = false;
+};
+
 /// Small deterministic offset for a node placed next to a neighbour.
 std::pair<double, double> offsetFor(const QString &id, std::uint32_t seed)
 {
@@ -51,7 +225,7 @@ GraphModel::GraphModel(QObject *parent) : QObject(parent)
     connect(&m_sim, &GraphSimulation::frameReady, this, &GraphModel::onFrameReady);
     m_refreshTimer.setSingleShot(true);
     m_refreshTimer.setInterval(300ms);
-    connect(&m_refreshTimer, &QTimer::timeout, this, &GraphModel::rebuild);
+    connect(&m_refreshTimer, &QTimer::timeout, this, &GraphModel::rebuildFromIndex);
 }
 
 GraphModel::~GraphModel() = default;
@@ -184,6 +358,23 @@ void GraphModel::setActive(bool active)
     else if (active)
         ensureRunning();
     updateRunning();
+}
+
+void GraphModel::setShown(bool shown)
+{
+    if (std::exchange(m_shown, shown) == shown)
+        return;
+    Q_EMIT shownChanged();
+    if (!m_shown) {
+        // A rebuild on its way waits for the graph to be shown.
+        if (m_refreshTimer.isActive()) {
+            m_refreshTimer.stop();
+            m_stale = true;
+        }
+        return;
+    }
+    if (m_stale)
+        rebuildFromIndex();
 }
 
 void GraphModel::setReducedMotion(bool on)
@@ -552,15 +743,59 @@ void GraphModel::refresh()
 
 void GraphModel::scheduleRebuild()
 {
+    if (!m_shown) {
+        m_stale = true;
+        return;
+    }
     if (m_refreshTimer.interval() == 0)
-        rebuild();
+        rebuildFromIndex();
     else
         m_refreshTimer.start();
+}
+
+void GraphModel::rebuildFromIndex()
+{
+    m_refreshTimer.stop();
+    m_stale = false;
+    if (!unaffectedByIndexChanges())
+        rebuild();
+}
+
+bool GraphModel::unaffectedByIndexChanges()
+{
+    if (!m_localBuild || !m_index || m_builtSerial != m_index->serial() || m_builtVersion < 0)
+        return false;
+    if (m_builtVersion == m_index->version())
+        return true;
+    const IndexChanges changes = m_index->changesSince(m_builtVersion);
+    if (!changes.complete || changes.names)
+        return false;
+    for (const VaultPath &path : changes.notes) {
+        if (m_localIds.contains(path))
+            return false; // one of its notes: its links or title may differ
+        const ParsedNote *note = m_index->note(path);
+        if (!note)
+            continue;
+        // A note outside it joins it with an edge to one of its inner nodes.
+        for (const QList<ResolvedLink> links = m_index->outgoingLinks(path); const ResolvedLink &l : links) {
+            if (m_joinIds.contains(l.target))
+                return false;
+        }
+        for (const QString &tag : note->tags) {
+            const std::optional<VaultPath> page = m_index->resolveTag(tag);
+            if (m_joinIds.contains(page ? *page : u'#' + tag))
+                return false;
+        }
+    }
+    m_builtVersion = m_index->version();
+    return true;
 }
 
 void GraphModel::rebuild()
 {
     m_refreshTimer.stop();
+    m_stale = false;
+    ++m_rebuilds;
     // Positions to carry over (the newest ones: the worker's frame during a run).
     QHash<QString, QPointF> oldPos;
     oldPos.reserve(m_nodes.size());
@@ -580,10 +815,34 @@ void GraphModel::rebuild()
         m_simRunning = false;
     }
 
+    // The templates folder ("templates/…", case-insensitive like the journals folder).
+    const QString templatesPrefix = [this] {
+        const QString folder = m_index ? paths::normalize(m_index->config().templatesFolder) : QString();
+        return folder.isEmpty() ? QString() : folder + u'/';
+    }();
     GraphData g;
+    QHash<QString, int> wholeDegree; ///< a local build's degrees in the whole graph (only when capped)
     m_pageCount = 0;
+    m_localBuild = false;
+    m_localIds.clear();
+    m_joinIds.clear();
+    m_builtSerial = m_index ? m_index->serial() : 0;
+    m_builtVersion = m_index ? m_index->version() : -1;
     if (m_index) {
-        g = m_index->graph(m_showTags, m_showMissing);
+        // A note's local graph without missing pages: only its neighbourhood (a daily note
+        // hidden with the journals shows the whole graph, as graph() cut by step 1 would).
+        const ParsedNote *focusNote = m_focus.isEmpty() ? nullptr : m_index->note(m_focus);
+        if (focusNote && !m_showMissing && (m_showJournals || !focusNote->journalDate)) {
+            Neighbourhood around(*m_index, m_focus, templatesPrefix, m_showTags, m_showJournals, m_showTemplates);
+            Neighbourhood::Result local = around.build(m_depth, m_maxNodes);
+            g = std::move(local.graph);
+            wholeDegree = std::move(local.degree);
+            m_joinIds = wholeDegree.isEmpty() ? std::move(local.inner) : local.ids;
+            m_localIds = std::move(local.ids);
+            m_localBuild = true;
+        } else {
+            g = m_index->graph(m_showTags, m_showMissing);
+        }
         m_pageCount = int(m_index->paths().size());
     }
 
@@ -591,11 +850,6 @@ void GraphModel::rebuild()
     QList<Node> all;
     QHash<QString, int> allIndex;
     all.reserve(g.nodes.size());
-    // The templates folder ("templates/…", case-insensitive like the journals folder).
-    const QString templatesPrefix = [this] {
-        const QString folder = m_index ? paths::normalize(m_index->config().templatesFolder) : QString();
-        return folder.isEmpty() ? QString() : folder + u'/';
-    }();
     const auto locale = uiLocale(m_locale);
     const int thisYear = QDate::currentDate().year();
     QSet<QString> templateIds; ///< template pages left out
@@ -691,10 +945,14 @@ void GraphModel::rebuild()
             if (keep[i])
                 order.append(i);
         }
+        const auto degree = [&](int i) {
+            return wholeDegree.isEmpty() ? int(adj.at(i).size())
+                                         : wholeDegree.value(all.at(i).id, int(adj.at(i).size()));
+        };
         std::ranges::stable_sort(order, [&](int a, int b) {
             if ((a == focus) != (b == focus))
                 return a == focus;
-            return adj.at(a).size() > adj.at(b).size();
+            return degree(a) > degree(b);
         });
         for (qsizetype k = m_maxNodes; k < order.size(); ++k)
             keep[order.at(k)] = false;

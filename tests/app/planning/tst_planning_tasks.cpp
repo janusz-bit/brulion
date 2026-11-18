@@ -3,7 +3,9 @@
 // page, folder, priority, status, diacritic-insensitive text), the equivalent query text (and
 // that the query engine agrees), sorting, collapsed sections, applyQuery(), escaping of the
 // rendered text, choices for the filter menus, and incremental row updates — the list kept across
-// random edits equals a list built afresh.
+// random edits equals a list built afresh, and a view that reads only the rows the model signals
+// shows the same; edits of notes without tasks compute nothing; an inactive (hidden) list only
+// goes stale.
 #include "index/query.h"
 #include "index/querycache.h"
 #include "planningtest.h"
@@ -24,6 +26,7 @@ using brulion::TaskStatus;
 using brulion::planning::TaskListModel;
 using brulion::planning::test::Files;
 using brulion::planning::test::makeIndex;
+using brulion::planning::test::ModelMirror;
 
 namespace {
 
@@ -112,6 +115,30 @@ QStringList rowsOf(const TaskListModel &m)
         out << fields.join(u'|');
     }
     return out;
+}
+
+/// One row as a view shows it (every role a delegate reads).
+QString rowText(const TaskListModel &m, int r)
+{
+    const QModelIndex i = m.index(r, 0);
+    QStringList fields;
+    for (const TaskListModel::Role role :
+         {TaskListModel::RowTypeRole, TaskListModel::KeyRole, TaskListModel::SectionRole,
+          TaskListModel::SectionCountRole, TaskListModel::CollapsedRole, TaskListModel::TextRole,
+          TaskListModel::StatusRole, TaskListModel::PageTitleRole, TaskListModel::DueRole, TaskListModel::ScheduledRole,
+          TaskListModel::ReminderSpecRole, TaskListModel::PriorityRole, TaskListModel::DepthRole,
+          TaskListModel::SubtaskCountRole, TaskListModel::FoldedRole, TaskListModel::BlockedRole,
+          TaskListModel::ProgressRole, TaskListModel::HtmlRole})
+        fields << m.data(i, role).toString();
+    return fields.join(u'|');
+}
+
+/// Apply one change to the index now (changed() at once: the models' delay 0 rebuilds them).
+template<typename Fn>
+void edit(brulion::VaultIndex &index, Fn &&fn)
+{
+    brulion::VaultIndex::Batch batch(index);
+    fn();
 }
 
 const QStringList RandomTaskLines = {
@@ -893,6 +920,168 @@ private Q_SLOTS:
                 QCOMPARE(m.rowOfKey(m.data(m.index(r, 0), TaskListModel::KeyRole).toString()), r);
         }
         QVERIFY(partial > 20);
+    }
+
+    // A hidden list (TasksView kept by ShellRouteView, the side panel's tasks out of sight)
+    // computes nothing after index changes: it only goes stale, and is computed when active again.
+    void inactiveListGoesStale()
+    {
+        auto index = makeIndex(vault());
+        TaskListModel m;
+        m.setRefreshDelay(0);
+        m.setToday(u"2026-10-15"_s);
+        m.setActive(false);
+        m.setVaultIndex(index.get()); // the first fill
+        const int total = m.totalCount();
+        QVERIFY(total > 0);
+        QVERIFY(!m.isStale());
+        const int built = m.rebuildCount();
+        edit(*index, [&] { index->update(u"Nowy.md"_s, u"- [ ] Nowe zadanie na wczoraj 📅 2026-10-14\n"_s); });
+        QCOMPARE(m.rebuildCount(), built);
+        QCOMPARE(m.totalCount(), total);
+        QVERIFY(m.isStale());
+        QSignalSpy activeChanged(&m, &TaskListModel::activeChanged);
+        m.setActive(true); // shown again: computed before anything reads it
+        QCOMPARE(activeChanged.size(), 1);
+        QVERIFY(!m.isStale());
+        QCOMPARE(m.totalCount(), total + 1);
+        QCOMPARE(textsIn(m, u"overdue"_s).last(), u"Nowe zadanie na wczoraj"_s);
+        // Shown again with nothing changed: nothing computed.
+        m.setActive(false);
+        m.setActive(true);
+        QCOMPARE(m.rebuildCount(), built + 1);
+        // A debounced change on its way when the view is hidden waits for it.
+        m.setRefreshDelay(150);
+        edit(*index, [&] { index->remove(u"Nowy.md"_s); });
+        m.setActive(false);
+        QTest::qWait(300);
+        QCOMPARE(m.totalCount(), total + 1);
+        QVERIFY(m.isStale());
+        m.setActive(true);
+        QCOMPARE(m.totalCount(), total);
+        // The model's own properties are computed while inactive (the view's filters).
+        m.setActive(false);
+        m.setStatusFilter(u"done"_s);
+        QVERIFY(m.totalCount() > 0 && m.totalCount() < total);
+        QCOMPARE(m.openCount(), 0);
+    }
+
+    // An autosave of a note without tasks (before and after) computes nothing and signals
+    // nothing; an edit of one task signals only the rows of its note's tasks.
+    void editsWithoutTasksComputeNothing()
+    {
+        Files files = vault();
+        files.append({u"Notatka.md"_s, u"- luźna myśl o żółwiu\n"_s});
+        auto index = makeIndex(files);
+        TaskListModel m;
+        QAbstractItemModelTester tester(&m, QAbstractItemModelTester::FailureReportingMode::QtTest);
+        m.setRefreshDelay(0);
+        m.setToday(u"2026-10-15"_s);
+        m.setVaultIndex(index.get());
+        QSignalSpy resets(&m, &QAbstractItemModel::modelReset);
+        QSignalSpy changes(&m, &QAbstractItemModel::dataChanged);
+        QSignalSpy inserts(&m, &QAbstractItemModel::rowsInserted);
+        QSignalSpy removes(&m, &QAbstractItemModel::rowsRemoved);
+        QSignalSpy moves(&m, &QAbstractItemModel::rowsMoved);
+        QSignalSpy counts(&m, &TaskListModel::countsChanged);
+        const int built = m.rebuildCount();
+        edit(*index, [&] { index->update(u"Notatka.md"_s, u"- luźna myśl o żółwiu, zmieniona\n- [[Książki]]\n"_s); });
+        QCOMPARE(m.rebuildCount(), built);
+        for (const QSignalSpy *spy : {&resets, &changes, &inserts, &removes, &moves, &counts})
+            QCOMPARE(spy->count(), 0);
+        // A task's text: its note's tasks are made again, only their rows are signalled.
+        QString content = index->content(u"Książki.md"_s);
+        content.replace(u"Przeczytać „Lalkę”"_s, u"Przeczytać „Lalkę” i „Faraona”"_s);
+        edit(*index, [&] { index->update(u"Książki.md"_s, content); });
+        QCOMPARE(m.rebuildCount(), built + 1);
+        for (const QSignalSpy *spy : {&resets, &inserts, &removes, &moves})
+            QCOMPARE(spy->count(), 0);
+        QStringList signalled;
+        for (const QList<QVariant> &args : std::as_const(changes)) {
+            for (int r = args.at(0).toModelIndex().row(); r <= args.at(1).toModelIndex().row(); ++r)
+                signalled << m.data(m.index(r, 0), TaskListModel::PathRole).toString();
+        }
+        QCOMPARE(signalled, (QStringList{u"Książki.md"_s, u"Książki.md"_s}));
+        QVERIFY(column(m, TaskListModel::TextRole).contains(u"Przeczytać „Lalkę” i „Faraona” #do przeczytania"_s));
+        // A task without a date in a note without tasks: a row and its section count.
+        changes.clear();
+        edit(*index, [&] { index->update(u"Notatka.md"_s, u"- [ ] Nakarmić żółwia\n"_s); });
+        QCOMPARE(inserts.count(), 1);
+        QCOMPARE(resets.count(), 0);
+        QVERIFY(changes.count() >= 1); // the section's header and its rows: the count
+        QCOMPARE(m.totalCount(), 16);
+    }
+
+    // Kept across random edits through the index's signal (changed notes merged in, notes
+    // without tasks skipped), the list equals a list built afresh, and a view that reads only the
+    // rows the model signals (inserted, moved, dataChanged) shows what the model holds.
+    void signalledRowsMatchAFreshList_data()
+    {
+        QTest::addColumn<quint32>("seed");
+        QTest::addColumn<bool>("nest");
+        QTest::newRow("nested") << 7u << true;
+        QTest::newRow("flat") << 99u << false;
+        QTest::newRow("nested 2") << 2027u << true;
+    }
+    void signalledRowsMatchAFreshList()
+    {
+        QFETCH(quint32, seed);
+        QFETCH(bool, nest);
+        const QStringList paths = {u"journals/2026-10-15.md"_s,
+                                   u"Dom.md"_s,
+                                   u"Ż.md"_s,
+                                   u"żółw.md"_s,
+                                   u"x/Ala.md"_s,
+                                   u"Łódź.md"_s,
+                                   u"Notatka.md"_s};
+        QStringList lines = RandomTaskLines;
+        lines << u"- zwykła notatka o żółwiu"_s << u"- link do [[Dom]]"_s << u"Akapit bez zadań."_s
+              << u"  - wcięty blok"_s;
+        auto index = makeIndex({});
+        TaskListModel m;
+        QAbstractItemModelTester tester(&m, QAbstractItemModelTester::FailureReportingMode::QtTest);
+        m.setRefreshDelay(0);
+        m.setToday(u"2026-10-15"_s);
+        m.setNestSubtasks(nest);
+        m.setCollapsedSections({u"later"_s});
+        m.setVaultIndex(index.get());
+        ModelMirror mirror(&m, [&m](int r) { return rowText(m, r); });
+        QRandomGenerator rng(seed);
+        int skipped = 0;
+        for (int step = 0; step < 80; ++step) {
+            const QString path = paths[rng.bounded(int(paths.size()))];
+            const int op = rng.bounded(100);
+            const int built = m.rebuildCount();
+            edit(*index, [&] {
+                if (op < 80) {
+                    QString content;
+                    // Often a note without tasks (an ordinary page being typed in).
+                    const bool plain = rng.bounded(3) == 0;
+                    for (int n = 1 + rng.bounded(5); n > 0; --n)
+                        content += (plain ? lines.mid(RandomTaskLines.size()) : lines)[rng.bounded(
+                                           int(plain ? lines.size() - RandomTaskLines.size() : lines.size()))]
+                                   + u'\n';
+                    index->update(path, content);
+                } else if (op < 92) {
+                    index->remove(path);
+                } else {
+                    const QString to = paths[rng.bounded(int(paths.size()))];
+                    if (to != path && index->note(path))
+                        index->rename(path, to, index->content(path));
+                }
+            });
+            if (m.rebuildCount() == built)
+                ++skipped;
+            const QByteArray ctx = u"step %1"_s.arg(step).toUtf8();
+            QVERIFY2(mirror.rows == mirror.current(), ctx.constData());
+            TaskListModel fresh;
+            fresh.setToday(u"2026-10-15"_s);
+            fresh.setNestSubtasks(nest);
+            fresh.setCollapsedSections({u"later"_s});
+            fresh.setVaultIndex(index.get());
+            QVERIFY2(rowsOf(m) == rowsOf(fresh), ctx.constData());
+        }
+        QVERIFY2(skipped >= 5, qPrintable(QString::number(skipped)));
     }
 
     // One change naming thousands of notes (the page they all link to appears or goes): the list

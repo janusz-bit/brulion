@@ -263,7 +263,7 @@ QVariant TaskListModel::data(const QModelIndex &index, int role) const
     case SectionCountRole: return m_sectionCounts.value(row.section);
     case DepthRole: return row.depth;
     case SubtaskCountRole: return row.subtasks;
-    case FoldedRole: return row.subtasks > 0 && m_folded.contains(rowKey(row));
+    case FoldedRole: return row.folded;
     default: return taskRowData(m_items.at(row.item), role);
     }
 }
@@ -327,7 +327,7 @@ QVariant TaskListModel::taskRowData(const Item &item, int role) const
     switch (role) {
     case RowTypeRole: return u"task"_s;
     case CollapsedRole: return false;
-    case KeyRole: return taskKey(item.ref.path, t.line);
+    case KeyRole: return item.key;
     case Qt::DisplayRole:
     case TextRole: return plainText(t.text);
     case HtmlRole:
@@ -730,6 +730,25 @@ void TaskListModel::clearFilters()
     filtersEdited();
 }
 
+void TaskListModel::setActive(bool active)
+{
+    if (m_active == active)
+        return;
+    m_active = active;
+    Q_EMIT activeChanged();
+    if (!m_active) {
+        // A rebuild on its way waits for the view to be shown.
+        if (m_refreshTimer.isActive()) {
+            m_refreshTimer.stop();
+            m_stale = true;
+        }
+        return;
+    }
+    // What changed while hidden, at once: the view shown again shows it in its first frame.
+    if (m_stale && !m_completing)
+        rebuild();
+}
+
 void TaskListModel::setRefreshDelay(int msec)
 {
     msec = std::max(0, msec);
@@ -953,6 +972,10 @@ void TaskListModel::requestRebuild()
 
 void TaskListModel::scheduleRefresh()
 {
+    if (!m_active) {
+        m_stale = true;
+        return;
+    }
     if (m_refreshTimer.interval() == 0)
         rebuild();
     else
@@ -964,6 +987,8 @@ TaskListModel::Item TaskListModel::makeItem(const QueryItem &qi, QDate today, Qt
     static const QStringList sections = sectionKeys();
     Item item;
     item.ref = TaskRef{qi.path, qi.blockIndex, *qi.task};
+    item.key = taskKey(qi.path, qi.task->line);
+    item.built = m_buildSerial;
     item.folder = folderOf(qi.path);
     if (const ParsedNote *note = m_index ? m_index->note(qi.path) : nullptr) {
         item.pageTitle = note->title;
@@ -1068,6 +1093,8 @@ void TaskListModel::rebuild()
 {
     m_refreshTimer.stop();
     m_rebuildPending = false;
+    m_stale = false;
+    ++m_buildSerial;
     const QDate today = currentDay();
     const Qt::DayOfWeek ws = weekStartDay();
     m_sortMode = m_sort == u"priority"  ? SortByPriority
@@ -1080,9 +1107,12 @@ void TaskListModel::rebuild()
         if (auto *q = std::get_if<Query>(&parsed))
             query = std::move(*q);
     }
+    ItemsChanged rowsChanged = ItemsChanged::All;
     if (!query) {
         m_items.clear();
+        m_itemsOfNote.clear();
         m_follower.reset();
+        m_renderVersion = -1;
     } else {
         QueryOptions options;
         options.defaultLimit = std::numeric_limits<int>::max();
@@ -1094,6 +1124,15 @@ void TaskListModel::rebuild()
         // week start; filters resolving names follow the cache's rule (queryResolvesNames()).
         const QString key = query->source + u'\x1f' + today.toString(Qt::ISODate) + u'\x1f' + QString::number(int(ws));
         const NoteCacheSync sync = m_follower.follow(*m_index, key, queryResolvesNames(*query));
+        // The rich text shows links into other notes: a name added, removed or renamed anywhere
+        // renders every task again; otherwise only the items made again (the changed notes').
+        bool renderAll = sync.full || m_renderSerial != m_index->serial() || m_renderVersion < 0;
+        if (!renderAll && m_renderVersion != m_index->version()) {
+            const IndexChanges changes = m_index->changesSince(m_renderVersion);
+            renderAll = !changes.complete || changes.names;
+        }
+        m_renderSerial = m_index->serial();
+        m_renderVersion = m_index->version();
         // Only the changed notes: their items again (one pass over the cache's matches, however
         // many notes changed), merged into the others' sorted ones — unless a title is new (its
         // rank among the others is not known: everything again).
@@ -1114,6 +1153,16 @@ void TaskListModel::rebuild()
                 fresh.last().title = *rank;
             }
         }
+        if (!full && !renderAll && unchangedRows(changed, fresh)) {
+            // Notes without listed tasks before and after (most autosaves): the rows, their
+            // order and their text stay; only the vault's own task count can differ.
+            const int vaultTasks = int(m_index->tasks().size());
+            if (vaultTasks != m_vaultTasks) {
+                m_vaultTasks = vaultTasks;
+                Q_EMIT countsChanged();
+            }
+            return;
+        }
         if (full) {
             const QueryResult result = m_query->result(*m_index);
             QList<Item> items;
@@ -1132,9 +1181,20 @@ void TaskListModel::rebuild()
             for (const qsizetype i : std::as_const(order))
                 sorted.append(std::move(items[i]));
             m_items = std::move(sorted);
-        } else if (!changed.isEmpty()) {
-            m_items.removeIf([&](const Item &item) { return changed.contains(item.ref.path); });
+            m_itemsOfNote.clear();
+            for (const Item &item : std::as_const(m_items))
+                ++m_itemsOfNote[item.ref.path];
+        } else {
+            const bool hadItems =
+                    std::ranges::any_of(changed, [this](const VaultPath &p) { return m_itemsOfNote.contains(p); });
+            if (hadItems) {
+                m_items.removeIf([&](const Item &item) { return changed.contains(item.ref.path); });
+                for (const VaultPath &p : std::as_const(changed))
+                    m_itemsOfNote.remove(p);
+            }
             if (!fresh.isEmpty()) {
+                for (const Item &item : std::as_const(fresh))
+                    ++m_itemsOfNote[item.ref.path];
                 const auto less = [this](const Item &a, const Item &b) { return itemLess(a, b); };
                 std::ranges::sort(fresh, less);
                 QList<Item> merged;
@@ -1144,14 +1204,20 @@ void TaskListModel::rebuild()
                            std::back_inserter(merged), less);
                 m_items = std::move(merged);
             }
+            if (renderAll) {
+                for (const Item &item : std::as_const(m_items))
+                    item.rendered = false;
+            } else {
+                rowsChanged = ItemsChanged::Fresh;
+            }
         }
     }
+    ++m_rebuilds;
     m_total = int(m_items.size());
     m_open = 0;
     m_overdue = 0;
     m_todayCount = 0;
-    for (Item &item : m_items) {
-        item.rendered = false; // the rich text shows links into other notes: rendered again when shown
+    for (const Item &item : std::as_const(m_items)) {
         if (!isClosed(item.ref.task.status))
             ++m_open;
         if (item.section == u"overdue")
@@ -1161,8 +1227,14 @@ void TaskListModel::rebuild()
     }
     m_vaultTasks = m_index ? int(m_index->tasks().size()) : 0;
     layoutTasks();
-    rebuildRows();
+    rebuildRows(rowsChanged);
     Q_EMIT countsChanged();
+}
+
+bool TaskListModel::unchangedRows(const QSet<VaultPath> &changed, const QList<Item> &fresh) const
+{
+    return fresh.isEmpty()
+           && std::ranges::none_of(changed, [this](const VaultPath &p) { return m_itemsOfNote.contains(p); });
 }
 
 void TaskListModel::layoutTasks()
@@ -1282,28 +1354,39 @@ void TaskListModel::followFoldedTasks()
 
 QString TaskListModel::rowKey(const Row &row) const
 {
-    const Item &item = m_items.at(row.item);
-    return taskKey(item.ref.path, item.ref.task.line);
+    return m_items.at(row.item).key;
 }
 
-void TaskListModel::rebuildRows()
+void TaskListModel::rebuildRows(ItemsChanged changed)
 {
     QList<Row> rows;
     QStringList keys;
+    rows.reserve(m_layout.size() + 8);
+    keys.reserve(m_layout.size() + 8);
     QString current;
+    bool collapsed = false;
+    int count = 0;
     int foldedDepth = -1; // the depth of the folded task whose subtasks are skipped
     for (const Row &task : std::as_const(m_layout)) {
         if (task.section != current) {
             current = task.section;
-            rows.append(Row{true, current, -1});
+            collapsed = m_collapsed.contains(current);
+            count = m_sectionCounts.value(current);
+            Row header{true, current, -1};
+            header.sectionCount = count;
+            header.collapsed = collapsed;
+            rows.append(header);
             keys.append(u"header:"_s + current);
             foldedDepth = -1;
         }
-        if (m_collapsed.contains(task.section) || (foldedDepth >= 0 && task.depth > foldedDepth))
+        if (collapsed || (foldedDepth >= 0 && task.depth > foldedDepth))
             continue;
-        const QString key = rowKey(task);
-        foldedDepth = task.subtasks > 0 && m_folded.contains(key) ? task.depth : -1;
-        rows.append(task);
+        const QString &key = m_items.at(task.item).key;
+        Row row = task;
+        row.sectionCount = count;
+        row.folded = task.subtasks > 0 && m_folded.contains(key);
+        foldedDepth = row.folded ? task.depth : -1;
+        rows.append(row);
         keys.append(key);
     }
     QHash<QString, int> newRow; // key -> its row in `rows`
@@ -1319,13 +1402,25 @@ void TaskListModel::rebuildRows()
             std::ranges::count_if(std::as_const(m_rowKeys), gone) + std::abs(keys.size() - m_rowKeys.size());
     const bool incremental = !m_rows.isEmpty() && changes < kMaxIncrementalOps && newRow.size() == keys.size()
                              && m_rowOfKey.size() == m_rowKeys.size(); // the keys are unique, new and old
+    QList<bool> dirty; // by row of `rows`: a row that stays shows something else
     if (incremental) {
-        // 0. Point the surviving rows at the new items (m_items was replaced already).
+        // 0. Point the surviving rows at the new items (m_items was replaced already); a row
+        //    whose fields or item changed is signalled below.
+        dirty.resize(rows.size(), false);
+        const auto rowChanged = [&](const Row &was, const Row &now) {
+            if (changed == ItemsChanged::All || was.section != now.section || was.depth != now.depth
+                || was.subtasks != now.subtasks || was.sectionCount != now.sectionCount || was.folded != now.folded
+                || was.collapsed != now.collapsed)
+                return true;
+            return changed == ItemsChanged::Fresh && !now.header && m_items.at(now.item).built == m_buildSerial;
+        };
         for (int i = 0; i < m_rows.size(); ++i) {
-            if (const int row = newRow.value(m_rowKeys.at(i), -1); row >= 0)
+            if (const int row = newRow.value(m_rowKeys.at(i), -1); row >= 0) {
+                dirty[row] = rowChanged(m_rows.at(i), rows.at(row));
                 m_rows[i] = rows.at(row);
-            else
+            } else {
                 m_rows[i].item = -1;
+            }
         }
         // 1. Remove rows that are gone (bottom-up, contiguous ranges).
         for (int last = int(m_rowKeys.size()) - 1; last >= 0; --last) {
@@ -1366,10 +1461,18 @@ void TaskListModel::rebuildRows()
         m_rowOfKey = std::move(newRow);
         endResetModel();
     } else {
-        // The rows are the new ones now (moved, inserted, pointed at the new items): any data changed.
+        // The rows are the new ones now (moved, inserted, pointed at the new items): only those
+        // that show something else get dataChanged, in contiguous ranges.
         m_rowOfKey = std::move(newRow);
-        if (!m_rows.isEmpty())
-            Q_EMIT dataChanged(createIndex(0, 0), createIndex(int(m_rows.size()) - 1, 0));
+        for (int first = 0; first < dirty.size(); ++first) {
+            if (!dirty.at(first))
+                continue;
+            int last = first;
+            while (last + 1 < dirty.size() && dirty.at(last + 1))
+                ++last;
+            Q_EMIT dataChanged(createIndex(first, 0), createIndex(last, 0));
+            first = last;
+        }
     }
 }
 
