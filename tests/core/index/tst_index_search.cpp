@@ -13,6 +13,7 @@
 
 #include <QThreadPool>
 
+#include <algorithm>
 #include <deque>
 #include <functional>
 #include <thread>
@@ -649,6 +650,47 @@ private Q_SLOTS:
         // Blocks with ids first (most recent note first), then others; frontmatter never.
         QCOMPARE(texts, QStringList({u"nowy z id"_s, u"z id"_s, u"nowy bez id"_s, u"bez id"_s}));
         QCOMPARE(index.suggestBlocks(QString(), 1).size(), 1);
+    }
+
+    // Many notes, ids only in the oldest ones and notes updated again: the most recent first, as
+    // a sort of every note by recency gives them (the empty query orders only as many notes as it
+    // needs, more each round).
+    void suggestionsOfManyNotesByRecency()
+    {
+        VaultIndex index;
+        QStringList order; // most recent last
+        const auto touch = [&](const QString &path, const QString &text) {
+            index.update(path, text);
+            order.removeAll(path);
+            order.append(path);
+        };
+        for (int i = 0; i < 300; ++i) {
+            const QString path = u"Notatka %1 źdźbło.md"_s.arg(i, 3, 10, QChar(u'0'));
+            touch(path, i < 5 ? u"- z id %1 ^id%1\n- bez id %1"_s.arg(i) : u"- bez id %1"_s.arg(i));
+        }
+        for (int i = 290; i >= 100; i -= 7) // updated again, out of path order; one id among them
+            touch(u"Notatka %1 źdźbło.md"_s.arg(i, 3, 10, QChar(u'0')),
+                  i == 290 ? u"- z id ponownie ^r290"_s : u"- bez id ponownie %1"_s.arg(i));
+        QStringList recent = order;
+        std::reverse(recent.begin(), recent.end());
+        QCOMPARE(suggestionPaths(index.suggestPages(QString(), 20)), recent.mid(0, 20));
+        QCOMPARE(suggestionPaths(index.suggestPages(QString(), 1000)), recent);
+        // The six blocks with ids (one found in the second round, five in the oldest notes) first,
+        // then the most recent others.
+        QStringList expected;
+        for (const QString &path : std::as_const(recent)) {
+            if (const ParsedNote *note = index.note(path); note && !note->blocks.first().id.isEmpty())
+                expected.append(path);
+        }
+        for (const QString &path : std::as_const(recent)) {
+            if (expected.size() >= 12)
+                break;
+            expected.append(path);
+        }
+        QStringList got;
+        for (const BlockRef &r : index.suggestBlocks(QString(), 12))
+            got.append(r.path);
+        QCOMPARE(got, expected);
     }
 
     // ---- suggestTags (`#` completion: tags in use, then pages a tag would name) -----------------

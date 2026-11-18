@@ -2665,6 +2665,23 @@ release has no LTO, and there was no gap to close); PGO is what would fix the me
 with GCC as well as with Clang, at the price of a training run per release. Cheaper and compiler-
 independent: `suggestPages("")` needs the 20 most recent entries, not a sorted list of all.
 
+**Done the same day:** the empty query's recency order (`mostRecent()` in
+`vaultindex_views.cpp`) sorts keys in one array — sequence number and position, no pointer followed
+in a comparison — and only as many as it needs: `suggestPages("")` the first `limit`,
+`suggestBlocks("")` four times more notes each round until it has `limit` blocks with an id (the
+whole notebook at worst). `bench_index`, 50 000 notes, GCC Release, the same binary before and after
+(instructions are QtTest's `-perf -perfcounter instructions`, exact; time: QBENCHMARK's median):
+
+| | before | after |
+|---|---:|---:|
+| `suggestPages("")` | 8.65 M instructions, 4.0 ms | 1.25 M, 0.29 ms (−93 %) |
+| `suggestBlocks("")` | 8.68 M instructions, 4.0 ms | 1.27 M, 0.29 ms (−93 %) |
+| `suggestBlocks("kawa ogród")` (the full order: keys, not pointers) | 1.348 G, 103 ms | 1.351 G, 103 ms |
+
+The order is the one a stable sort by recency gave (tst_index_search
+`suggestionsOfManyNotesByRecency`: 300 notes, notes updated again out of path order, ids found in
+the second round and in the oldest notes).
+
 ### Budgets
 
 Desktop = the laptop above (the graph: a GitHub runner, see its row), phone = Pi 4 (floor) and the

@@ -70,6 +70,35 @@ std::optional<Excerpt> findExcerpt(const QList<text::Line> &lines, const QString
     return std::nullopt;
 }
 
+/// The first `count` of `entries` (sortedEntries(): by path) most recent first — seq descending,
+/// equal seqs in path order, as a stable sort by seq leaves them. Sorted as keys in one array:
+/// comparing the entries through their pointers misses the cache at every step (50 000 notes: 4 ms
+/// with GCC, 15–18 ms with Clang's branch-free merge — docs/PERFORMANCE.md "GCC or Clang"), and only
+/// the first `count` are put in order.
+template<class Entry>
+QList<const Entry *> mostRecent(const QList<const Entry *> &entries, qsizetype count)
+{
+    struct Key {
+        quint64 seq;
+        qsizetype index;
+    };
+    std::vector<Key> keys;
+    keys.reserve(std::size_t(entries.size()));
+    for (qsizetype i = 0; i < entries.size(); ++i)
+        keys.push_back(Key{entries[i]->seq, i});
+    const auto newer = [](const Key &a, const Key &b) { return a.seq != b.seq ? a.seq > b.seq : a.index < b.index; };
+    count = std::clamp<qsizetype>(count, 0, entries.size());
+    if (count == entries.size())
+        std::ranges::sort(keys, newer);
+    else
+        std::ranges::partial_sort(keys, keys.begin() + count, newer);
+    QList<const Entry *> out;
+    out.reserve(count);
+    for (qsizetype i = 0; i < count; ++i)
+        out.append(entries[keys[std::size_t(i)].index]);
+    return out;
+}
+
 /// A page suggestion with what suggestPages() orders it by.
 struct ScoredPage {
     PageSuggestion s;
@@ -747,11 +776,8 @@ QList<PageSuggestion> VaultIndex::suggestPages(const QString &prefix, int limit)
         return out;
     const QString q = foldQuery(prefix);
     if (q.isEmpty()) {
-        QList<const Private::Entry *> recent = d->sortedEntries();
-        std::ranges::stable_sort(recent,
-                                 [](const Private::Entry *a, const Private::Entry *b) { return a->seq > b->seq; });
-        for (qsizetype i = 0; i < std::min<qsizetype>(limit, recent.size()); ++i)
-            out.append(PageSuggestion{recent[i]->path, recent[i]->note.title, {}});
+        for (const Private::Entry *e : mostRecent(d->sortedEntries(), limit))
+            out.append(PageSuggestion{e->path, e->note.title, {}});
         return out;
     }
     const bool withPath = q.contains(u'/');
@@ -865,28 +891,36 @@ QList<BlockRef> VaultIndex::suggestBlocks(const QString &text, int limit) const
     if (limit <= 0)
         return out;
     const QStringList wordsOfQuery = foldQuery(text).split(u' ', Qt::SkipEmptyParts);
-    QList<const Private::Entry *> byRecency = d->sortedEntries();
-    std::ranges::stable_sort(byRecency,
-                             [](const Private::Entry *a, const Private::Entry *b) { return a->seq > b->seq; });
+    const QList<const Private::Entry *> &sorted = d->sortedEntries();
     if (wordsOfQuery.isEmpty()) {
+        // The most recent notes until `limit` blocks with an id are found: usually among the
+        // first few, so only those are put in order (four times more each round, the whole
+        // notebook at worst).
         QList<BlockRef> rest;
-        for (const Private::Entry *e : std::as_const(byRecency)) {
-            const QList<Block> &blocks = e->note.blocks;
-            for (qsizetype i = 0; i < blocks.size(); ++i) {
-                if (!suggestable(blocks[i]))
-                    continue;
-                if (!blocks[i].id.isEmpty())
-                    out.append(BlockRef{e->path, int(i)});
-                else if (rest.size() < limit)
-                    rest.append(BlockRef{e->path, int(i)});
+        qsizetype done = 0;
+        for (qsizetype wanted = std::max<qsizetype>(limit, 16); done < sorted.size(); wanted *= 4) {
+            const QList<const Private::Entry *> recent = mostRecent(sorted, wanted);
+            for (qsizetype k = done; k < recent.size() && out.size() < limit; ++k) {
+                const Private::Entry *e = recent[k];
+                const QList<Block> &blocks = e->note.blocks;
+                for (qsizetype i = 0; i < blocks.size(); ++i) {
+                    if (!suggestable(blocks[i]))
+                        continue;
+                    if (!blocks[i].id.isEmpty())
+                        out.append(BlockRef{e->path, int(i)});
+                    else if (rest.size() < limit)
+                        rest.append(BlockRef{e->path, int(i)});
+                }
             }
             if (out.size() >= limit)
                 break;
+            done = recent.size();
         }
         out.append(rest);
         out.resize(std::min<qsizetype>(limit, out.size()));
         return out;
     }
+    const QList<const Private::Entry *> byRecency = mostRecent(sorted, sorted.size());
     struct Scored {
         BlockRef ref;
         int score;
