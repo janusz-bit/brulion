@@ -370,3 +370,13 @@ brulion_add_test(tst_editor_renderedtext
 brulion_add_test(tst_editor_rowheights
     SOURCES tst_editor_rowheights.cpp
     LIBS brulion_editor brulion_core_markdown)
+# PageItem (one item per page, Z10 stage C): only the rows on screen laid out (also after a width
+# change), the Flickable driven, the anchor keeping the screen through edits and measurements,
+# "scroll to block" exact, rich rows hosted by a QML delegate and released, folds, links, a frame —
+# offscreen with the software renderer (Qt Quick's QML module for the Flickable and the delegate).
+get_filename_component(_brulion_editor_qml_root "${Qt6Qml_DIR}/../../../${QT6_INSTALL_QML}" ABSOLUTE)
+brulion_add_test(tst_editor_pageitem
+    SOURCES tst_editor_pageitem.cpp
+    LIBS brulion_editor brulion_core_markdown Qt6::Qml Qt6::Quick)
+set_tests_properties(tst_editor_pageitem PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QML_IMPORT_PATH=${_brulion_editor_qml_root}")

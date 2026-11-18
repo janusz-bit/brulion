@@ -1040,8 +1040,10 @@ FocusScope {
         objectName: "pageReferences" // the shell's self-test reads linkedCount
         parent: editor.listView.contentItem
         // (Not drawn while the side panel shows the same references: refsInSidePanel. The model
-        // stays alive.)
+        // stays alive. Not under a PageItem's rows yet — BRULION_PAGE_ITEM=1, docs/UI.md "One item
+        // per page": the list it is placed in has no rows then.)
         visible: page.loaded && !page.sourceMode && page.zoomBlock < 0 && page.path !== "" && !root.refsInSidePanel
+                 && !editor.usesPageItem
         x: editor.contentX + (root.inSidePanel || Theme.compact || editor.documentMode ? 0 : editor.arrowColumn)
         y: (root.editorFooter ? root.editorFooter.y : 0) + root.refsGap
         width: editor.contentWidth - (root.inSidePanel || Theme.compact || editor.documentMode ? 0 : editor.arrowColumn)

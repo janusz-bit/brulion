@@ -22,6 +22,12 @@ bool EditorInput::textItem()
     return on;
 }
 
+bool EditorInput::pageItem()
+{
+    static const bool on = qEnvironmentVariableIntValue("BRULION_PAGE_ITEM") == 1;
+    return on;
+}
+
 EditorInput::EditorInput(QObject *parent) : QObject(parent) { }
 
 void EditorInput::replaceRanges(QQuickTextDocument *document, const QVariantList &ranges,
