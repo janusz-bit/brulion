@@ -22,10 +22,12 @@ compared with `ef90077`) and a smooth graph (L16, compared with `64d0380` on a G
   date and catches up when you open it, the folder tree changes only when files come or go, and a
   list leaves out the changes that cannot concern it; the save itself reads and checks the file
   once instead of four times, and the editor draws again only what read the changed note.
-  Measured on a computer with all those views ready: the time the window does not respond after
-  a pause in typing fell from about 0.6 s to 0.01 s on an ordinary page (the program's own work
-  for a save from 85 ms to 2 ms), and from 0.75–0.8 s to 0.07–0.09 s on pages of 5000 blocks;
-  there what is left is reading the long page again, which is moving to the background next.
+  The writing itself — checking the file, keeping the previous version, writing it safely to
+  disk, reading the page again for the index — now happens on another core, as in the Zed
+  editor. Measured on a computer with all those views ready: after a pause in typing the window
+  no longer stops at all on an ordinary page (it used to stop for about 0.3 s), and on pages of
+  5000 blocks for 0.02–0.03 s instead of 0.36–0.37 s; a letter typed into such a page shows in
+  15 instead of 25 ms (the slowest twentieth).
 
 * **Saving no longer stops the window** (2026-11-18). When you pause typing, the page used to be
   saved on the interface thread: the file read and compared, the old version kept in the history,
@@ -1888,6 +1890,27 @@ editor's write and then wrote the server's version over it), the own write refus
 note as QSaveFile does and tries a refused rename again, a failed background save is tried again
 after 2, 4, 8 … s, and a write dropped because its notebook closed reports Failed.
 
+**All of it together** (the branch's head after Z1 and the reviews' fixes against main c8bc2135;
+`bench-matrix.sh typing`, the 10k vault, Release `-g1`, `BENCH_WAIT_KEPT=1`, 2 runs × 2 alternating
+rounds, load 5–15; GUI thread per autosave, median [min–max]; instructions in user space, spread
+< 1 %):
+
+| per autosave | main | the branch |
+|---|---|---|
+| small page: GUI blocked after a burst | 325 ms | **0** (no stall over 12 ms) |
+| small page: the save / its merge / what follows (instructions) | 352 M / — / 2409 M | **0.2 M / 0.3 M / 5.1 M** |
+| small page: the save on the GUI thread | 61 ms | **0.4 ms** |
+| 5000-block outline: GUI blocked / longest stall | 373 / 113 ms | **24 / 22 ms** |
+| 5000-block outline: the save / its merge / what follows (instructions) | 729 M / — / 3113 M | **3.9 M / 62 M / 207 M** |
+| 5000-block document: GUI blocked / longest stall | 357 / 124 ms | **28 / 26 ms** |
+| 5000-block document: the save / its merge / what follows (instructions) | 795 M / — / 2942 M | **3.4 M / 79 M / 259 M** |
+| 5000-block document: a letter's handling / key → frame p95 | 5.7 / 25 ms | **1.3 / 15 ms** |
+
+What is left of an autosave on a 5000-block page (~20–28 ms, one stall): the merge — the index
+patching its lists with the prepared note, `fileChanged` / `indexChanged` to the open editors —
+and what follows it on the next turns. The small page's whole autosave is now below the probe's
+12 ms threshold.
+
 ### Typing: a keystroke costs the block (2026-11-18)
 
 A letter typed into a block of a 5000-block page still paid for the page after L4, outside the
@@ -2047,7 +2070,7 @@ emulator (optimistic), web = headless Chromium (×4 CPU = phone). ✅ meets, ⚠
 | GUI stall while indexing / after ready | < 50 ms desktop, < 100 ms phone | ✅ 28 ms indexing, 0 ms after ready (wave 5) | ❌ Pi 0.54 / 0.45 s before wave 5 (L1b; the full-text part of it off the GUI thread since L18) | – |
 | keystroke → frame (≤ 5000 blocks) | p95 < 16 ms desktop, < 33 ms phone | ✅ small page 11 ms; ✅ 5000-block outline p95 15 ms, document 13 ms ("Typing: a keystroke costs the block"; was 15 / 20 ms in the same session) | ✅ small page; ⚠️ outline p95 42 ms | – |
 | Enter / undo | < 50 ms desktop, < 100 ms phone | ✅ 15 / 13 ms (L5; base in the same session 15 / 32 ms) | ✅ Enter 38 ms; undo 214 ms before L5, not measured since (L5b) | – |
-| autosave stall (the longest stall after a save; the Zed-like aim: < 8 ms of GUI time) | < 50 ms desktop, < 100 ms phone | ✅ small page 11 ms (2 ms of CPU; 226 ms on main with the views built ahead, 41 ms before them); ⚠️ 5000 blocks 67–89 ms (236–254 ms on main; the parse, Z1) | ✅ small page 29 ms; ❌ 500 KB page 0.2 s | – |
+| autosave stall (the longest stall after a save; the Zed-like aim: < 8 ms of GUI time) | < 50 ms desktop, < 100 ms phone | ✅ small page: none over 12 ms (the save 0.4 ms on the GUI thread; 131 ms on main with the views built ahead, 41 ms before them); ✅ 5000 blocks 22–26 ms (113–124 ms on main; what is left: the merge into the index) | ✅ small page 29 ms; ❌ 500 KB page 0.2 s | – |
 | open page (5000 blocks) | frame < 150 ms desktop, < 300 ms phone | ✅ 113 ms | ❌ Pi 653 ms (L7) | – |
 | Tasks / Calendar / Agenda | < 200 ms desktop, < 500 ms phone | ✅ 133–166 ms | ❌ Pi 0.73–1.28 s before L3, not measured since (L3b, L10) | – |
 | Graph (4000 nodes; 1200 phones) | settled < 1.5 s desktop, < 3 s phone; GUI stall during the layout < 16 ms desktop, < 33 ms phone | ❌ not the laptop (unreachable): a GitHub runner with llvmpipe, CPU-rendered frames — stall 219 ms (was 958 ms), settled 2.0 s (`views`; was 8.3 s), 9.2 s with drags (was 40 s), first frame 0.13 s (was 1.07 s); the GUI thread's own sync 0.1–6 ms | ❌ Pi 2.6 s before L16, emulator 1.5 s; not measured since (L16b) | – |
