@@ -106,6 +106,40 @@ private Q_SLOTS:
         QCOMPARE(f.page.pageStats().value(u"words"_s).toInt(), 8);
     }
 
+    // The page's counts on a worker thread (PageView: off the way to the page's first frame):
+    // the same map as pageStats(), only the last request's, never another page's.
+    void statsCountedOnAWorker()
+    {
+        Fixture f(u"# Zażółć gęślą jaźń\n\n- [ ] Kupić żółć\n- [[Sklep|sklep]] biało-czerwony\n"_s);
+        QSignalSpy counted(&f.page, &PageController::pageStatsCounted);
+        f.page.countPageStats();
+        QCOMPARE(counted.count(), 0); // (from the event loop, never inside the call)
+        QVERIFY(counted.wait());
+        QCOMPARE(counted.takeFirst().at(0).toMap(), f.page.pageStats());
+        QCOMPARE(f.page.pageStats().value(u"words"_s).toInt(), 7);
+
+        // Two requests, the text changed in between: one result, the second text's.
+        f.page.countPageStats();
+        f.page.setSourceMode(true);
+        f.page.setSourceText(f.page.sourceText() + u"\nJeszcze dwa słowa"_s);
+        f.page.countPageStats();
+        QVERIFY(counted.wait());
+        QTest::qWait(50); // (an earlier result would come by now)
+        QCOMPARE(counted.count(), 1);
+        QCOMPARE(counted.takeFirst().at(0).toMap().value(u"words"_s).toInt(), 10);
+        f.page.setSourceMode(false);
+
+        // Another page meanwhile: the counts of the page before are not delivered.
+        f.page.countPageStats();
+        f.page.setPath(Other);
+        QTest::qWait(100);
+        QCOMPARE(counted.count(), 0);
+        f.page.countPageStats();
+        QVERIFY(counted.wait());
+        QCOMPARE(counted.takeFirst().at(0).toMap(), f.page.pageStats());
+        QCOMPARE(f.page.pageStats().value(u"words"_s).toInt(), 6);
+    }
+
     void rangesTakeWholeSubtrees()
     {
         Fixture f(Outline);

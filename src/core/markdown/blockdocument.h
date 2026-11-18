@@ -444,6 +444,36 @@ private:
     };
     Typing m_typing;
     bool m_typingShortcut = true;
+
+public:
+    /// One note's blocks as BlockDocument(content) splits them, found by line without splitting
+    /// and parsing the whole note: `note` is parseNote() of the same `content` (VaultIndex::note():
+    /// its blocks are the structure's nodes, in the order and with the parents the document splits
+    /// by). entryAtLine() gives what at(indexAtLine(line)) of BlockDocument(content) gives — kind,
+    /// prefix, body, heading level, language, task status, block id, first line and the blank lines
+    /// after it; not the uid, depth and parent (0, 0, -1) — parsing only that block (and the
+    /// frontmatter blocks before it), std::nullopt where indexAtLine() is -1. The linked references
+    /// of a page render one block of each referring note this way (content::GroupedRefsModel): a
+    /// note's own BlockDocument parses every block of it (docs/PERFORMANCE.md "L7").
+    class Locator {
+    public:
+        Locator(const QString &content, const ParsedNote &note);
+        std::optional<BlockEntry> entryAtLine(int line) const;
+
+    private:
+        /// Block `j` of the document with its own lines, their terminator and the blank lines after.
+        Item itemAt(int j) const;
+        QStringView lineText(int k) const;
+
+        QString m_text;            ///< the content without a byte order mark
+        QList<qsizetype> m_starts; ///< where line k starts
+        QList<qsizetype> m_ends;   ///< where its text ends (its terminator starts)
+        QList<int> m_blockStarts;  ///< the first line of each block
+        bool m_leadingEmpty = true;
+    };
+
+private:
+    static void deriveItem(Item &it, const PositionalOptions &positional);
 };
 
 } // namespace brulion::markdown

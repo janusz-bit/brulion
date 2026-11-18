@@ -258,6 +258,37 @@ QList<std::pair<QString, std::function<EditResult(BlockDocument &, int)>>> delta
     };
 }
 
+/// BlockDocument::Locator over `content` and its parseNote() against BlockDocument(content): the same
+/// block — kind, prefix, body, heading level, language, task status, id, first line, blank lines
+/// after — for every line (and none where indexAtLine() has none). "" or what differed.
+QString locatorDifference(const QString &content)
+{
+    const BlockDocument doc(content);
+    const ParsedNote note = parseNote(u"Notatki/Strona.md"_s, content);
+    const BlockDocument::Locator blocks(content, note);
+    const int lines = int(content.count(u'\n') + content.count(u'\r')) + 3;
+    for (int line = -1; line < lines; ++line) {
+        const int i = doc.indexAtLine(line);
+        const std::optional<BlockEntry> found = blocks.entryAtLine(line);
+        const QString where = u"line %1 of %2: "_s.arg(line).arg(content.left(120));
+        if ((i >= 0) != found.has_value())
+            return where + u"block %1, the locator %2"_s.arg(i).arg(found ? u"found one"_s : u"none"_s);
+        if (i < 0)
+            continue;
+        const BlockEntry &want = doc.at(i);
+        const BlockEntry &got = *found;
+        if (got.kind != want.kind || got.prefix != want.prefix || got.body != want.body
+            || got.headingLevel != want.headingLevel || got.lang != want.lang || got.taskStatus != want.taskStatus
+            || got.blockId != want.blockId || got.line != want.line || got.trailing != want.trailing)
+            return where
+                   + u"%1 %2|%3 (line %4) instead of %5 %6|%7 (line %8)"_s.arg(kindName(got.kind), got.prefix, got.body)
+                             .arg(got.line)
+                             .arg(kindName(want.kind), want.prefix, want.body)
+                             .arg(want.line);
+    }
+    return {};
+}
+
 /// Text, blocks (with their uids) and empty paragraphs of `doc` equal to `want`; the parse of every
 /// block too when `edits` (see difference()).
 QString versionDifference(const BlockDocument &doc, const BlockDocument &want, bool edits = false)
@@ -327,6 +358,66 @@ private Q_SLOTS:
                 s += pieces[rnd(quint32(pieces.size()))];
             const BlockDocument doc(s);
             QCOMPARE(doc.toString(), s);
+        }
+    }
+
+    // --- one block found by line (BlockDocument::Locator: the linked references) ------------------
+
+    void locatorMatchesTheDocument_data()
+    {
+        QTest::addColumn<QString>("content");
+        int k = 0;
+        QStringList all = fixtures();
+        all.append(deltaFixtures());
+        all.append({
+                u"- [[Strona]] w wierszu\n\t- dziecko z [[Strona]]\n\t\t- wnuk ✅\n- [ ] zadanie [[Strona]] ^blok1\n"_s,
+                u"---\naliases: [Łódź]\n---\n\n- po frontmatter i pustej linii\n"_s,
+                u"\n---\ntytuł: nie frontmatter\n---\n- dalej\n"_s,
+                u"klucz:: wartość\ndrugi:: też\n\nklucz2:: już nie właściwość strony\n- lista\n"_s,
+                u"Akapit\nw dwóch liniach\n- lista po akapicie\n  ciąg dalszy\n\n    wcięty kod?\n"_s,
+                u"    wcięty kod na początku\n\n- a\n"_s,
+                u"* gwiazdka\n  + plus w środku\n    1. numer\n       - minus głęboko\n"_s,
+                u"> - [ ] zadanie w cytacie [[Strona]]\n> zwykły tekst\n\n- poza cytatem\n"_s,
+        });
+        for (const QString &f : std::as_const(all)) {
+            QTest::newRow(qPrintable(u"fixture %1"_s.arg(k))) << f;
+            QString crlf = f;
+            crlf.replace(u"\r\n"_s, u"\n"_s).replace(u"\n"_s, u"\r\n"_s);
+            QTest::newRow(qPrintable(u"fixture %1 crlf"_s.arg(k))) << crlf;
+            QTest::newRow(qPrintable(u"fixture %1 bom"_s.arg(k))) << QString(QChar::ByteOrderMark) + f;
+            if (f.endsWith(u'\n'))
+                QTest::newRow(qPrintable(u"fixture %1 no final newline"_s.arg(k))) << f.chopped(1);
+            ++k;
+        }
+    }
+
+    void locatorMatchesTheDocument()
+    {
+        QFETCH(QString, content);
+        const QString d = locatorDifference(content);
+        QVERIFY2(d.isEmpty(), qPrintable(d));
+    }
+
+    void locatorMatchesTheDocumentFuzz()
+    {
+        const QStringList pieces{
+                u"- "_s,      u"  "_s,     u"\t"_s,  u"[ ]"_s,   u"[x]"_s,           u"#"_s,     u"##"_s,   u">"_s,
+                u"[!note]"_s, u"```"_s,    u"~~~"_s, u"|"_s,     u"---"_s,           u"%%"_s,    u"`"_s,    u"[["_s,
+                u"]]"_s,      u"^id"_s,    u"::"_s,  u"TODO "_s, u"📅 2026-10-15"_s, u"<div>"_s, u"\n"_s,   u"\n"_s,
+                u"\r\n"_s,    u"zażółć"_s, u"x"_s,   u" "_s,     u"1. "_s,           u"2) "_s,   u"<!--"_s, u"-->"_s,
+                u"key:: v"_s, u"\uFEFF"_s, u"\r"_s,  u"$$"_s};
+        quint32 seed = 4321;
+        const auto rnd = [&](quint32 n) {
+            seed = (seed * 1103515245u + 12345u) % 2147483648u;
+            return seed % n;
+        };
+        for (int k = 0; k < 800; ++k) {
+            QString s;
+            const quint32 len = 1 + rnd(90);
+            for (quint32 i = 0; i < len; ++i)
+                s += pieces[rnd(quint32(pieces.size()))];
+            const QString d = locatorDifference(s);
+            QVERIFY2(d.isEmpty(), qPrintable(d));
         }
     }
 

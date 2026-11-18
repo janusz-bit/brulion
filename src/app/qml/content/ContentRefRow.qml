@@ -25,6 +25,7 @@ import Brulion
 // Keyboard: focusable, Enter opens, Ctrl+Enter opens in the side panel (wide windows).
 FocusScope {
     id: row
+    objectName: "contentRefRow" // (the shell's self-test finds the rows by it)
 
     property string html
     property string plain
@@ -98,15 +99,18 @@ FocusScope {
                 radius: 3
                 color: Theme.fgFaint
             }
-            TaskBox {
-                objectName: "refTaskBox"
-                visible: row.taskStatus !== ""
+            // (Made for tasks only: most references are none.)
+            Loader {
+                active: row.taskStatus !== ""
                 anchors.centerIn: parent
-                status: row.taskStatus !== "" ? row.taskStatus : "todo"
-                onToggled: row.taskToggled()
-                onStatusChosen: (status) => {
-                    if (status !== row.taskStatus)
-                        row.taskStatusRequested(status)
+                sourceComponent: TaskBox {
+                    objectName: "refTaskBox"
+                    status: row.taskStatus !== "" ? row.taskStatus : "todo"
+                    onToggled: row.taskToggled()
+                    onStatusChosen: (status) => {
+                        if (status !== row.taskStatus)
+                            row.taskStatusRequested(status)
+                    }
                 }
             }
         }
@@ -151,15 +155,19 @@ FocusScope {
             }
         }
 
-        BButton {
-            visible: row.actionText !== ""
+        // (Made only with an action: the unlinked mentions' "Link".)
+        Loader {
+            active: row.actionText !== ""
+            visible: active
             Layout.alignment: Qt.AlignTop
-            size: "small"
-            variant: "secondary"
-            text: row.actionText
-            iconName: row.actionIcon
-            busy: row.actionBusy
-            onClicked: row.actionTriggered()
+            sourceComponent: BButton {
+                size: "small"
+                variant: "secondary"
+                text: row.actionText
+                iconName: row.actionIcon
+                busy: row.actionBusy
+                onClicked: row.actionTriggered()
+            }
         }
     }
 

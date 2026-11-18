@@ -15,6 +15,10 @@ import Brulion
 //
 // Not a scrolling view: it grows with its content (PageView puts it under the blocks, the side
 // panel in a Flickable). Long lists show `pageSize` references and a "show more" button.
+// Under a page's blocks only what the reader can reach is made (`visibleBottom`, `lookahead`): the
+// linked references of a long page sit far below the first screen and are listed — ten at a time,
+// a frame or two apart, into a height reserved for them — once the view comes within a screen of
+// them (docs/PERFORMANCE.md "L7"); their counts are there from the start.
 // `compact` for the side panel. Group headers collapse their page's references. The side panel's
 // accordion shows the two parts as sections of their own (`sectioned`: no headings here — the
 // section's header has them —; `showLinked` / `showUnlinked` pick the part, the unlinked mentions
@@ -35,12 +39,97 @@ FocusScope {
     property bool sectioned: false
     /// The unlinked mentions are listed (computing them reads every note: only when open).
     property bool unlinkedOpen: false
+    /// How far down this section the view reaches, in px from its top (PageView: the bottom of the
+    /// editor's viewport; negative while the section starts below it). The linked references are
+    /// listed down to `lookahead` px below that. Default: all of them at once (the side panel).
+    property real visibleBottom: 1e9
+    property real lookahead: 800
+    /// Linked references listed so far (0: none yet — the section is out of reach); grows by
+    /// `revealStep` while the list ends within reach, up to pageSize.
+    property int revealed: 0
+    readonly property int revealStep: 10
+    /// Room kept for the references not listed yet (an estimate: the page's height, and so its
+    /// scroll bar, hardly change when they come).
+    readonly property real reserved: !root.showLinked || root.revealed >= root.pageSize ? 0
+                                     : Math.min(root.pageSize - root.revealed,
+                                                root.revealed === 0 ? linked.refCount : linked.hiddenCount) * Theme.space12
+    /// List every linked reference, made at once (route.open "unlinked" scrolls to the section's
+    /// end right after).
+    function revealAll(): void {
+        root.revealUpTo(root.pageSize)
+        linked.refreshNow()
+    }
+    function revealUpTo(count: int): void {
+        revealTimer.stop()
+        root.revealed = Math.max(root.revealed, count)
+    }
+    function reveal(): void {
+        if (root.revealed >= root.pageSize || root.path === "" || !root.visible || !root.placed)
+            return
+        const reach = root.visibleBottom + root.lookahead
+        if (reach >= 1e8) {
+            root.revealUpTo(root.pageSize)
+            return
+        }
+        if (root.revealed === 0) {
+            // The first ones fill the part on screen at once (a reference takes 32 px or more),
+            // the rest follows below it.
+            if (reach > 0)
+                root.revealed = Math.min(root.pageSize, Math.max(root.revealStep,
+                                                                 Math.ceil(Math.max(0, root.visibleBottom) / 32) + 1))
+            return
+        }
+        // More while some are left out and the listed ones end within reach — the next ten a
+        // frame or two later (the rows of one step made at once).
+        if (linked.hiddenCount > 0 && column.implicitHeight < reach && !revealTimer.running)
+            revealTimer.start()
+    }
+    Timer {
+        id: revealTimer
+        interval: 32
+        onTriggered: {
+            root.revealed = Math.min(root.pageSize, root.revealed + root.revealStep)
+        }
+    }
+    // From the event loop, not inside the change: listing references changes the section's height,
+    // so the page's (the editor's footer) — and with the view at its end its scroll position, which
+    // visibleBottom reads.
+    onVisibleBottomChanged: revealLater.restart()
+    onVisibleChanged: revealLater.restart()
+    onPageSizeChanged: revealLater.restart()
+    Later {
+        id: revealLater
+        onTriggered: root.reveal()
+    }
+    /// The page above has been laid out since `path` changed (its blocks are loaded after the
+    /// path is set: until then visibleBottom measures the page before).
+    property bool placed: false
+    onPathChanged: {
+        revealTimer.stop()
+        root.revealed = 0
+        root.placed = false
+        placedLater.restart()
+    }
+    Later {
+        id: placedLater
+        onTriggered: {
+            root.placed = true
+            root.reveal()
+        }
+    }
+    // (A path given at creation: no change signal for it.)
+    Component.onCompleted: placedLater.restart()
+    Connections {
+        target: linked
+        // (After each refresh: a step listed, the counts known.)
+        function onRefreshed() { revealLater.restart() }
+    }
 
     readonly property int linkedCount: linked.refCount
     readonly property int unlinkedCount: unlinked.refCount
     readonly property bool empty: linked.refCount === 0 && linked.pageCount === 0
 
-    implicitHeight: column.implicitHeight
+    implicitHeight: column.implicitHeight + root.reserved
 
     PageTools { id: tools; workspace: Workspace }
 
@@ -51,7 +140,8 @@ FocusScope {
         palette: root.rendererPalette
         locale: DatesHelper.locale
         today: DatesHelper.today
-        limit: root.pageSize
+        // (One while out of reach: the counts without rendering the rows.)
+        limit: Math.max(1, Math.min(root.pageSize, root.revealed))
     }
     BacklinksModel {
         id: unlinked
@@ -181,13 +271,14 @@ FocusScope {
             wrapMode: Text.Wrap
         }
         RefList {
-            refs: root.showLinked ? linked : null
+            refs: root.showLinked && root.revealed > 0 ? linked : null
             tools: tools
             compact: root.compact
             rowWidth: column.width
         }
         BButton {
-            visible: root.showLinked && linked.hiddenCount > 0
+            // (Not while the references are still being listed.)
+            visible: root.showLinked && linked.hiddenCount > 0 && root.revealed >= root.pageSize
             Layout.leftMargin: Theme.space6
             Layout.topMargin: Theme.space1
             variant: "ghost"

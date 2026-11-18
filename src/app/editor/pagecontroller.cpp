@@ -330,6 +330,7 @@ void PageController::setPath(const QString &path)
         Q_EMIT pathAboutToChange();
     flush();
     m_path = path;
+    ++m_loadGeneration;     // (pending counts are the other page's)
     m_webDownloads.clear(); // the pictures of the other page are not stored into this one
     m_webStored = 0;
     m_webFailed.clear();
@@ -581,6 +582,7 @@ void PageController::load()
         return;
     waitForOwnWrite(); // (its result would otherwise land on the text loaded now)
     ++m_writeGeneration;
+    ++m_loadGeneration; // (counts of the text before are not this page's)
     m_saveAttempts = 0;
     m_failedSaves = 0; // (the backoff belongs to the page: the next one's first retry after 2 s)
     m_retryTimer.stop();

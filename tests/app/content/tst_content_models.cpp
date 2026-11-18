@@ -15,8 +15,10 @@
 #include "searchmodel.h"
 #include "taglistmodel.h"
 
+#include "contentutil.h"
 #include "workspace.h"
 
+#include "markdown/inlinerenderer.h"
 #include "text/text.h"
 #include "vault/history.h"
 #include "vault/vault.h"
@@ -1128,6 +1130,43 @@ private Q_SLOTS:
         QVERIFY2(timer.elapsed() < 20000, "the lists take far too long");
     }
 
+    // Each reference is its block as the editor holds it (BlockDocument), rendered: found in the
+    // indexed note without parsing all of it (BlockDocument::Locator) — nested items, a task, a
+    // block in a quote, after frontmatter and page properties, CRLF and a byte order mark.
+    void backlinksRenderEachBlockAsTheEditorHoldsIt()
+    {
+        auto ws = open({
+                {u"Cel.md"_s, u"- cel\n"_s},
+                {u"Lista.md"_s,
+                 u"- Góra\n\t- środek z [[Cel]]\n\t\t- [ ] zadanie [[Cel]] **pilne** ^z1\n\t- obok\n- [[Cel]] na wierzchu\n"_s},
+                {u"Dokument.md"_s, u"---\ntags: [żółty]\n---\nstatus:: szkic\n\n# Nagłówek o [[Cel]]\n\nAkapit\nw "
+                                   u"dwóch liniach [[Cel]]\n\n"
+                                   u"> cytat z [[Cel]]\n> dalej\n\n1. numer [[Cel]]\n   ciąg dalszy\n"_s},
+                {u"Windows.md"_s, u"\uFEFF- pierwszy [[Cel]]\r\n  - drugi #cel\r\n\r\n- trzeci [[Cel|cel]]\r\n"_s},
+        });
+        BacklinksModel model;
+        model.setWorkspace(ws.get());
+        model.setToday(u"2026-10-14"_s);
+        model.setPath(u"Cel.md"_s);
+        model.refreshNow();
+        int refs = 0;
+        for (int i = 0; i < model.rowCount(); ++i) {
+            const QVariantMap row = model.get(i);
+            if (row.value(u"rowType"_s) != u"ref"_s)
+                continue;
+            ++refs;
+            const QString path = row.value(u"path"_s).toString();
+            brulion::markdown::RenderContext ctx = renderContext(ws->index(), path, QDate(2026, 10, 14),
+                                                                 uiLocale(u"pl"_s), brulion::markdown::Palette());
+            ctx.taskCheckbox = false;
+            const QString want = renderBlockAt(ws->readFile(path), row.value(u"line"_s).toInt(), ctx);
+            QVERIFY(!want.isEmpty());
+            QCOMPARE(row.value(u"html"_s).toString(), want);
+        }
+        QCOMPARE(refs, 10);
+        QCOMPARE(model.refCount(), 10);
+    }
+
     void backlinksOfABusyPage()
     {
         // Two years of daily notes, each a dozen blocks that mention [[Praca]] here and there: the
@@ -1393,13 +1432,22 @@ private Q_SLOTS:
         }
         QCOMPARE(tools.summariesComputed(), computed);
 
-        // The page itself.
+        // The page itself: computed again, on the next turn. Its words are no part of the header's
+        // summary (summary() counts them): a new word changes nothing the header shows.
         QSignalSpy changed(&tools, &PageTools::summaryChanged);
         QVERIFY(ws->writeFile(u"Praca.md"_s, u"- strona tagu, słów teraz sześć\n"_s));
         QCOMPARE(tools.summariesComputed(), computed); // (not inside the save: on the next turn)
         settle();
         QCOMPARE(tools.summariesComputed(), ++computed);
+        QCOMPARE(changed.size(), 0);
+        QCOMPARE(summary().value(u"words"_s).toInt(), 5);
+        // A tag of its own does.
+        QVERIFY(ws->writeFile(u"Praca.md"_s, u"tags:: żółty\n\n- strona tagu, słów teraz sześć\n"_s));
+        settle();
+        QCOMPARE(tools.summariesComputed(), ++computed);
         QCOMPARE(changed.size(), 1);
+        QCOMPARE(tools.tagChips().size(), 1);
+        QCOMPARE(tools.tagChips().first().toMap().value(u"key"_s).toString(), u"żółty"_s);
 
         // A new referrer: a page that did not link here does now.
         QVERIFY(ws->writeFile(u"Druga.md"_s, u"- teraz o [[Praca]]\n"_s));

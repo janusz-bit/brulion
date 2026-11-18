@@ -74,7 +74,15 @@ nix develop -c nix shell nixpkgs#xvfb nixpkgs#perf -c env CUR=build-rel/src/app/
   the GUI thread, the browser's way). Trees from before wave 5 parse everything on every start.
 * `open-page`: `sync` (time inside `AppController.navigate()`), `content` (the page's first
   block exists), `frame` (the frame showing it), `settled`; `1` = first open, `2` = again after
-  going home.
+  going home. `*_frame_insns_M` / `*_frame_cpu_ms` and `*_settled_insns_M` / `*_settled_cpu_ms`:
+  the GUI thread's user-space instructions (millions) and CPU time from the navigation to that
+  frame's sync (read on the render thread while the GUI thread waits for it) and to the end of the
+  last stall before settled — the numbers to compare on a shared machine. `BENCH_WAIT_KEPT=1`
+  waits for the views built ahead first (on a loaded machine they may still be built while the
+  page opens, and their work lands in its numbers); `BENCH_NAV_DELAY_MS` waits before the first
+  opening (mark `nav_delay`: time for `perf record -p` attached at `kept_settled` to start).
+  Every mark of the GUI thread carries its counters (`gcpu`, `gins`), every frame too (`frames`
+  event: `gcpu`, `gins`).
 * `typing` (row 10 of the page; key = press + release): `*_handle` = the press's synchronous
   handling, `*_frame` = key press → the frame that shows the change, split into `*_gui` (the
   handling and that frame's sync: the GUI thread's own), `*_wait` (from the handling to the start

@@ -587,6 +587,12 @@ public:
     /// length } — length is the text's size, for a caller that waits longer after typing in a
     /// long page —; {} before it is loaded. (docs/UI.md "Statistics and focus mode".)
     Q_INVOKABLE QVariantMap pageStats() const;
+    /// pageStats() counted on a worker thread (the text taken now; counting a 5000-block page
+    /// takes the GUI thread some 100 ms — docs/PERFORMANCE.md "L7"): pageStatsCounted() follows
+    /// from the event loop with the counts of the last request — an earlier one still counting, a
+    /// request before another page was loaded, gives nothing. {} before the page is loaded.
+    /// (Single-threaded builds count from the event loop.)
+    Q_INVOKABLE void countPageStats();
     /// The same of a selection: `editSelection` (the Markdown selected in the block being edited)
     /// when it is not empty, else the selected blocks; {} when nothing is selected.
     Q_INVOKABLE QVariantMap selectionStats(const QString &editSelection = QString()) const;
@@ -1104,6 +1110,8 @@ Q_SIGNALS:
     void saveFailed();
     /// saveInBackground() sent the page's text to the host (diagnostics: the bench probe).
     void saveStarted();
+    /// countPageStats()'s result (pageStats()'s map).
+    void pageStatsCounted(const QVariantMap &stats);
     /// The file changed outside and was reloaded / merged.
     void externallyChanged(bool merged);
     /// The file was deleted outside the editor: reloaded as a page not written yet, or — with
@@ -1313,6 +1321,10 @@ private:
     BlockListModel *m_model = nullptr;
     QUndoStack *m_undo = nullptr;
     int m_undoGeneration = 0; ///< bumped whenever m_undo is cleared (undoToken())
+    /// countPageStats(): its last request (a result of an earlier one is dropped) and the page
+    /// loads (a result for a page loaded before is dropped too).
+    quint64 m_statsRequest = 0;
+    quint64 m_loadGeneration = 0;
     QTimer m_saveTimer;
     bool m_saving = false; ///< save() is inside the host's compare-and-swap write
     /// saveInBackground(): a write in flight, the text sent, its generation (a result of an older

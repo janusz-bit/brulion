@@ -141,10 +141,11 @@ References pageReferences(const VaultIndex *idx, const QString &path, QSet<QStri
     return refs;
 }
 
-/// summary()'s journalDate, aliases, tags, properties and words of the indexed note. The page's
-/// own tags go to `tagsOut`, the notes carrying them (whose spelling may be shown) to `notesOut`.
+/// summary()'s journalDate, aliases, tags, properties and (`words`) words of the indexed note.
+/// The page's own tags go to `tagsOut`, the notes carrying them (whose spelling may be shown) to
+/// `notesOut`.
 void noteSummary(QVariantMap &out, const ParsedNote &note, const VaultIndex *idx, QSet<QString> *notesOut,
-                 QSet<QString> *tagsOut)
+                 QSet<QString> *tagsOut, bool words)
 {
     if (note.journalDate)
         out.insert(u"journalDate"_s, isoDate(*note.journalDate));
@@ -153,11 +154,14 @@ void noteSummary(QVariantMap &out, const ParsedNote &note, const VaultIndex *idx
     const QStringList own = pageTags(note);
     if (tagsOut)
         tagsOut->unite(QSet<QString>(own.cbegin(), own.cend()));
+    // How the page's own tags are spelled (not a table of the notebook's every tag).
     QHash<QString, QString> display;
     const QList<TagCount> all = idx->tags();
     for (const TagCount &t : all) {
+        if (!own.contains(t.tag))
+            continue;
         display.insert(t.tag, t.display.isEmpty() ? t.tag : t.display);
-        if (notesOut && own.contains(t.tag))
+        if (notesOut)
             notesOut->unite(QSet<QString>(t.paths.cbegin(), t.paths.cend()));
     }
     QVariantList tags;
@@ -181,16 +185,18 @@ void noteSummary(QVariantMap &out, const ParsedNote &note, const VaultIndex *idx
     }
     out.insert(u"properties"_s, props);
 
-    int words = 0;
+    if (!words)
+        return;
+    int count = 0;
     static const QRegularExpression word(u"[\\p{L}\\p{N}]+"_s);
     for (const Block &b : note.blocks) {
         auto it = word.globalMatch(b.text);
         while (it.hasNext()) {
             it.next();
-            ++words;
+            ++count;
         }
     }
-    out.insert(u"words"_s, words);
+    out.insert(u"words"_s, count);
 }
 
 } // namespace
@@ -489,8 +495,10 @@ QVariantMap PageTools::summaryOf(const QString &rawPath, Reads *reads) const
     out.insert(u"exists"_s, m_workspace->exists(path));
     const VaultIndex *idx = m_workspace->index();
     const ParsedNote *note = idx ? idx->note(path) : nullptr;
+    // The header's summary (`reads`: refreshSummary()) shows no word count: a regex over every
+    // block of the page, again after each of its autosaves (docs/PERFORMANCE.md "L7").
     if (note)
-        noteSummary(out, *note, idx, reads ? &reads->notes : nullptr, reads ? &reads->tags : nullptr);
+        noteSummary(out, *note, idx, reads ? &reads->notes : nullptr, reads ? &reads->tags : nullptr, !reads);
     // Pages linking here or carrying a tag that names this page — also for a page not written
     // yet (a link's or a tag's): what already names it.
     if (idx && (note || !path.isEmpty())) {

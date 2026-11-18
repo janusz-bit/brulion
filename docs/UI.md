@@ -982,11 +982,15 @@ emoji alone none; a no-break space separates words except between digits) — th
 * at the top of the page's menu (`pageMenuStats`, disabled item, every width) — counted when the
   menu opens.
 
-Counting is cheap but not per keystroke: the footer counts once the page has not changed for
-400 ms plus 1 ms per 100 characters (at most 3 s; about 5 ms per 100 000 characters), the
-selection 150 ms after it changed; with the footer hidden nothing is counted until the menu opens.
-A page that opens is counted once, right after its first frame (a `Later`: the counts becoming
-available and the footer shown arrive together and asked for two whole counts before).
+Counting is not per keystroke: the footer counts once the page has not changed for 400 ms plus
+1 ms per 100 characters (at most 3 s), the selection 150 ms after it changed; with the footer hidden
+nothing is counted until the menu opens. The page's counts are taken on a worker thread
+(`PageController.countPageStats()` → `pageStatsCounted`: the text is taken on the GUI thread, a
+result for an earlier request or another page is dropped; single-threaded builds count from the
+event loop) — a 5000-block page's count is some 330 M instructions, which a posted call still put
+before the page's first frame. A page that opens is counted once (a `Later`: the counts becoming
+available and the footer shown arrive together and asked for two whole counts before); the menu
+counts synchronously as it opens.
 The journal stream shows no count (a day opened as a page does).
 
 **Focus mode** (`AppSettings.focusMode`, `ui/focusMode`, a device setting kept across restarts;
@@ -3125,6 +3129,21 @@ new width — the window, the side panel, a phone turned — lays every row out 
 that outline), and the background filling makes some frames of 25–45 ms just after a page opens.
 Rows are also made cheaper (below): the rows on screen, and every row of a longer page, are still
 created while the page opens or scrolls.
+
+The **linked references under a page** (`ContentBacklinks` in PageView, below the editor's
+footer) follow the same rule: only what the reader can reach is made (docs/PERFORMANCE.md "L7").
+PageView gives the section `visibleBottom` (how far into it the editor's viewport reaches) and a
+`lookahead` of one screen; while the section is beyond that, `BacklinksModel` counts the
+references (the heading's "40 linked references", the page tools) but renders one and lists none,
+and their room is reserved (`reserved`: an estimate per reference, so the page's height and its
+scroll bar hardly move). Once the view comes within a screen, the first references fill the part
+on screen at once and the rest follows ten at a time (`revealStep`, 32 ms apart), each step only
+while the listed ones end within reach; "Show N more" appears once `pageSize` are listed.
+`revealAll()` lists them at once (route.open "unlinked" scrolls to the section's end). The side
+panel's section and the picture's and PDF's references list everything at once (no
+`visibleBottom`). Each reference renders its block as the editor holds it without parsing the
+referring note: `BlockDocument::Locator` finds the block by its line from the index's
+`ParsedNote` and parses that block alone.
 
 ### Rules for contributors
 

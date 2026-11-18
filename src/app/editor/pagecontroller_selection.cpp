@@ -13,9 +13,16 @@
 #include "webpicture/webpicture.h"
 
 #include <QClipboard>
+#include <QCoreApplication>
 #include <QGuiApplication>
 #include <QMimeData>
+#include <QPointer>
 #include <QRegularExpression>
+#include <QTimer>
+
+#if QT_CONFIG(thread) && !defined(Q_OS_WASM)
+#include <QThreadPool>
+#endif
 
 #include <algorithm>
 #include <ranges>
@@ -442,6 +449,40 @@ QVariantMap PageController::pageStats() const
         return {};
     const QString content = m_sourceMode ? sourceText() : text();
     return statsMap(stats::countMarkdown(content), content.size());
+}
+
+void PageController::countPageStats()
+{
+    const quint64 request = ++m_statsRequest;
+    const quint64 load = m_loadGeneration;
+    if (!m_loaded) {
+        QMetaObject::invokeMethod(
+                this,
+                [this, request, load] {
+                    if (request == m_statsRequest && load == m_loadGeneration)
+                        Q_EMIT pageStatsCounted({});
+                },
+                Qt::QueuedConnection);
+        return;
+    }
+    // The text now (implicitly shared: the worker reads its own copy).
+    const QString content = m_sourceMode ? sourceText() : text();
+    const QPointer<PageController> self(this);
+    auto deliver = [self, request, load](const QVariantMap &stats) {
+        if (self && request == self->m_statsRequest && load == self->m_loadGeneration)
+            Q_EMIT self->pageStatsCounted(stats);
+    };
+#if QT_CONFIG(thread) && !defined(Q_OS_WASM)
+    QThreadPool::globalInstance()->start([content, deliver = std::move(deliver)] {
+        const QVariantMap stats = statsMap(stats::countMarkdown(content), content.size());
+        QMetaObject::invokeMethod(
+                QCoreApplication::instance(), [deliver, stats] { deliver(stats); }, Qt::QueuedConnection);
+    });
+#else
+    QTimer::singleShot(0, this, [content, deliver = std::move(deliver)] {
+        deliver(statsMap(stats::countMarkdown(content), content.size()));
+    });
+#endif
 }
 
 QVariantMap PageController::selectionStats(const QString &editSelection) const

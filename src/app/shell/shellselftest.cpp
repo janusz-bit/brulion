@@ -8180,6 +8180,51 @@ void checkNamesWithMarkup(QQuickWindow *window, AppController *app, const Check 
     app->goHome();
 }
 
+/// 3k'. A long page's linked references are made only when the reader can reach them
+///      (ContentBacklinks.visibleBottom, docs/PERFORMANCE.md "L7"): opened at its top, the section
+///      far below counts them but lists none; scrolled to the end, they are listed and shown.
+void checkReferencesOutOfReach(QQuickWindow *window, AppController *app, const Check &check)
+{
+    Workspace *ws = app->workspace();
+    const QString page = u"Długa strona referencji.md"_s;
+    const QString linking = u"Odnośnik do długiej.md"_s;
+    QString blocks;
+    for (int i = 0; i < 400; ++i)
+        blocks += u"- Akapit %1: zażółć gęślą jaźń, dłuższy tekst, żeby strona była wysoka\n"_s.arg(i);
+    check(ws->writeFile(page, blocks) && ws->writeFile(linking, u"- Tutaj jest [[Długa strona referencji]] z łódką\n"_s)
+                  && waitFor([&] { return ws->exists(page) && ws->exists(linking); }),
+          "a 400-block page and a note linking to it are added");
+    app->openPage(page);
+    QQuickItem *editor = waitLoadedEditor(window->contentItem(), u"pageEditor"_s, page);
+    // This page's own section (the views left before may still exist: deleted later).
+    QQuickItem *pageView = editor ? editor->parentItem() : nullptr;
+    auto *refs = pageView ? pageView->findChild<QQuickItem *>(u"pageReferences"_s) : nullptr;
+    const auto refRowShown = [&] {
+        return findShown(window->contentItem(),
+                         [](QQuickItem *item) {
+                             return item->objectName() == u"contentRefRow"_s
+                                    && item->property("plain").toString().contains(u"łódką"_s);
+                         })
+               != nullptr;
+    };
+    check(editor && refs && waitFor([&] { return refs->property("linkedCount").toInt() == 1; }),
+          "the long page's references are counted at once");
+    settle(300);
+    check(refs && refs->property("revealed").toInt() == 0 && !refRowShown(),
+          "but none is listed while they are far below the first screen");
+    auto *list = editor ? editor->property("listView").value<QQuickItem *>() : nullptr;
+    if (list) {
+        QMetaObject::invokeMethod(list, "positionViewAtEnd");
+        QMetaObject::invokeMethod(list, "forceLayout");
+    }
+    check(list && waitFor([&] { return refs->property("revealed").toInt() > 0 && refRowShown(); }),
+          "scrolled to the end, the reference is listed and shown");
+    app->goHome();
+    waitFor([&] { return app->currentView() == u"journals"; });
+    check(ws->vault()->removePermanently(page) && ws->vault()->removePermanently(linking),
+          "the long page and its referrer are removed again");
+}
+
 /// 3l. A language switched at run time reaches the frame's dates: the tree's daily notes are
 ///     labelled in the new language (their binding reads DatesHelper.locale: a method call alone is
 ///     not tracked, and the days kept the old language). Desktop: the sidebar's tree. The language
@@ -9300,6 +9345,9 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
     closeMenus(window);
     // 3k. Names with markup in the dialogs that quote them (Move, the trash confirmation).
     checkNamesWithMarkup(window, app, check);
+    // 3k'. A long page's references: made only when the reader can reach them.
+    checkReferencesOutOfReach(window, app, check);
+    closeMenus(window);
     // 3l. A language switched at run time: the tree's daily notes follow.
     checkLanguageFollows(window, app, check);
 
