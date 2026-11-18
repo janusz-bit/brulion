@@ -189,6 +189,11 @@ def m_open_page(run):
             f = frame_after(run, pc["prevPoll"])
             if f is not None:
                 out["open%s_frame_ms" % tag] = f - t0
+                # The GUI thread's user-space instructions from the navigation to that frame (the
+                # probe's counter series, where the scenario records one).
+                a, b = cpu_at(run, t0), cpu_at(run, f)
+                if a and b and b[2] > a[2]:
+                    out["open%s_insns_M" % tag] = (b[2] - a[2]) / 1e6
         ps = mk.get("page_settled:" + tag)
         if ps:
             out["open%s_settled_ms" % tag] = ps["t"] - t0
@@ -601,9 +606,16 @@ def m_journal_scroll(run):
 
 
 def m_page_scroll(run):
-    """page-scroll: the opening as open-page's first round, then the wheel's frames as journal-scroll."""
+    """page-scroll: the opening as open-page's first round, then the wheel's frames as journal-scroll;
+    the GUI thread's user-space instructions over the scroll less its idle rate (settled runs)."""
     out = {k: v for k, v in m_open_page(run).items() if k.startswith("open1_") or k.endswith(":page:1")}
     out.update(m_journal_scroll(run))
+    mk = run["marks"]
+    rate = idle_rate(run)
+    if rate and "scroll_start" in mk and "scroll_end" in mk:
+        a, b = cpu_at(run, mk["scroll_start"]["t"]), cpu_at(run, mk["scroll_end"]["t"])
+        if a and b and b[2] > a[2]:
+            out["scroll_insns_M"] = (b[2] - a[2] - rate[1] * (b[0] - a[0])) / 1e6
     return out
 
 
@@ -612,14 +624,22 @@ def m_page_resize(run):
     longest GUI stall within 500 ms of the request."""
     out = {k: v for k, v in m_open_page(run).items() if k.startswith("open1_") or k.endswith(":page:1")}
     acts = [x for x in run["actions"] if x["kind"] == "resize" and x["t2"] > 0]
-    frames, stalls = [], []
+    frames, stalls, insns = [], [], []
+    rate = idle_rate(run)
     for a in acts:
         f = frame_after(run, a["t2"])
         if f is not None:
             frames.append(f - a["t0"])
         stalls.append(max([d for _, d in stalls_in(run, a["t0"], a["t0"] + 500)], default=0.0))
+        # The GUI thread's user-space instructions in the 500 ms after the request, less its idle
+        # rate (the lag ticks): what the new width cost, whatever else runs on the machine.
+        before, after = cpu_at(run, a["t0"]), cpu_at(run, a["t0"] + 500)
+        if rate and before and after and after[2] > before[2]:
+            insns.append((after[2] - before[2] - rate[1] * (after[0] - before[0])) / 1e6)
     out.update(dist("resize_frame", frames))
     out.update(dist("resize_stall", stalls))
+    if insns:
+        out.update(dist("resize_insns_M", insns))
     return out
 
 

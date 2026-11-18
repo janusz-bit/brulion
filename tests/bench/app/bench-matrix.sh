@@ -9,6 +9,8 @@
 # Groups (default: all): startup-demo startup-big (startup-big-short) open-page typing source-typing
 #   select-copy search switcher views graph journal-scroll page-scroll page-resize switch-pages idle workload
 # Labels run alternately per group (base, cur, base, cur … when ROUNDS > 1) to spread drift.
+# ENVS: the app's environment per label, "label=VAR=value …" — the same binary with a switch on and
+#   off: BINS="off=…/brulion on=…/brulion" ENVS="on=BRULION_PAGE_ITEM=1".
 # RUN_TIMEOUT: seconds one app run may take (default 300; a scenario's own --timeout wins);
 # BENCH_TIMEOUT_MS (exported) is the probe's watchdog inside the app (default 240000).
 set -uo pipefail
@@ -21,16 +23,18 @@ pages="${PAGES:-${VAULT_BIG%/}.pages.txt}"
 work="${WORKDIR:-$(mktemp -d)}"
 mkdir -p "$OUT" "$work"
 read -r -a bins <<< "$BINS"
+read -r -a label_envs <<< "${ENVS:-}"
 if [[ $# -gt 0 ]]; then groups=("$@"); else
   groups=(startup-demo startup-big open-page typing source-typing select-copy search switcher views graph
     journal-scroll page-scroll page-resize switch-pages idle workload); fi
 
 run() { # run <label> <bin> <run-bench args…> (rounds after the first add to the first one's runs)
   local label="$1" bin="$2"; shift 2
-  local append=()
+  local append=() extra=() e
   [[ "${round:-0}" -gt 0 ]] && append=(--append)
+  for e in "${label_envs[@]}"; do [[ "${e%%=*}" == "$label" ]] && extra+=(--env "${e#*=}"); done
   python3 "$here/run-bench.py" --bin "$bin" --probe "$PROBE" --label "$label" --out "$OUT" \
-    --platform "$platform" --workdir "$work/$label" --timeout "${RUN_TIMEOUT:-300}" "${append[@]}" "$@"
+    --platform "$platform" --workdir "$work/$label" --timeout "${RUN_TIMEOUT:-300}" "${append[@]}" "${extra[@]}" "$@"
 }
 
 group() { # group <name> : runs every label for that group

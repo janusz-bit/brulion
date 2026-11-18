@@ -853,7 +853,8 @@ private:
         });
         return n;
     }
-    /// Visible BlockDelegates under `root` (the whole window when null).
+    /// Visible BlockDelegates under `root` (the whole window when null), and the rows a PageItem
+    /// draws itself (BRULION_PAGE_ITEM=1: its `drawnRowCount`; its hosted rows are BlockDelegates).
     int visibleBlocks(QQuickItem *root = nullptr)
     {
         if (!m_window)
@@ -862,10 +863,13 @@ private:
         walk(root ? root : m_window->contentItem(), [&n](QQuickItem *it) {
             if (!it->isVisible())
                 return false;
-            if (typeName(it) == "BlockDelegate") {
+            const QByteArray type = typeName(it);
+            if (type == "BlockDelegate") {
                 ++n;
                 return false;
             }
+            if (it->inherits("brulion::editor::PageItem"))
+                n += it->property("drawnRowCount").toInt();
             return true;
         });
         return n;
@@ -1322,12 +1326,14 @@ private:
     void openPageSteps(const QString &page, const QString &tag)
     {
         action(u"nav:"_s + tag, [this, page, tag] {
+            m_series = true; // the GUI thread's counters while the page opens (open<tag>_insns_M)
             mark(u"nav_start:"_s + tag);
             navigate({{u"view"_s, u"page"_s}, {u"path"_s, page}});
             mark(u"nav_returned:"_s + tag);
         });
         waitUntil(u"page_content:"_s + tag, [this, page] { return pageShown(page); }, 120000);
         waitSettled(u"page_settled:"_s + tag, 1000, 120000);
+        action(u"series_off"_s, [this] { m_series = false; });
     }
 
     void startEditing(const QString &page, int row)
@@ -1752,15 +1758,20 @@ private:
     void pageScrollSteps()
     {
         action(u"nav:1"_s, [this] {
+            m_series = true; // the GUI thread's counters: open1_insns_M, scroll_insns_M
             mark(u"nav_start:1"_s);
             navigate({{u"view"_s, u"page"_s}, {u"path"_s, m_page}});
             mark(u"nav_returned:1"_s);
         });
         waitUntil(u"page_content:1"_s, [this] { return pageShown(m_page); }, 120000);
-        if (m_scrollWait >= 0)
+        if (m_scrollWait >= 0) {
             wait(m_scrollWait);
-        else
+        } else {
             waitSettled(u"page_settled:1"_s, 1000, 120000);
+            action(u"idle_ref"_s, [this] { mark(u"idle_ref_start"_s); });
+            wait(500);
+            action(u"idle_ref_end"_s, [this] { mark(u"idle_ref_end"_s); });
+        }
         action(u"mem"_s, [this] { markMem(u"page:1"_s); });
         action(u"scroll_start"_s, [this] { mark(u"scroll_start"_s); });
         for (int i = 0; i < 80; ++i) {
@@ -1771,7 +1782,10 @@ private:
             action(u"wheel"_s, [this] { wheel(120, u"up"_s); });
             wait(40);
         }
-        action(u"scroll_end"_s, [this] { mark(u"scroll_end"_s); });
+        action(u"scroll_end"_s, [this] {
+            mark(u"scroll_end"_s);
+            m_series = false;
+        });
         waitSettled(u"scroll_settled"_s, 1000, 60000);
         action(u"mem"_s, [this] { markMem(u"scrolled"_s); });
     }
@@ -1785,7 +1799,15 @@ private:
     {
         openPageSteps(m_page, u"1"_s);
         action(u"mem"_s, [this] { markMem(u"page:1"_s); });
-        action(u"resize_base"_s, [this] { m_resizeBase = m_window ? m_window->width() : 1280; });
+        // The GUI thread's counters at every lag tick from 500 ms of idle before the first resize
+        // (the idle rate) to the end: each resize's instructions (resize_insns_M).
+        action(u"resize_base"_s, [this] {
+            m_resizeBase = m_window ? m_window->width() : 1280;
+            m_series = true;
+            mark(u"idle_ref_start"_s);
+        });
+        wait(500);
+        action(u"idle_ref_end"_s, [this] { mark(u"idle_ref_end"_s); });
         for (int i = 0; i < 12; ++i) {
             const bool narrow = i % 2 == 0;
             action(u"resize"_s, [this, narrow] {
@@ -1815,6 +1837,7 @@ private:
                     5000, false);
             wait(600);
         }
+        action(u"series_off"_s, [this] { m_series = false; });
         waitSettled(u"resize_settled"_s, 1000, 60000);
     }
 
