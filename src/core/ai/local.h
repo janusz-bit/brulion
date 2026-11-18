@@ -45,17 +45,26 @@ struct LocalFile {
 struct LocalModel {
     QString id;          ///< the settings' and a reply's name for it: "lfm3-vl-2b"
     QString name;        ///< "LFM3-VL 2B"
-    QString maker;       ///< "Liquid AI"
+    /// What the settings' chooser shows of it, short enough for all the models side by side on a
+    /// narrow phone ("": its name).
+    QString label;
+    /// Who made it ("Liquid AI"); of an adapted model, who trained the adapter ("Brulion") — the
+    /// model under it is `baseName` by `baseMaker`, whose licence it keeps.
+    QString maker;
     QString format;      ///< how its prompts are written (local::prompt): "lfm3"
     LocalFile file;      ///< the model itself (GGUF)
     /// What was learnt on top of it: a LoRA adapter (GGUF) the runner adds to the weights of
     /// `file`, which stays as it is (a 4-bit file trained for that precision keeps it); none: the
     /// model as its maker gives it.
     LocalFile adapter;
+    /// An adapted model's own: the model `file` is, by name ("LFM3 1.7B"), and who made it
+    /// ("Liquid AI"). Empty for a model as its maker gives it.
+    QString baseName;
+    QString baseMaker;
     LocalFile projector; ///< what lets it see pictures (GGUF); none: it reads text only
     QString license;     ///< the license's name (not a free-software one: the user downloads the files)
     QUrl licenseUrl;
-    QUrl pageUrl; ///< the maker's page about the model
+    QUrl pageUrl; ///< the maker's page about the model (of an adapted one: about the adapter)
     /// It may think before it answers, when the request lets it (local::thinks: an effort other
     /// than "low"); false: it always answers at once — it was trained to, and every request it
     /// gets is taken as one of the effort "low".

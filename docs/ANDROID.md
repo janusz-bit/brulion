@@ -853,7 +853,8 @@ while typing with a keyboard that corrects words by itself.
 
 **Settings → Extensions → AI → On this device** runs a small AI model inside the app
 (docs/EXTENSIONS.md "AI"): no key, no account, nothing sent anywhere. Choose LFM3-VL 2B (it sees
-pictures; 1.2 GB) or LFM3 1.7B (text only; 1.0 GB) and press **Download** — over Wi-Fi: the files
+pictures; 1.2 GB), LFM3 1.7B (text only; 1.0 GB) or Brulion Assistant 1.7B (LFM3 1.7B trained for
+the assistant; its file and 92 MB more) and press **Download** — over Wi-Fi: the files
 come from Hugging Face into the app's own storage (`files/models`, removed with the app or with
 **Remove**), each checked against its SHA-256. A download that stops goes on from where it was.
 Android's backup and the transfer to a new phone leave the models out ([Backups](#backups)): on

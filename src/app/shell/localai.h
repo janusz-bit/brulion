@@ -37,7 +37,8 @@ class LocalAi : public QObject, public ai::LocalBackend {
 
     /// This build can run a model on the device (it has the model runner's plugin).
     Q_PROPERTY(bool available READ available CONSTANT FINAL)
-    /// The models to choose from, for a segmented control: {value: id, text: name}.
+    /// The models to choose from, for a segmented control: {value: id, text: its label, else its
+    /// name}.
     Q_PROPERTY(QVariantList choices READ choices CONSTANT FINAL)
     /// The model chosen (its id; AppSettings' aiLocalModel, "" being the default one) — what the
     /// properties below and download() / cancelDownload() / remove() are about.
@@ -48,6 +49,12 @@ class LocalAi : public QObject, public ai::LocalBackend {
     Q_PROPERTY(QString modelSize READ modelSize NOTIFY modelChanged FINAL)
     /// It sees pictures (b.ai's `images`).
     Q_PROPERTY(bool modelSees READ modelSees NOTIFY modelChanged FINAL)
+    /// It is another model adapted to the app (ai::LocalModel::adapter): `modelBase` by
+    /// `modelBaseMaker` ("LFM3 1.7B", "Liquid AI"; "" for a model as its maker gives it), trained
+    /// further by `modelMaker`.
+    Q_PROPERTY(bool modelAdapted READ modelAdapted NOTIFY modelChanged FINAL)
+    Q_PROPERTY(QString modelBase READ modelBase NOTIFY modelChanged FINAL)
+    Q_PROPERTY(QString modelBaseMaker READ modelBaseMaker NOTIFY modelChanged FINAL)
     Q_PROPERTY(QString modelLicense READ modelLicense NOTIFY modelChanged FINAL)
     Q_PROPERTY(QString modelLicenseUrl READ modelLicenseUrl NOTIFY modelChanged FINAL)
     Q_PROPERTY(QString modelPageUrl READ modelPageUrl NOTIFY modelChanged FINAL)
@@ -103,6 +110,9 @@ public:
     QString modelMaker() const;
     QString modelSize() const;
     bool modelSees() const;
+    bool modelAdapted() const;
+    QString modelBase() const;
+    QString modelBaseMaker() const;
     QString modelLicense() const;
     QString modelLicenseUrl() const;
     QString modelPageUrl() const;

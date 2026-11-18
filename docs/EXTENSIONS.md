@@ -587,30 +587,37 @@ end, { label = "Ask my notes (AI)" })
   the notebook); the model; the address; **Check** ("Say OK."). In the browser the key is in the
   site's storage, and Anthropic's API is told the request comes from a page.
 * **On this device**: a small model that runs inside the app — no key, no account, no network once
-  its files are there, nothing sent anywhere. Two models by Liquid AI, chosen in the settings:
-  **LFM3-VL 2B** (the default: it sees pictures; 1.2 GB) and **LFM3 1.7B** (text only, the better
-  one at working through a notebook with tools; 1.0 GB). Settings downloads the chosen one from
+  its files are there, nothing sent anywhere. Three models, chosen in the settings: two by Liquid
+  AI, **LFM3-VL 2B** (the default: it sees pictures; 1.2 GB) and **LFM3 1.7B** (text only, better
+  at working through a notebook with tools; 1.0 GB), and **Brulion Assistant 1.7B**
+  (`brulion-assistant-1.7b`, `janusz-bit/brulion-assistant-1.7b` on Hugging Face): LFM3 1.7B
+  trained further for the built-in assistant (docs/FINETUNE.md), the best of the three at working
+  through the notebook with it — it answers at once, without thinking, and reads text only; an
+  adapter of 92 MB over LFM3 1.7B's file (below). Settings downloads the chosen one from
   Hugging Face into `<app data>/models` — one pinned revision, each file checked against its
   SHA-256; a download that breaks off goes on from where it stopped — and removes it. The files
   come over HTTP/1.1 with 4 MB read ahead: what the server sends while the app stands still (an
   Android app off the screen) waits there, not in the app's memory. The models
-  are their maker's, under the LFM Open License v1.0 (not a free-software licence; the app ships
-  none of them). They are slower and far less able than Claude: fine for a summary, a question
-  about a note, reading a photographed receipt; unreliable for long chains of tool calls.
+  are Liquid AI's, under the LFM Open License v1.0 (not a free-software licence; the app ships
+  none of them) — Brulion Assistant 1.7B too: LFM3 1.7B changed by Brulion's training, under the
+  same licence, neither made nor endorsed by Liquid AI (its `maker` is Brulion, its `baseName` and
+  `baseMaker` LFM3 1.7B and Liquid AI; Settings' **Whose model** says so). They are slower and far
+  less able than Claude: fine for a summary, a question about a note, reading a photographed
+  receipt; unreliable for long chains of tool calls.
   * A model may be another one adapted to the app: a LoRA adapter (`LocalModel::adapter`, a GGUF
     of some tens of MB) that the runner adds to the weights of its maker's 4-bit file as it
     computes. The file stays as it is: its weights were trained for that precision and lie on its
     grid, so the adapter merged into them and rounded to 4 bits again would lose most of what was
-    learnt. The adapted model and its maker's own share that file, downloaded once (the app lists
-    no adapted model yet: TODO.md). A model is on the device when its
+    learnt. The adapted model and its maker's own share that file, downloaded once (Brulion
+    Assistant 1.7B and LFM3 1.7B: LFM3-1.7B-QAD-Q4_0.gguf). A model is on the device when its
     download finished — `<id>.downloaded` in the folder; in a folder of an older version, which
     marked nothing, every model whose files are all there is marked so, once (`.adopted` then
     says it was done: a model removed later stays removed) — and removing one
     keeps a file the other needs. Settings says so under the model's files ("Shares a file with
     …", `LocalAi::modelSharesWith`) and, while part of a model is on the device already — a
     shared file, a download that stopped —, how much is left to download of the whole
-    (`modelLeft`). A model trained to answer at once (`LocalModel::thinks` false)
-    never thinks: every request it gets is taken as one of `effort = "low"`.
+    (`modelLeft`). A model trained to answer at once (`LocalModel::thinks` false: Brulion
+    Assistant 1.7B) never thinks: every request it gets is taken as one of `effort = "low"`.
   * The model is loaded the first time it is asked (some seconds) and leaves memory after ten
     minutes without a request. While loaded it takes some 1.3 GB of the app's own memory, and
     its file's 1 GB stays mapped until the system wants that memory back (docs/PERFORMANCE.md

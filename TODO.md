@@ -20,8 +20,9 @@ done in the repository simply disappears from the list.
   conversation from its list (the page's own menu does it), more than one turn at a time (one per app), a conversation too long for a small model cut by turns rather than by
   characters, the time of each message, and an extension of one's own as the chat's partner
   (`chat` is the built-in assistant's command).
-* **The model on the device: what is still missing** — LFM3-VL 2B and LFM3 1.7B run in the app
-  through llama.cpp on Linux (the Nix package) and Android (docs/EXTENSIONS.md "AI",
+* **The model on the device: what is still missing** — LFM3-VL 2B, LFM3 1.7B and Brulion
+  Assistant 1.7B (LFM3 1.7B with the adapter trained for the assistant: docs/FINETUNE.md) run in
+  the app through llama.cpp on Linux (the Nix package) and Android (docs/EXTENSIONS.md "AI",
   docs/ARCHITECTURE.md "The model on the device"). Missing:
   * the AppImage and the Windows builds (their scripts pass no llama.cpp sources yet: on Windows
     the libraries go next to `brulion.exe` and nothing was built or tried there; the AppImage's
@@ -49,17 +50,6 @@ done in the repository simply disappears from the list.
   * other models: a GGUF file of the user's own, a chat format beside LFM3's;
   * stores: F-Droid's and Google Play's rules for an app that downloads model weights under a
     licence that is not free software (a store build without it: `BRULION_LOCAL_AI=OFF`).
-* **The assistant's own model: what is still missing** — the bench, the generated tasks, the
-  training without thinking (SFT, then GRPO) as one LoRA adapter over LFM3-1.7B-QAD-Q4_0.gguf, the
-  app's support for an adapted model and `finetune/publish.py` are there (docs/FINETUNE.md).
-  Missing: the choice of the adapter to ship (SFT 3 alone or with GRPO 3; on the phone one of
-  rank 16 costs 29 % of the reading and 8 % of the writing, one of rank 48 33 % and 14 %:
-  docs/FINETUNE.md "GRPO 3 and the candidates to ship"); publishing it on Hugging Face, once these are decided: the
-  repositories' owner and the model's name, the dataset's licence, whether the training sequences
-  and the merged weights go too; then its entry in `knownModels()` (the adapter's URL in its repository
-  pinned to a revision, its SHA-256 and size) and Settings showing it (the model row describes
-  only a model that sees and one that reads text, not one adapted to the assistant that answers at
-  once).
 * **Extensibility as in Emacs and TiddlyWiki: what is still missing** — extension pages, approval
   per device, live reload, hooks (`save`, `change`) and the Luau console are there
   (docs/EXTENSIONS.md); missing: Luau's type checker on save (`b` as a definition file; the

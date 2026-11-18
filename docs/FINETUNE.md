@@ -712,11 +712,21 @@ one.
 
 ## What comes next
 
-The adapter to ship is SFT 3 + GRPO 3 (step 75) as one: it is to be published (below,
-"Publishing") and offered among the app's models; what else is missing is in TODO.md "The
-assistant's own model".
+The adapter to ship is SFT 3 + GRPO 3 (step 75) as one: it is published (below, "Publishing")
+and the app offers it among its models as Brulion Assistant 1.7B (`brulion-assistant-1.7b` in
+`knownModels()`, src/core/ai/local.cpp: the adapter of that revision over the text model's
+LFM3-1.7B-QAD-Q4_0.gguf, answering at once; docs/EXTENSIONS.md "AI"); what is still missing for
+a model on the device is in TODO.md "The model on the device".
 
 ## Publishing
+
+Published on 2026-11-18, public: the model
+[janusz-bit/brulion-assistant-1.7b](https://huggingface.co/janusz-bit/brulion-assistant-1.7b)
+(revision `4764e842038721cc7cc52cda67e9feff6474baa6`, the app's adapter
+`brulion-assistant-1.7b-lora.gguf` in it) and the dataset
+[janusz-bit/brulion-assistant-tasks](https://huggingface.co/datasets/janusz-bit/brulion-assistant-tasks)
+(revision `da89019a1d3a25b54cc6a3463d800c110450a08c`), made from commit 226302bd of this
+repository and uploaded with `hf upload` (huggingface_hub 2.4).
 
 `finetune/publish.py` (the standard library only) makes the two Hugging Face repositories as local
 folders, ready for `hf upload` — it uploads nothing. The model to ship is SFT 3 + GRPO 3 (step 75)

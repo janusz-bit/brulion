@@ -1300,14 +1300,12 @@ def main():
     print(f"\nmodel/: {sum(1 for p in model_dir.rglob('*') if p.is_file())} files, {size_text(model_bytes)}")
     print(f"dataset/: {sum(1 for p in dataset_dir.rglob('*') if p.is_file())} files, {size_text(dataset_bytes)}, "
           + ", ".join(f"{s} {c['tasks']} tasks" for s, c in counts.items()))
-    print("\nTo publish (private first: check the pages, then make them public in the repositories' settings):\n")
+    # (huggingface_hub 2.x's `hf`: `uvx --from 'huggingface_hub[cli]' hf …`; `hf upload` splits a big
+    # folder into several commits itself, and a repository it makes is public unless --private)
+    print("\nTo publish (--private: check the pages first, then make them public in the repositories' settings):\n")
     print("  hf auth login   # a token with write access, once")
-    if model_bytes > 5e9:  # many large files: resumable, in several commits
-        print(f"  hf upload-large-folder {repo_id} {model_dir} --repo-type model --private")
-    else:
-        print(f"  hf upload {repo_id} {model_dir} . --repo-type model --private "
-              f"--commit-message \"{args.title}\"")
-    print(f"  hf upload {dataset_id} {dataset_dir} . --repo-type dataset --private "
+    print(f"  hf upload {repo_id} {model_dir} . --repo-type model --commit-message \"{args.title}\"")
+    print(f"  hf upload {dataset_id} {dataset_dir} . --repo-type dataset "
           f"--commit-message \"Brulion assistant tasks\"")
     print(f"\nFor the app (knownModels(), src/core/ai/local.cpp): {lora_name}, {sizes[lora_name]} bytes, SHA-256 "
           f"{sums[lora_name]},\n  {repo_url}/resolve/<the upload's commit>/{lora_name}")

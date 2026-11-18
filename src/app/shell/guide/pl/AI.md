@@ -22,12 +22,13 @@ Naciśnij **Sprawdź**: model odpowie „OK” albo zobaczysz, co jest nie tak.
 Klucz zostaje **tylko na tym urządzeniu** (nie w notatniku, nie w synchronizacji, nie w dziennikach zdarzeń). Notatki trafiają do dostawcy tylko wtedy, gdy o to poprosisz, albo gdy zrobi to rozszerzenie zatwierdzone przez Ciebie z uprawnieniem `ai`.
 
 ## Model na tym urządzeniu
-Gdy wybierzesz **Na tym urządzeniu**, model działa w Brulionie — także na telefonie — i nic, o co pytasz, nie opuszcza urządzenia. Wybierz jeden z dwóch modeli firmy Liquid AI i naciśnij **Pobierz** (najlepiej przez Wi-Fi; na telefonie zostaw Bruliona na ekranie, aż skończy — ekran sam nie zgaśnie; przerwane pobieranie zacznie się od miejsca, w którym stanęło):
+Gdy wybierzesz **Na tym urządzeniu**, model działa w Brulionie — także na telefonie — i nic, o co pytasz, nie opuszcza urządzenia. Wybierz jeden z trzech modeli — dwa firmy Liquid AI i własny model Bruliona, zrobiony z drugiego z nich dla asystenta — i naciśnij **Pobierz** (najlepiej przez Wi-Fi; na telefonie zostaw Bruliona na ekranie, aż skończy — ekran sam nie zgaśnie; przerwane pobieranie zacznie się od miejsca, w którym stanęło):
 
 | Model | Rozmiar | W czym dobry |
 |---|---|---|
 | **LFM3-VL 2B** | 1,2 GB | **widzi obrazki**: zdjęcia, skany, zrzuty ekranu i tekst na nich |
 | **LFM3 1.7B** | 1,0 GB | tylko tekst; lepiej przeszukuje notatnik i zmienia notatki |
+| **Brulion Assistant 1.7B** („Brulion” w ustawieniach) | 1,1 GB | tylko tekst; LFM3 1.7B wytrenowany do pracy z **asystentem AI** — najlepiej radzi sobie z pracą na notatniku razem z nim; odpowiada od razu, bez namysłu; duży plik ma wspólny z LFM3 1.7B (gdy tamten już jest, to 92 MB więcej) |
 
 Czego się spodziewać:
 
@@ -36,7 +37,7 @@ Czego się spodziewać:
 - Zajmuje około **2,5 GB pamięci**, dopóki jest wczytany, i potrzebuje procesora z ostatnich lat (telefon mniej więcej od 2018 roku, komputer z AVX2).
 - Zbyt długą prośbę **przycina** — długą stronę w środku, długi wynik wyszukiwania na końcu — zamiast odmawiać.
 
-Modele należą do Liquid AI, mają własną licencję (LFM Open License v1.0) i nie są częścią Bruliona: aplikacja pobiera wybrany model z Hugging Face. **Usuń** kasuje jego pliki. Nie każde wydanie ma tego dostawcę: nie ma go wersja w przeglądarce ani część paczek na komputery.
+Modele należą do Liquid AI, mają własną licencję (LFM Open License v1.0) i nie są częścią Bruliona: aplikacja pobiera wybrany model z Hugging Face. Brulion Assistant 1.7B to LFM3 1.7B wytrenowany dalej przez Bruliona, na tej samej licencji — firma Liquid AI go nie stworzyła ani nie popiera. **Usuń** kasuje jego pliki (plik potrzebny innemu pobranemu modelowi zostaje). Nie każde wydanie ma tego dostawcę: nie ma go wersja w przeglądarce ani część paczek na komputery.
 
 ## Asystent AI
 Włącz go w **Ustawieniach → Rozszerzenia → AI → Asystent AI**. Rozmawiasz z nim w **czacie z AI**, jak w komunikatorze: Twoje wiadomości po prawej, odpowiedzi AI po lewej, i możesz pytać dalej — „A w przyszłym tygodniu?”, „Przesuń czynsz na piątek”. Górny pasek ma przycisk **✨** — także na telefonie — z pozycjami:
@@ -47,7 +48,7 @@ Włącz go w **Ustawieniach → Rozszerzenia → AI → Asystent AI**. Rozmawias
 - **Streść tę stronę** — nowa rozmowa, która prosi o streszczenie strony i jej zadań; dopytasz w niej o resztę.
 - **Ustawienia AI…** — dostawca, klucz i model.
 
-AI **samo przeszukuje i czyta cały notatnik** — strony, dziennik, zadania z terminami, tagi, przypomnienia — więc możesz zapytać „Co mam do zrobienia w tym tygodniu?”, „Co pisałem o wyjeździe?” albo poprosić „Dopisz mleko do listy zakupów”. **Odpowiedź widać na żywo**, słowo po słowie, a przed nią to, co model myśli (małymi szarymi literami; model na urządzeniu myśli po angielsku). Gdy szuka albo czyta, mówi o tym: „Szukam w notatkach: „wyjazd”…”, „Czytam „Zakupy”…”. **Zatrzymaj** przerywa od razu — model też przestaje pisać, więc kolejne pytanie nie czeka. **Ogląda też obrazki** w notatkach, gdy model widzi (Claude, LFM3-VL na urządzeniu): „Ile zapłaciłem za mleko? Paragon jest w Zakupach.” To samo jest w palecie (Ctrl+K) jako **AI: nowa rozmowa** i **Czat z AI**.
+AI **samo przeszukuje i czyta cały notatnik** — strony, dziennik, zadania z terminami, tagi, przypomnienia — więc możesz zapytać „Co mam do zrobienia w tym tygodniu?”, „Co pisałem o wyjeździe?” albo poprosić „Dopisz mleko do listy zakupów”. **Odpowiedź widać na żywo**, słowo po słowie, a przed nią to, co model myśli (małymi szarymi literami; model na urządzeniu myśli po angielsku, a Brulion Assistant 1.7B odpowiada bez namysłu). Gdy szuka albo czyta, mówi o tym: „Szukam w notatkach: „wyjazd”…”, „Czytam „Zakupy”…”. **Zatrzymaj** przerywa od razu — model też przestaje pisać, więc kolejne pytanie nie czeka. **Ogląda też obrazki** w notatkach, gdy model widzi (Claude, LFM3-VL na urządzeniu): „Ile zapłaciłem za mleko? Paragon jest w Zakupach.” To samo jest w palecie (Ctrl+K) jako **AI: nowa rozmowa** i **Czat z AI**.
 
 **Także rozszerzenia.** Poproś o nowe polecenie, widok albo reakcję — „polecenie, które policzy słowa dzisiejszej notatki” — a AI przeczyta, jak się pisze rozszerzenia, wypróbuje kod na Twoich notatkach, niczego nie zmieniając, i zapisze stronę w **Rozszerzenia/**. Potem czeka na Ciebie jak kod z innego urządzenia: przeczytaj stronę i naciśnij **Uruchom**, gdy zgadzasz się z tym, co robi (zob. [[Rozszerzenia]]).
 

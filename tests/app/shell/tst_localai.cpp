@@ -211,6 +211,54 @@ private Q_SLOTS:
         QVERIFY2(reply.error.contains(u"runs no model on the device"), qPrintable(reply.error));
     }
 
+    void theAssistantsOwnModel()
+    {
+        // What Settings shows of the models the app knows: the assistant's own is LFM3 1.7B by
+        // Liquid AI trained further by Brulion, and shares its file with it.
+        QTemporaryDir dir;
+        LocalAi::Options options;
+        options.folder = dir.path() + u"/models"_s;
+        options.pluginDirs = {dir.path()};
+        LocalAi local(options);
+        const QVariantList choices = local.choices();
+        QCOMPARE(choices.size(), 3);
+        QCOMPARE(choices[2].toMap().value(u"value"_s).toString(), u"brulion-assistant-1.7b"_s);
+        // (The models as their maker gives them by their names; this one by its short label, so
+        // that the three fit side by side on a narrow phone.)
+        QCOMPARE(choices[0].toMap().value(u"text"_s).toString(), u"LFM3-VL 2B"_s);
+        QCOMPARE(choices[1].toMap().value(u"text"_s).toString(), u"LFM3 1.7B"_s);
+        QCOMPARE(choices[2].toMap().value(u"text"_s).toString(), u"Brulion"_s);
+        // The models as their maker gives them.
+        QVERIFY(!local.modelAdapted());
+        QCOMPARE(local.modelBase(), QString());
+        QCOMPARE(local.modelBaseMaker(), QString());
+        QCOMPARE(local.modelSharesWith(), QString());
+        local.setChosen(u"lfm3-1.7b"_s);
+        QVERIFY(!local.modelAdapted());
+        QCOMPARE(local.modelMaker(), u"Liquid AI"_s);
+        QCOMPARE(local.modelSharesWith(), u"Brulion Assistant 1.7B"_s);
+
+        QSignalSpy changed(&local, &LocalAi::modelChanged);
+        local.setChosen(u"brulion-assistant-1.7b"_s);
+        QCOMPARE(changed.size(), 1);
+        QCOMPARE(local.modelName(), u"Brulion Assistant 1.7B"_s);
+        QVERIFY(local.modelAdapted());
+        QVERIFY(!local.modelSees());
+        QCOMPARE(local.modelBase(), u"LFM3 1.7B"_s);
+        QCOMPARE(local.modelBaseMaker(), u"Liquid AI"_s);
+        QCOMPARE(local.modelMaker(), u"Brulion"_s);
+        QCOMPARE(local.modelLicense(), u"LFM Open License v1.0"_s);
+        QVERIFY2(local.modelLicenseUrl().startsWith(u"https://huggingface.co/janusz-bit/brulion-assistant-1.7b/blob/"_s)
+                         && local.modelLicenseUrl().endsWith(u"/LICENSE"_s),
+                 qPrintable(local.modelLicenseUrl()));
+        QCOMPARE(local.modelPageUrl(), u"https://huggingface.co/janusz-bit/brulion-assistant-1.7b"_s);
+        QCOMPARE(local.modelSharesWith(), u"LFM3 1.7B"_s);
+        // The text model's file and the adapter: 1 146 270 016 B.
+        QVERIFY2(local.modelSize().contains(u"1.1") || local.modelSize().contains(u"1,1"),
+                 qPrintable(local.modelSize()));
+        QCOMPARE(local.modelLeft(), local.modelSize());
+    }
+
     void theChosenModel()
     {
         Fixture f;
@@ -460,6 +508,9 @@ private Q_SLOTS:
         ai::LocalModel adapted = f.reads;
         adapted.id = u"adapted"_s;
         adapted.name = u"Dostrojony 1.7B"_s;
+        adapted.maker = u"Brulion"_s;
+        adapted.baseName = f.reads.name;
+        adapted.baseMaker = f.reads.maker;
         adapted.adapter = {u"adapted-lora.gguf"_s, f.server.url(u"/adapted-lora.gguf"_s), sha256(adapterBytes),
                            adapterBytes.size()};
         adapted.thinks = false;
@@ -470,8 +521,16 @@ private Q_SLOTS:
         QCOMPARE(local.modelSharesWith(), QString());
         local.setChosen(u"reads"_s);
         QCOMPARE(local.modelSharesWith(), u"Dostrojony 1.7B"_s);
+        QVERIFY(!local.modelAdapted());
+        QCOMPARE(local.modelBase(), QString());
         local.setChosen(u"adapted"_s);
         QCOMPARE(local.modelSharesWith(), u"Czytający 1.7B"_s);
+        // Whose model it is: the model under it by its maker, trained further by another.
+        QVERIFY(local.modelAdapted());
+        QVERIFY(!local.modelSees());
+        QCOMPARE(local.modelBase(), u"Czytający 1.7B"_s);
+        QCOMPARE(local.modelBaseMaker(), u"Testy"_s);
+        QCOMPARE(local.modelMaker(), u"Brulion"_s);
         QCOMPARE(local.modelLeft(), local.modelSize()); // none of it here yet
         local.setChosen(u"reads"_s);
         QVERIFY(download(local, u"reads"_s));

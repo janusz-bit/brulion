@@ -219,6 +219,12 @@ private Q_SLOTS:
             QVERIFY2(ai::local::knowsFormat(model.format), qPrintable(model.format));
             QCOMPARE(model.licenseUrl.scheme(), u"https"_s);
             QCOMPARE(model.pageUrl.scheme(), u"https"_s);
+            // The licence beside its files, of one revision too.
+            QVERIFY2(model.licenseUrl.path().contains(QRegularExpression(u"/blob/[0-9a-f]{40}/LICENSE$"_s)),
+                     qPrintable(model.licenseUrl.toString()));
+            // An adapted model names the model under it and its maker; one as its maker gives it, none.
+            QCOMPARE(!model.baseName.isEmpty(), model.adapted());
+            QCOMPARE(!model.baseMaker.isEmpty(), model.adapted());
             QCOMPARE(model.files().size(), 1 + (model.adapted() ? 1 : 0) + (model.sees() ? 1 : 0));
             qint64 bytes = 0;
             QSet<QString> own;
@@ -243,7 +249,61 @@ private Q_SLOTS:
             }
             QCOMPARE(model.bytes(), bytes);
         }
+        // An adapted model over the file of a model the app knows is that one, trained further:
+        // its base, under its licence, in its format.
+        for (const ai::LocalModel &model : models) {
+            if (!model.adapted())
+                continue;
+            for (const ai::LocalModel &base : models) {
+                if (base.adapted() || base.file != model.file)
+                    continue;
+                QCOMPARE(model.baseName, base.name);
+                QCOMPARE(model.baseMaker, base.maker);
+                QCOMPARE(model.license, base.license);
+                QCOMPARE(model.format, base.format);
+            }
+        }
         QVERIFY(!ai::local::knowsFormat(u"chatml"_s));
+    }
+
+    void theAssistantsOwnModel()
+    {
+        // LFM3 1.7B trained further for the built-in assistant (docs/FINETUNE.md): an adapter
+        // over the text model's very file (downloaded once for both), answering at once.
+        const ai::LocalModel *assistant = ai::localModel(u"brulion-assistant-1.7b"_s);
+        const ai::LocalModel *text = ai::localModel(u"lfm3-1.7b"_s);
+        QVERIFY(assistant && text);
+        QCOMPARE(assistant->name, u"Brulion Assistant 1.7B"_s);
+        QCOMPARE(assistant->label, u"Brulion"_s); // (the settings' chooser: three on a narrow phone)
+        QVERIFY(assistant->adapted());
+        QVERIFY(!assistant->sees());
+        QVERIFY(!assistant->thinks);
+        QVERIFY(text->thinks && !text->adapted());
+        QVERIFY(ai::localModels().first().thinks);
+        QCOMPARE(assistant->file, text->file);
+        QCOMPARE(assistant->files(), (QList<ai::LocalFile>{text->file, assistant->adapter}));
+        QCOMPARE(assistant->format, text->format);
+        // Liquid AI's model under their licence, not made by them: trained further by Brulion.
+        QCOMPARE(assistant->baseName, u"LFM3 1.7B"_s);
+        QCOMPARE(assistant->baseMaker, u"Liquid AI"_s);
+        QCOMPARE(assistant->maker, u"Brulion"_s);
+        QCOMPARE(assistant->license, u"LFM Open License v1.0"_s);
+        // The adapter as published (finetune/publish.py: rank 48, f16).
+        QCOMPARE(assistant->adapter.name, u"brulion-assistant-1.7b-lora.gguf"_s);
+        QCOMPARE(assistant->adapter.bytes, qint64(96654336));
+        QCOMPARE(assistant->bytes(), text->bytes() + 96654336);
+        // Its adapter and the licence beside it from one revision of its own repository.
+        const QString repository = u"https://huggingface.co/janusz-bit/brulion-assistant-1.7b"_s;
+        QCOMPARE(assistant->pageUrl, QUrl(repository));
+        const QString revision = assistant->adapter.url.path().section(u'/', 4, 4);
+        QCOMPARE(assistant->adapter.url,
+                 QUrl(u"%1/resolve/%2/brulion-assistant-1.7b-lora.gguf"_s.arg(repository, revision)));
+        QCOMPARE(assistant->licenseUrl, QUrl(u"%1/blob/%2/LICENSE"_s.arg(repository, revision)));
+        QVERIFY2(QRegularExpression(u"^[0-9a-f]{40}$"_s).match(revision).hasMatch(), qPrintable(revision));
+        // The sampling it was measured with: the app's.
+        QCOMPARE(assistant->temperature, text->temperature);
+        QCOMPARE(assistant->topK, text->topK);
+        QCOMPARE(assistant->repeatPenalty, text->repeatPenalty);
     }
 
     void promptsAreTheModelsOwn_data()

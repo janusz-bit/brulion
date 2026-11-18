@@ -218,7 +218,7 @@ QVariantList LocalAi::choices() const
 {
     QVariantList out;
     for (const ai::LocalModel &m : m_models)
-        out.append(QVariantMap{{u"value"_s, m.id}, {u"text"_s, m.name}});
+        out.append(QVariantMap{{u"value"_s, m.id}, {u"text"_s, m.label.isEmpty() ? m.name : m.label}});
     return out;
 }
 
@@ -260,6 +260,24 @@ bool LocalAi::modelSees() const
 {
     const ai::LocalModel *m = model(m_chosen);
     return m && m->sees();
+}
+
+bool LocalAi::modelAdapted() const
+{
+    const ai::LocalModel *m = model(m_chosen);
+    return m && m->adapted();
+}
+
+QString LocalAi::modelBase() const
+{
+    const ai::LocalModel *m = model(m_chosen);
+    return m ? m->baseName : QString();
+}
+
+QString LocalAi::modelBaseMaker() const
+{
+    const ai::LocalModel *m = model(m_chosen);
+    return m ? m->baseMaker : QString();
 }
 
 QString LocalAi::modelLicense() const
