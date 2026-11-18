@@ -3130,6 +3130,21 @@ that outline), and the background filling makes some frames of 25–45 ms just a
 Rows are also made cheaper (below): the rows on screen, and every row of a longer page, are still
 created while the page opens or scrolls.
 
+The **linked references under a page** (`ContentBacklinks` in PageView, below the editor's
+footer) follow the same rule: only what the reader can reach is made (docs/PERFORMANCE.md "L7").
+PageView gives the section `visibleBottom` (how far into it the editor's viewport reaches) and a
+`lookahead` of one screen; while the section is beyond that, `BacklinksModel` counts the
+references (the heading's "40 linked references", the page tools) but renders one and lists none,
+and their room is reserved (`reserved`: an estimate per reference, so the page's height and its
+scroll bar hardly move). Once the view comes within a screen, the first references fill the part
+on screen at once and the rest follows ten at a time (`revealStep`, 32 ms apart), each step only
+while the listed ones end within reach; "Show N more" appears once `pageSize` are listed.
+`revealAll()` lists them at once (route.open "unlinked" scrolls to the section's end). The side
+panel's section and the picture's and PDF's references list everything at once (no
+`visibleBottom`). Each reference renders its block as the editor holds it without parsing the
+referring note: `BlockDocument::Locator` finds the block by its line from the index's
+`ParsedNote` and parses that block alone.
+
 ### Rules for contributors
 
 Any delegate of a scrolling list (a block and everything inside it, a day of the journal, a Tasks

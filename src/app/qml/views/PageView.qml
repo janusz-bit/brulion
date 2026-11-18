@@ -764,6 +764,8 @@ FocusScope {
         interval: 400
         onTriggered: {
             editor.markUserMoved()
+            refsSection.revealAll() // (the section's end stays where it is shown)
+            editor.listView.forceLayout()
             editor.listView.positionViewAtEnd()
         }
     }
@@ -1066,6 +1068,10 @@ FocusScope {
         rendererPalette: editor.rendererPalette
         compact: Theme.compact || root.inSidePanel
         showUnlinked: !root.inSidePanel
+        // Only references the reader can reach are made: a long page's sit far below its first
+        // screen (docs/PERFORMANCE.md "L7").
+        visibleBottom: editor.listView.contentY + editor.listView.height - y
+        lookahead: editor.listView.height
 
         Rectangle {
             // A rule between the page and its references.
