@@ -15,6 +15,7 @@
 #include <QElapsedTimer>
 #include <QFile>
 #include <QFileInfo>
+#include <QScopeGuard>
 #include <QStorageInfo>
 #include <QTimeZone>
 
@@ -71,10 +72,7 @@ constexpr qint64 kVerifyBytes = 1024 * 1024;
 /// .brulion/config.json larger than this is not read (a settings file is a few hundred bytes).
 constexpr qint64 kMaxConfigBytes = 1024 * 1024;
 
-/// readText(), readBinary() and readDetached() fail for files larger than this: they hold the
-/// whole file in memory, as writes do. Notes are kilobytes, the app stores attachments up to
-/// 200 MB and backups restore files up to 1 GiB (MaxRestoredEntryBytes) — all of them read back.
-constexpr qint64 kMaxReadBytes = qint64(1) << 30;
+constexpr qint64 kMaxReadBytes = kVaultMaxReadBytes;
 
 /// Replace the entry of `stat.path` in `sorted` (sorted by path) with `stat`; false when it is
 /// not there. Leaves the list alone (no detach from its copies) when nothing changed.
@@ -224,6 +222,8 @@ VaultPrivate::VaultPrivate(Vault *owner, const QString &rootPath, const QString 
     batchTimer.setInterval(50ms);
     QObject::connect(&batchTimer, &QTimer::timeout, owner, [this] { processPendingEvents(); });
     QObject::connect(&rescanTimer, &QTimer::timeout, owner, [this] { q->rescan(); });
+    writeWaitTimer.setSingleShot(true);
+    QObject::connect(&writeWaitTimer, &QTimer::timeout, owner, [this] { processPendingEvents(); });
 }
 
 VaultPrivate::~VaultPrivate() = default;
@@ -925,18 +925,20 @@ bool VaultPrivate::writeFile(const VaultPath &path, const QByteArray &bytes, Cha
     const VaultPath dir = paths::dirname(path);
     if (!ensureDirs(dir, changes))
         return false;
-    const std::optional<qint64> dirBefore =
-            tracked && watcher ? vaultutil::fineMtime(absPath(dir)) : std::optional<qint64>();
-    if (QString why; !vaultutil::saveAtomically(absPath(path), data, &why))
-        return fail(Vault::tr("Cannot write %1: %2").arg(path, why));
+    const bool pendingBefore = foreignBatchPending(dir);
+    const std::function<void()> hook =
+            beforeRenameHook ? std::function<void()>([this, &path] { beforeRenameHook(path); }) : nullptr;
+    const vaultutil::StampedSave save = vaultutil::saveAtomicallyStamped(absPath(path), data, hook);
+    if (!save.ok)
+        return fail(Vault::tr("Cannot write %1: %2").arg(path, save.error));
     if (!tracked)
         return true;
-    if (watcher)
-        noteOwnWrite(dir, dirBefore);
     const std::optional<FileStat> written = diskStat(path);
     if (!written)
         return fail(Vault::tr("%1 disappeared right after it was written").arg(path));
     trackFile(*written);
+    if (watcher) // (only once the file is tracked: a file gone at once lists its folder)
+        noteOwnWrite(dir, save, pendingBefore);
     // Known hash = what we wrote: the watcher's echo of this write is recognised as such.
     rememberContent(path, data, asText, dataHash);
     watchFile(path);
@@ -1045,10 +1047,12 @@ bool VaultPrivate::loadConfig(bool quiet, bool rereadObsidian)
     return differs;
 }
 
-void VaultPrivate::finish(const QList<VaultChange> &changes)
+void VaultPrivate::finish(const QList<VaultChange> &changes, quint64 ticket)
 {
     if (changes.isEmpty())
         return;
+    reporting.append(ticket);
+    const auto popTicket = qScopeGuard([this] { reporting.removeLast(); });
     const QString configPath = vaultConfigPath();
     const bool configTouched = std::ranges::any_of(
             changes, [&](const VaultChange &c) { return c.path == configPath || c.oldPath == configPath; });
@@ -1083,6 +1087,7 @@ Vault::Vault(const QString &rootPath, const QString &deviceStatePath, QObject *p
 
 Vault::~Vault()
 {
+    d->abandonWrites();
     d->stopWatching();
     d->store->flush();
 }
@@ -1127,6 +1132,8 @@ bool Vault::open(QString *error)
         return failed(tr("%1 is not a folder").arg(d->root));
     if (!info.exists() && !QDir().mkpath(d->root))
         return failed(tr("Cannot create the folder %1").arg(d->root));
+    d->waitForWrites(); // (their results belong to the notebook as it was)
+    ++d->generation;
     QElapsedTimer openTimer;
     openTimer.start();
     const bool watch = d->watchRequested; // also when requested before the first open()
@@ -1193,6 +1200,7 @@ void Vault::setFollowsOutsideLinks(bool follow)
 {
     if (d->followOutsideLinks == follow)
         return;
+    d->waitForWrites();
     d->followOutsideLinks = follow;
     if (d->isOpen)
         rescan(); // the linked folders' files come or go (changed())
@@ -1230,6 +1238,7 @@ QStringList Vault::configAdoptedFromObsidian() const
 
 bool Vault::saveConfig(const VaultConfig &config)
 {
+    d->waitForWrites();
     return d->write(vaultConfigPath(), serializeVaultConfig(config, d->rawConfig), ChangeSource::User, true);
 }
 
@@ -1288,6 +1297,7 @@ VaultPath Vault::existingCase(const VaultPath &path) const
 
 QString Vault::readText(const VaultPath &path, bool *ok)
 {
+    d->waitForWrites();
     bool good = false;
     const QByteArray bytes = d->readFile(paths::normalize(path), true, &good);
     if (ok)
@@ -1316,6 +1326,7 @@ DetachedRead Vault::readDetached(const VaultPath &path, const QString &absoluteP
 
 void Vault::adoptRead(const DetachedRead &read)
 {
+    d->waitForWrites();
     const VaultPath path = paths::normalize(read.path);
     if (!d->requireOpen() || path.isEmpty())
         return;
@@ -1331,6 +1342,7 @@ void Vault::adoptRead(const DetachedRead &read)
 
 QByteArray Vault::readBinary(const VaultPath &path, bool *ok)
 {
+    d->waitForWrites();
     bool good = false;
     QByteArray bytes = d->readFile(paths::normalize(path), false, &good);
     if (ok)
@@ -1340,17 +1352,20 @@ QByteArray Vault::readBinary(const VaultPath &path, bool *ok)
 
 bool Vault::writeText(const VaultPath &path, const QString &content, ChangeSource source)
 {
+    d->waitForWrites();
     return d->write(paths::normalize(path), content.toUtf8(), source, true);
 }
 
 bool Vault::writeBinary(const VaultPath &path, const QByteArray &data, ChangeSource source)
 {
+    d->waitForWrites();
     return d->write(paths::normalize(path), data, source, false);
 }
 
 WriteOutcome Vault::writeTextIfUnchanged(const VaultPath &rawPath, const QString &content, const QString &expected,
                                          ChangeSource source)
 {
+    d->waitForWrites();
     if (!d->requireOpen() || !d->requireStorage())
         return WriteOutcome::Failed;
     const VaultPath path = paths::normalize(rawPath);
@@ -1391,16 +1406,19 @@ WriteOutcome Vault::writeTextIfUnchanged(const VaultPath &rawPath, const QString
 
 VaultPath Vault::create(const VaultPath &path, const QString &content, ChangeSource source)
 {
+    d->waitForWrites();
     return d->create(path, content.toUtf8(), source, true);
 }
 
 VaultPath Vault::createBinary(const VaultPath &path, const QByteArray &data, ChangeSource source)
 {
+    d->waitForWrites();
     return d->create(path, data, source, false);
 }
 
 bool Vault::createFolder(const VaultPath &path)
 {
+    d->waitForWrites();
     if (!d->requireOpen() || !d->requireStorage())
         return false;
     const VaultPath p = paths::normalize(path);

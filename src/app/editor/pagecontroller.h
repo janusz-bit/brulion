@@ -335,6 +335,14 @@ public:
     /// the text this editor last read or wrote; a newer one on disk is taken in first (reload or
     /// three-way merge) and the result saved.
     Q_INVOKABLE bool save();
+    /// The autosave (the save timer): like save(), but the host's write runs in the background
+    /// (EditorHost::writeIfUnchangedAsync()); savedText() becomes the text sent once the write
+    /// is done, edits made meanwhile keep the page dirty and are saved next. While a write is in
+    /// flight nothing else is sent; save() (and everything that saves before the page's text
+    /// goes) waits for it first.
+    Q_INVOKABLE void saveInBackground();
+    /// A write of saveInBackground() is in flight (tests, diagnostics).
+    bool writeInFlight() const { return m_writeInFlight; }
     /// save(), then the file line where `row`'s block starts (-1 for an invalid row): an extension's
     /// command on the block under the caret reads the line as it is shown.
     Q_INVOKABLE int savedLineAt(int row);
@@ -1094,6 +1102,8 @@ Q_SIGNALS:
     void editTextReset(int row, const QString &text, int cursor);
     void saved();
     void saveFailed();
+    /// saveInBackground() sent the page's text to the host (diagnostics: the bench probe).
+    void saveStarted();
     /// The file changed outside and was reloaded / merged.
     void externallyChanged(bool merged);
     /// The file was deleted outside the editor: reloaded as a page not written yet, or — with
@@ -1233,6 +1243,10 @@ private:
     /// Save now; while a conflict is unresolved (also one this save found) write the conflict
     /// copy instead — before the page's text goes (another page, another host, destruction).
     void flush();
+    /// Wait until the host finished the write in flight (its result taken in).
+    void waitForOwnWrite();
+    /// The result (an EditorHost::WriteResult) of saveInBackground()'s write `generation` of `content`.
+    void backgroundWriteDone(quint64 generation, const QString &content, int result);
     void updateTitleRow();
     /// Recompute `pageProperties` from the leading frontmatter rows (or the source text in source
     /// mode) when their text changed; `visibleRow` always.
@@ -1301,6 +1315,14 @@ private:
     int m_undoGeneration = 0; ///< bumped whenever m_undo is cleared (undoToken())
     QTimer m_saveTimer;
     bool m_saving = false; ///< save() is inside the host's compare-and-swap write
+    /// saveInBackground(): a write in flight, the text sent, its generation (a result of an older
+    /// one — the page moved on — is ignored), whether the page was edited since it was sent, and
+    /// how often the file was found changed by another program in a row.
+    bool m_writeInFlight = false;
+    QString m_inFlightText;
+    quint64 m_writeGeneration = 0;
+    bool m_editedSinceSent = false;
+    int m_saveAttempts = 0;
     bool m_editsDiscarded = false; ///< a restore took this page away: nothing is written until load()
     QString m_savedText;
     /// What markDirty() worked out about typing in one block (typedStillDirty()): with block `uid`'s

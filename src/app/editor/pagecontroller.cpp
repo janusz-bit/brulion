@@ -225,7 +225,7 @@ PageController::PageController(QObject *parent)
 {
     m_saveTimer.setSingleShot(true);
     m_saveTimer.setInterval(400ms);
-    connect(&m_saveTimer, &QTimer::timeout, this, [this] { save(); });
+    connect(&m_saveTimer, &QTimer::timeout, this, &PageController::saveInBackground);
     connect(m_undo, &QUndoStack::canUndoChanged, this, &PageController::undoStateChanged);
     connect(m_undo, &QUndoStack::canRedoChanged, this, &PageController::undoStateChanged);
     // The leading "# Title" (titleRow) follows every change of the first blocks.
@@ -575,6 +575,9 @@ void PageController::load()
 {
     if (!m_host || m_path.isEmpty())
         return;
+    waitForOwnWrite(); // (its result would otherwise land on the text loaded now)
+    ++m_writeGeneration;
+    m_saveAttempts = 0;
     m_saveTimer.stop();
     m_editsDiscarded = false;
     m_loading = true;
@@ -626,15 +629,114 @@ void PageController::load()
     Q_EMIT foldStateChanged();
 }
 
+void PageController::saveInBackground()
+{
+    m_saveTimer.stop();
+    if (!m_host || m_path.isEmpty() || !m_loaded || m_saving || m_writeInFlight)
+        return; // (in flight: its result starts the timer again while the page is dirty)
+    if (m_editsDiscarded) {
+        setDirty(false);
+        return;
+    }
+    if (m_conflict || !m_dirty)
+        return;
+    if (m_sourceMode) {
+        Q_EMIT sourceTextWanted();
+        if (!m_dirty)
+            return;
+    }
+    static const QRegularExpression blank(u"^[\\s\\-*+]*$"_s);
+    const QString content = m_sourceMode ? m_sourceText : textToSave();
+    if (!m_exists && blank.match(content).hasMatch()) {
+        setDirty(false); // a new page: no file for an empty page or a lone empty bullet
+        return;
+    }
+    m_writeInFlight = true;
+    m_inFlightText = content;
+    m_editedSinceSent = false;
+    const quint64 generation = ++m_writeGeneration;
+    const QPointer<PageController> self(this);
+    // Over the text last read or written here, as save() (EditorHost::writeIfUnchanged()).
+    m_host->writeIfUnchangedAsync(m_path, content, m_savedText,
+                                  [self, generation, content](EditorHost::WriteResult result) {
+                                      if (self)
+                                          self->backgroundWriteDone(generation, content, int(result));
+                                  });
+    if (m_writeInFlight && generation == m_writeGeneration)
+        Q_EMIT saveStarted();
+}
+
+void PageController::backgroundWriteDone(quint64 generation, const QString &content, int resultCode)
+{
+    const auto result = static_cast<EditorHost::WriteResult>(resultCode);
+    if (generation != m_writeGeneration || !m_writeInFlight)
+        return; // the page moved on (another file or host, a reload): it waited for this already
+    m_writeInFlight = false;
+    m_inFlightText.clear();
+    switch (result) {
+    case EditorHost::WriteResult::Written:
+        m_saveAttempts = 0;
+        m_savedText = content;
+        if (!m_exists) {
+            m_exists = true;
+            Q_EMIT existsChanged();
+        }
+        if (m_editsDiscarded || !m_editedSinceSent)
+            setDirty(false);
+        else // edited meanwhile: dirty unless the edits came back to the text sent
+            setDirty((m_sourceMode ? m_sourceText : textToSave()) != m_savedText);
+        Q_EMIT saved();
+        if (m_dirty && !m_conflict)
+            m_saveTimer.start();
+        return;
+    case EditorHost::WriteResult::Failed:
+        // Still dirty: the next edit, a flush or save() writes it again.
+        m_saveAttempts = 0;
+        Q_EMIT saveFailed();
+        return;
+    case EditorHost::WriteResult::Changed: break;
+    }
+    // Another program changed the file meanwhile: reload / merge / conflict as for save() (a
+    // no-op when the host reported it already), then the result is saved.
+    onFileChanged(m_path);
+    m_saveTimer.stop();
+    if (m_conflict || !m_dirty) {
+        m_saveAttempts = 0;
+        return;
+    }
+    if (++m_saveAttempts >= 3) {
+        m_saveAttempts = 0;
+        m_saveTimer.start(); // the file keeps changing: try again a little later
+        return;
+    }
+    // Again at once, but outside the host's delivery of this result.
+    QMetaObject::invokeMethod(this, &PageController::saveInBackground, Qt::QueuedConnection);
+}
+
 int PageController::savedLineAt(int row)
 {
     save();
     return m_model ? m_model->lineAt(row) : -1;
 }
 
+void PageController::waitForOwnWrite()
+{
+    if (m_writeInFlight && m_host)
+        m_host->waitForWrites(); // backgroundWriteDone() runs in there
+    if (m_writeInFlight) {
+        // A host that cannot wait (or the result is being delivered right now): its answer is
+        // no longer awaited; the file decides through the compare-and-swap of the next write.
+        ++m_writeGeneration;
+        m_writeInFlight = false;
+        m_inFlightText.clear();
+    }
+}
+
 bool PageController::save()
 {
     m_saveTimer.stop();
+    waitForOwnWrite();
+    m_saveTimer.stop(); // (the write's result may have asked for another save)
     if (!m_host || m_path.isEmpty() || !m_loaded || m_saving)
         return false;
     if (m_editsDiscarded) {
@@ -854,6 +956,7 @@ void PageController::markDirty(quint64 typedUid, bool firstRowTouched)
         else
             m_typingSave = {};
     }
+    m_editedSinceSent = true;
     if (m_dirty && !m_conflict) {
         if (m_saveTimer.interval() == 0 && !m_saving)
             save();
@@ -1004,8 +1107,14 @@ void PageController::onFileChanged(const QString &path)
         m_model->attachmentChanged(path);
     if (path != m_path || !m_host || !m_loaded)
         return;
+    // The echo of this editor's own save: the host knows the file holds the very text saved
+    // (no reading of a big page on every save).
+    if (m_exists && !m_conflict && !m_writeInFlight && m_host->holdsText(path, m_savedText))
+        return;
     bool ok = false;
     const QString remote = m_host->read(path, &ok);
+    if (ok && m_writeInFlight && remote == m_inFlightText)
+        return; // the own write in flight, reported before its result (backgroundWriteDone() follows)
     if (!ok) {
         // Deleted (moved to the trash in the app, by another program or a sync). With nothing
         // unsaved the editor shows the page as one not written yet: a day of the journal stays on

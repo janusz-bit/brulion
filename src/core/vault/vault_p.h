@@ -10,8 +10,10 @@
 #include <QFileSystemWatcher>
 #include <QHash>
 #include <QJsonObject>
+#include <QMutex>
 #include <QSet>
 #include <QTimer>
+#include <QWaitCondition>
 
 #include <functional>
 #include <memory>
@@ -75,6 +77,61 @@ struct ScanDiff {
 struct DiskRead {
     FileStat stat;
     QByteArray bytes;
+};
+
+/// readText(), readBinary(), readDetached() and the writer's reads fail for files larger than
+/// this: they hold the whole file in memory, as writes do. Notes are kilobytes, the app stores
+/// attachments up to 200 MB and backups restore files up to 1 GiB (MaxRestoredEntryBytes) — all
+/// of them read back.
+inline constexpr qint64 kVaultMaxReadBytes = qint64(1) << 30;
+
+/// One Vault::writeTextIfUnchangedAsync(): what the vault's thread knew at the start, the work
+/// on the writer (run(): no vault state, only these fields) and its result for mergeWrite().
+struct WriteJob {
+    enum class Result {
+        Written,
+        Unchanged, ///< the file holds the new bytes already
+        Changed,   ///< other text than `expected`: nothing written
+        Fallback,  ///< not the plain case: writeTextIfUnchanged() on the vault's thread decides
+        Failed,
+    };
+    // --- set on the vault's thread before run(), read-only afterwards
+    quint64 ticket = 0;
+    quint64 generation = 0;
+    VaultPath path;
+    VaultPath dir;
+    QString absolute;
+    QStringList ancestorsAbsolute; ///< the folders above it (a symlinked one: Fallback)
+    QString content;
+    QString expected;
+    ChangeSource source = ChangeSource::User;
+    QString historyReason;
+    QDateTime at; ///< the snapshot's time (the vault's clock, on its thread)
+    History *history = nullptr;
+    FileStat known;             ///< the file's stat as the vault knows it
+    QString knownHash;          ///< "" when unknown
+    bool pendingBefore = false; ///< a watcher batch for `dir` (not an own echo) was queued
+    std::function<void(const QString &)> afterWrite;
+    std::function<void(const VaultPath &)> beforeRename; ///< tests (Vault::setBeforeRenameHook)
+    std::function<void(WriteOutcome)> done;              ///< vault's thread only
+    // --- results of run()
+    Result result = Result::Failed;
+    QByteArray data; ///< what was written (a BOM kept)
+    QString dataHash;
+    QString readHash; ///< Changed: the hash of what the file holds
+    std::optional<FileStat> written;
+    vaultutil::StampedSave save;
+    QString error;
+    QString historyError;
+    // --- hand-over
+    QMutex mutex;
+    QWaitCondition finishedCondition;
+    bool finished = false; ///< run() is over (under `mutex`)
+    bool merged = false;   ///< vault's thread only
+
+    void run();
+    void markFinished();
+    void wait();
 };
 
 struct RenamePair {
@@ -185,10 +242,24 @@ public:
                    QList<VaultChange> &changes, const DiskRead *read = nullptr);
     bool write(const VaultPath &path, const QByteArray &bytes, ChangeSource source, bool asText,
                const DiskRead *read = nullptr);
-    /// After an own atomic write into `dir` (`before`: the folder's stamp right before it): when
-    /// the vault knew the folder's entries up to `before`, it knows them after the write too, and
-    /// the watcher's echo of the write needs no listing (see processPendingEvents()).
-    void noteOwnWrite(const VaultPath &dir, std::optional<qint64> before);
+    /// After an own atomic write into `dir` (`save`: the folder's stamps around its steps; called
+    /// once the written file is tracked): when the vault knew the folder's entries at `save.before`
+    /// and nothing but the write's own steps changed them (StampedSave; never on storage whose
+    /// times follow the kernel's clock tick), it knows them after the write too, and the watcher's echo of the write
+    /// needs no listing (see processPendingEvents()). `pendingBefore`: a batch that is not an own echo was queued for
+    /// `dir` before the write.
+    void noteOwnWrite(const VaultPath &dir, const vaultutil::StampedSave &save, bool pendingBefore);
+    /// pendingBefore for a write into `dir` starting now.
+    bool foreignBatchPending(const VaultPath &dir) const;
+
+    // --- writes on the writer (vaultwrite.cpp)
+    quint64 writeAsync(AsyncTextWrite write);
+    /// Wait for every write in flight and merge them, oldest first.
+    void waitForWrites();
+    /// Merge a finished job (no-op when merged already): Vault state, `done`, changed().
+    void mergeWrite(const std::shared_ptr<WriteJob> &job);
+    /// The destructor: wait for the writer, report nothing.
+    void abandonWrites();
     VaultPath create(const VaultPath &path, const QByteArray &bytes, ChangeSource source, bool asText);
     QDateTime now() const;
 
@@ -200,7 +271,9 @@ public:
     /// for the guards after files came or went.
     bool loadConfig(bool quiet = false, bool rereadObsidian = true);
     std::optional<QByteArray> readObsidianSetting(const QString &path, QStringList &warnings) const;
-    void finish(const QList<VaultChange> &changes);
+    /// Emit changed() (and configChanged()); `ticket`: the async write whose changes these are
+    /// (Vault::reportingWrite() while they are reported), 0 for any other operation.
+    void finish(const QList<VaultChange> &changes, quint64 ticket = 0);
 
     // --- moving and trash (vaultmove.cpp)
     bool renameTargetFree(const VaultPath &from, const VaultPath &to);
@@ -328,6 +401,9 @@ public:
     /// is the write's echo and lists nothing.
     QHash<VaultPath, qint64> ownEchoes;
     QElapsedTimer echoClock;
+    /// An own write's step left the folder's stamp as it was right before (noteOwnWrite()): the
+    /// file times follow the kernel's clock tick, and no own echo is trusted any more.
+    bool coarseFolderTimes = false;
     mutable qint64 listedFolderCount = 0; ///< Vault::listedFolders()
 
     VaultConfig config;
@@ -355,6 +431,27 @@ public:
     QSet<VaultPath> pendingFiles;
     QTimer batchTimer;
     QTimer rescanTimer;
+
+    // Writes on the writer (Vault::writeTextIfUnchangedAsync)
+    /// A watcher batch waits at most this long for writes in flight, then for the writes.
+    static constexpr int kMaxEchoWaitMs = 2000;
+    std::function<void(std::function<void()>)> writeExecutor;
+    QList<std::shared_ptr<WriteJob>> writes; ///< in flight, oldest first
+    quint64 nextTicket = 0;
+    quint64 generation = 0;      ///< open() counts up: older results are dropped
+    QList<quint64> reporting;    ///< tickets whose changes finish() reports now (innermost last)
+    QElapsedTimer batchDeferred; ///< since when a watcher batch waits for writes
+    QTimer writeWaitTimer;       ///< the cap of that wait
+    std::function<void(const VaultPath &)> beforeRenameHook;
+    /// The text the last async writes of a few paths wrote, with the hash written
+    /// (Vault::holdsText()); the most recent last.
+    struct OwnText {
+        VaultPath path;
+        QString text;
+        QString hash;
+    };
+    static constexpr qsizetype kMaxOwnTexts = 16;
+    QList<OwnText> ownTexts;
 };
 
 } // namespace brulion

@@ -219,6 +219,21 @@ bool Workspace::open(const QString &rootPath, const QString &deviceStatePath, QS
     m_vault = std::move(vault);
     if (m_clock)
         m_vault->setClock(m_clock);
+#ifdef BRULION_INDEX_THREADS
+    // Editors' saves on a writer of their own: one thread (in order), normal priority — not the
+    // index pool, which is busy and at low priority while a notebook is indexed.
+    if (indexWorkerCount() > 0) {
+        if (!m_writePool) {
+            auto *pool = new QThreadPool(this);
+            pool->setMaxThreadCount(1);
+            pool->setObjectName(u"brulion-writer"_s);
+            m_writePool = pool;
+        }
+        m_vault->setWriteExecutor([pool = static_cast<QThreadPool *>(m_writePool)](std::function<void()> job) {
+            pool->start(std::move(job));
+        });
+    }
+#endif
     m_index = std::make_unique<VaultIndex>(m_vault->config());
     connect(m_vault.get(), &Vault::changed, this, &Workspace::onVaultChanged);
     connect(m_vault.get(), &Vault::configChanged, this, [this] {
@@ -309,6 +324,9 @@ void Workspace::close()
 {
     if (!m_vault)
         return;
+    // An editor's save in flight lands and is reported while everything still listens.
+    m_vault->waitForWrites();
+    m_preparedWrites.clear();
     const bool wasReady = ready();
     // Reminders and sync let go of the vault and the index first (a running sync is abandoned:
     // what it finished stays synced, the rest is synced next time).
@@ -410,6 +428,11 @@ void Workspace::setDataUrlAssets(bool on)
     m_dataUrls.clear();
     m_dataUrlSizes.clear();
 }
+
+struct Workspace::PreparedWrite {
+    quint64 ticket = 0; ///< Vault::reportingWrite() of the write
+    std::optional<PreparedNote> note;
+};
 
 // ---- Index ------------------------------------------------------------------------------------
 
@@ -572,6 +595,7 @@ void Workspace::onVaultChanged(const QList<VaultChange> &changes)
         }
     }
     const int versionBefore = m_index->version();
+    const quint64 reporting = m_vault->reportingWrite(); // (0: no async write of an editor)
     {
         VaultIndex::Batch batch(*m_index);
         for (const VaultChange &c : changes) {
@@ -586,7 +610,16 @@ void Workspace::onVaultChanged(const QList<VaultChange> &changes)
             }
             switch (c.type) {
             case ChangeType::Created:
-            case ChangeType::Modified: indexFile(c.path); break;
+            case ChangeType::Modified:
+                if (const auto it = m_preparedWrites.constFind(c.path);
+                    reporting && it != m_preparedWrites.cend() && (*it)->ticket == reporting) {
+                    // An editor's save, parsed on the writer: the note as written, no reading.
+                    m_index->updatePrepared(std::move(*(*it)->note));
+                    m_preparedWrites.erase(it);
+                } else {
+                    indexFile(c.path);
+                }
+                break;
             case ChangeType::Deleted:
                 m_index->remove(c.path);
                 m_vault->store()->remove(foldStateKey(c.path));
@@ -607,6 +640,8 @@ void Workspace::onVaultChanged(const QList<VaultChange> &changes)
                 changed.append(c.path);
         }
     }
+    if (reporting) // (a note that did not come with its write's change: never kept)
+        m_preparedWrites.removeIf([reporting](const auto &it) { return it.value()->ticket == reporting; });
     // Deletions and restores move files through the trash (.trash is not tracked itself).
     const bool listChanged =
             std::ranges::any_of(changes, [](const VaultChange &c) { return c.type != ChangeType::Modified; });
@@ -686,6 +721,51 @@ EditorHost::WriteResult Workspace::writeIfUnchanged(const QString &path, const Q
     }
     Q_EMIT errorOccurred(tr("Could not save %1: %2").arg(path, m_vault->errorString()));
     return WriteResult::Failed;
+}
+
+void Workspace::writeIfUnchangedAsync(const QString &path, const QString &content, const QString &expected,
+                                      WriteDone done)
+{
+    if (!m_vault) {
+        done(WriteResult::Failed);
+        return;
+    }
+    // This device's own edit ("save" hooks) of the text it expects there (an extension's trust),
+    // before the write as for writeIfUnchanged().
+    m_extensions->savedByEditor(path, content, expected);
+    auto prepared = std::make_shared<PreparedWrite>();
+    AsyncTextWrite write{.path = path, .content = content, .expected = expected, .source = ChangeSource::User};
+    if (paths::isMarkdown(path) && !paths::isIgnored(path)) {
+        // The parse runs on the writer, over the very text written (prepare() is pure).
+        write.afterWrite = [prepared, path, config = m_vault->config()](const QString &text) {
+            prepared->note = VaultIndex::prepare(path, text, config);
+        };
+    }
+    write.done = [this, path, prepared, done = std::move(done)](WriteOutcome outcome) {
+        if (outcome == WriteOutcome::Written && prepared->note && m_vault) {
+            prepared->ticket = m_vault->reportingWrite();
+            m_preparedWrites.insert(path, prepared);
+        }
+        switch (outcome) {
+        case WriteOutcome::Written: done(WriteResult::Written); return;
+        case WriteOutcome::Changed: done(WriteResult::Changed); return;
+        case WriteOutcome::Failed: break;
+        }
+        Q_EMIT errorOccurred(tr("Could not save %1: %2").arg(path, m_vault ? m_vault->errorString() : QString()));
+        done(WriteResult::Failed);
+    };
+    m_vault->writeTextIfUnchangedAsync(std::move(write));
+}
+
+void Workspace::waitForWrites()
+{
+    if (m_vault)
+        m_vault->waitForWrites();
+}
+
+bool Workspace::holdsText(const QString &path, const QString &text) const
+{
+    return m_vault && m_vault->holdsText(path, text);
 }
 
 void Workspace::editorOpened(const QString &rawPath)

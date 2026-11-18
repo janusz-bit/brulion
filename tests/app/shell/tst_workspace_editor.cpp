@@ -6,7 +6,10 @@
 #include "workspace.h"
 
 #include "backup/archive.h"
+#include "index/vaultindex.h"
 #include "vault/vault.h"
+
+#include <QThread>
 
 #include <QDir>
 #include <QFile>
@@ -202,6 +205,131 @@ private Q_SLOTS:
                 agentVersion = true;
         }
         QVERIFY(agentVersion);
+    }
+
+    // --- background saves (Vault::writeTextIfUnchangedAsync through the Workspace) --------------
+
+    // The autosave runs on the notebook's writer: the file, the index (the note parsed there) and
+    // the changes as before — Modified by the user, never External, no "external" snapshot.
+    void autosaveRunsOnTheWriter()
+    {
+        const QString root = m_tmp.filePath(u"TłoZapis"_s);
+        QVERIFY(writeBehind(root + u"/Dziennik.md"_s, "- rano\n"));
+        Workspace ws;
+        ws.sync()->setSyncthingDiscovery(false);
+        QVERIFY(ws.open(root, root + u"-state"_s));
+        ws.finishIndexing();
+        QSignalSpy changes(ws.vault(), &brulion::Vault::changed);
+        PageController editor;
+        editor.setSaveDelay(20);
+        editor.setHost(&ws);
+        editor.setPath(u"Dziennik.md"_s);
+        for (int i = 1; i <= 4; ++i) {
+            editor.setEditText(0, u"rano #kawa ąę %1"_s.arg(i), 15);
+            QTRY_VERIFY(!editor.dirty() && !editor.writeInFlight());
+        }
+        QCOMPARE(readRaw(root + u"/Dziennik.md"_s), QByteArray("- rano #kawa ąę 4\n"));
+        QTest::qWait(300); // the watcher's echoes
+        ws.vault()->processPendingEvents();
+        for (const QList<QVariant> &args : std::as_const(changes)) {
+            for (const brulion::VaultChange &change : args.at(0).value<QList<brulion::VaultChange>>())
+                QCOMPARE(change.source, brulion::ChangeSource::User);
+        }
+        const brulion::ParsedNote *note = ws.index()->note(u"Dziennik.md"_s);
+        QVERIFY(note);
+        QCOMPARE(ws.index()->content(u"Dziennik.md"_s), u"- rano #kawa ąę 4\n"_s);
+        for (const brulion::HistoryEntry &entry : ws.vault()->history()->list(u"Dziennik.md"_s))
+            QVERIFY(entry.reason != u"external");
+    }
+
+    // A rename or a deletion while a save is in flight: the save lands first, the old name never
+    // comes back, the trash holds the newest text, the editor follows.
+    void renameOrDeleteDuringABackgroundSave_data()
+    {
+        QTest::addColumn<bool>("rename");
+        QTest::newRow("rename") << true;
+        QTest::newRow("delete") << false;
+    }
+    void renameOrDeleteDuringABackgroundSave()
+    {
+        QFETCH(bool, rename);
+        const QString root = m_tmp.filePath(rename ? u"TłoNazwa"_s : u"TłoKosz"_s);
+        QVERIFY(writeBehind(root + u"/Stara.md"_s, "- tekst\n"));
+        Workspace ws;
+        ws.sync()->setSyncthingDiscovery(false);
+        QVERIFY(ws.open(root, root + u"-state"_s));
+        ws.finishIndexing();
+        ws.vault()->setBeforeRenameHook([](const brulion::VaultPath &) { QThread::msleep(150); });
+        PageController editor;
+        editor.setSaveDelay(100000);
+        editor.setHost(&ws);
+        editor.setPath(u"Stara.md"_s);
+        QObject::connect(&ws, &Workspace::pathRenamed, &editor, &PageController::followRename);
+        editor.setEditText(0, u"tekst najnowszy żółw"_s, 20);
+        editor.saveInBackground();
+        QVERIFY(editor.writeInFlight());
+        if (rename) {
+            QCOMPARE(ws.renamePage(u"Stara.md"_s, u"Nowa"_s), u"Nowa.md"_s);
+            QVERIFY(!QFileInfo::exists(root + u"/Stara.md"_s));
+            QCOMPARE(readRaw(root + u"/Nowa.md"_s), QByteArray("- tekst najnowszy żółw\n"));
+            QCOMPARE(editor.path(), u"Nowa.md"_s);
+            QVERIFY(!editor.dirty());
+        } else {
+            QVERIFY(!ws.deletePage(u"Stara.md"_s).isEmpty());
+            QVERIFY(!QFileInfo::exists(root + u"/Stara.md"_s));
+            QCOMPARE(readRaw(root + u"/.trash/Stara.md"_s), QByteArray("- tekst najnowszy żółw\n"));
+        }
+        QVERIFY(!editor.writeInFlight());
+        ws.vault()->setBeforeRenameHook({});
+        QTest::qWait(200);
+        QVERIFY(!QFileInfo::exists(root + u"/Stara.md"_s));
+    }
+
+    // Closing the notebook with a save in flight: it lands, and is reported while all listen.
+    void closeWithABackgroundSaveInFlight()
+    {
+        const QString root = m_tmp.filePath(u"TłoZamknięcie"_s);
+        QVERIFY(writeBehind(root + u"/a.md"_s, "- a\n"));
+        Workspace ws;
+        ws.sync()->setSyncthingDiscovery(false);
+        QVERIFY(ws.open(root, root + u"-state"_s));
+        ws.finishIndexing();
+        ws.vault()->setBeforeRenameHook([](const brulion::VaultPath &) { QThread::msleep(100); });
+        auto editor = std::make_unique<PageController>();
+        editor->setSaveDelay(100000);
+        editor->setHost(&ws);
+        editor->setPath(u"a.md"_s);
+        editor->setEditText(0, u"a ostatnie"_s, 10);
+        editor->saveInBackground();
+        QSignalSpy saved(editor.get(), &PageController::saved);
+        ws.close();
+        QCOMPARE(saved.size(), 1);
+        QVERIFY(!editor->dirty());
+        QCOMPARE(readRaw(root + u"/a.md"_s), QByteArray("- a ostatnie\n"));
+    }
+
+    // The async variant reports another program's change as the synchronous one does.
+    void backgroundSaveMergesAnUnreportedChange()
+    {
+        const QString root = m_tmp.filePath(u"TłoScalanie"_s);
+        QVERIFY(writeBehind(root + u"/a.md"_s, "- a\n- b\n"));
+        Workspace ws;
+        ws.sync()->setSyncthingDiscovery(false);
+        QVERIFY(ws.open(root, root + u"-state"_s));
+        ws.finishIndexing();
+        ws.vault()->stopWatching(); // (the other program's write stays unreported)
+        PageController editor;
+        editor.setSaveDelay(100000);
+        editor.setHost(&ws);
+        editor.setPath(u"a.md"_s);
+        editor.setEditText(0, u"a lokalnie"_s, 10);
+        QVERIFY(writeBehind(root + u"/a.md"_s, "- a\n- b\n- od agenta\n"));
+        editor.saveInBackground();
+        QTRY_VERIFY(!editor.dirty() && !editor.writeInFlight());
+#ifndef BRULION_TEST_NO_SYNC
+        if (!editor.conflict())
+            QCOMPARE(readRaw(root + u"/a.md"_s), QByteArray("- a lokalnie\n- b\n- od agenta\n"));
+#endif
     }
 
     void writeIfUnchangedReportsTheChange()

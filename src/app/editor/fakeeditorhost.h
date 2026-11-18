@@ -65,6 +65,23 @@ public:
     WriteResult writeIfUnchanged(const QString &path, const QString &content, const QString &expected) override;
     /// Number of writeIfUnchanged() calls refused because the file held other text (tests).
     int casRefusals() const { return m_casRefusals; }
+    /// With setDeferWrites(true) the writes are held until completeWrites() (or waitForWrites(),
+    /// which every other file operation of this host calls first, as the shell's vault does);
+    /// each result is delivered, then fileChanged(path) as the shell reports a write. Without it:
+    /// at once (EditorHost's default).
+    void writeIfUnchangedAsync(const QString &path, const QString &content, const QString &expected,
+                               WriteDone done) override;
+    void waitForWrites() override { completeWrites(); }
+    /// Hold the writes of writeIfUnchangedAsync() until completeWrites() (tests).
+    Q_INVOKABLE void setDeferWrites(bool defer) { m_deferWrites = defer; }
+    /// Writes held (setDeferWrites()).
+    Q_INVOKABLE int pendingWrites() const { return int(m_pendingWrites.size()); }
+    /// Complete the first `count` held writes in order (-1: all): the compare-and-swap against
+    /// the file as it is now (setFile() before: another program's write meanwhile), the result
+    /// delivered, then fileChanged(path).
+    Q_INVOKABLE void completeWrites(int count = -1);
+    /// The text of a held write (tests).
+    QString pendingWriteText(int index) const { return m_pendingWrites.value(index).content; }
     QVariantList suggestPages(const QString &prefix, int limit = 20) const override;
     QVariantList suggestBlocks(const QString &text, int limit = 20) const override;
     QVariantList suggestTags(const QString &prefix, int limit = 20) const override;
@@ -215,6 +232,16 @@ private:
     int m_writeCount = 0;
     int m_casRefusals = 0;
     bool m_failWrites = false;
+    struct PendingWrite {
+        QString path;
+        QString content;
+        QString expected;
+        WriteDone done;
+    };
+    bool m_deferWrites = false;
+    QList<PendingWrite> m_pendingWrites;
+    /// writeIfUnchanged() without waiting for the held writes.
+    WriteResult compareAndWrite(const QString &path, const QString &content, const QString &expected);
     QVariantMap m_lastRoute;
     QString m_now;
     QString m_pageMode = QStringLiteral("outline");

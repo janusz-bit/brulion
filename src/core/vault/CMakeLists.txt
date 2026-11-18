@@ -6,7 +6,7 @@
 # Internal: vault_p.h (d-pointer), vaultutil_p.h (path helpers, logging category).
 brulion_add_core_module(vault
     SOURCES
-        vault.h vault_p.h vault.cpp vaultmove.cpp vaultscan.cpp
+        vault.h vault_p.h vault.cpp vaultmove.cpp vaultscan.cpp vaultwrite.cpp
         vaultconfig.h vaultconfig.cpp
         obsidiansettings.h obsidiansettings.cpp
         history.h history.cpp

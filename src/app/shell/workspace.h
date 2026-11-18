@@ -270,6 +270,14 @@ public:
     /// Vault::writeTextIfUnchanged(): a change of another program is taken in (fileChanged) instead
     /// of overwritten.
     WriteResult writeIfUnchanged(const QString &path, const QString &content, const QString &expected) override;
+    /// Vault::writeTextIfUnchangedAsync() — the reading, comparing, History, the atomic write and
+    /// the note's parse (VaultIndex::prepare()) on the notebook's writer thread; the index takes the
+    /// prepared note when the vault reports the write ("save" hooks run first, as for
+    /// writeIfUnchanged()).
+    void writeIfUnchangedAsync(const QString &path, const QString &content, const QString &expected,
+                               WriteDone done) override;
+    void waitForWrites() override;
+    bool holdsText(const QString &path, const QString &text) const override;
     /// Pages shown by editors are watched themselves (Vault::watchFile()), counted per page.
     void editorOpened(const QString &path) override;
     void editorClosed(const QString &path) override;
@@ -839,6 +847,14 @@ private:
     /// The index loader's QThreadPool (indexworkers.h; none on WebAssembly), a child: deleted
     /// after the loader.
     QObject *m_indexPool = nullptr;
+    /// The vault's writer (Vault::setWriteExecutor): a QThreadPool of one thread at normal
+    /// priority, a child (deleted after the vault); none on WebAssembly or with
+    /// BRULION_INDEX_THREADS=0 (the writes run at once).
+    QObject *m_writePool = nullptr;
+    /// Notes parsed on the writer after an editor's save, by path, until the vault reports the
+    /// write with that ticket (onVaultChanged: the index takes the note instead of reading it).
+    struct PreparedWrite;
+    QHash<QString, std::shared_ptr<PreparedWrite>> m_preparedWrites;
     /// Loads the index after open(): parses on worker threads, merges in slices (m_indexTimer).
     std::unique_ptr<notebook::IndexLoader> m_loader;
     /// Keeps the index cache on the device once the index is loaded (docs/PERFORMANCE.md, L2).

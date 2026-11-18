@@ -140,7 +140,9 @@ end + 1.7 s fits unless a save takes over 300 ms) the probe records, on the GUI 
   a parentless timer as `timer:<interval>ms(<the first span in it>)` (member timers have no
   parent: `timer:400ms(model:PageListModel.dataChanged)` is All pages' refresh) — `timer:save` is
   the parentless single-shot timer with the controller's `saveDelay` in which a PageController
-  emits `saved` or `dirtyChanged`, its autosave, so its span is the whole synchronous save —, QML
+  emits `saved`, `dirtyChanged` or `saveStarted`, its autosave, so its span is the whole synchronous
+  save — or, since the save runs on the writer thread (2026-11-18), only taking the text and sending
+  it (`save_merge_ms` below) —, QML
   `Timer`s as `QmlTimer:<parent>:<interval>`; and every other signal of a `brulion::` class whose
   span takes at least `BENCH_SPAN_MIN_US` (200 µs). Self time = inclusive minus the spans nested
   in it. The probe's own timers are left out;
@@ -175,6 +177,7 @@ end + 1.7 s (cut at the window's end):
 | metric | what |
 |---|---|
 | `save_sync_ms`, `save_cpu_ms`, `save_insns_M` | the `timer:save` span: the synchronous save (wall, CPU, millions of instructions) — the Zed-like budget is < 8 ms |
+| `save_merge_ms`, `save_merge_cpu_ms`, `save_merge_insns_M` | a save in the background (the timer's span holds `PageController.saveStarted`): the merge of its result from the event loop — the outermost `Vault.changed`, `PageController.saved` / `dirtyChanged` spans after the timer (wall, CPU, instructions); the GUI thread's whole save is `save_sync_ms` + `save_merge_ms` |
 | `save_write_ms` | the save up to `Vault::changed`: serialising the page, the compare-and-swap read, History, the write |
 | `save_fsync_ms` / `save_fsync_n`, `save_rename_ms` | `fsync` + `fdatasync` (and renames) inside the save |
 | `save_vault_changed_ms` | `Vault.changed` inside the save: the index update and everything connected directly |

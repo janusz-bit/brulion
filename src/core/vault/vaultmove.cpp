@@ -252,6 +252,7 @@ void VaultPrivate::pruneEmptyTrashFolders(VaultPath dir)
 
 bool Vault::rename(const VaultPath &from, const VaultPath &to, ChangeSource source)
 {
+    d->waitForWrites();
     if (!d->requireOpen())
         return false;
     const VaultPath a = paths::normalize(from);
@@ -288,6 +289,7 @@ bool Vault::rename(const VaultPath &from, const VaultPath &to, ChangeSource sour
 
 bool Vault::remove(const VaultPath &path, ChangeSource source)
 {
+    d->waitForWrites();
     if (!d->requireOpen())
         return false;
     const VaultPath p = paths::normalize(path);
@@ -320,6 +322,7 @@ bool Vault::remove(const VaultPath &path, ChangeSource source)
 
 bool Vault::removePermanently(const VaultPath &path, ChangeSource source)
 {
+    d->waitForWrites();
     if (!d->requireOpen())
         return false;
     const VaultPath p = paths::normalize(path);
@@ -392,6 +395,7 @@ TrashInfo Vault::trashInfo(const VaultPath &trashPath) const
 
 VaultPath Vault::restore(const VaultPath &trashPath, ChangeSource source)
 {
+    d->waitForWrites();
     if (!d->requireOpen())
         return {};
     const auto failed = [this](const QString &message) {
@@ -428,6 +432,7 @@ VaultPath Vault::restore(const VaultPath &trashPath, ChangeSource source)
 
 bool Vault::emptyTrash()
 {
+    d->waitForWrites();
     return removePermanently(vaultTrashFolder(), ChangeSource::User);
 }
 
