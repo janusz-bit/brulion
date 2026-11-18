@@ -2182,6 +2182,43 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   mode Link to page, Tag, Commands, Undo, Redo, Hide keyboard; in the touch selection
   mode the selection's tools (`SelectionToolbar`, "Selecting and copying").
 
+### What an index change renders again
+
+Every save (an autosave of any editor, another device's file, an import) changes the notebook's
+index, and `EditorHost::indexChanged` reaches every live editor: the page, the side panel's page,
+the days of the Journal. Each follows the index's change log (`VaultIndex::changesSince()` since
+the version its rendering is current with, `BlockListModel::followIndex()`) and renders again only
+what read a changed note — an edit of an unrelated note changes no row, no `dataChanged` reaches
+the delegates:
+
+* While rendering, a row records what it read of other notes through the host (`RenderRead`: a
+  linked page's icon, the text of a `((id))` or `[[Page#^id]]` block, the task a `⛔ id` names) in
+  its html, its page properties, its table cells and its transclusions, with what it got. After a
+  change a read is asked again — an icon only when its note changed, block texts and tasks always
+  (a block may have moved) — and the row renders again only when the answer differs.
+* Transclusions (`![[Page]]`, `![[Page#Heading]]`, `!((id))`) are built again when a note they
+  show or looked for changed (`transclusionSources`, also a page drawing that may become a page
+  again) or a block they found by its id reads otherwise; attachment embeds when the note drawing
+  they show changed (a changed attachment file: `PageController::onFileChanged`).
+* Tables are computed again only when a cell read something that changed; charts of a query on
+  every change (their results may differ); a table's, a calc block's or a chart's own numbers and
+  inline calculations follow the page's text, not the index.
+* The page's own text is followed by the editor's own path (`refresh()`: rows with `((id))` /
+  `[[…#^id]]` and embeds of the page itself) — its save changes nothing more here.
+* A change of names (a note, an attachment or an alias added, removed or renamed: links, tags and
+  `page:` targets may resolve differently anywhere), a change log that no longer reaches back,
+  another index (another notebook) or another vault configuration invalidates everything as
+  before (`invalidateRendering()`, also for another palette, language, day or host): every row
+  renders again when it is asked for.
+
+`PageController.active` (QML: `active: root.visible` in PageView, `day.visible` in
+ContentJournalDay): an editor that is not shown — the days of the hidden Journal, the page of a
+hidden view or a closed side panel — only marks its rendering stale when the index changes, and
+follows all the changes at once when it is shown again (`setActive(true)`, before its next frame).
+The autocomplete popup's model computes nothing for a closed popup (`SuggestionModel.clear()` in
+`closeSuggestions()`: a `[[` once completed ranked every page name after every save), and the
+side panel's outline ignores `dataChanged` of roles it does not show (html rendered again).
+
 ### Coloured highlights
 
 Next to `==highlight==` a highlight can have a colour (docs/SYNTAX.md §11 "Coloured

@@ -23,8 +23,22 @@ void OutlineModel::setSource(QAbstractItemModel *source)
     m_source = source;
     if (m_source) {
         const auto changed = [this] { schedule(); };
+        // Only the roles the outline reads (an index change re-rendering html, a selection, a
+        // fold, the caret's row: nothing to rebuild over all rows for). No roles: all of them.
+        const QHash<int, QByteArray> names = m_source->roleNames();
+        QList<int> outlineRoles;
+        for (const char *name : {"headingLevel", "plainText", "view", "line"}) {
+            if (const int role = names.key(QByteArray(name), -1); role >= 0)
+                outlineRoles.append(role);
+        }
+        const auto dataChanged = [this, outlineRoles](const QModelIndex &, const QModelIndex &,
+                                                      const QList<int> &roles) {
+            if (roles.isEmpty()
+                || std::ranges::any_of(roles, [&outlineRoles](int r) { return outlineRoles.contains(r); }))
+                schedule();
+        };
         m_connections = {
-                connect(m_source, &QAbstractItemModel::dataChanged, this, changed),
+                connect(m_source, &QAbstractItemModel::dataChanged, this, dataChanged),
                 connect(m_source, &QAbstractItemModel::rowsInserted, this, changed),
                 connect(m_source, &QAbstractItemModel::rowsRemoved, this, changed),
                 connect(m_source, &QAbstractItemModel::rowsMoved, this, changed),

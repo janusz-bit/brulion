@@ -62,7 +62,10 @@ void SuggestionModel::setHost(EditorHost *host)
         disconnect(m_host, nullptr, this, nullptr);
     m_host = host;
     if (m_host)
-        connect(m_host, &EditorHost::indexChanged, this, &SuggestionModel::refresh);
+        connect(m_host, &EditorHost::indexChanged, this, [this] {
+            if (!m_mode.isEmpty()) // (closed: nothing to show)
+                refresh();
+        });
     Q_EMIT hostChanged();
     refresh();
 }
@@ -140,6 +143,11 @@ void SuggestionModel::setTrigger(const QVariantMap &trigger)
     if (tokenChange)
         Q_EMIT tokenChanged();
     refresh();
+}
+
+void SuggestionModel::clear()
+{
+    setTrigger(QVariantMap());
 }
 
 QVariantMap SuggestionModel::get(int row) const

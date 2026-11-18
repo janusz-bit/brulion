@@ -160,13 +160,37 @@ void FakeEditorHost::filesChanged(bool announce)
 
 const VaultIndex &FakeEditorHost::currentIndex() const
 {
-    if (!m_index || m_indexDirty) {
-        m_index = std::make_unique<VaultIndex>(vaultConfigFromMap(vaultConfig()));
+    // Kept and brought up to date like the shell's (its change log tells what changed: the
+    // editors follow it, BlockListModel::followIndex()); made anew for another configuration.
+    const QVariantMap config = vaultConfig();
+    if (!m_index || config != m_indexConfig) {
+        m_index = std::make_unique<VaultIndex>(vaultConfigFromMap(config));
+        m_indexConfig = config;
+        m_indexedFiles.clear();
+        m_indexedAssets.clear();
+        m_indexDirty = true;
+    }
+    if (m_indexDirty) {
         VaultIndex::Batch batch(*m_index);
-        for (auto [path, content] : m_files.asKeyValueRange())
-            m_index->update(path, content);
-        for (auto it = m_assets.keyBegin(); it != m_assets.keyEnd(); ++it)
-            m_index->update(*it, QString());
+        for (auto it = m_indexedFiles.cbegin(); it != m_indexedFiles.cend(); ++it) {
+            if (!m_files.contains(it.key()))
+                m_index->remove(it.key());
+        }
+        for (const QString &path : std::as_const(m_indexedAssets)) {
+            if (!m_assets.contains(path))
+                m_index->remove(path);
+        }
+        for (auto [path, content] : m_files.asKeyValueRange()) {
+            const auto indexed = m_indexedFiles.constFind(path);
+            if (indexed == m_indexedFiles.cend() || *indexed != content)
+                m_index->update(path, content);
+        }
+        for (auto it = m_assets.keyBegin(); it != m_assets.keyEnd(); ++it) {
+            if (!m_indexedAssets.contains(*it))
+                m_index->update(*it, QString());
+        }
+        m_indexedFiles = m_files;
+        m_indexedAssets = QSet<QString>(m_assets.keyBegin(), m_assets.keyEnd());
         m_indexDirty = false;
     }
     return *m_index;
@@ -758,7 +782,9 @@ void FakeEditorHost::overwriteTextAsset(const QString &path, const QString &cont
         if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate) || f.write(data) != data.size())
             m_assetUrls.remove(path);
     }
-    filesChanged(); // the editors render their embeds again (indexChanged)
+    // The editors' embeds load it again (as the shell tells a changed file).
+    Q_EMIT fileChanged(path);
+    filesChanged();
 }
 
 void FakeEditorHost::externalWrite(const QString &path, const QString &content)

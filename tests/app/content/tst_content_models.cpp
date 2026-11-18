@@ -1063,6 +1063,20 @@ private Q_SLOTS:
         add(1, u"Tytuł"_s, u"heading"_s, 11);
         QTRY_COMPARE(outline.count(), 3);
         QCOMPARE(column(outline, "depth"), (QStringList{ u"1"_s, u"2"_s, u"0"_s }));
+        // A change of other roles only (the editor's html rendered again after an index change, a
+        // selection, a fold): the outline does not read every row again.
+        QSignalSpy outlineChanged(&outline, &QAbstractItemModel::dataChanged);
+        {
+            const QSignalBlocker quiet(&blocks);
+            blocks.item(1)->setData(u"Plan bez sygnału"_s, Qt::UserRole + 2); // seen only when rebuilt
+        }
+        Q_EMIT blocks.dataChanged(blocks.index(0, 0), blocks.index(blocks.rowCount() - 1, 0), {Qt::UserRole + 9});
+        QCoreApplication::processEvents();
+        QCOMPARE(column(outline, "text").first(), u"Plan dnia — środa"_s);
+        QCOMPARE(outlineChanged.size(), 0);
+        // Its roles: rebuilt.
+        Q_EMIT blocks.dataChanged(blocks.index(1, 0), blocks.index(1, 0), {Qt::UserRole + 2});
+        QTRY_COMPARE(column(outline, "text").first(), u"Plan bez sygnału"_s);
         outline.setSource(nullptr);
         QCOMPARE(outline.count(), 0);
     }

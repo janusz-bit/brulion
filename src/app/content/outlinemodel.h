@@ -1,6 +1,7 @@
 // OutlineModel — the headings of the page being edited (the side panel's "Outline"), live from
 // the block editor's BlockListModel (any model with the roles `headingLevel`, `plainText` and
-// optionally `view`, `line`): edits show up at once, without waiting for the save.
+// optionally `view`, `line`): edits show up at once, without waiting for the save. A dataChanged
+// of other roles only (html rendered again, selection, folds) changes nothing.
 //
 //   OutlineModel { source: page.blocks }
 //   ListView { model: outline; delegate: … onClicked: editor.revealRow(model.row) }

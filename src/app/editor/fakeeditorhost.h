@@ -228,8 +228,12 @@ private:
     mutable QStringList m_pdfAsks;
     QStringList m_openedElsewhere;
     mutable QHash<QString, int> m_assetAsks;
-    /// The index for queries and link targets, rebuilt from the files after a change.
+    /// The index for queries and link targets, brought up to date with the files after a change
+    /// (the files and assets it has, the configuration it was made with).
     mutable std::unique_ptr<VaultIndex> m_index;
+    mutable QHash<QString, QString> m_indexedFiles;
+    mutable QSet<QString> m_indexedAssets;
+    mutable QVariantMap m_indexConfig;
     mutable bool m_indexDirty = true;
     bool m_taskStatusHistory = false;
     const VaultIndex &currentIndex() const;
