@@ -5,14 +5,19 @@
 // concurrent journal appends, the mass-deletion guard).
 #include "integrationtest.h"
 
+#include "backup/backup.h"
 #include "calc/calc.h"
 #include "calc/table.h"
-#include "fakewebdavserver.h"
-#include "io/io.h"
-#include "reminders/reminders.h"
-#include "synctest.h"
 #include "centraleuropeantime.h"
+#include "fakewebdavserver.h"
+#include "index/indexcache.h"
+#include "io/io.h"
+#include "notebook/cleanup.h"
+#include "reminders/reminders.h"
+#include "sync/syncthing.h"
+#include "synctest.h"
 
+#include <QFileInfo>
 #include <QRegularExpression>
 #include <QSet>
 #include <QTest>
@@ -539,6 +544,84 @@ private Q_SLOTS:
         const std::optional<VaultPath> photo = embedTarget(copy.index, kKitchen);
         QVERIFY(photo);
         QCOMPARE(target.vault->readBinary(*photo), photoBytes());
+    }
+
+    // Leftovers of interrupted own writes (`.brulion-tmp-…`; fresh ones, which the vault keeps until
+    // they are a day old) are nobody's notes: not the index's nor search's, not in the index cache,
+    // an export, a backup or Clean up's list, never synced either way (Syncthing's ignore patterns
+    // name them).
+    void leftoverTempFilesAreNoNotes()
+    {
+        FakeWebDavServer server;
+        QMap<QString, QByteArray> files = sampleVault();
+        const QByteArray leftover = "- przerwany zapis: słowokluczowe [[Jan Kowalski]] #porzucone\n"
+                                    "- [ ] Zadanie z resztki ⏰ 2026-10-14 18:30\n";
+        const QStringList temps{u".brulion-tmp-0123456789abcdef"_s, u"journals/.brulion-tmp-00000000deadbeef"_s,
+                                u"Projekty/.brulion-tmp-3f2504e0-4f89-41d3-9a0c-0305e82c3301"_s,
+                                u".brulion/.brulion-tmp-0f0f0f0f0f0f0f0f"_s};
+        for (const QString &temp : temps)
+            files.insert(temp, leftover);
+        // One that another device's sync client put on the server.
+        const QString remoteTemp = u"Ludzie/.brulion-tmp-fedcba9876543210"_s;
+        server.putFile(synctest::kFolder + u'/' + remoteTemp, leftover);
+        Device laptop(server, u"laptop"_s, files);
+        Indexer indexer(*laptop.vault);
+        const VaultIndex &index = indexer.index;
+        for (const QString &temp : temps) {
+            QVERIFY2(QFileInfo::exists(laptop.root + u'/' + temp), qPrintable(temp)); // (fresh: kept)
+            QVERIFY(!laptop.vault->exists(temp));
+        }
+        const int notes = int(sampleVault().size());
+        QCOMPARE(laptop.vault->files().size() + 1, notes); // (+ the config, not among files())
+
+        // The index and search.
+        for (const VaultPath &path : index.paths())
+            QVERIFY2(!path.contains(u".brulion-tmp-"_s), qPrintable(path));
+        QVERIFY(index.search(u"słowokluczowe"_s).isEmpty());
+        for (const TagCount &tag : index.tags())
+            QVERIFY(tag.tag != u"porzucone"_s);
+        QVERIFY(!findTask(index, u"Zadanie z resztki"_s));
+        // The index cache: what it holds is the index's.
+        const indexcache::Identity identity = indexcache::Identity::current(laptop.vault->config(), laptop.vault->id());
+        const QByteArray cache =
+                indexcache::encode(index, identity, [&](const VaultPath &path) { return laptop.vault->stat(path); });
+        const std::shared_ptr<const indexcache::Reader> reader = indexcache::Reader::open(cache, identity);
+        QVERIFY(reader);
+        QCOMPARE(reader->noteCount(), index.paths().size());
+        for (const QString &temp : temps)
+            QVERIFY(!reader->find(temp));
+
+        // Export: also when a caller hands one in, the exporter leaves it out.
+        io::ExportInput input = exportInput(*laptop.vault);
+        input.files.append(io::FileEntry{temps.at(1), leftover});
+        const io::Exporter *exporter = io::exporterById(u"markdown-zip"_s);
+        QVERIFY(exporter);
+        const io::ExportResult exported = io::runExport(*exporter, input);
+        QVERIFY(!exported.files.isEmpty());
+        Device imported(server, u"kopia"_s, {}, synctest::DeviceOptions{.folder = u"Inny"_s});
+        importInto(*imported.vault, u"markdown"_s, exported.files.first());
+        QVERIFY(!synctest::filesBelow(imported.root).join(u'\n').contains(u".brulion-tmp-"_s));
+        QVERIFY(!imported.vault->files().isEmpty());
+
+        // A backup's sources and Clean up's list.
+        for (const backup::SourceFile &source : backup::collectSources(*laptop.vault).files)
+            QVERIFY2(!source.path.contains(u".brulion-tmp-"_s), qPrintable(source.path));
+        for (const notebook::UnreferencedFile &file : notebook::unreferencedFiles(index, laptop.vault->config()))
+            QVERIFY2(!file.path.contains(u".brulion-tmp-"_s), qPrintable(file.path));
+
+        // Sync: not uploaded, the server's not downloaded.
+        QCOMPARE(synctest::counts(laptop.sync()), (Counts{.up = notes}));
+        const QMap<QString, QString> onServer = server.files(synctest::kFolder);
+        QCOMPARE(onServer.size(), notes + 1); // (+ the one put there)
+        for (const QString &temp : temps)
+            QVERIFY(!onServer.contains(temp));
+        Device phone(server, u"telefon"_s);
+        QCOMPARE(synctest::counts(phone.sync()), (Counts{.down = notes}));
+        QVERIFY(!synctest::filesBelow(phone.root).join(u'\n').contains(u".brulion-tmp-"_s));
+        QVERIFY(!laptop.vault->exists(remoteTemp));
+        QCOMPARE(synctest::counts(laptop.sync()), Counts{});
+        // Syncthing ignores them (and may delete them where they keep a folder from going).
+        QVERIFY(sync::stignoreTemplate().split(u'\n').contains(u"(?d).brulion-tmp-*"_s));
     }
 
     void twoDevicesSyncAndConverge()
