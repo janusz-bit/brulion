@@ -154,6 +154,40 @@ void fill(QSGGeometryNode &node, QList<Vertex> vertices)
 
 } // namespace
 
+RenderedTextLayout::RenderedTextLayout() = default;
+
+RenderedTextLayout::~RenderedTextLayout() = default;
+
+void RenderedTextLayout::setStyle(const Style &style)
+{
+    m_font = style.font;
+    m_color = style.color;
+    m_linkColor = style.linkColor;
+    m_lineHeight = style.lineHeight;
+    m_alignment = style.alignment;
+    m_wrap = style.wrap;
+    m_maxLines = style.maximumLineCount;
+    m_boxRadius = style.boxRadius;
+    m_inset = style.inset;
+    m_textDirty = true;
+    m_shapesDirty = true;
+}
+
+bool RenderedTextLayout::setOverlays(const QString &hoveredLink, const QString &findQuery, bool matchCase,
+                                     bool matchDiacritics, bool wholeWord, const QColor &findColor)
+{
+    if (hoveredLink == m_hoveredLink && findQuery == m_findQuery && matchCase == m_findCase
+        && matchDiacritics == m_findDiacritics && wholeWord == m_findWholeWord && findColor == m_findColor)
+        return false;
+    m_hoveredLink = hoveredLink;
+    m_findQuery = findQuery;
+    m_findCase = matchCase;
+    m_findDiacritics = matchDiacritics;
+    m_findWholeWord = wholeWord;
+    m_findColor = findColor;
+    return computeOverlays();
+}
+
 RenderedTextItem::RenderedTextItem(QQuickItem *parent) : QQuickItem(parent)
 {
     setFlag(ItemHasContents);
@@ -325,12 +359,12 @@ void RenderedTextItem::setFindColor(const QColor &color)
     Q_EMIT findChanged();
 }
 
-QString RenderedTextItem::plainText() const
+QString RenderedTextLayout::plainText() const
 {
     return m_shown.text;
 }
 
-QString RenderedTextItem::text() const
+QString RenderedTextLayout::text() const
 {
     return markdown::InlineRenderer::withHoveredLink(markdown::runsToHtml(m_shown), m_hoveredLink);
 }
@@ -341,7 +375,7 @@ void RenderedTextItem::reload()
     relayout();
 }
 
-QFont RenderedTextItem::runFont(const RenderedRun &run) const
+QFont RenderedTextLayout::runFont(const RenderedRun &run) const
 {
     QFont f = m_font;
     if (run.style & RenderedRun::Bold)
@@ -353,7 +387,7 @@ QFont RenderedTextItem::runFont(const RenderedRun &run) const
     return f;
 }
 
-int RenderedTextItem::layoutText(const QString &text)
+int RenderedTextLayout::layoutText(const QString &text)
 {
     QString shown = text;
     shown.replace(u'\n', QChar::LineSeparator);
@@ -391,7 +425,7 @@ int RenderedTextItem::layoutText(const QString &text)
         formats.append({int(run.from), int(std::min<qsizetype>(run.to, shown.size()) - run.from), f});
     }
     m_layout->setFormats(formats);
-    const qreal width = std::max<qreal>(0, this->width());
+    const qreal width = std::max<qreal>(0, m_width);
     m_layout->beginLayout();
     if (shown.isEmpty()) { // no line, no height
         m_layout->endLayout();
@@ -428,7 +462,32 @@ void RenderedTextItem::relayout()
 {
     if (!isComponentComplete())
         return;
-    const RenderedText source = m_ref.d ? *m_ref.d : markdown::renderedTextFromHtml(m_html);
+    const bool wasTruncated = m_truncated;
+    const QList<RichTextPill> icons = m_iconShapes;
+    layout(m_ref.d ? *m_ref.d : markdown::renderedTextFromHtml(m_html), width());
+    if (m_truncated != wasTruncated)
+        Q_EMIT truncatedChanged();
+    setImplicitSize(std::ceil(m_naturalWidth), m_height);
+    if (icons != m_iconShapes)
+        Q_EMIT iconShapesChanged();
+    update();
+    Q_EMIT layoutChanged();
+    Q_EMIT textChanged();
+}
+
+bool RenderedTextLayout::keepsLayoutAt(qreal width) const
+{
+    if (qFuzzyCompare(width + 1, m_laidOutWidth + 1))
+        return true;
+    // Left-aligned lines that no width broke stay as they are at any width that holds them (most
+    // blocks: a window or a side panel resized lays out only the wrapped ones, as QQuickText does).
+    return m_layout && !m_softWrapped && !m_truncated && m_alignment != Qt::AlignHCenter
+           && width >= m_naturalWidth + 0.5;
+}
+
+void RenderedTextLayout::layout(const RenderedText &source, qreal width)
+{
+    m_width = width;
     m_shown = source;
     m_shownLength = source.text.size();
     int lines = layoutText(m_shown.text);
@@ -467,11 +526,8 @@ void RenderedTextItem::relayout()
                 end = previous;
         }
     }
-    m_laidOutWidth = width();
-    if (cut != m_truncated) {
-        m_truncated = cut;
-        Q_EMIT truncatedChanged();
-    }
+    m_laidOutWidth = width;
+    m_truncated = cut;
     qreal height = 0;
     if (m_lineHeight > 0)
         height = lines * m_lineHeight;
@@ -488,15 +544,13 @@ void RenderedTextItem::relayout()
             m_softWrapped = true;
     }
     m_naturalWidth = natural;
-    setImplicitSize(std::ceil(natural), height);
+    m_height = height;
     m_textDirty = true;
     computeShapes();
     computeOverlays();
-    Q_EMIT layoutChanged();
-    Q_EMIT textChanged();
 }
 
-QList<RenderedTextItem::Segment> RenderedTextItem::segments(qsizetype from, qsizetype to) const
+QList<RenderedTextLayout::Segment> RenderedTextLayout::segments(qsizetype from, qsizetype to) const
 {
     // RichTextPills' line segments (richtext_p.h: lineSegments), in item coordinates.
     QList<Segment> out;
@@ -523,6 +577,19 @@ QList<RenderedTextItem::Segment> RenderedTextItem::segments(qsizetype from, qsiz
 }
 
 void RenderedTextItem::computeShapes()
+{
+    if (RenderedTextLayout::computeShapes())
+        Q_EMIT iconShapesChanged();
+    update();
+}
+
+void RenderedTextItem::computeOverlays()
+{
+    if (RenderedTextLayout::computeOverlays())
+        update();
+}
+
+bool RenderedTextLayout::computeShapes()
 {
     QList<Shape> shapes;
     QList<RichTextPill> icons;
@@ -570,14 +637,13 @@ void RenderedTextItem::computeShapes()
         m_shapes = std::move(shapes);
         m_shapesDirty = true;
     }
-    if (icons != m_iconShapes) {
-        m_iconShapes = std::move(icons);
-        Q_EMIT iconShapesChanged();
-    }
-    update();
+    if (icons == m_iconShapes)
+        return false;
+    m_iconShapes = std::move(icons);
+    return true;
 }
 
-void RenderedTextItem::computeOverlays()
+bool RenderedTextLayout::computeOverlays()
 {
     QList<Shape> overlays;
     if (m_layout) {
@@ -649,11 +715,11 @@ void RenderedTextItem::computeOverlays()
             }
         }
     }
-    if (overlays != m_overlays) {
-        m_overlays = std::move(overlays);
-        m_shapesDirty = true;
-        update();
-    }
+    if (overlays == m_overlays)
+        return false;
+    m_overlays = std::move(overlays);
+    m_shapesDirty = true;
+    return true;
 }
 
 void RenderedTextItem::geometryChange(const QRectF &newGeometry, const QRectF &oldGeometry)
@@ -661,10 +727,7 @@ void RenderedTextItem::geometryChange(const QRectF &newGeometry, const QRectF &o
     QQuickItem::geometryChange(newGeometry, oldGeometry);
     if (!isComponentComplete() || qFuzzyCompare(newGeometry.width() + 1, m_laidOutWidth + 1))
         return;
-    // Left-aligned lines that no width broke stay as they are at any width that holds them (most
-    // blocks: a window or a side panel resized lays out only the wrapped ones, as QQuickText does).
-    if (m_layout && !m_softWrapped && !m_truncated && m_alignment != Qt::AlignHCenter
-        && newGeometry.width() >= m_naturalWidth + 0.5) {
+    if (keepsLayoutAt(newGeometry.width())) {
         m_laidOutWidth = newGeometry.width();
         return;
     }
@@ -682,7 +745,11 @@ void RenderedTextItem::itemChange(ItemChange change, const ItemChangeData &value
 
 QSGNode *RenderedTextItem::updatePaintNode(QSGNode *old, UpdatePaintNodeData *)
 {
-    QQuickWindow *win = window();
+    return updateNode(old, window(), smooth());
+}
+
+QSGNode *RenderedTextLayout::updateNode(QSGNode *old, QQuickWindow *win, bool smooth)
+{
     if (!win) {
         delete old;
         return nullptr;
@@ -761,7 +828,7 @@ QSGNode *RenderedTextItem::updatePaintNode(QSGNode *old, UpdatePaintNodeData *)
         root->text->clear();
         root->text->setColor(m_color);
         root->text->setLinkColor(m_linkColor);
-        root->text->setFiltering(smooth() ? QSGTexture::Linear : QSGTexture::Nearest);
+        root->text->setFiltering(smooth ? QSGTexture::Linear : QSGTexture::Nearest);
         switch (QQuickWindow::textRenderType()) {
         case QQuickWindow::NativeTextRendering: root->text->setRenderType(QSGTextNode::NativeRendering); break;
         case QQuickWindow::CurveTextRendering: root->text->setRenderType(QSGTextNode::CurveRendering); break;
@@ -774,7 +841,7 @@ QSGNode *RenderedTextItem::updatePaintNode(QSGNode *old, UpdatePaintNodeData *)
     return root;
 }
 
-qreal RenderedTextItem::lineTop(int index) const
+qreal RenderedTextLayout::lineTop(int index) const
 {
     if (!m_layout || index < 0 || index >= m_layout->lineCount())
         return 0;
@@ -783,7 +850,7 @@ qreal RenderedTextItem::lineTop(int index) const
     return m_layout->lineAt(index).y();
 }
 
-int RenderedTextItem::lineAtY(qreal y) const
+int RenderedTextLayout::lineAtY(qreal y) const
 {
     if (!m_layout || m_layout->lineCount() == 0 || y < 0)
         return -1;
@@ -800,7 +867,7 @@ int RenderedTextItem::lineAtY(qreal y) const
     return -1;
 }
 
-QString RenderedTextItem::linkAt(qreal x, qreal y) const
+QString RenderedTextLayout::linkAt(qreal x, qreal y) const
 {
     const int k = lineAtY(y);
     if (k < 0)
@@ -818,7 +885,7 @@ QString RenderedTextItem::linkAt(qreal x, qreal y) const
     return run ? run->href : QString();
 }
 
-int RenderedTextItem::displayPositionAt(qreal x, qreal y) const
+int RenderedTextLayout::displayPositionAt(qreal x, qreal y) const
 {
     if (!m_layout || m_layout->lineCount() == 0)
         return 0;
@@ -829,7 +896,7 @@ int RenderedTextItem::displayPositionAt(qreal x, qreal y) const
     return int(std::min<qsizetype>(position, m_shownLength));
 }
 
-int RenderedTextItem::positionAt(qreal x, qreal y) const
+int RenderedTextLayout::positionAt(qreal x, qreal y) const
 {
     const int display = displayPositionAt(x, y);
     if (m_shown.source.isEmpty())
@@ -837,7 +904,7 @@ int RenderedTextItem::positionAt(qreal x, qreal y) const
     return int(m_shown.sourceAt(display));
 }
 
-QRectF RenderedTextItem::rectForSource(int from, int to) const
+QRectF RenderedTextLayout::rectForSource(int from, int to) const
 {
     qsizetype a = from;
     qsizetype b = to;

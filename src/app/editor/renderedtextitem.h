@@ -58,7 +58,138 @@ public:
     bool operator==(const RenderedTextRef &other) const { return d == other.d || (d && other.d && *d == *other.d); }
 };
 
-class RenderedTextItem : public QQuickItem {
+/// The layout and drawing of one rendered text, without an item: what RenderedTextItem shows,
+/// shared with PageItem (one item per page, docs/UI.md "One item per page (Z10 stage C)"), which
+/// keeps one per drawn row. Set the style, lay out a RenderedText at a width, draw it into a node
+/// with updateNode(); hit tests and the shapes as RenderedTextItem gives them. (Implemented in
+/// renderedtextitem.cpp, beside the item it was taken out of.)
+class RenderedTextLayout {
+public:
+    RenderedTextLayout();
+    ~RenderedTextLayout();
+    RenderedTextLayout(const RenderedTextLayout &) = delete;
+    RenderedTextLayout &operator=(const RenderedTextLayout &) = delete;
+
+    /// The style the next layout() uses (RenderedTextItem's properties of the same names).
+    struct Style {
+        QFont font;
+        QColor color{Qt::black};
+        QColor linkColor{Qt::blue};
+        qreal lineHeight = 0;
+        int alignment = Qt::AlignLeft;
+        bool wrap = true;
+        int maximumLineCount = 0;
+        qreal boxRadius = 3;
+        qreal inset = 0;
+    };
+    void setStyle(const Style &style);
+    /// Lays `source` out at `width`: the lines, the cut, the shapes and the overlays.
+    void layout(const markdown::RenderedText &source, qreal width);
+    /// A layout at `width` would be the one there is: left-aligned lines that no width broke and
+    /// that fit (a window resized lays out only the wrapped rows).
+    bool keepsLayoutAt(qreal width) const;
+    /// The hovered link and the find bar's matches drawn over the layout (no new layout); whether
+    /// the overlays changed.
+    bool setOverlays(const QString &hoveredLink, const QString &findQuery, bool matchCase, bool matchDiacritics,
+                     bool wholeWord, const QColor &findColor);
+    /// The laid-out height (whole fixed lines) and the widest line.
+    qreal laidOutHeight() const { return m_height; }
+    qreal naturalWidth() const { return m_naturalWidth; }
+    qreal laidOutWidth() const { return m_laidOutWidth; }
+    bool isTruncated() const { return m_truncated; }
+    int lines() const { return m_layout ? m_layout->lineCount() : 0; }
+    const QList<RichTextPill> &icons() const { return m_iconShapes; }
+    /// The glyphs and shapes are drawn again in the next updateNode() (a new window, another
+    /// device pixel ratio).
+    void markDirty()
+    {
+        m_textDirty = true;
+        m_shapesDirty = true;
+    }
+    /// The scene graph's nodes for the text: `old` (a node this made, or null) updated, or a new
+    /// one; null without a window.
+    QSGNode *updateNode(QSGNode *old, QQuickWindow *win, bool smooth);
+
+    /// The shown text (plain; the accessible name).
+    QString plainText() const;
+    /// The shown text as the renderer's HTML with the hovered link underlined.
+    QString text() const;
+    /// RenderedTextItem's hit tests (its functions of the same names).
+    QString linkAt(qreal x, qreal y) const;
+    int positionAt(qreal x, qreal y) const;
+    int displayPositionAt(qreal x, qreal y) const;
+    QRectF rectForSource(int from, int to) const;
+
+    /// One shape under or over the text (tests): a tinted span's line segment, a find match, the
+    /// hovered link's underline.
+    struct Shape {
+        enum class Kind { Pill, Box, Find, Underline };
+        Kind kind = Kind::Box;
+        QRectF rect;
+        QColor color;
+        bool operator==(const Shape &) const = default;
+    };
+    const QList<Shape> &shapes() const { return m_shapes; }
+    const QList<Shape> &overlays() const { return m_overlays; }
+    /// The laid-out text (tests); nullptr before the first layout.
+    const QTextLayout *textLayout() const { return m_layout.get(); }
+    const markdown::RenderedText &shown() const { return m_shown; }
+    /// Layouts made so far (tests: a property that changes nothing lays nothing out).
+    int layoutCount() const { return m_layoutCount; }
+
+protected:
+    /// Lays `text` out (formats from the runs of `m_shown`) into m_layout; the lines' count.
+    int layoutText(const QString &text);
+    /// The shapes under the text; whether the page icons' places changed.
+    bool computeShapes();
+    /// The overlays; whether they changed.
+    bool computeOverlays();
+    /// The baseline-to-top offset of line `line` for the fixed line height.
+    qreal lineTop(int index) const;
+    /// The line whose box holds `y` (−1: none).
+    int lineAtY(qreal y) const;
+    /// One line's part of display range [from, to): RichTextPills' line segments.
+    struct Segment {
+        QTextLine line;
+        qreal x1 = 0;
+        qreal x2 = 0;
+    };
+    QList<Segment> segments(qsizetype from, qsizetype to) const;
+    QFont runFont(const markdown::RenderedRun &run) const;
+
+    markdown::RenderedText m_shown; ///< what is shown (cut text: "…" at the end)
+    qsizetype m_shownLength = 0;    ///< of m_shown.text taken from the source text (before "…")
+    std::unique_ptr<QTextLayout> m_layout;
+    QFont m_font;
+    QColor m_color{Qt::black};
+    QColor m_linkColor{Qt::blue};
+    qreal m_lineHeight = 0;
+    int m_alignment = Qt::AlignLeft;
+    bool m_wrap = true;
+    int m_maxLines = 0;
+    bool m_truncated = false;
+    qreal m_boxRadius = 3;
+    qreal m_inset = 0;
+    QString m_hoveredLink;
+    QString m_findQuery;
+    bool m_findCase = false;
+    bool m_findDiacritics = false;
+    bool m_findWholeWord = false;
+    QColor m_findColor{0xf2, 0xb3, 0x3d, 0x80};
+    QList<Shape> m_shapes;
+    QList<Shape> m_overlays;
+    QList<RichTextPill> m_iconShapes;
+    qreal m_width = 0;  ///< the width layoutText() lays out with
+    qreal m_height = 0; ///< the laid-out height
+    qreal m_laidOutWidth = -1;
+    qreal m_naturalWidth = 0;   ///< the widest line
+    bool m_softWrapped = false; ///< a line was broken by the width (not by a line break)
+    int m_layoutCount = 0;
+    bool m_textDirty = true;   ///< the text node needs new glyphs
+    bool m_shapesDirty = true; ///< the geometry nodes need new vertices
+};
+
+class RenderedTextItem : public QQuickItem, protected RenderedTextLayout {
     Q_OBJECT
     Q_PROPERTY(brulion::editor::RenderedTextRef renderedText READ renderedText WRITE setRenderedText NOTIFY
                        renderedTextChanged FINAL)
@@ -137,36 +268,28 @@ public:
     QColor findColor() const { return m_findColor; }
     void setFindColor(const QColor &color);
     QList<RichTextPill> iconShapes() const { return m_iconShapes; }
-    QString plainText() const;
-    QString text() const;
+    QString plainText() const { return RenderedTextLayout::plainText(); }
+    QString text() const { return RenderedTextLayout::text(); }
 
     /// The link at (x, y) ("" none): the character under the point, not past a line's text nor
     /// above or below its glyphs (as the rich text's exact hit test).
-    Q_INVOKABLE QString linkAt(qreal x, qreal y) const;
+    Q_INVOKABLE QString linkAt(qreal x, qreal y) const { return RenderedTextLayout::linkAt(x, y); }
     /// The source position of (x, y) (the renderer's input; the display position without a source
     /// map); the nearest position between characters.
-    Q_INVOKABLE int positionAt(qreal x, qreal y) const;
+    Q_INVOKABLE int positionAt(qreal x, qreal y) const { return RenderedTextLayout::positionAt(x, y); }
     /// The display position of (x, y) (between characters).
-    Q_INVOKABLE int displayPositionAt(qreal x, qreal y) const;
+    Q_INVOKABLE int displayPositionAt(qreal x, qreal y) const { return RenderedTextLayout::displayPositionAt(x, y); }
     /// The bounding rectangle of where source range [from, to) is shown (empty: not shown).
-    Q_INVOKABLE QRectF rectForSource(int from, int to) const;
+    Q_INVOKABLE QRectF rectForSource(int from, int to) const { return RenderedTextLayout::rectForSource(from, to); }
 
     /// One shape under or over the text (tests): a tinted span's line segment, a find match, the
     /// hovered link's underline.
-    struct Shape {
-        enum class Kind { Pill, Box, Find, Underline };
-        Kind kind = Kind::Box;
-        QRectF rect;
-        QColor color;
-        bool operator==(const Shape &) const = default;
-    };
-    const QList<Shape> &shapes() const { return m_shapes; }
-    const QList<Shape> &overlays() const { return m_overlays; }
-    /// The laid-out text (tests); nullptr before the first layout.
-    const QTextLayout *textLayout() const { return m_layout.get(); }
-    const markdown::RenderedText &shown() const { return m_shown; }
-    /// Layouts made so far (tests: a property that changes nothing lays nothing out).
-    int layoutCount() const { return m_layoutCount; }
+    using Shape = RenderedTextLayout::Shape;
+    using RenderedTextLayout::layoutCount;
+    using RenderedTextLayout::overlays;
+    using RenderedTextLayout::shapes;
+    using RenderedTextLayout::shown;
+    using RenderedTextLayout::textLayout;
 
     void componentComplete() override;
 
@@ -199,53 +322,12 @@ private:
     void reload();
     /// Lays the text out with the current width (when complete), the shapes and overlays anew.
     void relayout();
-    /// Lays `text` out (formats from the runs of `m_shown`) into m_layout; the lines' count.
-    int layoutText(const QString &text);
+    /// RenderedTextLayout's, with the item told (a new frame, iconShapesChanged).
     void computeShapes();
     void computeOverlays();
-    /// The baseline-to-top offset of line `line` for the fixed line height.
-    qreal lineTop(int index) const;
-    /// The line whose box holds `y` (−1: none).
-    int lineAtY(qreal y) const;
-    /// One line's part of display range [from, to): RichTextPills' line segments.
-    struct Segment {
-        QTextLine line;
-        qreal x1 = 0;
-        qreal x2 = 0;
-    };
-    QList<Segment> segments(qsizetype from, qsizetype to) const;
-    QFont runFont(const markdown::RenderedRun &run) const;
 
     RenderedTextRef m_ref;
     QString m_html;
-    markdown::RenderedText m_shown; ///< what is shown (cut text: "…" at the end)
-    qsizetype m_shownLength = 0;    ///< of m_shown.text taken from the source text (before "…")
-    std::unique_ptr<QTextLayout> m_layout;
-    QFont m_font;
-    QColor m_color{Qt::black};
-    QColor m_linkColor{Qt::blue};
-    qreal m_lineHeight = 0;
-    int m_alignment = Qt::AlignLeft;
-    bool m_wrap = true;
-    int m_maxLines = 0;
-    bool m_truncated = false;
-    qreal m_boxRadius = 3;
-    qreal m_inset = 0;
-    QString m_hoveredLink;
-    QString m_findQuery;
-    bool m_findCase = false;
-    bool m_findDiacritics = false;
-    bool m_findWholeWord = false;
-    QColor m_findColor{0xf2, 0xb3, 0x3d, 0x80};
-    QList<Shape> m_shapes;
-    QList<Shape> m_overlays;
-    QList<RichTextPill> m_iconShapes;
-    qreal m_laidOutWidth = -1;
-    qreal m_naturalWidth = 0;   ///< the widest line
-    bool m_softWrapped = false; ///< a line was broken by the width (not by a line break)
-    int m_layoutCount = 0;
-    bool m_textDirty = true;   ///< the text node needs new glyphs
-    bool m_shapesDirty = true; ///< the geometry nodes need new vertices
 };
 
 } // namespace brulion::editor
