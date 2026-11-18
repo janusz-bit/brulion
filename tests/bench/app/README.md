@@ -64,6 +64,13 @@ nix develop -c nix shell nixpkgs#xvfb nixpkgs#perf -c env CUR=build-rel/src/app/
   `vault_open`, `content` / `content_frame` (the first block on screen, the frame showing it),
   `ready` (`Workspace.ready`: every file indexed), `settled` (the end of the last stall > 24 ms
   before 1 s without one); `indexing_*` / `after_ready_*` stalls between those marks.
+  `<mark>_gui_insns_M` / `<mark>_gui_cpu_ms` (window, first_frame, content, ready, settled): the GUI
+  thread's user-space instructions and CPU time from the probe's start (QApplication constructed)
+  to the mark — on a shared machine compare these rather than the milliseconds;
+  `<mark>_objects_alive` / `_objects_created`: the QObjects alive / created since then (QtCore's
+  AddQObject / RemoveQObject hooks). `--env BENCH_OBJECT_TYPES=1` adds an `objects` record at
+  content and settled: the live objects by class and by their named ancestors under `AppShell`
+  (`BENCH_OBJECT_DEPTH`, default 4) — what the shell creates (docs/PERFORMANCE.md "L10").
   `--start first` = a fresh XDG home (first start), `warm` = the same home again, `cold` = also
   the page cache of the binary, every mapped library / font and the vault dropped.
   Index cache (docs/PERFORMANCE.md, L2): a `first` start has no device state, so its index is
