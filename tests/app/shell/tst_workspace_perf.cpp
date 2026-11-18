@@ -231,9 +231,11 @@ private Q_SLOTS:
             }
         });
         connect(&ws, &Workspace::revisionChanged, this, [&] { order.append(u"revision"_s); });
+        qsizetype expected = m_total; // the notes on disk (one more after the edit below)
+        qsizetype atReady = -1;
         connect(&ws, &Workspace::readyChanged, this, [&] {
             order.append(u"ready"_s);
-            QCOMPARE(ws.index()->paths().size(), qsizetype(m_total)); // the views saw it all
+            atReady = ws.index()->paths().size(); // the views saw it all
         });
         QSignalSpy ready(&ws, &Workspace::readyChanged);
         clock.start();
@@ -242,22 +244,29 @@ private Q_SLOTS:
         order.clear();
         // An edit while loading (the first merges are in by now): passed on at once.
         QTRY_VERIFY_WITH_TIMEOUT(!notified.isEmpty(), 60000 * BRULION_TEST_SLOWDOWN);
+        const QString written = m_tmp.filePath(u"vault/Nowa.md"_s);
         if (ws.indexing()) {
             order.clear();
             QVERIFY(ws.write(u"Nowa.md"_s, u"- napisana w trakcie [[Strona 1]]\n"_s));
+            ++expected;
             QCOMPARE(order.mid(0, 2), (QStringList{u"index"_s, u"revision"_s}));
         }
         QVERIFY(ready.wait(120000 * BRULION_TEST_SLOWDOWN) || ws.ready());
         const qint64 loadMs = clock.elapsed();
         QVERIFY(order.contains(u"ready"_s));
+        QCOMPARE(atReady, expected);
         QVERIFY(order.lastIndexOf(u"index"_s, order.indexOf(u"ready"_s)) >= 0); // indexChanged, then ready
         // Merges every turn of the event loop; passed on at most every 250 ms (the edit's at once:
         // one more), so a load of `loadMs` notifies at most loadMs / 250 + 3 times.
-        qDebug("perf: %lld indexChanged while %d notes loaded in %lld ms", qint64(notified.size()), m_total, loadMs);
+        qDebug("perf: %lld indexChanged while %d notes loaded in %lld ms (an edit meanwhile: %s)",
+               qint64(notified.size()), m_total, loadMs, expected > m_total ? "yes" : "no");
         QVERIFY2(notified.size() <= loadMs / 250 + 3,
                  qPrintable(u"%1 notifications in %2 ms"_s.arg(notified.size()).arg(loadMs)));
         for (qsizetype i = 1; i < notesKnown.size(); ++i)
             QVERIFY(notesKnown[i] >= notesKnown[i - 1]);
+        disconnect(&ws, nullptr, this, nullptr);
+        ws.close();
+        QFile::remove(written); // (the next test opens the same notebook)
     }
 
     void reopenWithState()
