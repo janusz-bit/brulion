@@ -314,6 +314,9 @@ PageTools::Affected PageTools::summaryAffected(const VaultIndex &index, const In
         for (const QString &tag : note->tags) {
             if (m_reads.tags.contains(tag) || (!m_reads.tagPrefix.isEmpty() && tag.startsWith(m_reads.tagPrefix)))
                 return Affected::Yes;
+            // A spelling the notebook did not use before (`#projekty/dom`, an alias as a tag).
+            if (index.resolveTag(tag) == path)
+                return Affected::Yes;
         }
         const QList<ResolvedLink> links = index.outgoingLinks(changed);
         if (std::ranges::any_of(links, [&path](const ResolvedLink &l) { return l.target == path; }))

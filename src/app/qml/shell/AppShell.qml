@@ -718,10 +718,11 @@ FocusScope {
     BQuickSwitcher {
         id: switcher
         objectName: "shellSwitcher"
-        // Workspace.namesRevision: refresh when pages come and go (or their aliases change) while
-        // it is open. Closed (visible stays true until the exit transition ends), it neither
-        // queries nor follows the names.
-        pages: switcher.visible && Workspace.namesRevision >= 0 ? Workspace.switcherPages(switcher.query, 60) : []
+        // Workspace.namesRevision / propertiesRevision: refresh when pages come and go (or their
+        // aliases or icons change) while it is open. Closed (visible stays true until the exit
+        // transition ends), it neither queries nor follows them.
+        pages: switcher.visible && Workspace.namesRevision >= 0 && Workspace.propertiesRevision >= 0
+               ? Workspace.switcherPages(switcher.query, 60) : []
         // The top bar's search field opens it: "> " turns to the commands, the last result
         // searches the notes' text.
         placeholderText: qsTr("Go to page… (> for commands)")

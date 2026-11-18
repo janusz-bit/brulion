@@ -290,6 +290,23 @@ private Q_SLOTS:
                  u"every month on the 10th"_s);
     }
 
+    // A task's text shows what it links to: a linked page's icon and the text of a
+    // [[Page#^id]] block follow that page, although the page itself has no tasks.
+    void taskTextFollowsLinkedPages()
+    {
+        auto index = makeIndex({{u"a.md"_s, u"- [ ] zadzwonić w sprawie [[Projekt]] — [[Projekt#^abc]]\n"_s},
+                                {u"Projekt.md"_s, u"- cel główny ^abc\n"_s}});
+        TaskListModel m;
+        m.setRefreshDelay(0);
+        m.setVaultIndex(index.get());
+        const auto html = [&m] { return m.get(m.rowOfKey(u"a.md:0"_s)).value(u"html"_s).toString(); };
+        QVERIFY2(html().contains(u"cel główny"_s), qPrintable(html()));
+        const QString before = html();
+        edit(*index, [&] { index->update(u"Projekt.md"_s, u"---\nicon: 🚀\n---\n- cel poprawiony ^abc\n"_s); });
+        QTRY_VERIFY2(html().contains(u"cel poprawiony"_s), qPrintable(html()));
+        QVERIFY(html() != before);
+    }
+
     void htmlIsEscaped()
     {
         auto index = makeIndex({{u"a.md"_s, u"- [ ] <b>bold?</b> & [[Strona|link]] #tag\n"_s}});

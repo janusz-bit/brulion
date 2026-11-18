@@ -767,6 +767,10 @@ bool GraphModel::unaffectedByIndexChanges()
         return false;
     if (m_builtVersion == m_index->version())
         return true;
+    // Cut by the node cap: which nodes stay depends on their degrees in the whole graph, which a
+    // note outside the neighbourhood changes too (a link to a leaf taken out) — built again.
+    if (m_localCapped)
+        return false;
     const IndexChanges changes = m_index->changesSince(m_builtVersion);
     if (!changes.complete || changes.names)
         return false;
@@ -824,6 +828,7 @@ void GraphModel::rebuild()
     QHash<QString, int> wholeDegree; ///< a local build's degrees in the whole graph (only when capped)
     m_pageCount = 0;
     m_localBuild = false;
+    m_localCapped = false;
     m_localIds.clear();
     m_joinIds.clear();
     m_builtSerial = m_index ? m_index->serial() : 0;
@@ -837,6 +842,7 @@ void GraphModel::rebuild()
             Neighbourhood::Result local = around.build(m_depth, m_maxNodes);
             g = std::move(local.graph);
             wholeDegree = std::move(local.degree);
+            m_localCapped = !wholeDegree.isEmpty();
             m_joinIds = wholeDegree.isEmpty() ? std::move(local.inner) : local.ids;
             m_localIds = std::move(local.ids);
             m_localBuild = true;

@@ -334,6 +334,8 @@ private:
     bool m_localBuild = false;
     QSet<QString> m_localIds;
     QSet<QString> m_joinIds;
+    /// The local graph was cut by the node cap (its nodes depend on whole-graph degrees).
+    bool m_localCapped = false;
 };
 
 } // namespace brulion::planning

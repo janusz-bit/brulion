@@ -1438,6 +1438,32 @@ private Q_SLOTS:
         QCOMPARE(tools.summariesComputed(), computed);
     }
 
+    // A tag spelling the notebook did not use before (the page's path, an alias) names the page
+    // too: the summary is computed again although no note it read changed.
+    void pageToolsSummaryFollowsNewTagSpellings()
+    {
+        auto ws = open({
+                {u"Projekty/Dom.md"_s, u"---\naliases: [dommek]\n---\n- remont łazienki\n"_s},
+                {u"Notatka.md"_s, u"- [[Projekty/Dom]]\n"_s},
+                {u"Druga.md"_s, u"- nic\n"_s},
+        });
+        PageTools tools;
+        tools.setWorkspace(ws.get());
+        tools.setPath(u"Projekty/Dom.md"_s);
+        const auto settle = [] {
+            for (int i = 0; i < 3; ++i)
+                QCoreApplication::processEvents();
+        };
+        settle();
+        int computed = tools.summariesComputed();
+        QVERIFY(ws->writeFile(u"Druga.md"_s, u"- teraz #projekty/dom\n"_s));
+        settle();
+        QCOMPARE(tools.summariesComputed(), ++computed);
+        QVERIFY(ws->writeFile(u"Druga.md"_s, u"- teraz #projekty/dom i #dommek\n"_s));
+        settle();
+        QCOMPARE(tools.summariesComputed(), ++computed);
+    }
+
     // The side panel's calendar (ContentMiniCalendar): marks of a range and the entries of a day.
     void calendarMarksAndEntries()
     {

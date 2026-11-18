@@ -1141,6 +1141,16 @@ void TaskListModel::rebuild()
         QSet<VaultPath> changed;
         if (!full && !sync.changed.isEmpty()) {
             changed = QSet<VaultPath>(sync.changed.cbegin(), sync.changed.cend());
+            // A task's text shows what it links to (a page's icon, a [[Page#^id]] block's text):
+            // the listed tasks of notes linking to a changed note are made again too.
+            if (!renderAll) {
+                for (const VaultPath &p : sync.changed) {
+                    for (const VaultPath &source : m_index->linksTo(p)) {
+                        if (m_itemsOfNote.contains(source))
+                            changed.insert(source);
+                    }
+                }
+            }
             for (const QList<QueryItem> matches = m_query->itemsOf(changed, *m_index); const QueryItem &qi : matches) {
                 if (!qi.task)
                     continue;

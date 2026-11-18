@@ -1043,13 +1043,18 @@ bool BlockListModel::refreshTyping(const QList<markdown::BlockChange> &changes)
     QList<int> ancestorsOf; // rows whose task status changed: their ancestors' progress
     for (const int row : std::as_const(rows)) {
         const markdown::BlockEntry &e = m_doc.at(row);
-        const RowState &st = m_state[e.uid];
-        if (e.kind != st.kind || e.kind == BlockKind::Frontmatter || e.depth != st.docDepth
-            || m_doc.hasChildren(row) != st.hasChildren)
+        const auto st = m_state.constFind(e.uid);
+        if (st == m_state.cend() || e.kind != st->kind || e.kind == BlockKind::Frontmatter || e.depth != st->docDepth
+            || m_doc.hasChildren(row) != st->hasChildren)
             return false;
-        if (row + 1 < n && m_doc.at(row + 1).line != stateFor(m_rows.at(row + 1)).line)
-            return false;
-        if (e.taskStatus != st.task)
+        const bool taskChanged = e.taskStatus != st->task;
+        // (A row without a state yet: the long way. Nothing here adds states.)
+        if (row + 1 < n) {
+            const auto next = m_state.constFind(m_rows.at(row + 1));
+            if (next == m_state.cend() || m_doc.at(row + 1).line != next->line)
+                return false;
+        }
+        if (taskChanged)
             ancestorsOf.append(row);
     }
     // The rows to look at: the edited ones, the dependents, the ancestors of changed tasks.
@@ -2376,8 +2381,11 @@ void BlockListModel::followIndex()
             if (renderHtml(i) != before)
                 htmlRows.append(row);
         }
-        // A drawing of a note (`![[Plan]]`, an Obsidian Excalidraw plugin file) changed.
-        if (st.embedsValid && std::ranges::any_of(std::as_const(st.embeds), showsChanged)) {
+        // A drawing of a note (`![[Plan]]`, an Obsidian Excalidraw plugin file) changed — or a
+        // transcluded note became one (its transclusion goes, a drawing embed comes instead).
+        if (st.embedsValid
+            && (std::ranges::any_of(std::as_const(st.embeds), showsChanged)
+                || (st.transclusionsValid && st.transclusionSources.intersects(notes)))) {
             const QVariantList before = st.embeds;
             const bool onlyBefore = st.onlyEmbeds;
             st.embedsValid = false;
