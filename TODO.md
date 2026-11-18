@@ -49,6 +49,17 @@ done in the repository simply disappears from the list.
   * other models: a GGUF file of the user's own, a chat format beside LFM3's;
   * stores: F-Droid's and Google Play's rules for an app that downloads model weights under a
     licence that is not free software (a store build without it: `BRULION_LOCAL_AI=OFF`).
+* **The assistant's own model: what is still missing** — the bench, the generated tasks, the
+  training without thinking (SFT, then GRPO) as one LoRA adapter over LFM3-1.7B-QAD-Q4_0.gguf, the
+  app's support for an adapted model and `finetune/publish.py` are there (docs/FINETUNE.md).
+  Missing: the choice of the adapter to ship (SFT 3 alone or with GRPO 3; on the phone one of
+  rank 16 costs 29 % of the reading and 8 % of the writing, one of rank 48 33 % and 14 %:
+  docs/FINETUNE.md "GRPO 3 and the candidates to ship"); publishing it on Hugging Face, once these are decided: the
+  repositories' owner and the model's name, the dataset's licence, whether the training sequences
+  and the merged weights go too; then its entry in `knownModels()` (the adapter's URL in its repository
+  pinned to a revision, its SHA-256 and size) and Settings showing it (the model row describes
+  only a model that sees and one that reads text, not one adapted to the assistant that answers at
+  once).
 * **Extensibility as in Emacs and TiddlyWiki: what is still missing** — extension pages, approval
   per device, live reload, hooks (`save`, `change`) and the Luau console are there
   (docs/EXTENSIONS.md); missing: Luau's type checker on save (`b` as a definition file; the

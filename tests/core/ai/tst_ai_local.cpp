@@ -8,6 +8,7 @@
 #include "ai/localrunner.h"
 
 #include <QFile>
+#include <QHash>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -207,7 +208,9 @@ private Q_SLOTS:
         QCOMPARE(ai::localModel(u"gpt"_s), nullptr);
 
         QSet<QString> ids;
-        QSet<QString> fileNames;
+        // A name is one file in the models folder: models share a file only as the identical
+        // LocalFile (ai/localfiles.h keeps it for the other one, and finds it there by name).
+        QHash<QString, ai::LocalFile> filesByName;
         static const QRegularExpression sha256(u"^[0-9a-f]{64}$"_s);
         for (const ai::LocalModel &model : models) {
             QVERIFY2(!ids.contains(model.id), qPrintable(model.id));
@@ -216,8 +219,9 @@ private Q_SLOTS:
             QVERIFY2(ai::local::knowsFormat(model.format), qPrintable(model.format));
             QCOMPARE(model.licenseUrl.scheme(), u"https"_s);
             QCOMPARE(model.pageUrl.scheme(), u"https"_s);
-            QCOMPARE(model.files().size(), model.sees() ? 2 : 1);
+            QCOMPARE(model.files().size(), 1 + (model.adapted() ? 1 : 0) + (model.sees() ? 1 : 0));
             qint64 bytes = 0;
+            QSet<QString> own;
             for (const ai::LocalFile &file : model.files()) {
                 // One revision of a repository (40 hex digits), over HTTPS, with its checksum.
                 QCOMPARE(file.url.scheme(), u"https"_s);
@@ -226,10 +230,15 @@ private Q_SLOTS:
                          qPrintable(file.url.path()));
                 QVERIFY2(file.url.path().endsWith(u'/' + file.name), qPrintable(file.url.path()));
                 QVERIFY2(sha256.match(QString::fromLatin1(file.sha256)).hasMatch(), file.sha256.constData());
-                QVERIFY(file.bytes > 100 * 1000 * 1000);
+                // A model, a projector: hundreds of MB; a LoRA adapter: some tens.
+                const bool adapter = model.adapted() && file == model.adapter;
+                QVERIFY2(file.bytes > (adapter ? 10 : 100) * 1000 * 1000, qPrintable(file.name));
                 QVERIFY2(file.name.endsWith(u".gguf") && !file.name.contains(u'/'), qPrintable(file.name));
-                QVERIFY2(!fileNames.contains(file.name), qPrintable(file.name));
-                fileNames.insert(file.name);
+                QVERIFY2(!own.contains(file.name), qPrintable(file.name));
+                own.insert(file.name);
+                if (const auto known = filesByName.constFind(file.name); known != filesByName.constEnd())
+                    QVERIFY2(*known == file, qPrintable(u"%1 of %2: not the same file"_s.arg(file.name, model.id)));
+                filesByName.insert(file.name, file);
                 bytes += file.bytes;
             }
             QCOMPARE(model.bytes(), bytes);

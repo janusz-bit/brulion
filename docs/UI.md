@@ -843,11 +843,14 @@ With **On this device** the key, model and address rows give way to the model's 
 (`AppController.localAi`, `src/app/shell/localai.h` — typed `FINAL` properties about the chosen
 model, so the bindings compile): **Model** (`aiLocalModelSetting`: LFM3-VL 2B / LFM3 1.7B →
 `AppSettings.aiLocalModel`; the description says what the chosen one is good at), **The model's
-files** (`aiLocalFiles`: not here yet with its size and **Download**; while downloading the
+files** (`aiLocalFiles`: not here yet with its size and **Download** — partly here, a file
+another model shares or a download that stopped, with what is left of the whole (`modelLeft`), or
+"nothing left to download" when another model brought all its files; while downloading the
 progress as text, a progress bar and **Stop**; "Checking the downloaded files…"; a failed download
-with its reason — it goes on from where it stopped; here: its size and **Remove**) and **Whose
-model** (the maker and the licence, with links). One model downloads at a time (`downloadingOther`
-disables Download on the other). While a model is downloaded or answers (`working`) a phone's
+with its reason — it goes on from where it stopped; here: its size and **Remove**; a second line
+names the models it shares a file with, `modelSharesWith`) and **Whose model** (the maker and
+the licence, with links). One model downloads at a time (`downloadingOther` disables Download on
+the other). While a model is downloaded or answers (`working`) a phone's
 screen stays on (docs/ANDROID.md "A model on the phone"). A command whose
 extension asks AI shows "Asking AI…" (once per call: an agent asks many times); its result comes
 as the command's own message when the answer arrives; the console shows "Asking AI…" and then the

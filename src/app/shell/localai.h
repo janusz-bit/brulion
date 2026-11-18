@@ -10,8 +10,8 @@
 // after another; the model stays in memory between them (the next question of a conversation
 // reads only what is new) and is let go after ten minutes without a request — what it read of a
 // request's system text and tools is kept on disk (`stateFolder`), so the first request after it
-// was opened again does not read them anew. How much it holds at once follows the device's memory
-// (contextFor()).
+// was opened again does not read them anew. It holds the same on every device: 16 384 tokens at
+// once (ContextTokens).
 #pragma once
 
 #include "ai/local.h"
@@ -51,8 +51,16 @@ class LocalAi : public QObject, public ai::LocalBackend {
     Q_PROPERTY(QString modelLicense READ modelLicense NOTIFY modelChanged FINAL)
     Q_PROPERTY(QString modelLicenseUrl READ modelLicenseUrl NOTIFY modelChanged FINAL)
     Q_PROPERTY(QString modelPageUrl READ modelPageUrl NOTIFY modelChanged FINAL)
-    /// Its files are on the device, whole.
+    /// It is downloaded: its download finished (ai::LocalModelFiles::has: marked so) and its files
+    /// are on the device, whole — a file it shares with another model alone is not enough.
     Q_PROPERTY(bool modelHere READ modelHere NOTIFY modelsChanged FINAL)
+    /// What is still to download of it, as a text: less than `modelSize` when part of it is on the
+    /// device already (a file it shares with another model, a download that stopped), the same
+    /// when none of it is (or too little to show), "" when all its files are.
+    Q_PROPERTY(QString modelLeft READ modelLeft NOTIFY modelsChanged FINAL)
+    /// The other models it shares a file with, by name ("LFM3 1.7B"; "": none): that file is
+    /// downloaded once and stays while one of them is on the device.
+    Q_PROPERTY(QString modelSharesWith READ modelSharesWith NOTIFY modelChanged FINAL)
     /// It is being downloaded: how far (0–1; `progressText`: "312 MB of 1.2 GB"), whether the
     /// files are being checked. `downloadError`: why its last download failed ("": it did not).
     Q_PROPERTY(bool downloading READ downloadingChosen NOTIFY downloadChanged FINAL)
@@ -79,7 +87,6 @@ public:
         /// fast cores).
         bool spinWait = false;
         QStringList pluginDirs;       ///< where the model runner's plugin may be ("": by its name)
-        qint64 memoryBytes = 0;       ///< the device's memory (0: unknown)
         QList<ai::LocalModel> models; ///< empty: ai::localModels() (tests: small ones)
         Opener open;                  ///< empty: the plugin (tests: a fake runner)
         int idleMs = 10 * 60 * 1000;  ///< the model leaves memory after this long without a request
@@ -100,6 +107,8 @@ public:
     QString modelLicenseUrl() const;
     QString modelPageUrl() const;
     bool modelHere() const { return has(m_chosen); }
+    QString modelLeft() const;
+    QString modelSharesWith() const;
     bool downloadingChosen() const;
     bool downloadingOther() const;
     double progress() const;
@@ -134,9 +143,9 @@ public:
     void send(const ai::Settings &settings, const ai::Request &request, std::function<void(const ai::Reply &)> done,
               ai::PartialCallback partial = {}, std::shared_ptr<std::atomic<bool>> stopped = {}) override;
 
-    /// The tokens a model may hold at once on a device with `memoryBytes` of memory, and the most
-    /// a picture may take of them.
-    static int contextFor(qint64 memoryBytes);
+    /// The tokens a model holds at once, the request and the answer together, on every device (a
+    /// token takes some 12 KB of memory: 200 MB), and the most a picture may take of them.
+    static constexpr int ContextTokens = 16384;
     static int imageTokensFor(int contextTokens);
 
 Q_SIGNALS:

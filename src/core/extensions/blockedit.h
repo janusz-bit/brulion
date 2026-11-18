@@ -6,9 +6,11 @@
 //   replaceBlockText(content, 2, u"[[Przysiad]] 100 kg 4×5", u"x"_s, today)
 //
 // replaceBlockText keeps what the text the extension writes leaves out: Obsidian Tasks' date
-// fields (✅ ❌ ➕ 📅 ⏳ 🛫) and a block id ("^abc123") at the end of the old text, unless the new
-// text has its own. A status (one checkbox character) is set with markdown::setTaskStatus (✅ / ❌
-// dates, a plain line becomes a task, a Logseq keyword stays a keyword).
+// fields (✅ ❌ ➕ 📅 ⏳ 🛫, a due, scheduled or start date with its time) wherever they stand in the
+// old text — before a tag too, not in code — and a block id ("^abc123") at its end, unless the new
+// text has its own; they go after the new text, in their order. A status (one checkbox character)
+// is set with markdown::setTaskStatus (✅ / ❌ dates, a plain line becomes a task, a Logseq keyword
+// stays a keyword).
 
 #include <QDate>
 #include <QString>

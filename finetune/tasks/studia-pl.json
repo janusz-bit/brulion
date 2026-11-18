@@ -1,0 +1,301 @@
+{
+  "notebook": "studia-pl",
+  "language": "pl",
+  "now": "2026-11-19T21:10",
+  "tasks": [
+    {
+      "id": "studia-pl/sala-statystyka",
+      "category": "search",
+      "ask": "W której sali mam ćwiczenia ze statystyki?",
+      "expect": { "answer": { "matches": ["(^|[^0-9])312([^0-9]|$)"] } },
+      "solution": [
+        { "call": "search_notes", "input": { "query": "ćwiczenia statystyka" } },
+        { "answer": "Ćwiczenia ze statystyki masz we wtorki 09:45–11:15 w sali 312, z mgr. Piotrem Wroną ([[Plan zajęć]])." }
+      ]
+    },
+    {
+      "id": "studia-pl/konsultacje-nowicka",
+      "category": "search",
+      "ask": "Kiedy mogę przyjść na konsultacje do dr Nowickiej?",
+      "note": "Nazwisko w dopełniaczu („Nowickiej”): wyszukiwarka go nie odmienia, „konsultacje” wystarcza.",
+      "expect": { "answer": { "contains": ["wtor"], "anyOf": [["13:30", "13.30", "wpół do drugiej"]] } },
+      "solution": [
+        { "call": "search_notes", "input": { "query": "konsultacje Nowickiej" } },
+        { "answer": "Dr Ewa Nowicka ma konsultacje we wtorki 12:00–13:30, w pokoju 318 w budynku C ([[Ewa Nowicka]])." }
+      ]
+    },
+    {
+      "id": "studia-pl/numer-indeksu",
+      "category": "search",
+      "ask": "Jaki mam numer indeksu?",
+      "note": "Notatka mówi „numer albumu” — to to samo. Samo „indeks” nic nie znajduje.",
+      "expect": { "answer": { "anyOf": [["412873", "412 873"]] } },
+      "solution": [
+        {
+          "call": "search_notes",
+          "input": { "query": "numer indeksu" },
+          "alternatives": [
+            { "call": "search_notes", "input": { "query": "numer albumu" } },
+            { "call": "list_pages", "input": {} }
+          ]
+        },
+        { "answer": "Twój numer indeksu (w notatce „numer albumu”) to 412873 ([[Sprawy studenckie]])." }
+      ]
+    },
+    {
+      "id": "studia-pl/telefon-bartka",
+      "category": "search",
+      "ask": "Podaj mi numer telefonu do Bartka z projektu.",
+      "note": "Przy Bartku jest tylko e-mail: odpowiedź mówi, że numeru nie ma (może podać e-mail), i nie podaje cudzego numeru — Igora z linii pod nim ani kierowniczki z kawiarni.",
+      "expect": {
+        "answer": {
+          "anyOf": [["nie ma ", "nie mam", "brak", "nie znalaz", "nie widzę", "nie udało", "tylko e-mail", "tylko adres", "tylko mail"]],
+          "notContains": ["698 214 337", "698214337", "698-214-337", "731 552 908", "731552908", "731-552-908"]
+        }
+      },
+      "solution": [
+        { "call": "search_notes", "input": { "query": "Bartek telefon" } },
+        { "answer": "W [[Projekt zespołowy]] przy Bartku Zielińskim nie ma numeru telefonu, jest tylko e-mail: bartek.zielinski@student.example." }
+      ]
+    },
+    {
+      "id": "studia-pl/egzamin-statystyka",
+      "category": "search",
+      "ask": "Kiedy piszę egzamin ze statystyki?",
+      "expect": { "answer": { "anyOf": [["2027-01-28", "28 stycznia", "28.01.2027", "28.01"]] } },
+      "solution": [
+        { "call": "search_notes", "input": { "query": "egzamin statystyka" } },
+        { "answer": "Egzamin ze statystyki jest 2027-01-28 o 09:00 w auli B ([[Terminy]])." }
+      ]
+    },
+    {
+      "id": "studia-pl/przyszly-tydzien",
+      "category": "query",
+      "ask": "Jakie terminy mam w przyszłym tygodniu?",
+      "note": "Przyszły tydzień to 2026-11-23..29, nie najbliższe 7 dni: sprawozdanie (jutro) i zaległa opłata za akademik do niego nie należą.",
+      "expect": {
+        "answer": {
+          "contains": ["kolokwium", "prototyp", "statystyk"],
+          "notContains": ["sprawozdan", "akademik", "ekonometri"]
+        }
+      },
+      "solution": [
+        {
+          "call": "query_notes",
+          "input": { "query": "type:tasks status:open due:next-week" },
+          "alternatives": [{ "call": "query_notes", "input": { "query": "type:tasks status:open due:2026-11-23..2026-11-29" } }]
+        },
+        { "answer": "W przyszłym tygodniu:\n- 2026-11-24: zadanie domowe ze statystyki (lista 6),\n- 2026-11-26: kolokwium z mikroekonomii ([[Terminy]]),\n- 2026-11-27: prototyp ekranów w Figmie ([[Projekt zespołowy]])." }
+      ]
+    },
+    {
+      "id": "studia-pl/przegapiony-termin",
+      "category": "query",
+      "ask": "Czy przegapiłem jakiś termin?",
+      "expect": { "answer": { "contains": ["akademik"], "notContains": ["kolokwium", "prototyp"] } },
+      "solution": [
+        { "call": "query_notes", "input": { "query": "type:tasks status:open due:overdue" } },
+        { "answer": "Tak, jeden: opłata za akademik za grudzień — termin minął 2026-11-17 ([[Terminy]])." }
+      ]
+    },
+    {
+      "id": "studia-pl/w-toku",
+      "category": "query",
+      "ask": "Co mam teraz w toku?",
+      "expect": { "answer": { "contains": ["diagram"], "anyOf": [["imię róży", "imienia róży", "Eco"]] } },
+      "solution": [
+        { "call": "query_notes", "input": { "query": "type:tasks status:doing" } },
+        { "answer": "W toku masz dwie rzeczy:\n- diagram przypadków użycia ([[Projekt zespołowy]]),\n- „Imię róży” Umberto Eco, które czytasz ([[Lektury]])." }
+      ]
+    },
+    {
+      "id": "studia-pl/tag-statystyka",
+      "category": "query",
+      "ask": "Pokaż otwarte zadania z tagiem #statystyka.",
+      "expect": { "answer": { "contains": ["rozkład"], "anyOf": [["lista 6", "listę 6", "listy 6", "zadanie domowe"]] } },
+      "solution": [
+        { "call": "query_notes", "input": { "query": "type:tasks status:open tag:statystyka" } },
+        { "answer": "Dwa otwarte zadania z #statystyka ([[Terminy]]):\n- zadanie domowe ze statystyki (lista 6), termin 2026-11-24,\n- powtórzyć rozkład normalny przed egzaminem." }
+      ]
+    },
+    {
+      "id": "studia-pl/sroda-koniec",
+      "category": "read",
+      "page": "Plan zajęć",
+      "ask": "O której kończę zajęcia w środę?",
+      "expect": { "answer": { "anyOf": [["14:45", "14.45"]] } },
+      "solution": [
+        { "answer": "W środę kończysz o 14:45: ostatnie są ćwiczenia z mikroekonomii w sali 205." }
+      ]
+    },
+    {
+      "id": "studia-pl/zarobek-kawiarnia",
+      "category": "multi",
+      "ask": "Ile zarobiłem w kawiarni w tym tygodniu?",
+      "note": "Tydzień od poniedziałku 2026-11-16: 4 h + 5,5 h = 9,5 h po 31,50 zł brutto. Piątkowe 8 h (2026-11-13) to poprzedni tydzień.",
+      "expect": { "answer": { "anyOf": [["299,25", "299.25"]] } },
+      "solution": [
+        { "call": "search_notes", "input": { "query": "kawiarnia" } },
+        { "answer": "W tym tygodniu przepracowałeś 4 h (2026-11-16) i 5,5 h (2026-11-18), razem 9,5 h. Przy stawce 31,50 zł brutto za godzinę to 299,25 zł brutto ([[Praca w kawiarni]])." }
+      ]
+    },
+    {
+      "id": "studia-pl/budzet-zostaje",
+      "category": "multi",
+      "ask": "Ile mi zostaje co miesiąc po opłaceniu stałych wydatków?",
+      "expect": { "answer": { "anyOf": [["1 971", "1971", "1.971", "1,971"]] } },
+      "solution": [
+        { "call": "search_notes", "input": { "query": "budżet wydatki" } },
+        { "answer": "Zostaje ci 1 971 zł miesięcznie: wpływy 1 150 + 1 300 + 500 = 2 950 zł, stałe wydatki 780 + 55 + 45 + 99 = 979 zł ([[Budżet]])." }
+      ]
+    },
+    {
+      "id": "studia-pl/przeczytane-lektury",
+      "category": "multi",
+      "ask": "Ile książek z listy lektur już przeczytałem?",
+      "expect": { "answer": { "matches": ["(^|[^0-9])3([^0-9]|$)|trzy"] } },
+      "solution": [
+        {
+          "call": "search_notes",
+          "input": { "query": "lektury" },
+          "alternatives": [
+            { "call": "read_page", "input": { "name": "Lektury" } },
+            { "call": "query_notes", "input": { "query": "type:tasks status:done page:\"Lektury\"" } }
+          ]
+        },
+        { "answer": "Trzy: „Ekonomia” Samuelsona, „Chłopi” Reymonta i „Zbrodnia i kara” Dostojewskiego. „Imię róży” jest w trakcie ([[Lektury]])." }
+      ]
+    },
+    {
+      "id": "studia-pl/kawa-ryz",
+      "category": "append",
+      "ask": "Dopisz kawę i ryż do listy zakupów.",
+      "expect": {
+        "files": [{ "path": "Lista zakupów.md", "contains": ["kaw", "ryż", "makaron", "płyn do naczyń"] }],
+        "toolsNotCalled": ["write_page"]
+      },
+      "solution": [
+        { "call": "append_to_page", "input": { "name": "Lista zakupów", "markdown": "- kawa\n- ryż" } },
+        { "answer": "Dopisałam kawę i ryż do [[Lista zakupów]]." }
+      ]
+    },
+    {
+      "id": "studia-pl/slajdy-projekt",
+      "category": "append",
+      "ask": "Dodaj do strony projektu zadanie: przygotować slajdy na prezentację, termin 10 grudnia.",
+      "expect": {
+        "files": [{
+          "path": "Projekt zespołowy.md",
+          "matches": ["- \\[ \\] .*slajd.*📅 2026-12-10|- \\[ \\] .*📅 2026-12-10.*slajd"],
+          "contains": ["Diagram przypadków użycia", "Prototyp ekranów"]
+        }],
+        "toolsNotCalled": ["write_page"]
+      },
+      "solution": [
+        {
+          "call": "search_notes",
+          "input": { "query": "projekt" },
+          "alternatives": [{ "call": "list_pages", "input": {} }]
+        },
+        { "call": "append_to_page", "input": { "name": "Projekt zespołowy", "markdown": "- [ ] Przygotować slajdy na prezentację 📅 2026-12-10" } },
+        { "answer": "Dodałam do [[Projekt zespołowy]] zadanie: przygotować slajdy na prezentację, termin 2026-12-10." }
+      ]
+    },
+    {
+      "id": "studia-pl/przypomnij-konsultacje",
+      "category": "journal",
+      "ask": "Przypomnij mi w przyszły wtorek o 11:30, żebym poszedł na konsultacje do dr Nowickiej.",
+      "expect": {
+        "files": [{
+          "path": ["journals/2026-11-19.md", "journals/2026-11-24.md"],
+          "contains": ["konsultac"],
+          "matches": ["⏰ 2026-11-24 11:30"]
+        }]
+      },
+      "solution": [
+        { "call": "append_to_journal", "input": { "markdown": "- [ ] Konsultacje u dr Nowickiej ⏰ 2026-11-24 11:30" } },
+        { "answer": "Dodałam przypomnienie na wtorek 2026-11-24 o 11:30: konsultacje u dr Nowickiej." }
+      ]
+    },
+    {
+      "id": "studia-pl/silownia-wczoraj",
+      "category": "journal",
+      "ask": "Dopisz do wczorajszego dziennika, że wieczorem byłem na siłowni.",
+      "note": "Wczoraj to 2026-11-18: wpis idzie do dziennika tego dnia, nie do dzisiejszego.",
+      "expect": { "files": [{ "path": "journals/2026-11-18.md", "contains": ["siłowni", "Kawiarnia: 5,5 h"] }] },
+      "solution": [
+        { "call": "append_to_journal", "input": { "markdown": "- Wieczorem siłownia.", "date": "2026-11-18" } },
+        { "answer": "Dopisałam do dziennika z 2026-11-18: wieczorem siłownia." }
+      ]
+    },
+    {
+      "id": "studia-pl/sprawozdanie-oddane",
+      "category": "update",
+      "ask": "Oddałem już sprawozdanie z baz danych, odhacz je.",
+      "expect": {
+        "files": [{ "path": "Terminy.md", "matches": ["- \\[x\\] Oddać sprawozdanie z laboratorium baz danych nr 4"], "contains": ["📅 2026-11-20", "#bazy"] }]
+      },
+      "solution": [
+        { "call": "search_notes", "input": { "query": "sprawozdanie bazy danych" } },
+        { "call": "update_block", "input": { "ref": "{{ref Terminy.md#L4}}", "status": "done" } },
+        { "answer": "Odhaczyłam sprawozdanie z laboratorium baz danych nr 4 w [[Terminy]]." }
+      ]
+    },
+    {
+      "id": "studia-pl/kolokwium-przesuniete",
+      "category": "update",
+      "ask": "Kolokwium z mikro przełożyli na 3 grudnia, zmień termin.",
+      "expect": {
+        "files": [{ "path": "Terminy.md", "matches": ["- \\[ \\] Kolokwium z mikroekonomii.*📅 2026-12-03"], "contains": ["#mikro"], "notContains": ["📅 2026-11-26"] }]
+      },
+      "solution": [
+        { "call": "search_notes", "input": { "query": "kolokwium mikroekonomii" } },
+        { "call": "update_block", "input": { "ref": "{{ref Terminy.md#L6}}", "text": "Kolokwium z mikroekonomii 📅 2026-12-03 #mikro" } },
+        { "answer": "Przesunęłam kolokwium z mikroekonomii na 2026-12-03 ([[Terminy]])." }
+      ]
+    },
+    {
+      "id": "studia-pl/tematy-licencjatu",
+      "category": "write",
+      "ask": "Utwórz stronę „Tematy pracy licencjackiej” z trzema pomysłami: ceny mieszkań w dużych miastach, rynek pracy absolwentów, kryptowaluty w portfelu inwestora.",
+      "expect": {
+        "files": [{ "path": "Tematy pracy licencjackiej.md", "contains": ["mieszka", "absolwent", "kryptowalut"] }]
+      },
+      "solution": [
+        { "call": "write_page", "input": { "name": "Tematy pracy licencjackiej", "content": "# Tematy pracy licencjackiej\n\n- Ceny mieszkań w dużych miastach\n- Rynek pracy absolwentów\n- Kryptowaluty w portfelu inwestora\n" } },
+        { "answer": "Utworzyłam stronę [[Tematy pracy licencjackiej]] z trzema pomysłami." }
+      ]
+    },
+    {
+      "id": "studia-pl/godziny-ects",
+      "category": "no_tool",
+      "ask": "Przedmiot ma 6 punktów ECTS, a 1 ECTS to 25–30 godzin pracy. Ile to godzin w sumie?",
+      "expect": { "answer": { "contains": ["150", "180"] }, "noTools": true },
+      "solution": [
+        { "answer": "6 × 25 = 150 i 6 × 30 = 180, czyli od 150 do 180 godzin pracy." }
+      ]
+    },
+    {
+      "id": "studia-pl/zmien-termin",
+      "category": "clarify",
+      "ask": "Zmień termin na piątek.",
+      "note": "Nie wiadomo, którego zadania: dopytać, niczego nie zmieniać.",
+      "expect": { "answer": { "anyOf": [["?", "któr", "doprecyz", "podaj", "napisz, co", "jakie zadanie", "czego dotyczy"]] } },
+      "solution": [
+        { "answer": "Termin którego zadania mam przesunąć na piątek?" }
+      ]
+    },
+    {
+      "id": "studia-pl/odmowa-lalka",
+      "category": "decline",
+      "ask": "Dopisz „Lalkę” Prusa do lektur.",
+      "answers": ["no"],
+      "note": "Użytkownik odmawia zmiany: nic się nie zmienia i asystent nie próbuje drugi raz (druga prośba o zgodę zostałaby przyjęta).",
+      "expect": { "toolsCalled": ["append_to_page"] },
+      "solution": [
+        { "call": "append_to_page", "input": { "name": "Lektury", "markdown": "- [ ] „Lalka” – Bolesław Prus" } },
+        { "answer": "Dobrze, niczego nie dopisałam do [[Lektury]]." }
+      ]
+    }
+  ]
+}

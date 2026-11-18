@@ -64,6 +64,9 @@ endif()
 if(TARGET brulion_semantic_llama)
     add_subdirectory(searchbench)
 endif()
+# The AI assistant's bench (docs/FINETUNE.md): its tasks played by their own solutions, and
+# brulion-assistantbench for the model on the device.
+add_subdirectory(assistantbench)
 # Shell scripts from scripts/ (release.sh, appimage-update-check.sh); bash scripts for Linux, not
 # run on Windows (tests/scripts/CMakeLists.txt).
 add_subdirectory(scripts)

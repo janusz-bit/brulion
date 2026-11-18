@@ -128,8 +128,7 @@ Only what needs OS APIs; compiled per target (no `#ifdef`s in core). `platform.h
 
 * **Everywhere** (`platform.h`): `logDirectory()` (Linux `$XDG_STATE_HOME/Brulion/Brulion/logs`,
   Android the app's files dir + `/logs`, the browser none: memory only) and `deviceDescription()`
-  for the event log; `physicalMemoryBytes()` (the device's RAM: how much the model on the device
-  holds at once); `keepScreenOn(on)` — Android: the activity's window keeps the screen on while
+  for the event log; `keepScreenOn(on)` — Android: the activity's window keeps the screen on while
   a model on the device is downloaded or answers (`LocalAi::working()`; nothing elsewhere);
   `allowForegroundActivation()` — Windows: `AllowSetForegroundWindow` before a
   second launch hands its files or request to the running Brulion, so its window comes to the

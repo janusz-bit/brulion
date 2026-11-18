@@ -10,8 +10,6 @@
 #define NOMINMAX
 #endif
 #include <windows.h>
-#elif !defined(Q_OS_WASM)
-#include <unistd.h>
 #endif
 
 #ifdef Q_OS_ANDROID
@@ -47,21 +45,6 @@ QString logDirectory()
     if (state.isEmpty())
         state = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
     return state.isEmpty() ? QString() : state + u"/logs"_s;
-#endif
-}
-
-qint64 physicalMemoryBytes()
-{
-#if defined(Q_OS_WIN)
-    MEMORYSTATUSEX status;
-    status.dwLength = sizeof(status);
-    return GlobalMemoryStatusEx(&status) ? qint64(status.ullTotalPhys) : 0;
-#elif defined(Q_OS_WASM)
-    return 0;
-#else
-    const long pages = sysconf(_SC_PHYS_PAGES);
-    const long pageSize = sysconf(_SC_PAGESIZE);
-    return pages > 0 && pageSize > 0 ? qint64(pages) * qint64(pageSize) : 0;
 #endif
 }
 

@@ -1,8 +1,8 @@
 // LocalAi (src/app/shell/localai.h): the model on the device as the app keeps it — the chosen
 // model and what Settings shows of it, its download (a local HTTP server) and removal, requests
 // answered on the worker thread by a fake runner (opened once, again for another model, let go
-// after a while without a request), what is refused (no plugin, not downloaded, an unknown
-// model), and the app closing while a model answers.
+// after a while without a request), a model with an adapter over another one's file, what is
+// refused (no plugin, not downloaded, an unknown model), and the app closing while a model answers.
 
 #include "localai.h"
 
@@ -120,7 +120,6 @@ struct Fixture {
         o.stateFolder = dir.path() + u"/model-state"_s;
         o.spinWait = true;
         o.models = {sees, reads};
-        o.memoryBytes = 16LL * 1024 * 1024 * 1024;
         Record *r = &record;
         o.open = [r](const ai::LocalRunner::Options &runnerOptions, QString *) -> std::unique_ptr<ai::LocalRunner> {
             const std::lock_guard lock(r->mutex);
@@ -187,12 +186,7 @@ class TestLocalAi : public QObject {
 private Q_SLOTS:
     void howMuchItHolds()
     {
-        const qint64 GiB = 1024LL * 1024 * 1024;
-        QCOMPARE(LocalAi::contextFor(0), 8192); // unknown
-        QCOMPARE(LocalAi::contextFor(3 * GiB), 4096);
-        QCOMPARE(LocalAi::contextFor(6 * GiB), 8192);
-        QCOMPARE(LocalAi::contextFor(8 * GiB), 16384);
-        QCOMPARE(LocalAi::contextFor(64 * GiB), 16384);
+        QCOMPARE(LocalAi::ContextTokens, 16384); // on every device
         QCOMPARE(LocalAi::imageTokensFor(4096), 512);
         QCOMPARE(LocalAi::imageTokensFor(8192), 1024);
         QCOMPARE(LocalAi::imageTokensFor(16384), 1024);
@@ -240,6 +234,9 @@ private Q_SLOTS:
         QVERIFY2(local.modelSize().contains(u"146") || local.modelSize().contains(u"147"),
                  qPrintable(local.modelSize())); // 150 000 B
         QVERIFY(!local.modelHere());
+        // None of it here: all of it is left to download; it shares no file with the other.
+        QCOMPARE(local.modelLeft(), local.modelSize());
+        QCOMPARE(local.modelSharesWith(), QString());
 
         QSignalSpy changed(&local, &LocalAi::modelChanged);
         local.setChosen(u"reads"_s);
@@ -313,6 +310,7 @@ private Q_SLOTS:
         QVERIFY(!modelsChanged.isEmpty());
         QVERIFY(QFile::exists(f.dir.path() + u"/models/sees.gguf"_s));
         QVERIFY(QFile::exists(f.dir.path() + u"/models/sees-projector.gguf"_s));
+        QCOMPARE(local.modelLeft(), QString());
 
         // A download that fails says why — for the model it was, not for the other one.
         f.server.slow = false;
@@ -329,6 +327,7 @@ private Q_SLOTS:
         f.server.slow = true;
         local.setChosen(u"reads"_s);
         finished.clear();
+        QCOMPARE(local.modelLeft(), local.modelSize()); // (the failed download fetched nothing)
         QTest::ignoreMessage(QtInfoMsg, "reads download: 87.9 KB to fetch of 87.9 KB");
         QTest::ignoreMessage(QtInfoMsg, QRegularExpression(u"^reads download stopped after [0-9.]+ m?s$"_s));
         local.download();
@@ -340,6 +339,10 @@ private Q_SLOTS:
         QVERIFY(!finished[0][1].toBool());
         QCOMPARE(local.downloadError(), QString());
         QVERIFY(!local.downloadingChosen());
+        // What it fetched stays: less is left to download than the whole (said with modelsChanged).
+        QVERIFY(!local.modelLeft().isEmpty());
+        QVERIFY2(local.modelLeft() != local.modelSize(), qPrintable(local.modelLeft()));
+        QVERIFY(!modelsChanged.isEmpty());
     }
 
     void answersOnTheWorkerThread()
@@ -368,7 +371,7 @@ private Q_SLOTS:
         QVERIFY(!local.busy());
         {
             const std::lock_guard lock(f.record.mutex);
-            // Opened with the model's files, what a device with 16 GB holds, on another thread.
+            // Opened with the model's files, the context every device holds, on another thread.
             QCOMPARE(f.record.opened.size(), 1);
             QCOMPARE(f.record.opened[0].modelPath, f.dir.path() + u"/models/sees.gguf"_s);
             QCOMPARE(f.record.opened[0].projectorPath, f.dir.path() + u"/models/sees-projector.gguf"_s);
@@ -446,6 +449,88 @@ private Q_SLOTS:
         QVERIFY(ask(local, u"sees"_s).ok);
         QCOMPARE(f.openedCount(), 2);
         QCOMPARE(f.record.open.load(), 1);
+    }
+
+    void anAdaptedModel()
+    {
+        // The text model with an adapter over it, trained to answer at once.
+        Fixture f;
+        const QByteArray adapterBytes(20 * 1000, 'a');
+        f.server.files.insert("/adapted-lora.gguf", adapterBytes);
+        ai::LocalModel adapted = f.reads;
+        adapted.id = u"adapted"_s;
+        adapted.name = u"Dostrojony 1.7B"_s;
+        adapted.adapter = {u"adapted-lora.gguf"_s, f.server.url(u"/adapted-lora.gguf"_s), sha256(adapterBytes),
+                           adapterBytes.size()};
+        adapted.thinks = false;
+        LocalAi::Options options = f.options();
+        options.models << adapted;
+        LocalAi local(options);
+        // Each of the two says it shares a file with the other; the model that sees, with none.
+        QCOMPARE(local.modelSharesWith(), QString());
+        local.setChosen(u"reads"_s);
+        QCOMPARE(local.modelSharesWith(), u"Dostrojony 1.7B"_s);
+        local.setChosen(u"adapted"_s);
+        QCOMPARE(local.modelSharesWith(), u"Czytający 1.7B"_s);
+        QCOMPARE(local.modelLeft(), local.modelSize()); // none of it here yet
+        local.setChosen(u"reads"_s);
+        QVERIFY(download(local, u"reads"_s));
+        QSignalSpy modelChanged(&local, &LocalAi::modelChanged);
+        QSignalSpy modelsChanged(&local, &LocalAi::modelsChanged);
+        local.setChosen(u"adapted"_s);
+        QCOMPARE(modelChanged.size(), 1);
+        QCOMPARE(modelsChanged.size(), 1);
+        QVERIFY2(local.modelSize().contains(u"107"), qPrintable(local.modelSize())); // 110 000 B, its files together
+        QVERIFY(!local.modelHere());
+        // The file the model alone brought is here: only the adapter is left (20 000 B).
+        QVERIFY2(local.modelLeft().contains(u"19.5") || local.modelLeft().contains(u"19,5"),
+                 qPrintable(local.modelLeft()));
+        // What it shares with the model alone is not fetched again.
+        const qsizetype before = f.server.requests.size();
+        QTest::ignoreMessage(QtInfoMsg, "adapted download: 19.5 KB to fetch of 107.4 KB");
+        QVERIFY(download(local, u"adapted"_s));
+        QCOMPARE(f.server.requests.size(), before + 1);
+        QCOMPARE(f.server.requests.last().path, QByteArray("/adapted-lora.gguf"));
+        QVERIFY(local.modelHere());
+        QCOMPARE(local.modelLeft(), QString());
+
+        // Opened with the adapter; a request that lets it think gets an answer without thoughts
+        // (the model alone still thinks).
+        const auto thinking = [&](const QString &model) {
+            ai::Request request;
+            request.messages << ai::textMessage(u"user"_s, u"Co zaplanowałem na środę?"_s);
+            bool done = false;
+            local.send(settingsFor(model), request, [&](const ai::Reply &) { done = true; });
+            return QTest::qWaitFor([&] { return done; }, 20000);
+        };
+        QVERIFY(thinking(u"adapted"_s));
+        QVERIFY(thinking(u"reads"_s));
+        {
+            const std::lock_guard lock(f.record.mutex);
+            QCOMPARE(f.record.opened.size(), 2);
+            QCOMPARE(f.record.opened[0].modelPath, f.dir.path() + u"/models/reads.gguf"_s);
+            QCOMPARE(f.record.opened[0].adapterPath, f.dir.path() + u"/models/adapted-lora.gguf"_s);
+            QCOMPARE(f.record.opened[1].adapterPath, QString());
+            QVERIFY(!f.record.prompts[0].thinking);
+            QVERIFY(f.record.prompts[1].thinking);
+        }
+
+        // The model alone removed: the file the adapted one needs stays.
+        local.remove(u"reads"_s);
+        QTRY_VERIFY_WITH_TIMEOUT(!local.has(u"reads"_s), 10000);
+        QVERIFY(local.has(u"adapted"_s));
+        QVERIFY(QFile::exists(f.dir.path() + u"/models/reads.gguf"_s));
+        QVERIFY(ask(local, u"adapted"_s).ok);
+        // The model alone is not on the device now, but all its files are: nothing is left.
+        local.setChosen(u"reads"_s);
+        QVERIFY(!local.modelHere());
+        QCOMPARE(local.modelLeft(), QString());
+        local.setChosen(u"adapted"_s);
+        local.remove(u"adapted"_s);
+        QTRY_VERIFY_WITH_TIMEOUT(!local.has(u"adapted"_s), 10000);
+        QVERIFY(!QFile::exists(f.dir.path() + u"/models/reads.gguf"_s));
+        QVERIFY(!QFile::exists(f.dir.path() + u"/models/adapted-lora.gguf"_s));
+        QCOMPARE(local.modelLeft(), local.modelSize()); // all of it to download again
     }
 
     void removeStopsItsAnswer()

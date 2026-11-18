@@ -7,10 +7,21 @@
 // over HTTP/1.1 with a few megabytes read ahead, the server waits while this thread does not read
 // (an app off the screen on Android).
 //
+// Models may share a file (ai::LocalModel: an adapted model and its maker's own — the identical
+// LocalFile), so a model is on the device when its download finished — "<id>.downloaded" says so —
+// and its files are there. A file another model on the device (or being downloaded) needs stays
+// when one of them is removed, and goes with the last.
+//
+// Older versions marked nothing: adopt() marks the models whole in such a folder, once — it then
+// writes ".adopted" there (making the folder), also when nothing was adopted, and never looks
+// again. So a model removed stays removed although its file stayed for another one, and a shared
+// file this version downloaded for one model never makes another one downloaded.
+//
 //   ai::LocalModelFiles files(folder);
+//   files.adopt(ai::localModels());                         // at the start: an older version's folder
 //   connect(&files, &ai::LocalModelFiles::finished, …);   // (id, ok, error)
 //   files.download(*ai::localModel(u"lfm3-vl-2b"_s));       // one model at a time
-//   files.has(model);  files.remove(model);
+//   files.has(model);  files.remove(model, ai::localModels());
 
 #include "ai/local.h"
 
@@ -40,18 +51,27 @@ public:
     QString folder() const { return m_folder; }
     /// Where a model's file is (or will be).
     QString pathOf(const LocalFile &file) const;
-    /// Every file of `model` is there, whole and checked.
+    /// `model` was downloaded, and every file of it is there, whole and checked.
     bool has(const LocalModel &model) const;
+    /// The first time for the folder (no ".adopted" in it): every model of `models` whose files
+    /// are all there is marked downloaded — a folder of an older version, which marked nothing —,
+    /// then ".adopted" is written (the folder made first). Afterwards nothing.
+    void adopt(const QList<LocalModel> &models);
     /// The bytes of `model` on the device: its whole files and the part of one downloaded so far.
     qint64 bytesHere(const LocalModel &model) const;
 
     /// Downloads what `model` lacks, file after file; finished() says how it ended. Nothing while
-    /// another download runs (one at a time).
+    /// another download runs (one at a time). Its files all there already: only marked downloaded
+    /// (no free space needed).
     void download(const LocalModel &model);
+    /// The free space a download leaves beyond its own bytes (64 MB; tests: more than any disk).
+    void setSpareBytes(qint64 bytes) { m_spareBytes = bytes; }
     /// Stops the download; what it has stays for the next one. finished(id, false, "").
     void cancel();
-    /// Deletes `model`'s files and partial downloads (its running download stops first).
-    bool remove(const LocalModel &model);
+    /// Deletes `model`'s files and partial downloads (its running download stops first) — but
+    /// not a file another model of `models` needs too (the identical LocalFile), one on the
+    /// device or being downloaded.
+    bool remove(const LocalModel &model, const QList<LocalModel> &models = {});
 
     /// The id of the model being downloaded ("": none).
     QString downloading() const { return m_id; }
@@ -76,10 +96,14 @@ private:
     void onReplyFinished();
     void check();
     void checkSome();
-    void end(bool ok, const QString &error);
+    void end(bool ok, QString error);
     qint64 wholeBytes() const;
+    /// Every file of `model` is there, whole.
+    bool whole(const LocalModel &model) const;
+    QString markerOf(const LocalModel &model) const;
 
     QString m_folder;
+    qint64 m_spareBytes = 64 * 1024 * 1024;
     QPointer<QNetworkAccessManager> m_network;
     std::unique_ptr<QNetworkAccessManager> m_ownNetwork;
     QString m_id; ///< the model being downloaded

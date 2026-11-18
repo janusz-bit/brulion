@@ -203,8 +203,6 @@ AppController::AppController(const Options &options, QObject *parent)
 #endif
     if (localAi.pluginDirs.isEmpty() && !localAi.open)
         localAi.pluginDirs = localAiPluginDirs();
-    if (localAi.memoryBytes <= 0)
-        localAi.memoryBytes = platform::physicalMemoryBytes();
     m_localAi = std::make_unique<LocalAi>(localAi);
     m_workspace = std::make_unique<Workspace>();
     m_workspace->setUiLanguage(m_settings->language());

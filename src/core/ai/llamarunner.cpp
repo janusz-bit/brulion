@@ -287,7 +287,7 @@ private:
     bool m_spin = false; ///< they spin between steps (Options::spinWait)
     QString m_backend;
     QString m_stateDir;
-    QByteArray m_stateIdentity;    ///< what a state kept on disk holds for: llama.cpp, its plugin, the model's file
+    QByteArray m_stateIdentity;    ///< what a state kept on disk holds for: llama.cpp, its plugin, the model's files
     QSet<QByteArray> m_storedKeys; ///< the states known to be on disk: kept or restored by this runner
     std::array<Lane, LaneCount> m_lanes;
     quint64 m_clock = 0;
@@ -356,6 +356,16 @@ bool LlamaRunner::open(const Options &options, QString *error)
     if (!m_ctx)
         return fail(u"cannot set up the model %1 (not enough memory for %2 tokens?)"_s.arg(options.modelPath)
                             .arg(m_contextTokens));
+    // What was learnt on top of the weights (LocalModel::adapter): added as the model computes, its
+    // file left as it is. llama.cpp frees it with the model.
+    if (!options.adapterPath.isEmpty()) {
+        llama_adapter_lora *adapter = llama_adapter_lora_init(m_model.get(), options.adapterPath.toUtf8().constData());
+        if (!adapter)
+            return fail(u"cannot load the adapter %1 (not one of this model?)"_s.arg(options.adapterPath));
+        float scale = 1.0f;
+        if (llama_set_adapters_lora(m_ctx.get(), &adapter, 1, &scale) != 0)
+            return fail(u"cannot use the adapter %1"_s.arg(options.adapterPath));
+    }
     m_memory = llama_get_memory(m_ctx.get());
     for (int i = 0; i < LaneCount; ++i)
         m_lanes[size_t(i)].seq = i;
@@ -374,13 +384,19 @@ bool LlamaRunner::open(const Options &options, QString *error)
         m_spin = options.spinWait;
     }
 
-    // What a state kept on disk holds for (stateKey).
+    // What a state kept on disk holds for (stateKey): the adapter changes what the model makes of
+    // a text as much as its file does.
     m_stateDir = options.stateDir;
-    const QFileInfo modelFile(options.modelPath);
+    const auto identity = [](const QString &path) -> QByteArray {
+        if (path.isEmpty())
+            return QByteArray("-\n");
+        const QFileInfo file(path);
+        return file.absoluteFilePath().toUtf8() + '\n' + QByteArray::number(file.size()) + '\n'
+               + QByteArray::number(file.lastModified(QTimeZone::UTC).toMSecsSinceEpoch()) + '\n';
+    };
     m_stateIdentity = "brulion model state " + QByteArray::number(StateVersion) + '\n' + QByteArray(BRULION_LLAMA_TAG)
-                      + '\n' + m_backend.toUtf8() + '\n' + modelFile.absoluteFilePath().toUtf8() + '\n'
-                      + QByteArray::number(modelFile.size()) + '\n'
-                      + QByteArray::number(modelFile.lastModified(QTimeZone::UTC).toMSecsSinceEpoch()) + '\n';
+                      + '\n' + m_backend.toUtf8() + '\n' + identity(options.modelPath)
+                      + identity(options.adapterPath);
 
     if (!options.projectorPath.isEmpty()) {
         mtmd_context_params pp = mtmd_context_params_default();

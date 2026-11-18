@@ -1,0 +1,3 @@
+The hand-written tasks of this folder measure the assistant (docs/FINETUNE.md): they are never
+training data. brulion-assistantbench refuses --training with the tasks of a folder that has this
+file; training data come from the sets finetune/generate.py makes.

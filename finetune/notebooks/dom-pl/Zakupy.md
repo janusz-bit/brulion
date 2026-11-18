@@ -1,0 +1,5 @@
+# Zakupy
+
+- chleb
+- masło
+- jajka

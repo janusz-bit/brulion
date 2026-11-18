@@ -144,9 +144,10 @@ LocalAi::LocalAi(const Options &options, QObject *parent)
             return ai::loadLocalRunner(dirs, o, error);
         };
     }
-    m_contextTokens = contextFor(options.memoryBytes);
+    m_contextTokens = ContextTokens;
     if (!m_models.isEmpty())
         m_chosen = m_models.first().id;
+    m_files.adopt(m_models); // (models downloaded before they were marked so)
 
     connect(&m_files, &ai::LocalModelFiles::progress, this, &LocalAi::downloadChanged);
     connect(&m_files, &ai::LocalModelFiles::changed, this, &LocalAi::modelsChanged);
@@ -188,22 +189,6 @@ LocalAi::~LocalAi()
         m_thread.wait();
     }
     delete m_worker;
-}
-
-int LocalAi::contextFor(qint64 memoryBytes)
-{
-    // A loaded model takes some 1.3 GB of the app's own memory, beside its file's pages (1 GB the
-    // system keeps or takes back as it likes); the context itself is the smaller part (some 12 KB
-    // a token: 200 MB for 16 384), so what a phone can spare decides little and speed more:
-    // reading 16 000 tokens takes minutes on one.
-    constexpr qint64 GiB = 1024LL * 1024 * 1024;
-    if (memoryBytes <= 0)
-        return 8192;
-    if (memoryBytes >= 7 * GiB)
-        return 16384;
-    if (memoryBytes >= 5 * GiB)
-        return 8192;
-    return 4096;
 }
 
 int LocalAi::imageTokensFor(int contextTokens)
@@ -295,6 +280,35 @@ QString LocalAi::modelPageUrl() const
     return m ? m->pageUrl.toString() : QString();
 }
 
+QString LocalAi::modelLeft() const
+{
+    const ai::LocalModel *m = model(m_chosen);
+    if (!m)
+        return QString();
+    const qint64 left = m->bytes() - m_files.bytesHere(*m);
+    return left > 0 ? sizeText(left) : QString();
+}
+
+QString LocalAi::modelSharesWith() const
+{
+    const ai::LocalModel *m = model(m_chosen);
+    if (!m)
+        return QString();
+    QStringList names;
+    const QList<ai::LocalFile> files = m->files();
+    for (const ai::LocalModel &other : m_models) {
+        if (other.id == m->id)
+            continue;
+        const QList<ai::LocalFile> its = other.files();
+        const bool shares = std::ranges::any_of(files, [&](const ai::LocalFile &file) {
+            return std::ranges::any_of(its, [&](const ai::LocalFile &f) { return f.name == file.name; });
+        });
+        if (shares)
+            names << other.name;
+    }
+    return QLocale().createSeparatedList(names);
+}
+
 bool LocalAi::downloadingChosen() const
 {
     const ai::LocalModel *m = model(m_chosen);
@@ -360,7 +374,7 @@ void LocalAi::remove(const QString &id)
         return;
     const ai::LocalModel removed = *m;
     if (!m_thread.isRunning()) {
-        m_files.remove(removed); // no model ever runs here: only its files
+        m_files.remove(removed, m_models); // no model ever runs here: only its files
         return;
     }
     // The model leaves memory first (the requests not answered yet end: "stopped"), then its
@@ -370,7 +384,7 @@ void LocalAi::remove(const QString &id)
         worker->close(removed.id);
         if (!states.isEmpty())
             QDir(states).removeRecursively();
-        QMetaObject::invokeMethod(this, [this, removed] { m_files.remove(removed); }, Qt::QueuedConnection);
+        QMetaObject::invokeMethod(this, [this, removed] { m_files.remove(removed, m_models); }, Qt::QueuedConnection);
     });
 }
 
@@ -419,6 +433,8 @@ void LocalAi::send(const ai::Settings &settings, const ai::Request &request, std
     LocalAiWorker::Job job;
     job.model = *m;
     job.options.modelPath = m_files.pathOf(m->file);
+    if (m->adapted())
+        job.options.adapterPath = m_files.pathOf(m->adapter);
     if (m->sees())
         job.options.projectorPath = m_files.pathOf(m->projector);
     job.options.contextTokens = m_contextTokens;
@@ -426,6 +442,8 @@ void LocalAi::send(const ai::Settings &settings, const ai::Request &request, std
     job.options.stateDir = m_stateFolder;
     job.options.spinWait = m_spinWait;
     job.request = request;
+    if (!m->thinks)
+        job.request.effort = u"low"_s; // (a model trained to answer at once)
     job.stopped = stopped ? std::move(stopped) : std::make_shared<std::atomic<bool>>(false);
     m_stops.removeIf([](const std::weak_ptr<std::atomic<bool>> &stop) { return stop.expired(); });
     m_stops.append(job.stopped);

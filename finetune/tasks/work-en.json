@@ -1,0 +1,254 @@
+{
+  "notebook": "work-en",
+  "language": "en",
+  "now": "2026-11-18T14:00",
+  "tasks": [
+    {
+      "id": "work-en/julia-phone",
+      "category": "search",
+      "ask": "What's Julia's phone number?",
+      "expect": { "answer": { "anyOf": [["5557 1203", "55571203", "5557-1203"]] } },
+      "solution": [
+        { "call": "search_notes", "input": { "query": "Julia phone" } },
+        { "call": "read_page", "input": { "name": "Julia Martens" }, "unlessShown": "5557 1203" },
+        { "answer": "Julia Martens: +49 30 5557 1203 ([[Julia Martens]])." }
+      ]
+    },
+    {
+      "id": "work-en/julia-calls",
+      "category": "search",
+      "ask": "When does Julia prefer to be called?",
+      "expect": { "answer": { "anyOf": [["morning", "before 11"]] } },
+      "solution": [
+        { "call": "search_notes", "input": { "query": "Julia calls" } },
+        { "call": "read_page", "input": { "name": "Julia Martens" }, "unlessShown": "before 11:00" },
+        { "answer": "In the morning, before 11:00 ([[Julia Martens]])." }
+      ]
+    },
+    {
+      "id": "work-en/wifi-password",
+      "category": "search",
+      "ask": "What's the Wi-Fi password at the office?",
+      "note": "Not in the notes: the answer says so and makes nothing up.",
+      "expect": {
+        "answer": {
+          "anyOf": [["couldn't find", "could not find", "can't find", "cannot find", "didn't find", "did not find", "no information", "not in your notes", "isn't in your notes", "no mention", "nothing about", "don't see", "do not see", "no wi-fi password", "no wifi password",
+                     "not found", "doesn't appear", "does not appear", "isn't recorded", "not recorded", "don't have", "do not have", "no record", "found no", "found nothing", "nothing was found", "nothing came up", "nothing matching", "no matching", "none of",
+                     "doesn't look like", "does not look like", "doesn't seem", "does not seem", "haven't saved", "have not saved", "not saved", "haven't recorded", "have not recorded", "no entry", "no entries", "no saved", "no note", "not mentioned", "isn't mentioned", "nowhere"]]
+        }
+      },
+      "solution": [
+        { "call": "search_notes", "input": { "query": "Wi-Fi password office" } },
+        { "answer": "I couldn't find the office Wi-Fi password in your notes." }
+      ]
+    },
+    {
+      "id": "work-en/dark-mode",
+      "category": "search",
+      "ask": "What did Tom say about dark mode?",
+      "expect": { "answer": { "contains": ["1.5"] } },
+      "solution": [
+        { "call": "search_notes", "input": { "query": "dark mode" } },
+        { "answer": "Tom wants dark mode in release 1.5, not in 1.4 ([[2026-11-10 Harbor Fitness sync]])." }
+      ]
+    },
+    {
+      "id": "work-en/next-7-days",
+      "category": "query",
+      "ask": "What's due in the next 7 days?",
+      "expect": {
+        "answer": { "contains": ["moodboard", "staging"], "notContains": ["final review", "screenshots"] }
+      },
+      "solution": [
+        { "call": "query_notes", "input": { "query": "type:tasks status:open due:today..+7d" } },
+        { "answer": "In the next 7 days:\n- send the moodboard to Julia (2026-11-19),\n- set up the staging server (2026-11-25), both in [[Website redesign]]." }
+      ]
+    },
+    {
+      "id": "work-en/overdue",
+      "category": "query",
+      "ask": "Is anything overdue?",
+      "expect": { "answer": { "contains": ["login crash"], "notContains": ["moodboard"] } },
+      "solution": [
+        { "call": "query_notes", "input": { "query": "type:tasks status:open due:overdue" } },
+        { "answer": "Yes: fixing the login crash on Android 12 was due 2026-11-17 ([[Mobile app]])." }
+      ]
+    },
+    {
+      "id": "work-en/in-progress",
+      "category": "query",
+      "ask": "What am I working on right now, according to my tasks?",
+      "expect": { "answer": { "contains": ["wireframes"] } },
+      "solution": [
+        { "call": "query_notes", "input": { "query": "type:tasks status:doing" } },
+        { "answer": "The wireframes for the shop pages ([[Website redesign]]) are in progress." }
+      ]
+    },
+    {
+      "id": "work-en/unpaid-invoices",
+      "category": "read",
+      "ask": "Which invoices haven't been paid yet?",
+      "note": "Each unpaid invoice is named by its number or its amount (\"Harbor Fitness — 4 500 EUR\"). 2026-031 (3 000 EUR) may be named as the paid one, never as one still to be paid: a sentence (or a line of a table) naming it must say it is paid (\"is marked as paid\", \"has been paid\", \"(paid)\", the row's \"| yes\", a quoted \"yes\"); \"unpaid\", \"not yet paid\", \"to be paid\", \"none of them paid\" are no such words.",
+      "expect": {
+        "answer": {
+          "matches": ["2026-032|(?<![0-9])4[ .,]?500(?![0-9])", "2026-033|(?<![0-9])2[ .,]?250(?![0-9])"],
+          "notMatches": ["(?:^|(?<=[.;!?][\\s)]))(?!(?:[^\\n.;!?]|[.;!?](?![\\s)]|$))*(?:(?<!not )(?<!n't )\\b(?:is|was|has been|have been|already|fully|marked|as)\\s+paid\\b|'s\\s+paid\\b|\\bpaid\\s+(?:already|in full|off|on)\\b|\\(paid\\b|\\bpaid\\)|[:–—-]\\s*paid\\b|\\bpaid\\s*[:=]\\s*yes\\b|\\|\\s*yes\\b|\\bpaid (?:one|invoice)\\b|[\"“”„']yes[\"”“']|\\(yes\\)))(?:[^\\n.;!?]|[.;!?](?![\\s)]|$))*(?:2026-031|(?<![0-9])3[ .,]?000(?![0-9]))"]
+        }
+      },
+      "solution": [
+        { "call": "read_page", "input": { "name": "Invoices" } },
+        { "answer": "Two are unpaid: 2026-032 (Harbor Fitness, 4 500 EUR) and 2026-033 (Northwind Bakery, 2 250 EUR) ([[Invoices]])." }
+      ]
+    },
+    {
+      "id": "work-en/money-owed",
+      "category": "multi",
+      "ask": "How much do my clients still owe me in total?",
+      "expect": { "answer": { "anyOf": [["6 750", "6,750", "6750", "6.750"]] } },
+      "solution": [
+        { "call": "read_page", "input": { "name": "Invoices" } },
+        { "answer": "6 750 EUR: 4 500 EUR from Harbor Fitness (2026-032) and 2 250 EUR from Northwind Bakery (2026-033) ([[Invoices]])." }
+      ]
+    },
+    {
+      "id": "work-en/hours-on-website",
+      "category": "multi",
+      "ask": "How many hours did I log on the website this week?",
+      "expect": { "answer": { "matches": ["(^|[^0-9])6([^0-9]|$)|six"] } },
+      "solution": [
+        { "call": "search_notes", "input": { "query": "worked website" } },
+        { "answer": "6 hours, on Monday 2026-11-16 (the website wireframes)." }
+      ]
+    },
+    {
+      "id": "work-en/atomic-habits",
+      "category": "append",
+      "ask": "Add \"Atomic Habits\" to my reading list.",
+      "expect": {
+        "files": [{ "path": "Reading list.md", "contains": ["Atomic Habits", "Shape Up"] }],
+        "toolsNotCalled": ["write_page"]
+      },
+      "solution": [
+        { "call": "append_to_page", "input": { "name": "Reading list", "markdown": "- [ ] \"Atomic Habits\" #book" } },
+        { "answer": "Added \"Atomic Habits\" to your [[Reading list]]." }
+      ]
+    },
+    {
+      "id": "work-en/release-notes",
+      "category": "append",
+      "messages": [
+        { "role": "user", "content": "When is the Harbor Fitness release?" },
+        { "role": "assistant", "content": "Release 1.4 is planned for 2026-12-01 ([[Mobile app]])." },
+        { "role": "user", "content": "Add a task to that page to write the release notes by Nov 28." }
+      ],
+      "expect": {
+        "files": [{ "path": "Projects/Mobile app.md", "contains": ["release notes", "login crash"], "matches": ["- \\[ \\] .*release notes.*📅 2026-11-28|- \\[ \\] .*📅 2026-11-28.*release notes"] }],
+        "toolsNotCalled": ["write_page"]
+      },
+      "solution": [
+        { "call": "append_to_page", "input": { "name": "Mobile app", "markdown": "- [ ] Write the release notes for 1.4 📅 2026-11-28" } },
+        { "answer": "Added the task to [[Mobile app]]: write the release notes, due 2026-11-28." }
+      ]
+    },
+    {
+      "id": "work-en/log-hours",
+      "category": "journal",
+      "ask": "Log that I worked 4 hours on the staging server today.",
+      "expect": { "files": [{ "path": "journals/2026-11-18.md", "contains": ["staging"], "matches": ["4 ?h|4 hours|four hours"] }] },
+      "solution": [
+        { "call": "append_to_journal", "input": { "markdown": "- Worked 4 h on the staging server." } },
+        { "answer": "Logged in today's journal: 4 h on the staging server." }
+      ]
+    },
+    {
+      "id": "work-en/remind-tom",
+      "category": "journal",
+      "ask": "Remind me on Friday at 9 to call Tom.",
+      "expect": {
+        "files": [{
+          "path": ["journals/2026-11-18.md", "journals/2026-11-20.md"],
+          "contains": ["Tom"],
+          "matches": ["^(?=.*Tom).*⏰ 2026-11-20 09:00"]
+        }]
+      },
+      "solution": [
+        { "call": "append_to_journal", "input": { "markdown": "- [ ] Call Tom ⏰ 2026-11-20 09:00" } },
+        { "answer": "Done: a reminder to call Tom on Friday, 2026-11-20 at 09:00." }
+      ]
+    },
+    {
+      "id": "work-en/moodboard-done",
+      "category": "update",
+      "ask": "I sent Julia the moodboard, mark it as done.",
+      "expect": {
+        "files": [{ "path": "Projects/Website redesign.md", "matches": ["- \\[x\\] Send the moodboard to Julia"], "contains": ["📅 2026-11-19"] }]
+      },
+      "solution": [
+        { "call": "search_notes", "input": { "query": "moodboard" } },
+        { "call": "update_block", "input": { "ref": "{{ref Projects/Website redesign.md#L8}}", "text": "Send the moodboard to Julia", "status": "done" } },
+        { "answer": "Marked \"Send the moodboard to Julia\" as done in [[Website redesign]]." }
+      ]
+    },
+    {
+      "id": "work-en/staging-later",
+      "category": "update",
+      "ask": "Move the staging server task to December 2.",
+      "expect": {
+        "files": [{ "path": "Projects/Website redesign.md", "matches": ["- \\[ \\] Set up the staging server.*📅 2026-12-02"], "notContains": ["📅 2026-11-25"] }]
+      },
+      "solution": [
+        { "call": "search_notes", "input": { "query": "staging server" } },
+        { "call": "update_block", "input": { "ref": "{{ref Projects/Website redesign.md#L9}}", "text": "Set up the staging server 📅 2026-12-02" } },
+        { "answer": "Moved \"Set up the staging server\" to 2026-12-02 ([[Website redesign]])." }
+      ]
+    },
+    {
+      "id": "work-en/ideas-page",
+      "category": "write",
+      "ask": "Create a page called Ideas with one item: a newsletter for Northwind Bakery.",
+      "expect": { "files": [{ "path": "Ideas.md", "contains": ["newsletter", "Northwind"] }] },
+      "solution": [
+        { "call": "write_page", "input": { "name": "Ideas", "content": "# Ideas\n\n- A newsletter for Northwind Bakery\n" } },
+        { "answer": "Created [[Ideas]] with the newsletter for Northwind Bakery." }
+      ]
+    },
+    {
+      "id": "work-en/decline-email",
+      "category": "no_tool",
+      "ask": "Write a short, polite email declining a meeting invitation for Friday.",
+      "note": "A decline, in any words; naming the day is no must (\"I'm not able to make it this time\").",
+      "expect": {
+        "answer": {
+          "anyOf": [["can't", "cannot", "can not", "unable", "not able", "not be able", "won't be able", "not available", "unavailable",
+                     "unfortunately", "regret", "declin", "not make it", "won't make it", "not attend", "won't be attending"]]
+        },
+        "noTools": true
+      },
+      "solution": [
+        { "answer": "Hi,\n\nThank you for the invitation. Unfortunately I can't make it on Friday; could we find another time next week?\n\nBest regards" }
+      ]
+    },
+    {
+      "id": "work-en/move-it",
+      "category": "clarify",
+      "ask": "Move it to next week.",
+      "note": "Nothing says what \"it\" is: ask, change nothing.",
+      "expect": { "answer": { "anyOf": [["?", "please specify", "please tell", "let me know which", "let me know what", "could you clarify", "which task", "which item"]] } },
+      "solution": [
+        { "answer": "Which task or meeting should I move to next week?" }
+      ]
+    },
+    {
+      "id": "work-en/decline-journal",
+      "category": "decline",
+      "ask": "Add \"call the accountant\" to today's journal.",
+      "answers": ["no"],
+      "note": "The user declines: nothing changes and the assistant does not try again (a second request would be approved).",
+      "expect": { "toolsCalled": ["append_to_journal"] },
+      "solution": [
+        { "call": "append_to_journal", "input": { "markdown": "- [ ] Call the accountant" } },
+        { "answer": "OK, I didn't add it." }
+      ]
+    }
+  ]
+}

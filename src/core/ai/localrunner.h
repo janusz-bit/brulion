@@ -31,9 +31,10 @@ class LocalRunner {
 public:
     struct Options {
         QString modelPath;     ///< the model's file (GGUF)
+        QString adapterPath;   ///< a LoRA adapter over its weights (GGUF; "": the model as it is)
         QString projectorPath; ///< what lets it see pictures (GGUF; "": it reads text only)
         /// The tokens it holds at once — the prompt and the answer together; memory grows with it.
-        int contextTokens = 8192;
+        int contextTokens = 16384;
         /// The most tokens a picture may take (it is scaled down to fit).
         int imageTokens = 1024;
         /// 0: one per fast physical core (ai/cpus.h: a phone's slow cores, a PC's SMT siblings

@@ -807,6 +807,8 @@ if ((LOCALAI)); then
     # (adb is back before the device has written the last of it.)
     wait_for 120 la_file_whole "$name" "$(stat -c %s "$file")" || die "$name did not reach the app's storage whole"
   done
+  # (A download marks the model downloaded when its last file is there: ai/localfiles.h.)
+  adb shell run-as "$PKG" touch files/models/lfm3-vl-2b.downloaded
   la_log() { adb logcat -d | grep -E ' brulion\.ai\.local *: ' || true; }
   la_opened() { la_log | grep -c ' opened: ' || true; }
   # (What the app logs of the model it opened: how much it holds, the processor plugin, the threads.)

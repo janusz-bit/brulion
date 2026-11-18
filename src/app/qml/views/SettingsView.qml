@@ -1444,15 +1444,27 @@ Item {
                     ShellSettingRow {
                         Layout.fillWidth: true
                         title: qsTr("The model's files")
-                        description: AppController.localAi.modelHere
-                                     ? qsTr("On this device (%1). The model answers without the internet.").arg(AppController.localAi.modelSize)
-                                     : AppController.localAi.checking
-                                       ? qsTr("Checking the downloaded files…")
-                                       : AppController.localAi.downloading
-                                         ? qsTr("Downloading: %1. You can leave this page; a download that stops goes on from where it was.").arg(AppController.localAi.progressText)
-                                         : AppController.localAi.downloadError !== ""
-                                           ? qsTr("The download stopped (%1). Download again: it goes on from where it was.").arg(AppController.localAi.downloadError)
-                                           : qsTr("Not on this device yet: %1 to download from Hugging Face, best over Wi-Fi.").arg(AppController.localAi.modelSize)
+                        // (What is left to download when part of it is here — a file another model
+                        // shares, a download that stopped —, and with which models it shares one.)
+                        description: {
+                            const files = AppController.localAi.modelHere
+                                        ? qsTr("On this device (%1). The model answers without the internet.").arg(AppController.localAi.modelSize)
+                                        : AppController.localAi.checking
+                                          ? qsTr("Checking the downloaded files…")
+                                          : AppController.localAi.downloading
+                                            ? qsTr("Downloading: %1. You can leave this page; a download that stops goes on from where it was.").arg(AppController.localAi.progressText)
+                                            : AppController.localAi.downloadError !== ""
+                                              ? qsTr("The download stopped (%1). Download again: it goes on from where it was.").arg(AppController.localAi.downloadError)
+                                              : AppController.localAi.modelLeft === ""
+                                                ? qsTr("Its files are already on this device: nothing left to download.")
+                                                : AppController.localAi.modelLeft !== AppController.localAi.modelSize
+                                                  ? qsTr("Partly on this device: %1 of %2 left to download from Hugging Face, best over Wi-Fi.").arg(AppController.localAi.modelLeft).arg(AppController.localAi.modelSize)
+                                                  : qsTr("Not on this device yet: %1 to download from Hugging Face, best over Wi-Fi.").arg(AppController.localAi.modelSize)
+                            const shared = AppController.localAi.modelSharesWith
+                            if (shared === "")
+                                return files
+                            return files + "\n" + qsTr("Shares a file with %1: it is downloaded once and kept while either of them is on this device.").arg(shared)
+                        }
                         BButton {
                             objectName: "aiLocalDownload"
                             visible: !AppController.localAi.modelHere && !AppController.localAi.downloading

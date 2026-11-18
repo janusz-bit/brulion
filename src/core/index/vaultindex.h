@@ -141,7 +141,9 @@ struct SearchHit {
     VaultPath path;
     QString title;
     double score = 0;
-    int line = -1;   ///< 0-based line of the first match in the body, -1 for e.g. title-only matches
+    /// 0-based line of the best match in the body — the most of the query's words, the first of
+    /// those lines — -1 for e.g. title-only matches
+    int line = -1;
     QString excerpt; ///< text around the match (or the start of the note)
 };
 
