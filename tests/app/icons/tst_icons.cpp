@@ -91,27 +91,29 @@ private Q_SLOTS:
             QVERIFY(QFile::copy(iconFolder() + u'/' + name, m_folder + u'/' + name));
         QVERIFY(QFile::copy(iconFolder() + u"/bell.svg"_s, m_folder + u"/dzwonek-żółty.svg"_s));
 
-        // A module "Brulion" with the real BIcon.qml and Icons, and a Theme with BIcon's defaults.
-        const QString theme = m_dir.filePath(u"Theme.qml"_s);
-        QFile themeFile(theme);
+        // A module "Brulion" of the test's own, first on the import path: the real BIcon.qml (a
+        // copy, as the app's module holds it), a Theme with BIcon's defaults, and the real Icons
+        // (C++). Its own qmldir, so that no other "Brulion" found on the way — the app's, whose
+        // qmldir points into resources this test does not have (Windows CI: "Type BIcon
+        // unavailable … LinkPreviews.qml: No such file") — is the one `import Brulion` takes.
+        const QString module = m_dir.filePath(u"Brulion"_s);
+        QVERIFY(QDir().mkpath(module));
+        QFile themeFile(module + u"/Theme.qml"_s);
         QVERIFY(themeFile.open(QIODevice::WriteOnly));
         themeFile.write("pragma Singleton\nimport QtQuick\nQtObject {\n"
                         "    readonly property int iconSize: 16\n"
                         "    readonly property color fg: \"#1f2328\"\n}\n");
         themeFile.close();
-        qmlRegisterSingletonType(QUrl::fromLocalFile(theme), "Brulion", 1, 0, "Theme");
+        QVERIFY(QFile::copy(kSourceDir + u"/src/app/qml/components/BIcon.qml"_s, module + u"/BIcon.qml"_s));
+        QFile qmldir(module + u"/qmldir"_s);
+        QVERIFY(qmldir.open(QIODevice::WriteOnly));
+        qmldir.write("module Brulion\nsingleton Theme 1.0 Theme.qml\nBIcon 1.0 BIcon.qml\n");
+        qmldir.close();
         qmlRegisterSingletonType<Icons>("Brulion", 1, 0, "Icons",
                                         [](QQmlEngine *engine, QJSEngine *) { return Icons::forEngine(engine); });
-        qmlRegisterType(QUrl::fromLocalFile(kSourceDir + u"/src/app/qml/components/BIcon.qml"_s), "Brulion", 1, 0,
-                        "BIcon");
 
         m_engine = std::make_unique<QQmlEngine>();
-        // On Windows every executable is built into the build folder's top, next to the app's own
-        // module "Brulion" (its qmldir points into the app's resources, which this test lacks):
-        // this test's "Brulion" is the one registered above, so that folder is no import path here.
-        QStringList paths = m_engine->importPathList();
-        paths.removeAll(QCoreApplication::applicationDirPath());
-        m_engine->setImportPathList(paths);
+        m_engine->addImportPath(m_dir.path()); // (first: added paths come before the defaults)
         // The provider before Icons gives the engine one of its own (Icons::forEngine keeps it).
         m_provider = new IconImageProvider(m_folder);
         m_engine->addImageProvider(IconImageProvider::providerId(), m_provider);
@@ -205,7 +207,8 @@ private Q_SLOTS:
                 }
             })"_ba,
                           QUrl(u"qrc:/scene.qml"_s));
-        QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+        QVERIFY2(component.isReady(), qPrintable(component.errorString() + u"(imports: "_s
+                                                 + m_engine->importPathList().join(u", "_s) + u')'));
         QQuickItem *root = nullptr;
         auto window = show(component,
                            {{u"name"_s, name},
@@ -264,7 +267,8 @@ private Q_SLOTS:
                 BIcon { objectName: "toggled"; name: "check" }
             })"_ba,
                           QUrl(u"qrc:/sizes.qml"_s));
-        QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+        QVERIFY2(component.isReady(), qPrintable(component.errorString() + u"(imports: "_s
+                                                 + m_engine->importPathList().join(u", "_s) + u')'));
         QQuickItem *root = nullptr;
         auto window = show(component, {}, &root);
         QVERIFY(window);
@@ -322,7 +326,8 @@ private Q_SLOTS:
                 }
             })"_ba,
                           QUrl(u"qrc:/shared.qml"_s));
-        QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+        QVERIFY2(component.isReady(), qPrintable(component.errorString() + u"(imports: "_s
+                                                 + m_engine->importPathList().join(u", "_s) + u')'));
         const int before = m_provider->rasterCount();
         QQuickItem *root = nullptr;
         auto window = show(component, {}, &root);
