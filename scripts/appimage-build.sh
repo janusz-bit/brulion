@@ -98,13 +98,34 @@ install_deps() {
     # minimal containers lack) and the dictionaries copied into the AppDir
     pkg-config libhunspell-dev hunspell-pl hunspell-en-us
   )
+  # The C++ standard library Clang compiles against (and the app needs at run time) is GCC's:
   # Ubuntu 22.04's default g++ 11 lacks parts of C++20; g++-12 is in its main archive.
   local default_gcc
   default_gcc=$(apt-cache show --no-all-versions gcc 2>/dev/null | sed -nE 's/^Version: ([0-9]+:)?([0-9]+).*/\2/p' | head -n 1)
   if ((${default_gcc:-0} < 12)) && apt-cache show g++-12 >/dev/null 2>&1; then
     packages+=(g++-12)
   fi
+  # The compiler: Clang 18, as every other build uses Clang (docs/PERFORMANCE.md "GCC or Clang": a
+  # smaller app at the same speed) — the distribution's (Ubuntu 24.04), else LLVM's own apt
+  # repository (Ubuntu 22.04 has Clang 14 at most).
+  local llvm_repo=0
+  if apt-cache show clang-18 >/dev/null 2>&1; then
+    packages+=(clang-18)
+  else
+    llvm_repo=1
+  fi
   "${sudo[@]}" apt-get install -y -q --no-install-recommends "${packages[@]}"
+  if ((llvm_repo)); then
+    local codename
+    codename=$(sed -nE 's/^VERSION_CODENAME=//p' /etc/os-release)
+    [[ -n $codename ]] || die "no VERSION_CODENAME in /etc/os-release (LLVM's repository is per release)"
+    "${sudo[@]}" install -d -m 0755 /etc/apt/keyrings
+    curl -fsSL https://apt.llvm.org/llvm-snapshot.gpg.key | "${sudo[@]}" tee /etc/apt/keyrings/llvm.asc >/dev/null
+    echo "deb [signed-by=/etc/apt/keyrings/llvm.asc] https://apt.llvm.org/$codename/ llvm-toolchain-$codename-18 main" |
+      "${sudo[@]}" tee /etc/apt/sources.list.d/llvm-18.list >/dev/null
+    "${sudo[@]}" apt-get update -q
+    "${sudo[@]}" apt-get install -y -q --no-install-recommends clang-18
+  fi
 }
 
 case ${1:-} in
@@ -180,7 +201,16 @@ if ! cmake_ok; then
   cmake_ok || die "no usable cmake >= $CMAKE_MIN and ninja"
 fi
 
-# Prefer g++ 12+ (C++20); Ubuntu 22.04 defaults to 11.
+# Clang (--install-deps: clang-18), the newest one there is; else g++ 12+ (C++20; Ubuntu 22.04
+# defaults to 11). CC / CXX set by the caller win.
+if [[ -z ${CXX:-} ]]; then
+  for v in 21 20 19 18; do
+    if command -v "clang++-$v" >/dev/null; then
+      export CC=clang-$v CXX=clang++-$v
+      break
+    fi
+  done
+fi
 if [[ -z ${CXX:-} ]]; then
   for v in 14 13 12; do
     if command -v "g++-$v" >/dev/null; then

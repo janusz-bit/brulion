@@ -59,9 +59,15 @@
       packages = forAllSystems (
         pkgs:
         rec {
-          brulion = pkgs.callPackage ./nix/package.nix { };
+          # Built with Clang (clangStdenv: nixpkgs' Clang over GCC's libstdc++, the one Qt uses):
+          # a smaller app and command line than with GCC, the same speed, and the compiler of the
+          # Android, browser and macOS builds (docs/PERFORMANCE.md "GCC or Clang").
+          brulion = pkgs.callPackage ./nix/package.nix { stdenv = pkgs.clangStdenv; };
           default = brulion;
-          brulion-cli = pkgs.callPackage ./nix/cli.nix { inherit brulion; };
+          brulion-cli = pkgs.callPackage ./nix/cli.nix {
+            inherit brulion;
+            stdenv = pkgs.clangStdenv;
+          };
           brulion-android-sign = pkgs.callPackage ./nix/android/sign.nix { };
         }
         // lib.optionalAttrs (pkgs.stdenv.hostPlatform.system == "x86_64-linux") (
@@ -80,8 +86,8 @@
 
       # pkgs.brulion (and pkgs.brulion-cli) built with the nixpkgs of whoever applies the overlay.
       overlays.default = final: _prev: {
-        brulion = final.callPackage ./nix/package.nix { };
-        brulion-cli = final.callPackage ./nix/cli.nix { };
+        brulion = final.callPackage ./nix/package.nix { stdenv = final.clangStdenv; };
+        brulion-cli = final.callPackage ./nix/cli.nix { stdenv = final.clangStdenv; };
       };
 
       # programs.brulion (desktop app, autostart in the tray) and services.brulion-web (the
@@ -92,7 +98,8 @@
       };
 
       devShells = forAllSystems (pkgs: {
-        default = pkgs.mkShell {
+        # The packages' compiler: `cc` / `c++` are Clang (scripts/dev-build.sh).
+        default = pkgs.mkShell.override { stdenv = pkgs.clangStdenv; } {
           inputsFrom = [ self.packages.${pkgs.stdenv.hostPlatform.system}.brulion ];
           packages = with pkgs; [
             ccache

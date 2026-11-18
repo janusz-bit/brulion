@@ -6,16 +6,15 @@
 #   scripts/dev-build.sh -t tst_dates          # build + run tests matching the regex
 #   BUILD_DIR=build-x scripts/dev-build.sh     # other build directory
 #   JOBS=4 scripts/dev-build.sh                # more parallel jobs (only on bigger machines)
-#   BRULION_CLANG=1 BUILD_DIR=build-clang scripts/dev-build.sh   # Clang instead of GCC
+#   BRULION_CLANG=1 BUILD_DIR=build-clang scripts/dev-build.sh   # Clang even outside the dev shell
 #
-# Must be run inside `nix develop` (provides Qt, cmake, ninja, ccache).
+# Must be run inside `nix develop` (provides Qt, cmake, ninja, ccache and Clang: its `cc` / `c++`
+# are nixpkgs' Clang over GCC's libstdc++, the compiler of the Nix package and of every other
+# build — docs/PERFORMANCE.md "GCC or Clang").
 #
 # BRULION_CLANG=1 configures a new build directory with the flake's own Clang (nixpkgs#clang of
-# flake.lock: the same libstdc++ as the dev shell's GCC and Qt, so the two mix). It compiles
-# ~40 % faster than GCC and warns about a few things GCC does not (-Wshadow in lambdas,
-# -Wself-assign-overloaded); the shipped Linux builds stay on GCC (docs/PERFORMANCE.md "GCC or
-# Clang (2026-11-18)"). The compiler of an existing build directory never changes: use a new
-# BUILD_DIR.
+# flake.lock) whatever `c++` is. The compiler of an existing build directory never changes (one
+# configured with GCC before 2026-11-19 stays GCC): use a new BUILD_DIR.
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 

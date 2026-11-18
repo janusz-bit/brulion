@@ -2707,8 +2707,8 @@ nixpkgs binaries under both.
 What it says: Clang compiles 40–50 % faster and makes a 3 % smaller app and a 20 % smaller
 `brulion-cli`, but the code runs the same on average (−3 % to +5 % per suite, app ±3 %) with
 real regressions on hot paths (the switcher's empty query 3–5×, folding +17–38 %) — not the ≥ 5 %
-across the hot paths that would justify moving the shipped builds. The Linux packages stay on
-GCC; contributors can build with Clang (`BRULION_CLANG=1 BUILD_DIR=build-clang
+across the hot paths that would justify moving the shipped builds. The Linux packages stayed on
+GCC at first (moved the next day for their size: "Switched on 2026-11-19" below); contributors can build with Clang (`BRULION_CLANG=1 BUILD_DIR=build-clang
 scripts/dev-build.sh`), which also catches early what Android's and the browser's Clang would
 reject. Moving a shipped build would mean: `clangStdenv` for the Nix package (and restoring
 `_FORTIFY_SOURCE=3` by hand), a Clang in the AppImage's Ubuntu 22.04 container (its own is
@@ -2735,6 +2735,15 @@ whole notebook at worst). `bench_index`, 50 000 notes, GCC Release, the same bin
 The order is the one a stable sort by recency gave (tst_index_search
 `suggestionsOfManyNotesByRecency`: 300 notes, notes updated again out of path order, ids found in
 the second round and in the oldest notes).
+
+**Switched on 2026-11-19.** Every Linux build now uses Clang, as the other platforms do (Windows:
+MSVC): for the smaller app and command line (−3.3 % / −20 % stripped) and the faster builds, once
+the one hot-path regression above was gone. The Nix package and `brulion-cli` (`clangStdenv`:
+nixpkgs' Clang over GCC's libstdc++, which Qt uses; the dev shell's `cc` / `c++` too), the
+AppImages (scripts/appimage-build.sh: Clang 18 — Ubuntu 24.04's own, LLVM's apt repository on
+22.04; GCC's libstdc++ 12 or newer at run time, as before), CI's sanitizer job and its
+performance smoke (the runner's Clang 18). `_FORTIFY_SOURCE=3` stays: cmake/BrulionHardening.cmake
+sets it after the wrapper's `=2`. The other differences of the table above stay as measured.
 
 ### Budgets
 

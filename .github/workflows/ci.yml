@@ -90,7 +90,7 @@ jobs:
         run: nix build .#brulion -L --print-out-paths
 
   linux:
-    name: Linux (Qt 6.12.0 from aqt, GCC, -Werror, sanitizers)
+    name: Linux (Qt 6.12.0 from aqt, Clang 18, -Werror, sanitizers)
     if: github.event_name != 'push' || github.ref_type == 'tag' || contains(join(github.event.commits.*.message, ' '), '[ci]')
     runs-on: ubuntu-24.04
     # Warm cache: ~35 min (the build 13, ctest 19); a cold one (new compiler, Qt or flags) builds
@@ -101,6 +101,9 @@ jobs:
       CCACHE_BASEDIR: ${{ github.workspace }}
       CCACHE_MAXSIZE: 1500M
       CCACHE_COMPILERCHECK: content
+      # Clang, the compiler of every build (docs/PERFORMANCE.md "GCC or Clang"; the runner's own).
+      CC: clang-18
+      CXX: clang++-18
     steps:
       - uses: actions/checkout@v7
 
@@ -133,8 +136,8 @@ jobs:
         uses: actions/cache/restore@v6
         with:
           path: .ccache
-          key: ccache-asan-O1-${{ env.QT_VERSION }}-${{ github.sha }}
-          restore-keys: ccache-asan-O1-${{ env.QT_VERSION }}-
+          key: ccache-asan-clang18-O1-${{ env.QT_VERSION }}-${{ github.sha }}
+          restore-keys: ccache-asan-clang18-O1-${{ env.QT_VERSION }}-
 
       # -O1 (what the sanitizers recommend) roughly halves the CPU-bound tests' time against
       # -O0; Debug keeps Q_ASSERT on, -g1 the line tables the sanitizers' reports need.
@@ -162,7 +165,7 @@ jobs:
         uses: actions/cache/save@v6
         with:
           path: .ccache
-          key: ccache-asan-O1-${{ env.QT_VERSION }}-${{ github.sha }}
+          key: ccache-asan-clang18-O1-${{ env.QT_VERSION }}-${{ github.sha }}
 
       - name: Unit tests (ctest)
         env:
@@ -318,6 +321,9 @@ jobs:
 
       - name: Build the benchmark suites (Release)
         timeout-minutes: 20
+        env:
+          CC: clang-18
+          CXX: clang++-18
         run: |
           cmake -S . -B build-bench -G Ninja -DCMAKE_PREFIX_PATH="$QT_ROOT_DIR" \
             -DCMAKE_BUILD_TYPE=Release -DBRULION_BUILD_BENCHMARKS=ON
