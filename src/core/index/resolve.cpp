@@ -404,7 +404,23 @@ VaultPath NameTable::lookupAlias(const ResolvePlan &plan) const
 // ResolvePlan
 // ---------------------------------------------------------------------------------------------
 
+ResolvePlan::From ResolvePlan::From::of(const VaultPath &path)
+{
+    return From{path, paths::dirname(path), path.isEmpty() ? QString() : paths::dirname(paths::normalize(path))};
+}
+
 ResolvePlan::ResolvePlan(const QString &target, const VaultPath &from, TargetForm form)
+{
+    init(target, from, form, nullptr, nullptr);
+}
+
+ResolvePlan::ResolvePlan(const QString &target, const From &from, TargetForm form)
+{
+    init(target, from.path, form, &from.dir, &from.normalizedDir);
+}
+
+void ResolvePlan::init(const QString &target, const VaultPath &from, TargetForm form, const QString *dir,
+                       const QString *normalizedDir)
 {
     m_target = cleanTarget(target, form);
     m_from = from;
@@ -416,7 +432,7 @@ ResolvePlan::ResolvePlan(const QString &target, const VaultPath &from, TargetFor
         m_kind = Kind::Bare;
         m_lowered = lower(nfc(m_target));
         m_attachmentFirst = isAttachmentExtension(paths::extension(m_lowered));
-        m_fromDir = paths::dirname(from);
+        m_fromDir = dir ? *dir : paths::dirname(from);
         m_probeCount = m_fromDir.isEmpty() ? 1 : 2;
         return;
     }
@@ -428,7 +444,7 @@ ResolvePlan::ResolvePlan(const QString &target, const VaultPath &from, TargetFor
     m_kind = Kind::Path;
     m_attachmentFirst = isAttachmentExtension(paths::extension(m_lowered));
     m_explicitRelative = m_target.startsWith(u"./") || m_target.startsWith(u"../");
-    m_fromDir = from.isEmpty() ? QString() : paths::dirname(paths::normalize(from));
+    m_fromDir = normalizedDir ? *normalizedDir : (from.isEmpty() ? QString() : paths::dirname(paths::normalize(from)));
     const bool relativeFirst = m_explicitRelative && !from.isEmpty();
     const bool underFrom = !m_fromDir.isEmpty() && !m_explicitRelative && !m_target.startsWith(u'/');
     m_probeCount = 1 + (relativeFirst || underFrom ? 1 : 0);
@@ -449,21 +465,22 @@ QString ResolvePlan::probePath(int i) const
 
 const ResolvePlan::Probe &ResolvePlan::probe(int i) const
 {
-    std::optional<Probe> &p = m_probes[i];
-    if (!p) {
-        Probe made;
-        made.spelled = nfc(probePath(i));
-        made.key = lower(made.spelled);
-        made.markdown = hasMarkdownSuffix(made.key);
-        p = std::move(made);
+    const quint8 bit = i == 0 ? Probe0 : Probe1;
+    Probe &p = m_probes[i];
+    if (!(m_derived & bit)) {
+        p.spelled = nfc(probePath(i));
+        // A bare name's own key is its lower-cased NFC (shared, not built again).
+        p.key = m_kind == Kind::Bare && i == 0 ? m_lowered : lower(p.spelled);
+        p.markdown = hasMarkdownSuffix(p.key);
+        m_derived |= bit;
     }
-    return *p;
+    return p;
 }
 
 const ResolvePlan::Name &ResolvePlan::name() const
 {
-    if (!m_name) {
-        Name n;
+    if (!(m_derived & NameKeys)) {
+        Name &n = m_name;
         n.path = m_kind == Kind::Bare ? m_lowered : lower(m_lowered);
         const QString ext = paths::extension(n.path);
         n.markdown = isMarkdownExtension(ext);
@@ -471,16 +488,20 @@ const ResolvePlan::Name &ResolvePlan::name() const
         n.stem = n.markdown ? paths::stripMarkdownExtension(n.path) : n.path;
         n.noteBase = paths::basename(n.stem);
         n.fileBase = paths::basename(n.path);
-        m_name = std::move(n);
+        m_derived |= NameKeys;
     }
-    return *m_name;
+    return m_name;
 }
 
 const QString &ResolvePlan::aliasKey() const
 {
-    if (!m_aliasKey)
+    if (!(m_derived & AliasKey)) {
         m_aliasKey = index_detail::aliasKey(m_target);
-    return *m_aliasKey;
+        if (m_aliasKey == m_lowered)
+            m_aliasKey = m_lowered; // (a bare name's: one string)
+        m_derived |= AliasKey;
+    }
+    return m_aliasKey;
 }
 
 void ResolvePlan::complete() const

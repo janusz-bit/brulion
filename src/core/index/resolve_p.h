@@ -71,8 +71,18 @@ VaultPath pickBest(const PathSet &paths);
 /// on the index's thread only looks the keys up. Not thread-safe while incomplete.
 class ResolvePlan {
 public:
+    /// The linking file and its folder as a plan joins targets to it: the same for every link
+    /// of a note, derived once (makeNoteKeys()).
+    struct From {
+        VaultPath path;
+        QString dir;           ///< paths::dirname(path): a bare name's folder
+        QString normalizedDir; ///< paths::dirname(paths::normalize(path)) ("" for ""): a path's
+        static From of(const VaultPath &path);
+    };
+
     ResolvePlan() = default;
     ResolvePlan(const QString &target, const VaultPath &from, TargetForm form);
+    ResolvePlan(const QString &target, const From &from, TargetForm form);
 
     /// Derive every key now (the lookups then change nothing in the plan: another thread may
     /// read it).
@@ -101,7 +111,12 @@ private:
         Bare,    ///< a name without folders: the vault root, the linking file's folder, names
         Path,    ///< a path: relative, exact, under the linking file's folder, names
     };
+    /// Which of the lazily derived keys are there (m_derived).
+    enum Derived : quint8 { Probe0 = 1, Probe1 = 2, NameKeys = 4, AliasKey = 8 };
 
+    /// `dir` / `normalizedDir`: From's, when known (else derived here as the kind needs).
+    void init(const QString &target, const VaultPath &from, TargetForm form, const QString *dir,
+              const QString *normalizedDir);
     int probeCount() const { return m_probeCount; }
     const Probe &probe(int i) const;
     const Name &name() const;
@@ -113,13 +128,14 @@ private:
     bool m_attachmentFirst = false; ///< a file with the target's extension before a note
     bool m_explicitRelative = false;
     quint8 m_probeCount = 0;
+    mutable quint8 m_derived = 0;
     QString m_target;  ///< cleanTarget()
     VaultPath m_from;  ///< the linking file
     QString m_lowered; ///< Bare: lower(nfc(target)); Path: normalize(target)
     QString m_fromDir; ///< the linking file's folder (as the kind joins it)
-    mutable std::optional<Probe> m_probes[2];
-    mutable std::optional<Name> m_name;
-    mutable std::optional<QString> m_aliasKey;
+    mutable Probe m_probes[2];
+    mutable Name m_name;
+    mutable QString m_aliasKey;
 };
 
 /// Incrementally maintained lookup tables for link resolution.

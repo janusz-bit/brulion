@@ -258,6 +258,7 @@ struct VaultIndex::Private {
 
     VaultIndex *q;
     VaultConfig config;
+    QString fingerprint; ///< parseFingerprint(config): compared with every prepared note's
     /// Shared, not owned alone: the index cache's snapshots keep the records they copied (a record
     /// is never changed once attached but for its links and lazy caches — a change replaces it).
     std::unordered_map<VaultPath, std::shared_ptr<Entry>> entries;
@@ -312,6 +313,13 @@ struct VaultIndex::Private {
     int logStart = 0;                                 ///< the log covers the versions after this one
     qsizetype loggedPaths = 0;                        ///< paths in changeLog's records
     index_detail::ChangeRecord pending;               ///< the change being applied (markChanged() logs it)
+    /// The last changesSince() answer: asked `since`, at version `at`.
+    struct ChangesMemo {
+        int since = 0;
+        int at = 0;
+        IndexChanges changes;
+    };
+    mutable std::optional<ChangesMemo> changesMemo;
 
     // ---- lookups --------------------------------------------------------------------------------
     const Entry *entry(const VaultPath &path) const;

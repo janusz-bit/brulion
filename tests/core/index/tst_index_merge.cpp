@@ -556,6 +556,29 @@ private Q_SLOTS:
         }
     }
 
+    // The same question twice before the next change gets the same answer (remembered: every
+    // editor of the Journal's days asks it after one notification); after a change, the new one.
+    void changesSinceAskedAgain()
+    {
+        VaultIndex index;
+        index.update(u"Żółw.md"_s, u"- [[Łódź]]\n"_s);
+        const int before = index.version();
+        index.update(u"Łódź.md"_s, u"- tekst ^id1\n"_s);
+        const IndexChanges first = index.changesSince(before);
+        QCOMPARE(describeChanges(index.changesSince(before)), describeChanges(first));
+        QCOMPARE(first.notes, (QList<VaultPath>{u"Łódź.md"_s, u"Żółw.md"_s})); // relinked too
+        QVERIFY(first.names);
+        index.update(u"Gęś.md"_s, u"- ((id1))\n"_s);
+        QCOMPARE(index.changesSince(before).notes, (QList<VaultPath>{u"Gęś.md"_s, u"Łódź.md"_s, u"Żółw.md"_s}));
+        const int now = index.version();
+        QCOMPARE(describeChanges(index.changesSince(now)), u"1 0 []"_s);
+        index.update(u"Łódź.md"_s, u"- inny tekst ^id1\n"_s); // (Gęś.md shows that block)
+        QCOMPARE(index.changesSince(now).notes, (QList<VaultPath>{u"Gęś.md"_s, u"Łódź.md"_s}));
+        QVERIFY(!index.changesSince(now).names);
+        index.clear();
+        QVERIFY(!index.changesSince(now).complete);
+    }
+
     // The loader's way — notes prepared on four threads, merged in its order (attachments,
     // journals newest first, the rest by path) with the recency of path order, a batch per slice
     // — ends in the state of the serial path: every record and map, every derived list and

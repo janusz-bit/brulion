@@ -51,6 +51,8 @@ private:
     std::unique_ptr<index_detail::Entry> m_entry;
     std::unique_ptr<index_detail::NoteKeys> m_keys;
     QString m_parseFingerprint;
+    bool m_indexable = false; ///< VaultIndex::isIndexable() of the path
+    bool m_markdown = false;  ///< a Markdown path
 };
 
 /// A link from another note (see VaultIndex::backlinks()).

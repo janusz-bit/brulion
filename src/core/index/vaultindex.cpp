@@ -461,8 +461,9 @@ NoteKeys makeNoteKeys(const Entry &e, bool completePlans)
             k.tagBlocks.append({tag, std::max(1, perTag.value(tag))});
     }
     k.plans.reserve(e.links.size());
+    const ResolvePlan::From from = ResolvePlan::From::of(e.path); // (its folders shared by the plans)
     for (const PathLink &l : e.links) {
-        k.plans.append(ResolvePlan(e.note.links.at(l.link).target, e.path, TargetForm::Parsed));
+        k.plans.append(ResolvePlan(e.note.links.at(l.link).target, from, TargetForm::Parsed));
         if (completePlans)
             k.plans.constLast().complete();
     }
@@ -493,7 +494,8 @@ bool journalLess(const JournalRef &a, const JournalRef &b)
 // Private
 // ---------------------------------------------------------------------------------------------
 
-VaultIndex::Private::Private(VaultIndex *owner, const VaultConfig &cfg) : q(owner), config(cfg), serial(nextSerial())
+VaultIndex::Private::Private(VaultIndex *owner, const VaultConfig &cfg)
+    : q(owner), config(cfg), fingerprint(VaultIndex::parseFingerprint(cfg)), serial(nextSerial())
 {
     searchTimer = new QTimer(owner);
     searchTimer->setSingleShot(true);
@@ -908,7 +910,9 @@ void VaultIndex::Private::relink(const QSet<QString> &keys, const VaultPath &ski
                     kept = (e->unresolvedPlans = std::make_unique<QList<std::pair<int, ResolvePlan>>>()).get();
                 kept->append({int(i), std::move(*made)});
             } else if (!next.isEmpty() && at >= 0) {
-                kept->removeAt(at);
+                if (at != kept->size() - 1) // (the order does not matter: no plans shifted)
+                    std::swap((*kept)[at], kept->last());
+                kept->removeLast();
                 if (kept->isEmpty())
                     e->unresolvedPlans.reset();
             }
@@ -1097,6 +1101,7 @@ void VaultIndex::setConfig(const VaultConfig &config)
 {
     const bool reparse = parsingDiffers(config, d->config);
     d->config = config;
+    d->fingerprint = parseFingerprint(config);
     if (!reparse || d->entries.empty())
         return;
     d->cache = IndexCaches(); // nothing to patch: every note changes
@@ -1255,6 +1260,8 @@ PreparedNote VaultIndex::prepareParsed(const VaultPath &path, const QString &con
                                        const VaultConfig &config)
 {
     PreparedNote out;
+    out.m_indexable = indexable(path); // (the path's checks off the index's thread too)
+    out.m_markdown = paths::isMarkdown(path);
     out.m_entry = index_detail::makeEntry(path, content, std::move(note));
     out.m_keys = std::make_unique<NoteKeys>(index_detail::makeNoteKeys(*out.m_entry, true));
     out.m_parseFingerprint = parseFingerprint(config);
@@ -1266,9 +1273,9 @@ void VaultIndex::updatePrepared(PreparedNote prepared, std::optional<quint64> se
     if (!prepared.m_entry)
         return;
     const VaultPath path = prepared.m_entry->path;
-    if (!indexable(path))
+    if (!prepared.m_indexable)
         return;
-    if (!paths::isMarkdown(path)) {
+    if (!prepared.m_markdown) {
         d->addAttachment(path);
         return;
     }
@@ -1276,7 +1283,7 @@ void VaultIndex::updatePrepared(PreparedNote prepared, std::optional<quint64> se
     if (const Private::Entry *e = d->entry(path); e && e->content == content)
         return;
     const QSet<QString> keys =
-            prepared.m_parseFingerprint != parseFingerprint(d->config)
+            prepared.m_parseFingerprint != d->fingerprint
                     ? d->putNote(path, content, true, sequence) // prepared with an older config
                     : d->putEntry(std::move(prepared.m_entry), std::move(*prepared.m_keys), true, sequence);
     d->relink(keys, path);
@@ -1344,6 +1351,11 @@ quint64 VaultIndex::serial() const
 
 IndexChanges VaultIndex::changesSince(int version) const
 {
+    // The same question again before the next change (every editor of the Journal's days, the
+    // lists, after one notification): the answer of the first (the log changes only with the
+    // version).
+    if (d->changesMemo && d->changesMemo->since == version && d->changesMemo->at == d->version)
+        return d->changesMemo->changes;
     IndexChanges out;
     if (version > d->version || version < d->logStart)
         return out;
@@ -1355,6 +1367,7 @@ IndexChanges VaultIndex::changesSince(int version) const
     }
     out.notes = QList<VaultPath>(notes.cbegin(), notes.cend());
     std::ranges::sort(out.notes);
+    d->changesMemo = Private::ChangesMemo{version, d->version, out};
     return out;
 }
 
