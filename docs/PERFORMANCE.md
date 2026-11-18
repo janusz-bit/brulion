@@ -2593,6 +2593,7 @@ other agents' load):
 | — as the Nix package installs it (`strip -S`: symbols kept) | 131.7 MB | 117.6 MB | −10.7 % |
 | `brulion-cli`, `strip --strip-all` | 9.78 MB | 7.81 MB | −20 % |
 | `lib/brulion` (llama.cpp, ggml, the plugin), stripped | 15.10 MB | 14.89 MB | −1.4 % |
+| Debug build directory, every target (`-g`; Clang's with the benchmarks too) | 33 GB | 18 GB | −45 % |
 
 The Nix package strips debug information only (nixpkgs' `-S` for `bin`): 45 MB of the 122 MB
 `.brulion-wrapped` of 0.21.1 are `.symtab` and `.strtab` (the generated QML's long names),
