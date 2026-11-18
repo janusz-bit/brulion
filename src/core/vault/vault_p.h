@@ -45,6 +45,9 @@ struct DiskListing {
     /// Folders that could not be listed (completely): nothing at or below them is covered.
     QSet<VaultPath> unreadable;
     bool outsideLinkSkipped = false; ///< a folder link to outside was left out (followOutsideLinks off)
+    /// Listed folders' modification times (ns, vaultutil::fineMtime()) taken before listing them;
+    /// folders without a fine-grained one are left out.
+    QHash<VaultPath, qint64> stamps;
 
     /// True when the listing shows every child of `dir`: the folder was listed, lies in a
     /// listed tree, or is gone from a folder that was listed — and neither it nor a folder
@@ -65,6 +68,13 @@ struct ScanDiff {
     QList<DiskEntry> modifiedFiles; ///< known files whose stat changed
     QList<DiskEntry> appearedFiles;
     QList<DiskEntry> appearedDirs;
+};
+
+/// A tracked file's content as the caller just read it, with the stat taken before the read:
+/// writeFile() uses it instead of reading the file again when the stat still matches.
+struct DiskRead {
+    FileStat stat;
+    QByteArray bytes;
 };
 
 struct RenamePair {
@@ -168,10 +178,17 @@ public:
 
     // --- writing (vault.cpp)
     bool ensureDirs(const VaultPath &dir, QList<VaultChange> &changes);
-    void refreshKnownContent(const VaultPath &path, bool asText, qint64 newSize, QList<VaultChange> &changes);
+    /// `read`: the file's content the caller read a moment ago (its stat still matches the disk).
+    void refreshKnownContent(const VaultPath &path, bool asText, qint64 newSize, QList<VaultChange> &changes,
+                             const DiskRead *read);
     bool writeFile(const VaultPath &path, const QByteArray &bytes, ChangeSource source, bool asText,
-                   QList<VaultChange> &changes);
-    bool write(const VaultPath &path, const QByteArray &bytes, ChangeSource source, bool asText);
+                   QList<VaultChange> &changes, const DiskRead *read = nullptr);
+    bool write(const VaultPath &path, const QByteArray &bytes, ChangeSource source, bool asText,
+               const DiskRead *read = nullptr);
+    /// After an own atomic write into `dir` (`before`: the folder's stamp right before it): when
+    /// the vault knew the folder's entries up to `before`, it knows them after the write too, and
+    /// the watcher's echo of the write needs no listing (see processPendingEvents()).
+    void noteOwnWrite(const VaultPath &dir, std::optional<qint64> before);
     VaultPath create(const VaultPath &path, const QByteArray &bytes, ChangeSource source, bool asText);
     QDateTime now() const;
 
@@ -204,6 +221,9 @@ public:
     // --- scanning (vaultscan.cpp)
     void listChildren(const VaultPath &dir, const QString &dirRel, bool recursive, DiskListing &out) const;
     DiskListing collect(const ScanScope &scope) const;
+    /// Known files and folders the listing may cover: a superset of those coversFile() /
+    /// coversDir() accept, found through the children of the listed folders (not every file).
+    void coverCandidates(const DiskListing &listing, QList<VaultPath> &outFiles, QList<VaultPath> &outDirs) const;
     ScanDiff diff(const DiskListing &listing) const;
     // Content read while scanning is never kept beyond the file at hand: `hashCache` holds only
     // the content hashes of appeared files computed while looking for renames ("" for a file
@@ -221,6 +241,8 @@ public:
                              const QHash<VaultPath, QString> &hashCache, ChangeSource source);
     QList<VaultChange> reconcile(const ScanScope &scope, ChangeSource source);
     void adoptListing(const DiskListing &listing);
+    /// Remember the stamps of the folders `listing` listed completely (see folderStamps).
+    void adoptStamps(const DiskListing &listing);
 
     // --- scan safety (vaultscan.cpp)
     /// RootMissing / StorageChanged when the vault folder cannot be trusted at all; storage
@@ -285,8 +307,28 @@ public:
     /// Files whose content on disk is known to differ from `hashes` although their stat did not
     /// change (coarse timestamps): the next reconcile treats them as modified.
     QSet<VaultPath> staleContent;
+    /// Children of each folder ("" = the vault folder) among `files` and `dirs`: diffs of a
+    /// listing look at the listed folders' children only, not at every known file.
+    QHash<VaultPath, QSet<VaultPath>> childFiles;
+    QHash<VaultPath, QSet<VaultPath>> childDirs;
+    /// files() / markdownFiles() / folders(), sorted by path: kept up to date in place when a
+    /// known entry's stat changes (a save), rebuilt on the next call after entries come or go.
     mutable QList<FileStat> sortedFiles;
     mutable bool sortedFilesValid = false;
+    mutable QList<FileStat> sortedMarkdown;
+    mutable bool sortedMarkdownValid = false;
+    mutable QList<FileStat> sortedDirs;
+    mutable bool sortedDirsValid = false;
+    /// Folder -> its stamp (vaultutil::fineMtime()) at which the vault knew its entries
+    /// completely: taken before a complete listing, or right after an own write into it that
+    /// started from the known stamp.
+    QHash<VaultPath, qint64> folderStamps;
+    /// Folders an own write changed since their last watcher batch, with when the echo is no
+    /// longer expected (ms of `echoClock`): a batch that finds such a folder at its known stamp
+    /// is the write's echo and lists nothing.
+    QHash<VaultPath, qint64> ownEchoes;
+    QElapsedTimer echoClock;
+    mutable qint64 listedFolderCount = 0; ///< Vault::listedFolders()
 
     VaultConfig config;
     QJsonObject rawConfig;

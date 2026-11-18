@@ -10,6 +10,7 @@
 #include <QStringList>
 
 #include <functional>
+#include <optional>
 
 namespace brulion {
 
@@ -64,6 +65,13 @@ QByteArray utf8Bom();
 /// after each write (a virus scanner, an indexer) — is tried again a few times within about a
 /// tenth of a second, as Syncthing and editors do; any other failure is final. `error`: why not.
 bool saveAtomically(const QString &absolutePath, QByteArrayView bytes, QString *error);
+
+/// The modification time of the folder (or file) at `absolutePath` in nanoseconds (of the file
+/// system's clock, not the Unix epoch), when the file system keeps it finer than milliseconds:
+/// nullopt when it cannot be read or is a whole millisecond (coarse timestamps — FAT, exFAT,
+/// HFS+, the browser's file system — where a change by another program right after one of ours
+/// could keep it).
+std::optional<qint64> fineMtime(const QString &absolutePath);
 
 /// UTF-8 bytes to text with a leading byte order mark removed.
 QString decodeUtf8(const QByteArray &bytes);
