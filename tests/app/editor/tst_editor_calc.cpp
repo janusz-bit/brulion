@@ -681,15 +681,16 @@ Akapit końcowy `= y + z`
             if (action < 30) {
                 // Typing: append, insert or replace text.
                 QString text = f.edit(row);
-                if (view == u"calc")
+                if (view == u"calc") {
                     text = rng.bounded(2u) ? pick(calcTexts) : text + u"\nw = 1"_s;
-                else if (view == u"table")
-                    text = text; // tables are edited by cells
-                else if (rng.bounded(3u) == 0)
+                } else if (view == u"table") {
+                    // Tables are edited by cells: the text stays as it is.
+                } else if (rng.bounded(3u) == 0) {
                     text = pick(texts);
-                else
+                } else {
                     text.insert(int(rng.bounded(quint32(text.size() + 1))),
                                 pick({u"a"_s, u"ż"_s, u" "_s, u":"_s, u"-"_s, u"`"_s}));
+                }
                 what = u"setEditText(%1)"_s.arg(row);
                 f.page.setEditText(row, text);
             } else if (action < 40 && view == u"table") {

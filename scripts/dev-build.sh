@@ -6,8 +6,16 @@
 #   scripts/dev-build.sh -t tst_dates          # build + run tests matching the regex
 #   BUILD_DIR=build-x scripts/dev-build.sh     # other build directory
 #   JOBS=4 scripts/dev-build.sh                # more parallel jobs (only on bigger machines)
+#   BRULION_CLANG=1 BUILD_DIR=build-clang scripts/dev-build.sh   # Clang instead of GCC
 #
 # Must be run inside `nix develop` (provides Qt, cmake, ninja, ccache).
+#
+# BRULION_CLANG=1 configures a new build directory with the flake's own Clang (nixpkgs#clang of
+# flake.lock: the same libstdc++ as the dev shell's GCC and Qt, so the two mix). It compiles
+# ~40 % faster than GCC and warns about a few things GCC does not (-Wshadow in lambdas,
+# -Wself-assign-overloaded); the shipped Linux builds stay on GCC (docs/PERFORMANCE.md "GCC or
+# Clang (2026-11-18)"). The compiler of an existing build directory never changes: use a new
+# BUILD_DIR.
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
@@ -31,8 +39,15 @@ build_dir="${BUILD_DIR:-build}"
 jobs="${JOBS:-2}"
 
 if [[ ! -f "${build_dir}/build.ninja" ]]; then
+  if [[ -n "${BRULION_CLANG:-}" ]]; then
+    clang_dir=$(nix build --no-link --print-out-paths --inputs-from . nixpkgs#clang)
+    export CC="${clang_dir}/bin/clang" CXX="${clang_dir}/bin/clang++"
+  fi
   cmake -S . -B "${build_dir}" -G Ninja -DCMAKE_BUILD_TYPE=Debug \
     -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DBRULION_WERROR=ON
+elif [[ -n "${BRULION_CLANG:-}" ]] && ! grep -q '^CMAKE_CXX_COMPILER:.*clang++' "${build_dir}/CMakeCache.txt"; then
+  echo "dev-build: ${build_dir} was configured with another compiler; BRULION_CLANG=1 needs a new BUILD_DIR" >&2
+  exit 2
 fi
 
 if [[ ${#targets[@]} -gt 0 ]]; then
