@@ -1296,7 +1296,7 @@ private Q_SLOTS:
         t.start();
         const QString out = render(s);
         QVERIFY(out.startsWith(u"*a *a"));
-        QVERIFY2(t.elapsed() < 5000, qPrintable(QString::number(t.elapsed())));
+        QVERIFY2(t.elapsed() < 5000 * BRULION_TEST_SLOWDOWN, qPrintable(QString::number(t.elapsed())));
     }
 
     void largeInputIsFast()
@@ -1308,7 +1308,7 @@ private Q_SLOTS:
         t.start();
         const QString out = render(s);
         QVERIFY(!out.isEmpty());
-        QVERIFY2(t.elapsed() < 5000, qPrintable(QString::number(t.elapsed())));
+        QVERIFY2(t.elapsed() < 5000 * BRULION_TEST_SLOWDOWN, qPrintable(QString::number(t.elapsed())));
     }
 };
 

@@ -216,7 +216,7 @@ struct IndexCacheKeeper::Private {
         const quint64 number = ++snapshotNumbers;
         if (!pool.isInline()) {
             ++poolJobs;
-            pool.start([keeper = shared, file = path, snapshot = std::move(snapshot), number, clock = clock,
+            pool.start([keeper = shared, file = path, snapshot = std::move(snapshot), number, started = clock,
                         maxBytes = policy.maxBytes, tooLarge = tooLarge()] {
                 SaveResult result;
                 result.fromPool = true;
@@ -226,7 +226,7 @@ struct IndexCacheKeeper::Private {
                 else
                     result.error = writeSnapshotFile(file, bytes, number, &result.superseded);
                 result.bytes = result.error.isEmpty() ? bytes.size() : 0;
-                result.ms = clock.isValid() ? clock.elapsed() : 0;
+                result.ms = started.isValid() ? started.elapsed() : 0;
                 std::lock_guard lock(keeper->mutex);
                 if (IndexCacheKeeper *receiver = keeper->receiver)
                     QMetaObject::invokeMethod(
