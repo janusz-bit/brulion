@@ -340,22 +340,29 @@ struct IndexLoader::Private {
 
     /// Release the merged results of the last batch (space for the workers) and take every result
     /// that is ready.
-    void refill()
+    /// Give the merged results' space back to the workers (they may be waiting for it). Call
+    /// with the mutex held.
+    void releaseLocked()
     {
-        std::lock_guard lock(s->mutex);
-        const bool freed = released > 0;
+        if (released == 0)
+            return;
         s->held -= released;
         s->pendingBytes -= releasedBytes;
         released = 0;
         releasedBytes = 0;
+        s->workersCv.notify_all();
+    }
+
+    void refill()
+    {
+        std::lock_guard lock(s->mutex);
+        releaseLocked();
         if (s->results.empty()) {
             s->posted = false; // the next result wakes the owner again
         } else {
             s->held += int(s->results.size());
             ready.swap(s->results); // (`ready` is empty)
         }
-        if (freed)
-            s->workersCv.notify_all();
     }
 
     void merge(Result r)
@@ -594,6 +601,9 @@ IndexLoader::Step IndexLoader::step(int budgetMs)
     if (!d->threaded() || d->nextAttachment < d->attachments.size() || !d->ready.empty())
         return Step::More;
     std::lock_guard lock(d->s->mutex);
+    // A batch merged to its end when the time was up: its space goes back to the workers now,
+    // or they would wait for it while this waits for them.
+    d->releaseLocked();
     return d->s->results.empty() ? Step::Waiting : Step::More;
 }
 

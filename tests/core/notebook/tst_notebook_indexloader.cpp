@@ -459,6 +459,56 @@ private Q_SLOTS:
         QCOMPARE(loader.stats().merged, loader.stats().total);
     }
 
+    // The owner takes the workers' results in batches: a step whose time is up right after the
+    // last note of a full batch gives that batch's space back, so workers waiting for space go on
+    // and their results wake the owner (a load once stood still there: Waiting for workers that
+    // waited for space). Steps of no time merge one note each, so every batch ends that way.
+    void backPressureWithTinySteps_data()
+    {
+        QTest::addColumn<int>("maxPending");
+        QTest::newRow("1") << 1;
+        QTest::newRow("4") << 4;
+        QTest::newRow("16") << 16;
+    }
+    void backPressureWithTinySteps()
+    {
+        QFETCH(int, maxPending);
+        Vault vault(m_root);
+        QVERIFY(vault.open());
+        VaultIndex index(vault.config());
+        QThreadPool qt;
+        qt.setMaxThreadCount(3 + 1);
+        IndexLoader::Options options;
+        options.maxPending = maxPending;
+        {
+            IndexLoader loader(vault, index,
+                               WorkerPool{3, [&qt](std::function<void()> job) { qt.start(std::move(job)); }}, options);
+            bool wake = false;
+            QObject::connect(&loader, &IndexLoader::resultsReady, &loader, [&] { wake = true; });
+            loader.start(vault.files());
+            QElapsedTimer guard;
+            guard.start();
+            for (;;) {
+                const IndexLoader::Step s = loader.step(0);
+                if (s == IndexLoader::Step::Done)
+                    break;
+                if (s == IndexLoader::Step::Waiting) {
+                    // As the app: nothing until resultsReady() (no polling).
+                    wake = false;
+                    while (!wake && guard.elapsed() < 30000 * BRULION_TEST_SLOWDOWN)
+                        QCoreApplication::processEvents(QEventLoop::AllEvents, 5);
+                }
+                QVERIFY2(guard.elapsed() < 30000 * BRULION_TEST_SLOWDOWN, "the load stood still");
+            }
+            QCOMPARE(loader.stats().merged, loader.stats().total);
+            waitForSearch(index, loader);
+        }
+        qt.waitForDone();
+        Vault serialVault(m_root);
+        QVERIFY(serialVault.open());
+        compareIndexes(index, *serialIndex(serialVault), u"tiny steps"_s);
+    }
+
     // The workers' reads are recorded by the vault as readText() records them: an external
     // overwrite afterwards gets a History snapshot of the text the index saw.
     void vaultBookkeepingAfterDetachedReads()
