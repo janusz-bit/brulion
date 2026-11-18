@@ -26,6 +26,15 @@ compared with `ef90077`) and a smooth graph (L16, compared with `64d0380` on a G
   (the slowest twentieth 20 instead of 69 ms). More is on the way ("Only what is on screen, only
   what changed" below).
 
+* **Saving no longer stops the window** (2026-11-18). When you pause typing, the page used to be
+  saved on the interface thread: the file read and compared, the old version kept in the history,
+  the new one written and synced to the disk, the note read and indexed again — 15 ms on a small
+  page on a computer (nearly all of it waiting for the disk, much more on a phone's flash), 55 ms
+  on a page of 5000 blocks. Now all of that happens on another core while you keep typing; the
+  interface only hands the text over (0.2–1 ms) and takes the result in (0.2 ms on a small page,
+  9–11 ms at 5000 blocks). Nothing about safety changed: another program's change found at the
+  save is merged as before, and renaming, deleting or closing waits for a save in progress.
+
 * **No more hitches a minute after typing** (2026-11-18). A minute after every pause in typing
   the app used to write its ready index of the notebook again (L2), on the interface thread in
   small pieces: about 0.16 s of work at 10,000 notes on a computer, spread over a third of a
@@ -1748,7 +1757,7 @@ one; the estimates are for the 10k notebook on the desktop (a phone: ×4–6).
 
 | # | where | what still runs per save (or per key) | fix |
 |---|---|---|---|
-| Z1 | `Vault::writeTextIfUnchanged` → `writeFile` → `onVaultChanged` → `indexFile` | the whole save on the GUI thread: the file read 4 times, hashed 6–7 times, decoded 3 times; `QSaveFile::commit` (fdatasync); the History snapshot (3 fsyncs when not throttled, and the history index JSON read every time); the note parsed again (20–50 ms at 500 KB) | first without threads: pass the bytes and the hash through, index the text just written; then Zed's way — a per-vault serial worker does read-compare, History, atomic write, stat and `VaultIndex::prepare`, the GUI thread merges (`adoptRead`/`updatePrepared` exist); every other vault operation on that path waits for the write in flight; `PageController` keeps a save generation, `flush()` stays synchronous for navigation, close and Android's pause; inline on WebAssembly |
+| Z1 (**done**, below: "The save on a writer thread") | `Vault::writeTextIfUnchanged` → `writeFile` → `onVaultChanged` → `indexFile` | the whole save on the GUI thread: the file read 4 times, hashed 6–7 times, decoded 3 times; `QSaveFile::commit` (fdatasync); the History snapshot (3 fsyncs when not throttled, and the history index JSON read every time); the note parsed again (20–50 ms at 500 KB) | first without threads: pass the bytes and the hash through, index the text just written; then Zed's way — a per-vault serial worker does read-compare, History, atomic write, stat and `VaultIndex::prepare`, the GUI thread merges (`adoptRead`/`updatePrepared` exist); every other vault operation on that path waits for the write in flight; `PageController` keeps a save generation, `flush()` stays synchronous for navigation, close and Android's pause; inline on WebAssembly |
 | Z2 | `vaultscan.cpp` `processPendingEvents` → `reconcile` | the watcher's echo of our own write, 50 ms later: the folder listed (a stat per entry) and every known file walked (`verifyListing`, `diff`), 1–50 ms, much more on Android's FUSE storage; plus a full rescan every 120 s and on every return to the app | the parent folder's stat recorded after our write skips the listing; diff only the listed folder's children; rescans listed on a worker |
 | Z3 | `BlockListModel::invalidateRendering` (every live editor, the hidden Journal's days too) | after every index change every row's HTML, embeds, tables and charts dropped and `dataChanged` over all rows (5–40 ms) | invalidate only rows whose rendering read a changed note (`changesSince`), `PageController.active` for hidden editors |
 | Z4 | `Workspace.revision` in QML (~30 bindings) and `Vault::files()` | `files()` copied and re-sorted after every write (`trackFile` drops the sorted list); hidden All pages' `subfolders` (twice), the calendar grids' `periodicNoteStarts`, `PageTools::refreshSummary` (a regex over the page, all tags twice) — 10–25 ms | narrow notifications (`namesRevision`, `propertiesRevision`), visibility first in hidden bindings, the sorted list patched in place |
@@ -1770,6 +1779,62 @@ Metal and Direct3D 12 back ends — no GLES (older Android devices), no browser 
 is an open pull request) — and gives no text shaping, IME, accessibility or widgets; Qt's RHI
 already drives Vulkan, Metal, Direct3D and GL/GLES/WebGL under the scene graph. The time goes to
 work on the GUI thread, not to drawing; Zed's speed comes from the rules above, which Qt allows.
+
+### The save on a writer thread (Z1, 2026-11-18)
+
+Zed's save (rule 3 above): the GUI thread only takes the text to save — an implicitly shared
+`QString`, O(1) — and merges the result. `PageController`'s autosave timer calls
+`saveInBackground()` → `EditorHost::writeIfUnchangedAsync()` → `Workspace` (the extensions' "save"
+hooks first, as before) → `Vault::writeTextIfUnchangedAsync()`, whose work runs on a writer of the
+notebook's own (a `QThreadPool` of one thread at normal priority, not the index pool): the
+compare-and-swap read of the exact bytes, the History snapshot (`History` is thread-safe now), the
+atomic write with fsync, the stat, the hash, and `VaultIndex::prepare()` of the text written. Back on
+the GUI thread the vault adopts the result (`trackFile`, `rememberContent`, the folder's stamp for
+the echo), the editor learns its new merge base, `changed()` reports the write, and the index takes
+the prepared note (`updatePrepared`, no read, no parse); the editor recognises the echo of its own
+write without reading the page (`Vault::holdsText`: the very string written). Every other vault
+call that reads or changes files waits for the writes in flight and merges them first, a watcher
+batch waits for them (at most 2 s), and `save()` — navigation, closing, Android's pause — waits for
+its editor's write and then writes synchronously (docs/ARCHITECTURE.md "Vault threading" has the
+rules). WebAssembly and `BRULION_INDEX_THREADS=0` run the same job at once.
+
+The atomic write itself changed with it (a data-safety review of the echo shortcut, 630d6cde):
+`vaultutil::saveAtomicallyStamped` writes and syncs its own temporary file and stamps the folder
+right after creating it and right before the rename, so only those two system calls are trusted
+to be the folder's only changes — another program's change while the data is synced (Syncthing
+renaming its version of another note over it) is seen and listed; a kernel whose file times follow
+its clock tick (Linux before 6.13, Android) shows itself at the first saves and lists every echo;
+the own write is noted only after the file is tracked; History's memo takes the stamp of the index
+file it wrote, from that file before its rename.
+
+**Measured** (`bench-matrix.sh typing`, the 10k vault, Release builds — `BRULION_LOCAL_AI=OFF` for
+both — of 8e678649 and of the branch, Xvfb + llvmpipe on the 16-core x86_64 desktop, load 4–9,
+3 runs × 2 alternating rounds, median [min–max]; the probe's per-phase metrics,
+tests/bench/app/README.md "Autosave: where the GUI thread's time goes"; `save_merge_*` is the
+merge of the result from the event loop, new with this change):
+
+| autosave on the GUI thread | base | branch |
+|---|---|---|
+| small page: the save (`save_sync_ms`) | 15.5 [14.7–17.5] ms | **0.2** [0.2–0.2] ms |
+| … of it fsync (`save_fsync_ms`) | 14.7 ms | 0 (on the writer) |
+| … CPU / instructions (`save_cpu_ms`, `save_insns_M`) | 1.1 ms / 1.0 M | 0.2 ms / 0.2 M |
+| … the merge (`save_merge_ms`) | — | 0.2 ms |
+| small page: longest stall (`autosave_stall_max`) | 17.3 [15.7–18.7] ms | **0** (none over 12 ms) |
+| 5000-block outline: the save | 53.5 [46.6–65.3] ms | **1.0** [0.9–1.1] ms |
+| … CPU / instructions | 30.1 ms / 222.6 M | 0.9 ms / 3.9 M |
+| … the merge (CPU / instructions) | — | 9.1 ms (9.0 / 64.7 M) |
+| 5000-block outline: longest stall | 65.8 [58.6–78.4] ms | **31.0** [30.4–31.5] ms |
+| 5000-block outline: blocked in all (`autosave_blocked`) | 97.4 ms | 53.3 ms |
+| 5000-block document: the save | 57.8 [50.9–64.9] ms | **0.8** [0.7–0.9] ms |
+| … CPU / instructions | 35.2 ms / 262.1 M | 0.8 ms / 3.4 M |
+| … the merge (CPU / instructions) | — | 11.2 ms (11.2 / 83.9 M) |
+| 5000-block document: longest stall | 72.5 [66.0–79.7] ms | **26.8** [15.1–29.6] ms |
+| key → frame, median / p95 (all three) | 9.0–10.7 / 11.1–13.4 ms | the same |
+
+What the GUI thread still does after a save of a big page: the merge's `Vault.changed` (9–11 ms
+at 5000 blocks: the index's patch of its derived lists with the note, the direct fan-out of
+`fileChanged`/`indexChanged`) and, 200 ms later, a hidden list's refresh
+(`timer:200ms(WorkspaceListModel.refreshed)`, ~29 ms a save: the longest stall now) — Z3–Z5.
 
 ### Typing: a keystroke costs the block (2026-11-18)
 
@@ -1955,7 +2020,8 @@ The L-items of the October 2026 performance plan, with the numbers they should m
 | L19 | measure the PDF viewer on real devices (the emulator: 174 MB PSS at 800 %, above): PSS with a 100+ MB scanned lecture zoomed in on a phone (if above 350 MB, base pictures at half resolution on touch devices), time to the first page of a 300-page lecture, Qt PDF timings in a Release build | phone PSS < 350 MB; first page < 0.5 s |
 | L20b | measure the generated QML at `-Oz` on a phone (L20): a Release APK built with `-DBRULION_QML_CODE_FOR_SIZE=OFF` against the default one, `android-batch.sh probe` or the Pixel — journal scroll, opening a 5000-block page, the views; if a view loses more than 10 %, compile its few hot files at the build type's level | no phone slowdown > 10 % |
 
-The Z-items of "Only what is on screen, only what changed" (above) come first: Z1–Z9 remove most
+The Z-items of "Only what is on screen, only what changed" (above) come first (Z1 done on
+2026-11-18: the save on a writer thread): Z1–Z9 remove most
 of an autosave's GUI time in a big notebook, Z10 is the editor's rewrite in stages.
 
 Done in wave 5 (2026-10-29, above): L1 (parse on worker threads), L2 (the index cache), L8 (the
