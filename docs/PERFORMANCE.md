@@ -2161,16 +2161,20 @@ ratios count; Release `-O3 -g1`, Xvfb + llvmpipe, base and branch alternated, me
 | … the slices' notifications, cold | 1.61 G | 0.03 G |
 | all threads (render thread included: fewer frames drawn for nothing) | 29.1 G | 16.5 G |
 
-| app start (`startup-big`, 6 first and 10 warm starts per build, two rounds) | main | branch |
+| app start (`startup-big`, 8 cold and 8 warm starts per build, interleaved run by run ABBA, load ≈ 13) | main | branch |
 |---|---:|---:|
-| index time (`vault_open` → `ready`), cold | 8.80 s [6.69–11.02] | **3.63 s** [3.21–4.43] (−59 %) |
-| index time, warm | 4.97 s [4.20–6.32] | **2.67 s** [2.02–3.58] (−46 %) |
-| `ready` from the process start, cold / warm | 15.5 / 8.5 s | 7.6 / 6.5 s |
-| GUI blocked by stalls > 12 ms while indexing, cold / warm | 7.76 / 4.49 s | 2.90 / 2.01 s |
-| frame interval while indexing (median), cold / warm | 57 / 52 ms | 35 / 29 ms |
-| longest stall while indexing, cold / warm | 264 / 99 ms | 241 / 121 ms (load noise) |
-| malloc heap when settled, cold / warm | 379 / 371 MB | 378 / 370 MB |
-| anonymous memory (RSS) when settled, cold / warm | 380 / 373 MB | 389 / 380 MB (+7–9 MB: the plans and keys the workers allocate and the GUI thread frees stay with the workers' malloc arenas) |
+| index time (`vault_open` → `ready`), cold | 2.28 s [2.01–2.99] | **1.79 s** [1.49–2.18] (−22 %) |
+| index time, warm | 1.95 s [1.73–2.33] | **1.27 s** [1.09–1.59] (−35 %) |
+| `ready` from the process start, cold / warm | 4.08 / 3.41 s | 3.55 / 2.85 s |
+| GUI blocked by stalls > 12 ms while indexing, cold / warm | 1.91 / 1.67 s | 1.42 / 0.96 s |
+| frames per second while indexing, cold / warm | 22.5 / 24.4 | 35.7 / 35.4 |
+| longest stall while indexing, cold / warm | 88 / 65 ms | 112 / 65 ms — wall time under load: the longest stalls are mostly waiting for a CPU (200 ms with 34 ms of CPU); the most CPU in one stall went from 65 ms / 165 M instructions to 57 ms / 99 M |
+| malloc heap at `ready`, cold / warm | 378.5 / 370.0 MB | 375.1 / 366.8 MB |
+| anonymous memory (RSS) at `ready`, cold / warm | 381 / 374 MB | 390 / 383 MB (+9–10 MB: what the workers allocate for the plans and keys and the GUI thread frees stays in the workers' malloc arenas) |
+
+The milliseconds are a loaded machine's (the same runs at load 35–50, in blocks rather than
+interleaved: index time −59 % cold, −46 % warm): when the workers themselves are short of CPU,
+the GUI thread no longer is what the index waits for, so the times fall less than its work.
 
 Core rows (`scripts/bench.sh -c 0-11 -r 3`, two alternating rounds): the merge alone
 (`bench_index:mergePrepared` 10000 notes — every note prepared beforehand, merged in the loader's
@@ -2198,8 +2202,8 @@ emulator (optimistic), web = headless Chromium (×4 CPU = phone). ✅ meets, ⚠
 | budget | target | desktop | phone | web |
 |---|---|---|---|---|
 | start → first content | desktop < 1 s, phone < 2 s | ✅ 0.40 s (10k), 0.39 s demo | ✅ Pi demo 1.25 s, 10k 1.57 s | ✅ repeat 0.61 s, ×4 CPU 1.64 s; ❌ first visit at 20 Mbit/s 7.3–7.4 s (L9; 8.4–8.5 s before in the same session) |
-| index ready | desktop < 2 s at 10k; phone < 10 s at 10k | ✅ 0.96 s, 0.83 s from the index cache (wave 5; was 1.89 s); L1b: the index time −59 % cold, −46 % warm, the GUI thread's instructions while loading −69 / −65 % (a loaded machine: not yet timed quietly) | ❌ Pi 15 s before wave 5, not measured since (L1b) | ✅ 1k cold 1.3 s, warm 1.1 s (×4 CPU 5.8 / 4.7 s; was 1.1 / 5.2 s in the same session) |
-| GUI stall while indexing / after ready | < 50 ms desktop, < 100 ms phone | ✅ 28 ms indexing, 0 ms after ready (wave 5) | ❌ Pi 0.54 / 0.45 s before wave 5 (L1b; the full-text part of it off the GUI thread since L18) | – |
+| index ready | desktop < 2 s at 10k; phone < 10 s at 10k | ✅ 0.96 s, 0.83 s from the index cache (wave 5; was 1.89 s); L1b: the GUI thread's instructions while loading −69 / −65 %, the index time −22 / −35 % on a machine at load 13 (not yet timed quietly: L1c) | ❌ Pi 15 s before wave 5, not measured since (L1c) | ✅ 1k cold 1.3 s, warm 1.1 s (×4 CPU 5.8 / 4.7 s; was 1.1 / 5.2 s in the same session) |
+| GUI stall while indexing / after ready | < 50 ms desktop, < 100 ms phone | ✅ 28 ms indexing, 0 ms after ready (wave 5) | ❌ Pi 0.54 / 0.45 s before wave 5 (L1c; the full-text part of it off the GUI thread since L18) | – |
 | keystroke → frame (≤ 5000 blocks) | p95 < 16 ms desktop, < 33 ms phone | ✅ small page 11 ms; ✅ 5000-block outline p95 15 ms, document 13 ms ("Typing: a keystroke costs the block"; was 15 / 20 ms in the same session) | ✅ small page; ⚠️ outline p95 42 ms | – |
 | Enter / undo | < 50 ms desktop, < 100 ms phone | ✅ 15 / 13 ms (L5; base in the same session 15 / 32 ms) | ✅ Enter 38 ms; undo 214 ms before L5, not measured since (L5b) | – |
 | autosave stall (the longest stall after a save; the Zed-like aim: < 8 ms of GUI time) | < 50 ms desktop, < 100 ms phone | ✅ small page: none over 12 ms (the save 0.4 ms on the GUI thread; 131 ms on main with the views built ahead, 41 ms before them); ✅ 5000 blocks 22–26 ms (113–124 ms on main; what is left: the merge into the index) | ✅ small page 29 ms; ❌ 500 KB page 0.2 s | – |
