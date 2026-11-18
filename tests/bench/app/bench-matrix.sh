@@ -7,7 +7,7 @@
 #   LOCK=/path/laptop.lock tests/bench/app/bench-matrix.sh [groups…]
 #
 # Groups (default: all): startup-demo startup-big (startup-big-short) open-page typing source-typing
-#   select-copy search switcher views graph journal-scroll switch-pages idle workload
+#   select-copy search switcher views graph journal-scroll page-scroll page-resize switch-pages idle workload
 # Labels run alternately per group (base, cur, base, cur … when ROUNDS > 1) to spread drift.
 # RUN_TIMEOUT: seconds one app run may take (default 300; a scenario's own --timeout wins);
 # BENCH_TIMEOUT_MS (exported) is the probe's watchdog inside the app (default 240000).
@@ -23,7 +23,7 @@ mkdir -p "$OUT" "$work"
 read -r -a bins <<< "$BINS"
 if [[ $# -gt 0 ]]; then groups=("$@"); else
   groups=(startup-demo startup-big open-page typing source-typing select-copy search switcher views graph
-    journal-scroll switch-pages idle workload); fi
+    journal-scroll page-scroll page-resize switch-pages idle workload); fi
 
 run() { # run <label> <bin> <run-bench args…> (rounds after the first add to the first one's runs)
   local label="$1" bin="$2"; shift 2
@@ -78,6 +78,18 @@ group() { # group <name> : runs every label for that group
         views) run "$label" "$bin" --vault "$VAULT_BIG" --scenario views --name views-10k --start first --runs "$n" ;;
         graph) run "$label" "$bin" --vault "$VAULT_BIG" --scenario graph --name graph-10k --start first --runs "$n" ;;
         journal-scroll) run "$label" "$bin" --vault "$VAULT_BIG" --scenario journal-scroll --name journal-scroll-10k --start first --runs "$n" ;;
+        page-scroll) # 300 blocks (created whole) and 5000 (rows created on the way), settled or at once
+          run "$label" "$bin" --vault "$VAULT_BIG" --scenario page-scroll --name page-scroll-medium --start first \
+            --runs "$n" --env "BENCH_PAGE=Bench/Średnia strona.md"
+          run "$label" "$bin" --vault "$VAULT_BIG" --scenario page-scroll --name page-scroll-document5000 --start first \
+            --runs "$n" --env "BENCH_PAGE=Bench/Dokument 5000.md"
+          run "$label" "$bin" --vault "$VAULT_BIG" --scenario page-scroll --name page-scroll-document5000-early \
+            --start first --runs "$n" --env "BENCH_PAGE=Bench/Dokument 5000.md" --env BENCH_SCROLL_WAIT=200 ;;
+        page-resize) # every row that exists lays its text out again
+          run "$label" "$bin" --vault "$VAULT_BIG" --scenario page-resize --name page-resize-medium --start first \
+            --runs "$n" --env "BENCH_PAGE=Bench/Średnia strona.md"
+          run "$label" "$bin" --vault "$VAULT_BIG" --scenario page-resize --name page-resize-outline5000 --start first \
+            --runs "$n" --env "BENCH_PAGE=Bench/Konspekt 5000.md" ;;
         switch-pages) run "$label" "$bin" --vault "$VAULT_BIG" --scenario switch-pages --name switch-pages-10k --start first \
             --runs 3 --env "BENCH_PAGES=$(realpath "$pages")" --timeout 600 ;;
         idle)

@@ -12,6 +12,10 @@ Windows (from the probe's marks and stalls, GUI thread only):
   after_ready    ready .. settled
   stalls:<ms>    every stall longer than <ms> (stalls:<ms>@<mark>..<mark>: only between two marks)
   autosave       the stalls 30..1700 ms after each typing burst's last key
+  save           each autosave: the probe's "timer:save" signal span (PageController's save timer,
+                 the whole synchronous save; needs the probe's spans, BENCH_SPANS)
+  fanout         after each autosave: from the save's end 1700 ms on, cut at the typing window's
+                 end (the deferred work the save started: queued slots, timers, polish, rendering)
   keys           the synchronous handling of every synthetic key (t0..t2)
   after:<label>:<ms> / after1:<label>:<ms>   each key action with that label (or the first one)
                  up to <ms> after it: the handling plus the polish, layout and rendering after it
@@ -28,7 +32,7 @@ import sys
 
 
 def read_probe(path):
-    marks, stalls, actions, start = {}, [], [], None
+    marks, stalls, actions, start, spans = {}, [], [], None, []
     for line in open(path):
         o = json.loads(line)
         if o["ev"] == "start":
@@ -36,10 +40,13 @@ def read_probe(path):
         elif o["ev"] == "mark":
             marks.setdefault(o["name"], o)
         elif o["ev"] == "stalls":
-            stalls = o["list"]
+            stalls = [(x[0], x[1]) for x in o["list"]]  # [start, duration (, cpu, instructions)]
         elif o["ev"] == "actions":
             actions = o["list"]
-    return start, marks, stalls, actions
+        elif o["ev"] == "spans":
+            names = o["names"]
+            spans = [(x[0], names[x[1]], x[3], bool(x[10])) for x in o["list"]]  # t, name, incl, qml
+    return start, marks, stalls, actions, spans
 
 
 def read_samples(path, tid):
@@ -81,7 +88,9 @@ def main():
     ap.add_argument("--window", action="append", default=[])
     ap.add_argument("--top", type=int, default=30)
     args = ap.parse_args()
-    start, marks, stalls, actions = read_probe(args.probe)
+    start, marks, stalls, actions, sig_spans = read_probe(args.probe)
+    saves = [(t, t + incl) for t, name, incl, qml in sig_spans if name == "timer:save" and not qml]
+    window_ends = sorted(m["t"] for n, m in marks.items() if n.startswith("window_end:"))
     t0 = int(start["t0ns"]) / 1e9
     pid = start["pid"]
 
@@ -115,6 +124,12 @@ def main():
                     continue
                 last = max((a["t2"] for a in actions if a["t2"] <= e["t"] + 1), default=e["t"])
                 spans += [(s, s + d) for s, d in stalls if last + 30 <= s < e["t"] + 1700]
+        elif w == "save":
+            spans = list(saves)
+        elif w == "fanout":
+            for a, b in saves:
+                cut = min([e for e in window_ends if e >= b] + [b + 1700])
+                spans.append((b, min(b + 1700, cut)))
         elif w == "keys":
             spans = [(a["t0"], a["t2"]) for a in actions if a["kind"] == "key"]
         elif w.startswith("after:") or w.startswith("after1:"):

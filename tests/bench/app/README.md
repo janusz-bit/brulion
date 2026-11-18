@@ -7,18 +7,21 @@ same scripts measure any build (v0.1.1 and the working tree alike). An `LD_PRELO
 is a stall — the time input would have waited), memory (`/proc/self/status`, malloc in use) and
 CPU, and drives the app through a scenario: real input through `QWindowSystemInterface` (keys
 with shortcuts, wheel), navigation through the `AppController` singleton, and the editor through
-the `pageEditor` / `pageController` objects.
+the `pageEditor` / `pageController` objects. In the typing windows (each burst of typing and the
+2.4 s after it) it also records signal spans, the GUI thread's CPU time and instructions, and its
+`fsync` / `rename` calls — what an autosave costs and where that time goes ("Autosave: where the
+GUI thread's time goes" below).
 
 | File | What |
 |---|---|
 | `probe/benchprobe.cpp` | the probe (scenarios: `startup`, `open-page`, `typing`, `source-typing`, `select-copy`, `search`, `switcher`, `views`, `graph`, `journal-scroll`, `page-scroll`, `page-resize`, `switch-pages`, `idle`, `idle-edit`, `workload`; see the header) |
-| `build-probe.sh <dir>` | builds `libbenchprobe.so` against the dev shell's Qt (a throw-away CMake project in `<dir>`) |
+| `build-probe.sh <dir>` | builds `libbenchprobe.so` against the dev shell's Qt (a throw-away CMake project in `<dir>`; Qt's CorePrivate and GuiPrivate headers) |
 | `make-bench-vault.py <dir>` | a deterministic synthetic notebook: 10 000 notes (≈ 650 journal days over two years + pages in 40 folders, links, tags, tasks with dates and reminders, a few queries), `Bench/Konspekt 5000.md` (5000-block outline), `Bench/Dokument 5000.md` (5000-block document), `Bench/Mała strona.md`; `<dir>.pages.txt` lists 50 pages for page switching |
 | `run-bench.py` | runs one scenario N times (fresh working copy of the vault per run; `--start first\|warm\|cold`; Xvfb or offscreen); writes one JSONL per run |
-| `bench-matrix.sh` | the whole matrix for several labelled builds (`BINS="base=… cur=…"`), group by group (`startup-big-short`: first + warm starts only, for slow machines) |
+| `bench-matrix.sh` | the whole matrix for several labelled builds (`BINS="base=… cur=…"`), group by group (`startup-big-short`: first + warm starts only, for slow machines; `page-scroll`, `page-resize`: the 300-block and 5000-block pages) |
 | `analyze.py <dir>…` | metrics per run → median / min / max / p25 / p75 per metric and label (`--csv`, `--json`) |
-| `timeline.py run.jsonl` | one run's events in time order (marks, input, stalls, model signals, frame gaps) |
-| `perf-scenario.sh` + `perf-slice.py` | a scenario under `perf record` (CLOCK_MONOTONIC) and the GUI thread's samples sliced by the probe's windows (`after_ready`, `stalls:100@content:ready`, `autosave`, `keys`, …) |
+| `timeline.py run.jsonl` | one run's events in time order (marks, input, stalls with their CPU, model signals, signal spans ≥ `--span-ms`, the GUI thread's file system calls, frame gaps) |
+| `perf-scenario.sh` + `perf-slice.py` | a scenario under `perf record` (CLOCK_MONOTONIC) and the GUI thread's samples sliced by the probe's windows (`after_ready`, `stalls:100@content:ready`, `autosave`, `save`, `fanout`, `keys`, …) |
 | `perf-attach.sh` | `perf record -p` attached only once the probe writes a given mark, for N seconds (slow machines: the Pi), then `perf script` + per-thread/DSO summary |
 | `profile-cases.sh` | named attribution runs: perf cases (`typing-outline`, `startup-big`, `views`, `switcher`, …: `perf-scenario.sh` + `perf-slice.py` with the right windows), qmlprofiler cases (`qml-*`) and heaptrack (`heap-startup-big`) |
 | `qtd-summary.py` | a qmlprofiler trace summarised (build with `-DCMAKE_CXX_FLAGS=-DQT_QML_DEBUG`) |
@@ -73,9 +76,14 @@ nix develop -c nix shell nixpkgs#xvfb nixpkgs#perf -c env CUR=build-rel/src/app/
   block exists), `frame` (the frame showing it), `settled`; `1` = first open, `2` = again after
   going home.
 * `typing` (row 10 of the page; key = press + release): `*_handle` = the press's synchronous
-  handling, `*_frame` = key press → the frame that shows the change; `char` (a typed letter),
-  `enter`, `tab`, `shift-tab`, `undo` (Ctrl+Z), `redo` (Ctrl+Shift+Z); `autosave_blocked` = GUI
-  time blocked in the 1.7 s after a burst of typing (the 400 ms autosave and what follows it).
+  handling, `*_frame` = key press → the frame that shows the change, split into `*_gui` (the
+  handling and that frame's sync: the GUI thread's own), `*_wait` (from the handling to the start
+  of that sync: the rest of the event-loop turn — the release, polish, timers — and the render
+  loop's pacing) and `*_render` (after the sync: the render thread and the swap); `char` (a typed
+  letter), `enter`, `tab`, `shift-tab`, `undo` (Ctrl+Z), `redo` (Ctrl+Shift+Z);
+  `autosave_blocked` = GUI time blocked by stalls > 12 ms in the 1.7 s after a burst of typing
+  (the 400 ms autosave and what follows it), `autosave_blocked_cpu` the GUI thread's CPU time in
+  those stalls; the `save_*` / `fanout_*` metrics below.
 * `source-typing`: the page in source mode (Ctrl+E: the whole file in one TextEdit), the caret at
   the end of the line in the middle of the file; the bursts and Enters of `typing` and five
   Backspaces, the same metrics (`source-typing-medium`: `Bench/Średnia strona.md`, 32 KB;
@@ -110,6 +118,81 @@ nix develop -c nix shell nixpkgs#xvfb nixpkgs#perf -c env CUR=build-rel/src/app/
   width) and `resize_stall_*` (the longest GUI stall within 500 ms of each request): every row
   that exists lays its text out again.
 * `switch-pages`: 200 page openings: time to the page's frame, heap / RSS / item count every 20.
+
+## Autosave: where the GUI thread's time goes
+
+A stall needs more than 12 ms between two 4 ms lag ticks, so `autosave_blocked` misses every piece
+of work under 12 ms and says nothing about what ran. In the typing windows of `typing` and
+`source-typing` (each of the three bursts up to 2.4 s after it: the 400 ms autosave, the save's
+end + 1.7 s fits unless a save takes over 300 ms) the probe records, on the GUI thread only:
+
+* **signal spans** (`BENCH_SPANS`: `1` default, `watched` only the list below, `0` none): Qt's
+  signal spy callbacks (`qt_register_signal_spy_callbacks`, QtCore's private
+  `QSignalSpyCallbackSet`; registered only in the windows) give every emission's begin and end;
+  per span the inclusive and self wall time, thread CPU time (`CLOCK_THREAD_CPUTIME_ID`) and
+  user-space instructions (a `perf_event_open` counter with `exclude_kernel`, which
+  `perf_event_paranoid` 2 allows — on a hybrid Intel CPU one per core PMU, `cpu_core` +
+  `cpu_atom`, summed). Watched: `Vault.changed`; `Workspace` / `EditorHost` `revisionChanged`,
+  `fileChanged`, `filesChanged`, `fileListChanged`, `indexChanged`; `VaultIndex.changed`;
+  `PageController.saved`, `dirtyChanged`; every model's `modelReset`, `layoutChanged`,
+  `dataChanged`, `rowsInserted` / `rowsRemoved` / `rowsMoved` (`model:<class>.<signal>`, with the
+  rows they name — a reset: the row count after it); `QTimer::timeout` as `timer:<parent's class>`,
+  a parentless timer as `timer:<interval>ms(<the first span in it>)` (member timers have no
+  parent: `timer:400ms(model:PageListModel.dataChanged)` is All pages' refresh) — `timer:save` is
+  the parentless single-shot timer with the controller's `saveDelay` in which a PageController
+  emits `saved` or `dirtyChanged`, its autosave, so its span is the whole synchronous save —, QML
+  `Timer`s as `QmlTimer:<parent>:<interval>`; and every other signal of a `brulion::` class whose
+  span takes at least `BENCH_SPAN_MIN_US` (200 µs). Self time = inclusive minus the spans nested
+  in it. The probe's own timers are left out;
+* **file system calls**: the probe interposes `fsync`, `fdatasync`, `rename`, `renameat`,
+  `renameat2` and `linkat` (LD_PRELOAD: its definitions come first and call libc's through
+  `dlsym(RTLD_NEXT)`), timed on the GUI thread and counted on the others (`other_threads`);
+* **the GUI thread's counters at every lag tick** (from 1 s of idle editing before the first burst,
+  `idle_ref_start` … `idle_ref_end`, to the end of the last window), and per stall its CPU time and
+  instructions (every run, not only typing);
+* a mark `kept_views:<burst>` at each burst's start with `n` (the kept views of the main pane that
+  exist: ShellRouteView's KeptLoaders — Tasks, Calendar, Journal, All pages, Search — with an
+  item), `of` and `loading`: views built ahead 1.2 s after `ready`, one every 0.4 s, may or may not
+  exist during the first burst. `BENCH_WAIT_KEPT=1` waits (at most 30 s, mark `kept_ready`) until
+  all of them exist and the app has settled before typing.
+
+What the callbacks see (checked with Qt 6.12 on a test object): `signal_begin` / `signal_end` wrap
+every **direct** connection of an emission — string-based (`SIGNAL`/`SLOT`), pointer-to-member and
+lambda alike — so a span's inclusive time holds all its direct slots; Qt's `slot_begin` /
+`slot_end` fire only for string-based connections (the probe does not use them); a **queued**
+connection's slot runs later, outside the span (it shows in `fanout_deferred_cpu_ms`). **QML
+handlers and bindings** (`onX:`, `Connections`, bindings re-evaluated by a NOTIFY signal) run
+*before* `signal_begin`, through `QAbstractDeclarativeData::signalEmitted`: the probe wraps that
+hook too while the spans are on, and records the QML part as a span of the same name with `qml` set
+(`(qml)` in the top-N list); `sig_<name>_ms` adds both parts. A span costs a few syscalls (thread
+CPU clock, one or two counter reads, ≈ 1–2 µs): `window_emissions` / `window_spans` say how many
+emissions the window saw and kept; compare keystroke timings with `BENCH_SPANS=0` when in doubt.
+
+Metrics (analyze.py `save_metrics()`; per burst `<metric>_b<n>`, the run's median of the bursts as
+`<metric>`, then medians over runs as usual); the fan-out window runs from the save's start to its
+end + 1.7 s (cut at the window's end):
+
+| metric | what |
+|---|---|
+| `save_sync_ms`, `save_cpu_ms`, `save_insns_M` | the `timer:save` span: the synchronous save (wall, CPU, millions of instructions) — the Zed-like budget is < 8 ms |
+| `save_write_ms` | the save up to `Vault::changed`: serialising the page, the compare-and-swap read, History, the write |
+| `save_fsync_ms` / `save_fsync_n`, `save_rename_ms` | `fsync` + `fdatasync` (and renames) inside the save |
+| `save_vault_changed_ms` | `Vault.changed` inside the save: the index update and everything connected directly |
+| `sig_<name>_ms` | the watched signals' inclusive time in the fan-out window (C++ + QML parts; nested names overlap) |
+| `fanout_deferred_cpu_ms`, `fanout_insns_M` | GUI CPU / instructions from the save's end over 1.7 s minus the idle rate (the median lag-tick rate of the idle reference): the deferred work, also what stays under 12 ms |
+| `fanout_model_resets`, `fanout_rows_changed` | model resets + layout changes, and rows named by `dataChanged` / `rows*` in the fan-out window |
+| `kept_views` | kept views that existed when the burst started |
+| `top<i>_span` | over all bursts' fan-out windows, the spans with the most self time: name, self, inclusive, count |
+| `idle_ref_cpu_ms_per_s`, `fanout_window_ms`, `saves`, `window_emissions`, `window_spans` | checks: the idle rate, the window used, saves found, what the spans saw |
+
+`perf-slice.py … --window save --window fanout` slices a perf recording by the same windows (the
+probe's spans must be on); `timeline.py --span-ms 0.5` lists the spans in time order with their
+nesting.
+
+The core benchmark beside it, `bench_index:saveRoundTrip` (1000 / 3000 / 10 000 notes on disk with
+a History folder; "throttled" and "history stored"), times the same save without the GUI:
+`writeTextIfUnchanged()` of a 5 KB note → `Vault::changed` → the index update → `changesSince()`;
+its scaling limit (k ≤ 0.25, `tests/bench/baselines/limits.csv`) holds a save to O(1) in notebook size.
 
 Caveats: Xvfb + Mesa llvmpipe renders on the CPU (frame costs are higher than on a GPU, idle
 frames cost more); the Pi uses the software scene graph renderer. Timings on a shared machine

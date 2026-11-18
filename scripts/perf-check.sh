@@ -59,12 +59,16 @@ guards_full=(
   "bench_sync:syncNoChanges:10000 files"
   "bench_index:openFromDisk:10000 notes loader 4 workers"
   "bench_index:openFromDisk:10000 notes loader warm cache 4 workers"
+  # a save's round trip on the GUI thread (write, Vault::changed, index, changesSince); no
+  # baseline row yet on any machine: only its scaling limit counts until one is recorded (-u)
+  "bench_index:saveRoundTrip:10000 notes throttled"
 )
 guards_small=(
   "${guards_full[@]:0:10}"
   "bench_sync:syncNoChanges:5000 files"
   "bench_index:openFromDisk:10000 notes loader 3 workers"
   "bench_index:openFromDisk:10000 notes loader warm cache 3 workers"
+  "bench_index:saveRoundTrip:10000 notes throttled"
 )
 
 detect_machine() {

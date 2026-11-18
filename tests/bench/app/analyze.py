@@ -18,8 +18,9 @@ import sys
 
 
 def load(path):
-    run = {"marks": {}, "marklist": [], "sync": [], "synced": [], "swap": [], "stalls": [], "actions": [],
-           "model": [], "saved": [], "errors": [], "notes": [], "end": None}
+    run = {"marks": {}, "marklist": [], "sync": [], "synced": [], "swap": [], "stalls": [], "stall_cpu": [],
+           "actions": [], "model": [], "saved": [], "errors": [], "notes": [], "end": None, "spans": [],
+           "cpu": ([], [], []), "io": []}
     with open(path) as f:
         for line in f:
             try:
@@ -34,7 +35,17 @@ def load(path):
                 run["sync"], run["swap"] = o["sync"], o["swap"]
                 run["synced"] = o.get("synced", [])
             elif ev == "stalls":
-                run["stalls"] = [(a, d) for a, d in o["list"]]
+                # [start, duration] (older probes) or [start, duration, GUI CPU ms, instructions M]
+                run["stalls"] = [(x[0], x[1]) for x in o["list"]]
+                run["stall_cpu"] = [(x[2], x[3]) if len(x) > 3 else (None, None) for x in o["list"]]
+            elif ev == "spans":
+                names = o["names"]
+                run["spans"] = [Span(x[0], names[x[1]], x[2], x[3], x[4], x[5], x[6], x[7], x[8], x[9], bool(x[10]))
+                                for x in o["list"]]
+            elif ev == "cpu":
+                run["cpu"] = (o["t"], o["cpu"], o["insns"])
+            elif ev == "io":
+                run["io"] = [(t, d, kind) for t, d, kind in o["list"]]
             elif ev == "actions":
                 run["actions"] = o["list"]
             elif ev == "signals":
@@ -46,6 +57,29 @@ def load(path):
             elif ev == "end":
                 run["end"] = o
     return run
+
+
+class Span:
+    """A signal span of the probe (GUI thread): start, name, nesting depth, inclusive and self wall
+    time (ms), thread CPU (ms) and user-space instructions (millions), the rows a model signal
+    names (-1: none), and whether it is the QML part of the emission (handlers, bindings)."""
+    __slots__ = ("t", "name", "depth", "incl", "self", "icpu", "scpu", "iins", "sins", "rows", "qml")
+
+    def __init__(self, t, name, depth, incl, self_, icpu, scpu, iins, sins, rows, qml):
+        self.t, self.name, self.depth, self.incl, self.self = t, name, depth, incl, self_
+        self.icpu, self.scpu, self.iins, self.sins, self.rows, self.qml = icpu, scpu, iins, sins, rows, qml
+
+    @property
+    def end(self):
+        return self.t + self.incl
+
+
+def frame_index_after(run, t, limit=5000):
+    """Index of the first frame whose sync starts after t (None if none within limit)."""
+    for i, (s, w) in enumerate(zip(run["sync"], run["swap"])):
+        if s > t:
+            return i if w - t <= limit else None
+    return None
 
 
 def frame_after(run, t, limit=5000):
@@ -183,12 +217,25 @@ def key_metrics(run, actions, prefix):
             # would be the caret's next blink.
             acts = acts[:1]
         handle = [a["t1"] - a["t0"] for a in acts]
-        frame = []
+        frame, wait, gui, render = [], [], [], []
+        split = bool(run.get("synced")) and len(run["synced"]) == len(run["swap"])
         for a in acts:
-            f = frame_after(run, a["t1"], 2000)
-            frame.append(None if f is None else f - a["t0"])
+            i = frame_index_after(run, a["t1"], 2000)
+            frame.append(None if i is None else run["swap"][i] - a["t0"])
+            if i is not None and split:
+                # key -> frame = gui (the press handled + the frame's sync) + wait (until that
+                # sync starts: the rest of the event-loop turn, polish, timers, the render loop)
+                # + render (after the sync: the render thread, the swap)
+                s, d, w = run["sync"][i], run["synced"][i], run["swap"][i]
+                gui.append((a["t1"] - a["t0"]) + (d - s))
+                wait.append(s - a["t1"])
+                render.append(w - d)
         out.update(dist("%s%s_handle" % (prefix, kind), handle))
         out.update(dist("%s%s_frame" % (prefix, kind), frame))
+        if split:
+            out.update(dist("%s%s_wait" % (prefix, kind), wait))
+            out.update(dist("%s%s_gui" % (prefix, kind), gui))
+            out.update(dist("%s%s_render" % (prefix, kind), render))
     return out
 
 
@@ -197,6 +244,7 @@ def m_typing(run):
     mk = run["marks"]
     saves = []
     save_max = []
+    save_cpu = []
     for b in range(3):
         end = mk.get("burst_end:%d" % b)
         if not end:
@@ -206,13 +254,155 @@ def m_typing(run):
         st = stalls_in(run, last_key + 30, t + 1700)
         saves.append(sum(d for _, d in st))
         save_max.append(max([d for _, d in st], default=0.0))
+        cpu = [c for (s, _), (c, _) in zip(run["stalls"], run["stall_cpu"]) if last_key + 30 <= s < t + 1700]
+        if all(c is not None for c in cpu):
+            save_cpu.append(sum(cpu))
         sv = [s - last_key for s in run["saved"] if last_key < s < t + 1700]
         if sv:
             out["autosave%d_signal_after_ms" % b] = sv[0]
     out.update(dist("autosave_blocked", saves))
     out.update(dist("autosave_stall_max", save_max))
+    out.update(dist("autosave_blocked_cpu", save_cpu))
+    out.update(save_metrics(run))
     # Everything that blocked the GUI thread during the bursts, beyond the keys' own handling.
     out.update(mem(run, "typing_end"))
+    return out
+
+
+# The signals whose inclusive time save_metrics() reports as sig_<name>_ms (C++ and QML parts).
+SAVE_SIGNALS = ("Vault.changed", "Workspace.revisionChanged", "Workspace.fileChanged", "Workspace.filesChanged",
+                "Workspace.fileListChanged", "EditorHost.indexChanged", "EditorHost.revisionChanged",
+                "EditorHost.fileChanged", "EditorHost.filesChanged", "EditorHost.fileListChanged",
+                "VaultIndex.changed", "PageController.saved", "PageController.dirtyChanged")
+SAVE_TIMER = "timer:save"
+FANOUT_MS = 1700
+TOP_SPANS = 8
+
+
+def cpu_at(run, t):
+    """The GUI thread's (CPU ms, instructions) at the last lag tick at or before t (None outside the
+    recorded series)."""
+    ts, cpu, ins = run["cpu"]
+    if not ts or t < ts[0]:
+        return None
+    lo, hi = 0, len(ts) - 1
+    while lo < hi:
+        mid = (lo + hi + 1) // 2
+        if ts[mid] <= t:
+            lo = mid
+        else:
+            hi = mid - 1
+    return ts[lo], cpu[lo], ins[lo]
+
+
+def idle_rate(run):
+    """The GUI thread's idle CPU (ms per ms) and instructions (per ms) in the 1 s of idle editing
+    before the first burst: the median of the lag ticks' rates (robust to a slice of other work
+    there, e.g. a kept view built ahead)."""
+    a, b = run["marks"].get("idle_ref_start"), run["marks"].get("idle_ref_end")
+    ts, cpu, ins = run["cpu"]
+    if not a or not b or not ts:
+        return None
+    idx = [i for i, t in enumerate(ts) if a["t"] <= t <= b["t"]]
+    rates_c, rates_i = [], []
+    for i, j in zip(idx, idx[1:]):
+        dt = ts[j] - ts[i]
+        if dt > 0:
+            rates_c.append((cpu[j] - cpu[i]) / dt)
+            rates_i.append((ins[j] - ins[i]) / dt)
+    if not rates_c:
+        return None
+    return statistics.median(rates_c), statistics.median(rates_i)
+
+
+def save_metrics(run):
+    """The autosave of each burst from the probe's signal spans (BENCH_SPANS) and file system calls:
+    the save is the "timer:save" span (PageController's parentless single-shot save timer: the whole
+    synchronous save, Vault::changed and the direct fan-out included); its fan-out window runs from
+    the save's start to FANOUT_MS after its end. Per burst `<metric>_b<n>`, the run's median as
+    `<metric>`."""
+    out = {}
+    mk = run["marks"]
+    spans = run["spans"]
+    if not spans and not run["io"]:
+        return out
+    rate = idle_rate(run)
+    # Without a counter (perf_event_paranoid > 2, e.g. Ubuntu's 4) the probe's instructions are 0.
+    counters = next((n for n in run["notes"] if n.get("what") == "counters"), {})
+    insns = bool(counters.get("insns", ["?"]))
+    if rate:
+        out["idle_ref_cpu_ms_per_s"] = rate[0] * 1000
+    per = {}
+    top = {}
+    for b in range(3):
+        start, end = mk.get("burst_start:%d" % b), mk.get("burst_end:%d" % b)
+        if not start or not end:
+            continue
+        m = {}
+        kept = mk.get("kept_views:%d" % b)
+        if kept:
+            m["kept_views"] = kept.get("n", 0)
+        win = mk.get("window_end:%d" % b)
+        if win:
+            m["window_emissions"] = win.get("emissions", 0)
+            m["window_spans"] = win.get("spans", 0)
+        saves = [x for x in spans if x.name == SAVE_TIMER and not x.qml and start["t"] <= x.t < end["t"] + FANOUT_MS]
+        if saves:
+            inside = lambda t: any(x.t <= t <= x.end for x in saves)  # noqa: E731
+            m["saves"] = len(saves)
+            m["save_sync_ms"] = sum(x.incl for x in saves)
+            m["save_cpu_ms"] = sum(x.icpu for x in saves)
+            if insns:
+                m["save_insns_M"] = sum(x.iins for x in saves)
+            vc = [x for x in spans if x.name == "Vault.changed" and inside(x.t)]
+            m["save_vault_changed_ms"] = sum(x.incl for x in vc)
+            write = 0.0
+            for x in saves:  # the save up to Vault::changed: serialising, the compare-and-swap, the write
+                first = min((v.t for v in vc if x.t <= v.t <= x.end), default=x.end)
+                write += first - x.t
+            m["save_write_ms"] = write
+            fs = [(t, d) for t, d, k in run["io"] if k in ("fsync", "fdatasync") and inside(t)]
+            m["save_fsync_ms"] = sum(d for _, d in fs)
+            m["save_fsync_n"] = len(fs)
+            rn = [(t, d) for t, d, k in run["io"] if k.startswith("rename") and inside(t)]
+            m["save_rename_ms"] = sum(d for _, d in rn)
+            fa, save_end = saves[0].t, max(x.end for x in saves)
+            fb = save_end + FANOUT_MS
+            if win:
+                fb = min(fb, win["t"])  # the spans and the next burst: only up to the window's end
+            m["fanout_window_ms"] = fb - save_end
+            fan = [x for x in spans if fa <= x.t < fb]
+            for name in SAVE_SIGNALS:
+                hit = [x for x in fan if x.name == name]
+                if hit:
+                    m["sig_%s_ms" % name] = sum(x.incl for x in hit)
+            m["fanout_model_resets"] = sum(1 for x in fan if x.name.startswith("model:") and not x.qml
+                                           and x.name.endswith((".modelReset", ".layoutChanged")))
+            m["fanout_rows_changed"] = sum(max(0, x.rows) for x in fan if x.name.startswith("model:") and not x.qml
+                                           and x.name.endswith((".dataChanged", ".rowsInserted", ".rowsRemoved",
+                                                                ".rowsMoved")))
+            c0, c1 = cpu_at(run, save_end), cpu_at(run, fb)
+            if c0 and c1 and rate:
+                dt = c1[0] - c0[0]
+                m["fanout_deferred_cpu_ms"] = (c1[1] - c0[1]) - rate[0] * dt
+                if insns:
+                    m["fanout_insns_M"] = ((c1[2] - c0[2]) - rate[1] * dt) / 1e6
+            for x in fan:
+                key = x.name + (" (qml)" if x.qml else "")
+                agg = top.setdefault(key, [0.0, 0.0, 0])
+                agg[0] += x.self
+                agg[1] += x.incl
+                agg[2] += 1
+        per[b] = m
+        for k, v in m.items():
+            out["%s_b%d" % (k, b)] = v
+    for k in sorted({k for m in per.values() for k in m}):
+        vals = [m[k] for m in per.values() if k in m]
+        if vals:
+            out[k] = statistics.median(vals)
+    # Where the fan-out's time goes: the spans with the most self time over every burst's window.
+    for i, (name, (self_ms, incl_ms, n)) in enumerate(sorted(top.items(), key=lambda kv: -kv[1][0])[:TOP_SPANS]):
+        out["top%d_span" % i] = "%s self %.1f incl %.1f ms n%d" % (name, self_ms, incl_ms, n)
     return out
 
 
@@ -590,7 +780,7 @@ def main():
         if r["label"] not in labels:
             labels.append(r["label"])
         table.setdefault((r["name"], r["metric"]), {})[r["label"]] = r
-    print("%-28s %-34s " % ("name", "metric") + " ".join("%-26s" % l for l in labels))
+    print("%-28s %-40s " % ("name", "metric") + " ".join("%-26s" % l for l in labels))
     for (name, metric), by in table.items():
         cells = []
         for l in labels:
@@ -598,10 +788,11 @@ def main():
             if not r:
                 cells.append("%-26s" % "")
             elif r.get("median") is None:
-                cells.append("%-26s" % (",".join(str(v) for v in r["values"])[:26]))
+                text = ",".join(str(v) for v in r["values"])
+                cells.append("%-26s" % (text if metric.startswith("top") else text[:26]))
             else:
                 cells.append("%-26s" % ("%s [%s-%s] n%d" % (fmt(r["median"]), fmt(r["min"]), fmt(r["max"]), r["n"])))
-        print("%-28s %-34s " % (name[:28], metric[:34]) + " ".join(cells))
+        print("%-28s %-40s " % (name[:28], metric[:40]) + " ".join(cells))
 
 
 if __name__ == "__main__":
