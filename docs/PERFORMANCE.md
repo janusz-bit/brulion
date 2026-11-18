@@ -1882,7 +1882,8 @@ the page's own linked references, computed again because the page links to itsel
 (`BacklinksModel::mayNowReference` counted those links; fixed on the branch since, "Step 2" above).
 
 Since merged: the temporary file's sync comes from the platform layer (`vault/filesync.h`, set by
-`platform::installFileSync()`: fsync, Windows' `_commit`; core takes no platform `#if`; without one,
+`platform::installFileSync()`: fdatasync/fsync, Windows' FlushFileBuffers and MoveFileExW — the
+follow-ups below; core takes no platform `#if`; without one,
 as in brulion-cli, the writes are QSaveFile's and the echo lists the folder). A review of the
 merged change found and fixed: `Vault::stat()` / `exists()` of a path being written now wait for
 that write (a GitHub pull's or a sync's "unchanged since the plan" guard read the stat before the
@@ -1910,6 +1911,74 @@ What is left of an autosave on a 5000-block page (~20–28 ms, one stall): the m
 patching its lists with the prepared note, `fileChanged` / `indexChanged` to the open editors —
 and what follows it on the next turns. The small page's whole autosave is now below the probe's
 12 ms threshold.
+
+**Follow-ups (2026-11-18): leftovers, coarse stamps, the app's tests, Windows.**
+
+* *What a coarse stamp could lose.* The save compares the exact bytes, so an outside change made
+  before its read always came back as *Changed*; but between that read and the rename (the History
+  snapshot, the temporary file written and synced: tens of milliseconds, seconds on a slow card)
+  nothing looked again, on any storage — another program's write there was renamed over without a
+  trace. That was the one data-loss case. Now every conditional write (`writeTextIfUnchanged`, its
+  writer job) carries a `vaultutil::ReadMark` — the stat, the fine time and the bytes from right
+  before its read — and `saveAtomicallyStamped` checks it again right before every attempt of the
+  rename (`stillAsRead`): another size or time is a change; equal stamps vouch only when they are
+  fine-grained and were older than two kernel ticks (100 ms) plus the time since the read, measured
+  against the temporary file just written (the file system's own clock; git's "racily clean");
+  otherwise — FAT, exFAT, 1 s mounts, Android's providers, a note written just before the save —
+  this one file is read again and compared (O(its size), on the writer; nothing else is hashed). A
+  change is *Changed* (taken in, External, its predecessor in History); a file that appeared where
+  none was is not written over either. What remains is the microseconds between that check and the
+  rename (POSIX has no compare-and-rename), and a writer that forges an old fine stamp to the
+  nanosecond.
+* *Stale state, not loss.* On coarse storage another write of the same size within the tick after
+  the vault recorded a file (its own write, another program's write it took in, a read) kept the
+  stat, so listings and rescans — which compare stats — never saw it: the vault, the index and an
+  open editor stayed on the old text until the file changed again (the next save's comparison still
+  caught it, so nothing was overwritten, but an unconditional `writeText` of a text over 1 MB
+  snapshotted the stale cache instead of it). Such files are now *unsettled* (`noteUnsettled`, only
+  text the listings compare by content, only while the stamp is coarse and recent): a listing
+  covering one reads and hashes it as if modified, until one after `kSettleMs` (3 s); the
+  unconditional write verifies one of any size before its snapshot. Cost: on coarse storage the
+  echo of an own save reads that note once more (on fine storage nothing changes); the echo of
+  folders was never trusted there (no fine folder stamps). Another program's stamp in another clock
+  (a network server off by more than 3 s) is not recent and not caught.
+* *Leftovers.* A write stopped between its temporary file and the rename left `.brulion-tmp-…`
+  behind for good. `open()` now removes those its listing meets (the vault's own folders and
+  `.brulion/`, never behind a link it does not follow, nor in ignored folders) and History's
+  (`History::removeLeftovers`): only regular files, never links or folders, only our own names —
+  16 hex digits, the Android widget's UUID, the backup's case probe; never the shorter base-36 name
+  of a case-only rename, which holds a note — and only a day after the newest of their times
+  (modified, metadata changed, created: a file synced or copied in keeps its old modification time
+  but not the others), so another instance's or a sync client's file in flight stays. Every
+  consumer ignores them meanwhile (`paths::isIgnored`): the listing, the watcher, sync both ways
+  (WebDAV/Nextcloud, GitHub; Syncthing's `.stignore` names them), export, backups, Clean up, search,
+  the index cache — `tst_integration` checks them all.
+* *The app's tests* (`tests/app`, `BRULION_TEST_FILE_SYNC`, `tests/common/testfilesync.cpp`) now
+  install the platform's file calls as `main()` does, so they write through the stamped path, not
+  QSaveFile's fallback.
+* *Windows.* `_commit()` gave EBADF for every failure (and asserts in the debug runtime): the sync is
+  `FlushFileBuffers()` on the handle behind Qt's descriptor, with the system's message (POSIX:
+  `fdatasync()` like QSaveFile, EINTR retried). `std::filesystem::rename()` (MSVC: `MoveFileExW`
+  without the `\\?\` prefix) failed for paths over 260 characters, which QFile and QSaveFile handle:
+  the platform's `FileReplace` calls `MoveFileExW(MOVEFILE_REPLACE_EXISTING)` with Qt's
+  extended-length paths (`platform::extendedLengthPath`), and only ERROR_ACCESS_DENIED / ERROR_SHARING_VIOLATION /
+  ERROR_LOCK_VIOLATION — a virus scanner or an indexer holding the file just closed — are tried
+  again, for about a second (`kReplaceWaitsMs`, as git for Windows and LLVM wait; 90 ms before),
+  the compare-and-swap before each attempt. Still to check on a real Windows machine: a long-path
+  save, a save while Defender scans (and the leftover cleanup of a temporary file it held), a
+  read-only note, a save on a FAT USB stick and on an SMB share.
+
+Tests: `tst_vault_coarse` (the compare-and-swap with stamps put back to the nanosecond — coarse,
+fine but just written, another size — on the writer thread, inline and synchronously, a file
+created meanwhile; unsettled files after an own write, after another program's two writes in a
+tick, after a read, until the tick has passed; a 2 MB text written over kept in History; a busy
+rename tried again, a refusal that lasts, another failure, another program's write while waiting;
+a failing sync's message), `tst_vault_leftovers` (names, where, how old, never links, folders or a
+case rename's note, History's, ignored meanwhile), `tst_integration` `leftoverTempFilesAreNoNotes`,
+`tst_filesync` (Windows' extended-length paths — pure, run everywhere —, the installed sync, and on
+Windows the rename and its Busy for a file held without sharing its deletion).
+Coarse storage is simulated by a test file sync that cuts the temporary file's time to an even
+second, as FAT keeps it.
 
 ### Typing: a keystroke costs the block (2026-11-18)
 
