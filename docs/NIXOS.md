@@ -400,6 +400,7 @@ CAs).
 nix develop                    # Qt 6.12, cmake, ninja, ccache, clang-tools, gdb, nixfmt
 scripts/dev-build.sh           # configure + build in ./build (Debug, -Werror, with a lock)
 scripts/dev-build.sh -t tst_dates tst_dates   # just one test (target + regex)
+BRULION_CLANG=1 BUILD_DIR=build-clang scripts/dev-build.sh   # with Clang (~40 % faster to compile)
 ./build/src/app/brulion        # run; without a screen: QT_QPA_PLATFORM=offscreen
 ```
 

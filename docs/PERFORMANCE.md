@@ -2562,6 +2562,109 @@ What it says: per block the rows are gone (−91 %), and on a journal of plain d
 work per day created falls by three quarters; on a journal with many rich days the gain is a
 third. The rest is the day's own QML, which the next step can take (below: Z10-A2b).
 
+### GCC or Clang (2026-11-18)
+
+Should the Linux builds (the Nix package, the AppImage, CI's Linux job; all GCC) use Clang, as
+Android, the browser and macOS do? Measured on the x86_64 desktop (i5-13450HX, shared with other
+agents, load 3–18): GCC 16.2 against Clang 21.1.8 of the same nixpkgs (flake.lock's
+`nixpkgs#clang`, which uses GCC 16.2's libstdc++, so it links with the dev shell's Qt), the same
+commit and flags: Release as `nix build` makes it (`-O3`, nixpkgs' hardening, `BRULION_LOCAL_AI=ON`,
+no LTO; the generated QML at `-Oz`). nixpkgs' Clang wrapper treats `fortify3` as unsupported and
+passes `-D_FORTIFY_SOURCE=2`; the Clang builds here added `-U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=3`
+so that both have the same hardening.
+
+**Build time** (clean, no ccache, `-j8`; the compilers' user-space instructions from `perf stat -e
+instructions:u` over the whole build, which do not depend on the load; wall and CPU time with the
+other agents' load):
+
+| | GCC 16.2 | Clang 21 | |
+|---|---:|---:|---:|
+| Release as `nix build` (no tests; 1 785 steps): instructions | 41.6 T | 25.7 T | −38 % |
+| — CPU (user) / wall | 10 294 s / 25.4 min | 6 203 s / 14.4 min | −40 % / −43 % |
+| Debug as `scripts/dev-build.sh` (tests included; 2 993 steps): instructions | 94.3 T | 47.4 T | −50 % |
+| — CPU (user) / wall | 14 080 s / 31.0 min | 8 361 s / 18.4 min | −41 % / −41 % |
+
+**Size** (Release, x86_64):
+
+| | GCC 16.2 | Clang 21 | |
+|---|---:|---:|---:|
+| `brulion`, `strip --strip-all` | 84.2 MB | 81.4 MB | −3.3 % |
+| — `.text` | 53.1 MB | 50.6 MB | −4.7 % |
+| — as the Nix package installs it (`strip -S`: symbols kept) | 131.7 MB | 117.6 MB | −10.7 % |
+| `brulion-cli`, `strip --strip-all` | 9.78 MB | 7.81 MB | −20 % |
+| `lib/brulion` (llama.cpp, ggml, the plugin), stripped | 15.10 MB | 14.89 MB | −1.4 % |
+| Debug build directory, every target (`-g`; Clang's with the benchmarks too) | 33 GB | 18 GB | −45 % |
+
+The Nix package strips debug information only (nixpkgs' `-S` for `bin`): 45 MB of the 122 MB
+`.brulion-wrapped` of 0.21.1 are `.symtab` and `.strtab` (the generated QML's long names),
+whichever the compiler.
+
+**Core benchmarks** (`bench_calc`, `bench_text`, `bench_markdown`, `bench_index`, `bench_vault`:
+369 rows; QTest `-perf -perfcounter instructions:u`, then `cycles:u`; three rounds alternating
+gcc/clang, clang/gcc, gcc/clang, pinned to the P-cores; rows counted only where both binaries'
+ratios agree within 5 % whichever ran first — some rows depend on what ran before them):
+
+| clang / gcc, geometric mean | rows | instructions | cycles |
+|---|---:|---:|---:|
+| all | 311 / 171 | 0.999 | 1.011 |
+| `bench_markdown` | 70 / 59 | 0.994 | 0.968 |
+| `bench_index` | 161 / 50 | 1.011 | 1.035 |
+| `bench_text` | 36 / 31 | 0.958 | 1.041 |
+| `bench_calc` | 26 / 20 | 1.031 | 1.047 |
+| `bench_vault` | 18 / 11 | 0.946 | 0.992 |
+
+Single rows move by tens of percent either way (cycles; every Clang run on the same side of every
+GCC run). Clang faster: `search` 10 000 notes two words −35 %, title −23 %; `links` outgoing
+20 KB page −20 %; `query` 50 000 notes ref popular −11 %, open due this week −13 %; the pathological
+Markdown inputs −10…−12 %. Clang slower: `suggestPages("")` / `suggestBlocks("")` (the switcher
+without a query) **3–5×** (50 000 notes: 15.8 → 67–85 M cycles, ≈ 4 → 15–18 ms;
+10 000: 1.6 → 5.3 M); `serializeTable` +36 %; `foldKeyWithMap` ASCII +38 %; `foldKey` Polish
++17 %; `suggestBlocks` 50 000 notes 'kawa ogród' +16 %. The 3–5× is a `stable_sort` of 50 000
+`Entry` pointers by `a->seq`: Clang compiles libstdc++'s merge loop without branches (`setbe` +
+`cmova`), so every step waits for the previous comparison's cache miss, where GCC's predictable
+branch lets the CPU run ahead (branch misses: 8 658 GCC, 3 234 Clang). Fewer instructions are not
+fewer cycles either: `contentHash` −30…−38 % instructions and `writeText` −30 %, both ±0 cycles.
+
+**App benchmarks** (`bench-matrix.sh startup-big open-page typing journal-scroll`, the 10 000-note
+vault, Xvfb + llvmpipe pinned to the E-cores, 3 runs × 2 alternating rounds; GUI-thread
+instructions, median [min–max]):
+
+| | GCC 16.2 | Clang 21 | |
+|---|---:|---:|---:|
+| first start, settled | 4 528 M [4 417–4 659] | 4 455 M [4 368–4 536] | −1.6 % |
+| warm start, settled | 4 410 M [4 210–4 552] | 4 274 M [4 207–4 371] | −3.1 % |
+| cold start, settled | 4 358 M [4 170–4 543] | 4 310 M [4 107–4 378] | −1.1 % |
+| open the 5000-block outline | 4 712 M [4 676–4 732] | 4 739 M [4 663–4 790] | +0.6 % |
+| open the 5000-block document | 4 802 M [4 716–4 883] | 4 749 M [4 730–4 811] | −1.1 % |
+| autosave, 5000-block outline (`save_insns_M`) / fan-out | 3.9 / 51.9 M | 3.7 / 51.9 M | −5 % / 0 |
+| keystroke on the GUI thread, small page / outline / document | 1.1 / 1.7 / 1.9 ms | 1.0 / 1.6 / 1.9 ms | |
+| journal scroll: process CPU / stalls / frame p95 | 11.6 s / 4.57 s / 29.5 ms | 11.6 s / 4.54 s / 29.5 ms | 0 |
+| RSS after the first start | 573 MB | 569 MB | |
+
+Within the noise: most of the GUI thread's work is in Qt, whose libraries are the same GCC-built
+nixpkgs binaries under both.
+
+**Warnings and tests.** A Clang Debug build of every target (tests and benchmarks) with
+`-DBRULION_WERROR=ON` failed on one warning, `-Wself-assign-overloaded` in `tst_editor_calc`
+(`text = text;`); fixed, it passes. The earlier `-Wshadow` failures of Android's and the browser's Clang
+(lambda captures, locals shadowing `d`) are fixed already. ctest on the Clang Debug build: 349 of
+349 pass.
+
+What it says: Clang compiles 40–50 % faster and makes a 3 % smaller app and a 20 % smaller
+`brulion-cli`, but the code runs the same on average (−3 % to +5 % per suite, app ±3 %) with
+real regressions on hot paths (the switcher's empty query 3–5×, folding +17–38 %) — not the ≥ 5 %
+across the hot paths that would justify moving the shipped builds. The Linux packages stay on
+GCC; contributors can build with Clang (`BRULION_CLANG=1 BUILD_DIR=build-clang
+scripts/dev-build.sh`), which also catches early what Android's and the browser's Clang would
+reject. Moving a shipped build would mean: `clangStdenv` for the Nix package (and restoring
+`_FORTIFY_SOURCE=3` by hand), a Clang in the AppImage's Ubuntu 22.04 container (its own is
+Clang 14, untried with our C++20 and its libstdc++ 12; apt.llvm.org has newer ones — the glibc
+baseline does not change), and a cold ccache for CI's sanitizer job (Ubuntu 24.04's GCC 13 today;
+Clang's ASan and UBSan take the same flags). Not measured: ThinLTO and PGO (the
+release has no LTO, and there was no gap to close); PGO is what would fix the merge loop above,
+with GCC as well as with Clang, at the price of a training run per release. Cheaper and compiler-
+independent: `suggestPages("")` needs the 20 most recent entries, not a sorted list of all.
+
 ### Budgets
 
 Desktop = the laptop above (the graph: a GitHub runner, see its row), phone = Pi 4 (floor) and the
