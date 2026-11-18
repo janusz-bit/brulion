@@ -456,7 +456,7 @@ FocusScope {
             }
             Later {
                 id: jumpLater
-                onTriggered: jumpDialog.open()
+                onTriggered: journals.openJumpDialog()
             }
             Later {
                 id: caretLater
@@ -609,7 +609,7 @@ FocusScope {
                                 variant: "ghost"
                                 iconName: "calendar-days"
                                 text: qsTr("Go to day…")
-                                onClicked: jumpDialog.open()
+                                onClicked: journals.openJumpDialog()
                             }
                         }
                     }
@@ -722,39 +722,50 @@ FocusScope {
                 }
             }
 
-            BDialog {
-                id: jumpDialog
-                parent: T.Overlay.overlay
-                title: qsTr("Go to day")
-                iconName: "calendar-days"
-                showFooter: false
-                preferredWidth: Theme.dialogWidthSm
+            // "Go to day": made the first time it opens (docs/PERFORMANCE.md "L10": its month grid is
+            // not on the first screen).
+            property BDialog jumpDialogPopup: null
+            function openJumpDialog(): void {
+                if (!journals.jumpDialogPopup)
+                    journals.jumpDialogPopup = jumpDialogComponent.createObject(journals) as BDialog
+                journals.jumpDialogPopup.open()
+            }
+            Component {
+                id: jumpDialogComponent
+                BDialog {
+                    id: jumpDialog
+                    parent: T.Overlay.overlay
+                    title: qsTr("Go to day")
+                    iconName: "calendar-days"
+                    showFooter: false
+                    preferredWidth: Theme.dialogWidthSm
 
-                // The days with a journal: only while the dialog is open, following the names
-                // (journals created or deleted; read for real: a bare `void Workspace.namesRevision`
-                // is compiled away with the dependency).
-                readonly property var marks: jumpDialog.visible && Workspace.namesRevision >= 0
-                                             ? Workspace.journalMarks(jumpPicker.cells) : ({})
+                    // The days with a journal: only while the dialog is open, following the names
+                    // (journals created or deleted; read for real: a bare `void Workspace.namesRevision`
+                    // is compiled away with the dependency).
+                    readonly property var marks: jumpDialog.visible && Workspace.namesRevision >= 0
+                                                 ? Workspace.journalMarks(jumpPicker.cells) : ({})
 
-                BDatePicker {
-                    id: jumpPicker
-                    Layout.fillWidth: true
-                    selectedDate: DatesHelper.today
-                    marks: jumpDialog.marks
-                    onPicked: (value) => {
-                        const d = "" + Js.slice(value, 0, 10)
-                        jumpDialog.close()
-                        if (days.exactRowOfDate(d) >= 0)
-                            root.scrollToDate(d)
-                        else
-                            AppController.navigate({ view: "journal", date: d })
+                    BDatePicker {
+                        id: jumpPicker
+                        Layout.fillWidth: true
+                        selectedDate: DatesHelper.today
+                        marks: jumpDialog.marks
+                        onPicked: (value) => {
+                            const d = "" + Js.slice(value, 0, 10)
+                            jumpDialog.close()
+                            if (days.exactRowOfDate(d) >= 0)
+                                root.scrollToDate(d)
+                            else
+                                AppController.navigate({ view: "journal", date: d })
+                        }
                     }
-                }
-                BText {
-                    Layout.fillWidth: true
-                    text: qsTr("Days with a dot have a journal. Type a date like “Tuesday” or “October 12”.")
-                    variant: "muted"
-                    wrapMode: Text.Wrap
+                    BText {
+                        Layout.fillWidth: true
+                        text: qsTr("Days with a dot have a journal. Type a date like “Tuesday” or “October 12”.")
+                        variant: "muted"
+                        wrapMode: Text.Wrap
+                    }
                 }
             }
         }

@@ -150,7 +150,7 @@ Item {
                     Accessible.name: part.partIndex < 0 ? qsTr("Show hidden path parts") : text
                     onClicked: {
                         if (part.partIndex < 0)
-                            overflowMenu.popup(crumb, 0, crumb.height)
+                            root.overflowMenuNow().popup(crumb, 0, crumb.height)
                         else
                             root.activated(part.partIndex)
                     }
@@ -195,19 +195,29 @@ Item {
         }
     }
 
-    BMenu {
-        id: overflowMenu
-        Instantiator {
-            model: root.hiddenTitles
-            delegate: BMenuItem {
-                required property string modelData
-                required property int index
-                text: modelData
-                iconName: "folder"
-                onTriggered: root.activated(index + root.head)
+    // The hidden parts' menu, made the first time it opens (docs/PERFORMANCE.md "L10").
+    property BMenu overflowMenuPopup: null
+    function overflowMenuNow(): BMenu {
+        if (!root.overflowMenuPopup)
+            root.overflowMenuPopup = overflowMenuComponent.createObject(root) as BMenu
+        return root.overflowMenuPopup
+    }
+    Component {
+        id: overflowMenuComponent
+        BMenu {
+            id: overflowMenu
+            Instantiator {
+                model: root.hiddenTitles
+                delegate: BMenuItem {
+                    required property string modelData
+                    required property int index
+                    text: modelData
+                    iconName: "folder"
+                    onTriggered: root.activated(index + root.head)
+                }
+                onObjectAdded: (index, object) => overflowMenu.insertItem(index, object as Item)
+                onObjectRemoved: (index, object) => overflowMenu.removeItem(object as Item)
             }
-            onObjectAdded: (index, object) => overflowMenu.insertItem(index, object as Item)
-            onObjectRemoved: (index, object) => overflowMenu.removeItem(object as Item)
         }
     }
 }
