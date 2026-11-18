@@ -1,6 +1,7 @@
 #include "scrollprobe.h"
 #include "rowscroll.h"
 #include "touchflick.h"
+#include "viewrows.h"
 
 #include <QCoreApplication>
 #include <QDebug>
@@ -28,6 +29,7 @@
 #include <cmath>
 #include <cstdio>
 #include <limits>
+#include <optional>
 #include <utility>
 
 using namespace Qt::StringLiterals;
@@ -536,7 +538,6 @@ private:
     void attachTarget()
     {
         m_contentItem = m_target->property("contentItem").value<QQuickItem *>();
-        m_hasItemAtIndex = m_target->metaObject()->indexOfMethod("itemAtIndex(int)") >= 0;
         m_visibleArea = m_target->property("visibleArea").value<QObject *>();
         // A BRowScrollBar over the view (RowScroll, rowscroll.h): its thumb is checked too.
         m_rowScroll = nullptr;
@@ -864,7 +865,6 @@ private:
     }
 
     // ---- Frames ---------------------------------------------------------------------------------
-    /// The deepest visible item at the viewport's centre (in the target's content).
     /// The child of the content item (the view's delegate) that holds `item`.
     QQuickItem *delegateOf(QQuickItem *item) const
     {
@@ -881,11 +881,20 @@ private:
         if (!d)
             return true;
         if (m_anchorRow < 0)
-            return false; // not one of the view's rows (no index)
-        const QVariant row = d->property("index");
-        return !row.isValid() || row.toInt() != m_anchorRow || !placed(d, m_anchorRow);
+            return false; // not a row of an item view
+        const std::optional<int> row = rowOf(d);
+        return !row || *row != m_anchorRow;
     }
 
+    /// The row the target view placed the content item's child `d` at; std::nullopt when the view
+    /// has not placed it — one still incubating, or one released into ListView's reuseItems pool,
+    /// which stays in the content item where its row was, culled (not drawn) but `visible`, until
+    /// the view takes it for another row: an anchor on one jumped by hundreds of pixels then,
+    /// though nothing on screen moved. -1 when that cannot be told (viewrows.h).
+    std::optional<int> rowOf(const QQuickItem *d) const { return brulion::ui::placedRow(m_target.data(), d); }
+
+    /// The deepest visible item at the viewport's centre (in the target's content), in a row the
+    /// view has placed.
     QQuickItem *anchorAt(QPointF targetPoint) const
     {
         QQuickItem *item = m_contentItem;
@@ -899,12 +908,9 @@ private:
                 QQuickItem *c = *it;
                 if (!c->isVisible() || c->height() < 1 || c->width() < 1)
                     continue;
-                if (item == m_contentItem) {
-                    // Only rows the view has placed (not one still incubating, or kept for reuse).
-                    const QVariant row = c->property("index");
-                    if (row.isValid() && !placed(c, row.toInt()))
-                        continue;
-                }
+                // Only rows the view has placed (not one still incubating, or kept for reuse).
+                if (item == m_contentItem && !rowOf(c))
+                    continue;
                 if (c->contains(c->mapFromItem(m_target, targetPoint))) {
                     next = c;
                     break;
@@ -915,17 +921,6 @@ private:
             item = next;
         }
         return found;
-    }
-
-    /// Whether the target view has placed `item` as its row `index` (ListView / GridView:
-    /// itemAtIndex() knows only the rows it has laid out); other Flickables: always.
-    bool placed(const QQuickItem *item, int index) const
-    {
-        if (!m_hasItemAtIndex)
-            return true;
-        QQuickItem *row = nullptr;
-        QMetaObject::invokeMethod(m_target.data(), "itemAtIndex", Qt::DirectConnection, qReturnArg(row), index);
-        return row == item;
     }
 
     /// "(query)", "(text+embeds)", "(text+transclusions)": a block delegate's kind (BlockDelegate's
@@ -1042,13 +1037,14 @@ private:
         for (const QQuickItem *child : children) {
             if (child == header || child == footer || !child->isVisible())
                 continue;
-            // Delegates with a `required property int index` say which row they are.
-            const QVariant index = child->property("index");
             // A delegate the view has not placed yet (still incubating, or complete and waiting for
-            // the view's next refill: at y 0, not drawn) is not counted until it is placed.
-            if (index.isValid() && !placed(child, index.toInt()))
+            // the view's next refill: at y 0, not drawn) is not counted until it is placed, nor one
+            // kept for reuse (reuseItems: culled where its row was; taken for another row, it is
+            // released here and created there).
+            const std::optional<int> row = rowOf(child);
+            if (!row)
                 continue;
-            const DelegateState s{index.isValid() ? index.toInt() : -1, child->y(), child->height()};
+            const DelegateState s{*row, child->y(), child->height()};
             current.insert(child, s);
             const auto it = m_delegates.constFind(child);
             if (it == m_delegates.constEnd()) {
@@ -1165,11 +1161,10 @@ private:
             const QPointF centre(m_target->width() * 0.5, m_target->height() * 0.5);
             m_anchor = anchorAt(centre);
             m_anchorDelegate = m_anchor ? delegateOf(m_anchor) : nullptr;
-            const QVariant row = m_anchorDelegate ? m_anchorDelegate->property("index") : QVariant();
-            m_anchorRow = row.isValid() ? row.toInt() : -1;
+            m_anchorRow = m_anchorDelegate ? rowOf(m_anchorDelegate).value_or(-1) : -1;
             if (m_anchor) {
                 // A<row>: the anchor's delegate.
-                events.append(u"A"_s + (row.isValid() ? QString::number(m_anchorRow) : QString()));
+                events.append(u"A"_s + (m_anchorRow >= 0 ? QString::number(m_anchorRow) : QString()));
             }
         }
         if (m_anchor) {
@@ -1695,10 +1690,9 @@ private:
     bool m_direct = true;
     bool m_observe = false;
     bool m_finished = false;
-    double m_checkTolerance = 0;   // --probe-check: px (0: no check)
-    int m_cache = -1;              // --probe-cache: the target's cacheBuffer (-1: its own)
-    bool m_requireRowBar = false;  // --probe-row-bar: the target must have a BRowScrollBar
-    bool m_hasItemAtIndex = false; // the target is an item view (ListView, GridView)
+    double m_checkTolerance = 0;  // --probe-check: px (0: no check)
+    int m_cache = -1;             // --probe-cache: the target's cacheBuffer (-1: its own)
+    bool m_requireRowBar = false; // --probe-row-bar: the target must have a BRowScrollBar
     bool m_checkFailed = false;
     QStringList m_logLines;
 

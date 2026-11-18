@@ -2341,6 +2341,60 @@ rarely; the largest, the new-page dialog, is ~450 objects.
 Not measured on the Raspberry Pi or a phone (the plan's estimate was the Pi demo's first content
 −0.3 s; L10b below).
 
+### scroll-jumps: an anchor in the reuse pool (2026-11-18)
+
+`tst_scroll_jumps_qml` failed on CI's Nix aarch64 job (c0538c92) in Tasks at the phone size, touch
+drags, cache off (`tasks:phone:drag:0`): one jump and layout shift of 442 px while dragging up
+(`r-1:-28vF m-1:-414`). Seen once before while L10 was tested, so it looked like L10's work
+landing in the list. It was the scroll probe's own mistake; nothing on screen moved.
+
+**What it was.** ListView with `reuseItems` (Tasks, the agenda, All pages, Search, Tags) keeps a
+released delegate in its content item where its row was — culled, so not drawn, but `visible` —
+until it takes it for another row (`QQuickItemViewPrivate::releaseItem`, Qt 6.11; ListView drains
+the pool only when its size changes or `reuseItems` is turned off). The pool gives out its oldest
+delegate of the row's kind first (Tasks has two, section headers and tasks), and Tasks' short rows
+at the top leave more delegates than a screen of the taller ones below needs. So dragging back up
+from the end, each row that came back at the top edge got an older delegate from the pool, and
+its own stayed under it: the log's rows before the jump list `5176+97` and `5273+44` twice. The
+probe takes the item at the view's centre as its anchor and told placed rows from such delegates
+only through the delegate's `index` (`itemAtIndex`); Tasks' rows have none (the editor's, the
+journal's and the agenda's have one). When it picked a new anchor while the centre was over a
+pair, it could take the released one (the later child); two frames later ListView took that one
+for the next row at the top edge — 414 px up, one line of chips (28 px) shorter: "442 px".
+Whether the probe picked a new anchor just there is timing, so the case failed now and then, on
+CI and here with the same frame and numbers.
+
+**Fix.** The probe asks the view which row a delegate is (`placedRow()`, src/app/ui/viewrows.h,
+library `brulion_ui_scroll`: the `index`, or for a delegate without one the row at its centre,
+`indexAt()`, and the view's item of that row, `itemAtIndex()`, must be this delegate) for its
+anchor and for the delegates it follows: a delegate in the pool is no row, and taken from it it
+is released and created. Tasks' rows now have their row numbers in the probe's log. `RowScroll`
+already read the rows that way, so the row scroll bar never had this blind spot. The app itself is
+unchanged (L10 stays as it was).
+
+**When.** Not since L10: the blind spot is as old as Tasks' `reuseItems` and its case in the test
+(fdb85e57, 2026-10-17); L10 only shifted the timing. Runs of the old probe that failed (the
+16-core x86_64 desktop, Debug builds, `CASES=tasks:phone:drag:0 tests/app/perf/scroll-jumps.sh`,
+each run its own notebook, 4 at a time; "load": stress-ng on 12 of the 16 cores and a build,
+"quiet": other agents' builds at times):
+
+| build | quiet | load |
+|---|---:|---:|
+| 2cc599d7 (before L10) | 0 of 32 | 1 of 17 |
+| 4f077a9e (the L10 merge) | – | 2 of 16 |
+| fd187e0f (main) | 2 of 16 | 0 of 16 |
+| fd187e0f, the probe fixed | **0 of 32** | **0 of 32** |
+
+Every failure was this one (the same frame, 442 px) but one: 897 px while dragging down, a pooled
+delegate taken for a row at the bottom edge.
+
+ctest `tst_view_rows` makes the case deterministic: a ListView as Tasks has it (reuseItems, a
+DelegateChooser of section headers and tasks, short rows first, the cache off, with and without the
+delegates' `index`) swept in 22 px steps to the end and back: every child's `placedRow()` is the
+view's own row, none for a pooled delegate, and the sweep must meet a pooled delegate topmost at the
+view's centre (the probe's old anchor: 17 of 1128 steps). With the old rule (a delegate without
+an index counts) it fails.
+
 ### Z10 stage C: one item per page, the foundations (2026-11-18)
 
 The design and what exists of it: docs/UI.md "One item per page (Z10 stage C)". Built: the rows'
