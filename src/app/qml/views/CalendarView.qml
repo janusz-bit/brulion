@@ -123,8 +123,9 @@ FocusScope {
     /// The note of the period in the header's title (the anchor's month or week) exists.
     readonly property bool periodHasNote: {
         // Hidden: nothing is asked (the file check) until shown. (Read for real: a bare
-        // `void Workspace.revision` is compiled away with the dependency.)
-        if (!root.visible || mode === "agenda" || cal.anchorDate === "" || Workspace.revision < 0)
+        // `void Workspace.namesRevision` is compiled away with the dependency; only the set of
+        // files matters, not an edit of a note.)
+        if (!root.visible || mode === "agenda" || cal.anchorDate === "" || Workspace.namesRevision < 0)
             return false
         return AppController.routeFlag(Workspace.periodicNote(mode === "week" ? "week" : "month", cal.anchorDate), "exists")
     }

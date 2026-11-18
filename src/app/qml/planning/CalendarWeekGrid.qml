@@ -42,8 +42,9 @@ FocusScope {
     /// Mondays of weekly notes in the shown range (the number's accent).
     readonly property list<string> weekNotes: {
         // Hidden: nothing is asked (a walk over the notebook's files) until shown. (Read for real:
-        // a bare `void Workspace.revision` is compiled away with the dependency.)
-        if (!root.visible || calendar.rangeStart === "" || Workspace.revision < 0)
+        // a bare `void Workspace.namesRevision` is compiled away with the dependency; only the set of
+        // files matters, not an edit of a note.)
+        if (!root.visible || calendar.rangeStart === "" || Workspace.namesRevision < 0)
             return []
         return Workspace.periodicNoteStarts("week", calendar.rangeStart, calendar.rangeEnd)
     }
