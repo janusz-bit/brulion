@@ -34,6 +34,8 @@ def load(path):
             elif ev == "frames":
                 run["sync"], run["swap"] = o["sync"], o["swap"]
                 run["synced"] = o.get("synced", [])
+                # The GUI thread's CPU ms and instructions (M) at each frame's sync (newer probes).
+                run["frame_gcpu"], run["frame_gins"] = o.get("gcpu", []), o.get("gins", [])
             elif ev == "stalls":
                 # [start, duration] (older probes) or [start, duration, GUI CPU ms, instructions M]
                 run["stalls"] = [(x[0], x[1]) for x in o["list"]]
@@ -184,16 +186,27 @@ def m_open_page(run):
         if "nav_returned:" + tag in mk:
             out["open%s_sync_ms" % tag] = mk["nav_returned:" + tag]["t"] - t0
         pc = mk.get("page_content:" + tag)
+        # The GUI thread's work from the navigation (newer probes: marks and frames carry the GUI
+        # thread's CPU ms "gcpu" and user-space instructions in millions "gins").
+        g0 = ns if "gins" in ns else None
         if pc:
             out["open%s_content_ms" % tag] = pc["t"] - t0
             f = frame_after(run, pc["prevPoll"])
             if f is not None:
                 out["open%s_frame_ms" % tag] = f - t0
+            i = frame_index_after(run, pc["prevPoll"])
+            gins = run.get("frame_gins", [])
+            if g0 and i is not None and i < len(gins) and gins[i] > 0:
+                out["open%s_frame_insns_M" % tag] = gins[i] - g0["gins"]
+                out["open%s_frame_cpu_ms" % tag] = run["frame_gcpu"][i] - g0["gcpu"]
         ps = mk.get("page_settled:" + tag)
         if ps:
             out["open%s_settled_ms" % tag] = ps["t"] - t0
             st = stalls_in(run, t0, ps["t"] + 1)
             out["open%s_stall_max" % tag] = max([d for _, d in st], default=0.0)
+            if g0 and "gins" in ps:
+                out["open%s_settled_insns_M" % tag] = ps["gins"] - g0["gins"]
+                out["open%s_settled_cpu_ms" % tag] = ps["gcpu"] - g0["gcpu"]
         out.update(mem(run, "page:" + tag))
     return out
 

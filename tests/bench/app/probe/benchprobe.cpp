@@ -21,13 +21,15 @@
 //   BENCH_SCROLL_WAIT page-scroll: ms between the page's first block on screen and the first
 //                    wheel step (default: -1 = once the page has settled, as a reader would)
 //   BENCH_ROW        row to edit (typing, select-copy; default 10)
+//   BENCH_NAV_DELAY_MS open-page: ms to wait before the first opening (mark nav_delay; default 0):
+//                    time for a profiler attached at "settled" / "kept_settled" to start
 //   BENCH_PAGES      file with one page path per line (switch-pages, workload)
 //   BENCH_IDLE_MS    idle duration (default 30000)
 //   BENCH_TIMEOUT_MS whole-run watchdog (default 240000): exit code 3
 //   BENCH_KEEP       1: do not quit at the end
-//   BENCH_WAIT_KEPT  1: typing / source-typing wait until every kept view of the main pane
+//   BENCH_WAIT_KEPT  1: typing / source-typing / open-page wait until every kept view of the main pane
 //                    (ShellRouteView's KeptLoaders: Tasks, Calendar, Journal, All pages, Search,
-//                    built ahead 1.2 s after ready, one per 0.4 s) exists before the first burst
+//                    built ahead 1.2 s after ready, one per 0.4 s) exists before the first burst / open
 //   BENCH_SPANS      signal spans in the typing windows: 1 (default) the watched signals and
 //                    every other signal of a brulion:: class taking >= BENCH_SPAN_MIN_US (200 us)
 //                    inclusive; "watched" only the watched ones; 0 none
@@ -95,6 +97,7 @@
 #include <fcntl.h>
 #include <linux/perf_event.h>
 #include <malloc.h>
+#include <pthread.h>
 #include <sys/resource.h>
 #include <sys/syscall.h>
 #include <time.h>
@@ -145,6 +148,15 @@ qint64 threadCpuNs()
 {
     timespec ts;
     clock_gettime(CLOCK_THREAD_CPUTIME_ID, &ts);
+    return qint64(ts.tv_sec) * 1000000000LL + ts.tv_nsec;
+}
+/// The GUI thread's CPU clock (pthread_getcpuclockid), readable from any thread: the render
+/// thread reads it at a frame's sync, while the GUI thread waits for that sync.
+clockid_t g_guiCpuClock = CLOCK_THREAD_CPUTIME_ID;
+qint64 guiCpuNs()
+{
+    timespec ts;
+    clock_gettime(g_guiCpuClock, &ts);
     return qint64(ts.tv_sec) * 1000000000LL + ts.tv_nsec;
 }
 
@@ -219,6 +231,12 @@ struct Counters {
 Counters readCounters()
 {
     return {monoNs(), threadCpuNs(), g_insns.read()};
+}
+/// The GUI thread's counters from any thread (the instruction counter's file descriptors belong to
+/// the GUI thread's counters, whichever thread reads them).
+Counters readGuiCounters()
+{
+    return {monoNs(), guiCpuNs(), g_insns.read()};
 }
 
 // ---- file system calls on the GUI thread (interposed below, outside this namespace) ------------
@@ -587,6 +605,10 @@ struct Frame {
     qint64 sync = 0;
     qint64 synced = 0; ///< afterSynchronizing: the end of the sync (the GUI thread waits until then)
     qint64 swap = 0;
+    /// The GUI thread's CPU time and user-space instructions at the sync's start: its work up to
+    /// this frame (navigation → the frame showing the page: open-page's `*_frame_insns_M`).
+    qint64 guiCpu = 0;
+    qint64 guiInsns = 0;
 };
 
 struct Action {
@@ -609,6 +631,7 @@ public:
         m_row = envOr("BENCH_ROW", "10").toInt();
         m_idleMs = envOr("BENCH_IDLE_MS", "30000").toInt();
         m_scrollWait = envOr("BENCH_SCROLL_WAIT", "-1").toInt();
+        m_navDelay = envOr("BENCH_NAV_DELAY_MS", "0").toInt();
         m_resizeWidth = envOr("BENCH_RESIZE_WIDTH", "920").toInt();
         m_keep = qgetenv("BENCH_KEEP") == "1";
         m_waitKept = qgetenv("BENCH_WAIT_KEPT") == "1";
@@ -621,6 +644,8 @@ public:
         g_spans.skip[2] = &m_poll;
         // The constructor runs on the GUI thread (Q_COREAPP_STARTUP_FUNCTION): its counters.
         g_guiTid.store(currentTid());
+        if (pthread_getcpuclockid(pthread_self(), &g_guiCpuClock) != 0)
+            g_guiCpuClock = CLOCK_THREAD_CPUTIME_ID;
         g_insns.open();
         g_io = new std::vector<IoRec>();
         g_io->reserve(4096);
@@ -710,10 +735,17 @@ private:
         std::fputc('\n', m_out);
         std::fflush(m_out);
     }
-    void mark(const QString &name, qint64 t = 0, QJsonObject extra = {})
+    void mark(const QString &name, qint64 t = 0, QJsonObject extra = {}, const Counters *at = nullptr)
     {
         if (!t)
             t = monoNs();
+        // The GUI thread's counters (CPU ms, instructions in millions) now, or at `at` (a mark
+        // dated back: settled at the end of the last stall).
+        if (at || onGuiThread()) {
+            const Counters c = at ? *at : readCounters();
+            extra.insert(u"gcpu"_s, double(c.cpu) / 1e6);
+            extra.insert(u"gins"_s, double(c.insns) / 1e6);
+        }
         extra.insert(u"ev"_s, u"mark"_s);
         extra.insert(u"name"_s, name);
         extra.insert(u"t"_s, msOf(t));
@@ -742,8 +774,10 @@ private:
         connect(
                 w, &QQuickWindow::beforeSynchronizing, this,
                 [this] {
+                    const Counters gui = readGuiCounters();
                     std::lock_guard<std::mutex> lock(m_frameMutex);
-                    m_pendingSync = monoNs();
+                    m_pendingSync = gui.wall;
+                    m_pendingGui = gui;
                 },
                 Qt::DirectConnection);
         connect(
@@ -759,7 +793,8 @@ private:
                     const qint64 t = monoNs();
                     std::lock_guard<std::mutex> lock(m_frameMutex);
                     const qint64 sync = m_pendingSync ? m_pendingSync : t;
-                    m_frames.push_back({sync, m_pendingSynced >= sync ? m_pendingSynced : sync, t});
+                    m_frames.push_back({sync, m_pendingSynced >= sync ? m_pendingSynced : sync, t,
+                                        m_pendingSync ? m_pendingGui.cpu : 0, m_pendingSync ? m_pendingGui.insns : 0});
                     m_pendingSync = 0;
                     m_pendingSynced = 0;
                 },
@@ -778,8 +813,10 @@ private:
         if (gap > 12000000LL) { // > 12 ms between 4 ms ticks: the GUI thread was busy
             m_stalls.push_back({m_lastLag, t, c.cpu - m_lastLagCounters.cpu, c.insns - m_lastLagCounters.insns});
             // "Settled" ignores short ones (a frame's sync, preemption on a loaded machine).
-            if (gap > 24000000LL)
+            if (gap > 24000000LL) {
                 m_lastStallEnd = t;
+                m_lastStallEndCounters = c;
+            }
         }
         if (m_series)
             m_cpuSeries.push_back(c);
@@ -1013,6 +1050,7 @@ private:
     QList<Step> m_steps;
     int m_step = -1;
     qint64 m_stepStart = 0;
+    Counters m_stepStartCounters;
 
     QString currentStepName() const
     {
@@ -1055,7 +1093,8 @@ private:
                     const qint64 since = std::max(m_lastStallEnd, m_stepStart);
                     if (t - since < qint64(quietMs) * 1000000)
                         return false;
-                    mark(name, since, {{u"stepStart"_s, msOf(m_stepStart)}});
+                    const Counters at = since == m_lastStallEnd ? m_lastStallEndCounters : m_stepStartCounters;
+                    mark(name, since, {{u"stepStart"_s, msOf(m_stepStart)}}, &at);
                     return true;
                 },
                 maxMs);
@@ -1098,7 +1137,8 @@ private:
             if (m_step < 0 || m_step >= m_steps.size()) {
                 if (m_step < 0) {
                     m_step = 0;
-                    m_stepStart = monoNs();
+                    m_stepStartCounters = readCounters();
+                    m_stepStart = m_stepStartCounters.wall;
                     m_lastFalsePoll = 0;
                     if (!m_steps.isEmpty() && m_steps.at(0).enter)
                         m_steps.at(0).enter();
@@ -1119,7 +1159,8 @@ private:
                 return;
             }
             ++m_step;
-            m_stepStart = monoNs();
+            m_stepStartCounters = readCounters();
+            m_stepStart = m_stepStartCounters.wall;
             m_lastFalsePoll = 0;
             if (m_step < m_steps.size() && m_steps.at(m_step).enter)
                 m_steps.at(m_step).enter();
@@ -1136,13 +1177,20 @@ private:
         m_lag.stop();
         m_poll.stop();
         markMem(u"end"_s);
-        QJsonArray sync, synced, swap;
+        QJsonArray sync, synced, swap, gcpu, gins;
         for (const Frame &f : framesCopy()) {
             sync.append(msOf(f.sync));
             synced.append(msOf(f.synced));
             swap.append(msOf(f.swap));
+            gcpu.append(double(f.guiCpu) / 1e6);
+            gins.append(double(f.guiInsns) / 1e6);
         }
-        emitJson({{u"ev"_s, u"frames"_s}, {u"sync"_s, sync}, {u"synced"_s, synced}, {u"swap"_s, swap}});
+        emitJson({{u"ev"_s, u"frames"_s},
+                  {u"sync"_s, sync},
+                  {u"synced"_s, synced},
+                  {u"swap"_s, swap},
+                  {u"gcpu"_s, gcpu},
+                  {u"gins"_s, gins}});
         // [start ms, duration ms, GUI thread CPU ms, user-space instructions in millions]
         QJsonArray st;
         for (const Stall &s : m_stalls)
@@ -1921,6 +1969,13 @@ private:
         if (s == u"startup") {
             // nothing more
         } else if (s == u"open-page") {
+            // (BENCH_WAIT_KEPT=1: the views built ahead exist first — on a loaded machine they may
+            // still be built while the page opens, and their work lands in its numbers.)
+            waitKeptSteps();
+            if (m_navDelay > 0) {
+                action(u"nav_delay"_s, [this] { mark(u"nav_delay"_s); });
+                wait(m_navDelay);
+            }
             openPageSteps(m_page, u"1"_s);
             action(u"mem"_s, [this] { markMem(u"page:1"_s); });
             action(u"home"_s, [this] { navigate({{u"view"_s, u"journals"_s}}); });
@@ -1973,6 +2028,7 @@ private:
     int m_row = 10;
     int m_idleMs = 30000;
     int m_scrollWait = -1;
+    int m_navDelay = 0;
     bool m_keep = false;
     QStringList m_pages;
     int m_resizeBase = 1280;
@@ -1988,10 +2044,12 @@ private:
     std::vector<Frame> m_frames;
     qint64 m_pendingSync = 0;
     qint64 m_pendingSynced = 0;
+    Counters m_pendingGui; ///< the GUI thread's counters at m_pendingSync
 
     QTimer m_lag, m_poll;
     qint64 m_lastLag = 0;
     qint64 m_lastStallEnd = 0;
+    Counters m_lastStallEndCounters; ///< the GUI thread's counters at m_lastStallEnd
     qint64 m_lastFalsePoll = 0;
     struct Stall {
         qint64 start, end, cpu, insns;
