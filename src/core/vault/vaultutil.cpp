@@ -1,6 +1,7 @@
 #include "vault/vaultutil_p.h"
 
 #include "util/paths.h"
+#include "vault/filesync.h"
 #include "vault/vaultconfig.h"
 
 #include <QFile>
@@ -12,24 +13,30 @@
 #include <QThread>
 
 #include <algorithm>
+#include <atomic>
 #include <cerrno>
 #include <chrono>
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
 
-// fsync() of the C library: saveAtomicallyStamped() syncs its temporary file itself, so the
-// folder's entries change only by the creation of that file and the rename (QSaveFile syncs
-// inside commit(), right before its rename). A feature test, not a platform switch: without it
-// (MSVC's C library) the save is QSaveFile's.
-#if __has_include(<unistd.h>)
-#include <unistd.h>
-#define BRULION_VAULT_OWN_SYNC 1
-#endif
-
 using namespace Qt::StringLiterals;
 
 namespace brulion::vaultutil {
+
+namespace {
+std::atomic<FileSync> g_fileSync{nullptr};
+} // namespace
+
+void setFileSync(FileSync sync)
+{
+    g_fileSync.store(sync);
+}
+
+FileSync fileSync()
+{
+    return g_fileSync.load();
+}
 
 QString configFolder()
 {
@@ -150,7 +157,14 @@ StampedSave saveAtomicallyStamped(const QString &absolutePath, QByteArrayView by
                                   const std::function<void()> &beforeRename)
 {
     StampedSave out;
-#ifdef BRULION_VAULT_OWN_SYNC
+    const FileSync sync = fileSync();
+    if (!sync) {
+        // No sync of its own (filesync.h): QSaveFile's, without stamps.
+        if (beforeRename)
+            beforeRename();
+        out.ok = saveAtomically(absolutePath, bytes, &out.error);
+        return out;
+    }
     const QFileInfo target(absolutePath);
     const QString dir = target.absolutePath();
     out.before = fineMtime(dir);
@@ -176,7 +190,7 @@ StampedSave saveAtomicallyStamped(const QString &absolutePath, QByteArrayView by
         temp.setPermissions(target.permissions()); // (QSaveFile keeps them too)
     if (temp.write(bytes.data(), bytes.size()) != bytes.size() || !temp.flush())
         return failed(temp.errorString());
-    if (::fsync(temp.handle()) != 0)
+    if (!sync(temp))
         return failed(QString::fromLocal8Bit(std::strerror(errno)));
     out.fileMtime = fineMtime(temp.fileName());
     out.fileSize = temp.size();
@@ -194,11 +208,6 @@ StampedSave saveAtomicallyStamped(const QString &absolutePath, QByteArrayView by
     }
     out.after = fineMtime(dir);
     out.ok = true;
-#else
-    if (beforeRename)
-        beforeRename();
-    out.ok = saveAtomically(absolutePath, bytes, &out.error);
-#endif
     return out;
 }
 

@@ -2,7 +2,8 @@
 # trash, external-change detection (file system watcher + rescan), .brulion/config.json (or, without
 # it, the settings of an Obsidian vault's .obsidian/ folder); and the device-local History
 # (version snapshots) and LocalStore (JSON key/value store).
-# Public headers: vault.h (overview), history.h, localstore.h, vaultconfig.h, obsidiansettings.h.
+# Public headers: vault.h (overview), history.h, localstore.h, vaultconfig.h, obsidiansettings.h,
+# filesync.h (the platform's file sync for the vault's own writes).
 # Internal: vault_p.h (d-pointer), vaultutil_p.h (path helpers, logging category).
 brulion_add_core_module(vault
     SOURCES
@@ -11,5 +12,6 @@ brulion_add_core_module(vault
         obsidiansettings.h obsidiansettings.cpp
         history.h history.cpp
         localstore.h localstore.cpp
+        filesync.h
         vaultutil_p.h vaultutil.cpp
     DEPS util text log periodic)

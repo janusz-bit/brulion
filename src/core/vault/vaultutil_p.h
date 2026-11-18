@@ -86,8 +86,8 @@ struct StampedSave {
 /// saveAtomically() that writes the temporary file itself (`.brulion-tmp-…` in the same folder,
 /// the existing file's permissions), syncs it to the disk and only then renames it over the file,
 /// taking the folder's stamps around each step (StampedSave). `beforeRename` (tests) runs between
-/// the sync and the rename. Where the C library has no fsync() (MSVC) it is saveAtomically()
-/// without stamps.
+/// the sync and the rename. Without a file sync of its own (filesync.h: none set) it is
+/// saveAtomically() without stamps.
 StampedSave saveAtomicallyStamped(const QString &absolutePath, QByteArrayView bytes,
                                   const std::function<void()> &beforeRename = {});
 

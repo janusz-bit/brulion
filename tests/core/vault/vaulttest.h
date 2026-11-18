@@ -3,6 +3,7 @@
 // file system's timestamp granularity), a controllable clock and a vault fixture.
 #pragma once
 
+#include "filesync.h" // src/platform: the app's file sync for the vault's own writes
 #include "filesystemtraits.h"
 #include "vault/vault.h"
 
@@ -19,6 +20,9 @@
 
 #include <functional>
 #include <memory>
+
+// The vault's own writes sync their data as in the app (vault/filesync.h).
+inline const bool kVaultTestFileSync = (brulion::platform::installFileSync(), true);
 
 namespace vaulttest {
 
