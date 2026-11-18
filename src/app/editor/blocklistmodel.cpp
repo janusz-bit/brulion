@@ -5,6 +5,7 @@
 #include "markdown/taskdeps.h"
 
 #include "blockrender_p.h"
+#include "renderedtextitem.h"
 #include "editorhost.h"
 #include "queryhost.h"
 
@@ -50,6 +51,7 @@ const QList<int> TextRoles{Qt::DisplayRole,
                            BlockListModel::EditTextRole,
                            BlockListModel::EditOffsetRole,
                            BlockListModel::HtmlRole,
+                           BlockListModel::RenderedTextRole,
                            BlockListModel::DocDepthRole,
                            BlockListModel::KindRole,
                            BlockListModel::ViewRole,
@@ -268,9 +270,79 @@ QString shiftRangeLinks(const QString &html, qsizetype by)
     return out;
 }
 
+/// shiftRangeLinks() of traced HTML: the anchors follow the longer or shorter numbers.
+void shiftRangeLinks(markdown::TracedHtml &traced, qsizetype by)
+{
+    static const QRegularExpression link(u"href=\"(date|reminder|recur|prio|day):(\\d+)-(\\d+)\""_s);
+    QString out;
+    qsizetype last = 0;
+    QList<std::pair<qsizetype, qsizetype>> changes; // {end in the old HTML, growth}
+    for (auto it = link.globalMatch(traced.html); it.hasNext();) {
+        const QRegularExpressionMatch m = it.next();
+        out += QStringView(traced.html).sliced(last, m.capturedStart() - last);
+        const QString written = u"href=\""_s + m.captured(1) + u':' + QString::number(m.captured(2).toLongLong() + by)
+                                + u'-' + QString::number(m.captured(3).toLongLong() + by) + u'"';
+        out += written;
+        changes.append({m.capturedEnd(), written.size() - m.capturedLength()});
+        last = m.capturedEnd();
+    }
+    out += QStringView(traced.html).sliced(last);
+    traced.html = std::move(out);
+    const auto moved = [&](qsizetype at) {
+        qsizetype shift = 0;
+        for (const auto &[end, grown] : std::as_const(changes)) {
+            if (end <= at)
+                shift += grown;
+        }
+        return at + shift;
+    };
+    for (markdown::HtmlSourceAnchor &a : traced.anchors) {
+        a.htmlFrom = moved(a.htmlFrom);
+        a.htmlTo = moved(a.htmlTo);
+    }
+}
+
 } // namespace
 
 namespace detail {
+
+markdown::TracedHtml renderBodyTraced(const markdown::BlockEntry &e, const BlockShape &s,
+                                      const markdown::InlineRenderer &renderer, int *renderOffset)
+{
+    markdown::TracedHtml traced;
+    int offset = 0;
+    switch (s.view) {
+    case BlockView::Text:
+        if (!onlyEmbeds(e.body, true))
+            traced = e.kind == BlockKind::Paragraph ? renderer.renderBlockTraced(e.body, BlockKind::Paragraph)
+                                                    : renderer.renderTraced(e.body);
+        break;
+    case BlockView::Heading:
+        if (e.kind == BlockKind::Heading) {
+            traced = renderer.renderBlockTraced(e.body, BlockKind::Heading);
+        } else {
+            const QString rest = e.body.mid(s.editOffset);
+            const qsizetype nl = rest.indexOf(u'\n');
+            offset = s.editOffset;
+            traced.append(renderer.renderBlockTraced(nl < 0 ? rest : rest.left(nl), BlockKind::Heading), offset);
+            if (nl >= 0) {
+                markdown::TracedHtml more = renderer.renderBlockTraced(QStringView(rest).sliced(nl + 1), BlockKind::Paragraph);
+                shiftRangeLinks(more, nl + 1);
+                traced.append(u"<br/>");
+                traced.append(more, offset + nl + 1);
+            }
+        }
+        break;
+    case BlockView::Quote: traced = renderer.renderBlockTraced(e.body, BlockKind::Quote); break;
+    case BlockView::Callout: traced = renderer.renderBlockTraced(e.body, BlockKind::Callout); break;
+    case BlockView::Html: traced = renderer.renderBlockTraced(e.body, BlockKind::Html); break;
+    case BlockView::Math: traced.html = markdown::renderMath(s.editText, true); break;
+    default: break;
+    }
+    if (renderOffset)
+        *renderOffset = offset;
+    return traced;
+}
 
 QString renderBodyHtml(const markdown::BlockEntry &e, const BlockShape &s, const markdown::InlineRenderer &renderer,
                        int *renderOffset)
@@ -378,6 +450,7 @@ QHash<int, QByteArray> BlockListModel::roleNames() const
             {EditTextRole, "editText"},
             {EditOffsetRole, "editOffset"},
             {HtmlRole, "html"},
+            {RenderedTextRole, "renderedText"},
             {DepthRole, "depth"},
             {DocDepthRole, "docDepth"},
             {KindRole, "kind"},
@@ -933,7 +1006,7 @@ void BlockListModel::ContentChanges::emitTo(BlockListModel &model) const
     model.emitRowsChanged(calcRows, {CalcResultsRole});
     model.emitRowsChanged(tableRows, {TableDataRole});
     model.emitRowsChanged(chartRows, {ChartDataRole});
-    model.emitRowsChanged(htmlRows, {HtmlRole});
+    model.emitRowsChanged(htmlRows, {HtmlRole, RenderedTextRole});
     model.emitRowsChanged(transclusionRows, {TransclusionsRole});
 }
 
@@ -1583,7 +1656,24 @@ markdown::RenderContext BlockListModel::renderContextFor(const QString &path, co
     return ctx;
 }
 
-QString BlockListModel::renderHtml(int i) const
+std::shared_ptr<const markdown::RenderedText> BlockListModel::renderedTextAt(int i) const
+{
+    RowState &st = stateFor(m_doc.at(i).uid);
+    if (st.htmlValid && st.runs && st.runsHtml.isSharedWith(st.html))
+        return st.runs;
+    // Rendered again with the source anchors (the HTML is the same).
+    st.htmlValid = false;
+    markdown::TracedHtml traced;
+    renderHtml(i, &traced);
+    markdown::RenderedText runs = markdown::renderedTextFromHtml(traced.html, traced.anchors);
+    // The same text again keeps its object: a view sees no change.
+    if (!st.runs || *st.runs != runs)
+        st.runs = std::make_shared<const markdown::RenderedText>(std::move(runs));
+    st.runsHtml = st.html;
+    return st.runs;
+}
+
+QString BlockListModel::renderHtml(int i, markdown::TracedHtml *traced) const
 {
     const markdown::BlockEntry &e = m_doc.at(i);
     RowState &st = stateFor(e.uid);
@@ -1594,7 +1684,13 @@ QString BlockListModel::renderHtml(int i) const
     const Recording recording(*this, &st.htmlReads);
     const markdown::InlineRenderer renderer(renderContext(i));
     int offset = 0;
-    QString html = detail::renderBodyHtml(e, s, renderer, &offset);
+    QString html;
+    if (traced) {
+        *traced = detail::renderBodyTraced(e, s, renderer, &offset);
+        html = traced->html;
+    } else {
+        html = detail::renderBodyHtml(e, s, renderer, &offset);
+    }
     if (e.taskStatus) {
         // After the text: the subtask progress "3/5" and the clocked time (docs/UI.md).
         const markdown::SubtaskProgress progress = subtaskProgressAt(i);
@@ -1605,8 +1701,11 @@ QString BlockListModel::renderHtml(int i) const
                 markdown::taskChipsHtml(progress.done, progress.total, markdown::clockedSeconds(book.clocks),
                                         running ? running->start : QDateTime(), m_palette,
                                         m_english ? dates::UiLocale::English : dates::UiLocale::Polish);
-        if (!chips.isEmpty())
+        if (!chips.isEmpty()) {
             html += u' ' + chips;
+            if (traced)
+                traced->append(QString(u' ' + chips));
+        }
     }
     st.html = html;
     st.htmlValid = true;
@@ -1996,6 +2095,7 @@ QVariant BlockListModel::data(const QModelIndex &idx, int role) const
     case EditTextRole: return cachedShape(row).editText;
     case EditOffsetRole: return cachedShape(row).editOffset;
     case HtmlRole: return renderHtml(i);
+    case RenderedTextRole: return QVariant::fromValue(RenderedTextRef{renderedTextAt(i)});
     case DepthRole: return st.displayDepth;
     case DocDepthRole: return e.depth;
     case KindRole: return kindName(e.kind);
@@ -2321,7 +2421,7 @@ void BlockListModel::invalidateRendering()
     }
     if (!m_rows.isEmpty())
         Q_EMIT dataChanged(index(0), index(int(m_rows.size()) - 1),
-                           {HtmlRole, EmbedsRole, OnlyEmbedsRole, TransclusionsRole, PropertiesRole});
+                           {HtmlRole, RenderedTextRole, EmbedsRole, OnlyEmbedsRole, TransclusionsRole, PropertiesRole});
     emitRowsChanged(tableRows, {TableDataRole});
     emitRowsChanged(chartRows, {ChartDataRole});
 }
@@ -2415,7 +2515,7 @@ void BlockListModel::followIndex()
                 chartRows.append(row);
         }
     }
-    emitRowsChanged(htmlRows, {HtmlRole});
+    emitRowsChanged(htmlRows, {HtmlRole, RenderedTextRole});
     emitRowsChanged(embedRows, {EmbedsRole, OnlyEmbedsRole});
     emitRowsChanged(transclusionRows, {TransclusionsRole});
     emitRowsChanged(propertyRows, {PropertiesRole});

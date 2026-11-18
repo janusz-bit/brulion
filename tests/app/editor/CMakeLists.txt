@@ -356,3 +356,9 @@ brulion_add_test(tst_editor_tables
 brulion_add_test(tst_editor_indexrender
     SOURCES tst_editor_indexrender.cpp
     LIBS brulion_editor)
+# RenderedTextItem (Z10 stage A): a block's rendered text from RenderedText runs, compared with the
+# rich-text path (QTextDocument lines and baselines, RichTextPills' shapes), its layouts, links,
+# source positions, the cut after maximumLineCount lines, Polish text, emoji, a frame drawn.
+brulion_add_test(tst_editor_renderedtext
+    SOURCES tst_editor_renderedtext.cpp
+    LIBS brulion_editor brulion_core_markdown)

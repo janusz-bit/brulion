@@ -17,6 +17,8 @@
 //   Text { text: block.rowData.html }      TableView { data: block.rowData.tableData.rows }
 #pragma once
 
+#include "renderedtextitem.h"
+
 #include <QList>
 #include <QMetaProperty>
 #include <QObject>
@@ -31,6 +33,8 @@ class BlockRowData : public QObject {
     Q_OBJECT
     // The roles (BlockListModel's role names, docs in blocklistmodel.h).
     Q_PROPERTY(QString html READ html NOTIFY htmlChanged FINAL)
+    /// The html as RenderedText with its source map (RenderedTextItem; rendered only when read).
+    Q_PROPERTY(brulion::editor::RenderedTextRef renderedText READ renderedText NOTIFY renderedTextChanged FINAL)
     Q_PROPERTY(QString editText READ editText NOTIFY editTextChanged FINAL)
     Q_PROPERTY(QString lang READ lang NOTIFY langChanged FINAL)
     Q_PROPERTY(QString calloutType READ calloutType NOTIFY calloutTypeChanged FINAL)
@@ -46,6 +50,7 @@ public:
     explicit BlockRowData(QObject *parent = nullptr);
 
     QString html() const;
+    RenderedTextRef renderedText() const;
     QString editText() const;
     QString lang() const;
     QString calloutType() const;
@@ -59,6 +64,7 @@ public:
 
 Q_SIGNALS:
     void htmlChanged();
+    void renderedTextChanged();
     void editTextChanged();
     void langChanged();
     void calloutTypeChanged();
@@ -83,6 +89,7 @@ private:
         Query,
         Properties,
         PropertiesInfo,
+        RenderedText,
         RoleCount
     };
     /// The value of `role` on the delegate's model object (invalid without one); the first read
