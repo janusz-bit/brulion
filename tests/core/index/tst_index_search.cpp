@@ -480,6 +480,27 @@ private Q_SLOTS:
         QVERIFY(m_index.search(u"dom"_s, 0).isEmpty());
     }
 
+    void searchLineHoldsTheMostWords()
+    {
+        // The hit's line is the one with the most of the query's words (the first of those): the
+        // task asked for, not an earlier line with one common word of it.
+        VaultIndex index;
+        index.update(u"Dom.md"_s, u"# Dom\n\n- [x] Pomalować płot w ogrodzie\n- [ ] Umyć okna w kuchni\n"
+                                  u"- [ ] Wymienić filtr w okapie w kuchni 📅 2026-11-20\n- [ ] Wymienić filtr w odkurzaczu\n"_s);
+        QList<SearchHit> hits = index.search(u"wymienić filtr w okapie"_s);
+        QCOMPARE(hits.size(), 1);
+        QCOMPARE(hits.first().line, 4);
+        QVERIFY2(hits.first().excerpt.contains(u"okapie"_s), qPrintable(hits.first().excerpt));
+        // As many words in two lines: the first of them.
+        hits = index.search(u"filtr kuchni"_s);
+        QCOMPARE(hits.first().line, 4);
+        hits = index.search(u"wymienić filtr"_s);
+        QCOMPARE(hits.first().line, 4);
+        // One word: its first line, as before.
+        hits = index.search(u"kuchni"_s);
+        QCOMPARE(hits.first().line, 3);
+    }
+
     void searchExcerptForTitleOnlyMatch()
     {
         VaultIndex index;

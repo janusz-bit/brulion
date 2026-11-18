@@ -51,6 +51,21 @@ private Q_SLOTS:
         QTest::newRow("same status") << u"- [x] y ✅ 2026-11-04\n"_s << 0 << u"z"_s << u"X"_s << u"- [x] z ✅ 2026-11-04\n"_s;
         QTest::newRow("block id kept") << u"- a ^abc123\n"_s << 0 << u"b"_s << QString() << u"- b ^abc123\n"_s;
         QTest::newRow("own fields win") << u"- a ✅ 2026-11-04 ^abc\n"_s << 0 << u"b ✅ 2026-11-05"_s << QString() << u"- b ✅ 2026-11-05\n"_s;
+        // A date before a tag stays too: after the new text.
+        QTest::newRow("date before a tag") << u"- [ ] Zapłacić czynsz 📅 2026-11-13 #rachunki\n"_s << 0
+                                           << u"Zapłacić czynsz #rachunki"_s << u"x"_s
+                                           << u"- [x] Zapłacić czynsz #rachunki 📅 2026-11-13 ✅ 2026-11-11\n"_s;
+        QTest::newRow("dates around a tag") << u"- [ ] a ⏳ 2026-11-12 #dom 📅 2026-11-20 ^id-1\n"_s << 0 << u"b"_s << QString()
+                                            << u"- [ ] b ⏳ 2026-11-12 📅 2026-11-20 ^id-1\n"_s;
+        QTest::newRow("a due date's time") << u"- [ ] a 📅 2026-11-20 10:00 #dom\n"_s << 0 << u"b"_s << QString()
+                                           << u"- [ ] b 📅 2026-11-20 10:00\n"_s;
+        QTest::newRow("not a time") << u"- [ ] a 📅 2026-11-20 10:00:30\n"_s << 0 << u"b"_s << QString() << u"- [ ] b 📅 2026-11-20\n"_s;
+        QTest::newRow("a date in code is code") << u"- [ ] napisz `📅 2026-11-20` w notatce ✅ 2026-11-04\n"_s << 0
+                                                << u"inaczej"_s << QString() << u"- [ ] inaczej ✅ 2026-11-04\n"_s;
+        QTest::newRow("own field in code is none") << u"- [ ] a 📅 2026-11-20\n"_s << 0 << u"b `📅 2026-12-01`"_s << QString()
+                                                   << u"- [ ] b `📅 2026-12-01` 📅 2026-11-20\n"_s;
+        QTest::newRow("no text: the dates alone") << u"- [ ] a 📅 2026-11-20 #dom\n"_s << 0 << QString() << QString()
+                                                  << u"- [ ] 📅 2026-11-20\n"_s;
         QTest::newRow("plain becomes a task") << u"- a\n"_s << 0 << u"a"_s << u" "_s << u"- [ ] a\n"_s;
         QTest::newRow("logseq keyword") << u"- TODO a\n"_s << 0 << u"b"_s << u"x"_s << u"- DONE b ✅ 2026-11-11\n"_s;
         QTest::newRow("bom and last line") << u"﻿- a"_s << 0 << u"ż"_s << QString() << u"﻿- ż"_s;

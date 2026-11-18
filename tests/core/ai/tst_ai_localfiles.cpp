@@ -1,7 +1,8 @@
 // The files of the models on the device (src/core/ai/localfiles.h) against a small HTTP server on
 // 127.0.0.1: a download file after file, checked by SHA-256; one that broke off goes on from where
 // it stopped (an HTTP range) or from the start (a server without ranges); a damaged file is thrown
-// away; cancel and remove.
+// away; cancel and remove; models sharing a file, a folder of an older version (adopted once), the
+// free space a download needs.
 
 #include "ai/localfiles.h"
 
@@ -13,6 +14,7 @@
 #include <QFile>
 #include <QScopeGuard>
 #include <QSignalSpy>
+#include <QStorageInfo>
 #include <QTemporaryDir>
 #include <QTest>
 #include <QThread>
@@ -49,12 +51,15 @@ struct Fixture {
     QTemporaryDir dir;
     QByteArray modelBytes = bytesOf('m', 300 * 1000);
     QByteArray projectorBytes = bytesOf('p', 70 * 1000);
+    /// Large enough to take seconds when sent slowly (FileServer::slow: 4 KB in 2 ms at most).
+    QByteArray adapterBytes = bytesOf('a', 4 * 1000 * 1000);
     ai::LocalModel model;
 
     Fixture()
     {
         server.files.insert("/files/model.gguf", modelBytes);
         server.files.insert("/files/projector.gguf", projectorBytes);
+        server.files.insert("/files/adapter.gguf", adapterBytes);
         model.id = u"test"_s;
         model.name = u"Test"_s;
         model.format = u"lfm3"_s;
@@ -107,13 +112,13 @@ private Q_SLOTS:
         QCOMPARE(changed.size(), 1);
         QCOMPARE(files.downloading(), QString());
 
-        // Both files, whole, under their names; nothing else left.
+        // Both files, whole, under their names, and the model marked downloaded; nothing else left.
         QVERIFY(files.has(f.model));
         QCOMPARE(files.bytesHere(f.model), 370 * 1000);
         QCOMPARE(contentOf(files.pathOf(f.model.file)), f.modelBytes);
         QCOMPARE(contentOf(files.pathOf(f.model.projector)), f.projectorBytes);
         QCOMPARE(QDir(f.folder()).entryList(QDir::Files, QDir::Name),
-                 (QStringList{u"model.gguf"_s, u"projector.gguf"_s}));
+                 (QStringList{u"model.gguf"_s, u"projector.gguf"_s, u"test.downloaded"_s}));
         QCOMPARE(f.server.requests.size(), 2);
         QCOMPARE(f.server.requests[0].path, QByteArray("/files/model.gguf"));
         QCOMPARE(f.server.requests[0].range, QByteArray());
@@ -124,13 +129,201 @@ private Q_SLOTS:
         QVERIFY(again.value(1).toBool());
         QCOMPARE(f.server.requests.size(), 2);
 
-        // A model of one file (it reads text only) shares nothing with the other's files.
+        // A model of one file (it reads text only), that file the other's: whole, but not
+        // downloaded as this model until asked for — which takes no request.
         ai::LocalModel textOnly = f.model;
         textOnly.id = u"text"_s;
         textOnly.projector = {};
+        QVERIFY(!files.has(textOnly));
+        QVERIFY(run(files, textOnly).value(1).toBool());
+        QCOMPARE(f.server.requests.size(), 2);
         QVERIFY(files.has(textOnly));
         ai::LocalModel none;
         QVERIFY(!files.has(none));
+    }
+
+    void modelsShareAFile()
+    {
+        // The maker's model alone, and the same with an adapter over it (ai::LocalModel).
+        Fixture f;
+        ai::LocalModel plain = f.model;
+        plain.projector = {};
+        ai::LocalModel adapted = plain;
+        adapted.id = u"dostrojony"_s;
+        adapted.adapter = {u"adapter.gguf"_s, f.server.url(u"/files/adapter.gguf"_s), sha256(f.adapterBytes),
+                           f.adapterBytes.size()};
+        QCOMPARE(adapted.files().size(), 2);
+        QCOMPARE(adapted.bytes(), 300 * 1000 + 4 * 1000 * 1000);
+        const QList<ai::LocalModel> models{plain, adapted};
+        ai::LocalModelFiles files(f.folder());
+        QVERIFY(run(files, plain).value(1).toBool());
+        QVERIFY(!files.has(adapted));
+        QCOMPARE(files.bytesHere(adapted), 300 * 1000);
+        // The other one fetches only its own file.
+        QVERIFY(run(files, adapted).value(1).toBool());
+        QCOMPARE(f.server.requests.size(), 2);
+        QCOMPARE(f.server.requests[1].path, QByteArray("/files/adapter.gguf"));
+        QVERIFY(files.has(adapted));
+
+        // Either can go: the file both need stays while the other is here …
+        QVERIFY(files.remove(plain, models));
+        QVERIFY(!files.has(plain));
+        QVERIFY(files.has(adapted));
+        QCOMPARE(contentOf(files.pathOf(plain.file)), f.modelBytes);
+        // … and goes with the last one.
+        QVERIFY(files.remove(adapted, models));
+        QVERIFY(!files.has(adapted));
+        QVERIFY(QDir(f.folder()).entryList(QDir::Files).isEmpty());
+
+        // The other way round: the adapter goes, the model's own file stays.
+        QVERIFY(run(files, adapted).value(1).toBool());
+        QVERIFY(run(files, plain).value(1).toBool());
+        QVERIFY(files.remove(adapted, models));
+        QVERIFY(files.has(plain));
+        QCOMPARE(QDir(f.folder()).entryList(QDir::Files), (QStringList{u"model.gguf"_s, u"test.downloaded"_s}));
+        QVERIFY(files.remove(plain, models));
+
+        // Only the same file stays for another model, not one that has its name (another
+        // checksum: a different file — the models the app knows never have one, tst_ai_local).
+        QVERIFY(run(files, plain).value(1).toBool());
+        ai::LocalModel namesake = plain;
+        namesake.id = u"imiennik"_s;
+        namesake.file.sha256 = sha256("zupełnie inny plik");
+        QVERIFY(run(files, namesake).value(1).toBool()); // (a whole file is known by its size)
+        QVERIFY(files.has(namesake));
+        QVERIFY(files.remove(plain, {plain, namesake}));
+        QVERIFY(!QFile::exists(files.pathOf(plain.file)));
+        QVERIFY(!files.has(namesake));
+        QVERIFY(files.remove(namesake, {plain, namesake}));
+        QVERIFY(QDir(f.folder()).entryList(QDir::Files).isEmpty());
+
+        // A file of a model being downloaded stays too (it may be the one being written). The
+        // adapter takes seconds to arrive slowly: a moment within it is never missed.
+        QVERIFY(run(files, plain).value(1).toBool());
+        f.server.slow = true;
+        files.download(adapted);
+        QTRY_VERIFY_WITH_TIMEOUT(files.received() > 300 * 1000 + 4 * 1000, 20000);
+        QCOMPARE(files.downloading(), adapted.id);
+        QVERIFY(files.remove(plain, models));
+        QCOMPARE(files.downloading(), adapted.id);
+        QCOMPARE(contentOf(files.pathOf(plain.file)), f.modelBytes);
+        files.cancel();
+    }
+
+    void aFolderOfAnOlderVersion()
+    {
+        // Its models' files, whole, but none marked downloaded (older versions never did).
+        Fixture f;
+        QVERIFY(QDir().mkpath(f.folder()));
+        const QList<std::pair<QString, QByteArray>> written{{u"model.gguf"_s, f.modelBytes},
+                                                            {u"projector.gguf"_s, f.projectorBytes}};
+        for (const auto &[name, bytes] : written) {
+            QFile file(f.folder() + u'/' + name);
+            QVERIFY(file.open(QIODevice::WriteOnly));
+            file.write(bytes);
+        }
+        ai::LocalModel plain = f.model;
+        plain.id = u"zwykły"_s;
+        plain.projector = {};
+        ai::LocalModel missing = f.model;
+        missing.id = u"brak"_s;
+        missing.file = {u"inny.gguf"_s, f.server.url(u"/files/model.gguf"_s), sha256(f.modelBytes), f.modelBytes.size()};
+        ai::LocalModelFiles files(f.folder());
+        QVERIFY(!files.has(f.model));
+        files.adopt({f.model, plain, missing});
+        QVERIFY(files.has(f.model));
+        QVERIFY(files.has(plain));
+        QVERIFY(!files.has(missing));
+        QVERIFY(QFile::exists(f.folder() + u"/.adopted"_s));
+        // Once adopted, never again: one removed stays removed.
+        const QList<ai::LocalModel> models{f.model, plain, missing};
+        QVERIFY(files.remove(plain, models));
+        files.adopt(models);
+        QVERIFY(!files.has(plain));
+        QVERIFY(files.has(f.model));
+        QCOMPARE(f.server.requests.size(), 0);
+    }
+
+    void adoptedOnce()
+    {
+        // The maker's model and the same with an adapter over it: they share the model's file.
+        Fixture f;
+        ai::LocalModel plain = f.model;
+        plain.projector = {};
+        ai::LocalModel adapted = plain;
+        adapted.id = u"dostrojony"_s;
+        adapted.adapter = {u"adapter.gguf"_s, f.server.url(u"/files/adapter.gguf"_s), sha256(f.adapterBytes),
+                           f.adapterBytes.size()};
+        const QList<ai::LocalModel> models{plain, adapted};
+        const auto marked = [&] { return QDir(f.folder()).entryList({u"*.downloaded"_s}, QDir::Files); };
+
+        // A fresh install: nothing to adopt, the folder is adopted all the same …
+        {
+            ai::LocalModelFiles files(f.folder());
+            files.adopt(models);
+            QCOMPARE(QDir(f.folder()).entryList(QDir::Files | QDir::Hidden), QStringList{u".adopted"_s});
+            // … and the adapted model downloaded, the app gone before its adapter came: only the
+            // shared file is there.
+            f.server.files.remove("/files/adapter.gguf");
+            QVERIFY(!run(files, adapted).value(1).toBool());
+            QVERIFY(QFile::exists(files.pathOf(plain.file)));
+        }
+        // The next start takes that file for neither model.
+        {
+            ai::LocalModelFiles files(f.folder());
+            files.adopt(models);
+            QVERIFY(!files.has(plain));
+            QVERIFY(!files.has(adapted));
+            QVERIFY(marked().isEmpty());
+            // The maker's model downloaded (its file was there: nothing asked for); then removed
+            // while the adapted one downloads — its file stays for that one —, that download stopped.
+            QVERIFY(run(files, plain).value(1).toBool());
+            QVERIFY(files.has(plain));
+            f.server.files.insert("/files/adapter.gguf", f.adapterBytes);
+            files.download(adapted);
+            QCOMPARE(files.downloading(), adapted.id);
+            QVERIFY(files.remove(plain, models));
+            files.cancel();
+            QTRY_COMPARE(files.downloading(), QString());
+            QVERIFY(QFile::exists(files.pathOf(plain.file)));
+            QVERIFY(marked().isEmpty());
+        }
+        // The next start: the model removed stays removed, though its file is whole and nothing
+        // is marked (as in an older version's folder).
+        ai::LocalModelFiles files(f.folder());
+        files.adopt(models);
+        QVERIFY(!files.has(plain));
+        QVERIFY(!files.has(adapted));
+        QVERIFY(marked().isEmpty());
+    }
+
+    void nothingMissingNeedsNoSpace()
+    {
+        Fixture f;
+        ai::LocalModelFiles files(f.folder());
+        files.setSpareBytes(qint64(1) << 60); // more to leave free than any disk has
+        // Something to download: refused before anything is asked for.
+        QVERIFY(QDir().mkpath(f.folder()));
+        if (QStorageInfo(f.folder()).isValid()) {
+            const QVariantList refused = run(files, f.model);
+            QVERIFY(!refused.value(1).toBool());
+            QVERIFY2(refused.value(2).toString().contains(u"not enough free space"),
+                     qPrintable(refused.value(2).toString()));
+            QVERIFY(!files.has(f.model));
+        }
+        // Its files all there already (another model's, an older version's): only marked
+        // downloaded — no space is needed for that.
+        const QList<std::pair<QString, QByteArray>> written{{u"model.gguf"_s, f.modelBytes},
+                                                            {u"projector.gguf"_s, f.projectorBytes}};
+        for (const auto &[name, bytes] : written) {
+            QFile file(f.folder() + u'/' + name);
+            QVERIFY(file.open(QIODevice::WriteOnly));
+            file.write(bytes);
+        }
+        const QVariantList ended = run(files, f.model);
+        QVERIFY2(ended.value(1).toBool(), qPrintable(ended.value(2).toString()));
+        QVERIFY(files.has(f.model));
+        QVERIFY(f.server.requests.isEmpty());
     }
 
     void goesOnWhereItBrokeOff()
@@ -382,6 +575,13 @@ private Q_SLOTS:
         QCOMPARE(files.bytesHere(f.model), 0);
         QVERIFY(QDir(f.folder()).entryList(QDir::Files).isEmpty());
         QVERIFY(files.remove(f.model)); // nothing there: fine
+
+        // Nothing is being downloaded: a model without an id is not taken for the one that is.
+        QVERIFY(run(files, f.model).value(1).toBool());
+        ai::LocalModel nameless = f.model;
+        nameless.id.clear();
+        QVERIFY(files.remove(f.model, {f.model, nameless}));
+        QVERIFY(QDir(f.folder()).entryList(QDir::Files).isEmpty());
 
         // Removing while it downloads stops the download and takes its part too.
         f.server.slow = true;

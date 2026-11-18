@@ -51,7 +51,7 @@ A block is a list item, a paragraph or a heading. `b.blocks`, `b.search`, `b.que
 | `props` | its properties: `{ author = "Bolesław Prus" }` for a line `author:: Bolesław Prus` under it |
 | `children` | the blocks under it (from `b.blocks` and `ctx.block`) |
 | `ref` | where the block is. Give it to `b.replaceBlock` to change the block; it stops working when the line changes |
-| `line`, `excerpt` | from `b.search`: the line of the first match, counted from 1, and the text around it |
+| `line`, `excerpt` | from `b.search`: the line that matches best — the most of the words you searched for — counted from 1, and the text around it |
 | `due`, `scheduled`, `start`, `reminder` | from `b.query`: a task's dates and a reminder's time |
 
 ```luau
@@ -76,7 +76,7 @@ To change notes, the extension's page needs `permissions: [write]` in its proper
 | `b.write(name, text)` | makes the page, or replaces **all** of its text; `"Meetings/Budget"` makes the folder too |
 | `b.replaceBlock(ref, text, task)` | gives a block's first line the new text; with `task` (`"x"`, `" "`, `"/"`, `"-"`) it also sets the checkbox the way a click does (a finished task gets its date). Returns the block's new `ref` |
 
-`b.replaceBlock` keeps the bullet, the indentation and the dates at the end of the line. It **refuses** when the line has changed since your code read it — a sync arrived, you typed there — so nothing is ever written over a change the code did not see. The error has `stale` in it; read the block again.
+`b.replaceBlock` keeps the bullet, the indentation and the task's dates (wherever they stand on the line) unless the new text has dates of its own. It **refuses** when the line has changed since your code read it — a sync arrived, you typed there — so nothing is ever written over a change the code did not see. The error has `stale` in it; read the block again.
 
 ```luau
 b.command("done", function(ctx)

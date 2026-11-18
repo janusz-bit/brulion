@@ -20,10 +20,6 @@ QString logDirectory();
 /// (Linux 6.18), x86_64", "WebAssembly (wasm32)". No user or host names.
 QString deviceDescription();
 
-/// The device's memory in bytes (RAM; 0 when unknown — the browser): how much of a conversation
-/// the model on the device may hold at once (src/app/shell/localai.h).
-qint64 physicalMemoryBytes();
-
 /// The screen does not turn off by itself while `on` — Android: what the app does on screen only
 /// (a model on the device being downloaded or answering: src/app/shell/localai.h) would stop with
 /// it. Nothing elsewhere: a computer goes on working behind a dark screen.

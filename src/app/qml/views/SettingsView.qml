@@ -1425,9 +1425,12 @@ Item {
                     objectName: "aiLocalModelRow"
                     visible: aiGroup.local
                     title: qsTr("Model")
-                    description: AppController.localAi.modelSees
-                                 ? qsTr("%1 by %2 sees pictures — photos, scans, screenshots — and reads the text on them. It is the weaker one at working through a notebook step by step.").arg(AppController.localAi.modelName).arg(AppController.localAi.modelMaker)
-                                 : qsTr("%1 by %2 reads text only. It is the better one at searching the notebook and changing notes.").arg(AppController.localAi.modelName).arg(AppController.localAi.modelMaker)
+                    // (An adapted model: the model under it and its maker, who trained it further.)
+                    description: AppController.localAi.modelAdapted
+                                 ? qsTr("%1 is %2 by %3, trained further for Brulion's assistant: the best one at working through the notebook with the assistant. It answers at once, without thinking, and reads text only. It uses %2's file, with a small one of its own on top.").arg(AppController.localAi.modelName).arg(AppController.localAi.modelBase).arg(AppController.localAi.modelBaseMaker)
+                                 : AppController.localAi.modelSees
+                                   ? qsTr("%1 by %2 sees pictures — photos, scans, screenshots — and reads the text on them. It is the weakest of these models at working through a notebook step by step.").arg(AppController.localAi.modelName).arg(AppController.localAi.modelMaker)
+                                   : qsTr("%1 by %2 reads text only. It searches the notebook and changes notes better than a model that sees pictures, not as well as the one trained for Brulion's assistant.").arg(AppController.localAi.modelName).arg(AppController.localAi.modelMaker)
                     BSegmented {
                         objectName: "aiLocalModelSetting"
                         accessibleName: qsTr("Model")
@@ -1444,15 +1447,27 @@ Item {
                     ShellSettingRow {
                         Layout.fillWidth: true
                         title: qsTr("The model's files")
-                        description: AppController.localAi.modelHere
-                                     ? qsTr("On this device (%1). The model answers without the internet.").arg(AppController.localAi.modelSize)
-                                     : AppController.localAi.checking
-                                       ? qsTr("Checking the downloaded files…")
-                                       : AppController.localAi.downloading
-                                         ? qsTr("Downloading: %1. You can leave this page; a download that stops goes on from where it was.").arg(AppController.localAi.progressText)
-                                         : AppController.localAi.downloadError !== ""
-                                           ? qsTr("The download stopped (%1). Download again: it goes on from where it was.").arg(AppController.localAi.downloadError)
-                                           : qsTr("Not on this device yet: %1 to download from Hugging Face, best over Wi-Fi.").arg(AppController.localAi.modelSize)
+                        // (What is left to download when part of it is here — a file another model
+                        // shares, a download that stopped —, and with which models it shares one.)
+                        description: {
+                            const files = AppController.localAi.modelHere
+                                        ? qsTr("On this device (%1). The model answers without the internet.").arg(AppController.localAi.modelSize)
+                                        : AppController.localAi.checking
+                                          ? qsTr("Checking the downloaded files…")
+                                          : AppController.localAi.downloading
+                                            ? qsTr("Downloading: %1. You can leave this page; a download that stops goes on from where it was.").arg(AppController.localAi.progressText)
+                                            : AppController.localAi.downloadError !== ""
+                                              ? qsTr("The download stopped (%1). Download again: it goes on from where it was.").arg(AppController.localAi.downloadError)
+                                              : AppController.localAi.modelLeft === ""
+                                                ? qsTr("Its files are already on this device: nothing left to download.")
+                                                : AppController.localAi.modelLeft !== AppController.localAi.modelSize
+                                                  ? qsTr("Partly on this device: %1 of %2 left to download from Hugging Face, best over Wi-Fi.").arg(AppController.localAi.modelLeft).arg(AppController.localAi.modelSize)
+                                                  : qsTr("Not on this device yet: %1 to download from Hugging Face, best over Wi-Fi.").arg(AppController.localAi.modelSize)
+                            const shared = AppController.localAi.modelSharesWith
+                            if (shared === "")
+                                return files
+                            return files + "\n" + qsTr("Shares a file with %1: it is downloaded once and kept while either of them is on this device.").arg(shared)
+                        }
                         BButton {
                             objectName: "aiLocalDownload"
                             visible: !AppController.localAi.modelHere && !AppController.localAi.downloading
@@ -1491,7 +1506,10 @@ Item {
                     objectName: "aiLocalLicense"
                     visible: aiGroup.local
                     title: qsTr("Whose model")
-                    description: qsTr("%1 made it and gives it under its own licence (%2), not Brulion's. Brulion only downloads it when you ask.").arg(AppController.localAi.modelMaker).arg(AppController.localAi.modelLicense)
+                    // (An adapted model is its maker's model still, under its licence — not made by them.)
+                    description: AppController.localAi.modelAdapted
+                                 ? qsTr("%1 made %2 and gives it under its own licence (%3), not Brulion's. Brulion trained it further for its assistant, under the same licence; %1 neither made nor endorses this version. Brulion only downloads it when you ask.").arg(AppController.localAi.modelBaseMaker).arg(AppController.localAi.modelBase).arg(AppController.localAi.modelLicense)
+                                 : qsTr("%1 made it and gives it under its own licence (%2), not Brulion's. Brulion only downloads it when you ask.").arg(AppController.localAi.modelMaker).arg(AppController.localAi.modelLicense)
                     BButton {
                         size: "small"
                         variant: "ghost"

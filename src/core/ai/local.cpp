@@ -27,7 +27,8 @@ QList<LocalModel> knownModels()
 {
     const QString license = u"LFM Open License v1.0"_s;
 
-    // Sees pictures: the language model (4-bit, trained for that precision) and its projector.
+    // Sees pictures: the language model (4-bit, trained for that precision) and its projector — the
+    // weakest of them at working through a notebook.
     LocalModel vision;
     vision.id = u"lfm3-vl-2b"_s;
     vision.name = u"LFM3-VL 2B"_s;
@@ -44,7 +45,7 @@ QList<LocalModel> knownModels()
     vision.licenseUrl = QUrl(u"https://huggingface.co/LiquidAI/LFM3-VL-2B-GGUF/blob/%1/LICENSE"_s.arg(visionRevision));
     vision.pageUrl = QUrl(u"https://huggingface.co/LiquidAI/LFM3-VL-2B"_s);
 
-    // Text only: the better one at working through a notebook with tools.
+    // Text only: better than the vision model at working through a notebook with tools.
     LocalModel text;
     text.id = u"lfm3-1.7b"_s;
     text.name = u"LFM3 1.7B"_s;
@@ -58,7 +59,31 @@ QList<LocalModel> knownModels()
     text.licenseUrl = QUrl(u"https://huggingface.co/LiquidAI/LFM3-1.7B-GGUF/blob/%1/LICENSE"_s.arg(textRevision));
     text.pageUrl = QUrl(u"https://huggingface.co/LiquidAI/LFM3-1.7B"_s);
 
-    return {vision, text};
+    // The text model trained further for the built-in assistant, without thinking (SFT, then
+    // GRPO: docs/FINETUNE.md): a LoRA adapter over the text model's very file — downloaded once
+    // for both. The best of them with the assistant, so the default (first). Liquid AI's model under its licence still (a Derivative Work), not made by them.
+    // Brulion's own repository on Hugging Face (docs/FINETUNE.md "Publishing"), pinned the same
+    // way: one revision for the adapter and the LICENSE beside it.
+    const QString assistantRepository = u"https://huggingface.co/janusz-bit/brulion-assistant-1.7b"_s;
+    const QString assistantRevision = u"4764e842038721cc7cc52cda67e9feff6474baa6"_s;
+    LocalModel assistant;
+    assistant.id = u"brulion-assistant-1.7b"_s;
+    assistant.name = u"Brulion Assistant 1.7B"_s;
+    assistant.label = u"Brulion"_s; // (the three names side by side would not fit a phone of 360 px)
+    assistant.maker = u"Brulion"_s;
+    assistant.baseName = text.name;
+    assistant.baseMaker = text.maker;
+    assistant.format = text.format;
+    assistant.file = text.file;
+    const QString adapter = u"brulion-assistant-1.7b-lora.gguf"_s;
+    assistant.adapter = {adapter, QUrl(u"%1/resolve/%2/%3"_s.arg(assistantRepository, assistantRevision, adapter)),
+                         "abd6fff7106c375c6f1d28927f3e77c96be36f09211a58585d755e7d5777b452", 96654336};
+    assistant.license = license;
+    assistant.licenseUrl = QUrl(u"%1/blob/%2/LICENSE"_s.arg(assistantRepository, assistantRevision));
+    assistant.pageUrl = QUrl(assistantRepository);
+    assistant.thinks = false; // (trained to answer at once)
+
+    return {assistant, text, vision};
 }
 
 } // namespace

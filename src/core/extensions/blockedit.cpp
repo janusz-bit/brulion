@@ -20,12 +20,63 @@ const QRegularExpression &linePattern()
     return re;
 }
 
-// Obsidian Tasks' date fields and a block id at the end of a block's text
-const QRegularExpression &tailPattern()
+// An Obsidian Tasks date field — a due, scheduled or start date with an optional time — and the
+// spaces before it
+const QRegularExpression &datePattern()
 {
     static const QRegularExpression re(
-        uR"(((?:[ \t]+(?:✅|❌|➕|📅|⏳|🛫)\x{FE0F}?[ \t]*\d{4}-\d{2}-\d{2})*)([ \t]+\^[A-Za-z0-9-]+)?[ \t]*$)"_s);
+        uR"([ \t]*(?:(?:✅|❌|➕)\x{FE0F}?[ \t]*\d{4}-\d{2}-\d{2}|(?:📅|⏳|🛫)\x{FE0F}?[ \t]*\d{4}-\d{2}-\d{2}(?:[ \t]+\d{1,2}:\d{2})?)(?![\d:]))"_s);
     return re;
+}
+
+// A block id ending a block's text, the spaces before it
+const QRegularExpression &idPattern()
+{
+    static const QRegularExpression re(uR"(([ \t]+\^[A-Za-z0-9-]+)[ \t]*$)"_s);
+    return re;
+}
+
+// `text` with what its code spans hold blanked out (the same length): a field there is code.
+QString withoutCode(const QString &text)
+{
+    QString out = text;
+    qsizetype i = 0;
+    while (i < out.size()) {
+        if (out[i] != u'`') {
+            ++i;
+            continue;
+        }
+        qsizetype ticks = 0;
+        while (i + ticks < out.size() && out[i + ticks] == u'`')
+            ++ticks;
+        const QString fence(ticks, u'`');
+        const qsizetype close = out.indexOf(fence, i + ticks);
+        if (close < 0)
+            break; // no closing run: plain text from here on
+        for (qsizetype k = i + ticks; k < close; ++k)
+            out[k] = u' ';
+        i = close + ticks;
+    }
+    return out;
+}
+
+// The date fields of `text` wherever they stand (outside code) and its block id, in their order,
+// each with the spaces before it: what the new text of the block keeps.
+QString keptFields(const QString &text)
+{
+    const QString plain = withoutCode(text);
+    QString kept;
+    for (auto it = datePattern().globalMatch(plain); it.hasNext();) {
+        const QRegularExpressionMatch m = it.next();
+        QString field = text.mid(m.capturedStart(0), m.capturedLength(0));
+        if (!field.front().isSpace())
+            field.prepend(u' ');
+        kept += field;
+    }
+    const QRegularExpressionMatch id = idPattern().match(plain);
+    if (id.hasMatch())
+        kept += text.mid(id.capturedStart(1), id.capturedLength(1));
+    return kept;
 }
 
 const QRegularExpression &fieldPattern()
@@ -82,9 +133,10 @@ std::optional<QString> replaceBlockText(const QString &content, int line, const 
     const QString oldText = old.mid(start);
 
     QString newText = text.trimmed();
-    const QRegularExpressionMatch tail = tailPattern().match(oldText);
-    if (tail.hasMatch() && tail.capturedLength(0) > 0 && !fieldPattern().match(newText).hasMatch())
-        newText += tail.captured(1) + tail.captured(2);
+    if (!fieldPattern().match(withoutCode(newText)).hasMatch()) {
+        const QString kept = keptFields(oldText);
+        newText += newText.isEmpty() ? kept.trimmed() : kept;
+    }
     lines[line].text = old.left(start) + newText;
     QString result = text::joinLines(lines);
 

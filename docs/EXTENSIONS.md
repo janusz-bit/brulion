@@ -166,7 +166,7 @@ Reading needs no permission.
 | `b.read(name)` | the page's whole Markdown text, or `nil` |
 | `b.blocks({ page = name })` | the page's top-level blocks in order, each with its `children`: list items, but also headings (`text` is `# Home`, with its hashes), paragraphs, code blocks (the fence line) and the frontmatter (`---`, its `props` the page's). `{}` for a page that does not exist |
 | `b.blocks({ tag = "workout", journal = true, from = "2026-11-01", to = "2026-11-30" })` | every block that carries the tag itself (not through its parent or its page), each with its `children`: first those of ordinary pages (by path), then those of daily notes, oldest day first. `journal = true` — or a `from` / `to` day, both optional and inclusive — keeps daily notes only; a `from` or `to` that is no day (`"2026-11-31"`) is an error. At most 20 000 blocks |
-| `b.search(text, limit?)` | full-text search as the search view does it (words in any form, diacritics optional, the best first): one hit per page, at most `limit` (20 by default, 200 at most), each `{ page, date?, excerpt, line?, ref?, text?, task? }` — `line` the first matching line, counted from 1 (none when only the title matched), `ref` / `text` / `task` of the block holding that line |
+| `b.search(text, limit?)` | full-text search as the search view does it (words in any form, diacritics optional, the best first): one hit per page, at most `limit` (20 by default, 200 at most), each `{ page, date?, excerpt, line?, ref?, text?, task? }` — `line` the line that matches best (the most of the query's words; the first of those lines), counted from 1 (none when only the title matched), `ref` / `text` / `task` of the block holding that line |
 | `b.query(source, limit?)` | a query of the query language (docs/SYNTAX.md §10): `{ total, items }` with at most `limit` items (50 by default, 1000 at most; a smaller `limit:` in the query wins). Items are blocks without `children`, plus a task's `due`, `scheduled`, `start` and a reminder's `reminder` (`"2026-11-12 09:00"`); for `type:pages` they are `{ page, date? }`. A query that is none is an error with the reason |
 | `b.checkExtension(name, text)` | loads `text` as the extension page `name` would load (a new page: where new pages go), in an engine of its own — its top-level code runs with 1 s and 32 MB, writes only computed, nothing stays registered, no approval needed: `{ ok, id, title, path, permissions, problems, commands = { { name, label, block } }, views = { { name, label, icon, actions } }, hooks = { events… }, printed, writes? }`, or `ok = false` with `error`, `line` (the page's line, from 1) and `status` (`"timeout"` …). Text that is no extension page (no tag, no code) has `ok = false` too. Inside such a check it reports an error instead of checking again |
 
@@ -228,7 +228,7 @@ line stays byte for byte, the index, the views and a sync follow.
 |---|---|
 | `b.write(name, content)` | replaces the page's whole text, or creates the page where new pages go (`"Meetings/Budget"` makes the folder). Returns `true`. Read first what you do not want to lose |
 | `b.appendToJournal(date, markdown)` | adds `markdown` as written — start an item with `- ` — at the end of that day's note. A missing note is created from the journal template; a template's empty last bullet is filled instead of left above |
-| `b.replaceBlock(ref, text, task?)` | gives the block's first line the new `text` (one line): its indentation and list marker stay, and so do the Obsidian Tasks dates (`✅ ❌ ➕ 📅 ⏳ 🛫`) and the block id at its end unless `text` brings its own. `task` — one character, as a block's `task` — sets the checkbox as the editor does (`"x"` adds `✅` with today's date; a plain line becomes a task). Returns the block's new `ref` |
+| `b.replaceBlock(ref, text, task?)` | gives the block's first line the new `text` (one line): its indentation and list marker stay, and so do the Obsidian Tasks dates (`✅ ❌ ➕ 📅 ⏳ 🛫`, a date's time too) wherever they stand — before a tag as well, not in code — and the block id at its end, unless `text` brings its own: they go after the new text, in their order. `task` — one character, as a block's `task` — sets the checkbox as the editor does (`"x"` adds `✅` with today's date; a plain line becomes a task). Returns the block's new `ref` |
 
 `b.replaceBlock` never writes over what it did not see: when the line changed since `ref` was read —
 a sync arrived, another pane edited it — the call is an error with `stale:` in it and nothing is
@@ -587,23 +587,47 @@ end, { label = "Ask my notes (AI)" })
   the notebook); the model; the address; **Check** ("Say OK."). In the browser the key is in the
   site's storage, and Anthropic's API is told the request comes from a page.
 * **On this device**: a small model that runs inside the app — no key, no account, no network once
-  its files are there, nothing sent anywhere. Two models by Liquid AI, chosen in the settings:
-  **LFM3-VL 2B** (the default: it sees pictures; 1.2 GB) and **LFM3 1.7B** (text only, the better
-  one at working through a notebook with tools; 1.0 GB). Settings downloads the chosen one from
+  its files are there, nothing sent anywhere. Three models, chosen in the settings: **Brulion
+  Assistant 1.7B** (the default; `brulion-assistant-1.7b`, `janusz-bit/brulion-assistant-1.7b` on
+  Hugging Face): LFM3 1.7B trained further for the built-in assistant (docs/FINETUNE.md), the best
+  of the three at working through the notebook with it — it answers at once, without thinking,
+  and reads text only; an adapter of 92 MB over LFM3 1.7B's file (below) —, and two by Liquid AI,
+  **LFM3 1.7B** (text only, better than the next at working through a notebook with tools; 1.0 GB)
+  and **LFM3-VL 2B** (it sees pictures; 1.2 GB). LFM3-VL 2B was the default before: a device that
+  never chose a model and has its files (and not the default's) keeps it — AppController stores
+  it as chosen (`LocalAi::keptChoice()`), so an update does not swap the model it uses for one
+  still to download. Settings downloads the chosen one from
   Hugging Face into `<app data>/models` — one pinned revision, each file checked against its
   SHA-256; a download that breaks off goes on from where it stopped — and removes it. The files
   come over HTTP/1.1 with 4 MB read ahead: what the server sends while the app stands still (an
   Android app off the screen) waits there, not in the app's memory. The models
-  are their maker's, under the LFM Open License v1.0 (not a free-software licence; the app ships
-  none of them). They are slower and far less able than Claude: fine for a summary, a question
-  about a note, reading a photographed receipt; unreliable for long chains of tool calls.
+  are Liquid AI's, under the LFM Open License v1.0 (not a free-software licence; the app ships
+  none of them) — Brulion Assistant 1.7B too: LFM3 1.7B changed by Brulion's training, under the
+  same licence, neither made nor endorsed by Liquid AI (its `maker` is Brulion, its `baseName` and
+  `baseMaker` LFM3 1.7B and Liquid AI; Settings' **Whose model** says so). They are slower and far
+  less able than Claude: fine for a summary, a question about a note, reading a photographed
+  receipt; unreliable for long chains of tool calls.
+  * A model may be another one adapted to the app: a LoRA adapter (`LocalModel::adapter`, a GGUF
+    of some tens of MB) that the runner adds to the weights of its maker's 4-bit file as it
+    computes. The file stays as it is: its weights were trained for that precision and lie on its
+    grid, so the adapter merged into them and rounded to 4 bits again would lose most of what was
+    learnt. The adapted model and its maker's own share that file, downloaded once (Brulion
+    Assistant 1.7B and LFM3 1.7B: LFM3-1.7B-QAD-Q4_0.gguf). A model is on the device when its
+    download finished — `<id>.downloaded` in the folder; in a folder of an older version, which
+    marked nothing, every model whose files are all there is marked so, once (`.adopted` then
+    says it was done: a model removed later stays removed) — and removing one
+    keeps a file the other needs. Settings says so under the model's files ("Shares a file with
+    …", `LocalAi::modelSharesWith`) and, while part of a model is on the device already — a
+    shared file, a download that stopped —, how much is left to download of the whole
+    (`modelLeft`). A model trained to answer at once (`LocalModel::thinks` false: Brulion
+    Assistant 1.7B) never thinks: every request it gets is taken as one of `effort = "low"`.
   * The model is loaded the first time it is asked (some seconds) and leaves memory after ten
     minutes without a request. While loaded it takes some 1.3 GB of the app's own memory, and
     its file's 1 GB stays mapped until the system wants that memory back (docs/PERFORMANCE.md
     "The model on the device"). Requests are answered one after another, on a thread of their
     own.
-  * It holds 16 384 tokens at once on a device with 7 GB of memory or more, 8 192 from 5 GB,
-    4 096 below — the request and the answer together. A request that does not fit is cut rather
+  * It holds 16 384 tokens at once on every device (`LocalAi::ContextTokens`; some 200 MB of
+    memory) — the request and the answer together. A request that does not fit is cut rather
     than refused: its longest texts first, a tool's result at its end and a message in its middle
     (its start and its question stay), each marked `[… cut: the model on this device cannot read
     more at once …]`; only a request whose system text and tools alone are too long is an error.
@@ -626,7 +650,7 @@ end, { label = "Ask my notes (AI)" })
     it as it comes. A request stopped (`stopped`, the chat's Stop) ends its writing at the next
     token; one still waiting is never started.
   * How fast it is on a device is in the event log (`brulion.ai.local`): `lfm3-vl-2b opened:
-    8192 tokens at once, ggml-cpu-alderlake, 6 threads on cores 0,2,4,6,8,10, in 1.42 s` — the
+    16384 tokens at once, ggml-cpu-alderlake, 6 threads on cores 0,2,4,6,8,10, in 1.42 s` — the
     processor plugin taken, its threads and their cores (on Android also that they spin:
     `ggml-cpu-android_armv8.6_1, 4 threads on cores 4-7, spinning`) and the time the files took to load —, and of every answer `answered: 1520 tokens read
     in 0.61 s (1400 kept from before, 0 from the disk), 85 written in 1.90 s, shown from 0.62 s,
@@ -662,25 +686,120 @@ AI, off by default) is an agent that the **AI chat** talks to (docs/UI.md "AI ch
 conversation is a page in `AI/` (docs/SYNTAX.md §14), and every message sent there runs one turn,
 its command `chat` (`palette = false`: the palette does not offer it; run by hand it says to use
 the chat). The app gives it the conversation's messages (`ctx.messages`, the user's last) and the
-page it is about (`ctx.page`); today's date and that page's text (at most 30 000 characters, read
-again each turn) go before the first message — not into the system text, which stays the same from
-day to day, so that a model on the device keeps what it read of it —; what the command returns is
+page it is about (`ctx.page`); today's date with its weekday ("Today is Wednesday, 2026-11-11.",
+in the notes' language — not a calendar of the days after it: a small model took those dates for
+what the user said, and wrote them into the journal) and that page's text (at most
+30 000 characters, read again each turn) go before the first message — not into the system text,
+which stays the same from day to day, so that a model on the device keeps what it read of it —;
+what the command returns is
 the AI's message, which the app writes into the conversation. The conversation's own page
 (`ctx.conversation`) is none of its tools' finds — not in a search, a query or the list of
 pages, nor the day's line that only links to it, and reading it is refused: it holds the question
 word for word, and a small model read it instead of the notes (on a phone that cost minutes).
 Twelve tools —
-`search_notes` (`b.search`), `query_notes` (`b.query`, the query language described in the tool's
-description), `list_pages`, `read_page`, the changes `append_to_journal`, `append_to_page`,
-`write_page`, `update_block` (`b.replaceBlock`: a task's status too), `look_at_picture` (a picture
+`search_notes` (`b.search`, which gives one line of a page, its best — on a person's page the line
+"Vet", not the phone under it, and a small model made a number up: so under each of the first five
+hits more of its page, as long as it fits in 3 000 bytes for all of them — a short page, at most
+600 bytes and 12 lines with text, whole without its frontmatter and title (a person's page, a day
+with both of its runs); of a longer one, by their numbers, the three lines after the hit's up to a
+blank line or a heading (a heading's: the first three of its section) and three other lines with
+the most of the search's words, in any form (not words of one or two letters, nor "what", "jaki"
+and the like), a child with its parent above it; only the first 400 lines and 32 000 bytes of a
+page are looked through. Tasks there are words, as in a query's result ("- done task: …"); a line
+that links to the conversation is never shown, and a hit on one — today's journal links to the
+conversation, whose name holds the question's words — becomes the day's best other line with the
+search's words), `query_notes`
+(`b.query`, the query language described in the tool's description, which starts with the queries
+of the usual questions — overdue, due this week, in progress, unfinished, done this week or in the
+last 7 days, with a tag — and says that `open` is unfinished; its result repeats the query and gives
+a task's status as a word, "open task", "task in progress", so that a small model trusts what it
+got. A page filter as a small model writes it is read as it was meant, and the result says so in
+its first line: `page:"#home"` as `tag:home`, `page:"Dom."` with the user's full stop as
+`page:"Dom"`, the name of no page but of a tag in use as that tag (not in a quoted phrase),
+`tag:#auto` as `tag:auto`; a page
+asked for that does not exist is "No page named …" with the pages of a close name, or else some of
+the notebook's, before "Nothing matches" — never a day of the journal (a day that is not there: "the
+journal has no note of that day") nor a conversation with the AI (a page in `AI/`). A query that
+fails or finds nothing as written is read once more as a small model meant it — what a right query
+finds never changes —, and when that reading finds something, its result says what was read
+otherwise: a filter the language does not have is its words (`task:"Chłopi"`, `words:`, `word:`,
+`query:`, `name:`, `title:`, `słowa:` → `"Chłopi"`; a bare `task:` is left out, `task:tasks` is
+`type:tasks`), the label of a description's example copied before the query is left out ("in
+progress: type:tasks status:doing"), so are `OR` / `AND` between its terms (every filter and word
+must hold), a filter given twice once, a tag of joined words that no note has is those words
+(`tag:umówić-przegląd-pieca` → `"umówić przegląd pieca"`), the description's placeholder `tag:name`
+is left out, and a `?`, a full stop or brackets stuck to a token go; when it finds nothing either,
+the result is the query's as written (its error, "Nothing matches")), `list_pages`,
+`read_page`, the changes `append_to_journal` (not a line that starts with the words of a task this
+question changed with `update_block` — a small model ticked a task off, then wrote it into the day's
+journal too, "- [x] Kupić prezent dla mamy (odhaczono)", the user's "Już to zrobiłem" read as
+something done for the journal: refused before the user is asked, "Not added: this is the task
+changed above in [[Dom]] …", unless the user's message speaks of the journal), `append_to_page` (to a page that exists, named as in a
+link, with `.md` or not: one that does not is refused before the user is asked, with the pages to
+offer — a small model added a book "to the reading list" as a new page named after it —, and to add
+to one of them when the user meant it, otherwise to ask which page (not a new page with `write_page`:
+a small model then made a page of a task it was to move); so are a day, which is
+`append_to_journal`'s, and a conversation with the AI),
+`write_page`, `update_block`
+(`b.replaceBlock`: a task's status too — without a text only the status changes, and a text written
+with its marker and checkbox, `- [x] …`, sets the status; a change that changes nothing — a task
+ticked off again, its own words again, its dates left out — is refused before the user is asked,
+with what the call left out: "Not changed: the line already reads "[x] …" (done task), the status
+given. Tell the user it is so already." for a task ticked off again, but for a call with no status
+and the line's own text "… the call gives no status, and its text is the line's own … To change the
+task, give what changes: its status (todo, doing, done, cancelled), or its text with the new date"
+— a small model that forgot the date of a move was told "it is so already" and said so — and for a
+task opened again, "if that status is all the user asked for…; to move the task, give its text with
+the new date"; but on a line this question changed — on the ref its change gave, which is not the
+one it had — such a call is the change made: "This change was made already, by the same call above
+(Changed; its ref is now …)." for the same change again, "This line was changed already, by your
+call above (…): it reads "[x] …" now. Do not change it again: tell the user what you did." for its
+status or text again — a small model ticked a task off, called it again on its new ref, was told
+"it is so already" and told the user nothing needed changing), `look_at_picture` (a picture
 of the notebook — a photo, a scan, a screenshot — with a question about it: a request of its own
 with the picture, `b.ai`'s `images`, whose answer is the tool's result as text; a model that sees
 is needed), and for writing an extension
 `extension_reference` (this document, `b.data("reference")`: the list of its sections, or the
 sections whose heading has the words asked for), `check_extension` (`b.checkExtension`) and
 `write_extension` (checked first and refused while it does not load or when the page is no
-extension; a new page goes to `Rozszerzenia/` / `Extensions/`). The model calls them as it needs,
-at most sixteen turns, each result at most 12 000 characters (the reference 40 000); before each
+extension; a new page goes to `Rozszerzenia/` / `Extensions/`). A reminder asked for and written as a
+due date with a time goes in as the reminder (docs/SYNTAX.md §6; a due date rings nothing, and a
+small model wrote reminders so): when the user's message asks for one ("przypomnij", "przypomnienie",
+"remind"), not for none ("nie przypominaj", "don't remind"), and names no due date ("termin", "due",
+"deadline", 📅), a change of `append_to_journal`, `append_to_page` or `update_block` with no `⏰` of
+its own writes `📅 2026-11-12 8:30` as `⏰ 2026-11-12 08:30` — in what the user approves too; a
+task's line keeps its due date — and its result says so ("The time went in as a reminder, ⏰ …: 📅
+is a due date and rings no alarm."); the same change written again as a reminder is the change made
+already (a fine-tuned model wrote the line a second time so). Its system text is a list of rules, after the
+notes' syntax: search before answering about the notes and answer once a result does; answer only
+from what the tools gave, a result of the kind asked for under another name too; ask back when the request does not say what it is about; answer general
+questions without tools; a request to add or change ("remind me…", "tick off…") makes the change,
+searching only for what it changes; which tool for which change (a page the user names, the day's
+journal, a task's status by its ref); never say a change is made before its result. The model calls them as it needs,
+at most sixteen turns, each result at most 12 000 characters (the reference 40 000); a reading
+tool called again with the same input is not run again — its result says it is the same call as
+before and to answer or try something else (a small model asks the same in circles until its turns
+are up; a change makes every read new) —, a change made is not made again by the same call (the
+same tool and the same change, however written: a page as `[[Zakupy]]` or `Zakupy.md`, today's
+journal with or without its date, the text with other line endings or blanks around it) — its
+result says it was made already, with what it gave then, and to tell the user (a small model added
+the same reminder sixteen times); another change to that page makes it one to make again (the page
+may have changed back), and a change declined is none made: the same call asks the user again —,
+and from the eighth turn on, the last result of a turn
+says which turn of the sixteen it is, to answer soon. After a change, two turns in a row whose every
+call only repeats — a change made again (on a line's new ref too), a read again, a change refused
+again as changing nothing — end the question: the answer is "Gotowe." / "Done." with the pages
+changed (a small model called its reminder fifteen times more and never answered). An answer that
+starts by saying a change was made ("Odhaczyłam „Zły” w [[Książki]].", "Jasne, dopisałam …", "I've
+added …": a first-person verb of a change, after a word such as "Gotowe!" at most — not a quote, a
+list's item, nor after "nie") in a question that made none — none made, declined or found so already,
+the user's message no question (its first word "co", "czy" but not "czy możesz", "jaki", "what",
+"did" …), the answer before it no change of its own — is asked for once more: without that
+answer, and the message it answered (the turn's last result, else the user's message) ending
+"(Nothing is changed yet: no tool made a change for this question. If the user asked for one, make
+it now with its tool; otherwise answer without saying that you changed anything.)", as a late
+turn's result says to answer soon (a small model found the task to tick off, then said
+"Odhaczyłam …" and called nothing). Before each
 tool `b.status` says what it does ("Searching the notes: “rent”…", "Reading “Home”…"), before each
 request to the model `b.status("")`. **Every change waits for the user**: `b.choose` with what
 would be written — the chat shows it in the conversation as a card with the options (the dialog
@@ -696,7 +815,10 @@ the journal's stream today's note —, one beside it in the side panel, the conv
 of the page as a new conversation; a spinner while `aiPending`, none while a chat view shows the turn — `WorkspaceChats.runningShown`). Like the gym, its source can run
 from a page of the notebook and be changed there: a page tagged as an extension, with
 `permissions: [write, ai]`, that holds the source and is titled "Asystent AI" / "AI assistant" (or
-has `overrides: asystent`) — copied by hand so far: Settings has "Edit the code" for the gym only.
+has `overrides: asystent`) — copied by hand so far: Settings has "Edit the code" for the gym only. How
+well a model does its work is measured by the assistant's bench (docs/FINETUNE.md): tasks with a
+known outcome on notebooks of their own, run by this script — a change of its tools or instructions
+shows there.
 
 ## Errors
 

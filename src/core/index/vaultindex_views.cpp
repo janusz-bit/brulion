@@ -42,32 +42,42 @@ struct Excerpt {
     QString text;
 };
 
-/// The first of `lines` from `from` up to `to` (exclusive) containing one of the folded `terms` as
-/// a whole token, with an excerpt around the earliest such term.
+/// Of `lines` from `from` up to `to` (exclusive), the one containing the most of the folded `terms`
+/// as whole tokens — the first of those — with an excerpt around the earliest such term: "cooker
+/// hood filter" finds the task with all three words, not an earlier line with "the" in it.
 std::optional<Excerpt> findExcerpt(const QList<text::Line> &lines, const QStringList &terms, qsizetype from,
                                    qsizetype to)
 {
     if (terms.isEmpty())
         return std::nullopt;
+    std::optional<Excerpt> found;
+    qsizetype foundTerms = 0;
     for (qsizetype i = from; i < std::min(to, lines.size()); ++i) {
         const QString &line = lines[i].text;
         const text::FoldedText folded = text::foldKeyWithMap(line);
         qsizetype best = -1;
         qsizetype bestLength = 0;
+        qsizetype matched = 0;
         for (const QString &t : terms) {
             const qsizetype k = indexOfToken(folded.text, t);
-            if (k >= 0 && (best < 0 || k < best)) {
+            if (k < 0)
+                continue;
+            ++matched;
+            if (best < 0 || k < best) {
                 best = k;
                 bestLength = t.size();
             }
         }
-        if (best < 0)
+        if (matched <= foundTerms)
             continue;
         const qsizetype start = folded.toOriginal(best);
         const qsizetype end = folded.toOriginal(best + bestLength);
-        return Excerpt{int(i), lineExcerpt(line, start, end)};
+        found = Excerpt{int(i), lineExcerpt(line, start, end)};
+        foundTerms = matched;
+        if (matched == terms.size())
+            break; // (no line holds more)
     }
-    return std::nullopt;
+    return found;
 }
 
 /// The first `count` of `entries` (sortedEntries(): by path) most recent first — seq descending,

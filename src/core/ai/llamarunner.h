@@ -7,7 +7,7 @@
 
 namespace brulion::ai {
 
-/// Opens the model of `options` (and its projector) with llama.cpp on the processor; nullptr with
+/// Opens the model of `options` (with its adapter and projector) with llama.cpp on the processor; nullptr with
 /// `error` when the processor is too old for the processor plugins this build has, or a file
 /// cannot be loaded.
 std::unique_ptr<LocalRunner> openLlamaRunner(const LocalRunner::Options &options, QString *error);

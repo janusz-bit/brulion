@@ -205,8 +205,10 @@
 #   BRULION_EMULATOR_VULKAN  1: the guest has Vulkan (default 1, but 0 for --web-keyboard: Chrome's
 #                            Vulkan on the host's SwiftShader crashed the emulator in half the runs)
 #   BRULION_EMULATOR_MEMORY  the emulator's memory in MB (default: the AVD's 2 GB; --local-ai: 6144)
-#   BRULION_LOCAL_MODEL      --local-ai: the default model's file on the host, under its name at
-#                            Hugging Face (LFM3-VL-2B-QAD-Q4_0.gguf; src/core/ai/local.cpp)
+#   BRULION_LOCAL_MODEL      --local-ai: LFM3-VL 2B's file on the host, under its name at Hugging
+#                            Face (LFM3-VL-2B-QAD-Q4_0.gguf; src/core/ai/local.cpp) — the former
+#                            default, which the app keeps when its files are there and nothing
+#                            was chosen (LocalAi::keptChoice)
 #   BRULION_LOCAL_PROJECTOR  --local-ai: its picture part (mmproj-LFM3-VL-2B-Q8_0.gguf)
 #   BRULION_WEBPICTURE_HTTPS --web-pictures: the public https picture (default: Google's logo)
 #   BRULION_WEBPICTURE_PORT  --web-pictures: the host's port of the http picture (default 8765)
@@ -855,6 +857,8 @@ if ((LOCALAI)); then
     # (adb is back before the device has written the last of it.)
     wait_for 120 la_file_whole "$name" "$(stat -c %s "$file")" || die "$name did not reach the app's storage whole"
   done
+  # (A download marks the model downloaded when its last file is there: ai/localfiles.h.)
+  adb shell run-as "$PKG" touch files/models/lfm3-vl-2b.downloaded
   la_log() { adb logcat -d | grep -E ' brulion\.ai\.local *: ' || true; }
   la_opened() { la_log | grep -c ' opened: ' || true; }
   # (What the app logs of the model it opened: how much it holds, the processor plugin, the threads.)

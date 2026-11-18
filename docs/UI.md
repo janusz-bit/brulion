@@ -855,13 +855,20 @@ show the defaults), "Check" (`Workspace.extensions.testAi()`: the model's "OK" o
 toast; busy while `aiPending`). The group's note says what it costs and where the notes go.
 With **On this device** the key, model and address rows give way to the model's own
 (`AppController.localAi`, `src/app/shell/localai.h` — typed `FINAL` properties about the chosen
-model, so the bindings compile): **Model** (`aiLocalModelSetting`: LFM3-VL 2B / LFM3 1.7B →
-`AppSettings.aiLocalModel`; the description says what the chosen one is good at), **The model's
-files** (`aiLocalFiles`: not here yet with its size and **Download**; while downloading the
+model, so the bindings compile): **Model** (`aiLocalModelSetting`: Brulion / LFM3 1.7B /
+LFM3-VL 2B, the best with the assistant first and the default → `AppSettings.aiLocalModel`; a model's `label` where its name is long — Brulion
+Assistant 1.7B's —, so the three fit side by side on a 360-px phone; the description says what
+the chosen one is good at: it sees pictures, it reads text only, or — `modelAdapted` — it is
+`modelBase` by `modelBaseMaker` trained further for the assistant, answering at once), **The
+model's files** (`aiLocalFiles`: not here yet with its size and **Download** — partly here, a file
+another model shares or a download that stopped, with what is left of the whole (`modelLeft`), or
+"nothing left to download" when another model brought all its files; while downloading the
 progress as text, a progress bar and **Stop**; "Checking the downloaded files…"; a failed download
-with its reason — it goes on from where it stopped; here: its size and **Remove**) and **Whose
-model** (the maker and the licence, with links). One model downloads at a time (`downloadingOther`
-disables Download on the other). While a model is downloaded or answers (`working`) a phone's
+with its reason — it goes on from where it stopped; here: its size and **Remove**; a second line
+names the models it shares a file with, `modelSharesWith`) and **Whose model** (the maker and
+the licence, with links; of an adapted model the base model's maker and licence, and that
+Brulion trained it further, a version that maker neither made nor endorses). One model downloads
+at a time (`downloadingOther` disables Download on the other). While a model is downloaded or answers (`working`) a phone's
 screen stays on (docs/ANDROID.md "A model on the phone"). A command whose
 extension asks AI shows "Asking AI…" (once per call: an agent asks many times); its result comes
 as the command's own message when the answer arrives; the console shows "Asking AI…" and then the

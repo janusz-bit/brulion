@@ -852,8 +852,9 @@ while typing with a keyboard that corrects words by itself.
 ## A model on the phone
 
 **Settings → Extensions → AI → On this device** runs a small AI model inside the app
-(docs/EXTENSIONS.md "AI"): no key, no account, nothing sent anywhere. Choose LFM3-VL 2B (it sees
-pictures; 1.2 GB) or LFM3 1.7B (text only; 1.0 GB) and press **Download** — over Wi-Fi: the files
+(docs/EXTENSIONS.md "AI"): no key, no account, nothing sent anywhere. Choose Brulion Assistant 1.7B
+(the default: LFM3 1.7B trained for the assistant; its file and 92 MB more), LFM3 1.7B (text only;
+1.0 GB) or LFM3-VL 2B (it sees pictures; 1.2 GB) and press **Download** — over Wi-Fi: the files
 come from Hugging Face into the app's own storage (`files/models`, removed with the app or with
 **Remove**), each checked against its SHA-256. A download that stops goes on from where it was.
 Android's backup and the transfer to a new phone leave the models out ([Backups](#backups)): on
@@ -863,8 +864,8 @@ another phone the model is downloaded again.
   instructions (ARMv8.2: phones from about 2018 on; an older one is told "this device's processor
   is too old to run a model"), 1–1.3 GB of storage, and memory: the app grows by 2.4 GB while
   LFM3-VL is loaded — 1.5 GB of its own and the model's file, 1 GB that Android takes back when
-  it wants ([measured below](#on-a-pixel-9-pro)). A phone with 7 GB of memory or more holds
-  16 384 tokens at once, one with 5 GB 8 192, less 4 096 (12 KB of memory a token).
+  it wants ([measured below](#on-a-pixel-9-pro)). Every phone holds 16 384 tokens at once
+  (12 KB of memory a token: 200 MB).
 * **Speed**: the model is loaded for the first question (some seconds) and stays for ten minutes.
   The very first question is the slow one — the assistant's instructions and tools are some
   2 500 tokens before the question itself —; what was read stays, so the steps and the questions

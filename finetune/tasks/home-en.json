@@ -1,0 +1,298 @@
+{
+  "notebook": "home-en",
+  "language": "en",
+  "now": "2026-11-21T10:30",
+  "tasks": [
+    {
+      "id": "home-en/dentist-phone",
+      "category": "search",
+      "ask": "What's my dentist's phone number?",
+      "expect": { "answer": { "anyOf": [["020 7946 0321", "02079460321", "020-7946-0321", "7946 0321"]] } },
+      "solution": [
+        { "call": "search_notes", "input": { "query": "dentist phone" } },
+        { "answer": "Dr Priya Shah at Elm Road Dental: 020 7946 0321 ([[Contacts]])." }
+      ]
+    },
+    {
+      "id": "home-en/recycling-next",
+      "category": "search",
+      "ask": "When do they collect the recycling next?",
+      "expect": { "answer": { "anyOf": [["2026-11-26", "26 November", "November 26", "Nov 26", "26 Nov", "26th"]] } },
+      "solution": [
+        { "call": "search_notes", "input": { "query": "recycling" } },
+        { "answer": "Next Thursday, 2026-11-26: the recycling goes every other Thursday ([[House]])." }
+      ]
+    },
+    {
+      "id": "home-en/key-box-code",
+      "category": "search",
+      "ask": "What's the key box code for the apartment in Lisbon?",
+      "expect": { "answer": { "contains": ["5307"] } },
+      "solution": [
+        { "call": "search_notes", "input": { "query": "apartment key box code" } },
+        { "call": "read_page", "input": { "name": "Trip to Lisbon" }, "unlessShown": "key box code 5307" },
+        { "answer": "The key box code is 5307 (Rua das Flores 28, check-in from 15:00; [[Trip to Lisbon]])." }
+      ]
+    },
+    {
+      "id": "home-en/brightwater-rate",
+      "category": "search",
+      "ask": "What rate does Brightwater Press pay me?",
+      "note": "The rate is a property in the page's frontmatter, which a search does not show: the page has to be read.",
+      "expect": { "answer": { "anyOf": [["0.09", "0,09", "9p", "9 pence"]] } },
+      "solution": [
+        { "call": "search_notes", "input": { "query": "Brightwater rate" } },
+        { "call": "read_page", "input": { "name": "Brightwater Press" }, "unlessShown": "0.09 GBP" },
+        { "answer": "0.09 GBP per word, with payment within 30 days ([[Brightwater Press]])." }
+      ]
+    },
+    {
+      "id": "home-en/oakline-wednesday",
+      "category": "search",
+      "ask": "How many hours did I work for Oakline on Wednesday?",
+      "note": "Wednesday is 2026-11-18: the hours are in that day's journal, not on the client's page (\"Oakline hours\" finds only the page, whose \"an hour\" matches).",
+      "expect": { "answer": { "matches": ["4[.,]5 ?h|4[.,]5 hours|four and a half|4½"] } },
+      "solution": [
+        {
+          "call": "search_notes",
+          "input": { "query": "Oakline" },
+          "alternatives": [{ "call": "read_page", "input": { "name": "2026-11-18" } }]
+        },
+        { "answer": "4.5 h on Wednesday, 2026-11-18, on the website copy for the shop pages ([[2026-11-18]])." }
+      ]
+    },
+    {
+      "id": "home-en/sophie-birthday",
+      "category": "search",
+      "ask": "When is Sophie's birthday?",
+      "note": "Not in the notes: the only birthday there is Grandma's (2026-12-12), on the line under Sophie's gift. The answer says so and gives no date as Sophie's.",
+      "expect": {
+        "answer": {
+          "anyOf": [["couldn't find", "could not find", "can't find", "cannot find", "didn't find", "did not find", "no information", "not in your notes", "isn't in your notes", "is not in your notes", "no mention", "nothing about", "don't see", "do not see", "doesn't say", "don't say", "do not say", "not noted", "isn't noted", "not recorded", "no record", "doesn't mention", "don't mention"]],
+          "notMatches": ["sophie's birthday (?:is|falls|was) (?:on )?(?:the )?(?:\\d|(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]* \\d)"]
+        }
+      },
+      "solution": [
+        { "call": "search_notes", "input": { "query": "Sophie birthday" } },
+        { "answer": "I couldn't find Sophie's birthday in your notes. The only birthday there is Grandma's 90th ([[Gift ideas]])." }
+      ]
+    },
+    {
+      "id": "home-en/before-december",
+      "category": "query",
+      "ask": "What do I need to get done before the end of November?",
+      "expect": {
+        "answer": { "contains": ["tulip", "library", "parking", "fig"], "notContains": ["euro", "glossary", "7-9", "boiler"] }
+      },
+      "solution": [
+        {
+          "call": "query_notes",
+          "input": { "query": "type:tasks status:open due:today..2026-11-30" },
+          "alternatives": [{ "call": "query_notes", "input": { "query": "type:tasks status:open due:this-month" } }]
+        },
+        { "answer": "Four things before the end of November:\n- 2026-11-22: plant the tulip bulbs by the front path ([[Garden]]),\n- 2026-11-24: return the library books ([[2026-11-18]]),\n- 2026-11-27: book the airport parking at Gatwick ([[Trip to Lisbon]]),\n- 2026-11-28: wrap the fig tree in fleece ([[Garden]])." }
+      ]
+    },
+    {
+      "id": "home-en/unpaid-invoices",
+      "category": "query",
+      "ask": "Which invoices are still waiting to be paid?",
+      "note": "INV-117 may be named as the paid one, never as one still to be paid (the check of work-en/unpaid-invoices, for INV-117).",
+      "expect": {
+        "answer": {
+          "contains": ["INV-118", "INV-119"],
+          "notMatches": ["(?:^|(?<=[.;!?][\\s)]))(?!(?:[^\\n.;!?]|[.;!?](?![\\s)]|$))*(?:(?<!not )(?<!n't )\\b(?:is|was|has been|have been|already|fully|marked|as)\\s+paid\\b|'s\\s+paid\\b|\\bpaid\\s+(?:already|in full|off|on)\\b|\\(paid\\b|\\bpaid\\)|[:–—-]\\s*paid\\b|\\bpaid\\s*[:=]\\s*yes\\b|\\|\\s*yes\\b|\\bpaid (?:one|invoice)\\b))(?:[^\\n.;!?]|[.;!?](?![\\s)]|$))*INV-117"]
+        }
+      },
+      "solution": [
+        {
+          "call": "query_notes",
+          "input": { "query": "type:tasks status:open tag:invoice" },
+          "alternatives": [{ "call": "read_page", "input": { "name": "Billing" } }]
+        },
+        { "answer": "Two are unpaid: INV-118 from Brightwater Press (£1 240) and INV-119 from Oakline Studio (£360) ([[Billing]])." }
+      ]
+    },
+    {
+      "id": "home-en/garden-jobs",
+      "category": "query",
+      "ask": "What's left to do in the garden?",
+      "note": "The page is tagged #garden in its frontmatter, so tag:garden finds its tasks, as page:\"Garden\" does.",
+      "expect": { "answer": { "contains": ["tulip", "fig", "leaves"] } },
+      "solution": [
+        {
+          "call": "query_notes",
+          "input": { "query": "type:tasks status:open tag:garden" },
+          "alternatives": [
+            { "call": "query_notes", "input": { "query": "type:tasks status:open page:\"Garden\"" } },
+            { "call": "search_notes", "input": { "query": "garden" } }
+          ]
+        },
+        { "answer": "Three garden jobs are open ([[Garden]]):\n- plant the tulip bulbs by the front path (due 2026-11-22),\n- wrap the fig tree in fleece (due 2026-11-28),\n- rake the leaves off the lawn." }
+      ]
+    },
+    {
+      "id": "home-en/lentils-for-eight",
+      "category": "read",
+      "page": "Recipes/Red lentil soup",
+      "ask": "I'm making this for eight people. How many grams of lentils do I need?",
+      "expect": { "answer": { "matches": ["(^|[^0-9])500 ?(g|grams)\\b"] } },
+      "solution": [
+        { "answer": "The recipe serves 4 with 250 g of red lentils, so for eight: 2 × 250 g = 500 g." }
+      ]
+    },
+    {
+      "id": "home-en/trip-cost",
+      "category": "multi",
+      "ask": "How much have the flights and the apartment for Lisbon cost us?",
+      "expect": { "answer": { "matches": ["(^|[^0-9])698([^0-9]|$)"] } },
+      "solution": [
+        { "call": "search_notes", "input": { "query": "Lisbon cost" } },
+        { "call": "read_page", "input": { "name": "Trip to Lisbon" }, "unlessShown": "Apartment cost £486" },
+        { "answer": "£212 + £486 = £698: the return flights for both of you and the apartment for four nights ([[Trip to Lisbon]])." }
+      ]
+    },
+    {
+      "id": "home-en/days-to-flight",
+      "category": "multi",
+      "ask": "How many days until we fly to Lisbon?",
+      "expect": { "answer": { "matches": ["(^|[^0-9])13([^0-9]|$)|thirteen"] } },
+      "solution": [
+        { "call": "search_notes", "input": { "query": "Lisbon flight" } },
+        { "answer": "13 days: you fly from Gatwick on 2026-12-04 at 07:40 (TP1353), and today is 2026-11-21 ([[Trip to Lisbon]])." }
+      ]
+    },
+    {
+      "id": "home-en/gift-puzzle",
+      "category": "append",
+      "ask": "Add a jigsaw puzzle for Dad to my gift ideas.",
+      "expect": {
+        "files": [{ "path": "Gift ideas.md", "contains": ["puzzle", "Dad", "silk scarf", "photo book"] }],
+        "toolsNotCalled": ["write_page"]
+      },
+      "solution": [
+        { "call": "append_to_page", "input": { "name": "Gift ideas", "markdown": "- Dad: a jigsaw puzzle" } },
+        { "answer": "Added \"Dad: a jigsaw puzzle\" to [[Gift ideas]]." }
+      ]
+    },
+    {
+      "id": "home-en/packing",
+      "category": "append",
+      "ask": "Add sunscreen and a phone charger to the Lisbon packing list.",
+      "expect": {
+        "files": [{ "path": "Trip to Lisbon.md", "contains": ["sunscreen", "charger", "Passports", "food tour"] }],
+        "toolsNotCalled": ["write_page"]
+      },
+      "solution": [
+        { "call": "append_to_page", "input": { "name": "Trip to Lisbon", "markdown": "- Sunscreen\n- Phone charger" } },
+        { "answer": "Added sunscreen and a phone charger to the packing list in [[Trip to Lisbon]]." }
+      ]
+    },
+    {
+      "id": "home-en/remind-dentist",
+      "category": "journal",
+      "ask": "Remind me on Monday at 8:30 to ring the dentist.",
+      "expect": {
+        "files": [{
+          "path": ["journals/2026-11-21.md", "journals/2026-11-23.md"],
+          "contains": ["dentist"],
+          "matches": ["⏰ 2026-11-23 08:30"]
+        }]
+      },
+      "solution": [
+        { "call": "append_to_journal", "input": { "markdown": "- [ ] Ring the dentist ⏰ 2026-11-23 08:30" } },
+        { "answer": "Done: a reminder to ring the dentist on Monday, 2026-11-23 at 08:30." }
+      ]
+    },
+    {
+      "id": "home-en/log-words",
+      "category": "journal",
+      "ask": "Note in today's journal that I translated 2,000 words of chapter 7.",
+      "expect": { "files": [{ "path": "journals/2026-11-21.md", "contains": ["chapter 7"], "matches": ["2[ ,.]?000"] }] },
+      "solution": [
+        { "call": "append_to_journal", "input": { "markdown": "- Brightwater: translated 2,000 words of chapter 7." } },
+        { "answer": "Noted in today's journal: 2,000 words of chapter 7." }
+      ]
+    },
+    {
+      "id": "home-en/tulips-planted",
+      "category": "update",
+      "ask": "I planted the tulips this morning, tick that off.",
+      "expect": {
+        "files": [{ "path": "Garden.md", "matches": ["- \\[x\\] Plant the tulip bulbs by the front path"], "contains": ["📅 2026-11-22", "- [ ] Wrap the fig tree"] }]
+      },
+      "solution": [
+        { "call": "search_notes", "input": { "query": "tulip bulbs" } },
+        { "call": "update_block", "input": { "ref": "{{ref Garden.md#L7}}", "status": "done" } },
+        { "answer": "Ticked off \"Plant the tulip bulbs by the front path\" in [[Garden]]." }
+      ]
+    },
+    {
+      "id": "home-en/invoice-paid",
+      "category": "update",
+      "ask": "Oakline paid INV-119 this morning, mark it as paid.",
+      "expect": {
+        "files": [{ "path": "Billing.md", "matches": ["- \\[x\\] INV-119 Oakline Studio"], "contains": ["£360", "#invoice", "- [ ] INV-118"] }]
+      },
+      "solution": [
+        { "call": "search_notes", "input": { "query": "INV-119" } },
+        { "call": "update_block", "input": { "ref": "{{ref Billing.md#L7}}", "status": "done" } },
+        { "answer": "Marked INV-119 (Oakline Studio, £360) as paid in [[Billing]]." }
+      ]
+    },
+    {
+      "id": "home-en/cancel-food-tour",
+      "category": "update",
+      "ask": "We've decided against the food tour in Lisbon. Cancel that task.",
+      "expect": {
+        "files": [{ "path": "Trip to Lisbon.md", "matches": ["- \\[-\\] Book a food tour in Alfama"], "contains": ["- [ ] Exchange some euros"] }]
+      },
+      "solution": [
+        { "call": "search_notes", "input": { "query": "food tour" } },
+        { "call": "update_block", "input": { "ref": "{{ref Trip to Lisbon.md#L11}}", "status": "cancelled" } },
+        { "answer": "Cancelled \"Book a food tour in Alfama\" in [[Trip to Lisbon]]." }
+      ]
+    },
+    {
+      "id": "home-en/christmas-menu",
+      "category": "write",
+      "ask": "Create a page called Christmas menu with three dishes: roast goose, red cabbage and mince pies.",
+      "expect": { "files": [{ "path": "Christmas menu.md", "contains": ["goose", "red cabbage", "mince pies"] }] },
+      "solution": [
+        { "call": "write_page", "input": { "name": "Christmas menu", "content": "# Christmas menu\n\n- Roast goose\n- Red cabbage\n- Mince pies\n" } },
+        { "answer": "Created [[Christmas menu]] with roast goose, red cabbage and mince pies." }
+      ]
+    },
+    {
+      "id": "home-en/fahrenheit",
+      "category": "no_tool",
+      "ask": "What's 18 °C in Fahrenheit?",
+      "expect": { "answer": { "anyOf": [["64.4", "64,4"]] }, "noTools": true },
+      "solution": [
+        { "answer": "18 °C is 64.4 °F (18 × 9/5 + 32)." }
+      ]
+    },
+    {
+      "id": "home-en/change-time",
+      "category": "clarify",
+      "ask": "Change the time to 3 pm.",
+      "note": "Nothing says which reminder or event: ask, change nothing.",
+      "expect": { "answer": { "anyOf": [["?", "which", "please specify", "please tell", "let me know which", "let me know what", "could you clarify"]] } },
+      "solution": [
+        { "answer": "Which reminder or event should I move to 3 pm?" }
+      ]
+    },
+    {
+      "id": "home-en/decline-ideas",
+      "category": "decline",
+      "ask": "Create a page called Ideas for 2027 with one line: learn Portuguese.",
+      "answers": ["no"],
+      "note": "The user declines: nothing changes and the assistant does not try again (a second request would be approved).",
+      "expect": { "toolsCalled": ["write_page"] },
+      "solution": [
+        { "call": "write_page", "input": { "name": "Ideas for 2027", "content": "# Ideas for 2027\n\n- Learn Portuguese\n" } },
+        { "answer": "OK, I didn't create the page." }
+      ]
+    }
+  ]
+}

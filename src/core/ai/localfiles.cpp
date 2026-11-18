@@ -18,8 +18,6 @@ namespace {
 
 /// No bytes for this long: the download gives up (and can go on later).
 constexpr int StallMs = 60 * 1000;
-/// Free space kept beyond the download itself.
-constexpr qint64 SpareBytes = 64 * 1024 * 1024;
 /// A file is checked in steps of this size, the event loop running in between.
 constexpr qint64 CheckStep = 8 * 1024 * 1024;
 /// What a download holds in memory before it is written; beyond it the network waits. Without
@@ -56,7 +54,12 @@ QString LocalModelFiles::pathOf(const LocalFile &file) const
     return m_folder + u'/' + file.name;
 }
 
-bool LocalModelFiles::has(const LocalModel &model) const
+QString LocalModelFiles::markerOf(const LocalModel &model) const
+{
+    return m_folder + u'/' + model.id + u".downloaded"_s;
+}
+
+bool LocalModelFiles::whole(const LocalModel &model) const
 {
     const QList<LocalFile> files = model.files();
     for (const LocalFile &file : files) {
@@ -65,6 +68,30 @@ bool LocalModelFiles::has(const LocalModel &model) const
             return false;
     }
     return !files.isEmpty();
+}
+
+bool LocalModelFiles::has(const LocalModel &model) const
+{
+    return !model.id.isEmpty() && QFileInfo::exists(markerOf(model)) && whole(model);
+}
+
+void LocalModelFiles::adopt(const QList<LocalModel> &models)
+{
+    // Once: later the files of a model removed (kept for another one) or of one half-downloaded
+    // (a shared file only) would look the same as an older version's.
+    const QString adopted = m_folder + u"/.adopted"_s;
+    if (QFileInfo::exists(adopted) || !QDir().mkpath(m_folder))
+        return;
+    for (const LocalModel &model : models) {
+        if (!model.id.isEmpty() && whole(model)) {
+            QFile marker(markerOf(model));
+            if (marker.open(QIODevice::WriteOnly))
+                marker.close();
+        }
+    }
+    QFile done(adopted);
+    if (done.open(QIODevice::WriteOnly))
+        done.close();
 }
 
 qint64 LocalModelFiles::bytesHere(const LocalModel &model) const
@@ -108,10 +135,12 @@ void LocalModelFiles::download(const LocalModel &model)
         end(false, u"cannot make the folder %1"_s.arg(m_folder));
         return;
     }
+    // Nothing missing (files another model shares, a part whole but not yet checked): nothing is
+    // written, so no free space is needed — it is only marked downloaded.
     const QStorageInfo storage(m_folder);
     const qint64 missing = m_total - m_received;
-    if (storage.isValid() && storage.bytesAvailable() < missing + SpareBytes) {
-        end(false, u"not enough free space: %1 needed, %2 free"_s.arg(megabytes(missing + SpareBytes),
+    if (missing > 0 && storage.isValid() && storage.bytesAvailable() < missing + m_spareBytes) {
+        end(false, u"not enough free space: %1 needed, %2 free"_s.arg(megabytes(missing + m_spareBytes),
                                                                       megabytes(storage.bytesAvailable())));
         return;
     }
@@ -126,8 +155,10 @@ void LocalModelFiles::nextFile()
         const QFileInfo whole(pathOf(file));
         if (whole.isFile() && whole.size() == file.bytes)
             continue;
+        // Not this model's file: a leftover of another size — no other model's either (a name in
+        // the folder is one file: models share only the identical LocalFile, ai::LocalModel).
         if (whole.exists())
-            QFile::remove(whole.filePath()); // not this model's file: a leftover of another size
+            QFile::remove(whole.filePath());
         begin(file);
         return;
     }
@@ -305,7 +336,7 @@ void LocalModelFiles::cancel()
     end(false, QString());
 }
 
-void LocalModelFiles::end(bool ok, const QString &error)
+void LocalModelFiles::end(bool ok, QString error)
 {
     const QString id = m_id;
     m_id.clear();
@@ -315,19 +346,37 @@ void LocalModelFiles::end(bool ok, const QString &error)
         m_part.close();
     m_received = 0;
     m_total = 0;
+    if (ok) {
+        QFile marker(markerOf(m_model));
+        if (!marker.open(QIODevice::WriteOnly)) {
+            ok = false;
+            error = u"cannot write %1: %2"_s.arg(marker.fileName(), marker.errorString());
+        }
+    }
     Q_EMIT progress();
     if (ok)
         Q_EMIT changed();
     Q_EMIT finished(id, ok, error);
 }
 
-bool LocalModelFiles::remove(const LocalModel &model)
+bool LocalModelFiles::remove(const LocalModel &model, const QList<LocalModel> &models)
 {
     if (m_id == model.id)
         cancel();
-    bool ok = true;
+    bool ok = !QFileInfo::exists(markerOf(model)) || QFile::remove(markerOf(model));
+    // What another model needs too stays (the same file, not just its name): one on the device, or
+    // one being downloaded.
+    QList<LocalFile> kept;
+    for (const LocalModel &other : models) {
+        const bool downloading = !m_id.isEmpty() && m_id == other.id;
+        if (other.id == model.id || (!downloading && !has(other)))
+            continue;
+        kept.append(other.files());
+    }
     const QList<LocalFile> files = model.files();
     for (const LocalFile &file : files) {
+        if (kept.contains(file))
+            continue;
         for (const QString &path : {pathOf(file), QString(pathOf(file) + u".part"_s)}) {
             if (QFileInfo::exists(path) && !QFile::remove(path))
                 ok = false;

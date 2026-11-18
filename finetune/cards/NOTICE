@@ -1,0 +1,14 @@
+{{title}}
+Copyright {{year}} {{author}}
+
+This is a Derivative Work of LFM3-1.7B by Liquid AI, Inc.
+(https://huggingface.co/LiquidAI/LFM3-1.7B, revision {{base_revision}}),
+licensed under the LFM Open License v1.0; a copy of the license is in LICENSE.
+It is not made, endorsed or supported by Liquid AI. "LFM" and "Liquid AI" are
+used only to describe the origin of the base model.
+
+Changes (LFM Open License v1.0, section 4(b)): the base model's weights were
+changed by fine-tuning (LoRA), {{changes_date}}, on the tasks of the Brulion notes
+app's assistant ({{dataset_url}}).
+
+{{changed_files}}

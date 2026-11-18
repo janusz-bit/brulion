@@ -203,8 +203,6 @@ AppController::AppController(const Options &options, QObject *parent)
 #endif
     if (localAi.pluginDirs.isEmpty() && !localAi.open)
         localAi.pluginDirs = localAiPluginDirs();
-    if (localAi.memoryBytes <= 0)
-        localAi.memoryBytes = platform::physicalMemoryBytes();
     m_localAi = std::make_unique<LocalAi>(localAi);
     m_workspace = std::make_unique<Workspace>();
     m_workspace->setUiLanguage(m_settings->language());
@@ -234,6 +232,14 @@ AppController::AppController(const Options &options, QObject *parent)
             [this] { m_workspace->extensions()->setEnabled(m_settings->enabledExtensions()); });
     connect(m_settings.get(), &AppSettings::assistantEnabledChanged, this,
             [this] { m_workspace->extensions()->setEnabled(m_settings->enabledExtensions()); });
+    // A device that never chose a model and has the former default's files keeps that model: the
+    // default changed (the assistant's own came first), and an update must not swap the model it
+    // uses for one still to download.
+    if (m_settings->aiLocalModel().isEmpty()) {
+        const QString kept = m_localAi->keptChoice();
+        if (!kept.isEmpty())
+            m_settings->setAiLocalModel(kept);
+    }
     const auto aiSettings = [this] {
         ai::Settings s;
         s.provider = m_settings->aiProvider();

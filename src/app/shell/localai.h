@@ -10,8 +10,8 @@
 // after another; the model stays in memory between them (the next question of a conversation
 // reads only what is new) and is let go after ten minutes without a request — what it read of a
 // request's system text and tools is kept on disk (`stateFolder`), so the first request after it
-// was opened again does not read them anew. How much it holds at once follows the device's memory
-// (contextFor()).
+// was opened again does not read them anew. It holds the same on every device: 16 384 tokens at
+// once (ContextTokens).
 #pragma once
 
 #include "ai/local.h"
@@ -37,7 +37,8 @@ class LocalAi : public QObject, public ai::LocalBackend {
 
     /// This build can run a model on the device (it has the model runner's plugin).
     Q_PROPERTY(bool available READ available CONSTANT FINAL)
-    /// The models to choose from, for a segmented control: {value: id, text: name}.
+    /// The models to choose from, for a segmented control: {value: id, text: its label, else its
+    /// name}.
     Q_PROPERTY(QVariantList choices READ choices CONSTANT FINAL)
     /// The model chosen (its id; AppSettings' aiLocalModel, "" being the default one) — what the
     /// properties below and download() / cancelDownload() / remove() are about.
@@ -48,11 +49,25 @@ class LocalAi : public QObject, public ai::LocalBackend {
     Q_PROPERTY(QString modelSize READ modelSize NOTIFY modelChanged FINAL)
     /// It sees pictures (b.ai's `images`).
     Q_PROPERTY(bool modelSees READ modelSees NOTIFY modelChanged FINAL)
+    /// It is another model adapted to the app (ai::LocalModel::adapter): `modelBase` by
+    /// `modelBaseMaker` ("LFM3 1.7B", "Liquid AI"; "" for a model as its maker gives it), trained
+    /// further by `modelMaker`.
+    Q_PROPERTY(bool modelAdapted READ modelAdapted NOTIFY modelChanged FINAL)
+    Q_PROPERTY(QString modelBase READ modelBase NOTIFY modelChanged FINAL)
+    Q_PROPERTY(QString modelBaseMaker READ modelBaseMaker NOTIFY modelChanged FINAL)
     Q_PROPERTY(QString modelLicense READ modelLicense NOTIFY modelChanged FINAL)
     Q_PROPERTY(QString modelLicenseUrl READ modelLicenseUrl NOTIFY modelChanged FINAL)
     Q_PROPERTY(QString modelPageUrl READ modelPageUrl NOTIFY modelChanged FINAL)
-    /// Its files are on the device, whole.
+    /// It is downloaded: its download finished (ai::LocalModelFiles::has: marked so) and its files
+    /// are on the device, whole — a file it shares with another model alone is not enough.
     Q_PROPERTY(bool modelHere READ modelHere NOTIFY modelsChanged FINAL)
+    /// What is still to download of it, as a text: less than `modelSize` when part of it is on the
+    /// device already (a file it shares with another model, a download that stopped), the same
+    /// when none of it is (or too little to show), "" when all its files are.
+    Q_PROPERTY(QString modelLeft READ modelLeft NOTIFY modelsChanged FINAL)
+    /// The other models it shares a file with, by name ("LFM3 1.7B"; "": none): that file is
+    /// downloaded once and stays while one of them is on the device.
+    Q_PROPERTY(QString modelSharesWith READ modelSharesWith NOTIFY modelChanged FINAL)
     /// It is being downloaded: how far (0–1; `progressText`: "312 MB of 1.2 GB"), whether the
     /// files are being checked. `downloadError`: why its last download failed ("": it did not).
     Q_PROPERTY(bool downloading READ downloadingChosen NOTIFY downloadChanged FINAL)
@@ -79,10 +94,11 @@ public:
         /// fast cores).
         bool spinWait = false;
         QStringList pluginDirs;       ///< where the model runner's plugin may be ("": by its name)
-        qint64 memoryBytes = 0;       ///< the device's memory (0: unknown)
         QList<ai::LocalModel> models; ///< empty: ai::localModels() (tests: small ones)
         Opener open;                  ///< empty: the plugin (tests: a fake runner)
         int idleMs = 10 * 60 * 1000;  ///< the model leaves memory after this long without a request
+        /// The default model before the assistant's own came first (keptChoice()).
+        QString formerDefault = QStringLiteral("lfm3-vl-2b");
     };
 
     explicit LocalAi(const Options &options, QObject *parent = nullptr);
@@ -96,10 +112,15 @@ public:
     QString modelMaker() const;
     QString modelSize() const;
     bool modelSees() const;
+    bool modelAdapted() const;
+    QString modelBase() const;
+    QString modelBaseMaker() const;
     QString modelLicense() const;
     QString modelLicenseUrl() const;
     QString modelPageUrl() const;
     bool modelHere() const { return has(m_chosen); }
+    QString modelLeft() const;
+    QString modelSharesWith() const;
     bool downloadingChosen() const;
     bool downloadingOther() const;
     double progress() const;
@@ -119,6 +140,10 @@ public:
 
     /// The model `id` is downloaded ("": the default model).
     bool has(const QString &id) const;
+    /// What a device that never chose a model keeps: the former default (Options::formerDefault)
+    /// when its files are here and today's default's are not — so that an update does not swap the
+    /// model it uses for one still to download (AppController stores it as chosen); "" otherwise.
+    QString keptChoice() const;
     /// Downloads the model `id`; one download at a time.
     void download(const QString &id);
     void remove(const QString &id);
@@ -134,9 +159,9 @@ public:
     void send(const ai::Settings &settings, const ai::Request &request, std::function<void(const ai::Reply &)> done,
               ai::PartialCallback partial = {}, std::shared_ptr<std::atomic<bool>> stopped = {}) override;
 
-    /// The tokens a model may hold at once on a device with `memoryBytes` of memory, and the most
-    /// a picture may take of them.
-    static int contextFor(qint64 memoryBytes);
+    /// The tokens a model holds at once, the request and the answer together, on every device (a
+    /// token takes some 12 KB of memory: 200 MB), and the most a picture may take of them.
+    static constexpr int ContextTokens = 16384;
     static int imageTokensFor(int contextTokens);
 
 Q_SIGNALS:
@@ -164,6 +189,7 @@ private:
     bool m_available = false;
     int m_contextTokens = 0;
     QString m_chosen;
+    QString m_formerDefault; ///< Options::formerDefault
     QString m_downloadError;
     QString m_downloadErrorId;     ///< the model whose download failed
     QElapsedTimer m_downloadClock; ///< since the download was asked for (the log tells how it went)

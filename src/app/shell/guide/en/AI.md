@@ -22,12 +22,13 @@ Press **Check**: the model answers "OK", or you see what is wrong.
 The key stays **only on this device** (not in the notebook, not in sync, not in the logs). Notes go to the provider only when you ask, or when an extension you approved with the `ai` permission does.
 
 ## A model on this device
-With **On this device** chosen, the model runs in Brulion — on the phone too — and nothing you ask leaves the device. Choose one of two models by Liquid AI and press **Download** (best over Wi-Fi; on a phone keep Brulion on the screen until it is done — the screen stays on by itself; a download that stops goes on from where it was):
+With **On this device** chosen, the model runs in Brulion — on the phone too — and nothing you ask leaves the device. Choose one of three models — Brulion's own, made for the assistant (the default), and two by Liquid AI: LFM3 1.7B, which it was made from, and LFM3-VL 2B — and press **Download** (best over Wi-Fi; on a phone keep Brulion on the screen until it is done — the screen stays on by itself; a download that stops goes on from where it was):
 
 | Model | Size | Good at |
 |---|---|---|
+| **Brulion Assistant 1.7B** ("Brulion" in the settings; the default) | 1.1 GB | text only; LFM3 1.7B trained for the **AI assistant** — the best one at working through your notebook with it; answers at once, without thinking; shares its big file with LFM3 1.7B (with that one here, 92 MB more) |
+| **LFM3 1.7B** | 1.0 GB | text only; searches the notebook and changes notes better than LFM3-VL 2B |
 | **LFM3-VL 2B** | 1.2 GB | **sees pictures**: photos, scans, screenshots, and the text on them |
-| **LFM3 1.7B** | 1.0 GB | text only; the better one at searching the notebook and changing notes |
 
 What to expect:
 
@@ -36,7 +37,7 @@ What to expect:
 - It takes about **2.5 GB of memory** while it is loaded, and needs a processor from the last years (a phone from about 2018 on, a computer with AVX2).
 - A request too long for it is **cut** — a long page in its middle, a long search result at its end — rather than refused.
 
-The models are Liquid AI's, under their own licence (LFM Open License v1.0), and are not part of Brulion: the app downloads the one you choose from Hugging Face. **Remove** deletes its files. Not every build has this provider: the browser version and some desktop packages do not.
+The models are Liquid AI's, under their own licence (LFM Open License v1.0), and are not part of Brulion: the app downloads the one you choose from Hugging Face. Brulion Assistant 1.7B is LFM3 1.7B trained further by Brulion, under the same licence — Liquid AI neither made nor endorses it. **Remove** deletes its files (a file another downloaded model needs stays). Not every build has this provider: the browser version and some desktop packages do not.
 
 ## The AI assistant
 Switch it on in **Settings → Extensions → AI → AI assistant**. You talk to it in the **AI chat**, as in a messenger: your messages on the right, the AI's answers on the left, and you can go on asking — "And next week?", "Move the rent to Friday". The top bar has a **✨** button — on the phone too — with:
@@ -47,7 +48,7 @@ Switch it on in **Settings → Extensions → AI → AI assistant**. You talk to
 - **Summarise this page** — a new conversation that asks for a summary of the page and its tasks; ask more about it there.
 - **AI settings…** — the provider, the key and the model.
 
-The AI **searches and reads the whole notebook** by itself — pages, the journal, tasks with their dates, tags, reminders — so you can ask "What do I have to do this week?", "What did I write about the trip?" or "Add milk to my shopping list". You **see the answer as it is written**, word by word, and before it what the model is thinking (in small grey letters — the model on the device thinks in English). While it searches or reads it says so: "Searching the notes: “trip”…", "Reading “Shopping”…". **Stop** ends it at once — the model stops writing too, so your next question does not wait. It also **looks at pictures** in your notes when the model can see (Claude, LFM3-VL on the device): "What did I pay for milk? The receipt is in Shopping." The same is in the palette (Ctrl+K) as **AI: new conversation** and **AI chat**.
+The AI **searches and reads the whole notebook** by itself — pages, the journal, tasks with their dates, tags, reminders — so you can ask "What do I have to do this week?", "What did I write about the trip?" or "Add milk to my shopping list". You **see the answer as it is written**, word by word, and before it what the model is thinking (in small grey letters — the model on the device thinks in English; Brulion Assistant 1.7B answers without thinking). While it searches or reads it says so: "Searching the notes: “trip”…", "Reading “Shopping”…". **Stop** ends it at once — the model stops writing too, so your next question does not wait. It also **looks at pictures** in your notes when the model can see (Claude, LFM3-VL on the device): "What did I pay for milk? The receipt is in Shopping." The same is in the palette (Ctrl+K) as **AI: new conversation** and **AI chat**.
 
 **Extensions, too.** Ask for a new command, view or reaction — "a command that counts the words of today's note" — and the AI reads how extensions are written, tries its code on your notes without changing anything, and writes the page into **Extensions/**. It then waits for you like code from another device: read the page and press **Run** when you agree with what it does (see [[Extensions]]).
 

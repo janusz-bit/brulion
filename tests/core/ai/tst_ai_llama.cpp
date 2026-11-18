@@ -1,6 +1,7 @@
 // The model runner over llama.cpp (src/core/ai/llamarunner.h) with a real model: skipped unless
 // BRULION_LOCAL_MODEL names an LFM3 GGUF file (BRULION_LOCAL_PROJECTOR its picture part, for the
-// tests with pictures), e.g. the files Settings → Extensions → AI downloads:
+// tests with pictures; BRULION_LOCAL_ADAPTER a LoRA adapter over it, for the test with one), e.g.
+// the files Settings → Extensions → AI downloads:
 //
 //   export BRULION_LOCAL_MODEL=~/…/LFM3-VL-2B-QAD-Q4_0.gguf
 //   export BRULION_LOCAL_PROJECTOR=~/…/mmproj-LFM3-VL-2B-Q8_0.gguf
@@ -40,12 +41,17 @@ QString projectorPath()
 {
     return qEnvironmentVariable("BRULION_LOCAL_PROJECTOR");
 }
+QString adapterPath()
+{
+    return qEnvironmentVariable("BRULION_LOCAL_ADAPTER");
+}
 
 std::unique_ptr<LocalRunner> openRunner(int context = 8192, bool pictures = false, const QString &stateDir = QString(),
-                                        bool spin = false)
+                                        bool spin = false, const QString &adapter = QString())
 {
     LocalRunner::Options options;
     options.modelPath = modelPath();
+    options.adapterPath = adapter;
     if (pictures)
         options.projectorPath = projectorPath();
     options.contextTokens = context;
@@ -528,7 +534,8 @@ private Q_SLOTS:
     {
         // How fast it reads and writes, for docs/PERFORMANCE.md: BRULION_LOCAL_SPEED=<rounds>
         // (each on a model opened anew, so nothing is kept from the round before),
-        // BRULION_LOCAL_SPIN=1 with threads that spin between steps (LocalRunner::Options::spinWait).
+        // BRULION_LOCAL_SPIN=1 with threads that spin between steps (LocalRunner::Options::spinWait),
+        // with the adapter BRULION_LOCAL_ADAPTER names when it is set.
         const int rounds = qEnvironmentVariableIntValue("BRULION_LOCAL_SPEED");
         if (rounds <= 0)
             QSKIP("BRULION_LOCAL_SPEED is not set: no measurement");
@@ -538,7 +545,8 @@ private Q_SLOTS:
             text += day.arg(i + 1);
         for (int round = 0; round < rounds; ++round) {
             const std::unique_ptr<LocalRunner> runner =
-                    openRunner(8192, false, QString(), qEnvironmentVariableIntValue("BRULION_LOCAL_SPIN") > 0);
+                    openRunner(8192, false, QString(), qEnvironmentVariableIntValue("BRULION_LOCAL_SPIN") > 0,
+                               adapterPath());
             QVERIFY(runner);
             ai::Request request = question(
                     u"%1\n\nRound %2. Write a long story (500 words) about the days above."_s.arg(text).arg(round));
@@ -548,6 +556,54 @@ private Q_SLOTS:
                   r.promptTokens, r.promptMs, 1000.0 * r.promptTokens / double(std::max<qint64>(1, r.promptMs)),
                   r.outputTokens, r.outputMs, 1000.0 * r.outputTokens / double(std::max<qint64>(1, r.outputMs)));
         }
+    }
+
+    void anAdapter()
+    {
+        // An adapter that is not there, or not one of this model: the model is not opened.
+        QString error;
+        LocalRunner::Options options;
+        options.modelPath = modelPath();
+        options.adapterPath = u"/nonexistent/adapter.gguf"_s;
+        options.backendDir = QStringLiteral(BRULION_LOCAL_AI_OUTPUT_DIR);
+        QVERIFY(!ai::openLlamaRunner(options, &error));
+        QVERIFY2(error.contains(u"cannot load the adapter /nonexistent/adapter.gguf"), qPrintable(error));
+        options.adapterPath = modelPath(); // (a model's file, not an adapter)
+        QVERIFY(!ai::openLlamaRunner(options, &error));
+        QVERIFY2(error.contains(u"cannot load the adapter"), qPrintable(error));
+        if (adapterPath().isEmpty())
+            QSKIP("BRULION_LOCAL_ADAPTER is not set: no adapter to add");
+
+        // With the adapter it answers, and what it kept on disk without it is not its own: the
+        // same text means something else to the model with it.
+        QTemporaryDir states;
+        QVERIFY(states.isValid());
+        ai::Request request = question(u"Search my notes for the word \"szarlotka\"."_s);
+        for (int i = 1; i <= 30; ++i)
+            request.system += u"\nRule %1: answer in the language of the question."_s.arg(i);
+        request.tools << searchTool();
+        const ai::local::Prompt prompt = ai::local::prompt(kFormat, request);
+        {
+            const std::unique_ptr<LocalRunner> plain = openRunner(8192, false, states.path());
+            QVERIFY(plain);
+            QVERIFY(plain->generate(prompt, params()).status == LocalRunner::Ok);
+        }
+        LocalRunner::Result first;
+        {
+            const std::unique_ptr<LocalRunner> adapted = openRunner(8192, false, states.path(), false, adapterPath());
+            QVERIFY(adapted);
+            first = adapted->generate(prompt, params());
+            QVERIFY2(first.status == LocalRunner::Ok, qPrintable(first.error));
+            QCOMPARE(first.storedTokens, 0);
+            qInfo("with the adapter: %s", qPrintable(textOf(first)));
+        }
+        // Its own state it finds again, and answers as it did.
+        const std::unique_ptr<LocalRunner> again = openRunner(8192, false, states.path(), false, adapterPath());
+        QVERIFY(again);
+        const LocalRunner::Result second = again->generate(prompt, params());
+        QVERIFY2(second.status == LocalRunner::Ok, qPrintable(second.error));
+        QVERIFY(second.storedTokens > 256);
+        QCOMPARE(second.pieces, first.pieces);
     }
 
     void aMissingFile()

@@ -20,8 +20,9 @@ done in the repository simply disappears from the list.
   conversation from its list (the page's own menu does it), more than one turn at a time (one per app), a conversation too long for a small model cut by turns rather than by
   characters, the time of each message, and an extension of one's own as the chat's partner
   (`chat` is the built-in assistant's command).
-* **The model on the device: what is still missing** — LFM3-VL 2B and LFM3 1.7B run in the app
-  through llama.cpp on Linux (the Nix package) and Android (docs/EXTENSIONS.md "AI",
+* **The model on the device: what is still missing** — LFM3-VL 2B, LFM3 1.7B and Brulion
+  Assistant 1.7B (LFM3 1.7B with the adapter trained for the assistant: docs/FINETUNE.md) run in
+  the app through llama.cpp on Linux (the Nix package) and Android (docs/EXTENSIONS.md "AI",
   docs/ARCHITECTURE.md "The model on the device"). Missing:
   * the AppImage and the Windows builds (their scripts pass no llama.cpp sources yet: on Windows
     the libraries go next to `brulion.exe` and nothing was built or tried there; the AppImage's

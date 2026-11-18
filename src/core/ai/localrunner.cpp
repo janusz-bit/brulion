@@ -69,6 +69,7 @@ Reply answerLocally(LocalRunner *runner, const LocalModel &model, Request reques
     params.temperature = model.temperature;
     params.topK = model.topK;
     params.repeatPenalty = model.repeatPenalty;
+    params.seed = model.seed;
     params.timeoutMs = TimeoutMs;
     params.cancel = cancel;
     Partial shown; // (what `partial` got last)

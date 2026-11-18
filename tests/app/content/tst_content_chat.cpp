@@ -180,7 +180,9 @@ private Q_SLOTS:
         QCOMPARE(written.size(), 2); // the question, the answer
         QCOMPARE(m_model.requests.size(), 2);
         const ai::Message &first = m_model.requests[0].messages.first();
-        QVERIFY2(first.content.startsWith(u"Dziś jest 2026-11-15.\n\nRozmowa dotyczy strony [[Dom]]:\n\n- [ ] Zapłacić czynsz"_s),
+        // (The day with its weekday: tst_extensions_assistant.)
+        QVERIFY2(first.content.startsWith(
+                         u"Dziś jest niedziela, 2026-11-15.\n\nRozmowa dotyczy strony [[Dom]]:\n\n- [ ] Zapłacić czynsz"_s),
                  qPrintable(first.content));
         QVERIFY(first.content.endsWith(u"Co mam jutro do zrobienia? ([[Dom]])"_s));
         QVERIFY(!m_model.requests[0].tools.isEmpty());

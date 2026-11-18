@@ -1,0 +1,275 @@
+{
+  "notebook": "dom-pl",
+  "language": "pl",
+  "now": "2026-11-16T09:30",
+  "tasks": [
+    {
+      "id": "dom-pl/kod-domofonu",
+      "category": "search",
+      "ask": "Jaki jest kod do domofonu?",
+      "expect": { "answer": { "contains": ["4721"] } },
+      "solution": [
+        { "call": "search_notes", "input": { "query": "kod domofon" } },
+        { "answer": "Kod do domofonu to 4721 ([[Dom]])." }
+      ]
+    },
+    {
+      "id": "dom-pl/oc-samochodu",
+      "category": "search",
+      "ask": "Do kiedy mam ważne OC na samochód?",
+      "expect": { "answer": { "anyOf": [["2026-12-31", "31 grudnia", "31.12.2026"]] } },
+      "solution": [
+        { "call": "search_notes", "input": { "query": "ubezpieczenie OC" } },
+        { "answer": "OC (PZU, polisa nr 9031-55-2210) jest ważne do 2026-12-31 ([[Samochód]])." }
+      ]
+    },
+    {
+      "id": "dom-pl/telefon-hydraulika",
+      "category": "search",
+      "ask": "Podaj mi numer do hydraulika.",
+      "expect": { "answer": { "anyOf": [["601 234 567", "601234567", "601-234-567"]] } },
+      "solution": [
+        { "call": "search_notes", "input": { "query": "hydraulik telefon" } },
+        { "answer": "Hydraulik, pan Marek Wiśniewski: 601 234 567 ([[Kontakty]])." }
+      ]
+    },
+    {
+      "id": "dom-pl/numer-elektryka",
+      "category": "search",
+      "ask": "Jaki jest numer do elektryka?",
+      "note": "Nie ma go w notatkach: odpowiedź mówi, że nie znalazła, i nie podaje cudzego numeru jako elektryka.",
+      "expect": {
+        "answer": {
+          "anyOf": [["nie znalaz", "nie ma ", "nie mam", "brak", "nie widzę", "nie widze", "nie udało", "nie mogę znaleźć",
+                     "nie zawiera", "nie występuje", "nie posiadam", "nie wiem", "nie zapisa", "nie jest zapisan",
+                     "nie pojawia", "nie natrafi", "nie odnalaz", "nie znajduj", "żadn", "nie wygląda", "nie widać",
+                     "nie wspomina", "nigdzie"]],
+          "notContains": ["601 234 567", "504 778 120"]
+        }
+      },
+      "solution": [
+        { "call": "search_notes", "input": { "query": "elektryk" } },
+        { "answer": "Nie znalazłam w notatkach numeru do elektryka. W [[Kontakty]] są tylko hydraulik, weterynarz i mechanik." }
+      ]
+    },
+    {
+      "id": "dom-pl/twarog-pierogi",
+      "category": "search",
+      "ask": "Ile twarogu potrzeba na pierogi ruskie?",
+      "expect": { "answer": { "anyOf": [["400 g", "400g", "40 dag"]] } },
+      "solution": [
+        { "call": "search_notes", "input": { "query": "pierogi ruskie twaróg" } },
+        { "call": "read_page", "input": { "name": "Przepisy/Pierogi ruskie" }, "unlessShown": "400 g twarogu" },
+        { "answer": "Na pierogi ruskie (ok. 50 sztuk) potrzeba 400 g twarogu półtłustego ([[Przepisy/Pierogi ruskie]])." }
+      ]
+    },
+    {
+      "id": "dom-pl/porcja-pierogow",
+      "category": "read",
+      "page": "Przepisy/Pierogi ruskie",
+      "ask": "Na ile osób starczy ta porcja, jeśli każdy zje 10 pierogów?",
+      "expect": { "answer": { "matches": ["(^|[^0-9])5([^0-9]|$)|pięć|pięciu"] } },
+      "solution": [
+        { "answer": "Porcja to ok. 50 pierogów, więc przy 10 na osobę starczy dla 5 osób." }
+      ]
+    },
+    {
+      "id": "dom-pl/ten-tydzien",
+      "category": "query",
+      "ask": "Co mam do zrobienia w tym tygodniu?",
+      "expect": {
+        "answer": {
+          "contains": ["czynsz", "opony", "bibliotek"],
+          "notContains": ["filtr", "dentyst"]
+        }
+      },
+      "solution": [
+        { "call": "query_notes", "input": { "query": "type:tasks status:open due:today..+6d" } },
+        { "answer": "W tym tygodniu:\n- oddać książkę do biblioteki (2026-11-18),\n- zapłacić czynsz (2026-11-20, [[Dom]]),\n- wymienić opony na zimowe (2026-11-22, [[Samochód]])." }
+      ]
+    },
+    {
+      "id": "dom-pl/zalegle",
+      "category": "query",
+      "ask": "Czy mam jakieś zaległe zadania?",
+      "expect": { "answer": { "contains": ["paczk"], "notContains": ["czynsz"] } },
+      "solution": [
+        { "call": "query_notes", "input": { "query": "type:tasks status:open due:overdue" } },
+        { "answer": "Tak, jedno: odebrać paczkę z paczkomatu (termin minął 2026-11-13, [[2026-11-12]])." }
+      ]
+    },
+    {
+      "id": "dom-pl/przypomnienia-jutro",
+      "category": "query",
+      "ask": "Jakie mam przypomnienia na jutro?",
+      "expect": { "answer": { "contains": ["hydraulik"], "anyOf": [["10:00", "10.00", "o 10"]] } },
+      "solution": [
+        { "call": "query_notes", "input": { "query": "type:reminders remind:tomorrow" } },
+        { "answer": "Jutro o 10:00: zadzwonić do hydraulika w sprawie kranu ([[Dom]])." }
+      ]
+    },
+    {
+      "id": "dom-pl/co-czytam",
+      "category": "query",
+      "ask": "Jaką książkę teraz czytam?",
+      "note": "„Lalka” może paść jako przeczytana, nigdy jako czytana teraz: zdanie (albo wiersz), które ją nazywa, mówi, że jest skończona (przeczytana, zrobiona, ✅, [x]…), a „Solaris” pada przed nią.",
+      "expect": {
+        "answer": {
+          "contains": ["Solaris"],
+          "notMatches": [
+            "(?:^|(?<=[.;!?][\\s)]))(?!(?:[^\\n.;!?]|[.;!?](?![\\s)]|$))*(?:(?<!nie )(?<!nie)(?:przeczytan|przeczytał|zrobion|sko[ńn]czon|sko[ńn]czył|uko[ńn]czon|zako[ńn]czon|odhaczon)|✅|\\[x\\]|\\bdone\\b|\\bfinished\\b))(?:[^\\n.;!?]|[.;!?](?![\\s)]|$))*Lalk",
+            "\\A(?:(?!Solaris)[\\s\\S])*Lalk"
+          ]
+        }
+      },
+      "solution": [
+        { "call": "query_notes", "input": { "query": "type:tasks status:doing" } },
+        { "answer": "Teraz czytasz „Solaris” Stanisława Lema ([[Książki]])." }
+      ]
+    },
+    {
+      "id": "dom-pl/wydatki-tydzien",
+      "category": "multi",
+      "ask": "Ile wydałam w zeszłym tygodniu według dziennika?",
+      "expect": { "answer": { "anyOf": [["338,55", "338.55"]] } },
+      "solution": [
+        { "call": "search_notes", "input": { "query": "Wydatki" } },
+        { "answer": "Według dziennika 338,55 zł: Biedronka 86,40 zł (2026-11-12), apteka 42,15 zł i paliwo 210 zł (2026-11-14)." }
+      ]
+    },
+    {
+      "id": "dom-pl/mleko",
+      "category": "append",
+      "ask": "Dopisz mleko do listy zakupów.",
+      "expect": {
+        "files": [{ "path": "Zakupy.md", "matches": ["^- (\\[ \\] )?mleko", "- chleb"] }],
+        "toolsNotCalled": ["write_page"]
+      },
+      "solution": [
+        { "call": "append_to_page", "input": { "name": "Zakupy", "markdown": "- mleko" } },
+        { "answer": "Dopisałam mleko do [[Zakupy]]." }
+      ]
+    },
+    {
+      "id": "dom-pl/ser-pomidory",
+      "category": "append",
+      "messages": [
+        { "role": "user", "content": "Co mam na liście zakupów?" },
+        { "role": "assistant", "content": "Na liście [[Zakupy]] są: chleb, masło i jajka." },
+        { "role": "user", "content": "Dopisz jeszcze ser i pomidory." }
+      ],
+      "expect": {
+        "files": [{ "path": "Zakupy.md", "contains": ["ser", "pomidor", "chleb", "jajka"] }],
+        "toolsNotCalled": ["write_page"]
+      },
+      "solution": [
+        { "call": "append_to_page", "input": { "name": "Zakupy", "markdown": "- ser\n- pomidory" } },
+        { "answer": "Dopisałam ser i pomidory do [[Zakupy]]." }
+      ]
+    },
+    {
+      "id": "dom-pl/bieg-w-dzienniku",
+      "category": "journal",
+      "ask": "Zanotuj w dzienniku, że dziś przebiegłam 5 km.",
+      "expect": { "files": [{ "path": "journals/2026-11-16.md", "contains": ["5 km"] }] },
+      "solution": [
+        { "call": "append_to_journal", "input": { "markdown": "- Przebiegłam 5 km." } },
+        { "answer": "Zapisałam w dzienniku na dziś: przebiegłaś 5 km." }
+      ]
+    },
+    {
+      "id": "dom-pl/przypomnij-mama",
+      "category": "journal",
+      "ask": "Przypomnij mi jutro o 18:00, żeby zadzwonić do mamy.",
+      "expect": {
+        "files": [{
+          "path": ["journals/2026-11-16.md", "journals/2026-11-17.md"],
+          "contains": ["mam"],
+          "matches": ["^(?=.*mam).*⏰ 2026-11-17 18:00"]
+        }]
+      },
+      "solution": [
+        { "call": "append_to_journal", "input": { "markdown": "- [ ] Zadzwonić do mamy ⏰ 2026-11-17 18:00" } },
+        { "answer": "Dodałam przypomnienie na jutro (2026-11-17) o 18:00: zadzwonić do mamy." }
+      ]
+    },
+    {
+      "id": "dom-pl/opony-zrobione",
+      "category": "update",
+      "ask": "Opony już wymienione, odhacz to.",
+      "expect": {
+        "files": [{ "path": "Samochód.md", "matches": ["- \\[x\\] Wymienić opony na zimowe"], "contains": ["#auto", "📅 2026-11-22"] }]
+      },
+      "solution": [
+        { "call": "search_notes", "input": { "query": "opony" } },
+        { "call": "update_block", "input": { "ref": "{{ref Samochód.md#L6}}", "text": "Wymienić opony na zimowe 📅 2026-11-22 #auto", "status": "done" } },
+        { "answer": "Odhaczyłam wymianę opon na zimowe w [[Samochód]]." }
+      ]
+    },
+    {
+      "id": "dom-pl/czynsz-termin",
+      "category": "update",
+      "ask": "Przesuń termin zapłaty czynszu na 25 listopada.",
+      "expect": {
+        "files": [{ "path": "Dom.md", "matches": ["- \\[ \\] Zapłacić czynsz.*📅 2026-11-25"], "contains": ["#rachunki"], "notContains": ["📅 2026-11-20"] }]
+      },
+      "solution": [
+        { "call": "search_notes", "input": { "query": "czynsz" } },
+        { "call": "update_block", "input": { "ref": "{{ref Dom.md#L3}}", "text": "Zapłacić czynsz 📅 2026-11-25 #rachunki" } },
+        { "answer": "Przesunęłam termin czynszu na 2026-11-25 ([[Dom]])." }
+      ]
+    },
+    {
+      "id": "dom-pl/zakopane",
+      "category": "write",
+      "ask": "Utwórz stronę „Wyjazd do Zakopanego” z listą rzeczy do zabrania: narty, gogle, termos.",
+      "expect": {
+        "files": [{ "path": "Wyjazd do Zakopanego.md", "contains": ["narty", "gogle", "termos"] }]
+      },
+      "solution": [
+        { "call": "write_page", "input": { "name": "Wyjazd do Zakopanego", "content": "# Wyjazd do Zakopanego\n\nDo zabrania:\n- [ ] narty\n- [ ] gogle\n- [ ] termos\n" } },
+        { "answer": "Utworzyłam stronę [[Wyjazd do Zakopanego]] z listą: narty, gogle, termos." }
+      ]
+    },
+    {
+      "id": "dom-pl/procent",
+      "category": "no_tool",
+      "ask": "Ile to jest 15% z 240 zł?",
+      "expect": { "answer": { "matches": ["(^|[^0-9])36([^0-9]|$)"] }, "noTools": true },
+      "solution": [
+        { "answer": "15% z 240 zł to 36 zł." }
+      ]
+    },
+    {
+      "id": "dom-pl/podziekowanie",
+      "category": "no_tool",
+      "ask": "Dzięki, to wszystko!",
+      "expect": { "noTools": true },
+      "solution": [
+        { "answer": "Proszę bardzo! Daj znać, gdybyś czegoś potrzebowała." }
+      ]
+    },
+    {
+      "id": "dom-pl/dopisz-to",
+      "category": "clarify",
+      "ask": "Dopisz to do listy.",
+      "note": "Nie wiadomo, co i do której listy: dopytać, niczego nie zmieniać.",
+      "expect": { "answer": { "anyOf": [["?", "podaj", "napisz, co", "doprecyz", "potrzebuję wiedzieć", "powiedz", "co dokładnie", "do której"]] } },
+      "solution": [
+        { "answer": "Co mam dopisać i do której listy: [[Zakupy]], [[Książki]], czy innej?" }
+      ]
+    },
+    {
+      "id": "dom-pl/odmowa-chleb",
+      "category": "decline",
+      "ask": "Dopisz chleb razowy do zakupów.",
+      "answers": ["no"],
+      "note": "Użytkowniczka odmawia zmiany: nic się nie zmienia i asystent nie próbuje drugi raz (druga prośba o zgodę zostałaby przyjęta).",
+      "expect": { "toolsCalled": ["append_to_page"] },
+      "solution": [
+        { "call": "append_to_page", "input": { "name": "Zakupy", "markdown": "- chleb razowy" } },
+        { "answer": "Dobrze, niczego nie dopisałam do [[Zakupy]]." }
+      ]
+    }
+  ]
+}

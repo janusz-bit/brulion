@@ -8,6 +8,7 @@
 #include "ai/localrunner.h"
 
 #include <QFile>
+#include <QHash>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -197,17 +198,22 @@ private Q_SLOTS:
     {
         const QList<ai::LocalModel> &models = ai::localModels();
         QVERIFY(models.size() >= 2);
-        // The default sees pictures.
-        QCOMPARE(models.first().id, u"lfm3-vl-2b"_s);
-        QVERIFY(models.first().sees());
+        // The default is the assistant's own: LFM3 1.7B with its adapter, answering at once.
+        QCOMPARE(models.first().id, u"brulion-assistant-1.7b"_s);
+        QVERIFY(models.first().adapted());
+        QVERIFY(!models.first().thinks);
+        QVERIFY(!models.first().sees());
         QCOMPARE(ai::localModel(QString()), &models.first());
-        QCOMPARE(ai::defaultModel(u"local"_s), u"lfm3-vl-2b"_s);
+        QCOMPARE(ai::defaultModel(u"local"_s), u"brulion-assistant-1.7b"_s);
+        QVERIFY(ai::localModel(u"lfm3-vl-2b"_s)->sees());
         QCOMPARE(ai::localModel(u"lfm3-1.7b"_s)->name, u"LFM3 1.7B"_s);
         QVERIFY(!ai::localModel(u"lfm3-1.7b"_s)->sees());
         QCOMPARE(ai::localModel(u"gpt"_s), nullptr);
 
         QSet<QString> ids;
-        QSet<QString> fileNames;
+        // A name is one file in the models folder: models share a file only as the identical
+        // LocalFile (ai/localfiles.h keeps it for the other one, and finds it there by name).
+        QHash<QString, ai::LocalFile> filesByName;
         static const QRegularExpression sha256(u"^[0-9a-f]{64}$"_s);
         for (const ai::LocalModel &model : models) {
             QVERIFY2(!ids.contains(model.id), qPrintable(model.id));
@@ -216,8 +222,15 @@ private Q_SLOTS:
             QVERIFY2(ai::local::knowsFormat(model.format), qPrintable(model.format));
             QCOMPARE(model.licenseUrl.scheme(), u"https"_s);
             QCOMPARE(model.pageUrl.scheme(), u"https"_s);
-            QCOMPARE(model.files().size(), model.sees() ? 2 : 1);
+            // The licence beside its files, of one revision too.
+            QVERIFY2(model.licenseUrl.path().contains(QRegularExpression(u"/blob/[0-9a-f]{40}/LICENSE$"_s)),
+                     qPrintable(model.licenseUrl.toString()));
+            // An adapted model names the model under it and its maker; one as its maker gives it, none.
+            QCOMPARE(!model.baseName.isEmpty(), model.adapted());
+            QCOMPARE(!model.baseMaker.isEmpty(), model.adapted());
+            QCOMPARE(model.files().size(), 1 + (model.adapted() ? 1 : 0) + (model.sees() ? 1 : 0));
             qint64 bytes = 0;
+            QSet<QString> own;
             for (const ai::LocalFile &file : model.files()) {
                 // One revision of a repository (40 hex digits), over HTTPS, with its checksum.
                 QCOMPARE(file.url.scheme(), u"https"_s);
@@ -226,15 +239,75 @@ private Q_SLOTS:
                          qPrintable(file.url.path()));
                 QVERIFY2(file.url.path().endsWith(u'/' + file.name), qPrintable(file.url.path()));
                 QVERIFY2(sha256.match(QString::fromLatin1(file.sha256)).hasMatch(), file.sha256.constData());
-                QVERIFY(file.bytes > 100 * 1000 * 1000);
+                // A model, a projector: hundreds of MB; a LoRA adapter: some tens.
+                const bool adapter = model.adapted() && file == model.adapter;
+                QVERIFY2(file.bytes > (adapter ? 10 : 100) * 1000 * 1000, qPrintable(file.name));
                 QVERIFY2(file.name.endsWith(u".gguf") && !file.name.contains(u'/'), qPrintable(file.name));
-                QVERIFY2(!fileNames.contains(file.name), qPrintable(file.name));
-                fileNames.insert(file.name);
+                QVERIFY2(!own.contains(file.name), qPrintable(file.name));
+                own.insert(file.name);
+                if (const auto known = filesByName.constFind(file.name); known != filesByName.constEnd())
+                    QVERIFY2(*known == file, qPrintable(u"%1 of %2: not the same file"_s.arg(file.name, model.id)));
+                filesByName.insert(file.name, file);
                 bytes += file.bytes;
             }
             QCOMPARE(model.bytes(), bytes);
         }
+        // An adapted model over the file of a model the app knows is that one, trained further:
+        // its base, under its licence, in its format.
+        for (const ai::LocalModel &model : models) {
+            if (!model.adapted())
+                continue;
+            for (const ai::LocalModel &base : models) {
+                if (base.adapted() || base.file != model.file)
+                    continue;
+                QCOMPARE(model.baseName, base.name);
+                QCOMPARE(model.baseMaker, base.maker);
+                QCOMPARE(model.license, base.license);
+                QCOMPARE(model.format, base.format);
+            }
+        }
         QVERIFY(!ai::local::knowsFormat(u"chatml"_s));
+    }
+
+    void theAssistantsOwnModel()
+    {
+        // LFM3 1.7B trained further for the built-in assistant (docs/FINETUNE.md): an adapter
+        // over the text model's very file (downloaded once for both), answering at once.
+        const ai::LocalModel *assistant = ai::localModel(u"brulion-assistant-1.7b"_s);
+        const ai::LocalModel *text = ai::localModel(u"lfm3-1.7b"_s);
+        QVERIFY(assistant && text);
+        QCOMPARE(assistant->name, u"Brulion Assistant 1.7B"_s);
+        QCOMPARE(assistant->label, u"Brulion"_s); // (the settings' chooser: three on a narrow phone)
+        QVERIFY(assistant->adapted());
+        QVERIFY(!assistant->sees());
+        QVERIFY(!assistant->thinks);
+        QVERIFY(text->thinks && !text->adapted());
+        QCOMPARE(&ai::localModels().first(), assistant); // the default: the best with the assistant
+        QVERIFY(ai::localModel(u"lfm3-vl-2b"_s)->thinks);
+        QCOMPARE(assistant->file, text->file);
+        QCOMPARE(assistant->files(), (QList<ai::LocalFile>{text->file, assistant->adapter}));
+        QCOMPARE(assistant->format, text->format);
+        // Liquid AI's model under their licence, not made by them: trained further by Brulion.
+        QCOMPARE(assistant->baseName, u"LFM3 1.7B"_s);
+        QCOMPARE(assistant->baseMaker, u"Liquid AI"_s);
+        QCOMPARE(assistant->maker, u"Brulion"_s);
+        QCOMPARE(assistant->license, u"LFM Open License v1.0"_s);
+        // The adapter as published (finetune/publish.py: rank 48, f16).
+        QCOMPARE(assistant->adapter.name, u"brulion-assistant-1.7b-lora.gguf"_s);
+        QCOMPARE(assistant->adapter.bytes, qint64(96654336));
+        QCOMPARE(assistant->bytes(), text->bytes() + 96654336);
+        // Its adapter and the licence beside it from one revision of its own repository.
+        const QString repository = u"https://huggingface.co/janusz-bit/brulion-assistant-1.7b"_s;
+        QCOMPARE(assistant->pageUrl, QUrl(repository));
+        const QString revision = assistant->adapter.url.path().section(u'/', 4, 4);
+        QCOMPARE(assistant->adapter.url,
+                 QUrl(u"%1/resolve/%2/brulion-assistant-1.7b-lora.gguf"_s.arg(repository, revision)));
+        QCOMPARE(assistant->licenseUrl, QUrl(u"%1/blob/%2/LICENSE"_s.arg(repository, revision)));
+        QVERIFY2(QRegularExpression(u"^[0-9a-f]{40}$"_s).match(revision).hasMatch(), qPrintable(revision));
+        // The sampling it was measured with: the app's.
+        QCOMPARE(assistant->temperature, text->temperature);
+        QCOMPARE(assistant->topK, text->topK);
+        QCOMPARE(assistant->repeatPenalty, text->repeatPenalty);
     }
 
     void promptsAreTheModelsOwn_data()

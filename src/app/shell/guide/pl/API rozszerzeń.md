@@ -51,7 +51,7 @@ Blok to punkt listy, akapit albo nagłówek. `b.blocks`, `b.search`, `b.query` i
 | `props` | jego właściwości: `{ autor = "Bolesław Prus" }` dla wiersza `autor:: Bolesław Prus` pod nim |
 | `children` | bloki pod nim (z `b.blocks` i `ctx.block`) |
 | `ref` | miejsce bloku. Podaj je funkcji `b.replaceBlock`, żeby zmienić blok; przestaje działać, gdy wiersz się zmieni |
-| `line`, `excerpt` | z `b.search`: wiersz pierwszego trafienia, liczony od 1, i tekst wokół niego |
+| `line`, `excerpt` | z `b.search`: wiersz, który pasuje najlepiej — ma najwięcej szukanych słów — liczony od 1, i tekst wokół niego |
 | `due`, `scheduled`, `start`, `reminder` | z `b.query`: daty zadania i czas przypomnienia |
 
 ```luau
@@ -76,7 +76,7 @@ return table.concat(wiersze, "\n")
 | `b.write(nazwa, tekst)` | tworzy stronę albo zastępuje **cały** jej tekst; `"Spotkania/Budżet"` utworzy też folder |
 | `b.replaceBlock(ref, tekst, task)` | daje pierwszemu wierszowi bloku nowy tekst; z `task` (`"x"`, `" "`, `"/"`, `"-"`) ustawia też pole wyboru tak, jak kliknięcie (zrobione zadanie dostaje datę). Zwraca nowe `ref` bloku |
 
-`b.replaceBlock` zostawia punktor, wcięcie i daty na końcu wiersza. **Odmawia**, gdy wiersz zmienił się, odkąd kod go przeczytał — przyszła synchronizacja, coś tam dopisałeś — więc nigdy nie nadpisze zmiany, której kod nie widział. Błąd ma w sobie słowo `stale`; przeczytaj blok jeszcze raz.
+`b.replaceBlock` zostawia punktor, wcięcie i daty zadania (gdziekolwiek stoją w wierszu), chyba że nowy tekst ma własne daty. **Odmawia**, gdy wiersz zmienił się, odkąd kod go przeczytał — przyszła synchronizacja, coś tam dopisałeś — więc nigdy nie nadpisze zmiany, której kod nie widział. Błąd ma w sobie słowo `stale`; przeczytaj blok jeszcze raz.
 
 ```luau
 b.command("zrobione", function(ctx)
