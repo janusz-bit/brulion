@@ -207,7 +207,8 @@ private Q_SLOTS:
         QCOMPARE(t.displayRange(text.indexOf(u"ma"), text.indexOf(u"ma") + 2),
                  std::make_pair(t.text.indexOf(u"ma"), t.text.indexOf(u"ma") + 2));
         const qsizetype link = text.indexOf(u"[[");
-        QCOMPARE(t.displayRange(link + 3, link + 4), std::make_pair(t.text.indexOf(u"kota"), t.text.indexOf(u"kota") + 4));
+        QCOMPARE(t.displayRange(link + 3, link + 4),
+                 std::make_pair(t.text.indexOf(u"kota"), t.text.indexOf(u"kota") + 4));
     }
 
     void sourceMapOfBlocks_data()

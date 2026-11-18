@@ -142,7 +142,8 @@ private Q_SLOTS:
         const QString resolved = f.html(1);
         QSignalSpy changed(f.model(), &QAbstractItemModel::dataChanged);
         QVERIFY(f.change(u"Nowa strona.md"_s, u"- nowa, świeża\n"_s));
-        QVERIFY(changes(changed, *f.model()).contains(u"0-2:html,renderedText,embeds,onlyEmbeds,transclusions,properties"_s));
+        QVERIFY(changes(changed, *f.model())
+                        .contains(u"0-2:html,renderedText,embeds,onlyEmbeds,transclusions,properties"_s));
         QVERIFY(f.html(0) != unresolved);
         QCOMPARE(f.html(1), resolved);
         // A rename: the old name no longer resolves.
@@ -201,7 +202,8 @@ private Q_SLOTS:
         QVERIFY(f.html(0).contains(u"🚀"_s));
         QCOMPARE(f.html(1), other);
         QVERIFY(f.cellHtml(0, 0).contains(u"🚀"_s));
-        QCOMPARE(changes(changed, *f.model()), (QStringList{u"0-0:html,renderedText"_s, u"%1-%1:tableData"_s.arg(table)}));
+        QCOMPARE(changes(changed, *f.model()),
+                 (QStringList{u"0-0:html,renderedText"_s, u"%1-%1:tableData"_s.arg(table)}));
     }
 
     // Hidden (a day of the hidden Journal): index changes only make it stale; shown again, it

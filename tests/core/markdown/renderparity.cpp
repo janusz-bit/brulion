@@ -98,7 +98,8 @@ struct Install {
     {
         InlineRenderer::setRenderObserver(nullptr);
         Stats &s = stats();
-        std::fprintf(stderr, "render parity: %lld renderings checked, %lld not valid, %lld not drawable, %lld failures\n",
+        std::fprintf(stderr,
+                     "render parity: %lld renderings checked, %lld not valid, %lld not drawable, %lld failures\n",
                      qlonglong(s.checked), qlonglong(s.invalid), qlonglong(s.undrawable), qlonglong(s.failures.size()));
         for (const QString &f : std::as_const(s.failures).first(std::min<qsizetype>(s.failures.size(), 40)))
             std::fprintf(stderr, "PARITY FAIL %s\n", qPrintable(f));

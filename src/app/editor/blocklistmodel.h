@@ -382,8 +382,8 @@ private:
         QHash<QString, QString> transclusionBlocks;
         /// A task's subtask progress the html shows ("3/5"): re-rendered when its subtasks change.
         markdown::SubtaskProgress htmlProgress;
-        int htmlCalcEpoch = -1;     ///< m_calcEpoch the html's inline calculations saw
-        int renderOffset = 0;       ///< offset of the rendered text in the body (reminder: ranges)
+        int htmlCalcEpoch = -1; ///< m_calcEpoch the html's inline calculations saw
+        int renderOffset = 0;   ///< offset of the rendered text in the body (reminder: ranges)
         // Calculations: calcResults / tableData are current while resultsValid and, when they
         // read calc variables (resultsUseScope: calc blocks, tables with formulas or inline
         // calculations in cells), resultsEpoch == m_calcEpoch (the block's own text and
@@ -528,8 +528,8 @@ private:
     bool m_calcFlagsValid = false;
     /// Something reads calc variables: calc blocks, tables with formulas, rendered inline calculations.
     mutable bool m_hasCalcConsumers = false;
-    QList<quint64> m_rows;              ///< uid per model row (mirrors the document after replays)
-    QHash<quint64, int> m_docIndex;      ///< uid -> document index
+    QList<quint64> m_rows;          ///< uid per model row (mirrors the document after replays)
+    QHash<quint64, int> m_docIndex; ///< uid -> document index
     mutable QHash<quint64, RowState> m_state;
     /// Rows refresh(true) may have work for although their own text is unchanged — calc blocks,
     /// tables, charts, html with `((id))` or inline calculations, transclusions of this page — by

@@ -3308,6 +3308,56 @@ compression and 1–3 moves per frame (the first version of the catch gave 10, 3
 Its rows without TouchFlick fail when a Qt update changes either fault. Upstream bug report
 drafts: both faults are unfixed in qtbase / qtdeclarative dev.
 
+### Rendered text without rich text: `RenderedTextItem` (Z10 stage A)
+
+A block's rendered text costs most of a row: a rich-text `Text` (or, with tints, a read-only
+`TextEdit` with `RichTextPills` and `BTintShapes`' Repeaters) holds a `QTextDocument` parsed from the
+renderer's HTML and laid out by `QTextDocumentLayout`. Stage A of the editor's rewrite
+(docs/PERFORMANCE.md Z10) draws it with one C++ item instead, behind a switch: **`BRULION_TEXT_ITEM=1`**
+(`EditorInput.textItem`; off by default — nothing changes without it).
+
+* **Runs, not HTML** (`src/core/markdown/renderedtext.h`). `InlineRenderer::renderRuns()` /
+  `renderBlockRuns()` give `RenderedText`: the text Qt's rich text shows (entities decoded, `<br/>`
+  as `\n`, white space collapsed as Qt's HTML import collapses it), the tag pairs as nested
+  `elements`, flat `runs` (bold, italic, strike, code, sup/sub, underline; colours; a `Pill` or `Box`
+  background by RichTextPills' rule; the link; a page's app icon), `objects` (icons, rules) and a
+  display ↔ source map (`renderTraced()`: every piece of the HTML with its source range — verbatim
+  text character by character, a construct as a whole). It is the renderer's own HTML taken apart,
+  so the HTML and the runs never disagree: `runsToHtml()` gives the HTML back byte for byte, which
+  `tst_markdown_renderparity_*` checks for every rendering the renderer's tests make (the tests
+  built again with a render observer). HTML that is not well formed (a `<mark>` pair across
+  emphasis: `<mark>a **b</mark> c**`) is not `valid`; a formula with fonts of its own
+  (`\mathtt`, `\mathsf`, `\overline`), a rule and preformatted text are not `drawable`.
+* **The model** gives it as the role `renderedText` (`BlockRowData.renderedText`, the value type
+  `renderedText`: a shared pointer, `drawable`, `text`), rendered only when read and kept while the
+  row's `html` is (the same rendering through the traced path; the task chips are appended, a list
+  item's `# heading` lines put together as for `html`). Source positions are the block body's.
+* **The item** (`src/app/editor/renderedtextitem.h`): one `QTextLayout` with a format per run, laid
+  out synchronously when the text, width, font, line height, alignment or line limit changes — so
+  its `implicitHeight` is final when the row is created (rule 1 above) — and never for anything
+  else; a new width keeps left-aligned lines that no width broke (as QQuickText does: a window
+  resized lays out only the wrapped blocks). Lines sit where `QTextDocumentLayout`'s `FixedHeight` puts them (the baseline at 4/5 of the
+  fixed line, in 26.6 fixed point), so rendered and edited blocks keep their lines; the text is one
+  `QSGTextNode` (`QQuickWindow::createTextNode()`, `addTextLayout()`: the graph's way, L16). Chips,
+  tags, code and highlights are one geometry node of antialiased rounded rectangles under the text
+  (with the software renderer, one painted image); the hovered link's underline and the find bar's
+  matches are geometry over the same layout, not a new one. A page's app icon keeps its three
+  no-break spaces; `iconShapes` gives their place and a Repeater of `BIcon` draws it (rare).
+  `linkAt(x, y)`, `positionAt(x, y)` (a source position), `rectForSource(from, to)`,
+  `maximumLineCount` with "…" (`truncated`) as `RichTextPills` cuts the lists' rich text.
+* **BlockText** shows it in the same Loader that holds the tinted `TextEdit` (no new object per
+  row), for any block whose runs are `drawable`; everything else — and every block while a screen
+  reader is on (`DeviceInfo.screenReader`: `BLinkTargets` makes the rich text's links accessible
+  items) — keeps the rich-text path. The item is `StaticText` with the block's plain text as its
+  accessible name. Clicks, menus, hover, previews and the find bar go through the same
+  `BlockText` functions (`linkAt()`, `renderedItem`).
+
+`tst_editor_renderedtext` compares the item with the rich-text path on the same HTML: the lines'
+breaks, widths and positions with a `QTextDocument` of the fixed line height, the shapes with
+`RichTextPills`' rectangles (within half a pixel), the shown text with `toRawText()`; and its
+layouts, links, source positions, the cut, Polish no-break spaces and emoji. Status and numbers:
+docs/PERFORMANCE.md "Z10 stage A: rendered text from runs".
+
 ### The scroll bar: `RowScroll` (`src/app/ui/rowscroll.h`)
 
 Qt's attached scroll bar (`T.ScrollBar.vertical: BScrollBar {}`) takes its position and size

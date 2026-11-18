@@ -74,8 +74,8 @@ char32_t entityAt(QStringView html, qsizetype at, qsizetype &end)
         QStringView name;
         char32_t character;
     };
-    static constexpr Named entities[] = {{u"amp", u'&'},   {u"lt", u'<'},    {u"gt", u'>'},
-                                         {u"quot", u'"'},  {u"apos", u'\''}, {u"nbsp", 0xA0}};
+    static constexpr Named entities[] = {{u"amp", u'&'},  {u"lt", u'<'},    {u"gt", u'>'},
+                                         {u"quot", u'"'}, {u"apos", u'\''}, {u"nbsp", 0xA0}};
     char32_t out = 0;
     if (const Named *e = std::ranges::find(entities, name, &Named::name); e != std::end(entities)) {
         out = e->character;
@@ -359,9 +359,10 @@ private:
             }
             const QStringView key = inner.sliced(k + 1, eq - k - 1);
             const QStringView raw = inner.sliced(eq + 2, close - eq - 2);
-            const quint8 bit = key == u"href" ? HrefAttribute : key == u"name" ? NameAttribute
-                             : key == u"style"                                 ? StyleAttribute
-                                                                               : 0;
+            const quint8 bit = key == u"href"    ? HrefAttribute
+                               : key == u"name"  ? NameAttribute
+                               : key == u"style" ? StyleAttribute
+                                                 : 0;
             if (bit == 0 || attributes >= bit)
                 m_out.valid = false;
             attributes |= bit;
@@ -589,9 +590,9 @@ QString runsToHtml(const RenderedText &t)
             close();
         emitTo(e.from);
         const quint8 attributes = k < t.attributes.size() ? t.attributes[k]
-                                                         : quint8((e.href.isEmpty() ? 0 : HrefAttribute)
-                                                                  | (e.name.isEmpty() ? 0 : NameAttribute)
-                                                                  | (e.style.isEmpty() ? 0 : StyleAttribute));
+                                                          : quint8((e.href.isEmpty() ? 0 : HrefAttribute)
+                                                                   | (e.name.isEmpty() ? 0 : NameAttribute)
+                                                                   | (e.style.isEmpty() ? 0 : StyleAttribute));
         out += u'<' + tagName(e.tag);
         if (attributes & HrefAttribute)
             out += u" href=\""_s + e.href.toHtmlEscaped() + u'"';

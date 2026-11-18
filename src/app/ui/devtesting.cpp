@@ -201,8 +201,7 @@ QStringList wrongHourPresses(const QJSValue &picker, const QList<Circle> &number
 // The deferred deletions that come due while a self-test's pass runs (DevTest::callCatching): an
 // application event filter takes their events, and the outermost call deletes the objects once
 // the pass returned.
-class DeferredDeleteHold : public QObject
-{
+class DeferredDeleteHold : public QObject {
 public:
     bool eventFilter(QObject *watched, QEvent *event) override
     {

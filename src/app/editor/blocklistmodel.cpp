@@ -5,9 +5,9 @@
 #include "markdown/taskdeps.h"
 
 #include "blockrender_p.h"
-#include "renderedtextitem.h"
 #include "editorhost.h"
 #include "queryhost.h"
+#include "renderedtextitem.h"
 
 #include "calc/calc.h"
 #include "chart/chart.h"
@@ -326,7 +326,8 @@ markdown::TracedHtml renderBodyTraced(const markdown::BlockEntry &e, const Block
             offset = s.editOffset;
             traced.append(renderer.renderBlockTraced(nl < 0 ? rest : rest.left(nl), BlockKind::Heading), offset);
             if (nl >= 0) {
-                markdown::TracedHtml more = renderer.renderBlockTraced(QStringView(rest).sliced(nl + 1), BlockKind::Paragraph);
+                markdown::TracedHtml more =
+                        renderer.renderBlockTraced(QStringView(rest).sliced(nl + 1), BlockKind::Paragraph);
                 shiftRangeLinks(more, nl + 1);
                 traced.append(u"<br/>");
                 traced.append(more, offset + nl + 1);
@@ -432,7 +433,7 @@ QString richTextToPlain(const QString &html)
 
 } // namespace detail
 
-BlockListModel::BlockListModel(QObject *parent) : QAbstractListModel(parent), m_today(QDate::currentDate()) {}
+BlockListModel::BlockListModel(QObject *parent) : QAbstractListModel(parent), m_today(QDate::currentDate()) { }
 
 BlockListModel::~BlockListModel() = default;
 
@@ -893,11 +894,11 @@ void BlockListModel::refresh(bool contentChanged)
 
     QList<char> dirty(n, 0); // structural state changed
     QList<int> visibleRows;  // in order (selection edges)
-    QList<int> lineRows; // blocks moved to other lines of the file by changes above them
+    QList<int> lineRows;     // blocks moved to other lines of the file by changes above them
     ContentChanges content;
     if (contentChanged)
         m_dependents.clear(); // made again below
-    QString prevKind; // of the last visible row
+    QString prevKind;         // of the last visible row
     int visibleCount = 0;
     for (int row = 0; row < n; ++row) {
         const int i = docIndexOfRow(row);
@@ -1239,7 +1240,8 @@ QVariantMap BlockListModel::computeTableData(int i) const
             const QString display = formula ? eval.values.value(r).value(c, cell) : cell;
             const QString error = eval.errors.value(r).value(c);
             // Formula results (and errors) are values, not Markdown.
-            const QString html = formula || !error.isEmpty() ? markdown::InlineRenderer::escape(display) : cellHtml(cell);
+            const QString html =
+                    formula || !error.isEmpty() ? markdown::InlineRenderer::escape(display) : cellHtml(cell);
             cells.append(QVariantMap{{u"text"_s, cell},
                                      {u"display"_s, display},
                                      {u"html"_s, html},
@@ -1879,7 +1881,8 @@ void BlockListModel::ensureEmbeds(int row) const
     const BlockView view = cachedShape(row).view;
     if (!showsEmbeds(view))
         return;
-    st.onlyEmbeds = view == BlockView::Text && (e.body.contains(u"![") || e.body.contains(u"!((")) && onlyEmbeds(e.body, true);
+    st.onlyEmbeds =
+            view == BlockView::Text && (e.body.contains(u"![") || e.body.contains(u"!((")) && onlyEmbeds(e.body, true);
     QList<Embed> embeds = embedsOf(e.body);
     // Page embeds of Obsidian Excalidraw plugin drawings (`![[Plan]]`, the plugin's files without
     // ".excalidraw" in their name): their drawings, after the attachments.

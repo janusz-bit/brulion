@@ -22,7 +22,7 @@ bool EditorInput::textItem()
     return on;
 }
 
-EditorInput::EditorInput(QObject *parent) : QObject(parent) {}
+EditorInput::EditorInput(QObject *parent) : QObject(parent) { }
 
 void EditorInput::replaceRanges(QQuickTextDocument *document, const QVariantList &ranges,
                                 const QString &replacement) const

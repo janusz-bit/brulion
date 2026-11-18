@@ -38,12 +38,12 @@ namespace brulion::markdown {
 struct RenderedElement {
     enum class Tag : quint8 { Bold, Italic, Strike, Code, Sup, Sub, Span, Anchor, Pre };
     Tag tag = Tag::Span;
-    int depth = 0;          ///< nesting level (0: outermost)
-    qsizetype from = 0;     ///< display range
+    int depth = 0;      ///< nesting level (0: outermost)
+    qsizetype from = 0; ///< display range
     qsizetype to = 0;
-    QString href;           ///< Anchor (decoded)
-    QString name;           ///< Anchor: `name` (an app icon: "brulion-icon:<name>")
-    QString style;          ///< the `style` attribute as written ("" without one)
+    QString href;  ///< Anchor (decoded)
+    QString name;  ///< Anchor: `name` (an app icon: "brulion-icon:<name>")
+    QString style; ///< the `style` attribute as written ("" without one)
     bool operator==(const RenderedElement &) const = default;
 };
 
@@ -92,8 +92,8 @@ struct RenderedObject {
     Kind kind = Kind::Icon;
     qsizetype from = 0; ///< display range it covers (Icon: its no-break spaces; Rule: empty)
     qsizetype to = 0;
-    QString name;       ///< Icon: the icon's name
-    QString color;      ///< Icon: the link's colour
+    QString name;  ///< Icon: the icon's name
+    QString color; ///< Icon: the link's colour
     bool operator==(const RenderedObject &) const = default;
 };
 

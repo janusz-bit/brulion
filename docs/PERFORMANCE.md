@@ -1757,7 +1757,7 @@ one; the estimates are for the 10k notebook on the desktop (a phone: ×4–6).
 | Z7 | `SuggestionModel` | after one `[[` or `((` completion every save ranks all 10k names / sorts all blocks again, per editor (the mode is never reset on close) | reset on close, refresh only while open |
 | Z8 | `IndexCacheKeeper`, the search index | 60 s after every pause the whole 19 MB index cache is encoded in 8 ms slices on the GUI thread (122 ms at 10k; 0.5–1 s of dropped frames on a phone); a changed note is tokenised whole on the GUI thread 300 ms after a save (22 ms at 500 KB) | write when the app goes inactive or closes (and a long cap), ≤ 4 ms slices; `SearchIndex::prepare` on a worker |
 | Z9 | the measurement | `autosave_blocked` misses work under 12 ms (the 8 ms aim is invisible), has no phases, and does not know whether the kept views exist | probe spans of the save's signals and timers (`qt_register_signal_spy_callbacks`), fsync/rename interposed, CPU and instructions per stall, `kept_views`, `BENCH_WAIT_KEPT`; a core `saveRoundTrip` row with a scaling limit (a save is O(1) in the notebook's size) |
-| Z10 | the editor itself (Zed's rule 4) | each row is a QML delegate with a rich-text `QTextDocument` (0.1–0.2 MB a row, ~45 objects + ~25 components); pages up to 1000 rows are created whole, so a new width lays every row out (337 ms on an 1100-row outline) | in stages: (A) a C++ item drawing a block's rendered text from a cached `QTextLayout` through `QSGTextNode` instead of rich `Text`/`TextEdit` (runs from `InlineRenderer` instead of HTML); (A2) a journal day as one item; (C) one item per page with a height sum tree, anchor scrolling and only the visible rows laid out, rich blocks hosted as QML delegates; (B) the edited row last, for cross-block selection rather than speed |
+| Z10 | the editor itself (Zed's rule 4) | each row is a QML delegate with a rich-text `QTextDocument` (0.1–0.2 MB a row, ~45 objects + ~25 components); pages up to 1000 rows are created whole, so a new width lays every row out (337 ms on an 1100-row outline) | in stages: (A) a C++ item drawing a block's rendered text from a cached `QTextLayout` through `QSGTextNode` instead of rich `Text`/`TextEdit` (runs from `InlineRenderer` instead of HTML; done behind `BRULION_TEXT_ITEM=1` on 2026-11-18, below: "Z10 stage A"); (A2) a journal day as one item; (C) one item per page with a height sum tree, anchor scrolling and only the visible rows laid out, rich blocks hosted as QML delegates; (B) the edited row last, for cross-block selection rather than speed |
 
 Also found: on Android the GitHub change list (`localChanges`, 700 ms after a save) walks every
 file when a repository is linked, the home-screen widgets are refreshed through JNI 2 s after each
@@ -1916,6 +1916,47 @@ index's end with a job out, scripted edits on a pool and inline equal to a synch
 while changes never pause, a keeper closed while writing, the files load to the edited index),
 `tst_shell_workspace_wiring` (the app inactive writes the cache, the next open takes every note
 from it).
+
+### Z10 stage A: rendered text from runs (2026-11-18)
+
+The first stage of Z10 (docs/UI.md "Rendered text without rich text: `RenderedTextItem`"): a
+block's rendered text from `InlineRenderer::renderRuns()` (text + style runs + source map,
+`markdown/renderedtext.h`; `runsToHtml()` gives `render()`'s HTML back byte for byte, checked for
+all 764 renderings the renderer's tests make) drawn by one C++ item — a cached `QTextLayout`, one
+`QSGTextNode`, the chips' shapes as one geometry node — instead of a rich-text `Text` / tinted
+`TextEdit` + `RichTextPills` + `BTintShapes`. Behind `BRULION_TEXT_ITEM=1`, off by default.
+
+Measured on the x86_64 desktop (shared: load 15–20 for the 5000-block rows, ≈ 1 for the 300-block resize), Release `-O3 -g`, Xvfb +
+llvmpipe, the 10 000-note bench vault (`make-bench-vault.py`), `BRULION_TEXT_ITEM=0` vs `1` with the
+same binary:
+
+| | rich text | `RenderedTextItem` |
+|---|---:|---:|
+| GUI-thread instructions per row created (scroll probe, wheel, `--probe-cache 0`, 300-block page; passes 3 − 1 over 1158 rows, 3 runs, medians, spread ≤ 6 %) | 14.5 M | 13.9 M (−4 %) |
+| `page-resize-medium` (300 blocks, created whole): request → frame, medians of 6 interleaved runs of 12 resizes (a quiet machine, load ≈ 1) | 248 ms (max 295) | 145 ms (max 188), −41 % |
+| `page-resize-outline5000` (rows in the cache only) | 139.5 ms | 115.0 ms (−18 %) |
+| `page-scroll-document5000`: frame interval p95 / frames > 33 ms | 19.6 ms / 0 | 19.6 ms / 2 |
+| `open-outline5000` / `open-document5000`: navigation → frame | 185 / 203 ms | 172 / 224 ms |
+| RSS after opening / scrolling the 5000-block pages | 784 / 802 MB | 782 / 803 MB |
+
+What it says: the text of a row was a small part of the row. A row of the editor is still a
+`BlockDelegate` with some 45 objects (bullet, task box, Loaders, handlers, the `BlockText` with its
+hidden `Text`, overlay `Item` and handlers); taking the `QTextDocument` out removes about 0.6 M of
+the row's 14.5 M instructions and no measurable memory. The width change is where the item helps
+(only the lines a new width breaks are laid out again — what QQuickText does; synchronously, so
+every row's height is right in the same frame), opening and scrolling are within the noise. (One
+earlier run of `page-resize-medium` under load gave the rich text 54 ms after an 800 ms first
+resize; the interleaved runs on the quiet machine did not repeat it.) Stage A
+is therefore the foundation (runs with a source map, an item that draws them, parity checked) for
+the stages that pay: A2 (a journal day as one item) and C (one item per page, only the visible rows
+laid out, the per-row QML gone).
+
+Differences left, all small: under X11/OpenGL the item's text shows subpixel colour fringes where
+the rich `Text` is grey (both are `QSGTextNode`s with the default render type; not found yet); the
+software renderer's hover underline is 1 px where the rich text's is 2 px; whitespace inside a page
+differs by antialiasing only (≤ 0.7 % of the pixels, none by more than 48 of 255, editor
+playground screenshots `page`, `tags`, `markup`, `linkparts`, `document`, `properties`, desktop and
+phone).
 
 ### Budgets
 

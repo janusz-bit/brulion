@@ -1,5 +1,5 @@
-#include "text/find.h"
 #include "markdown/inlinerenderer.h"
+#include "text/find.h"
 
 #include "dates/format.h"
 #include "dates/recurrence.h"
@@ -708,7 +708,7 @@ QString InlineRenderer::withFindHighlight(QStringView html, QStringView query, b
         add(c, i, i + 1);
         ++i;
     }
-    const QList<text::TextRange> matches = text::findMatches(shown, query, { matchCase, matchDiacritics, wholeWord });
+    const QList<text::TextRange> matches = text::findMatches(shown, query, {matchCase, matchDiacritics, wholeWord});
     if (matches.isEmpty())
         return html.toString();
     const QString open = u"<span style=\"background-color:"_s + safeColor(color.toString()) + u"\">"_s;
@@ -1025,8 +1025,8 @@ QString InlineRenderer::renderInline(QStringView text, bool topLevel, int depth,
                 // joins them: adjacent spans of one background are one pill (RichTextPills).
                 if (const QList<LinkPathPart> parts = linkPathParts(item.target); parts.size() >= 2) {
                     const QString tint = u"style=\"color:"_s + safeColor(pal.tag.foreground)
-                                         + u";text-decoration:none;background-color:"_s
-                                         + safeColor(pal.tag.background) + u"\">"_s;
+                                         + u";text-decoration:none;background-color:"_s + safeColor(pal.tag.background)
+                                         + u"\">"_s;
                     const QStringView target(item.target);
                     for (qsizetype k = 0; k < parts.size(); ++k) {
                         const bool last = k + 1 == parts.size();
@@ -1292,7 +1292,8 @@ QString InlineRenderer::renderBlockImpl(QStringView body, BlockKind kind, QList<
         QList<HtmlSourceAnchor> restAnchors;
         QList<HtmlSourceAnchor> titleAnchors;
         const QString restHtml = renderInline(rest, true, 0, runs, false, trace ? &restAnchors : nullptr);
-        const QString titleHtml = renderInline(title, true, 0, {{0, titleStart}}, false, trace ? &titleAnchors : nullptr);
+        const QString titleHtml =
+                renderInline(title, true, 0, {{0, titleStart}}, false, trace ? &titleAnchors : nullptr);
         QString out = u"<b>"_s + titleHtml + u"</b>"_s;
         const qsizetype restAt = out.size() + 5;
         if (!restHtml.isEmpty())
