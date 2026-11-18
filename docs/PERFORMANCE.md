@@ -1760,6 +1760,72 @@ is an open pull request) — and gives no text shaping, IME, accessibility or wi
 already drives Vulkan, Metal, Direct3D and GL/GLES/WebGL under the scene graph. The time goes to
 work on the GUI thread, not to drawing; Zed's speed comes from the rules above, which Qt allows.
 
+### Typing: a keystroke costs the block (2026-11-18)
+
+A letter typed into a block of a 5000-block page still paid for the page after L4, outside the
+document: `BlockListModel::apply()` rebuilt its uid → index table, compared the uid lists and ran
+`refresh(true)` over every row (a hash lookup, the cached shape, the selection band, a parent
+task's subtask count over its descendants, the rows with `((id))` rendered again); the changed row
+was announced with every role; `PageController::markDirty()` made the text to save (a scan of
+every block for a lone fence, `toString()`), compared it with the file's and parsed the
+frontmatter for the note mode; the edited row's hidden rendered text was rendered again (the
+`InlineRenderer`, the task chips) and laid out again by its hidden `Text` / tinted `TextEdit`; and
+the inline editor detected its completion twice (the caret's signal comes before the text's).
+Now:
+
+* **The model's typing fast path** (`isTypingEdit`, `refreshTyping`): an edit whose changes are
+  all `Changed` keeps the rows, their uids and indices; when it also kept the blocks' kind, depth
+  and children, left the frontmatter alone and moved no line after them, only the edited rows, the
+  rows that follow every change of the page (`m_dependents`: calc blocks, tables, charts, html
+  with `((id))` or inline calculations, embeds of this page — each added where its flag is set,
+  so a row rendered later is one too) and the ancestors of a block whose task status changed are
+  refreshed; anything else is the full refresh as before. A changed row is announced with the
+  roles of its text only (`TextRoles`), in both paths.
+* **The dirty check of a typed block** (`PageController::TypingSave`): the first keystroke in a
+  block compares the whole text as before and keeps what lies around the block's own text in the
+  text to save — whether it is the file's text there and, if so, which own text would make the
+  page clean. The next keystrokes compare the block's own text with that (dirty for certain, or
+  the whole comparison when it matches: typed back means clean); a block saved with other text
+  (a lone fence, the editor's space), another file text or any other edit compare in full. The
+  note mode is looked at only when the first row changed.
+* **The edited block's rendered text is kept** while it is edited (`BlockText.keptHtml`; its
+  height then is the editor's), the latest taken when editing stops; the completion is detected
+  once per keystroke (`InlineEditor`: the caret's change waits for the text's when the length
+  differs).
+
+`tst_editor_typing` types scripted and random edits (1500 steps per page: an outline, a page with
+every kind of dependent, the same with CRLF) into two editors, one with the fast path off
+(`setTypingFastPath(false)`), and compares every role of the rows a moving window looks at after
+every step; every value that changed since the step before must have been announced with its role
+(both paths), and the dirty flag must say whether the text differs from the file's. Removing the
+dependents, the ancestors, the line check, the hooks in `renderHtml()` and `ensureTransclusions()`,
+a role of `TextRoles` or the dirty check's comparison each fails it (mutation testing); the
+children check and the calc consumers' flag are kept as safety (no difference found without them).
+In that test (Debug, one process) a keystroke in a 5000-block outline costs 1.6 ms with the full
+refresh and 0.3 ms with the fast path.
+
+**In the app** (`bench-matrix.sh typing`, Release `-O3 -g`, Xvfb, base = `0f6bab95`, the commit
+before; 8 runs per build in two alternating rounds while other work loaded the machine — load
+about 22 on 16 cores; medians of the runs' medians, min–max in brackets):
+
+| metric | outline5000 before | after | document5000 before | after |
+|---|---:|---:|---:|---:|
+| letter: handling | 2.8 ms [2.8–3.8] | 1.2 ms [1.1–2.2] | 3.3 ms [3.0–4.5] | 1.4 ms [1.2–1.8] |
+| letter: handling, p95 | 4.2 ms | 3.5 ms | 6.4 ms | 3.0 ms |
+| letter → frame | 11.1 ms | 10.8 ms | 13.1 ms | 10.8 ms |
+| letter → frame, p95 | 14.7 ms [13.3–24.3] | 14.9 ms [12.7–54.7] | 19.5 ms [13.9–28.8] | 13.3 ms [12.6–30.5] |
+| Enter: handling / → frame | 4.4 / 18.2 ms | 4.9 / 18.6 ms | 5.0 / 18.1 ms | 5.3 / 18.1 ms |
+| undo: handling / → frame | 3.4 / 15.3 ms | 3.2 / 15.1 ms | 3.9 / 15.0 ms | 3.2 / 14.7 ms |
+| GUI blocked after a burst (the autosave) | 165 ms | 174 ms | 152 ms | 165 ms |
+
+A letter's own handling is less than half of what it was; on llvmpipe the frame (about 10 ms)
+is now most of a keystroke, and the document's p95 meets the desktop budget. What is left of the
+handling per key: `BlockDocument::version()` and `diffFrom()` for the undo step (a reference count
+per block: about 0.1 ms at 5000 blocks, L4), the first keystroke of each burst (the whole
+comparison, part of the p95), Qt Quick's own work for the inline editor. Enter, undo and the
+autosave are unchanged (within the runs' spread: they take the full path). `typing-small`: the
+same within the spread (a letter 0.9 → 0.7 ms).
+
 ### Budgets
 
 Desktop = the laptop above (the graph: a GitHub runner, see its row), phone = Pi 4 (floor) and the
@@ -1771,7 +1837,7 @@ emulator (optimistic), web = headless Chromium (×4 CPU = phone). ✅ meets, ⚠
 | start → first content | desktop < 1 s, phone < 2 s | ✅ 0.40 s (10k), 0.39 s demo | ✅ Pi demo 1.25 s, 10k 1.57 s | ✅ repeat 0.61 s, ×4 CPU 1.64 s; ❌ first visit at 20 Mbit/s 7.3–7.4 s (L9; 8.4–8.5 s before in the same session) |
 | index ready | desktop < 2 s at 10k; phone < 10 s at 10k | ✅ 0.96 s, 0.83 s from the index cache (wave 5; was 1.89 s) | ❌ Pi 15 s before wave 5, not measured since (L1b) | ✅ 1k cold 1.3 s, warm 1.1 s (×4 CPU 5.8 / 4.7 s; was 1.1 / 5.2 s in the same session) |
 | GUI stall while indexing / after ready | < 50 ms desktop, < 100 ms phone | ✅ 28 ms indexing, 0 ms after ready (wave 5) | ❌ Pi 0.54 / 0.45 s before wave 5 (L1b, L18) | – |
-| keystroke → frame (≤ 5000 blocks) | p95 < 16 ms desktop, < 33 ms phone | ✅ small page; ⚠️ 5000 blocks p95 17–20 ms (outline / document, 2026-11-18; the document was 69 ms) | ✅ small page; ⚠️ outline p95 42 ms | – |
+| keystroke → frame (≤ 5000 blocks) | p95 < 16 ms desktop, < 33 ms phone | ✅ small page 11 ms; ✅ 5000-block outline p95 15 ms, document 13 ms ("Typing: a keystroke costs the block"; was 15 / 20 ms in the same session) | ✅ small page; ⚠️ outline p95 42 ms | – |
 | Enter / undo | < 50 ms desktop, < 100 ms phone | ✅ 15 / 13 ms (L5; base in the same session 15 / 32 ms) | ✅ Enter 38 ms; undo 214 ms before L5, not measured since (L5b) | – |
 | autosave stall (the longest stall after a save; the Zed-like aim: < 8 ms of GUI time) | < 50 ms desktop, < 100 ms phone | ⚠️ small page 51 ms (99 ms on main with the views built ahead, 41 ms before them); ❌ 5000 blocks 132–134 ms (198–236 ms on main), 500 KB page 88 ms before 2026-11-10 | ✅ small page 29 ms; ❌ 500 KB page 0.2 s | – |
 | open page (5000 blocks) | frame < 150 ms desktop, < 300 ms phone | ✅ 113 ms | ❌ Pi 653 ms (L7) | – |

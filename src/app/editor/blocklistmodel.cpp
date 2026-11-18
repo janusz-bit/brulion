@@ -42,6 +42,34 @@ const QList<int> StructuralRoles{BlockListModel::DepthRole,         BlockListMod
                                  BlockListModel::IsZoomRootRole,    BlockListModel::PrevKindRole,
                                  BlockListModel::SelectionEdgeRole, BlockListModel::ShownRole};
 
+/// The roles an edit of a block's text in place (BlockChange::Changed) can change: all but the
+/// structural ones, the line, the uid and the results (refresh() tells those when they differ).
+const QList<int> TextRoles{Qt::DisplayRole,
+                           BlockListModel::RawRole,
+                           BlockListModel::BodyRole,
+                           BlockListModel::EditTextRole,
+                           BlockListModel::EditOffsetRole,
+                           BlockListModel::HtmlRole,
+                           BlockListModel::DocDepthRole,
+                           BlockListModel::KindRole,
+                           BlockListModel::ViewRole,
+                           BlockListModel::HeadingLevelRole,
+                           BlockListModel::LangRole,
+                           BlockListModel::TaskStatusRole,
+                           BlockListModel::TaskDatedRole,
+                           BlockListModel::BlockIdRole,
+                           BlockListModel::EmbedsRole,
+                           BlockListModel::OnlyEmbedsRole,
+                           BlockListModel::PropertiesRole,
+                           BlockListModel::PropertiesInfoRole,
+                           BlockListModel::QueryRole,
+                           BlockListModel::CalloutTypeRole,
+                           BlockListModel::CalloutFoldedRole,
+                           BlockListModel::PlainTextRole,
+                           BlockListModel::TransclusionsRole,
+                           BlockListModel::ListMarkerRole,
+                           BlockListModel::NoteModeOnlyRole};
+
 /// Where a selected row sits in the band of selected visible rows (selectionEdge role).
 enum SelectionEdge : quint8 { NoEdge, SingleEdge, FirstEdge, MiddleEdge, LastEdge };
 
@@ -624,6 +652,14 @@ markdown::EditResult BlockListModel::apply(const std::function<markdown::EditRes
     }
     m_textValid = false;
     m_pageCalc.reset();
+    if (m_typingFastPath && isTypingEdit(r)) {
+        // Typing: the rows, their uids and document indices stay; refresh what the edit reaches.
+        if (!replay(r.changes, m_rows))
+            calcContentChanged();
+        if (!refreshTyping(r.changes))
+            refresh(true);
+        return r;
+    }
     rebuildIndex();
     const QList<quint64> finalUids = uidsOf(m_doc);
     bool calcNeutral = replay(r.changes, finalUids);
@@ -724,7 +760,9 @@ bool BlockListModel::replay(const QList<markdown::BlockChange> &changes, const Q
                 neutral = neutral && insensitive(uid) && inertNow(uid);
                 invalidateContent(uid);
             }
-            Q_EMIT dataChanged(index(c.first), index(c.first + c.count - 1));
+            // The roles of the block's text; refresh() tells the structural ones, the lines and
+            // the results that changed.
+            Q_EMIT dataChanged(index(c.first), index(c.first + c.count - 1), TextRoles);
             break;
         }
         }
@@ -782,15 +820,12 @@ void BlockListModel::refresh(bool contentChanged)
 
     QList<char> dirty(n, 0); // structural state changed
     QList<int> visibleRows;  // in order (selection edges)
-    QList<int> calcRows;
-    QList<int> tableRows;
-    QList<int> chartRows;
-    QList<int> htmlRows;
-    QList<int> transclusionRows;
     QList<int> lineRows; // blocks moved to other lines of the file by changes above them
+    ContentChanges content;
+    if (contentChanged)
+        m_dependents.clear(); // made again below
     QString prevKind; // of the last visible row
     int visibleCount = 0;
-    bool calcConsumers = false;
     for (int row = 0; row < n; ++row) {
         const int i = docIndexOfRow(row);
         if (i < 0)
@@ -836,6 +871,10 @@ void BlockListModel::refresh(bool contentChanged)
             st.prevKind = prevKind;
             dirty[row] = 1;
         }
+        st.structKnown = true;
+        st.kind = e.kind;
+        st.docDepth = e.depth;
+        st.task = e.taskStatus;
         // A fresh state belongs to a row a view fetched in full (inserted, reset): nothing to tell.
         if (e.line != st.line) {
             if (st.line >= 0)
@@ -850,76 +889,11 @@ void BlockListModel::refresh(bool contentChanged)
             st.selectionEdge = NoEdge;
             dirty[row] = 1;
         }
-        if (!contentChanged)
-            continue;
-        // Results stay while the block and, when they read calc variables, everything its
-        // calculations see are unchanged.
-        const BlockShape &shape = cachedShape(row);
-        // A block that is no calc block, table or chart any more (its text changed in place: an
-        // edit, undo) has no results.
-        if (shape.view != BlockView::Calc && !st.calcResults.isEmpty()) {
-            st.calcResults.clear();
-            calcRows.append(row);
-        }
-        if (shape.view != BlockView::Table && !st.tableData.isEmpty()) {
-            st.tableData.clear();
-            tableRows.append(row);
-        }
-        if (shape.view != BlockView::Chart && (st.chartValid || !st.chartData.isEmpty())) {
-            st.chartData.clear();
-            st.chartSource.clear();
-            st.chartValid = false;
-            chartRows.append(row);
-        }
-        // A chart of a table or a calc block follows every change of the page; one of a query
-        // its own text (and the index: invalidateRendering()).
-        const bool chartStale =
-                shape.view == BlockView::Chart
-                && (!st.chartValid || st.chartSource != shape.editText || !st.chartData.value(u"query"_s).toBool());
-        if (chartStale && updateChart(st, i, shape.editText))
-            chartRows.append(row);
-        if (shape.view == BlockView::Calc || shape.view == BlockView::Table) {
-            if (!st.resultsValid || (st.resultsUseScope && st.resultsEpoch != m_calcEpoch)
-                || (shape.view == BlockView::Table && st.resultsUseRefs)) {
-                if (shape.view == BlockView::Table) {
-                    if (updateTable(st, i))
-                        tableRows.append(row);
-                } else {
-                    QVariantList results = computeCalcResults(i);
-                    st.resultsValid = true;
-                    st.resultsEpoch = m_calcEpoch;
-                    st.resultsUseScope = true;
-                    if (results != st.calcResults) {
-                        st.calcResults = std::move(results);
-                        calcRows.append(row);
-                    }
-                }
-            }
-            calcConsumers = calcConsumers || st.resultsUseScope;
-        }
-        if (st.htmlValid && st.dependsOnCalc)
-            calcConsumers = true;
-        // A parent task's "3/5" follows its subtasks (their rows changed, not its own).
-        const bool progressChanged = st.htmlValid && e.taskStatus && (hasChildren || st.htmlProgress.total > 0)
-                                     && subtaskProgressAt(i) != st.htmlProgress;
-        if (st.htmlValid
-            && (progressChanged || st.dependsOnRefs || (st.dependsOnCalc && st.htmlCalcEpoch != m_calcEpoch))) {
-            const QString before = st.html;
-            st.htmlValid = false;
-            if (renderHtml(i) != before)
-                htmlRows.append(row);
-        }
-        // Embeds of this page show its current text.
-        if (st.transclusionsValid && st.transclusionsLocal) {
-            const QVariantList before = st.transclusions;
-            st.transclusionsValid = false;
-            ensureTransclusions(row);
-            if (st.transclusions != before)
-                transclusionRows.append(row);
-        }
+        if (contentChanged && refreshContent(row, i, content))
+            m_dependents.insert(e.uid);
     }
     if (contentChanged)
-        m_hasCalcConsumers = calcConsumers;
+        m_hasCalcConsumers = content.calcConsumers;
     // The selection band's ends over the visible rows (every row has its state by now: the
     // pointers stay valid, nothing is inserted into m_state below).
     QList<RowState *> shown;
@@ -950,12 +924,165 @@ void BlockListModel::refresh(bool contentChanged)
         m_visibleCount = visibleCount;
         Q_EMIT visibleCountChanged();
     }
-    emitRowsChanged(calcRows, {CalcResultsRole});
-    emitRowsChanged(tableRows, {TableDataRole});
-    emitRowsChanged(chartRows, {ChartDataRole});
-    emitRowsChanged(htmlRows, {HtmlRole});
-    emitRowsChanged(transclusionRows, {TransclusionsRole});
+    content.emitTo(*this);
     emitRowsChanged(lineRows, {LineRole});
+}
+
+void BlockListModel::ContentChanges::emitTo(BlockListModel &model) const
+{
+    model.emitRowsChanged(calcRows, {CalcResultsRole});
+    model.emitRowsChanged(tableRows, {TableDataRole});
+    model.emitRowsChanged(chartRows, {ChartDataRole});
+    model.emitRowsChanged(htmlRows, {HtmlRole});
+    model.emitRowsChanged(transclusionRows, {TransclusionsRole});
+}
+
+bool BlockListModel::refreshContent(int row, int i, ContentChanges &out)
+{
+    // Results stay while the block and, when they read calc variables, everything its
+    // calculations see are unchanged.
+    const BlockShape &shape = cachedShape(row);
+    const markdown::BlockEntry &e = m_doc.at(i);
+    RowState &st = stateFor(e.uid);
+    // A block that is no calc block, table or chart any more (its text changed in place: an
+    // edit, undo) has no results.
+    if (shape.view != BlockView::Calc && !st.calcResults.isEmpty()) {
+        st.calcResults.clear();
+        out.calcRows.append(row);
+    }
+    if (shape.view != BlockView::Table && !st.tableData.isEmpty()) {
+        st.tableData.clear();
+        out.tableRows.append(row);
+    }
+    if (shape.view != BlockView::Chart && (st.chartValid || !st.chartData.isEmpty())) {
+        st.chartData.clear();
+        st.chartSource.clear();
+        st.chartValid = false;
+        out.chartRows.append(row);
+    }
+    // A chart of a table or a calc block follows every change of the page; one of a query
+    // its own text (and the index: invalidateRendering()).
+    const bool chartStale =
+            shape.view == BlockView::Chart
+            && (!st.chartValid || st.chartSource != shape.editText || !st.chartData.value(u"query"_s).toBool());
+    if (chartStale && updateChart(st, i, shape.editText))
+        out.chartRows.append(row);
+    if (shape.view == BlockView::Calc || shape.view == BlockView::Table) {
+        if (!st.resultsValid || (st.resultsUseScope && st.resultsEpoch != m_calcEpoch)
+            || (shape.view == BlockView::Table && st.resultsUseRefs)) {
+            if (shape.view == BlockView::Table) {
+                if (updateTable(st, i))
+                    out.tableRows.append(row);
+            } else {
+                QVariantList results = computeCalcResults(i);
+                st.resultsValid = true;
+                st.resultsEpoch = m_calcEpoch;
+                st.resultsUseScope = true;
+                if (results != st.calcResults) {
+                    st.calcResults = std::move(results);
+                    out.calcRows.append(row);
+                }
+            }
+        }
+        out.calcConsumers = out.calcConsumers || st.resultsUseScope;
+    }
+    if (st.htmlValid && st.dependsOnCalc)
+        out.calcConsumers = true;
+    // A parent task's "3/5" follows its subtasks (their rows changed, not its own).
+    const bool progressChanged = st.htmlValid && e.taskStatus && (st.hasChildren || st.htmlProgress.total > 0)
+                                 && subtaskProgressAt(i) != st.htmlProgress;
+    if (st.htmlValid
+        && (progressChanged || st.dependsOnRefs || (st.dependsOnCalc && st.htmlCalcEpoch != m_calcEpoch))) {
+        const QString before = st.html;
+        st.htmlValid = false;
+        if (renderHtml(i) != before)
+            out.htmlRows.append(row);
+    }
+    // Embeds of this page show its current text.
+    if (st.transclusionsValid && st.transclusionsLocal) {
+        const QVariantList before = st.transclusions;
+        st.transclusionsValid = false;
+        ensureTransclusions(row);
+        if (st.transclusions != before)
+            out.transclusionRows.append(row);
+    }
+    return shape.view == BlockView::Calc || shape.view == BlockView::Table || shape.view == BlockView::Chart
+           || (st.htmlValid && (st.dependsOnRefs || st.dependsOnCalc))
+           || (st.transclusionsValid && st.transclusionsLocal);
+}
+
+bool BlockListModel::isTypingEdit(const markdown::EditResult &r) const
+{
+    if (m_doc.count() != m_rows.size() || m_resetting)
+        return false;
+    for (const markdown::BlockChange &c : r.changes) {
+        if (c.type != markdown::BlockChange::Type::Changed || c.count <= 0 || c.first < 0
+            || c.first + c.count > m_rows.size())
+            return false;
+        for (int k = c.first; k < c.first + c.count; ++k) {
+            const quint64 uid = m_rows.at(k);
+            const auto st = m_state.constFind(uid);
+            if (m_doc.at(k).uid != uid || st == m_state.constEnd() || !st->structKnown)
+                return false;
+        }
+    }
+    return true;
+}
+
+bool BlockListModel::refreshTyping(const QList<markdown::BlockChange> &changes)
+{
+    const int n = int(m_rows.size());
+    // What the other rows read of the edited blocks is as it was: their kind (the next row's
+    // prevKind, the frontmatter), depth and children (the outline, folds, zoom), the lines of
+    // the rows after them. Then no row's structural state changed.
+    QList<int> rows;
+    for (const markdown::BlockChange &c : changes) {
+        for (int k = c.first; k < c.first + c.count; ++k)
+            rows.append(k);
+    }
+    QList<int> ancestorsOf; // rows whose task status changed: their ancestors' progress
+    for (const int row : std::as_const(rows)) {
+        const markdown::BlockEntry &e = m_doc.at(row);
+        const RowState &st = m_state[e.uid];
+        if (e.kind != st.kind || e.kind == BlockKind::Frontmatter || e.depth != st.docDepth
+            || m_doc.hasChildren(row) != st.hasChildren)
+            return false;
+        if (row + 1 < n && m_doc.at(row + 1).line != stateFor(m_rows.at(row + 1)).line)
+            return false;
+        if (e.taskStatus != st.task)
+            ancestorsOf.append(row);
+    }
+    // The rows to look at: the edited ones, the dependents, the ancestors of changed tasks.
+    QList<int> visit = rows;
+    for (auto it = m_dependents.begin(); it != m_dependents.end();) {
+        const int row = rowOfUid(*it);
+        if (row < 0) {
+            it = m_dependents.erase(it);
+            continue;
+        }
+        visit.append(row);
+        ++it;
+    }
+    for (const int row : std::as_const(ancestorsOf)) {
+        for (int p = m_doc.at(row).parent; p >= 0; p = m_doc.at(p).parent)
+            visit.append(p);
+    }
+    std::ranges::sort(visit);
+    visit.erase(std::unique(visit.begin(), visit.end()), visit.end());
+    // Calc consumers: every row that can be one is a dependent or edited (refreshContent()).
+    ContentChanges content;
+    for (const int row : std::as_const(visit)) {
+        const quint64 uid = m_rows.at(row);
+        RowState &st = stateFor(uid);
+        st.task = m_doc.at(row).taskStatus;
+        if (refreshContent(row, row, content))
+            m_dependents.insert(uid);
+        else
+            m_dependents.remove(uid);
+    }
+    m_hasCalcConsumers = content.calcConsumers;
+    content.emitTo(*this);
+    return true;
 }
 
 QVariantList BlockListModel::computeCalcResults(int i) const
@@ -1490,6 +1617,8 @@ QString BlockListModel::renderHtml(int i) const
     st.htmlCalcEpoch = m_calcEpoch;
     if (st.dependsOnCalc)
         m_hasCalcConsumers = true;
+    if (st.dependsOnRefs || st.dependsOnCalc)
+        m_dependents.insert(e.uid);
     return html;
 }
 

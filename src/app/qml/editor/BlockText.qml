@@ -58,7 +58,19 @@ Item {
     readonly property int fontPx: root.mono ? Theme.textSm : root.fontSize
     readonly property int fontWeight: root.level > 0 ? Theme.weightSemiBold : Theme.weightNormal
     readonly property color textColor: root.block.closedTask ? Theme.fgFaint : root.quoted ? Theme.fgMuted : Theme.fg
-    readonly property string html: root.live ? root.block.rowData.html : ""
+    /// The rendered text. While the block is edited the editor shows it: the rendered text is
+    /// neither asked for (a keystroke would render the block again) nor laid out again (a hidden
+    /// Text or TextEdit still lays its rich text out), but kept as it was; when editing stops it
+    /// takes the latest. (The block's height while edited is the editor's: implicitHeight.)
+    readonly property string html: root.editing ? root.keptHtml : root.liveHtml
+    readonly property string liveHtml: root.live && !root.editing ? root.block.rowData.html : ""
+    /// liveHtml as it was when editing started (followed while the block is not edited).
+    property string keptHtml
+    onLiveHtmlChanged: {
+        if (!root.editing)
+            root.keptHtml = root.liveHtml
+    }
+    Component.onCompleted: root.keptHtml = root.liveHtml
     /// The rendered text with the find bar's matches tinted (docs/UI.md "Find and replace").
     readonly property string findHtml: {
         const find = root.find
