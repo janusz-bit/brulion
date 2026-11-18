@@ -452,13 +452,19 @@ the note prepared on the writer — `updatePrepared`, no read — for that ticke
 
 Rules that keep data safe:
 
-* Every other vault call that reads or changes files (`readText`, `readBinary`, `adoptRead`, every
-  write, `create*`, `rename`, `remove*`, `restore`, `emptyTrash`, `saveConfig`, `rescan`,
-  `processPendingEvents`, `open`, `setFollowsOutsideLinks`) first waits for the writes in flight
-  and merges them (`waitForWrites()`, oldest first; a ticket's merge happens once). A write never
-  lands after a rename or a deletion of its file, the trash holds the newest text, and a save over
-  the text in flight compares with what is on disk. Queries (`files()`, `stat()`) answer what the
-  vault knew until the merge.
+* Every other vault call that changes files (every write, `create*`, `rename`, `remove*`,
+  `restore`, `emptyTrash`, `saveConfig`, `rescan`, `processPendingEvents`, `open`,
+  `setFollowsOutsideLinks`) first waits for the writes in flight, merges and reports them
+  (`waitForWrites()`, oldest first; a ticket's merge happens once). A write never lands after a
+  rename or a deletion of its file, the trash holds the newest text, and a save over the text in
+  flight compares with what is on disk.
+* Reads and queries (`readText`, `readBinary`, `adoptRead`; `stat()` and `exists()` of a path being
+  written) wait and merge too — they see the write — but its reports (`done`, `changed()`) come
+  from the event loop (`settleWrites()`), never inside the caller: a dataview query that stats
+  files while it holds the index's notes, or a model building a row that reads an embedded page,
+  sees no index or editor change under it. The next call that changes files reports them first,
+  in order; `hasWritesInFlight()` stays true until they are reported. `files()` and the other
+  queries answer what the vault knew until the merge.
 * A watcher batch waits while a write is in flight (its echo — the temporary file, the rename — is
   the vault's own and is recognised once merged), at most 2 s, then for the write.
 * `open()` waits and counts a generation up (a result of an older generation is dropped); the

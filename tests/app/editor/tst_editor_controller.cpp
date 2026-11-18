@@ -14,8 +14,8 @@
 #include "markdown/inlinerenderer.h"
 #include "markdown/parse.h"
 #include "markdown/tokenedit.h"
-#include "notefind.h"
 #include "notebook/links.h"
+#include "notefind.h"
 #include "pagecontroller.h"
 #include "pickedfiles.h"
 
@@ -158,13 +158,13 @@ public:
                 m_roles.insert(it.key(), QString::fromLatin1(it.value()));
         }
         reset();
-        QObject::connect(model, &QAbstractItemModel::rowsInserted, &m_context, [this](const QModelIndex &, int first, int last) {
-            for (int r = first; r <= last; ++r)
-                m_rows.insert(r, fetch(r));
-        });
-        QObject::connect(model, &QAbstractItemModel::rowsRemoved, &m_context, [this](const QModelIndex &, int first, int last) {
-            m_rows.remove(first, last - first + 1);
-        });
+        QObject::connect(model, &QAbstractItemModel::rowsInserted, &m_context,
+                         [this](const QModelIndex &, int first, int last) {
+                             for (int r = first; r <= last; ++r)
+                                 m_rows.insert(r, fetch(r));
+                         });
+        QObject::connect(model, &QAbstractItemModel::rowsRemoved, &m_context,
+                         [this](const QModelIndex &, int first, int last) { m_rows.remove(first, last - first + 1); });
         QObject::connect(model, &QAbstractItemModel::rowsMoved, &m_context,
                          [this](const QModelIndex &, int first, int last, const QModelIndex &, int destination) {
                              const QList<QHash<int, QVariant>> part = m_rows.mid(first, last - first + 1);
@@ -199,7 +199,8 @@ public:
             for (auto it = m_roles.begin(); it != m_roles.end(); ++it) {
                 const QVariant actual = value(r, it.key());
                 if (m_rows[r].value(it.key()) != actual)
-                    out.append(u"%1/%2: %3 → %4"_s.arg(r).arg(it.value(), m_rows[r].value(it.key()).toString(), actual.toString()));
+                    out.append(u"%1/%2: %3 → %4"_s.arg(r).arg(it.value(), m_rows[r].value(it.key()).toString(),
+                                                              actual.toString()));
             }
         }
         return out;
@@ -394,8 +395,7 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         QStringList views;
         for (int r = 0; r < f.count(); ++r)
             views.append(f.role(r, "view").toString());
-        QCOMPARE(views, (QStringList{u"text"_s, u"code"_s, u"text"_s, u"text"_s, u"code"_s,
-                                     u"text"_s, u"code"_s}));
+        QCOMPARE(views, (QStringList{u"text"_s, u"code"_s, u"text"_s, u"text"_s, u"code"_s, u"text"_s, u"code"_s}));
         QCOMPARE(f.edit(0), u"paczka llama.cpp: `github:janusz-bit/nixos#llama-cpp-prism`"_s);
         QVERIFY(f.edit(1).endsWith(u"-ctk q8_0 -ctv q8_0"_s));
         QCOMPARE(f.edit(2), u"Udało się zmieścić model na GPU!!!!"_s);
@@ -561,7 +561,7 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         // "enter": Enter at the edited place; "insert": insertBlockAfter(-1); "paste": two list
         // items pasted at the edited place; "up": Alt+Up of the edited block
         QTest::addColumn<QString>("command");
-        QTest::addColumn<int>("editRow");      // edited before the command (-1: nothing)
+        QTest::addColumn<int>("editRow"); // edited before the command (-1: nothing)
         QTest::addColumn<int>("editCursor");
         QTest::addColumn<QString>("inserted"); // the text after the command
         QTest::addColumn<int>("rowAfter");     // edited after the command
@@ -579,26 +579,28 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
                                          << u"- [ ] \n- [x] Kupić ćwikłę\n- dalej\n"_s << 1 << 0;
         QTest::newRow("enter-task-children") << u"- [ ] Kupić ćwikłę\n\t- dziecko\n"_s << u"enter"_s << 0 << 0
                                              << u"- [ ] \n- [ ] Kupić ćwikłę\n\t- dziecko\n"_s << 1 << 0;
-        QTest::newRow("enter-task-logseq") << u"- DONE łódź\n"_s << u"enter"_s << 0 << 0
-                                           << u"- TODO \n- DONE łódź\n"_s << 1 << 0;
+        QTest::newRow("enter-task-logseq")
+                << u"- DONE łódź\n"_s << u"enter"_s << 0 << 0 << u"- TODO \n- DONE łódź\n"_s << 1 << 0;
         QTest::newRow("enter-task-crlf") << u"- [x] źdźbło\r\n- b\r\n"_s << u"enter"_s << 0 << 0
                                          << u"- [ ] \r\n- [x] źdźbło\r\n- b\r\n"_s << 1 << 0;
         QTest::newRow("enter-paragraph") << u"Pierwszy akapit źdźbła\n\nDrugi\n"_s << u"enter"_s << 0 << 0
                                          << u"\n\nPierwszy akapit źdźbła\n\nDrugi\n"_s << 1 << 0;
-        QTest::newRow("enter-title") << u"# Strona\n- treść\n"_s << u"enter"_s << 0 << 0
-                                     << u"\n\n# Strona\n- treść\n"_s << 1 << 0;
+        QTest::newRow("enter-title") << u"# Strona\n- treść\n"_s << u"enter"_s << 0 << 0 << u"\n\n# Strona\n- treść\n"_s
+                                     << 1 << 0;
         QTest::newRow("enter-ordered") << u"1. jeden\n2. dwa\n3. trzy\n"_s << u"enter"_s << 0 << 0
                                        << u"1. \n2. jeden\n3. dwa\n4. trzy\n"_s << 1 << 0;
-        QTest::newRow("enter-empty-first") << u"- \n- \n- b\n"_s << u"enter"_s << 0 << 0
-                                           << u"- \n- \n- \n- b\n"_s << 1 << 0;
+        QTest::newRow("enter-empty-first")
+                << u"- \n- \n- b\n"_s << u"enter"_s << 0 << 0 << u"- \n- \n- \n- b\n"_s << 1 << 0;
         QTest::newRow("enter-after-properties") << u"---\ntags: [dom]\n---\n- Zażółć gęślą\n"_s << u"enter"_s << 1 << 0
                                                 << u"---\ntags: [dom]\n---\n- \n- Zażółć gęślą\n"_s << 2 << 0;
-        QTest::newRow("enter-crlf") << u"- ąę\r\n- b\r\n"_s << u"enter"_s << 0 << 0 << u"- \r\n- ąę\r\n- b\r\n"_s << 1 << 0;
-        QTest::newRow("insert-nothing-edited") << u"- a\n- b\n"_s << u"insert"_s << -1 << -1
-                                               << u"- \n- a\n- b\n"_s << 0 << 0;
-        QTest::newRow("insert-editing-below") << u"- a\n- bęben\n"_s << u"insert"_s << 1 << 3
-                                              << u"- \n- a\n- bęben\n"_s << 0 << 0;
-        QTest::newRow("insert-same-as-first") << u"- \n- b\n"_s << u"insert"_s << 0 << 0 << u"- \n- \n- b\n"_s << 0 << 0;
+        QTest::newRow("enter-crlf") << u"- ąę\r\n- b\r\n"_s << u"enter"_s << 0 << 0 << u"- \r\n- ąę\r\n- b\r\n"_s << 1
+                                    << 0;
+        QTest::newRow("insert-nothing-edited")
+                << u"- a\n- b\n"_s << u"insert"_s << -1 << -1 << u"- \n- a\n- b\n"_s << 0 << 0;
+        QTest::newRow("insert-editing-below")
+                << u"- a\n- bęben\n"_s << u"insert"_s << 1 << 3 << u"- \n- a\n- bęben\n"_s << 0 << 0;
+        QTest::newRow("insert-same-as-first")
+                << u"- \n- b\n"_s << u"insert"_s << 0 << 0 << u"- \n- \n- b\n"_s << 0 << 0;
         // In document mode a frontmatter with nothing but the mode is hidden: row 0 is invisible.
         const QString document = u"---\nbrulion: document\n---\n"_s;
         QTest::newRow("document-enter") << document + u"Pierwszy akapit źdźbła\n\nDrugi\n"_s << u"enter"_s << 1 << 0
@@ -729,14 +731,15 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         QTest::addColumn<QString>("content");
         QTest::addColumn<QStringList>("steps");
 
-        QTest::newRow("typing-elsewhere") << u"Pierwszy akapit źdźbła\n\nDrugi\n"_s
-                                          << QStringList{u"enter 0 0"_s, u"set 2 Drugi ż"_s};
+        QTest::newRow("typing-elsewhere")
+                << u"Pierwszy akapit źdźbła\n\nDrugi\n"_s << QStringList{u"enter 0 0"_s, u"set 2 Drugi ż"_s};
         QTest::newRow("typed-away") << u"Ala\n\nŁąka\n\nOla\n"_s
                                     << QStringList{u"set 1 Łą"_s, u"+set 1"_s, u"insert 1"_s};
         QTest::newRow("two-in-a-row") << u"Ala\n\nOla\n"_s << QStringList{u"enter 1 0"_s, u"enter 2 0"_s};
-        QTest::newRow("heading-then-list") << u"# Strona\n- treść\n"_s
-                                           << QStringList{u"enter 0 0"_s, u"enter 2 5"_s, u"set 3 ąę"_s};
-        QTest::newRow("end-no-final-newline") << u"Ala ma kota"_s << QStringList{u"enter 0 11"_s, u"set 0 Ala ma psa"_s};
+        QTest::newRow("heading-then-list")
+                << u"# Strona\n- treść\n"_s << QStringList{u"enter 0 0"_s, u"enter 2 5"_s, u"set 3 ąę"_s};
+        QTest::newRow("end-no-final-newline")
+                << u"Ala ma kota"_s << QStringList{u"enter 0 11"_s, u"set 0 Ala ma psa"_s};
         QTest::newRow("crlf") << u"Żółw\r\n\r\nDrugi\r\n"_s << QStringList{u"enter 0 0"_s, u"set 2 Drugi ą"_s};
         const QString document = u"---\nbrulion: document\n---\n"_s;
         QTest::newRow("document") << document + u"Pierwszy akapit\n\nDrugi łęg\n"_s
@@ -744,8 +747,8 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         // A line break typed into the empty paragraph (Shift+Enter): one block of two lines.
         QTest::newRow("soft-break") << u"Pierwszy akapit źdźbła\n\nDrugi\n"_s
                                     << QStringList{u"enter 0 0"_s, u"set 0 \n"_s, u"set 2 Drugi ż"_s};
-        QTest::newRow("soft-breaks-crlf") << u"Żółw\r\n\r\nDrugi\r\n"_s
-                                          << QStringList{u"enter 0 0"_s, u"set 0 \n\n"_s, u"set 2 Drugi ą"_s};
+        QTest::newRow("soft-breaks-crlf")
+                << u"Żółw\r\n\r\nDrugi\r\n"_s << QStringList{u"enter 0 0"_s, u"set 0 \n\n"_s, u"set 2 Drugi ą"_s};
         QTest::newRow("document-soft-break") << document + u"Pierwszy akapit\n\nDrugi łęg\n"_s
                                              << QStringList{u"enter 1 0"_s, u"set 1 \n"_s, u"set 3 Drugi łęgi"_s};
     }
@@ -1964,7 +1967,8 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         // Removing the recurrence while editing the reminder.
         const QString body2 = f.model()->document().at(0).body;
         const int from2 = int(body2.indexOf(u"⏰"_s));
-        f.page.setReminder(0, u"2026-10-17 07:30"_s, true, QString(), from2, from2 + int(u"⏰! 2026-10-17 07:30"_s.size()));
+        f.page.setReminder(0, u"2026-10-17 07:30"_s, true, QString(), from2,
+                           from2 + int(u"⏰! 2026-10-17 07:30"_s.size()));
         QCOMPARE(f.text(), u"- [ ] Zadzwonić do mamy ⏰! 2026-10-17 07:30 ^m1\n"_s);
         f.page.setDateToken(0, u"due"_s, u"2026-10-20"_s);
         f.page.setDateToken(0, u"scheduled"_s, u"2026-10-18 09:00"_s);
@@ -2345,8 +2349,8 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         QTest::newRow("a quote") << u"> Cytat [[A/B]]\n"_s << u"A/"_s << 1 << u"part:1:A%2FB"_s;
         QTest::newRow("a tag") << u"- #zakupy\n"_s << u"zakupy"_s << 0 << u"tag:zakupy"_s;
         QTest::newRow("a nested tag's parent") << u"- #zakupy/spożywcze\n"_s << u"zakupy"_s << 0 << u"tag:zakupy"_s;
-        QTest::newRow("a nested tag's last part") << u"- #zakupy/spożywcze\n"_s << u"spożywcze"_s << 0
-                                                    << u"tag:zakupy%2Fspo%C5%BCywcze"_s;
+        QTest::newRow("a nested tag's last part")
+                << u"- #zakupy/spożywcze\n"_s << u"spożywcze"_s << 0 << u"tag:zakupy%2Fspo%C5%BCywcze"_s;
         QTest::newRow("inline code") << u"- `[[A/B]]`\n"_s << u"A/"_s << 0 << QString();
         QTest::newRow("a code block") << u"```\n[[A/B]]\n```\n"_s << u"A/"_s << 0 << QString();
     }
@@ -3107,7 +3111,8 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         QCOMPARE(r.value(u"cursor"_s).toInt(), 8);
         // Tags with spaces become #[[…]].
         Fixture tag(u"- #zak\n"_s);
-        tag.page.applyCompletion(0, completionTriggerAt(tag.edit(0), 4).toMap(), {{u"insertText"_s, u"zakupy domowe"_s}});
+        tag.page.applyCompletion(0, completionTriggerAt(tag.edit(0), 4).toMap(),
+                                 {{u"insertText"_s, u"zakupy domowe"_s}});
         QCOMPARE(tag.text(), u"- #[[zakupy domowe]] \n"_s);
         // So do page names that are no simple tag (a tag names a page: docs/SYNTAX.md §3); a simple
         // one stays simple, Polish letters too; no second space before an existing one.
@@ -4144,12 +4149,14 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         f.page.undo();
         f.page.undo();
         f.page.undo();
-        QCOMPARE(f.text(), u"Przed\n\n| Pozycja | Cena |\n| --- | ---: |\n| Płytki | 89 |\n| Suma | =sum(above) |\n\nPo\n"_s);
+        QCOMPARE(f.text(),
+                 u"Przed\n\n| Pozycja | Cena |\n| --- | ---: |\n| Płytki | 89 |\n| Suma | =sum(above) |\n\nPo\n"_s);
     }
 
     void tableRowsAndColumnsInPlace()
     {
-        const QString content = u"Przed\n\n| Pozycja | Cena |\n| --- | ---: |\n| Płytki | 89 |\n| Żółta farba | =B1*2 |\n\nPo\n"_s;
+        const QString content =
+                u"Przed\n\n| Pozycja | Cena |\n| --- | ---: |\n| Płytki | 89 |\n| Żółta farba | =B1*2 |\n\nPo\n"_s;
         Fixture f(content);
         const auto data = [&] { return f.role(1, "tableData").toMap(); };
         const auto rowTexts = [&](int r) {
@@ -4162,7 +4169,8 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         f.page.insertTableRow(1, 0);
         QCOMPARE(rowTexts(0), QStringList({QString(), QString()}));
         QCOMPARE(rowTexts(2), QStringList({u"Żółta farba"_s, u"=B2*2"_s})); // follows "Płytki"
-        QCOMPARE(data().value(u"rows"_s).toList().at(2).toList().at(1).toMap().value(u"display"_s).toString(), u"178"_s);
+        QCOMPARE(data().value(u"rows"_s).toList().at(2).toList().at(1).toMap().value(u"display"_s).toString(),
+                 u"178"_s);
 
         f.page.moveTableRow(1, 1, 2);
         QCOMPARE(rowTexts(1), QStringList({u"Żółta farba"_s, u"=B3*2"_s}));
@@ -4248,7 +4256,16 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         f.page.setTableCell(0, 0, 0, u"3a"_s, true);
         f.page.cancelTableCell(0, 0, 0);
         const auto first = [&] {
-            return f.role(0, "tableData").toMap().value(u"rows"_s).toList().at(0).toList().at(0).toMap().value(u"text"_s).toString();
+            return f.role(0, "tableData")
+                    .toMap()
+                    .value(u"rows"_s)
+                    .toList()
+                    .at(0)
+                    .toList()
+                    .at(0)
+                    .toMap()
+                    .value(u"text"_s)
+                    .toString();
         };
         QCOMPARE(first(), u"3"_s); // only the typing went, the row stays moved
         f.page.undo();
@@ -4257,12 +4274,14 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
 
     void tableCellsAreRendered()
     {
-        Fixture f(u"| Rzecz | Cena |\n| --- | ---: |\n| **Płytki** z [[Inna]] #zakupy | 89 |\n| <b>x</b> ⏰ 2026-10-16 09:00 | =2*3 |\n| Brak [[Nie ma]] | =1+ |\n"_s);
+        Fixture f(
+                u"| Rzecz | Cena |\n| --- | ---: |\n| **Płytki** z [[Inna]] #zakupy | 89 |\n| <b>x</b> ⏰ 2026-10-16 09:00 | =2*3 |\n| Brak [[Nie ma]] | =1+ |\n"_s);
         QVariantMap data = f.role(0, "tableData").toMap();
         const QVariantList rows = data.value(u"rows"_s).toList();
         const QVariantMap tiles = rows[0].toList()[0].toMap();
         const QString html = tiles.value(u"html"_s).toString();
-        QVERIFY2(html.contains(u"<b>Płytki</b>"_s) && html.contains(u"href=\"page:Inna\""_s) && html.contains(u"tag:zakupy"_s),
+        QVERIFY2(html.contains(u"<b>Płytki</b>"_s) && html.contains(u"href=\"page:Inna\""_s)
+                         && html.contains(u"tag:zakupy"_s),
                  qPrintable(html));
         // The visible text measures the column; the raw text stays what the cell editor edits.
         // "z" keeps the next word on its line (a no-break space, measured as such), and the tag's
@@ -4289,18 +4308,22 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         f.page.setPalette({{u"link"_s, u"#102030"_s}, {u"tagFg"_s, u"#405060"_s}});
         QVERIFY(changed.size() > 0);
         data = f.role(0, "tableData").toMap();
-        QVERIFY(data.value(u"rows"_s).toList()[0].toList()[0].toMap().value(u"html"_s).toString().contains(u"#102030"_s));
+        QVERIFY(data.value(u"rows"_s).toList()[0].toList()[0].toMap().value(u"html"_s).toString().contains(
+                u"#102030"_s));
         f.host.setFile(u"Nie ma.md"_s, u"- teraz jest\n"_s);
         Q_EMIT f.host.indexChanged();
         data = f.role(0, "tableData").toMap();
-        QVERIFY(data.value(u"rows"_s).toList()[2].toList()[0].toMap().value(u"html"_s).toString().contains(u"#102030"_s));
+        QVERIFY(data.value(u"rows"_s).toList()[2].toList()[0].toMap().value(u"html"_s).toString().contains(
+                u"#102030"_s));
     }
 
     void transclusions()
     {
-        Fixture f(u"- Wstęp ^wst\n- ![[Budżet#Październik]]\n- Zobacz ![[Inna#^inny1]] i !((kont))\n- ![[Brak strony]] ![[Budżet#Grudzień]]\n"_s);
-        f.host.setFile(u"Budżet.md"_s,
-                       u"# Budżet\n\n## Październik\n\n- Czynsz **1800 zł** #opłaty\n\t- [ ] Zapłacić 📅 2026-10-20\n- Jedzenie\n\n## Listopad\n\n- Prezenty\n"_s);
+        Fixture f(
+                u"- Wstęp ^wst\n- ![[Budżet#Październik]]\n- Zobacz ![[Inna#^inny1]] i !((kont))\n- ![[Brak strony]] ![[Budżet#Grudzień]]\n"_s);
+        f.host.setFile(
+                u"Budżet.md"_s,
+                u"# Budżet\n\n## Październik\n\n- Czynsz **1800 zł** #opłaty\n\t- [ ] Zapłacić 📅 2026-10-20\n- Jedzenie\n\n## Listopad\n\n- Prezenty\n"_s);
         f.host.setFile(u"Kontakty.md"_s, u"- Hydraulik: pan Marek ^kont\n\t- 600 100 200\n"_s);
         f.model()->invalidateRendering();
         // A section: the blocks under the heading up to the next one of its level.
@@ -4365,8 +4388,7 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
     void transcludedCodeBlocksShowTheirTextOnly()
     {
         Fixture f(u"- ![[Inna]]\n"_s);
-        f.host.setFile(u"Inna.md"_s,
-                       u"```js\nlet a = 1 < 2;\n```\n\n~~~\nb\n~~~\n\n```calc\nx = 2\n```\n"_s);
+        f.host.setFile(u"Inna.md"_s, u"```js\nlet a = 1 < 2;\n```\n\n~~~\nb\n~~~\n\n```calc\nx = 2\n```\n"_s);
         f.model()->invalidateRendering();
         const QVariantList t = f.role(0, "transclusions").toList();
         QCOMPARE(t.size(), 1);
@@ -4838,7 +4860,8 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
             QVERIFY(file.open(QIODevice::WriteOnly));
             file.write("dane");
         }
-        r = f.page.insertFilesAfter(0, {QUrl::fromLocalFile(a), QUrl::fromLocalFile(b), QUrl::fromLocalFile(dir.filePath(u"brak.png"_s))});
+        r = f.page.insertFilesAfter(
+                0, {QUrl::fromLocalFile(a), QUrl::fromLocalFile(b), QUrl::fromLocalFile(dir.filePath(u"brak.png"_s))});
         QCOMPARE(r.value(u"count"_s).toInt(), 2);
         QCOMPARE(f.edit(r.value(u"row"_s).toInt()), u"![[żółw.png]] ![[umowa najmu.pdf]]"_s);
         QCOMPARE(failed.size(), 2); // the missing file
@@ -5509,7 +5532,8 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         // again (the drawing editor) has its embed computed again (its size here; its URL's
         // version in the Workspace).
         FakeEditorHost host;
-        host.setTextAsset(u"assets/logo.svg"_s, u"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"40\" height=\"40\"/>"_s);
+        host.setTextAsset(u"assets/logo.svg"_s,
+                          u"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"40\" height=\"40\"/>"_s);
         brulion::drawing::Drawing d;
         host.setTextAsset(u"assets/szkic ćwiczeń.svg"_s, QString::fromUtf8(brulion::drawing::toSvg(d)));
         host.setFile(Page, u"- ![[logo.svg]] ![[szkic ćwiczeń.svg]]\n"_s);
@@ -5945,6 +5969,32 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         QVERIFY(!f.page.dirty());
     }
 
+    // The backoff of failed saves belongs to the page: after two failures of one page, the next
+    // page's first failure is retried after 2 s again (not 8 s).
+    void failedSavesCountPerPage()
+    {
+        Fixture f(u"- a\n"_s, 10000);
+        f.host.setFile(u"Inna.md"_s, u"- inna\n"_s);
+        f.host.setDeferWrites(true);
+        f.page.setEditText(0, u"a 1"_s, 3);
+        f.page.saveInBackground();
+        f.host.setFailWrites(true);
+        f.host.completeWrites(); // the first failure: tried again after 2 s
+        QTRY_COMPARE_WITH_TIMEOUT(f.host.pendingWrites(), 1, 5000);
+        f.host.completeWrites(); // the second: next after 4 s
+        f.host.setFailWrites(false);
+        f.page.setPath(u"Inna.md"_s); // (saved on the way)
+        QCOMPARE(f.host.file(Page), u"- a 1\n"_s);
+        f.page.setEditText(0, u"inna źdźbło"_s, 11);
+        f.page.saveInBackground();
+        f.host.setFailWrites(true);
+        f.host.completeWrites();
+        f.host.setFailWrites(false);
+        QTRY_COMPARE_WITH_TIMEOUT(f.host.pendingWrites(), 1, 3500);
+        f.host.completeWrites();
+        QCOMPARE(f.host.file(u"Inna.md"_s), u"- inna źdźbło\n"_s);
+    }
+
     // The page goes (destroyed, another path or host) while its write is in flight: the write
     // completes first and nothing of it lands on the next page.
     void pageGoesDuringABackgroundSave_data()
@@ -6194,9 +6244,8 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         {
             PageController page;
             page.setSaveDelay(10000);
-            page.setMergeFunction([](const QString &, const QString &local, const QString &) {
-                return MergeOutcome{local, false};
-            });
+            page.setMergeFunction(
+                    [](const QString &, const QString &local, const QString &) { return MergeOutcome{local, false}; });
             page.setHost(&host);
             page.setPath(Page);
             page.setEditText(0, u"lokalnie"_s, 8);
@@ -6278,7 +6327,8 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
     void rawHtmlIsNeverRendered_data()
     {
         QTest::addColumn<QString>("content");
-        const QString evil = u"<img src=\"https://tracker.example/p.png\"> <b>pogrubione</b> <a href=\"javascript:alert(1)\">x</a>"_s;
+        const QString evil =
+                u"<img src=\"https://tracker.example/p.png\"> <b>pogrubione</b> <a href=\"javascript:alert(1)\">x</a>"_s;
         QTest::newRow("list item") << u"- "_s + evil + u"\n"_s;
         QTest::newRow("task") << u"- [ ] "_s + evil + u"\n"_s;
         QTest::newRow("paragraph") << evil + u"\n"_s;
@@ -6300,7 +6350,8 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
             QVERIFY2(!html.contains(u"<img"_s, Qt::CaseInsensitive), qPrintable(html));
             QVERIFY2(!html.contains(u"<b>pogrubione"_s), qPrintable(html));
             QVERIFY2(!html.contains(u"<div"_s, Qt::CaseInsensitive), qPrintable(html));
-            QVERIFY2(!html.contains(u"javascript:"_s, Qt::CaseInsensitive) || html.contains(u"&lt;a href=&quot;javascript:"_s),
+            QVERIFY2(!html.contains(u"javascript:"_s, Qt::CaseInsensitive)
+                             || html.contains(u"&lt;a href=&quot;javascript:"_s),
                      qPrintable(html));
             QVERIFY2(!html.contains(u"onerror=alert"_s) || html.contains(u"&lt;img"_s), qPrintable(html));
         }
@@ -6313,7 +6364,7 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         Fixture f(u"- a😀b\n- 📅 jutro\n"_s);
         const QString edit = f.edit(0);
         QCOMPARE(edit.size(), 4); // a, high, low, b
-        f.page.split(0, 2); // inside the pair
+        f.page.split(0, 2);       // inside the pair
         QVERIFY2(f.text() == u"- a😀\n- b\n- 📅 jutro\n"_s || f.text() == u"- a\n- 😀b\n- 📅 jutro\n"_s,
                  qPrintable(f.text()));
         f.page.undo();
@@ -6385,9 +6436,8 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         host.setFile(Page, u"- a\n"_s);
         PageController page;
         page.setSaveDelay(10000);
-        page.setMergeFunction([](const QString &, const QString &local, const QString &) {
-            return MergeOutcome{local, false};
-        });
+        page.setMergeFunction(
+                [](const QString &, const QString &local, const QString &) { return MergeOutcome{local, false}; });
         page.setHost(&host);
         page.setPath(Page);
         page.setEditText(0, u"lokalnie"_s, 8);
@@ -6549,7 +6599,7 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         QCOMPARE(f.page.sourceText(), u"- a\n- b\n"_s);
         f.page.setSourceText(u"- a\n- b\n- c ąę\n"_s);
         QCOMPARE(f.host.file(Page), u"- a\n- b\n- c ąę\n"_s); // saved while in source mode
-        QCOMPARE(f.count(), 2); // blocks follow when leaving
+        QCOMPARE(f.count(), 2);                               // blocks follow when leaving
         f.page.setSourceMode(false);
         QCOMPARE(f.count(), 3);
         QCOMPARE(f.text(), u"- a\n- b\n- c ąę\n"_s);
@@ -6599,7 +6649,8 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         }
         QVERIFY(f.page.canUndo());
         QVERIFY2(f.page.undoHistorySize() < content.size() / 4,
-                 qPrintable(u"undo history holds %1 characters for a %2 character page"_s.arg(f.page.undoHistorySize()).arg(content.size())));
+                 qPrintable(u"undo history holds %1 characters for a %2 character page"_s.arg(f.page.undoHistorySize())
+                                    .arg(content.size())));
         while (f.page.canUndo())
             f.page.undo();
         QCOMPARE(f.text(), content);
@@ -6621,7 +6672,10 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
             else if (i % 1000 == 700)
                 content += u"- Koszt `= cena * 3` łącznie #budowa\n"_s;
             else
-                content += u"- Wpis %1: zażółć gęślą jaźń [[Strona %2]] #tag%3 📅 2026-10-%4\n"_s.arg(i).arg(i % 50).arg(i % 7).arg(10 + i % 18);
+                content += u"- Wpis %1: zażółć gęślą jaźń [[Strona %2]] #tag%3 📅 2026-10-%4\n"_s.arg(i)
+                                   .arg(i % 50)
+                                   .arg(i % 7)
+                                   .arg(10 + i % 18);
         }
         QElapsedTimer load;
         load.start();
@@ -6846,7 +6900,7 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         Fixture f(u"- [ ] zadanie\n\n```js\nkod\n```\n\n| a | b |\n|---|---|\n| kot | 2 |\n"_s);
         const QString text = f.text();
         // The task marker, the fence's language, a table cell.
-        for (const auto &[what, row] : { std::pair{ u"[ ]"_s, 0 }, std::pair{ u"```js"_s, 1 }, std::pair{ u"kot"_s, 2 } }) {
+        for (const auto &[what, row] : {std::pair{u"[ ]"_s, 0}, std::pair{u"```js"_s, 1}, std::pair{u"kot"_s, 2}}) {
             const PageController::TextLocation place = f.page.locateText(text.indexOf(what), what.size());
             QCOMPARE(place.row, row);
             QVERIFY2(!place.editable, qPrintable(what));
@@ -7000,7 +7054,7 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         QCOMPARE(ranges.at(0).toMap().value(u"from"_s).toInt(), 9);
         QCOMPARE(ranges.at(1).toMap().value(u"from"_s).toInt(), 15);
         QCOMPARE(ranges.at(1).toMap().value(u"to"_s).toInt(), 19);
-        QVERIFY(!f.page.replaceTextRanges({ { 0, 1 } }, u"x"_s)); // the TextEdit holds the text
+        QVERIFY(!f.page.replaceTextRanges({{0, 1}}, u"x"_s)); // the TextEdit holds the text
     }
 
     void findOptionsAndNoController()

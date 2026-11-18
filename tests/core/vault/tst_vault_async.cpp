@@ -247,9 +247,89 @@ private Q_SLOTS:
         } else if (operation == "exists"_L1) {
             QVERIFY(f.vault->exists(path));
         }
+        if (operation == "read"_L1 || operation == "stat"_L1 || operation == "exists"_L1) {
+            // A read or a query merged the write but reports it from the event loop, never inside
+            // its caller (a dataview query holding the index's notes, a model building a row).
+            QVERIFY(!result->done);
+            QVERIFY(f.changes().isEmpty());
+            QVERIFY(f.vault->hasWritesInFlight());
+            QCOMPARE(f.read(path), newest.toUtf8());
+            QTRY_VERIFY(result->done);
+            QCOMPARE(f.changes(), QStringList{u"modify:Projekty/łódź.md@user"_s});
+        }
         QVERIFY(result->done);
         QCOMPARE(result->outcome, WriteOutcome::Written);
         QVERIFY(!f.vault->hasWritesInFlight());
+    }
+
+    // What a read merged is reported before anything newer: the next call that changes files
+    // reports it first, in order (its `done` before its changed(), as always).
+    void readsReportBeforeTheNextChange()
+    {
+        Fixture f;
+        Writer writer;
+        f.write(u"a.md"_s, "- ą\n");
+        f.write(u"b.md"_s, "- b\n");
+        QVERIFY(f.open());
+        writer.attach(*f.vault, true);
+        slowWrites(*f.vault, 100);
+        auto result = std::make_shared<Result>();
+        QStringList seen;
+        QObject::connect(f.vault.get(), &Vault::changed, f.vault.get(), [&](const QList<VaultChange> &changes) {
+            for (const VaultChange &c : changes)
+                seen.append(c.path);
+        });
+        AsyncTextWrite write{.path = u"a.md"_s, .content = u"- ąę\n"_s, .expected = u"- ą\n"_s};
+        write.done = [&, result](WriteOutcome outcome) {
+            result->done = true;
+            result->outcome = outcome;
+            result->doneBeforeChange = seen.isEmpty();
+        };
+        f.vault->writeTextIfUnchangedAsync(std::move(write));
+        QCOMPARE(f.text(u"b.md"_s), u"- b\n"_s); // (merges a.md's write, reports nothing)
+        QVERIFY(!result->done);
+        QVERIFY(seen.isEmpty());
+        QVERIFY(f.vault->writeText(u"b.md"_s, u"- bę\n"_s));
+        QVERIFY(result->done);
+        QVERIFY(result->doneBeforeChange);
+        QCOMPARE(result->outcome, WriteOutcome::Written);
+        QCOMPARE(seen, (QStringList{u"a.md"_s, u"b.md"_s}));
+        QVERIFY(!f.vault->hasWritesInFlight());
+        QTest::qWait(20); // (the queued report finds nothing left)
+        QCOMPARE(seen.size(), 2);
+    }
+
+    // The writer's fallback (a stat that changed behind the vault: decided on the vault's thread)
+    // merged by a read: written there and then, reported from the event loop.
+    void fallbackMergedByARead()
+    {
+        Fixture f;
+        f.write(u"a.md"_s, "- moje\n");
+        QVERIFY(f.open());
+        QSemaphore gate;
+        QThreadPool pool;
+        pool.setMaxThreadCount(1);
+        f.vault->setWriteExecutor([&](std::function<void()> job) {
+            pool.start([&gate, job = std::move(job)] {
+                gate.acquire();
+                job();
+            });
+        });
+        QCOMPARE(f.text(u"a.md"_s), u"- moje\n"_s);
+        const qint64 known = f.vault->stat(u"a.md"_s)->mtime;
+        auto result = std::make_shared<Result>();
+        startWrite(*f.vault, u"a.md"_s, u"- moje i nowe\n"_s, u"- moje\n"_s, result);
+        writeBehind(f.root(), u"a.md"_s, "- moje\n", known + 5000); // (the same text, another stat)
+        gate.release();
+        QVERIFY(f.vault->exists(u"a.md"_s));
+        QCOMPARE(f.read(u"a.md"_s), QByteArray("- moje i nowe\n"));
+        QVERIFY(!result->done);
+        QVERIFY(f.changes().isEmpty());
+        QTRY_VERIFY(result->done);
+        QCOMPARE(result->outcome, WriteOutcome::Written);
+        QVERIFY(!f.changes().isEmpty());
+        QVERIFY(f.changes().contains(u"modify:a.md@user"_s));
+        pool.waitForDone();
     }
 
     void twoQuickSavesInOrder_data() { modes_data(); }
@@ -429,7 +509,6 @@ private Q_SLOTS:
 #ifdef Q_OS_UNIX
         if (::getuid() == 0)
             QSKIP("root writes into read-only folders");
-#endif
         Fixture f;
         Writer writer;
         f.write(u"Zamknięte/a.md"_s, "- 0\n");
@@ -451,6 +530,9 @@ private Q_SLOTS:
         startWrite(*f.vault, u"Zamknięte/a.md"_s, u"- 1\n"_s, u"- 0\n"_s, retry);
         f.vault->waitForWrites();
         QCOMPARE(retry->outcome, WriteOutcome::Written);
+#else
+        QSKIP("a folder's read-only attribute does not stop new files in it on Windows");
+#endif
     }
 
     // A note made read-only is not written over (QSaveFile refused it; the own write's rename would

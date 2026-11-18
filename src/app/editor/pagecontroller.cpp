@@ -91,8 +91,7 @@ public:
         , m_focusBefore(std::move(focusBefore))
         , m_focusAfter(std::move(focusAfter))
         , m_typingUid(typingUid)
-    {
-    }
+    { }
 
     void undo() override { m_controller->applyStep(m_delta, PageController::StepDirection::Undo, m_focusBefore); }
     void redo() override
@@ -583,6 +582,8 @@ void PageController::load()
     waitForOwnWrite(); // (its result would otherwise land on the text loaded now)
     ++m_writeGeneration;
     m_saveAttempts = 0;
+    m_failedSaves = 0; // (the backoff belongs to the page: the next one's first retry after 2 s)
+    m_retryTimer.stop();
     m_saveTimer.stop();
     m_editsDiscarded = false;
     m_loading = true;
@@ -1616,8 +1617,8 @@ void PageController::setEditText(int row, const QString &edit, int cursor)
     const QString body = bodyWithEditText(entry, edit);
     const BlockDocument::Version before = m_model->document().version();
     const Focus focusBefore = currentFocus();
-    const bool continueTyping = m_typingOpen && m_typingUid == uid && m_typingCell.y() == -2 && m_undo->canUndo()
-                                && !m_undo->canRedo();
+    const bool continueTyping =
+            m_typingOpen && m_typingUid == uid && m_typingCell.y() == -2 && m_undo->canUndo() && !m_undo->canRedo();
     const EditResult r = applyOp([&](BlockDocument &d) { return d.setBody(row, body); });
     if (!r.changed())
         return;
@@ -2237,8 +2238,8 @@ int PageController::appendEmptyBlock()
             return last;
         }
         beginCommand();
-        const EditResult r = applyOp(
-                [&](BlockDocument &d) { return d.insertAfter(last, QString(), doc.at(zoom).depth + 1); });
+        const EditResult r =
+                applyOp([&](BlockDocument &d) { return d.insertAfter(last, QString(), doc.at(zoom).depth + 1); });
         const Focus f = focusFromResult(r, last);
         endCommand(f);
         setFocus(f, true);
@@ -3595,8 +3596,8 @@ QVariantMap PageController::applySlashCommand(int row, int from, int to, const Q
             else
                 applyOp([&](BlockDocument &d) { return d.setBody(r, tpl); });
         } else {
-            const EditResult ins = applyOp(
-                    [&](BlockDocument &d) { return d.insertAfter(r, tpl, d.at(r).depth, listItem); });
+            const EditResult ins =
+                    applyOp([&](BlockDocument &d) { return d.insertAfter(r, tpl, d.at(r).depth, listItem); });
             target = ins.focus >= 0 ? ins.focus : r;
         }
         const BlockShape shape = m_model->shapeAt(target);
@@ -3652,8 +3653,8 @@ void PageController::setTableCell(int row, int tableRow, int column, const QStri
     // Typing in a cell: one undo step per cell, like typing in a block.
     const quint64 uid = m_model->uidAt(row);
     const QPoint where(column, tableRow);
-    const bool continueTyping = m_typingOpen && m_typingUid == uid && m_typingCell == where && m_undo->canUndo()
-                                && !m_undo->canRedo();
+    const bool continueTyping =
+            m_typingOpen && m_typingUid == uid && m_typingCell == where && m_undo->canUndo() && !m_undo->canRedo();
     const BlockDocument::Version before = m_model->document().version();
     const Focus focus = currentFocus();
     const EditResult r = applyOp([&](BlockDocument &d) { return d.setBody(row, body); });
@@ -4856,9 +4857,8 @@ void PageController::setSourceText(const QString &edited)
     // A TextEdit reports every line break as "\n": text without any "\r" gets the file's line
     // terminators back (untouched lines keep theirs, new ones get the document's).
     const QString current = m_sourceMode ? m_sourceText : text();
-    const QString sourceText = edited.contains(u'\r')
-            ? edited
-            : restoreLineEndings(current, edited, m_model->document().eol());
+    const QString sourceText =
+            edited.contains(u'\r') ? edited : restoreLineEndings(current, edited, m_model->document().eol());
     if (!m_sourceMode) {
         // Outside source mode this replaces the document as one undo step.
         applyText(sourceText, currentFocus());

@@ -10,6 +10,7 @@
 #include <QFileInfo>
 #include <QMetaObject>
 #include <QMutexLocker>
+#include <QScopeGuard>
 
 #include <algorithm>
 
@@ -151,15 +152,63 @@ quint64 VaultPrivate::writeAsync(AsyncTextWrite write)
 
 void VaultPrivate::waitForWrites()
 {
+    if (settling == 0)
+        reportDeferred(); // (what reads merged earlier is reported before anything newer)
     // Oldest first; a merge may start (and wait for) others itself.
     while (!writes.isEmpty())
         mergeWrite(writes.constFirst());
 }
 
-void VaultPrivate::waitForWritesTo(const VaultPath &path)
+void VaultPrivate::settleWrites()
+{
+    if (writes.isEmpty())
+        return;
+    ++settling;
+    const auto done = qScopeGuard([this] { --settling; });
+    while (!writes.isEmpty())
+        mergeWrite(writes.constFirst());
+}
+
+void VaultPrivate::settleWritesTo(const VaultPath &path)
 {
     if (std::ranges::any_of(writes, [&](const std::shared_ptr<WriteJob> &job) { return job->path == path; }))
-        waitForWrites();
+        settleWrites();
+}
+
+void VaultPrivate::report(std::function<void()> what)
+{
+    if (settling == 0) {
+        reportDeferred();
+        what();
+        return;
+    }
+    deferredReports.append(std::move(what));
+    postDeferred();
+}
+
+void VaultPrivate::postDeferred()
+{
+    if (deferredPosted)
+        return;
+    deferredPosted = true;
+    QMetaObject::invokeMethod(
+            q,
+            [this] {
+                deferredPosted = false;
+                if (settling == 0)
+                    reportDeferred();
+                else
+                    postDeferred(); // (an event loop inside a read: later)
+            },
+            Qt::QueuedConnection);
+}
+
+void VaultPrivate::reportDeferred()
+{
+    // One at a time from the front: a report that calls into the vault (an editor saving again)
+    // reports the rest first, still in order.
+    while (!deferredReports.isEmpty())
+        deferredReports.takeFirst()();
 }
 
 void VaultPrivate::abandonWrites()
@@ -170,6 +219,7 @@ void VaultPrivate::abandonWrites()
         job->done = {};
     }
     writes.clear();
+    deferredReports.clear();
 }
 
 void VaultPrivate::mergeWrite(const std::shared_ptr<WriteJob> &job)
@@ -179,18 +229,19 @@ void VaultPrivate::mergeWrite(const std::shared_ptr<WriteJob> &job)
     job->wait();
     job->merged = true;
     writes.removeOne(job);
-    const std::function<void(WriteOutcome)> done = std::exchange(job->done, {});
+    std::function<void(WriteOutcome)> done = std::exchange(job->done, {});
     job->afterWrite = {};
     if (job->generation != generation || !isOpen) {
         // The notebook was closed or opened again meanwhile (open() and an app's close wait: hardly
         // ever): the writer is told it failed, so it does not wait for an answer forever.
         if (done)
-            done(WriteOutcome::Failed);
+            report([done = std::move(done)] { done(WriteOutcome::Failed); });
         return;
     }
     const VaultPath &path = job->path;
     QList<VaultChange> changes;
     WriteOutcome outcome = WriteOutcome::Written;
+    QString failure;
     switch (job->result) {
     case WriteJob::Result::Written:
         if (!job->historyError.isEmpty())
@@ -218,19 +269,26 @@ void VaultPrivate::mergeWrite(const std::shared_ptr<WriteJob> &job)
         outcome = WriteOutcome::Changed;
         break;
     case WriteJob::Result::Fallback:
+        // (Inside settleWrites() its own changed() waits for the event loop too, before `done`.)
         outcome = q->writeTextIfUnchanged(path, job->content, job->expected, job->source);
         break;
     case WriteJob::Result::Failed:
-        fail(Vault::tr("Cannot write %1: %2").arg(path, job->error));
+        failure = Vault::tr("Cannot write %1: %2").arg(path, job->error);
         outcome = WriteOutcome::Failed;
         break;
     }
-    if (done) {
-        reporting.append(job->ticket); // (reportingWrite() in `done` too)
-        done(outcome);
-        reporting.removeLast();
-    }
-    finish(changes, job->ticket);
+    if (outcome == WriteOutcome::Failed && failure.isEmpty())
+        failure = error; // (the fallback's: errorString() when `done` runs later)
+    report([this, done = std::move(done), outcome, changes = std::move(changes), failure, ticket = job->ticket] {
+        if (!failure.isEmpty())
+            fail(failure); // (errorString() for `done`)
+        if (done) {
+            reporting.append(ticket); // (reportingWrite() in `done` too)
+            done(outcome);
+            reporting.removeLast();
+        }
+        finish(changes, ticket);
+    });
     // A watcher batch that waited for the write goes on.
     if (writes.isEmpty() && (!pendingDirs.isEmpty() || !pendingFiles.isEmpty()) && !batchTimer.isActive())
         batchTimer.start();
@@ -253,7 +311,7 @@ void Vault::setWriteExecutor(std::function<void(std::function<void()>)> start)
 
 bool Vault::hasWritesInFlight() const
 {
-    return !d->writes.isEmpty();
+    return !d->writes.isEmpty() || !d->deferredReports.isEmpty();
 }
 
 void Vault::waitForWrites()

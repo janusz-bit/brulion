@@ -285,6 +285,38 @@ private Q_SLOTS:
         QVERIFY(!QFileInfo::exists(root + u"/Stara.md"_s));
     }
 
+    // A dataview query that stats the page being saved in the background (file.mtime): the stat
+    // sees the write, the index the query holds does not change under it (its report comes from
+    // the event loop; under the sanitizers a merge inside the query was a use after free).
+    void dataviewDuringABackgroundSave()
+    {
+        const QString root = m_tmp.filePath(u"TłoDataview"_s);
+        QVERIFY(writeBehind(root + u"/Dziennik.md"_s, "- rano #kawa\n"));
+        QVERIFY(writeBehind(root + u"/Inna.md"_s, "- wieczór #kawa\n"));
+        Workspace ws;
+        ws.sync()->setSyncthingDiscovery(false);
+        QVERIFY(ws.open(root, root + u"-state"_s));
+        ws.finishIndexing();
+        ws.vault()->setBeforeRenameHook([](const brulion::VaultPath &) { QThread::msleep(150); });
+        PageController editor;
+        editor.setSaveDelay(100000);
+        editor.setHost(&ws);
+        editor.setPath(u"Dziennik.md"_s);
+        editor.setEditText(0, u"rano #kawa źdźbło"_s, 17);
+        editor.saveInBackground();
+        QVERIFY(editor.writeInFlight());
+        const quint64 version = ws.index()->version();
+        const QVariantMap result = ws.runDataview(u"TABLE file.mtime, file.name FROM #kawa SORT file.name"_s, {});
+        QVERIFY2(result.value(u"ok"_s).toBool(), qPrintable(result.value(u"error"_s).toString()));
+        QCOMPARE(result.value(u"total"_s).toInt(), 2);
+        QCOMPARE(ws.index()->version(), version); // (nothing merged into the index inside the query)
+        QCOMPARE(readRaw(root + u"/Dziennik.md"_s), QByteArray("- rano #kawa źdźbło\n"));
+        QTRY_VERIFY(!editor.writeInFlight());
+        QVERIFY(!editor.dirty());
+        QCOMPARE(ws.index()->content(u"Dziennik.md"_s), u"- rano #kawa źdźbło\n"_s);
+        ws.vault()->setBeforeRenameHook({});
+    }
+
     // Closing the notebook with a save in flight: it lands, and is reported while all listen.
     void closeWithABackgroundSaveInFlight()
     {

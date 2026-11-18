@@ -88,12 +88,14 @@
 //    Every other vault call that reads or changes files (read*, write*, create*, rename, remove*,
 //    restore, emptyTrash, saveConfig, rescan, processPendingEvents, adoptRead, open) first waits
 //    for the writes in flight and merges them, so it sees their result: a write never lands after
-//    a rename or a deletion of its file. The watcher's batches wait while a write is in flight (at
-//    most 2 s, then they wait for the write): its echo is the vault's own, never External. The
+//    a rename or a deletion of its file. Calls that change files report them (done, changed())
+//    before their own changes; reads and queries leave the reports to the event loop, so nothing
+//    the caller holds (the index's notes, a row being built) changes inside the call. The watcher's batches wait while
+//    a write is in flight (at most 2 s, then they wait for the write): its echo is the vault's own, never External. The
 //    destructor waits for writes in flight without reporting them (close an app's notebook with
 //    waitForWrites() first). stat() and exists() of a path being written wait for that write (a
-//    caller that checks a stat before it writes sees it); files() and the other queries answer what
-//    the vault knew before the write until it is merged.
+//    caller that checks a stat before it writes sees it; reported later, as for reads); files() and
+//    the other queries answer what the vault knew before the write until it is merged.
 //  * remove() moves to ".trash/<path>"; when taken, " (yyyyMMdd-HHmmss)" (then " … 2", …) is
 //    inserted before the extension. The original location is remembered in the LocalStore,
 //    otherwise derived from the trash path. restore() picks a free path ("Name 2.md") when the
@@ -342,14 +344,14 @@ public:
                                       ChangeSource source = ChangeSource::User);
     /// writeTextIfUnchanged() with its work on the writer (see the semantics): returns a ticket
     /// (> 0) at once; `write.done` follows with the outcome on this thread — from the event loop,
-    /// from the next vault call that waits for writes, or before this returns (no writer, or the
+    /// from the next vault call that changes files, or before this returns (no writer, or the
     /// file is not in the plain case). One writer thread keeps the writes in order.
     quint64 writeTextIfUnchangedAsync(AsyncTextWrite write);
     /// Where writeTextIfUnchangedAsync() runs its work: `start` runs a job on another thread (one
     /// at a time, in order: a pool of one thread at normal priority). Empty (the default;
     /// WebAssembly): at once, on this thread. Whatever runs `start` must outlive the vault.
     void setWriteExecutor(std::function<void(std::function<void()>)> start);
-    /// Writes of writeTextIfUnchangedAsync() not merged yet.
+    /// Writes of writeTextIfUnchangedAsync() not merged or not reported yet.
     bool hasWritesInFlight() const;
     /// Wait for the writes in flight and merge them (their `done`, then changed()).
     void waitForWrites();

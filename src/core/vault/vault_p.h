@@ -254,12 +254,28 @@ public:
 
     // --- writes on the writer (vaultwrite.cpp)
     quint64 writeAsync(AsyncTextWrite write);
-    /// Wait for every write in flight and merge them, oldest first.
+    /// Wait for every write in flight and merge them, oldest first, reporting them (and the
+    /// reports settleWrites() left for the event loop, first) before this returns. Every call
+    /// that changes files starts with it.
     void waitForWrites();
-    /// waitForWrites() when a write of `path` is in flight (stat(), exists()).
-    void waitForWritesTo(const VaultPath &path);
-    /// Merge a finished job (no-op when merged already): Vault state, `done`, changed().
+    /// Reads and queries (read*, adoptRead, stat(), exists()): wait for the writes in flight and
+    /// merge them into what the vault knows, but leave their reports (`done`, changed()) to the
+    /// event loop — a caller in the middle of its own work (a dataview query holding the index's
+    /// notes, a model building a row) never sees the index or an editor change under it.
+    void settleWrites();
+    /// settleWrites() when a write of `path` is in flight (stat(), exists(): a query of another
+    /// path never waits for the writer's fsync).
+    void settleWritesTo(const VaultPath &path);
+    /// Merge a finished job (no-op when merged already): Vault state now, then report() its
+    /// `done` and changed().
     void mergeWrite(const std::shared_ptr<WriteJob> &job);
+    /// Run `report` now (after the reports left for the event loop), or — inside settleWrites()
+    /// — leave it for the event loop, in order.
+    void report(std::function<void()> what);
+    /// reportDeferred() from the event loop (once queued).
+    void postDeferred();
+    /// The reports settleWrites() left, in order (re-entrant: a report may start a vault call).
+    void reportDeferred();
     /// The destructor: wait for the writer, report nothing.
     void abandonWrites();
     VaultPath create(const VaultPath &path, const QByteArray &bytes, ChangeSource source, bool asText);
@@ -359,8 +375,8 @@ public:
     const QString rootPrefix; ///< root + "/" (just "/" for the file system root)
     const QString statePath;
     QString id;
-    QString canonicalRoot; ///< root with symlinks resolved (set by open())
-    QString storageId;     ///< storage identity of the root at open() ("" = unknown)
+    QString canonicalRoot;            ///< root with symlinks resolved (set by open())
+    QString storageId;                ///< storage identity of the root at open() ("" = unknown)
     bool followOutsideLinks = false;  ///< Vault::setFollowsOutsideLinks()
     bool outsideLinksSkipped = false; ///< Vault::skippedOutsideLinks()
     VaultScanStatus scanStatus;
@@ -440,10 +456,13 @@ public:
     std::function<void(std::function<void()>)> writeExecutor;
     QList<std::shared_ptr<WriteJob>> writes; ///< in flight, oldest first
     quint64 nextTicket = 0;
-    quint64 generation = 0;      ///< open() counts up: older results are dropped
-    QList<quint64> reporting;    ///< tickets whose changes finish() reports now (innermost last)
-    QElapsedTimer batchDeferred; ///< since when a watcher batch waits for writes
-    QTimer writeWaitTimer;       ///< the cap of that wait
+    quint64 generation = 0;                       ///< open() counts up: older results are dropped
+    QList<quint64> reporting;                     ///< tickets whose changes finish() reports now (innermost last)
+    int settling = 0;                             ///< inside settleWrites(): reports wait for the event loop
+    QList<std::function<void()>> deferredReports; ///< settleWrites()'s reports, oldest first
+    bool deferredPosted = false;                  ///< reportDeferred() is queued
+    QElapsedTimer batchDeferred;                  ///< since when a watcher batch waits for writes
+    QTimer writeWaitTimer;                        ///< the cap of that wait
     std::function<void(const VaultPath &)> beforeRenameHook;
     /// The text the last async writes of a few paths wrote, with the hash written
     /// (Vault::holdsText()); the most recent last.

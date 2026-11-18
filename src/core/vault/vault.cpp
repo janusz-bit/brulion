@@ -1002,8 +1002,8 @@ bool VaultPrivate::loadConfig(bool quiet, bool rereadObsidian)
     QStringList adopted;
     const QString path = vaultConfigPath();
     const auto known = files.constFind(path);
-    const bool obsidianVault = known == files.cend()
-            && (rereadObsidian ? isDirOnDisk(u".obsidian"_s) : obsidianFiles.has_value());
+    const bool obsidianVault =
+            known == files.cend() && (rereadObsidian ? isDirOnDisk(u".obsidian"_s) : obsidianFiles.has_value());
     if (!obsidianVault)
         obsidianFiles.reset();
     if (known != files.cend() && known->size > kMaxConfigBytes) {
@@ -1039,7 +1039,7 @@ bool VaultPrivate::loadConfig(bool quiet, bool rereadObsidian)
     if (!adopted.isEmpty() && adopted != configFromObsidian)
         qCInfo(lcVault).noquote() << u"Settings taken from .obsidian/: %1"_s.arg(adopted.join(u", "_s));
     const bool differs = !sameVaultConfig(config, parsed.config) || adopted != configFromObsidian
-            || parsed.warnings != configWarnings;
+                         || parsed.warnings != configWarnings;
     config = std::move(parsed.config);
     rawConfig = std::move(parsed.raw);
     configWarnings = std::move(parsed.warnings);
@@ -1051,6 +1051,11 @@ void VaultPrivate::finish(const QList<VaultChange> &changes, quint64 ticket)
 {
     if (changes.isEmpty())
         return;
+    if (settling > 0) { // (a read merged a write: reported from the event loop)
+        report([this, changes, ticket] { finish(changes, ticket); });
+        return;
+    }
+    reportDeferred();
     reporting.append(ticket);
     const auto popTicket = qScopeGuard([this] { reporting.removeLast(); });
     const QString configPath = vaultConfigPath();
@@ -1060,12 +1065,11 @@ void VaultPrivate::finish(const QList<VaultChange> &changes, quint64 ticket)
     // guards of adoptObsidianSettings, the day at the top): checked again when files come or go
     // — say, Brulion's journals/ arriving on a new device after .obsidian/.
     const bool guardedFilesCameOrWent =
-            obsidianFiles && scanStatus.isOk()
-            && std::ranges::any_of(changes, [](const VaultChange &c) {
-                   return c.type != ChangeType::Modified
-                           && (obsidianAdoptionDependsOn(c.path)
-                               || (!c.oldPath.isEmpty() && obsidianAdoptionDependsOn(c.oldPath)));
-               });
+            obsidianFiles && scanStatus.isOk() && std::ranges::any_of(changes, [](const VaultChange &c) {
+                return c.type != ChangeType::Modified
+                       && (obsidianAdoptionDependsOn(c.path)
+                           || (!c.oldPath.isEmpty() && obsidianAdoptionDependsOn(c.oldPath)));
+            });
     const bool configDiffers = configTouched ? loadConfig() : guardedFilesCameOrWent && loadConfig(true, false);
     Q_EMIT q->changed(changes);
     if (configDiffers)
@@ -1282,16 +1286,18 @@ QList<FileStat> Vault::folders() const
 bool Vault::exists(const VaultPath &path) const
 {
     const VaultPath p = paths::normalize(path);
-    d->waitForWritesTo(p);
+    d->settleWritesTo(p);
     return !p.isEmpty() && (d->files.contains(p) || d->dirs.contains(p));
 }
 
 std::optional<FileStat> Vault::stat(const VaultPath &path) const
 {
-    // A write of this path in flight first: a caller checking the stat before it writes (a sync's
-    // "unchanged since the plan" guard) must see the editor's write, not the stat before it.
+    // The writes in flight first: a caller checking the stat before it writes (a sync's
+    // "unchanged since the plan" guard) must see the editor's write, not the stat before it. Their
+    // reports wait for the event loop (settleWrites()): a stat() inside a dataview query changes
+    // nothing the query holds.
     const VaultPath p = paths::normalize(path);
-    d->waitForWritesTo(p);
+    d->settleWritesTo(p);
     return d->knownStat(p);
 }
 
@@ -1302,7 +1308,7 @@ VaultPath Vault::existingCase(const VaultPath &path) const
 
 QString Vault::readText(const VaultPath &path, bool *ok)
 {
-    d->waitForWrites();
+    d->settleWrites();
     bool good = false;
     const QByteArray bytes = d->readFile(paths::normalize(path), true, &good);
     if (ok)
@@ -1331,7 +1337,7 @@ DetachedRead Vault::readDetached(const VaultPath &path, const QString &absoluteP
 
 void Vault::adoptRead(const DetachedRead &read)
 {
-    d->waitForWrites();
+    d->settleWrites();
     const VaultPath path = paths::normalize(read.path);
     if (!d->requireOpen() || path.isEmpty())
         return;
@@ -1347,7 +1353,7 @@ void Vault::adoptRead(const DetachedRead &read)
 
 QByteArray Vault::readBinary(const VaultPath &path, bool *ok)
 {
-    d->waitForWrites();
+    d->settleWrites();
     bool good = false;
     QByteArray bytes = d->readFile(paths::normalize(path), false, &good);
     if (ok)
