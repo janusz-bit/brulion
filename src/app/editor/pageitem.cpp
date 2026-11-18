@@ -703,12 +703,17 @@ void PageItem::updatePolish()
     }
     m_reflow = false;
 
-    // Hosted rows away from the view go, unless edited or holding the keyboard.
+    // Hosted rows away from the view go, unless edited or holding the keyboard. Those within one
+    // and a half screens stay: a new width or a scroll back and forth over the margin's edge
+    // would make and drop the same delegates again (a delegate is the costly part of a row).
     QQuickItem *focus = window() ? window()->activeFocusItem() : nullptr;
+    const auto [keepFirst, keepLast] = view.rowsShown(height() * 1.5, height() * 1.5);
     for (auto it = m_hosted.begin(); it != m_hosted.end();) {
         Hosted *h = it.value();
+        const int t = PageRows::treeRow(h->row);
+        const bool near = t >= keepFirst && t <= keepLast && m_rows.heights().height(t) > 0;
         const bool keep = h->item
-                          && (hostedNow.contains(it.key()) || h->item->property("isEditing").toBool()
+                          && (hostedNow.contains(it.key()) || near || h->item->property("isEditing").toBool()
                               || (focus && (focus == h->item || h->item->isAncestorOf(focus))));
         if (keep) {
             ++it;
