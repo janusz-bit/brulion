@@ -353,18 +353,21 @@ qreal PageItem::markerX(int lvl) const
 
 qreal PageItem::estimate(int row) const
 {
-    if (!m_model)
+    // From the document's block itself (the model's rows are its blocks, in order), not the
+    // model's roles: a role computes and keeps the row's shape, for every row of the page.
+    // (While the model replays a change the row may name another block: an estimate all the same.)
+    if (!m_model || row < 0 || row >= m_model->document().count())
         return 24;
-    const QModelIndex i = m_model->index(row);
-    const int lvl = std::clamp(m_model->data(i, BlockListModel::HeadingLevelRole).toInt(), 0, 6);
-    const QString body = m_model->data(i, BlockListModel::BodyRole).toString();
-    const int depth = m_model->data(i, BlockListModel::DepthRole).toInt();
+    const markdown::BlockEntry &block = m_model->document().at(row);
+    const int lvl = block.kind == BlockKind::Heading ? std::clamp(block.headingLevel, 1, 6) : 0;
     const qreal lineHeight = atInt(m_lineHeights, lvl, 24);
     const qreal fontPx = std::max(8, atInt(m_fontSizes, lvl, 15));
-    const qreal width = std::max<qreal>(40, m_contentWidth - m_gutter - depth * (m_doc ? m_listIndent : m_indentStep));
+    const qreal width =
+            std::max<qreal>(40, m_contentWidth - m_gutter - block.depth * (m_doc ? m_listIndent : m_indentStep));
     // The font's average advance is about half its size (no layout, no shaping).
     const qsizetype perLine = std::max<qsizetype>(8, qsizetype(width / (fontPx * 0.5)));
-    const qsizetype lines = std::max<qsizetype>({1, (body.size() + perLine - 1) / perLine, body.count(u'\n') + 1});
+    const qsizetype lines =
+            std::max<qsizetype>({1, (block.body.size() + perLine - 1) / perLine, block.body.count(u'\n') + 1});
     const qreal pads = m_doc ? m_paragraphGap : 2 * m_rowPad;
     return std::ceil(lines * lineHeight + pads + (lvl > 0 ? at(m_headingGapsAbove, lvl, 0) : 0));
 }
