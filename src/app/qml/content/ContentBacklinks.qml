@@ -91,9 +91,16 @@ FocusScope {
             root.revealed = Math.min(root.pageSize, root.revealed + root.revealStep)
         }
     }
-    onVisibleBottomChanged: reveal()
-    onVisibleChanged: reveal()
-    onPageSizeChanged: reveal()
+    // From the event loop, not inside the change: listing references changes the section's height,
+    // so the page's (the editor's footer) — and with the view at its end its scroll position, which
+    // visibleBottom reads.
+    onVisibleBottomChanged: revealLater.restart()
+    onVisibleChanged: revealLater.restart()
+    onPageSizeChanged: revealLater.restart()
+    Later {
+        id: revealLater
+        onTriggered: root.reveal()
+    }
     /// The page above has been laid out since `path` changed (its blocks are loaded after the
     /// path is set: until then visibleBottom measures the page before).
     property bool placed: false
@@ -115,7 +122,7 @@ FocusScope {
     Connections {
         target: linked
         // (After each refresh: a step listed, the counts known.)
-        function onRefreshed() { root.reveal() }
+        function onRefreshed() { revealLater.restart() }
     }
 
     readonly property int linkedCount: linked.refCount

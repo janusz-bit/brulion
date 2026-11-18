@@ -8196,7 +8196,9 @@ void checkReferencesOutOfReach(QQuickWindow *window, AppController *app, const C
           "a 400-block page and a note linking to it are added");
     app->openPage(page);
     QQuickItem *editor = waitLoadedEditor(window->contentItem(), u"pageEditor"_s, page);
-    auto *refs = window->findChild<QQuickItem *>(u"pageReferences"_s);
+    // This page's own section (the views left before may still exist: deleted later).
+    QQuickItem *pageView = editor ? editor->parentItem() : nullptr;
+    auto *refs = pageView ? pageView->findChild<QQuickItem *>(u"pageReferences"_s) : nullptr;
     const auto refRowShown = [&] {
         return findShown(window->contentItem(),
                          [](QQuickItem *item) {
