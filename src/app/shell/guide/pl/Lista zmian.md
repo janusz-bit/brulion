@@ -7,16 +7,20 @@ brulion: document
 
 Tu znajdziesz zmiany w każdej wersji Brulionu, od najnowszej. Pełne opisy wydań z plikami do pobrania są na GitHubie: https://github.com/janusz-bit/brulion/releases
 
-## 0.24.0 — 16 listopada 2026
+## 0.24.0 — 19 listopada 2026
 
 **Nowe**
+- **Własny model asystenta** — w Ustawieniach → AI → Na tym urządzeniu pierwszy jest Brulion Assistant 1.7B: LFM3 1.7B wytrenowany do narzędzi asystenta, dodatek 97 MB do pliku LFM3 1.7B. Robi więcej z tego, o co prosisz (232 z 245 zadań testowych zamiast 174), i odpowiada od razu, kilkudziesięcioma słowami zamiast minut myślenia. Urządzenie, które używa już poprzedniego domyślnego modelu, zostaje przy nim.
 - **Czat z AI na żywo** — odpowiedź pojawia się słowo po słowie, a przed nią to, co model myśli, małymi szarymi literami; z modelem na urządzeniu widać też, jak szybko pisze („16,7 tok/s”, z ostatnich dwóch sekund). Tak samo z Claude, z serwerem zgodnym z OpenAI i z modelem na urządzeniu. Zobacz [[AI]].
 
 **Zmiany**
 - **Zatrzymaj** zatrzymuje też model: model na urządzeniu przestaje pisać, a połączenie z dostawcą zostaje zamknięte, więc następne pytanie nie czeka za przerwaną odpowiedzią.
 - **Asystent nie znajduje już własnej rozmowy**, gdy przeszukuje albo wylicza notatki — rozmowa zawiera Twoje pytanie słowo w słowo, a mały model czytał ją zamiast notatek i tracił na tym minuty na telefonie.
 - **Mniej rysowania, gdy AI odpowiada**: wskaźniki pracy AI obracają się skokowo, ✨ na górnym pasku stoi, gdy czat pokazuje odpowiedź, a na nowo układa się tylko pisany akapit — rysowanie okna sześćdziesiąt razy na sekundę zabierało na telefonie procesor modelowi.
-- **Qt 6.12** — Brulion jest budowany z Qt 6.12 na wszystkich platformach (wersja w przeglądarce z Emscripten 5.0.5).
+- **Płynnie w dużych notatnikach**: notatka zapisuje się w tle, a odświeża się tylko to, co widać na ekranie i czego dotyczy zmiana — w notatniku z 10 000 notatek aplikacja nie staje już na około 0,3 s przy każdej przerwie w pisaniu.
+- **Szybszy start i otwieranie**: aplikacja startuje z jedną trzecią obiektów, które tworzyła wcześniej (okna i menu powstają przy pierwszym otwarciu), strona z tysiącami bloków otwiera się o 40 % mniejszym kosztem, a jej odnośniki zwrotne powstają, gdy do nich przewiniesz, duży notatnik wczytuje indeks z jedną trzecią pracy, a przełącznik stron od razu pokazuje ostatnie strony.
+- **Bezpieczniejszy zapis**: tuż przed zastąpieniem notatki zapis sprawdza jeszcze raz, czy inny program jej w międzyczasie nie zmienił (także na pendrive'ach i dyskach sieciowych z mało dokładnym czasem plików), a pozostałości przerwanego zapisu są sprzątane.
+- **Qt 6.12** — Brulion jest budowany z Qt 6.12 na wszystkich platformach (wersja w przeglądarce z Emscripten 5.0.5); na Linuksie Clangiem, jak na Androidzie i w przeglądarce: aplikacja jest o 3 % mniejsza, a `brulion-cli` o 20 %.
 - **Wolny albo nagrzany telefon** pisze dalej: odpowiedź modelu na urządzeniu kończy się dopiero po pięciu minutach bez żadnego postępu, a nie pięć minut po pytaniu.
 
 ## 0.23.0 — 16 listopada 2026

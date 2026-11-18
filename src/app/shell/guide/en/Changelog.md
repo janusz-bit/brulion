@@ -7,16 +7,20 @@ brulion: document
 
 Here you'll find what changed in every version of Brulion, newest first. Full release notes with downloads are on GitHub: https://github.com/janusz-bit/brulion/releases
 
-## 0.24.0 — November 16, 2026
+## 0.24.0 — November 19, 2026
 
 **New**
+- **Brulion's own assistant model** — Settings → AI → On this device offers Brulion Assistant 1.7B first: LFM3 1.7B trained for the assistant's own tools, a 97 MB addition to LFM3 1.7B's file. It does more of what you ask (232 of 245 test tasks instead of 174) and answers at once, with a few dozen words instead of minutes of thinking. A device that already uses the former default model keeps it.
 - **The AI chat as it is written** — the answer appears word by word, and before it what the model is thinking, in small grey letters; with the model on the device you also see how fast it writes ("16.7 tok/s", over the last two seconds). With Claude, an OpenAI-compatible server and the model on the device alike. See [[AI]].
 
 **Changes**
 - **Stop** stops the model too: the model on the device stops writing and a provider's connection is closed, so your next question does not wait behind the stopped answer.
 - **The assistant no longer finds its own conversation** when it searches or lists your notes — it holds your question word for word, and a small model read it instead of your notes, losing minutes on a phone.
 - **Less drawing while the AI answers**: the AI's spinners turn in steps, the ✨ on the top bar stands still while the chat shows the answer, and only the paragraph being written is laid out again — drawing the window sixty times a second took the processor from the model on a phone.
-- **Qt 6.12** — Brulion is built with Qt 6.12 on every platform (the browser version with Emscripten 5.0.5).
+- **Smooth in big notebooks**: a note is saved in the background, and only what is on screen and what the change touches is refreshed — in a notebook of 10 000 notes the app no longer stops for about 0.3 s whenever you pause typing.
+- **Faster to start and to open**: the app starts with a third of the objects it made before (dialogs and menus come when first opened), a page of thousands of blocks opens with 40 % less work and its linked references are made as you scroll to them, a big notebook loads its index with a third of the work, and the page switcher shows the recent pages at once.
+- **Safer saving**: right before a save replaces a note it checks again that no other program changed it meanwhile (also on USB sticks and network drives with coarse file times), and the leftovers of an interrupted save are cleaned up.
+- **Qt 6.12** — Brulion is built with Qt 6.12 on every platform (the browser version with Emscripten 5.0.5); on Linux with Clang, as on Android and in the browser: the app is 3 % smaller and `brulion-cli` 20 %.
 - **A slow or hot phone** writes on: an answer of the model on the device ends only after five minutes without any progress, no longer five minutes after the question.
 
 ## 0.23.0 — November 16, 2026
