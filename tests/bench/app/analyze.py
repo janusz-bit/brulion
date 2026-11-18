@@ -154,6 +154,15 @@ def m_startup(run):
             out["content_frame_ms"] = f
     if "first_frame" in mk and "window" in mk:
         out["first_frame_after_window_ms"] = mk["first_frame"]["t"] - mk["window"]["t"]
+    # The GUI thread's work and the QObjects made up to each mark (probes that record them).
+    for name in ("window", "first_frame", "content", "ready", "settled"):
+        m = mk.get(name)
+        if not m or "guiInsnsM" not in m:
+            continue
+        out[name + "_gui_insns_M"] = m["guiInsnsM"]
+        out[name + "_gui_cpu_ms"] = m["guiCpuMs"]
+        out[name + "_objects_created"] = m["objCreated"]
+        out[name + "_objects_alive"] = m["objAlive"]
     if "ready" in mk and "vault_open" in mk:
         out["index_ms"] = mk["ready"]["t"] - mk["vault_open"]["t"]
         start = out.get("content_frame_ms", mk["vault_open"]["t"])
