@@ -2098,6 +2098,93 @@ differs by antialiasing only (≤ 0.7 % of the pixels, none by more than 48 of 2
 playground screenshots `page`, `tags`, `markup`, `linkparts`, `document`, `properties`, desktop and
 phone).
 
+### L7: cheaper page opening (2026-11-18)
+
+**Where an opening's GUI time went.** perf (`instructions:u` every 1 M, DWARF call graphs, attached
+once the views built ahead existed: `BENCH_WAIT_KEPT=1`, `BENCH_NAV_DELAY_MS=3000`), the GUI
+thread's samples sliced by the probe's marks and frames (Release `-O3 -g` of ed847d3a — main's
+opening code; the probe's totals on main agree within 3 %), the 10 000-note bench vault, the
+first opening in a fresh process; GUI-thread instructions:
+
+| phase (main) | 5000-block outline | ordinary page, 43 linked references |
+|---|---:|---:|
+| `navigate()`, synchronous | 880 M | 497 M |
+| … the page parsed (`BlockListModel::resetContent` → `BlockDocument::setContent`; its `derive()` parses every block on its own) | 39 % (`derive` 24 %) | 1 % |
+| … PageTools' header summary: a word count by regex over every block | 14 % | 0 % |
+| … the first screen of rows and the header (QML, rich text layout) | ~30 % | ~90 % |
+| … QML types loaded the first time (`validateLookupSignatures`) | ~15 % | (in the rows) |
+| `navigate()` → first frame | 383 M: the page's word count (`countMarkdown`) 85 % — a posted call (`Later`) still ran before the frame | 86 M |
+| first frame → second frame | 1103 M: the 40 linked references (`BacklinksModel`: a `BlockDocument` of each of the 39 referring notes, 79 rows made — some 150 000 px below the first screen), the list's asynchronous row cache | 1472 M: the references — the 41 referring notes parsed whole 35 %, their 84 rows (rich text, QML) ~60 % |
+| → settled (first frame + everything until 1 s without a stall) | 2594 M | 2059 M |
+
+The 2026-11-18 tracking of the reference models (`affectedBy`, the RenderRead records), the cover,
+the icon and the properties panel did not show (< 1 % each); the unlinked mentions are not
+computed until their section is opened; the command palette's `CommandModel::commands()` (running
+clocks: `VaultIndex::tasks()`, cached) took 1–3 %.
+
+**What changed.**
+
+* **The word count on a worker thread** (`PageController.countPageStats()` → `pageStatsCounted`;
+  the text is taken on the GUI thread, the result of an earlier request or for another page is
+  dropped; single-threaded builds count from the event loop). The page menu still counts as it
+  opens.
+* **The header's summary without a word count** (`PageTools` with a `path`: no QML reads it;
+  `summary()` still counts) and without a table of the notebook's every tag to spell the page's own.
+  A new word in the page no longer signals `summaryChanged`.
+* **A reference renders one block of its note** (`BlockDocument::Locator`): the note is split as
+  `setContent()` would from the index's `ParsedNote` — its blocks are the structure's nodes in the
+  same pre-order — and only the block holding the line (and a frontmatter block before it) is
+  derived. Checked against `BlockDocument` for every line of the fixtures (also CRLF, a byte order
+  mark, no final newline) and 800 fuzzed texts (`tst_markdown_blockdoc`), and the references' HTML
+  against the whole note's rendering (`tst_content_models`).
+* **References are made when the reader can reach them** (`ContentBacklinks.visibleBottom`,
+  `lookahead`: one screen below PageView's viewport; docs/UI.md "Scrolling performance"). Out of
+  reach the model counts (one row rendered, none listed) and their room is reserved; within reach
+  the first ones fill the part on screen at once, the rest follows ten at a time, 32 ms apart,
+  while the listed ones end within reach. A reference row makes its task box and its action button
+  only when it has them.
+
+**Measured** (`open-page` with `BENCH_WAIT_KEPT=1`, the 10k vault, Release `-O3 -g` of main =
+438d6eb7 and of the branch, Xvfb + llvmpipe, 4 rounds alternating main / branch, one run of each
+page per round; load 40–55 from other agents' builds and this branch's Debug build; median
+[min–max]; instructions: the GUI thread's user-space instructions from the navigation to the
+frame that shows the page / to settled — the numbers to compare here, spread (max − min) / median
+≤ 13 %; the wall times include the machine's load):
+
+| first opening (`open1`) | main | branch |
+|---|---:|---:|
+| 5000-block outline: instructions to the frame / settled | 1256 M / 2670 M | **769 M / 1046 M** (−39 % / −61 %) |
+| … navigation → frame / settled | 895 [683–1481] / 3187 [2604–4196] ms | **551** [471–853] / **1695** [1412–2323] ms |
+| … the longest stall until settled | 1027 ms | **74 ms** |
+| 5000-block document: instructions to the frame / settled | 1443 M / 2530 M | **840 M / 1116 M** (−42 % / −56 %) |
+| … navigation → frame / settled | 1782 [1184–2699] / 5887 [3105–7859] ms | **990** [857–1737] / **2181** [1589–3535] ms |
+| ordinary page with 43 linked references: instructions to the frame / settled | 614 M / 2120 M | 574 M / **1022 M** (−7 % / −52 %) |
+| … navigation → frame / settled | 827 [434–909] / 2195 [1592–2815] ms | 830 [569–947] / **1385** [928–2054] ms |
+| … the longest stall until settled | 1152 ms | **390 ms** |
+| ordinary page without references: instructions to the frame / settled | 567 M / 627 M | 563 M / 623 M (unchanged) |
+
+| again after going home (`open2`) | main | branch |
+|---|---:|---:|
+| 5000-block outline: instructions to the frame / settled | 1033 M / 2462 M | **601 M / 875 M** |
+| 5000-block document | 1153 M / 2205 M | **614 M / 899 M** |
+| ordinary page, 43 references | 257 M / 1652 M | 317 M / **699 M** |
+| ordinary page without references | 328 M / 346 M | 293 M / 315 M |
+
+The ordinary page's second opening gains 60 M before its frame: a whole collection of the QML
+heap (`QV4::MemoryManager::runGC`, the `QV4_GC_TIMELIMIT=0` of "Only what is on screen") falls into
+its `navigate()` now — fewer rows made before it move the allocation that triggers it — and out of
+it with a 3 s pause before the first opening; the work after the frame fell by 1.0 G.
+
+**What is left** (the branch, the outline's first opening: 695 M in `navigate()`, 22 M to the
+frame, 1003 M to settled): the page parsed — 40 % of `navigate()`, most of it `derive()` parsing
+each of the 5000 blocks on its own with the whole note parser (`parseNoteWith`; it needs only the
+kind, heading level, language, task status and block id) —, the first screen's rows (~50 %: Z10),
+and after the frame the list's asynchronous row cache (~300 M). An ordinary page with references:
+the rows of the references within reach (~0.45 G for ~20 references: rich text and QML per row, Z10's
+`RenderedTextItem` would take the text's part). On the Pi the opening was 653 ms to the frame
+before (the table under "Results"); −39 % of its instructions puts it near the ~400 ms the plan
+expected — not measured there yet (L7b).
+
 ### Budgets
 
 Desktop = the laptop above (the graph: a GitHub runner, see its row), phone = Pi 4 (floor) and the
@@ -2112,7 +2199,7 @@ emulator (optimistic), web = headless Chromium (×4 CPU = phone). ✅ meets, ⚠
 | keystroke → frame (≤ 5000 blocks) | p95 < 16 ms desktop, < 33 ms phone | ✅ small page 11 ms; ✅ 5000-block outline p95 15 ms, document 13 ms ("Typing: a keystroke costs the block"; was 15 / 20 ms in the same session) | ✅ small page; ⚠️ outline p95 42 ms | – |
 | Enter / undo | < 50 ms desktop, < 100 ms phone | ✅ 15 / 13 ms (L5; base in the same session 15 / 32 ms) | ✅ Enter 38 ms; undo 214 ms before L5, not measured since (L5b) | – |
 | autosave stall (the longest stall after a save; the Zed-like aim: < 8 ms of GUI time) | < 50 ms desktop, < 100 ms phone | ✅ small page: none over 12 ms (the save 0.4 ms on the GUI thread; 131 ms on main with the views built ahead, 41 ms before them); ✅ 5000 blocks 22–26 ms (113–124 ms on main; what is left: the merge into the index) | ✅ small page 29 ms; ❌ 500 KB page 0.2 s | – |
-| open page (5000 blocks) | frame < 150 ms desktop, < 300 ms phone | ✅ 113 ms | ❌ Pi 653 ms (L7) | – |
+| open page (5000 blocks) | frame < 150 ms desktop, < 300 ms phone | ✅ 113 ms (before L7; L7: −39 % of the GUI thread's instructions to the frame, −61 % to settled) | ❌ Pi 653 ms before L7, not measured since (L7b: ~400 ms expected) | – |
 | Tasks / Calendar / Agenda | < 200 ms desktop, < 500 ms phone | ✅ 133–166 ms | ❌ Pi 0.73–1.28 s before L3, not measured since (L3b, L10) | – |
 | Graph (4000 nodes; 1200 phones) | settled < 1.5 s desktop, < 3 s phone; GUI stall during the layout < 16 ms desktop, < 33 ms phone | ❌ not the laptop (unreachable): a GitHub runner with llvmpipe, CPU-rendered frames — stall 219 ms (was 958 ms), settled 2.0 s (`views`; was 8.3 s), 9.2 s with drags (was 40 s), first frame 0.13 s (was 1.07 s); the GUI thread's own sync 0.1–6 ms | ❌ Pi 2.6 s before L16, emulator 1.5 s; not measured since (L16b) | – |
 | after a save, all derived lists (10k) | < 30 ms desktop, < 150 ms phone | ✅ 6.0 ms (L3; base in the same session 112 ms) | ❌ Pi 0.95 s before L3, not measured since (L3b) | – |
@@ -2129,7 +2216,7 @@ The L-items of the October 2026 performance plan, with the numbers they should m
 | L1b | cheaper merge of prepared notes on the GUI thread: link lookup keys (`cleanTarget`, NFC, lower case) and the name table's keys computed by the loader's workers; fewer redraws while loading (the browser's cold load: +11–16 % to "ready", 30 %–2.5× more draws since journals come first); measure the Pi and the Android emulator (L1/L2 of wave 5 not measured there yet) | laptop 10k index ready 0.96 / 0.83 s → 0.6 s; Pi ≤ 6 s cold, ≤ 3 s warm |
 | L5b | measure undo / redo on the Pi (`bench-matrix.sh` typing on the 5000-block outline, Release) and record the `blockDocOps` 5000 blocks undo+redo baseline in `pi.csv` (`perf-check.sh -u` in a quiet window; until then the Pi's check skips the row) | Pi undo 214 ms → < 50 ms |
 | L3b | measure the after-a-save fan-out on the Pi (`bench_reminders` afterEdit, small profile) and ratchet its `pi.csv` row (`perf-check.sh -m pi -u` in a quiet window; the row now measures the cached path, so the old 963 ms baseline only passes it loosely) | Pi 0.95 s → < 0.2 s |
-| L7 | cheaper page opening (header summary and linked references from the index) | Pi open 653 ms → ~400 ms |
+| L7b | measure the opening on the Pi (`bench-matrix.sh open-page`, offscreen, 3 000 notes) after L7 (done on 2026-11-18, above: "L7: cheaper page opening"); then the rest of it: `BlockDocument::derive()` with a parse that stops at what it keeps (kind, heading level, language, task status, block id — 40 % of `navigate()` on a 5000-block page), the reference rows' text (Z10) | Pi open 653 ms → ~400 ms |
 | L9b | the developer and self-test QML (`qml/dev`, `qml/content/*SelfTest.qml`) in a folder outside `src/app` (qmlimportscanner scans the target's source folder whole, and its `-exclude` does not work there), so that releases leave out QtTest, QuickTest and `Qt.labs.folderlistmodel` | APK −0.84 MB, wasm −0.27 MB (before wasm-opt) |
 | L10 | lazy cold views and dialogs, `BIcon` without a `Loader` | Pi demo first content −0.3 s |
 | L16b | measure the graph on the Raspberry Pi (`bench-matrix.sh views graph`, offscreen: the software renderer's image node, 3 000-note vault; must not regress) and in the Android emulator probe (`android-batch.sh probe`, the scene graph on GLES); check it by hand on a phone, on Windows with a GPU (Direct3D 11) and in a phone's browser; if `rebuild()` (VaultIndex::graph and the filters, GUI thread) costs a phone > 50 ms, move its pure part onto the worker | phone: GUI stall during the layout < 33 ms, settled < 3 s |
