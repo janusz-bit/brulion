@@ -22,6 +22,12 @@ import Brulion
 // to a document reads like one in the stream too, on the outline days' left edge (its editor's
 // documentInset) unless the journal is a document by default. Blocks may be selected across
 // several days at once (`stream`, StreamSelection: copying only).
+// With BRULION_JOURNAL_DAY_ITEM=1 (EditorInput.journalDayItem) a day that is not being edited is
+// drawn by one JournalDayItem instead of its editor's rows (docs/UI.md "A journal day as one item"):
+// the editor (its controller, geometry, functions) is there, its list makes no rows (`drawn`). A
+// tap, a click, a long press, a selection, editing, a zoom, the day becoming the stream's active
+// one — anything that needs the rows — makes them (materialize(): the same heights, so nothing
+// moves) and the input goes on to the editor's own functions; the day keeps its rows from then on.
 FocusScope {
     id: day
 
@@ -46,6 +52,7 @@ FocusScope {
     // (Also a day created again while scrolling: the keys, Back and the selection mode come here.)
     onSpanToolsChanged: {
         if (day.spanTools) {
+            day.materialize()
             day.activated()
             dayEditor.spanFocusHere(day.stream.focusRow, false)
         }
@@ -93,6 +100,7 @@ FocusScope {
         // (Reading mode: a toast offers "Edit" instead.)
         if (!page.loaded || dayEditor.readOnlyRefuses())
             return
+        day.materialize()
         if (page.blocks.visibleCount > 0) {
             dayEditor.startEditing(page.lastVisibleRow(), -1)
             return
@@ -141,12 +149,25 @@ FocusScope {
         }
         // A block selection in this day: the other days' selections end (one at a time) — not the
         // part of a selection over several days the stream gives it.
-        onSelectionChanged: if (page.selectionCount > 0 && !(day.stream && day.stream.applying)) day.activated()
+        onSelectionChanged: {
+            // (Selected blocks show on the editor's rows: a band each.)
+            if (page.selectionCount > 0)
+                day.materialize()
+            if (page.selectionCount > 0 && !(day.stream && day.stream.applying))
+                day.activated()
+        }
         // A zoom into one of its blocks makes the day the active one: Back zooms it out first
         // (JournalsView.stepBack()).
-        onZoomChanged: if (page.zoomBlock >= 0) day.activated()
+        onZoomChanged: {
+            if (page.zoomBlock >= 0) {
+                day.materialize()
+                day.activated()
+            }
+        }
+        onConflictChanged: if (page.conflict) day.materialize()
         onEditingRowChanged: {
             if (page.editingRow >= 0) {
+                day.materialize()
                 day.activated()
                 // Deferred, checking the editor is still alive: the day may be gone by then (the
                 // stream left right after a block started being edited — a palette command, a link).
@@ -188,6 +209,7 @@ FocusScope {
         function onFocusMoved(controller: PageController, row: int, reveal: bool) {
             if (controller !== page)
                 return
+            day.materialize()
             day.activated()
             day.editor.spanFocusHere(row, reveal)
         }
@@ -378,6 +400,8 @@ FocusScope {
         // The editor has its width from the start (a binding, not a layout's polish), so its
         // blocks are laid out at their final width right away.
         controller: page
+        // The rows are drawn by the day's JournalDayItem until something needs them (materialize()).
+        rowsDrawn: EditorInput.journalDayItem && !DeviceInfo.screenReader
         focus: true
         onReadOnlyLeaveRequested: AppSettings.readingMode = false
         onMessage: (text, kind, action) => {
@@ -428,13 +452,16 @@ FocusScope {
         day._fitting = true
         for (let i = 0; i < 4; ++i) {
             day._refit = false
-            dayEditor.height = day.empty && page.editingRow < 0 ? 0 : dayEditor.listView.contentHeight + dayEditor.listView.y
+            dayEditor.height = day.empty && page.editingRow < 0 ? 0
+                               : day.drawn ? day.drawnHeight + dayEditor.bottomSpace + dayEditor.listView.y
+                               : dayEditor.listView.contentHeight + dayEditor.listView.y
             if (!day._refit)
                 break
         }
         day._fitting = false
     }
     onEmptyChanged: day.fitEditorHeight()
+    onDrawnHeightChanged: day.fitEditorHeight()
     Connections {
         target: page
         function onEditingRowChanged() { day.fitEditorHeight() }
@@ -454,6 +481,512 @@ FocusScope {
             lv.contentY = lv.originY
             if (day.scroller)
                 day.scroller.scrollBy(delta)
+        }
+    }
+
+    // ---- The blocks drawn by one item (BRULION_JOURNAL_DAY_ITEM=1) ---------------------------------
+    /// The day's blocks are drawn by its JournalDayItem, not by its editor's rows (see the file
+    /// comment): until materialize().
+    readonly property bool drawn: dayEditor.rowsDrawn
+    /// The drawn blocks' height (the editor's rows' sum, without the strip under them).
+    readonly property real drawnHeight: day.drawnBlocks !== null ? day.drawnBlocks.contentHeight : 0
+    final readonly property JournalDayItem drawnBlocks: drawnLoader.item as JournalDayItem
+    /// A press on the drawn blocks lasts: their item stays (it handles the press) after the rows
+    /// were made under it, drawing nothing; it goes when the press ends.
+    property bool _drawnHeld: false
+    /// The press forwards its moves to the editor's block selection (a mouse; a long press).
+    property bool _dragForward: false
+    /// The press was a long press (its release is no tap: as on the rows' markers).
+    property bool _longPressed: false
+    /// Points of a press (a call's point is read through a typed property), its keyboard modifiers.
+    property point _scene
+    property int _modifiers
+    property point _mapped
+
+    /// The rows were made (or the day was never drawn): materialize() does nothing more.
+    property bool _materialized: !EditorInput.journalDayItem
+    /// The editor's rows from now on (the same heights: nothing moves). The day keeps them.
+    function materialize(): void {
+        if (day._materialized)
+            return
+        day._materialized = true
+        // (Set, not left to the binding: a screen reader turned on flips it too, and the rows must
+        // be made here, in this order.)
+        dayEditor.rowsDrawn = false
+        // Every row now, in this event (the editor's list is as tall as its blocks).
+        dayEditor.listView.forceLayout()
+        day.fitEditorHeight()
+    }
+    /// The editor's delegate of `row` (null: none).
+    function rowDelegate(row: int): BlockDelegate {
+        return dayEditor.listView.itemAtIndex(row) as BlockDelegate
+    }
+    /// The BlockText of a delegate (a quote's sits in its frame).
+    function blockTextOf(item: Item): BlockText {
+        const text = item as BlockText
+        if (text !== null)
+            return text
+        const n = item !== null ? EditorInput.childCount(item) : 0
+        for (let i = 0; i < n; ++i) {
+            const found = day.blockTextOf(EditorInput.childAt(item, i))
+            if (found !== null)
+                return found
+        }
+        return null
+    }
+    /// A tap (or a left click) on the drawn blocks at `scene`: what the editor's row does there.
+    function forwardTap(part: string, row: int): void {
+        // (The parameters copied first: compiled code reads none after a call. The press's scene
+        // point and modifiers are in _scene and _modifiers.)
+        const p = part
+        const r = row
+        const mods = day._modifiers
+        const ed = dayEditor
+        // A task box and a fold arrow change the page: the item follows, no rows are made for them.
+        if (p === "taskBox") {
+            page.toggleTask(r)
+            return
+        }
+        if (p === "arrow") {
+            page.toggleFold(r)
+            return
+        }
+        if (p !== "footer" && p !== "number" && p !== "bullet" && p !== "text")
+            return
+        day.materialize()
+        if (p === "footer") {
+            // (Reading mode: a tap under the blocks, often the end of a scroll, does nothing.)
+            if (ed.selectionMode || ed.readOnly)
+                return
+            const added = page.appendEmptyBlock()
+            ed.startEditing(added, -1)
+            return
+        }
+        const block = day.rowDelegate(r)
+        if (block === null)
+            return
+        if (p === "number") {
+            block.editOnTap(0)
+        } else if (p === "bullet") {
+            // A document has no zoom: the bullet is part of the text, a click edits the item.
+            if (ed.blockTapped(r))
+                return
+            if (ed.documentMode)
+                ed.startEditing(r, 0)
+            else
+                page.zoomInto(r)
+        } else if (p === "text") {
+            if (block.view === "rule") {
+                block.editOnTap(-1)
+                return
+            }
+            const text = day.blockTextOf(block.contentItem)
+            if (text === null)
+                return
+            day._mapped = text.mapFromItem(null, day._scene.x, day._scene.y)
+            const x = day._mapped.x
+            const y = day._mapped.y
+            // BlockText's tap: Shift+click, the touch selection mode; a link; else the caret here.
+            if (ed.blockTappedWith(r, mods))
+                return
+            // (A copy: a string a method returned is not read again after another call.)
+            const link = "" + text.linkAt(x, y)
+            if (ed.openDateDialogAt(r, link))
+                return
+            if (link !== "" && !ed.editsOnClick(link))
+                ed.activateLink(r, link)
+            else
+                ed.editAt(r, x, y)
+        }
+    }
+    /// A right-click (mouse, touchpad, stylus) on the drawn blocks: the menu the row opens there.
+    function forwardMenu(part: string, row: int): void {
+        const p = part
+        const r = row
+        if (p === "footer" || p === "" || r < 0)
+            return
+        day.materialize()
+        const ed = dayEditor
+        const block = day.rowDelegate(r)
+        if (block === null)
+            return
+        const drawnAt = day.drawnBlocks
+        if (p === "bullet" || p === "number" || p === "taskBox") {
+            // At the marker, as its own handler opens it (the delegate's coordinates).
+            if (drawnAt === null)
+                return
+            day._mapped = drawnAt.menuPoint(r, p)
+            if (p === "taskBox")
+                ed.openTaskStatusMenu(r, block, day._mapped.x, day._mapped.y)
+            else
+                ed.openBlockMenu(r, block, day._mapped.x, day._mapped.y)
+            return
+        }
+        if (p === "text" && block.view !== "rule") {
+            const text = day.blockTextOf(block.contentItem)
+            if (text !== null) {
+                // (The rendered item sits at the BlockText's origin.)
+                day._mapped = text.mapFromItem(null, day._scene.x, day._scene.y)
+                const x = day._mapped.x
+                const y = day._mapped.y
+                const link = "" + text.linkAt(x, y)
+                if (ed.openDateMenu(r, link, text.renderedItem, x, y)
+                        || ed.openBlockLinkMenu(r, link, text.renderedItem, x, y))
+                    return
+                ed.openBlockMenuAt(r, day._scene)
+                return
+            }
+        }
+        // Elsewhere on a block: the list's handler, the menu at the pointer.
+        ed.openBlockMenuAtScene(day._scene.x, day._scene.y)
+    }
+    /// A middle click on a link of the drawn text: that link in a new tab (BlockText).
+    function forwardMiddle(part: string, row: int): void {
+        const r = row
+        if (part !== "text" || !OpenIn.tabs)
+            return
+        day.materialize()
+        const block = day.rowDelegate(r)
+        const text = block !== null && block.view !== "rule" ? day.blockTextOf(block.contentItem) : null
+        if (text === null)
+            return
+        day._mapped = text.mapFromItem(null, day._scene.x, day._scene.y)
+        dayEditor.openLinkInTab(r, text.linkAt(day._mapped.x, day._mapped.y))
+    }
+    /// A finger held on the drawn blocks (touch): the marker's menu, a token's or a link's menu, or
+    /// the block selection (true: the finger's moves extend it, as on the editor's rows).
+    function forwardLongPress(part: string, row: int): bool {
+        const p = part
+        const r = row
+        if (p !== "bullet" && p !== "number" && p !== "taskBox" && p !== "text")
+            return false
+        day.materialize()
+        const ed = dayEditor
+        const block = day.rowDelegate(r)
+        if (block === null)
+            return false
+        const drawnAt = day.drawnBlocks
+        if (p === "bullet" || p === "number" || p === "taskBox") {
+            if (drawnAt === null)
+                return false
+            day._mapped = drawnAt.menuPoint(r, p)
+            if (p === "taskBox")
+                ed.openTaskStatusMenu(r, block, day._mapped.x, day._mapped.y)
+            else
+                ed.openBlockMenu(r, block, day._mapped.x, day._mapped.y)
+            return false
+        }
+        if (p !== "text" || block.view === "rule")
+            return false
+        const text = day.blockTextOf(block.contentItem)
+        if (text === null)
+            return false
+        day._mapped = text.mapFromItem(null, day._scene.x, day._scene.y)
+        const x = day._mapped.x
+        const y = day._mapped.y
+        const link = "" + text.linkAt(x, y)
+        if (!ed.selectionMode && (ed.openDateMenu(r, link, text.renderedItem, x, y)
+                                  || ed.openBlockLinkMenu(r, link, text.renderedItem, x, y)))
+            return false
+        ed.longPressText(r)
+        return true
+    }
+    /// The "Add date" button of a drawn task: the editor's own button's menu (or "+": a reminder).
+    function openDateFor(row: int): void {
+        const r = row
+        day.materialize()
+        const block = day.rowDelegate(r)
+        if (block === null)
+            return
+        if (block.addable) {
+            dayEditor.addDateTo(r)
+            return
+        }
+        // Its button shows while the menu is open: the menu opens under it.
+        dayEditor.quickDateRow = r
+        const button = day.dateButtonOf(block)
+        dayEditor.openQuickDateMenu(r, button !== null ? button : block)
+    }
+    /// The "Add date" button of a delegate while it is shown (its Loader's item, "taskDateButton").
+    function dateButtonOf(block: Item): Item {
+        const n = EditorInput.childCount(block)
+        for (let i = 0; i < n; ++i) {
+            const loader = EditorInput.childAt(block, i) as Loader
+            const item = loader !== null ? loader.item as Item : null
+            if (item !== null && item.objectName === "taskDateButton")
+                return item
+        }
+        return null
+    }
+    /// The link the pointer (or a pressing finger) is on, underlined: BlockText's rule (not a task
+    /// box link, not a chip a click edits).
+    function drawnLinkAt(x: real, y: real): string {
+        if (day.drawnBlocks === null)
+            return ""
+        const link = "" + day.drawnBlocks.linkAt(x, y)
+        if (link === "" || Js.startsWith(link, "task:") || dayEditor.editsOnClick(link))
+            return ""
+        return link
+    }
+    function drawnCursor(x: real, y: real): int {
+        if (day.drawnBlocks === null)
+            return Qt.ArrowCursor
+        const part = "" + day.drawnBlocks.partAt(x, y)
+        if (part === "text") {
+            const link = "" + day.drawnBlocks.linkAt(x, y)
+            if (link !== "" && (!dayEditor.editsOnClick(link) || dayEditor.opensDateDialog(link)))
+                return Qt.PointingHandCursor
+            return dayEditor.readOnly ? Qt.ArrowCursor : Qt.IBeamCursor
+        }
+        if (part === "bullet")
+            return dayEditor.documentMode ? Qt.ArrowCursor : Qt.PointingHandCursor
+        if (part === "arrow" || part === "dateButton")
+            return Qt.PointingHandCursor
+        if (part === "footer")
+            return dayEditor.readOnly ? Qt.ArrowCursor : Qt.IBeamCursor
+        return Qt.ArrowCursor
+    }
+    // The press ends: the item that took it goes (after its handlers are done).
+    Later {
+        id: drawnReleaseLater
+        onTriggered: day._drawnHeld = false
+    }
+    // A screen reader: the editor's rows (each block an accessible item, links too).
+    Connections {
+        target: DeviceInfo
+        function onScreenReaderChanged() {
+            if (DeviceInfo.screenReader)
+                day.materialize()
+        }
+    }
+
+    Loader {
+        id: drawnLoader
+        active: day.drawn || day._drawnHeld
+        x: dayEditor.x
+        y: dayEditor.y + dayEditor.listView.y
+        width: dayEditor.width
+        sourceComponent: JournalDayItem {
+            id: drawn
+            objectName: "journalDayItem"
+            // (An empty day shows its prompt instead: no strip under nothing.)
+            height: day.empty ? 0 : drawn.contentHeight + drawn.footerHeight
+            // Made rows under it during a press: it draws nothing more (the rows show) until it goes.
+            opacity: day.drawn ? 1 : 0
+            model: page.blocks
+            blocked: dayEditor.titleFirst || page.conflict || page.zoomBlock >= 0 || page.editingRow >= 0
+                     || page.selectionCount > 0 || page.sourceMode
+            onDrawableChanged: if (!drawn.drawable) day.materialize()
+            Component.onCompleted: if (!drawn.drawable) day.materialize()
+            // The day's editor's geometry (BlockEditor, BlockDelegate), every level of it.
+            documentMode: dayEditor.documentMode
+            readOnly: dayEditor.readOnly
+            touchUi: Theme.touchUi
+            contentX: dayEditor.contentX
+            contentWidth: dayEditor.contentWidth
+            gutter: dayEditor.gutter
+            indentStep: dayEditor.indentStep
+            bulletColumn: dayEditor.bulletColumn
+            arrowColumn: dayEditor.arrowColumn
+            listIndent: dayEditor.listIndent
+            taskBoxWidth: dayEditor.taskBoxWidth
+            paragraphGap: dayEditor.paragraphGap
+            listGap: dayEditor.listGap
+            headingGapBelow: dayEditor.headingGapBelow
+            headingGapsAbove: [0, dayEditor.headingGapAbove(1), dayEditor.headingGapAbove(2), dayEditor.headingGapAbove(3),
+                               dayEditor.headingGapAbove(4), dayEditor.headingGapAbove(5), dayEditor.headingGapAbove(6)]
+            fontSizes: [dayEditor.headingSize(0), dayEditor.headingSize(1), dayEditor.headingSize(2), dayEditor.headingSize(3),
+                        dayEditor.headingSize(4), dayEditor.headingSize(5), dayEditor.headingSize(6)]
+            lineHeights: [dayEditor.headingLineHeight(0), dayEditor.headingLineHeight(1), dayEditor.headingLineHeight(2),
+                          dayEditor.headingLineHeight(3), dayEditor.headingLineHeight(4), dayEditor.headingLineHeight(5),
+                          dayEditor.headingLineHeight(6)]
+            firstLineCenters: [dayEditor.firstLineCenter(0), dayEditor.firstLineCenter(1), dayEditor.firstLineCenter(2),
+                               dayEditor.firstLineCenter(3), dayEditor.firstLineCenter(4), dayEditor.firstLineCenter(5),
+                               dayEditor.firstLineCenter(6)]
+            spaces: [Theme.space1, Theme.space2, Theme.space3, Theme.space4, Theme.space5, Theme.space6]
+            touchTarget: Theme.touchTarget
+            iconSize: Theme.iconSizeSm
+            boxRadius: Theme.radiusXs
+            fontFamily: Theme.fontEditor
+            semiBoldWeight: Theme.weightSemiBold
+            normalWeight: Theme.weightNormal
+            footerHeight: dayEditor.bottomSpace
+            textColor: Theme.fg
+            mutedColor: Theme.fgMuted
+            faintColor: Theme.fgFaint
+            linkColor: Theme.link
+            guideColor: Theme.guide
+            hoverColor: Theme.bgHover
+            pressedColor: Theme.bgPressed
+            successColor: Theme.success
+            warningColor: Theme.warning
+            warningTextColor: Theme.warningText
+            controlBorderColor: Theme.borderControl
+            checkColor: Theme.dark ? Theme.bg : "#ffffff"
+            quoteBarColor: Theme.borderStrong
+            ruleColor: Theme.border
+            // Every day tints the stream's find bar's matches (BlockText's RenderedTextItem).
+            findQuery: dayEditor.find !== null ? dayEditor.find.appliedQuery : ""
+            findMatchCase: dayEditor.find !== null && dayEditor.find.matchCase
+            findMatchDiacritics: dayEditor.find !== null && dayEditor.find.matchDiacritics
+            findWholeWord: dayEditor.find !== null && dayEditor.find.wholeWord
+            findColor: dayEditor.findHitColor
+            Accessible.role: Accessible.List
+            Accessible.name: DatesHelper.formatLong(day.date)
+
+            // Hover: the row's fold arrow, the bullet's halo, a task box's tint, the link underlined,
+            // the cursor and the link's preview (LinkPreviews) — drawn by the item.
+            HoverHandler {
+                id: drawnHover
+                enabled: !Theme.touchUi
+                cursorShape: day.drawnCursor(drawnHover.point.position.x, drawnHover.point.position.y)
+                onPointChanged: {
+                    const x = drawnHover.point.position.x
+                    const y = drawnHover.point.position.y
+                    drawn.setHover(x, y)
+                    const link = drawnTap.pressed ? "" : day.drawnLinkAt(x, y)
+                    drawn.hoveredLink = link
+                    const preview = Js.startsWith(link, "day:") ? page.dateChipUrl(drawn.hoveredRow, link) : link
+                    LinkPreviews.hover(drawn, preview, page.path, page.host, x, y)
+                }
+                onHoveredChanged: {
+                    if (!drawnHover.hovered) {
+                        LinkPreviews.leave(drawn)
+                        drawn.clearHover()
+                        drawn.hoveredLink = ""
+                    }
+                }
+            }
+            // A press: a mouse makes the rows at once (a drag from it selects blocks, as on the rows);
+            // a finger waits for its tap or long press (most presses on a phone scroll the stream).
+            // (On an item above the rest, as the editor's drag layer: a passive grab there sees the
+            // presses whose point the tap handlers below take.)
+            Item {
+                anchors.fill: parent
+                z: 2
+                PointHandler {
+                    id: drawnPointer
+                    target: null
+                    onActiveChanged: {
+                        if (drawnPointer.active) {
+                            drawnReleaseLater.stop()
+                            day._drawnHeld = true
+                            day._dragForward = false
+                            day._longPressed = false
+                            const device = drawnPointer.point.device
+                            const mouse = device === null || device.type !== PointerDevice.TouchScreen
+                            if (mouse) {
+                                day.materialize()
+                                dayEditor.dragPressed(drawnPointer.point.scenePosition, true)
+                                day._dragForward = true
+                            }
+                            return
+                        }
+                        if (day._dragForward) {
+                            day._dragForward = false
+                            dayEditor.dragReleased()
+                        }
+                        drawnReleaseLater.restart()
+                    }
+                    onPointChanged: {
+                        if (drawnPointer.active && day._dragForward)
+                            dayEditor.dragMoved(drawnPointer.point.scenePosition)
+                    }
+                }
+            }
+            TapHandler {
+                id: drawnTap
+                gesturePolicy: TapHandler.ReleaseWithinBounds
+                // The press feedback (phones have no hover): the link under the finger underlined.
+                onPressedChanged: {
+                    if (drawnTap.pressed && day.drawn) {
+                        drawn.setHover(drawnTap.point.position.x, drawnTap.point.position.y)
+                        drawn.hoveredLink = day.drawnLinkAt(drawnTap.point.position.x, drawnTap.point.position.y)
+                    } else if (!drawnHover.hovered) {
+                        drawn.hoveredLink = ""
+                    }
+                }
+                onTapped: (eventPoint) => {
+                    const x = eventPoint.position.x
+                    const y = eventPoint.position.y
+                    day._scene = eventPoint.scenePosition
+                    day._modifiers = drawnTap.point.modifiers
+                    if (day._longPressed)
+                        return
+                    const part = "" + drawn.partAt(x, y)
+                    const row = drawn.rowAt(y)
+                    day.forwardTap(part, row)
+                }
+            }
+            // A finger held (BlockText's, the markers' long press): a menu or the block selection.
+            TapHandler {
+                id: drawnHold
+                acceptedDevices: PointerDevice.TouchScreen
+                enabled: Theme.touchUi
+                onLongPressed: {
+                    day._longPressed = true
+                    day._scene = drawnHold.point.scenePosition
+                    const x = drawnHold.point.position.x
+                    const y = drawnHold.point.position.y
+                    const part = "" + drawn.partAt(x, y)
+                    const row = drawn.rowAt(y)
+                    if (day.forwardLongPress(part, row))
+                        day._dragForward = true
+                }
+            }
+            TapHandler {
+                acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad | PointerDevice.Stylus
+                acceptedButtons: Qt.RightButton
+                gesturePolicy: TapHandler.WithinBounds
+                onTapped: (eventPoint) => {
+                    const x = eventPoint.position.x
+                    const y = eventPoint.position.y
+                    day._scene = eventPoint.scenePosition
+                    const part = "" + drawn.partAt(x, y)
+                    const row = drawn.rowAt(y)
+                    day.forwardMenu(part, row)
+                }
+            }
+            TapHandler {
+                acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+                acceptedButtons: Qt.MiddleButton
+                enabled: OpenIn.tabs
+                onTapped: (eventPoint) => {
+                    const x = eventPoint.position.x
+                    const y = eventPoint.position.y
+                    day._scene = eventPoint.scenePosition
+                    const part = "" + drawn.partAt(x, y)
+                    const row = drawn.rowAt(y)
+                    day.forwardMiddle(part, row)
+                }
+            }
+            // Files dragged over the day: the editor's rows take them (its drop area).
+            DropArea {
+                anchors.fill: parent
+                keys: ["text/uri-list"]
+                onEntered: (drag) => {
+                    drag.accepted = false
+                    day.materialize()
+                }
+            }
+            // An open task's "Add date" (with a date: "+") while its row is hovered, as on the rows.
+            Loader {
+                readonly property int row: drawn.hoveredRow
+                readonly property rect area: row >= 0 && drawn.contentHeight >= 0 ? drawn.dateButtonArea(row)
+                                                                                  : Qt.rect(0, 0, 0, 0)
+                active: !Theme.touchUi && (day.drawn || day._drawnHeld) && area.width > 0
+                x: area.x + (area.width - width) / 2
+                y: area.y + (area.height - height) / 2
+                sourceComponent: BIconButton {
+                    objectName: "drawnDateButton"
+                    label: drawn.addableAt(drawn.hoveredRow) ? qsTranslate("BlockDelegate", "Add a reminder or an alarm")
+                                                             : qsTranslate("BlockDelegate", "Add date")
+                    iconName: "calendar-plus"
+                    size: "small"
+                    focusPolicy: Qt.NoFocus
+                    onClicked: day.openDateFor(drawn.hoveredRow)
+                }
+            }
         }
     }
 }

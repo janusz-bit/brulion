@@ -380,3 +380,9 @@ brulion_add_test(tst_editor_pageitem
     LIBS brulion_editor brulion_core_markdown Qt6::Qml Qt6::Quick)
 set_tests_properties(tst_editor_pageitem PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QML_IMPORT_PATH=${_brulion_editor_qml_root}")
+# JournalDayItem (journaldayitem.h): a journal day drawn by one item — which days it draws, the
+# rows' geometry by BlockDelegate's formulas, what is under a point, links, hover, the model
+# followed without laying unchanged texts out again, the sprites, a frame drawn offscreen.
+brulion_add_test(tst_editor_journalday
+    SOURCES tst_editor_journalday.cpp
+    LIBS brulion_editor brulion_core_markdown)

@@ -55,6 +55,7 @@ qt_add_library(brulion_editor STATIC
     scrollanchor.h scrollanchor.cpp
     pagerows.h pagerows.cpp
     pageitem.h pageitem.cpp
+    journaldayitem.h journaldayitem.cpp
     linkpreview.h linkpreview.cpp
     suggestionmodel.h suggestionmodel.cpp
     fakeeditorhost.h fakeeditorhost.cpp

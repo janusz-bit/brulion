@@ -18,7 +18,13 @@ namespace brulion::editor {
 
 bool EditorInput::textItem()
 {
-    static const bool on = qEnvironmentVariableIntValue("BRULION_TEXT_ITEM") == 1;
+    static const bool on = qEnvironmentVariableIntValue("BRULION_TEXT_ITEM") == 1 || journalDayItem();
+    return on;
+}
+
+bool EditorInput::journalDayItem()
+{
+    static const bool on = qEnvironmentVariableIntValue("BRULION_JOURNAL_DAY_ITEM") == 1;
     return on;
 }
 

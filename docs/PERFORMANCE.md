@@ -2496,6 +2496,72 @@ the workers' reads (`Vault::adoptRead` 0.09 G, mostly `isTracked()` of each path
 `readDetached()` on the worker). A name change still makes every visible editor render all its rows
 again (`BlockListModel::followIndex()`); while loading that now happens at most four times a second.
 
+### Z10 stage A2: a journal day as one item (2026-11-18)
+
+Stage A showed that a row's text is ~0.6 M of the 14.5 M instructions a row costs: the rest is the
+row's QML. Stage A2 takes the rows away where it is simplest: a day of the journal stream that is
+not being edited is drawn by one C++ item (`JournalDayItem`, docs/UI.md "A journal day as one
+item") — guides, bullets, task boxes, fold arrows, numbers, quotes' bars and rules as scene graph
+nodes, the text as one `RenderedTextItem` per block made from C++. The day's `BlockEditor` stays
+(controller, geometry, functions) without rows and makes them, with the same heights, once
+something needs them (a click, a tap, a long press, editing, a selection, the stream's active day
+…). A day with a block the item does not draw (a table, code, a picture, an embedded page, the
+properties, a callout …) keeps its rows, the whole day. Behind `BRULION_JOURNAL_DAY_ITEM=1` (which
+turns `BRULION_TEXT_ITEM` on too), off by default.
+
+Measured on the x86_64 desktop (shared with other agents' builds, load 7–20), Release `-O3 -g1`
+(`BRULION_LOCAL_AI=OFF`), Xvfb + llvmpipe, the same binary with the flag off and on.
+
+**GUI-thread instructions per day created** (the in-app scroll probe: `--scroll-probe auto
+--scroll-script touchpad --probe-speed 6000 --probe-cache 0` — every day created at the view's edge
+—, `QSG_RENDER_LOOP=threaded` so that drawing stays off the GUI thread; `perf stat -e instructions:u
+-i -t <main thread>`; per day = (passes 3 − pass 1) / (days created 3 − 1); median [min–max] of 3
+runs, 2 for the uniform journals):
+
+| journal | off | `BRULION_TEXT_ITEM=1` | day item |
+|---|---:|---:|---:|
+| 120 days of `tests/app/perf/make-vault.py` (40 % of the days hold a table, code or a picture: they keep their rows) | 271 M [252–294] | 229 M [209–231] | **170 M** [150–173], −37 % |
+| 100 days of 12 plain blocks (links, tags, tasks, nesting) | 237.6 M [237.0–238.2] | – | **55.8 M** [54.1–57.4], −77 % |
+| 100 days of 1 block | 55.7 M [49.7–61.8] | – | 39.6 M [34.1–45.0] |
+
+A line through the uniform journals: **a block 16.5 M → 1.5 M (−91 %), the day itself ~39 M → ~38
+M**. What a drawn day still costs is the day without its blocks — `ContentJournalDay` (the date,
+the `PageController` reading and rendering the note) and its `BlockEditor` without rows: five
+`TextEdit` line probes, `EditorDialogs`, some forty `Later`s and `MapHolder`s, the `ListView` —
+now ~70 % of a 12-block day. In the same 12-block runs (three passes, timings on a shared machine)
+the frames over 33 ms fell from 536–551 to 13–138, the frame interval's p90 from 36–42 to 18–21 ms.
+
+**Journal scroll** (`bench-matrix.sh journal-scroll`: the 10 000-note bench vault — 651 days, 12 %
+with code or a table —, the journal from its top, 80 wheel notches 40 ms apart, the list's normal
+cache; `BENCH_WAIT_KEPT=1`: the views built ahead exist before the scroll — without it they were
+built during the off runs' scroll and made most of their stalls; 4 runs × 2 alternating rounds):
+
+| | off | day item |
+|---|---:|---:|
+| frame interval p95 | 21.1 ms [19.1–24.3] | **18.4 ms** [18.2–19.9] |
+| frames over 33 / 50 ms | 2.5 / 0.5 | **1 / 0** |
+| GUI stalls during the scroll: sum / longest | 164 ms [148–204] / 29.7 ms | **19.7 ms** [16–24] / 19.7 ms |
+| RSS / heap after the scroll | 746.5 / 507.0 MB | **722.7 / 489.8 MB** (−24 / −17 MB) |
+| Qt Quick items after the scroll | 12 066 | 10 212 |
+
+**Opening Journals** (the home view: `bench-matrix.sh startup-big-short`, both labels through the
+same wrapper script; the first block on screen and its frame): within the noise — warm start
+`content_frame` 794 ms [717–904] off, 781 ms [734–882] on; first start 949 [878–1078] and 1031
+[869–1086] ms. Today is the stream's active day and keeps its rows; the days under it are drawn.
+At `ready` the heap is 10 MB smaller (3 168 → 1 854 items).
+
+**Parity.** `tst_content_journals_qml_dayitem` compares every row's top, height, first line's centre
+and text place and width with the editor's rows the day switches to (an outline day of every kind
+of plain block, a document day): equal, and the day keeps its height and place. Screenshots of a
+journal with every kind of block at 1280×800 and 412×915 (touch): the software renderer differs in
+107 / 112 pixels (antialiased edges of chips' and task boxes' shapes, a quote bar's square ends);
+under Xvfb's GL two runs of the same configuration differ by ~4 840 pixels (text antialiasing),
+off and on by 4 856–4 905 — within that noise.
+
+What it says: per block the rows are gone (−91 %), and on a journal of plain days the GUI thread's
+work per day created falls by three quarters; on a journal with many rich days the gain is a
+third. The rest is the day's own QML, which the next step can take (below: Z10-A2b).
+
 ### Budgets
 
 Desktop = the laptop above (the graph: a GitHub runner, see its row), phone = Pi 4 (floor) and the
@@ -2525,6 +2591,7 @@ The L-items of the October 2026 performance plan, with the numbers they should m
 | # | change | expected |
 |---|---|---|
 | L1c | (L1b done on 2026-11-18, above) time it in a quiet window — `startup-big` and the `bench_index` loader rows, `mergePrepared` —, the browser's cold load (`wasm-bench.mjs`: was +11–16 % to "ready", 30 %–2.5× more draws since journals come first; the 250 ms notifications should take most of that back), the Pi and the Android emulator (L1/L2/L1b not measured there yet); then `Vault::adoptRead`'s per-path checks on the worker (`readDetached()`), a name change that renders only the rows whose links it touches | laptop 10k index ready → 0.6 s; Pi ≤ 6 s cold, ≤ 3 s warm |
+| Z10-A2b | a drawn journal day without its `BlockEditor` until its rows are made (or the line probes shared by the stream), then the day item on by default after measuring a phone (`tests/app/perf/android-scroll.sh`, the Pixel) and the screen readers; rich blocks hosted by stage C draw the 12–40 % of days that keep their rows | GUI instructions per drawn 12-block day 56 M → ~20 M |
 | L5b | measure undo / redo on the Pi (`bench-matrix.sh` typing on the 5000-block outline, Release) and record the `blockDocOps` 5000 blocks undo+redo baseline in `pi.csv` (`perf-check.sh -u` in a quiet window; until then the Pi's check skips the row) | Pi undo 214 ms → < 50 ms |
 | L3b | measure the after-a-save fan-out on the Pi (`bench_reminders` afterEdit, small profile) and ratchet its `pi.csv` row (`perf-check.sh -m pi -u` in a quiet window; the row now measures the cached path, so the old 963 ms baseline only passes it loosely) | Pi 0.95 s → < 0.2 s |
 | L7b | measure the opening on the Pi (`bench-matrix.sh open-page`, offscreen, 3 000 notes) after L7 (done on 2026-11-18, above: "L7: cheaper page opening"); then the rest of it: `BlockDocument::derive()` with a parse that stops at what it keeps (kind, heading level, language, task status, block id — 40 % of `navigate()` on a 5000-block page), the reference rows' text (Z10) | Pi open 653 ms → ~400 ms |
