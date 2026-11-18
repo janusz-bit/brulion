@@ -394,7 +394,8 @@ private Q_SLOTS:
                     naive.measured = QList<bool>(count, false);
                 } else {
                     tree.markAllEstimated();
-                    naive.measured.fill(false);
+                    // (Not QList::fill(): GCC 13 -O3 with _FORTIFY_SOURCE=3 sees an unbounded memset in it.)
+                    naive.measured = QList<bool>(naive.measured.size(), false);
                 }
             } else if (kind == 9 && rng.bounded(8) == 0) {
                 const QList<qreal> hs = randomHeights(int(rng.bounded(200)));

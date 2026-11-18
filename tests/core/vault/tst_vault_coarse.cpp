@@ -529,8 +529,10 @@ private:
         std::error_code code;
         const auto now = std::filesystem::last_write_time(fsPath(abs), code);
         QVERIFY(!code);
-        std::filesystem::last_write_time(
-                fsPath(abs), now + std::chrono::milliseconds(offsetMs) + std::chrono::nanoseconds(123'457), code);
+        // (In the clock's own ticks: MSVC's are 100 ns, a time point of nanoseconds is another type.)
+        const auto offset = std::chrono::duration_cast<std::filesystem::file_time_type::duration>(
+                std::chrono::milliseconds(offsetMs) + std::chrono::microseconds(123));
+        std::filesystem::last_write_time(fsPath(abs), now + offset, code);
         QVERIFY(!code);
         QVERIFY(brulion::vaultutil::fineMtime(abs));
     }
