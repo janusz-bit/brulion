@@ -148,7 +148,7 @@ Rectangle {
                 TapHandler {
                     acceptedButtons: Qt.LeftButton
                     onTapped: AppController.selectTab(tab.tabId)
-                    onLongPressed: tabMenu.openFor(tab, tab.tabId)
+                    onLongPressed: bar.openTabMenu(tab, tab.tabId)
                 }
                 TapHandler {
                     // A middle click closes it, as in browsers.
@@ -159,7 +159,7 @@ Rectangle {
                 TapHandler {
                     acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad | PointerDevice.Stylus
                     acceptedButtons: Qt.RightButton
-                    onTapped: tabMenu.openFor(tab, tab.tabId)
+                    onTapped: bar.openTabMenu(tab, tab.tabId)
                 }
                 DragHandler {
                     id: drag
@@ -190,48 +190,57 @@ Rectangle {
         }
     }
 
-    BMenu {
-        id: tabMenu
-        property int tabId: 0
-        readonly property bool inSplit: tabId !== 0 && tabId === AppController.splitTab
-        function openFor(tab: Item, id: int): void {
-            tabMenu.tabId = id
-            tabMenu.popup(tab, 0, tab.height)
-        }
-        BMenuItem {
-            text: qsTr("Close tab")
-            iconName: "x"
-            // (Its key closes the focused tab.)
-            shortcut: tabMenu.tabId === AppController.focusedTab ? ShortcutMap.sequences["tab.close"] || "" : ""
-            onTriggered: AppController.closeTab(tabMenu.tabId)
-        }
-        BMenuItem {
-            text: qsTr("Close other tabs")
-            iconName: "x"
-            enabled: AppController.tabCount > 1
-            onTriggered: AppController.closeOtherTabs(tabMenu.tabId)
-        }
-        BMenuSeparator {}
-        BMenuItem {
-            visible: !tabMenu.inSplit && tabMenu.tabId !== AppController.mainTab
-            height: visible ? implicitHeight : 0
-            text: qsTr("Show in split view")
-            iconName: "columns-2"
-            onTriggered: AppController.splitView(tabMenu.tabId)
-        }
-        BMenuItem {
-            visible: AppController.splitTab !== 0
-            height: visible ? implicitHeight : 0
-            text: qsTr("Close split view")
-            iconName: "square"
-            onTriggered: AppController.closeSplit()
-        }
-        BMenuItem {
-            visible: AppController.windowsAllowed
-            height: visible ? implicitHeight : 0
-            text: qsTr("Move to new window")
-            iconName: "app-window"
-            onTriggered: AppController.detachTab(tabMenu.tabId)
+    // A tab's menu, made the first time one opens (docs/PERFORMANCE.md "L10"); for the tab
+    // `menuTabId`.
+    property int menuTabId: 0
+    property BMenu tabMenuPopup: null
+    function openTabMenu(tab: Item, id: int): void {
+        bar.menuTabId = id
+        if (!bar.tabMenuPopup)
+            bar.tabMenuPopup = tabMenuComponent.createObject(bar) as BMenu
+        bar.tabMenuPopup.popup(tab, 0, tab.height)
+    }
+    Component {
+        id: tabMenuComponent
+        BMenu {
+            id: tabMenu
+            readonly property int tabId: bar.menuTabId
+            readonly property bool inSplit: tabId !== 0 && tabId === AppController.splitTab
+            BMenuItem {
+                text: qsTr("Close tab")
+                iconName: "x"
+                // (Its key closes the focused tab.)
+                shortcut: tabMenu.tabId === AppController.focusedTab ? ShortcutMap.sequences["tab.close"] || "" : ""
+                onTriggered: AppController.closeTab(tabMenu.tabId)
+            }
+            BMenuItem {
+                text: qsTr("Close other tabs")
+                iconName: "x"
+                enabled: AppController.tabCount > 1
+                onTriggered: AppController.closeOtherTabs(tabMenu.tabId)
+            }
+            BMenuSeparator {}
+            BMenuItem {
+                visible: !tabMenu.inSplit && tabMenu.tabId !== AppController.mainTab
+                height: visible ? implicitHeight : 0
+                text: qsTr("Show in split view")
+                iconName: "columns-2"
+                onTriggered: AppController.splitView(tabMenu.tabId)
+            }
+            BMenuItem {
+                visible: AppController.splitTab !== 0
+                height: visible ? implicitHeight : 0
+                text: qsTr("Close split view")
+                iconName: "square"
+                onTriggered: AppController.closeSplit()
+            }
+            BMenuItem {
+                visible: AppController.windowsAllowed
+                height: visible ? implicitHeight : 0
+                text: qsTr("Move to new window")
+                iconName: "app-window"
+                onTriggered: AppController.detachTab(tabMenu.tabId)
+            }
         }
     }
 }

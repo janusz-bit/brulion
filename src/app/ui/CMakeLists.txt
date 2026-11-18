@@ -41,6 +41,19 @@ target_link_libraries(brulion_ui_touch PUBLIC Qt6::Core Qt6::Gui Qt6::Quick)
 qt_extract_metatypes(brulion_ui_touch)
 brulion_set_warnings(brulion_ui_touch)
 
+# brulion_ui_icons — BIcon's pictures (iconprovider.h): Lucide's SVGs rasterised and recoloured as
+# IconImage did, through Qt Quick's pixmap cache ("image://bicon/…", one image and texture per
+# icon, size and colour), and the singleton "Icons" that names them (registered by qmlforeign.h).
+# Qt Quick's public API; a static library so that tests/app/icons compares it with Qt's IconImage
+# without the app.
+qt_add_library(brulion_ui_icons STATIC
+    iconprovider.h iconprovider.cpp
+)
+target_include_directories(brulion_ui_icons PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(brulion_ui_icons PUBLIC Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick)
+qt_extract_metatypes(brulion_ui_icons)
+brulion_set_warnings(brulion_ui_icons)
+
 # brulion_ui_smoothscroll — SmoothScroll (smoothscroll.h): the mouse wheel and the scroll bar's
 # paging move Flickables like a web browser's smooth scrolling, not Qt's wheel flicks. Qt Quick's
 # public API only; a static library so that tests/app/smoothscroll drives it with wheel events

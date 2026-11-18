@@ -2185,6 +2185,88 @@ the rows of the references within reach (~0.45 G for ~20 references: rich text a
 before (the table under "Results"); −39 % of its instructions puts it near the ~400 ms the plan
 expected — not measured there yet (L7b).
 
+### L10: popups and menus not made with the shell, `BIcon` without a `Loader` (2026-11-18)
+
+**What the shell made that the first screen does not show.** The bench probe now counts QObjects
+(QtCore's AddQObject / RemoveQObject hooks) and the GUI thread's instructions at every startup
+mark, and `BENCH_OBJECT_TYPES=1` lists the live objects by class and by the named ancestors under
+`AppShell` (tests/bench/app/README.md, `benchprobe.cpp`). On main (438d6eb7), the sample notebook
+at 1280 × 800, first content: 13,316 live QObjects, of which
+
+| what (closed or hidden on the first screen) | objects |
+|---|---:|
+| the shell's dialogs: new page 450 (its folder picker included), share 218, move 204, palette 196, extension question 188, switcher 187, rename 184, about 180, delete 173, quick capture 154 | 2,134 |
+| menus: the top bar's More 841 (its Notebook submenu 282), AI 188 and tab switcher 170; the tree's row menu 462 and "+" menu 189; the tab bar's 188; the rail's notebook switcher 103; the breadcrumb's overflow 39 | 2,180 |
+| the side panel (hidden) 176, the update banner (no update) 77, the journal's "Go to day" dialog (a month grid) | ≥ 253 |
+| `BIcon`: 295 icons, each an Item, a `Loader`, the Loader's component and context, an `IconImage` (198: the others have no name) and its own recoloured texture | ~1,300 |
+| a phone (412 × 915): the closed drawer's rail and page tree | 1,017 |
+
+The kept views of "Switching views" are built 1.2 s after the notebook is ready, after the first
+content: unchanged.
+
+**What changed.** No popup is made with the shell. The four used most — the switcher (the top
+bar's search field), the palette, the top bar's More menu and quick capture — are built ahead 3 s
+after the notebook is ready, one every 0.4 s, each by an asynchronous `Loader` (incubated over
+several frames, the way the kept views are; opened before it is ready, the rest is made at once).
+Every other dialog and menu is made the first time it opens and kept (`AppShell.newPageNow()`,
+`ShellTopBar.aiMenuNow()`, `ShellSidebar.contextMenuNow()` …; the extension question with the first
+question), and so are the journal's "Go to day", the side panel (the first time it shows) and the
+update banner (once a newer version is known). A phone's drawer content is built asynchronously
+0.6 s after the notebook is ready, or made when the drawer first opens. `BIcon` is an Item with
+one `Image` whose picture comes from an image provider (`src/app/ui/iconprovider.h`) that draws
+exactly what `IconImage` drew (tests/app/icons compares every pixel at device pixel ratio 1 and 2);
+Qt Quick's pixmap cache shares one image and one texture among the icons of a name, size and
+colour.
+
+**Measured** (`tests/bench/app/run-bench.py`, scenario `startup`, Release builds of main and of the
+branch, Xvfb + llvmpipe (`LP_NUM_THREADS=1`) on the shared 16-core x86_64 desktop, load 15–35 from
+other agents' builds; two interleaved rounds of 3 runs per build, medians [min–max]; the
+instructions and object counts are the GUI thread's / the process's and barely move between runs,
+the milliseconds are wall time on that loaded machine):
+
+| | main | branch |
+|---|---:|---:|
+| demo, first start: GUI instructions to the first frame | 2,556 M | **1,688 M** (−34 %) |
+| … to the first content | 3,221 M | **2,381 M** (−26 %) |
+| … GUI CPU to the first content | 823 ms [439–1,179] | **491 ms** [412–559] |
+| … QObjects alive at the first frame / first content | 10,899 / 13,313 | **2,379 / 4,721** (−65 % at content) |
+| … first frame / first content's frame | 997 ms [468–1,768] / 1,445 ms [717–3,117] | **702** [651–793] / **887 ms** [789–989] |
+| … RSS when ready | 344.4 MB | **331.3 MB** |
+| demo, warm start: GUI instructions to the first content | 3,172 M | **2,276 M** (−28 %) |
+| … first content's frame | 969 ms [561–2,552] | **696 ms** [537–1,044] |
+| demo, phone (412 × 915, `--touch`): GUI instructions to the first frame / content | 2,534 / 3,099 M | **1,505 / 2,237 M** (−41 / −28 %) |
+| … QObjects alive at the first frame / first content | 10,923 / 13,042 | **1,745 / 3,828** (−71 % at content) |
+| … first content's frame | 1,616 ms [989–2,735] | **871 ms** [736–1,015] |
+| 10k notebook, first start: GUI instructions to the first frame / content | 3,251 / 4,069 M | **2,388 / 3,215 M** (−27 / −21 %) |
+| … QObjects alive at the first content | 15,241 | **6,481** (−57 %) |
+| … first content's frame / ready | 1,364 ms / 3.19 s | **1,118 ms / 3.18 s** |
+| … RSS when ready | 583.3 MB | **563.2 MB** |
+| 10k notebook, warm start: GUI instructions to the first content | 4,009 M | **3,100 M** (−23 %) |
+| … first content's frame (GUI CPU 783 / 917 ms: the machine, not the work) | 938 ms [791–1,134] | 1,276 ms [835–1,601] |
+
+A later round when the machine had quietened (load 4–5; 4 runs per build, main's then the
+branch's), the wall times main → branch: the first content's frame on the demo's first start
+857 → **675 ms** [613–1,008], warm 701 → **462 ms** [435–538], the phone layout 796 → **568 ms**
+[540–574], the 10k notebook's first start 1,309 → **689 ms** [688–712] and warm 905 → **579 ms**
+[539–611]; the GUI thread's CPU to the first content 532 → **371 ms** (demo) and 869 → **456 ms**
+(10k); the stalls after "ready" stay as they were (the longest 66–75 ms on the phone layout
+against 65–92 ms).
+
+The shell itself (`window` → first frame) now takes ~880 M instructions instead of ~1,750 M and
+~2,000 objects instead of ~10,500. "settled" is not compared: on the branch it often comes before
+the kept views are built (no stall over 24 ms in between), on main after them.
+
+The cost moved, not all of it gone: a popup made when it first opens pays for its objects then.
+The quick switcher opened 1 s after the 10k notebook is ready (`switcher` scenario, 3 runs each),
+before the build-ahead, took 150 M GUI instructions and ~1,300 objects instead of 50–70 M and
+~1,100 (its rows) — 218–367 ms instead of 201–229 ms on the loaded machine, yet 216 ms [201–225]
+instead of 317 ms [274–339] in the quiet round (the rest of the startup's work is lighter); opened
+after the build-ahead, or the second time, it costs what it did. The other dialogs and menus are opened
+rarely; the largest, the new-page dialog, is ~450 objects.
+
+Not measured on the Raspberry Pi or a phone (the plan's estimate was the Pi demo's first content
+−0.3 s; L10b below).
+
 ### Budgets
 
 Desktop = the laptop above (the graph: a GitHub runner, see its row), phone = Pi 4 (floor) and the
@@ -2218,7 +2300,7 @@ The L-items of the October 2026 performance plan, with the numbers they should m
 | L3b | measure the after-a-save fan-out on the Pi (`bench_reminders` afterEdit, small profile) and ratchet its `pi.csv` row (`perf-check.sh -m pi -u` in a quiet window; the row now measures the cached path, so the old 963 ms baseline only passes it loosely) | Pi 0.95 s → < 0.2 s |
 | L7b | measure the opening on the Pi (`bench-matrix.sh open-page`, offscreen, 3 000 notes) after L7 (done on 2026-11-18, above: "L7: cheaper page opening"); then the rest of it: `BlockDocument::derive()` with a parse that stops at what it keeps (kind, heading level, language, task status, block id — 40 % of `navigate()` on a 5000-block page), the reference rows' text (Z10) | Pi open 653 ms → ~400 ms |
 | L9b | the developer and self-test QML (`qml/dev`, `qml/content/*SelfTest.qml`) in a folder outside `src/app` (qmlimportscanner scans the target's source folder whole, and its `-exclude` does not work there), so that releases leave out QtTest, QuickTest and `Qt.labs.folderlistmodel` | APK −0.84 MB, wasm −0.27 MB (before wasm-opt) |
-| L10 | lazy cold views and dialogs, `BIcon` without a `Loader` | Pi demo first content −0.3 s |
+| L10b | measure L10 (popups and menus not made with the shell, `BIcon` without a `Loader`; done on 2026-11-18, above) on the Raspberry Pi and a phone: `bench-matrix.sh startup-demo`, the phone layout too, and the first opening of the More menu and the switcher before and after their build-ahead | Pi demo first content −0.3 s |
 | L16b | measure the graph on the Raspberry Pi (`bench-matrix.sh views graph`, offscreen: the software renderer's image node, 3 000-note vault; must not regress) and in the Android emulator probe (`android-batch.sh probe`, the scene graph on GLES); check it by hand on a phone, on Windows with a GPU (Direct3D 11) and in a phone's browser; if `rebuild()` (VaultIndex::graph and the filters, GUI thread) costs a phone > 50 ms, move its pure part onto the worker | phone: GUI stall during the layout < 33 ms, settled < 3 s |
 | L19 | measure the PDF viewer on real devices (the emulator: 174 MB PSS at 800 %, above): PSS with a 100+ MB scanned lecture zoomed in on a phone (if above 350 MB, base pictures at half resolution on touch devices), time to the first page of a 300-page lecture, Qt PDF timings in a Release build | phone PSS < 350 MB; first page < 0.5 s |
 | L20b | measure the generated QML at `-Oz` on a phone (L20): a Release APK built with `-DBRULION_QML_CODE_FOR_SIZE=OFF` against the default one, `android-batch.sh probe` or the Pixel — journal scroll, opening a 5000-block page, the views; if a view loses more than 10 %, compile its few hot files at the build type's level | no phone slowdown > 10 % |

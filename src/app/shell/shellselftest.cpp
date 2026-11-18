@@ -1403,11 +1403,13 @@ void checkTagLinks(QQuickWindow *window, AppController *app, const Check &check)
         settle(200);
     }
 
-    // ---- Renaming from the sidebar says how many links and tags change.
+    // ---- Renaming from the sidebar says how many links and tags change. The dialog is made the
+    // first time it opens (docs/PERFORMANCE.md "L10"): a view's request opens it.
+    check(window->findChild<QObject *>(u"shellRename"_s) == nullptr, "the rename dialog is not made before it opens");
+    app->requestItemAction(u"rename"_s, u"Witaj w Brulionie.md"_s);
     QObject *rename = window->findChild<QObject *>(u"shellRename"_s);
-    check(rename != nullptr, "the shell has its rename dialog");
+    check(rename != nullptr, "a rename request makes the shell's rename dialog");
     if (rename) {
-        uidriver::callQml(rename, "openFor", {u"Witaj w Brulionie.md"_s, false});
         const int changes = rename->property("changes").toInt();
         check(waitFor([&] { return rename->property("opened").toBool(); }) && changes > 0
                       && rename->property("subtitle").toString().contains(QString::number(changes)),
@@ -1910,11 +1912,13 @@ void checkRowsAndMenus(QQuickWindow *window, AppController *app, const Check &ch
         activate(menuButton);
         check(waitFor(drawerOpen), "the top bar's ☰ opens the drawer");
     }
-    treeMenu = findTreeMenu();
-    if (!treeMenu) {
-        check(false, "the sidebar's page tree has a context menu");
+    // The tree's context menu is made the first time it opens (docs/PERFORMANCE.md "L10"): looked
+    // up after the gesture that opens it.
+    if (!findNamed(u"sidebarTree"_s)) {
+        check(false, "the sidebar's page tree is shown");
         return;
     }
+    const auto treeMenuShown = [&] { return (treeMenu = findTreeMenu()) && treeMenu->property("visible").toBool(); };
     // Polled: a delegate still being created runs its bindings a moment later.
     const auto noFingerRightClicks = [&](const char *what) {
         QStringList bad;
@@ -1936,9 +1940,8 @@ void checkRowsAndMenus(QQuickWindow *window, AppController *app, const Check &ch
     }
     if (!touch) {
         openMenuOn(treeRow(folder));
-        check(waitFor([&] { return treeMenu->property("visible").toBool(); })
-                      && treeMenu->property("path").toString() == folder && treeMenu->property("isDir").toBool()
-                      && !expanded(folder),
+        check(waitFor(treeMenuShown) && treeMenu->property("path").toString() == folder
+                      && treeMenu->property("isDir").toBool() && !expanded(folder),
               "a right-click on a folder opens its context menu (and does not expand it)");
         check(closeMenu(), "Escape closes the folder's context menu");
     }
@@ -1948,8 +1951,7 @@ void checkRowsAndMenus(QQuickWindow *window, AppController *app, const Check &ch
                 : "a click on a folder in the sidebar expands it, without a menu");
     if (!touch) {
         openMenuOn(treeRow(page));
-        check(waitFor([&] { return treeMenu->property("visible").toBool(); })
-                      && treeMenu->property("path").toString() == page && view() == u"journals",
+        check(waitFor(treeMenuShown) && treeMenu->property("path").toString() == page && view() == u"journals",
               "a right-click on a page opens its context menu (and does not open the page)");
         check(closeMenu(), "Escape closes the page's context menu");
     }
@@ -1966,8 +1968,7 @@ void checkRowsAndMenus(QQuickWindow *window, AppController *app, const Check &ch
                 return false;
             r->forceActiveFocus(Qt::TabFocusReason);
             sendKey(window, Qt::Key_Menu);
-            return waitFor([&] { return treeMenu->property("visible").toBool(); })
-                   && treeMenu->property("path").toString() == page;
+            return waitFor(treeMenuShown) && treeMenu->property("path").toString() == page;
         };
         bool opened = menuFromKey();
         sendKey(window, Qt::Key_Down);
@@ -2021,8 +2022,7 @@ void checkRowsAndMenus(QQuickWindow *window, AppController *app, const Check &ch
         checkEmptyFolder();
         if (QQuickItem *pageRow = treeRow(page)) {
             openMenuOn(pageRow);
-            check(waitFor([&] { return treeMenu->property("visible").toBool(); })
-                          && treeMenu->property("path").toString() == page && !drawerClosed(),
+            check(waitFor(treeMenuShown) && treeMenu->property("path").toString() == page && !drawerClosed(),
                   "a long press on a page in the drawer opens its context menu");
             check(closeMenu(), "Escape closes the context menu");
         } else {
@@ -2030,8 +2030,7 @@ void checkRowsAndMenus(QQuickWindow *window, AppController *app, const Check &ch
         }
         if (QQuickItem *folderRow = treeRow(folder)) {
             openMenuOn(folderRow);
-            check(waitFor([&] { return treeMenu->property("visible").toBool(); })
-                          && treeMenu->property("path").toString() == folder && expanded(folder),
+            check(waitFor(treeMenuShown) && treeMenu->property("path").toString() == folder && expanded(folder),
                   "a long press on a folder in the drawer opens its context menu (the folder stays open)");
             check(closeMenu(), "Escape closes the folder's context menu");
         }
@@ -2323,10 +2322,11 @@ void checkFolders(QQuickWindow *window, AppController *app, const Check &check)
           "the page opened is revealed and highlighted in the tree");
 
     // ---- A row's menu: the "⋯" button (touch) or a right-click; "Move to…".
+    // (The menu is made the first time it opens: looked up once the gesture asked for it.)
     row = treeRow(recipes);
-    QObject *menu = treeMenu();
-    check(row && menu, "the tree lists a page and has its menu");
-    if (!row || !menu) {
+    QObject *menu = nullptr;
+    check(row != nullptr, "the tree lists a page");
+    if (!row) {
         restore();
         return;
     }
@@ -2337,7 +2337,10 @@ void checkFolders(QQuickWindow *window, AppController *app, const Check &check)
     } else {
         mouseClick(window, pointIn(row), Qt::RightButton);
     }
-    check(waitFor([&] { return menu->property("visible").toBool() && menu->property("path").toString() == recipes; }),
+    check(waitFor([&] {
+              menu = treeMenu();
+              return menu && menu->property("visible").toBool() && menu->property("path").toString() == recipes;
+          }),
           touch ? "the row's “⋯” opens its menu" : "a right-click on a row opens its menu");
     tap(named(u"treeMenuMove"_s));
     QObject *moveDialog = window->findChild<QObject *>(u"shellMoveDialog"_s);
@@ -6663,25 +6666,29 @@ void checkBackups(QQuickWindow *window, AppController *app, const Check &check)
 void checkShare(QQuickWindow *window, AppController *app, const Check &check)
 {
     const bool touch = touchRun();
+    // The dialog is made with the first share (docs/PERFORMANCE.md "L10"): looked up from then on.
     QObject *dialog = window->findChild<QObject *>(u"shellShare"_s);
-    if (!dialog) {
-        check(false, "the share dialog exists");
-        return;
-    }
     Workspace *ws = app->workspace();
     const QString today = ws->journalPath(app->today(0));
     const QString journal = ws->readFile(today);
     const QString saveText = QCoreApplication::translate("ShellShareDialog", "Save");
     const auto save = [&] {
         // The dialog's own "Save" (its footer): a view behind it may have a button of that name.
-        QQuickItem *button = findButton(qvariant_cast<QQuickItem *>(dialog->property("footer")), saveText);
+        QQuickItem *button =
+                dialog ? findButton(qvariant_cast<QQuickItem *>(dialog->property("footer")), saveText) : nullptr;
         if (!button || !button->isEnabled())
             return false;
         tapOrClick(window, pointIn(button), touch);
         return true;
     };
-    const auto opened = [&] { return waitFor([&] { return dialog->property("opened").toBool(); }); };
-    const auto closed = [&] { return waitFor([&] { return !dialog->property("visible").toBool(); }); };
+    const auto opened = [&] {
+        return waitFor([&] {
+            if (!dialog)
+                dialog = window->findChild<QObject *>(u"shellShare"_s);
+            return dialog && dialog->property("opened").toBool();
+        });
+    };
+    const auto closed = [&] { return waitFor([&] { return dialog && !dialog->property("visible").toBool(); }); };
 
     // Text (a browser's page): the journal, as one block, without date parsing.
     app->receiveShare({{u"subject"_s, u"Przepis na żurek jutro"_s}, {u"text"_s, u"https://kuchnia.pl/żurek"_s}});
@@ -6728,7 +6735,7 @@ void checkShare(QQuickWindow *window, AppController *app, const Check &check)
     check(openedWritten && opened(), "a file opened with Brulion opens the share dialog");
     const QString openedSubtitle =
             QCoreApplication::translate("ShellShareDialog", "%n file(s) to save in the notebook", "", 1);
-    check(dialog->property("subtitle").toString() == openedSubtitle,
+    check(dialog && dialog->property("subtitle").toString() == openedSubtitle,
           "its subtitle says the file is saved in the notebook");
     check(shownNamed(window->contentItem(), u"shareCopyHint"_s) != nullptr,
           "the dialog says a copy is saved and the file stays");
@@ -7253,14 +7260,17 @@ void checkTrayCalendar(QQuickWindow *window, AppController *app, const Check &ch
     check(!popup->isVisible() && !lastClosed && !app->quitting(),
           "closing it with the window hidden hides it and never ends the app");
     QObject::disconnect(connection);
-    QObject *quickCapture = window->findChild<QObject *>(u"shellCapture"_s);
+    // (Quick capture is made the first time it opens: looked up once the click asked for it.)
+    QObject *quickCapture = nullptr;
     app->showTrayCalendar(icon, {});
     waitFor([&] { return popup->isVisible() && popup->isActive(); });
     QQuickItem *capture = shownNamed(popup->contentItem(), u"trayCalendarCapture"_s);
     if (capture)
         mouseClick(popup, pointIn(capture));
-    check(capture && quickCapture && waitFor([&] {
-              return !popup->isVisible() && window->isVisible() && quickCapture->property("opened").toBool();
+    check(capture && waitFor([&] {
+              quickCapture = window->findChild<QObject *>(u"shellCapture"_s);
+              return !popup->isVisible() && window->isVisible() && quickCapture
+                     && quickCapture->property("opened").toBool();
           }),
           "“Quick capture…” brings the window up with quick capture");
     if (quickCapture && quickCapture->property("visible").toBool()) {
@@ -7291,9 +7301,10 @@ void checkKeyboard(QQmlApplicationEngine *engine, QQuickWindow *window, AppContr
     auto *insets = engine->singletonInstance<QObject *>("Brulion", "KeyboardInsets");
     auto *nav = window->findChild<QQuickItem *>(u"shellBottomNav"_s);
     auto *room = window->findChild<QQuickItem *>(u"shellKeyboardRoom"_s);
-    auto *capture = window->findChild<QObject *>(u"shellCapture"_s);
-    if (!insets || !nav || !room || !capture) {
-        check(false, "the keyboard's room, the bottom navigation and quick capture exist");
+    // (Quick capture is made the first time it opens, below.)
+    QObject *capture = nullptr;
+    if (!insets || !nav || !room) {
+        check(false, "the keyboard's room and the bottom navigation exist");
         return;
     }
     const qreal keyboard = 300;
@@ -7317,6 +7328,11 @@ void checkKeyboard(QQmlApplicationEngine *engine, QQuickWindow *window, AppContr
 
     // Quick capture (a bottom sheet on phones) sits on the keyboard.
     app->requestUiAction(u"capture"_s);
+    capture = window->findChild<QObject *>(u"shellCapture"_s);
+    if (!capture) {
+        check(false, "asking for quick capture makes its dialog");
+        return;
+    }
     check(waitFor([&] {
               return capture->property("opened").toBool()
                      && near(capture->property("y").toReal() + capture->property("height").toReal(), top);
@@ -7955,14 +7971,18 @@ void checkAppearance(QQmlApplicationEngine *engine, QQuickWindow *window, AppCon
             waitFor([&] { return app->currentView() == u"settings"; });
         }
 
-        QObject *switcher = window->findChild<QObject *>(u"shellSwitcher"_s);
-        QObject *palette = window->findChild<QObject *>(u"shellPalette"_s);
-        check(activate(shownItem(u"topBarSearchField"_s)) && switcher
-                      && waitFor([&] { return switcher->property("opened").toBool(); }),
+        // (The switcher and the palette are made the first time they open.)
+        QObject *switcher = nullptr;
+        QObject *palette = nullptr;
+        check(activate(shownItem(u"topBarSearchField"_s)) && waitFor([&] {
+                  switcher = window->findChild<QObject *>(u"shellSwitcher"_s);
+                  return switcher && switcher->property("opened").toBool();
+              }),
               "the top bar's search field opens the page switcher");
         sendKey(window, Qt::Key_Greater, Qt::ShiftModifier, u">"_s);
-        check(palette && switcher && waitFor([&] {
-                  return palette->property("opened").toBool() && !switcher->property("visible").toBool();
+        check(switcher && waitFor([&] {
+                  palette = window->findChild<QObject *>(u"shellPalette"_s);
+                  return palette && palette->property("opened").toBool() && !switcher->property("visible").toBool();
               }),
               "“>” in it turns to the command palette");
         if (palette)
@@ -8826,7 +8846,8 @@ void checkPageProperties(QQuickWindow *window, AppController *app, const Check &
 /// subtitle on the title's line after it; full screen (phones) a subtitled row has two lines,
 /// the subtitle under the title. The query shows subtitled rows ("New folder…" — "At the
 /// notebook root", the page "Remont mieszkania" in Projekty).
-void checkPaletteRows(QQmlApplicationEngine *engine, QQuickWindow *window, QObject *palette, const Check &check)
+void checkPaletteRows(QQmlApplicationEngine *engine, QQuickWindow *window, AppController *app, QObject *palette,
+                      const Check &check)
 {
     const auto isOpen = [](QObject *popup) { return popup->property("visible").toBool(); };
     auto *theme = engine->singletonInstance<QObject *>("Brulion", "Theme");
@@ -8916,7 +8937,17 @@ void checkPaletteRows(QQmlApplicationEngine *engine, QQuickWindow *window, QObje
         QMetaObject::invokeMethod(palette, "close");
         waitFor([&] { return !isOpen(palette); });
     }
+    // (The switcher is made the first time it opens: Ctrl+O's way, then closed again.)
     QObject *switcher = window->findChild<QObject *>(u"shellSwitcher"_s);
+    if (!switcher) {
+        app->requestUiAction(u"switcher"_s);
+        switcher = window->findChild<QObject *>(u"shellSwitcher"_s);
+        if (switcher) {
+            waitFor([&] { return switcher->property("opened").toBool(); });
+            QMetaObject::invokeMethod(switcher, "close");
+            waitFor([&] { return !isOpen(switcher); });
+        }
+    }
     const QList<std::pair<QObject *, QString>> popups{{palette, u"folder"_s}, {switcher, u"rem"_s}};
     for (const auto &[popup, query] : popups) {
         if (!popup) {
@@ -9238,24 +9269,65 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
     activateWindow(window);
     const auto find = [window](const char *name) { return window->findChild<QObject *>(QString::fromLatin1(name)); };
     QObject *drawer = find("shellDrawer");
-    QObject *palette = find("shellPalette");
-    QObject *capture = find("shellCapture");
-    if (!drawer || !palette || !capture) {
-        check(false, "the drawer, the command palette and quick capture exist");
+    if (!drawer) {
+        check(false, "the drawer exists");
         return failures;
     }
     const auto isOpen = [](QObject *popup) { return popup->property("visible").toBool(); };
+    const bool startCapture = QCoreApplication::arguments().contains(u"--capture"_s);
+
+    // 0a. The shell's popups and menus are made the first time they open (docs/PERFORMANCE.md
+    //     "L10"): none of them exists at the start; the four used most (the switcher, the palette,
+    //     the top bar's More menu, quick capture) are built ahead later (0c). Quick capture exists
+    //     from the start with --capture.
+    {
+        QStringList made;
+        for (const char *name :
+             {"shellNewPage", "shellRename", "shellShare", "shellMoveDialog", "shellDeleteDialog", "extensionQuestion",
+              "topBarAiMenu", "tabSwitcher", "sidebarContextMenu", "sidebarPagesMenu", "notebookMenu"}) {
+            if (find(name))
+                made.append(QString::fromLatin1(name));
+        }
+        if (!made.isEmpty())
+            std::fprintf(stderr, "selftest: made before they opened: %s\n", qPrintable(made.join(u", "_s)));
+        check(made.isEmpty(), "the shell's popups and menus are not made before they open");
+    }
 
     // 0. Started with --capture (a launcher action, or the tray while the window was hidden):
     //    quick capture opens by itself; Escape closes it and the keys reach the shell again.
-    if (QCoreApplication::arguments().contains(u"--capture"_s)) {
-        check(waitFor([&] { return capture->property("opened").toBool(); }), "--capture opens quick capture");
+    if (startCapture) {
+        QObject *capture = nullptr;
+        check(waitFor([&] {
+                  capture = find("shellCapture");
+                  return capture && capture->property("opened").toBool();
+              }),
+              "--capture opens quick capture");
         sendKey(window, Qt::Key_Escape);
-        check(waitFor([&] { return !isOpen(capture); }), "Escape closes quick capture");
+        check(capture && waitFor([&] { return !isOpen(capture); }), "Escape closes quick capture");
     }
 
     // 0b. Tasks, Calendar… are built in the background before they are opened.
     checkViewsBuiltAhead(window, app, check);
+    // 0c. So are the popups used most (AppShell.prebuildNext()), closed; the others still are not.
+    {
+        QStringList missing;
+        const bool built = waitFor(
+                [&] {
+                    missing.clear();
+                    for (const char *name : {"shellSwitcher", "shellPalette", "topBarMoreMenu", "shellCapture"}) {
+                        if (!find(name))
+                            missing.append(QString::fromLatin1(name));
+                    }
+                    return missing.isEmpty();
+                },
+                15000);
+        if (!built)
+            std::fprintf(stderr, "selftest: not built ahead: %s\n", qPrintable(missing.join(u", "_s)));
+        check(built && !isOpen(find("shellSwitcher")) && !isOpen(find("shellPalette"))
+                      && !isOpen(find("topBarMoreMenu")) && !find("shellRename") && !find("topBarAiMenu"),
+              "the switcher, the palette, the More menu and quick capture are built in the background, closed; "
+              "the other popups are not");
+    }
 
     // 1. The back key walks the history and is handled; at home it is left to the system.
     app->navigate({ { u"view"_s, u"tasks"_s } });
@@ -9354,14 +9426,21 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
     // 4. The command palette: Escape closes it; the focus returns to the shell.
     app->navigate({ { u"view"_s, u"tasks"_s } });
     app->requestUiAction(u"palette"_s);
-    check(waitFor([&] { return palette->property("opened").toBool(); }), "the command palette opens");
+    QObject *palette = nullptr;
+    check(waitFor([&] {
+              palette = find("shellPalette");
+              return palette && palette->property("opened").toBool();
+          }),
+          "the command palette opens");
+    if (!palette)
+        return failures;
     sendKey(window, Qt::Key_Escape);
     check(waitFor([&] { return !isOpen(palette); }) && view() == u"tasks", "Escape closes the palette");
     handled = sendKey(window, Qt::Key_Back);
     check(handled && view() == u"journals", "after the palette closed, back reaches the shell again");
 
     // 4b. The rows of the palette and the quick switcher.
-    checkPaletteRows(engine, window, palette, check);
+    checkPaletteRows(engine, window, app, palette, check);
 
     // 5. The block editor in the shell, and the checks that follow in the guide page.
     checkBlockEditor(engine, window, app, check);

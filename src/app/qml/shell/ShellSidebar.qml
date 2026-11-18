@@ -152,9 +152,9 @@ Rectangle {
         sidebar.openPage(path, OpenIn.clickTarget(Qt.LeftButton, EditorInput.keyboardModifiers()))
     }
     function showContextMenu(item: Item, path: string, isDir: bool): void {
-        contextMenu.path = path
-        contextMenu.isDir = isDir
-        contextMenu.popup(item, Theme.space6, item.height - 4)
+        sidebar.contextPath = path
+        sidebar.contextIsDir = isDir
+        sidebar.contextMenuNow().popup(item, Theme.space6, item.height - 4)
     }
     /// Indentation of a row: 18 px (touch) / 14 px per level, 8 px per level below the fourth
     /// (a narrow drawer keeps room for deep names).
@@ -565,8 +565,10 @@ Rectangle {
                     expanded: sidebar.pagesOpen
                     actionIcon: "plus"
                     actionLabel: qsTr("New page or folder")
-                    onActionClicked: pagesMenu.popup(pagesHeaderItem, pagesHeaderItem.width - pagesMenu.implicitWidth,
-                                                     pagesHeaderItem.height)
+                    onActionClicked: {
+                        const menu = sidebar.pagesMenuNow()
+                        menu.popup(pagesHeaderItem, pagesHeaderItem.width - menu.implicitWidth, pagesHeaderItem.height)
+                    }
                     onExpandedToggled: (open) => {
                         sidebar.pagesOpen = open
                         AppSettings.setValue("ui/sidebar/pages", open)
@@ -931,172 +933,195 @@ Rectangle {
         }
     }
 
-    BMenu {
-        id: contextMenu
-        objectName: "sidebarContextMenu"
+    // A row's menu, made the first time one opens (docs/PERFORMANCE.md "L10"); it shows the row
+    // of `contextPath` (showContextMenu()).
+    property string contextPath
+    property bool contextIsDir: false
+    property BMenu contextMenuPopup: null
+    function contextMenuNow(): BMenu {
+        if (!sidebar.contextMenuPopup)
+            sidebar.contextMenuPopup = contextMenuComponent.createObject(sidebar) as BMenu
+        return sidebar.contextMenuPopup
+    }
+    Component {
+        id: contextMenuComponent
+        BMenu {
+            id: contextMenu
+            objectName: "sidebarContextMenu"
 
-        property string path
-        property bool isDir: false
-        // (Workspace.favorites: followed; it lists the favourites that exist.)
-        readonly property bool favorite: !isDir && Workspace.favorites.length >= 0 && Workspace.isFavorite(contextMenu.path)
-                                         && Workspace.exists(contextMenu.path)
-        readonly property bool page: !isDir && Js.endsWith(Js.toLowerCase(contextMenu.path), ".md")
+            readonly property string path: sidebar.contextPath
+            readonly property bool isDir: sidebar.contextIsDir
+            // (Workspace.favorites: followed; it lists the favourites that exist.)
+            readonly property bool favorite: !isDir && Workspace.favorites.length >= 0 && Workspace.isFavorite(contextMenu.path)
+                                             && Workspace.exists(contextMenu.path)
+            readonly property bool page: !isDir && Js.endsWith(Js.toLowerCase(contextMenu.path), ".md")
 
-        HidingItem {
-            objectName: "treeMenuNewPage"
-            visible: contextMenu.isDir
-            text: qsTr("New page here")
-            iconName: "square-pen"
-            onTriggered: sidebar.newPageRequested(contextMenu.path)
-        }
-        HidingItem {
-            objectName: "treeMenuNewFolder"
-            visible: contextMenu.isDir
-            text: qsTr("New folder…")
-            iconName: "folder-plus"
-            onTriggered: sidebar.newFolderRequested(contextMenu.path)
-        }
-        HidingSeparator {
-            visible: contextMenu.isDir
-        }
-        HidingItem {
-            objectName: "treeMenuShowPages"
-            visible: contextMenu.isDir
-            text: qsTr("Show folder pages")
-            iconName: "files"
-            onTriggered: sidebar.go({ view: "allPages", path: contextMenu.path })
-        }
-        HidingItem {
-            objectName: "treeMenuSearch"
-            visible: contextMenu.isDir
-            text: qsTr("Search in folder")
-            iconName: "search"
-            onTriggered: sidebar.go({ view: "search", folder: contextMenu.path })
-        }
-        HidingItem {
-            objectName: "treeMenuOpenTab"
-            visible: !contextMenu.isDir
-            text: qsTr("Open in new tab")
-            iconName: "plus"
-            onTriggered: sidebar.openPage(contextMenu.path, "tab")
-        }
-        HidingItem {
-            objectName: "treeMenuOpenSide"
-            visible: !contextMenu.isDir && !Theme.narrow
-            text: qsTr("Open in side panel")
-            iconName: "panel-right"
-            onTriggered: AppController.openPage(contextMenu.path, -1, true)
-        }
-        HidingItem {
-            objectName: "treeMenuOpenWindow"
-            visible: !contextMenu.isDir && AppController.windowsAllowed && !Theme.narrow
-            text: qsTr("Open in new window")
-            iconName: "app-window"
-            onTriggered: AppController.openWindow({ view: "page", path: contextMenu.path })
-        }
-        HidingItem {
-            visible: contextMenu.page
-            text: contextMenu.favorite ? qsTr("Remove from favorites") : qsTr("Add to favorites")
-            iconName: "star"
-            onTriggered: Workspace.toggleFavorite(contextMenu.path)
-        }
-        BMenuItem {
-            objectName: "treeMenuMove"
-            text: qsTr("Move to…")
-            iconName: "folder-input"
-            onTriggered: sidebar.moveRequested(contextMenu.path, contextMenu.isDir)
-        }
-        HidingItem {
-            objectName: "treeMenuCopyLink"
-            visible: !contextMenu.isDir
-            text: qsTr("Copy link")
-            iconName: "link"
-            onTriggered: sidebar.copyLink(contextMenu.path)
-        }
-        HidingItem {
-            objectName: "treeMenuExport"
-            visible: contextMenu.isDir
-            text: qsTr("Export folder…")
-            iconName: "share"
-            onTriggered: sidebar.go({ view: "importExport", tab: "export", scope: "folder", folder: contextMenu.path })
-        }
-        BMenuItem {
-            objectName: "treeMenuRename"
-            text: qsTr("Rename…")
-            iconName: "pencil"
-            onTriggered: sidebar.renameRequested(contextMenu.path, contextMenu.isDir)
-        }
-        HidingItem {
-            visible: contextMenu.page
-            text: qsTr("Page history")
-            iconName: "history"
-            onTriggered: sidebar.go({ view: "history", path: contextMenu.path })
-        }
-        BMenuSeparator {}
-        BMenuItem {
-            objectName: "treeMenuTrash"
-            text: qsTr("Move to trash")
-            iconName: "trash-2"
-            // Delete on a focused row (a fixed key, no command's).
-            shortcut: "Del"
-            danger: true
-            onTriggered: sidebar.deleteRequested(contextMenu.path)
+            HidingItem {
+                objectName: "treeMenuNewPage"
+                visible: contextMenu.isDir
+                text: qsTr("New page here")
+                iconName: "square-pen"
+                onTriggered: sidebar.newPageRequested(contextMenu.path)
+            }
+            HidingItem {
+                objectName: "treeMenuNewFolder"
+                visible: contextMenu.isDir
+                text: qsTr("New folder…")
+                iconName: "folder-plus"
+                onTriggered: sidebar.newFolderRequested(contextMenu.path)
+            }
+            HidingSeparator {
+                visible: contextMenu.isDir
+            }
+            HidingItem {
+                objectName: "treeMenuShowPages"
+                visible: contextMenu.isDir
+                text: qsTr("Show folder pages")
+                iconName: "files"
+                onTriggered: sidebar.go({ view: "allPages", path: contextMenu.path })
+            }
+            HidingItem {
+                objectName: "treeMenuSearch"
+                visible: contextMenu.isDir
+                text: qsTr("Search in folder")
+                iconName: "search"
+                onTriggered: sidebar.go({ view: "search", folder: contextMenu.path })
+            }
+            HidingItem {
+                objectName: "treeMenuOpenTab"
+                visible: !contextMenu.isDir
+                text: qsTr("Open in new tab")
+                iconName: "plus"
+                onTriggered: sidebar.openPage(contextMenu.path, "tab")
+            }
+            HidingItem {
+                objectName: "treeMenuOpenSide"
+                visible: !contextMenu.isDir && !Theme.narrow
+                text: qsTr("Open in side panel")
+                iconName: "panel-right"
+                onTriggered: AppController.openPage(contextMenu.path, -1, true)
+            }
+            HidingItem {
+                objectName: "treeMenuOpenWindow"
+                visible: !contextMenu.isDir && AppController.windowsAllowed && !Theme.narrow
+                text: qsTr("Open in new window")
+                iconName: "app-window"
+                onTriggered: AppController.openWindow({ view: "page", path: contextMenu.path })
+            }
+            HidingItem {
+                visible: contextMenu.page
+                text: contextMenu.favorite ? qsTr("Remove from favorites") : qsTr("Add to favorites")
+                iconName: "star"
+                onTriggered: Workspace.toggleFavorite(contextMenu.path)
+            }
+            BMenuItem {
+                objectName: "treeMenuMove"
+                text: qsTr("Move to…")
+                iconName: "folder-input"
+                onTriggered: sidebar.moveRequested(contextMenu.path, contextMenu.isDir)
+            }
+            HidingItem {
+                objectName: "treeMenuCopyLink"
+                visible: !contextMenu.isDir
+                text: qsTr("Copy link")
+                iconName: "link"
+                onTriggered: sidebar.copyLink(contextMenu.path)
+            }
+            HidingItem {
+                objectName: "treeMenuExport"
+                visible: contextMenu.isDir
+                text: qsTr("Export folder…")
+                iconName: "share"
+                onTriggered: sidebar.go({ view: "importExport", tab: "export", scope: "folder", folder: contextMenu.path })
+            }
+            BMenuItem {
+                objectName: "treeMenuRename"
+                text: qsTr("Rename…")
+                iconName: "pencil"
+                onTriggered: sidebar.renameRequested(contextMenu.path, contextMenu.isDir)
+            }
+            HidingItem {
+                visible: contextMenu.page
+                text: qsTr("Page history")
+                iconName: "history"
+                onTriggered: sidebar.go({ view: "history", path: contextMenu.path })
+            }
+            BMenuSeparator {}
+            BMenuItem {
+                objectName: "treeMenuTrash"
+                text: qsTr("Move to trash")
+                iconName: "trash-2"
+                // Delete on a focused row (a fixed key, no command's).
+                shortcut: "Del"
+                danger: true
+                onTriggered: sidebar.deleteRequested(contextMenu.path)
+            }
         }
     }
 
     // The "Pages" header's "+": new page or folder at the root, and how the tree shows.
-    BMenu {
-        id: pagesMenu
-        objectName: "sidebarPagesMenu"
+    // (Made the first time it opens.)
+    property BMenu pagesMenuPopup: null
+    function pagesMenuNow(): BMenu {
+        if (!sidebar.pagesMenuPopup)
+            sidebar.pagesMenuPopup = pagesMenuComponent.createObject(sidebar) as BMenu
+        return sidebar.pagesMenuPopup
+    }
+    Component {
+        id: pagesMenuComponent
+        BMenu {
+            id: pagesMenu
+            objectName: "sidebarPagesMenu"
 
-        BMenuItem {
-            objectName: "pagesMenuNewPage"
-            text: qsTr("New page")
-            iconName: "square-pen"
-            shortcut: ShortcutMap.sequences["page.new"] || ""
-            onTriggered: sidebar.newPageRequested("")
-        }
-        BMenuItem {
-            objectName: "pagesMenuNewFolder"
-            text: qsTr("New folder")
-            iconName: "folder-plus"
-            onTriggered: sidebar.newFolderRequested("")
-        }
-        BMenuSeparator {}
-        BMenuItem {
-            objectName: "pagesMenuCollapseAll"
-            text: qsTr("Collapse all")
-            iconName: "chevrons-down-up"
-            onTriggered: tree.collapseAll()
-        }
-        BMenuItem {
-            objectName: "pagesMenuAttachments"
-            text: qsTr("Show attachments")
-            iconName: "paperclip"
-            id: attachmentsItem
-            checkable: true
-            // (A Binding: it follows again after the item's own toggle; onTriggered sets it at once.)
-            Binding on checked { value: tree.showAttachments }
-            onTriggered: {
-                const show = !tree.showAttachments
-                tree.showAttachments = show
-                AppSettings.setValue("ui/sidebar/attachments", show)
-                attachmentsItem.checked = tree.showAttachments
+            BMenuItem {
+                objectName: "pagesMenuNewPage"
+                text: qsTr("New page")
+                iconName: "square-pen"
+                shortcut: ShortcutMap.sequences["page.new"] || ""
+                onTriggered: sidebar.newPageRequested("")
             }
-        }
-        BMenuItem {
-            objectName: "pagesMenuReveal"
-            text: qsTr("Show the open page")
-            iconName: "folder-tree"
-            id: revealItem
-            checkable: true
-            Binding on checked { value: sidebar.revealCurrent }
-            onTriggered: {
-                sidebar.revealCurrent = !sidebar.revealCurrent
-                AppSettings.setValue("ui/sidebar/revealCurrent", sidebar.revealCurrent)
-                revealItem.checked = sidebar.revealCurrent
-                if (sidebar.revealCurrent)
-                    sidebar.revealRoute()
+            BMenuItem {
+                objectName: "pagesMenuNewFolder"
+                text: qsTr("New folder")
+                iconName: "folder-plus"
+                onTriggered: sidebar.newFolderRequested("")
+            }
+            BMenuSeparator {}
+            BMenuItem {
+                objectName: "pagesMenuCollapseAll"
+                text: qsTr("Collapse all")
+                iconName: "chevrons-down-up"
+                onTriggered: tree.collapseAll()
+            }
+            BMenuItem {
+                objectName: "pagesMenuAttachments"
+                text: qsTr("Show attachments")
+                iconName: "paperclip"
+                id: attachmentsItem
+                checkable: true
+                // (A Binding: it follows again after the item's own toggle; onTriggered sets it at once.)
+                Binding on checked { value: tree.showAttachments }
+                onTriggered: {
+                    const show = !tree.showAttachments
+                    tree.showAttachments = show
+                    AppSettings.setValue("ui/sidebar/attachments", show)
+                    attachmentsItem.checked = tree.showAttachments
+                }
+            }
+            BMenuItem {
+                objectName: "pagesMenuReveal"
+                text: qsTr("Show the open page")
+                iconName: "folder-tree"
+                id: revealItem
+                checkable: true
+                Binding on checked { value: sidebar.revealCurrent }
+                onTriggered: {
+                    sidebar.revealCurrent = !sidebar.revealCurrent
+                    AppSettings.setValue("ui/sidebar/revealCurrent", sidebar.revealCurrent)
+                    revealItem.checked = sidebar.revealCurrent
+                    if (sidebar.revealCurrent)
+                        sidebar.revealRoute()
+                }
             }
         }
     }

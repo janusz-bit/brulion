@@ -105,7 +105,8 @@ Rectangle {
         const today = Workspace.journalPath(DatesHelper.today)
         aiPage = bar.pagePath !== "" ? bar.pagePath
                : bar.routeView === "journals" && Workspace.exists(today) ? today : ""
-        aiMenu.popup(aiButton, aiButton.width - aiMenu.width, aiButton.height)
+        const menu = bar.aiMenuNow()
+        menu.popup(aiButton, aiButton.width - menu.width, aiButton.height)
     }
     /// The name of aiPage as the chat takes it ("" for none).
     readonly property string aiPageName: bar.aiPage !== "" ? Workspace.pageTitle(bar.aiPage) : ""
@@ -210,7 +211,10 @@ Rectangle {
             implicitHeight: Theme.touchTarget
             Accessible.role: Accessible.Button
             Accessible.name: qsTr("Tabs (%1)").arg(AppController.tabCount)
-            onClicked: tabSwitcher.popup(tabSwitcherButton, tabSwitcherButton.width - tabSwitcher.width, tabSwitcherButton.height)
+            onClicked: {
+                const menu = bar.tabSwitcherNow()
+                menu.popup(tabSwitcherButton, tabSwitcherButton.width - menu.width, tabSwitcherButton.height)
+            }
             background: Rectangle {
                 visible: tabSwitcherButton.down
                 radius: Theme.radiusFull
@@ -368,62 +372,71 @@ Rectangle {
 
     // The tab switcher (phones): the tabs, the one shown checked like the notebook switcher's
     // notebook; then new / close.
-    BMenu {
-        id: tabSwitcher
-        objectName: "tabSwitcher"
-        Instantiator {
-            model: AppController.tabs
-            delegate: BMenuItem {
-                id: entry
-                // (AppController.tabs: { tabId, route, … })
-                required property int tabId
-                required property var route
-                readonly property bool isCurrent: tabId === AppController.focusedTab
-                objectName: "tabSwitcherEntry"
-                text: titles.routeTitle(titles.field(entry.route, "view"),
-                                        titles.field(entry.route, "path"),
-                                        titles.field(entry.route, "date"),
-                                        titles.field(entry.route, "tag"),
-                                        titles.field(entry.route, "title"))
-                // (No view icon: a checkable item draws its check where the icon would be.)
-                checkable: true
-                // Not `checked`: a checkable item has already toggled it when onTriggered runs.
-                // (A Binding: it follows isCurrent again after the toggle; onTriggered puts it back.)
-                Binding on checked { value: entry.isCurrent }
-                onTriggered: {
-                    entry.checked = entry.isCurrent
-                    AppController.selectTab(entry.tabId)
+    property BMenu tabSwitcherPopup: null
+    function tabSwitcherNow(): BMenu {
+        if (!bar.tabSwitcherPopup)
+            bar.tabSwitcherPopup = tabSwitcherComponent.createObject(bar) as BMenu
+        return bar.tabSwitcherPopup
+    }
+    Component {
+        id: tabSwitcherComponent
+        BMenu {
+            id: tabSwitcher
+            objectName: "tabSwitcher"
+            Instantiator {
+                model: AppController.tabs
+                delegate: BMenuItem {
+                    id: entry
+                    // (AppController.tabs: { tabId, route, … })
+                    required property int tabId
+                    required property var route
+                    readonly property bool isCurrent: tabId === AppController.focusedTab
+                    objectName: "tabSwitcherEntry"
+                    text: titles.routeTitle(titles.field(entry.route, "view"),
+                                            titles.field(entry.route, "path"),
+                                            titles.field(entry.route, "date"),
+                                            titles.field(entry.route, "tag"),
+                                            titles.field(entry.route, "title"))
+                    // (No view icon: a checkable item draws its check where the icon would be.)
+                    checkable: true
+                    // Not `checked`: a checkable item has already toggled it when onTriggered runs.
+                    // (A Binding: it follows isCurrent again after the toggle; onTriggered puts it back.)
+                    Binding on checked { value: entry.isCurrent }
+                    onTriggered: {
+                        entry.checked = entry.isCurrent
+                        AppController.selectTab(entry.tabId)
+                    }
                 }
-            }
-            onObjectAdded: (index, object) => tabSwitcher.insertItem(index, object as Item)
-            // (takeItem: the Instantiator destroys its objects itself.)
-            onObjectRemoved: (index, object) => {
-                for (let i = 0; i < tabSwitcher.count; ++i) {
-                    if (tabSwitcher.itemAt(i) === object as Item) {
-                        tabSwitcher.takeItem(i)
-                        return
+                onObjectAdded: (index, object) => tabSwitcher.insertItem(index, object as Item)
+                // (takeItem: the Instantiator destroys its objects itself.)
+                onObjectRemoved: (index, object) => {
+                    for (let i = 0; i < tabSwitcher.count; ++i) {
+                        if (tabSwitcher.itemAt(i) === object as Item) {
+                            tabSwitcher.takeItem(i)
+                            return
+                        }
                     }
                 }
             }
-        }
-        BMenuSeparator {}
-        BMenuItem {
-            text: qsTr("New tab")
-            iconName: "plus"
-            shortcut: ShortcutMap.sequences["tab.new"] || ""
-            onTriggered: AppController.newTab()
-        }
-        BMenuItem {
-            text: qsTr("Close tab")
-            iconName: "x"
-            shortcut: ShortcutMap.sequences["tab.close"] || ""
-            onTriggered: AppController.closeTab(AppController.focusedTab)
-        }
-        BMenuItem {
-            objectName: "tabSwitcherCloseOthers"
-            text: qsTr("Close other tabs")
-            iconName: "x"
-            onTriggered: AppController.closeOtherTabs(AppController.focusedTab)
+            BMenuSeparator {}
+            BMenuItem {
+                text: qsTr("New tab")
+                iconName: "plus"
+                shortcut: ShortcutMap.sequences["tab.new"] || ""
+                onTriggered: AppController.newTab()
+            }
+            BMenuItem {
+                text: qsTr("Close tab")
+                iconName: "x"
+                shortcut: ShortcutMap.sequences["tab.close"] || ""
+                onTriggered: AppController.closeTab(AppController.focusedTab)
+            }
+            BMenuItem {
+                objectName: "tabSwitcherCloseOthers"
+                text: qsTr("Close other tabs")
+                iconName: "x"
+                onTriggered: AppController.closeOtherTabs(AppController.focusedTab)
+            }
         }
     }
 
@@ -479,15 +492,15 @@ Rectangle {
         color: Theme.fgFaint
     }
 
-    /// The "More" menu (--popup more: screenshots).
-    readonly property alias moreMenuPopup: moreMenu
     function openMoreMenu(): void {
-        moreMenu.popup(moreButton, moreButton.width - moreMenu.width, moreButton.height)
+        const menu = bar.moreMenuNow()
+        menu.popup(moreButton, moreButton.width - menu.width, moreButton.height)
     }
 
     /// The menu's mode switch: the note as a document, an outline or its Markdown source.
     function setMode(mode: string): void {
-        moreMenu.close()
+        if (bar.moreMenuPopup)
+            bar.moreMenuPopup.close()
         if (mode === "source") {
             if (!AppController.sourceModeShown)
                 AppController.requestUiAction("toggleSourceMode")
@@ -501,364 +514,390 @@ Rectangle {
 
     // The ✨ button's menu: the AI chat — a new conversation (the page on screen goes along), one
     // beside the page, the conversations, a summary of the page —, the AI's settings.
-    BMenu {
-        id: aiMenu
-        objectName: "topBarAiMenu"
-        BMenuItem {
-            objectName: "aiAsk"
-            text: qsTr("New conversation")
-            iconName: "message-square"
-            onTriggered: bar.newChat("", false)
-        }
-        BMenuItem {
-            objectName: "aiAskBeside"
-            visible: AppController.sidePanelAllowed && bar.aiPage !== ""
-            height: visible ? implicitHeight : 0
-            text: qsTr("New conversation beside the page")
-            iconName: "panel-right"
-            onTriggered: bar.newChat("", true)
-        }
-        BMenuItem {
-            objectName: "aiChats"
-            text: qsTr("Conversations")
-            iconName: "history"
-            onTriggered: AppController.navigate({ view: "chat" })
-        }
-        BMenuItem {
-            objectName: "aiSummarize"
-            text: qsTr("Summarise this page")
-            iconName: "scroll-text"
-            enabled: bar.aiPage !== ""
-            onTriggered: bar.newChat(qsTr("Summarise this page in a few sentences and list its most important tasks."), false)
-        }
-        BMenuSeparator {}
-        BMenuItem {
-            objectName: "aiSettings"
-            text: qsTr("AI settings…")
-            iconName: "settings"
-            onTriggered: AppController.navigate({ view: "settings", section: "extensions" })
+    property BMenu aiMenuPopup: null
+    function aiMenuNow(): BMenu {
+        if (!bar.aiMenuPopup)
+            bar.aiMenuPopup = aiMenuComponent.createObject(bar) as BMenu
+        return bar.aiMenuPopup
+    }
+    Component {
+        id: aiMenuComponent
+        BMenu {
+            id: aiMenu
+            objectName: "topBarAiMenu"
+            BMenuItem {
+                objectName: "aiAsk"
+                text: qsTr("New conversation")
+                iconName: "message-square"
+                onTriggered: bar.newChat("", false)
+            }
+            BMenuItem {
+                objectName: "aiAskBeside"
+                visible: AppController.sidePanelAllowed && bar.aiPage !== ""
+                height: visible ? implicitHeight : 0
+                text: qsTr("New conversation beside the page")
+                iconName: "panel-right"
+                onTriggered: bar.newChat("", true)
+            }
+            BMenuItem {
+                objectName: "aiChats"
+                text: qsTr("Conversations")
+                iconName: "history"
+                onTriggered: AppController.navigate({ view: "chat" })
+            }
+            BMenuItem {
+                objectName: "aiSummarize"
+                text: qsTr("Summarise this page")
+                iconName: "scroll-text"
+                enabled: bar.aiPage !== ""
+                onTriggered: bar.newChat(qsTr("Summarise this page in a few sentences and list its most important tasks."), false)
+            }
+            BMenuSeparator {}
+            BMenuItem {
+                objectName: "aiSettings"
+                text: qsTr("AI settings…")
+                iconName: "settings"
+                onTriggered: AppController.navigate({ view: "settings", section: "extensions" })
+            }
         }
     }
 
     // "More" (docs/UI.md "Top bar"): the page's actions as a row of icons, the note's mode, where
     // to open the view, a few actions in a list; the notebook's places in a submenu; Settings.
-    BMenu {
-        id: moreMenu
-        objectName: "topBarMoreMenu"
+    // Built ahead in the background (AppShell.prebuildNext(): prebuildMoreMenu()), or made when
+    // first opened (docs/PERFORMANCE.md "L10").
+    readonly property BMenu moreMenuPopup: moreMenuLoader.item as BMenu
+    function moreMenuNow(): BMenu {
+        // (Synchronous: an incubation in progress, built ahead, finishes at once.)
+        moreMenuLoader.asynchronous = false
+        moreMenuLoader.active = true
+        return moreMenuLoader.item as BMenu
+    }
+    function prebuildMoreMenu(): void {
+        moreMenuLoader.active = true
+    }
+    Loader {
+        id: moreMenuLoader
+        active: false
+        asynchronous: true
+        sourceComponent: BMenu {
+            id: moreMenu
+            objectName: "topBarMoreMenu"
 
-        // ---- The page: favourite, rename, move, history ------------------------------------
-        Item {
-            visible: bar.onPage
-            implicitWidth: Theme.touchUi ? 280 : 264
-            implicitHeight: visible ? tiles.implicitHeight + 4 : 0
-            RowLayout {
-                id: tiles
-                anchors.fill: parent
-                anchors.bottomMargin: 4
-                spacing: 2
-                MenuTile {
-                    objectName: "menuFavorite"
-                    text: qsTr("Favorite")
-                    accessibleName: bar.favorite ? qsTr("Remove from favorites") : qsTr("Add to favorites")
-                    iconName: "star"
-                    on: bar.favorite
-                    onClicked: {
-                        moreMenu.close()
-                        Workspace.toggleFavorite(bar.pagePath)
+            // ---- The page: favourite, rename, move, history ------------------------------------
+            Item {
+                visible: bar.onPage
+                implicitWidth: Theme.touchUi ? 280 : 264
+                implicitHeight: visible ? tiles.implicitHeight + 4 : 0
+                RowLayout {
+                    id: tiles
+                    anchors.fill: parent
+                    anchors.bottomMargin: 4
+                    spacing: 2
+                    MenuTile {
+                        objectName: "menuFavorite"
+                        text: qsTr("Favorite")
+                        accessibleName: bar.favorite ? qsTr("Remove from favorites") : qsTr("Add to favorites")
+                        iconName: "star"
+                        on: bar.favorite
+                        onClicked: {
+                            moreMenu.close()
+                            Workspace.toggleFavorite(bar.pagePath)
+                        }
                     }
-                }
-                MenuTile {
-                    objectName: "menuRenamePage"
-                    visible: bar.routeView === "page"
-                    text: qsTr("Rename")
-                    accessibleName: qsTr("Rename…")
-                    iconName: "pencil"
-                    onClicked: {
-                        moreMenu.close()
-                        bar.renameRequested(bar.pagePath)
+                    MenuTile {
+                        objectName: "menuRenamePage"
+                        visible: bar.routeView === "page"
+                        text: qsTr("Rename")
+                        accessibleName: qsTr("Rename…")
+                        iconName: "pencil"
+                        onClicked: {
+                            moreMenu.close()
+                            bar.renameRequested(bar.pagePath)
+                        }
                     }
-                }
-                MenuTile {
-                    objectName: "menuMovePage"
-                    visible: bar.routeView === "page"
-                    text: qsTr("Move")
-                    accessibleName: qsTr("Move to…")
-                    iconName: "folder-input"
-                    onClicked: {
-                        moreMenu.close()
-                        bar.moveRequested(bar.pagePath)
+                    MenuTile {
+                        objectName: "menuMovePage"
+                        visible: bar.routeView === "page"
+                        text: qsTr("Move")
+                        accessibleName: qsTr("Move to…")
+                        iconName: "folder-input"
+                        onClicked: {
+                            moreMenu.close()
+                            bar.moveRequested(bar.pagePath)
+                        }
                     }
-                }
-                MenuTile {
-                    objectName: "menuPageHistory"
-                    visible: !bar.pdf && !bar.fileOnly
-                    text: qsTr("History")
-                    accessibleName: qsTr("Page history")
-                    iconName: "history"
-                    onClicked: {
-                        moreMenu.close()
-                        AppController.navigate({ view: "history", path: bar.pagePath })
-                    }
-                }
-            }
-        }
-        BMenuSeparator {
-            visible: bar.onPage
-            height: visible ? implicitHeight : 0
-        }
-
-        // ---- The note's mode: document, outline, Markdown source --------------------------
-        Column {
-            objectName: "menuNoteMode"
-            visible: bar.inNote && bar.noteMode !== ""
-            height: visible ? implicitHeight : 0
-            bottomPadding: Theme.space1
-            spacing: 2
-            MenuLabel {
-                text: qsTr("Mode")
-            }
-            BSegmented {
-                x: Theme.space1
-                width: parent.width - 2 * Theme.space1
-                fill: true
-                size: "small"
-                controlled: true
-                accessibleName: qsTr("Mode")
-                model: [{ value: "document", text: qsTr("Document"), icon: "file-text" },
-                        { value: "outline", text: qsTr("Outline"), icon: "list-indent-increase" },
-                        { value: "source", text: qsTr("Source"), icon: "code" }]
-                currentValue: AppController.sourceModeShown ? "source" : bar.noteMode
-                onActivated: (value) => bar.setMode(value)
-            }
-        }
-        // A picture: its two views (PageView switches them for this action too).
-        BMenuItem {
-            objectName: "menuPictureText"
-            visible: bar.inEditor && bar.picture
-            height: visible ? implicitHeight : 0
-            text: bar.pictureAsText ? qsTr("Show picture") : qsTr("Show as text")
-            iconName: bar.pictureAsText ? "image" : "code"
-            shortcut: ShortcutMap.sequences["page.source"] || ""
-            onTriggered: AppController.requestUiAction("toggleSourceMode")
-        }
-
-        // ---- Where to open the view (wide windows; phones: a new tab) ----------------------
-        Column {
-            visible: !Theme.narrow
-            height: visible ? implicitHeight : 0
-            bottomPadding: 2
-            spacing: 0
-            MenuLabel {
-                text: qsTr("Open in")
-            }
-            RowLayout {
-                width: parent.width
-                spacing: 2
-                MenuTile {
-                    objectName: "menuOpenInNewTab"
-                    text: qsTr("New tab")
-                    accessibleName: qsTr("Open in new tab")
-                    iconName: "plus"
-                    onClicked: {
-                        moreMenu.close()
-                        AppController.openTab(bar.route)
-                    }
-                }
-                MenuTile {
-                    objectName: "menuOpenInNewWindow"
-                    visible: AppController.windowsAllowed
-                    text: qsTr("Window")
-                    accessibleName: qsTr("Open in new window")
-                    iconName: "app-window"
-                    onClicked: {
-                        moreMenu.close()
-                        AppController.openWindow(bar.route)
-                    }
-                }
-                MenuTile {
-                    objectName: "menuOpenInSidePanel"
-                    visible: bar.onPage
-                    text: qsTr("Side panel")
-                    accessibleName: qsTr("Open in side panel")
-                    iconName: "panel-right"
-                    onClicked: {
-                        moreMenu.close()
-                        AppController.openPage(bar.pagePath, -1, true)
-                    }
-                }
-                MenuTile {
-                    objectName: "menuSplitView"
-                    text: AppController.splitTab !== 0 ? qsTr("Unsplit") : qsTr("Split")
-                    accessibleName: AppController.splitTab !== 0 ? qsTr("Close split view") : qsTr("Split view")
-                    iconName: AppController.splitTab !== 0 ? "square" : "columns-2"
-                    onClicked: {
-                        moreMenu.close()
-                        if (AppController.splitTab !== 0)
-                            AppController.closeSplit()
-                        else
-                            AppController.splitView()
+                    MenuTile {
+                        objectName: "menuPageHistory"
+                        visible: !bar.pdf && !bar.fileOnly
+                        text: qsTr("History")
+                        accessibleName: qsTr("Page history")
+                        iconName: "history"
+                        onClicked: {
+                            moreMenu.close()
+                            AppController.navigate({ view: "history", path: bar.pagePath })
+                        }
                     }
                 }
             }
-        }
-        BMenuItem {
-            objectName: "menuOpenInNewTabNarrow"
-            visible: Theme.narrow
-            height: visible ? implicitHeight : 0
-            text: qsTr("Open in new tab")
-            iconName: "plus"
-            onTriggered: AppController.openTab(bar.route)
-        }
-        BMenuSeparator {}
-
-        // ---- A few actions --------------------------------------------------------------------
-        BMenuItem {
-            // The properties panel's add row of the page shown (the day being written in).
-            objectName: "menuAddProperty"
-            visible: bar.inNote
-            height: visible ? implicitHeight : 0
-            text: qsTr("Add property")
-            iconName: "plus"
-            shortcut: ShortcutMap.sequences["page.addProperty"] || ""
-            enabled: !AppController.sourceModeShown && !AppSettings.readingMode
-            onTriggered: AppController.requestUiAction("addProperty")
-        }
-        BMenuItem {
-            // The page's tasks out of Tasks, the calendar and task queries, or back (the
-            // property `zadania:: ignoruj` / `tasks:: ignore`, PageView "toggleTasksIgnored").
-            objectName: "menuIgnoreTasks"
-            visible: bar.inNote && bar.onPage
-            height: visible ? implicitHeight : 0
-            text: bar.tasksIgnored ? qsTr("Show this page's tasks in Tasks") : qsTr("Ignore tasks on this page")
-            iconName: bar.tasksIgnored ? "list-checks" : "eye-off"
-            enabled: !AppController.sourceModeShown && !AppSettings.readingMode
-            onTriggered: AppController.requestUiAction("toggleTasksIgnored")
-        }
-        BMenuItem {
-            objectName: "menuFindInNote"
-            visible: ["page", "journal", "journals"].indexOf(AppController.currentView) >= 0
-            height: visible ? implicitHeight : 0
-            text: qsTr("Find in note")
-            iconName: "search"
-            shortcut: ShortcutMap.sequences["page.find"] || ""
-            onTriggered: AppController.requestUiAction("findInNote")
-        }
-        BMenuItem {
-            objectName: "menuRevealPage"
-            visible: bar.onPage
-            height: visible ? implicitHeight : 0
-            text: qsTr("Show in tree")
-            iconName: "folder-tree"
-            onTriggered: bar.revealRequested(bar.pagePath)
-        }
-        BMenuItem {
-            // The note as QR codes another phone's camera reads (docs/UI.md "QR code"); in the
-            // journal's stream the day being written in.
-            objectName: "menuQrCode"
-            visible: bar.inNote
-            height: visible ? implicitHeight : 0
-            text: qsTr("QR code…")
-            iconName: "qr-code"
-            onTriggered: AppController.requestUiAction("qrCode")
-        }
-        BMenuItem {
-            objectName: "menuOpenInOtherApp"
-            // A PDF; another attachment of the allow-list (DOCX, XLSX, MP3…: name and first bytes).
-            visible: bar.onPage && (bar.pdf || (bar.fileOnly && Workspace.canOpenInOtherApp(bar.pagePath)))
-            height: visible ? implicitHeight : 0
-            text: Qt.platform.os === "wasm" ? qsTr("Open in a new tab") : qsTr("Open in another app")
-            iconName: "external-link"
-            onTriggered: Workspace.openInOtherApp(bar.pagePath)
-        }
-        // The page's last item, set apart on both sides (the rule of BMenuItem's header).
-        BMenuSeparator {
-            visible: bar.onPage
-            height: visible ? implicitHeight : 0
-        }
-        BMenuItem {
-            objectName: "menuTrashPage"
-            visible: bar.onPage
-            height: visible ? implicitHeight : 0
-            text: qsTr("Move to trash")
-            iconName: "trash-2"
-            danger: true
-            onTriggered: bar.deleteRequested(bar.pagePath)
-        }
-        BMenuSeparator {
-            visible: bar.inEditor || bar.onPage
-            height: visible ? implicitHeight : 0
-        }
-        // Phones have no search field: the palette is here.
-        BMenuItem {
-            visible: Theme.narrow
-            height: visible ? implicitHeight : 0
-            text: qsTr("Command palette")
-            iconName: "command"
-            shortcut: ShortcutMap.sequences["palette"] || ""
-            onTriggered: bar.paletteRequested()
-        }
-
-        // ---- The notebook's places (on phones this menu is the only way there besides the
-        // palette) ------------------------------------------------------------------------------
-        BMenu {
-            objectName: "menuNotebook"
-            title: qsTr("Notebook")
-            iconName: "notebook-pen"
-
-            BMenuItem {
-                text: qsTr("New page")
-                iconName: "square-pen"
-                shortcut: ShortcutMap.sequences["page.new"] || ""
-                onTriggered: bar.newPageRequested()
-            }
-            BMenuSeparator {}
-            BMenuItem {
-                text: qsTr("Sync center")
-                iconName: "folder-sync"
-                onTriggered: AppController.navigate({ view: "sync" })
-            }
-            BMenuItem {
-                // Straight to the import tab: notes from Obsidian, Logseq, Notion… (docs/UI.md).
-                objectName: "menuImportNotes"
-                text: qsTr("Import notes")
-                iconName: "download"
-                onTriggered: AppController.navigate({ view: "importExport", tab: "import" })
-            }
-            BMenuItem {
-                text: qsTr("Import and export")
-                iconName: "import"
-                onTriggered: AppController.navigate({ view: "importExport" })
-            }
-            BMenuItem {
-                objectName: "menuReplaceInNotebook"
-                visible: !AppController.inDocsVault
+            BMenuSeparator {
+                visible: bar.onPage
                 height: visible ? implicitHeight : 0
-                text: qsTr("Replace in notebook")
-                iconName: "repeat"
-                onTriggered: AppController.navigate({ view: "replace" })
+            }
+
+            // ---- The note's mode: document, outline, Markdown source --------------------------
+            Column {
+                objectName: "menuNoteMode"
+                visible: bar.inNote && bar.noteMode !== ""
+                height: visible ? implicitHeight : 0
+                bottomPadding: Theme.space1
+                spacing: 2
+                MenuLabel {
+                    text: qsTr("Mode")
+                }
+                BSegmented {
+                    x: Theme.space1
+                    width: parent.width - 2 * Theme.space1
+                    fill: true
+                    size: "small"
+                    controlled: true
+                    accessibleName: qsTr("Mode")
+                    model: [{ value: "document", text: qsTr("Document"), icon: "file-text" },
+                            { value: "outline", text: qsTr("Outline"), icon: "list-indent-increase" },
+                            { value: "source", text: qsTr("Source"), icon: "code" }]
+                    currentValue: AppController.sourceModeShown ? "source" : bar.noteMode
+                    onActivated: (value) => bar.setMode(value)
+                }
+            }
+            // A picture: its two views (PageView switches them for this action too).
+            BMenuItem {
+                objectName: "menuPictureText"
+                visible: bar.inEditor && bar.picture
+                height: visible ? implicitHeight : 0
+                text: bar.pictureAsText ? qsTr("Show picture") : qsTr("Show as text")
+                iconName: bar.pictureAsText ? "image" : "code"
+                shortcut: ShortcutMap.sequences["page.source"] || ""
+                onTriggered: AppController.requestUiAction("toggleSourceMode")
+            }
+
+            // ---- Where to open the view (wide windows; phones: a new tab) ----------------------
+            Column {
+                visible: !Theme.narrow
+                height: visible ? implicitHeight : 0
+                bottomPadding: 2
+                spacing: 0
+                MenuLabel {
+                    text: qsTr("Open in")
+                }
+                RowLayout {
+                    width: parent.width
+                    spacing: 2
+                    MenuTile {
+                        objectName: "menuOpenInNewTab"
+                        text: qsTr("New tab")
+                        accessibleName: qsTr("Open in new tab")
+                        iconName: "plus"
+                        onClicked: {
+                            moreMenu.close()
+                            AppController.openTab(bar.route)
+                        }
+                    }
+                    MenuTile {
+                        objectName: "menuOpenInNewWindow"
+                        visible: AppController.windowsAllowed
+                        text: qsTr("Window")
+                        accessibleName: qsTr("Open in new window")
+                        iconName: "app-window"
+                        onClicked: {
+                            moreMenu.close()
+                            AppController.openWindow(bar.route)
+                        }
+                    }
+                    MenuTile {
+                        objectName: "menuOpenInSidePanel"
+                        visible: bar.onPage
+                        text: qsTr("Side panel")
+                        accessibleName: qsTr("Open in side panel")
+                        iconName: "panel-right"
+                        onClicked: {
+                            moreMenu.close()
+                            AppController.openPage(bar.pagePath, -1, true)
+                        }
+                    }
+                    MenuTile {
+                        objectName: "menuSplitView"
+                        text: AppController.splitTab !== 0 ? qsTr("Unsplit") : qsTr("Split")
+                        accessibleName: AppController.splitTab !== 0 ? qsTr("Close split view") : qsTr("Split view")
+                        iconName: AppController.splitTab !== 0 ? "square" : "columns-2"
+                        onClicked: {
+                            moreMenu.close()
+                            if (AppController.splitTab !== 0)
+                                AppController.closeSplit()
+                            else
+                                AppController.splitView()
+                        }
+                    }
+                }
             }
             BMenuItem {
-                text: qsTr("Clean up")
-                iconName: "sparkles"
-                onTriggered: AppController.navigate({ view: "cleanup" })
-            }
-            BMenuItem {
-                text: Workspace.trashCount > 0 ? qsTr("Trash (%1)").arg(Workspace.trashCount) : qsTr("Trash")
-                iconName: "trash-2"
-                onTriggered: AppController.navigate({ view: "trash" })
+                objectName: "menuOpenInNewTabNarrow"
+                visible: Theme.narrow
+                height: visible ? implicitHeight : 0
+                text: qsTr("Open in new tab")
+                iconName: "plus"
+                onTriggered: AppController.openTab(bar.route)
             }
             BMenuSeparator {}
+
+            // ---- A few actions --------------------------------------------------------------------
             BMenuItem {
-                text: qsTr("About Brulion")
-                iconName: "info"
-                onTriggered: bar.aboutRequested()
+                // The properties panel's add row of the page shown (the day being written in).
+                objectName: "menuAddProperty"
+                visible: bar.inNote
+                height: visible ? implicitHeight : 0
+                text: qsTr("Add property")
+                iconName: "plus"
+                shortcut: ShortcutMap.sequences["page.addProperty"] || ""
+                enabled: !AppController.sourceModeShown && !AppSettings.readingMode
+                onTriggered: AppController.requestUiAction("addProperty")
             }
-        }
-        BMenuItem {
-            text: qsTr("Settings")
-            iconName: "settings"
-            shortcut: ShortcutMap.sequences["go.settings"] || ""
-            onTriggered: AppController.navigate({ view: "settings" })
+            BMenuItem {
+                // The page's tasks out of Tasks, the calendar and task queries, or back (the
+                // property `zadania:: ignoruj` / `tasks:: ignore`, PageView "toggleTasksIgnored").
+                objectName: "menuIgnoreTasks"
+                visible: bar.inNote && bar.onPage
+                height: visible ? implicitHeight : 0
+                text: bar.tasksIgnored ? qsTr("Show this page's tasks in Tasks") : qsTr("Ignore tasks on this page")
+                iconName: bar.tasksIgnored ? "list-checks" : "eye-off"
+                enabled: !AppController.sourceModeShown && !AppSettings.readingMode
+                onTriggered: AppController.requestUiAction("toggleTasksIgnored")
+            }
+            BMenuItem {
+                objectName: "menuFindInNote"
+                visible: ["page", "journal", "journals"].indexOf(AppController.currentView) >= 0
+                height: visible ? implicitHeight : 0
+                text: qsTr("Find in note")
+                iconName: "search"
+                shortcut: ShortcutMap.sequences["page.find"] || ""
+                onTriggered: AppController.requestUiAction("findInNote")
+            }
+            BMenuItem {
+                objectName: "menuRevealPage"
+                visible: bar.onPage
+                height: visible ? implicitHeight : 0
+                text: qsTr("Show in tree")
+                iconName: "folder-tree"
+                onTriggered: bar.revealRequested(bar.pagePath)
+            }
+            BMenuItem {
+                // The note as QR codes another phone's camera reads (docs/UI.md "QR code"); in the
+                // journal's stream the day being written in.
+                objectName: "menuQrCode"
+                visible: bar.inNote
+                height: visible ? implicitHeight : 0
+                text: qsTr("QR code…")
+                iconName: "qr-code"
+                onTriggered: AppController.requestUiAction("qrCode")
+            }
+            BMenuItem {
+                objectName: "menuOpenInOtherApp"
+                // A PDF; another attachment of the allow-list (DOCX, XLSX, MP3…: name and first bytes).
+                visible: bar.onPage && (bar.pdf || (bar.fileOnly && Workspace.canOpenInOtherApp(bar.pagePath)))
+                height: visible ? implicitHeight : 0
+                text: Qt.platform.os === "wasm" ? qsTr("Open in a new tab") : qsTr("Open in another app")
+                iconName: "external-link"
+                onTriggered: Workspace.openInOtherApp(bar.pagePath)
+            }
+            // The page's last item, set apart on both sides (the rule of BMenuItem's header).
+            BMenuSeparator {
+                visible: bar.onPage
+                height: visible ? implicitHeight : 0
+            }
+            BMenuItem {
+                objectName: "menuTrashPage"
+                visible: bar.onPage
+                height: visible ? implicitHeight : 0
+                text: qsTr("Move to trash")
+                iconName: "trash-2"
+                danger: true
+                onTriggered: bar.deleteRequested(bar.pagePath)
+            }
+            BMenuSeparator {
+                visible: bar.inEditor || bar.onPage
+                height: visible ? implicitHeight : 0
+            }
+            // Phones have no search field: the palette is here.
+            BMenuItem {
+                visible: Theme.narrow
+                height: visible ? implicitHeight : 0
+                text: qsTr("Command palette")
+                iconName: "command"
+                shortcut: ShortcutMap.sequences["palette"] || ""
+                onTriggered: bar.paletteRequested()
+            }
+
+            // ---- The notebook's places (on phones this menu is the only way there besides the
+            // palette) ------------------------------------------------------------------------------
+            BMenu {
+                objectName: "menuNotebook"
+                title: qsTr("Notebook")
+                iconName: "notebook-pen"
+
+                BMenuItem {
+                    text: qsTr("New page")
+                    iconName: "square-pen"
+                    shortcut: ShortcutMap.sequences["page.new"] || ""
+                    onTriggered: bar.newPageRequested()
+                }
+                BMenuSeparator {}
+                BMenuItem {
+                    text: qsTr("Sync center")
+                    iconName: "folder-sync"
+                    onTriggered: AppController.navigate({ view: "sync" })
+                }
+                BMenuItem {
+                    // Straight to the import tab: notes from Obsidian, Logseq, Notion… (docs/UI.md).
+                    objectName: "menuImportNotes"
+                    text: qsTr("Import notes")
+                    iconName: "download"
+                    onTriggered: AppController.navigate({ view: "importExport", tab: "import" })
+                }
+                BMenuItem {
+                    text: qsTr("Import and export")
+                    iconName: "import"
+                    onTriggered: AppController.navigate({ view: "importExport" })
+                }
+                BMenuItem {
+                    objectName: "menuReplaceInNotebook"
+                    visible: !AppController.inDocsVault
+                    height: visible ? implicitHeight : 0
+                    text: qsTr("Replace in notebook")
+                    iconName: "repeat"
+                    onTriggered: AppController.navigate({ view: "replace" })
+                }
+                BMenuItem {
+                    text: qsTr("Clean up")
+                    iconName: "sparkles"
+                    onTriggered: AppController.navigate({ view: "cleanup" })
+                }
+                BMenuItem {
+                    text: Workspace.trashCount > 0 ? qsTr("Trash (%1)").arg(Workspace.trashCount) : qsTr("Trash")
+                    iconName: "trash-2"
+                    onTriggered: AppController.navigate({ view: "trash" })
+                }
+                BMenuSeparator {}
+                BMenuItem {
+                    text: qsTr("About Brulion")
+                    iconName: "info"
+                    onTriggered: bar.aboutRequested()
+                }
+            }
+            BMenuItem {
+                text: qsTr("Settings")
+                iconName: "settings"
+                shortcut: ShortcutMap.sequences["go.settings"] || ""
+                onTriggered: AppController.navigate({ view: "settings" })
+            }
         }
     }
 }

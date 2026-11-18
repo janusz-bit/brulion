@@ -84,7 +84,10 @@ FocusScope {
     readonly property real edgeSwipeStrip: 24
     /// A view's editing toolbar is docked at its bottom edge (touch UIs): the main view's or the
     /// side panel's.
-    readonly property bool toolbarDocked: shell.routeView.viewToolbarDocked || sidePanel.toolbarDocked
+    readonly property bool toolbarDocked: shell.routeView.viewToolbarDocked || (sidePanel !== null && sidePanel.toolbarDocked)
+    /// The side panel (wide windows), null until it first shows.
+    readonly property ShellSidePanel sidePanel: sidePanelLoader.item as ShellSidePanel
+    property bool _sidePanelMade: false
     /// Typing: the keyboard is up, or a toolbar stays docked after the system hid it.
     readonly property bool typing: KeyboardInsets.shown || toolbarDocked
     /// The bottom navigation's height (with the system's navigation bar under it), shown or not.
@@ -126,7 +129,7 @@ FocusScope {
     /// while an extension's question is a bottom sheet: the AI assistant's "Asking AI…" covered
     /// the change it asks about and its choices.
     readonly property bool toastsAtTop: KeyboardInsets.shown || (toolbarDocked && shell.routeView.viewEditing)
-                                        || (extensionQuestion.opened && extensionQuestion.sheet)
+                                        || (extensionQuestion !== null && extensionQuestion.opened && extensionQuestion.sheet)
     readonly property string title: shell.routeView.viewTitle !== "" ? shell.routeView.viewTitle
                                     : routeTitles.routeTitle(shell.currentView, shell.routePath,
                                                              routeTitles.field(AppController.currentRoute, "date"),
@@ -204,14 +207,16 @@ FocusScope {
     ShellRouteTitles { id: routeTitles }
 
     function openPalette(query: string): void {
-        palette.open()
+        const popup = shell.paletteNow()
+        popup.open()
         if (query !== "")
-            palette.typeQuery(query)
+            popup.typeQuery(query)
     }
     function openSwitcher(query: string): void {
-        switcher.open()
+        const popup = shell.switcherNow()
+        popup.open()
         if (query !== "")
-            switcher.typeQuery(query)
+            popup.typeQuery(query)
     }
     function openCapture(): void {
         // Captured notes belong in the user's journal: from the documentation, AppController
@@ -219,17 +224,18 @@ FocusScope {
         if (AppController.inDocsVault)
             AppController.quickCapture()
         else
-            capture.open()
+            shell.captureNow().open()
     }
     /// The share dialog for what another app shared (AppController.pendingShare; Android's
     /// "Share → Brulion", the --share option).
     function openShare(): void {
         if (AppController.routeText(AppController.pendingShare, "kind") === "")
             return
-        if (shareDialog.opened)
-            shareDialog.reload() // a newer share replaced the one shown
+        const dialog = shell.shareDialogNow()
+        if (dialog.opened)
+            dialog.reload() // a newer share replaced the one shown
         else
-            shareDialog.open()
+            dialog.open()
     }
     /// A new page: in `folder`, or — Ctrl+N, the top bar, the sidebar's pencil pass "" — in the
     /// folder of the page shown, the root too (a removable chip in the dialog); else the
@@ -237,17 +243,17 @@ FocusScope {
     function openNewPage(folder: string): void {
         if (folder === "" && shell.currentView === "page" && shell.routePath !== ""
                 && Workspace.journalDate(shell.routePath) === "") {
-            newPage.openFor(Workspace.folderOf(shell.routePath), false, true)
+            shell.newPageNow().openFor(Workspace.folderOf(shell.routePath), false, true)
             return
         }
-        newPage.openFor(folder, false, false)
+        shell.newPageNow().openFor(folder, false, false)
     }
-    function openNewFolder(parentFolder: string): void { newPage.openFor(parentFolder, true, false) }
-    function openRename(path: string, isDir: bool): void { rename.openFor(path, isDir) }
+    function openNewFolder(parentFolder: string): void { shell.newPageNow().openFor(parentFolder, true, false) }
+    function openRename(path: string, isDir: bool): void { shell.renameNow().openFor(path, isDir) }
     /// "Move to…" for a page, an attachment or a folder.
     function openMove(path: string, isDir: bool): void {
         if (path !== "")
-            moveDialog.openFor(path, isDir)
+            shell.moveDialogNow().openFor(path, isDir)
     }
     /// The last move's Undo: its toast (AppController.toastWithAction) and where it moves back.
     property int _moveToast: 0
@@ -301,10 +307,11 @@ FocusScope {
         if (sidebar)
             sidebar.reveal(path, true)
     }
-    function openAbout(): void { about.open() }
+    function openAbout(): void { shell.aboutNow().open() }
     function confirmDelete(path: string): void {
-        deleteDialog.path = path
-        deleteDialog.open()
+        const dialog = shell.deleteDialogNow()
+        dialog.path = path
+        dialog.open()
     }
     function toggleSidebar(): void {
         shell.sidebarVisible = !shell.sidebarVisible
@@ -477,12 +484,15 @@ FocusScope {
                 onContextRequested: contextDrawer.open()
             }
             // Not while typing: the room above the on-screen keyboard is the note's.
-            ShellUpdateBanner {
-                visible: !shell.keyboardUp && !shell.focusMode && AppController.updates.availableVersion !== ""
+            // (Made once a newer version is known: docs/PERFORMANCE.md "L10".)
+            Loader {
+                active: AppController.updates.availableVersion !== ""
+                visible: active && !shell.keyboardUp && !shell.focusMode
                 Layout.fillWidth: true
                 Layout.leftMargin: Theme.space2
                 Layout.rightMargin: Theme.space2
                 Layout.topMargin: Theme.space2
+                sourceComponent: ShellUpdateBanner {}
             }
             ShellTabBar {
                 id: tabBar
@@ -549,18 +559,25 @@ FocusScope {
             }
         }
 
-        ShellSidePanel {
-            id: sidePanel
+        // The side panel: made the first time it shows (docs/PERFORMANCE.md "L10"), then kept.
+        Loader {
+            id: sidePanelLoader
             visible: !Theme.narrow && AppController.sidePanelVisible && !shell.focusMode
+            active: shell._sidePanelMade
+            // (Not from the Loader's own signal: setting `active` from it would be a binding loop.)
+            onVisibleChanged: if (visible) shell._sidePanelMade = true
+            Component.onCompleted: if (visible) shell._sidePanelMade = true
             SplitView.preferredWidth: 340
             SplitView.minimumWidth: 260
             SplitView.maximumWidth: 600
-            pinnedTitle: routeTitles.routeTitle(routeTitles.field(AppController.sidePanelRoute, "view"),
-                                                routeTitles.field(AppController.sidePanelRoute, "path"),
-                                                routeTitles.field(AppController.sidePanelRoute, "date"),
-                                                routeTitles.field(AppController.sidePanelRoute, "tag"),
-                                                routeTitles.field(AppController.sidePanelRoute, "title"))
-            contextPanel: shell.routeView.viewSidePanel
+            sourceComponent: ShellSidePanel {
+                pinnedTitle: routeTitles.routeTitle(routeTitles.field(AppController.sidePanelRoute, "view"),
+                                                    routeTitles.field(AppController.sidePanelRoute, "path"),
+                                                    routeTitles.field(AppController.sidePanelRoute, "date"),
+                                                    routeTitles.field(AppController.sidePanelRoute, "tag"),
+                                                    routeTitles.field(AppController.sidePanelRoute, "title"))
+                contextPanel: shell.routeView.viewSidePanel
+            }
         }
     }
 
@@ -597,6 +614,14 @@ FocusScope {
         onClicked: shell.leaveFocusMode()
     }
 
+    /// The drawer's content exists (made once: drawer's onVisibleChanged, drawerTimer).
+    property bool _drawerMade: false
+    Timer {
+        id: drawerTimer
+        interval: 600
+        running: Theme.narrow && !shell._drawerMade && Workspace.ready
+        onTriggered: shell._drawerMade = true
+    }
     Drawer {
         id: drawer
         objectName: "shellDrawer"
@@ -641,9 +666,15 @@ FocusScope {
         topPadding: 0
         bottomPadding: 0
 
+        // Its rail and page panel (phones) are made after the first content — 0.6 s after the
+        // notebook is ready (drawerTimer below) — or when the drawer first opens: not before the
+        // first frame (docs/PERFORMANCE.md "L10"); kept after.
+        onVisibleChanged: if (visible) shell._drawerMade = true
         Loader {
             id: drawerRail
-            active: Theme.narrow
+            active: Theme.narrow && shell._drawerMade
+            // (Built ahead in pieces over several frames; opened before it is ready, at once.)
+            asynchronous: !drawer.visible
             anchors.left: parent.left
             anchors.top: parent.top
             anchors.bottom: parent.bottom
@@ -661,7 +692,8 @@ FocusScope {
             anchors.right: parent.right
             anchors.top: parent.top
             anchors.bottom: parent.bottom
-            active: Theme.narrow
+            active: Theme.narrow && shell._drawerMade
+            asynchronous: !drawer.visible
             sourceComponent: ShellSidebar {
                 topInset: shell.SafeArea.margins.top
                 bottomInset: shell.navigationBar
@@ -707,62 +739,210 @@ FocusScope {
     }
 
     // ---- Popups -----------------------------------------------------------------------------
+    // Not made with the shell (docs/PERFORMANCE.md "L10: lazy cold popups"): a closed popup still
+    // creates all of its items — the command palette even filters every command into the rows of
+    // its list —, and none of them is on the first screen. The ones used most — the switcher (the
+    // top bar's search field), the palette, quick capture and the top bar's More menu — are built
+    // ahead in the background once the notebook is ready (prebuildTimer below), so their first
+    // opening is as quick as before; the others are made the first time they open. Until then the
+    // property is null; the open*() functions above make it through its *Now() function (also
+    // --popup and the self-tests: the dialogs' objectNames are found once they exist).
 
-    BCommandPalette {
-        id: palette
-        objectName: "shellPalette"
-        commands: CommandModel.commands
-        onCommandIdActivated: (id) => CommandModel.run(id)
+    /// The popups built ahead so far (prebuildNext()).
+    property int _prebuilt: 0
+    Timer {
+        id: prebuildTimer
+        // After the kept views (ShellRouteView.preloadViews: 1.2 s after ready, then 0.4 s each).
+        interval: shell._prebuilt === 0 ? 3000 : 400
+        repeat: true
+        running: Workspace.ready && shell._prebuilt < 4
+        onTriggered: shell.prebuildNext()
+    }
+    /// Starts building the next popup used most, in pieces over several frames (an asynchronous
+    /// Loader; opened before it is ready, the rest is made at once).
+    function prebuildNext(): void {
+        switch (shell._prebuilt) {
+        case 0: switcherLoader.active = true; break
+        case 1: paletteLoader.active = true; break
+        case 2: topBar.prebuildMoreMenu(); break
+        case 3: captureLoader.active = true; break
+        }
+        ++shell._prebuilt
     }
 
-    BQuickSwitcher {
-        id: switcher
-        objectName: "shellSwitcher"
-        // Workspace.namesRevision / propertiesRevision: refresh when pages come and go (or their
-        // aliases or icons change) while it is open. Closed (visible stays true until the exit
-        // transition ends), it neither queries nor follows them.
-        pages: switcher.visible && Workspace.namesRevision >= 0 && Workspace.propertiesRevision >= 0
-               ? Workspace.switcherPages(switcher.query, 60) : []
-        // The top bar's search field opens it: "> " turns to the commands, the last result
-        // searches the notes' text.
-        placeholderText: qsTr("Go to page… (> for commands)")
-        offerSearch: true
-        commandPrefix: true
-        onSearchRequested: (text) => AppController.search(text)
-        onCommandsRequested: (text) => shell.openPalette(text)
-        onPagePathChosen: (path) => AppController.openPage(path)
-        onCreateRequested: (name) => {
-            const path = Workspace.createPage(name)
-            if (path !== "")
-                AppController.openPage(path)
+    // (Not `palette`: Item has a property of that name.)
+    readonly property BCommandPalette commandPalette: paletteLoader.item as BCommandPalette
+    function paletteNow(): BCommandPalette {
+        // (Synchronous: an incubation in progress, built ahead, finishes at once.)
+        paletteLoader.asynchronous = false
+        paletteLoader.active = true
+        return paletteLoader.item as BCommandPalette
+    }
+    Loader {
+        id: paletteLoader
+        active: false
+        asynchronous: true
+        sourceComponent: BCommandPalette {
+            objectName: "shellPalette"
+            commands: CommandModel.commands
+            onCommandIdActivated: (id) => CommandModel.run(id)
         }
     }
 
-    ShellQuickCapture {
-        id: capture
-        objectName: "shellCapture"
-        onCaptured: {
-            if (shell.toasts)
-                shell._captureToast = AppController.toastWithAction(qsTr("Added to today's journal"), "success", qsTr("Open"))
+    readonly property BQuickSwitcher switcher: switcherLoader.item as BQuickSwitcher
+    function switcherNow(): BQuickSwitcher {
+        switcherLoader.asynchronous = false
+        switcherLoader.active = true
+        return switcherLoader.item as BQuickSwitcher
+    }
+    Loader {
+        id: switcherLoader
+        active: false
+        asynchronous: true
+        sourceComponent: BQuickSwitcher {
+            id: switcherPopup
+            objectName: "shellSwitcher"
+            // Workspace.namesRevision / propertiesRevision: refresh when pages come and go (or their
+            // aliases or icons change) while it is open. Closed (visible stays true until the exit
+            // transition ends), it neither queries nor follows them.
+            pages: switcherPopup.visible && Workspace.namesRevision >= 0 && Workspace.propertiesRevision >= 0
+                   ? Workspace.switcherPages(switcherPopup.query, 60) : []
+            // The top bar's search field opens it: "> " turns to the commands, the last result
+            // searches the notes' text.
+            placeholderText: qsTr("Go to page… (> for commands)")
+            offerSearch: true
+            commandPrefix: true
+            onSearchRequested: (text) => AppController.search(text)
+            onCommandsRequested: (text) => shell.openPalette(text)
+            onPagePathChosen: (path) => AppController.openPage(path)
+            onCreateRequested: (name) => {
+                const path = Workspace.createPage(name)
+                if (path !== "")
+                    AppController.openPage(path)
+            }
         }
     }
 
-    ShellShareDialog { id: shareDialog; objectName: "shellShare" }
-    // The question an extension's command waits on (the gym: which plan, a set's weight and reps).
-    ShellExtensionQuestion { id: extensionQuestion }
+    readonly property ShellQuickCapture capture: captureLoader.item as ShellQuickCapture
+    function captureNow(): ShellQuickCapture {
+        captureLoader.asynchronous = false
+        captureLoader.active = true
+        return captureLoader.item as ShellQuickCapture
+    }
+    Loader {
+        id: captureLoader
+        active: false
+        asynchronous: true
+        sourceComponent: ShellQuickCapture {
+            objectName: "shellCapture"
+            onCaptured: {
+                if (shell.toasts)
+                    shell._captureToast = AppController.toastWithAction(qsTr("Added to today's journal"), "success", qsTr("Open"))
+            }
+        }
+    }
 
-    ShellNewPageDialog { id: newPage; objectName: "shellNewPage" }
-    ShellRenameDialog { id: rename; objectName: "shellRename" }
-    ShellMoveDialog {
-        id: moveDialog
-        onMoveRequested: (path, folder, create) => shell.performMove(path, folder, create)
+    property ShellShareDialog shareDialog: null
+    function shareDialogNow(): ShellShareDialog {
+        if (!shell.shareDialog)
+            shell.shareDialog = shareComponent.createObject(shell) as ShellShareDialog
+        return shell.shareDialog
+    }
+    Component {
+        id: shareComponent
+        ShellShareDialog { objectName: "shellShare" }
+    }
+
+    // The question an extension's command waits on (the gym: which plan, a set's weight and reps):
+    // the dialog is made with the first question and follows the next ones itself.
+    property ShellExtensionQuestion extensionQuestion: null
+    Component {
+        id: extensionQuestionComponent
+        ShellExtensionQuestion {}
+    }
+    Connections {
+        target: Workspace.extensions
+        enabled: shell.extensionQuestion === null
+        function onQuestionChanged() {
+            if (Workspace.extensions.questionKind === "")
+                return
+            shell.extensionQuestion = extensionQuestionComponent.createObject(shell) as ShellExtensionQuestion
+            // (Made in this signal's handler: its own Connections hear the next one.)
+            if (shell.extensionQuestion)
+                shell.extensionQuestion.questionChanged()
+        }
+    }
+
+    property ShellNewPageDialog newPage: null
+    function newPageNow(): ShellNewPageDialog {
+        if (!shell.newPage)
+            shell.newPage = newPageComponent.createObject(shell) as ShellNewPageDialog
+        return shell.newPage
+    }
+    Component {
+        id: newPageComponent
+        ShellNewPageDialog { objectName: "shellNewPage" }
+    }
+
+    property ShellRenameDialog rename: null
+    function renameNow(): ShellRenameDialog {
+        if (!shell.rename)
+            shell.rename = renameComponent.createObject(shell) as ShellRenameDialog
+        return shell.rename
+    }
+    Component {
+        id: renameComponent
+        ShellRenameDialog { objectName: "shellRename" }
+    }
+
+    property ShellMoveDialog moveDialog: null
+    function moveDialogNow(): ShellMoveDialog {
+        if (!shell.moveDialog)
+            shell.moveDialog = moveComponent.createObject(shell) as ShellMoveDialog
+        return shell.moveDialog
+    }
+    Component {
+        id: moveComponent
+        ShellMoveDialog {
+            onMoveRequested: (path, folder, create) => shell.performMove(path, folder, create)
+        }
     }
     ShellMoveWords { id: moveWords }
-    ShellAboutDialog { id: about }
 
-    BConfirmDialog {
+    property ShellAboutDialog about: null
+    function aboutNow(): ShellAboutDialog {
+        if (!shell.about)
+            shell.about = aboutComponent.createObject(shell) as ShellAboutDialog
+        return shell.about
+    }
+    Component {
+        id: aboutComponent
+        ShellAboutDialog {}
+    }
+
+    property DeleteDialog deleteDialog: null
+    function deleteDialogNow(): DeleteDialog {
+        if (!shell.deleteDialog)
+            shell.deleteDialog = deleteComponent.createObject(shell) as DeleteDialog
+        return shell.deleteDialog
+    }
+    Component {
+        id: deleteComponent
+        DeleteDialog {
+            id: trashDialog
+            objectName: "shellDeleteDialog"
+            onAccepted: {
+                const trashPath = Workspace.deletePage(trashDialog.path)
+                if (trashPath !== "" && shell.toasts) {
+                    trashDialog.trashed = [trashPath]
+                    AppController.toastRestore(qsTr("Moved to trash"), qsTr("Undo"), trashDialog.trashed)
+                }
+            }
+        }
+    }
+    /// "Move to trash?" for a page, an attachment or a folder (made when first asked: deleteDialogNow()).
+    component DeleteDialog: BConfirmDialog {
         id: deleteDialog
-        objectName: "shellDeleteDialog"
 
         property string path
         /// Workspace.folderInfo() of a folder ({} for a file).
@@ -833,13 +1013,6 @@ FocusScope {
                  + specialWarnings()
         confirmText: qsTr("Move to trash")
         destructive: true
-        onAccepted: {
-            const trashPath = Workspace.deletePage(deleteDialog.path)
-            if (trashPath !== "" && shell.toasts) {
-                deleteDialog.trashed = [trashPath]
-                AppController.toastRestore(qsTr("Moved to trash"), qsTr("Undo"), deleteDialog.trashed)
-            }
-        }
     }
 
     Connections {
@@ -1036,16 +1209,16 @@ FocusScope {
     property T.Popup _devPopupHeld: null
     function devPopupTarget(name: string): T.Popup {
         switch (name) {
-        case "palette": return palette
-        case "switcher": return switcher
-        case "capture": return capture
+        case "palette": return shell.paletteNow()
+        case "switcher": return shell.switcherNow()
+        case "capture": return shell.captureNow()
         case "newPage":
-        case "newFolder": return newPage
-        case "move": return moveDialog
-        case "about": return about
+        case "newFolder": return shell.newPageNow()
+        case "move": return shell.moveDialogNow()
+        case "about": return shell.aboutNow()
         case "drawer": return drawer
         case "context": return contextDrawer.drawerItem
-        case "more": return topBar.moreMenuPopup
+        case "more": return topBar.moreMenuNow()
         }
         return shell._noPopup
     }
@@ -1081,7 +1254,7 @@ FocusScope {
         id: devPopupChooseLater
         onTriggered: {
             const query = shell._devPopupQuery
-            moveDialog.choose(Js.sliceFrom(query, Js.indexOf(query, ">") + 1), false)
+            shell.moveDialogNow().choose(Js.sliceFrom(query, Js.indexOf(query, ">") + 1), false)
         }
     }
     function isFolder(path: string): bool {

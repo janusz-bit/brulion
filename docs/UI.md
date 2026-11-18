@@ -184,7 +184,8 @@ components — no Material/Fusion look, so all targets look identical.
     in a drawer from the right edge and always show the section.
 * **Narrow (< 900 px, phones):** the rail and the sidebar become a `Drawer` (the top bar's ☰
   or a swipe to the right from the left edge; a swipe to the left on
-  the drawer or the scrim closes it). The drawer is edge to edge: its `bgSunken` runs under the status and
+  the drawer or the scrim closes it). Its content is made 0.6 s after the notebook is ready, or
+  when the drawer first opens (a swipe included), not before the first frame (`AppShell._drawerMade`). The drawer is edge to edge: its `bgSunken` runs under the status and
   navigation bars, and the sidebar's own insets (`topInset` = the SafeArea's top,
   `bottomInset` = `AppShell.navigationBar`) keep the notebook button, the notebook row and the sync status clear of
   them — counted once: the Basic style pads a Drawer by the SafeArea margins itself, so the
@@ -307,7 +308,16 @@ components — no Material/Fusion look, so all targets look identical.
   a user notebook is ready), new page / folder, rename, move
   (`ShellMoveDialog`), delete confirmation, about; toasts. Views reach the shell's dialogs for a
   page or folder through `AppController.requestItemAction(action, path)` (`move`, `rename`,
-  `delete`, `newPage`, `newFolder`, `reveal`).
+  `delete`, `newPage`, `newFolder`, `reveal`). No popup is made with the shell (docs/PERFORMANCE.md
+  "L10"): the four used most — the switcher, the palette, the top bar's More menu and quick
+  capture — are built ahead in the background 3 s after the notebook is ready, one every 0.4 s,
+  each by an asynchronous `Loader` (in pieces over several frames; opened before it is ready, the
+  rest is made at once: `AppShell.prebuildNext()`); the others are made the first time they open
+  (`newPageNow()`, `renameNow()`, … — the extension question with the first question, through a
+  `Connections` of the shell) and kept. Before that a popup's property (`commandPalette`,
+  `newPage`, …) is null and its objectName is not found. The other menus of the top bar, the rail,
+  the tab bar, the tree and the breadcrumb are made when they first open (`aiMenuNow()`,
+  `notebookMenuNow()`, `openTabMenu()`, `contextMenuNow()`).
 * **The tray calendar** (`ShellTrayCalendar`, desktop; docs/WINDOWS.md "Tray calendar"):
   a window of its own (Qt.Tool, frameless, always on top, no transient parent — owned by a
   hidden main window it would hide with it on Windows), created on first use by Main.qml's
@@ -3259,7 +3269,11 @@ open, the block editor's dialogs, autocomplete popup, merge dialog, drop hint an
 first use, a block's fold arrow / bullet / number / checkbox only when it has one, a text block's
 text without a Loader, a table cell's tooltip when it shows, a table's buttons when they show, a
 task box's icon for "done" / "deferred" only; `BIcon` creates no image without a name (an
-`IconImage` without a source searches the icon theme on disk). The editor's palette, locale and
+`Image` without a source; Qt's `IconImage` without one searched the icon theme on disk). The shell
+does the same (docs/PERFORMANCE.md "L10"): its dialogs and menus, the journal's "Go to day", the
+side panel and the update banner are made the first time they open or show — the four popups
+used most are built ahead in the background after the notebook is ready —, a phone's drawer
+content 0.6 s after the notebook is ready (asynchronously) or when the drawer opens. The editor's palette, locale and
 clock reach its controller before its rows are created (applied later, they made every row
 render twice).
 
@@ -4288,6 +4302,17 @@ pickers (Android, Windows, GTK / KDE, the portal, the browser's) speak the syste
   New icons: copy from `lucide-static`, normalise like the others, re-run CMake. They render
   everywhere, the browser included (the SVG plugin is linked statically there; `BIcon` recolours
   on the CPU, no shader effect).
+  `BIcon` is an `Item` with one `Image` (no Loader, no `IconImage`; not an `Image` itself, whose
+  implicit size is read-only and its picture's): the image's source is `Icons.source(name, color)`,
+  "image://bicon/<colour>/<name>" (`src/app/ui/iconprovider.h`, library `brulion_ui_icons`), whose
+  provider rasterises the SVG at the requested size (size × the device pixel ratio) and fills it
+  with the colour in `SourceIn` — exactly what Qt's `IconImage` drew; Qt Quick's pixmap cache then
+  shares one image and one texture among every icon of that name, size and colour (an
+  `IconImage` recoloured and uploaded each one on its own). Like `IconImage` it draws the picture
+  at its own size, centred, in a larger box and scales it down in a smaller one; its implicit size
+  is its width and height, as before. Creating the `Icons`
+  singleton gives its engine the provider. `tests/app/icons` compares it with `IconImage` pixel by
+  pixel at device pixel ratio 1 and 2.
 * **Emoji and symbol fonts** (`src/app/ui/fallbackfonts.h`, see below).
 * **`FilePicker`** — the system's file picker (`src/app/ui/filepicker.h`, see below).
 

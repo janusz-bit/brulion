@@ -33,6 +33,9 @@
 //   BENCH_SPANS      signal spans in the typing windows: 1 (default) the watched signals and
 //                    every other signal of a brulion:: class taking >= BENCH_SPAN_MIN_US (200 us)
 //                    inclusive; "watched" only the watched ones; 0 none
+//   BENCH_OBJECT_TYPES 1: at the startup's "content" and "settled" marks, the live QObjects by class
+//                    and by the direct child of AppShell that holds them ("objects" records; slower);
+//                    BENCH_OBJECT_DEPTH: how many named ancestors name a group (default 4)
 //
 // What it records (raw, analysed by tests/bench/app/analyze.py):
 //   * marks: preload (library constructor), qapp (QCoreApplication constructed), window
@@ -47,6 +50,9 @@
 //     was handled synchronously, t2 after the release; the frame that shows the change is the
 //     first frame whose sync starts after t1;
 //   * memory (VmRSS, VmHWM, RssAnon, malloc in-use) and CPU (getrusage) at marks;
+//   * at every mark made on the GUI thread its CPU time and user-space instructions since the
+//     probe started (guiCpuMs, guiInsnsM) and the QObjects created and alive since then
+//     (objCreated, objAlive: QtCore's AddQObject / RemoveQObject hooks);
 //   * model signals of a watched QAbstractItemModel (search results);
 //   * typing windows (each burst of typing up to 2.4 s after it: the autosave and its fan-out):
 //     signal spans through Qt's signal spy callbacks (qt_register_signal_spy_callbacks, registered
@@ -84,11 +90,13 @@
 #include <QJsonObject>
 #include <QMetaEnum>
 #include <QPointer>
+#include <QQmlContext>
 #include <QQmlEngine>
 #include <QQuickItem>
 #include <QQuickWindow>
 #include <QRandomGenerator>
 #include <QTimer>
+#include <QtCore/private/qhooks_p.h>
 #include <QtCore/private/qmetaobject_p.h>
 #include <QtCore/private/qobject_p.h>
 #include <qpa/qwindowsysteminterface.h>
@@ -237,6 +245,52 @@ Counters readCounters()
 Counters readGuiCounters()
 {
     return {monoNs(), guiCpuNs(), g_insns.read()};
+}
+
+// ---- QObjects: created and alive (QtCore's hooks, qhooks_p.h) -----------------------------------
+//
+// Every QObject constructed or destroyed after the probe started (the QML engine, every object a
+// component creates, the views built ahead…), any thread. BENCH_OBJECT_TYPES=1 also keeps the set
+// of live objects and prints, at the "settled" mark, how many there are of each class and under
+// which of AppShell's direct children (docs/PERFORMANCE.md, L10: what the shell creates at startup).
+
+std::atomic<qint64> g_objCreated{0};
+std::atomic<qint64> g_objDestroyed{0};
+quintptr g_prevAddHook = 0;
+quintptr g_prevRemoveHook = 0;
+bool g_objTypes = false;
+std::mutex g_liveMutex;
+std::set<QObject *> *g_live = nullptr;
+
+void addObjectHook(QObject *o)
+{
+    g_objCreated.fetch_add(1, std::memory_order_relaxed);
+    if (g_live) {
+        std::lock_guard<std::mutex> lock(g_liveMutex);
+        g_live->insert(o);
+    }
+    if (g_prevAddHook)
+        reinterpret_cast<QHooks::AddQObjectCallback>(g_prevAddHook)(o);
+}
+void removeObjectHook(QObject *o)
+{
+    g_objDestroyed.fetch_add(1, std::memory_order_relaxed);
+    if (g_live) {
+        std::lock_guard<std::mutex> lock(g_liveMutex);
+        g_live->erase(o);
+    }
+    if (g_prevRemoveHook)
+        reinterpret_cast<QHooks::RemoveQObjectCallback>(g_prevRemoveHook)(o);
+}
+void installObjectHooks()
+{
+    g_objTypes = qgetenv("BENCH_OBJECT_TYPES") == "1";
+    if (g_objTypes)
+        g_live = new std::set<QObject *>();
+    g_prevAddHook = qtHookData[QHooks::AddQObject];
+    g_prevRemoveHook = qtHookData[QHooks::RemoveQObject];
+    qtHookData[QHooks::AddQObject] = reinterpret_cast<quintptr>(&addObjectHook);
+    qtHookData[QHooks::RemoveQObject] = reinterpret_cast<quintptr>(&removeObjectHook);
 }
 
 // ---- file system calls on the GUI thread (interposed below, outside this namespace) ------------
@@ -647,6 +701,8 @@ public:
         if (pthread_getcpuclockid(pthread_self(), &g_guiCpuClock) != 0)
             g_guiCpuClock = CLOCK_THREAD_CPUTIME_ID;
         g_insns.open();
+        m_counters0 = readCounters();
+        installObjectHooks();
         g_io = new std::vector<IoRec>();
         g_io->reserve(4096);
         const QByteArray pagesFile = qgetenv("BENCH_PAGES");
@@ -740,11 +796,18 @@ private:
         if (!t)
             t = monoNs();
         // The GUI thread's counters (CPU ms, instructions in millions) now, or at `at` (a mark
-        // dated back: settled at the end of the last stall).
+        // dated back: settled at the end of the last stall); also since the probe started
+        // (QApplication constructed), and the QObjects created and alive: what the marks of a
+        // start cost.
         if (at || onGuiThread()) {
             const Counters c = at ? *at : readCounters();
             extra.insert(u"gcpu"_s, double(c.cpu) / 1e6);
             extra.insert(u"gins"_s, double(c.insns) / 1e6);
+            extra.insert(u"guiCpuMs"_s, double(c.cpu - m_counters0.cpu) / 1e6);
+            extra.insert(u"guiInsnsM"_s, double(c.insns - m_counters0.insns) / 1e6);
+            const qint64 created = g_objCreated.load(std::memory_order_relaxed);
+            extra.insert(u"objCreated"_s, created);
+            extra.insert(u"objAlive"_s, created - g_objDestroyed.load(std::memory_order_relaxed));
         }
         extra.insert(u"ev"_s, u"mark"_s);
         extra.insert(u"name"_s, name);
@@ -1362,9 +1425,76 @@ private:
                     return visibleBlocks() > 0 || (view != u"journals" && view != u"" && frameCount() > 2);
                 },
                 120000);
+        if (g_objTypes)
+            action(u"objects_content"_s, [this] { dumpObjectTypes(u"content"_s); });
         waitUntil(u"ready_wait"_s, [this] { return m_readyMarked; }, 600000, false);
         waitSettled(u"settled"_s, 1000, 120000);
-        action(u"mem"_s, [this] { markMem(u"settled"_s); });
+        action(u"mem"_s, [this] {
+            markMem(u"settled"_s);
+            if (g_objTypes)
+                dumpObjectTypes(u"settled"_s);
+        });
+    }
+
+    /// BENCH_OBJECT_TYPES=1: the live QObjects by class, and by the direct child of the shell
+    /// (AppShell's QML type) whose subtree holds them — QObject parents, as QML sets them for the
+    /// objects a file declares — named by its QML id where it has one.
+    void dumpObjectTypes(const QString &at)
+    {
+        std::vector<QObject *> live;
+        {
+            std::lock_guard<std::mutex> lock(g_liveMutex);
+            live.assign(g_live->begin(), g_live->end());
+        }
+        QHash<QString, qint64> byClass, byShellChild, byPath;
+        const int depth = envOr("BENCH_OBJECT_DEPTH", "4").toInt(); // named ancestors in byPath
+        const auto nameOf = [](QObject *object) {
+            QString name = QString::fromLatin1(object->metaObject()->className());
+            name.truncate(name.indexOf(u"_QML"_s) >= 0 ? name.indexOf(u"_QML"_s) : name.size());
+            if (QQmlContext *c = qmlContext(object)) {
+                const QString id = c->nameForObject(object);
+                if (!id.isEmpty())
+                    name += u" #"_s + id;
+            }
+            if (!object->objectName().isEmpty())
+                name += u" \""_s + object->objectName() + u'"';
+            return name;
+        };
+        for (QObject *o : live) {
+            if (o->thread() != thread())
+                continue;
+            byClass[QString::fromLatin1(o->metaObject()->className())] += 1;
+            // The ancestors below the shell that have a QML id or an objectName, outermost first.
+            QObject *child = nullptr;
+            QStringList named;
+            for (QObject *p = o; p; p = p->parent()) {
+                QObject *up = p->parent();
+                if (p != o
+                    && (!p->objectName().isEmpty() || (qmlContext(p) && !qmlContext(p)->nameForObject(p).isEmpty())))
+                    named.prepend(nameOf(p));
+                if (up && QByteArray(up->metaObject()->className()).startsWith("AppShell")) {
+                    child = p;
+                    break;
+                }
+            }
+            if (!child)
+                continue;
+            byShellChild[nameOf(child)] += 1;
+            byPath[named.mid(0, depth).join(u" / "_s)] += 1;
+        }
+        const auto toJson = [](const QHash<QString, qint64> &h) {
+            QJsonObject o;
+            for (auto it = h.begin(); it != h.end(); ++it)
+                o.insert(it.key(), it.value());
+            return o;
+        };
+        emitJson({{u"ev"_s, u"objects"_s},
+                  {u"at"_s, at},
+                  {u"t"_s, msOf(monoNs())},
+                  {u"live"_s, qint64(live.size())},
+                  {u"byClass"_s, toJson(byClass)},
+                  {u"byShellChild"_s, toJson(byShellChild)},
+                  {u"byPath"_s, toJson(byPath)}});
     }
 
     void openPageSteps(const QString &page, const QString &tag)
@@ -2056,6 +2186,7 @@ private:
     };
     std::vector<Stall> m_stalls;
     Counters m_lastLagCounters;
+    Counters m_counters0;  ///< the GUI thread's at the probe's start (the marks' guiCpuMs, guiInsnsM)
     bool m_series = false; ///< the GUI thread's counters at every lag tick (the typing windows)
     std::vector<Counters> m_cpuSeries;
     bool m_spans = true;

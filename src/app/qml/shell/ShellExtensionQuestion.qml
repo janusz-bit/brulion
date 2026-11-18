@@ -9,7 +9,8 @@ import Brulion
 // (ask) or nil (choose, form), and its command ends itself. A question that follows right after
 // (choose a plan, then a form) opens the dialog again. A question of the AI chat's turn
 // (Workspace.extensions.questionChat) is asked in the conversation while a chat view shows it
-// (Workspace.chats.isShown); the dialog asks it once none does.
+// (Workspace.chats.isShown); the dialog asks it once none does. The shell makes it with the first
+// question (AppShell.extensionQuestion).
 BDialog {
     id: dialog
     objectName: "extensionQuestion"
@@ -69,17 +70,20 @@ BDialog {
             dialog.open()
         }
     }
+    /// A question came or went (Workspace.extensions.questionChanged; the shell calls it for the
+    /// question it makes this dialog with).
+    function questionChanged(): void {
+        // (Answered elsewhere — in the chat —: the dialog of it goes, asking nothing.)
+        if (dialog.opened && dialog.shownSerial !== dialog.extensions.questionSerial) {
+            dialog.shownSerial = -1
+            dialog.close()
+        }
+        if (dialog.extensions.questionKind !== "")
+            openLater.restart() // after the dialog that answered the last one has closed
+    }
     Connections {
         target: dialog.extensions
-        function onQuestionChanged() {
-            // (Answered elsewhere — in the chat —: the dialog of it goes, asking nothing.)
-            if (dialog.opened && dialog.shownSerial !== dialog.extensions.questionSerial) {
-                dialog.shownSerial = -1
-                dialog.close()
-            }
-            if (dialog.extensions.questionKind !== "")
-                openLater.restart() // after the dialog that answered the last one has closed
-        }
+        function onQuestionChanged() { dialog.questionChanged() }
     }
     Connections {
         target: Workspace.chats

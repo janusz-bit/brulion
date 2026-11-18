@@ -98,7 +98,7 @@ Rectangle {
             Accessible.role: Accessible.Button
             Accessible.name: label
             Accessible.description: Workspace.name
-            onClicked: notebookMenu.popup(notebookButton, notebookButton.width + Theme.space1, 0)
+            onClicked: rail.notebookMenuNow().popup(notebookButton, notebookButton.width + Theme.space1, 0)
 
             background: Rectangle {
                 radius: Theme.radius
@@ -209,65 +209,75 @@ Rectangle {
     }
 
     // Quick switch between notebooks: the recent ones, the documentation, any other folder.
-    BMenu {
-        id: notebookMenu
-        objectName: "notebookMenu"
+    // (Made the first time it opens: docs/PERFORMANCE.md "L10".)
+    property BMenu notebookMenuPopup: null
+    function notebookMenuNow(): BMenu {
+        if (!rail.notebookMenuPopup)
+            rail.notebookMenuPopup = notebookMenuComponent.createObject(rail) as BMenu
+        return rail.notebookMenuPopup
+    }
+    Component {
+        id: notebookMenuComponent
+        BMenu {
+            id: notebookMenu
+            objectName: "notebookMenu"
 
-        readonly property string current: AppSettings.currentVault
-        readonly property string docsPath: AppController.docsVaultPath
+            readonly property string current: AppSettings.currentVault
+            readonly property string docsPath: AppController.docsVaultPath
 
-        Repeater {
-            // (The documentation is the item below: its row is not shown.)
-            model: AppSettings.recentVaults
-            delegate: BMenuItem {
-                id: recent
-                required property string path
-                required property string name
-                objectName: "notebookMenuRecent"
-                visible: path !== notebookMenu.docsPath
+            Repeater {
+                // (The documentation is the item below: its row is not shown.)
+                model: AppSettings.recentVaults
+                delegate: BMenuItem {
+                    id: recent
+                    required property string path
+                    required property string name
+                    objectName: "notebookMenuRecent"
+                    visible: path !== notebookMenu.docsPath
+                    height: visible ? implicitHeight : 0
+                    // Not `checked`: a checkable item has already toggled it when onTriggered runs,
+                    // so the first click on another notebook would do nothing. (A Binding: it
+                    // follows isCurrent again after the toggle; onTriggered puts it back at once.)
+                    readonly property bool isCurrent: path === notebookMenu.current
+                    text: name
+                    iconName: "folder"
+                    checkable: true
+                    Binding on checked { value: recent.isCurrent }
+                    onTriggered: {
+                        recent.checked = recent.isCurrent
+                        if (!recent.isCurrent)
+                            AppController.openRecentVault(recent.path)
+                        rail.navigated()
+                    }
+                }
+            }
+            BMenuSeparator {}
+            BMenuItem {
+                objectName: "notebookMenuDocs"
+                visible: notebookMenu.docsPath !== ""
                 height: visible ? implicitHeight : 0
-                // Not `checked`: a checkable item has already toggled it when onTriggered runs,
-                // so the first click on another notebook would do nothing. (A Binding: it
-                // follows isCurrent again after the toggle; onTriggered puts it back at once.)
-                readonly property bool isCurrent: path === notebookMenu.current
-                text: name
-                iconName: "folder"
+                text: qsTr("Brulion Documentation")
+                iconName: "circle-help"
+                // (Its key opens the documentation; from the documentation it goes back.)
+                shortcut: docsItem.isCurrent ? "" : ShortcutMap.sequences["vault.docs"] || ""
+                id: docsItem
+                readonly property bool isCurrent: notebookMenu.docsPath === notebookMenu.current
                 checkable: true
-                Binding on checked { value: recent.isCurrent }
+                Binding on checked { value: docsItem.isCurrent }
                 onTriggered: {
-                    recent.checked = recent.isCurrent
-                    if (!recent.isCurrent)
-                        AppController.openRecentVault(recent.path)
+                    docsItem.checked = docsItem.isCurrent
+                    if (!docsItem.isCurrent)
+                        AppController.openDocsVault()
                     rail.navigated()
                 }
             }
-        }
-        BMenuSeparator {}
-        BMenuItem {
-            objectName: "notebookMenuDocs"
-            visible: notebookMenu.docsPath !== ""
-            height: visible ? implicitHeight : 0
-            text: qsTr("Brulion Documentation")
-            iconName: "circle-help"
-            // (Its key opens the documentation; from the documentation it goes back.)
-            shortcut: docsItem.isCurrent ? "" : ShortcutMap.sequences["vault.docs"] || ""
-            id: docsItem
-            readonly property bool isCurrent: notebookMenu.docsPath === notebookMenu.current
-            checkable: true
-            Binding on checked { value: docsItem.isCurrent }
-            onTriggered: {
-                docsItem.checked = docsItem.isCurrent
-                if (!docsItem.isCurrent)
-                    AppController.openDocsVault()
-                rail.navigated()
-            }
-        }
-        BMenuItem {
-            text: qsTr("Open another notebook…")
-            iconName: "folder-open"
-            onTriggered: {
-                rail.navigated()
-                AppController.closeVault()
+            BMenuItem {
+                text: qsTr("Open another notebook…")
+                iconName: "folder-open"
+                onTriggered: {
+                    rail.navigated()
+                    AppController.closeVault()
+                }
             }
         }
     }
