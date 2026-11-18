@@ -145,6 +145,7 @@ LocalAi::LocalAi(const Options &options, QObject *parent)
         };
     }
     m_contextTokens = ContextTokens;
+    m_formerDefault = options.formerDefault;
     if (!m_models.isEmpty())
         m_chosen = m_models.first().id;
     m_files.adopt(m_models); // (models downloaded before they were marked so)
@@ -220,6 +221,13 @@ QVariantList LocalAi::choices() const
     for (const ai::LocalModel &m : m_models)
         out.append(QVariantMap{{u"value"_s, m.id}, {u"text"_s, m.label.isEmpty() ? m.name : m.label}});
     return out;
+}
+
+QString LocalAi::keptChoice() const
+{
+    if (m_formerDefault.isEmpty() || !model(m_formerDefault) || model(m_formerDefault) == model(QString()))
+        return QString();
+    return has(m_formerDefault) && !has(QString()) ? m_formerDefault : QString();
 }
 
 void LocalAi::setChosen(const QString &id)

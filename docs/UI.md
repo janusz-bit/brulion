@@ -841,8 +841,8 @@ show the defaults), "Check" (`Workspace.extensions.testAi()`: the model's "OK" o
 toast; busy while `aiPending`). The group's note says what it costs and where the notes go.
 With **On this device** the key, model and address rows give way to the model's own
 (`AppController.localAi`, `src/app/shell/localai.h` — typed `FINAL` properties about the chosen
-model, so the bindings compile): **Model** (`aiLocalModelSetting`: LFM3-VL 2B / LFM3 1.7B /
-Brulion → `AppSettings.aiLocalModel`; a model's `label` where its name is long — Brulion
+model, so the bindings compile): **Model** (`aiLocalModelSetting`: Brulion / LFM3 1.7B /
+LFM3-VL 2B, the best with the assistant first and the default → `AppSettings.aiLocalModel`; a model's `label` where its name is long — Brulion
 Assistant 1.7B's —, so the three fit side by side on a 360-px phone; the description says what
 the chosen one is good at: it sees pictures, it reads text only, or — `modelAdapted` — it is
 `modelBase` by `modelBaseMaker` trained further for the assistant, answering at once), **The

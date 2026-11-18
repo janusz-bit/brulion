@@ -205,8 +205,10 @@
 #   BRULION_EMULATOR_VULKAN  1: the guest has Vulkan (default 1, but 0 for --web-keyboard: Chrome's
 #                            Vulkan on the host's SwiftShader crashed the emulator in half the runs)
 #   BRULION_EMULATOR_MEMORY  the emulator's memory in MB (default: the AVD's 2 GB; --local-ai: 6144)
-#   BRULION_LOCAL_MODEL      --local-ai: the default model's file on the host, under its name at
-#                            Hugging Face (LFM3-VL-2B-QAD-Q4_0.gguf; src/core/ai/local.cpp)
+#   BRULION_LOCAL_MODEL      --local-ai: LFM3-VL 2B's file on the host, under its name at Hugging
+#                            Face (LFM3-VL-2B-QAD-Q4_0.gguf; src/core/ai/local.cpp) — the former
+#                            default, which the app keeps when its files are there and nothing
+#                            was chosen (LocalAi::keptChoice)
 #   BRULION_LOCAL_PROJECTOR  --local-ai: its picture part (mmproj-LFM3-VL-2B-Q8_0.gguf)
 #   BRULION_WEBPICTURE_HTTPS --web-pictures: the public https picture (default: Google's logo)
 #   BRULION_WEBPICTURE_PORT  --web-pictures: the host's port of the http picture (default 8765)

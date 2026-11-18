@@ -27,7 +27,8 @@ QList<LocalModel> knownModels()
 {
     const QString license = u"LFM Open License v1.0"_s;
 
-    // Sees pictures: the language model (4-bit, trained for that precision) and its projector.
+    // Sees pictures: the language model (4-bit, trained for that precision) and its projector — the
+    // weakest of them at working through a notebook.
     LocalModel vision;
     vision.id = u"lfm3-vl-2b"_s;
     vision.name = u"LFM3-VL 2B"_s;
@@ -60,7 +61,7 @@ QList<LocalModel> knownModels()
 
     // The text model trained further for the built-in assistant, without thinking (SFT, then
     // GRPO: docs/FINETUNE.md): a LoRA adapter over the text model's very file — downloaded once
-    // for both. Liquid AI's model under its licence still (a Derivative Work), not made by them.
+    // for both. The best of them with the assistant, so the default (first). Liquid AI's model under its licence still (a Derivative Work), not made by them.
     // Brulion's own repository on Hugging Face (docs/FINETUNE.md "Publishing"), pinned the same
     // way: one revision for the adapter and the LICENSE beside it.
     const QString assistantRepository = u"https://huggingface.co/janusz-bit/brulion-assistant-1.7b"_s;
@@ -82,7 +83,7 @@ QList<LocalModel> knownModels()
     assistant.pageUrl = QUrl(assistantRepository);
     assistant.thinks = false; // (trained to answer at once)
 
-    return {vision, text, assistant};
+    return {assistant, text, vision};
 }
 
 } // namespace

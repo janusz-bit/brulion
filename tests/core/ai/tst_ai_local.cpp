@@ -198,11 +198,14 @@ private Q_SLOTS:
     {
         const QList<ai::LocalModel> &models = ai::localModels();
         QVERIFY(models.size() >= 2);
-        // The default sees pictures.
-        QCOMPARE(models.first().id, u"lfm3-vl-2b"_s);
-        QVERIFY(models.first().sees());
+        // The default is the assistant's own: LFM3 1.7B with its adapter, answering at once.
+        QCOMPARE(models.first().id, u"brulion-assistant-1.7b"_s);
+        QVERIFY(models.first().adapted());
+        QVERIFY(!models.first().thinks);
+        QVERIFY(!models.first().sees());
         QCOMPARE(ai::localModel(QString()), &models.first());
-        QCOMPARE(ai::defaultModel(u"local"_s), u"lfm3-vl-2b"_s);
+        QCOMPARE(ai::defaultModel(u"local"_s), u"brulion-assistant-1.7b"_s);
+        QVERIFY(ai::localModel(u"lfm3-vl-2b"_s)->sees());
         QCOMPARE(ai::localModel(u"lfm3-1.7b"_s)->name, u"LFM3 1.7B"_s);
         QVERIFY(!ai::localModel(u"lfm3-1.7b"_s)->sees());
         QCOMPARE(ai::localModel(u"gpt"_s), nullptr);
@@ -279,7 +282,8 @@ private Q_SLOTS:
         QVERIFY(!assistant->sees());
         QVERIFY(!assistant->thinks);
         QVERIFY(text->thinks && !text->adapted());
-        QVERIFY(ai::localModels().first().thinks);
+        QCOMPARE(&ai::localModels().first(), assistant); // the default: the best with the assistant
+        QVERIFY(ai::localModel(u"lfm3-vl-2b"_s)->thinks);
         QCOMPARE(assistant->file, text->file);
         QCOMPARE(assistant->files(), (QList<ai::LocalFile>{text->file, assistant->adapter}));
         QCOMPARE(assistant->format, text->format);

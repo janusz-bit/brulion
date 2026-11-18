@@ -22,13 +22,13 @@ Naciśnij **Sprawdź**: model odpowie „OK” albo zobaczysz, co jest nie tak.
 Klucz zostaje **tylko na tym urządzeniu** (nie w notatniku, nie w synchronizacji, nie w dziennikach zdarzeń). Notatki trafiają do dostawcy tylko wtedy, gdy o to poprosisz, albo gdy zrobi to rozszerzenie zatwierdzone przez Ciebie z uprawnieniem `ai`.
 
 ## Model na tym urządzeniu
-Gdy wybierzesz **Na tym urządzeniu**, model działa w Brulionie — także na telefonie — i nic, o co pytasz, nie opuszcza urządzenia. Wybierz jeden z trzech modeli — dwa firmy Liquid AI i własny model Bruliona, zrobiony z drugiego z nich dla asystenta — i naciśnij **Pobierz** (najlepiej przez Wi-Fi; na telefonie zostaw Bruliona na ekranie, aż skończy — ekran sam nie zgaśnie; przerwane pobieranie zacznie się od miejsca, w którym stanęło):
+Gdy wybierzesz **Na tym urządzeniu**, model działa w Brulionie — także na telefonie — i nic, o co pytasz, nie opuszcza urządzenia. Wybierz jeden z trzech modeli — własny model Bruliona, zrobiony dla asystenta (domyślny), i dwa firmy Liquid AI: LFM3 1.7B, z którego powstał, oraz LFM3-VL 2B — i naciśnij **Pobierz** (najlepiej przez Wi-Fi; na telefonie zostaw Bruliona na ekranie, aż skończy — ekran sam nie zgaśnie; przerwane pobieranie zacznie się od miejsca, w którym stanęło):
 
 | Model | Rozmiar | W czym dobry |
 |---|---|---|
+| **Brulion Assistant 1.7B** („Brulion” w ustawieniach; domyślny) | 1,1 GB | tylko tekst; LFM3 1.7B wytrenowany do pracy z **asystentem AI** — najlepiej radzi sobie z pracą na notatniku razem z nim; odpowiada od razu, bez namysłu; duży plik ma wspólny z LFM3 1.7B (gdy tamten już jest, to 92 MB więcej) |
+| **LFM3 1.7B** | 1,0 GB | tylko tekst; przeszukuje notatnik i zmienia notatki lepiej niż LFM3-VL 2B |
 | **LFM3-VL 2B** | 1,2 GB | **widzi obrazki**: zdjęcia, skany, zrzuty ekranu i tekst na nich |
-| **LFM3 1.7B** | 1,0 GB | tylko tekst; lepiej przeszukuje notatnik i zmienia notatki |
-| **Brulion Assistant 1.7B** („Brulion” w ustawieniach) | 1,1 GB | tylko tekst; LFM3 1.7B wytrenowany do pracy z **asystentem AI** — najlepiej radzi sobie z pracą na notatniku razem z nim; odpowiada od razu, bez namysłu; duży plik ma wspólny z LFM3 1.7B (gdy tamten już jest, to 92 MB więcej) |
 
 Czego się spodziewać:
 

@@ -222,13 +222,16 @@ private Q_SLOTS:
         LocalAi local(options);
         const QVariantList choices = local.choices();
         QCOMPARE(choices.size(), 3);
-        QCOMPARE(choices[2].toMap().value(u"value"_s).toString(), u"brulion-assistant-1.7b"_s);
+        // The best of them with the assistant first: the default, chosen from the start.
+        QCOMPARE(choices[0].toMap().value(u"value"_s).toString(), u"brulion-assistant-1.7b"_s);
+        QCOMPARE(local.chosen(), u"brulion-assistant-1.7b"_s);
         // (The models as their maker gives them by their names; this one by its short label, so
         // that the three fit side by side on a narrow phone.)
-        QCOMPARE(choices[0].toMap().value(u"text"_s).toString(), u"LFM3-VL 2B"_s);
+        QCOMPARE(choices[0].toMap().value(u"text"_s).toString(), u"Brulion"_s);
         QCOMPARE(choices[1].toMap().value(u"text"_s).toString(), u"LFM3 1.7B"_s);
-        QCOMPARE(choices[2].toMap().value(u"text"_s).toString(), u"Brulion"_s);
+        QCOMPARE(choices[2].toMap().value(u"text"_s).toString(), u"LFM3-VL 2B"_s);
         // The models as their maker gives them.
+        local.setChosen(u"lfm3-vl-2b"_s);
         QVERIFY(!local.modelAdapted());
         QCOMPARE(local.modelBase(), QString());
         QCOMPARE(local.modelBaseMaker(), QString());
@@ -237,6 +240,8 @@ private Q_SLOTS:
         QVERIFY(!local.modelAdapted());
         QCOMPARE(local.modelMaker(), u"Liquid AI"_s);
         QCOMPARE(local.modelSharesWith(), u"Brulion Assistant 1.7B"_s);
+        // A device without the former default's files keeps nothing: today's default stays.
+        QCOMPARE(local.keptChoice(), QString());
 
         QSignalSpy changed(&local, &LocalAi::modelChanged);
         local.setChosen(u"brulion-assistant-1.7b"_s);
@@ -302,6 +307,30 @@ private Q_SLOTS:
         local.setChosen(u"gpt"_s);
         QCOMPARE(local.chosen(), u"sees"_s);
         QCOMPARE(local.modelName(), u"Widzący 2B"_s);
+    }
+
+    void aDeviceKeepsTheFormerDefault()
+    {
+        // The default changed (the assistant's own model came first): a device that never chose
+        // and has the former default's files keeps that model (AppController stores it) — not
+        // when today's default is here too, nor when the former default is today's.
+        Fixture f;
+        LocalAi::Options options = f.options();
+        options.formerDefault = u"reads"_s;
+        LocalAi local(options);
+        QCOMPARE(local.keptChoice(), QString()); // nothing downloaded
+        local.download(u"reads"_s);
+        QTRY_VERIFY_WITH_TIMEOUT(local.has(u"reads"_s), 20000);
+        QCOMPARE(local.keptChoice(), u"reads"_s);
+        local.download(u"sees"_s);
+        QTRY_VERIFY_WITH_TIMEOUT(local.has(u"sees"_s), 20000);
+        QCOMPARE(local.keptChoice(), QString()); // today's default is here: nothing to keep
+        options.formerDefault = u"sees"_s;
+        LocalAi same(options);
+        QCOMPARE(same.keptChoice(), QString());
+        options.formerDefault = u"gpt"_s; // a model the app does not know
+        LocalAi unknown(options);
+        QCOMPARE(unknown.keptChoice(), QString());
     }
 
     void downloadsTheChosenModel()

@@ -587,13 +587,16 @@ end, { label = "Ask my notes (AI)" })
   the notebook); the model; the address; **Check** ("Say OK."). In the browser the key is in the
   site's storage, and Anthropic's API is told the request comes from a page.
 * **On this device**: a small model that runs inside the app — no key, no account, no network once
-  its files are there, nothing sent anywhere. Three models, chosen in the settings: two by Liquid
-  AI, **LFM3-VL 2B** (the default: it sees pictures; 1.2 GB) and **LFM3 1.7B** (text only, better
-  at working through a notebook with tools; 1.0 GB), and **Brulion Assistant 1.7B**
-  (`brulion-assistant-1.7b`, `janusz-bit/brulion-assistant-1.7b` on Hugging Face): LFM3 1.7B
-  trained further for the built-in assistant (docs/FINETUNE.md), the best of the three at working
-  through the notebook with it — it answers at once, without thinking, and reads text only; an
-  adapter of 92 MB over LFM3 1.7B's file (below). Settings downloads the chosen one from
+  its files are there, nothing sent anywhere. Three models, chosen in the settings: **Brulion
+  Assistant 1.7B** (the default; `brulion-assistant-1.7b`, `janusz-bit/brulion-assistant-1.7b` on
+  Hugging Face): LFM3 1.7B trained further for the built-in assistant (docs/FINETUNE.md), the best
+  of the three at working through the notebook with it — it answers at once, without thinking,
+  and reads text only; an adapter of 92 MB over LFM3 1.7B's file (below) —, and two by Liquid AI,
+  **LFM3 1.7B** (text only, better than the next at working through a notebook with tools; 1.0 GB)
+  and **LFM3-VL 2B** (it sees pictures; 1.2 GB). LFM3-VL 2B was the default before: a device that
+  never chose a model and has its files (and not the default's) keeps it — AppController stores
+  it as chosen (`LocalAi::keptChoice()`), so an update does not swap the model it uses for one
+  still to download. Settings downloads the chosen one from
   Hugging Face into `<app data>/models` — one pinned revision, each file checked against its
   SHA-256; a download that breaks off goes on from where it stopped — and removes it. The files
   come over HTTP/1.1 with 4 MB read ahead: what the server sends while the app stands still (an

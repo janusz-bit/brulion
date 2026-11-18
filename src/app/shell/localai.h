@@ -97,6 +97,8 @@ public:
         QList<ai::LocalModel> models; ///< empty: ai::localModels() (tests: small ones)
         Opener open;                  ///< empty: the plugin (tests: a fake runner)
         int idleMs = 10 * 60 * 1000;  ///< the model leaves memory after this long without a request
+        /// The default model before the assistant's own came first (keptChoice()).
+        QString formerDefault = QStringLiteral("lfm3-vl-2b");
     };
 
     explicit LocalAi(const Options &options, QObject *parent = nullptr);
@@ -138,6 +140,10 @@ public:
 
     /// The model `id` is downloaded ("": the default model).
     bool has(const QString &id) const;
+    /// What a device that never chose a model keeps: the former default (Options::formerDefault)
+    /// when its files are here and today's default's are not — so that an update does not swap the
+    /// model it uses for one still to download (AppController stores it as chosen); "" otherwise.
+    QString keptChoice() const;
     /// Downloads the model `id`; one download at a time.
     void download(const QString &id);
     void remove(const QString &id);
@@ -183,6 +189,7 @@ private:
     bool m_available = false;
     int m_contextTokens = 0;
     QString m_chosen;
+    QString m_formerDefault; ///< Options::formerDefault
     QString m_downloadError;
     QString m_downloadErrorId;     ///< the model whose download failed
     QElapsedTimer m_downloadClock; ///< since the download was asked for (the log tells how it went)

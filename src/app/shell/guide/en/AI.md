@@ -22,13 +22,13 @@ Press **Check**: the model answers "OK", or you see what is wrong.
 The key stays **only on this device** (not in the notebook, not in sync, not in the logs). Notes go to the provider only when you ask, or when an extension you approved with the `ai` permission does.
 
 ## A model on this device
-With **On this device** chosen, the model runs in Brulion — on the phone too — and nothing you ask leaves the device. Choose one of three models — two by Liquid AI, and Brulion's own made from the second one for the assistant — and press **Download** (best over Wi-Fi; on a phone keep Brulion on the screen until it is done — the screen stays on by itself; a download that stops goes on from where it was):
+With **On this device** chosen, the model runs in Brulion — on the phone too — and nothing you ask leaves the device. Choose one of three models — Brulion's own, made for the assistant (the default), and two by Liquid AI: LFM3 1.7B, which it was made from, and LFM3-VL 2B — and press **Download** (best over Wi-Fi; on a phone keep Brulion on the screen until it is done — the screen stays on by itself; a download that stops goes on from where it was):
 
 | Model | Size | Good at |
 |---|---|---|
+| **Brulion Assistant 1.7B** ("Brulion" in the settings; the default) | 1.1 GB | text only; LFM3 1.7B trained for the **AI assistant** — the best one at working through your notebook with it; answers at once, without thinking; shares its big file with LFM3 1.7B (with that one here, 92 MB more) |
+| **LFM3 1.7B** | 1.0 GB | text only; searches the notebook and changes notes better than LFM3-VL 2B |
 | **LFM3-VL 2B** | 1.2 GB | **sees pictures**: photos, scans, screenshots, and the text on them |
-| **LFM3 1.7B** | 1.0 GB | text only; better at searching the notebook and changing notes |
-| **Brulion Assistant 1.7B** ("Brulion" in the settings) | 1.1 GB | text only; LFM3 1.7B trained for the **AI assistant** — the best one at working through your notebook with it; answers at once, without thinking; shares its big file with LFM3 1.7B (with that one here, 92 MB more) |
 
 What to expect:
 
