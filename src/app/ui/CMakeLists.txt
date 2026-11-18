@@ -93,9 +93,12 @@ brulion_set_warnings(brulion_ui_files)
 # brulion_ui_scroll — RowScroll (rowscroll.h): the scroll bar of long lists whose rows differ in
 # height, from the rows at the view's edges instead of ListView's estimate of its content height.
 # Qt Quick's public API only; a static library so that tests/app/scroll drives it with a ListView
-# without the app; registered as "RowScroll" by qmlforeign.h (BRowScrollBar.qml uses it).
+# without the app; registered as "RowScroll" by qmlforeign.h (BRowScrollBar.qml uses it). With it
+# placedRow() (viewrows.h): which row of an item view a child of its content item shows — none
+# for a delegate kept in ListView's reuse pool (the scroll probe's anchor and delegates).
 qt_add_library(brulion_ui_scroll STATIC
     rowscroll.h rowscroll.cpp
+    viewrows.h viewrows.cpp
 )
 target_include_directories(brulion_ui_scroll PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(brulion_ui_scroll PUBLIC Qt6::Core Qt6::Quick)

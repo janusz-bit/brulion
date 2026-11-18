@@ -13,3 +13,15 @@ if(TARGET brulion_ui_scroll AND EXISTS "${_brulion_qt_qml_root}/QtQuick/Template
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QML_IMPORT_PATH=${_brulion_qt_qml_root}"
         TIMEOUT 120)
 endif()
+
+# placedRow() (src/app/ui/viewrows.h, library brulion_ui_scroll): which row of a ListView a child
+# of its content item shows — none for a delegate kept in the reuse pool (still `visible`, where its
+# row was), with and without the delegates' `index`, over a drag-like sweep down and back up.
+if(TARGET brulion_ui_scroll)
+    brulion_add_test(tst_view_rows
+        SOURCES tst_view_rows.cpp
+        LIBS brulion_ui_scroll Qt6::Qml Qt6::Quick)
+    set_tests_properties(tst_view_rows PROPERTIES
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QML_IMPORT_PATH=${_brulion_qt_qml_root}"
+        TIMEOUT 120)
+endif()

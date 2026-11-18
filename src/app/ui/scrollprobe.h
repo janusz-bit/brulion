@@ -46,7 +46,9 @@
 // Per frame (QQuickWindow::afterAnimating, the GUI thread, after polish): time, frame interval,
 // the GUI work between frames and in polish, the Flickable's contentY / originY / contentHeight /
 // visibleArea, the input delivered since the last frame and the scroll it asks for, the delegates
-// created (once the view has placed them: itemAtIndex()) with their kind of block, resized and
+// created (once the view has placed them: itemAtIndex() of their `index`, or of the row at their
+// place, indexAt(), for a delegate without one — never one kept in ListView's reuseItems pool,
+// which stays in the content item, culled, where its row was) with their kind of block, resized and
 // destroyed, the nested block delegates (BlockDelegate) created, and an anchor — the
 // item under the viewport's centre — whose movement on screen is what the user sees. A JUMP is
 // content moving on screen by more than the input explains (direct scripts: drag, touchpad) or a

@@ -3130,9 +3130,9 @@ mode and `tests/web/pdf.spec.mjs` (docs/ANDROID.md, docs/WEB.md). Screenshots:
 Long pages, the journal stream, Tasks and the calendar agenda are lazy `ListView`s: a row is
 created when it scrolls into the list's cache and destroyed when it leaves, on the GUI thread,
 while the list moves. Measured with `--scroll-probe` (see "Dev tools"); ctest
-`tst_scroll_jumps_qml` fails on jumps (also of the scroll bar's thumb), `tst_touch_flick` /
-`tst_touch_flick_compressed` on Qt's touch faults, `tst_row_scroll` on the scroll bar,
-`tst_smooth_scroll` on the wheel.
+`tst_scroll_jumps_qml` fails on jumps (also of the scroll bar's thumb; the probe follows only the
+rows the view placed, `tst_view_rows`), `tst_touch_flick` / `tst_touch_flick_compressed` on Qt's
+touch faults, `tst_row_scroll` on the scroll bar, `tst_smooth_scroll` on the wheel.
 
 A page of up to `BlockEditor.wholePageRows` rows (1000; 300 on phones and in the browser) is
 **created whole**: its list's cache reaches past the page's end (`wholePageCache`), so the rows on
