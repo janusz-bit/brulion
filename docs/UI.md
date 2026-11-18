@@ -3358,6 +3358,177 @@ breaks, widths and positions with a `QTextDocument` of the fixed line height, th
 layouts, links, source positions, the cut, Polish no-break spaces and emoji. Status and numbers:
 docs/PERFORMANCE.md "Z10 stage A: rendered text from runs".
 
+### One item per page (Z10 stage C)
+
+The goal is Zed's rule 4 (docs/PERFORMANCE.md "Only what is on screen, only what changed"): the
+editor is one element that lays out and draws only the lines on screen. Today a page is a
+`ListView` of `BlockDelegate`s (some 45 QML objects a row, its text a `RenderedTextItem` or a rich
+`Text`); a page of up to 1000 rows is created whole, so a new width lays every row out (337 ms on
+an 1100-row outline), and the list's content height is an estimate from the rows it created, so
+the scroll bar (`RowScroll` counts rows to hide it) and "scroll to block" (`positionViewAtIndex`,
+then the row's own geometry, twice) are approximate on long pages. Stage C replaces the list with
+one C++ item, `PageItem`, that draws the rows it can and hosts the others as QML delegates. This
+is the design; what exists of it is listed at the end ("State").
+
+**Shape.** A plain `Flickable` (kinetic scrolling, `TouchFlick`, `SmoothScroll`, the scroll bar,
+the keyboard insets — everything that works on Flickables today) whose `contentHeight` is the
+page's height from the height sum tree; `PageItem` fills the Flickable's viewport, not its
+content, and draws the rows that meet the viewport and a margin of half a screen above and below
+it (`viewportY`, `viewportHeight` bound to the Flickable). The header (title, properties draft,
+zoom breadcrumb) and the footer stay QML items above and below the rows, in the Flickable's
+content, their heights part of the total.
+
+**Rows: measured, cached, laid out lazily.** Each row has an entry in a cache keyed by its
+uid (`BlockListModel` keeps a block's uid through every edit, undo and remote change):
+
+* what the item draws for it — the text as a `RenderedTextLayout` (the layout and drawing code of
+  `RenderedTextItem`, shared: one `QTextLayout` from the row's `renderedText` runs, the tints'
+  shapes, the hovered link and the find matches), and the row's decorations computed from the
+  same geometry as `BlockDelegate`'s (indent, bullet, number, task box, guide lines, top and
+  bottom padding by `prevKind`, the heading sizes);
+* its measured height at the width it was laid out with.
+
+An entry is made when its row comes within the margin (in `updatePolish()`, before the frame:
+the rows on screen always have their final height in the frame that shows them — rule 1 above,
+without a delegate) and dropped least-recently-drawn first beyond a bound (three screens of rows
+plus 256); `dataChanged` drops the parts its roles touch (`renderedText`/`html` the text,
+`depth`/`prevKind`/`view` the geometry, `isSelected`/`selectionEdge` nothing but the band), a new
+width lays out again only the rows that break differently (`RenderedTextItem`'s rule: a
+left-aligned row no width broke keeps its layout), a new font or theme every entry. A row never
+laid out has an **estimate**: its kind's paddings plus its plain text's length × the font's
+average advance ÷ the text width, in whole lines (no layout, no font shaping); a hosted row its
+last measured height, else its view's typical height. While nothing moves, an idle measurer lays
+out the rest of the page in slices of at most 2 ms a frame and stops at any input, so the total
+— and with it the scroll bar — becomes exact on pages that are read for a while; nothing waits
+for it.
+
+**The height sum tree (`RowHeightTree`, `src/app/editor/rowheighttree.h`).** One entry per model
+row (hidden rows — folds, a zoom — have height 0), each with a flag *measured* or *estimated*;
+heights are kept in 1/64 px fixed point, so sums are exact and a long session of updates never
+drifts. A Fenwick tree over them gives the offset of a row and the row at an offset in O(log n), a
+height set in O(log n); inserting, removing and moving ranges of rows (the model's row signals)
+and setting all heights at once rebuild it in O(n) — a memmove and a linear rebuild, far below
+what the model's own row signals cost (docs/PERFORMANCE.md "Z10 stage C"). (Zed's `SumTree` is a B-tree with O(log n) splices; worth it only for pages of millions of
+rows.) The tree also counts the measured rows and their heights, for the estimate of what is left
+and for tests.
+
+**Scroll anchoring (`ScrollAnchor`, `src/app/editor/scrollanchor.h`).** The scroll position is not
+a pixel offset but an **anchor**: a row (followed through the model's row signals, i.e. a block
+uid) and an offset in pixels from that row's top to the viewport's top edge. The view's y is
+derived — `offset(anchor row) + anchor offset`, clamped to the content — so every change of a
+height above the anchor (an estimate replaced by a measurement, a row typed into above, a picture
+whose size arrives) moves the content's coordinates, never what the user sees. The rules:
+
+* the user scrolls (`scrollTo`, `scrollBy`): the anchor becomes the row at the new top edge and the
+  offset into it;
+* a row above or below the anchor changes height, rows are inserted or removed elsewhere: nothing
+  on screen moves (rows below the anchor's row move down or up from it, as text below a growing
+  paragraph does);
+* the anchor's own row changes height: its offset stays (its top stays put; text added at its end
+  grows downwards), clamped to the new height; when the height changes because the width changed
+  (a reflow) the offset keeps its fraction of the row instead, the closest one can stay to the same
+  line without a line-level anchor;
+* the anchor's row is removed: the anchor becomes the row that takes its place, keeping its
+  offset, when rows are inserted at exactly that place in the same change (a remote edit of that
+  block: `replaceContent()` removes the block and inserts its new version), else the next row at
+  offset 0 (the content after what was removed moves up to the top edge);
+* the anchor's row is hidden (a fold above it, a zoom): the next shown row at offset 0 — the same y,
+  the fold point; unfolding again grows rows above the anchor, so the row at the top stays;
+* rows moved (Alt+↑/↓, a drag): the anchor moves with its row;
+* the content ends: the y is clamped to [0, total − viewport]; reaching an end re-anchors there;
+* "scroll to block" (`positionAtRow(row, mode)`): the anchor becomes the target row itself with
+  the offset the mode needs (Beginning 0, Center its height / 2 − viewport / 2, End its height −
+  viewport, Contain the least move), so measuring the rows between the old position and the
+  target in the next polish moves nothing: the block is exactly where it was asked to be, in one
+  step, whatever the estimates said.
+
+The Flickable is told the derived y as its `contentY` only while it stands still: setting
+`contentY` stops a running flick (`QQuickFlickable::setContentY` resets its timeline), so while it
+moves the difference is kept as a *slack* between the Flickable's `contentY` and the item's y and
+folded into `contentY` when the movement ends — what `ListView` does with `originY`. The scroll
+bar shows `y / (total − viewport)` with its size frozen while the view moves (as `RowScroll`);
+`RowScroll`'s row counting is not needed for this view.
+
+**The edited row: a QML delegate over the item.** Editing keeps everything it has today (the
+`InlineEditor`, the highlighter, completions, the input method, the touch toolbar): the edited
+row is a real `BlockDelegate`, hosted by the item, placed over the row's place, and the item does
+not draw that row. The host creates it from the editor's delegate `Component` with the row's
+roles as initial (required) properties and `index`, and gives it a model object of its own (a
+`QQmlPropertyMap` of the roles: what `BlockRowData` reads), updated from `dataChanged` and the row
+signals as `QQmlDelegateModel` updates a ListView's delegate; its height is the row's measured
+height (the tree follows it: the rows below move, the anchor keeps the view). It stays hosted
+while the row is edited or holds the keyboard, also when scrolled out of the margin (a key brings
+it back, as today), and is released when editing ends; the row is then drawn from the cache again,
+which is laid out from the row's new `renderedText`.
+
+**Rich blocks: hosted delegates.** Code, calc, math, Mermaid, charts, tables, queries, callouts
+and quotes (their frames), rules, the frontmatter, rows with pictures, PDFs or embedded pages,
+and task rows until the item draws a task box, are hosted the same way, while their rows meet the
+viewport and its margin; a small pool per view kind reuses them (as `ListView`'s `reuseItems`, but
+only for the same view, so a row never changes its kind of content). Their heights are their
+delegates' and they keep the delegate rules above (final height at creation, no height change
+while only scrolling, create only what is shown); a hosted row that grows moves the rows below it,
+never the view. The item draws the text rows — paragraphs, headings, list items, the bullets,
+numbers, guide lines, the selection band and the flash —, which are 90–98 % of the rows of the
+bench pages.
+
+**Contracts** (what the rest of the editor relies on; today they go through `list`):
+
+* *Rows by position*: `rowAt(x, y)` (the tree, then the row's geometry: −1 in a gap), `rowRect(row)`
+  (in the item's coordinates; estimated rows say so), `rowItem(row)` (the hosted delegate or
+  null). `BlockEditor.rowAt()`, the drag tracker, the drop hint and the context menus use these.
+* *Selection*: the model's `selectionEdge` draws the band (geometry nodes, the same shape as
+  `BlockDelegate`'s band); a mouse drag selects through `rowAt()` with the Flickable scrolled at
+  the edges, as now; Shift+click and the touch grips call the same controller functions; the
+  grips are two QML items placed at the band's ends.
+* *Drag and drop*: the drop target is `rowAt()` of the drop point and the half of the row it is in;
+  the drop hint a QML item at `rowRect()`.
+* *Keyboard navigation*: unchanged — `PageController` moves editing and the selection by row; the
+  editor asks for the row to be shown (`ensureRowVisible(row)` = `positionAtRow(row, Contain)`)
+  instead of `positionViewAtIndex`; the caret's own visibility is the hosted editor's.
+* *Accessibility*: the item is `Accessible.List`; its rows, links and their actions need a
+  `QAccessibleInterface` of its own (children per drawn row with their rectangles and plain text,
+  `QAccessible::installFactory`). Until that exists, the editor keeps the `ListView` while a screen
+  reader is on (`DeviceInfo.screenReader`), as `BlockText` keeps the rich text.
+* *Find in page*: the matches are the rows' overlays (`findQuery` and its options, as
+  `RenderedTextItem`); the current match's row is shown with `positionAtRow(row, Center)` and
+  flashed; an editable match hosts its row as the edited row.
+* *Scroll to block / reveal*: `positionAtRow(row, Center)` then the flash, in the same frame.
+* *Self-tests and probes*: `rowItem(row)` gives the delegate of a hosted row; the drawn rows are
+  read through `drawnRows` (first, last), `rowRect()`, `rowText(row)` and `rowLayout(row)` (line
+  count, the link at a point); the bench probe counts `drawnRowCount` where it counts
+  `BlockDelegate`s. Self-tests that inspect a delegate's insides (`BlockText`, `TaskBox`) host
+  their row first (`hostRow(row)`: test builds only).
+
+**Stage B, later: the edited row last.** Stage C keeps the editing in one `TextEdit` per edited
+block, so a text selection cannot cross blocks (the block selection does). Stage B draws the
+edited row too (its source with the highlighter's formats in a `RenderedTextLayout`), keeps the
+caret and a selection of source ranges across rows in C++, and uses a hidden `TextEdit` only for
+the input method's composition and the platform's text services; copying, Shift+arrows and drags
+then select text across blocks as in a document editor.
+
+**Migration and risks.** Behind `BRULION_PAGE_ITEM=1` (`EditorInput.pageItem`), off by default;
+pages only (a journal day keeps its list: stage A2 makes the day one item):
+
+1. foundations: the tree, the anchor, the shared layout, the item drawing text rows read-only
+   with rich rows hosted (this stage, partly done: "State");
+2. every `list.*` use in `BlockEditor` and the self-tests behind the row contracts above, which
+   both the `ListView` and the item answer — the switch then is one property;
+3. editing through the hosted delegate, the selection, drag and drop, find, reveal;
+4. accessibility; then the item by default and the `ListView` path removed.
+
+Risks: the Flickable's slack (a movement that ends at an end of a page whose estimates were off
+lands a few pixels from the true end until it is folded); hosted delegates read `ListView`
+attached properties (`ListView.view` gives `BlockDelegate` its width: the host gives the width
+instead); focus and the input method in a hosted editor that scrolls out of the margin; the touch
+gestures (long press, the selection mode, grips) reimplemented on one item instead of per row; the
+title drawn above the properties (`titleFirst`: a display order that differs from the model's, a
+permutation in the tree's coordinates); right-to-left text and centred rows in the shared layout;
+memory, which falls (no per-row QML) only once the item draws most rows.
+
+**State (2026-11-18).** The design above; the foundations follow in this order: the tree and the
+anchor, the shared layout, the item.
+
 ### The scroll bar: `RowScroll` (`src/app/ui/rowscroll.h`)
 
 Qt's attached scroll bar (`T.ScrollBar.vertical: BScrollBar {}`) takes its position and size
