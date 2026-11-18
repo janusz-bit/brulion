@@ -1,7 +1,8 @@
 // Benchmarks of the index module on synthetic vaults (bench::makeVault: 1/3 journals, the rest
 // document pages; mean ≈ 2 KB per note) of 1k / 10k / 50k notes (small profile: 1k / 10k):
-// full build (in memory, and the app's open path from disk: scan + read + index), the first
-// search (builds the full-text index), memory, incremental updates after one file change,
+// full build (in memory, and the app's open path from disk: scan + read + index; the loader's
+// merge of prepared notes alone, mergePrepared), the first search (builds the full-text index),
+// memory, incremental updates after one file change,
 // full-text search (exact, prefix, diacritics, fuzzy, many results), page/block suggestions,
 // the query language, backlinks / unlinked references and the vault-wide lists; moving and
 // renaming (planRelocation, the move dialog's and the drag's notebook::relocationImpact), tags as
