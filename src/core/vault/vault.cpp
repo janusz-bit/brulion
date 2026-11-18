@@ -76,6 +76,30 @@ constexpr qint64 kMaxConfigBytes = 1024 * 1024;
 /// 200 MB and backups restore files up to 1 GiB (MaxRestoredEntryBytes) — all of them read back.
 constexpr qint64 kMaxReadBytes = qint64(1) << 30;
 
+/// Replace the entry of `stat.path` in `sorted` (sorted by path) with `stat`; false when it is
+/// not there. Leaves the list alone (no detach from its copies) when nothing changed.
+bool replaceSorted(QList<FileStat> &sorted, const FileStat &stat)
+{
+    const auto it = std::ranges::lower_bound(std::as_const(sorted), stat.path, std::ranges::less{}, &FileStat::path);
+    if (it == sorted.cend() || it->path != stat.path)
+        return false;
+    if (it->isDir != stat.isDir || it->size != stat.size || it->mtime != stat.mtime)
+        sorted[it - sorted.cbegin()] = stat;
+    return true;
+}
+
+void addChild(QHash<VaultPath, QSet<VaultPath>> &children, const VaultPath &path)
+{
+    children[paths::dirname(path)].insert(path);
+}
+
+void removeChild(QHash<VaultPath, QSet<VaultPath>> &children, const VaultPath &path)
+{
+    const auto it = children.find(paths::dirname(path));
+    if (it != children.end() && it->remove(path) && it->isEmpty())
+        children.erase(it);
+}
+
 /// `path` equals `dir` or lies inside it (absolute file system paths).
 bool fsWithin(const QString &path, const QString &dir)
 {
@@ -450,10 +474,20 @@ void VaultPrivate::trackFile(const FileStat &stat)
     const VaultPath &p = stat.path;
     if (dirs.contains(p))
         untrackDir(p);
-    if (!files.contains(p))
+    if (const auto known = files.find(p); known != files.end()) {
+        // A save: the sorted lists keep their order, only this entry's stat changes.
+        *known = stat;
+        if (sortedFilesValid && !replaceSorted(sortedFiles, stat) && !paths::isIgnored(p))
+            sortedFilesValid = false;
+        if (sortedMarkdownValid && !replaceSorted(sortedMarkdown, stat) && paths::isMarkdown(p) && !paths::isIgnored(p))
+            sortedMarkdownValid = false;
+    } else {
         addLower(p);
-    files.insert(p, stat);
-    sortedFilesValid = false;
+        addChild(childFiles, p);
+        files.insert(p, stat);
+        sortedFilesValid = false;
+        sortedMarkdownValid = false;
+    }
     trackAncestors(p);
 }
 
@@ -462,12 +496,19 @@ void VaultPrivate::insertDir(const FileStat &stat)
     const VaultPath &p = stat.path;
     if (files.contains(p))
         untrackFile(p);
-    if (!dirs.contains(p))
-        addLower(p);
     FileStat st = stat;
     st.isDir = true;
     st.size = 0;
+    if (const auto known = dirs.find(p); known != dirs.end()) {
+        *known = st;
+        if (sortedDirsValid && !replaceSorted(sortedDirs, st))
+            sortedDirsValid = false;
+        return;
+    }
+    addLower(p);
+    addChild(childDirs, p);
     dirs.insert(p, st);
+    sortedDirsValid = false;
 }
 
 void VaultPrivate::trackDir(const FileStat &stat)
@@ -497,7 +538,9 @@ bool VaultPrivate::untrackFile(const VaultPath &path)
     bomPaths.remove(path);
     staleContent.remove(path);
     diskNames.remove(path);
+    removeChild(childFiles, path);
     sortedFilesValid = false;
+    sortedMarkdownValid = false;
     return true;
 }
 
@@ -507,6 +550,10 @@ void VaultPrivate::untrackDir(const VaultPath &path)
         return;
     removeLower(path);
     diskNames.remove(path);
+    removeChild(childDirs, path);
+    folderStamps.remove(path);
+    ownEchoes.remove(path);
+    sortedDirsValid = false;
 }
 
 VaultPath VaultPrivate::existingCase(const VaultPath &path, bool foldersOnly) const
@@ -619,8 +666,16 @@ void VaultPrivate::reset()
     contents.clear();
     bomPaths.clear();
     staleContent.clear();
+    childFiles.clear();
+    childDirs.clear();
     sortedFiles.clear();
     sortedFilesValid = false;
+    sortedMarkdown.clear();
+    sortedMarkdownValid = false;
+    sortedDirs.clear();
+    sortedDirsValid = false;
+    folderStamps.clear();
+    ownEchoes.clear();
     pendingDirs.clear();
     pendingFiles.clear();
     batchTimer.stop();
@@ -787,7 +842,8 @@ bool VaultPrivate::ensureDirs(const VaultPath &dir, QList<VaultChange> &changes)
     return true;
 }
 
-void VaultPrivate::refreshKnownContent(const VaultPath &path, bool asText, qint64 newSize, QList<VaultChange> &changes)
+void VaultPrivate::refreshKnownContent(const VaultPath &path, bool asText, qint64 newSize, QList<VaultChange> &changes,
+                                       const DiskRead *read)
 {
     const qint64 size = files.value(path).size;
     const bool textual = asText || isTextual(path);
@@ -798,27 +854,37 @@ void VaultPrivate::refreshKnownContent(const VaultPath &path, bool asText, qint6
                                 : (!hashes.contains(path) && size == newSize);
     if (!needed || size > ContentCache::kMaxItemBytes)
         return;
-    bool ok = false;
-    const QByteArray current = readDisk(path, ContentCache::kMaxItemBytes, &ok);
+    bool ok = true;
+    // What the caller read a moment ago, behind the same stat, is what a read now would give
+    // (the same race as reading again: a change that keeps size and modification time).
+    const QByteArray current = read ? read->bytes : readDisk(path, ContentCache::kMaxItemBytes, &ok);
     if (!ok)
         return;
     const auto hash = hashes.constFind(path);
-    if (hash != hashes.cend() && *hash != text::fnv1a64Hex(current)) {
+    // The content the vault holds already comes with its hash (rememberContent() keeps both).
+    const std::optional<QByteArray> cached = contents.get(path);
+    const QString currentHash =
+            cached && hash != hashes.cend() && *cached == current ? *hash : text::fnv1a64Hex(current);
+    if (hash != hashes.cend() && *hash != currentHash) {
         // Changed behind our back without a visible stat change (coarse timestamps).
         staleContent.insert(path);
         changes += reconcile(ScanScope{{}, {}, {path}}, ChangeSource::External);
     } else {
-        rememberContent(path, current, textual);
+        rememberContent(path, current, textual, currentHash);
     }
 }
 
 bool VaultPrivate::writeFile(const VaultPath &path, const QByteArray &bytes, ChangeSource source, bool asText,
-                             QList<VaultChange> &changes)
+                             QList<VaultChange> &changes, const DiskRead *read)
 {
     if (path.isEmpty())
         return fail(Vault::tr("Cannot write: empty path"));
-    resolveSpelling(path);
+    if (!read) // (the caller who read it resolved its spelling just before)
+        resolveSpelling(path);
     const std::optional<FileStat> disk = diskStat(path);
+    // The caller's read stands for the file only while its stat is the one it read behind.
+    if (read && (!disk || !sameStat(*disk, read->stat) || read->bytes.size() > ContentCache::kMaxItemBytes))
+        read = nullptr;
     if (dirs.contains(path) || (disk && disk->isDir))
         return fail(Vault::tr("Cannot write %1: it is a folder").arg(path));
     // QSaveFile writes through symlinks, to wherever they point (outside the vault), and creates
@@ -840,43 +906,51 @@ bool VaultPrivate::writeFile(const VaultPath &path, const QByteArray &bytes, Cha
             // Take in what other programs did first: reported as External and kept in History
             // instead of being overwritten without a trace.
             changes += reconcile(ScanScope{{}, {}, {path}}, ChangeSource::External);
+            read = nullptr; // (the scan read it again)
         }
         if (files.contains(path))
-            refreshKnownContent(path, asText, bytes.size(), changes);
+            refreshKnownContent(path, asText, bytes.size(), changes, read);
     }
     // Text written to a file that has a byte order mark keeps it (editors such as Notepad add one).
     QByteArray data = bytes;
     if (asText && !data.startsWith(vaultutil::utf8Bom()) && usesBom(path))
         data.prepend(vaultutil::utf8Bom());
+    const QString dataHash = tracked ? text::fnv1a64Hex(data) : QString();
     if (tracked && files.contains(path)) {
-        if (hashes.value(path) == text::fnv1a64Hex(data))
+        if (hashes.value(path) == dataHash)
             return true; // unchanged: no write, no change
         snapshotCached(path, historyReason.isEmpty() ? changeSourceName(source) : historyReason);
     }
     const bool existed = tracked ? files.contains(path) : disk.has_value();
-    if (!ensureDirs(paths::dirname(path), changes))
+    const VaultPath dir = paths::dirname(path);
+    if (!ensureDirs(dir, changes))
         return false;
+    const std::optional<qint64> dirBefore =
+            tracked && watcher ? vaultutil::fineMtime(absPath(dir)) : std::optional<qint64>();
     if (QString why; !vaultutil::saveAtomically(absPath(path), data, &why))
         return fail(Vault::tr("Cannot write %1: %2").arg(path, why));
     if (!tracked)
         return true;
+    if (watcher)
+        noteOwnWrite(dir, dirBefore);
     const std::optional<FileStat> written = diskStat(path);
     if (!written)
         return fail(Vault::tr("%1 disappeared right after it was written").arg(path));
     trackFile(*written);
     // Known hash = what we wrote: the watcher's echo of this write is recognised as such.
-    rememberContent(path, data, asText);
+    rememberContent(path, data, asText, dataHash);
     watchFile(path);
     changes.append(VaultChange{existed ? ChangeType::Modified : ChangeType::Created, path, {}, source});
     return true;
 }
 
-bool VaultPrivate::write(const VaultPath &path, const QByteArray &bytes, ChangeSource source, bool asText)
+bool VaultPrivate::write(const VaultPath &path, const QByteArray &bytes, ChangeSource source, bool asText,
+                         const DiskRead *read)
 {
     if (!requireOpen() || !requireStorage())
         return false;
     QList<VaultChange> changes;
-    const bool ok = writeFile(path, bytes, source, asText, changes);
+    const bool ok = writeFile(path, bytes, source, asText, changes, read);
     finish(changes);
     return ok;
 }
@@ -1175,16 +1249,25 @@ QList<FileStat> Vault::files() const
 
 QList<FileStat> Vault::markdownFiles() const
 {
-    QList<FileStat> out = files();
-    out.removeIf([](const FileStat &st) { return !paths::isMarkdown(st.path); });
-    return out;
+    if (!d->sortedMarkdownValid) {
+        d->sortedMarkdown.clear();
+        for (const QList<FileStat> all = files(); const FileStat &st : all) {
+            if (paths::isMarkdown(st.path))
+                d->sortedMarkdown.append(st);
+        }
+        d->sortedMarkdownValid = true;
+    }
+    return d->sortedMarkdown;
 }
 
 QList<FileStat> Vault::folders() const
 {
-    QList<FileStat> out = d->dirs.values();
-    std::ranges::sort(out, byPath);
-    return out;
+    if (!d->sortedDirsValid) {
+        d->sortedDirs = d->dirs.values();
+        std::ranges::sort(d->sortedDirs, byPath);
+        d->sortedDirsValid = true;
+    }
+    return d->sortedDirs;
 }
 
 bool Vault::exists(const VaultPath &path) const
@@ -1279,13 +1362,15 @@ WriteOutcome Vault::writeTextIfUnchanged(const VaultPath &rawPath, const QString
     // What the file holds now — on disk, not what the vault remembers: another program may have
     // written it a moment ago, before its change reached the vault. (A link to a file, or a file
     // in a linked folder the vault does not follow, is none: write() refuses it.)
+    std::optional<DiskRead> read;
     if (const std::optional<FileStat> disk = d->diskStat(path); disk && !disk->isDir) {
         bool ok = false;
-        const QByteArray bytes = d->readDisk(path, kMaxReadBytes, &ok);
+        QByteArray bytes = d->readDisk(path, kMaxReadBytes, &ok);
         if (!ok) {
             d->fail(tr("Cannot read %1").arg(path));
             return WriteOutcome::Failed;
         }
+        // The exact bytes decide, never a hash (sync can bring content crafted to collide).
         if (vaultutil::decodeUtf8(bytes) != expected) {
             // Take the other program's change in now (External, its predecessor kept in
             // History), so the caller sees it, instead of overwriting it.
@@ -1297,8 +1382,11 @@ WriteOutcome Vault::writeTextIfUnchanged(const VaultPath &rawPath, const QString
             }
             return WriteOutcome::Changed;
         }
+        read = DiskRead{*disk, std::move(bytes)};
     }
-    return d->write(path, content.toUtf8(), source, true) ? WriteOutcome::Written : WriteOutcome::Failed;
+    // The write checks the content it just compared without reading the file again.
+    return d->write(path, content.toUtf8(), source, true, read ? &*read : nullptr) ? WriteOutcome::Written
+                                                                                   : WriteOutcome::Failed;
 }
 
 VaultPath Vault::create(const VaultPath &path, const QString &content, ChangeSource source)

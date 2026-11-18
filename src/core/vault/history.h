@@ -35,6 +35,7 @@
 #include <QByteArray>
 #include <QByteArrayView>
 #include <QDateTime>
+#include <QHash>
 #include <QList>
 #include <QString>
 #include <QStringList>
@@ -132,6 +133,16 @@ private:
     static QList<Stored> retain(const QList<Stored> &entries, qint64 now, int maxPerPath, int maxAgeDays,
                                 int keepAtLeast);
     bool isThrottled(const Stored &newest, const QString &reason, qint64 now) const;
+    /// An index file's modification time (vaultutil::fineMtime()) and size.
+    struct IndexStamp {
+        qint64 mtime = 0;
+        qint64 size = 0;
+        bool operator==(const IndexStamp &) const = default;
+    };
+    static std::optional<IndexStamp> indexStamp(const QString &file);
+    /// Remember `newest` as the newest snapshot of `path` while its index file keeps `stamp`.
+    void rememberNewest(const VaultPath &path, const QString &file, const Stored &newest,
+                        std::optional<IndexStamp> stamp);
     QString newId(qint64 time) const;
     qint64 now() const;
     bool fail(const QString &message);
@@ -140,6 +151,16 @@ private:
     std::function<QDateTime()> m_clock;
     HistoryPolicy m_policy;
     QString m_error;
+    /// The newest snapshot of the paths snapshotted in this session, with the stamp of their
+    /// index file then: a throttled snapshot (most saves) is decided without reading the index
+    /// while the file still has that stamp. A change of an index (also by another program on
+    /// this device) gives it another one.
+    struct Newest {
+        QString file; ///< indexFile(path) (a SHA-1: not computed again)
+        Stored entry;
+        IndexStamp indexStamp;
+    };
+    QHash<VaultPath, Newest> m_newest;
 };
 
 } // namespace brulion

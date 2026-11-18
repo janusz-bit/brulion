@@ -91,9 +91,17 @@
 //    start-up fast with thousands of notes. Events are
 //    coalesced for setWatchDelay() ms, then the affected folders are diffed against the
 //    cache: stat (size, mtime) first, content hash for text files, so touches and the echoes
-//    of the vault's own writes produce nothing. A file that disappears while another with the
-//    same content appears is reported as Renamed (folder moves: one Renamed per file; files
-//    with identical content pair by the trailing folders they keep).
+//    of the vault's own writes produce nothing. The echo of an own save costs no listing: a
+//    folder still at the modification time (ns) the save left it at — when the vault knew its
+//    entries at the time right before the save — holds what the vault knows (on storage with
+//    whole-millisecond times, and after other changes there, the folder is listed). Other
+//    files' attribute-only changes (touch, chmod) arriving in the same batch as that echo are
+//    found by the next rescan(), as in-place rewrites are; so is an entry another program adds
+//    within the same clock tick right after the save, on kernels without fine-grained file
+//    times. A diff looks at the known children of the listed folders only. A file that
+//    disappears while another with the same content appears is reported as Renamed (folder
+//    moves: one Renamed per file; files with identical content pair by the trailing folders
+//    they keep).
 //    Content replaced or deleted by other programs is snapshotted into History when the vault
 //    has it cached (files it read or wrote). A read that finds other content than the vault
 //    knows behind an unchanged stat schedules a check that reports it.
@@ -344,6 +352,9 @@ public:
     /// Handle queued watcher events (and checks scheduled by reads) now instead of after the
     /// watch delay.
     void processPendingEvents();
+    /// How many folders the vault has listed (open(), rescans, watcher batches, writes that find
+    /// the disk changed) — diagnostics and tests: the echo of an own save lists none.
+    qint64 listedFolders() const;
 
     /// What the last scan (open(), rescan(), a watcher batch) could not see; see the semantics
     /// above. Changes are announced by scanStatusChanged().

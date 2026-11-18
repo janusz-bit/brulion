@@ -3,6 +3,8 @@
 // the vault's back" with plain QFile/rename calls and explicit modification times.
 #include "vaulttest.h"
 
+#include "vault/vaultutil_p.h"
+
 #include <QRegularExpression>
 #include <QThread>
 
@@ -339,6 +341,105 @@ private Q_SLOTS:
         QTRY_COMPARE(sorted(f.changes().mid(own.size())),
                      (QStringList{u"create:Nowy folder/y.md@external"_s, u"modify:G/x.md@external"_s,
                                   u"modify:a.md@external"_s}));
+    }
+
+    // The echo of an own save: no External change, and no folder listed for it — the folder is
+    // still at the modification time the save left it at (whatever else it holds).
+    void ownSaveEchoListsNothing_data()
+    {
+        QTest::addColumn<QString>("path");
+        QTest::newRow("top level") << u"Notatka źdźbło.md"_s;
+        QTest::newRow("folder") << u"Dziennik/2026-11-18.md"_s;
+        QTest::newRow("deeper") << u"Projekty/Dom/łazienka.md"_s;
+    }
+    void ownSaveEchoListsNothing()
+    {
+        QFETCH(QString, path);
+        Fixture f;
+        const QString folder = QFileInfo(path).path() == "."_L1 ? QString() : QFileInfo(path).path() + u'/';
+        f.write(path, "- start\n");
+        for (int i = 0; i < 30; ++i)
+            f.write(folder + u"inna %1 ąę.md"_s.arg(i), "- inna\n");
+        QVERIFY(f.open());
+        f.vault->startWatching();
+        QString content = f.text(path);
+        for (int i = 0; i < 5; ++i) {
+            QTest::qWait(20); // a later clock tick than the listing (kernels without fine timestamps)
+            const qint64 listed = f.vault->listedFolders();
+            const QString next = content + u"- zapis %1 źdźbło\n"_s.arg(i);
+            QCOMPARE(f.vault->writeTextIfUnchanged(path, next, content), WriteOutcome::Written);
+            content = next;
+            QTest::qWait(200); // the echo arrives and is handled
+            f.vault->processPendingEvents();
+#ifdef Q_OS_LINUX
+            if (vaultutil::fineMtime(f.root()))
+                QCOMPARE(f.vault->listedFolders(), listed);
+#else
+            Q_UNUSED(listed)
+#endif
+        }
+        const QList<VaultChange> all = collected(*f.spy);
+        QCOMPARE(all.size(), 5);
+        for (const VaultChange &change : all)
+            QCOMPARE(shortChange(change), u"modify:"_s + path + u"@user"_s);
+        QCOMPARE(f.read(path), content.toUtf8());
+    }
+
+    // What another program does in the folder of an own save, right after it or just before it
+    // (still unseen), is reported: the folder's modification time is not the one the save left.
+    void otherProgramsNextToAnOwnSaveAreSeen_data()
+    {
+        QTest::addColumn<QString>("kind");
+        QTest::addColumn<QStringList>("expected");
+        const auto row = [](const char *kind, const QString &change) {
+            QTest::newRow(kind) << QString::fromLatin1(kind) << QStringList{change};
+        };
+        row("created after", u"create:Wspólny/nowa ź.md@external"_s);
+        row("deleted after", u"delete:Wspólny/b.md@external"_s);
+        row("renamed after", u"rename:Wspólny/b.md->Wspólny/bę.md@external"_s);
+        row("replaced after", u"modify:Wspólny/c.md@external"_s);
+        row("created before", u"create:Wspólny/nowa ź.md@external"_s);
+        row("created before, seen", u"create:Wspólny/nowa ź.md@external"_s);
+    }
+    void otherProgramsNextToAnOwnSaveAreSeen()
+    {
+        QFETCH(QString, kind);
+        QFETCH(QStringList, expected);
+        Fixture f;
+        f.write(u"Wspólny/a.md"_s, "- moja\n");
+        f.write(u"Wspólny/b.md"_s, "- b\n");
+        f.write(u"Wspólny/c.md"_s, "- c\n");
+        QVERIFY(f.open());
+        f.vault->setWatchDelay(300);
+        f.vault->startWatching();
+        QTest::qWait(20);
+        const auto other = [&] {
+            if (kind.startsWith("created"_L1)) {
+                QVERIFY(createPlain(f.root(), u"Wspólny/nowa ź.md"_s, "- obca\n"));
+            } else if (kind.startsWith("deleted"_L1)) {
+                QVERIFY(removeBehind(f.root(), u"Wspólny/b.md"_s));
+            } else if (kind.startsWith("renamed"_L1)) {
+                QVERIFY(renameBehind(f.root(), u"Wspólny/b.md"_s, u"Wspólny/bę.md"_s));
+            } else {
+                f.write(u"Wspólny/.syncthing.c.md.tmp"_s, "- c z innego urządzenia\n");
+                QVERIFY(replaceBehind(f.root(), u"Wspólny/.syncthing.c.md.tmp"_s, u"Wspólny/c.md"_s));
+            }
+        };
+        const bool before = kind.endsWith("before"_L1) || kind.endsWith("seen"_L1);
+        if (before) {
+            other();
+            if (kind.endsWith("seen"_L1))
+                QTest::qWait(50); // the watcher's event is queued (the batch waits 300 ms)
+        }
+        QThread::msleep(20); // another clock tick (kernels without fine timestamps)
+        QCOMPARE(f.vault->writeTextIfUnchanged(u"Wspólny/a.md"_s, u"- moja\n- dalej\n"_s, u"- moja\n"_s),
+                 WriteOutcome::Written);
+        if (!before) {
+            QThread::msleep(20);
+            other();
+        }
+        QTRY_COMPARE(f.changes().mid(1), expected);
+        QCOMPARE(f.changes().constFirst(), u"modify:Wspólny/a.md@user"_s);
     }
 
     void watcherIgnoresTouches()

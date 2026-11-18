@@ -99,13 +99,22 @@ bool History::snapshotBytes(const VaultPath &path, QByteArrayView bytes, const Q
     const VaultPath p = paths::normalize(path);
     if (p.isEmpty())
         return fail(tr("History: empty path"));
+    const qint64 time = now();
+    // Throttled by the newest snapshot this session knows, if the index is still as it left it:
+    // no reading, no parsing, no hashing (the same answer as below, which returns true as well).
+    if (const auto memo = m_newest.constFind(p);
+        memo != m_newest.cend() && isThrottled(memo->entry, reason, time) && indexStamp(memo->file) == memo->indexStamp)
+        return true;
+    const QString index = indexFile(p);
+    const std::optional<IndexStamp> stamp = indexStamp(index); // before reading it
     QList<Stored> entries = load(p);
     const QString hash = text::fnv1a64Hex(bytes);
-    const qint64 time = now();
     if (!entries.isEmpty()) {
         const Stored &newest = entries.constLast();
-        if (newest.hash == hash || isThrottled(newest, reason, time))
+        if (newest.hash == hash || isThrottled(newest, reason, time)) {
+            rememberNewest(p, index, newest, stamp);
             return true;
+        }
     }
     const Stored entry{newId(time), time, bytes.size(), reason, hash};
     // Content first: an interrupted snapshot leaves only an orphan, never a dangling entry.
@@ -118,7 +127,28 @@ bool History::snapshotBytes(const VaultPath &path, QByteArrayView bytes, const Q
         return false;
     }
     removeObjects(entries, kept);
+    if (!kept.isEmpty())
+        rememberNewest(p, index, kept.constLast(), indexStamp(index));
     return true;
+}
+
+std::optional<History::IndexStamp> History::indexStamp(const QString &file)
+{
+    // The size too: two instances may save within one clock tick of a kernel without
+    // fine-grained file times, and every snapshot or removal changes the size of the index.
+    const std::optional<qint64> mtime = vaultutil::fineMtime(file);
+    if (!mtime)
+        return std::nullopt;
+    return IndexStamp{*mtime, QFileInfo(file).size()};
+}
+
+void History::rememberNewest(const VaultPath &path, const QString &file, const Stored &newest,
+                             std::optional<IndexStamp> stamp)
+{
+    if (stamp)
+        m_newest.insert(path, Newest{file, newest, *stamp});
+    else
+        m_newest.remove(path); // coarse timestamps: always read
 }
 
 QList<HistoryEntry> History::list(const VaultPath &path) const
@@ -281,6 +311,7 @@ QList<History::Stored> History::load(const VaultPath &path) const
 
 bool History::save(const VaultPath &path, const QList<Stored> &entries)
 {
+    m_newest.remove(path); // (snapshotBytes() remembers what it saved)
     const QString file = indexFile(path);
     if (entries.isEmpty()) {
         if (QFileInfo::exists(file) && !QFile::remove(file))

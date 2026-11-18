@@ -558,6 +558,130 @@ private Q_SLOTS:
         QCOMPARE(f.vault->writeTextIfUnchanged(u"bom.md"_s, u"x"_s, u"- a\n- ą\n"_s), WriteOutcome::Changed);
     }
 
+    // A save right after a save: each one compares with the disk (another program may have written
+    // between them, behind a stat the vault knows or a new one) and keeps the BOM and line endings.
+    void writeIfUnchangedAfterAWrite()
+    {
+        Fixture f;
+        const QString path = u"Dziennik/2026-11-18.md"_s;
+        f.write(path, "- rano\n");
+        QVERIFY(f.open());
+        QCOMPARE(f.vault->writeTextIfUnchanged(path, u"- rano\n- południe\n"_s, u"- rano\n"_s), WriteOutcome::Written);
+        QCOMPARE(f.vault->writeTextIfUnchanged(path, u"- rano\n- południe\n- wieczór\n"_s, u"- rano\n- południe\n"_s),
+                 WriteOutcome::Written);
+        QCOMPARE(f.read(path), "- rano\n- południe\n- wieczór\n"_ba);
+        // Another program appends between two saves: not overwritten, taken in as External.
+        const QByteArray agent = "- rano\n- południe\n- wieczór\n- od agenta ąę\n";
+        f.write(path, agent);
+        QCOMPARE(f.vault->writeTextIfUnchanged(path, u"moje"_s, u"- rano\n- południe\n- wieczór\n"_s),
+                 WriteOutcome::Changed);
+        QCOMPARE(f.read(path), agent);
+        QCOMPARE(f.changes().constLast(), u"modify:Dziennik/2026-11-18.md@external"_s);
+        QCOMPARE(f.text(path), QString::fromUtf8(agent));
+        // Behind the very stat of the vault's own last save (same size, same modification time):
+        // the bytes decide, not the stat.
+        QCOMPARE(f.vault->writeTextIfUnchanged(path, u"- v1 ż\n"_s, QString::fromUtf8(agent)), WriteOutcome::Written);
+        const qint64 mtime = f.vault->stat(path)->mtime;
+        f.write(path, "- v2 ż\n", mtime);
+        QCOMPARE(f.vault->stat(path)->size, qint64(QByteArray("- v2 ż\n").size()));
+        QCOMPARE(f.vault->writeTextIfUnchanged(path, u"- v3 ż\n"_s, u"- v1 ż\n"_s), WriteOutcome::Changed);
+        QCOMPARE(f.read(path), "- v2 ż\n"_ba);
+        QCOMPARE(f.text(path), u"- v2 ż\n"_s);
+        QCOMPARE(f.historyContents(path).constFirst(), u"- v1 ż\n"_s); // what it replaced
+        QCOMPARE(f.vault->writeTextIfUnchanged(path, u"- v3 ż\n"_s, u"- v2 ż\n"_s), WriteOutcome::Written);
+        QCOMPARE(f.read(path), "- v3 ż\n"_ba);
+    }
+
+    void writeIfUnchangedKeepsTheBomAcrossSaves()
+    {
+        Fixture f;
+        const QString path = u"Notatki/bom ść.md"_s;
+        f.write(path, "\xEF\xBB\xBF- a\r\n");
+        QVERIFY(f.open());
+        QString content = u"- a\r\n"_s;
+        for (int i = 0; i < 3; ++i) {
+            const QString next = content + u"- ą %1\r\n"_s.arg(i);
+            QCOMPARE(f.vault->writeTextIfUnchanged(path, next, content), WriteOutcome::Written);
+            QCOMPARE(f.read(path), "\xEF\xBB\xBF"_ba + next.toUtf8());
+            content = next;
+            f.clock.advanceMs(10 * 60 * 1000); // every save snapshots the one before
+        }
+        QCOMPARE(f.historyContents(path),
+                 (QStringList{u"- a\r\n- ą 0\r\n- ą 1\r\n"_s, u"- a\r\n- ą 0\r\n"_s, u"- a\r\n"_s}));
+        for (const HistoryEntry &e : f.vault->history()->list(path))
+            QVERIFY(f.vault->history()->readBytes(e.id).startsWith("\xEF\xBB\xBF"));
+        QCOMPARE(f.text(path), content);
+    }
+
+    // files(), markdownFiles() and folders() follow every change (in place after a save): always
+    // what a fresh vault opened on the same folder lists, sorted by path.
+    void sortedListsMatchAFreshScan_data()
+    {
+        QTest::addColumn<QString>("step");
+        for (const char *step : {"writeText", "writeBinary", "writeTextIfUnchanged", "create", "createFolder", "remove",
+                                 "renameFile", "renameFolder", "external"})
+            QTest::newRow(step) << QString::fromLatin1(step);
+    }
+    void sortedListsMatchAFreshScan()
+    {
+        QFETCH(QString, step);
+        Fixture f;
+        f.write(u"Żółw.md"_s, "ż");
+        f.write(u"ab.md"_s, "a");
+        f.write(u"Ąb/zeszyt.md"_s, "z");
+        f.write(u"Ąb/obraz.png"_s, "\x89PNG");
+        f.write(u"Zadania/Dom/łódź.md"_s, "ł");
+        f.write(u".obsidian/app.json"_s, "{}"); // ignored
+        QVERIFY(f.open());
+        const auto described = [](const QList<FileStat> &list) {
+            QStringList out;
+            for (const FileStat &st : list)
+                out.append(u"%1 %2 %3 %4"_s.arg(st.path).arg(st.isDir).arg(st.size).arg(st.mtime));
+            return out;
+        };
+        // Copies held by callers stay as they were.
+        const QList<FileStat> heldFiles = f.vault->files();
+        const QList<FileStat> heldMarkdown = f.vault->markdownFiles();
+        const QList<FileStat> heldFolders = f.vault->folders();
+        const QStringList before = described(heldFiles) + described(heldMarkdown) + described(heldFolders);
+        for (int round = 0; round < 3; ++round) {
+            const QString n = QString::number(round);
+            if (step == "writeText"_L1) {
+                QVERIFY(f.vault->writeText(u"Ąb/zeszyt.md"_s, u"zeszyt ę "_s + n.repeated(round + 1)));
+            } else if (step == "writeBinary"_L1) {
+                QVERIFY(f.vault->writeBinary(u"Ąb/obraz.png"_s, "\x89PNG"_ba + n.toLatin1().repeated(round + 2)));
+            } else if (step == "writeTextIfUnchanged"_L1) {
+                const QString current = f.text(u"Zadania/Dom/łódź.md"_s);
+                QCOMPARE(f.vault->writeTextIfUnchanged(u"Zadania/Dom/łódź.md"_s, current + u"ń"_s, current),
+                         WriteOutcome::Written);
+            } else if (step == "create"_L1) {
+                QVERIFY(!f.vault->create(u"Ąb/nowa ąę.md"_s, u"nowa"_s).isEmpty());
+            } else if (step == "createFolder"_L1) {
+                QVERIFY(f.vault->createFolder(u"Puste ść "_s + n));
+            } else if (step == "remove"_L1) {
+                const QStringList doomed{u"ab.md"_s, u"Ąb/zeszyt.md"_s, u"Zadania/Dom"_s};
+                QVERIFY(f.vault->remove(doomed.at(round)));
+            } else if (step == "renameFile"_L1) {
+                const QStringList chain{u"Żółw.md"_s, u"Ąb/Żółw.md"_s, u"Żółw 2.md"_s, u"Zadania/Dom/żółw.md"_s};
+                QVERIFY(f.vault->rename(chain.at(round), chain.at(round + 1)));
+            } else if (step == "renameFolder"_L1) {
+                const QStringList chain{u"Zadania"_s, u"Projekty"_s, u"Ąb/Projekty"_s, u"Ćwiczenia"_s};
+                QVERIFY(f.vault->rename(chain.at(round), chain.at(round + 1)));
+            } else {
+                f.write(u"ab.md"_s, "zmienione " + n.toLatin1());
+                f.write(u"Zadania/obce "_s + n + u".md"_s, "obce");
+                QVERIFY(!f.vault->rescan().isEmpty());
+            }
+            Vault fresh(f.root());
+            QVERIFY(fresh.open());
+            QCOMPARE(described(f.vault->files()), described(fresh.files()));
+            QCOMPARE(described(f.vault->markdownFiles()), described(fresh.markdownFiles()));
+            // (Folders keep the modification time they were found with: compared by path.)
+            QCOMPARE(statPaths(f.vault->folders()), statPaths(fresh.folders()));
+        }
+        QCOMPARE(described(heldFiles) + described(heldMarkdown) + described(heldFolders), before);
+    }
+
     void writeIfUnchangedFailures()
     {
         Fixture f;

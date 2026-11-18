@@ -11,6 +11,8 @@
 #include <QThread>
 
 #include <algorithm>
+#include <chrono>
+#include <filesystem>
 
 using namespace Qt::StringLiterals;
 
@@ -118,6 +120,22 @@ bool saveAtomically(const QString &absolutePath, QByteArrayView bytes, QString *
         }
         QThread::msleep(15 * attempt); // 15 + 30 + 45 ms
     }
+}
+
+std::optional<qint64> fineMtime(const QString &absolutePath)
+{
+    // QFileInfo has milliseconds only: std::filesystem reads the nanoseconds.
+    const QByteArray utf8 = absolutePath.toUtf8();
+    const std::filesystem::path path(
+            std::u8string(reinterpret_cast<const char8_t *>(utf8.constData()), static_cast<size_t>(utf8.size())));
+    std::error_code error;
+    const std::filesystem::file_time_type time = std::filesystem::last_write_time(path, error);
+    if (error)
+        return std::nullopt;
+    const qint64 ns = std::chrono::duration_cast<std::chrono::nanoseconds>(time.time_since_epoch()).count();
+    if (ns % 1'000'000 == 0)
+        return std::nullopt;
+    return ns;
 }
 
 QString decodeUtf8(const QByteArray &bytes)

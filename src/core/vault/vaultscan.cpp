@@ -128,6 +128,10 @@ void VaultPrivate::listChildren(const VaultPath &dir, const QString &dirRel, boo
             continue;
         }
         out.listedDirs.insert(folder.path);
+        ++listedFolderCount;
+        // Taken before the listing: a change while listing leaves the folder at another stamp.
+        if (const std::optional<qint64> stamp = vaultutil::fineMtime(absDir))
+            out.stamps.insert(folder.path, *stamp);
         QDirIterator it(absDir, QDir::AllEntries | QDir::NoDotAndDotDot | QDir::Hidden | QDir::System);
         while (it.hasNext()) {
             const QFileInfo info = it.nextFileInfo();
@@ -217,26 +221,84 @@ void VaultPrivate::adoptListing(const DiskListing &listing)
         rememberDiskName(entry.stat.path, entry.diskRel);
         trackFile(entry.stat);
     }
+    adoptStamps(listing);
+}
+
+void VaultPrivate::adoptStamps(const DiskListing &listing)
+{
+    for (const VaultPath &dir : listing.listedDirs) {
+        const auto stamp = listing.stamps.constFind(dir);
+        if (stamp != listing.stamps.cend() && !listing.withinUnreadable(dir) && (dir.isEmpty() || dirs.contains(dir)))
+            folderStamps.insert(dir, *stamp);
+        else
+            folderStamps.remove(dir);
+    }
 }
 
 // ---------------------------------------------------------------------------------------------
 // Diffing
 // ---------------------------------------------------------------------------------------------
 
+void VaultPrivate::coverCandidates(const DiskListing &listing, QList<VaultPath> &outFiles,
+                                   QList<VaultPath> &outDirs) const
+{
+    if (listing.trees.contains(QString())) { // the whole vault
+        outFiles = files.keys();
+        outDirs = dirs.keys();
+        return;
+    }
+    // A file is covered when stat-ed itself, or when its folder was listed, lies in a listed tree
+    // (whose folders were all listed) or is gone from a listed folder — so the children of the
+    // listed folders, and everything below their children that are gone, are all there is.
+    for (const VaultPath &file : listing.checkedFiles) {
+        if (files.contains(file))
+            outFiles.append(file);
+    }
+    const VaultPath configFolder = vaultutil::configFolder(); // untracked, but holds config.json
+    QSet<VaultPath> visited;
+    QList<VaultPath> todo(listing.listedDirs.cbegin(), listing.listedDirs.cend());
+    todo.append(QList<VaultPath>(listing.trees.cbegin(), listing.trees.cend()));
+    while (!todo.isEmpty()) {
+        const VaultPath dir = todo.takeLast();
+        if (visited.contains(dir))
+            continue;
+        visited.insert(dir);
+        if (const auto it = childFiles.constFind(dir); it != childFiles.cend()) {
+            for (const VaultPath &file : *it) {
+                if (!listing.checkedFiles.contains(file))
+                    outFiles.append(file);
+            }
+        }
+        if (const auto it = childDirs.constFind(dir); it != childDirs.cend()) {
+            for (const VaultPath &child : *it) {
+                outDirs.append(child);
+                if (!listing.dirs.contains(child))
+                    todo.append(child); // gone (or listed itself): its children are covered too
+            }
+        }
+        if (dir.isEmpty())
+            todo.append(configFolder); // never in listing.dirs (see listChildren())
+    }
+}
+
 ScanDiff VaultPrivate::diff(const DiskListing &listing) const
 {
     ScanDiff out;
-    for (const auto &[path, known] : files.asKeyValueRange()) {
+    QList<VaultPath> candidateFiles;
+    QList<VaultPath> candidateDirs;
+    coverCandidates(listing, candidateFiles, candidateDirs);
+    for (const VaultPath &path : std::as_const(candidateFiles)) {
         if (!listing.coversFile(path))
             continue;
+        const FileStat &known = *files.constFind(path);
         if (const auto disk = listing.files.constFind(path); disk == listing.files.cend())
             out.vanishedFiles.append(known);
         else if (!sameStat(disk->stat, known) || staleContent.contains(path))
             out.modifiedFiles.append(*disk);
     }
-    for (auto it = dirs.cbegin(); it != dirs.cend(); ++it) {
-        if (listing.coversDir(it.key()) && !listing.dirs.contains(it.key()))
-            out.vanishedDirs.append(it.key());
+    for (const VaultPath &dir : std::as_const(candidateDirs)) {
+        if (listing.coversDir(dir) && !listing.dirs.contains(dir))
+            out.vanishedDirs.append(dir);
     }
     for (const auto &[path, entry] : listing.files.asKeyValueRange()) {
         if (!files.contains(path))
@@ -246,6 +308,17 @@ ScanDiff VaultPrivate::diff(const DiskListing &listing) const
         if (!dirs.contains(path))
             out.appearedDirs.append(entry);
     }
+#ifndef QT_NO_DEBUG
+    // Every known entry the listing covers must have been a candidate.
+    const QSet<VaultPath> fileSet(candidateFiles.cbegin(), candidateFiles.cend());
+    const QSet<VaultPath> dirSet(candidateDirs.cbegin(), candidateDirs.cend());
+    for (auto it = files.cbegin(); it != files.cend(); ++it)
+        Q_ASSERT_X(fileSet.contains(it.key()) || !listing.coversFile(it.key()), "VaultPrivate::diff",
+                   qPrintable(it.key()));
+    for (auto it = dirs.cbegin(); it != dirs.cend(); ++it)
+        Q_ASSERT_X(dirSet.contains(it.key()) || !listing.coversDir(it.key()), "VaultPrivate::diff",
+                   qPrintable(it.key()));
+#endif
     std::ranges::sort(out.vanishedFiles, byPath);
     std::ranges::sort(out.vanishedDirs);
     std::ranges::sort(out.modifiedFiles, entryByPath);
@@ -462,6 +535,7 @@ QList<VaultChange> VaultPrivate::reconcile(const ScanScope &scope, ChangeSource 
     adoptSpellings(listing);
     syncConfigFolderWatch();
     noteListing(listing, scope.trees.contains(QString()));
+    adoptStamps(listing);
     return changes;
 }
 
@@ -524,8 +598,10 @@ void VaultPrivate::verifyListing(DiskListing &listing) const
         }
         return listedLower.contains(path.toLower());
     };
-    for (auto it = dirs.cbegin(); it != dirs.cend(); ++it) {
-        const VaultPath &dir = it.key();
+    QList<VaultPath> candidateFiles;
+    QList<VaultPath> candidateDirs;
+    coverCandidates(listing, candidateFiles, candidateDirs);
+    for (const VaultPath &dir : std::as_const(candidateDirs)) {
         if (listing.dirs.contains(dir) || !listing.coversDir(dir))
             continue;
         const QFileInfo info(absPath(dir));
@@ -534,8 +610,7 @@ void VaultPrivate::verifyListing(DiskListing &listing) const
         else if (isDirOnDisk(dir) && !caseVariantListed(dir))
             listing.unreadable.insert(paths::dirname(dir));
     }
-    for (auto it = files.cbegin(); it != files.cend(); ++it) {
-        const VaultPath &path = it.key();
+    for (const VaultPath &path : std::as_const(candidateFiles)) {
         if (listing.files.contains(path) || !listing.coversFile(path))
             continue;
         // Gone for the vault, not a gap: a file replaced by a link, or one in a linked folder no
@@ -717,10 +792,52 @@ void VaultPrivate::scheduleCheck(const VaultPath &path)
         batchTimer.start();
 }
 
+void VaultPrivate::noteOwnWrite(const VaultPath &dir, std::optional<qint64> before)
+{
+    // Only from the stamp at which the vault knew the folder: what other programs did to its
+    // entries since is still to be seen. A batch already queued for the folder may hold such a
+    // change too — unless it is the echo of an own write that left the folder at that stamp.
+    const auto known = folderStamps.constFind(dir);
+    const bool fromKnown = before && known != folderStamps.cend() && *known == *before
+                           && (!pendingDirs.contains(dir) || ownEchoes.contains(dir));
+    const std::optional<qint64> after = fromKnown ? vaultutil::fineMtime(absPath(dir)) : std::nullopt;
+    // A write that left the stamp as it was cannot be told from another program's change after
+    // it (timestamps coarser than they look): the echo lists the folder.
+    if (!after || *after == *before) {
+        folderStamps.remove(dir);
+        ownEchoes.remove(dir);
+        return;
+    }
+    if (!echoClock.isValid())
+        echoClock.start();
+    folderStamps.insert(dir, *after);
+    // The echo comes with the next batch; one that waits longer is not trusted.
+    ownEchoes.insert(dir, echoClock.elapsed() + std::max<qint64>(2000, 2LL * batchTimer.interval()));
+}
+
 void VaultPrivate::processPendingEvents()
 {
     batchTimer.stop();
-    const ScanScope scope{.dirs = std::exchange(pendingDirs, {}), .files = std::exchange(pendingFiles, {})};
+    ScanScope scope{.dirs = std::exchange(pendingDirs, {}), .files = std::exchange(pendingFiles, {})};
+    if (!ownEchoes.isEmpty()) {
+        // The echo of own writes: the folder still at the stamp the write left it at has the
+        // entries the vault knows (the file's own stat was recorded by the write). Attribute
+        // changes of other files there in the same batch (touch, chmod) wait for the next scan,
+        // like in-place rewrites of files that are not watched.
+        const qint64 now = echoClock.elapsed();
+        for (auto it = ownEchoes.begin(); it != ownEchoes.end();) {
+            const VaultPath dir = it.key();
+            const bool expected = *it >= now;
+            if (!scope.dirs.contains(dir)) {
+                it = expected ? std::next(it) : ownEchoes.erase(it);
+                continue;
+            }
+            it = ownEchoes.erase(it);
+            const auto known = folderStamps.constFind(dir);
+            if (expected && known != folderStamps.cend() && vaultutil::fineMtime(absPath(dir)) == *known)
+                scope.dirs.remove(dir);
+        }
+    }
     if (scope.isEmpty() || !isOpen)
         return;
     const QList<VaultChange> changes = reconcile(scope, ChangeSource::External);
@@ -763,6 +880,11 @@ void Vault::watchFile(const VaultPath &path)
 void Vault::unwatchFile(const VaultPath &path)
 {
     d->stopWatchingFile(paths::normalize(path));
+}
+
+qint64 Vault::listedFolders() const
+{
+    return d->listedFolderCount;
 }
 
 int Vault::maxWatchedFiles()

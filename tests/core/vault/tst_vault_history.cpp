@@ -304,6 +304,40 @@ private Q_SLOTS:
         QCOMPARE(otherTab->list(u"b.md"_s).size(), 3);
     }
 
+    // A throttled snapshot is decided from what this instance last saw of the index — but only
+    // while the index file is as it left it: another instance's snapshot, removal or rename counts.
+    void throttleSeesWhatOtherInstancesDid()
+    {
+        const auto cli = another();
+        QVERIFY(history().snapshot(u"Zadania/żółw.md"_s, u"v1"_s, u"user"_s));
+        m_clock.advance(kMinute);
+        QVERIFY(history().snapshot(u"Zadania/żółw.md"_s, u"v2"_s, u"user"_s)); // throttled
+        QCOMPARE(contents(u"Zadania/żółw.md"_s), QStringList{u"v1"_s});
+        // Another program on this device keeps a sync snapshot: the next ordinary one is kept.
+        QVERIFY(cli->snapshot(u"Zadania/żółw.md"_s, u"z synchronizacji"_s, u"sync"_s));
+        m_clock.advance(kMinute);
+        QVERIFY(history().snapshot(u"Zadania/żółw.md"_s, u"v3"_s, u"user"_s));
+        QCOMPARE(contents(u"Zadania/żółw.md"_s), (QStringList{u"v3"_s, u"z synchronizacji"_s, u"v1"_s}));
+        m_clock.advance(kMinute);
+        QVERIFY(history().snapshot(u"Zadania/żółw.md"_s, u"v4"_s, u"user"_s)); // throttled again
+        QCOMPARE(history().list(u"Zadania/żółw.md"_s).size(), 3);
+        // Removed elsewhere: the next snapshot starts a new history at once.
+        QVERIFY(cli->remove(u"Zadania/żółw.md"_s));
+        m_clock.advance(kMinute);
+        QVERIFY(history().snapshot(u"Zadania/żółw.md"_s, u"v5"_s, u"user"_s));
+        QCOMPARE(contents(u"Zadania/żółw.md"_s), QStringList{u"v5"_s});
+        // Moved away by this instance: nothing throttles the path any more.
+        QVERIFY(history().rename(u"Zadania/żółw.md"_s, u"Archiwum/żółw.md"_s));
+        m_clock.advance(kMinute);
+        QVERIFY(history().snapshot(u"Zadania/żółw.md"_s, u"v6"_s, u"user"_s));
+        QCOMPARE(contents(u"Zadania/żółw.md"_s), QStringList{u"v6"_s});
+        QCOMPARE(contents(u"Archiwum/żółw.md"_s), QStringList{u"v5"_s});
+        // A policy without throttling applies to the next snapshot.
+        setPolicy(0);
+        QVERIFY(history().snapshot(u"Zadania/żółw.md"_s, u"v7"_s, u"user"_s));
+        QCOMPARE(contents(u"Zadania/żółw.md"_s), (QStringList{u"v7"_s, u"v6"_s}));
+    }
+
     void clockSetBackKeepsOrder()
     {
         history().snapshot(u"Dziennik/środa.md"_s, u"wersja 1"_s, u"user"_s);

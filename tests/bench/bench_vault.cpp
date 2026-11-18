@@ -245,6 +245,77 @@ private Q_SLOTS:
         vault.stopWatching();
     }
 
+    // The editor's autosave of an open note (writeTextIfUnchanged with History, the first list
+    // a consumer asks for after the change) and the watcher's echo of that write ~50 ms later —
+    // both on the GUI thread. "save" and "echo" time the two parts of the same loop; the wait for
+    // the watcher's event in between is not timed. The echo must report nothing.
+    void ownSaveEcho_data()
+    {
+        QTest::addColumn<int>("notes");
+        QTest::addColumn<bool>("oneFolder");
+        QTest::addColumn<bool>("echo");
+        for (const bool oneFolder : {true, false}) {
+            for (const bool echo : {false, true}) {
+                QTest::newRow(qPrintable(u"10000 notes in %1, %2"_s.arg(oneFolder ? u"one folder"_s : u"51 folders"_s,
+                                                                        echo ? u"echo"_s : u"save"_s)))
+                        << 10000 << oneFolder << echo;
+            }
+        }
+    }
+    void ownSaveEcho()
+    {
+        QFETCH(int, notes);
+        QFETCH(bool, oneFolder);
+        QFETCH(bool, echo);
+        QString root;
+        std::unique_ptr<QTemporaryDir> flat;
+        if (oneFolder) {
+            flat = bench::makeTempDir();
+            QList<bench::VaultFile> vaultFiles = bench::makeVault(notes, 77);
+            for (bench::VaultFile &f : vaultFiles)
+                f.path = u"Wszystko/"_s + QString(f.path).replace(u'/', u" – "_s);
+            QVERIFY(bench::writeVault(flat->path(), vaultFiles));
+            root = flat->path();
+        } else {
+            root = vaultOnDisk(notes);
+        }
+        const auto state = bench::makeTempDir();
+        Vault vault(root, state->path());
+        vault.setWatchDelay(3600 * 1000); // the echo is processed below, by hand
+        vault.startWatching();
+        QVERIFY(vault.open());
+        QVERIFY(vault.markdownFiles().size() >= notes);
+        const QString path = vault.markdownFiles().at(notes / 2).path;
+        QString content = vault.readText(path);
+        QSignalSpy spy(&vault, &Vault::changed);
+        constexpr int kSaves = 40;
+        qint64 saveNs = 0;
+        qint64 echoNs = 0;
+        QElapsedTimer t;
+        for (int i = 0; i < kSaves; ++i) {
+            const QString next = content + u"Wpis %1 — źdźbło\n"_s.arg(i);
+            t.start();
+            QCOMPARE(vault.writeTextIfUnchanged(path, next, content), WriteOutcome::Written);
+            const qsizetype listed = vault.markdownFiles().size();
+            saveNs += t.nsecsElapsed();
+            QVERIFY(listed >= notes);
+            content = next;
+            // The write's inotify events are queued already; let the watcher take them in.
+            for (int k = 0; k < 5; ++k)
+                QCoreApplication::processEvents();
+            t.start();
+            vault.processPendingEvents();
+            echoNs += t.nsecsElapsed();
+        }
+        for (const QList<QVariant> &args : std::as_const(spy)) {
+            for (const VaultChange &c : args.at(0).value<QList<VaultChange>>())
+                QVERIFY2(c.source != ChangeSource::External, qPrintable(c.path));
+        }
+        QCOMPARE(spy.size(), kSaves);
+        QTest::setBenchmarkResult(qreal(echo ? echoNs : saveNs) / kSaves / 1e6, QTest::WalltimeMilliseconds);
+        vault.stopWatching();
+    }
+
     // ---- LocalStore -------------------------------------------------------------------------------
 
     // The vault's store holds UI state and the sync bookkeeping (state + merge base per file):
