@@ -1672,7 +1672,17 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   come and go, never a reset; undo costs about what the command cost (`largePageTouchesOneRow`
   compares their medians). Typing merges into one step per block (`BlockDocument::composed`); a
   keystroke that also changed blocks far away — typing at the top of a page renumbers a loose
-  ordered list further down — stays a step of its own (`typingAfterAFarChangeIsAStepOfItsOwn`). The caret goes back to the block and the place it had — also when the
+  ordered list further down — stays a step of its own (`typingAfterAFarChangeIsAStepOfItsOwn`).
+  A keystroke costs the edited block, not the page (docs/PERFORMANCE.md "Typing: a keystroke costs
+  the block"): `BlockListModel::apply()` refreshes only the edited rows and the rows that follow
+  every change of the page (its `dependents`: calc blocks, tables, charts, `((id))` and inline
+  calculations, embeds of this page; the ancestors of a block whose task status changed) when the
+  edit kept the blocks' kind, depth, children and lines, and tells the views only the roles of the
+  block's text; `markDirty()` compares the edited block's own text with the file's text around it
+  (`PageController::TypingSave`) instead of the page; `BlockText` keeps the rendered text of the
+  edited block as it was (the editor shows it) and `InlineEditor` updates the completion once per
+  keystroke. `tst_editor_typing` compares both model paths after every step of scripted and random
+  edits. The caret goes back to the block and the place it had — also when the
   undone step put a block at the very start of the page: Enter at the start of the first block, a
   pasted list, Alt+Up, below a hidden note-mode frontmatter (`tst_editor_controller`
   `undoOfAnInsertionAtTheStart` follows the rows as a view sees them from the model's signals).

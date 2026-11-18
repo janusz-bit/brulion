@@ -292,6 +292,7 @@ TextEdit {
                 setPlain(before)
                 cursorPosition = start
                 syncing = false
+                editor.updateCompletion(edit)
                 if (inserted === "\n")
                     editor.controller.split(row, start)
                 else
@@ -316,6 +317,10 @@ TextEdit {
         if (syncing || !active || !editor || !editor.controller)
             return
         editor.controller.cursorPosition = cursorPosition
+        // A keystroke moves the caret before the text change is told (cursorPositionChanged, then
+        // textChanged): onTextChanged updates the completion once for both.
+        if (length !== lastText.length)
+            return
         editor.updateCompletion(edit)
     }
     onCursorRectangleChanged: if (activeFocus && editor) caretLater.restart()

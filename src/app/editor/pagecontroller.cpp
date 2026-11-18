@@ -702,6 +702,11 @@ void PageController::followRename(const QString &oldPath, const QString &newPath
 
 QString PageController::textToSave() const
 {
+    return textToSave(-1, nullptr);
+}
+
+QString PageController::textToSave(int lineOf, int *line) const
+{
     const BlockDocument &doc = m_model->document();
     std::optional<BlockDocument> closed;
     const auto setBody = [&](int row, const QString &body) {
@@ -720,6 +725,8 @@ QString PageController::textToSave() const
         if (!body.isEmpty())
             setBody(spaced, body);
     }
+    if (line)
+        *line = lineOf < 0 || lineOf >= doc.count() ? -1 : closed ? closed->at(lineOf).line : doc.at(lineOf).line;
     return closed ? closed->toString() : text();
 }
 
@@ -806,12 +813,29 @@ void PageController::closeLoneFence(quint64 uid)
     markDirty();
 }
 
-void PageController::markDirty()
+void PageController::markDirty(quint64 typedUid, bool firstRowTouched)
 {
-    // What save() would write: a lone fence being typed is saved closed (textToSave()), so the
-    // text compared with the file must be closed too, or every later check would call it dirty.
-    const QString current = m_sourceMode ? m_sourceText : textToSave();
-    setDirty(current != m_savedText);
+    if (m_sourceMode)
+        typedUid = 0;
+    // Typing in one block of a page that stays dirty whatever the block holds, or whose block
+    // differs from what would make it clean: no text of the page is made or compared.
+    const bool known = typedStillDirty(typedUid);
+    QString current;
+    if (known) {
+        setDirty(true);
+    } else {
+        // What save() would write: a lone fence being typed is saved closed (textToSave()), so
+        // the text compared with the file must be closed too, or every later check would call it
+        // dirty.
+        int line = -1;
+        const int typedRow = typedUid ? m_model->rowOfUid(typedUid) : -1;
+        current = m_sourceMode ? m_sourceText : textToSave(typedRow, &line);
+        setDirty(current != m_savedText);
+        if (typedUid)
+            rememberTypingSave(typedUid, current, line);
+        else
+            m_typingSave = {};
+    }
     if (m_dirty && !m_conflict) {
         if (m_saveTimer.interval() == 0 && !m_saving)
             save();
@@ -821,8 +845,69 @@ void PageController::markDirty()
         m_saveTimer.stop();
     }
     // The note's own mode key may have changed (undo of a switch, source mode, typing in the
-    // properties); anything else keeps the mode the page was opened with.
-    resolveMode(false, &current);
+    // properties); anything else keeps the mode the page was opened with. Typing in a block
+    // after the first changes no frontmatter.
+    if (firstRowTouched || !typedUid)
+        resolveMode(false, known ? nullptr : &current);
+}
+
+bool PageController::typedStillDirty(quint64 uid) const
+{
+    const TypingSave &t = m_typingSave;
+    if (!uid || t.uid != uid || t.saved.constData() != m_savedText.constData() || t.saved.size() != m_savedText.size())
+        return false;
+    const int row = m_model->rowOfUid(uid);
+    if (!validRow(row))
+        return false;
+    const BlockDocument &doc = m_model->document();
+    const markdown::BlockEntry &entry = doc.at(row);
+    // A block saved with other text than it holds (textToSave()): compared in full.
+    if (!loneFenceClosed(entry).isEmpty() || !bodyWithoutEditorSpace(entry).isEmpty())
+        return false;
+    return !t.cleanPossible || doc.blockSource(row) != t.cleanOwn;
+}
+
+void PageController::rememberTypingSave(quint64 uid, const QString &current, int line)
+{
+    m_typingSave = {};
+    const int row = m_model->rowOfUid(uid);
+    if (!validRow(row) || line < 0)
+        return;
+    const BlockDocument &doc = m_model->document();
+    const markdown::BlockEntry &entry = doc.at(row);
+    if (!loneFenceClosed(entry).isEmpty() || !bodyWithoutEditorSpace(entry).isEmpty())
+        return;
+    // Where the block's own text is in the text to save: at the start of its line (line breaks
+    // as the document counts them: \n, \r\n, a lone \r).
+    const QStringView all(current);
+    qsizetype at = 0;
+    if (!all.contains(u'\r')) {
+        for (int l = 0; l < line && at >= 0; ++l) {
+            at = all.indexOf(u'\n', at);
+            if (at >= 0)
+                ++at;
+        }
+    } else {
+        for (int l = 0; l < line && at < all.size(); ++at) {
+            if (all[at] == u'\n' || all[at] == u'\r') {
+                if (all[at] == u'\r' && at + 1 < all.size() && all[at + 1] == u'\n')
+                    ++at;
+                ++l;
+            }
+        }
+    }
+    const QString own = doc.blockSource(row);
+    if (at < 0 || at + own.size() > all.size() || all.sliced(at, own.size()) != own)
+        return; // (not where its line says: nothing is known)
+    // The text to save is before + own + after; typing changes only `own`.
+    const qsizetype after = all.size() - at - own.size();
+    const QStringView saved(m_savedText);
+    m_typingSave.uid = uid;
+    m_typingSave.saved = m_savedText;
+    m_typingSave.cleanPossible =
+            saved.size() >= at + after && saved.first(at) == all.first(at) && saved.last(after) == all.last(after);
+    if (m_typingSave.cleanPossible)
+        m_typingSave.cleanOwn = m_savedText.sliced(at, saved.size() - at - after);
 }
 
 void PageController::setDirty(bool dirty)
@@ -1404,7 +1489,11 @@ void PageController::setEditText(int row, const QString &edit, int cursor)
     m_typingOpen = true;
     m_typingUid = uid;
     m_typingCell = QPoint(-1, -2);
-    markDirty();
+    // Only this block's text changed (typing; no normalisation reached other blocks): the
+    // comparison with the file can cost the block (markDirty()).
+    const bool ownTextOnly = r.changes.size() == 1 && r.changes.first().type == markdown::BlockChange::Type::Changed
+                             && r.changes.first().first == row && r.changes.first().count == 1;
+    markDirty(ownTextOnly ? uid : 0, !ownTextOnly || row == 0);
     // Normalisation: "[ ] " typed at the start turns into a checkbox, a closing fence is added
     // after a fence typed in a text block, etc. The caret keeps its place when the text before
     // it did not change; otherwise it moves with the text after it.

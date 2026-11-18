@@ -272,6 +272,13 @@ public:
     /// Everything rendered may look different (index changed, links resolve differently).
     void invalidateRendering();
 
+    /// The typing fast path of apply() (on by default): an edit that only changes the text of
+    /// blocks and keeps their kind, depth, children, frontmatter and lines refreshes those rows
+    /// and the rows that follow every change of the page (`dependents`), not every row. Off: every
+    /// edit refreshes the page (tests compare the two).
+    void setTypingFastPath(bool on) { m_typingFastPath = on; }
+    bool typingFastPath() const { return m_typingFastPath; }
+
     // --- Table filters (view only: nothing is written; docs/SYNTAX.md §9) ------------------------
     /// The filter of column `column` of the table in `row` (calc::tableValueMatches(); "" none).
     void setTableFilter(int row, int column, const QString &text);
@@ -295,6 +302,12 @@ private:
         bool zoomRoot = false;
         QString prevKind;
         int line = -1; ///< the line number a view was last told (-1: fetched with the row)
+        // What the rest of the page reads of the block, at the last refresh (the typing fast
+        // path compares them: refreshTyping()).
+        bool structKnown = false;
+        BlockKind kind = BlockKind::Paragraph;
+        int docDepth = 0;
+        std::optional<TaskStatus> task;
         // Content caches.
         BlockShape shape;
         bool shapeValid = false;
@@ -386,6 +399,27 @@ private:
     /// differ (none inside resetContent()'s model reset). `contentChanged` recomputes calc/table
     /// results and page-dependent html.
     void refresh(bool contentChanged);
+    /// The rows refresh(true) tells the views about, by role.
+    struct ContentChanges {
+        QList<int> calcRows;
+        QList<int> tableRows;
+        QList<int> chartRows;
+        QList<int> htmlRows;
+        QList<int> transclusionRows;
+        bool calcConsumers = false;
+        void emitTo(BlockListModel &model) const;
+    };
+    /// refresh(true)'s work on the content of row `row` (document index `i`; its structural state
+    /// is current): results, charts, page-dependent html and transclusions. Returns whether the row
+    /// follows every change of the page (see m_dependents).
+    bool refreshContent(int row, int i, ContentChanges &out);
+    /// After an edit that changed only the text of the rows `changes` name (all Changed): what
+    /// refresh(true) would do, for those rows, the dependents and the ancestors of a block whose
+    /// task status changed. False (nothing done) when the edit changed what other rows read of
+    /// the blocks (kind, depth, children, the frontmatter, the lines after them): refresh(true).
+    bool refreshTyping(const QList<markdown::BlockChange> &changes);
+    /// The edit changed only the text of existing rows, each with a known structure (apply()).
+    bool isTypingEdit(const markdown::EditResult &r) const;
     QVariantList computeCalcResults(int docIndex) const;
     QVariantMap computeTableData(int docIndex) const;
     QVariantMap computeChartData(int docIndex) const;
@@ -428,6 +462,12 @@ private:
     QList<quint64> m_rows;              ///< uid per model row (mirrors the document after replays)
     QHash<quint64, int> m_docIndex;      ///< uid -> document index
     mutable QHash<quint64, RowState> m_state;
+    /// Rows refresh(true) may have work for although their own text is unchanged — calc blocks,
+    /// tables, charts, html with `((id))` or inline calculations, transclusions of this page — by
+    /// uid (a superset: rows removed or no longer such are dropped when visited). Every place that
+    /// makes a row one adds it (renderHtml(), ensureTransclusions(), refreshContent()).
+    mutable QSet<quint64> m_dependents;
+    bool m_typingFastPath = true;
 
     quint64 m_zoomUid = 0;
     QSet<quint64> m_collapsed;

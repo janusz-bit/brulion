@@ -1120,7 +1120,17 @@ private:
     void onWebPictureChanged(const QString &url);
     /// Tell the hosts which file this editor shows (EditorHost::editorOpened/editorClosed).
     void showFile(EditorHost *host, const QString &path);
-    void markDirty();
+    /// Compare the text to save with the file's (dirty or not) and start or stop the autosave.
+    /// `typedUid`: the edit changed the text of that block only (typing, setEditText()); then the
+    /// comparison usually costs the block, not the page (m_typingSave). `firstRowTouched`: the edit
+    /// may have changed the frontmatter (the note mode key: resolveMode()).
+    void markDirty(quint64 typedUid = 0, bool firstRowTouched = true);
+    /// markDirty() for typing in `uid` from what m_typingSave knows: true when the page is dirty
+    /// for certain; false when the whole text has to be compared.
+    bool typedStillDirty(quint64 uid) const;
+    /// After a whole comparison of `current` (the text to save) with the file's: what typing in
+    /// `uid` can still change (m_typingSave).
+    void rememberTypingSave(quint64 uid, const QString &current, int line);
     void setDirty(bool dirty);
     void setConflict(bool conflict, const QString &remote = QString());
     QDate today() const;
@@ -1226,6 +1236,8 @@ private:
     /// "```js" being typed is saved as a closed, empty code block — and without the space the
     /// editor wrote after a token at the end of the edited block (rememberEditorSpace()).
     QString textToSave() const;
+    /// textToSave(), and the line where block `lineOf` (a row) starts in it (-1 for none).
+    QString textToSave(int lineOf, int *line) const;
     /// The edited block at `row` is to end with `tail`: a token the editor wrote (a completed date or
     /// tag, a reminder from the dialog) and the space it added after it, so that the caret does
     /// not stick to the token. The space is not saved while the block still ends with `tail`
@@ -1279,6 +1291,19 @@ private:
     bool m_saving = false; ///< save() is inside the host's compare-and-swap write
     bool m_editsDiscarded = false; ///< a restore took this page away: nothing is written until load()
     QString m_savedText;
+    /// What markDirty() worked out about typing in one block (typedStillDirty()): with block `uid`'s
+    /// own text cut out, the text to save is the file's text `saved` (cleanPossible, cleanOwn: the
+    /// block's own text that makes the page clean) or not (dirty whatever the block holds). Only
+    /// the block's text changes while it is typed in; another edit, a block written otherwise
+    /// when saved, or another file text forgets it. `saved` keeps the file text it was worked out
+    /// for (its data cannot be reused for another text while held).
+    struct TypingSave {
+        quint64 uid = 0;
+        QString saved;
+        bool cleanPossible = false;
+        QString cleanOwn;
+    };
+    TypingSave m_typingSave;
     bool m_dirty = false;
     bool m_loading = false;
     bool m_loaded = false;

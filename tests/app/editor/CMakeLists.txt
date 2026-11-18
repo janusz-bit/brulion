@@ -17,6 +17,12 @@ target_compile_definitions(tst_editor_controller PRIVATE BRULION_APP_QM_DIR="${C
 # once ran past its default 300 s.)
 math(EXPR _controller_timeout "300 + 30 * ${BRULION_TEST_SLOWDOWN}")
 set_tests_properties(tst_editor_controller PROPERTIES TIMEOUT ${_controller_timeout})
+# Typing costs the block: the model's typing fast path against its full refresh (scripted and
+# random edits compared after every step, every change of a role told), the dirty check while a
+# block is typed in.
+brulion_add_test(tst_editor_typing
+    SOURCES tst_editor_typing.cpp
+    LIBS brulion_editor brulion_core_markdown brulion_core_calc brulion_core_text)
 # Calculations across edits: definitions above, sum(above), calc fences, frontmatter, and random
 # edits checked against a model computing everything from scratch (BlockListModel keeps results
 # across calc-neutral edits).

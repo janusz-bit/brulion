@@ -458,6 +458,8 @@ void BlockListModel::ensureTransclusions(int row) const
             st.transclusions.append(builder.build(t));
     }
     st.transclusionsLocal = builder.usedOwnPage();
+    if (st.transclusionsLocal)
+        m_dependents.insert(m_rows[row]); // follows every change of the page (refreshTyping())
 }
 
 } // namespace brulion::editor
