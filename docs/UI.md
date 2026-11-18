@@ -3436,6 +3436,9 @@ whose size arrives) moves the content's coordinates, never what the user sees. T
   the fold point; unfolding again grows rows above the anchor, so the row at the top stays;
 * rows moved (Alt+↑/↓, a drag): the anchor moves with its row;
 * the content ends: the y is clamped to [0, total − viewport]; reaching an end re-anchors there;
+  the top is sticky — a view at y 0 is anchored on row 0 (the header, also before it has a
+  height), so a title that wraps again or rows inserted at the top of the page keep the top in
+  view, as `ListView`'s header does today;
 * "scroll to block" (`positionAtRow(row, mode)`): the anchor becomes the target row itself with
   the offset the mode needs (Beginning 0, Center its height / 2 − viewport / 2, End its height −
   viewport, Contain the least move), so measuring the rows between the old position and the
@@ -3495,10 +3498,10 @@ bench pages.
   flashed; an editable match hosts its row as the edited row.
 * *Scroll to block / reveal*: `positionAtRow(row, Center)` then the flash, in the same frame.
 * *Self-tests and probes*: `rowItem(row)` gives the delegate of a hosted row; the drawn rows are
-  read through `drawnRows` (first, last), `rowRect()`, `rowText(row)` and `rowLayout(row)` (line
-  count, the link at a point); the bench probe counts `drawnRowCount` where it counts
-  `BlockDelegate`s. Self-tests that inspect a delegate's insides (`BlockText`, `TaskBox`) host
-  their row first (`hostRow(row)`: test builds only).
+  read through `firstShownRow` / `lastShownRow`, `rowRect()`, `rowText(row)`, `rowLineCount(row)`
+  and `linkAt(x, y)`; the bench probe counts `drawnRowCount` where it counts `BlockDelegate`s.
+  Self-tests that inspect a delegate's insides (`BlockText`, `TaskBox`) host their row first
+  (`hostRow(row)`).
 
 **Stage B, later: the edited row last.** Stage C keeps the editing in one `TextEdit` per edited
 block, so a text selection cannot cross blocks (the block selection does). Stage B draws the
@@ -3526,8 +3529,48 @@ title drawn above the properties (`titleFirst`: a display order that differs fro
 permutation in the tree's coordinates); right-to-left text and centred rows in the shared layout;
 memory, which falls (no per-row QML) only once the item draws most rows.
 
-**State (2026-11-18).** The design above; the foundations follow in this order: the tree and the
-anchor, the shared layout, the item.
+**State (2026-11-18): foundations, behind `BRULION_PAGE_ITEM=1`, off by default.**
+
+* `RowHeightTree`, `ScrollAnchor` and `PageRows` (`src/app/editor/rowheighttree.h`,
+  `scrollanchor.h`, `pagerows.h`; pure QtCore) as designed above: the tree, the anchor with every
+  rule of the list, and the two kept in step with a model's row signals — a header row, the
+  model's rows, a footer row; rows hidden by the model's `visible` role are 0 px (measured), shown
+  again with an estimate. `tst_editor_rowheights`: the tree against a naive list (random edits of
+  every kind, six seeds, exact sums after 100 000 updates), each anchor rule, random changes
+  followed by uid, and `PageRows` on a list model and on `BlockListModel` with another device's
+  changes merged in (`replaceContent`: the anchor's block kept, changed — adopted at the same
+  offset —, removed) and folds; `bench_rowheights` the costs.
+* `RenderedTextLayout` (in `renderedtextitem.h` / `.cpp`): `RenderedTextItem`'s layout, shapes,
+  overlays, hit tests and scene-graph nodes, taken out of the item with its code where it was
+  (the item derives from it; its QML API and behaviour are unchanged: `tst_editor_renderedtext`).
+* `PageItem` (`src/app/editor/pageitem.h`) and `PageItemView.qml`: with the switch on, a page (not
+  a journal day; not with a screen reader) shows its rows through the item over a Flickable; the
+  `ListView` stays without rows and keeps the keyboard. The item draws paragraphs, headings and
+  list items (their text, bullets, a document's numbers, guide lines) and hosts every other row
+  as the editor's own `BlockDelegate` (code, tables, tasks, frames, pictures, embedded pages,
+  selected, folded and edited rows): tapping a drawn row edits it — the row is then hosted and
+  its inline editor works as in the list, the caret kept in view (`BlockEditor.ensureVisible()`
+  through `PageItem.ensureVisible()`) —, links open, hover underlines them, the find bar's
+  matches are drawn, "scroll to block", find and reveal go through `positionAtRow()` (a revealed
+  row is selected, so hosted, and flashes; a selection's band is its delegates'). A hosted
+  delegate stays while its row is within one and a half screens (a new width or a scroll over the
+  margin's edge would make the same delegates again). The slack keeps flings running while rows
+  above are measured. `tst_editor_pageitem` checks the item offscreen:
+  rows laid out only near the view (also after a width change), the Flickable driven, the anchor
+  through edits and measurements and while a fling runs, exact positioning on estimated rows,
+  hosted rows with their roles and index, folds, links, a frame, and `RenderedTextLayout` against
+  `RenderedTextItem`. The numbers: docs/PERFORMANCE.md "Z10 stage C: one item per page, the
+  foundations".
+* Not yet (the next steps, in the order of the migration above): task boxes drawn by the item (a
+  task row is hosted now: most of what a new width still costs on a long outline), fold arrows and
+  the bullet's hover halo of drawn rows (a folded row is hosted, so folding back works; folding a
+  drawn row takes its block menu or Ctrl+.), drawing the selection's band and the flash itself
+  (selected rows are hosted: a large selection hosts many delegates), drag-selecting across rows,
+  drop targets, the touch toolbar's room at the bottom edge, the page's linked references under the
+  rows (PageView hides them with the switch on), the idle measurer (the total, and so the scroll bar
+  — the Flickable's attached `BScrollBar` — is an estimate until the rows were shown once), the
+  bar's size frozen while the view moves, a pool of hosted delegates, accessibility, and the
+  self-tests run with the switch on.
 
 ### The scroll bar: `RowScroll` (`src/app/ui/rowscroll.h`)
 
