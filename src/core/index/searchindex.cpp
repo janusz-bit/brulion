@@ -5,6 +5,7 @@
 #include "text/text.h"
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <ranges>
 
@@ -91,9 +92,16 @@ QStringList SearchIndex::ids() const
     return m_byId.keys();
 }
 
+void SearchIndex::touch()
+{
+    static std::atomic<quint64> revisions{0};
+    m_revision = ++revisions;
+}
+
 void SearchIndex::set(const QString &id, Document document, quint64 contentKey)
 {
     remove(id);
+    touch();
     const int doc = m_free.isEmpty() ? int(m_docs.size()) : m_free.takeLast();
     if (doc == m_docs.size())
         m_docs.append(Doc());
@@ -125,6 +133,7 @@ void SearchIndex::remove(const QString &id)
     if (found == m_byId.constEnd())
         return;
     const int doc = *found;
+    touch();
     m_byId.erase(found);
     Doc &d = m_docs[doc];
     for (const QString *term : std::as_const(d.terms)) {
@@ -146,6 +155,7 @@ void SearchIndex::remove(const QString &id)
 
 void SearchIndex::clear()
 {
+    touch();
     m_postings.clear();
     m_docs.clear();
     m_free.clear();
@@ -155,6 +165,7 @@ void SearchIndex::clear()
 
 void SearchIndex::squeeze()
 {
+    touch();
     for (PostingList &list : m_postings | std::views::values) {
         if (list.capacity() > list.size())
             list.squeeze();

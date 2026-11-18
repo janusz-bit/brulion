@@ -485,6 +485,9 @@ void IndexLoader::start(const QList<FileStat> &files)
         return;
     d->started = true;
     d->clock.start();
+    // The full-text upkeep after edits tokenises on the pool too, from now on.
+    if (d->threaded())
+        d->index.setSearchWorker(d->pool.start);
     QList<VaultPath> notes;
     for (const FileStat &f : files) {
         if (f.isDir || !VaultIndex::isIndexable(f.path))

@@ -14,6 +14,7 @@
 #include <deque>
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <string_view>
 #include <unordered_map>
@@ -24,9 +25,31 @@ namespace index_detail {
 
 /// Quiet time after the last change before the search index catches up in the background.
 inline constexpr int SearchIdleMs = 300;
-/// Time the search index may take per background step (event loop turn) to catch up: the UI
-/// stays responsive (also single-threaded in the browser); at least one document per step.
+/// Time the search index may take per background step (event loop turn) to catch up without a
+/// search worker: the UI stays responsive (single-threaded in the browser); at least one document
+/// per step.
 inline constexpr int SearchSliceMs = 8;
+/// A job of the search worker (VaultIndex::setSearchWorker()) prepares at most this many
+/// documents and this many characters of notes (at least one note): each job's documents are
+/// applied on the index's thread in one go.
+inline constexpr qsizetype SearchJobDocs = 64;
+inline constexpr qsizetype SearchJobChars = 256 * 1024;
+
+/// A note's full-text document prepared on the search worker.
+struct PreparedSearchDoc {
+    VaultPath path;
+    quint64 contentKey = 0; ///< of the text it was prepared from
+    QString title;
+    QStringList aliases;
+    QString content; ///< shared with the note's record, released once prepared
+    SearchIndex::Document document;
+};
+
+/// What the search worker's jobs share with their index: the receiver, null once it is gone.
+struct SearchWorkerShared {
+    std::mutex mutex;
+    VaultIndex *receiver = nullptr;
+};
 
 /// A path-based link of a note (wiki link, embed, Markdown link to a file) and its resolution.
 struct PathLink {
@@ -41,7 +64,10 @@ struct NameCandidate {
     QString alias; ///< alias as written; empty for the title / path
 };
 
-/// Per-note record of the index.
+/// Per-note record of the index. Once attached, `path`, `content`, `note` and `contentKey` never
+/// change — a change of the note attaches a new record — since the index cache's snapshots share
+/// records and read those members on other threads; only `links`, `refs`, `seq` and the lazy caches
+/// below change, on the index's thread.
 struct Entry {
     VaultPath path;
     QString content;
@@ -82,9 +108,14 @@ private:
 /// cache's writer) and tests.
 struct IndexAccess {
     static const Entry *entry(const VaultIndex &index, const VaultPath &path);
+    /// The record of `path`, shared: its note and text stay as they are (any thread may read them)
+    /// whatever the index does afterwards. Null when unknown.
+    static std::shared_ptr<const Entry> sharedEntry(const VaultIndex &index, const VaultPath &path);
     static const SearchIndex &search(const VaultIndex &index);
     /// Is the full-text index up to date and complete (nothing pending, not built elsewhere)?
     static bool searchComplete(const VaultIndex &index);
+    /// Is the full-text index being built away from the index (setSearchBuiltElsewhere())?
+    static bool searchBuiltElsewhere(const VaultIndex &index);
     /// Every note's record, by path (valid until the next change).
     static QList<const Entry *> sortedEntries(const VaultIndex &index);
     /// How often a derived list was built from scratch (tests: an edit patches the lists instead):
@@ -192,10 +223,13 @@ struct VaultIndex::Private {
     using Entry = index_detail::Entry;
 
     Private(VaultIndex *owner, const VaultConfig &cfg);
+    ~Private();
 
     VaultIndex *q;
     VaultConfig config;
-    std::unordered_map<VaultPath, std::unique_ptr<Entry>> entries;
+    /// Shared, not owned alone: the index cache's snapshots keep the records they copied (a record
+    /// is never changed once attached but for its links and lazy caches — a change replaces it).
+    std::unordered_map<VaultPath, std::shared_ptr<Entry>> entries;
     QSet<VaultPath> attachmentSet;
     index_detail::NameTable names;
     // Compact per-key sets (smallsets_p.h): nearly every key names one or two notes.
@@ -226,6 +260,11 @@ struct VaultIndex::Private {
     bool searchElsewhere = false; ///< setSearchBuiltElsewhere()
     QTimer *searchTimer = nullptr;
     QElapsedTimer lastChange;
+    std::function<void(std::function<void()>)> searchWorker; ///< setSearchWorker()
+    std::shared_ptr<index_detail::SearchWorkerShared> searchShared;
+    /// Notes being prepared on the search worker -> the ticket of their job (one job at a time).
+    QHash<VaultPath, quint64> searchInFlight;
+    quint64 searchTickets = 0;
 
     QTimer *notifyTimer = nullptr;
     int batchDepth = 0;
@@ -288,10 +327,10 @@ struct VaultIndex::Private {
     QSet<QString> putEntry(std::unique_ptr<Entry> e, bool updateSearch, std::optional<quint64> keepSeq);
     /// Add a note to every map; `countFolders` false: its folders still count it (re-put at the
     /// same path after detachNote(…, countFolders = false)).
-    void attachNote(std::unique_ptr<Entry> e, bool countFolders = true);
+    void attachNote(std::shared_ptr<Entry> e, bool countFolders = true);
     /// Remove a note from every map; returns it (nullptr when unknown). `countFolders` false
     /// leaves it in noteFolders, for a note put back at the same path.
-    std::unique_ptr<Entry> detachNote(const VaultPath &path, bool discardSearch, bool countFolders = true);
+    std::shared_ptr<Entry> detachNote(const VaultPath &path, bool discardSearch, bool countFolders = true);
     /// Forget the note or attachment at `path`: the link keys whose resolution in other notes may
     /// change; nullopt when the index does not know `path`.
     std::optional<QSet<QString>> forget(const VaultPath &path);
@@ -305,8 +344,14 @@ struct VaultIndex::Private {
     // ---- search ---------------------------------------------------------------------------------
     void markSearch(const VaultPath &path);
     void searchTick();
+    /// Hand the next dirty notes to the search worker (removed notes are dropped right here).
+    void startSearchJob();
+    /// A job's documents are back: those whose note is unchanged since go into `search`.
+    void applyPrepared(quint64 ticket, QList<index_detail::PreparedSearchDoc> &docs);
     void indexSearchDoc(const VaultPath &path);
     void flushSearch();
+    /// Squeeze the search index after a bulk build.
+    void squeezeAfterBulk();
 };
 
 } // namespace brulion

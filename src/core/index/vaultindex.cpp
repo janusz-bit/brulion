@@ -11,6 +11,8 @@
 #include "text/text.h"
 #include "util/paths.h"
 
+#include <QMetaObject>
+
 #include <algorithm>
 #include <atomic>
 #include <utility>
@@ -279,14 +281,25 @@ const Entry *IndexAccess::entry(const VaultIndex &index, const VaultPath &path)
     return index.d->entry(path);
 }
 
+std::shared_ptr<const Entry> IndexAccess::sharedEntry(const VaultIndex &index, const VaultPath &path)
+{
+    const auto it = index.d->entries.find(path);
+    return it == index.d->entries.end() ? nullptr : std::shared_ptr<const Entry>(it->second);
+}
+
 const SearchIndex &IndexAccess::search(const VaultIndex &index)
 {
     return index.d->search;
 }
 
+bool IndexAccess::searchBuiltElsewhere(const VaultIndex &index)
+{
+    return index.d->searchElsewhere;
+}
+
 bool IndexAccess::searchComplete(const VaultIndex &index)
 {
-    return index.d->searchDirty.isEmpty() && !index.d->searchElsewhere;
+    return index.d->searchDirty.isEmpty() && index.d->searchInFlight.isEmpty() && !index.d->searchElsewhere;
 }
 
 QList<const Entry *> IndexAccess::sortedEntries(const VaultIndex &index)
@@ -406,6 +419,14 @@ VaultIndex::Private::Private(VaultIndex *owner, const VaultConfig &cfg) : q(owne
         if (batchDepth == 0)
             emitIfPending();
     });
+}
+
+VaultIndex::Private::~Private()
+{
+    if (searchShared) {
+        std::lock_guard lock(searchShared->mutex);
+        searchShared->receiver = nullptr; // running jobs deliver nothing
+    }
 }
 
 const VaultIndex::Private::Entry *VaultIndex::Private::entry(const VaultPath &path) const
@@ -582,7 +603,7 @@ std::optional<QSet<QString>> VaultIndex::Private::forget(const VaultPath &path)
 {
     if (const Entry *e = entry(path)) {
         QSet<QString> keys = entryKeys(*e);
-        const std::unique_ptr<Entry> gone = detachNote(path, true);
+        const std::shared_ptr<Entry> gone = detachNote(path, true);
         noteChanged(gone.get(), nullptr);
         namesChanged();
         return keys;
@@ -603,7 +624,7 @@ QSet<QString> VaultIndex::Private::putEntry(std::unique_ptr<Entry> e, bool updat
 {
     const VaultPath path = e->path;
     // The same path: its folders keep counting it (the spelling stays put while it is edited).
-    const std::unique_ptr<Entry> prev = detachNote(path, false, false);
+    const std::shared_ptr<Entry> prev = detachNote(path, false, false);
     e->seq = keepSeq ? *keepSeq : ++seq;
     QSet<QString> keys = prev ? QSet<QString>() : entryKeys(*e);
     const Entry *added = e.get();
@@ -620,7 +641,7 @@ QSet<QString> VaultIndex::Private::putEntry(std::unique_ptr<Entry> e, bool updat
     return keys;
 }
 
-void VaultIndex::Private::attachNote(std::unique_ptr<Entry> owned, bool countFolders)
+void VaultIndex::Private::attachNote(std::shared_ptr<Entry> owned, bool countFolders)
 {
     Entry &e = *owned;
     const ParsedNote &note = e.note;
@@ -692,13 +713,13 @@ void VaultIndex::Private::countNoteFolders(const VaultPath &path, int delta)
     }
 }
 
-std::unique_ptr<VaultIndex::Private::Entry> VaultIndex::Private::detachNote(const VaultPath &path, bool discardSearch,
+std::shared_ptr<VaultIndex::Private::Entry> VaultIndex::Private::detachNote(const VaultPath &path, bool discardSearch,
                                                                             bool countFolders)
 {
     const auto it = entries.find(path);
     if (it == entries.end())
         return nullptr;
-    std::unique_ptr<Entry> owned = std::move(it->second);
+    std::shared_ptr<Entry> owned = std::move(it->second);
     entries.erase(it);
     const Entry &e = *owned;
     unlinkOutgoing(e);
@@ -814,6 +835,11 @@ void VaultIndex::Private::searchTick()
         searchTimer->start(int(SearchIdleMs - quiet));
         return;
     }
+    if (searchWorker) {
+        if (searchInFlight.isEmpty())
+            startSearchJob(); // else its delivery comes back here
+        return;
+    }
     QElapsedTimer slice;
     slice.start();
     for (auto it = searchDirty.begin(); it != searchDirty.end();) {
@@ -826,7 +852,79 @@ void VaultIndex::Private::searchTick()
     if (!searchDirty.isEmpty())
         searchTimer->start(0);
     else
-        flushSearch(); // nothing left to build: only the squeeze after a bulk build
+        squeezeAfterBulk();
+}
+
+void VaultIndex::Private::startSearchJob()
+{
+    using index_detail::PreparedSearchDoc;
+    const quint64 ticket = ++searchTickets;
+    auto docs = std::make_shared<QList<PreparedSearchDoc>>();
+    qsizetype chars = 0;
+    QElapsedTimer slice;
+    slice.start();
+    for (auto it = searchDirty.begin();
+         it != searchDirty.end() && docs->size() < SearchJobDocs && chars < SearchJobChars;) {
+        const VaultPath path = *it;
+        it = searchDirty.erase(it);
+        const Entry *e = entry(path);
+        if (!e) {
+            search.remove(path); // a note gone: nothing to tokenise
+            ++searchBuilt;
+            if (slice.elapsed() >= SearchSliceMs)
+                break;
+            continue;
+        }
+        // Shared copies: the worker reads them while the record may be replaced here.
+        docs->append({path, e->contentKey, e->note.title, e->note.aliases, e->content, {}});
+        chars += e->content.size();
+        searchInFlight.insert(path, ticket);
+    }
+    if (docs->isEmpty()) {
+        if (!searchDirty.isEmpty())
+            searchTimer->start(0);
+        else
+            squeezeAfterBulk();
+        return;
+    }
+    searchWorker([shared = searchShared, ticket, docs] {
+        for (PreparedSearchDoc &doc : *docs) {
+            doc.document = SearchIndex::prepare(doc.title, doc.aliases, doc.content);
+            doc.content = QString(); // the record keeps the text, the job need not
+        }
+        std::lock_guard lock(shared->mutex);
+        if (VaultIndex *receiver = shared->receiver)
+            QMetaObject::invokeMethod(
+                    receiver, [receiver, ticket, docs] { receiver->d->applyPrepared(ticket, *docs); },
+                    Qt::QueuedConnection);
+    });
+}
+
+void VaultIndex::Private::applyPrepared(quint64 ticket, QList<index_detail::PreparedSearchDoc> &docs)
+{
+    for (index_detail::PreparedSearchDoc &doc : docs) {
+        const auto it = searchInFlight.constFind(doc.path);
+        if (it == searchInFlight.constEnd() || *it != ticket)
+            continue; // built meanwhile (flushSearch(), adoptSearch(), clear())
+        searchInFlight.erase(it);
+        if (searchDirty.contains(doc.path))
+            continue; // changed meanwhile: prepared again from its new text
+        const Entry *e = entry(doc.path);
+        if (!e || e->contentKey != doc.contentKey) {
+            markSearch(doc.path); // (every change marks the note: not expected)
+            continue;
+        }
+        search.set(doc.path, std::move(doc.document), doc.contentKey);
+        ++searchBuilt;
+    }
+    if (!searchInFlight.isEmpty())
+        return; // (a job of an older ticket cannot be pending: one job at a time)
+    if (!searchDirty.isEmpty()) {
+        if (!searchTimer->isActive())
+            searchTimer->start(0); // searchTick() waits for a quiet moment again
+    } else {
+        squeezeAfterBulk();
+    }
 }
 
 void VaultIndex::Private::indexSearchDoc(const VaultPath &path)
@@ -840,10 +938,19 @@ void VaultIndex::Private::indexSearchDoc(const VaultPath &path)
 void VaultIndex::Private::flushSearch()
 {
     searchTimer->stop();
+    // Documents on the worker are built here too; the job's late delivery is dropped.
+    for (auto it = searchInFlight.cbegin(); it != searchInFlight.cend(); ++it)
+        searchDirty.insert(it.key());
+    searchInFlight.clear();
     searchBuilt += searchDirty.size();
     for (const VaultPath &p : std::as_const(searchDirty))
         indexSearchDoc(p);
     searchDirty.clear();
+    squeezeAfterBulk();
+}
+
+void VaultIndex::Private::squeezeAfterBulk()
+{
     if (searchBuilt > BulkSearchBuild) {
         searchBuilt = 0;
         search.squeeze(); // no growth slack after a bulk build (docs/PERFORMANCE.md, L8)
@@ -957,6 +1064,7 @@ void VaultIndex::clear()
     d->noteFolders.clear();
     d->searchTimer->stop();
     d->searchDirty.clear();
+    d->searchInFlight.clear(); // (their documents are dropped when they come back)
     d->search.clear();
     d->markEverythingChanged();
 }
@@ -1072,6 +1180,7 @@ void VaultIndex::adoptSearch(SearchIndex built)
     built.squeeze();
     d->search = std::move(built);
     d->searchDirty.clear();
+    d->searchInFlight.clear(); // dropped when they come back: marked again below when missing
     d->searchBuilt = 0;
     for (const auto &[path, e] : d->entries) {
         if (!d->search.contains(path))
@@ -1132,7 +1241,27 @@ void VaultIndex::flushSearch()
 
 qsizetype VaultIndex::pendingSearchDocuments() const
 {
-    return d->searchDirty.size();
+    qsizetype pending = d->searchDirty.size();
+    for (auto it = d->searchInFlight.cbegin(); it != d->searchInFlight.cend(); ++it)
+        pending += d->searchDirty.contains(it.key()) ? 0 : 1;
+    return pending;
+}
+
+void VaultIndex::setSearchWorker(std::function<void(std::function<void()>)> start)
+{
+    d->searchWorker = std::move(start);
+    if (d->searchWorker && !d->searchShared) {
+        d->searchShared = std::make_shared<index_detail::SearchWorkerShared>();
+        d->searchShared->receiver = this;
+    }
+    // Without a worker a job still out is dropped when it comes back; its notes are built here.
+    if (!d->searchWorker && !d->searchInFlight.isEmpty()) {
+        for (auto it = d->searchInFlight.cbegin(); it != d->searchInFlight.cend(); ++it)
+            d->searchDirty.insert(it.key());
+        d->searchInFlight.clear();
+        if (!d->searchTimer->isActive())
+            d->searchTimer->start(0);
+    }
 }
 
 } // namespace brulion

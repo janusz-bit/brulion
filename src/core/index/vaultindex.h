@@ -433,10 +433,18 @@ public:
     /// Build the full-text documents of all changed notes now (otherwise done in the background
     /// or by the next search()).
     void flushSearch();
-    /// Notes whose full-text document is not built yet: the background catches up in steps of a
-    /// few milliseconds per event-loop turn once changes pause (after opening a vault: soon after
-    /// it is indexed), so the first search() is fast. 0 when up to date.
+    /// Notes whose full-text document is not built yet (or is being prepared on the search
+    /// worker): the background catches up once changes pause (after opening a vault: soon after it
+    /// is indexed), so the first search() is fast. 0 when up to date.
     qsizetype pendingSearchDocuments() const;
+    /// Tokenise the changed notes' full-text documents (SearchIndex::prepare(), the costly part:
+    /// ~20 ms for a 500 KB note on a laptop) on another thread: `start` runs a job there (the
+    /// index loader passes its pool's, notebook::IndexLoader). This thread only applies a
+    /// prepared document, and only while its note still has the text it was prepared from (an
+    /// edit meanwhile drops it: the note is prepared again). Empty (the default; WebAssembly):
+    /// everything on this thread, a few milliseconds per event-loop turn. Whatever runs `start`
+    /// must outlive the index; jobs still running when the index goes deliver nothing.
+    void setSearchWorker(std::function<void(std::function<void()>)> start);
 
     // ---- notes ----------------------------------------------------------------------------------
 

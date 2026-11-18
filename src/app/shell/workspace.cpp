@@ -322,11 +322,10 @@ void Workspace::close()
     cancelMoveImpact(); // its planner reads the index
     m_impacts = ImpactCache();
     const bool wasIndexing = indexing();
-    // A notebook closed before its first cache was written (the app quit right after indexing):
-    // write it now, once, so the next start does not parse everything again.
-    if (m_cacheKeeper && m_loader && !m_cacheKeeper->hasSaved() && !m_cacheKeeper->isSaving()
-        && m_loader->stats().cache != u"used" && m_cacheKeeper->isDirty())
-        m_cacheKeeper->saveNow();
+    // What the index cache does not have yet (written on the index pool: its owner, this
+    // workspace, waits for it before the app ends).
+    if (m_cacheKeeper)
+        m_cacheKeeper->saveIfDirty();
     m_cacheKeeper.reset(); // before the loader, the index and the vault
     m_loader.reset();      // before the index and the vault (its workers stop after their file)
     m_trashCount = -1;
@@ -1850,6 +1849,8 @@ void Workspace::applicationStateChanged(Qt::ApplicationState state)
 {
     m_github->setAppActive(state == Qt::ApplicationActive);
     if (state != Qt::ApplicationActive) {
+        if (m_cacheKeeper)
+            m_cacheKeeper->saveIfDirty(); // the index cache now, not while the user is in the app
         m_wasInactive = true;
         return;
     }

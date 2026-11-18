@@ -729,7 +729,8 @@ public:
     /// Remember that a page was opened (recentPages).
     Q_INVOKABLE void notePageOpened(const QString &path);
     /// The app left the foreground (another window has the focus, the phone shows another app)
-    /// or came back. Coming back rescans the vault: other programs may have rewritten notes in
+    /// or came back. Leaving it writes what the index cache lacks (IndexCacheKeeper::saveIfDirty(),
+    /// on the index pool). Coming back rescans the vault: other programs may have rewritten notes in
     /// place meanwhile, which the vault's folder watches do not report (it watches only the
     /// files open in editors themselves), and hands the reminders to Android again
     /// (WorkspaceReminders::resendSoon()). Connected to QGuiApplication::applicationStateChanged.
