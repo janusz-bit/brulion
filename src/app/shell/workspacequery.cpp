@@ -119,7 +119,7 @@ QStringList Workspace::cachedLists() const
 
 int Workspace::journalCount() const
 {
-    return m_index ? int(m_index->journals().size()) : 0;
+    return m_index ? int(m_index->journalCount()) : 0;
 }
 
 QVariantList Workspace::journals(int offset, int limit) const

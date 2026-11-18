@@ -787,6 +787,11 @@ Q_SIGNALS:
 
 private:
     void onVaultChanged(const QList<brulion::VaultChange> &changes);
+    /// VaultIndex::changed: EditorHost::indexChanged — at once, but for the loader's merges
+    /// (indexChunk()), which are passed on at most every kLoadNotifyMs (docs/PERFORMANCE.md, L1b).
+    void onIndexChanged();
+    /// The loader's merges not passed on yet: indexChanged() now.
+    void flushLoadChanges();
     void indexChunk();
     void indexFile(const QString &path);
     /// The loader's results are ready: merge them (indexChunk()).
@@ -863,6 +868,13 @@ private:
     QString m_indexCachePath; ///< "" when the notebook keeps none
     QTimer m_indexTimer;
     QElapsedTimer m_indexClock; ///< since open() (the event log's "Index ready" line)
+    /// While the loader merges (indexChunk()), the index's changes are passed on to the views at
+    /// most this often: every merge adds names, so each one made every visible page render all
+    /// its rows again and the lists compute again.
+    bool m_inIndexChunk = false;
+    bool m_loadChangesPending = false;
+    QElapsedTimer m_loadNotified; ///< when the loader's changes were last passed on
+    QTimer m_loadNotifyTimer;     ///< the next time they may be
     int m_revision = 0;
     int m_namesRevision = 0;
     int m_propertiesRevision = 0;

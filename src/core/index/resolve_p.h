@@ -22,6 +22,8 @@
 #include <QString>
 #include <QStringList>
 
+#include <optional>
+
 namespace brulion::index_detail {
 
 /// Case-insensitive key of a vault path: NFC, lower-cased ("Projekty/Dom.md" -> "projekty/dom.md").
@@ -61,10 +63,94 @@ bool isPageTarget(const QString &target, TargetForm form = TargetForm::Raw);
 /// Shortest path, then smallest by code units; empty for an empty set.
 VaultPath pickBest(const PathSet &paths);
 
+/// What NameTable::resolve() looks a link target up by: the keys derived from the target and the
+/// linking file's path alone (NFC, lower case, the paths to try, the name and alias keys) — pure,
+/// so any thread can derive them. NameTable::resolve(target, from, form) is resolve() of such a
+/// plan whose keys are derived when a lookup first needs them; the index loader's workers derive
+/// every key of a note's links beforehand (complete(), VaultIndex::prepare()), so merging the note
+/// on the index's thread only looks the keys up. Not thread-safe while incomplete.
+class ResolvePlan {
+public:
+    /// The linking file and its folder as a plan joins targets to it: the same for every link
+    /// of a note, derived once (makeNoteKeys()).
+    struct From {
+        VaultPath path;
+        QString dir;           ///< paths::dirname(path): a bare name's folder
+        QString normalizedDir; ///< paths::dirname(paths::normalize(path)) ("" for ""): a path's
+        static From of(const VaultPath &path);
+    };
+
+    ResolvePlan() = default;
+    ResolvePlan(const QString &target, const VaultPath &from, TargetForm form);
+    ResolvePlan(const QString &target, const From &from, TargetForm form);
+
+    /// Derive every key now (the lookups then change nothing in the plan: another thread may
+    /// read it).
+    void complete() const;
+
+private:
+    friend class NameTable;
+    /// One path tried (NameTable::lookupPath()): its NFC spelling and lower-cased key.
+    struct Probe {
+        QString spelled;
+        QString key;
+        bool markdown = false; ///< the key ends with .md / .markdown: only that file
+    };
+    /// The base-name lookup (NameTable::lookupName()) of the lower-cased path.
+    struct Name {
+        QString path;            ///< lower-cased NFC target (normalised when it has folders)
+        QString stem;            ///< `path` without .md / .markdown
+        QString noteBase;        ///< basename(stem): the notes' name key
+        QString fileBase;        ///< basename(path): the attachments' name key
+        bool markdown = false;   ///< `path` ends with .md / .markdown
+        bool attachment = false; ///< `path` has a real file extension: attachments first
+    };
+    enum class Kind : quint8 {
+        Nothing, ///< resolves to nothing (a path that normalises to "")
+        From,    ///< an empty target (`[[#^id]]`): the linking file
+        Bare,    ///< a name without folders: the vault root, the linking file's folder, names
+        Path,    ///< a path: relative, exact, under the linking file's folder, names
+    };
+    /// Which of the lazily derived keys are there (m_derived).
+    enum Derived : quint8 { Probe0 = 1, Probe1 = 2, NameKeys = 4, AliasKey = 8 };
+
+    /// `dir` / `normalizedDir`: From's, when known (else derived here as the kind needs).
+    void init(const QString &target, const VaultPath &from, TargetForm form, const QString *dir,
+              const QString *normalizedDir);
+    int probeCount() const { return m_probeCount; }
+    const Probe &probe(int i) const;
+    const Name &name() const;
+    const QString &aliasKey() const;
+    /// The path probe `i` tries.
+    QString probePath(int i) const;
+
+    Kind m_kind = Kind::Nothing;
+    bool m_attachmentFirst = false; ///< a file with the target's extension before a note
+    bool m_explicitRelative = false;
+    quint8 m_probeCount = 0;
+    mutable quint8 m_derived = 0;
+    QString m_target;  ///< cleanTarget()
+    VaultPath m_from;  ///< the linking file
+    QString m_lowered; ///< Bare: lower(nfc(target)); Path: normalize(target)
+    QString m_fromDir; ///< the linking file's folder (as the kind joins it)
+    mutable Probe m_probes[2];
+    mutable Name m_name;
+    mutable QString m_aliasKey;
+};
+
 /// Incrementally maintained lookup tables for link resolution.
 class NameTable {
 public:
+    /// The keys a note is filed under (addNote()): derived from its path and aliases alone.
+    struct NoteNames {
+        QString pathKey;       ///< pathKey(path)
+        QString nameKey;       ///< noteNameKey(path)
+        QStringList aliasKeys; ///< aliasKey() of each alias that has one
+        static NoteNames of(const VaultPath &path, const QStringList &aliases);
+    };
+
     void addNote(const VaultPath &path, const QStringList &aliases);
+    void addNote(const VaultPath &path, const NoteNames &names);
     void removeNote(const VaultPath &path, const QStringList &aliases);
     void addAttachment(const VaultPath &path);
     void removeAttachment(const VaultPath &path);
@@ -77,6 +163,8 @@ public:
     /// Resolve `target` written in `from` (see the file comment). An empty target (`[[#^id]]`)
     /// resolves to `from`. Returns an empty path when nothing matches.
     VaultPath resolve(const QString &target, const VaultPath &from = {}, TargetForm form = TargetForm::Raw) const;
+    /// resolve() of a planned target (the same result as resolve() of the plan's target and file).
+    VaultPath resolve(const ResolvePlan &plan) const;
     /// resolve() of `target` written at the vault root, among notes only (a tag names a note,
     /// docs/SYNTAX.md §3): exact path ± `.md` / `.markdown`, base name or path suffix (shortest
     /// path, then alphabetical), aliases. An attachment of that name (a `TODO` file next to
@@ -86,23 +174,27 @@ public:
     /// NFC; among case variants the exact spelling wins), never an attachment; empty when none.
     /// The page beside a folder (VaultIndex::resolveLinkPart()).
     VaultPath notePath(const QString &path) const;
+    /// Every key of every map with its files, sorted (tests: two tables hold the same names).
+    QStringList describe() const;
 
 private:
-    VaultPath resolveBare(const QString &target, const VaultPath &from) const;
-    /// File at exactly `path` (case-insensitive, NFC), also with `.md` / `.markdown` added;
-    /// notes first unless `attachmentFirst`. Among case variants the exact spelling wins.
-    VaultPath lookupPath(const QString &path, bool attachmentFirst) const;
-    /// lookupPath() of one key; `spelled` is the NFC path as written.
-    VaultPath lookupExact(const QString &key, const QString &spelled) const;
+    /// File at exactly the probe's path (case-insensitive, NFC), also with `.md` / `.markdown`
+    /// added; notes first unless `attachmentFirst`. Among case variants the exact spelling wins.
+    VaultPath lookupPath(const ResolvePlan::Probe &probe, bool attachmentFirst) const;
+    /// The file at `key` + `suffix` (lower-cased NFC); `spelled` + `suffix` is the NFC path as
+    /// written, which wins among case variants.
+    VaultPath lookupExact(QStringView key, QStringView spelled, QLatin1StringView suffix = {}) const;
     /// lookupExact() of the note at `key` + `.md`, else at `key` + `.markdown`.
-    VaultPath lookupNote(const QString &key, const QString &spelled) const;
-    VaultPath lookupName(const QString &lowerPath) const;
+    VaultPath lookupNote(QStringView key, QStringView spelled) const;
+    VaultPath lookupName(const ResolvePlan::Name &name) const;
     VaultPath lookupAlias(const QString &target) const;
+    /// lookupAlias() given the plan (its alias key derived only when there are aliases).
+    VaultPath lookupAlias(const ResolvePlan &plan) const;
 
     using Map = QHash<QString, PathSet>;
     /// The files under `key` in the map `field`, the base's when this overlay did not change
     /// them; nullptr when there are none.
-    const PathSet *find(Map NameTable::*field, const QString &key) const;
+    const PathSet *find(Map NameTable::*field, QStringView key) const;
     /// Has the map `field` (or the base's) any key? (A fast path: may say yes for an overlay
     /// that hides every one of them.)
     bool hasAny(Map NameTable::*field) const;

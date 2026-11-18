@@ -270,6 +270,16 @@ QList<VaultPath> VaultIndex::paths() const
     });
 }
 
+qsizetype VaultIndex::noteCount() const
+{
+    return qsizetype(d->entries.size());
+}
+
+qsizetype VaultIndex::journalCount() const
+{
+    return d->journalNotes;
+}
+
 void VaultIndex::forEachNote(const std::function<void(const VaultPath &, const ParsedNote &)> &visit) const
 {
     // A copy of the list: visit() may read lists that are built on first use.

@@ -48,9 +48,10 @@ int Workspace::pageCount() const
 
 int Workspace::pagesWithoutJournals() const
 {
-    // The index's notes are the pages without conflict copies; its lists are cached until the
-    // next change (this is read on every revision).
-    return m_index ? int(m_index->paths().size() - m_index->journals().size()) : 0;
+    // The index's notes are the pages without conflict copies. Counted, not listed: this is read
+    // after every change (also every slice of a load, when sorting every path each time cost more
+    // than merging the notes).
+    return m_index ? int(m_index->noteCount() - m_index->journalCount()) : 0;
 }
 
 QString Workspace::linkTarget(const QString &path, const QString &fromPath) const
