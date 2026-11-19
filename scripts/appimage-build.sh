@@ -239,7 +239,12 @@ if [[ ${CXX:-} == *clang* ]]; then
   done
   [[ -n $gcc_dir && ${gcc_dir##*/} -ge 12 ]] ||
     die "$CXX needs the C++ library of GCC 12 or newer (g++-12; --install-deps installs it)"
-  export CFLAGS="--gcc-install-dir=$gcc_dir ${CFLAGS:-}" CXXFLAGS="--gcc-install-dir=$gcc_dir ${CXXFLAGS:-}"
+  gcc_flags="--gcc-install-dir=$gcc_dir"
+  # libstdc++ before GCC 13 calls the deprecated std::get_temporary_buffer in std::stable_sort and
+  # its kin without silencing it, and Clang reports that use in the system header: a warning
+  # there, not an error (every other build still fails on our own deprecated calls).
+  ((${gcc_dir##*/} >= 13)) || gcc_flags+=" -Wno-error=deprecated-declarations"
+  export CFLAGS="$gcc_flags ${CFLAGS:-}" CXXFLAGS="$gcc_flags ${CXXFLAGS:-}"
   echo "$CXX over $gcc_dir"
 fi
 echo "CMake $(cmake --version | head -n 1 | cut -d' ' -f3), Ninja $(ninja --version), ${CXX:-c++} $("${CXX:-c++}" -dumpversion)"
