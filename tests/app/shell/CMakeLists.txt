@@ -100,12 +100,11 @@ if(TARGET brulion AND NOT ANDROID AND NOT EMSCRIPTEN AND EXISTS "${_brulion_qt_q
         COMMAND brulion --demo --route journals --capture --selftest-shell --no-single-instance
             --size 1280x800 --now "2026-10-14 10:00" --locale en --sample-language pl)
     # Next to other tests (two cores each): every wait of the self-test follows the state it waits
-    # for (shellselftest.cpp), so a loaded machine only makes it slower.
-    # (150, then +30 for the PDF viewer's steps — selection, password, table of contents, links,
-    # two pages — and +30 for the checks of find over the journal's days and of weekly and monthly
-    # notes, each measured on its own branch; with both 153 s alone on a busy 16-core machine, past
-    # 211 s in a full parallel run: 240.)
-    math(EXPR _shell_qml_timeout "240 + 10 * ${BRULION_TEST_SLOWDOWN}")
+    # for (shellselftest.cpp), so a loaded machine only makes it slower — and this limit, which
+    # only has to end a run that hangs, is three times the longest run seen. (153 s alone on a busy
+    # 16-core machine, 211 s in a full parallel run; on CI runners 160-215 s in November 2026, so
+    # close to the 240 s it had that a busy runner went past it.)
+    math(EXPR _shell_qml_timeout "660 + 10 * ${BRULION_TEST_SLOWDOWN}")
     foreach(_pair "tst_shell_qml;phone" "tst_shell_qml_capture;desktop")
         list(GET _pair 0 _test)
         list(GET _pair 1 _kind)
