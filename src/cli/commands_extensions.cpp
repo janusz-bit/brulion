@@ -719,7 +719,8 @@ Result extensionRun(Call &call)
     QJsonObject o{{u"extension"_s, x.id}};
     ext::Result r;
     if (!command.isEmpty()) {
-        QVariantMap ctx{{u"page"_s, pageName}, {u"selection"_s, QString()}};
+        // --args: the command's ctx.args ({} when none), as the app passes a command its arguments.
+        QVariantMap ctx{{u"page"_s, pageName}, {u"selection"_s, QString()}, {u"args"_s, args->toObject().toVariantMap()}};
         if (!blockMap.isEmpty())
             ctx.insert(u"block"_s, blockMap);
         o.insert(u"ran"_s, QJsonObject{{u"command"_s, command}});
@@ -982,7 +983,7 @@ void addExtensionCommands(QList<Command> &out)
              option(u"action"_s, ArgType::String,
                     QT_TRANSLATE_NOOP("brulion::cli", "With --view: call this action of the view")),
              option(u"args"_s, ArgType::String,
-                    QT_TRANSLATE_NOOP("brulion::cli", "The view's params or the action's args, a JSON object")),
+                    QT_TRANSLATE_NOOP("brulion::cli", "The view's params, the action's args or the command's ctx.args, a JSON object")),
              option(u"hook"_s, ArgType::String,
                     QT_TRANSLATE_NOOP("brulion::cli", "Call the extension's hooks of this event (save, change)")),
              option(u"page"_s, ArgType::Ref,

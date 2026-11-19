@@ -119,17 +119,37 @@ private Q_SLOTS:
         {
             AppSettings s(file, m_tmp.path());
             QVERIFY(!s.gymEnabled());
-            QVERIFY(s.enabledExtensions().isEmpty());
+            QCOMPARE(s.enabledExtensions(), QStringList{u"nawyki"_s}); // habits are on by default
             QSignalSpy changed(&s, &AppSettings::gymEnabledChanged);
             s.setGymEnabled(true);
             s.setGymEnabled(true);
             QCOMPARE(changed.count(), 1);
-            QCOMPARE(s.enabledExtensions(), QStringList{u"silownia"_s});
+            QCOMPARE(s.enabledExtensions(), (QStringList{u"silownia"_s, u"nawyki"_s}));
             QVERIFY(AppSettings::sidebarItems().contains(u"gym"_s));
             QVERIFY(AppSettings::bottomNavViews().contains(u"gym"_s));
         }
         AppSettings again(file, m_tmp.path());
         QVERIFY(again.gymEnabled());
+    }
+
+    void habitsAreOnUntilSwitchedOff()
+    {
+        // Habits (the built-in extension `nawyki`) were always there: on until switched off.
+        const QString file = nextFile();
+        {
+            AppSettings s(file, m_tmp.path());
+            QVERIFY(s.habitsEnabled());
+            QSignalSpy changed(&s, &AppSettings::habitsEnabledChanged);
+            s.setHabitsEnabled(false);
+            s.setHabitsEnabled(false);
+            QCOMPARE(changed.count(), 1);
+            QVERIFY(s.enabledExtensions().isEmpty());
+            QVERIFY(AppSettings::sidebarItems().contains(u"habits"_s));
+        }
+        AppSettings again(file, m_tmp.path());
+        QVERIFY(!again.habitsEnabled());
+        again.setHabitsEnabled(true);
+        QCOMPARE(again.enabledExtensions(), QStringList{u"nawyki"_s});
     }
 
     void theModelOnTheDevice()

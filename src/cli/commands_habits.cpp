@@ -1,15 +1,22 @@
-// Habits (docs/SYNTAX.md §5 "Habits"): habit list, habit set (+ tick, skip).
+// Habits (docs/SYNTAX.md §5 "Habits"): habit list, habit set (+ tick, skip) — run by the built-in
+// habits extension (src/core/extensions/builtin/nawyki.luau, its commands `list` and `set`) over a
+// dry-run NotebookHost: what it would write goes through Call::edit like every other write of the
+// command line (the lock, --dry-run, --diff, the hashes, a daily note made from its template).
 #include "commands_p.h"
 
-#include "habits/habitcache.h"
+#include "extensions/blockedit.h"
+#include "extensions/builtin.h"
+#include "extensions/engine.h"
+#include "extensions/notebookhost.h"
 #include "index/vaultindex.h"
-#include "notebook/habitchecks.h"
+#include "markdown/parse.h"
 #include "notebook/journals.h"
+#include "util/unicode.h"
 #include "vault/vault.h"
 
 #include <QFileInfo>
 
-#include <cmath>
+#include <memory>
 
 using namespace Qt::StringLiterals;
 
@@ -17,65 +24,59 @@ namespace brulion::cli {
 
 namespace {
 
-/// The index's habits (a cache per call: the command line runs one command); nullopt with the
-/// call's error when there is no notebook.
-std::optional<habits::HabitCache> loadHabits(Call &call)
+namespace ext = brulion::extensions;
+
+const QString kHabits = u"nawyki"_s;
+
+/// The habits extension on an engine of its own over the notebook, its writes only computed.
+struct Habits {
+    std::unique_ptr<ext::NotebookHost> host;
+    ext::Engine engine;
+};
+
+bool startHabits(Call &call, Habits &h)
 {
-    VaultIndex *index = call.index();
+    Vault *v = call.vault();
+    VaultIndex *index = v ? call.index() : nullptr;
     if (!index)
-        return std::nullopt;
-    habits::HabitCache cache;
-    cache.sync(*index);
-    return cache;
+        return false;
+    ext::NotebookHost::Options options;
+    const QDateTime now = call.ctx.now();
+    options.now = [now] { return now; };
+    options.language = call.ctx.language();
+    options.uiLanguage = call.ctx.language();
+    options.dryRun = true;
+    h.host = std::make_unique<ext::NotebookHost>(*v, *index, options);
+    QString error;
+    if (!h.engine.start(h.host.get(), ext::Limits{}, &error)) {
+        call.setError(ExitInternal, u"engine_unavailable"_s, tr("The Luau engine did not start: %1").arg(error));
+        return false;
+    }
+    const ext::Result loaded = h.engine.load(ext::builtinExtension(kHabits));
+    if (!loaded.ok()) {
+        call.setError(ExitInternal, u"extension_error"_s, tr("The habits extension does not load: %1").arg(loaded.error));
+        return false;
+    }
+    return true;
 }
 
-QJsonObject habitJson(Call &call, const habits::HabitCache &cache, const habits::Habit &habit, QDate today, int days)
+/// The extension's command `name` with `args` (its ctx.args): its result, or nullopt + call.error.
+std::optional<QVariantMap> runHabits(Call &call, Habits &h, const QString &name, const QVariantMap &args)
 {
-    const Qt::DayOfWeek weekStart = call.ctx.weekStart();
-    const habits::DayMarks marks = cache.days(habit.key);
-    QJsonObject o{{u"name"_s, habit.name},
-                  {u"key"_s, habit.key},
-                  {u"schedule"_s, habit.scheduleText},
-                  {u"valid"_s, habit.isValid()},
-                  {u"path"_s, habit.path},
-                  {u"line"_s, habit.line},
-                  {u"ref"_s, habit.blockIndex < 0 ? habit.path
-                                                  : Call::lineRef(habit.path, noteText(call, habit.path), habit.line)}};
-    if (habit.duplicate) {
-        o.insert(u"problem"_s, u"duplicate"_s);
-        return o;
+    const ext::Result r =
+            h.engine.runCommand(kHabits, name, {{u"page"_s, QString()}, {u"selection"_s, QString()}, {u"args"_s, args}});
+    if (!r.ok()) {
+        call.setError(ExitInternal, u"extension_error"_s,
+                      tr("The habits extension failed: %1").arg(r.error.section(u'\n', 0, 0)));
+        return std::nullopt;
     }
-    if (!habit.schedule) {
-        o.insert(u"problem"_s, u"schedule_not_understood"_s);
-        return o;
-    }
-    o.insert(u"scheduleText"_s, habits::formatSchedule(*habit.schedule, call.ctx.locale()));
-    const habits::Stats st = habits::statsOf(habit, marks, today, weekStart);
-    o.insert(u"start"_s, st.start.toString(Qt::ISODate));
-    o.insert(u"today"_s, QJsonObject{{u"date"_s, today.toString(Qt::ISODate)},
-                                     {u"mark"_s, st.todayRecorded ? habits::markName(st.todayMark) : QString()},
-                                     {u"due"_s, st.dueToday}});
-    o.insert(u"streak"_s, QJsonObject{{u"current"_s, st.currentStreak},
-                                      {u"longest"_s, st.longestStreak},
-                                      {u"unit"_s, habits::streakUnitName(st.unit)}});
-    o.insert(u"done"_s, st.done);
-    o.insert(u"met"_s, st.met);
-    o.insert(u"expected"_s, st.expected);
-    o.insert(u"rate"_s, st.expected > 0 ? QJsonValue(std::round(st.rate() * 1000) / 1000) : QJsonValue());
-    if (habit.schedule->kind == habits::Schedule::Kind::Times)
-        o.insert(u"period"_s, QJsonObject{{u"done"_s, st.periodDone}, {u"target"_s, st.periodTarget}});
-    if (st.lastDone.isValid())
-        o.insert(u"lastDone"_s, st.lastDone.toString(Qt::ISODate));
-    if (days > 0) {
-        const QDate from = today.addDays(-(days - 1));
-        const QList<habits::DayState> states = habits::daysOf(habit, marks, from, today, today, weekStart);
-        QJsonArray arr;
-        for (qsizetype i = 0; i < states.size(); ++i)
-            arr.append(QJsonObject{{u"date"_s, from.addDays(i).toString(Qt::ISODate)},
-                                   {u"state"_s, habits::dayStateName(states[i])}});
-        o.insert(u"days"_s, arr);
-    }
-    return o;
+    return r.value.toMap();
+}
+
+/// A list from the extension (an empty one crosses as an empty record).
+QJsonArray arrayOf(const QVariant &value)
+{
+    return QJsonValue::fromVariant(value.metaType().id() == QMetaType::QVariantList ? value : QVariantList()).toArray();
 }
 
 /// One line of `--format text`: "✔ Medytacja — codziennie — seria 5 (najdłuższa 12), 80 %".
@@ -108,17 +109,22 @@ QString habitLine(const QJsonObject &o)
 
 Result habitList(Call &call)
 {
-    const auto cache = loadHabits(call);
-    if (!cache)
+    Habits h;
+    if (!startHabits(call, h))
         return call.failed();
     const auto date = call.date(call.str(u"date"_s));
     if (!date)
         return call.failed();
     const int days = std::clamp(call.integer(u"days"_s, 7), 0, 400);
+    const auto r = runHabits(call, h, u"list"_s, {{u"date"_s, date->toString(Qt::ISODate)}, {u"days"_s, days}});
+    if (!r)
+        return call.failed();
     QJsonArray list;
     QString text;
-    for (const habits::Habit &habit : cache->habits()) {
-        const QJsonObject o = habitJson(call, *cache, habit, *date, days);
+    for (const QJsonValue &value : arrayOf(r->value(u"habits"_s))) {
+        QJsonObject o = value.toObject();
+        if (o.value(u"valid"_s).toBool() && !o.contains(u"rate"_s))
+            o.insert(u"rate"_s, QJsonValue()); // nothing expected yet
         list.append(o);
         text += habitLine(o) + u'\n';
     }
@@ -127,71 +133,115 @@ Result habitList(Call &call)
                + u'\n';
     return call.ok(QJsonObject{{u"date"_s, date->toString(Qt::ISODate)},
                                {u"habits"_s, list},
-                               {u"undefined"_s, QJsonArray::fromStringList(cache->undefinedKeys())}},
+                               {u"undefined"_s, arrayOf(r->value(u"undefined"_s))}},
                    text);
+}
+
+/// The 0-based line of the check of habit `key` in the daily note `content` (-1: none) — of the
+/// first with `mark` (done, skipped), else the first one ("open"); a check is a task tagged
+/// #nawyk / #habit that defines no habit (docs/SYNTAX.md §5 "Habits").
+int checkLine(const QString &content, const VaultPath &path, const VaultConfig &config, const QString &key,
+              const QString &mark)
+{
+    const ParsedNote note = markdown::parseNote(path, content, config);
+    int first = -1;
+    for (const Block &b : note.blocks) {
+        if (!b.task || !(b.tags.contains(u"nawyk"_s) || b.tags.contains(u"habit"_s))
+            || b.properties.contains(u"habit"_s) || b.properties.contains(u"nawyk"_s))
+            continue;
+        if (unicode::nfc(ext::plainWords(b.task->text)).toCaseFolded().simplified() != key)
+            continue;
+        const QString m = b.task->status == TaskStatus::Done        ? u"done"_s
+                          : b.task->status == TaskStatus::Cancelled ? u"skipped"_s
+                                                                    : u"open"_s;
+        if (first < 0)
+            first = b.line;
+        if (mark != u"open"_s && m == mark)
+            return b.line;
+    }
+    return first;
 }
 
 Result habitSet(Call &call)
 {
-    const auto mark = habits::markFromName(call.str(u"state"_s));
-    if (!mark)
+    Habits h;
+    if (!startHabits(call, h))
+        return call.failed();
+    const QString name = call.text(u"name"_s).trimmed();
+    // The day is told about after the name (a name no habit has comes first, as it always did).
+    const auto date = call.date(call.str(u"date"_s));
+    const std::optional<Error> dateError = call.error;
+    call.error.reset();
+    const auto r = runHabits(call, h,
+                             u"set"_s,
+                             {{u"name"_s, name},
+                              {u"state"_s, call.str(u"state"_s)},
+                              {u"date"_s, date ? date->toString(Qt::ISODate) : QString()}});
+    if (!r)
+        return call.failed();
+    const QString error = r->value(u"error"_s).toString();
+    if (error == u"bad_argument"_s)
         return call.fail(ExitUsage, u"bad_argument"_s,
                          tr("The state is done, skipped or open (also: zrobione, pominięte, brak)"),
                          {{u"state"_s, call.str(u"state"_s)}});
-    const auto cache = loadHabits(call);
-    if (!cache)
-        return call.failed();
-    const QString name = call.text(u"name"_s).trimmed();
-    const habits::Habit *habit = cache->find(habits::habitName(name));
-    if (!habit) {
-        QJsonArray names;
-        for (const habits::Habit &other : cache->habits()) {
-            if (!other.duplicate)
-                names.append(other.name);
-        }
+    if (error == u"habit_not_found"_s)
         return call.fail(ExitNotFound, u"habit_not_found"_s, tr("No habit named %1").arg(name),
-                         {{u"name"_s, name}, {u"habits"_s, names}});
-    }
-    const auto date = call.date(call.str(u"date"_s));
-    if (!date)
+                         {{u"name"_s, name}, {u"habits"_s, arrayOf(r->value(u"habits"_s))}});
+    if (!date) {
+        call.error = dateError;
         return call.failed();
+    }
+    if (error == u"bad_name"_s)
+        return call.fail(ExitUsage, u"bad_name"_s, tr("The habit's name cannot be written as a check"));
+    if (!error.isEmpty())
+        return call.fail(ExitInternal, u"extension_error"_s, r->value(u"message"_s).toString());
     Vault *v = call.vault();
     if (!v)
         return call.failed();
-    const VaultPath path = notebook::journalFileFor(*v, *date);
-    const QString tag = habits::checkTag(call.ctx.locale());
-    notebook::HabitCheckEdit result;
-    // `o` with the habit, the day, its mark before and after and the check's line (`result`).
-    const auto answer = [&](QJsonObject o) {
-        o.insert(u"habit"_s, habit->name);
+    const QList<ext::NotebookHost::DryWrite> writes = h.host->dryWrites();
+    if (writes.size() > 1)
+        return call.fail(ExitInternal, u"extension_error"_s, tr("The habits extension wrote more than one note"));
+    const VaultPath path = writes.isEmpty() ? notebook::journalFileFor(*v, *date) : writes.first().path;
+    const QString mark = r->value(u"mark"_s).toString();
+    const QString key = r->value(u"key"_s).toString();
+    // `o` with the habit, the day, its mark before and after and the check's line.
+    const auto answer = [&](QJsonObject o, int line) {
+        o.insert(u"habit"_s, r->value(u"habit"_s).toString());
         o.insert(u"date"_s, date->toString(Qt::ISODate));
-        o.insert(u"mark"_s, habits::markName(*mark));
-        o.insert(u"before"_s, result.hadCheck ? habits::markName(result.before) : QString());
-        o.insert(u"line"_s, result.line);
+        o.insert(u"mark"_s, mark);
+        o.insert(u"before"_s, r->value(u"before"_s).toString());
+        o.insert(u"line"_s, line);
         return o;
     };
-    // "Open" on a day without a note: nothing to change, and no note created for it.
-    if (*mark == habits::Mark::Open && !QFileInfo(v->absolutePath(path)).isFile())
-        return call.ok(answer({{u"path"_s, path}, {u"changed"_s, false}, {u"created"_s, false}}));
+    // Nothing to write on a day without a note ("open"): no note created for it.
+    if (writes.isEmpty() && !QFileInfo(v->absolutePath(path)).isFile())
+        return call.ok(answer({{u"path"_s, path}, {u"changed"_s, false}, {u"created"_s, false}}, -1));
     const auto written = call.edit(
             path,
             [&](const QString &content, bool, QString *next) {
-                result = notebook::setHabitCheck(content, path, v->config(), *date, habit->name, *mark,
-                                                 call.ctx.today(), tag, habit->blockIndex < 0);
-                if (result.refused) {
-                    call.setError(ExitUsage, u"bad_name"_s, tr("The habit's name cannot be written as a check"));
+                if (writes.isEmpty()) {
+                    *next = content;
+                    return true;
+                }
+                const ext::NotebookHost::DryWrite &w = writes.first();
+                if (w.existed && content != w.before) {
+                    call.setError(ExitConflict, u"concurrent_change"_s,
+                                  tr("%1 kept changing while it was written (another program writes it): try again")
+                                          .arg(path),
+                                  {{u"path"_s, path}});
                     return false;
                 }
-                *next = result.content;
+                *next = w.after;
                 return true;
             },
             creatingJournal(call, path));
     if (!written)
         return call.failed();
-    QJsonObject o = answer(call.writeJson(*written));
-    if (result.line >= 0)
-        o.insert(u"ref"_s, Call::lineRef(path, written->after, result.line));
-    return call.ok(o, result.line >= 0 ? lineText(written->after, result.line) : QString());
+    const int line = checkLine(written->after, path, v->config(), key, mark);
+    QJsonObject o = answer(call.writeJson(*written), line);
+    if (line >= 0)
+        o.insert(u"ref"_s, Call::lineRef(path, written->after, line));
+    return call.ok(o, line >= 0 ? lineText(written->after, line) : QString());
 }
 
 Result habitAlias(Call &call, const QString &state)

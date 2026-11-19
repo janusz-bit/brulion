@@ -57,34 +57,22 @@ done in the repository simply disappears from the list.
   macros in the text (`{{ext:silownia/rekord Przysiad}}`, rendered through `InlineRenderer`) and
   template variables from extensions, more events (a task done, a daily note created, the app
   opened), extension views in the sidebar and inside pages (a ```` ```view ```` block), more
-  components for views (text fields, menus), an extension's own settings, sharing extensions
+  components for views (text fields), an extension's own settings, sharing extensions
   between notebooks, the browser build checked against hostile extensions. Smaller gaps the
-  documentation has to mention (docs/EXTENSIONS.md): text fields in `b.form` (the engine takes
-  `kind = "text"`, the dialog draws number fields only), the editor's selection for a command
+  documentation has to mention (docs/EXTENSIONS.md): the editor's selection for a command
   (`ctx.selection` is always empty), keyboard shortcuts for extension commands (the list of
   Settings → Keyboard shortcuts is made when the app starts, before extensions load), a timer of
   an extension's own (`b.timer` is the gym's rest timer: its banner shows in the Gym view only and
-  its notification speaks of the next set), an empty state's own icon (`b.ui.empty` shows the
-  gym's dumbbell), the notebook's first day of the week in `b.query` (`NotebookHost::query` starts
-  weeks on Monday), "Edit the code" for the AI assistant (Settings has the button for the gym
-  only).
+  its notification speaks of the next set), "Edit the code" for the AI assistant (Settings has the
+  button for the gym and the habits only).
 * **Extensions: what ten sample extensions had to work around** — the samples of
   `tests/core/extensions/samples` (a task review, a mood log, expenses, flashcards, a project index
-  kept by hooks …) run, but each met a wall of the API: a block's properties and children cannot be
-  changed, nor a block added under another or removed, without rewriting the page
-  (`b.replaceBlock` changes the first line only: the mood log cannot correct today's entry, the
-  flashcards keep their schedule in the line's text); adding to a page that is no daily note is
-  `b.read` and `b.write` of the whole page; `b.query` has no paging past its 1000 items; there is
-  no clock of the host (`b.today()` follows the app's clock and `brulion-cli --now`, `os.date` and
-  `os.time` the system's — a `b.now()`) and no date helper next to `b.daysBetween` (every sample
-  carries its own `addDays`); the hooks hear nothing of what another extension wrote (a task ticked
-  in one extension's view does not refresh the page another one keeps), and a view cannot tell
-  cheaply that nothing changed (it reads everything on every draw: a revision of the notebook to
-  cache on); pages of one name in different folders are one name to `b.pages` and `b.page` (no
-  path); the attachments are invisible (the link check guesses a file by its extension); code
-  cannot be shared between extensions (each page carries its helpers); what a question shows has no
-  limit (`b.ask` with a megabyte of prompt, `b.choose` with thousands of options), nor has
-  `b.timer`'s label.
+  kept by hooks …) run, but each met a wall of the API: the hooks hear nothing of what another
+  extension wrote (a task ticked in one extension's view does not refresh the page another one
+  keeps); pages of one name in different folders are one name to `b.pages` (names only: `b.page`
+  gives the `path` of the one a name finds); code cannot be shared between extensions (each page
+  carries its helpers); what a question shows has no limit (`b.ask` with a megabyte of prompt,
+  `b.choose` with thousands of options), nor has `b.timer`'s label.
 * **Gym: next steps** — the rest timer's notification while the app is closed (Android: a scheduled
   alarm), a catalog beyond the 51 built-in exercises (free-exercise-db, Unlicense, English names),
   sample workouts in the sample notebook, weekly volume per muscle group, a body weight log.

@@ -224,6 +224,25 @@ private:
     static int apiForm(lua_State *L);
     static int apiOn(lua_State *L);
     static int apiAi(lua_State *L);
+    static int apiAttachments(lua_State *L);
+    static int apiRevision(lua_State *L);
+    static int apiNow(lua_State *L);
+    static int apiAddDays(lua_State *L);
+    static int apiAddMonths(lua_State *L);
+    static int apiWeekday(lua_State *L);
+    static int apiWeekStart(lua_State *L);
+    static int apiWeekdayName(lua_State *L);
+    static int apiMonthName(lua_State *L);
+    static int apiLower(lua_State *L);
+    static int apiPlain(lua_State *L);
+    static int apiParseRecurrence(lua_State *L);
+    static int apiParseWeekdays(lua_State *L);
+    static int apiFormatRecurrence(lua_State *L);
+    static int apiAppendToPage(lua_State *L);
+    static int apiInsertBlock(lua_State *L);
+    static int apiRemoveBlock(lua_State *L);
+    static int apiSetTask(lua_State *L);
+    static int apiSetProperty(lua_State *L);
 
     int commandImpl(lua_State *L);
     int viewImpl(lua_State *L);
@@ -249,6 +268,20 @@ private:
     int questionImpl(lua_State *L, const char *kind);
     int onImpl(lua_State *L);
     int aiImpl(lua_State *L);
+    int attachmentsImpl(lua_State *L);
+    int addDaysImpl(lua_State *L, bool months);
+    int weekdayImpl(lua_State *L);
+    int nameImpl(lua_State *L, bool month);
+    int lowerImpl(lua_State *L);
+    int plainImpl(lua_State *L);
+    int parseRecurrenceImpl(lua_State *L);
+    int parseWeekdaysImpl(lua_State *L);
+    int formatRecurrenceImpl(lua_State *L);
+    int appendToPageImpl(lua_State *L);
+    int insertBlockImpl(lua_State *L);
+    int removeBlockImpl(lua_State *L);
+    int setTaskImpl(lua_State *L);
+    int setPropertyImpl(lua_State *L);
 
     bool mayWrite(lua_State *L, const QString &extension, const char *function);
     void pushEnvironment(const QString &extension);

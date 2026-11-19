@@ -45,6 +45,7 @@ QVariant ExtensionFormModel::data(const QModelIndex &index, int role) const
     case UnitRole: return f.unit;
     case TextRole: return f.text;
     case DisplayRole: return formatExtensionNumber(f.value, m_comma);
+    case PlaceholderRole: return f.placeholder;
     }
     return {};
 }
@@ -52,7 +53,8 @@ QVariant ExtensionFormModel::data(const QModelIndex &index, int role) const
 QHash<int, QByteArray> ExtensionFormModel::roleNames() const
 {
     return {{KeyRole, "fieldKey"}, {LabelRole, "fieldLabel"}, {KindRole, "fieldKind"}, {ValueRole, "fieldValue"},
-            {StepRole, "fieldStep"}, {UnitRole, "fieldUnit"}, {TextRole, "fieldText"}, {DisplayRole, "fieldDisplay"}};
+            {StepRole, "fieldStep"}, {UnitRole, "fieldUnit"}, {TextRole, "fieldText"}, {DisplayRole, "fieldDisplay"},
+            {PlaceholderRole, "fieldPlaceholder"}};
 }
 
 void ExtensionFormModel::reset(const QVariantList &fields)
@@ -71,6 +73,7 @@ void ExtensionFormModel::reset(const QVariantList &fields)
         if (!std::isfinite(f.step) || f.step <= 0)
             f.step = 1;
         f.text = f.kind == u"number" ? QString() : map.value(u"value"_s).toString();
+        f.placeholder = map.value(u"placeholder"_s).toString();
         if (!f.key.isEmpty())
             m_fields << f;
     }
@@ -107,6 +110,14 @@ void ExtensionFormModel::setNumberText(int row, const QString &text)
         return;
     if (const std::optional<double> value = parseExtensionNumber(text, m_fields[row].unit))
         setNumber(row, *value);
+}
+
+int ExtensionFormModel::firstTextField() const
+{
+    for (qsizetype i = 0; i < m_fields.size(); ++i)
+        if (m_fields[i].kind == u"text")
+            return int(i);
+    return -1;
 }
 
 void ExtensionFormModel::step(int row, int direction)
@@ -590,7 +601,7 @@ void WorkspaceExtensions::handleResult(const extensions::Result &r)
     else if (ctx.hook)
         hookResult(ctx, r);
     else
-        handle(r, ctx.fromAction);
+        handle(r, ctx);
 }
 
 void WorkspaceExtensions::setAi(const ai::Settings &settings) { m_aiSettings = settings; }
@@ -1145,11 +1156,14 @@ QString WorkspaceExtensions::viewTitle(const QString &extension, const QString &
 
 bool WorkspaceExtensions::isWaiting() const { return !m_questionKind.isEmpty(); }
 
-void WorkspaceExtensions::runCommand(const QString &extension, const QString &name, const QString &path, int line)
+void WorkspaceExtensions::runCommand(const QString &extension, const QString &name, const QString &path, int line,
+                                     const QVariantMap &args)
 {
     if (!m_engine)
         return;
-    QVariantMap ctx{{u"page"_s, path.isEmpty() ? QString() : paths::pageTitle(path)}, {u"selection"_s, QString()}};
+    QVariantMap ctx{{u"page"_s, path.isEmpty() ? QString() : paths::pageTitle(path)},
+                    {u"selection"_s, QString()},
+                    {u"args"_s, args}};
     if (!path.isEmpty() && line >= 0) {
         const QVariantMap block = m_host->blockAt(path, line);
         if (!block.isEmpty())
@@ -1157,6 +1171,7 @@ void WorkspaceExtensions::runCommand(const QString &extension, const QString &na
     }
     cancelQuestion();
     m_current = CallContext{};
+    m_current.extension = extension;
     handleResult(m_engine->runCommand(extension, name, ctx));
     m_current = CallContext{};
 }
@@ -1201,21 +1216,23 @@ bool WorkspaceExtensions::act(const QString &extension, const QString &view, con
     cancelQuestion();
     m_current = CallContext{};
     m_current.fromAction = true;
+    m_current.extension = extension;
+    m_current.view = view;
     const extensions::Result r = m_engine->act(extension, view, action, args);
     handleResult(r);
     m_current = CallContext{};
     return r.ok() || r.status == extensions::Status::Suspended;
 }
 
-void WorkspaceExtensions::handle(const extensions::Result &result, bool fromAction)
+void WorkspaceExtensions::handle(const extensions::Result &result, const CallContext &ctx)
 {
+    const bool fromAction = ctx.fromAction;
     switch (result.status) {
     case extensions::Status::Suspended:
         setQuestion(result.value.toMap());
         return;
     case extensions::Status::Ok:
-        if (result.value.metaType().id() == QMetaType::QString && !result.value.toString().isEmpty())
-            Q_EMIT message(result.value.toString(), u"info"_s);
+        showResult(result.value, ctx);
         break;
     case extensions::Status::NotFound:
         break;
@@ -1236,6 +1253,59 @@ void WorkspaceExtensions::handle(const extensions::Result &result, bool fromActi
     }
     Q_EMIT changed();
 }
+
+void WorkspaceExtensions::showResult(const QVariant &value, const CallContext &ctx)
+{
+    if (value.metaType().id() == QMetaType::QString) {
+        if (!value.toString().isEmpty())
+            Q_EMIT message(value.toString(), u"info"_s);
+        return;
+    }
+    if (value.metaType().id() != QMetaType::QVariantMap)
+        return; // anything else is silent (the CLI's JSON of a command run for it)
+    const QVariantMap map = value.toMap();
+    const QString text = map.value(u"message"_s).toString();
+    if (text.isEmpty())
+        return;
+    const QString tone = map.value(u"tone"_s).toString();
+    const QString kind = tone == u"success" || tone == u"error" || tone == u"warning" ? tone : u"info"_s;
+    const QVariantMap b = map.value(u"button"_s).toMap();
+    Button button;
+    button.extension = ctx.extension;
+    button.args = b.value(u"args"_s).toMap();
+    const QString label = b.value(u"label"_s).toString();
+    if (!b.value(u"action"_s).toString().isEmpty() && !ctx.view.isEmpty()) {
+        button.view = ctx.view;
+        button.action = b.value(u"action"_s).toString();
+    } else if (!b.value(u"command"_s).toString().isEmpty()) {
+        button.command = b.value(u"command"_s).toString();
+    } else if (!b.value(u"page"_s).toString().isEmpty()) {
+        button.page = b.value(u"page"_s).toString();
+    }
+    if (label.isEmpty() || (button.action.isEmpty() && button.command.isEmpty() && button.page.isEmpty())) {
+        Q_EMIT message(text, kind);
+        return;
+    }
+    const int id = ++m_lastButton;
+    m_buttons.insert(id, button);
+    // (A burst of results keeps at most the last 64 buttons: toasts go long before that.)
+    if (m_buttons.size() > 64)
+        m_buttons.remove(id - 64);
+    Q_EMIT messageWithButton(text, kind, label, id);
+}
+
+void WorkspaceExtensions::pressButton(int id)
+{
+    const Button button = m_buttons.take(id);
+    if (!button.page.isEmpty())
+        Q_EMIT pageRequested(button.page);
+    else if (!button.action.isEmpty())
+        act(button.extension, button.view, button.action, button.args);
+    else if (!button.command.isEmpty())
+        runCommand(button.extension, button.command, QString(), -1, button.args);
+}
+
+void WorkspaceExtensions::forgetButton(int id) { m_buttons.remove(id); }
 
 // ---- the console -----------------------------------------------------------------------------------
 

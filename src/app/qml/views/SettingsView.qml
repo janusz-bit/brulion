@@ -456,6 +456,41 @@ Item {
         }
     }
 
+    /// A built-in extension's code as a page of the notebook (TiddlyWiki's shadow tiddlers): "Edit
+    /// the code" writes it into a page, which then runs instead of the built-in code; "Restore"
+    /// puts that page in the trash. `pageText` says so with the page's title (%1), `restoredText`
+    /// after a restore.
+    component BuiltinSourceRow: ShellSettingRow {
+        id: sourceRow
+        required property string builtin
+        property string pageText
+        property string restoredText
+        readonly property string page: Workspace.extensions.revision >= 0 ? Workspace.extensions.overridePage(sourceRow.builtin) : ""
+        description: sourceRow.page !== ""
+                     ? sourceRow.pageText.arg(Workspace.pageTitle(sourceRow.page))
+                     : qsTr("Built into Brulion. Edit it as a page of this notebook: the page then runs instead.")
+        BButton {
+            size: "small"
+            iconName: "code"
+            text: sourceRow.page !== "" ? qsTr("Open") : qsTr("Edit the code")
+            onClicked: {
+                const path = sourceRow.page !== "" ? sourceRow.page : Workspace.extensions.editBuiltinSource(sourceRow.builtin)
+                if (path !== "")
+                    AppController.openPage(path)
+            }
+        }
+        BButton {
+            visible: sourceRow.page !== ""
+            size: "small"
+            variant: "ghost"
+            text: qsTr("Restore")
+            onClicked: {
+                if (Workspace.extensions.restoreBuiltin(sourceRow.builtin))
+                    AppController.toast(sourceRow.restoredText, "success")
+            }
+        }
+    }
+
     // ---- Layout -----------------------------------------------------------------------------
 
     RowLayout {
@@ -1344,6 +1379,22 @@ Item {
                 note: qsTr("Extensions add views, commands and reactions to Brulion. They read and write only the open notebook, in plain Markdown that other apps read too.")
 
                 SettingSwitch {
+                    objectName: "habitsSetting"
+                    text: qsTr("Habits")
+                    description: qsTr("Recurring points of the day ticked in the journal, with streaks and a month grid of each (Habits in the sidebar).")
+                    iconName: "flame"
+                    checked: AppSettings.habitsEnabled
+                    onToggled: AppSettings.habitsEnabled = checked
+                }
+                BuiltinSourceRow {
+                    objectName: "habitsSourceSetting"
+                    visible: AppSettings.habitsEnabled
+                    builtin: "nawyki"
+                    title: qsTr("The habits' code")
+                    pageText: qsTr("Habits run from their page in this notebook (%1): change the code there. Restore puts the page in the trash, and the built-in code runs again.")
+                    restoredText: qsTr("The built-in habits run again; their page is in the trash.")
+                }
+                SettingSwitch {
                     objectName: "gymSetting"
                     text: qsTr("Gym")
                     description: qsTr("Workouts written in the journal, plans that add weight when you are ready, a rest timer and the progress of every exercise (Gym in the sidebar).")
@@ -1351,37 +1402,13 @@ Item {
                     checked: AppSettings.gymEnabled
                     onToggled: AppSettings.gymEnabled = checked
                 }
-                // The gym's code as a page of the notebook (TiddlyWiki's shadow tiddlers): edited
-                // there, it runs instead of the built-in one.
-                ShellSettingRow {
-                    id: gymSource
+                BuiltinSourceRow {
                     objectName: "gymSourceSetting"
                     visible: AppSettings.gymEnabled
-                    readonly property string page: Workspace.extensions.revision >= 0 ? Workspace.extensions.overridePage("silownia") : ""
+                    builtin: "silownia"
                     title: qsTr("The gym's code")
-                    description: gymSource.page !== ""
-                                 ? qsTr("The gym runs from its page in this notebook (%1): change the code there. Restore puts the page in the trash, and the built-in code runs again.").arg(Workspace.pageTitle(gymSource.page))
-                                 : qsTr("Built into Brulion. Edit it as a page of this notebook: the page then runs instead.")
-                    BButton {
-                        size: "small"
-                        iconName: "code"
-                        text: gymSource.page !== "" ? qsTr("Open") : qsTr("Edit the code")
-                        onClicked: {
-                            const path = gymSource.page !== "" ? gymSource.page : Workspace.extensions.editBuiltinSource("silownia")
-                            if (path !== "")
-                                AppController.openPage(path)
-                        }
-                    }
-                    BButton {
-                        visible: gymSource.page !== ""
-                        size: "small"
-                        variant: "ghost"
-                        text: qsTr("Restore")
-                        onClicked: {
-                            if (Workspace.extensions.restoreBuiltin("silownia"))
-                                AppController.toast(qsTr("The built-in gym runs again; its page is in the trash."), "success")
-                        }
-                    }
+                    pageText: qsTr("The gym runs from its page in this notebook (%1): change the code there. Restore puts the page in the trash, and the built-in code runs again.")
+                    restoredText: qsTr("The built-in gym runs again; its page is in the trash.")
                 }
             }
 

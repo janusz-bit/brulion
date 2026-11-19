@@ -244,7 +244,7 @@ Never compute a hash yourself.
 | `extension list` | | the extension pages `{id, title, path, hash, codeHash, permissions, description, overrides?, problems, state}` — state on this device: `approved`, `approval` (waits for the user), `off`, `problem`, `duplicate` — and the built-ins | |
 | `extension show <name>` | | an extension's page and code (a built-in's source, and `overridePage`: the page that replaces it) | |
 | `extension check <name>` | `[--content T \| --stdin]` | load it in a sandbox: `{loaded, commands, views, hooks, printed}` or the error with the page's `line` (exit 6); `--content` checks a text before it is written | |
-| `extension run <name> [<command>]` | `[--view V [--action A]] [--hook E] [--args JSON] [--page P] [--block REF] [--answers JSON]` | try a command, a view (its node tree), an action or the hooks of an event in a sandbox: `{status, value, writes (diffs, never made), printed, questions}` | |
+| `extension run <name> [<command>]` | `[--view V [--action A]] [--hook E] [--args JSON] [--page P] [--block REF] [--answers JSON]` | try a command, a view (its node tree), an action or the hooks of an event in a sandbox: `{status, value, writes (diffs, never made), printed, questions}`; `--args` is a view's params, an action's args or a command's `ctx.args` | |
 | `extension eval <code>` | `[--extension N] [--answers JSON] [--stdin]` | Luau with the notebook's `b`, as the app's console (writes only computed) | |
 | `extension write <name>` | `(--content T \| --stdin \| --code C [--description D] [--permissions P]) [--folder F] [--expect-hash H] [--force]` | write an extension page, checked first (exit 6 when it does not load); replacing one needs its hash. The app runs it once the user approves it | yes |
 | `app open <target>` | a ref, `today` or `capture`; `[--line N] [--block-id ID] [--heading H] [--side]` | show the running app there (exit 5 when none runs); with its remote control on the app resolves the ref and says what it opened | |
@@ -272,6 +272,14 @@ Never compute a hash yourself.
 | `completion <shell>` | bash, fish, zsh | a completion script (`brulion-cli completion bash > ~/.local/share/bash-completion/completions/brulion-cli`) | |
 | `mcp` | `[--read-only] [--allow-destructive] [--app-control]` | the MCP server (below) | |
 <!-- /commands -->
+
+The `habit` commands are run by the app's built-in habits extension (`nawyki.luau`, its commands
+`list` and `set` with the options as `ctx.args`) over the notebook, the same code as the app's
+Habits view: it computes the write, and the command line makes it through its usual edit — the
+notebook's lock, `--dry-run`, `--diff`, the hashes and the exit codes as for every other write. A
+day with several daily notes is one day: its checks in all of them are looked at. It runs the
+built-in code whether the app's switch is on or off, and also when the notebook has the habits'
+code as a page of its own ("Edit the code").
 
 `habit set` takes the habit's name in any letter case (quoted when it has several words; `habit
 tick` and `habit skip` take the rest of the line): a name no habit has is exit 3 `habit_not_found`
@@ -304,8 +312,10 @@ add commands, views and hooks) and try them without the app:
    several ```` ```luau ```` blocks). It is checked first: code that does not load is not written
    (exit 6, `--force` writes it anyway). Replacing a page needs `--expect-hash` with the `hash`
    of `extension show` or `extension list`; the old text stays in the version history.
-4. **Test it**: `extension run "Word count" count --page Dom`, `--view today --args '{"week": 2}'`,
-   `--hook save --page Dom`, questions answered with `--answers '["Przysiad", {"kg": 80}, null]'`.
+4. **Test it**: `extension run "Word count" count --page Dom` (`--args '{"limit": 10}'` is the
+   command's `ctx.args`), `--view today --args '{"week": 2}'`, `--hook save --page Dom`, questions
+   answered with `--answers '["Przysiad", {"kg": 80}, null]'` (a form's text fields as texts:
+   `{"name": "Medytacja"}`).
 
 The sandbox is the app's engine with the app's limits (2 s a call, 64 MB), a fresh one for every
 call, over the notebook as it is: what the code writes comes back as `writes` (unified diffs, later

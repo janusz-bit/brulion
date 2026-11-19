@@ -26,7 +26,21 @@ struct BlockQuery
     QString tag; ///< non-empty: every block carrying the tag (each with its subtree)
     bool journalOnly = false; ///< only blocks of daily notes
     QString from, to; ///< ISO dates, inclusive, for daily notes ("" = open)
+    /// Non-empty: every block with one of these properties (lower-case keys) among its own — with
+    /// `tag` the blocks that have both; with `page` only that page's (then at any depth).
+    QStringList props;
 };
+
+/// b.pages: the pages whose own tags have `tag` ("" = any) and, when `props` is not empty, whose
+/// page properties (frontmatter or leading `key:: value` lines) have one of these keys.
+struct PageQuery
+{
+    QString tag;
+    QStringList props;
+};
+
+/// Where b.insertBlock puts new lines (blockedit.h Placement).
+enum class InsertAt { Before, After, Child };
 
 class Host
 {
@@ -48,6 +62,25 @@ public:
     /// children, with `due`, `scheduled`, `start` of a task and `reminder` ("2026-11-12 09:00") of
     /// a reminder; {page, date?} for pages. `error`: why `source` is no query.
     virtual QVariantMap query(const QString &source, int limit, QString *error) = 0;
+    /// query() from item `offset` on (0 = the first): `total` counts them all. The default asks
+    /// query() for offset + limit items and drops the first.
+    virtual QVariantMap queryPage(const QString &source, int limit, int offset, QString *error)
+    {
+        QVariantMap result = query(source, limit + offset, error);
+        if (offset > 0 && result.contains(QStringLiteral("items")))
+            result.insert(QStringLiteral("items"), result.value(QStringLiteral("items")).toList().mid(offset, limit));
+        return result;
+    }
+    /// pages() with a property filter (PageQuery); the default knows tags only.
+    virtual QStringList findPages(const PageQuery &query)
+    {
+        return query.props.isEmpty() ? pages(query.tag) : QStringList();
+    }
+    /// The notebook's files that are no notes (pictures, PDFs …): paths in the notebook, sorted.
+    virtual QStringList attachments() { return {}; }
+    /// A number that changes whenever the notes change (the index's version and the host's own
+    /// writes): a script may keep what it computed until it differs.
+    virtual qint64 revision() { return 0; }
     /// b.checkExtension: `content` loaded as the extension page `page` would be, in a sandbox of its
     /// own (sandbox.h: {ok, error, line, commands, views, hooks, …}). A host without a notebook
     /// cannot: the default says so.
@@ -66,9 +99,60 @@ public:
     /// block's reference after the change.
     virtual QString replaceBlock(const QString &extension, const QString &ref, const QString &text,
                                  const std::optional<QString> &task, QString *newRef) = 0;
+    /// Appends `markdown` as the last block of the page (made where new pages go when missing).
+    virtual QString appendToPage(const QString &extension, const QString &page, const QString &markdown)
+    {
+        Q_UNUSED(extension);
+        Q_UNUSED(page);
+        Q_UNUSED(markdown);
+        return QStringLiteral("not available here");
+    }
+    /// Inserts `markdown` before, after or under the block `ref` names (stale as replaceBlock);
+    /// `newRef`: the first new line's reference.
+    virtual QString insertBlock(const QString &extension, const QString &ref, const QString &markdown, InsertAt where,
+                                QString *newRef)
+    {
+        Q_UNUSED(extension);
+        Q_UNUSED(ref);
+        Q_UNUSED(markdown);
+        Q_UNUSED(where);
+        Q_UNUSED(newRef);
+        return QStringLiteral("not available here");
+    }
+    /// Removes the block `ref` names with its children.
+    virtual QString removeBlock(const QString &extension, const QString &ref)
+    {
+        Q_UNUSED(extension);
+        Q_UNUSED(ref);
+        return QStringLiteral("not available here");
+    }
+    /// Sets the checkbox of the block `ref` names to `status` (one character), its text untouched.
+    virtual QString setTask(const QString &extension, const QString &ref, const QString &status, QString *newRef)
+    {
+        Q_UNUSED(extension);
+        Q_UNUSED(ref);
+        Q_UNUSED(status);
+        Q_UNUSED(newRef);
+        return QStringLiteral("not available here");
+    }
+    /// Sets (an empty value: removes) the property `key` of the block `ref` names.
+    virtual QString setProperty(const QString &extension, const QString &ref, const QString &key,
+                                const QString &value, QString *newRef)
+    {
+        Q_UNUSED(extension);
+        Q_UNUSED(ref);
+        Q_UNUSED(key);
+        Q_UNUSED(value);
+        Q_UNUSED(newRef);
+        return QStringLiteral("not available here");
+    }
 
     // The device
     virtual QString today() = 0; ///< "2026-11-11", local wall-clock date
+    /// "2026-11-11 14:05", local wall-clock time; the default: today at midnight.
+    virtual QString now() { return today() + QStringLiteral(" 00:00"); }
+    /// The notebook's first day of the week, 1 = Monday … 7 = Sunday.
+    virtual int weekStart() { return 1; }
     virtual QString language() = 0; ///< the notebook's language for written text: "pl" | "en"
     virtual QString uiLanguage() = 0; ///< the app's interface language: "pl" | "en"
     virtual void timer(const QString &extension, int seconds, const QString &label) = 0;

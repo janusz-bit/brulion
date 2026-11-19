@@ -603,7 +603,7 @@ everything near the bottom, the same way on Android, in the browser and with a s
   Onboarding ends at the keyboard like the shell's content. A word the keyboard is still
   composing (Android's keyboards keep every word as preedit text, outside `text`, until a space)
   counts as typed: dialogs enable their accept button by `typedText` (quick capture's "Add",
-  "Create" of a new page or folder, rename, a new habit's "Add" and its "Due:" preview), and the
+  "Create" of a new page or folder, rename), and the
   word becomes text when the field loses the
   focus (`EditorInput.commitPreedit`) or the dialog is accepted (`BDialog.tryAccept`) — a single
   word typed into an empty field used to leave the button disabled.
@@ -730,37 +730,49 @@ Block editor (handled in `qml/editor/BlockEditor.qml`, executed by `PageControll
 
 ## Habits
 
-`qml/views/HabitsView.qml` (route `habits`; the sidebar's **Habits** under Tasks, a bottom-bar
-tab to choose, the palette's "Habits" `go.habits`, the tab icon `flame`): recurring points of the
-day recorded in the journal (docs/SYNTAX.md §5 "Habits"). A view of its own rather than a
+`qml/views/HabitsView.qml` (route `habits` {month?: "YYYY-MM", open?: "add"}; the sidebar's
+**Habits** under Tasks, a bottom-bar tab to choose, the palette's "Habits" `go.habits`, the tab icon
+`flame` — the sidebar's entry and the palette's command only while habits are on): recurring points
+of the day recorded in the journal (docs/SYNTAX.md §5 "Habits"). A view of its own rather than a
 section of Tasks or the Calendar: habits are not tasks with dates (one line a day, not one task),
 and their month grids need the width.
 
-* **Model**: `HabitListModel` (`src/app/planning/habitlistmodel.h`) over the index through a
-  `habits::HabitCache` (only the notes a change names are read again; only the habits whose checks
-  or definition changed are computed again — `dataChanged` for those rows, a reset when habits are
-  added, removed or reordered). One row per definition, in the notebook's order (by path, then as
-  written). The model's `month` moves every grid at once (the header's arrows, ←/→ or PgUp/PgDn;
-  "This month" when another is shown).
-* **Card** (`qml/planning/HabitCard.qml`, laid out with bindings: its final height at creation):
-  today's round check (a click ticks it, again opens it; a right-click or long press: done /
-  skipped / no check), the name, the schedule in the UI language and, for "N times a week", the
-  period's progress ("2 of 3 this week"); a flame with "Streak: 5 days · longest: 12 days ·
-  completed: 80%"; the month grid (weekday heads from `weekStartsOn`): done days in the success
-  tint, missed due days in the danger tint, skipped ones muted and struck out, today with an accent
-  ring, a due day with a thin one; a click on a past day ticks it or opens it again, a right-click
-  or long press offers done / skipped (no streak lost) / no check / the day's journal. The "⋯"
-  menu: Done today, Skip today, No check today, Open its definition (the page at its line),
-  Open today's journal. A definition not understood or given twice shows its problem
-  (`warningText`) and no statistics.
-* **Writing**: `Workspace.setHabitCheck(name, date, state, pageLink)` → `notebook::setHabitCheck`
-  on the daily note (created from the journal template only when something is written); the toast
-  has Undo (the previous state written back). A tick in the journal editor counts the same: the
-  view follows the index.
-* **Add habit** (N; `HabitAddDialog`): name and schedule, previewed in words
-  (`HabitListModel.describeSchedule`; "Not understood — try …" otherwise), refused for a name in
-  use; `Workspace.addHabit` appends `- Name` + `  habit:: schedule` to the page of the first
-  definition, else to a new `Habits` page (`Nawyki` in Polish notes) where new pages go. The empty state explains the syntax.
+* **The built-in extension `nawyki`** (`src/core/extensions/builtin/nawyki.luau`, docs/EXTENSIONS.md)
+  computes and writes everything; the view is its view `month` in an `ExtensionView`
+  (`paramKey: "month"`), drawn by `ShellExtensionView` ("Extension views" below) — no C++ of its
+  own. It is on by default (`AppSettings.habitsEnabled`, `extensions/nawyki`; Settings →
+  Extensions). Off, the view is an empty state, "Habits are off", with **Switch on**.
+* **Header** (QML, the list's `header`): the title, "Recurring points of the day, ticked in the
+  journal", **Add habit** (primary; an icon alone on narrow windows) and the month row — ‹ the
+  month's name › and, while another month is shown, **This month**; the view's error, when its
+  `render` fails, under it. Keys: N adds a habit, ← / → and PgUp / PgDn move the month. `month`
+  in the route shows that month; `open: "add"` asks Add habit's form once the notebook is read
+  (screenshots).
+* **Lines** (what `nawyki` returns): "2 of 3 done today" (and "· 1 with a problem"), then a card per
+  definition in the notebook's order (by path, then as written): a row of today's check (a tap
+  ticks it, again opens it; a right-click or long press: Done today, Skip today, No check today,
+  Open its definition — the page at its line —, Open today's journal), the name, the schedule in
+  the UI language muted and the "⋯" menu with the same items; a flame with "Streak: 5 days ·
+  longest: 12 days · completed: 80%" (and "2 of 3 this week" for N times a period); the month grid
+  — done days in the success tint, missed due days in the danger tint, skipped ones struck out, a
+  due day with a thin ring, today with the accent ring; a tap on a past day ticks it or opens it
+  again, a right-click or long press offers Done, Skipped (no streak lost), No check, the day's
+  journal and the definition. A definition not understood or given twice is a card with its
+  problem in the danger tone and a link to it, without statistics. No habits: an empty state
+  (flame) that explains the syntax and **Add habit**.
+* **Writing**: the view's action `set` {name, page, date, state} writes the day's check
+  (docs/SYNTAX.md §5 "What Brulion writes"), the daily note created from the journal template only
+  when something is written; its result is a toast ("Done for today: Reading", success) whose
+  **Undo** runs `set` again with the state before. A tick in the journal editor counts the same:
+  the view is drawn again when the index changes.
+* **Add habit** (the header's button, N, the palette's "Habits: add a habit"): `nawyki`'s command
+  `add`, a `b.form` of two text fields (ShellExtensionQuestion, "Questions" below) — the name ("e.g.
+  Meditation") and how often ("every day, Mon Wed Fri, 3 times a week…"). A name in use, none, or a
+  schedule not understood is asked again with the reason under the title and the text typed kept;
+  an empty schedule is every day. It appends `- Name` + `  habit:: schedule` to the page of the
+  first definition, else to a new `Habits` page (`Nawyki` in Polish notes) where new pages go; the
+  toast ("Habit added to “Habits”") has **Open**. "Habits: tick a habit" (the palette) asks which of
+  today's open habits is done.
 
 ## Gym
 
@@ -786,12 +798,32 @@ docs/SYNTAX.md §5 "Gym") through its two views, drawn by `ShellExtensionView`.
 * **Start a workout** (the header's button, the palette's "Siłownia: zacznij trening"): asks which
   plan (a page tagged `#plan-treningowy`) and appends it to today's note with progression.
 
-**Extension views** (`ShellExtensionView.qml` over `ExtensionView`, a list model of the node tree a
-view returns — docs/EXTENSIONS.md "Views"): headings, texts, empty states, buttons that open another
-view of the extension (`open`) or run one of its commands (`run`), links, rows as cards of wrapping
-controls (all centred on one control height: the touch target on touch UIs), charts and tables (the
-second column widest, numbers right-aligned). A view renders again after every command and action of
-the extension and when the index changes (coalesced), never while a question waits; after an action
+## Extension views
+
+`ShellExtensionView.qml` over `ExtensionView` (`src/app/shell/extensionviewmodel.h`), a list model of
+the node tree a view returns — docs/EXTENSIONS.md "Views" —, draws the gym, the habits and every
+extension page's views. Its lines: headings; texts, with an icon before them (`lineIcon`, icon
+size) and a tone (`lineTone`: success, danger or accent text, else muted or plain); empty states
+with their own icon (else the dumbbell); buttons that open another view of the extension (`open`)
+or run one of its commands (`run`); links — a link's `line` opens its page there
+(`pageRequested(page, line)`, 0-based); menus as a "⋯" `BIconButton` ("More" without a label);
+rows as cards of wrapping controls (all centred on one control height: the touch target on touch
+UIs) — a check is the tasks' `TaskBox` (done, open, or skipped in a cancelled task's look), its
+menu on a right-click or a long press (`controlHasMenu`; its label is its accessible name, "Reading:
+done") —; month grids; charts and tables (the second column widest, numbers right-aligned).
+**Cards** are no item of their own: the lines of a `card` node stay lines of the flat list (a
+delegate each, recycled as any), each drawing its part — `lineCard` "first", "middle", "last" or
+"only": the top with its corners, the sides, the bottom — so a card of a hundred lines scrolls like
+a hundred lines. A **month grid** (`lineMonth`, `lineDays`: a map per day — date, day, state,
+tappable, menu) is cells of 26 px (34 on touch UIs) with a gap of 4, under the weekdays' short
+names from the notebook's first day (`DatesHelper.weekStart`); done in `successBg`, missed in
+`dangerBg`, skipped in `chipDoneBg` with its number struck out, future and outside faint, a due
+day with a 1-px ring and today with a 2-px one; a tap is the day's action (`activateDay`), a
+right-click or a long press its menu. Menus — of a menu line, of a check, of a day — are one
+`BMenu` (`menuLabels` / `menuIcons` / `activateMenuItem`): a view's action, a page at its line
+(`file-text`) or a day's journal (`book-open`; `journalRequested`).
+
+A view renders again after every command and action of the extension and when the index changes (coalesced), never while a question waits; after an action
 of its own controls at once. The same view drawn again with lines of the same kinds changes them in
 place (dataChanged with the roles that changed; a row whose controls changed their kinds resets
 only that row's model, from the timer — never inside the handler that acted): the delegates stay.
@@ -806,10 +838,18 @@ release on touch screens, before that control's click, which then acts on the li
 lines change writes nothing (`enterValue` is refused during the update).
 
 **Questions** (`ShellExtensionQuestion.qml`, in AppShell): `b.ask` a text field, `b.choose` the
-options as rows (one tap answers), `b.form` labelled numbers with − / + and typing (`82,5`, `82.5`,
-`82,5 kg`; − / + from a number between two steps go to the next step's value). A
-question that follows at once reopens the dialog; cancelling answers "" or nil, and only the question
-the dialog showed (`questionSerial`).
+options as rows (one tap answers), `b.form` labelled fields — numbers with − / + and typing (`82,5`,
+`82.5`, `82,5 kg`; − / + from a number between two steps go to the next step's value) and text
+fields (`kind: "text"`: the label above a `BTextField` with the field's `value` and its
+`placeholder`; the first one has the focus, Enter answers — `ExtensionFormModel.firstTextField`,
+`setText`). A question that follows at once reopens the dialog (the habits' form asked again);
+cancelling answers "" or nil, and only the question the dialog showed (`questionSerial`).
+
+**Messages**: a command's or an action's result is a toast — a text as information, a table
+`{message, tone, button}` in its tone (success, warning, error) and with its button
+(`WorkspaceExtensions::messageWithButton` → `AppController.toastWithAction`; a press is
+`pressButton(id)`: the view's action again — the habits' Undo —, a command with `ctx.args`, or a
+page opened, made when missing; a toast that goes forgets its button).
 
 **The palette** lists the extensions' commands with their own labels ("Siłownia: dodaj serię");
 those on the block under the caret (`meta.block`) are enabled in an editor and run there (uiAction
@@ -819,9 +859,12 @@ first, so the extension reads the line as shown).
 
 ## Extensions
 
-Settings → **Extensions** (`SettingsView.qml`, docs/EXTENSIONS.md): the gym's switch; **The gym's
-code** — "Edit the code" writes its source into a page of the notebook (`Rozszerzenia/Siłownia.md`)
-and opens it, after which the gym runs from that page; "Restore" puts the page in the trash. **In
+Settings → **Extensions** (`SettingsView.qml`, docs/EXTENSIONS.md): the switches of the gym (off by
+default) and of the habits (`habitsSetting`, on by default), each with its code's row while on —
+**The gym's code**, **The habits' code** (`BuiltinSourceRow`, one component for both): "Edit the
+code" writes its source into a page of the notebook (`Rozszerzenia/Siłownia.md`,
+`Rozszerzenia/Nawyki.md`; `Extensions/…` in English) and opens it, after which the built-in runs
+from that page ("Open" then); "Restore" puts the page in the trash. **In
 this notebook**: "New extension" (a page in `Rozszerzenia/` with an example — a command, a view, a
 hook — approved on this device, opened), "Console", and a row per extension page
 (`Workspace.extensions.list`): its title, its state ("Runs: 2 commands, 1 view, 1 reaction", "Error
@@ -888,7 +931,9 @@ time a model on the device loses).
 
 The palette also has "New extension", "Reload extensions" (a fresh VM, every extension loaded
 again) and "Extensions" (Settings → Extensions). Extension commands carry the extension's title as
-their subtitle and the icon `puzzle` (the gym's `dumbbell`).
+their subtitle and the icon `puzzle` (the gym's `dumbbell`, the habits' `flame`); the views of the
+gym and the habits are offered as "Gym" and "Habits" (`go.gym`, `go.habits`, while they are on),
+not as `extview.…`.
 ## AI chat
 
 `qml/views/ChatView.qml`, route `chat` (the palette's "AI chat", `go.chat`, and "AI: new
@@ -1134,7 +1179,7 @@ panel keeps none.
 | `page` | `PageView` — page header (tags and aliases as chips, edited there: "Page properties"; note mode toggle — on a wide header; a small one, phones and the side panel, leaves it to the page menu "⋯", the top bar's More and the palette —, favourite, page menu with "Add property"; the page actions end the title row, and a page without one — it starts with its own "# Title" — puts them at the end of its chips' first line, the chips wrapping short of them, or on a row of their own when it has no chips; for a page named by a tag in use — with a rename at once, at every width — Tag overview is a "#" button among the page actions before the note mode toggle, Tasks with this tag is in the page menu "⋯" (also in Tag overview and every `#tag`'s menu), and its sub-tags are chips under the title; no row of buttons comes between the title and the properties), the block editor (outline or document), linked references (links and the blocks / pages tagged with a tag naming the page — "whole page" for a page tagged as a whole —; a page not written yet lists what already names it), unlinked mentions (that section is not drawn while the side panel shows them on its Links tab: "Window layout"). A weekly or monthly note (docs/SYNTAX.md §1 "Weekly and monthly notes"; `Workspace.periodicNoteOf`) has its period under the title (`periodicNav`: "Week 45 (Nov 2–8, 2026)", also the top bar's title, with the previous / next period's arrows and "This week" / "This month" when it is another one), and one not written yet starts from its period's template (`weeklyTemplate` / `monthlyTemplate`, `{{date}}` the period's first day) as a day without a note does. A page not written yet opens ready to type, except one opened from a `#tag` (`fromTag`, set by `Workspace::resolveRoute`) on a touch UI: the keyboard would cover the tagged blocks listed below, so the header's "Start writing" or a tap under it starts typing. `line` / `blockId` / `heading` scroll to that block, select it and flash it (a heading by `PageController.rowOfHeading`, docs/SYNTAX.md §2; one that is not there: a toast, the page at its top); `Workspace::resolveRoute` sends a `blockId` the page no longer has to the page holding it. A picture attachment opens in the picture view, a PDF in the PDF viewer ("PDF viewer": `pdfPage`, `from`, `fromLine`), any other file that is no note read-only as text | `path`, `line?`, `blockId?`, `heading?`, `open?`, `fromTag?`, `pdfPage?`, `from?`, `fromLine?`, `pdfScale?` |
 | `calendar` | `CalendarView` — Month / Week / Agenda, the day panel, add dialog. In the month and week grids today is a red disc on its number (`accentSolid`) and the selected day a dark one (`Theme.primary` with `primaryFg`, as in `BDatePicker`; ≥ 3:1, WCAG 1.4.11 — today selected shows only the red one); no cell or header fills: the month's cells are one surface, days of other months have faint numbers (`fgFaint`, normal weight); on touch UIs with narrow cells (phones, touch tablets: under 96 px — a mouse keeps the titled pills down to 72 px, so a 1280-px desktop with the sidebar and the day panel, cells of ~91 px, lists its entries) a day shows one small icon (14 px) per kind of open entry, most urgent first (`CalendarModel` `openKinds`), in its `Theme.markColor`: overdue a red `circle-alert`, reminder or alarm an amber bell (one: four icons do not fit the cell), due a blue calendar, scheduled a violet hourglass — a shape, not only a colour; nothing for done entries, and a daily note is a short faint line under the number, not a mark (nearly every day has one: a grey dot for it drowned out the others); an alarm's pill in the month is in the reminder's tint with its alarm clock; under ~104-px cells a pill shows its title alone (the time stays in the pill's accessible name, its tooltip — also shown for an elided title — and the day panel). Done entries read as in Tasks and the editor: the "done" chip's fill and muted text with a small check, not struck out; cancelled ones are struck out with an x (the week grid's pills and the day panel's rows follow the same rule). In a month cell and in the day panel's "Plan of the day", open entries come first (a stable partition, times keep their order), so "+N more" hides finished ones first and a click on a pill opens the entry shown there. An agenda day's header is a button (`CalendarAgendaList`; a tap or click, or Enter on the list's current day — Up / Down move a focus ring from the selected day): it selects the day — its number on the grids' dark disc, today keeping its red one —, the day panel follows and phones open the day's sheet, while the list stays where it is (`CalendarModel` keeps the agenda's four weeks while the selected day is among them; ← / → go on from them); the journal button and the entries keep their own clicks. A past day of the agenda says so with colours, not a fade (at 72 % opacity its faint text fell under AA): the circle outlined (`Theme.border`), its number and the open entries' titles in `fgMuted`. The day panel's actions (Open journal / Write in journal, Add task, Add reminder) are one even list of full-width rows (icon and label, buttons for accessibility; 30 px with a mouse, 44 px on touch) under the date, the icons in line with it. The day panel's empty "Plan of the day" is a short note in line with its header, without a picture. The add dialog (`CalendarAddDialog`, "New task" / "New reminder"): a typed time ("other") applies as the date picker's does — on Enter, when the field is left, on Add, the clock button and "More options…", never per keystroke —; text that is no time keeps Add disabled at once and quietly: "Use a 24-hour time, e.g. 18:30" shows under the field only once such a text is applied, until the next keystroke (as in the date picker: a hint coming and going while "14:30" was typed changed the sheet's height); for today it opens on the next full hour once the notebook's default reminder time has passed and the quick times already past are disabled (other days keep every time: a past day can still get one); a time that has passed is said under the field ("This time has already passed", warning tone). Weekly and monthly notes (docs/SYNTAX.md §1): the month grid has a column of ISO week numbers on its left (`CalendarWeekNumber`: the ISO week of each row's middle day, also when weeks start on a Sunday; faint, a week with a note semi-bold in `accentText`; a tap / click opens the week's note through `AppController.openPeriodicNote`), the week grid has its number in the corner above the hours ("Wk" over it), the header's title opens the month's note (month view) or the week's (week view; a small book after the title when it has one, underlined on hover), and W / M open the selected day's week / month note | `date?`, `mode?` |
 | `tasks` | `TasksView` — quick add, filters, sections (Overdue, Today, Tomorrow, This week, Later, No date, Done), "Show as query"; subtasks under their task (`TaskListModel.nestSubtasks`, docs/SYNTAX.md §5 "Subtasks": indented by their depth in the note's order, done ones too; one more urgent than its task's section — an overdue step of a task for later, an open step of a done task — is listed in its own section; the filters apply to them, the home screen widget lists every task on its own); a task with subtasks under it folds them with its progress chip, a chevron before "3/5" (or "2 subtasks" when none counts), and with Left / Right on its row (`TaskListModel.toggleSubtasks`: view state kept while Tasks is open, nothing written; the fold follows its task when an edit moves it in its note, the section counts keep the folded ones); a click on a task's `#tag` filters the list, Ctrl+click opens the tag's page, a long press or right-click its menu (Filter by tag, Open tag page, Tag overview, Open in side panel, Copy tag); a right-click or long press on a chip: its token's menu ("Token and link menus") | `query?` |
-| `habits` | `HabitsView` — the habits (docs/SYNTAX.md §5 "Habits"), each a card: today's check, schedule, streaks, completion rate, the month grid ("Habits" below) | `month?` ("YYYY-MM"), `open?` (`add`: the add dialog) |
+| `habits` | `HabitsView` — the habits (docs/SYNTAX.md §5 "Habits"; the built-in extension `nawyki`), each a card: today's check, schedule, streaks, completion rate, the month grid ("Habits" below) | `month?` ("YYYY-MM"), `open?` (`add`: Add habit's form) |
 | `graph` | `GraphView` — whole / local graph (depth 1–2), toggles for tags (the "#tag" nodes of tags that name no page; a tag naming a page is an edge to it), missing pages, journals, templates. The layout is computed on a worker thread (in slices between frames in the browser) and unfolds over about a second at the display's frame rate (phones 60 fps): pan, zoom, select and drag work from the first frame, a dragged node follows the finger at once. Reduced motion: the layout is computed without animation and shown once; a fresh one shows a spinner (`graphModel.settling`) instead of a spiral that jumps — also when a filter, the local graph or the index changes before it is shown. Drawn through the scene graph (GPU) | `path?`, `depth?`, `select?` |
 | `search` | `SearchView` — results in a folder of any depth with `folder` (the tree's "Search in folder"; the route follows its renames and moves). Shown (made, built ahead and shown, or shown again), its field takes the keys with the query selected, and on touch it asks for the on-screen keyboard (`DeviceInfo.showInputMethod()`: focus alone does not raise it on Android). The filters are one row; on compact windows (< 600 px) two — the scope (All / Pages / Journals) alone across the width, then Replace…, the folder and the result count —, so they never make the view wider than a phone (one row needed ~426 px in Polish) | `query?`, `folder?` |
 | `allPages` | `AllPagesView` — with `path` a folder browser: its subfolders as rows, its pages (with subfolders' or not), a breadcrumb in the top bar; follows the folder's renames and moves; a path part of a link naming a folder opens it (below) | `path?` (folder), `sort?` |
@@ -3210,7 +3255,8 @@ or agenda row) follows these; the reasons are below.
    delegate at x 0 (an `x` binding there holds only until the next layout — Tasks' rows hung up to
    200 px left of their centred header). The delegate is as wide as the list and the row is inset
    into its column: a control's `leftInset` / `rightInset` and paddings (`TasksRow.sideMargin`, All
-   pages, Search), an inset its parts are drawn from (`HabitCard.inset`) or a full-width `Item`
+   pages, Search), an inset its parts are drawn from (`ShellExtensionView.inset`: its lines and
+   its header place their content at `inset`) or a full-width `Item`
    with the row inside it (the agenda's days). A header that offsets its column counts the
    offset in its height.
 9. **Measure, before and after:** `tests/app/perf/scroll-probe.sh` (also `CACHE=0`: every row
@@ -4508,7 +4554,7 @@ pickers (Android, Windows, GTK / KDE, the portal, the browser's) speak the syste
   A problem with what is typed shows at that field (`BTextField.errorText`: a red border, the
   message under it, its accessible description) as soon as it is known, the accept button
   disabled; a dialog's subtitle says what accepting does, never what is wrong (the rename and
-  new folder dialogs, the habit, accent and recurrence dialogs). Enablement and previews read
+  new folder dialogs, the accent and recurrence dialogs). Enablement and previews read
   `typedText` ("On-screen keyboard").
   Touch keyboards: `BTextField` asks for the action key Done (`EnterKey.type: Qt.EnterKeyDone`).
   Qt on Android otherwise shows Next whenever something focusable lies below a field, and Next

@@ -64,11 +64,22 @@ class NetworkHttpTransport;
 
 namespace brulion::shell {
 
-/// The fields of a b.form question (roles key, label, kind, value, step, unit).
+/// The fields of a b.form question (roles key, label, kind — "number" | "text" —, value, step, unit,
+/// text — a text field's —, display — a number as shown —, placeholder — a text field's example).
 class ExtensionFormModel : public QAbstractListModel {
     Q_OBJECT
 public:
-    enum Role { KeyRole = Qt::UserRole + 1, LabelRole, KindRole, ValueRole, StepRole, UnitRole, TextRole, DisplayRole };
+    enum Role {
+        KeyRole = Qt::UserRole + 1,
+        LabelRole,
+        KindRole,
+        ValueRole,
+        StepRole,
+        UnitRole,
+        TextRole,
+        DisplayRole,
+        PlaceholderRole,
+    };
     using QAbstractListModel::QAbstractListModel;
 
     int rowCount(const QModelIndex &parent = {}) const override;
@@ -84,11 +95,13 @@ public:
     Q_INVOKABLE void setNumberText(int row, const QString &text);
     /// One step up (direction 1) or down (-1) onto the step's grid (stepExtensionNumber()).
     Q_INVOKABLE void step(int row, int direction);
+    /// The first field of kind "text" (-1: none): the dialog's focus.
+    Q_INVOKABLE int firstTextField() const;
     void setComma(bool comma) { m_comma = comma; }
 
 private:
     struct Field {
-        QString key, label, kind, unit, text;
+        QString key, label, kind, unit, text, placeholder;
         double value = 0;
         double step = 1;
     };
@@ -98,9 +111,10 @@ private:
 
 class WorkspaceExtensions : public QObject {
     Q_OBJECT
-    /// The built-in extensions switched on ("silownia").
+    /// The built-in extensions switched on ("silownia", "nawyki").
     Q_PROPERTY(QStringList enabled READ enabled NOTIFY enabledChanged FINAL)
     Q_PROPERTY(bool gymEnabled READ gymEnabled NOTIFY enabledChanged FINAL)
+    Q_PROPERTY(bool habitsEnabled READ habitsEnabled NOTIFY enabledChanged FINAL)
     /// The language of the extensions' words: "pl" | "en".
     Q_PROPERTY(QString language READ language NOTIFY commandsChanged FINAL)
     /// The question waiting for an answer: "" (none), "ask", "choose", "form".
@@ -157,6 +171,7 @@ public:
     QStringList enabled() const { return m_enabled; }
     QString language() const { return m_language; }
     bool gymEnabled() const { return m_enabled.contains(QStringLiteral("silownia")); }
+    bool habitsEnabled() const { return m_enabled.contains(QStringLiteral("nawyki")); }
     QList<extensions::CommandInfo> commands() const;
     QList<extensions::ViewInfo> views() const;
     /// An extension's title: a built-in's in the UI language ("Siłownia"), a page's title, the
@@ -210,8 +225,10 @@ public:
     /// The ```luau block at `line` of `path` evaluated like the console's input ("Run Luau block").
     void runCodeAt(const QString &path, int line);
 
-    /// Runs a command; `path`/`line` name the block under the caret (ctx.block) when given.
-    Q_INVOKABLE void runCommand(const QString &extension, const QString &name, const QString &path = QString(), int line = -1);
+    /// Runs a command; `path`/`line` name the block under the caret (ctx.block) when given; `args`
+    /// is its ctx.args (`{}` when none: what the app or a toast's button passes).
+    Q_INVOKABLE void runCommand(const QString &extension, const QString &name, const QString &path = QString(), int line = -1,
+                                const QVariantMap &args = QVariantMap());
     /// runCommand() of `command` "<extension>/<name>" on the block at `line` of `path` (the editor);
     /// "*/run" runs the ```luau block there in the console (runCodeAt()).
     Q_INVOKABLE void runBlockCommand(const QString &command, const QString &path, int line);
@@ -221,6 +238,14 @@ public:
     /// One of a view's actions; false when it failed (the message was shown).
     bool act(const QString &extension, const QString &view, const QString &action, const QVariantMap &args);
     bool isWaiting() const;
+
+    // ---- the buttons of messages (a result { message, tone, button }) -----------------------------
+    /// The button `id` of messageWithButton() was pressed: its view action runs (of the view whose
+    /// action returned it) with its args, or its command (ctx.args), or its page opens
+    /// (pageRequested()). Each button works once.
+    Q_INVOKABLE void pressButton(int id);
+    /// The toast of button `id` went: it is forgotten.
+    Q_INVOKABLE void forgetButton(int id);
 
     // ---- the AI chat (WorkspaceChats) --------------------------------------------------------
     /// Runs the assistant's turn in the conversation `path` (asystent's "chat": ctx.messages,
@@ -255,8 +280,13 @@ Q_SIGNALS:
     void restChanged();
     void revisionChanged();
     void aiPendingChanged();
-    /// A command's result or an error, for a toast (kind "info" | "error").
+    /// A command's result or an error, for a toast (kind "info" | "success" | "error").
     void message(const QString &text, const QString &kind);
+    /// A result { message, tone, button = { label, … } }: a toast with a button; its press is
+    /// pressButton(`button`).
+    void messageWithButton(const QString &text, const QString &kind, const QString &label, int button);
+    /// A button of a message opens a page (a page name, made when missing).
+    void pageRequested(const QString &page);
     /// Something changed what views show (a command or action finished, extensions on or off).
     void changed();
     /// A turn of runChat() ended with the AI's message.
@@ -315,10 +345,19 @@ private:
         int hookId = 0;
         QString hookEvent;
         QString extension;
+        QString view; // a view's action: the view (a result's button acts in it)
+    };
+    /// What a message's button does (a result's `button`).
+    struct Button
+    {
+        QString extension, view, action, command, page;
+        QVariantMap args;
     };
     /// A call's result: a question shown, an AI request sent, or its end (by its context).
     void handleResult(const extensions::Result &result);
-    void handle(const extensions::Result &result, bool fromAction);
+    void handle(const extensions::Result &result, const CallContext &ctx);
+    /// A command's or an action's value: a text, or a table { message, tone, button } — a message.
+    void showResult(const QVariant &value, const CallContext &ctx);
     void chatResult(const QString &path, const extensions::Result &result);
     /// resume() of `call` with the conversation it belongs to known to b.status.
     extensions::Result resumeCall(int call, const QVariant &value);
@@ -362,6 +401,8 @@ private:
     QStringList m_changedPages;
     QTimer m_changeTimer;
     CallContext m_current; // the context of the call starting now
+    QHash<int, Button> m_buttons; // the buttons of messages shown, by id
+    int m_lastButton = 0;
     QHash<int, CallContext> m_calls; // waiting calls by id
     int m_questionCall = 0; // the call the shown question belongs to
     QString m_questionChat; // its conversation, when a chat's turn asks

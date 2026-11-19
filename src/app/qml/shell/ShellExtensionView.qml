@@ -5,12 +5,16 @@ import QtQml.Models
 import Brulion
 
 // ShellExtensionView — an extension's view drawn with Brulion's own components (docs/UI.md
-// "Extension views"): a list over an ExtensionView model whose lines are headings, texts, empty
-// states, buttons that open another view of the extension or run one of its commands, links, rows
-// of controls (a check, a link, a text, steppers — − number +, the number typed in as well —,
-// buttons), a chart (ChartView) and tables. Nothing of the extension is QML: it returns data (b.ui
-// nodes), this file draws it. The model changes lines in place when the view is drawn again with
-// lines of the same kinds, so a field keeps its focus (and the touch keyboard) across a write.
+// "Extension views"): a list over an ExtensionView model whose lines are headings, texts (with an
+// icon, a tone), empty states, buttons that open another view of the extension or run one of its
+// commands, links, menus (a "⋯" button), rows of controls (a check — done, open or skipped, with a
+// menu on a right-click or a long press —, a link, a text, steppers — − number +, the number typed
+// in as well —, buttons, menus), month grids (a cell per day, tinted by its state; a tap is the
+// day's action, a right-click or a long press its menu), a chart (ChartView) and tables. The lines
+// of a card stay lines of the list: each draws its part of the card (LineFrame). Nothing of the
+// extension is QML: it returns data (b.ui nodes), this file draws it. The model changes lines in
+// place when the view is drawn again with lines of the same kinds, so a field keeps its focus (and
+// the touch keyboard) across a write.
 //
 //   ShellExtensionView { lines: gymModel; maximumWidth: 720; header: Item { … } }
 ListView {
@@ -23,6 +27,88 @@ ListView {
     readonly property real lineWidth: width - 2 * inset
     /// The height of a row's controls (each centred in it): the touch target on touch UIs.
     readonly property int controlHeight: Theme.touchUi ? Theme.touchTarget : Theme.controlHeight
+    /// A card's padding around its lines.
+    readonly property int cardPad: Theme.narrow ? Theme.space3 : Theme.space4
+    /// A month grid's day cell and the gap between cells (as the habits' cards had them).
+    readonly property int dayCell: Theme.touchUi ? 34 : 26
+    readonly property int dayGap: 4
+
+    /// A text's colour by its tone ("success" | "danger" | "accent"), else by `muted`.
+    function toneColor(tone: string, muted: bool): color {
+        switch (tone) {
+        case "success": return Theme.successText
+        case "danger": return Theme.dangerText
+        case "accent": return Theme.accent
+        }
+        return muted ? Theme.fgMuted : Theme.fg
+    }
+    /// A day's state for screen readers.
+    function dayStateLabel(state: string): string {
+        switch (state) {
+        case "done": return qsTr("done")
+        case "skipped": return qsTr("skipped")
+        case "missed": return qsTr("missed")
+        case "due": return qsTr("due")
+        case "future": return qsTr("future")
+        case "outside": return qsTr("before the start")
+        }
+        return qsTr("nothing due")
+    }
+    /// A check's state for screen readers.
+    function checkStateLabel(state: string): string {
+        switch (state) {
+        case "done": return qsTr("done")
+        case "skipped": return qsTr("skipped")
+        }
+        return qsTr("not done")
+    }
+
+    // ---- The menus (one, made the first time one opens; its items from the model) --------------
+    /// What the menu shown belongs to: a row's control, a month line's day, a menu line.
+    property int menuRow: -1
+    property int menuControl: -1
+    property string menuDate: ""
+    property list<string> menuLabels: []
+    property list<string> menuIcons: []
+    property BMenu menuPopup: null
+    /// Where openMenu() opens (mapToItem's result is read through a typed property).
+    property point menuAt
+    /// Opens the menu of the control `control` of line `row` (-1: the day `date` of a month line,
+    /// or a menu line) at `x`, `y` of `item`.
+    function openMenu(row: int, control: int, date: string, item: Item, x: real, y: real): void {
+        list.menuLabels = list.lines.menuLabels(row, control, date)
+        if (list.menuLabels.length === 0)
+            return
+        list.menuRow = row
+        list.menuControl = control
+        list.menuDate = date
+        list.menuIcons = list.lines.menuIcons(row, control, date)
+        if (!list.menuPopup)
+            list.menuPopup = menuComponent.createObject(list) as BMenu
+        list.menuAt = item.mapToItem(list, x, y)
+        list.menuPopup.popup(list, list.menuAt.x, list.menuAt.y)
+    }
+    Component {
+        id: menuComponent
+        BMenu {
+            id: extensionMenu
+            objectName: "extensionMenuPopup"
+            Instantiator {
+                model: list.menuLabels
+                delegate: BMenuItem {
+                    id: menuItem
+                    required property string modelData
+                    required property int index
+                    objectName: "extensionMenuItem"
+                    text: menuItem.modelData
+                    iconName: menuItem.index < list.menuIcons.length ? list.menuIcons[menuItem.index] : ""
+                    onTriggered: list.lines.activateMenuItem(list.menuRow, list.menuControl, list.menuDate, menuItem.index)
+                }
+                onObjectAdded: (index, object) => extensionMenu.insertItem(index, object as Item)
+                onObjectRemoved: (index, object) => extensionMenu.removeItem(object as Item)
+            }
+        }
+    }
 
     model: lines
     TouchFlick.enabled: true
@@ -50,21 +136,62 @@ ListView {
         }
     }
 
+    /// A line of the list: as wide as the list (ListView places its delegates at x 0), its content
+    /// at contentX within contentWidth from topPad on. Inside a card (lineCard) it draws its part of
+    /// the card — the top with its corners for "first", the sides for "middle", the bottom for
+    /// "last", all of it for "only" — over the gap above it too, so the parts join; the card's
+    /// padding is inside the first and the last line. The height is set by bindings
+    /// (contentHeight): final at creation (docs/UI.md "Scrolling performance").
+    component LineFrame: Item {
+        id: frame
+        required property string lineCard
+        readonly property bool inCard: frame.lineCard !== ""
+        readonly property bool cardTop: frame.lineCard === "first" || frame.lineCard === "only"
+        readonly property bool cardBottom: frame.lineCard === "last" || frame.lineCard === "only"
+        readonly property real padX: frame.inCard ? list.cardPad : 0
+        readonly property real contentX: list.inset + frame.padX
+        readonly property real contentWidth: list.lineWidth - 2 * frame.padX
+        readonly property real topPad: frame.cardTop ? list.cardPad : 0
+        readonly property real bottomPad: frame.cardBottom ? list.cardPad : 0
+        /// The content's height: the line is topPad + it + bottomPad.
+        property real contentHeight: 0
+        width: ListView.view.width
+        height: frame.topPad + frame.contentHeight + frame.bottomPad
+
+        Item {
+            visible: frame.inCard
+            x: list.inset
+            y: frame.cardTop ? 0 : -list.spacing
+            width: list.lineWidth
+            height: frame.height - y
+            clip: frame.lineCard !== "only"
+            Rectangle {
+                readonly property real overlap: 2 * Theme.radiusLg
+                y: frame.cardTop ? 0 : -overlap
+                width: parent.width
+                height: parent.height - y + (frame.cardBottom ? 0 : overlap)
+                radius: Theme.radiusLg
+                color: Theme.bgElevated
+                border.width: 1
+                border.color: Theme.borderSubtle
+            }
+        }
+    }
+
     delegate: DelegateChooser {
         role: "lineType"
 
         DelegateChoice {
             roleValue: "heading"
-            Item {
+            LineFrame {
                 id: heading
                 required property string lineText
-                width: ListView.view.width
-                height: headingText.implicitHeight + Theme.space3
+                contentHeight: headingText.implicitHeight + (heading.inCard ? 0 : Theme.space3)
                 BText {
                     id: headingText
-                    x: list.inset
-                    y: Theme.space3
-                    width: list.lineWidth
+                    x: heading.contentX
+                    y: heading.topPad + (heading.inCard ? 0 : Theme.space3)
+                    width: heading.contentWidth
                     text: heading.lineText
                     variant: "title"
                     font.weight: Font.DemiBold
@@ -75,37 +202,57 @@ ListView {
         }
         DelegateChoice {
             roleValue: "text"
-            Item {
+            LineFrame {
                 id: textLine
                 required property string lineText
                 required property bool lineMuted
-                width: ListView.view.width
-                height: lineTextItem.implicitHeight
+                required property string lineIcon
+                required property string lineTone
+                readonly property color textColor: list.toneColor(textLine.lineTone, textLine.lineMuted)
+                contentHeight: Math.max(lineTextItem.implicitHeight, textLine.lineIcon !== "" ? Theme.iconSizeSm : 0)
+                Loader {
+                    id: textIcon
+                    active: textLine.lineIcon !== ""
+                    visible: active
+                    x: textLine.contentX
+                    // (Beside the first line of a text that wraps.)
+                    y: textLine.topPad + (lineTextItem.implicitHeight / Math.max(1, lineTextItem.lineCount) - Theme.iconSizeSm) / 2
+                    width: Theme.iconSizeSm
+                    height: Theme.iconSizeSm
+                    sourceComponent: BIcon {
+                        name: textLine.lineIcon
+                        size: Theme.iconSizeSm
+                        color: textLine.lineTone !== "" ? textLine.textColor : Theme.fgMuted
+                    }
+                }
                 BText {
                     id: lineTextItem
-                    x: list.inset
-                    width: list.lineWidth
+                    readonly property real indent: textLine.lineIcon !== "" ? Theme.iconSizeSm + Theme.space1 : 0
+                    x: textLine.contentX + indent
+                    y: textLine.topPad
+                    width: textLine.contentWidth - indent
                     text: textLine.lineText
                     variant: textLine.lineMuted ? "muted" : "body"
+                    color: textLine.textColor
                     wrapMode: Text.Wrap
                 }
             }
         }
         DelegateChoice {
             roleValue: "empty"
-            Item {
+            LineFrame {
                 id: emptyLine
                 required property string lineTitle
                 required property string lineText
-                width: ListView.view.width
-                height: emptyState.implicitHeight + Theme.space4
+                required property string lineIcon
+                contentHeight: emptyState.implicitHeight + Theme.space4
                 BEmptyState {
                     id: emptyState
                     objectName: "extensionEmpty"
-                    x: (parent.width - width) / 2
-                    y: Theme.space4
-                    width: Math.min(list.lineWidth, 440)
-                    iconName: "dumbbell"
+                    x: emptyLine.contentX + (emptyLine.contentWidth - width) / 2
+                    y: emptyLine.topPad + Theme.space4
+                    width: Math.min(emptyLine.contentWidth, 440)
+                    iconName: emptyLine.lineIcon !== "" ? emptyLine.lineIcon : "dumbbell"
                     title: emptyLine.lineTitle
                     description: emptyLine.lineText
                 }
@@ -113,16 +260,16 @@ ListView {
         }
         DelegateChoice {
             roleValue: "run"
-            Item {
+            LineFrame {
                 id: runLine
                 required property int index
                 required property string lineText
-                width: ListView.view.width
-                height: runButton.implicitHeight
+                contentHeight: runButton.implicitHeight
                 BButton {
                     id: runButton
                     objectName: "extensionRun"
-                    x: (parent.width - width) / 2
+                    x: runLine.contentX + (runLine.contentWidth - width) / 2
+                    y: runLine.topPad
                     text: runLine.lineText
                     variant: "primary"
                     iconName: "play"
@@ -132,15 +279,15 @@ ListView {
         }
         DelegateChoice {
             roleValue: "open"
-            Item {
+            LineFrame {
                 id: openLine
                 required property int index
                 required property string lineText
-                width: ListView.view.width
-                height: openButton.implicitHeight
+                contentHeight: openButton.implicitHeight
                 BButton {
                     id: openButton
-                    x: list.inset - Theme.space2
+                    x: openLine.contentX - Theme.space2
+                    y: openLine.topPad
                     text: openLine.lineText
                     variant: "ghost"
                     size: "small"
@@ -151,16 +298,17 @@ ListView {
         }
         DelegateChoice {
             roleValue: "link"
-            Item {
+            LineFrame {
                 id: linkLine
                 required property int index
                 required property string lineText
-                width: ListView.view.width
-                height: linkItem.implicitHeight
+                contentHeight: linkItem.implicitHeight
                 LinkText {
                     id: linkItem
-                    x: list.inset
-                    width: Math.min(implicitWidth, list.lineWidth)
+                    objectName: "extensionLink"
+                    x: linkLine.contentX
+                    y: linkLine.topPad
+                    width: Math.min(implicitWidth, linkLine.contentWidth)
                     text: linkLine.lineText
                     onActivated: list.lines.activate(linkLine.index)
                 }
@@ -168,33 +316,165 @@ ListView {
         }
         DelegateChoice {
             roleValue: "button"
-            Item {
+            LineFrame {
                 id: buttonLine
                 required property int index
                 required property string lineText
-                width: ListView.view.width
-                height: lineButton.implicitHeight
+                contentHeight: lineButton.implicitHeight
                 BButton {
                     id: lineButton
-                    x: list.inset
+                    x: buttonLine.contentX
+                    y: buttonLine.topPad
                     text: buttonLine.lineText
                     onClicked: list.lines.activate(buttonLine.index)
                 }
             }
         }
         DelegateChoice {
+            roleValue: "menu"
+            LineFrame {
+                id: menuLine
+                required property int index
+                required property string lineText
+                contentHeight: menuLineButton.height
+                BIconButton {
+                    id: menuLineButton
+                    objectName: "extensionMenu"
+                    x: menuLine.contentX + menuLine.contentWidth - width
+                    y: menuLine.topPad
+                    label: menuLine.lineText !== "" ? menuLine.lineText : qsTr("More")
+                    iconName: "ellipsis"
+                    onClicked: list.openMenu(menuLine.index, -1, "", menuLineButton, 0, menuLineButton.height)
+                }
+            }
+        }
+        DelegateChoice {
+            roleValue: "month"
+            LineFrame {
+                id: monthLine
+                objectName: "extensionMonth"
+                required property int index
+                required property string lineMonth
+                required property string lineTitle
+                required property list<var> lineDays
+                /// The weekday of the month's first day from the week's first (DatesHelper.weekStart).
+                readonly property int offset: (DatesHelper.dayOfWeek(monthLine.lineMonth + "-01") - DatesHelper.weekStart + 7) % 7
+                readonly property int weeks: Math.ceil((monthLine.offset + monthLine.lineDays.length) / 7)
+                readonly property list<string> heads: DatesHelper.weekdayNamesFrom(DatesHelper.weekStart, "short", "")
+                readonly property real titleHeight: monthLine.lineTitle !== "" ? monthTitle.implicitHeight + Theme.space1 : 0
+                readonly property real headsHeight: Theme.textXs + Theme.space2
+                contentHeight: monthLine.titleHeight + monthLine.headsHeight + monthLine.weeks * (list.dayCell + list.dayGap)
+                Accessible.role: Accessible.Table
+                Accessible.name: monthLine.lineTitle !== "" ? monthLine.lineTitle : monthLine.lineMonth
+
+                BText {
+                    id: monthTitle
+                    visible: monthLine.lineTitle !== ""
+                    x: monthLine.contentX
+                    y: monthLine.topPad
+                    width: monthLine.contentWidth
+                    text: monthLine.lineTitle
+                    variant: "label"
+                    elide: Text.ElideRight
+                }
+                Item {
+                    id: grid
+                    x: monthLine.contentX
+                    y: monthLine.topPad + monthLine.titleHeight
+                    width: 7 * list.dayCell + 6 * list.dayGap
+                    height: monthLine.headsHeight + monthLine.weeks * (list.dayCell + list.dayGap)
+
+                    Repeater {
+                        model: monthLine.heads
+                        delegate: Text {
+                            id: head
+                            required property int index
+                            required property string modelData
+                            x: head.index * (list.dayCell + list.dayGap)
+                            width: list.dayCell
+                            horizontalAlignment: Text.AlignHCenter
+                            textFormat: Text.PlainText
+                            text: head.modelData
+                            font.family: Theme.fontUi
+                            font.pixelSize: Theme.textXs
+                            color: Theme.fgMuted
+                        }
+                    }
+                    Repeater {
+                        model: monthLine.lineDays
+                        delegate: Rectangle {
+                            id: dayCell
+                            required property int index
+                            required property var modelData
+                            // (Item has a `state` of its own: the day's fields are read from the map.)
+                            readonly property string date: AppController.routeText(dayCell.modelData, "date")
+                            readonly property string dayState: AppController.routeText(dayCell.modelData, "state")
+                            readonly property bool tappable: AppController.routeFlag(dayCell.modelData, "tappable")
+                            readonly property bool hasMenu: AppController.routeFlag(dayCell.modelData, "menu")
+                            readonly property bool isToday: dayCell.date === DatesHelper.today
+                            readonly property bool faint: dayCell.dayState === "future" || dayCell.dayState === "outside"
+                            readonly property int slot: monthLine.offset + dayCell.index
+                            objectName: "extensionDay_" + dayCell.date
+                            x: (dayCell.slot % 7) * (list.dayCell + list.dayGap)
+                            y: monthLine.headsHeight + Math.floor(dayCell.slot / 7) * (list.dayCell + list.dayGap)
+                            width: list.dayCell
+                            height: list.dayCell
+                            radius: Theme.radiusSm
+                            color: dayCell.dayState === "done" ? Theme.successBg : dayCell.dayState === "missed" ? Theme.dangerBg
+                                 : dayCell.dayState === "skipped" ? Theme.chipDoneBg : "transparent"
+                            border.width: dayCell.isToday ? 2 : dayCell.dayState === "due" ? 1 : 0
+                            border.color: Theme.accent
+                            Accessible.role: dayCell.tappable ? Accessible.Button : Accessible.Cell
+                            Accessible.name: qsTr("%1: %2").arg(dayCell.date).arg(list.dayStateLabel(dayCell.dayState))
+                            Accessible.onPressAction: if (dayCell.tappable) list.lines.activateDay(monthLine.index, dayCell.date)
+
+                            Text {
+                                anchors.centerIn: parent
+                                textFormat: Text.PlainText
+                                text: AppController.routeText(dayCell.modelData, "day")
+                                font.family: Theme.fontUi
+                                font.pixelSize: Theme.textXs
+                                font.strikeout: dayCell.dayState === "skipped"
+                                color: dayCell.dayState === "done" ? Theme.successText
+                                     : dayCell.dayState === "missed" ? Theme.dangerText
+                                     : dayCell.dayState === "due" || dayCell.isToday ? Theme.fg
+                                     : dayCell.faint ? Theme.fgFaint : Theme.fgMuted
+                            }
+                            TapHandler {
+                                enabled: dayCell.tappable || dayCell.hasMenu
+                                gesturePolicy: TapHandler.ReleaseWithinBounds
+                                onTapped: if (dayCell.tappable) list.lines.activateDay(monthLine.index, dayCell.date)
+                                onLongPressed: list.openMenu(monthLine.index, -1, dayCell.date, dayCell, dayCell.width / 2, dayCell.height)
+                            }
+                            TapHandler {
+                                enabled: dayCell.hasMenu
+                                acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad | PointerDevice.Stylus
+                                acceptedButtons: Qt.RightButton
+                                onTapped: (eventPoint) => list.openMenu(monthLine.index, -1, dayCell.date, dayCell,
+                                                                         eventPoint.position.x, eventPoint.position.y)
+                            }
+                            HoverHandler {
+                                enabled: dayCell.tappable
+                                cursorShape: Qt.PointingHandCursor
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        DelegateChoice {
             roleValue: "chart"
-            Item {
+            LineFrame {
                 id: chartLine
                 required property var lineChartData
                 required property string lineChartSource
-                width: ListView.view.width
-                height: chart.height + Theme.space2
+                contentHeight: chart.height + Theme.space2
                 ChartView {
                     id: chart
                     objectName: "extensionChart"
-                    x: list.inset
-                    width: list.lineWidth
+                    x: chartLine.contentX
+                    y: chartLine.topPad
+                    width: chartLine.contentWidth
                     height: implicitHeight
                     source: chartLine.lineChartSource
                     chartData: chartLine.lineChartData
@@ -223,261 +503,311 @@ ListView {
         }
         DelegateChoice {
             roleValue: "row"
-            Item {
+            LineFrame {
                 id: row
+                objectName: "extensionRow"
                 required property int index
                 required property ExtensionControlsModel lineControls
-                width: ListView.view.width
-                height: card.height
+                // Inside a card the controls are part of it; on their own they make a card of their own.
+                readonly property real rowPad: row.inCard ? 0 : Theme.space3
+                contentHeight: flow.implicitHeight + 2 * row.rowPad
                 Rectangle {
                     id: card
-                    x: list.inset
-                    width: list.lineWidth
-                    height: flow.implicitHeight + 2 * Theme.space3
+                    visible: !row.inCard
+                    x: row.contentX
+                    y: row.topPad
+                    width: row.contentWidth
+                    height: row.contentHeight
                     radius: Theme.radiusLg
                     color: Theme.bgSunken
                     border.color: Theme.borderSubtle
-                    Flow {
-                        id: flow
-                        x: Theme.space3
-                        y: Theme.space3
-                        width: parent.width - 2 * Theme.space3
-                        spacing: Theme.space2
-                        Repeater {
-                            model: row.lineControls
-                            delegate: DelegateChooser {
-                                role: "controlType"
-                                DelegateChoice {
-                                    roleValue: "check"
-                                    Item {
-                                        id: check
-                                        required property int controlIndex
-                                        required property bool controlChecked
-                                        width: checkBox.width
-                                        height: list.controlHeight
-                                        // The tasks' own box: the line is a task of the note.
-                                        TaskBox {
-                                            id: checkBox
-                                            objectName: "extensionCheck"
-                                            anchors.verticalCenter: parent.verticalCenter
-                                            status: check.controlChecked ? "done" : "todo"
-                                            ownMenu: false
-                                            Accessible.name: qsTr("Done")
-                                            onToggled: list.lines.activateControl(row.index, check.controlIndex, 0)
-                                        }
-                                    }
-                                }
-                                DelegateChoice {
-                                    roleValue: "link"
-                                    Item {
-                                        id: linkControl
-                                        required property int controlIndex
-                                        required property string controlText
-                                        implicitWidth: Math.min(linkControlText.implicitWidth, flow.width)
-                                        implicitHeight: Math.max(linkControlText.implicitHeight, list.controlHeight)
-                                        width: implicitWidth
-                                        height: implicitHeight
-                                        LinkText {
-                                            id: linkControlText
-                                            anchors.verticalCenter: parent.verticalCenter
-                                            width: parent.width
-                                            text: linkControl.controlText
-                                            onActivated: list.lines.activateControl(row.index, linkControl.controlIndex, 0)
-                                        }
-                                    }
-                                }
-                                DelegateChoice {
-                                    roleValue: "open"
-                                    Item {
-                                        id: openControl
-                                        required property int controlIndex
-                                        required property string controlText
-                                        objectName: "extensionOpen"
-                                        implicitWidth: Math.min(openControlText.implicitWidth, flow.width)
-                                        implicitHeight: Math.max(openControlText.implicitHeight, list.controlHeight)
-                                        width: implicitWidth
-                                        height: implicitHeight
-                                        LinkText {
-                                            id: openControlText
-                                            anchors.verticalCenter: parent.verticalCenter
-                                            width: parent.width
-                                            text: openControl.controlText
-                                            onActivated: list.lines.activateControl(row.index, openControl.controlIndex, 0)
-                                        }
-                                    }
-                                }
-                                DelegateChoice {
-                                    roleValue: "text"
-                                    Item {
-                                        id: textControl
-                                        required property string controlText
-                                        required property bool controlMuted
-                                        implicitWidth: Math.min(textControlItem.implicitWidth, flow.width)
-                                        implicitHeight: Math.max(textControlItem.implicitHeight, list.controlHeight)
-                                        width: implicitWidth
-                                        height: implicitHeight
-                                        BText {
-                                            id: textControlItem
-                                            anchors.verticalCenter: parent.verticalCenter
-                                            width: parent.width
-                                            text: textControl.controlText
-                                            variant: textControl.controlMuted ? "muted" : "body"
-                                            wrapMode: Text.Wrap
-                                        }
-                                    }
-                                }
-                                // − number +: the number is a field — a tap selects it, what is typed
-                                // ("82,5", "82.5") is written by the stepper's action on Enter (the
-                                // touch keyboard's Done) or when the field is left, also for − / +
-                                // or "+ set" tapped next (the view changes in place, the field stays);
-                                // Escape brings the number back, ↑ / ↓ step.
-                                DelegateChoice {
-                                    roleValue: "stepper"
-                                    Item {
-                                        id: stepper
-                                        required property int controlIndex
-                                        required property string controlDisplay
-                                        required property string controlNumber
-                                        required property string controlUnit
-                                        objectName: "extensionStepper"
-                                        width: stepperBox.width
-                                        height: Math.max(stepperBox.height, list.controlHeight)
-
-                                        /// The field shows the line's number (after a change of the
-                                        /// line, or when what was typed is not written).
-                                        function showValue(): void {
-                                            numberField.text = stepper.controlNumber
-                                        }
-                                        /// What was typed goes to the stepper's action when it is a
-                                        /// number of at least 0 that differs from the shown one
-                                        /// (ExtensionView.enterValue); then the field shows the line's
-                                        /// number, drawn again by then.
-                                        function enter(): void {
-                                            const rowIndex = row.index
-                                            const controlIndex = stepper.controlIndex
-                                            const typed = numberField.typedText
-                                            list.lines.enterValue(rowIndex, controlIndex, typed)
-                                            stepper.showValue()
-                                        }
-                                        /// One step from the number — what was typed first.
-                                        function step(direction: int): void {
-                                            stepper.enter()
-                                            const rowIndex = row.index
-                                            const controlIndex = stepper.controlIndex
-                                            const value = list.lines.stepped(rowIndex, controlIndex, direction)
-                                            list.lines.activateControl(rowIndex, controlIndex, value)
-                                        }
-                                        onControlNumberChanged: stepper.showValue()
-                                        Component.onCompleted: stepper.showValue()
-
-                                      Rectangle {
-                                        id: stepperBox
+                }
+                Flow {
+                    id: flow
+                    x: row.contentX + row.rowPad
+                    y: row.topPad + row.rowPad
+                    width: row.contentWidth - 2 * row.rowPad
+                    spacing: Theme.space2
+                    Repeater {
+                        model: row.lineControls
+                        delegate: DelegateChooser {
+                            role: "controlType"
+                            DelegateChoice {
+                                roleValue: "check"
+                                Item {
+                                    id: check
+                                    required property int controlIndex
+                                    required property string controlState
+                                    required property string controlLabel
+                                    required property bool controlHasMenu
+                                    width: checkBox.width
+                                    height: list.controlHeight
+                                    // The tasks' own box: the line is a task of the note (skipped:
+                                    // a cancelled task's look).
+                                    TaskBox {
+                                        id: checkBox
+                                        objectName: "extensionCheck"
                                         anchors.verticalCenter: parent.verticalCenter
-                                        width: stepperRow.implicitWidth
-                                        height: stepperRow.implicitHeight
-                                        radius: Theme.radius
-                                        color: Theme.bg
-                                        // The box is the number field's frame, in BTextField's colours.
-                                        border.color: numberField.activeFocus ? Theme.focusRing
-                                                    : numberField.hovered ? Theme.borderControl : Theme.border
-                                        Rectangle {
-                                            visible: numberField.activeFocus
-                                            x: -3
-                                            y: -3
-                                            width: parent.width + 6
-                                            height: parent.height + 6
-                                            radius: stepperBox.radius + 3
-                                            color: "transparent"
-                                            border.width: 3
-                                            border.color: Theme.focusRing.alpha(0.28)
+                                        status: check.controlState === "done" ? "done"
+                                              : check.controlState === "skipped" ? "cancelled" : "todo"
+                                        ownMenu: false
+                                        Accessible.name: check.controlLabel !== ""
+                                                         ? qsTr("%1: %2").arg(check.controlLabel).arg(list.checkStateLabel(check.controlState))
+                                                         : qsTr("Done")
+                                        Accessible.description: check.controlHasMenu ? qsTr("Right-click or press and hold for more") : ""
+                                        onToggled: list.lines.activateControl(row.index, check.controlIndex, 0)
+                                        onMenuRequested: {
+                                            if (check.controlHasMenu)
+                                                list.openMenu(row.index, check.controlIndex, "", checkBox, 0, checkBox.height)
                                         }
-                                        Row {
-                                            id: stepperRow
-                                            BIconButton {
-                                                label: qsTr("Less: %1").arg(stepper.controlDisplay)
-                                                iconName: "minus"
-                                                size: "small"
-                                                onClicked: stepper.step(-1)
-                                            }
-                                            BTextField {
-                                                id: numberField
-                                                objectName: "extensionStepperField"
-                                                anchors.verticalCenter: parent.verticalCenter
-                                                // As wide as the number with its unit was (at least 52):
-                                                // narrow paddings, the unit in the field's trailing slot
-                                                // (8 from the edge in a small field, 4 from the number).
-                                                width: Math.max(52, contentWidth + leftPadding + rightPadding)
-                                                leftPadding: 4
-                                                rightPadding: unitLabel.visible ? unitLabel.implicitWidth + 12 : 4
-                                                size: "small"
-                                                horizontalAlignment: TextInput.AlignHCenter
-                                                inputMethodHints: Qt.ImhFormattedNumbersOnly
-                                                font.weight: Theme.weightMedium
-                                                accessibleName: stepper.controlUnit !== "" ? qsTr("Number (%1)").arg(stepper.controlUnit)
-                                                                                          : qsTr("Number")
-                                                background: Item {}
-                                                trailingItem: BText {
-                                                    id: unitLabel
-                                                    visible: stepper.controlUnit !== ""
-                                                    text: stepper.controlUnit
-                                                    variant: "muted"
-                                                }
-                                                /// It had the focus when pressed: the tap places the caret.
-                                                property bool hadFocus: false
-                                                // A tap that gives the focus selects the number, so what
-                                                // is typed replaces it — after the release, which moves
-                                                // the caret on touch screens (and gives the focus there).
-                                                onPressed: numberField.hadFocus = numberField.activeFocus
-                                                onReleased: if (!numberField.hadFocus) selectLater.restart()
-                                                onActiveFocusChanged: if (numberField.activeFocus) numberField.selectAll()
-                                                Later {
-                                                    id: selectLater
-                                                    onTriggered: if (numberField.activeFocus) numberField.selectAll()
-                                                }
-                                                onEditingFinished: stepper.enter()
-                                                onEscapePressed: stepper.showValue()
-                                                Keys.onUpPressed: stepper.step(1)
-                                                Keys.onDownPressed: stepper.step(-1)
-                                            }
-                                            BIconButton {
-                                                label: qsTr("More: %1").arg(stepper.controlDisplay)
-                                                iconName: "plus"
-                                                size: "small"
-                                                onClicked: stepper.step(1)
-                                            }
-                                        }
-                                      }
                                     }
                                 }
-                                DelegateChoice {
-                                    roleValue: "button"
-                                    Item {
-                                        id: controlButton
-                                        required property int controlIndex
-                                        required property string controlText
-                                        width: buttonItem.width
-                                        height: Math.max(buttonItem.height, list.controlHeight)
-                                        BButton {
-                                            id: buttonItem
-                                            objectName: "extensionButton"
-                                            anchors.verticalCenter: parent.verticalCenter
-                                            text: controlButton.controlText
+                            }
+                            DelegateChoice {
+                                roleValue: "menu"
+                                Item {
+                                    id: menuControl
+                                    required property int controlIndex
+                                    required property string controlLabel
+                                    width: menuButton.width
+                                    height: Math.max(menuButton.height, list.controlHeight)
+                                    BIconButton {
+                                        id: menuButton
+                                        objectName: "extensionMenu"
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        label: menuControl.controlLabel !== "" ? menuControl.controlLabel : qsTr("More")
+                                        iconName: "ellipsis"
+                                        onClicked: list.openMenu(row.index, menuControl.controlIndex, "", menuButton, 0, menuButton.height)
+                                    }
+                                }
+                            }
+                            DelegateChoice {
+                                roleValue: "link"
+                                Item {
+                                    id: linkControl
+                                    required property int controlIndex
+                                    required property string controlText
+                                    implicitWidth: Math.min(linkControlText.implicitWidth, flow.width)
+                                    implicitHeight: Math.max(linkControlText.implicitHeight, list.controlHeight)
+                                    width: implicitWidth
+                                    height: implicitHeight
+                                    LinkText {
+                                        id: linkControlText
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        width: parent.width
+                                        text: linkControl.controlText
+                                        onActivated: list.lines.activateControl(row.index, linkControl.controlIndex, 0)
+                                    }
+                                }
+                            }
+                            DelegateChoice {
+                                roleValue: "open"
+                                Item {
+                                    id: openControl
+                                    required property int controlIndex
+                                    required property string controlText
+                                    objectName: "extensionOpen"
+                                    implicitWidth: Math.min(openControlText.implicitWidth, flow.width)
+                                    implicitHeight: Math.max(openControlText.implicitHeight, list.controlHeight)
+                                    width: implicitWidth
+                                    height: implicitHeight
+                                    LinkText {
+                                        id: openControlText
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        width: parent.width
+                                        text: openControl.controlText
+                                        onActivated: list.lines.activateControl(row.index, openControl.controlIndex, 0)
+                                    }
+                                }
+                            }
+                            DelegateChoice {
+                                roleValue: "text"
+                                Item {
+                                    id: textControl
+                                    required property string controlText
+                                    required property bool controlMuted
+                                    required property string controlIcon
+                                    required property string controlTone
+                                    readonly property real indent: textControl.controlIcon !== "" ? Theme.iconSizeSm + Theme.space1 : 0
+                                    implicitWidth: Math.min(textControlItem.implicitWidth + textControl.indent, flow.width)
+                                    implicitHeight: Math.max(textControlItem.implicitHeight, list.controlHeight)
+                                    width: implicitWidth
+                                    height: implicitHeight
+                                    Loader {
+                                        active: textControl.controlIcon !== ""
+                                        visible: active
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        width: Theme.iconSizeSm
+                                        height: Theme.iconSizeSm
+                                        sourceComponent: BIcon {
+                                            name: textControl.controlIcon
+                                            size: Theme.iconSizeSm
+                                            color: textControl.controlTone !== "" ? textControlItem.color : Theme.fgMuted
+                                        }
+                                    }
+                                    BText {
+                                        id: textControlItem
+                                        x: textControl.indent
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        width: parent.width - textControl.indent
+                                        text: textControl.controlText
+                                        variant: textControl.controlMuted ? "muted" : "body"
+                                        color: list.toneColor(textControl.controlTone, textControl.controlMuted)
+                                        wrapMode: Text.Wrap
+                                    }
+                                }
+                            }
+                            // − number +: the number is a field — a tap selects it, what is typed
+                            // ("82,5", "82.5") is written by the stepper's action on Enter (the
+                            // touch keyboard's Done) or when the field is left, also for − / +
+                            // or "+ set" tapped next (the view changes in place, the field stays);
+                            // Escape brings the number back, ↑ / ↓ step.
+                            DelegateChoice {
+                                roleValue: "stepper"
+                                Item {
+                                    id: stepper
+                                    required property int controlIndex
+                                    required property string controlDisplay
+                                    required property string controlNumber
+                                    required property string controlUnit
+                                    objectName: "extensionStepper"
+                                    width: stepperBox.width
+                                    height: Math.max(stepperBox.height, list.controlHeight)
+
+                                    /// The field shows the line's number (after a change of the
+                                    /// line, or when what was typed is not written).
+                                    function showValue(): void {
+                                        numberField.text = stepper.controlNumber
+                                    }
+                                    /// What was typed goes to the stepper's action when it is a
+                                    /// number of at least 0 that differs from the shown one
+                                    /// (ExtensionView.enterValue); then the field shows the line's
+                                    /// number, drawn again by then.
+                                    function enter(): void {
+                                        const rowIndex = row.index
+                                        const controlIndex = stepper.controlIndex
+                                        const typed = numberField.typedText
+                                        list.lines.enterValue(rowIndex, controlIndex, typed)
+                                        stepper.showValue()
+                                    }
+                                    /// One step from the number — what was typed first.
+                                    function step(direction: int): void {
+                                        stepper.enter()
+                                        const rowIndex = row.index
+                                        const controlIndex = stepper.controlIndex
+                                        const value = list.lines.stepped(rowIndex, controlIndex, direction)
+                                        list.lines.activateControl(rowIndex, controlIndex, value)
+                                    }
+                                    onControlNumberChanged: stepper.showValue()
+                                    Component.onCompleted: stepper.showValue()
+
+                                  Rectangle {
+                                    id: stepperBox
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    width: stepperRow.implicitWidth
+                                    height: stepperRow.implicitHeight
+                                    radius: Theme.radius
+                                    color: Theme.bg
+                                    // The box is the number field's frame, in BTextField's colours.
+                                    border.color: numberField.activeFocus ? Theme.focusRing
+                                                : numberField.hovered ? Theme.borderControl : Theme.border
+                                    Rectangle {
+                                        visible: numberField.activeFocus
+                                        x: -3
+                                        y: -3
+                                        width: parent.width + 6
+                                        height: parent.height + 6
+                                        radius: stepperBox.radius + 3
+                                        color: "transparent"
+                                        border.width: 3
+                                        border.color: Theme.focusRing.alpha(0.28)
+                                    }
+                                    Row {
+                                        id: stepperRow
+                                        BIconButton {
+                                            label: qsTr("Less: %1").arg(stepper.controlDisplay)
+                                            iconName: "minus"
                                             size: "small"
-                                            onClicked: list.lines.activateControl(row.index, controlButton.controlIndex, 0)
+                                            onClicked: stepper.step(-1)
+                                        }
+                                        BTextField {
+                                            id: numberField
+                                            objectName: "extensionStepperField"
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            // As wide as the number with its unit was (at least 52):
+                                            // narrow paddings, the unit in the field's trailing slot
+                                            // (8 from the edge in a small field, 4 from the number).
+                                            width: Math.max(52, contentWidth + leftPadding + rightPadding)
+                                            leftPadding: 4
+                                            rightPadding: unitLabel.visible ? unitLabel.implicitWidth + 12 : 4
+                                            size: "small"
+                                            horizontalAlignment: TextInput.AlignHCenter
+                                            inputMethodHints: Qt.ImhFormattedNumbersOnly
+                                            font.weight: Theme.weightMedium
+                                            accessibleName: stepper.controlUnit !== "" ? qsTr("Number (%1)").arg(stepper.controlUnit)
+                                                                                      : qsTr("Number")
+                                            background: Item {}
+                                            trailingItem: BText {
+                                                id: unitLabel
+                                                visible: stepper.controlUnit !== ""
+                                                text: stepper.controlUnit
+                                                variant: "muted"
+                                            }
+                                            /// It had the focus when pressed: the tap places the caret.
+                                            property bool hadFocus: false
+                                            // A tap that gives the focus selects the number, so what
+                                            // is typed replaces it — after the release, which moves
+                                            // the caret on touch screens (and gives the focus there).
+                                            onPressed: numberField.hadFocus = numberField.activeFocus
+                                            onReleased: if (!numberField.hadFocus) selectLater.restart()
+                                            onActiveFocusChanged: if (numberField.activeFocus) numberField.selectAll()
+                                            Later {
+                                                id: selectLater
+                                                onTriggered: if (numberField.activeFocus) numberField.selectAll()
+                                            }
+                                            onEditingFinished: stepper.enter()
+                                            onEscapePressed: stepper.showValue()
+                                            Keys.onUpPressed: stepper.step(1)
+                                            Keys.onDownPressed: stepper.step(-1)
+                                        }
+                                        BIconButton {
+                                            label: qsTr("More: %1").arg(stepper.controlDisplay)
+                                            iconName: "plus"
+                                            size: "small"
+                                            onClicked: stepper.step(1)
                                         }
                                     }
+                                  }
                                 }
-                                DelegateChoice {
-                                    roleValue: "run"
+                            }
+                            DelegateChoice {
+                                roleValue: "button"
+                                Item {
+                                    id: controlButton
+                                    required property int controlIndex
+                                    required property string controlText
+                                    width: buttonItem.width
+                                    height: Math.max(buttonItem.height, list.controlHeight)
                                     BButton {
-                                        id: runControl
-                                        required property int controlIndex
-                                        required property string controlText
-                                        text: runControl.controlText
+                                        id: buttonItem
+                                        objectName: "extensionButton"
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        text: controlButton.controlText
                                         size: "small"
-                                        variant: "primary"
-                                        onClicked: list.lines.activateControl(row.index, runControl.controlIndex, 0)
+                                        onClicked: list.lines.activateControl(row.index, controlButton.controlIndex, 0)
                                     }
+                                }
+                            }
+                            DelegateChoice {
+                                roleValue: "run"
+                                BButton {
+                                    id: runControl
+                                    required property int controlIndex
+                                    required property string controlText
+                                    text: runControl.controlText
+                                    size: "small"
+                                    variant: "primary"
+                                    onClicked: list.lines.activateControl(row.index, runControl.controlIndex, 0)
                                 }
                             }
                         }
@@ -488,16 +818,16 @@ ListView {
     }
 
     /// A table's header or row: its cells in proportional columns (the second one widest).
-    component TableLine: Item {
+    component TableLine: LineFrame {
         id: tableLine
         required property list<string> lineCells
         property bool header: false
-        width: ListView.view.width
-        height: cellsRow.implicitHeight + (header ? Theme.space1 : 0)
+        contentHeight: cellsRow.implicitHeight + (header ? Theme.space1 : 0)
         Row {
             id: cellsRow
-            x: list.inset
-            width: list.lineWidth
+            x: tableLine.contentX
+            y: tableLine.topPad
+            width: tableLine.contentWidth
             spacing: Theme.space2
             Repeater {
                 model: tableLine.lineCells
@@ -516,9 +846,9 @@ ListView {
         }
         Rectangle {
             visible: tableLine.header
-            x: list.inset
-            y: parent.height - 1
-            width: list.lineWidth
+            x: tableLine.contentX
+            y: tableLine.topPad + tableLine.contentHeight - 1
+            width: tableLine.contentWidth
             height: 1
             color: Theme.borderSubtle
         }

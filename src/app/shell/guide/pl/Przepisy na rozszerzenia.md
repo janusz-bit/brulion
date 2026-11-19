@@ -21,22 +21,15 @@ end, { label = "Notatnik w liczbach" })
 ```
 
 ## Zadanie na jutro, zadanie o dzień później
-**Wymaga: zapis.** Daty to teksty, a `dodajDni` przesuwa datę o kilka dni. Pierwsze polecenie pyta o zadanie i zapisuje je w dzisiejszym dzienniku z terminem na jutro; drugie przesuwa o dzień termin zadania pod kursorem.
+**Wymaga: zapis.** Daty to teksty, a `b.addDays` przesuwa datę o kilka dni (`"2026-11-13"` i 1 dają `"2026-11-14"`; koniec miesiąca i roku też się zgadza). Pierwsze polecenie pyta o zadanie i zapisuje je w dzisiejszym dzienniku z terminem na jutro; drugie przesuwa o dzień termin zadania pod kursorem.
 
 ```luau
--- "2026-11-13" i 1 dają "2026-11-14"; koniec miesiąca i roku też się zgadza.
-local function dodajDni(data, n)
-    local r, m, d = data:match("^(%d+)-(%d+)-(%d+)$")
-    local poludnie = os.time({ year = tonumber(r), month = tonumber(m), day = tonumber(d) + n })
-    return os.date("!%Y-%m-%d", poludnie)
-end
-
 b.command("jutro", function(ctx)
     local tekst = b.ask("Zadanie na jutro")
     if tekst == "" then
         return nil
     end
-    local termin = dodajDni(b.today(), 1)
+    local termin = b.addDays(b.today(), 1)
     b.appendToJournal(b.today(), `- [ ] {tekst} 📅 {termin}`)
     return `Dodano, termin {termin}`
 end, { label = "Zadanie na jutro" })
@@ -47,7 +40,7 @@ b.command("przeloz", function(ctx)
     if not termin then
         return "Ustaw kursor w zadaniu z terminem."
     end
-    local pozniej = dodajDni(termin, 1)
+    local pozniej = b.addDays(termin, 1)
     local tekst = blok.text:gsub("📅 %d%d%d%d%-%d%d%-%d%d", "📅 " .. pozniej, 1)
     b.replaceBlock(blok.ref, tekst, blok.task)
     return `Termin: {pozniej}`
@@ -276,6 +269,7 @@ end, { label = "Podsumuj mój tydzień (AI)" })
 ## Dobre nawyki
 - Sprawdzaj, czego może nie być: `b.read` i `b.page` dają `nil` dla strony, której nie ma, `ctx.block` nie ma poza blokiem, a `ctx.page` jest pustym tekstem poza stroną.
 - W widoku daj kontrolce to, czego potrzebuje jej akcja (`ref`, `text`), zamiast szukać tego od nowa: wiersz, który się zmienił, zostanie wtedy odrzucony, a nie nadpisany.
-- Proś notatnik o mniej: zapytanie z filtrami i limitem jest szybsze niż czytanie każdej strony.
+- Proś notatnik o mniej: zapytanie z filtrami i limitem jest szybsze niż czytanie każdej strony. To, co długo się liczy, może czekać w zmiennej, dopóki `b.revision()` się nie zmieni.
+- Jeden blok zmieniaj funkcjami bloków (`b.insertBlock`, `b.setTask`, `b.setProperty`, `b.removeBlock`), a do strony dopisuj przez `b.appendToPage`, zamiast `b.read` i `b.write` całej strony: zmiana, którą ktoś w międzyczasie zrobił gdzie indziej na stronie, zostaje.
 - Porównuj teksty przez `b.fold`, a sortuj przez `b.sorted`, żeby polskie litery zachowywały się, jak trzeba.
 - To, co ma zostać, trzymaj w notatkach. Zmienne znikają, gdy strona zostanie zapisana od nowa.

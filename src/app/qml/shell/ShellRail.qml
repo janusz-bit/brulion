@@ -153,9 +153,10 @@ Rectangle {
                         required property string entryTitle
                         required property string entryIcon
                         objectName: "sidebarNav_" + entryView
-                        // Hidden in the settings: not shown (the layout leaves no gap); the gym only
-                        // while it is switched on (Settings → Extensions).
+                        // Hidden in the settings: not shown (the layout leaves no gap); the gym and
+                        // habits only while they are switched on (Settings → Extensions).
                         visible: AppSettings.sidebarHidden.indexOf(entryView) < 0 && (entryView !== "gym" || AppSettings.gymEnabled)
+                                 && (entryView !== "habits" || AppSettings.habitsEnabled)
                         label: entryTitle
                         iconName: entryIcon
                         shortcut: AppController.routeText(ShortcutMap.sequences, "go." + entryView)

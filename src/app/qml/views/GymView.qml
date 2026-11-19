@@ -62,14 +62,6 @@ FocusScope {
     function showTab(tab: string): void {
         AppController.navigate({ view: "gym", tab: tab })
     }
-    /// An exercise's page (a [[link]] target): opened, or made when it does not exist yet.
-    function openPage(name: string): void {
-        let path = Workspace.resolveLink(name, "")
-        if (path === "")
-            path = Workspace.createPage(name)
-        if (path !== "")
-            AppController.openPage(path)
-    }
 
     onRouteChanged: applyRoute()
     Component.onCompleted: {
@@ -86,7 +78,9 @@ FocusScope {
         view: root.tab
         paramKey: "exercise"
         paramValue: root.exercise
-        onPageRequested: (page) => root.openPage(page)
+        // A link's page (an exercise's): opened, or made when it does not exist yet.
+        onPageRequested: (page, line) => AppController.openNamedPage(page, line)
+        onJournalRequested: (date) => AppController.openJournal(date)
         onViewRequested: (view, params) => AppController.navigate({ view: "gym", tab: view,
                                                                     exercise: AppController.routeText(params, "exercise") })
     }

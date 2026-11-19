@@ -1,6 +1,6 @@
 // QML registration of the planning classes (library brulion_planning, planning/CMakeLists.txt)
 // in the app's QML module "Brulion" — the classes know nothing about QML (the src/app/ui and
-// editor pattern): CalendarModel, TaskListModel, HabitListModel, GraphModel, GraphItem and
+// editor pattern): CalendarModel, TaskListModel, GraphModel, GraphItem and
 // PlanningActions are creatable types.
 //
 // PlanningContext (singleton, app-only) is the seam between the views and the shell: it hands
@@ -17,7 +17,6 @@
 #include "calendarmodel.h"
 #include "graphitem.h"
 #include "graphmodel.h"
-#include "habitlistmodel.h"
 #include "planningactions.h"
 #include "tasklistmodel.h"
 
@@ -41,12 +40,6 @@ struct TaskListModelForeign {
     Q_GADGET
     QML_FOREIGN(brulion::planning::TaskListModel)
     QML_NAMED_ELEMENT(TaskListModel)
-};
-
-struct HabitListModelForeign {
-    Q_GADGET
-    QML_FOREIGN(brulion::planning::HabitListModel)
-    QML_NAMED_ELEMENT(HabitListModel)
 };
 
 struct GraphModelForeign {

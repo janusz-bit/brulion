@@ -1,11 +1,13 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
+import QtQml.Models
 import Brulion
 
 // ShellExtensionQuestion — the question an extension's command or action waits on
 // (Workspace.extensions, docs/EXTENSIONS.md "Questions"): b.ask a line of text, b.choose one of a
-// list, b.form numbers with steppers (the gym's weight and reps). Cancelling gives the extension ""
+// list, b.form labelled fields — numbers with steppers (the gym's weight and reps) and text fields
+// (kind "text": a habit's name and schedule, with an example as the placeholder). Cancelling gives the extension ""
 // (ask) or nil (choose, form), and its command ends itself. A question that follows right after
 // (choose a plan, then a form) opens the dialog again. A question of the AI chat's turn
 // (Workspace.extensions.questionChat) is asked in the conversation while a chat view shows it
@@ -36,7 +38,9 @@ BDialog {
     showFooter: kind !== "choose"
     acceptText: kind === "form" ? qsTr("Save") : qsTr("OK")
     acceptEnabled: kind !== "ask" || Js.trim(textField.typedText) !== ""
-    initialFocusItem: kind === "ask" ? textField : null
+    initialFocusItem: kind === "ask" ? textField : dialog.formFocus
+    /// A form's first text field: it has the focus when the dialog opens.
+    property Item formFocus: null
 
     onAccepted: {
         const serial = dialog.shownSerial
@@ -66,6 +70,9 @@ BDialog {
             if (dialog.extensions.questionKind === "" || dialog.inChat())
                 return
             textField.text = ""
+            const first = dialog.extensions.questionKind === "form" ? dialog.extensions.questionFields.firstTextField() : -1
+            const row = first >= 0 ? formFields.itemAt(first) as FormTextRow : null
+            dialog.formFocus = row ? row.input : null
             dialog.shownSerial = dialog.extensions.questionSerial
             dialog.open()
         }
@@ -146,47 +153,89 @@ BDialog {
         }
     }
 
-    Repeater {
-        model: dialog.extensions.questionFields
-        delegate: RowLayout {
-            id: field
-            required property int index
-            required property string fieldLabel
-            required property string fieldDisplay
-            required property string fieldUnit
+    /// A form's text field (kind "text"): its label above it; what is typed is its answer.
+    component FormTextRow: ColumnLayout {
+        id: textRow
+        required property int index
+        required property string fieldLabel
+        required property string fieldText
+        required property string fieldPlaceholder
+        readonly property BTextField input: textInput
+        Layout.fillWidth: true
+        visible: dialog.kind === "form"
+        spacing: Theme.space1
+        BText {
             Layout.fillWidth: true
-            visible: dialog.kind === "form"
-            spacing: Theme.space2
-            BText {
-                Layout.fillWidth: true
-                text: field.fieldLabel
-                variant: "label"
-                elide: Text.ElideRight
+            text: textRow.fieldLabel
+            variant: "label"
+            elide: Text.ElideRight
+        }
+        BTextField {
+            id: textInput
+            objectName: "extensionQuestionField"
+            Layout.fillWidth: true
+            placeholderText: textRow.fieldPlaceholder
+            accessibleName: textRow.fieldLabel
+            Component.onCompleted: textInput.text = textRow.fieldText
+            onTextChanged: dialog.extensions.questionFields.setText(textRow.index, textInput.text)
+            onAccepted: dialog.tryAccept()
+        }
+    }
+
+    Repeater {
+        id: formFields
+        model: dialog.extensions.questionFields
+        delegate: DelegateChooser {
+            role: "fieldKind"
+            DelegateChoice {
+                roleValue: "text"
+                FormTextRow {}
             }
-            BIconButton {
-                label: qsTr("Less")
-                iconName: "minus"
-                onClicked: dialog.extensions.questionFields.step(field.index, -1)
+            DelegateChoice {
+                NumberRow {}
             }
-            BTextField {
-                objectName: "extensionQuestionNumber"
-                Layout.preferredWidth: 104
-                text: field.fieldDisplay
-                horizontalAlignment: TextInput.AlignHCenter
-                inputMethodHints: Qt.ImhFormattedNumbersOnly
-                accessibleName: field.fieldLabel
-                onEditingFinished: dialog.extensions.questionFields.setNumberText(field.index, text)
-            }
-            BText {
-                Layout.preferredWidth: 28
-                text: field.fieldUnit
-                variant: "muted"
-            }
-            BIconButton {
-                label: qsTr("More")
-                iconName: "plus"
-                onClicked: dialog.extensions.questionFields.step(field.index, 1)
-            }
+        }
+    }
+
+    /// A form's number: − / + and typing ("82,5", "82.5", "82,5 kg").
+    component NumberRow: RowLayout {
+        id: field
+        required property int index
+        required property string fieldLabel
+        required property string fieldDisplay
+        required property string fieldUnit
+        Layout.fillWidth: true
+        visible: dialog.kind === "form"
+        spacing: Theme.space2
+        BText {
+            Layout.fillWidth: true
+            text: field.fieldLabel
+            variant: "label"
+            elide: Text.ElideRight
+        }
+        BIconButton {
+            label: qsTr("Less")
+            iconName: "minus"
+            onClicked: dialog.extensions.questionFields.step(field.index, -1)
+        }
+        BTextField {
+            objectName: "extensionQuestionNumber"
+            Layout.preferredWidth: 104
+            text: field.fieldDisplay
+            horizontalAlignment: TextInput.AlignHCenter
+            inputMethodHints: Qt.ImhFormattedNumbersOnly
+            accessibleName: field.fieldLabel
+            onEditingFinished: dialog.extensions.questionFields.setNumberText(field.index, text)
+        }
+        BText {
+            Layout.preferredWidth: 28
+            text: field.fieldUnit
+            variant: "muted"
+        }
+        BIconButton {
+            label: qsTr("More")
+            iconName: "plus"
+            onClicked: dialog.extensions.questionFields.step(field.index, 1)
         }
     }
 }

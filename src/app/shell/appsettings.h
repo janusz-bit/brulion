@@ -77,6 +77,9 @@ class AppSettings : public QObject {
     /// The built-in gym extension (Settings → Extensions; docs/UI.md "Gym"): the Gym view, its
     /// palette commands. Off by default.
     Q_PROPERTY(bool gymEnabled READ gymEnabled WRITE setGymEnabled NOTIFY gymEnabledChanged FINAL)
+    /// The built-in habits extension (`nawyki`; Settings → Extensions; docs/UI.md "Habits"): the
+    /// Habits view, its palette commands. On by default (habits were always there).
+    Q_PROPERTY(bool habitsEnabled READ habitsEnabled WRITE setHabitsEnabled NOTIFY habitsEnabledChanged FINAL)
     /// The built-in AI assistant extension (asks about a page, summarises it). Off by default.
     Q_PROPERTY(bool assistantEnabled READ assistantEnabled WRITE setAssistantEnabled NOTIFY assistantEnabledChanged FINAL)
     /// AI for extensions (b.ai, docs/EXTENSIONS.md "AI") on this device: "anthropic" | "openai"
@@ -267,6 +270,8 @@ public:
     bool captureButtonShown() const;
     bool gymEnabled() const;
     void setGymEnabled(bool on);
+    bool habitsEnabled() const;
+    void setHabitsEnabled(bool on);
     bool assistantEnabled() const;
     void setAssistantEnabled(bool on);
     /// The ids of the built-in extensions switched on ("silownia", "asystent").
@@ -467,6 +472,7 @@ Q_SIGNALS:
     void bottomNavTabsChanged();
     void captureButtonShownChanged();
     void gymEnabledChanged();
+    void habitsEnabledChanged();
     void assistantEnabledChanged();
     void aiChanged();
     void editorLineSpacingChanged();

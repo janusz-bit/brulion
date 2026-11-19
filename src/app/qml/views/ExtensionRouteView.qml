@@ -18,14 +18,6 @@ FocusScope {
                                     ? Workspace.extensions.viewTitle(root.extensionId, root.viewName) : ""
     readonly property int maximumWidth: 720
 
-    /// A page of a link: opened, or made when it does not exist yet.
-    function openPage(name: string): void {
-        let path = Workspace.resolveLink(name, "")
-        if (path === "")
-            path = Workspace.createPage(name)
-        if (path !== "")
-            AppController.openPage(path)
-    }
 
     onRouteChanged: lines.setRouteParams(root.route)
     Component.onCompleted: {
@@ -40,7 +32,9 @@ FocusScope {
         extensions: Workspace.extensions
         extension: root.extensionId
         view: root.viewName
-        onPageRequested: (page) => root.openPage(page)
+        // A link's page (an exercise's): opened, or made when it does not exist yet.
+        onPageRequested: (page, line) => AppController.openNamedPage(page, line)
+        onJournalRequested: (date) => AppController.openJournal(date)
         onViewRequested: (view, params) => AppController.navigate(lines.routeFor(view, params))
     }
 
