@@ -20,7 +20,7 @@ Tu znajdziesz zmiany w każdej wersji Brulionu, od najnowszej. Pełne opisy wyda
 - **Płynnie w dużych notatnikach**: notatka zapisuje się w tle, a odświeża się tylko to, co widać na ekranie i czego dotyczy zmiana — w notatniku z 10 000 notatek aplikacja nie staje już na około 0,3 s przy każdej przerwie w pisaniu.
 - **Szybszy start i otwieranie**: aplikacja startuje z jedną trzecią obiektów, które tworzyła wcześniej (okna i menu powstają przy pierwszym otwarciu), strona z tysiącami bloków otwiera się o 40 % mniejszym kosztem, a jej odnośniki zwrotne powstają, gdy do nich przewiniesz, duży notatnik wczytuje indeks z jedną trzecią pracy, a przełącznik stron od razu pokazuje ostatnie strony.
 - **Bezpieczniejszy zapis**: tuż przed zastąpieniem notatki zapis sprawdza jeszcze raz, czy inny program jej w międzyczasie nie zmienił (także na pendrive'ach i dyskach sieciowych z mało dokładnym czasem plików), a pozostałości przerwanego zapisu są sprzątane.
-- **Qt 6.12** — Brulion jest budowany z Qt 6.12 na wszystkich platformach (wersja w przeglądarce z Emscripten 5.0.5); na Linuksie Clangiem, jak na Androidzie i w przeglądarce: aplikacja jest o 3 % mniejsza, a `brulion-cli` o 20 %.
+- **Qt 6.12** — Brulion jest budowany z Qt 6.12 na wszystkich platformach (wersja w przeglądarce z Emscripten 5.0.5); na Linuksie Clangiem, jak na Androidzie i w przeglądarce: aplikacja jest o 3 % mniejsza, `brulion-cli` o 20 %, a AppImage o 5–8 %.
 - **Wolny albo nagrzany telefon** pisze dalej: odpowiedź modelu na urządzeniu kończy się dopiero po pięciu minutach bez żadnego postępu, a nie pięć minut po pytaniu.
 
 ## 0.23.0 — 16 listopada 2026

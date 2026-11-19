@@ -20,7 +20,7 @@ Here you'll find what changed in every version of Brulion, newest first. Full re
 - **Smooth in big notebooks**: a note is saved in the background, and only what is on screen and what the change touches is refreshed — in a notebook of 10 000 notes the app no longer stops for about 0.3 s whenever you pause typing.
 - **Faster to start and to open**: the app starts with a third of the objects it made before (dialogs and menus come when first opened), a page of thousands of blocks opens with 40 % less work and its linked references are made as you scroll to them, a big notebook loads its index with a third of the work, and the page switcher shows the recent pages at once.
 - **Safer saving**: right before a save replaces a note it checks again that no other program changed it meanwhile (also on USB sticks and network drives with coarse file times), and the leftovers of an interrupted save are cleaned up.
-- **Qt 6.12** — Brulion is built with Qt 6.12 on every platform (the browser version with Emscripten 5.0.5); on Linux with Clang, as on Android and in the browser: the app is 3 % smaller and `brulion-cli` 20 %.
+- **Qt 6.12** — Brulion is built with Qt 6.12 on every platform (the browser version with Emscripten 5.0.5); on Linux with Clang, as on Android and in the browser: the app is 3 % smaller, `brulion-cli` 20 % and the AppImage 5–8 %.
 - **A slow or hot phone** writes on: an answer of the model on the device ends only after five minutes without any progress, no longer five minutes after the question.
 
 ## 0.23.0 — November 16, 2026
