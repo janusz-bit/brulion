@@ -2820,7 +2820,7 @@ JOBS=16 scripts/bench.sh -B -b ../build-bench                  # configure Relea
 scripts/bench.sh -n -b ../build-bench -r 5 -c 0-11 -q 3 -o ../r/new bench_index bench_markdown
 scripts/bench.sh -n -b ../build-bench bench_index:search       # one function
 scripts/bench.sh -n -b ../build-bench "bench_index:search:10000 notes fuzzy"   # one data row
-scripts/bench.sh -n -b ../build-bench -r 3 -T 600 bench_index    # at most 10 min (CI: -T 1500)
+scripts/bench.sh -n -b ../build-bench -r 3 -T 600 bench_index    # at most 10 min (CI: -T 1800)
 scripts/bench.sh compare ../r/base ../r/new                    # % change against the noise
 scripts/bench.sh scaling ../r/new                              # exponent k between input sizes
 scripts/bench.sh -h
@@ -2999,10 +2999,12 @@ It must not cancel anything either: a job that reaches its `timeout-minutes` end
 `continue-on-error` does not cover that, and the run ends cancelled too — through
 `workflow_call` that skipped the whole v0.6.0 release once (the smoke takes 17–25 min, 30 with
 the setup, and runners differ by up to 1.45×: an AMD EPYC 7763 against a 9V45). So the
-benchmarks run with a time budget (`bench.sh -T 1500`: no repetition starts after 25 min, a
-running one finishes; what is left is listed and its rows are `MISSING`, a warning), the steps
-have timeouts of their own (Qt 15, build 20, the check 35 min) and the job's limit (80 min) is
-above their sum. `release.yml` calls `ci.yml` with `skip-perf-smoke: true`: a release never
+benchmarks run with a time budget (`bench.sh -T 1800`: no repetition starts after 30 min, a
+running one finishes; what is left is listed and its rows are `MISSING`, a warning; the step
+succeeds when nothing that was measured failed), the steps have timeouts of their own (Qt 15,
+build 20, the check 40 min) and the job's limit (80 min) is above their sum. On 2026-11-19 the
+same code took 18.7 min on one runner and 25.5 min on another, every benchmark about 1.4× slower:
+the old budget of 25 min left one out. `release.yml` calls `ci.yml` with `skip-perf-smoke: true`: a release never
 waits for the smoke, which runs in CI by hand and with `[ci]`.
 
 Why it can run on shared runners without flaking: on the laptop's 4 E-cores, 16 runs of
