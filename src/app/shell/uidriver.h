@@ -39,7 +39,9 @@ namespace brulion::uidriver {
 /// press), unlike waitFor()'s deadlines.
 void settle(int ms);
 /// Run the event loop until `condition` holds (true) or `timeoutMs` passed (false). Sanitizer test
-/// runs are ~25x slower: the deadline is multiplied by BRULION_TEST_SLOWDOWN.
+/// runs are ~25x slower: the deadline is multiplied by BRULION_TEST_SLOWDOWN. A stall of the
+/// thread (seconds inside one event handler, the process paused) counts as 250 ms of the deadline:
+/// the event it held up still gets its turn.
 bool waitFor(const std::function<bool()> &condition, int timeoutMs = 3000);
 
 // ---- Items ------------------------------------------------------------------------------------

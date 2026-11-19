@@ -7,7 +7,8 @@
 // Flickable under it can move that way (the item a press reaches, canScroll(): at the end of a
 // page a finger's drag over a switch would tap it), the same gestures played from timers (play():
 // no nested event loop) and stopped when the window goes away, and finding items (type names,
-// labels, shown, on screen, topmost first, scrolled into view).
+// labels, shown, on screen, topmost first, scrolled into view), and waitFor() through a stall of
+// the thread.
 #include "uidriver.h"
 
 #include <QElapsedTimer>
@@ -20,6 +21,8 @@
 #include <QSignalSpy>
 #include <QStyleHints>
 #include <QTest>
+#include <QThread>
+#include <QTimer>
 
 using namespace Qt::StringLiterals;
 namespace ud = brulion::uidriver;
@@ -168,6 +171,30 @@ private Q_SLOTS:
         m_window = nullptr;
         delete m_engine;
         m_engine = nullptr;
+    }
+
+    // A stall of the thread (a handler blocking for 1.5 s, the process paused) takes 250 ms of
+    // waitFor()'s deadline, not its length: the event it held up still gets its turn. (CI's Windows
+    // job: a save of 1.4 KB took 4.9 s, and a 3 s wait ran out before the click it waited for.)
+    void waitingThroughAStall()
+    {
+        bool done = false;
+        // The flag is set by an event that comes after the stall, in a later round of the wait.
+        QTimer::singleShot(0, this, [this, &done] {
+            QThread::msleep(1500);
+            QTimer::singleShot(0, this, [&done] { done = true; });
+        });
+        QVERIFY(ud::waitFor([&done] { return done; }, 1000));
+        // A condition that never holds still ends the wait, even when every round is slow.
+        int calls = 0;
+        QVERIFY(!ud::waitFor(
+                [&calls] {
+                    ++calls;
+                    QThread::msleep(300);
+                    return false;
+                },
+                100));
+        QVERIFY(calls >= 1);
     }
 
     void keySequences_data()

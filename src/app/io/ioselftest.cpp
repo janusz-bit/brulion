@@ -41,12 +41,17 @@ int slowdown()
     return factor;
 }
 
+/// Run the event loop until `condition` holds or `timeoutMs` (scaled) passed; a stall of the thread
+/// counts as 250 ms of it, as in uidriver::waitFor().
 bool waitFor(const std::function<bool()> &condition, int timeoutMs = 5000)
 {
-    QElapsedTimer timer;
-    timer.start();
+    const qint64 maxRound = qint64(250) * slowdown();
+    qint64 waited = 0;
+    QElapsedTimer round;
+    round.start();
     while (!condition()) {
-        if (timer.elapsed() > qint64(timeoutMs) * slowdown())
+        waited += std::min(round.restart(), maxRound);
+        if (waited > qint64(timeoutMs) * slowdown())
             return false;
         QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
         QThread::msleep(5);

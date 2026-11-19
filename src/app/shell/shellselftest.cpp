@@ -7728,12 +7728,24 @@ void checkAppearance(QQmlApplicationEngine *engine, QQuickWindow *window, AppCon
         });
         return found && shown(found) ? found : nullptr;
     };
+    // Tapped once it stays put where a press reaches it (steadyItem()): after a fixed pause the
+    // scroll into view or a new layout of the rows could still move it, and the tap landed beside
+    // it now and then. The pointer leaves the last item clicked first: hovered, it shows its
+    // tooltip (after 550 ms) over its neighbour (the accent swatches, the rail's buttons).
     const auto activate = [&](QQuickItem *item) {
         if (!item)
             return false;
+        if (!touch)
+            mouseMove(window, QPointF(1, 1));
         uidriver::scrollIntoView(window, item);
-        settle(100);
-        tapOrClick(window, pointIn(item), touch);
+        const QPointer<QQuickItem> target(item);
+        QPointF at;
+        if (!steadyItem(window, [&target] { return target.data(); }, &at)) {
+            std::fprintf(stderr, "selftest: %s did not stay put (at %.1f, %.1f)\n",
+                         target ? qPrintable(target->objectName()) : "an item gone meanwhile", at.x(), at.y());
+            return false;
+        }
+        tapOrClick(window, at, touch);
         return true;
     };
 

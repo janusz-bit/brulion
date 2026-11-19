@@ -56,10 +56,18 @@ bool waitFor(const std::function<bool()> &condition, int timeoutMs)
     // Sanitizer test runs are ~25x slower: ctest passes BRULION_TEST_SLOWDOWN (tests/CMakeLists.txt).
     static const int slowdown = std::max(1, qEnvironmentVariableIntValue("BRULION_TEST_SLOWDOWN"));
     const qint64 timeout = qint64(timeoutMs) * slowdown;
-    QElapsedTimer timer;
-    timer.start();
+    // The deadline counts the rounds of this loop, each at most kStallMs: a stall of the thread
+    // (the runner pausing the process, a save stuck on the disk under an event handler) is one
+    // round, not the time it took. A save of 1.4 KB that took 4.9 s on CI's Windows job ran out a
+    // 3 s wait before the click it waited for was handled. (A round normally takes 5-130 ms.)
+    constexpr qint64 kStallMs = 250;
+    const qint64 maxRound = kStallMs * slowdown;
+    qint64 waited = 0;
+    QElapsedTimer round;
+    round.start();
     while (!condition()) {
-        if (timer.elapsed() > timeout)
+        waited += std::min(round.restart(), maxRound);
+        if (waited > timeout)
             return false;
         QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
         QThread::msleep(5);

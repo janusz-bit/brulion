@@ -747,7 +747,9 @@ redirect check does not apply there); a failed one is told as CORS or mixed cont
   and worker-thread stack sizes by it (1 otherwise), the editor playground's self-tests their
   waits for something asynchronous (`DevTools.testSlowdown`); CI builds them at `-O1`. The GUI
   tests run side by side with the others (`PROCESSORS 2` for a whole app's self-test): their
-  checks wait for the state they read, never for a fixed time; only measurements that compare
+  checks wait for the state they read, never for a fixed time, and the self-tests' `waitFor()`
+  counts a stall of the GUI thread as 250 ms of its deadline (`uidriver.h`: a 5 s save on the
+  Windows runner had run out a 3 s wait before the click it waited for); only measurements that compare
   wall-clock times run alone (`RUN_SERIAL`: `tst_shell_workspace_perf`, `tst_scroll_jumps_qml`).
   CI runners stall (Windows' run of 2026-11-19 lost two seconds in a one-line extension command),
   so time in a test follows `tests/common/testtiming.h`: a limit on how long work takes reads the
