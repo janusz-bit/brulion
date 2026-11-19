@@ -73,6 +73,13 @@ case $ARCH in
   *) die "unsupported architecture $ARCH (x86_64 or aarch64)" ;;
 esac
 
+# Whether apt can install the package: `apt-cache show` also succeeds for a name another package
+# only refers to (Ubuntu 22.04's clang-18), which has nothing to install.
+# (grep reads all of it: `grep -q` could end the pipe early, a failure under pipefail.)
+installable() {
+  apt-cache policy "$1" 2>/dev/null | grep -E '^ *Candidate: [^(]' >/dev/null
+}
+
 install_deps() {
   command -v apt-get >/dev/null || die "--install-deps supports Debian/Ubuntu (apt-get) only"
   local sudo=()
@@ -102,14 +109,14 @@ install_deps() {
   # Ubuntu 22.04's default g++ 11 lacks parts of C++20; g++-12 is in its main archive.
   local default_gcc
   default_gcc=$(apt-cache show --no-all-versions gcc 2>/dev/null | sed -nE 's/^Version: ([0-9]+:)?([0-9]+).*/\2/p' | head -n 1)
-  if ((${default_gcc:-0} < 12)) && apt-cache show g++-12 >/dev/null 2>&1; then
+  if ((${default_gcc:-0} < 12)) && installable g++-12; then
     packages+=(g++-12)
   fi
   # The compiler: Clang 18, as every other build uses Clang (docs/PERFORMANCE.md "GCC or Clang": a
   # smaller app at the same speed) — the distribution's (Ubuntu 24.04), else LLVM's own apt
   # repository (Ubuntu 22.04 has Clang 14 at most).
   local llvm_repo=0
-  if apt-cache show clang-18 >/dev/null 2>&1; then
+  if installable clang-18; then
     packages+=(clang-18)
   else
     llvm_repo=1
@@ -218,6 +225,22 @@ if [[ -z ${CXX:-} ]]; then
       break
     fi
   done
+fi
+# Clang compiles against GCC's libstdc++, but on its own it may take an older GCC than the newest
+# one there is (Ubuntu 22.04: GCC 11, whose libstdc++ lacks parts of C++20): name the newest GCC
+# with C++ headers, 12 at least. Its libstdc++.so is the system's own (Ubuntu 22.04's is GCC 12's).
+if [[ ${CXX:-} == *clang* ]]; then
+  gcc_dir=
+  for dir in /usr/lib/gcc/"$ARCH"-linux-gnu/*/; do
+    dir=${dir%/}
+    v=${dir##*/}
+    [[ $v =~ ^[0-9]+$ && -f $dir/crtbegin.o && -d /usr/include/c++/$v ]] || continue
+    [[ -n $gcc_dir && ${v} -le ${gcc_dir##*/} ]] || gcc_dir=$dir
+  done
+  [[ -n $gcc_dir && ${gcc_dir##*/} -ge 12 ]] ||
+    die "$CXX needs the C++ library of GCC 12 or newer (g++-12; --install-deps installs it)"
+  export CFLAGS="--gcc-install-dir=$gcc_dir ${CFLAGS:-}" CXXFLAGS="--gcc-install-dir=$gcc_dir ${CXXFLAGS:-}"
+  echo "$CXX over $gcc_dir"
 fi
 echo "CMake $(cmake --version | head -n 1 | cut -d' ' -f3), Ninja $(ninja --version), ${CXX:-c++} $("${CXX:-c++}" -dumpversion)"
 

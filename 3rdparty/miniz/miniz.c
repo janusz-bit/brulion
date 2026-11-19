@@ -4064,7 +4064,9 @@ static int mz_stat64(const char *path, struct __stat64 *buffer)
     {
         mz_zip_archive *pZip = (mz_zip_archive *)pOpaque;
         size_t s = (file_ofs >= pZip->m_archive_size) ? 0 : (size_t)MZ_MIN(pZip->m_archive_size - file_ofs, n);
-        memcpy(pBuf, (const mz_uint8 *)pZip->m_pState->m_pMem + file_ofs, s);
+        /* Brulion: no pointer past the buffer for an offset outside it (undefined behaviour). */
+        if (s)
+            memcpy(pBuf, (const mz_uint8 *)pZip->m_pState->m_pMem + file_ofs, s);
         return s;
     }
 

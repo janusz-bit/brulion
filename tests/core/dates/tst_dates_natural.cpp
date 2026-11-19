@@ -1,5 +1,6 @@
 // Natural-language dates, stripping and protected spans. Test cases ported from archive/web-v1
 // (natural.test.ts, protect.test.ts). "now" is always injected: Wednesday 14 Oct 2026, 10:00.
+#include "dates/local.h"
 #include "dates/natural.h"
 #include "dates/protect_p.h"
 #include "text/text.h"
@@ -221,11 +222,15 @@ private Q_SLOTS:
         QCOMPARE(when(u"w przyszły poniedziałek", Now, Qt::Sunday), u"2026-10-19"_s);
         QCOMPARE(when(u"w przyszłym tygodniu", Now, Qt::Sunday), u"2026-10-18"_s);
         QCOMPARE(when(u"koniec tygodnia", Now, Qt::Sunday), u"2026-10-17"_s);
-        // A malformed week start means Monday.
-        const auto bad = static_cast<Qt::DayOfWeek>(42);
-        QCOMPARE(when(u"w przyszły poniedziałek", Now, bad), u"2026-10-19"_s);
-        QCOMPARE(when(u"next week", Now, bad), u"2026-10-19"_s);
-        QCOMPARE(when(u"koniec tygodnia", Now, bad), u"2026-10-18"_s);
+        // 0 (the JavaScript convention of a synced config) is Sunday. An out-of-range int cannot
+        // be a Qt::DayOfWeek (undefined behaviour); sanitizeWeekStart() makes it Monday first.
+        const auto zero = static_cast<Qt::DayOfWeek>(0);
+        QCOMPARE(when(u"w przyszły poniedziałek", Now, zero), u"2026-10-19"_s);
+        QCOMPARE(when(u"next week", Now, zero), u"2026-10-18"_s);
+        QCOMPARE(when(u"koniec tygodnia", Now, zero), u"2026-10-17"_s);
+        QCOMPARE(when(u"w przyszły poniedziałek", Now, dates::sanitizeWeekStart(42)), u"2026-10-19"_s);
+        QCOMPARE(when(u"next week", Now, dates::sanitizeWeekStart(42)), u"2026-10-19"_s);
+        QCOMPARE(when(u"koniec tygodnia", Now, dates::sanitizeWeekStart(42)), u"2026-10-18"_s);
     }
 
     // ---- relative offsets ----------------------------------------------------------------

@@ -196,7 +196,10 @@ private Q_SLOTS:
         QTest::newRow("wed, saturday") << d(u"2026-10-14") << int(Qt::Saturday) << d(u"2026-10-10")
                                        << d(u"2026-10-16");
         QTest::newRow("across year") << d(u"2027-01-01") << int(Qt::Monday) << d(u"2026-12-28") << d(u"2027-01-03");
-        QTest::newRow("malformed = monday") << d(u"2026-10-14") << 42 << d(u"2026-10-12") << d(u"2026-10-18");
+        // 0 is Sunday (the JavaScript convention a synced config may use). An out-of-range int
+        // cannot be a Qt::DayOfWeek at all (undefined behaviour): sanitizeWeekStart() turns
+        // those into Monday before they get here.
+        QTest::newRow("zero = sunday") << d(u"2026-10-14") << 0 << d(u"2026-10-11") << d(u"2026-10-17");
     }
     void weekBoundaries()
     {
@@ -225,6 +228,8 @@ private Q_SLOTS:
         QCOMPARE(dates::sanitizeWeekStart(6), Qt::Saturday);
         QCOMPARE(dates::sanitizeWeekStart(-1), Qt::Monday);
         QCOMPARE(dates::sanitizeWeekStart(8), Qt::Monday);
+        QCOMPARE(dates::sanitizeWeekStart(42), Qt::Monday);
+        QCOMPARE(dates::sanitizeWeekStart(-3), Qt::Monday);
     }
 
     // ==== names.h =======================================================================
@@ -492,9 +497,10 @@ private Q_SLOTS:
     {
         QCOMPARE(expr(u"this-week", Today, Qt::Sunday), u"2026-10-11..2026-10-17"_s);
         QCOMPARE(expr(u"next-week", Today, Qt::Sunday), u"2026-10-18..2026-10-24"_s);
-        // A malformed week start (e.g. from a synced config) means Monday.
-        QCOMPARE(expr(u"this-week", Today, static_cast<Qt::DayOfWeek>(42)), u"2026-10-12..2026-10-18"_s);
-        QCOMPARE(expr(u"next-week", Today, static_cast<Qt::DayOfWeek>(-3)), u"2026-10-19..2026-10-25"_s);
+        // 0 (the JavaScript convention of a synced config) is Sunday. A malformed int never
+        // reaches a Qt::DayOfWeek: sanitizeWeekStart() makes it Monday (tested above).
+        QCOMPARE(expr(u"this-week", Today, static_cast<Qt::DayOfWeek>(0)), u"2026-10-11..2026-10-17"_s);
+        QCOMPARE(expr(u"next-week", Today, static_cast<Qt::DayOfWeek>(0)), u"2026-10-18..2026-10-24"_s);
     }
     void resolveDateExprBoundaries()
     {

@@ -1,5 +1,7 @@
 # miniz 3.1.2 (https://github.com/richgel999/miniz, MIT, see LICENSE) — deflate/inflate and ZIP
-# reading/writing used by src/core/io. Vendored unmodified (only miniz.c, miniz.h, LICENSE).
+# reading/writing used by src/core/io. Vendored as released (only miniz.c, miniz.h, LICENSE) with
+# one change, marked "Brulion:" in miniz.c: mz_zip_mem_read_func forms no pointer past the archive
+# for an offset outside it (a hostile ZIP; Clang's UBSan reports the pointer overflow).
 #
 # The project enables only CXX, so miniz.c is compiled as C++ (it is C++-clean). Warnings are
 # disabled for this third-party code; Brulion's -Werror flags never apply to it.
