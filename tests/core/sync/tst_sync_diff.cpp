@@ -1,7 +1,8 @@
 // Line diff (Myers with budget) and diff3 regions.
 #include "sync/diff.h"
 
-#include <QElapsedTimer>
+#include "testtiming.h"
+
 #include <QTest>
 
 #include <algorithm>
@@ -278,10 +279,10 @@ private Q_SLOTS:
             changed[i] = u"zmiana %1"_s.arg(i);
         changed.prepend(u"nowy początek"_s);
         changed.append(u"koniec"_s);
-        QElapsedTimer timer;
+        brulion::test::CpuTimer timer;
         timer.start();
         const QList<DiffHunk> hunks = diffLines(lines, changed);
-        QVERIFY2(timer.elapsed() < 2000, qPrintable(QString::number(timer.elapsed())));
+        QVERIFY2(timer.elapsed() < 2000 * BRULION_TEST_SLOWDOWN, qPrintable(QString::number(timer.elapsed())));
         QCOMPARE(hunks.size(), 22);
     }
 
@@ -292,10 +293,10 @@ private Q_SLOTS:
             a.append(u"a%1"_s.arg(i % 97));
             b.append(u"b%1"_s.arg(i % 89));
         }
-        QElapsedTimer timer;
+        brulion::test::CpuTimer timer;
         timer.start();
         QCOMPARE(diffLines(a, b), (QList<DiffHunk>{{0, 20000, 0, 20000}}));
-        QVERIFY(timer.elapsed() < 5000);
+        QVERIFY(timer.elapsed() < 5000 * BRULION_TEST_SLOWDOWN);
     }
 
     void diffComm()

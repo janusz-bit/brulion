@@ -2,7 +2,8 @@
 // Polish vault. "Today" is Wednesday 2026-10-14, 10:00 (weeks start on Monday).
 #include "dataview/dataview.h"
 
-#include <QElapsedTimer>
+#include "testtiming.h"
+
 #include <QTest>
 #include <QThread>
 
@@ -587,7 +588,7 @@ private Q_SLOTS:
         QFETCH(qint64, maxSteps);
         auto o = options();
         o.maxSteps = maxSteps;
-        QElapsedTimer timer;
+        brulion::test::CpuTimer timer;
         timer.start();
         const QString error = failure(m_index, u"LIST WITHOUT ID "_s + expr + u"\nFROM \"Projekty/Dom\""_s, o);
         QVERIFY2(error.contains(u"takes too long"_s), qPrintable(error));
@@ -649,7 +650,7 @@ private Q_SLOTS:
             note += u"klucz-%1:: ż%1\n"_s.arg(i);
         VaultIndex index;
         index.update(u"Pola.md"_s, note);
-        QElapsedTimer timer;
+        brulion::test::CpuTimer timer;
         timer.start();
         const auto r = run(index, u"TABLE WITHOUT ID length(nastrój), nastrój[49999], klucz-9999"_s);
         QCOMPARE(r.rows.size(), 1);
@@ -773,7 +774,7 @@ private Q_SLOTS:
         for (int i = 0; i < 40000; ++i)
             line += u"[a:: "_s;
         index.update(u"Długa.md"_s, line + u"\nklucz:: "_s + QString(100000, u' ') + u"x"_s);
-        QElapsedTimer timer;
+        brulion::test::CpuTimer timer;
         timer.start();
         const auto r = run(index, u"TABLE WITHOUT ID klucz, a"_s);
         QCOMPARE(r.rows.size(), 1);

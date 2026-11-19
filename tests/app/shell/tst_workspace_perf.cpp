@@ -15,6 +15,8 @@
 #include "index/vaultindex.h"
 #include "reminders/notifications.h"
 
+#include "testtiming.h"
+
 #include <QDir>
 #include <QElapsedTimer>
 #include <QFile>
@@ -68,29 +70,38 @@ public:
     void showNow(const brulion::ScheduledNotification &) override { }
 };
 
-/// Records the longest gap between two turns of the event loop.
+/// Records the longest gap between two turns of the event loop: in the UI thread's own CPU time
+/// (`worst`: work that keeps the loop from turning, which a stalled runner does not add to) and
+/// on the wall clock (`worstWall`: also a wait for another thread — and the runner's stalls).
 struct StallProbe {
     QTimer timer;
     QElapsedTimer clock;
+    brulion::test::CpuTimer cpu;
     qint64 last = 0;
+    qint64 lastWall = 0;
     qint64 worst = 0;
+    qint64 worstWall = 0;
     int ticks = 0;
     StallProbe()
     {
         timer.setInterval(1);
         timer.setTimerType(Qt::PreciseTimer);
         QObject::connect(&timer, &QTimer::timeout, [this] {
-            const qint64 t = clock.elapsed();
+            const qint64 t = cpu.elapsed();
             worst = std::max(worst, t - last);
             last = t;
+            const qint64 wall = clock.elapsed();
+            worstWall = std::max(worstWall, wall - lastWall);
+            lastWall = wall;
             ++ticks;
         });
     }
     void start()
     {
         clock.start();
-        last = 0;
-        worst = 0;
+        cpu.start();
+        last = lastWall = 0;
+        worst = worstWall = 0;
         ticks = 0;
         timer.start();
     }
@@ -146,9 +157,10 @@ private Q_SLOTS:
         QVERIFY(ready.wait(120000) || ws.ready());
         const qint64 readyMs = total.elapsed();
         const qint64 indexingStall = probe.worst;
+        const qint64 indexingWait = probe.worstWall;
         // After `ready`: the reminders start in the readyChanged handler, and the index builds its
         // full-text documents once changes pause (300 ms), a few ms per turn: watch that second too.
-        probe.worst = 0;
+        probe.worst = probe.worstWall = 0;
         QTest::qWait(1500);
         probe.timer.stop();
         // Under sanitizers everything runs ~25x slower: give the background search indexing the
@@ -158,14 +170,20 @@ private Q_SLOTS:
         const qint64 afterReadyStall = probe.worst;
 
         qDebug("perf: %lld pages, open() blocked %lld ms, ready after %lld ms, longest UI stall while "
-               "indexing %lld ms, longest stall in the 1.5 s after ready %lld ms, %d reminders scheduled",
-               qint64(ws.pageCount()), openMs, readyMs, indexingStall, afterReadyStall, sink.scheduledCount);
+               "indexing %lld ms of work (%lld ms on the wall clock), longest stall in the 1.5 s after ready "
+               "%lld ms of work, %d reminders scheduled",
+               qint64(ws.pageCount()), openMs, readyMs, indexingStall, indexingWait, afterReadyStall,
+               sink.scheduledCount);
         QVERIFY(ws.ready());
         QVERIFY(ws.reminders()->isRunning());
         QVERIFY(sink.scheduledCount > 0);
         QVERIFY2(openMs < 15000 * BRULION_TEST_SLOWDOWN, qPrintable(u"open() took %1 ms"_s.arg(openMs)));
-        // The point of chunked indexing: no long freeze while the notebook loads.
+        // The point of chunked indexing: no long freeze while the notebook loads — no long piece of
+        // work between two turns of the loop, and no long wait for the loader (a bound only a
+        // stall of the runner itself could reach).
         QVERIFY2(indexingStall < 1500 * BRULION_TEST_SLOWDOWN, qPrintable(u"the UI thread stalled for %1 ms"_s.arg(indexingStall)));
+        QVERIFY2(indexingWait < 15000 * BRULION_TEST_SLOWDOWN,
+                 qPrintable(u"the UI thread waited for %1 ms"_s.arg(indexingWait)));
 
         // The full-text index was built in the background meanwhile: the first search is fast.
         QCOMPARE(ws.index()->pendingSearchDocuments(), 0);
@@ -199,12 +217,14 @@ private Q_SLOTS:
         QVERIFY(!journals.isEmpty());
         QVERIFY(!switcher.isEmpty());
 
-        // An edit in a big vault: the incremental path (index + reminders debounce + revision).
-        t.restart();
+        // An edit in a big vault: the incremental path (index + reminders debounce + revision),
+        // the UI thread's work (not the disk's time, nor a stall of the runner).
+        brulion::test::CpuTimer edit;
+        edit.start();
         QVERIFY(ws.write(u"Strony/Folder 2/Strona 2.md"_s, u"- [ ] nowe zadanie ⏰ 2026-06-14 18:00\n"_s));
-        const qint64 writeMs = t.elapsed();
+        const qint64 writeMs = edit.elapsed();
         qDebug("perf: one edit (write + index update) %lld ms", writeMs);
-        QVERIFY2(writeMs < 2000, qPrintable(u"an edit took %1 ms"_s.arg(writeMs)));
+        QVERIFY2(writeMs < 2000 * BRULION_TEST_SLOWDOWN, qPrintable(u"an edit took %1 ms"_s.arg(writeMs)));
     }
 
     // While the index loads, its merges reach the views at most every 250 ms (each one used to

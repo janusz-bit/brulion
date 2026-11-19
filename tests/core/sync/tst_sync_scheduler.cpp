@@ -685,7 +685,7 @@ private Q_SLOTS:
         scheduler.setInterval(1000);
         scheduler.start();
         QTRY_COMPARE(runner.calls, 1);
-        QTRY_COMPARE_WITH_TIMEOUT(runner.calls, 2, 5000);
+        QTRY_COMPARE_WITH_TIMEOUT(runner.calls, 2, 20000 * BRULION_TEST_SLOWDOWN);
         scheduler.stop();
         const int calls = runner.calls;
         QTest::qWait(1200);

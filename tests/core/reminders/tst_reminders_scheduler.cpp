@@ -188,7 +188,7 @@ private Q_SLOTS:
         auto s = env.scheduler();
         s->start();
         QCOMPARE(s->nextFireTime(), dt(2026, 10, 14, 9, 0));
-        QTRY_COMPARE_WITH_TIMEOUT(env.sink.shown.size(), 1, 5000);
+        QTRY_COMPARE_WITH_TIMEOUT(env.sink.shown.size(), 1, 20000 * BRULION_TEST_SLOWDOWN);
         QCOMPARE(env.sink.shown.first().title, u"Wyłączyć piekarnik"_s);
         QVERIFY(!s->nextFireTime().isValid());
     }

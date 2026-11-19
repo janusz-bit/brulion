@@ -9,10 +9,18 @@ else()
     set(BRULION_TEST_SLOWDOWN 1)
 endif()
 
+# Time in tests that a stalled runner cannot fail (tests/common/testtiming.h): the thread's CPU
+# time, kept out of the headers (<windows.h>).
+add_library(brulion_test_timing STATIC common/testtiming.cpp)
+target_link_libraries(brulion_test_timing PUBLIC Qt6::Core)
+target_include_directories(brulion_test_timing PUBLIC ${PROJECT_SOURCE_DIR}/tests/common)
+target_compile_definitions(brulion_test_timing PRIVATE BRULION_TEST_SLOWDOWN=${BRULION_TEST_SLOWDOWN})
+brulion_set_warnings(brulion_test_timing)
+
 function(brulion_add_test name)
     cmake_parse_arguments(ARG "" "" "SOURCES;LIBS" ${ARGN})
     qt_add_executable(${name} ${ARG_SOURCES})
-    target_link_libraries(${name} PRIVATE Qt6::Test ${ARG_LIBS})
+    target_link_libraries(${name} PRIVATE Qt6::Test brulion_test_timing ${ARG_LIBS})
     # Helpers shared by tests (tests/common: centraleuropeantime.h, filesystemtraits.h).
     target_include_directories(${name} PRIVATE ${PROJECT_SOURCE_DIR}/tests/common)
     target_compile_definitions(${name} PRIVATE BRULION_TEST_DATA="${PROJECT_SOURCE_DIR}/tests/data"

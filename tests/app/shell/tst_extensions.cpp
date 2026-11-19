@@ -20,6 +20,8 @@
 #include "util/paths.h"
 #include "vault/vault.h"
 
+#include "testtiming.h"
+
 #include <QDir>
 #include <QDirIterator>
 #include <QFile>
@@ -186,6 +188,11 @@ class TestShellExtensions : public QObject {
         for (const QString &file : filesUnder(kSamples + u"/extensions"_s))
             files.insert(kFolder + u'/' + file, readFile(kSamples + u"/extensions/"_s + file));
         QVERIFY(files.size() > 20);
+        // Link check's scan stops after a second of os.clock(), a wall clock as well.
+        QString &linkCheck = files[page(u"Link check"_s)];
+        QVERIFY(linkCheck.contains(u"local BUDGET_SECONDS = 1\n"_s));
+        linkCheck.replace(u"local BUDGET_SECONDS = 1\n"_s,
+                          u"local BUDGET_SECONDS = %1\n"_s.arg(brulion::test::kRoomyMs / 1000));
         for (auto it = files.cbegin(); it != files.cend(); ++it) {
             const QString file = m_dir + u'/' + it.key();
             QDir().mkpath(QFileInfo(file).absolutePath());
@@ -199,6 +206,9 @@ class TestShellExtensions : public QObject {
         for (auto it = files.cbegin(); it != files.cend(); ++it)
             m_index->update(it.key(), it.value());
         m_ext = std::make_unique<WorkspaceExtensions>([] { return QDateTime(QDate(2026, 11, 14), QTime(10, 30)); });
+        // The time limit is a wall clock that a stalled runner runs out in a call of a millisecond:
+        // roomy here, as none of these tests is about it.
+        m_ext->setLimits(extensions::Limits{brulion::test::kRoomyMs, extensions::Limits{}.memoryBytes});
         connect(m_ext.get(), &WorkspaceExtensions::message, this,
                 [this](const QString &text, const QString &kind) { m_messages << kind + u": "_s + text; });
         // Workspace::onVaultChanged: the index first, then the extensions are told — inside the

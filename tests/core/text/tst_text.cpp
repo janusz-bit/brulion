@@ -1,7 +1,8 @@
 #include "text/decode.h"
 #include "text/text.h"
 
-#include <QElapsedTimer>
+#include "testtiming.h"
+
 #include <QRandomGenerator>
 #include <QTest>
 #include <QThread>
@@ -220,7 +221,7 @@ private Q_SLOTS:
         QCOMPARE(text::foldDiacritics(big), wholeStringFoldDiacritics(big));
         QCOMPARE(text::foldKeyWithMap(big).text, wholeStringFoldKey(big));
         const QString huge = paragraph.repeated(2000000 / paragraph.size() + 1);
-        QElapsedTimer timer;
+        brulion::test::CpuTimer timer;
         timer.start();
         const QString folded = text::foldKey(huge);
         QVERIFY(folded.size() > 1000000);
@@ -477,12 +478,12 @@ private Q_SLOTS:
     void splitLinesLarge()
     {
         const QString big = u"Linia ąę\r\n"_s.repeated(100'000);
-        QElapsedTimer t;
+        brulion::test::CpuTimer t;
         t.start();
         const auto lines = text::splitLines(big);
         QCOMPARE(lines.size(), 100'001);
         QCOMPARE(text::joinLines(lines), big);
-        QVERIFY(t.elapsed() < 5000);
+        QVERIFY(t.elapsed() < 5000 * BRULION_TEST_SLOWDOWN);
     }
 
     // ---- names -------------------------------------------------------------------------

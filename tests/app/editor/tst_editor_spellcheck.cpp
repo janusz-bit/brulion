@@ -6,7 +6,10 @@
 #include "markdownhighlighter.h"
 #include "spellcheck.h"
 
-#include <QElapsedTimer>
+#include "testtiming.h"
+
+#include <QScopeGuard>
+#include <QSemaphore>
 #include <QSignalSpy>
 #include <QTest>
 #include <QTextBlock>
@@ -319,21 +322,28 @@ private Q_SLOTS:
 
     void slowBackendNeverBlocks()
     {
-        SpellCheck spell({u"pl"_s}, [](const QString &) -> std::unique_ptr<spell::SpellBackend> {
-            QThread::msleep(300); // loading a big dictionary
+        // Loading a big dictionary takes until the test opens the gate (not a fixed time a slow
+        // runner could outlast): a UI thread that waited for the load would find it done.
+        QSemaphore gate;
+        std::atomic<bool> loaded{false};
+        SpellCheck spell({u"pl"_s}, [&gate, &loaded](const QString &) -> std::unique_ptr<spell::SpellBackend> {
+            (void)gate.tryAcquire(1, brulion::test::kRoomyMs);
+            loaded = true;
             return std::make_unique<SlowBackend>();
         });
+        const auto open = qScopeGuard([&gate] { gate.release(); }); // also when a check fails
         spell.setUiLanguage(u"pl"_s);
-        QElapsedTimer timer;
-        timer.start();
+        int pending = 0;
         for (int i = 0; i < 2000; ++i)
-            spell.verdict(u"słowo"_s + QString::number(i));
-        spell.verdict(u"kot"_s);
+            pending += spell.verdict(u"słowo"_s + QString::number(i)) == SpellCheck::Verdict::Pending ? 1 : 0;
+        pending += spell.verdict(u"kot"_s) == SpellCheck::Verdict::Pending ? 1 : 0;
         spell.requestSuggestions(u"kott"_s);
         // The UI thread goes on: events are processed while the worker loads and checks.
         for (int i = 0; i < 5; ++i)
             QCoreApplication::processEvents();
-        QVERIFY2(timer.elapsed() < 250, qPrintable(QString::number(timer.elapsed())));
+        QVERIFY(!loaded);
+        QCOMPARE(pending, 2001); // asked, not waited for
+        gate.release();
         QVERIFY(spell.waitUntilIdle(30000));
         QCOMPARE(spell.verdict(u"kot"_s), SpellCheck::Verdict::Correct);
         QCOMPARE(spell.verdict(u"słowo7"_s), SpellCheck::Verdict::Wrong);

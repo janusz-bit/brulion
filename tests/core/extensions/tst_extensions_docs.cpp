@@ -13,6 +13,8 @@
 #include "index/vaultindex.h"
 #include "vault/vault.h"
 
+#include "testtiming.h"
+
 #include <QDebug>
 #include <QDir>
 #include <QDirIterator>
@@ -219,7 +221,7 @@ class TestExtensionsDocs : public QObject {
         options.updateIndex = true;
         m_host = std::make_unique<NotebookHost>(*m_vault, *m_index, options);
         m_engine = std::make_unique<Engine>();
-        if (!m_engine->start(m_host.get(), Limits{2000 * BRULION_TEST_SLOWDOWN, 64ll << 20}))
+        if (!m_engine->start(m_host.get(), Limits{test::kRoomyMs, 64ll << 20}))
             return {Status::Error, {}, u"cannot start the engine"_s};
         Extension extension;
         extension.id = kExtension;

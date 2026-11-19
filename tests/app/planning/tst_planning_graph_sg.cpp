@@ -109,7 +109,7 @@ struct Scene {
             return false;
         QElapsedTimer t;
         t.start();
-        while (item->sceneStats().frames == 0 && t.elapsed() < timeoutMs)
+        while (item->sceneStats().frames == 0 && t.elapsed() < timeoutMs * BRULION_TEST_SLOWDOWN)
             QTest::qWait(5);
         return item->sceneStats().frames > 0;
     }
@@ -119,7 +119,7 @@ struct Scene {
         const int frames = item->sceneStats().frames;
         QElapsedTimer t;
         t.start();
-        while (item->sceneStats().frames <= frames && t.elapsed() < timeoutMs)
+        while (item->sceneStats().frames <= frames && t.elapsed() < timeoutMs * BRULION_TEST_SLOWDOWN)
             QTest::qWait(5);
         // Let the frame finish (the sync is over once the stats changed).
         return item->sceneStats().frames > frames;

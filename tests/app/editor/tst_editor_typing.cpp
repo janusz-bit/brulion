@@ -14,6 +14,8 @@
 #include "fakeeditorhost.h"
 #include "pagecontroller.h"
 
+#include "testtiming.h"
+
 #include <QElapsedTimer>
 #include <QRandomGenerator>
 #include <QSignalSpy>
@@ -422,20 +424,23 @@ private Q_SLOTS:
     {
         // A keystroke in a 5000-block outline: setEditText() (the document, the undo step, the
         // dirty check, the model's refresh) with the fast paths and with the model's off. Times of
-        // one process (Debug: compared, not judged against a budget).
+        // one process (Debug: compared, not judged against a budget), the median keystroke of each
+        // way: a stall of the runner in a few of them does not tip the comparison.
         qint64 times[2] = {0, 0};
         for (const bool fast : {false, true}) {
             Editor e(outline(5000), fast);
             const int row = 2500;
             e.page.startEditing(row, 0);
             QString text = e.model()->editTextAt(row);
+            QList<qint64> keystrokes;
             QElapsedTimer clock;
-            clock.start();
             for (int k = 0; k < 200; ++k) {
                 text += k % 10 == 9 ? u' ' : u'ą';
+                clock.start();
                 e.page.setEditText(row, text, int(text.size()));
+                keystrokes.append(clock.nsecsElapsed());
             }
-            times[fast] = clock.nsecsElapsed() / 200;
+            times[fast] = brulion::test::medianOf(keystrokes);
             QVERIFY(e.page.dirty());
         }
         qInfo("keystroke in 5000 blocks: %.3f ms with the full refresh, %.3f ms with the fast path",

@@ -3,7 +3,8 @@
 
 #include "calctest.h"
 
-#include <QElapsedTimer>
+#include "testtiming.h"
+
 #include <QTest>
 #include <QThread>
 
@@ -207,7 +208,7 @@ private Q_SLOTS:
             parts << u"```"_s << u"tekst `= v0_1`"_s;
         }
         const QString page = parts.join(u'\n');
-        QElapsedTimer timer;
+        brulion::test::CpuTimer timer; // both runs' work: a stall in one would tip the ratio
         timer.start();
         pageScope(page, 5);
         const qint64 first = timer.elapsed();
@@ -227,12 +228,12 @@ private Q_SLOTS:
         for (int i = 0; i < 5000; ++i)
             lines << u"- blok %1"_s.arg(i) << u"  wartosc_%1:: %1"_s.arg(i);
         const QString page = lines.join(u'\n');
-        QElapsedTimer timer;
+        brulion::test::CpuTimer timer;
         timer.start();
         const PageCalc calc(page);
         QCOMPARE(calc.scopeAt().number(u"wartosc_4999"_s), std::optional<double>(4999));
         QCOMPARE(calc.scopeAt(3).names(), QStringList{u"wartosc_0"_s});
-        QVERIFY(timer.elapsed() < 10000);
+        QVERIFY(timer.elapsed() < 10000 * BRULION_TEST_SLOWDOWN);
     }
 
     void manyBlocksAndPropertiesScale()
@@ -244,7 +245,7 @@ private Q_SLOTS:
         for (int b = 0; b < 1000; ++b)
             lines << u"```calc"_s << u"v%1 = %1 * 2; w%1 = 1"_s.arg(b) << u"```"_s;
         const QString page = lines.join(u'\n');
-        QElapsedTimer timer;
+        brulion::test::CpuTimer timer;
         timer.start();
         const PageCalc calc(page);
         QVERIFY2(timer.elapsed() < 4000 * BRULION_TEST_SLOWDOWN, qPrintable(u"%1 ms"_s.arg(timer.elapsed())));

@@ -6,7 +6,8 @@
 #include "text/text.h"
 #include "centraleuropeantime.h"
 
-#include <QElapsedTimer>
+#include "testtiming.h"
+
 #include <QScopeGuard>
 #include <QSet>
 #include <QTest>
@@ -470,7 +471,7 @@ private Q_SLOTS:
         text.reserve(200'000);
         for (int i = 0; i < 50'000; ++i)
             text += u"**a "_s;
-        QElapsedTimer timer;
+        brulion::test::CpuTimer timer;
         timer.start();
         const QString plain = reminders_detail::plainText(text);
         const qint64 elapsed = timer.elapsed();
@@ -492,7 +493,7 @@ private Q_SLOTS:
         VaultIndex index;
         fill(index, {{u"Duży.md"_s, content}});
         QCOMPARE(index.note(u"Duży.md"_s)->reminders.size(), 5'000);
-        QElapsedTimer timer;
+        brulion::test::CpuTimer timer;
         timer.start();
         const auto list = upcomingNotifications(index, Now, 14, 1000);
         const qint64 elapsed = timer.elapsed();

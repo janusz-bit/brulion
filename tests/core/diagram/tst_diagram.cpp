@@ -8,7 +8,8 @@
 #include "diagram/sequence_p.h"
 #include "diagram/svg.h"
 
-#include <QElapsedTimer>
+#include "testtiming.h"
+
 #include <QRegularExpression>
 #include <QTest>
 #include <QXmlStreamReader>
@@ -689,7 +690,7 @@ private Q_SLOTS:
     {
         QFETCH(QString, source);
         QFETCH(bool, ok);
-        QElapsedTimer t;
+        brulion::test::CpuTimer t;
         t.start();
         const Result r = render(source);
         QCOMPARE(r.ok(), ok);

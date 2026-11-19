@@ -7,7 +7,8 @@
 #include "markdown/blockclipboard.h"
 #include "markdown/blockdocument.h"
 
-#include <QElapsedTimer>
+#include "testtiming.h"
+
 #include <QHash>
 #include <QTest>
 
@@ -293,14 +294,14 @@ private Q_SLOTS:
         Rows all;
         for (int i = 0; i < doc.count(); ++i)
             all.append(i);
-        QElapsedTimer timer;
+        brulion::test::CpuTimer timer;
         timer.start();
         const QList<int> tops = topRows(doc, all);
         const QString md = blocksMarkdown(doc, tops);
         const QString plain = blocksPlainText(doc, tops);
         QCOMPARE(md + u'\n', content);
         QVERIFY(plain.startsWith(u"• punkt 0\n  • podpunkt 1"_s));
-        QVERIFY2(timer.elapsed() < 5000, qPrintable(QString::number(timer.elapsed())));
+        QVERIFY2(timer.elapsed() < 5000 * BRULION_TEST_SLOWDOWN, qPrintable(QString::number(timer.elapsed())));
     }
 };
 

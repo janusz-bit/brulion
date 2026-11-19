@@ -147,6 +147,9 @@ public:
     void setLocalAi(ai::LocalBackend *backend);
     /// Loads the pictures a request names (b.ai's `images`): Workspace's, from the notebook.
     void setAiPictures(ai::ImageLoader loader);
+    /// The engine's limits: extensions::Limits{} (the app's), unless a test whose subject is not the
+    /// time limit gives its calls more time (a wall clock, which a stalled CI runner runs out).
+    void setLimits(const extensions::Limits &limits);
     int aiPending() const { return m_aiPending; }
     /// Asks the model "Say OK." with the settings as they are: the answer or the error as a message.
     Q_INVOKABLE void testAi();
@@ -341,6 +344,7 @@ private:
     QStringList m_enabled;
     std::unique_ptr<extensions::NotebookHost> m_host;
     std::unique_ptr<extensions::Engine> m_engine;
+    extensions::Limits m_limits;
     QString m_questionKind, m_questionTitle;
     QStringList m_questionOptions;
     int m_questionSerial = 0;

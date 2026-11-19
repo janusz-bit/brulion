@@ -32,7 +32,7 @@ bool waitState(const Object &o, const QString &state, int ms = 10000)
 {
     QElapsedTimer t;
     t.start();
-    while (o.state() != state && t.elapsed() < ms)
+    while (o.state() != state && t.elapsed() < ms * BRULION_TEST_SLOWDOWN)
         QTest::qWait(5);
     if (o.state() != state)
         qWarning() << "state" << o.state() << "error" << o.errorText();

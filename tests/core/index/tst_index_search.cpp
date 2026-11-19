@@ -82,7 +82,7 @@ bool waitSearchBuilt(const VaultIndex &index, const std::function<void()> &pump 
 {
     QElapsedTimer t;
     t.start();
-    while (index.pendingSearchDocuments() > 0 && t.elapsed() < 20000) {
+    while (index.pendingSearchDocuments() > 0 && t.elapsed() < 20000 * BRULION_TEST_SLOWDOWN) {
         if (pump)
             pump();
         QCoreApplication::processEvents(QEventLoop::AllEvents, 5);
@@ -322,7 +322,7 @@ private Q_SLOTS:
         QSet<qsizetype> seen;
         QElapsedTimer t;
         t.start();
-        while (index.pendingSearchDocuments() > 0 && t.elapsed() < 20000) {
+        while (index.pendingSearchDocuments() > 0 && t.elapsed() < 20000 * BRULION_TEST_SLOWDOWN) {
             QCoreApplication::processEvents(QEventLoop::AllEvents, 5);
             seen.insert(index.pendingSearchDocuments());
         }

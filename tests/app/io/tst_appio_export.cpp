@@ -117,7 +117,7 @@ class TestAppIoExport : public QObject {
     {
         QElapsedTimer t;
         t.start();
-        while (c.state() != state && t.elapsed() < ms)
+        while (c.state() != state && t.elapsed() < ms * BRULION_TEST_SLOWDOWN)
             QTest::qWait(10);
         if (c.state() != state)
             qWarning() << "state" << c.state() << "error" << c.errorText();

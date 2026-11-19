@@ -3,7 +3,8 @@
 // are generous (Raspberry Pi 4 under load); the measured times are printed.
 #include "index/index.h"
 
-#include <QElapsedTimer>
+#include "testtiming.h"
+
 #include <QTest>
 
 using namespace brulion;
@@ -65,7 +66,7 @@ private Q_SLOTS:
             notes.append(syntheticNote(i, total));
 
         VaultIndex index;
-        QElapsedTimer timer;
+        brulion::test::CpuTimer timer; // the index works on this thread (no search worker)
         timer.start();
         {
             VaultIndex::Batch batch(index);

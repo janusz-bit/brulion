@@ -451,7 +451,7 @@ private Q_SLOTS:
         timer.start();
         auto model = opened(path, 360, 740);
         QSignalSpy status(model.get(), &PdfViewModel::statusChanged);
-        while (model->status() == Status::Loading && timer.elapsed() < 20000)
+        while (model->status() == Status::Loading && timer.elapsed() < 20000 * BRULION_TEST_SLOWDOWN)
             status.wait(20000);
         const qint64 ready = timer.elapsed();
         QCOMPARE(model->status(), Status::Ready);
@@ -483,7 +483,7 @@ private Q_SLOTS:
               qPrintable(brulion::platform::pdfBackendName()), ready, open, render, thumbnail, search, hits, searchAll);
         QVERIFY(!page.isNull());
         QVERIFY(!thumb.isNull());
-        QVERIFY(ready < 10000);
+        QVERIFY2(ready < 10000 * BRULION_TEST_SLOWDOWN, qPrintable(QString::number(ready)));
     }
 
     void selection()

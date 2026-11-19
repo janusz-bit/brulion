@@ -9,6 +9,8 @@
 #include "drawing/excalidrawmd.h"
 #include "drawing/svgwrite.h"
 
+#include "testtiming.h"
+
 #include <QBuffer>
 #include <QElapsedTimer>
 #include <QFile>
@@ -397,9 +399,9 @@ private Q_SLOTS:
         timer.start();
         const QSize size = localDrawingSize(file);
         const qint64 first = timer.nsecsElapsed();
-        timer.restart();
         QCOMPARE(localDrawingSize(file), size);
-        const qint64 again = timer.nsecsElapsed();
+        // (The fastest of a few: a stall in one cached look-up would outlast the first read.)
+        const qint64 again = brulion::test::fastestNs(5, [&] { (void)localDrawingSize(file); });
         QCOMPARE(size, brulion::drawing::pictureRect(d).size().toSize());
         // Where the first time goes: reading the file (LZ-String, JSON), the picture's rect.
         QFile f(file);

@@ -16,10 +16,14 @@
 #include "io/zip.h"
 #include "vault/vault.h"
 
+#include "testtiming.h"
+
+#include <QDeadlineTimer>
 #include <QDir>
 #include <QElapsedTimer>
 #include <QFile>
 #include <QProcess>
+#include <QScopeGuard>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
@@ -29,6 +33,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <functional>
 #include <limits>
 #include <memory>
 
@@ -139,6 +144,10 @@ public:
     std::optional<QList<Entry>> children(const Entry &folder, QString *error) const override
     {
         ++listings;
+        if (QThread::isMainThread())
+            ++onGuiThread;
+        else if (whileListing)
+            whileListing();
         if (delayMs > 0)
             QThread::msleep(delayMs);
         const auto it = nodes.constFind(folder.uri);
@@ -154,6 +163,8 @@ public:
     std::optional<QByteArray> read(const Entry &file, qint64 maxBytes, QString *error) const override
     {
         ++reads;
+        if (QThread::isMainThread())
+            ++onGuiThread;
         const Node node = nodes.value(file.uri);
         if (node.unreadable || node.dir) {
             *error = u"permission denied"_s;
@@ -165,9 +176,12 @@ public:
     QHash<QString, Node> nodes;
     QHash<QString, QString> trees;
     int delayMs = 0;
+    /// Called by every listing on a worker thread, before its delay.
+    std::function<void()> whileListing;
     mutable std::atomic<int> stats{0};
     mutable std::atomic<int> listings{0};
     mutable std::atomic<int> reads{0};
+    mutable std::atomic<int> onGuiThread{0}; ///< listings and reads on the GUI thread
 
 private:
     static Entry entry(const QString &uri, const Node &node)
@@ -240,7 +254,7 @@ class TestAppIoImport : public QObject {
     {
         QElapsedTimer t;
         t.start();
-        while (c.state() != state && t.elapsed() < ms)
+        while (c.state() != state && t.elapsed() < ms * BRULION_TEST_SLOWDOWN)
             QTest::qWait(10);
         if (c.state() != state)
             qWarning() << "state" << c.state() << "error" << c.errorText();
@@ -919,44 +933,68 @@ private Q_SLOTS:
     {
         // A slow provider (Google Drive, an SD card): listing and reading never block the event
         // loop — on Android a blocked GUI thread is an "app not responding" dialog.
+        // (Shown by what runs where, not by how long start() or the listing takes, which a
+        // stalled runner stretches: no listing or read on the GUI thread, and its event loop
+        // going on during every listing — which waits for a tick of it.)
         auto docs = obsidianTree();
         docs->delayMs = 120;
-        brulion::ioviews::FileGatherer g;
+        std::atomic<int> ticks{0};
+        std::atomic<int> answered{0}; // listings during which the GUI thread's events went on
+        std::atomic<bool> over{false};
+        brulion::ioviews::FileGatherer g; // (after what its worker's listings use: gone first)
         g.setDocumentProvider(docs);
         QSignalSpy finished(&g, &brulion::ioviews::FileGatherer::finished);
         QSignalSpy progress(&g, &brulion::ioviews::FileGatherer::progress);
-        int ticks = 0;
         QTimer ticker;
         ticker.setInterval(10);
         connect(&ticker, &QTimer::timeout, &g, [&ticks] { ++ticks; });
         ticker.start();
-        QElapsedTimer started;
-        started.start();
+        docs->whileListing = [&ticks, &answered, &over] {
+            const int seen = ticks.load();
+            const QDeadlineTimer deadline(brulion::test::kRoomyMs);
+            while (ticks.load() == seen && !over.load() && !deadline.hasExpired())
+                QThread::msleep(1);
+            if (ticks.load() != seen)
+                ++answered;
+        };
+        const auto end = qScopeGuard([&over] { over = true; }); // a failed check: the worker goes on
         g.start({QUrl(kTree)});
-        QVERIFY2(started.elapsed() < 100, qPrintable(QString::number(started.elapsed())));
+        QCOMPARE(docs->onGuiThread.load(), 0);
         QCOMPARE(progress.first().at(1).toInt(), 0); // "looking for the files"
-        QVERIFY(finished.wait(10000 * BRULION_TEST_SLOWDOWN));
-        QVERIFY2(ticks >= 10, qPrintable(QString::number(ticks))); // ≥ 360 ms of listing
+        QVERIFY(finished.wait(brulion::test::kRoomyMs));
+        QCOMPARE(docs->onGuiThread.load(), 0);
+        QVERIFY(docs->listings.load() > 0);
+        QCOMPARE(answered.load(), docs->listings.load());
         QCOMPARE(finished.first().at(0).value<QList<InputFile>>().size(), 4);
     }
 
     void gatherDocumentTreeCancelled()
     {
+        // The first listing waits until the pick is cancelled (a gate, not a delay a stalled
+        // runner could outlast before the cancel comes).
         auto docs = obsidianTree();
-        docs->delayMs = 50;
+        std::atomic<bool> listing{false};
+        std::atomic<bool> gate{false};
+        docs->whileListing = [&listing, &gate] {
+            listing = true;
+            const QDeadlineTimer deadline(brulion::test::kRoomyMs);
+            while (!gate.load() && !deadline.hasExpired())
+                QThread::msleep(1);
+        };
         brulion::ioviews::FileGatherer g;
         g.setDocumentProvider(docs);
         QSignalSpy finished(&g, &brulion::ioviews::FileGatherer::finished);
         QSignalSpy cancelled(&g, &brulion::ioviews::FileGatherer::cancelled);
+        const auto open = qScopeGuard([&gate] { gate = true; }); // a failed check: before g goes
         g.start({QUrl(kTree)});
-        QTest::qWait(20);
+        QTRY_VERIFY(listing.load());
         g.cancel(); // while the listing runs on its thread
         QCOMPARE(cancelled.size(), 1);
+        gate = true; // (open from now on: the next pick lists at once)
         QTest::qWait(400);
         QCOMPARE(finished.size(), 0); // the listing's late result is dropped
         QVERIFY(!g.isRunning());
         // And a new pick right after works.
-        docs->delayMs = 0;
         g.start({QUrl(kTree)});
         QVERIFY(finished.wait(5000));
         QCOMPARE(finished.first().at(0).value<QList<InputFile>>().size(), 4);

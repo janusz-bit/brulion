@@ -6,8 +6,9 @@
 #include "markdown/frontmatter.h"
 #include "centraleuropeantime.h"
 
+#include "testtiming.h"
+
 #include <QCryptographicHash>
-#include <QElapsedTimer>
 #include <QTest>
 
 using namespace brulion;
@@ -261,7 +262,7 @@ private Q_SLOTS:
                     + ";</div><div>return x;</div></div>";
         const QByteArray note = "<en-export><note><title>Kod</title><content><![CDATA[<en-note>" + body
                                 + "</en-note>]]></content></note></en-export>";
-        QElapsedTimer t;
+        brulion::test::CpuTimer t;
         t.start();
         const ImportResult r = importWith(u"evernote"_s, {bytes(u"a.enex"_s, note)});
         QVERIFY2(t.elapsed() < 10000 * BRULION_TEST_SLOWDOWN, qPrintable(QString::number(t.elapsed())));

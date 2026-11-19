@@ -8,7 +8,8 @@
 
 #include "themepalette.h"
 
-#include <QElapsedTimer>
+#include "testtiming.h"
+
 #include <QFile>
 #include <QFont>
 #include <QJsonArray>
@@ -551,7 +552,7 @@ void TestUiBenchMetrics::parseDumpLarge()
                                   { u"px"_s, 14 }, { u"text"_s, u"Wiersz %1 zażółć"_s.arg(i) } });
     }
     const QByteArray json = minimalDump(QString::fromUtf8(QJsonDocument(texts).toJson(QJsonDocument::Compact)));
-    QElapsedTimer timer;
+    brulion::test::CpuTimer timer; // the parse's work, not a stall of the runner
     timer.start();
     QString error;
     const auto dump = brulion::uibench::parseDump(json, &error);

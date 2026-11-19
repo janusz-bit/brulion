@@ -4,7 +4,8 @@
 #include "markdown/inlinerenderer.h"
 #include "markdown/renderedtext.h"
 
-#include <QElapsedTimer>
+#include "testtiming.h"
+
 #include <QTest>
 
 using namespace brulion;
@@ -247,7 +248,7 @@ private Q_SLOTS:
         QString html;
         for (int k = 0; k < 3000; ++k)
             html += u"<b>a<i>b</i></b> "_s;
-        QElapsedTimer timer;
+        brulion::test::CpuTimer timer;
         timer.start();
         const RenderedText t = renderedTextFromHtml(html);
         QCOMPARE(runsToHtml(t), html);

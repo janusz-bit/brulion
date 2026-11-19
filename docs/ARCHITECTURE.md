@@ -733,6 +733,11 @@ redirect check does not apply there); a failed one is told as CORS or mixed cont
   tests run side by side with the others (`PROCESSORS 2` for a whole app's self-test): their
   checks wait for the state they read, never for a fixed time; only measurements that compare
   wall-clock times run alone (`RUN_SERIAL`: `tst_shell_workspace_perf`, `tst_scroll_jumps_qml`).
+  CI runners stall (Windows' run of 2026-11-19 lost two seconds in a one-line extension command),
+  so time in a test follows `tests/common/testtiming.h`: a limit on how long work takes reads the
+  thread's CPU time (`CpuTimer`), a comparison of two ways takes medians or the fastest of a few
+  runs, a wall-clock budget the test is not about (an extension's time limit) is `kRoomyMs`, and a
+  worker that must be busy while the test looks waits for a gate the test opens, not for a delay.
   A fresh build directory starts the longest tests first (`tests/ctest-costs.txt` becomes
   ctest's cost data until ctest has its own timings).
 * Nix: `nix develop` (Qt 6.12 from nixpkgs, CMake, Ninja, ccache, clang-tools, gdb);

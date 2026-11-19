@@ -13,7 +13,8 @@
 #include "markdown/parse.h"
 #include "util/paths.h"
 
-#include <QElapsedTimer>
+#include "testtiming.h"
+
 #include <QRandomGenerator>
 #include <QTest>
 #include <QThread>
@@ -253,7 +254,7 @@ private Q_SLOTS:
                                     u"<meta content=\""_s.repeated(20000),
                                     u"<pre "_s.repeated(10000) + u"<code \""_s.repeated(10000)};
         for (const QString &html : inputs) {
-            QElapsedTimer timer;
+            brulion::test::CpuTimer timer;
             timer.start();
             htmlToMarkdown(html);
             QVERIFY2(timer.elapsed() < 10000 * BRULION_TEST_SLOWDOWN, qPrintable(html.left(20) + u": "_s + QString::number(timer.elapsed())));

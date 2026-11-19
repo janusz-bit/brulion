@@ -25,10 +25,11 @@
 #include "drawing/stroke.h"
 #include "drawing/svgwrite.h"
 
+#include "testtiming.h"
+
 #include <QBuffer>
 #include <QClipboard>
 #include <QDir>
-#include <QElapsedTimer>
 #include <QFile>
 #include <QFileInfo>
 #include <QGuiApplication>
@@ -1129,15 +1130,16 @@ private Q_SLOTS:
                 s.points.append({20 + (i % 20) * 38.0 + k * 0.6, 20 + (i / 20) * 30.0 + 8 * std::sin(k / 6.0), 0.5});
             d.strokes.append(s);
         }
-        QElapsedTimer t;
+        brulion::test::CpuTimer t; // the work, not a stalled runner (lastRenderMs is a wall clock)
         t.start();
         QCOMPARE(canvas->load(brulion::drawing::toSvg(d)), QString());
-        const qint64 loadMs = t.elapsed();
+        const qint64 loadMs = t.restart();
         QImage image(800, 600, QImage::Format_ARGB32_Premultiplied);
         QPainter p(&image);
         canvas->render(&p, QSizeF(800, 600));
-        qInfo("600 strokes: load %lld ms, render %.1f ms", loadMs, canvas->lastRenderMs());
-        QVERIFY(canvas->lastRenderMs() < 1000.0 * BRULION_TEST_SLOWDOWN);
+        const qint64 renderMs = t.elapsed();
+        qInfo("600 strokes: load %lld ms, render %.1f ms (%lld ms of CPU)", loadMs, canvas->lastRenderMs(), renderMs);
+        QVERIFY2(renderMs < 1000 * BRULION_TEST_SLOWDOWN, qPrintable(QString::number(renderMs)));
     }
 
     void handwritingSample()
@@ -3563,7 +3565,7 @@ private Q_SLOTS:
         }
         const QByteArray file = toSvg(d);
         QVERIFY(file.size() < 16 * 1024 * 1024);
-        QElapsedTimer t;
+        brulion::test::CpuTimer t;
         t.start();
         QCOMPARE(canvas->load(file), QString());
         QImage image(800, 600, QImage::Format_ARGB32_Premultiplied);
@@ -3691,15 +3693,16 @@ private Q_SLOTS:
                 s.points.clear();
             d.strokes.append(s);
         }
-        QElapsedTimer t;
+        brulion::test::CpuTimer t; // the work, not a stalled runner (lastRenderMs is a wall clock)
         t.start();
         QCOMPARE(canvas->load(toSvg(d)), QString());
-        const qint64 loadMs = t.elapsed();
+        const qint64 loadMs = t.restart();
         QImage image(800, 600, QImage::Format_ARGB32_Premultiplied);
         QPainter p(&image);
         canvas->render(&p, QSizeF(800, 600));
-        qInfo("600 shapes: load %lld ms, render %.1f ms", loadMs, canvas->lastRenderMs());
-        QVERIFY(canvas->lastRenderMs() < 2000.0 * BRULION_TEST_SLOWDOWN);
+        const qint64 renderMs = t.elapsed();
+        qInfo("600 shapes: load %lld ms, render %.1f ms (%lld ms of CPU)", loadMs, canvas->lastRenderMs(), renderMs);
+        QVERIFY2(renderMs < 2000 * BRULION_TEST_SLOWDOWN, qPrintable(QString::number(renderMs)));
     }
 
     // --- Backdrops (core drawing/backdrop.h, backdropimage.h, backdrops.h) --------------------
@@ -4225,7 +4228,7 @@ private Q_SLOTS:
                 s.points.append({50.0 + k * 10, 20.0 + i * 1.5, 0.5});
             d.strokes.append(s);
         }
-        QElapsedTimer t;
+        brulion::test::CpuTimer t;
         t.start();
         const QByteArray svg = brulion::drawing::toSvg(d);
         const qint64 ms = t.elapsed();

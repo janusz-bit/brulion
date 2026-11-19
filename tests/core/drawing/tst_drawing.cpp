@@ -9,7 +9,8 @@
 #include "drawing/stroke.h"
 #include "drawing/svgwrite.h"
 
-#include <QElapsedTimer>
+#include "testtiming.h"
+
 #include <QFile>
 #include <QJsonDocument>
 #include <QRandomGenerator>
@@ -683,10 +684,10 @@ private Q_SLOTS:
         d.background = Background(background);
         d.strokes.append(wavyStroke(u"źdźbło"_s, -far, -far, 5));
         d.strokes.append(wavyStroke(u"ćma"_s, far - 100, far - 100, 5));
-        QElapsedTimer timer;
+        brulion::test::CpuTimer timer;
         timer.start();
         const QByteArray svg = toSvg(d);
-        QVERIFY2(timer.elapsed() < 5000, qPrintable(QString::number(timer.elapsed())));
+        QVERIFY2(timer.elapsed() < 5000 * BRULION_TEST_SLOWDOWN, qPrintable(QString::number(timer.elapsed())));
         QVERIFY2(svg.size() < 16 * 1024 * 1024, qPrintable(QString::number(svg.size())));
         const SvgCheck check = checkSvg(svg);
         QVERIFY(check.wellFormed);
@@ -761,7 +762,7 @@ private Q_SLOTS:
                                "<!-- payload-start -->"
                                + encodePayload(scene) + "<!-- payload-end --></svg>";
         QVERIFY(svg.size() < 2 * 1024 * 1024);
-        QElapsedTimer timer;
+        brulion::test::CpuTimer timer;
         timer.start();
         ReadError error = ReadError::None;
         const std::optional<Drawing> d = readDrawing(svg, &error);
@@ -770,7 +771,7 @@ private Q_SLOTS:
             QCOMPARE(d->strokes.size(), 1);
         else
             QCOMPARE(error, ReadError::Corrupt);
-        QVERIFY2(timer.elapsed() < 5000, qPrintable(QString::number(timer.elapsed())));
+        QVERIFY2(timer.elapsed() < 5000 * BRULION_TEST_SLOWDOWN, qPrintable(QString::number(timer.elapsed())));
     }
 
     // --- The dark theme (palette.h) -------------------------------------------------------

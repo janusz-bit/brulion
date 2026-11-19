@@ -3,7 +3,8 @@
 #include "markdown/inline.h"
 #include "markdown/inline_p.h"
 
-#include <QElapsedTimer>
+#include "testtiming.h"
+
 #include <QRandomGenerator>
 #include <QRegularExpression>
 #include <QTest>
@@ -329,7 +330,7 @@ private Q_SLOTS:
         // the whole subject on every call — 20 000 inline tags took seconds.
         const QString tags = u"<span>a</span> "_s.repeated(20000) + u"<jan@example.com>"_s;
         const QString lessThan = u"a < b "_s.repeated(50000) + u"<jan@example.com>"_s;
-        QElapsedTimer t;
+        brulion::test::CpuTimer t;
         t.start();
         const QList<Link> a = links(tags);
         const QList<Link> b = links(lessThan);
@@ -511,7 +512,7 @@ private Q_SLOTS:
         QString quotes;
         for (int i = 0; i < 100000; ++i)
             quotes += u"[ż](c \"x"_s;
-        QElapsedTimer t;
+        brulion::test::CpuTimer t;
         t.start();
         QVERIFY(extractInline(s).links.isEmpty());
         QVERIFY(extractInline(u"[a](b (tytuł)) [c](d \"t\")"_s).links.size() == 2);
@@ -540,7 +541,7 @@ private Q_SLOTS:
             openImages += u"!["_s;
             openLinks += u"[x "_s;
         }
-        QElapsedTimer t;
+        brulion::test::CpuTimer t;
         t.start();
         extractInline(brackets);
         const auto u = extractInline(url);
@@ -680,10 +681,10 @@ private Q_SLOTS:
         for (int k = 0; k < 100000; ++k)
             target += u"ż/"_s;
         target += u"ż"_s;
-        QElapsedTimer t;
+        brulion::test::CpuTimer t;
         t.start();
         QVERIFY(markdown::linkPathParts(target).isEmpty());
-        QVERIFY2(t.elapsed() < 1000, qPrintable(QString::number(t.elapsed())));
+        QVERIFY2(t.elapsed() < 1000 * BRULION_TEST_SLOWDOWN, qPrintable(QString::number(t.elapsed())));
     }
 };
 

@@ -678,7 +678,9 @@ private Q_SLOTS:
             QTRY_VERIFY_WITH_TIMEOUT(f.record.blocked.load(), 10000);
             timer.start();
         } // the app closes: the answer is told to stop, the thread ends
-        QVERIFY2(timer.elapsed() < 5000, qPrintable(QString::number(timer.elapsed())));
+        // (Milliseconds: the answer waits until it is told to stop, so a close that waited for it
+        // would not end at all. The bound leaves room for a stalled runner.)
+        QVERIFY2(timer.elapsed() < 30000, qPrintable(QString::number(timer.elapsed())));
         QCOMPARE(f.record.open.load(), 0);
         QVERIFY(!answered); // nobody is left to hear it
     }

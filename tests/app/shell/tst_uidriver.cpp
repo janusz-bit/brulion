@@ -354,24 +354,26 @@ private Q_SLOTS:
     {
         QQuickItem *flick = named(u"flick"_s);
         QVERIFY(flick);
-        const auto settled = [flick] {
+        // Where the content comes to rest: at `want` and still there 100 ms later. (Not the first
+        // two looks that agree: a runner that stalls mid-movement shows the same place twice.)
+        const auto settledAt = [flick](qreal want) {
             qreal last = -1;
             QElapsedTimer t;
             t.start();
-            while (t.elapsed() < 3000) {
+            while (t.elapsed() < 30000 * BRULION_TEST_SLOWDOWN) {
                 QTest::qWait(100);
                 const qreal y = flick->property("contentY").toReal();
-                if (y == last)
+                if (y == last && std::abs(y - want) < 2)
                     return y;
                 last = y;
             }
             return last;
         };
         ud::run(ud::wheel(m_window, ud::pointIn(flick), QPointF(0, 300)));
-        const qreal down = settled();
+        const qreal down = settledAt(300);
         QVERIFY2(std::abs(down - 300) < 2, qPrintable(QString::number(down)));
         ud::run(ud::wheel(m_window, ud::pointIn(flick), QPointF(0, -100)));
-        const qreal up = settled();
+        const qreal up = settledAt(200);
         QVERIFY2(std::abs(up - 200) < 2, qPrintable(QString::number(up)));
     }
 

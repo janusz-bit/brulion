@@ -50,7 +50,7 @@ QJsonObject nextResponse(QLocalSocket &socket)
 {
     QElapsedTimer t;
     t.start();
-    while (!socket.canReadLine() && t.elapsed() < 5000)
+    while (!socket.canReadLine() && t.elapsed() < 20000 * BRULION_TEST_SLOWDOWN)
         QTest::qWait(10);
     return QJsonDocument::fromJson(socket.readLine()).object();
 }

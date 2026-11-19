@@ -2,7 +2,8 @@
 // journals, graph, change notification and configuration.
 #include "fixture.h"
 
-#include <QElapsedTimer>
+#include "testtiming.h"
+
 #include <QSignalSpy>
 #include <QTest>
 
@@ -330,7 +331,7 @@ private Q_SLOTS:
         for (int i = 0; i < 20000; ++i)
             line += u"Strona 1%1 "_s.arg(i % 10);
         index.update(u"Długa notatka.md"_s, line + u"i na końcu Strona 1.\n"_s);
-        QElapsedTimer t;
+        brulion::test::CpuTimer t;
         t.start();
         const QList<UnlinkedRef> refs = index.unlinkedReferences(u"Strona 1.md"_s);
         QVERIFY2(t.elapsed() < 2000 * BRULION_TEST_SLOWDOWN, qPrintable(QString::number(t.elapsed())));

@@ -87,7 +87,7 @@ class TestAppIoSyncSetup : public QObject {
         QElapsedTimer t;
         t.start();
         QTest::qWait(1);
-        while ((form.testing() || form.testResult().isEmpty()) && t.elapsed() < 5000)
+        while ((form.testing() || form.testResult().isEmpty()) && t.elapsed() < 20000 * BRULION_TEST_SLOWDOWN)
             QTest::qWait(5);
         return !form.testing() && !form.testResult().isEmpty();
     }

@@ -10,6 +10,8 @@
 #include "markdown/frontmatter.h"
 #include "markdown/parse.h"
 
+#include "testtiming.h"
+
 #include <QTest>
 
 #include <optional>
@@ -19,6 +21,10 @@ using namespace brulion;
 using namespace brulion::extensions;
 
 namespace {
+
+/// The app's memory limit with a roomy time limit: a wall clock, which a stalled CI runner can run
+/// out in a call that takes a millisecond (none of these tests is about it).
+const Limits kRoomy{test::kRoomyMs, Limits{}.memoryBytes};
 
 class NullHost : public Host
 {
@@ -262,7 +268,7 @@ private Q_SLOTS:
     {
         NullHost host;
         Engine engine;
-        QVERIFY(engine.start(&host, Limits{}));
+        QVERIFY(engine.start(&host, kRoomy));
         const PageExtension e = pageOf(u"Licznik słów.md"_s, u"---\ntags: [rozszerzenie]\n---\nOpis.\n\n```luau\n"
                                                              "b.command(\"policz\", function()\n"
                                                              "    local t = nil\n"
@@ -300,7 +306,7 @@ private Q_SLOTS:
         QVERIFY(e.permissions.isEmpty()); // the example only reads
         NullHost host;
         Engine engine;
-        QVERIFY(engine.start(&host, Limits{}));
+        QVERIFY(engine.start(&host, kRoomy));
         const Result loaded = engine.load(e.extension());
         QVERIFY2(loaded.ok(), qPrintable(loaded.error));
         QCOMPARE(engine.commands().size(), 1);
@@ -328,7 +334,7 @@ private Q_SLOTS:
         NullHost host;
         host.texts.insert(u"Trening A"_s, u"tags:: plan-treningowy\n\n- [[Przysiad]] 3×5\n"_s);
         Engine engine;
-        QVERIFY(engine.start(&host, Limits{}));
+        QVERIFY(engine.start(&host, kRoomy));
         const Extension assistant = builtinExtension(u"asystent"_s);
         QVERIFY(assistant.permissions.contains(u"ai"_s));
         const Result loaded = engine.load(assistant);
@@ -399,7 +405,7 @@ private Q_SLOTS:
         QCOMPARE(e.blocks, 1);
         NullHost host;
         Engine engine;
-        QVERIFY(engine.start(&host, Limits{}));
+        QVERIFY(engine.start(&host, kRoomy));
         const Result loaded = engine.load(e.extension());
         QVERIFY2(loaded.ok(), qPrintable(loaded.error));
         QCOMPARE(engine.commands().size(), 1);
@@ -453,7 +459,7 @@ private Q_SLOTS:
 
         NullHost host;
         Engine engine;
-        QVERIFY(engine.start(&host, Limits{}));
+        QVERIFY(engine.start(&host, kRoomy));
         QVERIFY(engine.load(gym).ok());
         const QList<CommandInfo> commands = engine.commands();
         const QList<ViewInfo> views = engine.views();

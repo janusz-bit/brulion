@@ -6,7 +6,8 @@
 #include "markdown/inline.h"
 #include "markdown/linkformat.h"
 
-#include <QElapsedTimer>
+#include "testtiming.h"
+
 #include <QTest>
 
 using namespace brulion;
@@ -92,10 +93,10 @@ private Q_SLOTS:
         QString heading;
         for (int i = 0; i < 1000; ++i)
             heading += u"ż#[["_s + QString::number(i % 10);
-        QElapsedTimer timer;
+        brulion::test::CpuTimer timer;
         timer.start();
         const QString fragment = headingFragment(heading);
-        QVERIFY(timer.elapsed() < 2000);
+        QVERIFY(timer.elapsed() < 2000 * BRULION_TEST_SLOWDOWN);
         QVERIFY(fragment.size() <= heading.size());
         QVERIFY(fragment.startsWith(u"ż 0ż 1ż 2"_s));
         // Too long to be named in a link: no unique fragment (a block id is used instead).
