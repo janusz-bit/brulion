@@ -385,13 +385,17 @@ private Q_SLOTS:
         for (int i = 0; i < 5; ++i) {
             QTest::qWait(20); // a later clock tick than the listing (kernels without fine timestamps)
             const qint64 listed = f.vault->listedFolders();
+            QElapsedTimer wall;
+            wall.start();
             const QString next = content + u"- zapis %1 źdźbło\n"_s.arg(i);
             QCOMPARE(f.vault->writeTextIfUnchanged(path, next, content), WriteOutcome::Written);
             content = next;
             QTest::qWait(200); // the echo arrives and is handled
             f.vault->processPendingEvents();
 #ifdef Q_OS_LINUX
-            if (fine)
+            // (An echo handled more than 2 s after its save is no longer expected and lists the
+            // folder, as it should: a stalled runner, not the save.)
+            if (fine && wall.elapsed() < 2000)
                 QCOMPARE(f.vault->listedFolders(), listed);
 #else
             Q_UNUSED(listed)

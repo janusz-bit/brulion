@@ -16,7 +16,6 @@
 #include <QThread>
 #include <QThreadPool>
 
-#include <cstdio>
 #include <filesystem>
 #include <optional>
 #include <system_error>
@@ -696,9 +695,7 @@ private Q_SLOTS:
         QTest::addColumn<QString>("kind");
         for (const bool async : {false, true}) {
             QTest::newRow(async ? "async, created" : "sync, created") << async << u"created"_s;
-#ifndef Q_OS_WIN
             QTest::newRow(async ? "async, replaced" : "sync, replaced") << async << u"replaced"_s;
-#endif
         }
     }
     void foreignChangeWhileSaving()
@@ -726,8 +723,18 @@ private Q_SLOTS:
                 createPlain(root, u"journals/C.md"_s, "- z innego urządzenia\n");
             } else {
                 createPlain(root, u"journals/.syncthing.B.md.tmp"_s, "- b z innego urządzenia\n");
-                std::rename(QFile::encodeName(root + u"/journals/.syncthing.B.md.tmp"_s).constData(),
-                            QFile::encodeName(root + u"/journals/B.md"_s).constData());
+                // (std::filesystem's rename replaces the file on Windows too: MoveFileExW. Again a
+                // moment later while a virus scanner still looks at the new file.)
+                const auto at = [&](const QString &rel) {
+                    return std::filesystem::path(QString(root + rel).toStdU16String());
+                };
+                std::error_code code;
+                for (int attempt = 0; attempt < 50; ++attempt) {
+                    std::filesystem::rename(at(u"/journals/.syncthing.B.md.tmp"_s), at(u"/journals/B.md"_s), code);
+                    if (code != std::errc::permission_denied)
+                        break;
+                    QThread::msleep(20);
+                }
             }
         });
         const QString next = u"- moja\n- 1\n- 2\n"_s;

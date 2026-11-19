@@ -62,7 +62,7 @@ void WriteJob::run()
         && !history->snapshotBytesAt(path, read.bytes, historyReason, at))
         historyError = history->errorString();
     const std::function<void()> hook = beforeRename ? std::function<void()>([this] { beforeRename(path); }) : nullptr;
-    save = vaultutil::saveAtomicallyStamped(absolute, data, hook, &mark);
+    save = vaultutil::saveAtomicallyStamped(absolute, data, hook, &mark, probeClock);
     if (save.changed) {
         // Another program wrote the file while this one wrote and synced its own (the same check
         // as above, right before the rename): its text stays, mergeWrite() takes it in.
@@ -138,6 +138,7 @@ quint64 VaultPrivate::writeAsync(AsyncTextWrite write)
     job->known = *known;
     job->knownHash = hashes.value(path);
     job->pendingBefore = foreignBatchPending(dir);
+    job->probeClock = probesFolderClock(dir);
     job->afterWrite = std::move(write.afterWrite);
     job->beforeRename = beforeRenameHook;
     job->done = std::move(write.done);

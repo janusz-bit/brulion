@@ -1845,8 +1845,10 @@ The atomic write itself changed with it (a data-safety review of the echo shortc
 `vaultutil::saveAtomicallyStamped` writes and syncs its own temporary file and stamps the folder
 right after creating it and right before the rename, so only those two system calls are trusted
 to be the folder's only changes — another program's change while the data is synced (Syncthing
-renaming its version of another note over it) is seen and listed; a kernel whose file times follow
-its clock tick (Linux before 6.13, Android) shows itself at the first saves and lists every echo;
+renaming its version of another note over it) is seen and listed; a file system whose times follow
+a clock's tick was to show itself at the first saves and list every echo — it did only when two own
+steps met in a tick, which the fsync between them mostly prevents; since 2026-11-19 the folder's
+clock is probed ("Follow-up (2026-11-19): the folder's clock" below);
 the own write is noted only after the file is tracked; History's memo takes the stamp of the index
 file it wrote, from that file before its rename.
 
@@ -1984,6 +1986,57 @@ case rename's note, History's, ignored meanwhile), `tst_integration` `leftoverTe
 Windows the rename and its Busy for a file held without sharing its deletion).
 Coarse storage is simulated by a test file sync that cuts the temporary file's time to an even
 second, as FAT keeps it.
+
+**Follow-up (2026-11-19): the folder's clock.** A Windows CI run (44459319291) failed
+`tst_vault_async` `foreignChangeWhileSaving(async, created)`, after five green runs: a note that
+another program created while a save synced its data was never reported. The echo shortcut trusts
+the folder's stamps — the vault knew the folder at `before`, and `afterTemp` == `beforeRename`:
+nothing changed the folder while the data was written and synced. That proves it only where every
+change moves the stamp. NTFS takes file times from the system time, which moves at every timer tick
+(0.5–15.6 ms), as Linux before 6.13 and Android do with the kernel's tick (1–10 ms, unless a file
+system has multigrain times): the temporary file and the other program's note came within one tick,
+the rename in the next, so `afterTemp` == `beforeRename` and the echo passed for the save's own. The
+guard against such clocks — two own steps that kept the stamp — almost never fired: the fsync
+between them lets a tick pass. And `fineStampOf()` counts NTFS's stamps as fine (100 ns ticks of a
+coarse clock are not whole milliseconds). So the hole was on every tick-stamped file system, Linux
+included, until a coincidence happened.
+
+Now the first own save into a folder while the vault watches probes the folder's clock
+(`vaultutil::probeFolderClock`, inside `saveAtomicallyStamped` right after its first look at the
+stamp): two `.brulion-tmp-…` files made and removed — four changes of the folder's entries, each
+right after a look. A clock that stamps with its tick keeps the stamp for a change in the tick of the
+one before; when all four come within 0.4 ms, under the finest tick of any such clock (Windows lets a
+program ask for 0.5 ms; Linux's is 1 ms at HZ=1000), at most one tick boundary falls between them, so
+of the three pairs at least two lie within a tick and the stamp stays at least once — whatever
+another program does meanwhile. A probe that saw every change move the stamp within that span
+therefore proves the clock fine; a slower attempt proves nothing and is made again (four attempts,
+then *Unknown*). Only folders found *Fine* trust the echo of an own save; a *Coarse* or *Unknown*
+verdict in any folder (or two own steps that kept a stamp, as before) ends the trust for good (the
+`Vault`'s life). The verdict is per folder: a folder mounted or linked inside the notebook may be on another
+file system (FS_MGTIME is per file system; network shares and FUSE have their own clocks).
+
+Rejected: the platform declaring coarse times (Windows, Android) with a kernel version check on Linux
+— the answer depends on the file system, not on the platform, and a check of names and versions
+goes stale; a racy window like `stampsVouch`'s for files — a folder's stamp cannot tell one change in
+a tick from two however long one waits, since the other program's change may follow the own one at
+once.
+
+Cost: the probe's four changes are part of the save's own steps (each one system call right after a
+look, like the temporary file and the rename), so the probing save's echo is trusted too and fine
+storage still lists nothing for an own save (`ownSaveEchoListsNothing`); once per folder and
+`open()`, tens of microseconds on a local disk, on the writer for an editor's save, nothing per
+save after. On tick-stamped storage the first probe says *Coarse*, no folder probes again, and the
+echoes are listed as before 630d6cde — what the design meant to do there.
+
+Tests: `tst_vault_coarse` `foreignChangeInTheTickOfTheTemporaryFile` — a folder clock that ticks only
+when told (the test hook `vaultutil::setStampFilter`): by hand, and right before the vault's renames;
+another program creates, replaces or deletes a note in the tick of the save's temporary file, on the
+writer thread, inline and synchronously. All 9 rows failed before the change (the echo was trusted,
+the change never reported), on Linux too; now the probe finds the clock coarse and the echo's
+listing reports it. `probeFolderClock`: the ticking clock is *Coarse* every time, looks slower than
+a tick are never *Fine*, a missing or locked folder is *Unknown*, no file is left behind.
+`tst_vault_async` `foreignChangeWhileSaving` runs its "replaced" rows on Windows too
+(`std::filesystem::rename` replaces a file there; C's `rename()` does not).
 
 ### Typing: a keystroke costs the block (2026-11-18)
 

@@ -10,10 +10,14 @@
 //    an own write, after another program's write, after a read — until the tick has passed;
 //  * a rename refused for a moment (FileReplace's Busy: Windows' virus scanners and indexers) is
 //    tried again for 0.3 s, the compare-and-swap before every attempt; a final failure
-//    leaves no temporary file. A failing sync says why.
+//    leaves no temporary file. A failing sync says why;
+//  * folders whose clock stamps changes with its tick (NTFS, Linux before 6.13, Android): the probe
+//    of a folder's clock (vaultutil::probeFolderClock()) finds them coarse, and another program's
+//    change in the tick of an own save's temporary file is reported — the echo is not trusted.
 // The coarse times are simulated: a file sync that cuts the temporary file's time to an even second
-// (as FAT keeps it), files of other programs written with whole-second times, and rewrites that
-// put the file's exact time back (std::filesystem: nanoseconds).
+// (as FAT keeps it), files of other programs written with whole-second times, rewrites that
+// put the file's exact time back (std::filesystem: nanoseconds), and a folder clock that ticks only
+// when told (vaultutil::setStampFilter()).
 #include "vaulttest.h"
 
 #include "vault/filesync.h"
@@ -27,6 +31,8 @@
 #include <atomic>
 #include <chrono>
 #include <filesystem>
+#include <map>
+#include <mutex>
 
 using namespace vaulttest;
 
@@ -138,6 +144,82 @@ bool failingSync(QFileDevice &, QString *error)
 {
     *error = u"brak miejsca na nośniku (test)"_s;
     return false;
+}
+
+// --- a folder clock that ticks only when told (vaultutil::setStampFilter())
+// A file system that stamps changes with its clock tick (NTFS, Linux before 6.13, Android) gives
+// every change of a folder within one tick that tick's stamp. Simulated over the real stamps (a
+// change moves them here: multigrain times): a folder's stamp is the tick in which it was first
+// seen — the tick of its change, as long as the clock moves on only between a change and the next
+// look, which the test makes sure of: it ticks by hand, and right before each of the vault's renames
+// into the notebook (tickingReplace).
+std::mutex g_clockMutex;
+std::map<qint64, qint64> g_folderTicks; ///< a folder's real stamp -> its tick's stamp
+qint64 g_tick = 0;
+QString g_tickingRoot;             ///< renames into it tick first
+std::atomic<int> g_slowLooksMs{0}; ///< every look at a folder's stamp takes this long
+brulion::vaultutil::FileReplace g_realReplace = nullptr;
+
+std::optional<qint64> tickedFolderStamp(const QString &abs, std::optional<qint64> stamp)
+{
+    if (!stamp || !QFileInfo(abs).isDir())
+        return stamp; // (files keep their real stamps)
+    const std::lock_guard lock(g_clockMutex);
+    // Windows' 15.6 ms ticks from a time in 2023, plus 7 ns: never a whole millisecond (coarse).
+    constexpr qint64 kBase = 1'700'000'000'000'000'000;
+    constexpr qint64 kTickNs = 15'625'000;
+    return g_folderTicks.try_emplace(*stamp, kBase + g_tick * kTickNs + 7).first->second;
+}
+
+std::optional<qint64> slowFolderStamp(const QString &abs, std::optional<qint64> stamp)
+{
+    if (QFileInfo(abs).isDir())
+        QThread::msleep(g_slowLooksMs.load());
+    return stamp;
+}
+
+void nextTick()
+{
+    const std::lock_guard lock(g_clockMutex);
+    ++g_tick;
+}
+
+brulion::vaultutil::Replaced tickingReplace(const QString &from, const QString &to, QString *error)
+{
+    if (to.startsWith(g_tickingRoot + u'/'))
+        nextTick();
+    if (g_realReplace)
+        return g_realReplace(from, to, error);
+    std::error_code code;
+    std::filesystem::rename(fsPath(from), fsPath(to), code);
+    if (code && error)
+        *error = QString::fromStdString(code.message());
+    return code ? brulion::vaultutil::Replaced::Failed : brulion::vaultutil::Replaced::Done;
+}
+
+/// The coarse folder clock of the notebook `root` while it lives.
+struct TickingFolderClock {
+    explicit TickingFolderClock(const QString &root)
+    {
+        g_folderTicks.clear();
+        g_tick = 0;
+        g_tickingRoot = root;
+        g_realReplace = brulion::vaultutil::fileReplace();
+        brulion::vaultutil::setFileReplace(&tickingReplace);
+        brulion::vaultutil::setStampFilter(&tickedFolderStamp);
+    }
+    ~TickingFolderClock()
+    {
+        brulion::vaultutil::setStampFilter(nullptr);
+        brulion::vaultutil::setFileReplace(g_realReplace);
+    }
+    Q_DISABLE_COPY_MOVE(TickingFolderClock)
+};
+
+/// Files of the folder `dir` itself (hidden ones too).
+QStringList filesIn(const QString &dir)
+{
+    return QDir(dir).entryList(QDir::Files | QDir::Hidden | QDir::System);
 }
 
 } // namespace
@@ -515,6 +597,129 @@ private Q_SLOTS:
                  qPrintable(f.vault->errorString()));
         QCOMPARE(f.read(u"Plan.md"_s), QByteArray("- plan\n"));
         QVERIFY(!hasTemp(f.root()));
+    }
+
+    // probeFolderClock(): four own changes of the folder, each right after a look at its stamp —
+    // Coarse when one kept it, Fine only when all moved it within less than any clock's tick,
+    // Unknown when it cannot tell. No file is left behind.
+    void probeFolderClock()
+    {
+        using vaultutil::FolderClock;
+        QTemporaryDir tmp;
+        const QString dir = tmp.path() + u"/Dziennik źdźbło"_s;
+        QVERIFY(QDir().mkpath(dir));
+        // This file system's own clock: Fine with multigrain times (Linux 6.13 and later on ext4,
+        // XFS, Btrfs, tmpfs), Coarse on NTFS, older kernels and Android; Unknown where it could not
+        // tell (no fine stamps, a stalled run).
+        const FolderClock real = vaultutil::probeFolderClock(dir);
+        const char *const names[] = {"fine", "coarse", "unknown"};
+        qInfo("this file system's folder clock: %s", names[int(real)]);
+        QCOMPARE(filesIn(dir), QStringList());
+        // A clock that stamps with its tick (ticking only when told here): Coarse, every time.
+        {
+            TickingFolderClock clock(dir);
+            for (int i = 0; i < 5; ++i)
+                QCOMPARE(vaultutil::probeFolderClock(dir), FolderClock::Coarse);
+            nextTick();
+            QCOMPARE(vaultutil::probeFolderClock(dir, vaultutil::fineMtime(dir)), FolderClock::Coarse);
+        }
+        QCOMPARE(filesIn(dir), QStringList());
+        // Every look takes longer than a tick: moved stamps prove nothing then.
+        g_slowLooksMs = 1;
+        vaultutil::setStampFilter(&slowFolderStamp);
+        const FolderClock slow = vaultutil::probeFolderClock(dir);
+        vaultutil::setStampFilter(nullptr);
+        QVERIFY(slow != FolderClock::Fine);
+        QCOMPARE(filesIn(dir), QStringList());
+        // No folder, or one that cannot be changed: Unknown.
+        QCOMPARE(vaultutil::probeFolderClock(dir + u"/nie ma"_s), FolderClock::Unknown);
+        if (test::hasUnixPermissions()) {
+            const QString locked = tmp.path() + u"/Zamknięty"_s;
+            QVERIFY(QDir().mkpath(locked));
+            QVERIFY(QFile::setPermissions(locked, QFile::ReadOwner | QFile::ExeOwner));
+            QCOMPARE(vaultutil::probeFolderClock(locked), FolderClock::Unknown);
+            QVERIFY(QFile::setPermissions(locked, QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner));
+            QCOMPARE(filesIn(locked), QStringList());
+        }
+    }
+
+    // Another program changes a folder within the clock tick in which an own save made its
+    // temporary file there (Windows CI's foreignChangeWhileSaving): where changes are stamped with
+    // the clock's tick, the folder keeps the stamp the temporary file gave it, and its stamps cannot
+    // tell the two apart — the echo of that save must not be trusted. Simulated by a folder clock
+    // that ticks by hand and right before the vault's renames: never between the temporary file and
+    // the other program's change, always between that and the rename (so no own step meets another
+    // in a tick, as the sync between them mostly makes sure of).
+    void foreignChangeInTheTickOfTheTemporaryFile_data()
+    {
+        QTest::addColumn<QString>("mode");
+        QTest::addColumn<QString>("kind");
+        QTest::addColumn<QString>("expected");
+        for (const QString &mode : {u"async thread"_s, u"async inline"_s, u"sync"_s}) {
+            const auto row = [&](const QString &kind, const QString &expected) {
+                QTest::newRow(qPrintable(mode + u", "_s + kind)) << mode << kind << expected;
+            };
+            row(u"created"_s, u"create:Dziennik/Z telefonu ż.md@external"_s);
+            row(u"replaced"_s, u"modify:Dziennik/Zakupy.md@external"_s);
+            row(u"deleted"_s, u"delete:Dziennik/Zakupy.md@external"_s);
+        }
+    }
+    void foreignChangeInTheTickOfTheTemporaryFile()
+    {
+        QFETCH(QString, mode);
+        QFETCH(QString, kind);
+        QFETCH(QString, expected);
+        Fixture f;
+        const QString path = u"Dziennik/2026-11-19.md"_s;
+        f.write(path, "- moja\n");
+        f.write(u"Dziennik/Zakupy.md"_s, "- chleb\n");
+        TickingFolderClock clock(f.root()); // (the listing's stamps are the clock's too)
+        QVERIFY(f.open());
+        Writer writer;
+        writer.attach(*f.vault, mode == "async thread"_L1);
+        f.vault->setWatchDelay(30);
+        f.vault->startWatching();
+        // An own save first: the folder's stamp is known as the save left it.
+        nextTick();
+        QCOMPARE(save(*f.vault, mode, path, u"- moja\n- 1\n"_s, u"- moja\n"_s), WriteOutcome::Written);
+        QTest::qWait(100); // (its echo)
+        f.vault->processPendingEvents();
+        QCOMPARE(f.changes(), QStringList{u"modify:Dziennik/2026-11-19.md@user"_s});
+        f.spy->clear();
+
+        nextTick();
+        const QString dir = f.root() + u"/Dziennik"_s;
+        auto done = std::make_shared<std::atomic<int>>(0);
+        f.vault->setBeforeRenameHook([dir, kind, done](const VaultPath &) {
+            // (On the writer thread: no QVERIFY. No tick: the temporary file's.)
+            bool ok = false;
+            if (kind == "deleted"_L1) {
+                ok = QFile::remove(dir + u"/Zakupy.md"_s);
+            } else {
+                const QString name = kind == "created"_L1 ? u"/Z telefonu ż.md"_s : u"/.syncthing.Zakupy.md.tmp"_s;
+                QFile file(dir + name);
+                ok = file.open(QIODevice::WriteOnly) && file.write("- chleb z innego urządzenia\n") > 0;
+                file.close();
+                if (ok && kind == "replaced"_L1) {
+                    // (Replaces on Windows too: MoveFileExW. Again while a virus scanner looks.)
+                    std::error_code code;
+                    for (int attempt = 0; attempt < 50; ++attempt) {
+                        std::filesystem::rename(fsPath(dir + name), fsPath(dir + u"/Zakupy.md"_s), code);
+                        if (code != std::errc::permission_denied)
+                            break;
+                        QThread::msleep(20);
+                    }
+                    ok = !code;
+                }
+            }
+            *done = ok ? 1 : -1;
+        });
+        QCOMPARE(save(*f.vault, mode, path, u"- moja\n- 1\n- 2\n"_s, u"- moja\n- 1\n"_s), WriteOutcome::Written);
+        f.vault->setBeforeRenameHook({});
+        QCOMPARE(done->load(), 1);
+        QTRY_VERIFY2(f.changes().contains(expected), qPrintable(f.changes().join(u", "_s)));
+        QCOMPARE(f.changes().constFirst(), u"modify:Dziennik/2026-11-19.md@user"_s);
+        QCOMPARE(f.read(path), QByteArray("- moja\n- 1\n- 2\n"));
     }
 
 private:

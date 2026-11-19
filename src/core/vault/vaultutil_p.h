@@ -104,6 +104,34 @@ inline constexpr qint64 kRacyNs = 100'000'000;
 /// stat: FAT's 2 s tick with a margin (as sync's SyncFileState::SettledAfterMs).
 inline constexpr qint64 kSettleMs = 3000;
 
+/// What the clock that stamps a folder's changes can tell apart (probeFolderClock()).
+enum class FolderClock {
+    /// Every change of the folder's entries made right after a look at its stamp moved it
+    /// (multigrain times — Linux 6.13 and later on ext4, XFS, Btrfs and tmpfs): an unchanged stamp
+    /// proves that nothing changed the entries since that look.
+    Fine,
+    /// A change right after a look kept the stamp: the clock's tick stamps every change within it
+    /// (NTFS — the system time, 0.5 to 15.6 ms —, Linux before 6.13 and Android — the kernel's
+    /// tick, 1 to 10 ms —, network shares, a client's cached times). Another program's change in
+    /// the tick of an own one keeps the stamp too.
+    Coarse,
+    /// The probe could not tell: no fine-grained stamps (FAT, exFAT, HFS+, the browser's file
+    /// system), the folder could not be changed, or every attempt took too long.
+    Unknown,
+};
+
+/// Probes the clock of the folder `absoluteDir`: four own changes of its entries (two files
+/// `.brulion-tmp-…` created and removed), each right after a look at the folder's stamp (`stamp`:
+/// its fineMtime() just taken, else read first). Coarse as soon as one kept the stamp. Fine when
+/// every one moved it within kClockProbeSpanNs — shorter than any clock's tick, so that a clock
+/// that stamps with its tick would have kept it at least once; a slower attempt proves nothing
+/// and is made again, four attempts in all, then Unknown. Leaves no file behind (one that cannot be
+/// removed stays a leftover: removeLeftoverTemp()).
+FolderClock probeFolderClock(const QString &absoluteDir, std::optional<qint64> stamp = std::nullopt);
+/// Under the finest tick of any clock that stamps files: Windows' 0.5 ms (a program may ask for
+/// it), Linux's 1 ms (HZ=1000).
+inline constexpr qint64 kClockProbeSpanNs = 400'000;
+
 /// What saveAtomicallyStamped() saw of the folder around its own changes of the folder's entries.
 struct StampedSave {
     bool ok = false;
@@ -114,13 +142,17 @@ struct StampedSave {
     /// The written file's modification time is fine-grained (fineMtime()); false for coarse times,
     /// where an unchanged stat says nothing about another write within the same tick.
     bool fineStamps = false;
-    /// The folder's fineMtime(): right before the temporary file was created, right after it was
-    /// created, right before the rename over the file and right after it. Equal `afterTemp` and
+    /// The folder's fineMtime(): right before the save's first change of its entries (the probe's,
+    /// when asked for one, else the temporary file's), right after the temporary file was created,
+    /// right before the rename over the file and right after it. Equal `afterTemp` and
     /// `beforeRename`: nothing changed the folder's entries while the data was written and synced,
-    /// so between `before` and `after` only the creation of the temporary file and the rename
-    /// happened there (each one system call) — unless another program changed it in the same
-    /// clock tick. nullopt where unknown (coarse times, the fallback without a sync of its own).
+    /// so between `before` and `after` only the save's own changes happened there (each one system
+    /// call right after a look at the stamp) — provided the folder's clock is Fine: one that stamps
+    /// with its tick keeps the stamp for another program's change in the temporary file's tick.
+    /// nullopt where unknown (coarse times, the fallback without a sync of its own).
     std::optional<qint64> before, afterTemp, beforeRename, after;
+    /// probeFolderClock() of the folder, right after `before`, when the save was asked to probe.
+    std::optional<FolderClock> folderClock;
     /// The written file's fineMtime() and size, taken from the temporary file before the rename
     /// (another program's file renamed over it later has another stamp).
     std::optional<qint64> fileMtime;
@@ -132,11 +164,13 @@ struct StampedSave {
 /// taking the folder's stamps around each step (StampedSave). `beforeRename` (tests) runs between
 /// the sync and the rename. `expect`: the file must still be what the caller read (stillAsRead(),
 /// checked right before every attempt of the rename), else nothing is written (`changed`). A
-/// rename refused for a moment (FileReplace's Busy) is tried again for 0.3 s. Without a
+/// rename refused for a moment (FileReplace's Busy) is tried again for 0.3 s. `probeClock`:
+/// probeFolderClock() of the folder first, right after `before` (`folderClock`). Without a
 /// file sync of its own (filesync.h: none set) it is saveAtomically() without stamps (`expect`
-/// checked before QSaveFile's commit, which syncs).
+/// checked before QSaveFile's commit, which syncs) and probes nothing.
 StampedSave saveAtomicallyStamped(const QString &absolutePath, QByteArrayView bytes,
-                                  const std::function<void()> &beforeRename = {}, const ReadMark *expect = nullptr);
+                                  const std::function<void()> &beforeRename = {}, const ReadMark *expect = nullptr,
+                                  bool probeClock = false);
 
 /// The waits between the attempts of a rename refused for a moment (ms): 10 + 20 + … + 160, 0.3 s
 /// in all — a virus scanner looks at a new file for a few to a few hundred milliseconds. Not
@@ -169,6 +203,12 @@ bool removeLeftoverTemp(const QString &absolutePath, qint64 nowMs);
 /// HFS+, the browser's file system — where a change by another program right after one of ours
 /// could keep it).
 std::optional<qint64> fineMtime(const QString &absolutePath);
+
+/// Tests: a function that every stamp fineMtime() reads goes through (the path, the stamp read:
+/// nullopt when coarse or unreadable), to simulate a file system whose clock ticks coarsely
+/// (tst_vault_coarse). Null, the default: none. Set it while no write is in flight.
+using StampFilter = std::optional<qint64> (*)(const QString &absolutePath, std::optional<qint64> stamp);
+void setStampFilter(StampFilter filter);
 
 /// fineMtime() of a file time given as its clock's time since its epoch: nullopt for whole
 /// milliseconds (coarse), else nanoseconds modulo 2^64 — exact where they fit in 64 bits (the
