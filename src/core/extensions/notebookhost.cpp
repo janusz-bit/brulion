@@ -4,6 +4,8 @@
 #include "extensions/sandbox.h"
 #include "index/query.h"
 #include "index/vaultindex.h"
+#include "markdown/edit.h"
+#include "markdown/parse.h"
 #include "markdown/tasks.h"
 #include "notebook/itemref.h"
 #include "notebook/journals.h"
@@ -71,9 +73,14 @@ QVariantMap blockMap(const VaultPath &path, const ParsedNote &note, const QList<
     QVariantMap map{
         {u"ref"_s, notebook::formatLineRef(path, block.line, line)},
         {u"page"_s, note.title},
+        {u"path"_s, path},
+        {u"line"_s, block.line + 1},
         {u"text"_s, blockLineText(line)},
         {u"tags"_s, block.tags},
         {u"props"_s, propertiesMap(block.properties)},
+        // What the block says: its text without task fields (dates, priority, ids), tags and with
+        // links as their labels.
+        {u"plain"_s, plainWords(block.task ? block.task->text : block.text)},
     };
     if (note.journalDate)
         map.insert(u"date"_s, note.journalDate->toString(Qt::ISODate));
@@ -112,9 +119,13 @@ void NotebookHost::setLanguages(const QString &language, const QString &uiLangua
     m_options.uiLanguage = uiLanguage;
 }
 
-QDateTime NotebookHost::now() const { return m_options.now ? m_options.now() : QDateTime::currentDateTime(); }
+QDateTime NotebookHost::clock() const { return m_options.now ? m_options.now() : QDateTime::currentDateTime(); }
 
-QString NotebookHost::today() { return now().date().toString(Qt::ISODate); }
+QString NotebookHost::today() { return clock().date().toString(Qt::ISODate); }
+
+QString NotebookHost::now() { return clock().toString(u"yyyy-MM-dd HH:mm"_s); }
+
+int NotebookHost::weekStart() { return int(m_index.config().weekStartsOn); }
 
 VaultPath NotebookHost::pathOf(const QString &page) const
 {
@@ -174,7 +185,10 @@ QVariantMap NotebookHost::page(const QString &page)
     const ParsedNote *note = path.isEmpty() ? nullptr : m_index.note(path);
     if (!note)
         return {};
-    QVariantMap map{{u"name"_s, note->title}, {u"tags"_s, pageTags(*note)}, {u"props"_s, propertiesMap(note->properties)}};
+    QVariantMap map{{u"name"_s, note->title},
+                    {u"path"_s, path},
+                    {u"tags"_s, pageTags(*note)},
+                    {u"props"_s, propertiesMap(note->properties)}};
     if (note->journalDate)
         map.insert(u"date"_s, note->journalDate->toString(Qt::ISODate));
     return map;
@@ -197,6 +211,22 @@ QVariantMap NotebookHost::blockAt(const VaultPath &path, int line) const
 QVariantList NotebookHost::blocks(const BlockQuery &query)
 {
     QVariantList out;
+    const QString tag = unicode::nfc(query.tag).toLower();
+    QStringList props;
+    for (const QString &key : query.props)
+        if (const QString k = key.trimmed().toLower(); !k.isEmpty() && !props.contains(k))
+            props << k;
+    // A block that carries the tag itself and has one of the properties (each when asked for).
+    const auto matches = [&](const Block &block) {
+        if (!tag.isEmpty() && !block.tags.contains(tag))
+            return false;
+        if (props.isEmpty())
+            return true;
+        if (block.kind == BlockKind::Frontmatter || block.properties.isEmpty())
+            return false;
+        return std::ranges::any_of(props, [&](const QString &k) { return block.properties.contains(k); });
+    };
+    const bool filtered = !tag.isEmpty() || !props.isEmpty();
     if (!query.page.isEmpty()) {
         const VaultPath path = pathOf(query.page);
         const ParsedNote *note = path.isEmpty() ? nullptr : m_index.note(path);
@@ -204,11 +234,10 @@ QVariantList NotebookHost::blocks(const BlockQuery &query)
             return out;
         const QList<text::Line> lines = text::splitLines(m_index.content(path));
         for (int i = 0; i < note->blocks.size() && out.size() < m_options.maxBlocks; ++i)
-            if (note->blocks[i].parent < 0)
+            if (filtered ? matches(note->blocks[i]) : note->blocks[i].parent < 0)
                 out << blockMap(path, *note, lines, i, 0);
         return out;
     }
-    const QString tag = unicode::nfc(query.tag).toLower();
     const QDate from = QDate::fromString(query.from, Qt::ISODate), to = QDate::fromString(query.to, Qt::ISODate);
     struct Hit
     {
@@ -218,7 +247,7 @@ QVariantList NotebookHost::blocks(const BlockQuery &query)
     };
     QList<Hit> hits;
     m_index.forEachNote([&](const VaultPath &path, const ParsedNote &note) {
-        if (!note.tags.contains(tag))
+        if (!tag.isEmpty() && !note.tags.contains(tag))
             return;
         const bool journal = note.journalDate.has_value();
         if ((query.journalOnly || from.isValid() || to.isValid()) && !journal)
@@ -226,7 +255,7 @@ QVariantList NotebookHost::blocks(const BlockQuery &query)
         if (journal && ((from.isValid() && *note.journalDate < from) || (to.isValid() && *note.journalDate > to)))
             return;
         for (int i = 0; i < note.blocks.size(); ++i)
-            if (note.blocks[i].tags.contains(tag))
+            if (matches(note.blocks[i]))
                 hits.append({note.journalDate.value_or(QDate()), path, i});
     });
     std::stable_sort(hits.begin(), hits.end(), [](const Hit &a, const Hit &b) {
@@ -250,6 +279,38 @@ QVariantList NotebookHost::blocks(const BlockQuery &query)
     }
     return out;
 }
+
+QStringList NotebookHost::findPages(const PageQuery &query)
+{
+    const QString wanted = unicode::nfc(query.tag).toLower();
+    QStringList props;
+    for (const QString &key : query.props)
+        if (const QString k = key.trimmed().toLower(); !k.isEmpty())
+            props << k;
+    QStringList out;
+    m_index.forEachNote([&](const VaultPath &, const ParsedNote &note) {
+        if (!wanted.isEmpty() && !(note.tags.contains(wanted) && pageTags(note).contains(wanted)))
+            return;
+        if (!props.isEmpty() && std::ranges::none_of(props, [&](const QString &k) { return note.properties.contains(k); }))
+            return;
+        out << note.title;
+    });
+    std::stable_sort(out.begin(), out.end(), [](const QString &a, const QString &b) { return text::compareNames(a, b) < 0; });
+    out.erase(std::unique(out.begin(), out.end()), out.end());
+    return out;
+}
+
+QStringList NotebookHost::attachments()
+{
+    QStringList out;
+    for (const VaultPath &path : m_index.attachments())
+        if (!paths::isIgnored(path))
+            out << path;
+    std::sort(out.begin(), out.end());
+    return out;
+}
+
+qint64 NotebookHost::revision() { return qint64(m_index.version()) + (m_writes << 32); }
 
 QVariantList NotebookHost::search(const QString &query, int limit)
 {
@@ -285,6 +346,11 @@ QVariantList NotebookHost::search(const QString &query, int limit)
 
 QVariantMap NotebookHost::query(const QString &source, int limit, QString *error)
 {
+    return queryPage(source, limit, 0, error);
+}
+
+QVariantMap NotebookHost::queryPage(const QString &source, int limit, int offset, QString *error)
+{
     const std::variant<Query, QString> parsed = parseQuery(source);
     if (const QString *message = std::get_if<QString>(&parsed)) {
         if (error)
@@ -293,16 +359,19 @@ QVariantMap NotebookHost::query(const QString &source, int limit, QString *error
     }
     Query query = std::get<Query>(parsed);
     limit = std::clamp(limit, 1, 1000);
-    if (!query.limit || *query.limit > limit)
-        query.limit = limit;
+    offset = std::max(0, offset);
+    // A smaller `limit:` of the query itself ends the items there, the pages after it too.
+    const int last = query.limit ? std::min(*query.limit, offset + limit) : offset + limit;
+    query.limit = last;
     QueryOptions options;
-    options.now = now().time();
-    options.defaultLimit = limit;
-    const QueryResult result = runQuery(query, m_index, now().date(), Qt::Monday, options);
+    options.now = clock().time();
+    options.defaultLimit = last;
+    const QueryResult result = runQuery(query, m_index, clock().date(), m_index.config().weekStartsOn, options);
     QVariantList items;
     VaultPath linesOf;
     QList<text::Line> lines;
-    for (const QueryItem &item : result.items) {
+    for (qsizetype i = offset; i < result.items.size(); ++i) {
+        const QueryItem &item = result.items[i];
         const ParsedNote *note = m_index.note(item.path);
         if (!note)
             continue;
@@ -319,7 +388,10 @@ QVariantMap NotebookHost::query(const QString &source, int limit, QString *error
         }
         // (Depth 64: the block without its subtree.)
         QVariantMap block = blockMap(item.path, *note, lines, item.blockIndex, 64);
+        // As docs/EXTENSIONS.md "Blocks" says: children, path and line are b.blocks' and ctx.block's.
         block.remove(u"children"_s);
+        block.remove(u"path"_s);
+        block.remove(u"line"_s);
         if (item.task) {
             if (item.task->due)
                 block.insert(u"due"_s, item.task->due->toString());
@@ -344,13 +416,14 @@ QVariantMap NotebookHost::checkExtension(const QString &page, const QString &con
         return {{u"ok"_s, false}, {u"error"_s, u"no page name"_s}};
     Options options = m_options;
     options.updateIndex = false;
-    const QDateTime when = now();
+    const QDateTime when = clock();
     options.now = [when] { return when; };
     return checkExtensionPage(m_vault, m_index, path, content, options, Limits{1000, 32ll << 20});
 }
 
 QString NotebookHost::writeFile(const QString &extension, const VaultPath &path, const QString &content)
 {
+    ++m_writes;
     if (m_options.dryRun) {
         if (DryWrite *w = dryWrite(path)) {
             w->after = content;
@@ -380,6 +453,7 @@ QString NotebookHost::write(const QString &extension, const QString &page, const
         if (planned.path.isEmpty())
             return u"cannot create the page \"%1\""_s.arg(page);
         if (!planned.existing) {
+            ++m_writes;
             m_dryWrites.append({planned.path, QString(), notebook::newPageText(m_vault, planned.path, std::nullopt, content), false});
             m_dryPages.insert(text::foldKey(page.trimmed()), planned.path);
             if (onWritten)
@@ -393,6 +467,7 @@ QString NotebookHost::write(const QString &extension, const QString &page, const
         if (created.path.isEmpty())
             return u"cannot create the page \"%1\""_s.arg(page);
         if (!created.existing) {
+            ++m_writes;
             if (m_options.updateIndex)
                 m_index.update(created.path, m_vault.readText(created.path));
             if (onWritten)
@@ -415,11 +490,11 @@ QString NotebookHost::appendToJournal(const QString &extension, const QString &d
         bool ok = false;
         QString content = currentText(path, &ok);
         if (!ok || (!dryWrite(path) && !m_vault.exists(path)))
-            content = notebook::newJournalText(m_vault, day, now(), locale);
+            content = notebook::newJournalText(m_vault, day, clock(), locale);
         return writeFile(extension, path, notebook::appendBlock(content, markdown));
     }
     const notebook::EnsuredJournal journal = notebook::ensureJournal(
-            m_vault, day, now(), locale);
+            m_vault, day, clock(), locale);
     if (journal.path.isEmpty())
         return journal.error.isEmpty() ? u"cannot open the daily note of %1"_s.arg(date) : journal.error;
     bool ok = false;
@@ -429,8 +504,7 @@ QString NotebookHost::appendToJournal(const QString &extension, const QString &d
     return writeFile(extension, journal.path, notebook::appendBlock(content, markdown));
 }
 
-QString NotebookHost::replaceBlock(const QString &extension, const QString &ref, const QString &text,
-                                   const std::optional<QString> &task, QString *newRef)
+QString NotebookHost::resolveRef(const QString &ref, VaultPath *path, QString *content, int *line)
 {
     // A block's ref as blocks(), search() and query() give it: a note's path, a line and the hash
     // of that line's text. A script can write any text as a ref, so nothing else is taken: a ref
@@ -440,19 +514,31 @@ QString NotebookHost::replaceBlock(const QString &extension, const QString &ref,
     const std::optional<notebook::ItemRef> item = notebook::parseItemRef(ref);
     if (!item || !item->hasLine() || item->lineHash.isEmpty())
         return u"not a block reference: "_s + ref;
-    const VaultPath path = paths::normalize(item->page);
-    if (!paths::isMarkdown(path) || paths::isIgnored(path))
+    *path = paths::normalize(item->page);
+    if (!paths::isMarkdown(*path) || paths::isIgnored(*path))
         return u"not a block reference: "_s + ref;
-    if (!m_index.note(path) && !dryWrite(path))
+    if (!m_index.note(*path) && !dryWrite(*path))
         return u"stale: the page is gone ("_s + ref + u")"_s;
     bool ok = false;
-    const QString content = currentText(path, &ok);
+    *content = currentText(*path, &ok);
     if (!ok)
         return u"stale: the page is gone ("_s + ref + u")"_s;
-    const notebook::ResolvedLine resolved = notebook::resolve(content, *item, m_vault.config());
+    const notebook::ResolvedLine resolved = notebook::resolve(*content, *item, m_vault.config());
     if (resolved.status != notebook::ResolvedLine::Ok && resolved.status != notebook::ResolvedLine::Moved)
         return u"stale: the block changed since it was read ("_s + ref + u")"_s;
-    const std::optional<QString> edited = replaceBlockText(content, resolved.line, text, task, now().date());
+    *line = resolved.line;
+    return {};
+}
+
+QString NotebookHost::replaceBlock(const QString &extension, const QString &ref, const QString &text,
+                                   const std::optional<QString> &task, QString *newRef)
+{
+    VaultPath path;
+    QString content;
+    int line = -1;
+    if (const QString error = resolveRef(ref, &path, &content, &line); !error.isEmpty())
+        return error;
+    const std::optional<QString> edited = replaceBlockText(content, line, text, task, clock().date());
     if (!edited)
         return u"cannot replace the line of "_s + ref;
     if (*edited != content) {
@@ -461,7 +547,150 @@ QString NotebookHost::replaceBlock(const QString &extension, const QString &ref,
             return error;
     }
     if (newRef)
-        *newRef = notebook::formatLineRef(path, resolved.line, rawLine(*edited, resolved.line));
+        *newRef = notebook::formatLineRef(path, line, rawLine(*edited, line));
+    return {};
+}
+
+namespace {
+
+// The block whose first line is `line` in `content` parsed as the note at `path`, or nullopt.
+std::optional<Block> blockOfLine(const VaultPath &path, const QString &content, const VaultConfig &config, int line)
+{
+    const ParsedNote note = markdown::parseNote(path, content, config);
+    for (const Block &block : note.blocks)
+        if (block.line == line && block.kind != BlockKind::Frontmatter)
+            return block;
+    return std::nullopt;
+}
+
+} // namespace
+
+QString NotebookHost::appendToPage(const QString &extension, const QString &page, const QString &markdown)
+{
+    if (markdown.trimmed().isEmpty())
+        return u"nothing to append"_s;
+    const VaultPath path = pathOf(page);
+    if (path.isEmpty())
+        return write(extension, page, notebook::appendBlock(QString(), markdown));
+    bool ok = false;
+    const QString content = currentText(path, &ok);
+    if (!ok)
+        return m_vault.errorString();
+    return writeFile(extension, path, notebook::appendBlock(content, markdown));
+}
+
+QString NotebookHost::insertBlock(const QString &extension, const QString &ref, const QString &markdown, InsertAt where,
+                                  QString *newRef)
+{
+    VaultPath path;
+    QString content;
+    int line = -1;
+    if (const QString error = resolveRef(ref, &path, &content, &line); !error.isEmpty())
+        return error;
+    const std::optional<Block> block = blockOfLine(path, content, m_vault.config(), line);
+    if (!block)
+        return u"stale: the block changed since it was read ("_s + ref + u")"_s;
+    // As a child: indented as the block's first child is, beyond the block's own indentation.
+    QString childIndent;
+    const QList<text::Line> lines = text::splitLines(content);
+    if (where == InsertAt::Child && block->endLine > block->ownEndLine) {
+        const ParsedNote note = markdown::parseNote(path, content, m_vault.config());
+        for (const Block &b : note.blocks) {
+            if (b.line > block->ownEndLine && b.line <= block->endLine && b.parent >= 0
+                && note.blocks[b.parent].line == line && b.line < lines.size()) {
+                const QString own = lines[line].text, child = lines[b.line].text;
+                qsizetype a = 0, c = 0;
+                while (a < own.size() && (own[a] == u' ' || own[a] == u'\t'))
+                    ++a;
+                while (c < child.size() && (child[c] == u' ' || child[c] == u'\t'))
+                    ++c;
+                if (c > a)
+                    childIndent = child.mid(a, c - a);
+                break;
+            }
+        }
+    }
+    const Placement placement = where == InsertAt::Before ? Placement::Before
+                                : where == InsertAt::Child ? Placement::Child
+                                                           : Placement::After;
+    int first = -1;
+    const std::optional<QString> edited =
+            insertBlockLines(content, line, block->endLine, markdown, placement, childIndent, &first);
+    if (!edited)
+        return u"nothing to insert"_s;
+    if (const QString error = writeFile(extension, path, *edited); !error.isEmpty())
+        return error;
+    if (newRef)
+        *newRef = notebook::formatLineRef(path, first, rawLine(*edited, first));
+    return {};
+}
+
+QString NotebookHost::removeBlock(const QString &extension, const QString &ref)
+{
+    VaultPath path;
+    QString content;
+    int line = -1;
+    if (const QString error = resolveRef(ref, &path, &content, &line); !error.isEmpty())
+        return error;
+    const std::optional<Block> block = blockOfLine(path, content, m_vault.config(), line);
+    if (!block)
+        return u"stale: the block changed since it was read ("_s + ref + u")"_s;
+    const std::optional<QString> edited = removeBlockLines(content, line, block->endLine);
+    if (!edited)
+        return u"cannot remove the block of "_s + ref;
+    return writeFile(extension, path, *edited);
+}
+
+QString NotebookHost::setTask(const QString &extension, const QString &ref, const QString &status, QString *newRef)
+{
+    VaultPath path;
+    QString content;
+    int line = -1;
+    if (const QString error = resolveRef(ref, &path, &content, &line); !error.isEmpty())
+        return error;
+    const TaskStatus wanted = markdown::statusFromCheckbox(status.at(0));
+    const std::optional<QString> current = taskCharacter(rawLine(content, line));
+    QString edited = content;
+    if (!current || markdown::statusFromCheckbox(current->at(0)) != wanted)
+        edited = markdown::setTaskStatus(content, line, wanted, clock().date());
+    if (edited != content) {
+        if (const QString error = writeFile(extension, path, edited); !error.isEmpty())
+            return error;
+    }
+    // Completing a recurring task puts its next occurrence above it: the task set is lower now.
+    const int added = int(text::splitLines(edited).size() - text::splitLines(content).size());
+    for (int i = line; added > 0 && i <= line + added; ++i) {
+        const std::optional<QString> c = taskCharacter(rawLine(edited, i));
+        if (c && markdown::statusFromCheckbox(c->at(0)) == wanted) {
+            line = i;
+            break;
+        }
+    }
+    if (newRef)
+        *newRef = notebook::formatLineRef(path, line, rawLine(edited, line));
+    return {};
+}
+
+QString NotebookHost::setProperty(const QString &extension, const QString &ref, const QString &key,
+                                  const QString &value, QString *newRef)
+{
+    VaultPath path;
+    QString content;
+    int line = -1;
+    if (const QString error = resolveRef(ref, &path, &content, &line); !error.isEmpty())
+        return error;
+    const std::optional<Block> block = blockOfLine(path, content, m_vault.config(), line);
+    if (!block)
+        return u"stale: the block changed since it was read ("_s + ref + u")"_s;
+    const std::optional<QString> edited = setBlockProperty(content, line, block->ownEndLine, key, value);
+    if (!edited)
+        return u"cannot set the property \"%1\""_s.arg(key);
+    if (*edited != content) {
+        if (const QString error = writeFile(extension, path, *edited); !error.isEmpty())
+            return error;
+    }
+    if (newRef)
+        *newRef = notebook::formatLineRef(path, line, rawLine(*edited, line));
     return {};
 }
 

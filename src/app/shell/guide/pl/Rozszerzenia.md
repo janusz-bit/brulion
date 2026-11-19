@@ -7,6 +7,8 @@ brulion: document
 
 Brulion potrafi uruchamiać kod, który mieszka w Twoim notatniku — tak jak Emacs wykonuje plik startowy, a TiddlyWiki trzyma własny kod w tiddlerach. **Rozszerzenie** to strona z tagiem `rozszerzenie` (albo `extension`): kod w jej blokach `luau` dodaje polecenia do palety, własne widoki i reakcje na zapis i zmiany. Językiem jest Luau, mały i szybki Lua z typami; kod czyta i zapisuje tylko otwarty notatnik, z limitem czasu i pamięci, i nigdy nie sięga do plików, sieci ani innych programów.
 
+Wbudowane [[Nawyki]] i [[Siłownia]] to też rozszerzenia, napisane tym samym `b` (podobnie jak [[AI|Asystent AI]]): **Ustawienia → Rozszerzenia** włączają i wyłączają każde z nich, a ich kod można otworzyć i zmienić tak jak własny (niżej).
+
 Ta strona pokazuje, jak zacząć. [[API rozszerzeń]] wymienia wszystko, co kod może wywołać, a [[Przepisy na rozszerzenia]] to gotowe kawałki do skopiowania.
 
 ## Pierwsze rozszerzenie
@@ -50,7 +52,7 @@ end, { label = "Policz słowa tej strony" })
 Z `block = true` po etykiecie polecenie działa na bloku pod kursorem: `ctx.block` ma jego tekst, stan zadania i `ref`, dzięki któremu kod może go zmienić, a paleta pokazuje polecenie tylko wtedy, gdy jesteś w notatce.
 
 ## Pytania i zmiany
-`b.ask("…")` prosi Cię o wiersz tekstu, `b.choose("…", { "A", "B" })` pokazuje listę do wyboru, `b.form` pyta o liczby z − i +. Żeby zmieniać notatki, strona potrzebuje uprawnienia `zapis`:
+`b.ask("…")` prosi Cię o wiersz tekstu, `b.choose("…", { "A", "B" })` pokazuje listę do wyboru, `b.form` pyta o kilka rzeczy naraz — liczby z − i +, wiersze tekstu. Żeby zmieniać notatki, strona potrzebuje uprawnienia `zapis`:
 
 ````markdown
 ---
@@ -69,7 +71,7 @@ end, { label = "Notatka z godziną" })
 ```
 ````
 
-`b.appendToJournal` dopisuje do notatki dnia, `b.write` tworzy albo zastępuje stronę, `b.replaceBlock` zmienia jeden wiersz — i odmawia, gdy wiersz zmienił się, odkąd kod go przeczytał, więc synchronizacja, która przyjdzie w trakcie, nigdy nie zostanie nadpisana.
+`b.appendToJournal` dopisuje do notatki dnia, a `b.appendToPage` do dowolnej strony, `b.write` tworzy albo zastępuje stronę, `b.replaceBlock` zmienia jeden wiersz, a `b.insertBlock`, `b.removeBlock`, `b.setTask` i `b.setProperty` dodają blok, usuwają go, odhaczają albo nadają mu właściwość — i każda z nich odmawia, gdy wiersz zmienił się, odkąd kod go przeczytał, więc synchronizacja, która przyjdzie w trakcie, nigdy nie zostanie nadpisana.
 
 ## Gdy coś nie działa
 Błąd wskazuje **wiersz strony**: w rogu strony pojawia się „Błąd w wierszu 14: …” z przyciskiem do tego wiersza, to samo pokazują **Ustawienia → Rozszerzenia** i **konsola Luau**. Dopóki piszesz, działa wersja sprzed błędu — niedokończony kod nigdy nie zabiera działającego rozszerzenia. `print(…)` pisze do konsoli Luau: to najszybszy sposób, żeby zobaczyć, co kod ma w ręku. Komunikaty, które możesz spotkać, objaśnia [[API rozszerzeń#Błędy]].
@@ -94,7 +96,7 @@ uprawnienia: [zapis]
 Działa to także w tej dokumentacji: ustaw kursor w kodzie „Policz słowa tej strony” powyżej i wybierz **Uruchom blok Luau** — polecenie będzie w palecie do ponownego wczytania rozszerzeń. Tak samo wypróbujesz przykłady ze stron [[API rozszerzeń]] i [[Przepisy na rozszerzenia]].
 
 ## Widoki i reakcje
-Widok to funkcja, która zwraca, co pokazać, złożona z elementów Brulionu (`b.ui.heading`, `text`, `link`, `button`, `check`, `stepper`, `table`, `chart`); z etykietą (`label`) jest w palecie:
+Widok to funkcja, która zwraca, co pokazać, złożona z elementów Brulionu (`b.ui.heading`, `text`, `link`, `button`, `check`, `stepper`, `menu`, `card`, `month`, `table`, `chart`); z etykietą (`label`) jest w palecie:
 
 ```luau
 b.view("projekty", function(params)
@@ -111,8 +113,8 @@ Reakcja działa, gdy coś się dzieje: `b.on("save", function(e) … end)` po za
 ## Napisane przez AI
 Poproś o nie [[AI|Asystenta AI]] — w nowej rozmowie czatu z AI (✨ → **Nowa rozmowa**): „polecenie, które policzy słowa dzisiejszej notatki”. Asystent przeczyta, jak się pisze rozszerzenia, wypróbuje kod na Twoich notatkach, niczego nie zmieniając, i za Twoją zgodą zapisze stronę w **Rozszerzenia/**. Agent, np. Claude Code, zrobi to samo przez [[Wiersz poleceń i agenci AI|wiersz poleceń]]: przeczyta API (`brulion-cli extension docs`), wypróbuje kod (`extension eval`, `extension run` — to, co kod by zapisał, wraca jako różnica) i zapisze stronę (`extension write`). W obu przypadkach kod czeka na Ciebie jak kod z innego urządzenia: przeczytaj stronę i naciśnij **Uruchom**, gdy zgadzasz się z tym, co robi. Każda późniejsza zmiana AI znowu czeka.
 
-## Kod Siłowni
-[[Siłownia]] też jest rozszerzeniem. **Ustawienia → Rozszerzenia → Kod Siłowni → Edytuj kod** zapisuje jej źródło na stronie Twojego notatnika, sekcja pod nagłówkiem, i odtąd Siłownia działa **z tej strony**: zmień, zapisz i zmiana działa. **Przywróć** przenosi stronę do kosza i znowu działa wbudowana Siłownia.
+## Kod Siłowni i Nawyków
+[[Siłownia]] i [[Nawyki]] też są rozszerzeniami. **Ustawienia → Rozszerzenia → Kod Siłowni** (albo **Kod nawyków**) **→ Edytuj kod** zapisuje źródło na stronie Twojego notatnika (`Rozszerzenia/Siłownia`, `Rozszerzenia/Nawyki`), sekcja pod nagłówkiem, i odtąd rozszerzenie działa **z tej strony**: zmień, zapisz i zmiana działa. **Przywróć** przenosi stronę do kosza i znowu działa kod wbudowany.
 
 ## Więcej
 - [[API rozszerzeń]] — każda funkcja `b`, jak wygląda blok, limity i komunikaty błędów.

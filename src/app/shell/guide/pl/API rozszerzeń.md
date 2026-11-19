@@ -20,12 +20,16 @@ Czytanie nie wymaga uprawnień.
 |---|---|
 | `b.pages()` | nazwy wszystkich stron, także dni dziennika, alfabetycznie |
 | `b.pages({ tag = "projekt" })` | tylko strony, które mają ten tag wśród własnych tagów (`tags: [projekt]` we właściwościach strony) |
-| `b.page(nazwa)` | `{ name, tags, props, date }`: własne tagi i właściwości strony oraz jej dzień, gdy to strona dziennika; `nil`, gdy takiej strony nie ma |
+| `b.pages({ prop = "nawyk" })` | tylko strony, które mają tę właściwość wśród własnych (`nawyk: codziennie` we właściwościach strony); `prop = { "habit", "nawyk" }` przyjmuje którąkolwiek, można też dodać `tag` |
+| `b.page(nazwa)` | `{ name, path, tags, props, date }`: plik strony w notatniku (`Projekty/Dom.md`), jej własne tagi i właściwości oraz jej dzień, gdy to strona dziennika; `nil`, gdy takiej strony nie ma |
 | `b.read(nazwa)` | cały tekst strony albo `nil` |
 | `b.blocks({ page = nazwa })` | bloki strony od góry, każdy z blokami pod nim |
 | `b.blocks({ tag = "pomysł" })` | każdy blok, który sam ma ten tag; z `journal = true`, `from = "2026-11-01"` albo `to = "2026-11-30"` tylko bloki dziennika |
+| `b.blocks({ prop = "nawyk" })` | każdy blok, który ma pod sobą tę właściwość (`nawyk:: codziennie`); z `tag` bloki, które mają jedno i drugie, ze stroną `page` tylko bloki tej strony (także te głębiej) |
 | `b.search(tekst, limit)` | to, co znajduje widok wyszukiwania: jedno trafienie na stronę, najlepsze najpierw (20 bez `limit`, najwyżej 200) |
-| `b.query(tekst, limit)` | zapytanie w języku opisanym na stronie [[Zapytania]]: `{ total, items }` (50 pozycji bez `limit`, najwyżej 1000) |
+| `b.query(tekst, limit, offset)` | zapytanie w języku opisanym na stronie [[Zapytania]]: `{ total, items }` (50 pozycji bez `limit`, najwyżej 1000; `offset` pomija tyle pierwszych, więc można przejść po dowolnej ich liczbie — `total` liczy wszystkie). Tygodnie zaczynają się od pierwszego dnia tygodnia z ustawień notatnika |
+| `b.attachments()` | pliki notatnika, które nie są notatkami — obrazki, PDF-y — jako ścieżki: `zalaczniki/paragon.jpg` |
+| `b.revision()` | liczbę, która zmienia się przy każdej zmianie notatki: to, co kod wyliczył z notatek, jest aktualne, dopóki ta liczba jest ta sama |
 | `b.checkExtension(nazwa, tekst)` | próbuje `tekst` jako stronę rozszerzenia `nazwa`, nie zapisując go i o nic nie pytając: `{ ok, commands, views, hooks, … }` albo `ok = false` z `error` i wierszem strony `line`. Niczego nie zapisuje; tak Asystent AI sprawdza rozszerzenie, zanim je zapisze |
 
 ```luau
@@ -45,12 +49,14 @@ Blok to punkt listy, akapit albo nagłówek. `b.blocks`, `b.search`, `b.query` i
 | Pole | Czym jest |
 |---|---|
 | `text` | pierwszy wiersz bloku tak, jak go napisałeś, bez punktora i pola wyboru; tagi, daty i linki dalej w nim są |
+| `plain` | same jego słowa: zadanie bez dat, bez tagów, linki jako ich nazwy — `Zapłacić czynsz` |
 | `task` | dla zadania znak w jego polu wyboru: `" "` otwarte, `"x"` zrobione, `"/"` w toku, `"-"` anulowane, `">"` odłożone; `nil` dla bloku, który nie jest zadaniem |
 | `page`, `date` | strona, na której leży, i dzień, gdy to strona dziennika |
 | `tags` | własne tagi bloku, małymi literami, bez krzyżyka |
 | `props` | jego właściwości: `{ autor = "Bolesław Prus" }` dla wiersza `autor:: Bolesław Prus` pod nim |
 | `children` | bloki pod nim (z `b.blocks` i `ctx.block`) |
-| `ref` | miejsce bloku. Podaj je funkcji `b.replaceBlock`, żeby zmienić blok; przestaje działać, gdy wiersz się zmieni |
+| `ref` | miejsce bloku. Podaj je funkcji `b.replaceBlock` albo innej funkcji zapisu, żeby zmienić blok; przestaje działać, gdy wiersz się zmieni |
+| `path`, `line` | z `b.blocks` i `ctx.block`: plik strony i wiersz bloku w nim, liczony od 1 — `b.ui.link(blok.page, nil, blok.line)` otwiera go w tym miejscu |
 | `line`, `excerpt` | z `b.search`: wiersz, który pasuje najlepiej — ma najwięcej szukanych słów — liczony od 1, i tekst wokół niego |
 | `due`, `scheduled`, `start`, `reminder` | z `b.query`: daty zadania i czas przypomnienia |
 
@@ -73,10 +79,15 @@ return table.concat(wiersze, "\n")
 | Funkcja | Co robi |
 |---|---|
 | `b.appendToJournal(data, tekst)` | dopisuje tekst na końcu notatki tego dnia; brakującą notatkę tworzy z Twojego szablonu dziennika. Tekst trafia tak, jak go napisano: punkt zacznij od `- ` |
+| `b.appendToPage(nazwa, tekst)` | to samo na końcu dowolnej strony; strona, której nie ma, zostaje utworzona |
 | `b.write(nazwa, tekst)` | tworzy stronę albo zastępuje **cały** jej tekst; `"Spotkania/Budżet"` utworzy też folder |
 | `b.replaceBlock(ref, tekst, task)` | daje pierwszemu wierszowi bloku nowy tekst; z `task` (`"x"`, `" "`, `"/"`, `"-"`) ustawia też pole wyboru tak, jak kliknięcie (zrobione zadanie dostaje datę). Zwraca nowe `ref` bloku |
+| `b.insertBlock(ref, tekst, gdzie)` | wstawia nowe wiersze przy bloku: za nim i blokami pod nim (`"after"`, gdy bez `gdzie`), przed nim (`"before"`) albo jako ostatni blok pod nim (`"child"`) — z pasującym wcięciem. Zwraca `ref` pierwszego nowego wiersza |
+| `b.removeBlock(ref)` | usuwa blok razem z blokami pod nim |
+| `b.setTask(ref, stan)` | samo pole wyboru, tak jak ustawia je kliknięcie: `"x"` zrobione (z dzisiejszą datą), `" "` otwarte, `"/"` w toku, `"-"` anulowane. Zwraca `ref` bloku |
+| `b.setProperty(ref, klucz, wartość)` | właściwość bloku `klucz:: wartość`: zmienia ją, gdy jest, a gdy jej nie ma, dopisuje pod blokiem; `nil` albo `""` ją usuwa. Zwraca `ref` bloku |
 
-`b.replaceBlock` zostawia punktor, wcięcie i daty zadania (gdziekolwiek stoją w wierszu), chyba że nowy tekst ma własne daty. **Odmawia**, gdy wiersz zmienił się, odkąd kod go przeczytał — przyszła synchronizacja, coś tam dopisałeś — więc nigdy nie nadpisze zmiany, której kod nie widział. Błąd ma w sobie słowo `stale`; przeczytaj blok jeszcze raz.
+`b.replaceBlock` zostawia punktor, wcięcie i daty zadania (gdziekolwiek stoją w wierszu), chyba że nowy tekst ma własne daty. Ona i pozostałe funkcje, które biorą `ref`, **odmawiają**, gdy wiersz zmienił się, odkąd kod go przeczytał — przyszła synchronizacja, coś tam dopisałeś — więc nigdy nie nadpiszą zmiany, której kod nie widział. Błąd ma w sobie słowo `stale`; przeczytaj blok jeszcze raz. Wiersze dopisane albo usunięte nad blokiem nie przeszkadzają.
 
 ```luau
 b.command("zrobione", function(ctx)
@@ -89,14 +100,54 @@ b.command("zrobione", function(ctx)
 end, { label = "Oznacz zadanie jako zrobione", block = true })
 ```
 
+```luau
+-- Pierwszy krok pod zadaniem przy kursorze, od razu w toku, i notka, kiedy go dodano.
+b.command("podziel", function(ctx)
+    local blok = ctx.block
+    if not blok or not blok.task then
+        return "Ustaw kursor w zadaniu."
+    end
+    local krok = b.insertBlock(blok.ref, "- [ ] Pierwszy krok", "child")
+    b.setTask(krok, "/")
+    b.setProperty(blok.ref, "podzielone", b.today())
+    return `Pierwszy krok pod „{blok.plain}”`
+end, { label = "Podziel zadanie", block = true })
+
+-- Zrobione zadania strony na ekranie przechodzą na stronę „Archiwum”.
+b.command("archiwizuj", function(ctx)
+    if ctx.page == "" then
+        return "Najpierw otwórz stronę."
+    end
+    local przeniesione = 0
+    for _, blok in b.blocks({ page = ctx.page }) do
+        if blok.task == "x" and #blok.children == 0 then
+            b.appendToPage("Archiwum", `- [x] {blok.text} (z [[{ctx.page}]])`)
+            b.removeBlock(blok.ref)
+            przeniesione += 1
+        end
+    end
+    return `Zrobione zadania w [[Archiwum]]: {przeniesione}`
+end, { label = "Przenieś zrobione zadania do archiwum" })
+```
+
 ## Pomocnicze
 
 | Funkcja | Co dostajesz |
 |---|---|
 | `b.today()` | dzisiejszą datę: `2026-11-13` |
+| `b.now()` | datę i godzinę teraz: `2026-11-13 09:05` |
 | `b.daysBetween(a, b)` | ile dni mija od daty `a` do daty `b` |
+| `b.addDays(data, n)`, `b.addMonths(data, n)` | datę `n` dni albo miesięcy później (wcześniej, gdy `n` jest ujemne): `b.addDays("2026-12-31", 1)` to `2027-01-01`, `b.addMonths("2026-01-31", 1)` to `2026-02-28` |
+| `b.weekday(data)` | dzień tygodnia: 1 to poniedziałek, 7 niedziela |
+| `b.weekStart()` | pierwszy dzień tygodnia z ustawień notatnika, liczony tak samo |
+| `b.weekdayName(n, forma)`, `b.monthName(n, forma)` | nazwę dnia tygodnia (1–7) albo miesiąca (1–12) w języku interfejsu; `forma` to `"full"` (bez niej: `środa`, `listopad`), `"short"` (`pn`) albo `"of"` (dopełniacz, jak w dacie: `listopada`) |
 | `b.sorted(lista)` | teksty w kolejności alfabetycznej, z polskimi literami na swoich miejscach i `Rozdział 2` przed `Rozdział 10` |
 | `b.fold(tekst)` | tekst małymi literami i bez polskich znaków (`Żółw` daje `zolw`): do porównywania i szukania |
+| `b.lower(tekst)` | tekst małymi literami, z polskimi znakami (`ŻÓŁW` daje `żółw`, czego `string.lower` nie umie) |
+| `b.plain(tekst)` | same słowa wiersza: bez tagów, linki jako ich nazwy (`Czytać [[Książki/Diuna]] #wieczór` daje `Czytać Diuna`) |
+| `b.parseRecurrence(tekst)` | jak Brulion rozumie powtarzanie („co 2 tygodnie w poniedziałek”, „every month on the 15th”): `{ every = "week", interval = 2, weekdays = { 1 } }` albo `nil` |
+| `b.parseWeekdays(tekst)` | listę dni tygodnia: `"pn, śr i pt"` daje `{ 1, 3, 5 }`; `nil`, gdy to nie są dni |
+| `b.formatRecurrence(reguła, język)` | takie powtarzanie słowami, po polsku (`"pl"`) albo po angielsku (`"en"`): `co tydzień w poniedziałek, piątek` |
 | `b.formatNumber(n, miejsca)` | liczbę jako tekst, w polskim notatniku z przecinkiem: `82,5` |
 | `b.lang()`, `b.uiLang()` | język notatek i język interfejsu: `"pl"` albo `"en"` |
 | `b.log(tekst)`, `print(…)` | wiersz w konsoli Luau |
@@ -110,7 +161,8 @@ end, { label = "Oznacz zadanie jako zrobione", block = true })
 - `ctx.page` to nazwa strony na ekranie; pusty tekst, gdy żadnej nie ma.
 - Z `block = true` polecenie działa na bloku pod kursorem, `ctx.block`, a paleta pokazuje je tylko w notatce. Sprawdź, czy `ctx.block` jest.
 - Z `palette = false` paleta go nie pokazuje: uruchamia je przycisk widoku (`b.ui.run`) albo sama aplikacja — tak czat z AI uruchamia polecenie `chat` asystenta AI.
-- Tekst, który funkcja zwróci, pojawia się jako komunikat. Można nie zwracać niczego.
+- `ctx.args` to to, co polecenie dostało od wywołującego: od przycisku komunikatu (niżej) albo z `brulion-cli extension run … --args '{"page": "Dom"}'`; `{}`, gdy nic nie dostało (pisz `ctx.args or {}`: tura czatu z AI nie ma go wcale).
+- Tekst, który funkcja zwróci, pojawia się jako komunikat. Można nie zwracać niczego. Tabela `{ message = "…", tone = "success", button = { label = "Otwórz", page = "Dom" } }` też jest komunikatem: `tone` to `"success"`, `"warning"` albo `"error"`, a przycisk otwiera stronę, uruchamia jedno z poleceń rozszerzenia (`command = "…"`, jego `args` jako `ctx.args`) albo — w tym, co zwraca akcja widoku — jeszcze raz akcję tego widoku (`action = "…"`, `args`): tak działa **Cofnij**.
 
 ## Widoki
 `b.view(nazwa, function(params) … end, akcje, { label = "…", icon = "…" })` dodaje widok. Jego funkcja zwraca, co pokazać, zbudowane z poniższych elementów; z etykietą `label` widok jest w palecie. `icon` to nazwa jednej z ikon Brulionu, na przykład `folder`, `star`, `calendar-check`, `chart-column`, `list-checks`.
@@ -118,18 +170,23 @@ end, { label = "Oznacz zadanie jako zrobione", block = true })
 | Element | Co pokazuje |
 |---|---|
 | `b.ui.column({ … })` | elementy jeden pod drugim: zwykle element zewnętrzny |
+| `b.ui.card({ … })` | elementy w jednej karcie |
 | `b.ui.heading(tekst)` | nagłówek |
-| `b.ui.text(tekst, przygaszony)` | akapit; z `true` jako drugim argumentem w spokojniejszym kolorze |
-| `b.ui.link(strona, etykieta)` | link do strony |
+| `b.ui.text(tekst, przygaszony)` | akapit; z `true` jako drugim argumentem w spokojniejszym kolorze, z `{ muted = true, icon = "flame", tone = "success" }` także z ikoną przed nim i w kolorze (`"success"`, `"danger"`, `"accent"`) |
+| `b.ui.link(strona, etykieta, wiersz)` | link do strony; z numerem wiersza (liczonym od 1) otwiera stronę w tym miejscu |
 | `b.ui.button(etykieta, akcja, args)` | przycisk, który wywołuje jedną z akcji widoku |
-| `b.ui.row({ … })` | karta z kontrolkami obok siebie: pola wyboru, liczniki, teksty, linki, przyciski |
-| `b.ui.check(zaznaczone, akcja, args)` | pole wyboru zadania. Tylko wewnątrz wiersza `row` |
+| `b.ui.menu(pozycje, etykieta)` | przycisk „⋯” z menu (pozycje niżej) |
+| `b.ui.row({ … })` | karta z kontrolkami obok siebie: pola wyboru, liczniki, teksty, linki, przyciski, menu |
+| `b.ui.check(zaznaczone, akcja, args, { menu = …, label = … })` | pole wyboru zadania: `zaznaczone` to `true`, `false` albo `"skipped"` (przekreślone); `menu` otwiera się prawym przyciskiem albo przytrzymaniem. Tylko wewnątrz wiersza `row` |
 | `b.ui.stepper({ value = 3, step = 1, unit = "kg", action = "ustaw", args = { … } })` | liczba z − i +, którą można też wpisać; akcja dostaje nową liczbę jako `args.value`. Tylko wewnątrz wiersza `row` |
 | `b.ui.table(kolumny, wiersze)` | tabela: lista nagłówków i lista wierszy, każdy jako lista tekstów. Najlepiej do czterech kolumn |
 | `b.ui.chart({ kind = "line", labels = { … }, series = { { name = "…", values = { … } } } })` | wykres, `"line"` (liniowy) albo `"bar"` (słupkowy), liczba na każdą etykietę |
-| `b.ui.empty(tytuł, tekst)` | co pokazać, gdy nie ma czego pokazać |
+| `b.ui.month({ month = "2026-11", days = { ["2026-11-03"] = { state = "done", action = "…", args = { … }, menu = { … } } } })` | miesiąc jako kalendarz, kwadrat na każdy dzień: `"done"` zielony, `"missed"` czerwony, `"skipped"` przekreślony, `"due"` z obwódką, `"future"` blady, `"rest"` zwykły; stuknięcie dnia z akcją `action` ją wywołuje, prawy przycisk albo przytrzymanie otwiera jego `menu`. Tygodnie zaczynają się od pierwszego dnia tygodnia z ustawień notatnika, dzisiejszy dzień ma obwódkę |
+| `b.ui.empty(tytuł, tekst, ikona)` | co pokazać, gdy nie ma czego pokazać, z wybraną ikoną |
 | `b.ui.open(etykieta, widok, params)` | otwiera inny widok rozszerzenia, z `params` dla jego funkcji |
 | `b.ui.run(etykieta, polecenie)` | przycisk, który uruchamia jedno z poleceń rozszerzenia |
+
+**Menu** to lista pozycji: `{ label = "…", action = "…", args = { … } }` wywołuje jedną z akcji widoku, `{ label = "…", page = "…", line = 5 }` otwiera stronę, `{ label = "…", journal = "2026-11-03" }` otwiera ten dzień dziennika.
 
 Funkcja widoku musi zwrócić element (lista elementów pokaże się jak kolumna): widok, który nic nie zwraca, mówi o tym, zamiast zostać pusty. Element, który nie zawsze jest potrzebny, można zapisać jako `warunek and b.ui.text("…") or nil` — `nil` w kolumnie albo w wierszu jest pomijany, a komórka tabeli z `nil` jest pusta.
 
@@ -156,6 +213,53 @@ end, {
 }, { label = "Pomysły", icon = "star" })
 ```
 
+```luau
+-- Miesiąc dziennika: dni z notatką są zielone, minione bez niej czerwone. Każde otwarte zadanie
+-- z terminem w tym miesiącu ma menu, a odhaczenie mówi o tym z przyciskiem Cofnij.
+b.view("miesiac", function(params)
+    local dzis = b.today()
+    local miesiac = params.month or dzis:sub(1, 7)
+    local dni, zapisane, dzien = {}, 0, miesiac .. "-01"
+    while dzien:sub(1, 7) == miesiac do
+        local stan = if dzien > dzis then "future" elseif b.page(dzien) then "done" else "missed"
+        zapisane += if stan == "done" then 1 else 0
+        dni[dzien] = { state = stan, menu = { { label = "Otwórz dziennik", journal = dzien } } }
+        dzien = b.addDays(dzien, 1)
+    end
+    local wiersze = {
+        b.ui.heading(`{b.monthName(tonumber(miesiac:sub(6, 7)))} {miesiac:sub(1, 4)}`),
+        b.ui.card({
+            b.ui.text(`Dni z notatką: {zapisane}`, { icon = "book-open", tone = "accent" }),
+            b.ui.month({ month = miesiac, days = dni }),
+        }),
+    }
+    local ostatni = b.addDays(b.addMonths(miesiac .. "-01", 1), -1)
+    for _, zadanie in b.query(`type:tasks status:open due:{miesiac}-01..{ostatni} sort:due`, 20).items do
+        table.insert(wiersze, b.ui.row({
+            b.ui.check(false, "ustaw", { ref = zadanie.ref, stan = "x" }, {
+                label = zadanie.plain,
+                menu = { { label = "Anuluj je", action = "ustaw", args = { ref = zadanie.ref, stan = "-" } } },
+            }),
+            b.ui.text(zadanie.plain),
+            b.ui.text(zadanie.due, { muted = true, icon = "calendar" }),
+            b.ui.menu({ { label = "Otwórz jego stronę", page = zadanie.page } }),
+        }))
+    end
+    return b.ui.column(wiersze)
+end, {
+    ustaw = function(args)
+        local ref = b.setTask(args.ref, args.stan)
+        return {
+            message = if args.stan == "x" then "Zrobione" else "Anulowane",
+            tone = "success",
+            button = { label = "Cofnij", action = "ustaw", args = { ref = ref, stan = " " } },
+        }
+    end,
+}, { label = "Miesiąc dziennika", icon = "calendar" })
+```
+
+Gdy funkcja ma dużo do wyliczenia, może trzymać wynik w zmiennej razem z `b.revision()` i liczyć od nowa tylko wtedy, gdy ta liczba się zmieni — tak robią [[Nawyki]].
+
 ## Reakcje
 `b.on("save", function(e) … end)` działa zaraz po tym, jak to urządzenie zapisało stronę: `e.page` to jej nazwa. `b.on("change", function(e) … end)` działa po zmianach w notatkach, skądkolwiek przyszły — z Twojego pisania, synchronizacji, innego programu — gdy zmiany ucichną: `e.pages` to lista nazw zmienionych stron (jest w niej także strona usunięta). To, co rozszerzenia zapisują same, nie wraca jako zmiana. Reakcja nie może zadać pytania, a taka, która zawiedzie trzy razy z rzędu, zostaje wyłączona do ponownego wczytania rozszerzenia.
 
@@ -165,21 +269,23 @@ end, {
 |---|---|
 | `b.ask(pytanie)` | wiersz tekstu, który wpisałeś; pusty tekst, gdy zamknąłeś okno |
 | `b.choose(pytanie, { "A", "B" })` | opcję, którą wybrałeś; `nil`, gdy zamknąłeś okno |
-| `b.form(tytuł, pola)` | liczby, każda z − i +: `{ klucz = liczba }`; `nil`, gdy zamknąłeś okno |
+| `b.form(tytuł, pola)` | liczby, każda z − i +, i wiersze tekstu: `{ klucz = liczba albo tekst }`; `nil`, gdy zamknąłeś okno |
 
-Pole formularza to `{ key = "powt", label = "Powtórzenia", value = 8, step = 1, unit = "" }`. Pytania działają w poleceniach i akcjach; nie działają w widokach, w reakcjach ani podczas wczytywania strony.
+Pole liczbowe formularza to `{ key = "powt", label = "Powtórzenia", value = 8, step = 1, unit = "" }`, pole tekstowe `{ key = "nazwa", label = "Nazwa", kind = "text", value = "", placeholder = "np. Medytacja" }` — `placeholder` to szary przykład w pustym polu. Pytania działają w poleceniach i akcjach; nie działają w widokach, w reakcjach ani podczas wczytywania strony.
 
 ```luau
 b.command("spacer", function(ctx)
     local odpowiedz = b.form("Spacer", {
         { key = "km", label = "Dystans", value = 3, step = 0.5, unit = "km" },
         { key = "min", label = "Czas", value = 40, step = 5, unit = "min" },
+        { key = "gdzie", label = "Gdzie", kind = "text", value = "", placeholder = "np. w parku" },
     })
     if odpowiedz == nil then
         return nil
     end
     local km, min = b.formatNumber(odpowiedz.km), b.formatNumber(odpowiedz.min)
-    b.appendToJournal(b.today(), `- Spacer: {km} km w {min} min`)
+    local gdzie = if odpowiedz.gdzie ~= "" then ` ({odpowiedz.gdzie})` else ""
+    b.appendToJournal(b.today(), `- Spacer: {km} km w {min} min{gdzie}`)
     return "Spacer jest w dzisiejszym dzienniku"
 end, { label = "Zapisz spacer" })
 ```
@@ -193,7 +299,7 @@ end, { label = "Zapisz spacer" })
 - Nazwy zmiennych i funkcji pisz bez polskich znaków (`slowa`, nie `słowa`); w tekstach w cudzysłowie polskie znaki są w porządku.
 - Tekst liczy bajty, nie litery: `#"żółw"` to 7. Do liter użyj `utf8.len(tekst)`, do porównywania `b.fold`, do sortowania `b.sorted`.
 - Liczbę pisze się z kropką: `82.5`. Pokazuj ją przez `b.formatNumber`.
-- `os.date("%H:%M")` to bieżąca godzina.
+- `b.now()` to bieżąca data z godziną, `os.date("%H:%M")` sama godzina.
 - Nie ma plików, sieci ani innych programów: jest tylko `b`.
 
 ## Limity
@@ -207,11 +313,14 @@ Komunikaty silnika są po angielsku:
 | `permission denied: write` | strona nie ma `uprawnienia: [zapis]` we właściwościach |
 | `permission denied: ai` | to samo dla `ai` |
 | `stale: the block changed since it was read` | wiersz nie jest już tym, co kod przeczytał: przeczytaj go jeszcze raz |
-| `not a block reference` | `b.replaceBlock` dostało coś, co nie jest `ref` bloku: podaj `ref` takie, jakie dało `b.blocks`, `b.query`, `b.search` albo `ctx.block` |
+| `not a block reference` | `b.replaceBlock` (albo `b.insertBlock`, `b.removeBlock`, `b.setTask`, `b.setProperty`) dostało coś, co nie jest `ref` bloku: podaj `ref` takie, jakie dało `b.blocks`, `b.query`, `b.search` albo `ctx.block` |
+| `the task status must be one character` | `b.setTask` albo `b.replaceBlock` dostało `"zrobione"`: napisz `"x"` |
+| `cannot set the property` | nazwa właściwości może mieć tylko litery, cyfry, `-` i `_` |
+| `must be one line` | wiersz bloku albo wartość właściwości ma w sobie podział wiersza |
 | `attempt to index nil` | czegoś nie było: strony, która nie istnieje, zadania w bloku, który nim nie jest, `ctx.block` poza blokiem |
 | `argument 1 must be a string` | funkcja dostała coś innego, niż przyjmuje; liczba mówi, który to argument |
 | `invalid date` | data nie jest zapisana jak `2026-11-13` albo nie ma takiego dnia |
-| `the query needs a page or a tag` | `b.blocks` nie dostało ani strony, ani tagu |
+| `the query needs a page, a tag or a prop` | `b.blocks` nie dostało ani strony, ani tagu, ani właściwości |
 | `argument 1 must be a table` | `b.pages("projekt")`: napisz `b.pages({ tag = "projekt" })` |
 | `the view "…" returned nothing` | funkcja widoku skończyła się, nie zwracając tego, co pokazać |
 | `Widok nie może czekać na pytanie ani na AI` | funkcja widoku o coś zapytała: pytaj w poleceniu albo w akcji |

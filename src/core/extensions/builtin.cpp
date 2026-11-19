@@ -45,7 +45,13 @@ QList<BuiltinExtension> builtinExtensions()
         }
         assistant.titleEn = u"AI assistant"_s;
         assistant.titlePl = u"Asystent AI"_s;
-        return QList<BuiltinExtension>{gym, assistant};
+        BuiltinExtension habits;
+        habits.extension.id = u"nawyki"_s;
+        habits.extension.source = QString::fromUtf8(resource(u"nawyki.luau"_s));
+        habits.extension.permissions = {u"write"_s};
+        habits.titleEn = u"Habits"_s;
+        habits.titlePl = u"Nawyki"_s;
+        return QList<BuiltinExtension>{gym, assistant, habits};
     }();
     return builtins;
 }

@@ -2,6 +2,8 @@
 
 #include "workspaceextensions.h"
 
+#include <QDate>
+
 #include <algorithm>
 #include <cmath>
 #include <utility>
@@ -21,10 +23,63 @@ QString textOf(const QVariantMap &node)
     const QString type = node.value(u"type"_s).toString();
     if (type == u"link")
         return node.value(u"label"_s).toString().isEmpty() ? node.value(u"page"_s).toString() : node.value(u"label"_s).toString();
-    if (type == u"button" || type == u"open" || type == u"run")
+    if (type == u"button" || type == u"open" || type == u"run" || type == u"menu" || type == u"check")
         return node.value(u"label"_s).toString();
     return node.value(u"text"_s).toString();
 }
+
+/// A text node's tone: "success" | "danger" | "accent", else "".
+QString toneOf(const QVariantMap &node)
+{
+    const QString tone = node.value(u"tone"_s).toString();
+    return tone == u"success" || tone == u"danger" || tone == u"accent" ? tone : QString();
+}
+
+/// A check's state: "done" | "open" | "skipped" (a node without one: from `checked`).
+QString stateOf(const QVariantMap &node)
+{
+    const QString state = node.value(u"state"_s).toString();
+    if (state == u"done" || state == u"open" || state == u"skipped")
+        return state;
+    return node.value(u"checked"_s).toBool() ? u"done"_s : u"open"_s;
+}
+
+/// The items of a menu node (`items`) or of a check's or a day's menu (`menu`) that can be chosen.
+QVariantList itemsOf(const QVariant &value)
+{
+    // A list with a nil in it reaches the app as a table with numbered keys: those in order.
+    QVariantList items = value.toList();
+    if (value.metaType().id() == QMetaType::QVariantMap) {
+        const QVariantMap map = value.toMap();
+        QList<int> keys;
+        for (auto it = map.cbegin(); it != map.cend(); ++it) {
+            bool ok = false;
+            const int key = it.key().toInt(&ok);
+            if (ok && key >= 1)
+                keys << key;
+        }
+        std::sort(keys.begin(), keys.end());
+        for (const int key : std::as_const(keys))
+            items << map.value(QString::number(key));
+    }
+    QVariantList out;
+    for (const QVariant &v : std::as_const(items)) {
+        const QVariantMap item = v.toMap();
+        if (item.value(u"label"_s).toString().isEmpty())
+            continue;
+        if (!item.value(u"action"_s).toString().isEmpty() || !item.value(u"page"_s).toString().isEmpty()
+            || QDate::fromString(item.value(u"journal"_s).toString(), Qt::ISODate).isValid())
+            out << item;
+    }
+    return out;
+}
+
+QVariantList menuOfNode(const QVariantMap &node)
+{
+    return itemsOf(node.value(node.value(u"type"_s).toString() == u"menu" ? u"items"_s : u"menu"_s));
+}
+
+const QStringList kDayStates{u"outside"_s, u"future"_s, u"rest"_s, u"due"_s, u"done"_s, u"skipped"_s, u"missed"_s};
 
 // A list from the script: a sequence, or a table with holes (nil values) as numbered keys.
 QVariantList listOf(const QVariant &value, int size)
@@ -142,6 +197,11 @@ QVariant ExtensionControlsModel::value(int row, int role) const
     case UnitRole: return c.value(u"unit"_s).toString();
     case IndexRole: return row;
     case MutedRole: return c.value(u"muted"_s).toBool();
+    case StateRole: return c.value(u"type"_s).toString() == u"check" ? stateOf(c) : QString();
+    case LabelRole: return c.value(u"label"_s).toString();
+    case IconRole: return c.value(u"icon"_s).toString();
+    case ToneRole: return toneOf(c);
+    case HasMenuRole: return !menuOfNode(c).isEmpty();
     case NumberRole: return formatExtensionNumber(c.value(u"value"_s).toDouble(), m_comma);
     case DisplayRole: {
         const QString unit = c.value(u"unit"_s).toString();
@@ -157,7 +217,9 @@ QHash<int, QByteArray> ExtensionControlsModel::roleNames() const
     return {{TypeRole, "controlType"},       {TextRole, "controlText"},   {PageRole, "controlPage"},
             {CheckedRole, "controlChecked"}, {ValueRole, "controlValue"}, {StepRole, "controlStep"},
             {UnitRole, "controlUnit"},       {IndexRole, "controlIndex"}, {MutedRole, "controlMuted"},
-            {DisplayRole, "controlDisplay"}, {NumberRole, "controlNumber"}};
+            {DisplayRole, "controlDisplay"}, {NumberRole, "controlNumber"}, {StateRole, "controlState"},
+            {LabelRole, "controlLabel"},     {IconRole, "controlIcon"},   {ToneRole, "controlTone"},
+            {HasMenuRole, "controlHasMenu"}};
 }
 
 bool ExtensionControlsModel::sameKinds(const QList<QVariantMap> &controls) const
@@ -229,6 +291,11 @@ QVariant ExtensionViewModel::data(const QModelIndex &index, int role) const
     case ChartSourceRole: return l.chartSource;
     case ControlsRole: return QVariant::fromValue(static_cast<QObject *>(l.controls));
     case HasControlsRole: return l.controls != nullptr;
+    case IconRole: return l.icon;
+    case ToneRole: return l.tone;
+    case CardRole: return l.card;
+    case MonthRole: return l.month;
+    case DaysRole: return l.days;
     }
     return {};
 }
@@ -238,7 +305,8 @@ QHash<int, QByteArray> ExtensionViewModel::roleNames() const
     return {{TypeRole, "lineType"},          {TextRole, "lineText"},       {TitleRole, "lineTitle"},
             {MutedRole, "lineMuted"},        {PageRole, "linePage"},       {CellsRole, "lineCells"},
             {ChartDataRole, "lineChartData"}, {ChartSourceRole, "lineChartSource"}, {ControlsRole, "lineControls"},
-            {HasControlsRole, "lineHasControls"}};
+            {HasControlsRole, "lineHasControls"}, {IconRole, "lineIcon"}, {ToneRole, "lineTone"},
+            {CardRole, "lineCard"},          {MonthRole, "lineMonth"},     {DaysRole, "lineDays"}};
 }
 
 void ExtensionViewModel::setExtensions(WorkspaceExtensions *extensions)
@@ -411,6 +479,16 @@ QList<int> ExtensionViewModel::changedRoles(const Line &before, const Line &afte
         roles << ChartDataRole;
     if (before.chartSource != after.chartSource)
         roles << ChartSourceRole;
+    if (before.icon != after.icon)
+        roles << IconRole;
+    if (before.tone != after.tone)
+        roles << ToneRole;
+    if (before.card != after.card)
+        roles << CardRole;
+    if (before.month != after.month)
+        roles << MonthRole;
+    if (before.days != after.days)
+        roles << DaysRole;
     return roles;
 }
 
@@ -422,6 +500,21 @@ void ExtensionViewModel::flatten(const QVariantMap &node, int depth, QList<Line>
     if (type == u"column") {
         for (const QVariant &child : node.value(u"children"_s).toList())
             flatten(child.toMap(), depth + 1, lines);
+        return;
+    }
+    if (type == u"card") {
+        // Its lines stay lines of the list; each knows its part of the card (a card in a card
+        // goes on as the outer one).
+        const qsizetype start = lines->size();
+        for (const QVariant &child : node.value(u"children"_s).toList())
+            flatten(child.toMap(), depth + 1, lines);
+        const qsizetype end = lines->size();
+        for (qsizetype i = start; i < end; ++i) {
+            (*lines)[i].card = end - start == 1 ? u"only"_s
+                               : i == start     ? u"first"_s
+                               : i == end - 1   ? u"last"_s
+                                                : u"middle"_s;
+        }
         return;
     }
     addLine(node, lines);
@@ -452,8 +545,15 @@ void ExtensionViewModel::addLine(const QVariantMap &node, QList<Line> *lines)
     line.text = textOf(node);
     line.muted = node.value(u"muted"_s).toBool();
     line.page = node.value(u"page"_s).toString();
+    line.icon = node.value(u"icon"_s).toString();
+    line.tone = toneOf(node);
     if (type == u"empty") {
         line.title = node.value(u"title"_s).toString();
+    } else if (type == u"month") {
+        line.days = daysOf(node, &line.month);
+        line.title = node.value(u"label"_s).toString();
+        if (line.days.isEmpty())
+            return; // no month to draw
     } else if (type == u"row") {
         for (const QVariant &c : node.value(u"children"_s).toList()) {
             const QVariantMap map = c.toMap();
@@ -486,10 +586,92 @@ void ExtensionViewModel::addLine(const QVariantMap &node, QList<Line> *lines)
         }
         return;
     } else if (type != u"heading" && type != u"text" && type != u"link" && type != u"open" && type != u"run"
-               && type != u"button") {
+               && type != u"button" && type != u"menu") {
         return; // unknown nodes are left out
     }
     lines->append(line);
+}
+
+QVariantList ExtensionViewModel::daysOf(const QVariantMap &node, QString *month)
+{
+    const QDate first = QDate::fromString(node.value(u"month"_s).toString() + u"-01"_s, Qt::ISODate);
+    if (!first.isValid())
+        return {};
+    *month = first.toString(u"yyyy-MM"_s);
+    const QVariantMap days = node.value(u"days"_s).toMap();
+    QVariantList out;
+    out.reserve(first.daysInMonth());
+    for (int d = 1; d <= first.daysInMonth(); ++d) {
+        const QString date = QDate(first.year(), first.month(), d).toString(Qt::ISODate);
+        const QVariantMap day = days.value(date).toMap();
+        const QString state = day.value(u"state"_s).toString();
+        out << QVariantMap{{u"date"_s, date},
+                           {u"day"_s, d},
+                           {u"state"_s, kDayStates.contains(state) ? state : u"rest"_s},
+                           {u"tappable"_s, !day.value(u"action"_s).toString().isEmpty()},
+                           {u"menu"_s, !itemsOf(day.value(u"menu"_s)).isEmpty()}};
+    }
+    return out;
+}
+
+QVariantList ExtensionViewModel::menuItems(int row, int control, const QString &date) const
+{
+    if (row < 0 || row >= m_lines.size())
+        return {};
+    const Line &l = m_lines[row];
+    if (control >= 0)
+        return l.controls ? menuOfNode(l.controls->control(control)) : QVariantList();
+    if (!date.isEmpty())
+        return l.type == u"month" ? itemsOf(l.node.value(u"days"_s).toMap().value(date).toMap().value(u"menu"_s))
+                                  : QVariantList();
+    return l.type == u"menu" ? menuOfNode(l.node) : QVariantList();
+}
+
+QStringList ExtensionViewModel::menuLabels(int row, int control, const QString &date) const
+{
+    QStringList out;
+    for (const QVariant &item : menuItems(row, control, date))
+        out << item.toMap().value(u"label"_s).toString();
+    return out;
+}
+
+QStringList ExtensionViewModel::menuIcons(int row, int control, const QString &date) const
+{
+    QStringList out;
+    for (const QVariant &v : menuItems(row, control, date)) {
+        const QVariantMap item = v.toMap();
+        QString icon = item.value(u"icon"_s).toString();
+        if (icon.isEmpty() && item.contains(u"journal"_s))
+            icon = u"book-open"_s;
+        else if (icon.isEmpty() && item.contains(u"page"_s) && item.value(u"action"_s).toString().isEmpty())
+            icon = u"file-text"_s;
+        out << icon;
+    }
+    return out;
+}
+
+void ExtensionViewModel::activateMenuItem(int row, int control, const QString &date, int item)
+{
+    if (m_updating)
+        return;
+    const QVariantMap chosen = menuItems(row, control, date).value(item).toMap();
+    if (!chosen.value(u"action"_s).toString().isEmpty()) {
+        runAction(chosen.value(u"action"_s).toString(), chosen.value(u"args"_s).toMap());
+    } else if (!chosen.value(u"page"_s).toString().isEmpty()) {
+        const int line = chosen.value(u"line"_s).toInt();
+        Q_EMIT pageRequested(chosen.value(u"page"_s).toString(), line > 0 ? line - 1 : -1);
+    } else if (chosen.contains(u"journal"_s)) {
+        Q_EMIT journalRequested(chosen.value(u"journal"_s).toString());
+    }
+}
+
+void ExtensionViewModel::activateDay(int row, const QString &date)
+{
+    if (m_updating || row < 0 || row >= m_lines.size() || m_lines[row].type != u"month")
+        return;
+    const QVariantMap day = m_lines[row].node.value(u"days"_s).toMap().value(date).toMap();
+    if (!day.value(u"action"_s).toString().isEmpty())
+        runAction(day.value(u"action"_s).toString(), day.value(u"args"_s).toMap());
 }
 
 void ExtensionViewModel::activate(int row)
@@ -531,7 +713,8 @@ bool ExtensionViewModel::run(const QVariantMap &node, double value)
 {
     const QString type = node.value(u"type"_s).toString();
     if (type == u"link") {
-        Q_EMIT pageRequested(node.value(u"page"_s).toString());
+        const int line = node.value(u"line"_s).toInt();
+        Q_EMIT pageRequested(node.value(u"page"_s).toString(), line > 0 ? line - 1 : -1);
     } else if (type == u"open") {
         const QString view = node.value(u"view"_s).toString();
         Q_EMIT viewRequested(view.isEmpty() ? m_view : view, node.value(u"params"_s).toMap());
@@ -540,21 +723,26 @@ bool ExtensionViewModel::run(const QVariantMap &node, double value)
             return false;
         m_extensions->runCommand(m_extension, node.value(u"command"_s).toString());
     } else if (type == u"button" || type == u"check" || type == u"stepper") {
-        const QString action = node.value(u"action"_s).toString();
-        if (!m_extensions || action.isEmpty())
-            return false;
         QVariantMap args = node.value(u"args"_s).toMap();
         if (type == u"stepper")
             args.insert(u"value"_s, value);
-        m_extensions->act(m_extension, m_view, action, args);
-        // Drawn again at once, in place: the next tap acts on the lines as they are now — a number
-        // typed into a stepper is written when its field loses the focus to the button pressed
-        // next ("+ set"), whose action then reads the line with it. Lines of other kinds wait for
-        // the timer: a reset would take away the delegate whose handler called this.
-        render(false);
+        return runAction(node.value(u"action"_s).toString(), args);
     } else {
         return false;
     }
+    return true;
+}
+
+bool ExtensionViewModel::runAction(const QString &action, const QVariantMap &args)
+{
+    if (!m_extensions || action.isEmpty())
+        return false;
+    m_extensions->act(m_extension, m_view, action, args);
+    // Drawn again at once, in place: the next tap acts on the lines as they are now — a number
+    // typed into a stepper is written when its field loses the focus to the button pressed
+    // next ("+ set"), whose action then reads the line with it. Lines of other kinds wait for
+    // the timer: a reset would take away the delegate whose handler called this.
+    render(false);
     return true;
 }
 

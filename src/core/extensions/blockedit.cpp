@@ -1,10 +1,13 @@
 #include "extensions/blockedit.h"
 
 #include "markdown/edit.h"
+#include "markdown/inline.h"
 #include "markdown/tasks.h"
 #include "text/text.h"
 
 #include <QRegularExpression>
+
+#include <algorithm>
 
 using namespace Qt::StringLiterals;
 
@@ -148,6 +151,206 @@ std::optional<QString> replaceBlockText(const QString &content, int line, const 
             result = markdown::setTaskStatus(result, line, wanted, today);
     }
     return result;
+}
+
+namespace {
+
+QString leadingSpace(QStringView line)
+{
+    qsizetype n = line.startsWith(QChar(0xFEFF)) ? 1 : 0;
+    const qsizetype bom = n;
+    while (n < line.size() && (line[n] == u' ' || line[n] == u'\t'))
+        ++n;
+    return line.mid(bom, n - bom).toString();
+}
+
+// The lines of a script's markdown: any line break, the trailing empty lines left out.
+QStringList markdownLines(const QString &markdown)
+{
+    QString text = markdown;
+    text.replace(u"\r\n"_s, u"\n"_s);
+    text.replace(u'\r', u'\n');
+    QStringList lines = text.split(u'\n');
+    while (!lines.isEmpty() && lines.last().trimmed().isEmpty())
+        lines.removeLast();
+    return lines;
+}
+
+const QRegularExpression &propertyPattern()
+{
+    static const QRegularExpression re(uR"(^([ \t]*)([^\s:][^:]*?)::(?:[ \t](.*)|$))"_s);
+    return re;
+}
+
+bool isPropertyName(const QString &key)
+{
+    if (key.isEmpty())
+        return false;
+    for (const QChar c : key)
+        if (!c.isLetterOrNumber() && c != u'-' && c != u'_')
+            return false;
+    return true;
+}
+
+} // namespace
+
+std::optional<QString> insertBlockLines(const QString &content, int line, int endLine, const QString &markdown,
+                                        Placement where, const QString &childIndent, int *firstLine)
+{
+    QList<text::Line> lines = text::splitLines(content);
+    // splitLines() gives a note ending with a line break a last empty line: no block's line.
+    const int count = int(lines.size()) - (lines.size() > 1 && lines.last().text.isEmpty() && lines.last().eol.isEmpty() ? 1 : 0);
+    if (line < 0 || endLine < line || endLine >= count)
+        return std::nullopt;
+    const QStringList added = markdownLines(markdown);
+    if (added.isEmpty())
+        return std::nullopt;
+    QString indent = leadingSpace(lines[line].text);
+    if (where == Placement::Child) {
+        QString more = childIndent;
+        if (more.isEmpty())
+            more = indent.contains(u'\t') ? u"\t"_s : u"  "_s;
+        indent += more;
+    }
+    const int at = where == Placement::Before ? line : endLine + 1;
+    const QString eol = text::preferredEol(lines, at > 0 ? at - 1 : 0);
+    QList<text::Line> inserted;
+    for (const QString &text : added) {
+        text::Line l;
+        l.text = text.trimmed().isEmpty() ? QString() : indent + text;
+        l.eol = eol;
+        inserted << l;
+    }
+    if (at >= int(lines.size()) || (at == count && lines[at - 1].eol.isEmpty())) {
+        // After the note's last line, which has no line break: it gets one, the new last line none.
+        lines[at - 1].eol = eol;
+        inserted.last().eol.clear();
+    }
+    for (qsizetype i = 0; i < inserted.size(); ++i)
+        lines.insert(at + i, inserted[i]);
+    if (firstLine)
+        *firstLine = at;
+    return text::joinLines(lines);
+}
+
+std::optional<QString> removeBlockLines(const QString &content, int line, int endLine)
+{
+    QList<text::Line> lines = text::splitLines(content);
+    const int count = int(lines.size()) - (lines.size() > 1 && lines.last().text.isEmpty() && lines.last().eol.isEmpty() ? 1 : 0);
+    if (line < 0 || endLine < line || endLine >= count)
+        return std::nullopt;
+    const bool wasLast = endLine == int(lines.size()) - 1;
+    lines.remove(line, endLine - line + 1);
+    if (wasLast && !lines.isEmpty())
+        lines.last().eol.clear(); // the note ended without a line break: it still does
+    return text::joinLines(lines);
+}
+
+std::optional<QString> setBlockProperty(const QString &content, int line, int ownEndLine, const QString &key,
+                                        const QString &value)
+{
+    if (!isPropertyName(key) || value.contains(u'\n') || value.contains(u'\r'))
+        return std::nullopt;
+    QList<text::Line> lines = text::splitLines(content);
+    if (line < 0 || line >= lines.size())
+        return std::nullopt;
+    ownEndLine = std::clamp(ownEndLine, line, int(lines.size()) - 1);
+    const QString wanted = key.toCaseFolded();
+    const QString newValue = value.trimmed();
+    QList<int> matching;
+    int lastProperty = -1;
+    QString propertyIndent;
+    for (int i = line + 1; i <= ownEndLine; ++i) {
+        const QRegularExpressionMatch m = propertyPattern().match(lines[i].text);
+        if (!m.hasMatch())
+            continue;
+        lastProperty = i;
+        if (propertyIndent.isEmpty())
+            propertyIndent = m.captured(1);
+        if (m.captured(2).trimmed().toCaseFolded() == wanted)
+            matching << i;
+    }
+    if (newValue.isEmpty()) {
+        for (qsizetype k = matching.size() - 1; k >= 0; --k) {
+            const int i = matching[k];
+            if (i == int(lines.size()) - 1 && i > 0)
+                lines[i - 1].eol = lines[i].eol;
+            lines.remove(i);
+        }
+        return text::joinLines(lines);
+    }
+    if (!matching.isEmpty()) {
+        const int i = matching.first();
+        const QRegularExpressionMatch m = propertyPattern().match(lines[i].text);
+        lines[i].text = lines[i].text.left(m.capturedEnd(2)) + u":: "_s + newValue;
+        for (qsizetype k = matching.size() - 1; k >= 1; --k)
+            lines.remove(matching[k]); // a key given twice: one value now
+        return text::joinLines(lines);
+    }
+    if (propertyIndent.isEmpty() && lastProperty < 0) {
+        const QString first = lines[line].text;
+        const qsizetype bom = first.startsWith(QChar(0xFEFF)) ? 1 : 0;
+        static const QRegularExpression markerPattern(uR"(^([ \t]*)([-*+]|\d{1,9}[.)])[ \t])"_s);
+        const QRegularExpressionMatch marker = markerPattern.match(first.mid(bom));
+        propertyIndent = marker.hasMatch() ? marker.captured(1) + QString(marker.captured(2).size() + 1, u' ')
+                                           : leadingSpace(first);
+    }
+    const int after = lastProperty >= 0 ? lastProperty : line;
+    text::Line added;
+    added.text = propertyIndent + key + u":: "_s + newValue;
+    added.eol = lines[after].eol;
+    if (added.eol.isEmpty()) {
+        lines[after].eol = text::preferredEol(lines, after);
+    }
+    lines.insert(after + 1, added);
+    return text::joinLines(lines);
+}
+
+// (blockedit.h) The words of a line as a reader takes them: [[links]] as their labels (the alias, else the
+// target's last part without its heading), tags left out, white space single.
+QString plainWords(QStringView text)
+{
+    const qsizetype eol = text.indexOf(u'\n');
+    const QStringView line = eol < 0 ? text : text.first(eol);
+    struct Cut
+    {
+        qsizetype from = 0;
+        qsizetype to = 0;
+        QString with;
+    };
+    QList<Cut> cuts;
+    for (const auto tags = markdown::findTags(line); const markdown::TagSpan &tag : tags)
+        cuts.append({tag.from, tag.to, QString()});
+    const markdown::InlineScan scan = markdown::extractInline(line);
+    for (const Link &link : scan.links) {
+        if (link.kind != LinkKind::Wiki && link.kind != LinkKind::Embed)
+            continue;
+        QString label = link.display.trimmed();
+        if (label.isEmpty()) {
+            label = link.target;
+            const qsizetype hash = label.indexOf(u'#');
+            if (hash >= 0)
+                label.truncate(hash);
+            const qsizetype slash = label.lastIndexOf(u'/');
+            if (slash >= 0)
+                label = label.sliced(slash + 1);
+            if (label.endsWith(u".md"_s, Qt::CaseInsensitive))
+                label.chop(3);
+        }
+        cuts.append({link.from, link.to, label});
+    }
+    std::ranges::sort(cuts, {}, &Cut::from);
+    QString out;
+    qsizetype at = 0;
+    for (const Cut &cut : std::as_const(cuts)) {
+        if (cut.from < at || cut.to > line.size())
+            continue; // inside an earlier cut (the link of a #[[tag]])
+        out += line.sliced(at, cut.from - at);
+        out += u' ' + cut.with + u' ';
+        at = cut.to;
+    }
+    out += line.sliced(at);
+    return out.simplified();
 }
 
 } // namespace brulion::extensions

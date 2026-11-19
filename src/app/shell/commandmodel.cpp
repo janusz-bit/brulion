@@ -502,7 +502,8 @@ static QList<Command> editorCommands(const AppController *app, bool editor)
 /// All commands in the palette's order: buildCommands() with the note's commands (editorCommands())
 /// after "Markdown source", the event log after the sync center, the folder commands after "New
 /// page", the tab commands after "Forward" and the backup commands at the end.
-/// The extensions' commands (docs/EXTENSIONS.md): "Gym" (go.gym) while the gym is on, every
+/// The extensions' commands (docs/EXTENSIONS.md): "Gym" (go.gym) while the gym is on (go.habits
+/// before them only while habits are, allCommands()), every
 /// command of a loaded extension as "ext.<extension>.<name>" with the extension's own label, every
 /// view with a label as "extview.<extension>.<name>" (the route "extension"), then the
 /// extensions' own tools: the Luau console, "Run Luau block", "New extension", "Reload
@@ -517,14 +518,16 @@ static QList<Command> extensionCommands(const AppController *app, bool blocks)
     if (extensions->gymEnabled())
         out.append({u"go.gym"_s, CommandModel::tr("Gym"), CommandModel::tr("Today's workout, plans, progress"), u"dumbbell"_s,
                     {}, ready});
-    const auto iconOf = [](const QString &extension) { return extension == u"silownia" ? u"dumbbell"_s : u"puzzle"_s; };
+    const auto iconOf = [](const QString &extension) {
+        return extension == u"silownia" ? u"dumbbell"_s : extension == u"nawyki" ? u"flame"_s : u"puzzle"_s;
+    };
     for (const extensions::CommandInfo &c : extensions->commands()) {
         if (c.palette) // (else only the app or a view's button runs it: the assistant's chat turn)
             out.append({u"ext."_s + c.extension + u'.' + c.name, c.label, extensions->title(c.extension),
                         iconOf(c.extension), {}, ready && (!c.needsBlock || blocks)});
     }
     for (const extensions::ViewInfo &v : extensions->views()) {
-        if (!v.label.isEmpty() && v.extension != u"silownia")
+        if (!v.label.isEmpty() && v.extension != u"silownia" && v.extension != u"nawyki") // (their own views)
             out.append({u"extview."_s + v.extension + u'.' + v.name, v.label, extensions->title(v.extension),
                         v.icon.isEmpty() ? iconOf(v.extension) : v.icon, {}, ready});
     }
@@ -557,6 +560,9 @@ static QList<Command> allCommands(const AppController *app)
     const bool editor = source != out.cend() && source->enabled;
     insertAfter(out, u"page.source"_s, editorCommands(app, editor));
     insertAfter(out, u"go.habits"_s, extensionCommands(app, editor && !app->sourceModeShown()));
+    // Habits are the built-in extension `nawyki`: offered while it is on (as the gym).
+    if (!app->workspace()->extensions()->habitsEnabled())
+        out.removeIf([](const Command &c) { return c.id == u"go.habits"; });
     // The event log ("Event log"); also found as logs, diagnostics.
     insertAfter(out, u"go.sync"_s,
                 {{u"go.logs"_s,

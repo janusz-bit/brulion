@@ -1,8 +1,9 @@
 #pragma once
 // ExtensionViewModel — an extension's view as a list for QML (QML type `ExtensionView`, docs/UI.md
-// "Extension views"): the node tree of b.view's render function (b.ui: column, row, heading,
-// text, link, button, check, stepper, chart, table, empty, open, run) flattened into lines, a row's
-// controls in a model of their own. It renders again when its extension, view or params change,
+// "Extension views"): the node tree of b.view's render function (b.ui: column, row, card, heading,
+// text, link, button, check, stepper, menu, month, chart, table, empty, open, run) flattened into
+// lines, a row's controls in a model of their own. A card's lines stay lines of the flat list, each
+// with its part of the card (lineCard: "first", "middle", "last", "only"; "" outside cards). It renders again when its extension, view or params change,
 // after Workspace.extensions.changed() (a command or an action finished) and when the index
 // changed (a note written anywhere: coalesced) — and at once after an action of its own controls.
 // The same view drawn again with lines of the same kinds changes them in place (dataChanged): the
@@ -12,8 +13,15 @@
 //   Repeater { model: today; delegate: … lineType, lineText, controls … }
 //   today.activate(row) / today.activateControl(row, control, value) / today.enterValue(row, control, "82,5")
 //
-// Lines (role lineType): heading, text, empty (lineTitle + lineText), link, open, run, row (controls),
-// chart (chartData + chartSource for ChartView), tableHead / tableRow (cells).
+// Lines (role lineType): heading, text (lineIcon, lineTone), empty (lineTitle + lineText, lineIcon),
+// link, open, run, button, menu (a "⋯": menuLabels() / activateMenuItem()), row (controls), month
+// (lineMonth "2026-11", lineDays — a map per day of the month { date, day, state, tappable, menu } —
+// and lineTitle its label; activateDay(), a day's menu), chart (chartData + chartSource for
+// ChartView), tableHead / tableRow (cells).
+//
+// Menus (a menu node's items, a check's menu, a day's menu) are lists of { label, action, args } (a
+// view action), { label, page, line? } (a page at its 1-based line) or { label, journal = date } (a
+// day's journal), each with an optional icon.
 
 #include <QAbstractListModel>
 #include <QPointer>
@@ -34,7 +42,9 @@ class ExtensionViewModel;
 
 /// The controls of one row (roles controlType, controlText, controlPage, controlChecked,
 /// controlValue, controlStep, controlUnit, controlIndex, controlMuted, controlDisplay — a stepper's
-/// number with its unit, "82,5 kg" —, controlNumber — the number alone, "82,5").
+/// number with its unit, "82,5 kg" —, controlNumber — the number alone, "82,5" —, controlState — a
+/// check's "done" | "open" | "skipped" —, controlLabel — a check's or a menu's name —, controlIcon,
+/// controlTone — a text's —, controlHasMenu — a check with a menu, a menu with items).
 class ExtensionControlsModel : public QAbstractListModel {
     Q_OBJECT
 public:
@@ -50,6 +60,11 @@ public:
         MutedRole,
         DisplayRole,
         NumberRole,
+        StateRole,
+        LabelRole,
+        IconRole,
+        ToneRole,
+        HasMenuRole,
     };
     /// `comma`: numbers shown with a decimal comma (Polish).
     ExtensionControlsModel(QList<QVariantMap> controls, bool comma, QObject *parent);
@@ -106,6 +121,11 @@ public:
         ChartSourceRole,
         ControlsRole,
         HasControlsRole,
+        IconRole,
+        ToneRole,
+        CardRole,
+        MonthRole,
+        DaysRole,
     };
 
     explicit ExtensionViewModel(QObject *parent = nullptr);
@@ -152,6 +172,16 @@ public:
     /// that is no stepper, and while the lines are being changed (a field that loses the focus
     /// because its delegate goes says nothing to another line).
     Q_INVOKABLE bool enterValue(int row, int control, const QString &text);
+    /// A day of a month line tapped: its action with its args (nothing for a day without one).
+    Q_INVOKABLE void activateDay(int row, const QString &date);
+    /// The labels of a menu: of the control `control` of a row (a menu, a check's menu), else of the
+    /// day `date` of a month line, else of a menu line.
+    Q_INVOKABLE QStringList menuLabels(int row, int control, const QString &date) const;
+    /// The icons of that menu's items ("" none): the item's own, else a journal's or a page's.
+    Q_INVOKABLE QStringList menuIcons(int row, int control, const QString &date) const;
+    /// That menu's item `item` chosen: its view action, its page (pageRequested) or its day's
+    /// journal (journalRequested).
+    Q_INVOKABLE void activateMenuItem(int row, int control, const QString &date, int item);
 
 Q_SIGNALS:
     void extensionsChanged();
@@ -159,17 +189,21 @@ Q_SIGNALS:
     void viewChanged();
     void paramsChanged();
     void renderedChanged();
-    /// A link of the view: the page to open (its name, a [[link]] target).
-    void pageRequested(const QString &page);
+    /// A link of the view, a menu's page: the page to open (its name, a [[link]] target), at the
+    /// 0-based `line` when ≥ 0 (the node's 1-based line).
+    void pageRequested(const QString &page, int line);
+    /// A menu's journal item: the daily note of "YYYY-MM-DD".
+    void journalRequested(const QString &date);
     /// An "open" node: the view and params the extension asks for.
     void viewRequested(const QString &view, const QVariantMap &params);
 
 private:
     struct Line {
-        QString type, text, title, page, chartSource;
+        QString type, text, title, page, chartSource, icon, tone, card, month;
         bool muted = false;
         QStringList cells;
         QVariantMap chartData;
+        QVariantList days; // a month's days for QML
         QVariantMap node; // the node itself (actions, args, views to open)
         QList<QVariantMap> controlNodes; // a row's controls, until they are in `controls`
         ExtensionControlsModel *controls = nullptr;
@@ -182,6 +216,11 @@ private:
     static void addLine(const QVariantMap &node, QList<Line> *lines);
     /// A node's action (activate(), activateControl()); false when it has none to do.
     bool run(const QVariantMap &node, double value);
+    /// The view's action `action` with `args`, then the view drawn again in place.
+    bool runAction(const QString &action, const QVariantMap &args);
+    /// The items of a menu (menuLabels()).
+    QVariantList menuItems(int row, int control, const QString &date) const;
+    static QVariantList daysOf(const QVariantMap &node, QString *month);
     static QVariantMap chartDataOf(const QVariantMap &node);
     static QList<int> changedRoles(const Line &before, const Line &after);
 

@@ -768,13 +768,16 @@ every ```query block of the open pages, the Android widgets. Now:
   query matching more than 5000 items is not kept — its cache would hold every match, ~0.2 KB each,
   for the session),
   `WidgetPublisher` (the snapshot's caches kept across publishes).
-* **Habits** (added later, `habits/habitcache.h`) follow the same log: a `NoteCache` of each note's
-  habit definitions and checks (only notes with any are kept — the habits' pages and the daily
-  notes with checks), the merged lists rebuilt from those values after a change (never from the
-  whole vault) with a revision per habit; `HabitListModel` computes a habit's streaks and month
-  grid again only when its revision moved (a tick in one daily note: that habit's row alone;
-  `tst_habits` cacheManyNotes and `tst_planning_habits` incremental check it). Statistics walk at
-  most the last 3660 days of a habit.
+* **Habits** were added later in C++ with the same log (`habits/habitcache.h`: a `NoteCache` of each
+  note's definitions and checks, a revision per habit, `HabitListModel` computing a habit's row
+  again only when its revision moved). Since they became the built-in Luau extension `nawyki`
+  (docs/EXTENSIONS.md) that code is gone: the extension reads the definitions (`b.pages` /
+  `b.blocks` by property) and every check (`b.blocks` by tag) once, keeps what it read while
+  `b.revision()` is the same — a change anywhere, its own tick too, reads it all again —, and computes each habit's streaks and month grid
+  from that on every draw. Statistics walk at most the last 3660 days of a habit. Measured in
+  `tst_extensions_habits` bigNotebook (2000 daily notes × 8 habits and 1000 other pages, a Debug
+  build): the first draw ≈ 0.3 s, a draw from the cache ≈ 10 ms; the test holds the first draw and
+  the one after a tick under 1.5 s, the cached one under 0.2 s.
 * **Full syncs stay as cheap as the old full computation.** A first view, another range or the
   date picker's marks compute everything: a `NoteCache` then fills its values from the index's own
   task and reminder lists (contiguous, kept up to date by the index) rather than visiting 10 000

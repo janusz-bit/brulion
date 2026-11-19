@@ -979,16 +979,18 @@ Tasks" removes it): `markdown::tasksIgnored`.
 
 ### Habits
 
-Recurring points of the day (`src/core/habits`, writing a check: `notebook/habitchecks.h`), kept as
-plain Markdown that Obsidian and Logseq read as ordinary blocks and tasks: a habit is **defined**
+Recurring points of the day (the built-in extension `src/core/extensions/builtin/nawyki.luau`,
+docs/EXTENSIONS.md; reading, counting and writing a check all there), kept as plain Markdown that Obsidian and Logseq read as ordinary blocks and tasks: a habit is **defined**
 once, and each day's **check** is a task in that day's daily note — so it syncs and merges like any
 note, and a tick in the journal itself counts.
 
 **Definition** — a block (list item or paragraph) with the property `habit::` (or `nawyk::`); its
 text is the habit's name. A page whose page properties (YAML frontmatter or leading `key:: value`
 lines) have `habit` is a habit named by its title. Anywhere in the notebook; Brulion's "Add habit"
-appends to the page holding the first habit, else creates `Nawyki.md` (`Habits.md` in English)
-where new pages go.
+appends `- Name` and `  habit:: schedule` (`codziennie` / `every day` when none was given) to the
+page holding the first habit a block defines, else to `Nawyki.md` (`Habits.md` in English), made
+where new pages go — or to `Lista nawyków.md` (`Habit list.md`) when that name is the habits' own code
+as an extension page ("Edit the code", §13).
 
 ```markdown
 - Medytacja
@@ -1038,13 +1040,17 @@ Several checks of one habit on one day (also in two notes of one day): done wins
 open. Checks on other pages, untagged tasks and blocks that define a habit are no checks. A journal
 template may list the habits as `- [ ] Medytacja #nawyk` lines: each day starts with them open.
 
-**What Brulion writes** (the Habits view, `brulion-cli habit set`): the day's first check of the
-habit gets the status (§5 `setTaskStatus`: `✅ today` / `❌ today`, a Logseq keyword stays one);
-without one, a new line `- [x] Name #nawyk ✅ today` (`#habit` when notes are written in English; a
-page habit as `[[Name]]`) goes right after the note's last check of any habit, with its
-indentation, else as the note's last block (a template's empty last bullet is filled); the daily
-note is created from the journal template only then. "Not done" sets the day's done and skipped
-checks back to `[ ]` and writes nothing when there is none. Every other byte stays.
+**What Brulion writes** (the Habits view, `brulion-cli habit set`): it looks at the day's checks in
+every daily note of that day (two notes of one day — a sync's conflict copy, files named both
+ways — are one day here too). A check of the habit with the status asked for already: nothing is
+written. Else the day's first check of the habit gets the status (§5 `setTaskStatus`: `✅ today` /
+`❌ today`, a Logseq keyword stays one); without one, a new line — one line, `- [x] Name #nawyk ✅
+today` (`- [-] Name #nawyk ❌ today` for a skipped day; `#habit` when notes are written in English;
+a page habit as `[[Name]]`) — goes right after the last check of any habit in the first of those
+notes that has one, with that line's indentation, else as the day's note's last block (a
+template's empty last bullet is filled); the daily note is created from the journal template only
+then. "Not done" sets the day's done and skipped checks back to `[ ]`, in all of its notes, and
+writes nothing when there is none. Every other byte stays.
 
 **Counting** (local calendar days — no times, no time zones, so DST and year boundaries change
 nothing; at most the last 3660 days):
@@ -1905,11 +1911,11 @@ end, { label = "Policz słowa" })
   commas or spaces: `zapis` / `write` (it may change notes; reading is always allowed, and `odczyt`
   / `read` may be written), `ai`; `opis::` / `description::` — shown in Settings → Extensions;
   `zastępuje::` / `overrides::` — the id of a built-in extension the page replaces (`silownia`,
-  `asystent`). Unknown permission words are reported, not granted.
+  `nawyki`, `asystent`). Unknown permission words are reported, not granted.
 * **Id**: the page's title folded — lower case, no diacritics, what is no letter or digit a `-`
   ("Licznik słów" → `licznik-slow`; at most 64 characters; `extension` when nothing is left). A
-  title naming a built-in extension ("Siłownia", "Gym", "Asystent AI", "AI assistant") overrides
-  it too. Of two pages with one id the first by path runs.
+  title naming a built-in extension ("Siłownia", "Gym", "Nawyki", "Habits", "Asystent AI", "AI
+  assistant") overrides it too. Of two pages with one id the first by path runs.
 * **Code**: the blocks in order, each line at its own line of the page (errors name the page's
   lines). A fence is three or more backticks or tildes, may be indented and may follow a list
   marker (`- `, `1. `); its language is the first word after it, `luau` or `lua`, also written

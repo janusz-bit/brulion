@@ -60,6 +60,76 @@ const QString kCounter = u"---\ntags: [extension]\npermissions: [write]\n---\n``
                          "    return \"napisane\"\n"
                          "end)\n```\n"_s;
 
+/// An extension (page "Węzły", id "wezly") with the newer parts of the API the app draws: ctx.args,
+/// results as tables with buttons, a form's text fields, and a view of every newer node — a text
+/// with an icon and a tone, a link at a line, a card, a menu, a check that is skipped and has a
+/// menu, a month grid, an empty state with an icon. What its actions set lives in `marks`.
+const QString kNodes = u"---\ntags: [extension]\n---\n```luau\n"
+                       "local marks = { [\"dziś\"] = \"skipped\" }\n"
+                       "b.command(\"echo\", function(ctx)\n"
+                       "    local n = 0\n"
+                       "    for _ in ctx.args do n += 1 end\n"
+                       "    return { message = `słowo: {ctx.args.word or \"-\"} ({n})`, tone = \"success\",\n"
+                       "             button = { label = \"Jeszcze\", command = \"echo\", args = { word = \"żółw\" } } }\n"
+                       "end)\n"
+                       "b.command(\"strona\", function(ctx)\n"
+                       "    return { message = \"Gotowe\", tone = \"info\", button = { label = \"Otwórz\", page = \"Żółwie\" } }\n"
+                       "end)\n"
+                       "b.command(\"blad\", function(ctx) return { message = \"Źle\", tone = \"error\" } end)\n"
+                       "b.command(\"cisza\", function(ctx) return { tone = \"error\" } end)\n"
+                       "b.command(\"formularz\", function(ctx)\n"
+                       "    local a = b.form(\"Nowy nawyk\", {\n"
+                       "        { key = \"ile\", label = \"Ile\", value = 2 },\n"
+                       "        { key = \"nazwa\", label = \"Nazwa\", kind = \"text\", value = \"Żółć\", placeholder = \"np. Czytanie\" },\n"
+                       "    })\n"
+                       "    if a == nil then return \"anulowano\" end\n"
+                       "    return `{a.nazwa}/{a.ile}`\n"
+                       "end)\n"
+                       "local function menu(day)\n"
+                       "    return {\n"
+                       "        { label = \"Zrobione\", action = \"ustaw\", args = { day = day, state = \"done\" }, icon = \"check\" },\n"
+                       "        nil,\n"
+                       "        { label = \"Bez etykiety\" },\n"
+                       "        { label = \"Dziennik\", journal = \"2026-11-03\" },\n"
+                       "        { label = \"Definicja\", page = \"Nawyki\", line = 3 },\n"
+                       "    }\n"
+                       "end\n"
+                       "b.view(\"widok\", function(params)\n"
+                       "    if params.pusto then return b.ui.empty(\"Pusto\", \"Nic tu nie ma\", \"flame\") end\n"
+                       "    local state = marks[\"dziś\"]\n"
+                       "    local checked = if state == \"done\" then true elseif state == \"skipped\" then \"skipped\" else false\n"
+                       "    return b.ui.column({\n"
+                       "        b.ui.text(\"Seria: 3 dni\", { icon = \"flame\", tone = \"success\" }),\n"
+                       "        b.ui.card({\n"
+                       "            b.ui.row({\n"
+                       "                b.ui.check(checked, \"ustaw\", { day = \"dziś\", state = \"done\" }, { menu = menu(\"dziś\"), label = \"Medytacja\" }),\n"
+                       "                b.ui.text(\"Medytacja\"),\n"
+                       "                b.ui.text(\"źle\", { tone = \"danger\" }),\n"
+                       "                b.ui.menu(menu(\"dziś\"), \"Więcej\"),\n"
+                       "            }),\n"
+                       "            b.ui.link(\"Nawyki\", \"Definicja\", 3),\n"
+                       "            b.ui.month({ month = \"2026-11\", label = \"listopad 2026\", days = {\n"
+                       "                [\"2026-11-02\"] = { state = marks[\"2026-11-02\"] or \"missed\", action = \"ustaw\",\n"
+                       "                                     args = { day = \"2026-11-02\", state = \"done\" }, menu = menu(\"2026-11-02\") },\n"
+                       "                [\"2026-11-14\"] = { state = \"due\", action = \"ustaw\", args = { day = \"2026-11-14\", state = \"done\" } },\n"
+                       "                [\"2026-11-20\"] = { state = \"future\" },\n"
+                       "                [\"2026-11-21\"] = { state = \"cokolwiek\" },\n"
+                       "            } }),\n"
+                       "        }),\n"
+                       "        b.ui.card({ b.ui.text(\"sama\") }),\n"
+                       "        b.ui.month({ month = \"bzdura\", days = {} }),\n"
+                       "        b.ui.menu(menu(\"dziś\")),\n"
+                       "    })\n"
+                       "end, {\n"
+                       "    ustaw = function(args)\n"
+                       "        local before = marks[args.day] or \"open\"\n"
+                       "        if before == args.state then return nil end\n"
+                       "        marks[args.day] = args.state\n"
+                       "        return { message = `{args.day}: {args.state}`, tone = \"success\",\n"
+                       "                 button = { label = \"Cofnij\", action = \"ustaw\", args = { day = args.day, state = before } } }\n"
+                       "    end,\n"
+                       "})\n```\n"_s;
+
 QString readFile(const QString &file)
 {
     QFile f(file);
@@ -251,6 +321,16 @@ class TestShellExtensions : public QObject {
     bool syncBrings(const QString &path, const QString &content)
     {
         return m_vault->writeText(path, content, ChangeSource::External);
+    }
+
+    /// The page "Węzły" (kNodes) written as this device's user writes and approved: running.
+    void addNodesExtension()
+    {
+        QVERIFY(m_vault->writeText(page(u"Węzły"_s), kNodes, ChangeSource::User));
+        QTRY_VERIFY(!m_ext->pageState(page(u"Węzły"_s)).isEmpty()); // (read when the burst is over)
+        m_ext->approve(page(u"Węzły"_s));
+        QVERIFY2(m_ext->pageState(page(u"Węzły"_s)) == u"running",
+                 qPrintable(m_ext->pageMessage(page(u"Węzły"_s))));
     }
 
 private Q_SLOTS:
@@ -847,6 +927,200 @@ private Q_SLOTS:
         m_ext->answerForm();
         QCOMPARE(squat(), u"  - [ ] [[Przysiad]] 31 kg × 8; 30 kg × 4"_s);
         m_ext->stopRest();
+    }
+
+    void argsAndTableResults()
+    {
+        // A command the app runs with arguments gets them as ctx.args ({} without any); a result
+        // { message, tone, button } is a message with that tone and a button, which runs the
+        // command (with its args), opens a page, or — of a view's action — runs that action again.
+        addNodesExtension();
+        QList<int> buttons;
+        connect(m_ext.get(), &WorkspaceExtensions::messageWithButton, this,
+                [&](const QString &text, const QString &kind, const QString &label, int id) {
+                    m_messages << kind + u": "_s + text + u" ["_s + label + u']';
+                    buttons << id;
+                });
+        QStringList pages;
+        connect(m_ext.get(), &WorkspaceExtensions::pageRequested, this, [&](const QString &p) { pages << p; });
+        m_ext->runCommand(u"wezly"_s, u"echo"_s);
+        m_ext->runCommand(u"wezly"_s, u"echo"_s, QString(), -1, {{u"word"_s, u"ćma"_s}, {u"inne"_s, 1}});
+        QCOMPARE(m_messages, (QStringList{u"success: słowo: - (0) [Jeszcze]"_s, u"success: słowo: ćma (2) [Jeszcze]"_s}));
+        QCOMPARE(buttons.size(), 2);
+        // Its button: the command again with the button's args; a button works once.
+        m_messages.clear();
+        m_ext->pressButton(buttons[0]);
+        m_ext->pressButton(buttons[0]);
+        QCOMPARE(m_messages, QStringList{u"success: słowo: żółw (1) [Jeszcze]"_s});
+        // A page button; a forgotten button does nothing.
+        m_messages.clear();
+        m_ext->runCommand(u"wezly"_s, u"strona"_s);
+        QCOMPARE(m_messages, QStringList{u"info: Gotowe [Otwórz]"_s});
+        m_ext->forgetButton(buttons.last());
+        m_ext->pressButton(buttons.last());
+        QVERIFY(pages.isEmpty());
+        m_ext->runCommand(u"wezly"_s, u"strona"_s);
+        m_ext->pressButton(buttons.last());
+        QCOMPARE(pages, QStringList{u"Żółwie"_s});
+        // No button: a plain message with the tone; no message: silent.
+        m_messages.clear();
+        m_ext->runCommand(u"wezly"_s, u"blad"_s);
+        m_ext->runCommand(u"wezly"_s, u"cisza"_s);
+        QCOMPARE(m_messages, QStringList{u"error: Źle"_s});
+
+        // A view action's result: Undo runs the same view's action with the args before.
+        m_messages.clear();
+        buttons.clear();
+        QVERIFY(m_ext->act(u"wezly"_s, u"widok"_s, u"ustaw"_s, {{u"day"_s, u"2026-11-02"_s}, {u"state"_s, u"done"_s}}));
+        QCOMPARE(m_messages, QStringList{u"success: 2026-11-02: done [Cofnij]"_s});
+        m_ext->pressButton(buttons.last());
+        QCOMPARE(m_messages.last(), u"success: 2026-11-02: open [Cofnij]"_s);
+        QString error;
+        QList<QVariantMap> months;
+        collect(m_ext->render(u"wezly"_s, u"widok"_s, {}, &error), u"month"_s, &months);
+        QCOMPARE(months.first().value(u"days"_s).toMap().value(u"2026-11-02"_s).toMap().value(u"state"_s).toString(),
+                 u"open"_s);
+        // Nothing changed (nil): no message.
+        m_messages.clear();
+        QVERIFY(m_ext->act(u"wezly"_s, u"widok"_s, u"ustaw"_s, {{u"day"_s, u"2026-11-02"_s}, {u"state"_s, u"open"_s}}));
+        QVERIFY(m_messages.isEmpty());
+    }
+
+    void formTextFields()
+    {
+        // b.form's text fields: their text (the value given first), a placeholder; the answer is
+        // the text typed; numbers as before.
+        addNodesExtension();
+        m_ext->runCommand(u"wezly"_s, u"formularz"_s);
+        QCOMPARE(m_ext->questionKind(), u"form"_s);
+        ExtensionFormModel *fields = m_ext->questionFields();
+        QCOMPARE(fields->rowCount(), 2);
+        const auto role = [fields](int row, int role) { return fields->data(fields->index(row), role).toString(); };
+        QCOMPARE(role(0, ExtensionFormModel::KindRole), u"number"_s);
+        QCOMPARE(role(1, ExtensionFormModel::KindRole), u"text"_s);
+        QCOMPARE(role(1, ExtensionFormModel::TextRole), u"Żółć"_s);
+        QCOMPARE(role(1, ExtensionFormModel::PlaceholderRole), u"np. Czytanie"_s);
+        QCOMPARE(role(0, ExtensionFormModel::PlaceholderRole), QString());
+        QCOMPARE(fields->firstTextField(), 1);
+        fields->setText(1, u"Gęślą jaźń"_s);
+        fields->setNumber(0, 3);
+        m_ext->answerForm();
+        QCOMPARE(m_messages, QStringList{u"info: Gęślą jaźń/3"_s});
+        // Cancelled: nil.
+        m_messages.clear();
+        m_ext->runCommand(u"wezly"_s, u"formularz"_s);
+        m_ext->cancelQuestion();
+        QCOMPARE(m_messages, QStringList{u"info: anulowano"_s});
+    }
+
+    void newNodesInTheViewModel()
+    {
+        // Every newer node as the app draws it: their roles, a card's lines with their parts of
+        // it, a month's cells, menus and what their items do, a day's tap; drawn again in place.
+        addNodesExtension();
+        ExtensionViewModel model;
+        model.setExtensions(m_ext.get());
+        model.setExtension(u"wezly"_s);
+        model.setView(u"widok"_s);
+        model.refresh();
+        QVERIFY2(model.error().isEmpty(), qPrintable(model.error()));
+        // (A month that is no month is left out.)
+        QCOMPARE(lineKinds(model), (QStringList{u"text"_s, u"row"_s, u"link"_s, u"month"_s, u"text"_s, u"menu"_s}));
+        const auto line = [&model](int row, int role) { return model.data(model.index(row), role); };
+        QStringList parts;
+        for (int i = 0; i < model.rowCount(); ++i)
+            parts << line(i, ExtensionViewModel::CardRole).toString();
+        QCOMPARE(parts, (QStringList{QString(), u"first"_s, u"middle"_s, u"last"_s, u"only"_s, QString()}));
+        // A text with an icon and a tone.
+        QCOMPARE(line(0, ExtensionViewModel::IconRole).toString(), u"flame"_s);
+        QCOMPARE(line(0, ExtensionViewModel::ToneRole).toString(), u"success"_s);
+        QCOMPARE(line(4, ExtensionViewModel::ToneRole).toString(), QString());
+        // The row: a skipped check with a menu and a name, texts, a menu.
+        ExtensionControlsModel *controls = controlsOf(model, 1);
+        QCOMPARE(controlKinds(controls), (QStringList{u"check"_s, u"text"_s, u"text"_s, u"menu"_s}));
+        QCOMPARE(controlRole(controls, 0, ExtensionControlsModel::StateRole), u"skipped"_s);
+        QCOMPARE(controlRole(controls, 0, ExtensionControlsModel::LabelRole), u"Medytacja"_s);
+        QVERIFY(controls->data(controls->index(0), ExtensionControlsModel::HasMenuRole).toBool());
+        QVERIFY(!controls->data(controls->index(0), ExtensionControlsModel::CheckedRole).toBool());
+        QCOMPARE(controlRole(controls, 2, ExtensionControlsModel::ToneRole), u"danger"_s);
+        QCOMPARE(controlRole(controls, 3, ExtensionControlsModel::LabelRole), u"Więcej"_s);
+        QVERIFY(controls->data(controls->index(3), ExtensionControlsModel::HasMenuRole).toBool());
+        QVERIFY(!controls->data(controls->index(1), ExtensionControlsModel::HasMenuRole).toBool());
+        // Menus: the items that can be chosen (no nil, none without anything to do), their icons.
+        const QStringList labels{u"Zrobione"_s, u"Dziennik"_s, u"Definicja"_s};
+        QCOMPARE(model.menuLabels(1, 0, QString()), labels);
+        QCOMPARE(model.menuLabels(1, 3, QString()), labels);
+        QCOMPARE(model.menuIcons(1, 3, QString()), (QStringList{u"check"_s, u"book-open"_s, u"file-text"_s}));
+        QCOMPARE(model.menuLabels(5, -1, QString()), labels);
+        QCOMPARE(model.menuLabels(3, -1, u"2026-11-02"_s), labels);
+        QVERIFY(model.menuLabels(3, -1, u"2026-11-14"_s).isEmpty());
+        QVERIFY(model.menuLabels(1, 1, QString()).isEmpty());
+        QVERIFY(model.menuLabels(0, -1, QString()).isEmpty());
+        QVERIFY(model.menuLabels(99, 0, QString()).isEmpty());
+        QSignalSpy pageSpy(&model, &ExtensionViewModel::pageRequested);
+        QSignalSpy journalSpy(&model, &ExtensionViewModel::journalRequested);
+        model.activateMenuItem(1, 3, QString(), 1);
+        QCOMPARE(journalSpy.count(), 1);
+        QCOMPARE(journalSpy.first().at(0).toString(), u"2026-11-03"_s);
+        model.activateMenuItem(5, -1, QString(), 2);
+        QCOMPARE(pageSpy.count(), 1);
+        QCOMPARE(pageSpy.first().at(0).toString(), u"Nawyki"_s);
+        QCOMPARE(pageSpy.first().at(1).toInt(), 2); // the 1-based line 3, 0-based
+        // The link at its line.
+        QCOMPARE(line(2, ExtensionViewModel::TextRole).toString(), u"Definicja"_s);
+        model.activate(2);
+        QCOMPARE(pageSpy.count(), 2);
+        QCOMPARE(pageSpy.last().at(1).toInt(), 2);
+
+        // The month: a cell per day, the states it gave (else "rest"), which days act and have menus.
+        QCOMPARE(line(3, ExtensionViewModel::MonthRole).toString(), u"2026-11"_s);
+        QCOMPARE(line(3, ExtensionViewModel::TitleRole).toString(), u"listopad 2026"_s);
+        const auto days = [&] { return line(3, ExtensionViewModel::DaysRole).toList(); };
+        QCOMPARE(days().size(), 30);
+        const auto day = [&](int d) { return days().at(d - 1).toMap(); };
+        QCOMPARE(day(1).value(u"date"_s).toString(), u"2026-11-01"_s);
+        QCOMPARE(day(1).value(u"day"_s).toInt(), 1);
+        QCOMPARE(day(1).value(u"state"_s).toString(), u"rest"_s);
+        QCOMPARE(day(2).value(u"state"_s).toString(), u"missed"_s);
+        QVERIFY(day(2).value(u"tappable"_s).toBool() && day(2).value(u"menu"_s).toBool());
+        QCOMPARE(day(14).value(u"state"_s).toString(), u"due"_s);
+        QVERIFY(day(14).value(u"tappable"_s).toBool() && !day(14).value(u"menu"_s).toBool());
+        QCOMPARE(day(20).value(u"state"_s).toString(), u"future"_s);
+        QVERIFY(!day(20).value(u"tappable"_s).toBool());
+        QCOMPARE(day(21).value(u"state"_s).toString(), u"rest"_s); // a state it does not know
+
+        // A day tapped: its action; drawn again at once and in place (only that line's days).
+        QSignalSpy resets(&model, &QAbstractItemModel::modelReset);
+        QSignalSpy changes(&model, &QAbstractItemModel::dataChanged);
+        QSignalSpy controlResets(controls, &QAbstractItemModel::modelReset);
+        QSignalSpy controlChanges(controls, &QAbstractItemModel::dataChanged);
+        model.activateDay(3, u"2026-11-02"_s);
+        QCOMPARE(day(2).value(u"state"_s).toString(), u"done"_s);
+        QCOMPARE(changedRows(changes), QList<int>{3});
+        QCOMPARE(changes.first().at(2).value<QList<int>>(), QList<int>{ExtensionViewModel::DaysRole});
+        model.activateDay(3, u"2026-11-20"_s); // no action: nothing
+        model.activateDay(2, u"2026-11-02"_s); // no month line
+        QCOMPARE(changes.count(), 1);
+        // A menu's action: the check's state changes in place, the row's model stays.
+        model.activateMenuItem(1, 0, QString(), 0);
+        QCOMPARE(controlsOf(model, 1), controls);
+        QCOMPARE(controlRole(controls, 0, ExtensionControlsModel::StateRole), u"done"_s);
+        QVERIFY(controls->data(controls->index(0), ExtensionControlsModel::CheckedRole).toBool());
+        QCOMPARE(changedRows(controlChanges), QList<int>{0});
+        QCOMPARE(resets.count(), 0);
+        QCOMPARE(controlResets.count(), 0);
+        // The check tapped: its action (done again: nothing changes, nothing said).
+        m_messages.clear();
+        model.activateControl(1, 0);
+        QVERIFY(m_messages.isEmpty());
+
+        // An empty state with its icon; another view's params start afresh.
+        model.setParam(u"pusto"_s, u"tak"_s);
+        QTRY_COMPARE(resets.count(), 1);
+        QCOMPARE(lineKinds(model), QStringList{u"empty"_s});
+        QCOMPARE(line(0, ExtensionViewModel::IconRole).toString(), u"flame"_s);
+        QCOMPARE(line(0, ExtensionViewModel::TitleRole).toString(), u"Pusto"_s);
+        QCOMPARE(line(0, ExtensionViewModel::CardRole).toString(), QString());
     }
 };
 

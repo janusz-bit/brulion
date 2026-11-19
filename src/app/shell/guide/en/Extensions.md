@@ -7,6 +7,8 @@ brulion: document
 
 Brulion can run code that lives in your notebook, as Emacs runs your init file and TiddlyWiki keeps its own code in tiddlers. An **extension** is a page tagged `extension` (or `rozszerzenie`): the code in its `luau` blocks adds commands to the palette, views of its own and reactions to saves and changes. The language is Luau, a small, fast Lua with types; the code reads and writes only the open notebook, with time and memory limits, and never reaches files, the network or other apps.
 
+Brulion's own [[Habits]] and [[Gym]] are extensions too, written with the same `b` (and so is the [[AI|AI assistant]]): **Settings → Extensions** switches each on or off, and their code can be opened and changed like yours (below).
+
 This page shows the way in. [[Extension API]] lists everything the code can call, and [[Extension recipes]] has ready pieces to copy.
 
 ## Your first extension
@@ -50,7 +52,7 @@ end, { label = "Count the words of this page" })
 With `block = true` after the label, the command works on the block under the cursor: `ctx.block` has its text, its task status and the `ref` that lets the code change it, and the palette offers the command only while you are in a note.
 
 ## Asking and changing
-`b.ask("…")` asks you for a line of text, `b.choose("…", { "A", "B" })` shows a list to pick from, `b.form` asks for numbers with − and +. To change notes, the page needs the permission `write`:
+`b.ask("…")` asks you for a line of text, `b.choose("…", { "A", "B" })` shows a list to pick from, `b.form` asks for several things at once — numbers with − and +, lines of text. To change notes, the page needs the permission `write`:
 
 ````markdown
 ---
@@ -69,7 +71,7 @@ end, { label = "Note with the time" })
 ```
 ````
 
-`b.appendToJournal` adds to a day's note, `b.write` makes or replaces a page, `b.replaceBlock` changes one line — and refuses when the line has changed since the code read it, so a sync that arrives in the middle is never overwritten.
+`b.appendToJournal` adds to a day's note and `b.appendToPage` to any page, `b.write` makes or replaces a page, `b.replaceBlock` changes one line, `b.insertBlock`, `b.removeBlock`, `b.setTask` and `b.setProperty` add a block, remove one, tick it off or give it a property — and all of them refuse when the line has changed since the code read it, so a sync that arrives in the middle is never overwritten.
 
 ## When something goes wrong
 An error names the **line of the page**: the page's corner shows "Error on line 14: …" with a button to that line, and so do **Settings → Extensions** and the **Luau console**. While you are still typing, the version before the error keeps running — half-written code never takes a working extension away. `print(…)` writes to the Luau console: the quickest way to see what your code has in hand. The messages you may meet are explained in [[Extension API#Errors]].
@@ -94,7 +96,7 @@ permissions: [write]
 That works in this documentation too: put the cursor in the code of "Count the words of this page" above and choose **Run Luau block** — the command is in the palette until the extensions are loaded again. The examples of [[Extension API]] and [[Extension recipes]] can be tried the same way.
 
 ## Views and reactions
-A view is a function that returns what to show, made of Brulion's own pieces (`b.ui.heading`, `text`, `link`, `button`, `check`, `stepper`, `table`, `chart`); with a `label` it is in the palette:
+A view is a function that returns what to show, made of Brulion's own pieces (`b.ui.heading`, `text`, `link`, `button`, `check`, `stepper`, `menu`, `card`, `month`, `table`, `chart`); with a `label` it is in the palette:
 
 ```luau
 b.view("projects", function(params)
@@ -111,8 +113,8 @@ A reaction runs when something happens: `b.on("save", function(e) … end)` afte
 ## Written by AI
 Ask the [[AI|AI assistant]] for one — in a new conversation of the AI chat (✨ → **New conversation**), "a command that counts the words of today's note". It reads how extensions are written, tries its code on your notes without changing anything, and with your yes writes the page into **Extensions/**. An agent such as Claude Code does the same through [[Command line and AI agents|the command line]]: it reads the API (`brulion-cli extension docs`), tries its code (`extension eval`, `extension run` — what the code would write comes back as a diff) and writes the page (`extension write`). Either way the code waits for you like code from another device: read the page, and press **Run** when you agree with what it does. Every later change by the AI waits again.
 
-## The gym's own code
-The [[Gym]] is an extension too. **Settings → Extensions → The gym's code → Edit the code** writes its source into a page of your notebook, one section per heading, and from then on the gym runs **from that page**: change it, save, and the change works. **Restore** puts the page in the trash and the built-in gym runs again.
+## The code of the gym and the habits
+The [[Gym]] and the [[Habits]] are extensions too. **Settings → Extensions → The gym's code** (or **The habits' code**) **→ Edit the code** writes the source into a page of your notebook (`Extensions/Gym`, `Extensions/Habits`), one section per heading, and from then on it runs **from that page**: change it, save, and the change works. **Restore** puts the page in the trash and the built-in code runs again.
 
 ## Learn more
 - [[Extension API]] — every function of `b`, what a block looks like, the limits and the error messages.

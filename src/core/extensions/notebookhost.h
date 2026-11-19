@@ -81,6 +81,10 @@ public:
     QVariantList blocks(const BlockQuery &query) override;
     QVariantList search(const QString &query, int limit) override;
     QVariantMap query(const QString &source, int limit, QString *error) override;
+    QVariantMap queryPage(const QString &source, int limit, int offset, QString *error) override;
+    QStringList findPages(const PageQuery &query) override;
+    QStringList attachments() override;
+    qint64 revision() override;
     /// Through checkExtensionPage() (sandbox.h): the page `page` is (or would be, a new one where new
     /// pages go) loaded from `content` in an engine of its own — 1 s for its top-level code, 32 MB.
     QVariantMap checkExtension(const QString &page, const QString &content) override;
@@ -88,7 +92,16 @@ public:
     QString appendToJournal(const QString &extension, const QString &date, const QString &markdown) override;
     QString replaceBlock(const QString &extension, const QString &ref, const QString &text,
                          const std::optional<QString> &task, QString *newRef) override;
+    QString appendToPage(const QString &extension, const QString &page, const QString &markdown) override;
+    QString insertBlock(const QString &extension, const QString &ref, const QString &markdown, InsertAt where,
+                        QString *newRef) override;
+    QString removeBlock(const QString &extension, const QString &ref) override;
+    QString setTask(const QString &extension, const QString &ref, const QString &status, QString *newRef) override;
+    QString setProperty(const QString &extension, const QString &ref, const QString &key, const QString &value,
+                        QString *newRef) override;
     QString today() override;
+    QString now() override;
+    int weekStart() override;
     QString language() override { return m_options.language; }
     QString uiLanguage() override { return m_options.uiLanguage; }
     void timer(const QString &extension, int seconds, const QString &label) override;
@@ -96,7 +109,10 @@ public:
     void status(const QString &extension, const QString &text) override;
 
 private:
-    QDateTime now() const;
+    QDateTime clock() const;
+    /// The note and line a block reference names as the file is now (a dry run's text first):
+    /// "" and `content` / `line` set, or the error ("not a block reference: …", "stale: …").
+    QString resolveRef(const QString &ref, VaultPath *path, QString *content, int *line);
     QString writeFile(const QString &extension, const VaultPath &path, const QString &content);
     /// The text of `path` as the writes see it (a dry run's own text first); `ok` false: unreadable.
     QString currentText(const VaultPath &path, bool *ok);
@@ -107,6 +123,7 @@ private:
     Options m_options;
     QList<DryWrite> m_dryWrites;
     QHash<QString, VaultPath> m_dryPages; // a dry run's new pages by the name b.write was given
+    qint64 m_writes = 0; // writes made (revision(): the index may follow them later)
 };
 
 /// A page's tags from its properties (frontmatter `tags:`, a `tags::` line): lower-case, without '#'.

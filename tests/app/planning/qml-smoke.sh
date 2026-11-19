@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # QML smoke test of the planning views (ctest tst_planning_qml): opens CalendarView (month, week,
 # agenda, the add dialog), TasksView (with the query dialog and a quick-add preview), HabitsView
-# (with its add dialog) and GraphView
+# (the habits extension's view, its "Add habit" form) and GraphView
 # (whole, local, a selected node) in the real app with the sample notebook, desktop and phone
 # sizes, headless, and fails when the app does not start or QML reports a warning or error from
 # one of these files (binding loops, type errors, missing properties, layout loops).
@@ -27,7 +27,7 @@ routes=(
   '{"view":"graph","path":"Projekty/Remont mieszkania.md","depth":2}'
   '{"view":"graph","select":"Projekty/Remont mieszkania.md"}'
 )
-pattern='qml/(planning/|views/(CalendarView|TasksView|GraphView|HabitsView))'
+pattern='qml/(planning/|views/(CalendarView|TasksView|GraphView|HabitsView)|shell/ShellExtension)'
 
 failed=0
 for size in desktop phone; do

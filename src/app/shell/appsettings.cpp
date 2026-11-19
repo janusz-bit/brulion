@@ -46,6 +46,7 @@ constexpr auto kSidebarSections = "ui/sidebar/sections"_L1;
 constexpr auto kBottomNavTabs = "ui/bottomNav/tabs"_L1;
 constexpr auto kCaptureButton = "ui/captureButton"_L1;
 constexpr auto kGym = "extensions/silownia"_L1;
+constexpr auto kHabits = "extensions/nawyki"_L1;
 constexpr auto kAssistant = "extensions/asystent"_L1;
 constexpr auto kAiProvider = "ai/provider"_L1;
 constexpr auto kAiModel = "ai/model"_L1;
@@ -552,6 +553,17 @@ void AppSettings::setGymEnabled(bool on)
         Q_EMIT gymEnabledChanged();
 }
 
+bool AppSettings::habitsEnabled() const
+{
+    return m_settings->value(kHabits, true).toBool();
+}
+
+void AppSettings::setHabitsEnabled(bool on)
+{
+    if (store(kHabits, on, habitsEnabled()))
+        Q_EMIT habitsEnabledChanged();
+}
+
 bool AppSettings::assistantEnabled() const
 {
     return m_settings->value(kAssistant, false).toBool();
@@ -568,6 +580,8 @@ QStringList AppSettings::enabledExtensions() const
     QStringList out;
     if (gymEnabled())
         out << u"silownia"_s;
+    if (habitsEnabled())
+        out << u"nawyki"_s;
     if (assistantEnabled())
         out << u"asystent"_s;
     return out;

@@ -1313,7 +1313,7 @@ private Q_SLOTS:
         QCOMPARE(page.value(u"id"_s).toString(), u"licznik"_s);
         QCOMPARE(page.value(u"state"_s).toString(), u"approval"_s); // never approved on this device
         QCOMPARE(page.value(u"permissions"_s).toArray(), QJsonArray{u"write"_s});
-        QCOMPARE(r.result().value(u"builtins"_s).toArray().size(), 2);
+        QCOMPARE(r.result().value(u"builtins"_s).toArray().size(), 3); // the gym, the AI assistant, the habits
         // Approved in the app (its device state): approved here too.
         writeFile(stateDirOf(dir) + u"/store.json"_s,
                   QJsonDocument(QJsonObject{{u"extensions/approved"_s,
@@ -1369,6 +1369,10 @@ private Q_SLOTS:
         r = run(dir, {u"extension"_s, u"run"_s, u"Licznik"_s, u"--hook"_s, u"save"_s, u"--page"_s, u"Zakupy"_s});
         QCOMPARE(r.code, 0);
         QCOMPARE(r.result().value(u"values"_s).toArray(), QJsonArray{u"zapisano Zakupy"_s});
+        // A command's arguments (ctx.args): the built-in habits' schedule reader.
+        r = run(dir, {u"extension"_s, u"run"_s, u"nawyki"_s, u"schedule"_s, u"--args"_s, uR"({"text": "3 razy w tygodniu"})"_s});
+        QCOMPARE(r.code, 0);
+        QCOMPARE(r.result().value(u"value"_s).toObject().value(u"times"_s).toInt(), 3);
         r = run(dir, {u"extension"_s, u"run"_s, u"Licznik"_s, u"brak"_s});
         QCOMPARE(r.code, 6);
         r = run(dir, {u"extension"_s, u"run"_s, u"Licznik"_s});

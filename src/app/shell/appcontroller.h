@@ -300,6 +300,9 @@ public:
     /// Show the current view's context panel (backlinks, outline) instead of a pinned route.
     Q_INVOKABLE void clearSidePanelRoute();
     Q_INVOKABLE void openPage(const QString &path, int line = -1, bool newPane = false);
+    /// Open the page of a [[link]] target `name` (an extension's link, a toast's "Open") or of a
+    /// note's path ("Nawyki.md"), made when it does not exist yet; at the 0-based `line` when ≥ 0.
+    Q_INVOKABLE void openNamedPage(const QString &name, int line = -1);
     /// Open the daily note of "YYYY-MM-DD" (created from the journal template when missing).
     Q_INVOKABLE void openJournal(const QString &date);
     /// Today's journal; while the notebook is still opening, once it is ready.
@@ -811,6 +814,7 @@ private:
     QHash<int, int> m_toastIdsByHostId;      ///< the toast host's id → toastWithAction()'s
     QHash<int, QStringList> m_restoreToasts; ///< toastRestore()'s ids → the trash paths
     QHash<int, QJSValue> m_functionToasts;   ///< toastAction()'s ids → the function
+    QHash<int, int> m_extensionToasts;       ///< toastWithAction()'s ids → an extension's button
 #ifdef Q_OS_WASM
     platform::WasmNotifier *m_wasmNotifier = nullptr;
 #endif

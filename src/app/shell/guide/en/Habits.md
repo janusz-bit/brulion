@@ -6,18 +6,20 @@ brulion: document
 
 A habit is an item you want to check off regularly: meditation, running, reading. Brulion counts your streak of days without a break, shows how often you succeed and draws a month calendar. Everything stays in ordinary notes: a habit is a list item with a property, and every check-off is a task in that day's journal — so it syncs like any note and is readable in Obsidian and Logseq.
 
+Habits are an [[Extensions|extension]] built into Brulion and on from the start. **Settings → Extensions → Habits** switches them off (the sidebar's Habits and the palette's command go with them, your notes stay as they are) and on again; **The habits' code → Edit the code** puts their code into a page of your notebook, where you can read and change it ([[Extensions#The code of the gym and the habits]]).
+
 ## The Habits view
-Open **Habits** from the sidebar (below Tasks) or from the command palette (Ctrl+K, “Habits”). Every habit has a card:
+Open **Habits** from the sidebar (below Tasks) or from the command palette (Ctrl+K, “Habits”). At the top it says how many of today's habits are done (“2 of 3 done today”), and every habit has a card:
 
-- the **circle** on the left checks the habit off for today; a second click undoes it. A right click or a long press also gives **Skip** — an excused day that doesn't break the streak (illness, travel);
-- below the name is the **schedule** in words, and for “N times a week” habits the week's progress, e.g. “2 of 3 this week”;
-- a flame shows the **streak** (how many times in a row it worked), the longest streak and the **completion rate** in percent;
-- the **month calendar**: green days are done, red ones missed, crossed-out ones skipped, and today has an outline. Clicking a past day checks it off or undoes the check (when you forgot to enter yesterday). The arrows above the cards change the month.
+- the **circle** on the left checks the habit off for today; a second click undoes it. A right click or a long press opens a menu: **Done today**, **Skip today** — an excused day that doesn't break the streak (illness, travel) —, **No check today**, **Open its definition** (the page where the habit is written, at its line) and **Open today's journal**. The card's **“⋯”** button has the same menu;
+- next to the name is the **schedule** in words;
+- a flame shows the **streak** (how many times in a row it worked), the longest streak, the **completion rate** in percent, and for “N times a week” habits the week's progress, e.g. “2 of 3 this week”;
+- the **month calendar**: green days are done, red ones missed, crossed-out ones skipped, a day the habit is due has a thin outline and today a ring. Clicking a past day checks it off or undoes the check (when you forgot to enter yesterday); a right click or a long press on a day offers done, skipped (no streak lost), no check, that day's journal and the habit's definition. The arrows above the cards (or ← and →, PgUp and PgDn) change the month, and **This month** comes back.
 
-The card's “⋯” menu opens the page where the habit is written, or today's journal. Every check-off from the view can be undone with the **Undo** button in the notification.
+Every check-off from the view can be undone with the **Undo** button in the notification. A habit whose schedule Brulion doesn't understand, or one written twice, has a card that says so, with a link to where it is written.
 
 ## New habit
-The **Add habit** button (or the N key in the view) asks for a name and how often. Brulion shows right away how it understands the schedule. The habit goes onto the page with your first habit, and when there is none yet — onto a new page “Habits”.
+The **Add habit** button (or the N key in the view) asks for a name and how often — “every day”, “mon, wed, fri”, “3 times a week”; left empty, it is every day. When Brulion doesn't understand the schedule, or a habit of that name exists already, it says so and asks again, with what you typed still there. The habit goes onto the page with your first habit, and when there is none yet — onto a new page “Habits”; the notification's **Open** button takes you there.
 
 You can also write a habit yourself, in any note: it is a list item with a `habit::` property (or `nawyk::`), whose value is the schedule. For example, these three items are real habits of this notebook — take a look at the Habits view:
 
@@ -50,7 +52,7 @@ A check-off is a task in the journal with the `#habit` tag (or `#nawyk`) and the
 - [ ] Reading #habit
 ```
 
-`[x]` is done, `[-]` (cancelled) — skipped, and `[ ]` — not yet. The Habits view writes exactly such lines (next to the day's other check-offs), but you can write and tick them yourself in the journal — they count the same. It's handy to add your habits to the journal template (see [[Journal, calendar and templates|Journal, calendar and templates]]): every new day then starts with a list of `- [ ] Meditation #habit` to check off.
+`[x]` is done, `[-]` (cancelled) — skipped, and `[ ]` — not yet. The Habits view writes exactly such lines — it ticks the day's line of the habit when there is one, else adds `- [x] Meditation #habit ✅` with today's date next to the day's other check-offs —, but you can write and tick them yourself in the journal — they count the same. When one day has two journal notes (a copy a sync left, say), the check-offs of both count, and the view looks at both before it writes. It's handy to add your habits to the journal template (see [[Journal, calendar and templates|Journal, calendar and templates]]): every new day then starts with a list of `- [ ] Meditation #habit` to check off.
 
 ## How the streak is counted
 - For habits on specific days only those days count. A day on which the habit was scheduled but not checked off — including a day **without a journal note** — breaks the streak. Today doesn't break it while it lasts.

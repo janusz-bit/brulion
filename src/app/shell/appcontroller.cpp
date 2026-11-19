@@ -19,6 +19,7 @@
 #include "notebook/share.h"
 #include "periodic/periodic.h"
 #include "sync/syncengine.h"
+#include "util/paths.h"
 #include "vault/localstore.h"
 #include "vault/vault.h"
 #include "vault/vaultconfig.h"
@@ -225,10 +226,12 @@ AppController::AppController(const Options &options, QObject *parent)
         m_localeOverride.clear();
         Q_EMIT notebookPathsChanged();
     });
-    // The built-in extensions the settings switch on (the gym, the AI assistant), their messages
+    // The built-in extensions the settings switch on (the gym, habits, the AI assistant), their messages
     // as toasts; the model b.ai asks on this device.
     m_workspace->extensions()->setEnabled(m_settings->enabledExtensions());
     connect(m_settings.get(), &AppSettings::gymEnabledChanged, this,
+            [this] { m_workspace->extensions()->setEnabled(m_settings->enabledExtensions()); });
+    connect(m_settings.get(), &AppSettings::habitsEnabledChanged, this,
             [this] { m_workspace->extensions()->setEnabled(m_settings->enabledExtensions()); });
     connect(m_settings.get(), &AppSettings::assistantEnabledChanged, this,
             [this] { m_workspace->extensions()->setEnabled(m_settings->enabledExtensions()); });
@@ -268,6 +271,13 @@ AppController::AppController(const Options &options, QObject *parent)
     connect(m_localAi.get(), &LocalAi::workingChanged, this, [this] { platform::keepScreenOn(m_localAi->working()); });
     connect(m_workspace->extensions(), &WorkspaceExtensions::message, this,
             [this](const QString &text, const QString &kind) { toast(text, kind); });
+    // A result with a button (the habits' Undo, "Open"): a toast whose button the extensions press.
+    connect(m_workspace->extensions(), &WorkspaceExtensions::messageWithButton, this,
+            [this](const QString &text, const QString &kind, const QString &label, int button) {
+                m_extensionToasts.insert(toastWithAction(text, kind, label), button);
+            });
+    connect(m_workspace->extensions(), &WorkspaceExtensions::pageRequested, this,
+            [this](const QString &page) { openNamedPage(page); });
     connect(m_workspace.get(), &Workspace::navigationRequested, this, &AppController::navigate);
     connect(m_workspace.get(), &Workspace::errorOccurred, this,
             [this](const QString &message) { toast(message, u"error"_s); });
@@ -885,6 +895,18 @@ void AppController::openPage(const QString &path, int line, bool newPane)
     if (line >= 0)
         route.insert(u"line"_s, line);
     navigate(route, newPane);
+}
+
+void AppController::openNamedPage(const QString &name, int line)
+{
+    if (name.trimmed().isEmpty() || !m_workspace)
+        return;
+    // A note's path (a block's `path` from b.blocks) as it is, else a [[link]] target.
+    QString path = paths::isMarkdown(name) && m_workspace->exists(name) ? name : m_workspace->resolveLink(name, QString());
+    if (path.isEmpty())
+        path = m_workspace->createPage(name);
+    if (!path.isEmpty())
+        openPage(path, line);
 }
 
 void AppController::openJournal(const QString &date)
@@ -1953,6 +1975,10 @@ void AppController::hostToastActionTriggered(int hostId)
             onAction.call();
         return;
     }
+    if (m_extensionToasts.contains(id)) {
+        m_workspace->extensions()->pressButton(m_extensionToasts.take(id));
+        return;
+    }
     Q_EMIT toastActionTriggered(id);
 }
 
@@ -1961,6 +1987,8 @@ void AppController::hostToastRemoved(int hostId)
     const int id = m_toastIdsByHostId.take(hostId);
     m_restoreToasts.remove(id);
     m_functionToasts.remove(id);
+    if (m_extensionToasts.contains(id))
+        m_workspace->extensions()->forgetButton(m_extensionToasts.take(id));
 }
 
 void AppController::beginOpenIn(const QString &target)

@@ -6,6 +6,8 @@
 //
 // silownia — the gym (docs/SYNTAX.md §5 "Gym"): silownia.luau + exercises.json (b.data("exercises")).
 // asystent — the AI assistant (docs/EXTENSIONS.md "AI"): asystent.luau, b.ai about the page on screen.
+// nawyki   — the habits (docs/SYNTAX.md §5 "Habits"): nawyki.luau — the month view, checks written
+//            into daily notes, and the commands `brulion-cli habit …` runs (list, set, schedule).
 
 #include "extensions/engine.h"
 

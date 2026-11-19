@@ -1,7 +1,11 @@
 #include "extensions/engine.h"
 
+#include "extensions/blockedit.h"
 #include "extensions/host.h"
+#include "dates/names.h"
+#include "dates/recurrence.h"
 #include "text/text.h"
+#include "util/unicode.h"
 
 #include "lua.h"
 #include "luacode.h"
@@ -55,10 +59,30 @@ end
 function ui.column(children) return { type = "column", children = present(children) } end
 function ui.row(children) return { type = "row", children = present(children) } end
 function ui.heading(text) return { type = "heading", text = text } end
-function ui.text(text, muted) return { type = "text", text = text, muted = muted == true } end
-function ui.link(page, label) return { type = "link", page = page, label = label } end
+-- b.ui.text(text, true) or b.ui.text(text, { muted = true, icon = "flame", tone = "success" })
+function ui.text(text, options)
+    if type(options) == "table" then
+        return { type = "text", text = text, muted = options.muted == true, icon = options.icon, tone = options.tone }
+    end
+    return { type = "text", text = text, muted = options == true }
+end
+function ui.link(page, label, line) return { type = "link", page = page, label = label, line = line } end
+function ui.card(children) return { type = "card", children = present(children) } end
+function ui.menu(items, label) return { type = "menu", items = present(items), label = label } end
+function ui.month(spec)
+    return { type = "month", month = spec.month, days = spec.days, label = spec.label }
+end
 function ui.button(label, action, args) return { type = "button", label = label, action = action, args = args } end
-function ui.check(checked, action, args) return { type = "check", checked = checked == true, action = action, args = args } end
+-- checked: true, false or "skipped" (a cancelled task's look); options: { menu = items, label = … }
+function ui.check(checked, action, args, options)
+    local state = if checked == "skipped" then "skipped" elseif checked == true then "done" else "open"
+    local node = { type = "check", checked = checked == true, state = state, action = action, args = args }
+    if type(options) == "table" then
+        node.menu = present(options.menu)
+        node.label = options.label
+    end
+    return node
+end
 function ui.stepper(spec)
     return { type = "stepper", value = spec.value, step = spec.step, unit = spec.unit, action = spec.action, args = spec.args }
 end
@@ -84,7 +108,7 @@ function ui.table(columns, rows)
     end
     return { type = "table", columns = columns, rows = rows }
 end
-function ui.empty(title, text) return { type = "empty", title = title, text = text } end
+function ui.empty(title, text, icon) return { type = "empty", title = title, text = text, icon = icon } end
 function ui.open(label, view, params) return { type = "open", label = label, view = view, params = params } end
 function ui.run(label, command) return { type = "run", label = label, command = command } end
 return table.freeze(ui)
@@ -342,6 +366,104 @@ QString tagName(const QString &tag)
     return name;
 }
 
+// A property filter as a script writes it: "habit" or { "habit", "nawyk" } (keys in any case).
+bool propsFrom(const QVariant &value, QStringList *out)
+{
+    out->clear();
+    if (!value.isValid() || value.isNull())
+        return true;
+    QVariantList list;
+    if (value.metaType().id() == QMetaType::QString)
+        list << value;
+    else if (value.metaType().id() == QMetaType::QVariantList)
+        list = value.toList();
+    else
+        return false;
+    for (const QVariant &item : std::as_const(list)) {
+        if (item.metaType().id() != QMetaType::QString)
+            return false;
+        const QString key = item.toString().trimmed().toLower();
+        if (!key.isEmpty() && !out->contains(key))
+            *out << key;
+    }
+    return true;
+}
+
+dates::UiLocale localeOf(const QString &language)
+{
+    return language == u"pl" ? dates::UiLocale::Polish : dates::UiLocale::English;
+}
+
+QString frequencyName(dates::RecurrenceRule::Freq freq)
+{
+    switch (freq) {
+    case dates::RecurrenceRule::Freq::Day: return u"day"_s;
+    case dates::RecurrenceRule::Freq::Week: return u"week"_s;
+    case dates::RecurrenceRule::Freq::Month: return u"month"_s;
+    case dates::RecurrenceRule::Freq::Year: return u"year"_s;
+    }
+    return {};
+}
+
+QVariantMap ruleMap(const dates::RecurrenceRule &rule)
+{
+    QVariantMap map{{u"every"_s, frequencyName(rule.freq)}, {u"interval"_s, rule.interval}};
+    if (!rule.weekdays.isEmpty()) {
+        QVariantList days;
+        for (const int d : rule.weekdays)
+            days << d;
+        map.insert(u"weekdays"_s, days);
+    }
+    if (rule.monthDay)
+        map.insert(u"monthDay"_s, *rule.monthDay);
+    if (rule.lastDayOfMonth)
+        map.insert(u"lastDay"_s, true);
+    if (rule.weekdaysOnly)
+        map.insert(u"workdays"_s, true);
+    if (rule.whenDone)
+        map.insert(u"whenDone"_s, true);
+    return map;
+}
+
+// A rule as ruleMap() gives it (or a script builds it); an error message when it is none.
+QString ruleFrom(const QVariantMap &map, dates::RecurrenceRule *rule)
+{
+    const QString every = map.value(u"every"_s).toString();
+    if (every == u"day")
+        rule->freq = dates::RecurrenceRule::Freq::Day;
+    else if (every == u"week")
+        rule->freq = dates::RecurrenceRule::Freq::Week;
+    else if (every == u"month")
+        rule->freq = dates::RecurrenceRule::Freq::Month;
+    else if (every == u"year")
+        rule->freq = dates::RecurrenceRule::Freq::Year;
+    else
+        return u"every must be \"day\", \"week\", \"month\" or \"year\""_s;
+    const QVariant interval = map.value(u"interval"_s, 1);
+    bool ok = false;
+    rule->interval = interval.toInt(&ok);
+    if (!ok || rule->interval < 1 || rule->interval > 999)
+        return u"interval must be a whole number from 1 to 999"_s;
+    for (const QVariant &d : map.value(u"weekdays"_s).toList()) {
+        const int day = d.toInt(&ok);
+        if (!ok || day < 1 || day > 7)
+            return u"weekdays are numbers from 1 (Monday) to 7 (Sunday)"_s;
+        if (!rule->weekdays.contains(day))
+            rule->weekdays << day;
+    }
+    std::sort(rule->weekdays.begin(), rule->weekdays.end());
+    if (map.contains(u"monthDay"_s)) {
+        const int day = map.value(u"monthDay"_s).toInt(&ok);
+        if (!ok || day < 1 || day > 31)
+            return u"monthDay must be a day from 1 to 31"_s;
+        rule->monthDay = day;
+    }
+    rule->lastDayOfMonth = map.value(u"lastDay"_s).toBool();
+    rule->weekdaysOnly = map.value(u"workdays"_s).toBool();
+    rule->whenDone = map.value(u"whenDone"_s).toBool();
+    return {};
+}
+
 QString formatNumber(double value, int decimals, bool comma)
 {
     if (!std::isfinite(value))
@@ -522,7 +644,7 @@ void Engine::pushEnvironment(const QString &extension)
     lua_setreadonly(L, -1, true);
     lua_setmetatable(L, -2);
 
-    lua_createtable(L, 0, 24); // b
+    lua_createtable(L, 0, 48); // b
     const auto set = [&](const char *name, lua_CFunction f) {
         lua_pushlstring(L, id.constData(), size_t(id.size()));
         lua_pushcclosure(L, f, name, 1);
@@ -555,6 +677,25 @@ void Engine::pushEnvironment(const QString &extension)
     set("choose", &Engine::apiChoose);
     set("form", &Engine::apiForm);
     set("on", &Engine::apiOn);
+    set("attachments", &Engine::apiAttachments);
+    set("revision", &Engine::apiRevision);
+    set("now", &Engine::apiNow);
+    set("addDays", &Engine::apiAddDays);
+    set("addMonths", &Engine::apiAddMonths);
+    set("weekday", &Engine::apiWeekday);
+    set("weekStart", &Engine::apiWeekStart);
+    set("weekdayName", &Engine::apiWeekdayName);
+    set("monthName", &Engine::apiMonthName);
+    set("lower", &Engine::apiLower);
+    set("plain", &Engine::apiPlain);
+    set("parseRecurrence", &Engine::apiParseRecurrence);
+    set("parseWeekdays", &Engine::apiParseWeekdays);
+    set("formatRecurrence", &Engine::apiFormatRecurrence);
+    set("appendToPage", &Engine::apiAppendToPage);
+    set("insertBlock", &Engine::apiInsertBlock);
+    set("removeBlock", &Engine::apiRemoveBlock);
+    set("setTask", &Engine::apiSetTask);
+    set("setProperty", &Engine::apiSetProperty);
     // b.ai = factory(raw): the raw C function yields; the Luau wrapper raises its errors.
     lua_getref(L, m_aiFactoryRef);
     lua_pushlstring(L, id.constData(), size_t(id.size()));
@@ -983,6 +1124,45 @@ int Engine::apiChoose(lua_State *L) { return finishApi(L, self(L)->questionImpl(
 int Engine::apiForm(lua_State *L) { return finishApi(L, self(L)->questionImpl(L, "form")); }
 int Engine::apiOn(lua_State *L) { return finishApi(L, self(L)->onImpl(L)); }
 int Engine::apiAi(lua_State *L) { return finishApi(L, self(L)->aiImpl(L)); }
+int Engine::apiAttachments(lua_State *L) { return finishApi(L, self(L)->attachmentsImpl(L)); }
+int Engine::apiAddDays(lua_State *L) { return finishApi(L, self(L)->addDaysImpl(L, false)); }
+int Engine::apiAddMonths(lua_State *L) { return finishApi(L, self(L)->addDaysImpl(L, true)); }
+int Engine::apiWeekday(lua_State *L) { return finishApi(L, self(L)->weekdayImpl(L)); }
+int Engine::apiWeekdayName(lua_State *L) { return finishApi(L, self(L)->nameImpl(L, false)); }
+int Engine::apiMonthName(lua_State *L) { return finishApi(L, self(L)->nameImpl(L, true)); }
+int Engine::apiLower(lua_State *L) { return finishApi(L, self(L)->lowerImpl(L)); }
+int Engine::apiPlain(lua_State *L) { return finishApi(L, self(L)->plainImpl(L)); }
+int Engine::apiParseRecurrence(lua_State *L) { return finishApi(L, self(L)->parseRecurrenceImpl(L)); }
+int Engine::apiParseWeekdays(lua_State *L) { return finishApi(L, self(L)->parseWeekdaysImpl(L)); }
+int Engine::apiFormatRecurrence(lua_State *L) { return finishApi(L, self(L)->formatRecurrenceImpl(L)); }
+int Engine::apiAppendToPage(lua_State *L) { return finishApi(L, self(L)->appendToPageImpl(L)); }
+int Engine::apiInsertBlock(lua_State *L) { return finishApi(L, self(L)->insertBlockImpl(L)); }
+int Engine::apiRemoveBlock(lua_State *L) { return finishApi(L, self(L)->removeBlockImpl(L)); }
+int Engine::apiSetTask(lua_State *L) { return finishApi(L, self(L)->setTaskImpl(L)); }
+int Engine::apiSetProperty(lua_State *L) { return finishApi(L, self(L)->setPropertyImpl(L)); }
+
+int Engine::apiRevision(lua_State *L)
+{
+    lua_pushnumber(L, double(self(L)->m_host->revision()));
+    return 1;
+}
+
+int Engine::apiNow(lua_State *L)
+{
+    Engine *e = self(L);
+    {
+        Unlimited unlimited(&e->m_unlimited);
+        pushString(L, e->m_host->now());
+    }
+    return 1;
+}
+
+int Engine::apiWeekStart(lua_State *L)
+{
+    const int day = self(L)->m_host->weekStart();
+    lua_pushnumber(L, day >= 1 && day <= 7 ? day : 1);
+    return 1;
+}
 
 int Engine::apiToday(lua_State *L)
 {
@@ -1101,20 +1281,23 @@ int Engine::viewImpl(lua_State *L)
 int Engine::pagesImpl(lua_State *L)
 {
     // b.pages("project") would silently list every page: the filter is a table, its tag a text.
-    QString tag;
+    PageQuery query;
     if (lua_type(L, 1) == LUA_TTABLE) {
-        lua_rawgetfield(L, 1, "tag");
-        const int type = lua_type(L, -1);
-        if (type == LUA_TSTRING)
-            tag = tagName(toQString(L, -1));
-        lua_pop(L, 1);
-        if (type != LUA_TSTRING && type != LUA_TNIL)
+        QVariant value;
+        if (!argValue(L, 1, "b.pages", &value))
+            return kRaise;
+        const QVariantMap map = value.toMap();
+        const QVariant tag = map.value(u"tag"_s);
+        if (tag.isValid() && tag.metaType().id() != QMetaType::QString)
             return failWith(L, u"b.pages: tag must be a text"_s);
+        query.tag = tagName(tag.toString());
+        if (!propsFrom(map.value(u"prop"_s), &query.props))
+            return failWith(L, u"b.pages: prop must be a text or a list of texts"_s);
     } else if (!lua_isnoneornil(L, 1)) {
         return failWith(L, u"b.pages: argument 1 must be a table ({ tag = … }), not %1"_s.arg(
                                    QString::fromUtf8(luaL_typename(L, 1))));
     }
-    const QStringList pages = m_host->pages(tag);
+    const QStringList pages = query.props.isEmpty() ? m_host->pages(query.tag) : m_host->findPages(query);
     Unlimited unlimited(&m_unlimited);
     pushVariant(L, pages);
     return 1;
@@ -1162,8 +1345,10 @@ int Engine::blocksImpl(lua_State *L)
     query.journalOnly = map.value(u"journal"_s).toBool();
     query.from = map.value(u"from"_s).toString().trimmed();
     query.to = map.value(u"to"_s).toString().trimmed();
-    if (query.page.isEmpty() && query.tag.isEmpty())
-        return failWith(L, u"b.blocks: the query needs a page or a tag"_s);
+    if (!propsFrom(map.value(u"prop"_s), &query.props))
+        return failWith(L, u"b.blocks: prop must be a text or a list of texts"_s);
+    if (query.page.isEmpty() && query.tag.isEmpty() && query.props.isEmpty())
+        return failWith(L, u"b.blocks: the query needs a page, a tag or a prop"_s);
     // A day that is none ("2026-11-31", "yesterday") must not read as "no limit": the script would
     // get the blocks of every day and never know.
     for (const QString &day : {query.from, query.to})
@@ -1191,10 +1376,14 @@ int Engine::queryImpl(lua_State *L)
 {
     QString source;
     double limit = 50;
-    if (!argString(L, 1, "b.query", &source) || (!lua_isnoneornil(L, 2) && !argNumber(L, 2, "b.query", &limit)))
+    double offset = 0;
+    if (!argString(L, 1, "b.query", &source) || (!lua_isnoneornil(L, 2) && !argNumber(L, 2, "b.query", &limit))
+        || (!lua_isnoneornil(L, 3) && !argNumber(L, 3, "b.query", &offset)))
         return kRaise;
     QString error;
-    const QVariantMap result = m_host->query(source, countFrom(limit, 1, 1000, 50), &error);
+    const int first = countFrom(offset, 0, 1000000, 0);
+    const QVariantMap result = first > 0 ? m_host->queryPage(source, countFrom(limit, 1, 1000, 50), first, &error)
+                                         : m_host->query(source, countFrom(limit, 1, 1000, 50), &error);
     if (!error.isEmpty())
         return failWith(L, u"b.query: "_s + error);
     Unlimited unlimited(&m_unlimited);
@@ -1549,6 +1738,244 @@ int Engine::aiImpl(lua_State *L)
     m_asking = true;
     m_askingKind = u"ai"_s;
     return kYield;
+}
+
+// ---- helpers and writes added with the habits (docs/EXTENSIONS.md "Helpers", "Writing") --------
+
+int Engine::attachmentsImpl(lua_State *L)
+{
+    const QStringList files = m_host->attachments();
+    Unlimited unlimited(&m_unlimited);
+    pushVariant(L, files);
+    return 1;
+}
+
+int Engine::addDaysImpl(lua_State *L, bool months)
+{
+    const char *function = months ? "b.addMonths" : "b.addDays";
+    QString date;
+    double n = 0;
+    if (!argString(L, 1, function, &date) || !argNumber(L, 2, function, &n))
+        return kRaise;
+    const QDate day = QDate::fromString(date, Qt::ISODate);
+    if (!day.isValid())
+        return failWith(L, QString::fromLatin1(function) + u": invalid date: "_s + date);
+    if (!std::isfinite(n) || n != std::floor(n) || std::fabs(n) > (months ? 120000.0 : 3660000.0))
+        return failWith(L, QString::fromLatin1(function) + u": the count must be a whole number"_s);
+    const QDate result = months ? day.addMonths(int(n)) : day.addDays(qint64(n));
+    if (!result.isValid() || result.year() < 1 || result.year() > 9999)
+        return failWith(L, QString::fromLatin1(function) + u": the date is out of range"_s);
+    Unlimited unlimited(&m_unlimited);
+    pushString(L, result.toString(Qt::ISODate));
+    return 1;
+}
+
+int Engine::weekdayImpl(lua_State *L)
+{
+    QString date;
+    if (!argString(L, 1, "b.weekday", &date))
+        return kRaise;
+    const QDate day = QDate::fromString(date, Qt::ISODate);
+    if (!day.isValid())
+        return failWith(L, u"b.weekday: invalid date: "_s + date);
+    lua_pushnumber(L, day.dayOfWeek());
+    return 1;
+}
+
+int Engine::nameImpl(lua_State *L, bool month)
+{
+    const char *function = month ? "b.monthName" : "b.weekdayName";
+    double n = 0;
+    QString form;
+    if (!argNumber(L, 1, function, &n) || !argOptString(L, 2, function, &form))
+        return kRaise;
+    const int high = month ? 12 : 7;
+    if (n != std::floor(n) || n < 1 || n > high)
+        return failWith(L, QString::fromLatin1(function) + u": argument 1 must be a whole number from 1 to %1"_s.arg(high));
+    dates::NameForm nameForm = dates::NameForm::Nominative;
+    if (form == u"short")
+        nameForm = dates::NameForm::Short;
+    else if (form == u"of")
+        nameForm = dates::NameForm::Genitive;
+    else if (!form.isEmpty() && form != u"full")
+        return failWith(L, QString::fromLatin1(function) + u": the form is \"full\", \"short\" or \"of\""_s);
+    const dates::UiLocale locale = localeOf(m_host->uiLanguage());
+    const QString name = month ? dates::monthName(int(n), locale, nameForm) : dates::weekdayName(int(n), locale, nameForm);
+    Unlimited unlimited(&m_unlimited);
+    pushString(L, name);
+    return 1;
+}
+
+int Engine::lowerImpl(lua_State *L)
+{
+    QString s;
+    if (!argString(L, 1, "b.lower", &s))
+        return kRaise;
+    Unlimited unlimited(&m_unlimited);
+    pushString(L, unicode::nfc(s).toCaseFolded());
+    return 1;
+}
+
+int Engine::plainImpl(lua_State *L)
+{
+    QString s;
+    if (!argString(L, 1, "b.plain", &s))
+        return kRaise;
+    Unlimited unlimited(&m_unlimited);
+    pushString(L, plainWords(s));
+    return 1;
+}
+
+int Engine::parseRecurrenceImpl(lua_State *L)
+{
+    QString s;
+    if (!argString(L, 1, "b.parseRecurrence", &s))
+        return kRaise;
+    const std::optional<dates::RecurrenceRule> rule = dates::parseRecurrence(s);
+    Unlimited unlimited(&m_unlimited);
+    if (rule)
+        pushVariant(L, ruleMap(*rule));
+    else
+        lua_pushnil(L);
+    return 1;
+}
+
+int Engine::parseWeekdaysImpl(lua_State *L)
+{
+    QString s;
+    if (!argString(L, 1, "b.parseWeekdays", &s))
+        return kRaise;
+    const QList<int> days = dates::parseWeekdayList(s);
+    Unlimited unlimited(&m_unlimited);
+    if (days.isEmpty()) {
+        lua_pushnil(L);
+        return 1;
+    }
+    QVariantList list;
+    for (const int d : days)
+        list << d;
+    pushVariant(L, list);
+    return 1;
+}
+
+int Engine::formatRecurrenceImpl(lua_State *L)
+{
+    QVariant value;
+    QString language;
+    if (lua_type(L, 1) != LUA_TTABLE)
+        return failWith(L, u"b.formatRecurrence: argument 1 must be a rule ({ every = \"week\", … })"_s);
+    if (!argValue(L, 1, "b.formatRecurrence", &value) || !argOptString(L, 2, "b.formatRecurrence", &language))
+        return kRaise;
+    dates::RecurrenceRule rule;
+    if (const QString error = ruleFrom(value.toMap(), &rule); !error.isEmpty())
+        return failWith(L, u"b.formatRecurrence: "_s + error);
+    if (language.isEmpty())
+        language = m_host->uiLanguage();
+    else if (language != u"pl" && language != u"en")
+        return failWith(L, u"b.formatRecurrence: the language is \"pl\" or \"en\""_s);
+    Unlimited unlimited(&m_unlimited);
+    pushString(L, dates::formatRecurrence(rule, localeOf(language)));
+    return 1;
+}
+
+int Engine::appendToPageImpl(lua_State *L)
+{
+    const QString extension = extensionOf(L);
+    QString page, markdown;
+    if (!argString(L, 1, "b.appendToPage", &page) || !argString(L, 2, "b.appendToPage", &markdown))
+        return kRaise;
+    if (page.trimmed().isEmpty())
+        return failWith(L, u"b.appendToPage: the page's name is empty"_s);
+    if (!mayWrite(L, extension, "b.appendToPage"))
+        return kRaise;
+    const QString error = m_host->appendToPage(extension, page.trimmed(), markdown);
+    if (!error.isEmpty())
+        return failWith(L, u"b.appendToPage: "_s + error);
+    return 0;
+}
+
+int Engine::insertBlockImpl(lua_State *L)
+{
+    const QString extension = extensionOf(L);
+    QString ref, markdown, where;
+    if (!argString(L, 1, "b.insertBlock", &ref) || !argString(L, 2, "b.insertBlock", &markdown)
+        || !argOptString(L, 3, "b.insertBlock", &where))
+        return kRaise;
+    InsertAt at = InsertAt::After;
+    if (where == u"before")
+        at = InsertAt::Before;
+    else if (where == u"child")
+        at = InsertAt::Child;
+    else if (!where.isEmpty() && where != u"after")
+        return failWith(L, u"b.insertBlock: argument 3 is \"after\", \"before\" or \"child\""_s);
+    if (markdown.trimmed().isEmpty())
+        return failWith(L, u"b.insertBlock: nothing to insert"_s);
+    if (!mayWrite(L, extension, "b.insertBlock"))
+        return kRaise;
+    QString newRef;
+    const QString error = m_host->insertBlock(extension, ref, markdown, at, &newRef);
+    if (!error.isEmpty())
+        return failWith(L, u"b.insertBlock: "_s + error);
+    Unlimited unlimited(&m_unlimited);
+    pushString(L, newRef);
+    return 1;
+}
+
+int Engine::removeBlockImpl(lua_State *L)
+{
+    const QString extension = extensionOf(L);
+    QString ref;
+    if (!argString(L, 1, "b.removeBlock", &ref))
+        return kRaise;
+    if (!mayWrite(L, extension, "b.removeBlock"))
+        return kRaise;
+    const QString error = m_host->removeBlock(extension, ref);
+    if (!error.isEmpty())
+        return failWith(L, u"b.removeBlock: "_s + error);
+    return 0;
+}
+
+int Engine::setTaskImpl(lua_State *L)
+{
+    const QString extension = extensionOf(L);
+    QString ref, status;
+    if (!argString(L, 1, "b.setTask", &ref) || !argString(L, 2, "b.setTask", &status))
+        return kRaise;
+    if (status.size() != 1)
+        return failWith(L, u"b.setTask: the task status must be one character"_s);
+    if (!mayWrite(L, extension, "b.setTask"))
+        return kRaise;
+    QString newRef;
+    const QString error = m_host->setTask(extension, ref, status, &newRef);
+    if (!error.isEmpty())
+        return failWith(L, u"b.setTask: "_s + error);
+    Unlimited unlimited(&m_unlimited);
+    pushString(L, newRef);
+    return 1;
+}
+
+int Engine::setPropertyImpl(lua_State *L)
+{
+    const QString extension = extensionOf(L);
+    QString ref, key, value;
+    if (!argString(L, 1, "b.setProperty", &ref) || !argString(L, 2, "b.setProperty", &key))
+        return kRaise;
+    if (lua_type(L, 3) == LUA_TNUMBER) {
+        value = numberToVariant(lua_tonumber(L, 3)).toString();
+    } else if (!argOptString(L, 3, "b.setProperty", &value)) {
+        return kRaise;
+    }
+    if (value.contains(u'\n') || value.contains(u'\r'))
+        return failWith(L, u"b.setProperty: the value must be one line"_s);
+    if (!mayWrite(L, extension, "b.setProperty"))
+        return kRaise;
+    QString newRef;
+    const QString error = m_host->setProperty(extension, ref, key.trimmed(), value, &newRef);
+    if (!error.isEmpty())
+        return failWith(L, u"b.setProperty: "_s + error);
+    Unlimited unlimited(&m_unlimited);
+    pushString(L, newRef);
+    return 1;
 }
 
 } // namespace brulion::extensions

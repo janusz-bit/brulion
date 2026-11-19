@@ -21,22 +21,15 @@ end, { label = "The notebook in numbers" })
 ```
 
 ## A task for tomorrow, a task a day later
-**Needs: write.** Dates are texts, and `addDays` moves one by some days. The first command asks for a task and writes it into today's journal, due tomorrow; the second moves the due date of the task under the cursor by a day.
+**Needs: write.** Dates are texts, and `b.addDays` moves one by some days (`"2026-11-13"` and 1 give `"2026-11-14"`; the end of a month and of a year are handled). The first command asks for a task and writes it into today's journal, due tomorrow; the second moves the due date of the task under the cursor by a day.
 
 ```luau
--- "2026-11-13" and 1 give "2026-11-14"; the end of a month and of a year are handled.
-local function addDays(date, n)
-    local y, m, d = date:match("^(%d+)-(%d+)-(%d+)$")
-    local noon = os.time({ year = tonumber(y), month = tonumber(m), day = tonumber(d) + n })
-    return os.date("!%Y-%m-%d", noon)
-end
-
 b.command("tomorrow", function(ctx)
     local text = b.ask("A task for tomorrow")
     if text == "" then
         return nil
     end
-    local due = addDays(b.today(), 1)
+    local due = b.addDays(b.today(), 1)
     b.appendToJournal(b.today(), `- [ ] {text} 📅 {due}`)
     return `Added, due {due}`
 end, { label = "Task for tomorrow" })
@@ -47,7 +40,7 @@ b.command("postpone", function(ctx)
     if not due then
         return "Put the cursor in a task with a due date."
     end
-    local later = addDays(due, 1)
+    local later = b.addDays(due, 1)
     local text = block.text:gsub("📅 %d%d%d%d%-%d%d%-%d%d", "📅 " .. later, 1)
     b.replaceBlock(block.ref, text, block.task)
     return `Due {later}`
@@ -270,6 +263,7 @@ end, { label = "Review my week (AI)" })
 ## Good habits
 - Check what may be missing: `b.read` and `b.page` give `nil` for a page that is not there, `ctx.block` is not there outside a block, `ctx.page` is an empty text outside a page.
 - In a view, give a control what its action needs (`ref`, `text`) instead of looking it up again: a line that changed is then refused, not overwritten.
-- Ask the notebook for less: a query with filters and a limit is faster than reading every page.
+- Ask the notebook for less: a query with filters and a limit is faster than reading every page. What takes long to work out can wait in a variable while `b.revision()` stays the same.
+- Change one block with the functions for blocks (`b.insertBlock`, `b.setTask`, `b.setProperty`, `b.removeBlock`) and add to a page with `b.appendToPage`, instead of `b.read` and `b.write` of the whole page: a change someone made elsewhere on the page meanwhile stays.
 - Compare texts with `b.fold` and sort them with `b.sorted`, so that Polish letters behave.
 - Keep what must stay in notes. Variables are gone when the page is saved again.
