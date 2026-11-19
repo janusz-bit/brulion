@@ -555,6 +555,7 @@ void VaultPrivate::untrackDir(const VaultPath &path)
     removeChild(childDirs, path);
     folderStamps.remove(path);
     ownEchoes.remove(path);
+    fineClockFolders.remove(path);
     sortedDirsValid = false;
 }
 
@@ -679,6 +680,7 @@ void VaultPrivate::reset()
     sortedDirsValid = false;
     folderStamps.clear();
     ownEchoes.clear();
+    fineClockFolders.clear();
     pendingDirs.clear();
     pendingFiles.clear();
     batchTimer.stop();
@@ -987,7 +989,8 @@ bool VaultPrivate::writeFile(const VaultPath &path, const QByteArray &bytes, Cha
     const bool pendingBefore = foreignBatchPending(dir);
     const std::function<void()> hook =
             beforeRenameHook ? std::function<void()>([this, &path] { beforeRenameHook(path); }) : nullptr;
-    const vaultutil::StampedSave save = vaultutil::saveAtomicallyStamped(absPath(path), data, hook, expect);
+    const vaultutil::StampedSave save =
+            vaultutil::saveAtomicallyStamped(absPath(path), data, hook, expect, probesFolderClock(dir));
     if (save.changed)
         return changedSinceRead();
     if (!save.ok)

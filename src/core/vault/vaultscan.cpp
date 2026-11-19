@@ -815,24 +815,46 @@ bool VaultPrivate::foreignBatchPending(const VaultPath &dir) const
     return pendingDirs.contains(dir) && !ownEchoes.contains(dir);
 }
 
+bool VaultPrivate::probesFolderClock(const VaultPath &dir) const
+{
+    return watcher && !coarseFolderTimes && !fineClockFolders.contains(dir);
+}
+
 void VaultPrivate::noteOwnWrite(const VaultPath &dir, const vaultutil::StampedSave &save, bool pendingBefore)
 {
     // Only from the stamp at which the vault knew the folder: what other programs did to its
     // entries since is still to be seen. Between `before` and `after` the write itself changed
-    // them twice (the temporary file, the rename), each a single system call; while the data was
-    // written and synced the folder must have kept its stamp (`afterTemp` == `beforeRename`), or
-    // another program changed it meanwhile.
-    // Kernels that stamp files with their clock tick (Linux before 6.13, Android's) let two own
-    // steps right after a query of the stamp keep it: then another program's change in the same
-    // tick would keep it too, and no own write is trusted again (fine-grained times — multigrain
-    // since Linux 6.13 — always move a stamp that was looked at).
+    // them (the probe's four changes the first time, the temporary file, the rename), each a single
+    // system call right after a look at the stamp; while the data was written and synced the
+    // folder must have kept its stamp (`afterTemp` == `beforeRename`), or another program changed
+    // it meanwhile.
+    // That holds only where every change after a look moves the stamp (multigrain times, Linux
+    // 6.13 and later). A clock that stamps with its tick (NTFS, Linux before 6.13, Android) gives
+    // another program's change in the tick of the temporary file the temporary file's stamp, and
+    // the sync between them mostly lets a tick pass first, so own steps seldom show it. Hence the
+    // folder's clock is probed at its first own write (vaultutil::probeFolderClock(): within less
+    // than any tick, so a tick shows for sure): only a folder found Fine is trusted, and a clock
+    // found coarse, one the probe cannot tell, or two own steps that kept the stamp end the trust
+    // for every folder.
+    const auto coarse = [&](const char *why) {
+        if (!coarseFolderTimes)
+            qCDebug(lcVault).noquote() << "Folder times" << why << "in" << (dir.isEmpty() ? u"/"_s : dir)
+                                       << "— the echoes of own writes list their folders";
+        coarseFolderTimes = true;
+    };
+    if (save.folderClock == vaultutil::FolderClock::Fine)
+        fineClockFolders.insert(dir);
+    else if (save.folderClock == vaultutil::FolderClock::Coarse)
+        coarse("follow a clock's tick");
+    else if (save.folderClock == vaultutil::FolderClock::Unknown)
+        coarse("cannot be told apart");
     if ((save.before && save.afterTemp && *save.before == *save.afterTemp)
         || (save.beforeRename && save.after && *save.beforeRename == *save.after))
-        coarseFolderTimes = true;
+        coarse("stayed for an own change");
     const auto known = folderStamps.constFind(dir);
-    const bool trusted = !coarseFolderTimes && !pendingBefore && save.before && save.afterTemp && save.beforeRename
-                         && save.after && known != folderStamps.cend() && *known == *save.before
-                         && *save.afterTemp == *save.beforeRename;
+    const bool trusted = !coarseFolderTimes && fineClockFolders.contains(dir) && !pendingBefore && save.before
+                         && save.afterTemp && save.beforeRename && save.after && known != folderStamps.cend()
+                         && *known == *save.before && *save.afterTemp == *save.beforeRename;
     if (!trusted) {
         folderStamps.remove(dir);
         ownEchoes.remove(dir);

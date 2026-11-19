@@ -114,6 +114,7 @@ struct WriteJob {
     FileStat known;             ///< the file's stat as the vault knows it
     QString knownHash;          ///< "" when unknown
     bool pendingBefore = false; ///< a watcher batch for `dir` (not an own echo) was queued
+    bool probeClock = false;    ///< probe the folder's clock first (VaultPrivate::probesFolderClock())
     std::function<void(const QString &)> afterWrite;
     std::function<void(const VaultPath &)> beforeRename; ///< tests (Vault::setBeforeRenameHook)
     std::function<void(WriteOutcome)> done;              ///< vault's thread only
@@ -258,11 +259,16 @@ public:
                bool *changedMeanwhile = nullptr);
     /// After an own atomic write into `dir` (`save`: the folder's stamps around its steps; called
     /// once the written file is tracked): when the vault knew the folder's entries at `save.before`
-    /// and nothing but the write's own steps changed them (StampedSave; never on storage whose
-    /// times follow the kernel's clock tick), it knows them after the write too, and the watcher's echo of the write
-    /// needs no listing (see processPendingEvents()). `pendingBefore`: a batch that is not an own echo was queued for
+    /// and nothing but the write's own steps changed them (StampedSave; only where the folder's
+    /// clock was probed Fine — never where file times follow a clock's tick), it knows them after
+    /// the write too, and the watcher's echo of the write needs no listing (see
+    /// processPendingEvents()). `pendingBefore`: a batch that is not an own echo was queued for
     /// `dir` before the write.
     void noteOwnWrite(const VaultPath &dir, const vaultutil::StampedSave &save, bool pendingBefore);
+    /// True when an own write into `dir` is to probe the folder's clock first
+    /// (vaultutil::probeFolderClock(), once per folder and open()): the vault watches,
+    /// has not found `dir`'s clock Fine yet and no folder's coarse.
+    bool probesFolderClock(const VaultPath &dir) const;
     /// pendingBefore for a write into `dir` starting now.
     bool foreignBatchPending(const VaultPath &dir) const;
 
@@ -443,8 +449,12 @@ public:
     /// is the write's echo and lists nothing.
     QHash<VaultPath, qint64> ownEchoes;
     QElapsedTimer echoClock;
-    /// An own write's step left the folder's stamp as it was right before (noteOwnWrite()): the
-    /// file times follow the kernel's clock tick, and no own echo is trusted any more.
+    /// Folders whose clock an own write probed Fine (vaultutil::probeFolderClock()): only their
+    /// stamps can vouch for the echo of an own write.
+    QSet<VaultPath> fineClockFolders;
+    /// A probe found a folder's clock Coarse or could not tell, or an own write's step left the
+    /// folder's stamp as it was right before (noteOwnWrite()): the file times follow a clock's
+    /// tick, and no own echo is trusted any more.
     bool coarseFolderTimes = false;
     mutable qint64 listedFolderCount = 0; ///< Vault::listedFolders()
 

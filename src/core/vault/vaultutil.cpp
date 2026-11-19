@@ -30,6 +30,7 @@ namespace brulion::vaultutil {
 namespace {
 std::atomic<FileSync> g_fileSync{nullptr};
 std::atomic<FileReplace> g_fileReplace{nullptr};
+std::atomic<StampFilter> g_stampFilter{nullptr};
 } // namespace
 
 void setFileSync(FileSync sync)
@@ -233,8 +234,76 @@ bool stillAsRead(const QString &absolutePath, const ReadMark &mark, std::optiona
     return now.ok() && now.bytes == mark.bytes;
 }
 
+namespace {
+
+QString ownTempName()
+{
+    return u".brulion-tmp-%1"_s.arg(QRandomGenerator::global()->generate64(), 16, 16, QChar(u'0'));
+}
+
+/// Removes a file of probeFolderClock() — again a moment later when another program holds it (on
+/// Windows a virus scanner looking at a new file).
+bool removeProbe(const QString &path)
+{
+    for (const int waitMs : {0, 10, 40}) {
+        if (waitMs > 0)
+            QThread::msleep(waitMs);
+        if (QFile::remove(path))
+            return true;
+    }
+    qCWarning(lcVault).noquote() << "Cannot remove" << path << "(removed later as a leftover)";
+    return false;
+}
+
+} // namespace
+
+FolderClock probeFolderClock(const QString &absoluteDir, std::optional<qint64> stamp)
+{
+    // Four changes c1..c4, each right after a look at the stamp. A clock that stamps with its tick
+    // gives every change within a tick the tick's stamp. If c1..c4 lie within a span shorter than
+    // any tick, at most one tick boundary falls between c1 and c4, so of the three pairs of
+    // consecutive changes at least two lie within one tick: the look after the later change of such
+    // a pair shows the stamp the earlier one left — whatever another program changed there meanwhile
+    // (stamped from the same ticks). A slower attempt proves nothing when every change moved the
+    // stamp: made again.
+    constexpr int kAttempts = 4;
+    constexpr int kChanges = 4;
+    const QDir dir(absoluteDir);
+    for (int attempt = 0; attempt < kAttempts; ++attempt) {
+        std::optional<qint64> last = attempt == 0 && stamp ? stamp : fineMtime(absoluteDir);
+        if (!last)
+            return FolderClock::Unknown;
+        QElapsedTimer span;
+        span.start();
+        QString probe; // the file made by the last change, until removed
+        for (int change = 0; change < kChanges; ++change) {
+            bool changed = false;
+            if (change % 2 == 0) {
+                probe = dir.filePath(ownTempName());
+                QFile file(probe);
+                changed = file.open(QIODevice::WriteOnly | QIODevice::NewOnly); // (closed at once)
+                if (!changed)
+                    probe.clear();
+            } else {
+                changed = removeProbe(probe);
+                probe.clear();
+            }
+            const std::optional<qint64> now = changed ? fineMtime(absoluteDir) : std::nullopt;
+            if (!now || *now == *last) {
+                if (!probe.isEmpty())
+                    removeProbe(probe);
+                return now ? FolderClock::Coarse : FolderClock::Unknown;
+            }
+            last = now;
+        }
+        if (span.nsecsElapsed() < kClockProbeSpanNs)
+            return FolderClock::Fine;
+    }
+    return FolderClock::Unknown;
+}
+
 StampedSave saveAtomicallyStamped(const QString &absolutePath, QByteArrayView bytes,
-                                  const std::function<void()> &beforeRename, const ReadMark *expect)
+                                  const std::function<void()> &beforeRename, const ReadMark *expect, bool probeClock)
 {
     StampedSave out;
     const FileSync sync = fileSync();
@@ -260,10 +329,11 @@ StampedSave saveAtomicallyStamped(const QString &absolutePath, QByteArrayView by
     }
     const QString dir = target.absolutePath();
     out.before = fineMtime(dir);
+    if (probeClock)
+        out.folderClock = out.before ? probeFolderClock(dir, out.before) : FolderClock::Unknown;
     QFile temp;
     for (int attempt = 0;; ++attempt) {
-        const QString name = u".brulion-tmp-%1"_s.arg(QRandomGenerator::global()->generate64(), 16, 16, QChar(u'0'));
-        temp.setFileName(QDir(dir).filePath(name)); // ("E:/" at a drive's root: no "E://")
+        temp.setFileName(QDir(dir).filePath(ownTempName())); // ("E:/" at a drive's root: no "E://")
         if (temp.open(QIODevice::WriteOnly | QIODevice::NewOnly))
             break;
         if (attempt >= 8 || !temp.exists()) {
@@ -352,9 +422,15 @@ std::optional<qint64> fineMtime(const QString &absolutePath)
     const std::filesystem::path path = fsPath(absolutePath);
     std::error_code error;
     const std::filesystem::file_time_type time = std::filesystem::last_write_time(path, error);
-    if (error)
-        return std::nullopt;
-    return fineStampOf(time.time_since_epoch());
+    const std::optional<qint64> stamp = error ? std::nullopt : fineStampOf(time.time_since_epoch());
+    if (const StampFilter filter = g_stampFilter.load(std::memory_order_relaxed))
+        return filter(absolutePath, stamp);
+    return stamp;
+}
+
+void setStampFilter(StampFilter filter)
+{
+    g_stampFilter.store(filter);
 }
 
 QString decodeUtf8(const QByteArray &bytes)
