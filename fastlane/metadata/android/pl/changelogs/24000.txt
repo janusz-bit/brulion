@@ -1,0 +1,10 @@
+Nowości w 0.24.0:
+• Własny model asystenta
+• Czat z AI na żywo
+• Szybciej na telefonie
+• Płynnie w dużych notatnikach
+• Szybszy start i otwieranie
+• Bezpieczniejszy zapis
+• Qt 6.12
+
+Pełny opis: https://github.com/janusz-bit/brulion/releases/tag/v0.24.0
