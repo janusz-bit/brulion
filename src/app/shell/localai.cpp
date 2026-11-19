@@ -208,6 +208,15 @@ const ai::LocalModel *LocalAi::model(const QString &id) const
     return nullptr;
 }
 
+const ai::LocalModel *LocalAi::seer(bool here) const
+{
+    for (const ai::LocalModel &m : m_models) {
+        if (m.sees() && (!here || m_files.has(m)))
+            return &m;
+    }
+    return nullptr;
+}
+
 namespace {
 QString sizeText(qint64 bytes)
 {
@@ -268,6 +277,19 @@ bool LocalAi::modelSees() const
 {
     const ai::LocalModel *m = model(m_chosen);
     return m && m->sees();
+}
+
+QString LocalAi::pictureModel() const
+{
+    const ai::LocalModel *m = model(m_chosen);
+    const ai::LocalModel *other = m && !m->sees() ? seer(false) : nullptr;
+    return other ? other->name : QString();
+}
+
+bool LocalAi::pictureModelHere() const
+{
+    const ai::LocalModel *m = model(m_chosen);
+    return m && !m->sees() && seer(true);
 }
 
 bool LocalAi::modelAdapted() const
@@ -452,6 +474,18 @@ void LocalAi::send(const ai::Settings &settings, const ai::Request &request, std
         return refuse(u"no such model on this device: \"%1\" (Settings → Extensions → AI)"_s.arg(settings.model));
     if (!m_available)
         return refuse(u"this build of Brulion runs no model on the device"_s);
+    if (ai::local::hasImages(request) && !m->sees()) {
+        // A picture: the model that sees looks at it in this one's place (a phone holds one).
+        const ai::LocalModel *other = seer(true);
+        if (!other) {
+            const ai::LocalModel *any = seer(false);
+            return refuse(any ? u"the model on this device (%1) does not see pictures: download %2 too in Settings → "
+                                 u"Extensions → AI, and it looks at them in its place"_s.arg(m->name, any->name)
+                              : u"the model on this device (%1) does not see pictures"_s.arg(m->name));
+        }
+        qCInfo(lcLocalAi).noquote() << u"%1 does not see pictures: %2 looks at them"_s.arg(m->id, other->id);
+        m = other;
+    }
     if (!m_files.has(*m))
         return refuse(
                 u"the model %1 is not on this device yet: download it in Settings → Extensions → AI"_s.arg(m->name));

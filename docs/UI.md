@@ -904,7 +904,10 @@ model, so the bindings compile): **Model** (`aiLocalModelSetting`: Brulion / LFM
 LFM3-VL 2B, the best with the assistant first and the default → `AppSettings.aiLocalModel`; a model's `label` where its name is long — Brulion
 Assistant 1.7B's —, so the three fit side by side on a 360-px phone; the description says what
 the chosen one is good at: it sees pictures, it reads text only, or — `modelAdapted` — it is
-`modelBase` by `modelBaseMaker` trained further for the assistant, answering at once), **The
+`modelBase` by `modelBaseMaker` trained further for the assistant, answering at once — and of a
+model that reads text only, a second line: which model looks at pictures in its place
+(`pictureModel`) — loaded for them when it is on the device too (`pictureModelHere`), else to
+download as well), **The
 model's files** (`aiLocalFiles`: not here yet with its size and **Download** — partly here, a file
 another model shares or a download that stopped, with what is left of the whole (`modelLeft`), or
 "nothing left to download" when another model brought all its files; while downloading the
