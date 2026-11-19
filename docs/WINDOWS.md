@@ -337,8 +337,9 @@ with exceptions:
   **Unix permissions** (a folder without read permission, a file for the owner only; Windows has
   only the "read-only" attribute, and the rest is handled by the profile's access lists) — in
   `tst_vault_safety`, `tst_sync_engine`, `tst_sync_folders` (`renameHereRefusedFallsBack`: a
-  read-only folder that sync cannot rename), `tst_log_logger`,
-  `tst_shell_settings`; with **two
+  read-only folder that sync cannot rename), `tst_vault_async` (`failedWrite`'s read-only folder,
+  whose attribute does not stop a new file in it; its injected refusal of the rename runs here
+  too), `tst_log_logger`, `tst_shell_settings`; with **two
   files differing only in letter case** (NTFS does not tell them apart) — in `tst_vault`,
   `tst_notebook_journals`, `tst_shell_workspace`, `tst_sync_folders` (there, on such a file system,
   the test instead checks that a folder whose letter case was changed by another device gets
