@@ -846,7 +846,12 @@ private Q_SLOTS:
         });
         m.setVaultIndex(index.get());
         QTRY_VERIFY_WITH_TIMEOUT(m.framesApplied() >= 3, 10000 * BRULION_TEST_SLOWDOWN);
-        QTest::qSleep(500); // the GUI thread is busy; the worker is not
+        // The GUI thread is busy, the worker is not: for half a second of the GUI thread's own CPU
+        // time (not of the wall clock, which a stalled runner spends with both stopped).
+        brulion::test::CpuTimer busy;
+        busy.start();
+        while (busy.elapsed() < 500) {
+        }
         busyOver = true;
         QTRY_VERIFY_WITH_TIMEOUT(!m.running(), 30000 * BRULION_TEST_SLOWDOWN);
         // The frame after the busy spell carried the newest positions, many steps ahead (some 30;
@@ -1024,7 +1029,9 @@ private Q_SLOTS:
         auto index = makeIndex(bigVault(200, 3));
         GraphModel m;
         m.setRefreshDelay(0);
-        m.setMinRunMs(2000); // "midRun": still moving after its first frames
+        // "midRun": still moving after its first frames, however long a stalled runner took to
+        // show them (reduced motion then ends the run at once).
+        m.setMinRunMs(brulion::test::kRoomyMs);
         const bool reducedFirst = scenario == u"focusPath" || scenario == u"filter" || scenario == u"index";
         if (reducedFirst)
             m.setReducedMotion(true);
@@ -1105,8 +1112,9 @@ private Q_SLOTS:
         QVERIFY(m.running());
         QCOMPARE(m.frameInterval(), 16);
         m.setFrameInterval(250);
-        // The interval shows in the gaps between frames, which a stalled runner only lengthens (not
-        // in how many fit into a second, which it cuts).
+        // The interval shows in how many frames come at most in the time waited — a stalled runner
+        // only makes fewer: a timer that fires late fires once (not in how many fit into a fixed
+        // second, which a stall cuts, nor in each gap, as the one after a late frame is short).
         QElapsedTimer clock;
         clock.start();
         QList<qint64> at; // when each frame came, ms
@@ -1123,11 +1131,12 @@ private Q_SLOTS:
                 out.append(QString::number(gap));
             return out.join(u' ');
         };
-        // At 250 ms: a quarter of a second between frames (after one or two computed before the
-        // change); at 16 ms they would come some 60 a second.
-        QTRY_VERIFY_WITH_TIMEOUT(at.size() >= 5, brulion::test::kRoomyMs);
-        for (qsizetype i = 2; i < gaps().size(); ++i)
-            QVERIFY2(gaps()[i] >= 200, qPrintable(u"gaps of "_s + shown()));
+        // At 250 ms: one frame a quarter of a second (and one or two computed before the change);
+        // at 16 ms they would come some 60 a second.
+        QTRY_VERIFY_WITH_TIMEOUT(at.size() >= 4, brulion::test::kRoomyMs);
+        const qint64 waited = clock.elapsed();
+        QVERIFY2(at.size() <= waited / 250 + 3,
+                 qPrintable(u"%1 frames in %2 ms, gaps of "_s.arg(at.size()).arg(waited) + shown()));
         QVERIFY(m.running());
         m.setActive(false); // a paused run takes the change too
         m.setFrameInterval(16);
@@ -1143,9 +1152,9 @@ private Q_SLOTS:
     {
         auto index = makeIndex(smallVault());
         {
-            // (1.5 s of frames 16 ms apart: a stall of the runner takes some of them, as the run
-            // ends by the clock, but not all but ten.)
-            constexpr int minRun = 1500;
+            // (4 s of frames 16 ms apart: a stall of the runner takes some of them, as the run ends
+            // by the clock, but not all but ten — a stall of seconds leaves hundreds.)
+            constexpr int minRun = 4000;
             GraphModel m;
             m.setMinRunMs(minRun);
             QSignalSpy frames(&m, &GraphModel::positionsChanged);
