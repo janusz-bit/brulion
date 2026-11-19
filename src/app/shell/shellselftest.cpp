@@ -117,6 +117,15 @@ void touchTap(QQuickWindow *window, QPointF scenePos, int holdMs = 110)
     uidriver::touchTapNow(window, scenePos, holdMs);
 }
 
+/// A long press with one finger at `scenePos`, held until a menu opens (touchHoldNow(), at most
+/// 3 s): not for a fixed second — with the GUI thread stuck meanwhile (a LocalStore flush of 177 B
+/// took 1.5 s on CI's aarch64 AppImage job) the finger was lifted before the handler's long-press
+/// timer had its turn, and the press was a tap.
+void longPressForMenu(QQuickWindow *window, QPointF scenePos)
+{
+    uidriver::touchHoldNow(window, scenePos, [window] { return uidriver::openMenus(window) > 0; }, 3000);
+}
+
 /// A finger dragged from `from` by `delta` (scene coordinates) in small steps, then lifted.
 void touchDrag(QQuickWindow *window, QPointF from, QPointF delta)
 {
@@ -558,7 +567,7 @@ void checkTaskStatusMenus(QQuickWindow *window, AppController *app, const Check 
                          qPrintable(chain));
         }
         if (touch)
-            touchTap(window, pointIn(box), 1000);
+            longPressForMenu(window, pointIn(box));
         else
             mouseClick(window, pointIn(box), Qt::RightButton);
         return waitFor([&] { return openMenus(window) == 1; });
@@ -643,7 +652,7 @@ void checkTaskStatusMenus(QQuickWindow *window, AppController *app, const Check 
                                    : QString();
         const QString before = path.isEmpty() ? QString() : ws->readFile(path);
         if (touch)
-            touchTap(window, pointIn(dueChip), 1000);
+            longPressForMenu(window, pointIn(dueChip));
         else
             mouseClick(window, pointIn(dueChip), Qt::RightButton);
         QQuickItem *later = nullptr;
@@ -870,7 +879,7 @@ void checkTaskStatusMenus(QQuickWindow *window, AppController *app, const Check 
     check(pillsRow != nullptr, "the agenda shows the next times of a repeated reminder");
     if (pillsRow) {
         if (touch)
-            touchTap(window, pointIn(pillsRow), 1000);
+            longPressForMenu(window, pointIn(pillsRow));
         else
             mouseClick(window, pointIn(pillsRow), Qt::RightButton);
         const bool opened = waitFor(
@@ -1294,7 +1303,7 @@ void checkTagLinks(QQuickWindow *window, AppController *app, const Check &check)
                          task ? qPrintable(task->property("text").toString().left(200)) : "");
         if (touch) {
             // A long press: the tag's menu (LinkMenu), "Filter by tag" first; its "Open tag page".
-            touchTap(window, taskTag, 1000);
+            longPressForMenu(window, taskTag);
             check(waitFor([&] { return openMenus(window) == 1; }), "a long press on a tag in Tasks opens its menu");
             const auto menuItem = [window](const QString &name) { return findShownNamed(window->contentItem(), name); };
             QQuickItem *filter = menuItem(u"linkMenuFilter"_s);
@@ -1756,12 +1765,15 @@ void checkDrawerSwipe(QQuickWindow *window, AppController *app, QObject *drawer,
     QQuickItem *text = renderedTextContaining(window->contentItem(), u"Budżet całkowity"_s);
     QQuickItem *grip = nullptr;
     if (editor && text) {
-        touchTap(window, pointIn(text, 0.3), 1000);
-        waitFor([&] {
-            grip = findShown(window->contentItem(),
-                             [](QQuickItem *item) { return item->objectName() == u"selectionGripStart"; });
-            return grip != nullptr;
-        });
+        // Held until the selection's grips are shown (as longPressForMenu() for a menu).
+        uidriver::touchHoldNow(
+                window, pointIn(text, 0.3),
+                [&] {
+                    grip = findShown(window->contentItem(),
+                                     [](QQuickItem *item) { return item->objectName() == u"selectionGripStart"; });
+                    return grip != nullptr;
+                },
+                3000);
     }
     check(grip && editor->property("selectionMode").toBool(), "a long press on a block selects it, with grips");
     if (grip) {
@@ -1859,7 +1871,7 @@ void checkRowsAndMenus(QQuickWindow *window, AppController *app, const Check &ch
         if (!item)
             return;
         if (touch)
-            touchTap(window, pointIn(item, fx), 1000);
+            longPressForMenu(window, pointIn(item, fx));
         else
             mouseClick(window, pointIn(item, fx), Qt::RightButton);
     };
@@ -2920,7 +2932,7 @@ void checkLinkParts(QQuickWindow *window, AppController *app, const Check &check
     if (text) {
         const QPointF at = linkPoint(text, u"part:1:Projekty"_s);
         if (touch)
-            touchTap(window, at, 1000);
+            longPressForMenu(window, at);
         else
             mouseClick(window, at, Qt::RightButton);
     }
@@ -8792,7 +8804,7 @@ void checkPageProperties(QQuickWindow *window, AppController *app, const Check &
     check(chip != nullptr && before.contains(u"\ntags: [przewodnik]\n"_s), "the guide's tag chip is in its header");
     if (chip) {
         if (touch)
-            touchTap(window, pointIn(chip), 1000);
+            longPressForMenu(window, pointIn(chip));
         else
             mouseClick(window, pointIn(chip), Qt::RightButton);
         check(waitFor([&] { return openMenus(window) == 1; }),
