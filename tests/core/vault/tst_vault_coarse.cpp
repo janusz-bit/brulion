@@ -637,7 +637,16 @@ private Q_SLOTS:
             const QString locked = tmp.path() + u"/Zamknięty"_s;
             QVERIFY(QDir().mkpath(locked));
             QVERIFY(QFile::setPermissions(locked, QFile::ReadOwner | QFile::ExeOwner));
-            QCOMPARE(vaultutil::probeFolderClock(locked), FolderClock::Unknown);
+            // (Only where the folder refuses a new file: root writes into it all the same — the
+            // AppImage job's container.)
+            QFile intruder(locked + u"/.próba"_s);
+            if (intruder.open(QIODevice::WriteOnly | QIODevice::NewOnly)) {
+                intruder.close();
+                QVERIFY(intruder.remove());
+                qInfo("a read-only folder takes new files here (root): its probe not checked");
+            } else {
+                QCOMPARE(vaultutil::probeFolderClock(locked), FolderClock::Unknown);
+            }
             QVERIFY(QFile::setPermissions(locked, QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner));
             QCOMPARE(filesIn(locked), QStringList());
         }
