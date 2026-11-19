@@ -162,38 +162,64 @@ bool takesPressAtCentre(QQuickWindow *window, QQuickItem *item)
     return false;
 }
 
-/// The button of the toast shown (objectName "toastAction") tapped after the app went to view
-/// `view`: once it stays where it is there and a press at its centre reaches it — the toasts follow
-/// the view's bottom edge (Main.qml: the bottom navigation's room), and a fixed pause after the
-/// navigation tapped beside the button now and then on CI's Windows job. False, with the numbers
-/// on stderr, when it is gone or keeps moving (a toast with an action lasts 7 s).
-bool tapToastAction(QQuickWindow *window, AppController *app, const QString &view, bool touch)
+/// The item `find` gives once it stays put: the same item at the same point on two looks 100 ms
+/// apart, and a press at its centre reaches it (takesPressAtCentre). An item still moving (a toast
+/// following the view's bottom edge, a dialog's button while the dialog comes in) or not placed by
+/// its layout yet takes a tap beside it. Its centre in `at`; nullptr when none stays put within
+/// `timeoutMs` (`at`: where the last one was, (-1, -1) for none).
+QQuickItem *steadyItem(QQuickWindow *window, const std::function<QQuickItem *()> &find, QPointF *at,
+                       int timeoutMs = 3000)
 {
-    QElapsedTimer timer;
-    timer.start();
-    QQuickItem *button = nullptr;
-    QPointF at(-1, -1);
+    QPointer<QQuickItem> item;
+    QPointF where(-1, -1);
     const bool steady = uidriver::waitFor(
             [&] {
-                QQuickItem *found = app->currentView() == view
-                                            ? uidriver::shownNamed(window->contentItem(), u"toastAction"_s)
-                                            : nullptr;
+                QQuickItem *found = find();
                 const QPointF now = found ? pointIn(found) : QPointF(-1, -1);
-                const bool still = found && found == button && now == at && takesPressAtCentre(window, found);
-                button = found;
-                at = now;
+                const bool still = found && found == item && now == where && takesPressAtCentre(window, found);
+                item = found;
+                where = now;
                 if (!still)
                     uidriver::settle(100);
                 return still;
             },
-            3000);
-    if (steady)
-        tapOrClick(window, at, touch);
-    else
+            timeoutMs);
+    if (at)
+        *at = where;
+    return steady ? item.data() : nullptr;
+}
+
+/// The button of the toast shown (objectName "toastAction") tapped after the app went to view
+/// `view`, once it stays put there (steadyItem()) — the toasts follow the view's bottom edge
+/// (Main.qml: the bottom navigation's room), and a fixed pause after the navigation tapped beside
+/// the button now and then on CI's Windows job —; true once the toast has gone, as a press of its
+/// button removes it at once (BToastHost._trigger). False, with the numbers on stderr, when it is
+/// not shown, keeps moving (a toast with an action lasts 7 s) or stays after the tap.
+bool tapToastAction(QQuickWindow *window, AppController *app, const QString &view, bool touch)
+{
+    QElapsedTimer timer;
+    timer.start();
+    QPointF at;
+    QPointer<QQuickItem> button = steadyItem(
+            window,
+            [&] {
+                return app->currentView() == view ? uidriver::shownNamed(window->contentItem(), u"toastAction"_s)
+                                                  : nullptr;
+            },
+            &at);
+    if (!button) {
         std::fprintf(stderr, "selftest: the toast's button in the view %s (now %s): %s at (%.1f, %.1f) after %lld ms\n",
-                     qPrintable(view), qPrintable(app->currentView()), button ? "moving or covered" : "not shown",
+                     qPrintable(view), qPrintable(app->currentView()), at.x() >= 0 ? "moving or covered" : "not shown",
                      at.x(), at.y(), qlonglong(timer.elapsed()));
-    return steady;
+        return false;
+    }
+    tapOrClick(window, at, touch);
+    // (Removed, the toast fades out: shown() follows its opacity, and the delegate is deleted after.)
+    if (uidriver::waitFor([&] { return !button || !shown(button); }, 2000))
+        return true;
+    std::fprintf(stderr, "selftest: the toast's button in the view %s took no tap at (%.1f, %.1f) after %lld ms: %s\n",
+                 qPrintable(view), at.x(), at.y(), qlonglong(timer.elapsed()), qPrintable(uidriver::itemsAt(window, at)));
+    return false;
 }
 
 /// `word` typed on an on-screen keyboard that still composes it: preedit text of `item`, nothing
@@ -5147,51 +5173,54 @@ void checkFindAndReplace(QQuickWindow *window, AppController *app, const Check &
                 items, [&name](QQuickItem *item) { return item->objectName() == name && uidriver::shown(item); });
         return it == items.cend() ? nullptr : *it;
     };
-    settle(300); // the view fades in
-    QQuickItem *hitTick = shownInList(u"replaceHitTick"_s);
+    // (Each tapped once it stays put — steadyItem(): the view fades in, its list lays out.)
+    QPointF at;
+    QQuickItem *hitTick = steadyItem(window, [&] { return shownInList(u"replaceHitTick"_s); }, &at);
     check(hitTick != nullptr, "a hit has its tick");
     if (hitTick)
-        tapOrClick(window, pointIn(hitTick), touch);
+        tapOrClick(window, at, touch);
     check(waitFor([&] { return session->tickedHits() == all - 1; }), "a tap takes one hit out");
     // Opening a hit and coming back keeps what was unticked.
-    if (QQuickItem *hitText = shownInList(u"replaceHitText"_s))
-        tapOrClick(window, pointIn(hitText), touch);
+    if (steadyItem(window, [&] { return shownInList(u"replaceHitText"_s); }, &at))
+        tapOrClick(window, at, touch);
     check(waitFor([&] { return app->currentView() == u"page"; }), "a tap on a hit opens its note");
     app->back();
     check(waitFor([&] { return app->currentView() == u"replace" && !session->scanning() && session->fileCount() >= 2; }, 5000),
           "Back returns to the preview");
     check(waitFor([&] { return session->tickedHits() == all - 1; }, 1000), "the unticked hit is still unticked");
-    settle(300); // the view fades in
-    hitTick = shownInList(u"replaceHitTick"_s);
-    apply = named(u"replaceApply"_s);
-    if (hitTick)
-        tapOrClick(window, pointIn(hitTick), touch);
+    if (steadyItem(window, [&] { return shownInList(u"replaceHitTick"_s); }, &at))
+        tapOrClick(window, at, touch);
     check(waitFor([&] { return session->tickedHits() == all; }), "and puts it back");
+    apply = steadyItem(window, [&] { return named(u"replaceApply"_s); }, &at);
     if (apply)
-        tapOrClick(window, pointIn(apply), touch);
+        tapOrClick(window, at, touch);
     const QString accept = QCoreApplication::translate("ReplaceView", "Replace");
     QQuickItem *acceptButton = nullptr;
-    check(waitFor([&] {
-              acceptButton = uidriver::findShown(window->contentItem(), [&](QQuickItem *item) {
-                  return isA(item, "BButton") && item != apply && item->property("text").toString() == accept;
-              });
-              return acceptButton != nullptr;
-          }),
-          "the confirmation asks first");
+    const auto findAccept = [&] {
+        return uidriver::findShown(window->contentItem(), [&](QQuickItem *item) {
+            return isA(item, "BButton") && item != apply && item->property("text").toString() == accept;
+        });
+    };
+    check(waitFor([&] { return (acceptButton = findAccept()) != nullptr; }), "the confirmation asks first");
     check(ws->readFile(other) == u"- zolw w innej notatce\n"_s, "nothing is written before the confirmation");
-    // (The note's Replace all has a toast with Undo of its own: this replace's is the one to press.)
+    // (The note's Replace all has a toast with Undo of its own: this replace's is the one to press.
+    // Removed, a toast fades out before its delegate goes: until then it is still found.)
     if (QObject *toasts = window->findChild<QObject *>(u"toastHost"_s))
         QMetaObject::invokeMethod(toasts, "clear");
-    settle(250);
+    waitFor([&] { return named(u"toastAction"_s) == nullptr; });
+    acceptButton = steadyItem(window, findAccept, &at); // (the dialog comes in)
     if (acceptButton)
-        tapOrClick(window, pointIn(acceptButton), touch);
+        tapOrClick(window, at, touch);
     check(waitFor([&] { return ws->readFile(other) == u"- pies w innej notatce\n"_s; }, 5000), "the replace is written");
     // Undo from another view: the toast outlives the view.
     QQuickItem *undo = nullptr;
     check(waitFor([&] { return (undo = named(u"toastAction"_s)) != nullptr; }), "the toast offers Undo");
     app->navigate({ { u"view"_s, u"tasks"_s } });
-    const bool undone = tapToastAction(window, app, u"tasks"_s, touch)
-                        && waitFor([&] { return ws->readFile(other) == u"- zolw w innej notatce\n"_s; }, 5000);
+    const bool tapped = tapToastAction(window, app, u"tasks"_s, touch);
+    const bool undone = tapped && waitFor([&] { return ws->readFile(other) == u"- zolw w innej notatce\n"_s; }, 5000);
+    if (tapped && !undone)
+        std::fprintf(stderr, "selftest: after Undo (%s) the note holds \"%s\"\n",
+                     session->applying() ? "still writing" : "done", qPrintable(ws->readFile(other).trimmed()));
     check(undone, "Undo restores the notes after leaving the view");
     closeMenus(window);
     ws->writeFile(note, QString());

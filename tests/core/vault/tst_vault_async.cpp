@@ -8,6 +8,7 @@
 // reported: the echo of the save is not trusted then).
 #include "vaulttest.h"
 
+#include "vault/filesync.h"
 #include "vault/vaultutil_p.h"
 
 #include <QAtomicInt>
@@ -16,6 +17,9 @@
 #include <QThreadPool>
 
 #include <cstdio>
+#include <filesystem>
+#include <optional>
+#include <system_error>
 
 #ifdef Q_OS_UNIX
 #include <unistd.h>
@@ -71,6 +75,56 @@ void slowWrites(Vault &vault, int ms)
 {
     vault.setBeforeRenameHook([ms](const VaultPath &) { QThread::msleep(ms); });
 }
+
+/// While it lives, the vault's rename over a file whose path ends with `suffix` is refused for good
+/// (FileReplace's Failed, vault/filesync.h: as a full disk or a folder made read-only refuses it),
+/// on every platform; the other renames (History's) are the platform's. Made and gone on the test's
+/// thread while no write is in flight; the writer thread only calls it.
+class RefusedRename {
+public:
+    explicit RefusedRename(const QString &suffix) : m_previous(vaultutil::fileReplace())
+    {
+        s_suffix = suffix;
+        s_previous = m_previous;
+        s_calls.storeRelaxed(0);
+        vaultutil::setFileReplace(&replace);
+    }
+    ~RefusedRename()
+    {
+        vaultutil::setFileReplace(m_previous);
+        s_suffix.clear();
+    }
+    RefusedRename(const RefusedRename &) = delete;
+    RefusedRename &operator=(const RefusedRename &) = delete;
+
+    /// The renames refused so far.
+    int count() const { return s_calls.loadRelaxed(); }
+    static QString reason() { return u"nośnik tylko do odczytu (test)"_s; }
+
+private:
+    static vaultutil::Replaced replace(const QString &from, const QString &to, QString *error)
+    {
+        if (to.endsWith(s_suffix)) {
+            s_calls.ref();
+            if (error)
+                *error = reason();
+            return vaultutil::Replaced::Failed;
+        }
+        if (s_previous)
+            return s_previous(from, to, error);
+        std::error_code code;
+        std::filesystem::rename(std::filesystem::path(from.toStdU16String()), std::filesystem::path(to.toStdU16String()),
+                                code);
+        if (code && error)
+            *error = QString::fromStdString(code.message());
+        return code ? vaultutil::Replaced::Failed : vaultutil::Replaced::Done;
+    }
+
+    vaultutil::FileReplace m_previous;
+    static inline QString s_suffix;
+    static inline vaultutil::FileReplace s_previous = nullptr;
+    static inline QAtomicInt s_calls;
+};
 
 } // namespace
 
@@ -503,36 +557,62 @@ private Q_SLOTS:
         QCOMPARE(f.text(u"a.md"_s), u"- po otwarciu\n"_s);
     }
 
-    // A failed write (a read-only folder) is reported with the result; nothing changes.
+    // A failed write is reported with the result, its reason in the vault's error; the note, the
+    // folder and the changes stay as they were. Once the cause is gone the next write goes through.
+    // The failure every platform has: the rename over the note refused for good (FileReplace's
+    // Failed, injected: vault/filesync.h). The folder made read-only only where that stops a new
+    // file in it — not on Windows, whose read-only attribute of a folder means nothing to it (the
+    // write went through there), and not for root.
+    void failedWrite_data()
+    {
+        QTest::addColumn<bool>("readOnlyFolder");
+        QTest::newRow("rename refused") << false;
+        QTest::newRow("read-only folder") << true;
+    }
     void failedWrite()
     {
+        QFETCH(bool, readOnlyFolder);
+        if (readOnlyFolder) {
+            BRULION_SKIP_WITHOUT_UNIX_PERMISSIONS();
 #ifdef Q_OS_UNIX
-        if (::getuid() == 0)
-            QSKIP("root writes into read-only folders");
+            if (::getuid() == 0)
+                QSKIP("root writes into read-only folders");
+#endif
+        }
         Fixture f;
         Writer writer;
         f.write(u"Zamknięte/a.md"_s, "- 0\n");
         QVERIFY(f.open());
         writer.attach(*f.vault, true);
         const QString dir = f.root() + u"/Zamknięte"_s;
-        QVERIFY(QFile::setPermissions(dir, QFileDevice::ReadOwner | QFileDevice::ExeOwner));
         auto result = std::make_shared<Result>();
-        startWrite(*f.vault, u"Zamknięte/a.md"_s, u"- 1\n"_s, u"- 0\n"_s, result);
-        f.vault->waitForWrites();
-        QVERIFY(QFile::setPermissions(dir, QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner));
+        {
+            std::optional<RefusedRename> refused;
+            if (readOnlyFolder)
+                QVERIFY(QFile::setPermissions(dir, QFileDevice::ReadOwner | QFileDevice::ExeOwner));
+            else
+                refused.emplace(u"/Zamknięte/a.md"_s);
+            startWrite(*f.vault, u"Zamknięte/a.md"_s, u"- 1\n"_s, u"- 0\n"_s, result);
+            f.vault->waitForWrites();
+            if (readOnlyFolder)
+                QVERIFY(QFile::setPermissions(dir, QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner));
+            else
+                QCOMPARE(refused->count(), 1); // (refused for good: not tried again)
+        }
+        QVERIFY(result->done);
         QCOMPARE(result->outcome, WriteOutcome::Failed);
-        QVERIFY(f.vault->errorString().contains(u"Zamknięte/a.md"_s));
+        QVERIFY2(f.vault->errorString().contains(u"Zamknięte/a.md"_s), qPrintable(f.vault->errorString()));
+        if (!readOnlyFolder)
+            QVERIFY2(f.vault->errorString().contains(RefusedRename::reason()), qPrintable(f.vault->errorString()));
         QCOMPARE(f.read(u"Zamknięte/a.md"_s), QByteArray("- 0\n"));
         QVERIFY(f.changes().isEmpty());
         QVERIFY(!QDir(dir).entryList(QDir::Files | QDir::Hidden).join(u' ').contains(u".brulion-tmp-"_s));
-        // Writable again: the next write goes through.
+        // The cause gone: the next write goes through.
         auto retry = std::make_shared<Result>();
         startWrite(*f.vault, u"Zamknięte/a.md"_s, u"- 1\n"_s, u"- 0\n"_s, retry);
         f.vault->waitForWrites();
         QCOMPARE(retry->outcome, WriteOutcome::Written);
-#else
-        QSKIP("a folder's read-only attribute does not stop new files in it on Windows");
-#endif
+        QCOMPARE(f.read(u"Zamknięte/a.md"_s), QByteArray("- 1\n"));
     }
 
     // A note made read-only is not written over (QSaveFile refused it; the own write's rename would
