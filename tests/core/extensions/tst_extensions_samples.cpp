@@ -25,6 +25,8 @@
 #include "util/paths.h"
 #include "vault/vault.h"
 
+#include "testtiming.h"
+
 #include <QDebug>
 #include <QDir>
 #include <QDirIterator>
@@ -46,6 +48,8 @@ namespace {
 const QString kSamples = QStringLiteral(BRULION_SOURCE_DIR) + u"/tests/core/extensions/samples"_s;
 const QString kFolder = u"Rozszerzenia"_s;            // where the extension pages are in the test's notebook
 const QString kJournal = u"journals/2026-11-14.md"_s; // today's note
+const QString kLinkCheckBudget = u"local BUDGET_SECONDS = 1\n"_s; // in "Link check.md"
+const QString kRoomyLinkCheckBudget = u"local BUDGET_SECONDS = %1\n"_s.arg(brulion::test::kRoomyMs / 1000);
 
 using Model = std::function<QVariantMap(const QVariantMap &request)>;
 
@@ -372,9 +376,11 @@ class TestExtensionsSamples : public QObject {
     }
 
     /// A fresh notebook — the sample notes and the ten extension pages — and an engine with every
-    /// extension page loaded; "" when all of them loaded.
-    QString open(const QString &language = u"pl"_s,
-                 const Limits &limits = Limits{2000 * BRULION_TEST_SLOWDOWN, 64ll << 20},
+    /// extension page loaded; "" when all of them loaded. The time limit is a wall clock that a
+    /// stalled CI runner can run out in a call that takes a millisecond (Windows, 2026-11-19: a
+    /// one-line command timed out right after a notebook that took 186 ms instead of 1 to open):
+    /// roomy here, as none of these tests is about it.
+    QString open(const QString &language = u"pl"_s, const Limits &limits = Limits{test::kRoomyMs, 64ll << 20},
                  const QHash<QString, QString> &extraNotes = {})
     {
         m_engine.reset();
@@ -392,6 +398,13 @@ class TestExtensionsSamples : public QObject {
             files.insert(file, readFile(kSamples + u"/notebook/"_s + file));
         for (const QString &file : filesUnder(kSamples + u"/extensions"_s))
             files.insert(kFolder + u'/' + file, readFile(kSamples + u"/extensions/"_s + file));
+        // Link check's scan stops after a second of os.clock(), a wall clock as well: one a
+        // stalled runner can run out on these 27 pages too. Its tests of that budget set their own
+        // (linkCheckStopsInTime).
+        QString &linkCheck = files[kFolder + u"/Link check.md"_s];
+        if (!linkCheck.contains(kLinkCheckBudget))
+            return u"Link check: no "_s + kLinkCheckBudget;
+        linkCheck.replace(kLinkCheckBudget, kRoomyLinkCheckBudget);
         for (auto it = files.cbegin(); it != files.cend(); ++it)
             if (!writeFile(m_dir + u'/' + it.key(), it.value()))
                 return u"cannot write "_s + it.key();
@@ -1448,8 +1461,8 @@ private Q_SLOTS:
         // loads it again.)
         const QString path = kFolder + u"/Link check.md"_s;
         QString code = disk(path);
-        QVERIFY(code.contains(u"local BUDGET_SECONDS = 1\n"_s));
-        code.replace(u"local BUDGET_SECONDS = 1\n"_s, u"local BUDGET_SECONDS = -1\n"_s);
+        QVERIFY(code.contains(kRoomyLinkCheckBudget)); // (the sample's 1 s: open())
+        code.replace(kRoomyLinkCheckBudget, u"local BUDGET_SECONDS = -1\n"_s);
         QVERIFY(userSaves(path, code));
         const Result loaded = loadPage(path);
         QVERIFY2(loaded.ok(), qPrintable(loaded.error));
@@ -1631,7 +1644,7 @@ private Q_SLOTS:
         }
         QElapsedTimer clock;
         clock.start();
-        const QString errors = open(u"pl"_s, Limits{20000 * BRULION_TEST_SLOWDOWN, 64ll << 20}, notes);
+        const QString errors = open(u"pl"_s, Limits{test::kRoomyMs, 64ll << 20}, notes);
         QVERIFY2(errors.isEmpty(), qPrintable(errors));
         int pages = 0;
         m_index->forEachNote([&](const VaultPath &, const ParsedNote &) { ++pages; });
@@ -1681,12 +1694,18 @@ private Q_SLOTS:
                                          + u"\n[[a|b|c#d]] [[ ]] [[|x]] [[#y]] [[a]]]] [[[[zagnieżdżony]]]]\n- [ ] "_s
                                          + QString(100000, u'z') + u" 📅 2026-11-01\n- [ ] 📅 2026-11-02\n"_s},
         };
-        const QString errors = open(u"pl"_s, Limits{2000 * BRULION_TEST_SLOWDOWN, 64ll << 20}, notes);
+        const QString errors = open(u"pl"_s, Limits{test::kRoomyMs, 64ll << 20}, notes);
         QVERIFY2(errors.isEmpty(), qPrintable(errors));
         QHash<QString, QVariant> trees;
         for (const ViewInfo &v : m_engine->views()) {
+            // "In the usual time": within the app's limit (Limits::timeoutMs) of the work itself,
+            // the CPU time of this thread, where the engine runs.
+            test::CpuTimer work;
+            work.start();
             const Result r = view(v.extension, v.name);
             QVERIFY2(r.ok(), qPrintable(u"%1/%2: %3"_s.arg(v.extension, v.name, r.error)));
+            QVERIFY2(work.elapsed() < Limits{}.timeoutMs * BRULION_TEST_SLOWDOWN,
+                     qPrintable(u"%1/%2: %3 ms"_s.arg(v.extension, v.name).arg(work.elapsed())));
             QVERIFY2(m_viewProblems.isEmpty(), qPrintable(v.extension + u": "_s + m_viewProblems.join(u"; "_s)));
             trees.insert(v.extension, r.value);
         }

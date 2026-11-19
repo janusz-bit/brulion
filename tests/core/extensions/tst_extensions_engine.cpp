@@ -5,7 +5,8 @@
 #include "extensions/engine.h"
 #include "extensions/host.h"
 
-#include <QElapsedTimer>
+#include "testtiming.h"
+
 #include <QTest>
 
 #include <clocale>
@@ -131,6 +132,13 @@ Extension ext(const QString &id, const QString &source, bool write = true)
     return {id, source, write ? QStringList{u"write"_s} : QStringList{}, {}, {}};
 }
 
+/// The time limit of the tests of that limit (and of the other limits a script cannot catch).
+constexpr int kTimeLimitMs = 300;
+const Limits kTimeLimited{kTimeLimitMs, 32ll << 20};
+/// The other tests' limits: the time limit is a wall clock, which a stalled CI runner can run out
+/// in a call that takes a millisecond.
+const Limits kRoomy{brulion::test::kRoomyMs, 32ll << 20};
+
 } // namespace
 
 #define LOAD_OK(extension)                                                                                             \
@@ -149,7 +157,7 @@ private Q_SLOTS:
         host = FakeHost();
         engine = std::make_unique<Engine>();
         QString error;
-        QVERIFY2(engine->start(&host, Limits{300, 32ll << 20}, &error), qPrintable(error));
+        QVERIFY2(engine->start(&host, kRoomy, &error), qPrintable(error));
     }
     void cleanup() { engine.reset(); }
 
@@ -582,17 +590,21 @@ private Q_SLOTS:
     {
         QFETCH(QString, body);
         QFETCH(int, status);
-        // A memory limit is reached by allocating, which takes longer than the time limit under the
-        // sanitizers (BRULION_TEST_SLOWDOWN): those rows get more time.
-        if (status == int(Status::OutOfMemory))
-            engine->setLimits(Limits{300 * BRULION_TEST_SLOWDOWN, 32ll << 20});
         LOAD_OK(ext(u"zły"_s, u"b.command(\"x\", function()\n"_s + body + u"\nend)\nb.command(\"ok\", function() return 7 end)"_s));
-        QElapsedTimer clock;
-        clock.start();
+        // Only the rows of the time limit run with it: the memory and stack limits are reached by
+        // allocating, which a loaded runner (or the sanitizer build) can make take longer than
+        // that, and the time limit would end those calls first.
+        if (status == int(Status::Timeout))
+            engine->setLimits(kTimeLimited);
+        // Stopped soon after the limit, not when a long C call (the pattern matcher, the plain
+        // search) returns: the CPU time of the call, which stands still while the runner stalls.
+        brulion::test::CpuTimer work;
+        work.start();
         const Result r = engine->runCommand(u"zły"_s, u"x"_s, {});
         QCOMPARE(int(r.status), status);
-        QVERIFY2(clock.elapsed() < 5000 * BRULION_TEST_SLOWDOWN, qPrintable(QString::number(clock.elapsed())));
+        QVERIFY2(work.elapsed() < 5000 * BRULION_TEST_SLOWDOWN, qPrintable(QString::number(work.elapsed())));
         // the VM stays usable
+        engine->setLimits(kRoomy);
         QCOMPARE(engine->runCommand(u"zły"_s, u"ok"_s, {}).value.toLongLong(), 7);
         QVERIFY(engine->memoryUsed() < (32ll << 20));
     }
@@ -735,7 +747,9 @@ private Q_SLOTS:
         QCOMPARE(r.status, Status::Error);
         QVERIFY2(r.error.startsWith(u"console:1:"_s), qPrintable(r.error));
         // The limits hold here too; another extension's environment is not reachable.
+        engine->setLimits(kTimeLimited);
         QCOMPARE(engine->evaluate(u"*console*"_s, u"while true do end"_s, u"console"_s).status, Status::Timeout);
+        engine->setLimits(kRoomy);
         QCOMPARE(engine->evaluate(u"nie-ma"_s, u"1"_s, u"x"_s).status, Status::NotFound);
         LOAD_OK(ext(u"inne"_s, u"sekret = 7"_s));
         QVERIFY(!engine->evaluate(u"*console*"_s, u"sekret"_s, u"console"_s).value.isValid());

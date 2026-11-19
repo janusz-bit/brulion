@@ -11,6 +11,8 @@
 #include "notebook/itemref.h"
 #include "vault/vault.h"
 
+#include "testtiming.h"
+
 #include <QDir>
 #include <QFile>
 #include <QTemporaryDir>
@@ -69,7 +71,7 @@ private Q_SLOTS:
         options.dryRun = true;
         m_host = std::make_unique<NotebookHost>(*m_vault, *m_index, options);
         m_engine = std::make_unique<Engine>();
-        QVERIFY(m_engine->start(m_host.get(), Limits{2000 * BRULION_TEST_SLOWDOWN, 64ll << 20}));
+        QVERIFY(m_engine->start(m_host.get(), Limits{test::kRoomyMs, 64ll << 20}));
         Extension e;
         e.id = u"t"_s;
         e.permissions = {u"write"_s};
@@ -193,7 +195,7 @@ private Q_SLOTS:
         options.updateIndex = true;
         NotebookHost real(*m_vault, *m_index, options);
         Engine writing;
-        QVERIFY(writing.start(&real, Limits{2000 * BRULION_TEST_SLOWDOWN, 64ll << 20}));
+        QVERIFY(writing.start(&real, Limits{test::kRoomyMs, 64ll << 20}));
         Extension e;
         e.id = u"t"_s;
         e.permissions = {u"write"_s};

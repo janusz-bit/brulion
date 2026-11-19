@@ -24,6 +24,8 @@
 #include "index/vaultindex.h"
 #include "vault/vault.h"
 
+#include "testtiming.h"
+
 #include <QDir>
 #include <QFile>
 #include <QRegularExpression>
@@ -123,7 +125,7 @@ class TestExtensionsAssistant : public QObject {
         m_statuses.clear();
         m_host->onStatus = [this](const QString &, const QString &text) { m_statuses.append(text); };
         m_engine = std::make_unique<Engine>();
-        if (!m_engine->start(m_host.get(), Limits{2000 * BRULION_TEST_SLOWDOWN, 64ll << 20}))
+        if (!m_engine->start(m_host.get(), Limits{test::kRoomyMs, 64ll << 20}))
             return false;
         const Result loaded = m_engine->load(builtinExtension(u"asystent"_s));
         if (!loaded.ok())

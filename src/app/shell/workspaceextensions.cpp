@@ -324,7 +324,7 @@ bool WorkspaceExtensions::ensureEngine()
     };
     m_engine = std::make_unique<extensions::Engine>();
     QString error;
-    if (!m_engine->start(m_host.get(), extensions::Limits{}, &error)) {
+    if (!m_engine->start(m_host.get(), m_limits, &error)) {
         qCWarning(lcApp, "extensions: %s", qUtf8Printable(error));
         m_engine.reset();
         m_host.reset();
@@ -605,6 +605,13 @@ void WorkspaceExtensions::setLocalAi(ai::LocalBackend *backend)
 void WorkspaceExtensions::setAiPictures(ai::ImageLoader loader)
 {
     m_aiPictures = std::move(loader);
+}
+
+void WorkspaceExtensions::setLimits(const extensions::Limits &limits)
+{
+    m_limits = limits;
+    if (m_engine)
+        m_engine->setLimits(limits);
 }
 
 /// The client of b.ai's requests: the network for the providers there, the app's model runner

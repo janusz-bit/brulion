@@ -9,8 +9,9 @@
 #include "index/vaultindex.h"
 #include "vault/vault.h"
 
+#include "testtiming.h"
+
 #include <QDir>
-#include <QElapsedTimer>
 #include <QFile>
 #include <QTemporaryDir>
 #include <QTest>
@@ -80,7 +81,7 @@ class TestExtensionsGym : public QObject
         m_host = std::make_unique<NotebookHost>(*m_vault, *m_index, options);
         m_host->onTimer = [this](const QString &, int seconds, const QString &label) { m_timers.append({seconds, label}); };
         m_engine = std::make_unique<Engine>();
-        if (!m_engine->start(m_host.get(), Limits{2000 * BRULION_TEST_SLOWDOWN, 64ll << 20}))
+        if (!m_engine->start(m_host.get(), Limits{test::kRoomyMs, 64ll << 20}))
             return false;
         const Result loaded = m_engine->load(builtinExtension(u"silownia"_s));
         if (!loaded.ok())
@@ -440,7 +441,9 @@ private Q_SLOTS:
         big += u"  - [[X]] "_s + u"mc+"_s.repeated(20000) + u'\n';
         big += u"  - [[Y]] 100 kg 5×5\n"_s;
         QVERIFY(open({{u"journals/2026-11-11.md"_s, big}}));
-        QElapsedTimer clock;
+        // Within the app's time limit (Limits::timeoutMs) of work: the CPU time of this thread,
+        // where the engine runs, not a wall clock a stalled runner moves on.
+        test::CpuTimer clock;
         clock.start();
         const QVariantMap view = render(u"today"_s);
         QVERIFY(!view.isEmpty());
@@ -449,7 +452,8 @@ private Q_SLOTS:
         const QVariantMap capped = rowOf(view, u"X"_s);
         QVERIFY(!capped.isEmpty());
         QVERIFY(render(u"progress"_s).value(u"type"_s) == u"column"_s);
-        QVERIFY2(clock.elapsed() < 2000 * BRULION_TEST_SLOWDOWN, qPrintable(QString::number(clock.elapsed())));
+        QVERIFY2(clock.elapsed() < Limits{}.timeoutMs * BRULION_TEST_SLOWDOWN,
+                 qPrintable(QString::number(clock.elapsed())));
     }
 
     void twoYearsOfWorkouts()
@@ -463,7 +467,7 @@ private Q_SLOTS:
                          "  - [x] [[Podciąganie]] MC × 8, 7, 6\n  - [x] [[Plank]] 3×60 s\n"_s.arg(60 + i / 4).arg(40 + i / 8));
         }
         QVERIFY(open(notes));
-        QElapsedTimer clock;
+        test::CpuTimer clock; // the work, not the runner's stalls
         clock.start();
         const QVariantMap squat = render(u"progress"_s, {{u"exercise"_s, u"Przysiad"_s}});
         const qint64 one = clock.elapsed();
