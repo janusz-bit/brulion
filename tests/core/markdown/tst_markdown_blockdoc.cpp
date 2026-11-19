@@ -4,7 +4,8 @@
 #include "markdown/frontmatter.h"
 #include "markdown/parse.h"
 
-#include <QElapsedTimer>
+#include "testtiming.h"
+
 #include <QHash>
 #include <QPoint>
 #include <QRegularExpression>
@@ -2494,7 +2495,7 @@ private Q_SLOTS:
                            .arg(n);
             src += u"Akapit z ((abc123)) i [link](Strona%20B.md)\n\n"_s;
         }
-        QElapsedTimer t;
+        brulion::test::CpuTimer t;
         t.start();
         BlockDocument doc(src);
         QCOMPARE(doc.toString(), src);

@@ -6,7 +6,8 @@
 // at a point, ranges by rows, anchors, back to one page per row).
 #include "pdflayout.h"
 
-#include <QElapsedTimer>
+#include "testtiming.h"
+
 #include <QRandomGenerator>
 #include <QTest>
 
@@ -305,7 +306,7 @@ private Q_SLOTS:
         PdfPageLayout layout;
         QList<QSizeF> pages(20000, A4);
         pages[777] = A4Landscape;
-        QElapsedTimer timer;
+        brulion::test::CpuTimer timer; // the work: a stall of the runner does not count
         timer.start();
         layout.setPages(pages);
         layout.setGeometry(1200, 24, 12, 1000);
@@ -318,8 +319,8 @@ private Q_SLOTS:
             sum += layout.indexAt(height * (i % 1000) / 1000.0);
         const qint64 lookupMs = timer.elapsed();
         qInfo("20 000 pages: layout %lld ms, 10^6 lookups %lld ms (%d)", layoutMs, lookupMs, int(sum % 7));
-        QVERIFY2(layoutMs < 50, qPrintable(QString::number(layoutMs)));
-        QVERIFY2(lookupMs < 2000, qPrintable(QString::number(lookupMs)));
+        QVERIFY2(layoutMs < 50 * BRULION_TEST_SLOWDOWN, qPrintable(QString::number(layoutMs)));
+        QVERIFY2(lookupMs < 2000 * BRULION_TEST_SLOWDOWN, qPrintable(QString::number(lookupMs)));
         QCOMPARE(layout.indexAt(height - 30), 19999);
     }
 };

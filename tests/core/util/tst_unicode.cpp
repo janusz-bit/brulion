@@ -1,7 +1,8 @@
 // unicode::nfc: QString's NFC for every real text, in linear time for the texts that are not.
 #include "util/unicode.h"
 
-#include <QElapsedTimer>
+#include "testtiming.h"
+
 #include <QRandomGenerator>
 #include <QTest>
 
@@ -154,7 +155,7 @@ private Q_SLOTS:
     void timeIsLinear()
     {
         QFETCH(QString, text);
-        QElapsedTimer timer;
+        brulion::test::CpuTimer timer;
         timer.start();
         const QString result = unicode::nfc(text);
         const qint64 elapsed = timer.elapsed();

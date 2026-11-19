@@ -3,7 +3,8 @@
 
 #include "calctest.h"
 
-#include <QElapsedTimer>
+#include "testtiming.h"
+
 #include <QTest>
 
 using namespace brulion::calc;
@@ -364,13 +365,13 @@ private Q_SLOTS:
         model.header = {u"n"_s, u"suma"_s};
         for (int i = 0; i < 5000; ++i)
             model.rows.append({QString::number(i), u"=sum(A1:A%1)"_s.arg(i + 1)});
-        QElapsedTimer timer;
+        brulion::test::CpuTimer timer;
         timer.start();
         const TableEval e = evaluateTable(model);
         QCOMPARE(e.values[99][1], u"4950"_s);
         QCOMPARE(e.values[4999][1], kErrorMarker.toString());
         QCOMPARE(e.errors[4999][1], u"Obliczenie jest zbyt złożone"_s);
-        QVERIFY(timer.elapsed() < 60000);
+        QVERIFY(timer.elapsed() < 60000 * BRULION_TEST_SLOWDOWN);
     }
 
     void denseChainsInBothDirections()

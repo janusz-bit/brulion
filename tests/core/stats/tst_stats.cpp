@@ -1,7 +1,8 @@
 // Word and character counts and the reading time (stats/textstats.h).
 #include "stats/textstats.h"
 
-#include <QElapsedTimer>
+#include "testtiming.h"
+
 #include <QTest>
 
 using namespace Qt::StringLiterals;
@@ -246,12 +247,12 @@ void TestStats::largePage()
                               u"  ```\n  kod się nie liczy\n  ```\n"_s;
     for (int i = 0; i < 20'000; ++i)
         page += paragraph.arg(i);
-    QElapsedTimer timer;
+    brulion::test::CpuTimer timer;
     timer.start();
     const TextStats stats = brulion::stats::countMarkdown(page);
     QCOMPARE(stats.words, 20'000 * 4);
     QCOMPARE(stats.readingMinutes, 400);
-    QVERIFY2(timer.elapsed() < 10'000, qPrintable(QString::number(timer.elapsed())));
+    QVERIFY2(timer.elapsed() < 10'000 * BRULION_TEST_SLOWDOWN, qPrintable(QString::number(timer.elapsed())));
 }
 
 QTEST_GUILESS_MAIN(TestStats)

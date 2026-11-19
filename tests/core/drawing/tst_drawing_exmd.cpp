@@ -11,6 +11,8 @@
 #include "drawing/lzstring.h"
 #include "drawing/svgwrite.h"
 
+#include "testtiming.h"
+
 #include <QElapsedTimer>
 #include <QFile>
 #include <QJsonDocument>
@@ -1029,7 +1031,7 @@ private Q_SLOTS:
     {
         QFETCH(QByteArray, bytes);
         QFETCH(bool, readable);
-        QElapsedTimer timer;
+        brulion::test::CpuTimer timer;
         timer.start();
         ReadError why = ReadError::None;
         const std::optional<ExcalidrawMarkdownRead> read = readExcalidrawMarkdown(bytes, &why);

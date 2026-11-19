@@ -383,7 +383,7 @@ private Q_SLOTS:
         if (when == 1) {
             QElapsedTimer t;
             t.start();
-            while (loader.pendingResults() < 10 && t.elapsed() < 10000)
+            while (loader.pendingResults() < 10 && t.elapsed() < 10000 * BRULION_TEST_SLOWDOWN)
                 std::this_thread::yield();
             loader.step(0);
             applyChange();
@@ -448,7 +448,7 @@ private Q_SLOTS:
         manual.runAll();
         QElapsedTimer t;
         t.start();
-        while (loader.pendingResults() < 4 && t.elapsed() < 10000)
+        while (loader.pendingResults() < 4 && t.elapsed() < 10000 * BRULION_TEST_SLOWDOWN)
             std::this_thread::yield();
         QTest::qWait(100);
         QCOMPARE(loader.pendingResults(), 4); // never more

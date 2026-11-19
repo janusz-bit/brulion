@@ -2,7 +2,8 @@
 // malformed input and concurrent use.
 #include "log/redact.h"
 
-#include <QElapsedTimer>
+#include "testtiming.h"
+
 #include <QTest>
 #include <QThread>
 #include <QUrl>
@@ -236,7 +237,7 @@ void TestLogRedact::hostileInputStaysLinear()
     QFETCH(QString, unit);
     QFETCH(QString, tail);
     const QString hostile = unit.repeated(int(200'000 / unit.size())) + tail;
-    QElapsedTimer timer;
+    brulion::test::CpuTimer timer;
     timer.start();
     // One secret for every pattern, after the hostile text.
     const QString secrets = u"\nhttps://jan:tajne1@chmura.pl/dav\nAuthorization: Basic dGFqbmUyOnRham5l\n"

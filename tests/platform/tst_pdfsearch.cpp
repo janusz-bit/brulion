@@ -5,7 +5,8 @@
 // Android's own search is asked for.
 #include "pdfsearch.h"
 
-#include <QElapsedTimer>
+#include "testtiming.h"
+
 #include <QTest>
 
 using namespace Qt::StringLiterals;
@@ -87,13 +88,13 @@ private Q_SLOTS:
         QString text;
         while (text.size() < 100'000)
             text += u"Zażółć gęślą jaźń, żółw. "_s;
-        QElapsedTimer timer;
+        brulion::test::CpuTimer timer;
         timer.start();
         const Ranges found = brulion::platform::findPdfText(text, u"ZOLW"_s, 1000);
         const qint64 ms = timer.elapsed();
         qInfo("1000 hits in 100 000 characters: %lld ms", ms);
         QCOMPARE(found.size(), 1000);
-        QVERIFY2(ms < 200, qPrintable(QString::number(ms)));
+        QVERIFY2(ms < 200 * BRULION_TEST_SLOWDOWN, qPrintable(QString::number(ms)));
     }
 
     void rangeRects_data()

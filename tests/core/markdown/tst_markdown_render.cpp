@@ -5,7 +5,8 @@
 #include "markdown/math.h"
 #include "markdown/tokens.h"
 
-#include <QElapsedTimer>
+#include "testtiming.h"
+
 #include <QRegularExpression>
 #include <QSet>
 #include <QTest>
@@ -412,10 +413,10 @@ private Q_SLOTS:
     {
         QFETCH(QString, input);
         QFETCH(QString, expected);
-        QElapsedTimer t;
+        brulion::test::CpuTimer t;
         t.start();
         QCOMPARE(InlineRenderer(partsContext()).render(input), expected);
-        QVERIFY2(t.elapsed() < 500, qPrintable(QString::number(t.elapsed())));
+        QVERIFY2(t.elapsed() < 500 * BRULION_TEST_SLOWDOWN, qPrintable(QString::number(t.elapsed())));
         // Without the callback (exports, the clipboard): one link as before.
         const QString single = render(input);
         QVERIFY2(!single.contains(u"part:"), qPrintable(single));
@@ -1292,7 +1293,7 @@ private Q_SLOTS:
             s += u"*a "_s;
         for (int i = 0; i < 20000; ++i)
             s += u"b_ ~~c "_s;
-        QElapsedTimer t;
+        brulion::test::CpuTimer t;
         t.start();
         const QString out = render(s);
         QVERIFY(out.startsWith(u"*a *a"));
@@ -1304,7 +1305,7 @@ private Q_SLOTS:
         QString s;
         for (int i = 0; i < 5000; ++i)
             s += u"**a* _b_ [[c]] #d `e` 📅 2026-10-15 ~~f "_s;
-        QElapsedTimer t;
+        brulion::test::CpuTimer t;
         t.start();
         const QString out = render(s);
         QVERIFY(!out.isEmpty());

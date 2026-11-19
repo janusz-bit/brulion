@@ -3,7 +3,8 @@
 #include "reminders/reminders.h"
 #include "reminderstest.h"
 
-#include <QElapsedTimer>
+#include "testtiming.h"
+
 #include <QTest>
 
 using namespace brulion;
@@ -308,7 +309,7 @@ private Q_SLOTS:
         }
         VaultIndex index;
         fill(index, {{u"Duży.md"_s, content}});
-        QElapsedTimer timer;
+        brulion::test::CpuTimer timer;
         timer.start();
         const auto items = calendarItems(index, QDate(2026, 10, 1), QDate(2026, 10, 31));
         const qint64 elapsed = timer.elapsed();

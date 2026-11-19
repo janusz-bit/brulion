@@ -17,6 +17,8 @@
 #include "pdfsearch.h"
 #include "pdftext.h"
 
+#include "testtiming.h"
+
 #include <QDir>
 #include <QElapsedTimer>
 #include <QFile>
@@ -1024,13 +1026,13 @@ void TestPdfPages::loopingOutline()
     }
     const std::unique_ptr<PdfReader> reader = PdfReader::open(path);
     QVERIFY(reader);
-    QElapsedTimer timer;
+    brulion::test::CpuTimer timer;
     timer.start();
     const QList<PdfOutlineItem> items = reader->outline();
     qInfo("%s: a looping outline gave %d entries in %lld ms", qPrintable(pdfBackendName()), int(items.size()),
           timer.elapsed());
     QVERIFY(items.size() <= MaxPdfOutlineItems);
-    QVERIFY(timer.elapsed() < 10000);
+    QVERIFY(timer.elapsed() < 10000 * BRULION_TEST_SLOWDOWN);
     for (const PdfOutlineItem &item : items)
         QVERIFY(item.level < MaxPdfOutlineDepth);
 }

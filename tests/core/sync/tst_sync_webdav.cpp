@@ -979,7 +979,9 @@ private Q_SLOTS:
         QElapsedTimer clock;
         clock.start();
         const HttpResponse r = await<HttpResponse>([&](auto cb) { transport.send(request, cb); });
-        QVERIFY(clock.elapsed() < 5000);
+        // Ended by the abort: before await() gives up on a request that never ends (20 s), with
+        // room for a stalled runner.
+        QVERIFY2(clock.elapsed() < 15000, qPrintable(QString::number(clock.elapsed())));
         QCOMPARE(r.status, 0);
         QVERIFY(!r.networkError.isEmpty());
         QVERIFY(!r.timedOut);

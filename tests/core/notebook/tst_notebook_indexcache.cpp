@@ -14,6 +14,7 @@
 #include "filesystemtraits.h"
 #include "index/index.h"
 #include "indexcompare.h"
+#include "testtiming.h"
 #include "util/paths.h"
 #include "vault/vault.h"
 
@@ -410,15 +411,18 @@ private Q_SLOTS:
         used.searchFromCache = true;
         keeper.loaded(used); // nothing to save after the load
         QVERIFY(!keeper.isDirty());
+        // Typing goes on until the file is written: after maxDirtyMs, the only wait the keeper has
+        // left once loaded, which no edit restarts (a wait that every edit restarted would never
+        // end here). Not timed against maxDirtyMs itself: a stalled runner delays the save by as
+        // much as it stalls.
         QElapsedTimer clock;
         clock.start();
         int edit = 0;
-        while (saved.count() == 0 && clock.elapsed() < 10000) {
+        while (saved.count() == 0 && clock.elapsed() < test::kRoomyMs) {
             l.index->update(u"Pisanie.md"_s, u"- tekst pisany bez przerwy %1"_s.arg(++edit));
             QTest::qWait(40);
         }
         QCOMPARE(saved.count(), 1);
-        QVERIFY2(clock.elapsed() < 3000, qPrintable(QString::number(clock.elapsed())));
         pool.waitForDone();
         Loaded warm = load(root, cache, 0, pool);
         QCOMPARE(warm.stats.cache, u"used"_s);

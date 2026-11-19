@@ -7,7 +7,8 @@
 #include "markdown/tokens.h"
 #include "markdown/tokens_p.h"
 
-#include <QElapsedTimer>
+#include "testtiming.h"
+
 #include <QTest>
 
 using namespace brulion;
@@ -337,11 +338,11 @@ private Q_SLOTS:
         QString s;
         for (int i = 0; i < 20000; ++i)
             s += u"🔁 📅 (@ [# SCHEDULED: <"_s;
-        QElapsedTimer t;
+        brulion::test::CpuTimer t;
         t.start();
         findTokens(s);
         markdown::stripTokens(s);
-        QVERIFY(t.elapsed() < 3000);
+        QVERIFY(t.elapsed() < 3000 * BRULION_TEST_SLOWDOWN);
     }
 
     // --- task markers ------------------------------------------------------------------------
@@ -527,11 +528,11 @@ private Q_SLOTS:
                 runs += u" x "_s;
             runs += QString(k + 1, u'`');
         }
-        QElapsedTimer t;
+        brulion::test::CpuTimer t;
         t.start();
         detail::maskInline(s);
         const QString m = detail::maskInline(runs);
-        QVERIFY(t.elapsed() < 2000);
+        QVERIFY(t.elapsed() < 2000 * BRULION_TEST_SLOWDOWN);
         QCOMPARE(m, runs); // no run has a partner of the same length
     }
 

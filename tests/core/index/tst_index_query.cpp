@@ -6,7 +6,8 @@
 #include "index/textutil_p.h"
 #include "markdown/parse.h"
 
-#include <QElapsedTimer>
+#include "testtiming.h"
+
 #include <QTest>
 
 #include <algorithm>
@@ -599,7 +600,7 @@ private Q_SLOTS:
             index.update(u"Strony/"_s + name + u".md"_s, u"- [ ] zadanie %1"_s.arg(i));
         }
         const QString stars = QString(u"*a"_s).repeated(16);
-        QElapsedTimer timer;
+        brulion::test::CpuTimer timer;
         timer.start();
         QCOMPARE(runQuery(parsed(u"type:tasks page:"_s + stars + u"*x*y"_s), index, fixture::Today).total, 300);
         QCOMPARE(runQuery(parsed(u"type:tasks path:strony/"_s + stars + u"*x"_s), index, fixture::Today).total, 300);

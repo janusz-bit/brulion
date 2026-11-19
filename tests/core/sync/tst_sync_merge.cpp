@@ -1,7 +1,8 @@
 // Three-way merge of notes (diff3 + union of concurrent insertions) and of JSON objects.
 #include "sync/merge.h"
 
-#include <QElapsedTimer>
+#include "testtiming.h"
+
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -408,10 +409,10 @@ private Q_SLOTS:
         for (int i = 0; i < 4000; ++i)
             lines.append(i % 2 ? QString() : u"akapit numer %1 — zażółć"_s.arg(i));
         const QString base = lines.join(u'\n') + u'\n';
-        QElapsedTimer timer;
+        brulion::test::CpuTimer timer;
         timer.start();
         const MergeResult r = merge3(base, u"nowy początek\n"_s + base, base + u"nowy koniec\n"_s);
-        QVERIFY(timer.elapsed() < 2000);
+        QVERIFY(timer.elapsed() < 2000 * BRULION_TEST_SLOWDOWN);
         QVERIFY(r.clean);
         QCOMPARE(r.text, u"nowy początek\n"_s + base + u"nowy koniec\n"_s);
     }

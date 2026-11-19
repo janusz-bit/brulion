@@ -4,7 +4,8 @@
 // surrogate pairs, decomposed letters and malformed syntax.
 #include "spell/spellwords.h"
 
-#include <QElapsedTimer>
+#include "testtiming.h"
+
 #include <QTest>
 
 using namespace Qt::StringLiterals;
@@ -220,10 +221,10 @@ private Q_SLOTS:
         QString text;
         for (int i = 0; i < 20000; ++i)
             text += u"słowo [[link]] `kod` #tag "_s;
-        QElapsedTimer timer;
+        brulion::test::CpuTimer timer;
         timer.start();
         QCOMPARE(findWords(text).size(), 20000);
-        QVERIFY2(timer.elapsed() < 5000, qPrintable(QString::number(timer.elapsed())));
+        QVERIFY2(timer.elapsed() < 5000 * BRULION_TEST_SLOWDOWN, qPrintable(QString::number(timer.elapsed())));
         const QString run(100000, u'a');
         QCOMPARE(findWords(run).size(), 1);
     }

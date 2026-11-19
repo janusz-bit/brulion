@@ -9,7 +9,8 @@
 #include "markdown/inlinerenderer.h"
 #include "markdown/math.h"
 
-#include <QElapsedTimer>
+#include "testtiming.h"
+
 #include <QRandomGenerator>
 #include <QRegularExpression>
 #include <QTest>
@@ -467,7 +468,7 @@ private Q_SLOTS:
     void deepNesting()
     {
         QFETCH(QString, html);
-        QElapsedTimer timer;
+        brulion::test::CpuTimer timer;
         timer.start();
         const QString md = htmlToMarkdown(html).markdown;
         QVERIFY2(timer.elapsed() < 20000 * BRULION_TEST_SLOWDOWN, qPrintable(QString::number(timer.elapsed())));
@@ -670,7 +671,7 @@ private Q_SLOTS:
         // QTextDocument alone needs about 13 s for 20 000 items of one list (x86_64, Release).
         QFETCH(QString, html);
         QFETCH(int, lines);
-        QElapsedTimer timer;
+        brulion::test::CpuTimer timer;
         timer.start();
         const QString md = htmlToMarkdown(html).markdown;
         QVERIFY2(timer.elapsed() < 4000 * BRULION_TEST_SLOWDOWN, qPrintable(QString::number(timer.elapsed())));
@@ -875,7 +876,7 @@ private Q_SLOTS:
             chain += u"$a "_s;
         for (int i = 0; i < 2000; ++i)
             chain += u"b$ "_s;
-        QElapsedTimer timer;
+        brulion::test::CpuTimer timer;
         timer.start();
         const QString out = detail::escapeTextFormulas(chain);
         QVERIFY2(timer.elapsed() < 4000 * BRULION_TEST_SLOWDOWN, qPrintable(QString::number(timer.elapsed())));

@@ -37,7 +37,7 @@ Result download(FakeMicrosoft &ms, const QString &token = {}, const brulion::mst
     Result r;
     QElapsedTimer t;
     t.start();
-    while (finished.isEmpty() && failed.isEmpty() && t.elapsed() < 10000)
+    while (finished.isEmpty() && failed.isEmpty() && t.elapsed() < 10000 * BRULION_TEST_SLOWDOWN)
         QTest::qWait(5);
     if (!finished.isEmpty()) {
         r.raw = finished.first().at(0).toByteArray();

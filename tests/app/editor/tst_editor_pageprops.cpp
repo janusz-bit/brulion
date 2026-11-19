@@ -7,8 +7,9 @@
 #include "fakeeditorhost.h"
 #include "pagecontroller.h"
 
+#include "testtiming.h"
+
 #include <QAbstractItemModelTester>
-#include <QElapsedTimer>
 #include <QSignalSpy>
 #include <QTest>
 
@@ -467,12 +468,12 @@ private Q_SLOTS:
         for (int i = 0; i < 5000; ++i)
             content += u"- blok "_s + QString::number(i) + u" zażółć\n"_s;
         Fixture f(content);
-        QElapsedTimer timer;
+        brulion::test::CpuTimer timer;
         timer.start();
         QVERIFY(f.page.setPageProperty(QString(), u"status"_s, u"b"_s, u"text"_s).value(u"ok"_s).toBool());
         const qint64 ms = timer.elapsed();
         qDebug("a property edit on a 5000-block page: %lld ms", ms);
-        QVERIFY2(ms < 5000, "an edit costs one applyText, not more");
+        QVERIFY2(ms < 5000 * BRULION_TEST_SLOWDOWN, "an edit costs one applyText, not more");
         QCOMPARE(f.model()->rowCount(), 5001);
     }
 };

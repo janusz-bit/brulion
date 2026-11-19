@@ -14,8 +14,9 @@
 #include "markdown/frontmatter.h"
 #include "markdown/inline.h"
 
+#include "testtiming.h"
+
 #include <QDir>
-#include <QElapsedTimer>
 #include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -1823,7 +1824,7 @@ private Q_SLOTS:
         }
         entries.prepend(FileEntry{u"!!!meta.json"_s, metaJson(notes)});
         const InputFile zip = iotest::zip(u"duży.zip"_s, entries);
-        QElapsedTimer timer;
+        brulion::test::CpuTimer timer;
         timer.start();
         const ImportResult r = importFiles({zip});
         const qint64 ms = timer.elapsed();
@@ -1842,7 +1843,7 @@ private Q_SLOTS:
         const QByteArray meta = metaJson(
                 {Meta{u"c1"_s, u"Kod"_s, u"Kod.py"_s, {}, {}, {}, u"code"_s, u"text/x-python"_s},
                  Meta{u"m1"_s, u"Diagram"_s, u"Diagram.dat"_s, {}, {}, {}, u"mermaid"_s, u"text/vnd.mermaid"_s}});
-        QElapsedTimer timer;
+        brulion::test::CpuTimer timer;
         timer.start();
         const ImportResult r = importZip({{u"!!!meta.json"_s, meta},
                                           {u"Kod.py"_s, "x = 1\n" + ticks},
@@ -1862,7 +1863,7 @@ private Q_SLOTS:
             attributes.append(label(u"tag"_s + QString::number(k)));
         }
         const QByteArray meta = metaJson({Meta{u"a1"_s, u"Notatka"_s, u"Notatka.html"_s, {}, {}, attributes}});
-        QElapsedTimer timer;
+        brulion::test::CpuTimer timer;
         timer.start();
         const ImportResult r =
                 importZip({{u"!!!meta.json"_s, meta}, {u"Notatka.html"_s, page(u"Notatka"_s, u"<p>x</p>"_s)}});
@@ -2298,7 +2299,7 @@ private Q_SLOTS:
         // Hostile notes never crash and stay (close to) linear: a generous bound.
         QFETCH(QString, content);
         QFETCH(bool, markdown);
-        QElapsedTimer timer;
+        brulion::test::CpuTimer timer;
         timer.start();
         if (markdown)
             trilium::markdownNoteToMarkdown(content, u"T"_s, testResolver());
@@ -2338,7 +2339,7 @@ private Q_SLOTS:
         }
         entries.prepend(FileEntry{u"!!!meta.json"_s, metaJson(folders)});
         const InputFile zip = iotest::zip(u"duży.zip"_s, entries);
-        QElapsedTimer timer;
+        brulion::test::CpuTimer timer;
         timer.start();
         const ImportResult r = importFiles({zip});
         const qint64 ms = timer.elapsed();

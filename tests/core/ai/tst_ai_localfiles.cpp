@@ -498,7 +498,7 @@ private Q_SLOTS:
         qsizetype asked = 0;
         QElapsedTimer waiting;
         waiting.start();
-        while (asked == 0 && waiting.elapsed() < 20000) {
+        while (asked == 0 && waiting.elapsed() < 20000 * BRULION_TEST_SLOWDOWN) {
             QCoreApplication::processEvents();
             there([&] { asked = server->requests.size(); });
         }

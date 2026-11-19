@@ -3,7 +3,8 @@
 #include "chart/chart.h"
 #include "diagram/svg.h"
 
-#include <QElapsedTimer>
+#include "testtiming.h"
+
 #include <QTest>
 #include <QXmlStreamReader>
 
@@ -323,7 +324,7 @@ private Q_SLOTS:
         QString big = u"| a | b |\n|---|---|\n"_s;
         for (int i = 0; i <= limits::MaxPoints; ++i)
             big += u"| r"_s + QString::number(i) + u" | "_s + QString::number(i) + u" |\n"_s;
-        QElapsedTimer timer;
+        brulion::test::CpuTimer timer;
         timer.start();
         const Result r = renderOn(big + u'\n', QString());
         QVERIFY(!r.ok());
@@ -341,7 +342,7 @@ private Q_SLOTS:
                 texts += it.type == diagram::Item::Type::Text ? 1 : 0;
             QVERIFY2(texts < 100, qPrintable(QString::number(texts)));
         }
-        QVERIFY2(timer.elapsed() < 20000, qPrintable(QString::number(timer.elapsed())));
+        QVERIFY2(timer.elapsed() < 20000 * BRULION_TEST_SLOWDOWN, qPrintable(QString::number(timer.elapsed())));
         // Too many series asked for.
         QString wide = u"|"_s;
         QString delimiter = u"|"_s;

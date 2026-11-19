@@ -6,7 +6,8 @@
 
 #include "calctest.h"
 
-#include <QElapsedTimer>
+#include "testtiming.h"
+
 #include <QTest>
 #include <QThread>
 
@@ -614,14 +615,14 @@ private Q_SLOTS:
 
     void exponentialRecursionIsBounded()
     {
-        QElapsedTimer timer;
+        brulion::test::CpuTimer timer;
         timer.start();
         Scope scope;
         const auto lines = evaluateCalc(u"f(n) = n < 1 ? 1 : f(n - 1) + f(n - 1)\nf(40)\nf(10)\n2 + 2", scope);
         QCOMPARE(lines[1].error, u"Obliczenie jest zbyt złożone"_s);
         QCOMPARE(lines[2].value, u"1024"_s);
         QCOMPARE(lines[3].value, u"4"_s);
-        QVERIFY2(timer.elapsed() < 20000, "the work budget must stop the evaluation quickly");
+        QVERIFY2(timer.elapsed() < 20000 * BRULION_TEST_SLOWDOWN, "the work budget must stop the evaluation quickly");
         QCOMPARE(last(u"fib(n) = n < 2 ? n : fib(n - 1) + fib(n - 1 - 1)\nfib(15)"_s), u"610"_s);
     }
 
@@ -656,10 +657,10 @@ private Q_SLOTS:
         for (int i = 0; i < 5; ++i)
             block += u"h(17)\n"_s;
         Scope scope;
-        QElapsedTimer timer;
+        brulion::test::CpuTimer timer;
         timer.start();
         const auto lines = evaluateCalc(block, scope);
-        QVERIFY2(timer.elapsed() < 3000, qPrintable(u"%1 ms"_s.arg(timer.elapsed())));
+        QVERIFY2(timer.elapsed() < 3000 * BRULION_TEST_SLOWDOWN, qPrintable(u"%1 ms"_s.arg(timer.elapsed())));
         QCOMPARE(lines[1].value.size(), 1000); // 65 536 characters, shown truncated
         QCOMPARE(lines[3].error, u"Obliczenie jest zbyt złożone"_s);
         QCOMPARE(inl(u"concat(\"a\", 1, \"b\") == \"a1b\""_s), u"prawda"_s);
@@ -674,10 +675,10 @@ private Q_SLOTS:
         const QString y = u"y = ["_s + QStringList(700, u"x"_s).join(u", "_s) + u']';
         const QString sum = u"sum("_s + QStringList(40, u"y"_s).join(u", "_s) + u')';
         Scope scope;
-        QElapsedTimer timer;
+        brulion::test::CpuTimer timer;
         timer.start();
         const auto lines = evaluateCalc(QString(x + u'\n' + y + u'\n' + sum), scope);
-        QVERIFY2(timer.elapsed() < 5000, qPrintable(u"%1 ms"_s.arg(timer.elapsed())));
+        QVERIFY2(timer.elapsed() < 5000 * BRULION_TEST_SLOWDOWN, qPrintable(u"%1 ms"_s.arg(timer.elapsed())));
         QCOMPARE(lines[0].assigned, u"x"_s);
         QCOMPARE(lines[1].error, u"Wynik jest za duży (limit 20000)"_s);
         QVERIFY(lines[2].hasError());

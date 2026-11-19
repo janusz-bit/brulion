@@ -3,7 +3,8 @@
 
 #include "calctest.h"
 
-#include <QElapsedTimer>
+#include "testtiming.h"
+
 #include <QTest>
 
 using namespace brulion::calc;
@@ -287,7 +288,7 @@ private Q_SLOTS:
         for (int i = 0; i < 6000; ++i)
             block += u"1\nsum\n"_s;
         Scope scope;
-        QElapsedTimer timer;
+        brulion::test::CpuTimer timer;
         timer.start();
         const auto lines = evaluateCalc(block, scope);
         QVERIFY2(timer.elapsed() < 20000 * BRULION_TEST_SLOWDOWN, "aggregates must be charged to the work budget");

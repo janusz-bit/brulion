@@ -5,7 +5,8 @@
 #include "markdown/inlinerenderer.h"
 #include "markdown/math.h"
 
-#include <QElapsedTimer>
+#include "testtiming.h"
+
 #include <QRandomGenerator>
 #include <QTest>
 #include <QThread>
@@ -254,7 +255,7 @@ private Q_SLOTS:
         QString html;
         qint64 ms = -1;
         QVERIFY(runOnASmallStack([&] {
-            QElapsedTimer timer;
+            brulion::test::CpuTimer timer; // of the thread with the small stack
             timer.start();
             html = renderMath(latex, true);
             ms = timer.elapsed();
@@ -325,7 +326,7 @@ private Q_SLOTS:
     void spansInLinearTime()
     {
         QFETCH(QString, text);
-        QElapsedTimer timer;
+        brulion::test::CpuTimer timer;
         timer.start();
         const QList<MathSpan> spans = findMathSpans(text);
         QVERIFY2(timer.elapsed() < 1000 * BRULION_TEST_SLOWDOWN, qPrintable(u"%1 ms"_s.arg(timer.elapsed())));

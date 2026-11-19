@@ -3,6 +3,8 @@
 #include "markdown/parse.h"
 #include "markdown/structure_p.h"
 
+#include "testtiming.h"
+
 #include <QElapsedTimer>
 #include <QSet>
 
@@ -1076,7 +1078,7 @@ private Q_SLOTS:
         // An outline of `- $$` items with no closing line: each item's search would run to the end
         // of the note (a hostile note of half a megabyte took seconds).
         const QString src = u"- $$\n  - a\n"_s.repeated(50'000);
-        QElapsedTimer t;
+        brulion::test::CpuTimer t;
         t.start();
         const ParsedNote note = parseNote(u"a.md"_s, src);
         QVERIFY2(t.elapsed() < 3000 * BRULION_TEST_SLOWDOWN, qPrintable(QString::number(t.elapsed())));

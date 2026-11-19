@@ -23,6 +23,8 @@
 #include "vault/history.h"
 #include "vault/vault.h"
 
+#include "testtiming.h"
+
 #include <QDir>
 #include <QElapsedTimer>
 #include <QFile>
@@ -30,6 +32,9 @@
 #include <QStandardItemModel>
 #include <QTemporaryDir>
 #include <QTest>
+
+#include <algorithm>
+#include <limits>
 
 using namespace Qt::StringLiterals;
 using namespace brulion::content;
@@ -1094,7 +1099,7 @@ private Q_SLOTS:
         for (int d = 1; d <= 1200; ++d)
             files.insert(u"journals/%1.md"_s.arg(QDate(2026, 10, 14).addDays(-d).toString(Qt::ISODate)), u"- dzień %1 [[Strona 7]]\n"_s.arg(d));
         auto ws = open(files);
-        QElapsedTimer timer;
+        brulion::test::CpuTimer timer; // this thread's work: a stalled runner does not count
         timer.start();
         PageListModel pages;
         pages.setWorkspace(ws.get());
@@ -1127,7 +1132,7 @@ private Q_SLOTS:
         QCOMPARE(search.rowCount(), 100);
         QCOMPARE(search.totalCount(), 100);
         qInfo() << "lists of a big notebook built in" << timer.elapsed() << "ms";
-        QVERIFY2(timer.elapsed() < 20000, "the lists take far too long");
+        QVERIFY2(timer.elapsed() < 20000 * BRULION_TEST_SLOWDOWN, "the lists take far too long");
     }
 
     // Each reference is its block as the editor holds it (BlockDocument), rendered: found in the
@@ -1197,17 +1202,32 @@ private Q_SLOTS:
         QCOMPARE(refs.hiddenCount(), 730 * 3 - 50);
         QVERIFY(refs.get(1).value(u"html"_s).toString().contains(u"<b>budżecie</b>"_s));
 
-        // A save in an unrelated note (typing elsewhere): the rows stay, the refresh is cheap.
+        // A save in an unrelated note (typing elsewhere): the rows stay, the refresh is cheap —
+        // the fastest of a few (a stall of the runner lengthens one refresh, not all of them).
         QSignalSpy resets(&refs, &QAbstractItemModel::modelReset);
         QSignalSpy changed(&refs, &QAbstractItemModel::dataChanged);
-        QVERIFY(ws->writeFile(u"Inna.md"_s, u"- coś innego, dopisane\n"_s));
-        timer.restart();
-        refs.refreshNow();
-        const qint64 again = timer.elapsed();
+        qint64 again = std::numeric_limits<qint64>::max();
+        for (int save = 0; save < 5; ++save) {
+            QVERIFY(ws->writeFile(u"Inna.md"_s, u"- coś innego, dopisane %1\n"_s.arg(save)));
+            timer.restart();
+            refs.refreshNow();
+            again = std::min(again, timer.nsecsElapsed());
+        }
         QCOMPARE(resets.size(), 0);
         QCOMPARE(changed.size(), 0);
         QCOMPARE(refs.refCount(), 730 * 3);
-        qInfo() << "references of a busy page:" << first << "ms, after an unrelated save" << again << "ms";
+        // What rendering every reference costs here: the same page's references without a limit
+        // (a stall there only makes the bound below looser).
+        BacklinksModel everyRef;
+        everyRef.setWorkspace(ws.get());
+        everyRef.setPath(u"Praca.md"_s);
+        everyRef.setLimit(0);
+        everyRef.refreshNow();
+        timer.restart();
+        everyRef.refreshNow();
+        const qint64 everything = timer.nsecsElapsed();
+        qInfo("references of a busy page: %lld ms, after an unrelated save %.2f ms, every one rendered %.2f ms", first,
+              again / 1e6, everything / 1e6);
 
         // Editing a referencing block updates its row.
         const QString path = refs.get(1).value(u"path"_s).toString();
@@ -1233,7 +1253,7 @@ private Q_SLOTS:
         QCOMPARE(refRows, 100);
         QCOMPARE(rendered, 100);
         // Debug build on the laptop: ~110 ms when every reference was rendered, ~5 ms now.
-        QVERIFY2(again < 40 * BRULION_TEST_SLOWDOWN, "an unrelated save re-renders every reference");
+        QVERIFY2(again * 4 < everything, "an unrelated save re-renders every reference");
     }
 
     // ---- Page tools ---------------------------------------------------------------------------------

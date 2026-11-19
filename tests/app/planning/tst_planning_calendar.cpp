@@ -11,6 +11,7 @@
 
 #include "dates/local.h"
 #include "index/querycache.h"
+#include "testtiming.h"
 
 #include <QElapsedTimer>
 #include <QRandomGenerator>
@@ -749,7 +750,7 @@ private Q_SLOTS:
         auto index = makeIndex(files);
         CalendarModel m;
         m.setToday(today.toString(Qt::ISODate));
-        QElapsedTimer t;
+        brulion::test::CpuTimer t; // the model works on this thread: a stall of the runner does not count
         t.start();
         m.setVaultIndex(index.get());
         const qint64 month = t.elapsed();

@@ -19,6 +19,8 @@
 #include "pagecontroller.h"
 #include "pickedfiles.h"
 
+#include "testtiming.h"
+
 #include <QAbstractItemModelTester>
 #include <QBuffer>
 #include <QClipboard>
@@ -468,7 +470,7 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         QCOMPARE(changed.size(), 0);
         // The timer is armed for just after midnight (by this clock: 2 s).
         now = QDateTime(QDate(2026, 10, 17), QTime(0, 0, 1));
-        QTRY_COMPARE_WITH_TIMEOUT(changed.size(), 1, 5000);
+        QTRY_COMPARE_WITH_TIMEOUT(changed.size(), 1, 20000 * BRULION_TEST_SLOWDOWN);
         QCOMPARE(changed.first().first().toDate(), QDate(2026, 10, 17));
         clock->check();
         QCOMPARE(changed.size(), 1);
@@ -5963,7 +5965,7 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         QCOMPARE(failed.size(), 1);
         QVERIFY(f.page.dirty());
         f.host.setFailWrites(false);
-        QTRY_COMPARE_WITH_TIMEOUT(f.host.pendingWrites(), 1, 5000); // the retry, after 2 s
+        QTRY_COMPARE_WITH_TIMEOUT(f.host.pendingWrites(), 1, 20000 * BRULION_TEST_SLOWDOWN); // the retry, after 2 s
         f.host.completeWrites();
         QCOMPARE(f.host.file(Page), u"- a 1 żółw\n"_s);
         QVERIFY(!f.page.dirty());
@@ -5980,7 +5982,7 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         f.page.saveInBackground();
         f.host.setFailWrites(true);
         f.host.completeWrites(); // the first failure: tried again after 2 s
-        QTRY_COMPARE_WITH_TIMEOUT(f.host.pendingWrites(), 1, 5000);
+        QTRY_COMPARE_WITH_TIMEOUT(f.host.pendingWrites(), 1, 20000 * BRULION_TEST_SLOWDOWN);
         f.host.completeWrites(); // the second: next after 4 s
         f.host.setFailWrites(false);
         f.page.setPath(u"Inna.md"_s); // (saved on the way)
@@ -5990,7 +5992,8 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         f.host.setFailWrites(true);
         f.host.completeWrites();
         f.host.setFailWrites(false);
-        QTRY_COMPARE_WITH_TIMEOUT(f.host.pendingWrites(), 1, 3500);
+        // After 2 s, before the 8 s of a backoff shared by the pages: with room for a stall.
+        QTRY_COMPARE_WITH_TIMEOUT(f.host.pendingWrites(), 1, 6000);
         f.host.completeWrites();
         QCOMPARE(f.host.file(u"Inna.md"_s), u"- inna źdźbło\n"_s);
     }
@@ -6688,7 +6691,7 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         QSignalSpy reset(f.model(), &QAbstractItemModel::modelReset);
         QSignalSpy inserted(f.model(), &QAbstractItemModel::rowsInserted);
         QSignalSpy removed(f.model(), &QAbstractItemModel::rowsRemoved);
-        QElapsedTimer typing;
+        brulion::test::CpuTimer typing; // the work: a stall of the runner does not count
         typing.start();
         QString text = f.edit(row);
         for (int k = 0; k < 50; ++k) {

@@ -9,6 +9,8 @@
 #include "pagecontroller.h"
 #include "sourcetextsync.h"
 
+#include "testtiming.h"
+
 #include <QElapsedTimer>
 #include <QGuiApplication>
 #include <QRandomGenerator>
@@ -316,7 +318,8 @@ private Q_SLOTS:
         // endings mapped back: O(page)); now it hands over the edit. Both ways are timed by what
         // they do themselves, not the document's own work (insertion, layout, highlighting: 3-4 ms
         // a keystroke here in a Debug build, the same both ways), so that a busy machine (CI runs
-        // tests in parallel) does not hide the difference in that work's noise.
+        // tests in parallel) does not hide the difference in that work's noise; and compared by
+        // their median keystrokes, which a stall of the runner in a few of them does not move.
         Fixture f(pageOf(9000, u"\r\n"_s), 100000, false, highlighted);
         QVERIFY(f.page.sourceText().size() > 500'000);
         // The sync's slot alone: a clock started by a slot connected before it and read by one
@@ -324,17 +327,21 @@ private Q_SLOTS:
         // connected first, makes its changes of formats before the clock starts).
         f.sync.setDocument(nullptr);
         QElapsedTimer clock;
-        qint64 edits = 0;
+        qint64 slot = 0; // of the keystroke being typed
         QObject::connect(&f.doc, &QTextDocument::contentsChange, &f.sync, [&clock] { clock.start(); });
         f.sync.setDocument(&f.doc);
         QObject::connect(&f.doc, &QTextDocument::contentsChange, &f.sync,
-                         [&clock, &edits] { edits += clock.nsecsElapsed(); });
+                         [&clock, &slot] { slot += clock.nsecsElapsed(); });
         const int middle = f.size() / 2;
         constexpr int Keys = 60;
+        QList<qint64> edits;
         QElapsedTimer timer;
         timer.start();
-        for (int k = 0; k < Keys; ++k)
+        for (int k = 0; k < Keys; ++k) {
+            slot = 0;
             f.type(middle + k, u"ż"_s);
+            edits.append(slot);
+        }
         const qint64 all = timer.nsecsElapsed();
         QCOMPARE(f.sync.wholeTexts(), 0);
         QVERIFY(f.sync.edits() >= Keys);
@@ -345,7 +352,7 @@ private Q_SLOTS:
         Fixture old(pageOf(9000, u"\r\n"_s), 100000, false, highlighted);
         old.sync.setActive(false);
         QString last = old.shown();
-        qint64 whole = 0;
+        QList<qint64> whole;
         for (int k = 0; k < Keys; ++k) {
             old.type(middle + k, u"ż"_s);
             timer.restart();
@@ -354,14 +361,16 @@ private Q_SLOTS:
                 last = text;
                 old.page.setSourceText(text);
             }
-            whole += timer.nsecsElapsed();
+            whole.append(timer.nsecsElapsed());
         }
         QCOMPARE(old.page.sourceText(), f.page.sourceText());
-        qInfo("500 KB page, %d keystrokes: %.2f ms each in all, handing over %.3f ms each by edits, "
-              "%.3f ms each by whole texts",
-              Keys, double(all) / Keys / 1e6, double(edits) / Keys / 1e6, double(whole) / Keys / 1e6);
+        const qint64 byEdits = brulion::test::medianOf(edits);
+        const qint64 byWhole = brulion::test::medianOf(whole);
+        qInfo("500 KB page, %d keystrokes: %.2f ms each in all, handing over %.3f ms (median) by edits, "
+              "%.3f ms by whole texts",
+              Keys, double(all) / Keys / 1e6, double(byEdits) / 1e6, double(byWhole) / 1e6);
         // (Measured, Debug on x86_64: about 0.1 ms against 4.2 ms.)
-        QVERIFY2(edits * 3 < whole, "a keystroke in source mode costs about as much as the whole page");
+        QVERIFY2(byEdits * 3 < byWhole, "a keystroke in source mode costs about as much as the whole page");
     }
 };
 

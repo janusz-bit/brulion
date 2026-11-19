@@ -4,7 +4,8 @@
 #include "markdown/highlight.h"
 #include "markdown/inlinerenderer.h"
 
-#include <QElapsedTimer>
+#include "testtiming.h"
+
 #include <QTest>
 
 using namespace brulion;
@@ -238,11 +239,11 @@ private Q_SLOTS:
             text += u"<mark>a "_s;
         for (int i = 0; i < 20000; ++i)
             text += u"</mark "_s;
-        QElapsedTimer timer;
+        brulion::test::CpuTimer timer;
         timer.start();
         QCOMPARE(findMarkPairs(text).size(), 0); // "</mark " is no tag
         (void)::render(text);
-        QVERIFY2(timer.elapsed() < 5000, qPrintable(QString::number(timer.elapsed())));
+        QVERIFY2(timer.elapsed() < 5000 * BRULION_TEST_SLOWDOWN, qPrintable(QString::number(timer.elapsed())));
     }
 
     void findSpans()
