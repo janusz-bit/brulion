@@ -110,27 +110,49 @@ class TestExtensionsGym : public QObject
         return r.value.toMap();
     }
 
-    // The first row of today's view whose link names `exercise`.
-    static QVariantMap rowOf(const QVariantMap &view, const QString &exercise)
+    // A card's controls in order, through its lines (the rows in the card).
+    static QVariantList controlsOf(const QVariantMap &card)
+    {
+        QVariantList out;
+        for (const QVariant &line : card.value(u"children"_s).toList())
+            out << line.toMap().value(u"children"_s).toList();
+        return out;
+    }
+
+    // The first card of today's view whose link names `exercise`.
+    static QVariantMap cardOf(const QVariantMap &view, const QString &exercise)
     {
         for (const QVariant &child : view.value(u"children"_s).toList()) {
-            const QVariantMap row = child.toMap();
-            if (row.value(u"type"_s) != u"row"_s)
+            const QVariantMap card = child.toMap();
+            if (card.value(u"type"_s) != u"card"_s)
                 continue;
-            const QVariantList controls = row.value(u"children"_s).toList();
+            const QVariantList controls = controlsOf(card);
             if (controls.size() > 1 && controls[1].toMap().value(u"page"_s) == exercise)
-                return row;
+                return card;
         }
         return {};
     }
 
-    static QVariantMap control(const QVariantMap &row, const QString &type, int nth = 1)
+    static QVariantMap control(const QVariantMap &card, const QString &type, int nth = 1)
     {
         int seen = 0;
-        for (const QVariant &c : row.value(u"children"_s).toList())
+        for (const QVariant &c : controlsOf(card))
             if (c.toMap().value(u"type"_s) == type && ++seen == nth)
                 return c.toMap();
         return {};
+    }
+
+    // The kinds of a card's lines and their controls: "row: check link text|row: stepper stepper|…".
+    static QString linesOf(const QVariantMap &card)
+    {
+        QStringList lines;
+        for (const QVariant &line : card.value(u"children"_s).toList()) {
+            QStringList types;
+            for (const QVariant &c : line.toMap().value(u"children"_s).toList())
+                types << c.toMap().value(u"type"_s).toString();
+            lines << line.toMap().value(u"type"_s).toString() + u": "_s + types.join(u' ');
+        }
+        return lines.join(u'|');
     }
 
     Result act(const QVariantMap &node, const QVariantMap &extra = {})
@@ -286,7 +308,7 @@ private Q_SLOTS:
 
         QVariantMap view = render(u"today"_s);
         QCOMPARE(view.value(u"children"_s).toList().value(0).toMap().value(u"text"_s).toString(), u"Trening B"_s);
-        QVariantMap row = rowOf(view, u"Przysiad"_s);
+        QVariantMap row = cardOf(view, u"Przysiad"_s);
         QCOMPARE(control(row, u"text"_s).value(u"text"_s).toString(), u"105 kg 3×5"_s);
         QCOMPARE(control(row, u"check"_s).value(u"checked"_s).toBool(), false);
 
@@ -295,33 +317,37 @@ private Q_SLOTS:
         QCOMPARE(lineOf(today, 2), u"  - [ ] [[Przysiad]] 105 kg 4×5"_s);
         QCOMPARE(m_timers.value(0), (QPair<int, QString>{120, u"Przerwa"_s}));
 
+        // every card has the same lines, however long its texts: the exercise, the last set's
+        // steppers, the set buttons
+        row = cardOf(render(u"today"_s), u"Przysiad"_s);
+        QCOMPARE(linesOf(row), u"row: check link text|row: stepper stepper|row: button button"_s);
+
         // the steppers change the last set
-        row = rowOf(render(u"today"_s), u"Przysiad"_s);
         QCOMPARE(control(row, u"stepper"_s, 1).value(u"step"_s).toDouble(), 2.5);
         QVERIFY(act(control(row, u"stepper"_s, 1), {{u"value"_s, 107.5}}).ok());
-        row = rowOf(render(u"today"_s), u"Przysiad"_s);
+        row = cardOf(render(u"today"_s), u"Przysiad"_s);
         QVERIFY(act(control(row, u"stepper"_s, 2), {{u"value"_s, 3}}).ok());
         QCOMPARE(lineOf(today, 2), u"  - [ ] [[Przysiad]] 105 kg 3×5; 107,5 kg × 3"_s);
         // "− seria"
-        row = rowOf(render(u"today"_s), u"Przysiad"_s);
+        row = cardOf(render(u"today"_s), u"Przysiad"_s);
         QVERIFY(act(control(row, u"button"_s, 2)).ok());
         QCOMPARE(lineOf(today, 2), u"  - [ ] [[Przysiad]] 105 kg 3×5"_s);
 
         // tick it: Obsidian Tasks' done date, and the history has today's squat
-        row = rowOf(render(u"today"_s), u"Przysiad"_s);
+        row = cardOf(render(u"today"_s), u"Przysiad"_s);
         QVERIFY(act(control(row, u"check"_s)).ok());
         QCOMPARE(lineOf(today, 2), u"  - [x] [[Przysiad]] 105 kg 3×5 ✅ 2026-11-11"_s);
-        row = rowOf(render(u"today"_s), u"Przysiad"_s);
+        row = cardOf(render(u"today"_s), u"Przysiad"_s);
         QCOMPARE(control(row, u"check"_s).value(u"checked"_s).toBool(), true);
         // a change of a done line keeps its done date; unticking removes it
         QVERIFY(act(control(row, u"button"_s)).ok());
         QCOMPARE(lineOf(today, 2), u"  - [x] [[Przysiad]] 105 kg 4×5 ✅ 2026-11-11"_s);
-        row = rowOf(render(u"today"_s), u"Przysiad"_s);
+        row = cardOf(render(u"today"_s), u"Przysiad"_s);
         QVERIFY(act(control(row, u"check"_s)).ok());
         QCOMPARE(lineOf(today, 2), u"  - [ ] [[Przysiad]] 105 kg 4×5"_s);
 
         // a line changed elsewhere (a sync arrived) is refused, not overwritten
-        const QVariantMap stale = rowOf(render(u"today"_s), u"Martwy ciąg"_s);
+        const QVariantMap stale = cardOf(render(u"today"_s), u"Martwy ciąg"_s);
         QStringList lines = file(today).split(u'\n');
         lines[4] = u"  - [ ] [[Martwy ciąg]] 130 kg × 5"_s;
         QVERIFY(m_vault->writeText(today, lines.join(u'\n')));
@@ -332,9 +358,10 @@ private Q_SLOTS:
         QCOMPARE(lineOf(today, 4), u"  - [ ] [[Martwy ciąg]] 130 kg × 5"_s);
 
         // bodyweight rows have a reps stepper only
-        row = rowOf(render(u"today"_s), u"Podciąganie"_s);
+        row = cardOf(render(u"today"_s), u"Podciąganie"_s);
         QCOMPARE(control(row, u"stepper"_s, 1).value(u"unit"_s).toString(), QString());
         QVERIFY(control(row, u"stepper"_s, 2).isEmpty());
+        QCOMPARE(linesOf(row), u"row: check link text|row: stepper|row: button button"_s);
     }
 
     void aPlanWithoutHistory()
@@ -346,11 +373,11 @@ private Q_SLOTS:
         QVERIFY(m_engine->resume(u"Nowy plan"_s).ok());
         QCOMPARE(file(u"journals/2026-11-11.md"_s).trimmed(),
                  u"- Nowy plan #trening\n  plan:: [[Nowy plan]]\n  - [ ] [[Przysiad]] 3×5\n  - [ ] [[Pompki]] MC 3×10"_s);
-        QVariantMap row = rowOf(render(u"today"_s), u"Przysiad"_s);
+        QVariantMap row = cardOf(render(u"today"_s), u"Przysiad"_s);
         QCOMPARE(control(row, u"stepper"_s, 1).value(u"value"_s).toDouble(), 0.0);
         QVERIFY(act(control(row, u"stepper"_s, 1), {{u"value"_s, 60}}).ok());
         QCOMPARE(lineOf(u"journals/2026-11-11.md"_s, 2), u"  - [ ] [[Przysiad]] 60 kg 3×5"_s); // every set's
-        row = rowOf(render(u"today"_s), u"Pompki"_s);
+        row = cardOf(render(u"today"_s), u"Pompki"_s);
         QVERIFY(control(row, u"stepper"_s, 2).isEmpty()); // MC: reps only
     }
 
@@ -359,7 +386,7 @@ private Q_SLOTS:
         QHash<QString, QString> notes = sampleNotes();
         notes.insert(u"journals/2026-11-11.md"_s, u"- Trening A #trening\n  plan:: [[Trening A]]\n  - [ ] [[Przysiad]] 100 kg 3×5\n"_s);
         QVERIFY(open(notes));
-        const QVariantMap row = rowOf(render(u"today"_s), u"Przysiad"_s);
+        const QVariantMap row = cardOf(render(u"today"_s), u"Przysiad"_s);
         QCOMPARE(control(row, u"button"_s).value(u"args"_s).toMap().value(u"rest"_s).toInt(), 180);
     }
 
@@ -427,7 +454,7 @@ private Q_SLOTS:
         QCOMPARE(r.value.toString(), u"Workout “Workout A” added to today's note"_s);
         QCOMPARE(file(u"journals/2026-11-11.md"_s).trimmed(),
                  u"- Workout A #workout\n  plan:: [[Workout A]]\n  - [ ] [[Squat]] 102.5 kg 3×5\n  - [ ] [[Pull-up]] BW 3×8"_s);
-        const QVariantMap row = rowOf(render(u"today"_s), u"Squat"_s);
+        const QVariantMap row = cardOf(render(u"today"_s), u"Squat"_s);
         QCOMPARE(control(row, u"button"_s).value(u"label"_s).toString(), u"+ set"_s);
     }
 
@@ -447,9 +474,9 @@ private Q_SLOTS:
         clock.start();
         const QVariantMap view = render(u"today"_s);
         QVERIFY(!view.isEmpty());
-        QVERIFY(!rowOf(view, u"Y"_s).isEmpty());
+        QVERIFY(!cardOf(view, u"Y"_s).isEmpty());
         // the capped line: 100 sets at most
-        const QVariantMap capped = rowOf(view, u"X"_s);
+        const QVariantMap capped = cardOf(view, u"X"_s);
         QVERIFY(!capped.isEmpty());
         QVERIFY(render(u"progress"_s).value(u"type"_s) == u"column"_s);
         QVERIFY2(clock.elapsed() < Limits{}.timeoutMs * BRULION_TEST_SLOWDOWN,

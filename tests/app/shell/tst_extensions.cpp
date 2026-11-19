@@ -821,16 +821,29 @@ private Q_SLOTS:
         model.setView(u"today"_s);
         model.refresh();
         QVERIFY2(model.error().isEmpty(), qPrintable(model.error()));
-        QCOMPARE(lineKinds(model), (QStringList{u"heading"_s, u"row"_s, u"row"_s}));
-        ExtensionControlsModel *controls = controlsOf(model, 1);
-        QVERIFY(controls);
-        const QStringList kinds{u"check"_s, u"link"_s, u"text"_s, u"stepper"_s, u"stepper"_s, u"button"_s};
+        // Every exercise is a card of the same three lines: the exercise, the last set's steppers
+        // (a bodyweight line: reps only), the set buttons.
+        const QString row = u"row"_s;
+        QCOMPARE(lineKinds(model), (QStringList{u"heading"_s, row, row, row, row, row, row}));
+        QStringList parts;
+        for (int i = 0; i < model.rowCount(); ++i)
+            parts << model.data(model.index(i), ExtensionViewModel::CardRole).toString();
+        QCOMPARE(parts, (QStringList{QString(), u"first"_s, u"middle"_s, u"last"_s, u"first"_s, u"middle"_s, u"last"_s}));
+        const int exercise = 1;
+        const int steppers = 2;
+        const int buttons = 3;
+        ExtensionControlsModel *exerciseControls = controlsOf(model, exercise);
+        ExtensionControlsModel *controls = controlsOf(model, steppers);
+        ExtensionControlsModel *buttonControls = controlsOf(model, buttons);
+        QVERIFY(exerciseControls && controls && buttonControls);
+        QCOMPARE(controlKinds(exerciseControls), (QStringList{u"check"_s, u"link"_s, u"text"_s}));
+        const QStringList kinds{u"stepper"_s, u"stepper"_s};
         QCOMPARE(controlKinds(controls), kinds);
-        QCOMPARE(controlKinds(controlsOf(model, 2)),
-                 (QStringList{u"check"_s, u"link"_s, u"text"_s, u"stepper"_s, u"button"_s})); // bodyweight: reps only
-        const int weight = 3;
-        const int reps = 4;
-        const int addSet = 5;
+        QCOMPARE(controlKinds(buttonControls), QStringList{u"button"_s});
+        QCOMPARE(controlKinds(controlsOf(model, 5)), QStringList{u"stepper"_s}); // bodyweight: reps only
+        const int weight = 0;
+        const int reps = 1;
+        const int addSet = 0;
         QCOMPARE(controlRole(controls, weight, ExtensionControlsModel::NumberRole), u"100"_s);
         QCOMPARE(controlRole(controls, weight, ExtensionControlsModel::DisplayRole), u"100 kg"_s);
         QCOMPARE(controlRole(controls, weight, ExtensionControlsModel::UnitRole), u"kg"_s);
@@ -839,63 +852,71 @@ private Q_SLOTS:
         QSignalSpy lineResets(&model, &QAbstractItemModel::modelReset);
         QSignalSpy controlResets(controls, &QAbstractItemModel::modelReset);
         QSignalSpy controlChanges(controls, &QAbstractItemModel::dataChanged);
+        QSignalSpy exerciseChanges(exerciseControls, &QAbstractItemModel::dataChanged);
         // A weight typed with a decimal comma: written, shown at once, in place.
-        QVERIFY(model.enterValue(1, weight, u"102,5"_s));
+        QVERIFY(model.enterValue(steppers, weight, u"102,5"_s));
         QCOMPARE(squat(), u"  - [ ] [[Przysiad]] 102,5 kg × 5"_s);
-        QCOMPARE(controlsOf(model, 1), controls);
+        QCOMPARE(controlsOf(model, steppers), controls);
         QCOMPARE(controlRole(controls, weight, ExtensionControlsModel::NumberRole), u"102,5"_s);
-        QCOMPARE(controlRole(controls, 2, ExtensionControlsModel::TextRole), u"102,5 kg × 5"_s);
-        QCOMPARE(changedRows(controlChanges), (QList<int>{2, weight})); // the sets' text and the stepper
+        QCOMPARE(controlRole(exerciseControls, 2, ExtensionControlsModel::TextRole), u"102,5 kg × 5"_s);
+        QCOMPARE(changedRows(exerciseChanges), QList<int>{2}); // the sets' text
+        QCOMPARE(changedRows(controlChanges), QList<int>{weight}); // and the stepper
         QCOMPARE(lineResets.count(), 0);
         QCOMPARE(controlResets.count(), 0);
         // The next control right away (no event loop in between): it acts on the new line.
-        model.activateControl(1, reps, 6);
+        model.activateControl(steppers, reps, 6);
         QCOMPARE(squat(), u"  - [ ] [[Przysiad]] 102,5 kg × 6"_s);
         QVERIFY2(m_messages.isEmpty(), qPrintable(m_messages.join(u'|')));
 
         // What is no new number writes nothing: the value shown, other text, other controls.
         for (const QString &text : {u"102.50"_s, u"102,5 kg"_s, u" 102,5"_s, u""_s, u"abc"_s, u"-5"_s, u"1e3"_s, u"5 lb"_s})
-            QVERIFY2(!model.enterValue(1, weight, text), qPrintable(text));
-        QVERIFY(!model.enterValue(1, addSet, u"3"_s)); // a button
-        QVERIFY(!model.enterValue(1, 99, u"3"_s));
+            QVERIFY2(!model.enterValue(steppers, weight, text), qPrintable(text));
+        QVERIFY(!model.enterValue(buttons, addSet, u"3"_s)); // a button
+        QVERIFY(!model.enterValue(exercise, 2, u"3"_s)); // a text
+        QVERIFY(!model.enterValue(steppers, 99, u"3"_s));
         QVERIFY(!model.enterValue(0, 0, u"3"_s)); // the heading
         QVERIFY(!model.enterValue(-1, weight, u"3"_s));
         QVERIFY(!model.enterValue(7, weight, u"3"_s));
         QCOMPARE(squat(), u"  - [ ] [[Przysiad]] 102,5 kg × 6"_s);
         // Its unit typed along, a point; reps; the bodyweight line's reps.
-        QVERIFY(model.enterValue(1, weight, u"105 kg"_s));
-        QVERIFY(model.enterValue(1, reps, u"8"_s));
+        QVERIFY(model.enterValue(steppers, weight, u"105 kg"_s));
+        QVERIFY(model.enterValue(steppers, reps, u"8"_s));
         QCOMPARE(squat(), u"  - [ ] [[Przysiad]] 105 kg × 8"_s);
-        QVERIFY(model.enterValue(2, 3, u"10"_s));
+        QVERIFY(model.enterValue(5, 0, u"10"_s));
         QCOMPARE(lineWith(kJournal, u"[[Podciąganie]]"_s), u"  - [ ] [[Podciąganie]] MC × 10"_s);
         // A weight off the step's grid: − and + go to the grid's values next to it.
-        QVERIFY(model.enterValue(1, weight, u"31"_s));
-        QCOMPARE(model.stepped(1, weight, -1), 30.0);
-        QCOMPARE(model.stepped(1, weight, 1), 32.5);
+        QVERIFY(model.enterValue(steppers, weight, u"31"_s));
+        QCOMPARE(model.stepped(steppers, weight, -1), 30.0);
+        QCOMPARE(model.stepped(steppers, weight, 1), 32.5);
         QCOMPARE(lineResets.count(), 0);
         QCOMPARE(controlResets.count(), 0);
 
         // "+ set" brings "− set": controls of other kinds wait for the timer (the delegate whose
-        // handler acted stays until then), then only that row's controls are reset.
-        model.activateControl(1, addSet);
+        // handler acted stays until then), then only the buttons' line is reset — the steppers,
+        // a line of their own, keep their delegates (a field being typed into stays).
+        QSignalSpy buttonResets(buttonControls, &QAbstractItemModel::modelReset);
+        model.activateControl(buttons, addSet);
         QCOMPARE(squat(), u"  - [ ] [[Przysiad]] 31 kg 2×8"_s);
-        QCOMPARE(controlKinds(controls), kinds);
-        QTRY_COMPARE(controlKinds(controls), kinds + QStringList{u"button"_s});
-        QCOMPARE(controlsOf(model, 1), controls);
-        QCOMPARE(controlResets.count(), 1);
+        QCOMPARE(controlKinds(buttonControls), QStringList{u"button"_s});
+        QTRY_COMPARE(controlKinds(buttonControls), (QStringList{u"button"_s, u"button"_s}));
+        QCOMPARE(controlsOf(model, buttons), buttonControls);
+        QCOMPARE(buttonResets.count(), 1);
+        QCOMPARE(controlResets.count(), 0);
         QCOMPARE(lineResets.count(), 0);
         m_ext->stopRest();
 
-        // A field that loses the focus while the lines change (its delegate goes) writes nothing.
+        // While the lines change nothing is written: a field that loses the focus then (its
+        // delegate going) would act on lines half changed.
         QList<bool> duringReset;
-        connect(controls, &QAbstractItemModel::modelAboutToBeReset, this,
-                [&] { duringReset << model.enterValue(1, weight, u"50"_s); });
-        connect(controls, &QAbstractItemModel::modelReset, this, [&] { duringReset << model.enterValue(1, weight, u"50"_s); });
-        model.activateControl(1, addSet + 1); // "− set"
-        QTRY_COMPARE(controlKinds(controls), kinds);
+        connect(buttonControls, &QAbstractItemModel::modelAboutToBeReset, this,
+                [&] { duringReset << model.enterValue(steppers, weight, u"50"_s); });
+        connect(buttonControls, &QAbstractItemModel::modelReset, this,
+                [&] { duringReset << model.enterValue(steppers, weight, u"50"_s); });
+        model.activateControl(buttons, addSet + 1); // "− set"
+        QTRY_COMPARE(controlKinds(buttonControls), QStringList{u"button"_s});
         QCOMPARE(duringReset, (QList<bool>{false, false}));
         QCOMPARE(squat(), u"  - [ ] [[Przysiad]] 31 kg × 8"_s);
-        disconnect(controls, nullptr, this, nullptr);
+        disconnect(buttonControls, nullptr, this, nullptr);
 
         // A note changed elsewhere is drawn again in place too: nothing of the rows changed here.
         controlChanges.clear();

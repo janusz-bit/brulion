@@ -1011,25 +1011,32 @@ local function todayView()
                 end
                 local last = entry.sets[#entry.sets]
                 local args = { ref = line.ref, text = line.text, task = line.task or "", rest = rest }
-                local controls: { Node } = {
-                    b.ui.check(line.task == "x" or line.task == "X" or line.task == nil, "toggle", args),
-                    b.ui.link(entry.exercise, entry.label),
-                    b.ui.text(trim(formatEntry({ exercise = "", linked = false, sets = entry.sets, notes = "" })), true),
+                -- A card of the same lines in every card, however long its texts: the exercise,
+                -- the last set's steppers, the set buttons.
+                local cardLines: { Node } = {
+                    b.ui.row({
+                        b.ui.check(line.task == "x" or line.task == "X" or line.task == nil, "toggle", args),
+                        b.ui.link(entry.exercise, entry.label),
+                        b.ui.text(trim(formatEntry({ exercise = "", linked = false, sets = entry.sets, notes = "" })), true),
+                    }),
                 }
                 if last.reps then
+                    local steppers: { Node } = {}
                     if not last.bodyweight then
-                        table.insert(controls, b.ui.stepper({
+                        table.insert(steppers, b.ui.stepper({
                             value = last.weight or 0, step = if last.unit == "lb" then 5 else 2.5,
                             unit = last.unit or "kg", action = "weight", args = args,
                         }))
                     end
-                    table.insert(controls, b.ui.stepper({ value = last.reps :: number, step = 1, action = "reps", args = args }))
+                    table.insert(steppers, b.ui.stepper({ value = last.reps :: number, step = 1, action = "reps", args = args }))
+                    table.insert(cardLines, b.ui.row(steppers))
                 end
-                table.insert(controls, b.ui.button(T.addSetButton, "addSet", args))
+                local buttons: { Node } = { b.ui.button(T.addSetButton, "addSet", args) }
                 if #entry.sets > 1 then
-                    table.insert(controls, b.ui.button(T.removeSetButton, "removeSet", args))
+                    table.insert(buttons, b.ui.button(T.removeSetButton, "removeSet", args))
                 end
-                table.insert(rows, b.ui.row(controls))
+                table.insert(cardLines, b.ui.row(buttons))
+                table.insert(rows, b.ui.card(cardLines))
             end
             if #rows > 0 then
                 table.insert(items, b.ui.heading(trim((" " .. workout.text):gsub("%s#[^%s#]+", ""))))

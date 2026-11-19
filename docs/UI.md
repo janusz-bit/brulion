@@ -782,10 +782,12 @@ default; the view says so with a "Switch on" button) —, a bottom-bar tab to ch
 "Gym" `go.gym`, the icon `dumbbell`): the built-in gym extension (docs/EXTENSIONS.md,
 docs/SYNTAX.md §5 "Gym") through its two views, drawn by `ShellExtensionView`.
 
-* **Today** (view `today`): every exercise line of today's `#trening` blocks as a card — the tasks'
-  checkbox (done / open), the exercise's link (opens its page, made when missing), its sets, the
+* **Today** (view `today`): every exercise line of today's `#trening` blocks as a card
+  (`b.ui.card`) of the same three lines in every card, however long its texts — the tasks'
+  checkbox (done / open), the exercise's link (opens its page, made when missing), its sets; the
   last set's weight and reps as steppers (− value +, the value typed in as well: "Extension views"
-  below; a line with no weight written takes the weight for every set), **+ set** / **− set**.
+  below; a line with no weight written takes the weight for every set; a bodyweight line: reps
+  only); **+ set** / **− set**.
   Each control rewrites that one line of the note (`b.replaceBlock`); a line changed elsewhere
   meanwhile is not overwritten (a toast says so and the view shows it again). Adding a set starts
   the **rest timer**: a banner with the time left, a bar and **Skip**; at the end a notification

@@ -5611,7 +5611,8 @@ void checkGym(QQuickWindow *window, AppController *app, const Check &check)
     check(waitFor([&] { return ws->extensions()->restRemaining() > 0; }, 2000), "and starts the rest timer");
     check(waitFor([&] { return named(u"gymRest"_s) != nullptr; }, 2000), "the timer shows in the view");
 
-    // Numbers typed into the steppers (the row: check, link, sets, weight, reps, "+ set", "− set").
+    // Numbers typed into the steppers (the card's lines: check, link, sets | weight, reps |
+    // "+ set", "− set").
     const auto shownButtons = [&] {
         int n = 0;
         findShown(window->contentItem(), [&](QQuickItem *item) {
