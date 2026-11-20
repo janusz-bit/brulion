@@ -28,23 +28,29 @@ BDialog {
     /// The last confirmation failed (the page changed meanwhile, say): shown under the text.
     property string error
 
-    /// Where it would write, in a sentence.
-    function whereText(): string {
+    /// What it would write into or run (a whole phrase per case: each language words them its own way).
+    function targetText(): string {
         if (dialog.runs)
-            return qsTr("Run the command “%1” of the extension “%2”.").arg(AppController.routeText(dialog.request, "command"))
-                                                                     .arg(AppController.routeText(dialog.request, "extension"))
+            return qsTr("The command “%1” of the extension “%2”").arg(AppController.routeText(dialog.request, "command"))
+                                                               .arg(AppController.routeText(dialog.request, "extension"))
         if (dialog.newPage)
-            return qsTr("Create the page “%1”.").arg(dialog.target)
-        const place = dialog.journal
-                      ? (AppController.routeFlag(dialog.request, "today") ? qsTr("today's journal")
-                                                                         : qsTr("the journal of %1").arg(AppController.routeText(dialog.request, "day")))
-                      : "“" + dialog.target + "”"
+            return qsTr("A new page “%1”").arg(dialog.target)
+        if (dialog.journal)
+            return AppController.routeFlag(dialog.request, "today")
+                   ? qsTr("Today's journal")
+                   : qsTr("The journal of %1").arg(AppController.routeText(dialog.request, "day"))
+        return qsTr("The page “%1”").arg(dialog.target)
+    }
+    /// Where in it ("" for a new page and a command).
+    function placeText(): string {
+        if (dialog.runs || dialog.newPage)
+            return ""
         if (dialog.heading !== "")
-            return dialog.atStart ? qsTr("Add at the start of the section “%1” in %2.").arg(dialog.heading).arg(place)
-                                  : qsTr("Add at the end of the section “%1” in %2.").arg(dialog.heading).arg(place)
+            return dialog.atStart ? qsTr("At the start of the section “%1”").arg(dialog.heading)
+                                  : qsTr("At the end of the section “%1”").arg(dialog.heading)
         if (dialog.blockId !== "")
-            return qsTr("Add under the block ^%1 in %2.").arg(dialog.blockId).arg(place)
-        return dialog.atStart ? qsTr("Add at the start of %1.").arg(place) : qsTr("Add at the end of %1.").arg(place)
+            return qsTr("Under the block ^%1").arg(dialog.blockId)
+        return dialog.atStart ? qsTr("At the start") : qsTr("At the end")
     }
 
     title: dialog.runs ? qsTr("Run from a link?") : qsTr("Write from a link?")
@@ -66,14 +72,32 @@ BDialog {
     /// (Kept in a property: a call's result read after another call is not compiled.)
     property var _result: ({})
 
-    BText {
+    ColumnLayout {
         objectName: "automationWhere"
         Layout.fillWidth: true
-        text: dialog.whereText()
-        textFormat: Text.PlainText
-        wrapMode: Text.Wrap
-        Accessible.role: Accessible.StaticText
-        Accessible.name: text
+        spacing: Theme.space1
+
+        BText {
+            objectName: "automationTarget"
+            Layout.fillWidth: true
+            text: dialog.targetText()
+            textFormat: Text.PlainText
+            variant: "label"
+            wrapMode: Text.Wrap
+            Accessible.role: Accessible.StaticText
+            Accessible.name: text
+        }
+        BText {
+            objectName: "automationPlace"
+            Layout.fillWidth: true
+            visible: text !== ""
+            text: dialog.placeText()
+            textFormat: Text.PlainText
+            variant: "muted"
+            wrapMode: Text.Wrap
+            Accessible.role: Accessible.StaticText
+            Accessible.name: text
+        }
     }
 
     Rectangle {

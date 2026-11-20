@@ -193,10 +193,8 @@ int main(int argc, char *argv[])
     for (const QString &file : launch.files) {
         if (brulion::automation::isAutomationUri(file))
             fileUris.append(file);
-        else if (file.startsWith(u"file:", Qt::CaseInsensitive))
-            launchFiles.append(QUrl(file).toLocalFile()); // %U: a file manager's file:// address
         else
-            launchFiles.append(file);
+            launchFiles.append(file); // a path or a file:// address (%U: openedFilesShare reads both)
     }
     launchUris += fileUris;
     // Dev/test options from the command line (component gallery, screenshots, forced theme

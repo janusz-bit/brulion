@@ -22,7 +22,9 @@
 ; type's OpenWithProgids and Applications\brulion.exe with its SupportedTypes, under
 ; HKCU\Software\Classes (HKLM with /ALLUSERS). Offered, never the default: no type's default value
 ; or UserChoice is written. The uninstaller removes exactly these (a type's key only when nothing
-; else is left in it). The portable ZIP registers nothing. UTF-8 with a BOM: the Polish texts below.
+; else is left in it). brulion:// links: the URL protocol "brulion" (HKCU\Software\Classes\brulion,
+; its command `"…\brulion.exe" --open "%1"`), removed whole by the uninstaller. The portable ZIP
+; registers nothing. UTF-8 with a BOM: the Polish texts below.
 
 #ifndef AppVersion
   #error Pass /DAppVersion=<x.y.z> (scripts/windows-build.ps1 does)
@@ -121,6 +123,14 @@ Root: HKA; Subkey: "Software\Classes\Applications\brulion.exe\SupportedTypes"; V
 Root: HKA; Subkey: "Software\Classes\Applications\brulion.exe\SupportedTypes"; ValueType: string; ValueName: ".markdown"; ValueData: ""
 Root: HKA; Subkey: "Software\Classes\Applications\brulion.exe\SupportedTypes"; ValueType: string; ValueName: ".txt"; ValueData: ""
 Root: HKA; Subkey: "Software\Classes\Applications\brulion.exe\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\brulion.exe"" --open ""%1"""
+; brulion:// links (docs/UI.md "Automation", docs/WINDOWS.md): the URL protocol "brulion" — a
+; link in a browser or another app, `start brulion://daily` — starts brulion.exe with the address
+; after --open (a second start hands it to the running Brulion). Nothing else opens brulion://, so
+; it is registered whole and removed whole.
+Root: HKA; Subkey: "Software\Classes\brulion"; ValueType: string; ValueName: ""; ValueData: "URL:Brulion"; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\brulion"; ValueType: string; ValueName: "URL Protocol"; ValueData: ""
+Root: HKA; Subkey: "Software\Classes\brulion\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: """{app}\brulion.exe"",0"
+Root: HKA; Subkey: "Software\Classes\brulion\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\brulion.exe"" --open ""%1"""
 
 [Icons]
 Name: "{autoprograms}\Brulion"; Filename: "{app}\brulion.exe"; WorkingDir: "{app}"; AppUserModelID: "JanuszBit.Brulion"

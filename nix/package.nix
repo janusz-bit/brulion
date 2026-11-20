@@ -233,10 +233,13 @@ stdenv.mkDerivation (finalAttrs: {
     test -f $out/share/icons/hicolor/scalable/apps/$id.svg
     test -f $out/share/icons/hicolor/256x256/apps/$id.png
     desktop-file-validate $out/share/applications/$id.desktop
-    # "Open with → Other application → Brulion" for Markdown and text files (docs/NIXOS.md).
-    grep -qx 'Exec=brulion --open %F' $out/share/applications/$id.desktop
-    # No file types: a desktop without a default program would make Brulion the default for them.
-    if grep -q '^MimeType=' $out/share/applications/$id.desktop; then
+    # "Open with → Other application → Brulion" for Markdown and text files (docs/NIXOS.md), and
+    # brulion:// links (docs/UI.md "Automation"): files and addresses as %U.
+    grep -qx 'Exec=brulion --open %U' $out/share/applications/$id.desktop
+    # No file types — a desktop without a default program would make Brulion the default for
+    # them —, only the brulion:// scheme.
+    grep -qx 'MimeType=x-scheme-handler/brulion;' $out/share/applications/$id.desktop
+    if [ "$(grep -c '^MimeType=' $out/share/applications/$id.desktop)" != 1 ]; then
       echo "the desktop entry declares file types" >&2
       exit 1
     fi

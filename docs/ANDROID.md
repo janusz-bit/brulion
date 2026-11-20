@@ -485,6 +485,122 @@ without Qt) and `QuickAdd`/`JournalAppend`; the queue for the app is `WidgetInbo
 journal, moving tasks to the new day) are checked in C++ and in Kotlin with the same cases
 (`tests/data/widgets/`).
 
+## Automation (Tasker, Automate, MacroDroid…)
+
+brulion:// links (docs/UI.md "Automation" lists every action and parameter) work on the phone too
+— a link in a browser or a message, `adb shell am start -d 'brulion://daily'` — and automation
+apps send **intents**. What needs the window (opening a page, a day, a view, search, quick
+capture's dialog; a write **without** the notebook's key, which asks "Write from a link?"; an
+extension's command) brings Brulion up; **a write with the key runs in the background**, with
+Brulion closed or behind another app, and answers with a broadcast.
+
+**The key**: Settings → Automation → Automation key → **Create a key** (Polish: Ustawienia →
+Automatyzacja → Klucz automatyzacji → Utwórz klucz), **Copy** and paste it into a Tasker variable
+(`%BRULION_KEY`). It is this phone's and this notebook's: another device has its own.
+
+### The intents
+
+**Action** `io.github.januszbit.brulion.action.RUN`, **package** `io.github.januszbit.brulion`.
+The request is the intent's **data** — a brulion:// address (`brulion://append?page=Zakupy`) — or
+the extra `uri`, or the extra `action` (`append`, `task`, …); **string extras named like the
+parameters** add to it (and replace the same parameter of the address): `text`, `page`,
+`heading`, `block`, `date`, `title`, `folder`, `template`, `due`, `remind`, `alarm`, `every`,
+`priority`, `query`, `vault`, `key`, `id`, … `android.intent.extra.TEXT` is `text` when `text`
+is not given. Tasker's "Send Intent" takes three extras: put the fixed parameters into the data
+and `text:%avariable`, `key:%BRULION_KEY` into the extras.
+
+| Target | Class | What it does |
+|---|---|---|
+| **Activity** | `io.github.januszbit.brulion.android.AutomationActivity` | everything: what needs the window goes to Brulion, which comes to the front; a write with the key runs in the background (a toast says when it failed, unless the extra `quiet` is true) |
+| **Broadcast receiver** | `io.github.januszbit.brulion.android.AutomationReceiver` | writes with the key only, never a window; anything else is answered with `key_required` (no key) or `needs_window` (opening, a command) |
+
+Examples (`adb`, the same as Tasker's fields):
+
+```sh
+# Open a page at a heading, today's journal, the calendar
+adb shell am start -a android.intent.action.VIEW -d 'brulion://open?page=Zakupy%23Jutro'
+adb shell am start -a android.intent.action.VIEW -d 'brulion://daily'
+adb shell am start -a android.intent.action.VIEW -d 'brulion://view?name=calendar'
+# Append under a heading of a page (in the background, with the key)
+adb shell am broadcast -n io.github.januszbit.brulion/io.github.januszbit.brulion.android.AutomationReceiver \
+    -a io.github.januszbit.brulion.action.RUN -d 'brulion://append?page=Zakupy&heading=Dzi%C5%9B' \
+    --es text 'Mleko' --es key "$KEY"
+# A task with a reminder in today's journal (the date in Polish or English words)
+adb shell am broadcast -n io.github.januszbit.brulion/io.github.januszbit.brulion.android.AutomationReceiver \
+    -a io.github.januszbit.brulion.action.RUN --es action task \
+    --es text 'Zadzwonić do mamy' --es remind 'jutro o 18' --es key "$KEY"
+# Quick capture, through the activity (asks first: no key)
+adb shell am start -n io.github.januszbit.brulion/io.github.januszbit.brulion.android.AutomationActivity \
+    -a io.github.januszbit.brulion.action.RUN --es action capture --es text 'Pomysł na prezent'
+```
+
+### The answer
+
+Every request through the receiver — and every background write through the activity — ends with
+the broadcast **`io.github.januszbit.brulion.action.RESULT`** (to the package in the extra
+`result_package` when given, else to every app that listens: Tasker's event "Intent Received"
+with that action). Its extras: `ok` (boolean), `error` (the code: docs/UI.md "Automation"; also
+`no_notebook` — Brulion has not opened a notebook on this phone yet —, `no_answer`, `busy`),
+`action`, `id` (the request's `id` extra or parameter, else a new one). **Only when the key was
+valid** it also says what was written: `path` (the note in the notebook), `line` (from 1),
+`kind` (note, task, due, reminder, alarm, page), `reminder` (`YYYY-MM-DD HH:mm`), `message`. A
+request without the key, or with a wrong one, learns nothing about the notebook.
+
+A task with a time gets its system reminder at once (provisional, as quick add's: Brulion replaces
+it with its own set at its next start or return to the front), unless reminders are off in Brulion.
+A running Brulion reads the note again when it comes back to the front.
+
+### What may happen in the background
+
+* Only writes (`new`, `append`, `prepend`, `task`, `capture` with text), and only with the key:
+  nobody can be asked there. The notebook is the one Brulion last had open (it publishes it when a
+  notebook is ready, with the policy of Settings → Automation and the language for date words);
+  `vault=` may name it, never another (`unknown_notebook`).
+* Policy **Off** refuses everything; **Only open** and **Ask** let a write with the key through.
+* Nothing is overwritten or deleted (docs/UI.md "Automation", "Safety"); History keeps what a write
+  replaced.
+
+### How it works
+
+* `AutomationActivity` (exported, no UI of its own, its own task, not in Recents — like
+  `ShareActivity`) and `AutomationReceiver` (exported, the `RUN` action) build one address from the
+  intent (`Automation.requestUri`: data, `uri`, `action`, the parameter extras — defensively: a
+  malformed parcel crashes nothing, at most 100 000 characters). What needs the window goes to C++
+  **inside the process** (`BrulionAndroid.deliverUri` → native `nativeUri`, or `takeUris` on a cold
+  start; never as an extra of the exported `BrulionActivity`, which any app could forge) and
+  `AppController::receiveUri` checks it as any link's.
+* A write with the key: `Automation.runInBackground` binds `AutomationService` — a `QtService` in
+  the process `:automation` (Qt cannot start a second time in the activity's process, as for the
+  background check) — and sends the job `{uri, id, target}` over a `Messenger`. Qt starts Brulion's
+  library there with `--automation`: `main()` → `runAutomationService()`
+  (`src/app/background/automationentry_android.cpp`): a `QAndroidService`, its own event log
+  (`files/logs/automation/`), polling the queue (`takeAutomationJob`). `AutomationRunner`
+  (`src/app/background/automationrun.h`, tested on the desktop: `tst_automation_run`) checks the
+  key against `files/…/secrets/automation-keys.json`, opens the notebook headless
+  (`notebook::Notebook`, the index cache) and writes through the core's executor
+  (compare-and-swap, History). The answer goes back through the `Messenger`; the receiver keeps
+  its broadcast alive meanwhile (`goAsync`) and gives up after 40 s. Unbinding ends the process.
+* The target is `AppController::publishAutomationTarget()`'s JSON (`{root, stateDir, name, policy,
+  language, followOutsideLinks}`, `AndroidBridge::setAutomationTarget`), kept in SharedPreferences
+  and sent with each job.
+
+## Quick Settings tiles and app shortcuts
+
+* **Quick Settings**: edit the tiles (the pencil of the Quick Settings panel) and drag **Quick
+  note** and **New task** (Polish: "Szybka notatka", "Nowe zadanie") among the active ones. A tap
+  opens quick add's window over whatever is on the screen — the same as the widgets' **+**
+  ([Quick add](#quick-add)): the note or task goes into today's journal at once, without starting
+  Brulion.
+* **App shortcuts**: a long press on Brulion's icon offers **Quick note**, **New task**, **Today's
+  journal** and **Search** (drag one to the home screen to keep it). The first two open quick add's
+  window, the others Brulion at that view (through `AutomationActivity`: `brulion://daily`,
+  `brulion://search`).
+
+The tiles are `QuickNoteTileService` and `QuickTaskTileService` (`QuickTiles.kt`, bound only by
+the system: `BIND_QUICK_SETTINGS_TILE`; `startActivityAndCollapse`, with a `PendingIntent` from
+Android 14); the shortcuts are dynamic (`ShortcutManager`, published at each start of
+`BrulionActivity`: no package name is written into the manifest, so the `.test` build has its own).
+
 ## Export: "Save to Downloads"
 
 You can save a finished export file (ZIP, HTML, iCalendar…) in two ways:
@@ -1763,16 +1879,16 @@ taps, swipes and types, and `adb exec-out screencap -p > ekran.png` takes a scre
 
 | Path | Contents |
 |---|---|
-| `android/AndroidManifest.xml` | manifest based on the Qt 6.11.2 template (`androiddeployqt` fills in the `%%INSERT_…%%` markers: package, version, name, library and the permissions of the Qt modules): permissions, `BrulionActivity`, receivers, `AlarmActivity`, `ShareActivity` (filters `ACTION_SEND`/`ACTION_SEND_MULTIPLE` for `text/*`), icons |
+| `android/AndroidManifest.xml` | manifest based on the Qt 6.11.2 template (`androiddeployqt` fills in the `%%INSERT_…%%` markers: package, version, name, library and the permissions of the Qt modules): permissions, `BrulionActivity`, receivers, `AlarmActivity`, `ShareActivity` (filters `ACTION_SEND`/`ACTION_SEND_MULTIPLE` for `text/*`), `AutomationActivity` (VIEW of `brulion:` and the `RUN` action), `AutomationReceiver`, `AutomationService`, the Quick Settings tiles, icons |
 | `android/res/` | strings (`values` — English, the default; `values-pl`), the notification icon `ic_stat_brulion`, the app icons (`mipmap-*` from the logo, the adaptive `mipmap-anydpi` with the `#283045` background and a monochrome layer), the alarm screen theme; widgets: layouts `layout/widget_*.xml` (also the previews for the widget picker), `xml/widget_*_info.xml`, colours `widget_colors.xml` (`values` light, `values-night` dark), the corner radius (`values-v31`: the system's), the theme of the quick add window |
-| `android/src/io/github/januszbit/brulion/android/` | Kotlin: `BrulionAndroid` (JNI facade), `BrulionActivity` (`QtActivity` + taps/permissions/ringtone choice) + `StartupRelaunch` (recreated before Qt started: restart of the app), `ImeInsets` (on-screen keyboard: how much of the Qt view it covers), `AlarmScheduler` + `WallClock`, `Reminder` + `ReminderStore`, `ReminderNotifier`, `ReminderSounds` (sounds: `SoundChoice`, channel versions `SoundChannel`, `SoundStore`, sample, ringtone picker), `RingTimeout`, `Receivers` (fire, buttons, boot/time change), `DoneQueue` (the "Done" queue for C++), `AlarmActivity` + `AlarmSlider` (the alarm screen and its slider; `SlideGesture`: its arithmetic), `Documents` (chosen documents and document trees for the import), `ShareActivity` + `ShareIntent` ("Share → Brulion": receiving, copies in `files/share-in/`, JSON for C++), widgets: `Widgets` (`TasksWidget`, `CalendarWidget`, `NotesWidget`), `WidgetViews` + `WidgetListService` (RemoteViews and list rows), `WidgetSnapshot` (the snapshot, moving tasks to the new day), `WidgetStore` + `WidgetUpdater` + `WidgetReceiver` (storing, refreshing, midnight, month buttons), `WidgetDates` (the app's day and month names), `QuickAddActivity` + `QuickAdd` + `JournalAppend` (quick add, writing to the journal), `WidgetInbox` (the queue of entries for C++), background check of the notes: `BackgroundCheck` (target, job, decision on the result), `BackgroundCheckJob` (JobScheduler job in the main process), `BackgroundCheckService` (`QtService` in the `:background` process) |
+| `android/src/io/github/januszbit/brulion/android/` | Kotlin: `BrulionAndroid` (JNI facade), `BrulionActivity` (`QtActivity` + taps/permissions/ringtone choice) + `StartupRelaunch` (recreated before Qt started: restart of the app), `ImeInsets` (on-screen keyboard: how much of the Qt view it covers), `AlarmScheduler` + `WallClock`, `Reminder` + `ReminderStore`, `ReminderNotifier`, `ReminderSounds` (sounds: `SoundChoice`, channel versions `SoundChannel`, `SoundStore`, sample, ringtone picker), `RingTimeout`, `Receivers` (fire, buttons, boot/time change), `DoneQueue` (the "Done" queue for C++), `AlarmActivity` + `AlarmSlider` (the alarm screen and its slider; `SlideGesture`: its arithmetic), `Documents` (chosen documents and document trees for the import), `ShareActivity` + `ShareIntent` ("Share → Brulion": receiving, copies in `files/share-in/`, JSON for C++), widgets: `Widgets` (`TasksWidget`, `CalendarWidget`, `NotesWidget`), `WidgetViews` + `WidgetListService` (RemoteViews and list rows), `WidgetSnapshot` (the snapshot, moving tasks to the new day), `WidgetStore` + `WidgetUpdater` + `WidgetReceiver` (storing, refreshing, midnight, month buttons), `WidgetDates` (the app's day and month names), `QuickAddActivity` + `QuickAdd` + `JournalAppend` (quick add, writing to the journal), `WidgetInbox` (the queue of entries for C++), background check of the notes: `BackgroundCheck` (target, job, decision on the result), `BackgroundCheckJob` (JobScheduler job in the main process), `BackgroundCheckService` (`QtService` in the `:background` process), automation: `Automation` (the request from an intent, the target, the background run, the result broadcast, the provisional reminder), `AutomationActivity`, `AutomationReceiver`, `AutomationService` (`QtService` in the `:automation` process), `QuickTiles` (the Quick Settings tiles and the launcher's shortcuts) |
 | `android/tests/` | Kotlin unit tests (JVM) + a Gradle init script that adds them |
 | `android/lint.xml` | Android lint configuration (exceptions for `res/values/libs.xml` generated by Qt) |
 | `android/settings.gradle`, `android/proguard-rules.pro` | R8 in release builds and its rules (classes called through JNI) — [APK size](#apk-size) |
 | `android/res/xml/network_security_config.xml` | trusted HTTPS certificate authorities: the system's and those the user installed — [HTTPS and OpenSSL](#https-and-openssl) |
 | `android/assets/licenses/` | licence texts of the bundled libraries (OpenSSL, Apache-2.0) |
 | `src/platform/android/androidbridge.{h,cpp}` | C++: `brulion::platform::AndroidBridge` (compiled only when `ANDROID`) |
-| `src/app/background/` | C++ of the background check of the notes: `backgroundcheck.{h,cpp}` (target, reminders, one check — built everywhere, tests in `tests/app/background`), `backgroundentry_android.cpp` (`main()` of the `:background` process) — [Checking notes in the background](#checking-notes-in-the-background) |
+| `src/app/background/` | C++ of the background check of the notes: `backgroundcheck.{h,cpp}` (target, reminders, one check — built everywhere, tests in `tests/app/background`), `backgroundentry_android.cpp` (`main()` of the `:background` process) — [Checking notes in the background](#checking-notes-in-the-background); of automation requests: `automationrun.{h,cpp}` (one job — built everywhere, `tst_automation_run`), `automationentry_android.cpp` (`main()` of the `:automation` process) — [Automation](#automation-tasker-automate-macrodroid) |
 | `src/platform/android/selftest/` | `brulion_android_selftest` — an APK that tests the bridge on a device/emulator (only with `-DBRULION_ANDROID_SELFTEST=ON`) |
 | `scripts/android-build.sh`, `scripts/android-new-keystore.sh` | building + signing, the release key |
 | `fastlane/metadata/android/`, `scripts/check-fastlane-metadata.sh` | descriptions, icon and screenshots for F-Droid and IzzyOnDroid, and their check — [F-Droid and IzzyOnDroid](#f-droid-and-izzyondroid) |

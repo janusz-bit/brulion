@@ -39,8 +39,10 @@ Where the text goes:
 
 The cursor lands on the first inserted block. You undo the insertion like any other change.
 
-There is no way yet to create a new page from a chosen template. Create the page and insert the
-template into an empty block.
+A new page from a chosen template: a brulion:// link (docs/UI.md "Automation"), e.g.
+`brulion://new?title=Spotkanie%20z%20Ann%C4%85&template=Spotkanie` — the template's variables are
+filled for the new page (`{{title}}` is its title), and the link's `text` goes after it. In the app
+itself, create the page and insert the template into an empty block.
 
 ## Variables
 

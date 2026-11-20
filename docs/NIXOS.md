@@ -183,7 +183,7 @@ nothing needs to be installed alongside. Brulion also looks in `DICPATH`, in `sh
 
 ### Open with
 
-The package's desktop entry (`Exec=brulion --open %F`, `StartupNotify=true`) lets you open a
+The package's desktop entry (`Exec=brulion --open %U`, `StartupNotify=true`) lets you open a
 `.md` or `.txt` file in Brulion from the file manager: **Open With → Other Application → Brulion**
 (GNOME Files: **Open With…** → "View All Apps"; Dolphin, Thunar, Nemo:
 **Open With → Other Application…**). The **Save to Brulion** dialog opens, the same as "Share → Brulion"
@@ -197,7 +197,7 @@ GNOME show only "Brulion is ready"); under X11 the second start ends the startup
 itself, so the cursor does not keep spinning.
 
 **Brulion does not change the default program.** That is why the entry declares no file types
-(`MimeType`): a desktop without a default program for some type (sway, i3 or Hyprland without
+(`MimeType` names only `x-scheme-handler/brulion`, below): a desktop without a default program for some type (sway, i3 or Hyprland without
 `mimeapps.list`; GNOME for `text/markdown`) takes the first program that declares it, by
 name — and `io.github.januszbit.brulion` comes before `nvim`, `org.gnome.TextEditor` or
 `org.kde.kate`, so Brulion would then silently open every text file. If you want
@@ -211,6 +211,17 @@ From the command line: `brulion --open notatka.md …` (everything after `--open
 without files starts Brulion as usual). **The AppImage** has the same entry inside: tools that
 integrate AppImages with the menu (Gear Lever, AppImageLauncher, appimaged) install it, so "Open
 with" works with the AppImage too.
+
+### brulion:// links
+
+The desktop entry also takes **brulion:// links** (`MimeType=x-scheme-handler/brulion;` — no
+other program opens them, so Brulion is their default at once): `xdg-open 'brulion://daily'`, a
+link in a browser or an e-mail, a keyboard shortcut of the desktop (GNOME's Settings → Keyboard →
+Custom Shortcuts, KDE's Shortcuts: the command `xdg-open 'brulion://capture'`), a script — Brulion
+starts or the running one gets the address and does what it asks (docs/UI.md "Automation"). The
+AppImage's entry declares it too (once a tool integrated the AppImage). Writing without the
+notebook's automation key asks first; a script can also write without the app:
+`brulion-cli uri run 'brulion://append?…'` (docs/CLI.md "brulion:// addresses").
 
 ### Notes and Syncthing
 

@@ -5,14 +5,17 @@ GenericName=Notes
 GenericName[pl]=Notatki
 Comment=Offline-first Markdown notes: outliner, journals, calendar, reminders, calculations
 Comment[pl]=Notatki w Markdown, także offline: konspekt, dziennik, kalendarz, przypomnienia, obliczenia
-Exec=brulion --open %F
+Exec=brulion --open %U
 Icon=io.github.januszbit.brulion
 Terminal=false
 Categories=Office;Utility;
-# "Open with → Other application → Brulion" (docs/NIXOS.md): no MimeType on purpose. A desktop
+# "Open with → Other application → Brulion" (docs/NIXOS.md): no file types on purpose. A desktop
 # without a default for a type (sway, i3, Hyprland without mimeapps.list; GNOME for text/markdown)
 # takes the first app in mimeinfo.cache, sorted by name: io.github… comes before nvim, org.gnome…,
-# org.kde…, so declaring text/plain made Brulion the default for every text file there.
+# org.kde…, so declaring text/plain made Brulion the default for every text file there. The only
+# type is brulion:// links (docs/UI.md "Automation"), which nothing else opens; %U hands over
+# their addresses and the files a file manager opens with Brulion (paths or file:// URLs).
+MimeType=x-scheme-handler/brulion;
 # Launchers then hand over an activation token (Wayland), which a second launch forwards: the
 # running Brulion comes to the front.
 StartupNotify=true

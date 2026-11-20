@@ -1191,7 +1191,7 @@ panel keeps none.
 | `history` | `HistoryView` — versions of a page, diff, restore; each says what replaced it (your edit, another program, sync, an import, the command line — "Replaced from the command line (agent)" with a terminal icon —, a restored version) | `path` |
 | `trash` | `TrashView` — a row shows "Restore" (its icon on compact windows) and a "⋯" whose menu, also from a right-click or a long press on the row, has Restore and, after a separator in the danger colour, "Delete for good…" (asked first; no bare red × — the app's dismiss glyph — that deletes); the header's "Empty trash" is a secondary button with danger text, only the confirmations are solid red, and both say "This cannot be undone." | — |
 | `cleanup` | `CleanupView` — notes and attachments nothing refers to ("Cleaning up" below) | `kind?`, `selected?` (written when a row opens a file, so Back returns to the same choice) |
-| `settings` | `SettingsView` — one section at a time: on wide windows the list of sections on the left, on narrow ones (under 900 px, phones) the sections as tabs at the top — a bar that scrolls sideways, the route's section scrolled into view, icons from 600 px —; choosing one replaces the route's section (no history entry). General, Appearance (`appearance`), Editor, Notebook (also this device's "Follow links to folders outside the notebook", `AppSettings.followsOutsideLinks`, default off, never in `.brulion/config.json` — a sync peer must not switch it on —, pushed into `Workspace.setFollowsOutsideLinks` → `Vault::setFollowsOutsideLinks`, and read by brulion-cli and the background check: a toggle rescans, the linked files come or go as changes; off, a file opened from such a folder is offered as a copy, and neither its pictures nor its PDFs are shown. Devices that followed such links before it was a setting keep them: while the setting was never chosen, each notebook's first open checks once (`AppSettings::checkOutsideLinksOnce`, "vaults/outsideLinksChecked/<id>") and switches it on — before the index and sync see the notebook — only when this device knew the notebook before (state in its device folder, or a recent notebook) and it has such a link; a new device, or a link planted after the check, never does), Reminders, Sync, Backups (`backups`, "Backups" below), Application (on Android and Windows "Check for new versions" — `AppController.updates.enabled`, "Window layout"; on the desktop "Keep running in the system tray" and "Click on the tray icon" Window | Calendar — `AppSettings.trayClick`, the tray calendar above, disabled without a tray; on Windows "Start when you sign in" — `AppController.startAtLogin`, the Run key, shown disabled with a separate `BRULION_PROFILE`, docs/WINDOWS.md "Autostart"; on the desktop with "For developers": the switch that lets AI agents drive the running app, docs/CLI.md "Remote control"). Reminders → sounds: on Windows the "Ringtone" menu lists Windows' notification sounds (Notification, Alarm 1–10, Call 1–10…) and "Sound file…" is disabled. Each group is a heading, a note and its rows divided by hairlines: in a card from 600 px up; below 600 px the card is flat (`BCard.flat`: no surface, border or padding), so heading, note and rows share the page's 16-px edge and the headings and the 32-px gap set the groups apart (the sync section's status rows too). The custom accent's empty "+" swatch is `bgElevated2` in the dark (`bgSunken` in the light) | `section?` |
+| `settings` | `SettingsView` — one section at a time: on wide windows the list of sections on the left, on narrow ones (under 900 px, phones) the sections as tabs at the top — a bar that scrolls sideways, the route's section scrolled into view, icons from 600 px —; choosing one replaces the route's section (no history entry). General, Appearance (`appearance`), Editor, Notebook (also this device's "Follow links to folders outside the notebook", `AppSettings.followsOutsideLinks`, default off, never in `.brulion/config.json` — a sync peer must not switch it on —, pushed into `Workspace.setFollowsOutsideLinks` → `Vault::setFollowsOutsideLinks`, and read by brulion-cli and the background check: a toggle rescans, the linked files come or go as changes; off, a file opened from such a folder is offered as a copy, and neither its pictures nor its PDFs are shown. Devices that followed such links before it was a setting keep them: while the setting was never chosen, each notebook's first open checks once (`AppSettings::checkOutsideLinksOnce`, "vaults/outsideLinksChecked/<id>") and switches it on — before the index and sync see the notebook — only when this device knew the notebook before (state in its device folder, or a recent notebook) and it has such a link; a new device, or a link planted after the check, never does), Reminders, Sync, Backups (`backups`, "Backups" below), Automation (`automation`: brulion:// links and the notebook's key, "Automation (brulion:// links)" above), Application (on Android and Windows "Check for new versions" — `AppController.updates.enabled`, "Window layout"; on the desktop "Keep running in the system tray" and "Click on the tray icon" Window | Calendar — `AppSettings.trayClick`, the tray calendar above, disabled without a tray; on Windows "Start when you sign in" — `AppController.startAtLogin`, the Run key, shown disabled with a separate `BRULION_PROFILE`, docs/WINDOWS.md "Autostart"; on the desktop with "For developers": the switch that lets AI agents drive the running app, docs/CLI.md "Remote control"). Reminders → sounds: on Windows the "Ringtone" menu lists Windows' notification sounds (Notification, Alarm 1–10, Call 1–10…) and "Sound file…" is disabled. Each group is a heading, a note and its rows divided by hairlines: in a card from 600 px up; below 600 px the card is flat (`BCard.flat`: no surface, border or padding), so heading, note and rows share the page's 16-px edge and the headings and the 32-px gap set the groups apart (the sync section's status rows too). The custom accent's empty "+" swatch is `bgElevated2` in the dark (`bgSunken` in the light) | `section?` |
 | `logs` | `LogsView` — "Event log" (see below) | `group?`, `level?`, `fromMs?`, `toMs?`, `run?` |
 | `chat` | `ChatView` — the AI chat ("AI chat" above): the conversations, one conversation, a new one | `path?`, `new?`, `page?`, `prompt?` |
 | `drawing` | `DrawingView` (`qml/drawing`) — the drawing editor on a drawing file ("Drawing editor" below); title: the file's name without `.svg`, `.excalidraw`, `.excalidraw.md` | `path`, `open?` (screenshots: `style`, `more`, `paper`, `theme`, `shape`, `select`, `backdrop` — the page picker of the backdrop's PDF) |
@@ -1232,6 +1232,122 @@ the keyboard and the gesture bar. Back also with Android's back gesture (`Main.q
 the intro again** (`AppController.restartIntro()`) closes the notebook and starts it again.
 The journey (`--journey`) walks it: Polish, the run's theme, a journal mode clicked
 (`Journey::intro`, screenshots `intro-*`).
+
+## Automation (brulion:// links)
+
+Other apps, launchers, scripts, bookmarks and automation tools (Tasker, Automate, MacroDroid,
+KDE's and GNOME's shortcuts, a browser's bookmark) reach Brulion through **brulion:// addresses**
+(Obsidian's URI scheme, Logseq's `logseq://`, x-callback-url): open a page, a heading or a block,
+a day; add a note, a task with a reminder, a new page; search; open a view; run an extension's
+command. The core is `src/core/automation` (`uri.h` reads and writes addresses, `policy.h` decides
+what one may do, `edits.h` the pure edits, `plan.h` works a request out for a notebook and carries
+it out); the app's part is `src/app/shell/appautomation.cpp` (AppController::receiveUri), the
+command line's `uri build | parse | run | open` (docs/CLI.md "brulion:// addresses"), Android's
+docs/ANDROID.md "Automation", the browser's docs/WEB.md "brulion:// links".
+
+### The address
+
+```
+brulion://<action>[/<page path>]?<parameter>=<value>&…
+```
+
+* `brulion:` or `web+brulion:` (the browser's protocol handler), `//` optional, any letter case;
+  `brulion://x-callback-url/<action>?…` too. A path after the action is the page
+  (`brulion://open/Projekty/Dom`; for `new` the title).
+* The query is read as a form: `%XX` are UTF-8 bytes and **`+` is a space** — a plus sign is
+  `%2B` (every URL encoder writes it so); Polish letters may also be typed as they are. `#` is
+  part of a value: `page=Dom#Zakupy` is the heading "Zakupy" of the page Dom, `page=Dom#^abc` its
+  block, as in `[[links]]`.
+* Parameter names ignore letter case; a parameter given twice, a `%` without two hex digits,
+  invalid UTF-8, an unknown action or **a parameter the action does not know** (a typo:
+  `heding=`) make the address invalid — nothing is guessed. Control characters are dropped from
+  values (line breaks and tabs stay; `\r\n` becomes `\n`).
+* Limits: the address at most 100 000 characters, a value at most 50 000 once decoded, 32
+  parameters.
+
+| Action | Parameters | What it does |
+|---|---|---|
+| `open` | `page` (also `file`, `path`: a path with or without `.md`, a page name or alias as `[[links]]` read it, `today`, a date, a date phrase — "wczoraj", "w piątek" — when no page has that name), `heading`, `block` (`abc`, `^abc`, `((abc))`), `line` (from 1) | shows the page there; a day without a note shows its empty day (never created by opening it); a page that does not exist is an error |
+| `daily` (`journal`, `today`) | `date` (ISO, `today`, "wczoraj", "next friday"; default today) | shows the day |
+| `new` (`create`) | `title` (also `name`, `page`; "Projekty/Dom" makes the folder), `folder`, `template` (a page of the templates folder by name or path: docs/TEMPLATES.md), `text` (also `content`: after the template's text), `mode` (`outline`, `document`), `open` (default yes) | a new page — **never over an existing one** (also one differing only in letter case): that page opens instead, error `exists` |
+| `append` / `prepend` | `text` (also `content`), `page` or `date` (default today's journal, made from the journal template when missing), `heading` (the end — `prepend`: the start — of its section; `Dziś`, `## Dziś`, `Plan#Dziś`), `block` (its last / first child), `create` (yes: a missing page is made), `open` | adds the text as one block (`- ` unless it starts with a list marker; further lines its continuation): at the page's end, or at its start — after the frontmatter, the page's properties and a title heading |
+| `task` | `text`, `due`, `scheduled`, `start` (date phrases), `remind` (a date and time phrase; a date alone gets the notebook's default reminder time), `alarm` (yes: the reminder rings as an alarm; or the alarm's own phrase), `every` (a recurrence: "co tydzień", "every weekday"), `priority` (highest … lowest, najwyższy … najniższy), `parse` (no: a date in the text stays text), the target as `append` | `- [ ] text 📅 … ⏰ …`; without date parameters a date phrase in the text is taken out as quick capture reads it ("jutro o 18" a reminder, "w piątek" a due date) |
+| `capture` | `text`, `open` | quick capture into today's journal (a date makes a task); without text the quick capture dialog opens |
+| `search` | `query` (also `q`, `text`) | the search view with the query |
+| `view` | `name` (journals, calendar, tasks, habits, graph, search, allPages / pages, tags, sync, importExport, trash, cleanup, settings, logs, chat) and its parameters: `date` (journals, calendar), `mode` (calendar), `query` (tasks, search), `folder` (search, allPages), `tab` (sync, importExport), `section` (settings) | shows the view |
+| `run` (`command`) | `extension`, `command` (or `extension=silownia/rekord`), `args` (a JSON object: the command's `ctx.args`), `page` (its `ctx` page) | runs the command of an extension **approved on this device** (docs/EXTENSIONS.md); an extension waiting for approval, off or without that command is an error (`not_approved`) — an address never approves code |
+
+Common parameters: `vault` (also `notebook`: a notebook of this device by its name or its folder's,
+or its absolute folder; another one than the open is opened first; a name several notebooks share
+is an error), `key` (below), `x-source` (the caller's name, shown in the confirmation as what the
+link says), `id` (echoed in results), `x-success` / `x-error` / `x-cancel` (callbacks, below).
+
+### Safety
+
+Any web page, any app and any program of the device can fire an address, so (`policy.h`):
+
+* **Opening** — `open`, `daily`, `search`, `view`, `capture` without text — **runs at once**; it
+  changes nothing.
+* **Writing** (`new`, `append`, `prepend`, `task`, `capture` with text) and **running an
+  extension's command** need the notebook's **automation key** in the address (`key=…`) — or the
+  user's **Write** in the dialog **"Write from a link?"** (`ShellAutomationDialog`), which says where
+  it would write (today's journal, the page and its section, a new page, the command) and shows
+  exactly what, as plain text in a monospace well, the reminder's time, the notebook, and the
+  link's own `x-source` name as "The link says it comes from …", never as a fact. "Cancel" writes
+  nothing. The confirmation is asked every time: the caller of a link cannot be known (a browser
+  does not say which page fired it), so there is no "always allow" for links without the key.
+* The key: **Settings → Automation** (`ShellAutomationSettings`) makes one per notebook and
+  device — 32 random characters (160 bits), shown on request, copied, renewed (the old one stops
+  working), removed. It lives in `<app data>/secrets/automation-keys.json` (owner-only, next to the
+  other secrets), never in the notebook: it does not travel with a sync, and every device has its
+  own. Compared in constant time; letter case and spaces around are forgiven. A **wrong key is
+  refused** whatever the address asks (the caller hears why).
+* The setting **"Links without the key"** (`AppSettings` `automation/links`, this device):
+  **Ask** (default: writing asks), **Only open** (writing only with the key, no dialog), **Off**
+  (addresses do nothing, not even with the key).
+* **Never overwritten, never deleted**: writes add one block (compare-and-swap through the vault,
+  History keeps what it replaced; a note that is not UTF-8 is left alone) or create a page whose
+  name is free. Writing through the vault and not the editor's save path, a block added to an
+  extension page never approves its code — changed code waits for approval as code from a sync.
+* **Callbacks** (`x-success`, `x-error`: opened with `path`, `line`, `id`, or `errorCode` and
+  `errorMessage`, added to their query) are used only for a request with the **valid key**: without
+  it a web page could learn from them which pages exist. Never Brulion's own scheme, `file:`,
+  `data:`, `javascript:` (a loop or a local file). `x-cancel` is read but never used: a request with
+  the key is never asked about.
+* The event log records an address's action and where it came from, never its text or key
+  (`redactedUri()` masks a key wherever an address is shown).
+
+The confirmation, an error ("No page “Zakupy” in this notebook.", "The Brulion link has a part
+Brulion does not know: heding") or the outcome ("Task added to today's journal" with an **Open**
+button; a new page and `open=yes` show the note) are toasts. Addresses that come while a notebook
+opens wait for it (at most 8); one for the documentation goes to the user's notebook (as quick
+capture); without any notebook the app asks for one first and runs it then.
+
+**Errors** (`plan.h`, the same codes for the command line, Android's result and the callbacks):
+`unknown_parameter`, `missing_parameter`, `missing_text`, `missing_title`, `page_not_found`,
+`not_a_page`, `heading_not_found`, `block_not_found`, `exists`, `template_not_found`,
+`date_not_understood`, `recurrence_not_understood`, `bad_priority`, `bad_args`, `unknown_view`,
+`not_utf8`, `conflict`, `failed`; the address's own (`too_long`, `no_action`, `unknown_action`,
+`bad_encoding`, `duplicate`); the policy's (`links_off`, `key_required`, `wrong_key`);
+`unknown_notebook`, `ambiguous_notebook`, `not_approved`, `needs_app` (the command line and
+Android's background run: opening and commands need the window).
+
+### Where addresses come from
+
+| From | How |
+|---|---|
+| Linux | the desktop entry declares `MimeType=x-scheme-handler/brulion;` and `Exec=brulion --open %U` (packaging/, the Nix package, the AppImage's desktop entry): `xdg-open 'brulion://daily'`, a link in a browser; a running Brulion gets it from the second launch (`uri` message, ipc/appmessage.h) |
+| Windows | the installer registers the URL protocol `brulion` (`HKCU\Software\Classes\brulion`, docs/WINDOWS.md): `start brulion://daily`, a link |
+| Android | links (VIEW), Tasker's intents, Quick Settings tiles, launcher shortcuts (docs/ANDROID.md "Automation") |
+| Browser | `web+brulion:` through `navigator.registerProtocolHandler` (Settings → Automation: **Allow**) and the installed app's `protocol_handlers` (docs/WEB.md "brulion:// links") |
+| A note | a `[link](brulion://…)` clicked in a note (Workspace::openUrl → `automationUriRequested`) — checked like any other: notes come from anywhere |
+| Command line | `brulion 'brulion://…'`, `brulion --uri <address>`, `brulion-cli uri open` (to the running app), `brulion-cli uri run` (headless, docs/CLI.md) |
+
+Settings → Automation also builds links: Quick note / Task / Add to a page / Open / New page,
+the page, heading, text and reminder fields, "With the key", the address as it comes out (monospace,
+wrapping anywhere), **Copy link** and **Try it** (the app receives it as any link: a write without
+the key asks). `AppController.automationLink()` / `pageAutomationLink()` write them (`vault` is the
+notebook's folder name, so a link works whichever notebook is open).
 
 ## Tabs, split view and windows
 
@@ -5028,7 +5144,8 @@ default, leaves it out of the shipped Android and browser builds (Release / MinS
 | `--route <view or JSON>` | initial route, e.g. `settings` or `'{"view":"page","path":"Projekty/Remont mieszkania.md","open":"links"}'` |
 | `--share <json>` | receive a share as Android's `ShareActivity` hands it over — `{"subject", "text", "url", "files": [{"path", "name", "mime"}]}` (`src/core/notebook/share.h`) — and open the share dialog once the notebook is ready (`AppController::receiveShare`; screenshots, manual checks, ctest `tst_shell_share`) |
 | `--share-query <query>` | the browser version's share target: `share-title=…&share-text=…&share-url=…` as `wasm/index.html` passes a share launch's parameters (`notebook::sharedContentFromQuery`, `AppController::receiveShareQuery`); works on every platform (ctest `tst_shell_share`) |
-| `--open <file>…` | the files to offer in the share dialog ("Open with": the desktop entry's `Exec=brulion --open %F`, the Windows installer's `"…\brulion.exe" --open "%1"`): every argument after it is a file — paths relative to the working folder or `file://` URLs —, never an option, the options are the arguments before it (`notebook::splitOpenArguments`); a file of the open notebook opens as its page; copies are saved, the files are never changed; without files a plain start. A second launch sends them to the running Brulion (`share`, ipc/appmessage.h) |
+| `--uri <address>` | a brulion:// address to receive once the notebook is ready (also a bare `brulion://…` argument, and one among the `--open` files: the desktop entry's `%U`); a second launch hands it to the running Brulion (`uri`, ipc/appmessage.h) — "Automation" above |
+| `--open <file>…` | the files to offer in the share dialog ("Open with": the desktop entry's `Exec=brulion --open %U`, the Windows installer's `"…\brulion.exe" --open "%1"`): every argument after it is a file — paths relative to the working folder or `file://` URLs —, never an option, the options are the arguments before it (`notebook::splitOpenArguments`); a file of the open notebook opens as its page; copies are saved, the files are never changed; without files a plain start. A second launch sends them to the running Brulion (`share`, ipc/appmessage.h) |
 | `--update-available <version>` | show the message about a new version as if `<version>` were the latest release, on any platform, without asking GitHub; for this run only (the `update` screenshot) |
 | `--popup <name[:query]>` | open a shell popup once the notebook is open and indexed (at most 3 s later without one): `palette`, `switcher` (the query as if typed, the caret after it), `capture`, `newPage`, `newFolder`, `move[:<path>[><folder>]]` (else the page shown; with `>` that folder chosen), `about`, `drawer`, `more` (the top bar's "More" menu) |
 | `--editor-script <state>` (with the app) | `qml/dev/PageScript.qml`: the editor on the guide page (a document) in a state (`editing`, `slash`, `reminder`, `source`, `sidepanel`, `doc-paragraph`, `doc-list`, `doc-heading`, `doc-outline`; any page given by `--route`: `edit:<text>[@<caret>]`, `select:<text>`, `select-range:<first>..<last>` — on touch UIs in the selection mode —, `mode-tooltip`, `properties` — the page's properties panel expanded, nothing focused, the view at the top: the `ui` benchmark's screen —, …) |
