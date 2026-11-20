@@ -20,6 +20,8 @@ import Brulion
 // tools ([[, #, /, undo, redo, hide keyboard; BlockEditor.toolbarMode "source"); the view ends at
 // the keyboard (the shell lifts it), the caret is kept above the toolbar — with the editor's
 // typewriter scrolling in the middle of the view.
+// Vim keys (docs/UI.md "Vim mode"): the TextEdit is BlockEditor.vimSession's source buffer
+// (VimSourceBuffer) while it exists; normal and visual mode make it read-only with a block caret.
 Flickable {
     id: root
 
@@ -42,6 +44,32 @@ Flickable {
     TouchFlick.enabled: true
 
     function focusEditor(): void { source.forceActiveFocus() }
+    /// Vim's normal / visual mode in the source (BlockEditor.vimCommands).
+    readonly property bool vimCommands: editor !== null && editor.vimCommands
+    onVimCommandsChanged: {
+        const caret = source.cursorPosition
+        source.readOnly = root.vimCommands
+        source.cursorPosition = Math.min(caret, source.length)
+        root.updateVimCaret()
+    }
+    Component.onCompleted: source.readOnly = root.vimCommands
+    /// The block caret (InlineEditor's way: set when the caret, the text or the mode change).
+    property rect vimCaretBox
+    property rect box
+    property rect nextBox
+    function updateVimCaret(): void {
+        if (!vimCommands)
+            return
+        root.box = source.positionToRectangle(source.cursorPosition)
+        let w = caretMetrics.averageCharacterWidth
+        if (source.cursorPosition < source.length) {
+            root.nextBox = source.positionToRectangle(source.cursorPosition + 1)
+            if (Math.abs(root.nextBox.y - root.box.y) < 1 && root.nextBox.x > root.box.x)
+                w = root.nextBox.x - root.box.x
+        }
+        root.vimCaretBox = Qt.rect(root.box.x, root.box.y, Math.max(2, w), root.box.height)
+    }
+    FontMetrics { id: caretMetrics; font: source.font }
     /// The find bar's current match: selected and scrolled to; the bar may keep the keyboard.
     function showRange(from: int, to: int, keepKeyboard: bool): void {
         source.select(from, to)
@@ -126,6 +154,9 @@ Flickable {
         tabStopDistance: tabMetrics.advanceWidth("    ")
         // Not on touch UIs: a finger drag scrolls (see above).
         selectByMouse: !Theme.touchUi
+        // Vim's normal and visual mode: keys are commands (docs/UI.md "Vim mode"); switched with
+        // the caret kept (a TextEdit puts it at the end whenever readOnly changes).
+        readOnly: false
         font.family: Theme.fontMono
         font.pixelSize: Theme.textSm + 1
         color: Theme.fg
@@ -162,8 +193,30 @@ Flickable {
             text = root.controller ? root.controller.sourceText : ""
             sync.active = true
             cursorPosition = 0
+            if (root.editor)
+                root.editor.vimSession.sourceEdit = source
         }
-        onCursorRectangleChanged: root.keepCaretVisible()
+        Component.onDestruction: {
+            if (root.editor && root.editor.vimSession.sourceEdit === source)
+                root.editor.vimSession.sourceEdit = null
+        }
+
+        // Vim's block caret (normal mode).
+        Rectangle {
+            objectName: "vimSourceCaret"
+            visible: root.vimCommands && source.activeFocus && source.selectedText === ""
+            x: root.vimCaretBox.x
+            y: root.vimCaretBox.y
+            width: root.vimCaretBox.width
+            height: root.vimCaretBox.height
+            color: Theme.accent
+            opacity: 0.45
+            radius: 1
+        }
+        onCursorRectangleChanged: {
+            root.keepCaretVisible()
+            root.updateVimCaret()
+        }
         // The editor's toolbar shows the source tools while the text has the keyboard.
         onActiveFocusChanged: if (root.editor) root.editor.sourceEditing = activeFocus
 
@@ -185,8 +238,15 @@ Flickable {
         Keys.onShortcutOverride: (event) => {
             if ((event.modifiers & Qt.ControlModifier) && event.key === Qt.Key_E)
                 event.accepted = true
+            else if (root.vimCommands && root.editor.vimOwnsShortcut(event.key, event.modifiers))
+                event.accepted = true
         }
         Keys.onPressed: (event) => {
+            // Vim's keys first (docs/UI.md "Vim mode").
+            if (root.editor && root.editor.handleVimSourceKey(event, source)) {
+                event.accepted = true
+                return
+            }
             if ((event.modifiers & Qt.ControlModifier) && event.key === Qt.Key_E) {
                 root.editor.toggleSourceMode()
                 event.accepted = true

@@ -284,12 +284,18 @@ void TestEditorVim::visualOverBlocks()
     QCOMPARE(e.vim.pageBuffer()->shownSelectionRow(), 1);
     QCOMPARE(e.page.selectionCount(), 0);
     e.run(u"j"_s);
-    // Two blocks: a block selection.
-    QCOMPARE(e.page.selectionCount(), 2);
+    // Two blocks: drawn as selected while the caret's block stays edited (no block selection of
+    // the editor's: no tools, no subtrees).
+    QCOMPARE(e.page.selectionCount(), 0);
+    QCOMPARE(e.caret(), u"2:0"_s);
+    QVERIFY(e.page.blocks()->isRowSelected(1));
+    QVERIFY(e.page.blocks()->isRowSelected(2));
+    QVERIFY(!e.page.blocks()->isRowSelected(3));
     QVERIFY(e.vim.ownsBlockSelection());
     e.run(u"y"_s);
     QCOMPARE(e.vim.mode(), u"normal"_s);
-    QCOMPARE(e.page.selectionCount(), 0);
+    QVERIFY(!e.page.blocks()->isRowSelected(1));
+    QVERIFY(!e.page.blocks()->isRowSelected(2));
     QCOMPARE(e.caret(), u"1:0"_s);
     e.run(u"Gp"_s);
     QCOMPARE(e.text(), u"- jeden\n- dwa\n- trzy\n- cztery\n- dwa\n- trzy\n"_s);
@@ -299,10 +305,18 @@ void TestEditorVim::visualOverBlocks()
     QCOMPARE(e.text(), u"- jeden\n- dwa\n- trzy\n- cztery\n- dwa\n- trzy\n"_s);
     e.run(u"ggVjjd"_s);
     QCOMPARE(e.text(), u"- cztery\n- dwa\n- trzy\n"_s);
-    // Esc in visual mode: back to editing the block at the caret.
+    // Esc in visual mode: the band goes, the caret stays where it was moved.
     e.run(u"Vj<Esc>"_s);
-    QCOMPARE(e.page.selectionCount(), 0);
+    QVERIFY(!e.page.blocks()->isRowSelected(0));
+    QVERIFY(!e.page.blocks()->isRowSelected(1));
     QCOMPARE(e.caret(), u"1:0"_s);
+    // A parent with its children open: V takes its line only (the children are lines of their own).
+    Editor p(u"- rodzic\n  - dziecko\n- dalej\n"_s);
+    p.at(0, 0);
+    p.run(u"V"_s);
+    QVERIFY(!p.page.blocks()->isRowSelected(1));
+    p.run(u"jd"_s);
+    QCOMPARE(p.text(), u"- dalej\n"_s);
 }
 
 void TestEditorVim::visualInOneBlock()

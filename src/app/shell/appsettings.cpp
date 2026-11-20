@@ -74,6 +74,7 @@ constexpr auto kWordCount = "editor/wordCountShown"_L1;
 constexpr auto kFocusMode = "ui/focusMode"_L1;
 constexpr auto kReadingMode = "ui/readingMode"_L1;
 constexpr auto kTypewriter = "editor/typewriterScrolling"_L1;
+constexpr auto kVimMode = "editor/vimMode"_L1;
 constexpr auto kShortcuts = "shortcuts"_L1;
 constexpr auto kIntroDone = "app/introDone"_L1;
 constexpr auto kNewNotebookConfig = "app/newNotebookConfig"_L1;
@@ -973,6 +974,17 @@ void AppSettings::setTypewriterScrolling(bool on)
 {
     if (store(kTypewriter, on, typewriterScrolling()))
         Q_EMIT typewriterScrollingChanged();
+}
+
+bool AppSettings::vimMode() const
+{
+    return value(kVimMode, false).toBool();
+}
+
+void AppSettings::setVimMode(bool on)
+{
+    if (store(kVimMode, on, vimMode()))
+        Q_EMIT vimModeChanged();
 }
 
 // ---- Keyboard shortcuts (ShortcutMap) -------------------------------------------------------

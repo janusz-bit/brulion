@@ -21,6 +21,7 @@ constexpr Trait kTraits[] = {
         {"noteMode", 0},
         {"statusText", 0},
         {"statusPosition", 0},
+        {"statusVim", 0},
         {"editing", 1 << 0},
         {"toolbarDocked", 1 << 1},
         {"replacesBottomNav", 1 << 2},
@@ -95,6 +96,7 @@ void ViewTraits::refresh()
                   .noteMode = text("noteMode"),
                   .statusText = text("statusText"),
                   .statusPosition = text("statusPosition"),
+                  .statusVim = text("statusVim"),
                   .flags = flags};
     if (values == m_values)
         return;

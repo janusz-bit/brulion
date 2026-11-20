@@ -95,7 +95,7 @@ public:
     Q_INVOKABLE void adoptTextSelection(int row, int from, int to);
     /// The same in source mode (positions in the text).
     Q_INVOKABLE void adoptSourceSelection(int from, int to);
-    /// The mode is Vim's visual mode shown as a block selection (the selection's keys are Vim's).
+    /// The mode is Vim's visual mode shown as a band of selected blocks (VimPageBuffer).
     Q_INVOKABLE bool ownsBlockSelection() const;
 
     // Tests.

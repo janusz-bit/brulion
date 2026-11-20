@@ -47,6 +47,7 @@ qt_target_qml_sources(brulion
         qml/editor/SourceEditor.qml
         qml/editor/FindBar.qml
         qml/editor/ZoomBreadcrumb.qml
+        qml/editor/VimStatus.qml
         qml/editor/SelectionToolbar.qml
         qml/editor/PageItemView.qml
 )

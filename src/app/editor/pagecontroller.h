@@ -1094,6 +1094,9 @@ public:
     TextRow textRow(int row) const;
     /// `row`'s edit text ("" for an invalid row).
     QString editTextOf(int row) const;
+    /// Vim's visual selection over blocks: `rows` drawn as selected while the caret's block stays
+    /// edited — the model's selected rows only, no block selection of the controller (empty: none).
+    void showLineSelection(const QList<int> &rows);
 
     // --- Undo -------------------------------------------------------------------------------------
     Q_INVOKABLE void undo();

@@ -38,6 +38,9 @@ class ViewTraits : public QObject {
     /// while a block is edited) when they are strings, else "".
     Q_PROPERTY(QString statusText READ statusText NOTIFY traitsChanged FINAL)
     Q_PROPERTY(QString statusPosition READ statusPosition NOTIFY traitsChanged FINAL)
+    /// `statusVim` (PageView, JournalsView: Vim's mode, the command being typed or the command
+    /// line of the focused editor — docs/UI.md "Vim mode"), else "".
+    Q_PROPERTY(QString statusVim READ statusVim NOTIFY traitsChanged FINAL)
     // Each true only when the view's property of that name is the boolean true.
     Q_PROPERTY(bool editing READ editing NOTIFY traitsChanged FINAL)
     Q_PROPERTY(bool toolbarDocked READ toolbarDocked NOTIFY traitsChanged FINAL)
@@ -63,6 +66,7 @@ public:
     QString noteMode() const { return m_values.noteMode; }
     QString statusText() const { return m_values.statusText; }
     QString statusPosition() const { return m_values.statusPosition; }
+    QString statusVim() const { return m_values.statusVim; }
     bool editing() const { return m_values.flags & Editing; }
     bool toolbarDocked() const { return m_values.flags & ToolbarDocked; }
     bool replacesBottomNav() const { return m_values.flags & ReplacesBottomNav; }
@@ -118,6 +122,7 @@ private:
         QString noteMode;
         QString statusText;
         QString statusPosition;
+        QString statusVim;
         int flags = 0; ///< Flag bits
         bool operator==(const Values &) const = default;
     };

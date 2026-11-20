@@ -533,6 +533,11 @@ private Q_SLOTS:
             QVERIFY(!s.focusMode());
             QVERIFY(!s.typewriterScrolling());
             QVERIFY(!s.readingMode());
+            QVERIFY(!s.vimMode()); // (Vim keys: off until asked for)
+            QSignalSpy vim(&s, &AppSettings::vimModeChanged);
+            s.setVimMode(true);
+            s.setVimMode(true);
+            QCOMPARE(vim.size(), 1);
             QSignalSpy focus(&s, &AppSettings::focusModeChanged);
             s.setFocusMode(true);
             s.setFocusMode(true);
@@ -553,6 +558,7 @@ private Q_SLOTS:
             QVERIFY(s.focusMode());
             QVERIFY(s.readingMode());
             QVERIFY(s.typewriterScrolling());
+            QVERIFY(s.vimMode());
             QVERIFY(!s.wordCountShown());
             const QVariantMap shortcuts = s.shortcutOverrides();
             QCOMPARE(shortcuts.size(), 3);

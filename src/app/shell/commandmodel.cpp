@@ -119,6 +119,7 @@ CommandModel::CommandModel(AppController *app) : QObject(nullptr), m_app(app)
     connect(app->settings(), &AppSettings::focusModeChanged, this, &CommandModel::commandsChanged);
     connect(app->settings(), &AppSettings::readingModeChanged, this, &CommandModel::commandsChanged);
     connect(app->settings(), &AppSettings::typewriterScrollingChanged, this, &CommandModel::commandsChanged);
+    connect(app->settings(), &AppSettings::vimModeChanged, this, &CommandModel::commandsChanged);
     // The shortcuts' list: these commands with their default shortcuts (titles in the language:
     // again after a language switch, eventFilter()).
     if (ShortcutMap *shortcuts = app->shortcuts()) {
@@ -276,6 +277,13 @@ static QList<Command> buildCommands(const AppController *app)
                                                     : CommandModel::tr("Typewriter scrolling"),
              CommandModel::tr("Keep the line being written in the middle of the screen"),
              u"text-select"_s,
+             {},
+             true},
+            // Vim keys (docs/UI.md "Vim mode"): a device setting.
+            {u"view.vim"_s,
+             app->settings()->vimMode() ? CommandModel::tr("Turn off Vim keys") : CommandModel::tr("Vim keys"),
+             CommandModel::tr("Normal, insert and visual mode in the blocks and the Markdown source"),
+             u"keyboard"_s,
              {},
              true},
             {u"sync.now"_s,
@@ -674,6 +682,8 @@ QList<ShortcutMap::Action> CommandModel::shortcutActions() const
             title = tr("Focus mode");
         else if (c.id == u"view.typewriter")
             title = tr("Typewriter scrolling");
+        else if (c.id == u"view.vim")
+            title = tr("Vim keys");
         QString shortcut = c.shortcut;
         if (c.id.startsWith(u"ext.")) {
             title = c.subtitle + u": "_s + c.title; // ("Licznik słów: Policz słowa")
@@ -780,6 +790,8 @@ bool CommandModel::run(const QString &id)
         m_app->settings()->setReadingMode(!m_app->settings()->readingMode());
     else if (id == u"view.typewriter")
         m_app->settings()->setTypewriterScrolling(!m_app->settings()->typewriterScrolling());
+    else if (id == u"view.vim")
+        m_app->settings()->setVimMode(!m_app->settings()->vimMode());
     else if (id == u"settings.shortcuts")
         m_app->navigate({{u"view"_s, u"settings"_s}, {u"section"_s, u"shortcuts"_s}});
     else if (id == u"task.stopClocks")

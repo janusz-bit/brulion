@@ -5,7 +5,8 @@ import Brulion
 
 // ShellStatusBar — the thin bar along the bottom of wide windows (docs/UI.md "Status bar"; the
 // "Nocny" look, IDE-like): on the left the sync status — a dot (green: synced, amber: syncing, red:
-// failed, grey: only on this device) and its words, a click opens the sync center —; on the right
+// failed, grey: only on this device) and its words, a click opens the sync center —, Vim's mode or
+// command line while the view's editor has Vim's keys (ShellRouteView.viewStatusVim); on the right
 // what the view reports (ShellRouteView.viewStatusPosition / viewStatusText: the edited block, the
 // word count) and the command palette's key. Only what there is: an empty part leaves no gap.
 //
@@ -19,6 +20,8 @@ Rectangle {
 
     readonly property string position: routeView ? routeView.viewStatusPosition : ""
     readonly property string words: routeView ? routeView.viewStatusText : ""
+    /// Vim's mode, the command typed or the command line (docs/UI.md "Vim mode").
+    readonly property string vim: routeView ? routeView.viewStatusVim : ""
     readonly property string paletteKey: ShortcutMap.sequences["palette"] || ""
 
     implicitHeight: Theme.dense ? 22 : 24
@@ -93,6 +96,19 @@ Rectangle {
             }
             HoverHandler { id: syncHover; cursorShape: Qt.PointingHandCursor }
             TapHandler { onTapped: AppController.navigate({ view: "sync" }) }
+        }
+
+        // ---- Vim's mode and command line (as Vim shows them at the bottom left) ----------------
+        BText {
+            objectName: "statusBarVim"
+            visible: bar.vim !== ""
+            Layout.maximumWidth: bar.width / 3
+            text: bar.vim
+            font.family: Theme.fontMono
+            font.pixelSize: Theme.textXs
+            font.bold: true
+            color: Theme.accentText
+            elide: Text.ElideRight
         }
 
         Item { Layout.fillWidth: true }

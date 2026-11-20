@@ -11,6 +11,9 @@ import Brulion
 // is read-only while the block is not edited, so nothing moves when editing starts.
 // Android keyboards may commit a line break as text instead of a key press: in single-line
 // blocks it splits the block like Enter.
+// Vim keys (docs/UI.md "Vim mode"): in normal and visual mode the text is read-only (keys are
+// BlockEditor.vimSession's commands), a block caret stands on the character, Vim's visual selection
+// is the text's selection (BlockEditor.vimSelection…).
 // The text is read with EditorInput.plainText(), not `text`: TextEdit.text turns no-break spaces
 // and U+2028 into spaces / line feeds, and the block must keep every character it had (so do
 // Ctrl+C / Ctrl+X: BlockEditor.copyEditSelection). The selection stays shown while a menu or a
@@ -48,6 +51,35 @@ TextEdit {
     property string placeholderText
     /// Misspelled words are underlined while the block is edited.
     readonly property bool spellChecked: active && highlightMode !== "code" && SpellCheck.active
+    /// Vim's normal / visual mode (docs/UI.md "Vim mode"): keys are commands, the text takes no
+    /// typing (no input method either), the caret is a block over its character.
+    readonly property bool vimCommands: active && editor !== null && editor.vimCommands
+    /// The block caret: the character at the caret (a space's width at a line's end); set by
+    /// updateVimCaret() when the caret, the text or the mode change (a binding would read what it
+    /// writes).
+    property rect vimCaretBox
+    property rect box
+    property rect nextBox
+    function updateVimCaret(): void {
+        if (!vimCommands)
+            return
+        edit.box = positionToRectangle(cursorPosition)
+        let w = tabMetrics.averageCharacterWidth
+        if (cursorPosition < length) {
+            edit.nextBox = positionToRectangle(cursorPosition + 1)
+            if (Math.abs(edit.nextBox.y - edit.box.y) < 1 && edit.nextBox.x > edit.box.x)
+                w = edit.nextBox.x - edit.box.x
+        }
+        vimCaretBox = Qt.rect(edit.box.x, edit.box.y, Math.max(2, w), edit.box.height)
+    }
+    onContentWidthChanged: updateVimCaret()
+    /// Vim's visual selection here: [anchor → cursor) of the text.
+    function vimSelect(): void {
+        if (!editor || editor.vimSelectionRow !== row || !active)
+            return
+        cursorPosition = Math.min(editor.vimSelectionAnchor, length)
+        moveCursorSelection(Math.min(editor.vimSelectionCursor, length), TextEdit.SelectCharacters)
+    }
 
     // Until the initial text is in place, textChanged (TextEdit also reports formatting-only
     // changes) is ignored. lastText: the exact text last synchronised with the controller.
@@ -63,7 +95,19 @@ TextEdit {
     textFormat: TextEdit.PlainText
     wrapMode: TextEdit.Wrap
     tabStopDistance: tabMetrics.advanceWidth("    ")
-    readOnly: !active
+    readOnly: !active || vimReadOnly
+    /// vimCommands, switched with the caret kept: a TextEdit puts its caret at the end whenever
+    /// readOnly changes (QQuickTextEdit::setReadOnly).
+    property bool vimReadOnly: false
+    onVimCommandsChanged: {
+        const caret = cursorPosition
+        const wasSyncing = syncing
+        syncing = true
+        vimReadOnly = vimCommands
+        cursorPosition = Math.min(caret, length)
+        syncing = wasSyncing
+        updateVimCaret()
+    }
     selectByMouse: active
     activeFocusOnPress: active
     // The selected text stays while a menu or dialog has the keyboard (the block is still edited;
@@ -153,6 +197,19 @@ TextEdit {
         elide: Text.ElideRight
     }
 
+    // Vim's block caret (normal mode; visual mode shows the selection).
+    Rectangle {
+        objectName: "vimCaret"
+        visible: edit.vimCommands && edit.activeFocus && edit.selectedText === ""
+        x: edit.vimCaretBox.x
+        y: edit.vimCaretBox.y
+        width: edit.vimCaretBox.width
+        height: edit.vimCaretBox.height
+        color: Theme.accent
+        opacity: 0.45
+        radius: 1
+    }
+
     /// The exact text of the document (no-break spaces kept), see EditorInput.plainText().
     function plain(): string {
         return EditorInput.plainText(edit.textDocument)
@@ -195,6 +252,7 @@ TextEdit {
         syncing = false
         editor.controller.cursorPosition = cursorPosition
         edit.selectFindMatch()
+        edit.vimSelect()
         // The find bar keeps the keyboard while it goes from match to match.
         if (editor.findKeepsKeyboard) {
             editor.setActiveEditor(edit)
@@ -326,7 +384,11 @@ TextEdit {
             return
         editor.updateCompletion(edit)
     }
-    onCursorRectangleChanged: if (activeFocus && editor) caretLater.restart()
+    onCursorRectangleChanged: {
+        if (activeFocus && editor)
+            caretLater.restart()
+        updateVimCaret()
+    }
     /// editor.ensureCaretVisible(edit) once the event loop is idle (Qt.callLater merged the calls).
     Later {
         id: caretLater
@@ -358,9 +420,22 @@ TextEdit {
     Connections {
         target: edit.editor
         function onFindSelectionChanged() { edit.selectFindMatch() }
+        function onVimSelectionChanged() {
+            if (!edit.active)
+                return
+            if (edit.editor.vimSelectionRow === edit.row)
+                edit.vimSelect()
+            else if (edit.editor.vimSelectionRow < 0 && edit.vimCommands)
+                edit.deselect()
+        }
     }
 
     Keys.onShortcutOverride: (event) => {
+        // Vim's own Ctrl keys in its command modes (docs/UI.md "Vim mode").
+        if (edit.vimCommands && edit.editor.vimOwnsShortcut(event.key, event.modifiers)) {
+            event.accepted = true
+            return
+        }
         // Editor shortcuts win over application-wide ones while typing.
         if (!(event.modifiers & Qt.ControlModifier))
             return

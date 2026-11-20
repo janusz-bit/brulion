@@ -170,6 +170,19 @@ PageController::TextRow PageController::textRow(int row) const
     return TextRow{row, opaque ? QString() : shape.editText, opaque, m_model->isCollapsed(row)};
 }
 
+void PageController::showLineSelection(const QList<int> &rows)
+{
+    if (!rows.isEmpty() && (m_selectedUid || m_anchorUid))
+        clearSelection();
+    if (m_selectedUid || m_anchorUid)
+        return; // (a block selection of the controller's own draws its rows)
+    QSet<quint64> uids;
+    for (const int r : rows)
+        if (validRow(r))
+            uids.insert(m_model->uidAt(r));
+    m_model->setSelectedUids(uids);
+}
+
 QString PageController::editTextOf(int row) const
 {
     return validRow(row) ? m_model->editTextAt(row) : QString();

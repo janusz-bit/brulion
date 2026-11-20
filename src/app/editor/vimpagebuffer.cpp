@@ -218,6 +218,15 @@ void VimPageBuffer::clearTextSelection()
         onTextSelection(-1, -1, -1);
 }
 
+void VimPageBuffer::clearBand()
+{
+    if (!m_showingBlocks)
+        return;
+    m_showingBlocks = false;
+    if (m_controller)
+        m_controller->showLineSelection({});
+}
+
 void VimPageBuffer::setCursor(Position p)
 {
     if (!m_controller)
@@ -225,7 +234,7 @@ void VimPageBuffer::setCursor(Position p)
     p = clamped(p);
     m_cursor = p;
     m_selectionShown = false;
-    m_showingBlocks = false;
+    clearBand();
     clearTextSelection();
     const Line &l = m_lines.at(p.line);
     if (l.row < 0)
@@ -255,7 +264,7 @@ void VimPageBuffer::showSelection(Position anchor, Position cursor, vim::Selecti
     m_selectionShown = true;
     if (a.row == c.row && !a.opaque && a.row >= 0) {
         // In the edited block's text.
-        m_showingBlocks = false;
+        clearBand();
         const QString text = m_texts.at(cursor.line);
         int from = 0, to = 0;
         if (shape == vim::SelectionShape::Lines) {
@@ -282,11 +291,22 @@ void VimPageBuffer::showSelection(Position anchor, Position cursor, vim::Selecti
             onTextSelection(c.row, from, to);
         return;
     }
-    // Over several blocks: those blocks are selected.
+    // Over several blocks: the caret's block stays edited, the blocks of the selection are drawn
+    // as selected (a band, not the editor's block selection: no subtrees, no tools).
     clearTextSelection();
+    if (a.row < 0 || c.row < 0)
+        return;
+    if (c.opaque) {
+        m_controller->stopEditing();
+    } else {
+        m_controller->placeCaret(c.row, c.offset + std::min(cursor.column, c.length));
+    }
+    QList<int> rows;
+    for (int i = std::min(anchor.line, cursor.line); i <= std::max(anchor.line, cursor.line); ++i)
+        if (rows.isEmpty() || rows.last() != m_lines.at(i).row)
+            rows.append(m_lines.at(i).row);
     m_showingBlocks = true;
-    if (a.row >= 0 && c.row >= 0)
-        m_controller->selectRange(a.row, c.row);
+    m_controller->showLineSelection(rows);
 }
 
 bool VimPageBuffer::ensureBlock()
@@ -460,6 +480,7 @@ bool VimPageBuffer::undo()
     if (!m_controller || !m_controller->canUndo())
         return false;
     m_selectionShown = false;
+    clearBand();
     clearTextSelection();
     m_controller->undo();
     m_dirty = true;
@@ -471,6 +492,7 @@ bool VimPageBuffer::redo()
     if (!m_controller || !m_controller->canRedo())
         return false;
     m_selectionShown = false;
+    clearBand();
     clearTextSelection();
     m_controller->redo();
     m_dirty = true;
@@ -483,6 +505,7 @@ void VimPageBuffer::modeChanged(vim::Mode mode)
         ensureBlock();
     if (mode == vim::Mode::Normal || mode == vim::Mode::Insert || mode == vim::Mode::Replace) {
         m_selectionShown = false;
+        clearBand();
         clearTextSelection();
     }
     if (onMode)

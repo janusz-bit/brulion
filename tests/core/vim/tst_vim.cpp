@@ -742,6 +742,14 @@ void TestVim::keysLeftToTheEditor()
     QCOMPARE(f.engine.mode(), Mode::Normal);
     // Shift+arrows select in the editor.
     QVERIFY(!f.engine.feed(Key::special(Qt::Key_Down, Qt::ShiftModifier)));
+    // A modifier alone keeps what is pending (d, then Shift for G).
+    Fixture g(u"a\n|b\nc"_s);
+    g.engine.feed(Key::fromText(u"d"_s));
+    QVERIFY(!g.engine.feed(Key::special(Qt::Key_Shift, Qt::ShiftModifier)));
+    QVERIFY(!g.engine.feed(Key::special(Qt::Key_AltGr)));
+    QCOMPARE(g.engine.pending(), u"d"_s);
+    g.engine.feed(Key{Qt::Key_G, Qt::ShiftModifier, u"G"_s});
+    QCOMPARE(dump(g.buffer), u"|a"_s);
 }
 
 void TestVim::polishLayoutKeys()

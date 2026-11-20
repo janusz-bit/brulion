@@ -525,6 +525,27 @@ bool Engine::feed(const Key &key)
 {
     if (!m_buffer)
         return false;
+    // A modifier pressed alone (Shift for a capital, AltGr for ą) or a dead key is no key of its
+    // own: what is pending stays.
+    switch (key.key) {
+    case Qt::Key_Shift:
+    case Qt::Key_Control:
+    case Qt::Key_Alt:
+    case Qt::Key_AltGr:
+    case Qt::Key_Meta:
+    case Qt::Key_Super_L:
+    case Qt::Key_Super_R:
+    case Qt::Key_Hyper_L:
+    case Qt::Key_Hyper_R:
+    case Qt::Key_CapsLock:
+    case Qt::Key_NumLock:
+    case Qt::Key_ScrollLock:
+    case Qt::Key_Mode_switch: return false;
+    default:
+        if (key.key >= Qt::Key_Dead_Grave && key.key <= Qt::Key_Dead_Longsolidusoverlay && key.text.isEmpty())
+            return false;
+        break;
+    }
     clearMessage();
     const QString t = tokenOf(key);
     if (m_mode == Mode::Insert)

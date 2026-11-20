@@ -12,8 +12,9 @@
 //     outdent like Tab and Shift+Tab — a line of a code block, quote… is a line of its text;
 //   * one change of Vim is one undo step (PageController::joinUndoSteps()).
 //
-// The visual selection shows in the edited block's text while it stays in one block, as a block
-// selection once it reaches others.
+// The visual selection shows in the edited block's text while it stays in one block; once it reaches
+// others the caret's block stays edited and the selection's blocks are drawn as selected (a band;
+// the editor's block selection — with its subtrees and tools — is not made).
 #pragma once
 
 #include "vim/vim.h"
@@ -106,6 +107,7 @@ private:
     /// lines must all be read again.
     bool refreshRows(int from, int to) const;
     void clearTextSelection();
+    void clearBand();
     /// An empty page gets a block to edit (insert, put): true when there is one now.
     bool ensureBlock();
     vim::Position clamped(vim::Position p) const;

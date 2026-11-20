@@ -4966,6 +4966,116 @@ QQuickItem *toolbarSlotOf(QQuickWindow *window, QQuickItem *editor)
 
 /// Find and replace (docs/UI.md "Find and replace"): the bar in a page with real keys and taps, source
 /// mode, the journal stream, and the notebook-wide view with its ticks, confirmation and Undo.
+/// Vim keys (docs/UI.md "Vim mode"): the setting on, real keys typed into a page — motions,
+/// cw with Polish letters, dd, u, a visual line selection over blocks, :s — then into source mode;
+/// the mode shown (the status bar on desktops, the view's corner on phones); off again.
+void checkVimKeys(QQuickWindow *window, AppController *app, const Check &check)
+{
+    const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
+    Workspace *ws = app->workspace();
+    const QString note = u"Vim w notatce.md"_s;
+    ws->writeFile(note, u"- Zażółć gęślą jaźń\n- drugi wiersz\n- trzeci wiersz\n- czwarty\n"_s);
+    app->settings()->setVimMode(true);
+    app->navigate({{u"view"_s, u"page"_s}, {u"path"_s, note}});
+    QQuickItem *editor = waitLoadedEditor(window->contentItem(), u"pageEditor"_s, note);
+    QObject *controller = controllerOf(editor);
+    check(controller != nullptr, "Vim: the page is open");
+    if (!controller) {
+        app->settings()->setVimMode(false);
+        return;
+    }
+    const auto text = [&] { return controller->property("sourceText").toString(); };
+    const auto keys = [&](const QString &chars) {
+        for (const QChar ch : chars) {
+            if (ch == u'\x1b')
+                sendKey(window, Qt::Key_Escape);
+            else if (ch == u'\r')
+                sendKey(window, Qt::Key_Return);
+            else
+                sendKey(window, 0, Qt::NoModifier, QString(ch));
+        }
+    };
+    const auto named = [&](const QString &name) { return shownNamed(window->contentItem(), name); };
+    uidriver::callQml(editor, "startEditing", {QVariant(0), QVariant(0)});
+    QQuickItem *edit = nullptr;
+    check(waitFor([&] {
+              edit = editor->property("activeEditor").value<QQuickItem *>();
+              return edit && edit->hasActiveFocus();
+          }),
+          "Vim: the first block is edited");
+    check(waitFor([&] { return edit && edit->property("readOnly").toBool(); }),
+          "Vim: normal mode — the text takes no typing");
+    // The mode where it is shown: the status bar (desktop) or the view's corner (phones).
+    QQuickItem *status = nullptr;
+    check(waitFor([&] {
+              status = named(touch ? u"pageVimStatus"_s : u"statusBarVim"_s);
+              return status != nullptr;
+          }),
+          "Vim: the mode is shown");
+    keys(u"wcwżółwia\x1b"_s);
+    check(waitFor([&] { return text() == u"- Zażółć żółwia jaźń\n- drugi wiersz\n- trzeci wiersz\n- czwarty\n"_s; }),
+          "Vim: w, cw and Polish letters typed in insert mode");
+    keys(u"jdd"_s);
+    check(waitFor([&] { return text() == u"- Zażółć żółwia jaźń\n- trzeci wiersz\n- czwarty\n"_s; }),
+          "Vim: dd removes the block");
+    keys(u"u"_s);
+    check(waitFor([&] { return text() == u"- Zażółć żółwia jaźń\n- drugi wiersz\n- trzeci wiersz\n- czwarty\n"_s; }),
+          "Vim: u brings it back");
+    keys(u"Vj"_s);
+    check(waitFor([&] {
+              return editor->property("vimSession").value<QObject *>()->property("mode").toString() == u"visualLine"_s;
+          }),
+          "Vim: V starts a visual line selection");
+    keys(u"d"_s);
+    check(waitFor([&] { return text() == u"- Zażółć żółwia jaźń\n- czwarty\n"_s; }),
+          "Vim: a visual line selection over two blocks is deleted");
+    keys(u":%s/ż/rz/g\r"_s);
+    check(waitFor([&] { return text() == u"- Zarzółć rzółwia jaźń\n- czwarty\n"_s; }),
+          "Vim: :%s over the page, plain text");
+    keys(u"u"_s);
+    check(waitFor([&] { return text() == u"- Zażółć żółwia jaźń\n- czwarty\n"_s; }), "Vim: one u undoes the :s");
+
+    // Source mode: the same keys over the page's text.
+    app->requestUiAction(u"toggleSourceMode"_s);
+    QQuickItem *source = nullptr;
+    check(waitFor([&] {
+              QQuickItem *focus = window->activeFocusItem();
+              if (focus && focus->property("textDocument").isValid() && controller->property("sourceMode").toBool())
+                  source = focus;
+              return source != nullptr;
+          }),
+          "Vim: source mode has the keyboard");
+    if (source) {
+        check(waitFor([&] { return source->property("readOnly").toBool(); }), "Vim: source mode starts in normal mode");
+        keys(u"ggjdd"_s);
+        check(waitFor([&] { return source->property("text").toString() == u"- Zażółć żółwia jaźń\n"_s; }),
+              "Vim: dd removes a line of the source");
+        keys(u"u"_s);
+        check(waitFor([&] { return source->property("text").toString() == u"- Zażółć żółwia jaźń\n- czwarty\n"_s; }),
+              "Vim: u in the source");
+        keys(u"ggAx\x1b"_s);
+        check(waitFor([&] { return source->property("text").toString() == u"- Zażółć żółwia jaźńx\n- czwarty\n"_s; }),
+              "Vim: A types at the line's end in the source");
+        keys(u"x"_s);
+        app->requestUiAction(u"toggleSourceMode"_s);
+        check(waitFor([&] { return !controller->property("sourceMode").toBool(); }), "Vim: back to the blocks");
+        check(waitFor([&] { return text() == u"- Zażółć żółwia jaźń\n- czwarty\n"_s; }),
+              "Vim: the source's edits are the page's");
+    }
+    // Off: keys type again.
+    app->settings()->setVimMode(false);
+    uidriver::callQml(editor, "startEditing", {QVariant(1), QVariant(-1)});
+    check(waitFor([&] {
+              edit = editor->property("activeEditor").value<QQuickItem *>();
+              return edit && edit->hasActiveFocus() && !edit->property("readOnly").toBool();
+          }),
+          "Vim off: the block takes typing");
+    typeChars(window, u"!"_s);
+    check(waitFor([&] { return text() == u"- Zażółć żółwia jaźń\n- czwarty!\n"_s; }), "Vim off: a key types");
+    uidriver::callQml(editor, "stopEditing", {QVariant(false)});
+    app->goHome();
+}
+
 void checkFindAndReplace(QQuickWindow *window, AppController *app, const Check &check)
 {
     const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
@@ -10138,6 +10248,9 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
     app->goHome();
     // 3g. Find and replace: the bar in a note and over the journal's days, the notebook-wide view.
     checkFindAndReplace(window, app, check);
+    closeMenus(window);
+    // 3g'. Vim keys: a page and its source typed with Vim's keys, the mode shown, off again.
+    checkVimKeys(window, app, check);
     closeMenus(window);
     // 3h. Weekly and monthly notes: opened from the shortcut's action, the page's arrows, the calendar.
     checkPeriodicNotes(window, app, check);

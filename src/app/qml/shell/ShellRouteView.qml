@@ -30,7 +30,7 @@ import Brulion
 // menu acts on it), `sourceMode` (PageView: the page is shown as Markdown source — the palette's
 // block commands are off), `edgeSwipe` (CalendarView: the view's own horizontal swipe starts at
 // the left edge — the drawer's edge strip makes way), `statusText` / `statusPosition` (PageView: the
-// status bar's word count and edited block). The shell sets `covered` (CalendarView: a modal
+// status bar's word count and edited block), `statusVim` (PageView, JournalsView: Vim's mode). The shell sets `covered` (CalendarView: a modal
 // panel lies over the view), `paneActive` (PageView, JournalsView: false in the other pane of
 // a split view — the window-wide shortcuts and the shell's actions are the focused pane's view's).
 // Optional `viewState()` / `restoreViewState(state)` (PageView, JournalsView): where the view is
@@ -112,6 +112,8 @@ Item {
     /// The status bar's texts of the view ("" for none): the word count, the edited block.
     readonly property string viewStatusText: traits.statusText
     readonly property string viewStatusPosition: traits.statusPosition
+    /// Vim's mode / command line of the view's editor (PageView, JournalsView: `statusVim`).
+    readonly property string viewStatusVim: traits.statusVim
 
     /// Ends the editing the view's docked touch toolbar is for (views without one: nothing).
     function endEditing(): void {
