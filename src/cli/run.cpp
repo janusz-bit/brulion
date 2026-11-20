@@ -181,6 +181,11 @@ int run(int argc, char **argv)
                         inv.globals.allowDestructive || inv.args.value(u"allowDestructive"_s).toBool(),
                         inv.args.value(u"appControl"_s).toBool());
     }
+    if (inv.command->id == u"mcp.serve") {
+        // The remote server, English for its clients like `mcp` (its log is English too).
+        useLanguage(u"en"_s);
+        return serveRemoteMcp(ctx, *inv.command, inv.args, output);
+    }
     return output(inv.command, execute(ctx, *inv.command, inv.args));
 }
 

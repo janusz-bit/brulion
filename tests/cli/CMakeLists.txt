@@ -8,7 +8,14 @@
 # English), and the MCP server (initialize, tools/list, tools/call).
 brulion_add_test(tst_cli_args SOURCES tst_cli_args.cpp LIBS brulion_cli Qt6::Core)
 target_compile_definitions(tst_cli_args PRIVATE BRULION_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
-brulion_add_test(tst_cli_process SOURCES tst_cli_process.cpp LIBS brulion_ipc brulion_core_notebook)
+# The remote MCP server (`mcp serve`): its HTTP parser, secrets, checks and state file in process
+# (tst_cli_http), and the whole sign-in flow and MCP over a real local socket with
+# QNetworkAccessManager as the client (tst_cli_remote_mcp; HTTPS with tests/data/mcp-remote).
+brulion_add_test(tst_cli_http SOURCES tst_cli_http.cpp LIBS brulion_cli Qt6::Network Qt6::Core)
+brulion_add_test(tst_cli_remote_mcp SOURCES tst_cli_remote_mcp.cpp LIBS brulion_cli Qt6::Network Qt6::Core)
+math(EXPR _remote_timeout "300 * ${BRULION_TEST_SLOWDOWN}")
+set_tests_properties(tst_cli_remote_mcp PROPERTIES TIMEOUT ${_remote_timeout})
+brulion_add_test(tst_cli_process SOURCES tst_cli_process.cpp LIBS brulion_ipc brulion_core_notebook Qt6::Network)
 target_compile_definitions(tst_cli_process PRIVATE BRULION_CLI="$<TARGET_FILE:brulion-cli>")
 add_dependencies(tst_cli_process brulion-cli)
 if(TARGET brulion)

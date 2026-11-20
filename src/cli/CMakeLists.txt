@@ -9,8 +9,9 @@
 # brulion_cli: the static library (the app links it for `brulion cli …`, tests/cli for in-process
 # checks); brulion-cli: the executable.
 qt_add_library(brulion_cli STATIC
-    cli.h cli_p.h commands_p.h
+    cli.h cli_p.h commands_p.h mcp_p.h
     args.cpp
+    authserver.h authserver.cpp
     commands_app.cpp
     commands_common.cpp
     commands_extensions.cpp
@@ -22,7 +23,10 @@ qt_add_library(brulion_cli STATIC
     commands_tasks.cpp
     commands_tools.cpp
     context.cpp
+    http.h http.cpp
     mcp.cpp
+    mcpremote.h mcpremote.cpp
+    oauth.h oauth.cpp
     output.cpp
     registry.cpp
     run.cpp

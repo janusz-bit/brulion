@@ -27,8 +27,13 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLocale>
+#include <QNetworkAccessManager>
+#include <QNetworkReply>
 #include <QProcess>
+#include <QRegularExpression>
+#include <QUrlQuery>
 #include <QSaveFile>
+#include <QScopeGuard>
 #include <QSettings>
 #include <QSignalSpy>
 #include <QStandardPaths>
@@ -250,7 +255,8 @@ private Q_SLOTS:
         QCOMPARE(r.code, 0);
         QVERIFY(r.json.value(u"ok"_s).toBool());
         QVERIFY(!r.result().value(u"version"_s).toString().isEmpty());
-        QCOMPARE(r.result().value(u"mcpProtocol"_s).toString(), u"2025-06-18"_s);
+        QCOMPARE(r.result().value(u"mcpProtocol"_s).toString(), u"2026-07-28"_s);
+        QVERIFY(r.result().value(u"mcpProtocols"_s).toArray().contains(u"2025-06-18"_s));
         r = cli({u"--help"_s});
         QCOMPARE(r.code, 0);
         QVERIFY(r.out.contains("page read"));
@@ -1865,6 +1871,213 @@ private Q_SLOTS:
             QCOMPARE(r.errorCode(), code);
             QCOMPARE(r.json.value(u"error"_s).toObject().value(u"message"_s).toString(), u"Nie wyszło"_s);
         }
+    }
+
+    // `mcp serve` as the real program (the in-process flow: tst_cli_remote_mcp): the password
+    // commands, the server's first line, its metadata, a whole sign-in with the password of the
+    // state file, a tool call over HTTP, `mcp clients` and `mcp revoke` taking effect in the
+    // running server, the sign-in page in Polish, and the refusals at start.
+    void remoteMcpServe()
+    {
+        const QString dir = vault({{u"Ogród.md"_s, "- żółw błotny\n"}});
+        const QString password = u"Hasło do notatek 1"_s;
+        Run r = run(dir, {u"--stdin"_s, u"mcp"_s, u"password"_s}, "krótkie\n");
+        QCOMPARE(r.code, 2);
+        QCOMPARE(r.errorCode(), u"password_too_short"_s);
+        r = run(dir, {u"mcp"_s, u"password"_s}); // standard input is no terminal here
+        QCOMPARE(r.code, 2);
+        QCOMPARE(r.errorCode(), u"password_needs_stdin"_s);
+        r = run(dir, {u"--stdin"_s, u"mcp"_s, u"password"_s, u"--print-hash"_s}, password.toUtf8() + '\n');
+        QCOMPARE(r.code, 0);
+        const QString printedHash = r.result().value(u"hash"_s).toString();
+        QVERIFY(printedHash.startsWith(u"pbkdf2-sha256$600000$"_s));
+        // No password yet: the server does not start.
+        r = run(dir, {u"mcp"_s, u"serve"_s, u"--port"_s, u"0"_s});
+        QCOMPARE(r.code, 5);
+        QCOMPARE(r.errorCode(), u"cannot_serve"_s);
+        r = run(dir, {u"--stdin"_s, u"mcp"_s, u"password"_s}, password.toUtf8() + '\n');
+        QCOMPARE(r.code, 0);
+        const QString authFile = r.result().value(u"authFile"_s).toString();
+        QVERIFY(authFile.startsWith(stateDirOf(dir)));
+        QFile state(authFile);
+        QVERIFY(state.open(QIODevice::ReadOnly));
+        QVERIFY(!state.readAll().contains(password.toUtf8()));
+        state.close();
+#ifndef Q_OS_WIN
+        QCOMPARE(QFile::permissions(authFile) & (QFileDevice::ReadGroup | QFileDevice::ReadOther),
+                 QFileDevice::Permissions());
+#endif
+        r = run(dir, {u"mcp"_s, u"clients"_s});
+        QCOMPARE(r.code, 0);
+        QVERIFY(r.result().value(u"passwordSet"_s).toBool());
+        QVERIFY(r.result().value(u"connections"_s).toArray().isEmpty());
+        r = run(dir, {u"mcp"_s, u"serve"_s, u"--public-url"_s, u"http://notes.example.com"_s});
+        QCOMPARE(r.code, 5);
+        r = run(dir, {u"mcp"_s, u"serve"_s, u"--listen"_s, u"nie-adres"_s});
+        QCOMPARE(r.code, 2);
+
+        QProcess server;
+        const auto stopServer = qScopeGuard([&server] {
+            server.kill();
+            server.waitForFinished();
+        });
+        server.setProcessEnvironment(environment());
+        server.start(QStringLiteral(BRULION_CLI), {u"--vault"_s, dir, u"--now"_s, kNow, u"mcp"_s, u"serve"_s,
+                                                   u"--port"_s, u"0"_s});
+        QVERIFY(server.waitForStarted(kTimeoutMs));
+        QVERIFY(QTest::qWaitFor([&] { return server.canReadLine() || server.state() != QProcess::Running; },
+                                kTimeoutMs));
+        const QJsonObject started = QJsonDocument::fromJson(server.readLine()).object();
+        QByteArray log = server.readAllStandardError(); // the server's log
+        QVERIFY2(started.value(u"ok"_s).toBool(), log.constData());
+        const QString endpoint = started.value(u"result"_s).toObject().value(u"endpoint"_s).toString();
+        const QString base = endpoint.chopped(4);
+        QVERIFY(endpoint.startsWith(u"http://127.0.0.1:"_s));
+        QCOMPARE(started.value(u"result"_s).toObject().value(u"authFile"_s).toString(), authFile);
+
+        QNetworkAccessManager nam;
+        struct Answer {
+            int status = 0;
+            QByteArray body;
+            QByteArray location;
+            QJsonObject json;
+        };
+        const auto send = [&](const QByteArray &method, const QString &path, const QByteArray &body,
+                              const QList<std::pair<QByteArray, QByteArray>> &headers) {
+            QNetworkRequest request(QUrl(base + path));
+            request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::ManualRedirectPolicy);
+            for (const auto &[name, value] : headers)
+                request.setRawHeader(name, value);
+            QNetworkReply *reply = nam.sendCustomRequest(request, method, body);
+            Answer a;
+            if (QTest::qWaitFor([reply] { return reply->isFinished(); }, kTimeoutMs)) {
+                a.status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+                a.body = reply->readAll();
+                a.location = reply->rawHeader("Location"_ba);
+                a.json = QJsonDocument::fromJson(a.body).object();
+            }
+            delete reply;
+            return a;
+        };
+        const auto form = [](const QList<std::pair<QString, QString>> &fields) {
+            QByteArray out;
+            for (const auto &[name, value] : fields)
+                out += (out.isEmpty() ? ""_ba : "&"_ba) + QUrl::toPercentEncoding(name) + '=' + QUrl::toPercentEncoding(value);
+            return out;
+        };
+        const QList<std::pair<QByteArray, QByteArray>> formType{{"Content-Type"_ba, "application/x-www-form-urlencoded"_ba}};
+        const auto field = [](const QByteArray &html, const QString &name) {
+            return QRegularExpression(u"name=\"%1\" value=\"([^\"]*)\""_s.arg(name)).match(QString::fromUtf8(html)).captured(1);
+        };
+        Answer a = send("GET"_ba, u"/.well-known/oauth-protected-resource"_s, {}, {});
+        QCOMPARE(a.status, 200);
+        QCOMPARE(a.json.value(u"resource"_s).toString(), endpoint);
+        a = send("POST"_ba, u"/mcp"_s, "{}"_ba, {{"Content-Type"_ba, "application/json"_ba}});
+        QCOMPARE(a.status, 401);
+        a = send("POST"_ba, u"/register"_s,
+                 R"({"redirect_uris":["https://claude.ai/api/mcp/auth_callback"],"client_name":"Claude"})"_ba,
+                 {{"Content-Type"_ba, "application/json"_ba}});
+        QCOMPARE(a.status, 201);
+        const QString client = a.json.value(u"client_id"_s).toString();
+        const QString verifier = QString(50, u'v');
+        const QString challenge = QString::fromLatin1(QCryptographicHash::hash(verifier.toLatin1(), QCryptographicHash::Sha256)
+                                                              .toBase64(QByteArray::Base64UrlEncoding
+                                                                        | QByteArray::OmitTrailingEquals));
+        const QString query = QString::fromLatin1(form({{u"response_type"_s, u"code"_s},
+                                                        {u"client_id"_s, client},
+                                                        {u"redirect_uri"_s, u"https://claude.ai/api/mcp/auth_callback"_s},
+                                                        {u"code_challenge"_s, challenge},
+                                                        {u"code_challenge_method"_s, u"S256"_s},
+                                                        {u"resource"_s, endpoint}}));
+        // The pages speak the browser's language.
+        a = send("GET"_ba, u"/authorize?"_s + query, {}, {{"Accept-Language"_ba, "pl-PL,pl;q=0.9,en;q=0.5"_ba}});
+        QCOMPARE(a.status, 200);
+        QVERIFY2(a.body.contains("Hasło"), a.body.constData());
+        a = send("GET"_ba, u"/authorize?"_s + query, {}, {{"Accept-Language"_ba, "en-GB"_ba}});
+        QVERIFY(a.body.contains("Password"));
+        const QString request = field(a.body, u"request"_s);
+        a = send("POST"_ba, u"/authorize"_s,
+                 form({{u"request"_s, request}, {u"csrf"_s, field(a.body, u"csrf"_s)}, {u"action"_s, u"signin"_s},
+                       {u"password"_s, password}}),
+                 formType);
+        QVERIFY2(a.body.contains("value=\"allow\""), a.body.constData());
+        a = send("POST"_ba, u"/authorize"_s,
+                 form({{u"request"_s, request}, {u"csrf"_s, field(a.body, u"csrf"_s)}, {u"action"_s, u"allow"_s},
+                       {u"write"_s, u"on"_s}}),
+                 formType);
+        QCOMPARE(a.status, 303);
+        const QString code = QUrlQuery(QUrl(QString::fromUtf8(a.location))).queryItemValue(u"code"_s);
+        a = send("POST"_ba, u"/token"_s,
+                 form({{u"grant_type"_s, u"authorization_code"_s}, {u"code"_s, code}, {u"client_id"_s, client},
+                       {u"code_verifier"_s, verifier}, {u"redirect_uri"_s, u"https://claude.ai/api/mcp/auth_callback"_s}}),
+                 formType);
+        QCOMPARE(a.status, 200);
+        const QByteArray bearer = "Bearer "_ba + a.json.value(u"access_token"_s).toString().toLatin1();
+        const QList<std::pair<QByteArray, QByteArray>> modern{
+                {"Authorization"_ba, bearer},       {"Content-Type"_ba, "application/json"_ba},
+                {"MCP-Protocol-Version"_ba, "2026-07-28"_ba}, {"Mcp-Method"_ba, "tools/call"_ba},
+                {"Mcp-Name"_ba, "brulion_search"_ba}};
+        a = send("POST"_ba, u"/mcp"_s,
+                 R"({"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"brulion_search","arguments":{"text":"zolw"},"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}}})"_ba,
+                 modern);
+        QCOMPARE(a.status, 200);
+        QCOMPARE(a.json.value(u"result"_s)
+                         .toObject()
+                         .value(u"structuredContent"_s)
+                         .toObject()
+                         .value(u"result"_s)
+                         .toObject()
+                         .value(u"hits"_s)
+                         .toArray()
+                         .size(),
+                 1);
+        // The connection as `mcp clients` lists it, and revoked while the server runs.
+        r = run(dir, {u"mcp"_s, u"clients"_s});
+        const QJsonArray connections = r.result().value(u"connections"_s).toArray();
+        QCOMPARE(connections.size(), 1);
+        QCOMPARE(connections.first().toObject().value(u"client"_s).toString(), u"Claude"_s);
+        QVERIFY(connections.first().toObject().value(u"write"_s).toBool());
+        r = run(dir, {u"--format"_s, u"text"_s, u"mcp"_s, u"clients"_s});
+        QVERIFY(r.out.contains("Claude"));
+        r = run(dir, {u"mcp"_s, u"revoke"_s, u"bgr_nie-ma"_s});
+        QCOMPARE(r.code, 3);
+        r = run(dir, {u"mcp"_s, u"revoke"_s});
+        QCOMPARE(r.code, 2);
+        r = run(dir, {u"mcp"_s, u"revoke"_s, connections.first().toObject().value(u"id"_s).toString()});
+        QCOMPARE(r.code, 0);
+        QCOMPARE(r.result().value(u"revoked"_s).toArray().size(), 1);
+        a = send("POST"_ba, u"/mcp"_s,
+                 R"({"jsonrpc":"2.0","id":2,"method":"tools/list","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}}})"_ba,
+                 modern);
+        QCOMPARE(a.status, 401);
+        server.kill();
+        QVERIFY(server.waitForFinished(kTimeoutMs));
+        log += server.readAllStandardError();
+        QVERIFY(log.contains("serving"));
+        QVERIFY(log.contains("POST /token 200"));
+        QVERIFY(!log.contains(password.toUtf8()));
+        QVERIFY(!log.contains(bearer.mid(7)));
+
+        // --password-file with the hash: the state file's password is not needed.
+        const QString hashFile = m_tmp.filePath(u"mcp-hash.txt"_s);
+        writeFile(hashFile, printedHash.toUtf8() + '\n');
+        QProcess second;
+        const auto stopSecond = qScopeGuard([&second] {
+            second.kill();
+            second.waitForFinished();
+        });
+        second.setProcessEnvironment(environment());
+        second.start(QStringLiteral(BRULION_CLI),
+                     {u"--vault"_s, dir, u"mcp"_s, u"serve"_s, u"--port"_s, u"0"_s, u"--read-only"_s, u"--auth-file"_s,
+                      m_tmp.filePath(u"inny/stan.json"_s), u"--password-file"_s, hashFile});
+        QVERIFY(second.waitForStarted(kTimeoutMs));
+        QVERIFY(QTest::qWaitFor([&] { return second.canReadLine() || second.state() != QProcess::Running; },
+                                kTimeoutMs));
+        const QJsonObject secondStarted = QJsonDocument::fromJson(second.readLine()).object();
+        QVERIFY2(secondStarted.value(u"ok"_s).toBool(), second.readAllStandardError().constData());
+        QVERIFY(secondStarted.value(u"result"_s).toObject().value(u"readOnly"_s).toBool());
+        second.kill();
+        QVERIFY(second.waitForFinished(kTimeoutMs));
     }
 
     void mcp()

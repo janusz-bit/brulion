@@ -31,7 +31,8 @@ Result version(Call &call)
 {
     return call.ok(QJsonObject{{u"version"_s, QCoreApplication::applicationVersion()},
                                {u"qt"_s, QString::fromLatin1(qVersion())},
-                               {u"mcpProtocol"_s, mcpProtocolVersion()}},
+                               {u"mcpProtocol"_s, mcpProtocolVersion()},
+                               {u"mcpProtocols"_s, QJsonArray::fromStringList(mcpProtocolVersions())}},
                    u"brulion-cli "_s + QCoreApplication::applicationVersion());
 }
 
@@ -194,6 +195,7 @@ void addMetaCommands(QList<Command> &out)
                                        "JSON-RPC 2.0 over stdio, tools only; the notebook stays open and watched, so "
                                        "calls after the first are fast. Give the notebook with --vault."));
     out.append(c);
+    addRemoteMcpCommands(out);
 }
 
 } // namespace brulion::cli

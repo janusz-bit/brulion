@@ -4,8 +4,10 @@
 to the journal, adds tasks and reminders, searches, runs queries and moves pages the way the app
 does (links and tags follow the page). The output is JSON (or text with `--format text`), and the
 exit code says what went wrong. The same set of commands works as an MCP server (`brulion-cli mcp`)
-for AI agents such as Hermes or Claude Code. The agent gets the notes as a plain folder (Syncthing,
-the Nextcloud client). The agent's changes go into the version history described as "Replaced from
+for AI agents such as Hermes or Claude Code, and over HTTPS with sign-in (`brulion-cli mcp serve`)
+for the providers' own apps — claude.ai, the Claude app on the phone, ChatGPT — which then search,
+read and (if you allow it) change the notebook on your own computer ("Remote MCP server" below).
+The agent gets the notes as a plain folder (Syncthing, the Nextcloud client). The agent's changes go into the version history described as "Replaced from
 the command line (agent)", commands that delete or overwrite something need `--allow-destructive`,
 and deleted pages go to the trash. When you turn on "Allow agents to control the app" in the app
 (Settings → Application → For developers) or start it with `--remote-control`, the agent can also
@@ -138,7 +140,10 @@ input schemas, `instructions`, tool results' messages and JSON-RPC errors). The 
 is a program (an AI agent) that reads tool descriptions and messages as one English text with the
 schemas, and its replies may go into logs or other tools; plain `brulion-cli` runs for whoever
 started it, often a person at a terminal, so its `message` fields — declared as text for people
-— follow that person's language, while everything a program branches on stays English.
+— follow that person's language, while everything a program branches on stays English. The remote
+server (`mcp serve`) is English for its clients and in its log as well; only its sign-in and
+consent pages, read by the owner in a browser, are Polish when the browser prefers Polish to
+English (`Accept-Language`).
 
 The translations are the app's catalogue (`i18n/brulion_pl.ts`, context `brulion::cli`; `lupdate`
 collects `src/cli` with the app, target `update_translations`): brulion-cli embeds the compiled
@@ -266,11 +271,15 @@ Never compute a hash yourself.
 | `app wait` | `[--route R] [--text T --object-name N --type T --exact \| --handle H] [--gone] [--idle] [--timeout MS]` | until a route shows, an item is shown (or gone), the app is idle; exit 3 `timeout` | |
 | `app quit` | | quit the running app | yes |
 | `init <path>` | | create a notebook folder | yes |
-| `version` | | `{version, qt, mcpProtocol}` | |
+| `version` | | `{version, qt, mcpProtocol, mcpProtocols}` (the newest MCP version and all of them) | |
 | `help [<command>]` | `[--json]` | help | |
 | `schema [<command>]` | | JSON Schema (draft 2020-12) of the arguments | |
 | `completion <shell>` | bash, fish, zsh | a completion script (`brulion-cli completion bash > ~/.local/share/bash-completion/completions/brulion-cli`) | |
 | `mcp` | `[--read-only] [--allow-destructive] [--app-control]` | the MCP server (below) | |
+| `mcp serve` | `[--listen A] [--port N] [--public-url U] [--tls-cert F --tls-key F] [--password-file F] [--auth-file F] [--allowed-origin O] [--allowed-host H] [--read-only] [--allow-destructive]` | the remote MCP server over HTTPS with sign-in ("Remote MCP server" below) | |
+| `mcp password` | `[--stdin] [--print-hash] [--auth-file F]` | set its password (kept as a salted PBKDF2 hash) | |
+| `mcp clients` | `[--auth-file F]` | the apps connected to it: `{connections [{id, client, clientId, kind, returnsTo, scopes, write, connected, lastUsed, expires}], clients, passwordSet}` | |
+| `mcp revoke [<connection>]` | `[--all] [--auth-file F]` | end a connection (`bgr_…`) or all of a client's (`bcl_…`, an https client ID); takes effect in a running server at once | |
 <!-- /commands -->
 
 The `habit` commands are run by the app's built-in habits extension (`nawyki.luau`, its commands
@@ -369,9 +378,17 @@ that relays reminders (e.g. to a chat) keeps its own "already sent" state.
 ## MCP server
 
 `brulion-cli mcp` serves the commands as Model Context Protocol tools: JSON-RPC 2.0, one message per
-line on standard input and output (the stdio transport), tools only (`initialize`, `tools/list`,
-`tools/call`, `ping`), protocol version `2025-06-18` (also `2025-03-26` and `2024-11-05` when the
-client asks for them; one constant in `src/cli/mcp.cpp`).
+line on standard input and output (the stdio transport), tools only. Both eras of the protocol
+(`McpDispatcher`, `src/cli/mcp_p.h`, shared with `mcp serve`):
+
+* the handshake versions `2025-11-25`, `2025-06-18`, `2025-03-26` and `2024-11-05`: `initialize`
+  (the version the client asks for, else `2025-11-25`), `tools/list`, `tools/call`, `ping`;
+* the per-request version `2026-07-28` (no handshake): a request whose `params._meta` names
+  `io.modelcontextprotocol/protocolVersion` is answered on its own — `server/discover`,
+  `tools/list`, `tools/call`, `ping`; results carry `resultType: "complete"` and the server's
+  `io.modelcontextprotocol/serverInfo` in `_meta`, `tools/list` and `server/discover` also `ttlMs`
+  (5 minutes) and `cacheScope: "private"`; an unknown version is `-32022` with the `supported` ones,
+  a missing `io.modelcontextprotocol/clientCapabilities` `-32602`.
 
 * Tool names: `brulion_` + the command with `_` (`brulion_capture`, `brulion_search`,
   `brulion_task_add`, `brulion_task_set`, `brulion_journal_append`, `brulion_query`, …). Their
@@ -386,7 +403,8 @@ client asks for them; one constant in `src/cli/mcp.cpp`).
   `brulion_app_click`, `brulion_app_type`, `brulion_app_screenshot`, … — "Remote control" below)
   only with `--app-control` (`brulion_app_open`, `brulion_app_today` and `brulion_app_capture` are
   always there). `brulion_app_screenshot` returns the picture too (an `image` content item, PNG).
-  Meta commands (help, schema, completion, mcp, init) and the `task done`… aliases are no tools.
+  Meta commands (help, schema, completion, `mcp` and its `serve`, `password`, `clients`, `revoke`,
+  init) and the `task done`… aliases are no tools.
 * The notebook stays open, watched and indexed: calls after the first are fast. The first one
   loads the index from the device's index cache (shared with the app) and parses only the notes
   changed since, on worker threads (10 000 notes on the laptop: ≈ 0.3 s from the cache, ≈ 0.35 s
@@ -401,6 +419,194 @@ Claude Code (`.mcp.json`):
 ```
 
 Hermes on NixOS: see docs/NIXOS.md "AI agent (Hermes) and the command line".
+
+## Remote MCP server
+
+`brulion-cli mcp serve` offers the same tools over the network, for the AI providers' own apps:
+claude.ai on the web, the Claude desktop and phone apps, and ChatGPT. You add the server once as a
+**custom connector** there and sign in with a password of your own; from then on the app searches,
+reads and — only if you allowed it — changes the notebook, wherever you are. The notes never leave
+the computer that serves them (e.g. a NixOS box at home holding the Syncthing copy of the
+notebook): the app sees what its tool calls return.
+
+* **Transport**: MCP Streamable HTTP at one endpoint, `<public URL>/mcp`, in both eras of the
+  protocol (as `mcp`): the handshake versions with sessions (`initialize` answers with an
+  `Mcp-Session-Id`, every later request must carry it, `DELETE` ends the session; an unknown or
+  ended one is 404, a missing one 400) and the per-request version `2026-07-28` without sessions,
+  whose `MCP-Protocol-Version`, `Mcp-Method` and `Mcp-Name` headers must match the body (else 400
+  `-32020 HeaderMismatch`; `Mcp-Name` may be `=?base64?…?=`). A POST carries one JSON-RPC message
+  (no batches) and is answered as JSON, or as one SSE event when the client accepts only
+  `text/event-stream`; a notification is `202`. `GET` is `405`: the server sends no messages of its
+  own. The tools are those of `mcp` with `--read-only` / `--allow-destructive`; the `brulion_app_*`
+  tools are never offered over the network (there is no `--app-control`).
+* **Sign-in**: OAuth 2.1 as the MCP authorization specification asks (below). The apps register
+  themselves; the owner signs in on a page the server serves, with the password set by
+  `brulion-cli mcp password`, and answers a consent page that names the app, the address it returns
+  to and whether it may change notes.
+* **Where**: it listens on `127.0.0.1:8780` by default, for a reverse proxy or a tunnel that adds
+  HTTPS; with `--tls-cert`/`--tls-key` it serves HTTPS itself. `--public-url` is the address the
+  apps reach (`https://notes.example.com`, also under a path: `https://example.com/brulion`); the
+  endpoint to paste into the app is that plus `/mcp`.
+
+### Setting it up
+
+1. **A password** (at least 8 characters; kept only as a salted PBKDF2-SHA256 hash with 600 000
+   rounds in the state file):
+
+   ```sh
+   brulion-cli --vault ~/Notatki mcp password          # typed twice, not shown
+   echo "$PASSWORD" | brulion-cli --vault ~/Notatki --stdin mcp password
+   ```
+
+   The state file is `mcp-remote.json` in the notebook's device state
+   (`~/.local/share/Brulion/Brulion/vaults/<id>/`), readable by its owner only; `--auth-file` names
+   another. It holds the password hash, the registered apps and the connections with hashes of
+   their tokens, so a restart keeps every connection. `mcp password --print-hash` prints the hash
+   instead, for `--password-file` (a file with the password or its hash, e.g. from a secret
+   manager; it then wins over the state file's).
+
+2. **The server**, reachable over HTTPS at a public address. Pick one:
+
+   * **Tailscale Funnel** (a home machine without a public IP or open ports):
+     `tailscale funnel --bg 8780`, then
+     `brulion-cli --vault ~/Notatki mcp serve --public-url https://<machine>.<tailnet>.ts.net`.
+   * **Cloudflare Tunnel**: `cloudflared tunnel --url http://127.0.0.1:8780` (or a named tunnel
+     with your domain), and `--public-url https://notes.example.com`.
+   * **Caddy** (certificates by itself):
+
+     ```
+     notes.example.com {
+         reverse_proxy 127.0.0.1:8780
+     }
+     ```
+   * **nginx**:
+
+     ```
+     location / {
+         proxy_pass http://127.0.0.1:8780;
+         proxy_set_header Host $host;
+         proxy_http_version 1.1;
+         proxy_buffering off;          # answers go out as they are made
+         client_max_body_size 16m;
+     }
+     ```
+   * **HTTPS by itself**: `mcp serve --listen 0.0.0.0 --port 8443 --tls-cert fullchain.pem
+     --tls-key privkey.pem --public-url https://notes.example.com:8443`. The certificate and key
+     (PEM; an RSA or EC key without a passphrase) are read again when their files change, so a
+     renewal (certbot, ACME) needs no restart. This needs a Qt with its TLS (OpenSSL) backend, as
+     the Nix packages have.
+
+   A proxy that serves Brulion under a path keeps or strips the prefix — both work. Behind one
+   that rewrites `Host` to something else than the public name or `127.0.0.1:<port>`, name it with
+   `--allowed-host`.
+
+   On NixOS the module runs it as a hardened service: docs/NIXOS.md "Remote MCP server".
+
+3. **Add it to the app** with the endpoint, e.g. `https://notes.example.com/mcp`:
+
+   * **claude.ai** (and Claude Desktop): Settings → Connectors → Add custom connector → the name
+     (Brulion) and the URL → Add, then Connect. A Brulion page opens: the password, then Allow —
+     with "Also allow it to change notes" ticked or not. Claude identifies itself with its client
+     ID metadata document (`https://claude.ai/oauth/mcp-oauth-client-metadata`; "Use Claude's
+     published identity", the default) or registers itself; both work, no client ID to enter.
+   * **The Claude app on the phone**: a connector added on claude.ai is in the app too; turn it on
+     for a chat in its tools menu. Signing in happens in the phone's browser.
+   * **ChatGPT** (web; a plan with developer mode): turn on Developer mode (Settings → Security and
+     login, in older versions Settings → Apps → Advanced settings), then add an MCP app (Plugins →
+     Add → Create MCP App, in older versions Settings → Apps & Connectors → Create) with the URL and
+     OAuth as the authentication; sign in on the Brulion page. In a chat pick it from the + menu.
+     ChatGPT uses its client ID metadata document (`https://chatgpt.com/oauth/client.json`) and
+     the return address `https://chatgpt.com/connector_platform_oauth_redirect` (the server sends
+     the `iss` of RFC 9207, which that address needs), else it registers itself.
+
+4. **See and end connections**:
+
+   ```sh
+   brulion-cli --vault ~/Notatki --format text mcp clients
+   brulion-cli --vault ~/Notatki mcp revoke bgr_Xk3…      # one connection
+   brulion-cli --vault ~/Notatki mcp revoke --all
+   ```
+
+   A revoked connection's tokens stop working at once, also in the running server (it reads the
+   state file again when it changes); the app has to sign in again.
+
+Options: `--listen` (an IP address; `0.0.0.0` / `::` for all, which needs `--public-url`),
+`--port` (`0`: any free one), `--public-url` (https, or http on this computer only), `--tls-cert`,
+`--tls-key`, `--password-file`, `--auth-file`, `--allowed-origin` (browser-based clients, e.g. the
+MCP Inspector: their origins, comma-separated; they get CORS answers), `--allowed-host`,
+`--read-only` (no app may write: no `notes:write` scope, no checkbox on the consent page),
+`--allow-destructive` (the destructive tools for connections that may write). The server prints one
+JSON line when it listens (`{ok, result: {endpoint, port, address, tls, readOnly, allowDestructive,
+authFile}}`), then logs one line per request on standard error — the method, the path without its
+query, the status and the time; never a token, password, code or query string — and serves until
+stopped. A problem at start is the usual envelope (exit 5 `cannot_serve`: no password, a port in
+use, a bad certificate or public URL).
+
+### Authorization
+
+The server is its own authorization server (one issuer: the public URL):
+
+* `/.well-known/oauth-protected-resource` (also `…/oauth-protected-resource/mcp` and under the
+  public URL's path, RFC 9728): `resource` (the endpoint), `authorization_servers`,
+  `scopes_supported` (`notes:read`, and `notes:write` unless `--read-only`). A request without a
+  valid token is `401` with `WWW-Authenticate: Bearer resource_metadata="…", scope="…"`
+  (`error="invalid_token"` for a bad, expired or revoked one); the body of such a request is never
+  read.
+* `/.well-known/oauth-authorization-server` (RFC 8414; also `/.well-known/openid-configuration`,
+  with the issuer's path inserted or appended): PKCE `S256` only, `client_id_metadata_document_supported`,
+  `authorization_response_iss_parameter_supported`, token endpoint authentication `none`,
+  `client_secret_post` or `client_secret_basic`, `offline_access` among the scopes.
+* `POST /register` — dynamic client registration (RFC 7591): redirect URIs must be https, or http
+  on a loopback address; at most 30 registrations in ten minutes. A registration stays in memory
+  until the owner allows the app once: nothing an unauthenticated request sends is written to
+  disk.
+* Client ID metadata documents: a `client_id` that is an https URL (with a path, the default port,
+  a host name) is fetched — only after the owner signed in, so no unauthenticated request makes
+  the server fetch anything — with no redirects, 10 s, 64 KiB at most, from public addresses only
+  (no loopback, private, link-local or CGNAT ones), kept for its `max-age` (1 minute … 1 day). Its
+  `client_id` must be its address and its `redirect_uris` must list the request's.
+* `GET /authorize`: an unknown client or a return address it did not register is a page, never a
+  redirect; other errors go back to the app with `state` and `iss`. A loopback return address
+  (Claude Code: `http://127.0.0.1:<port>/callback`) matches on any port (RFC 8252). `resource`, when
+  given, must name the endpoint (RFC 8707).
+* The sign-in page (`POST /authorize`): the password is checked on a worker thread against the
+  slow hash; after five wrong ones within 15 minutes each attempt waits longer (1 s, 2 s, 4 s … up
+  to 15 minutes, for every sign-in), and a sign-in with five wrong ones ends. Each form carries a
+  token of its own, replaced after sign-in; a form posted from another site (`Origin`) is refused.
+  The pages forbid framing and scripts (`Content-Security-Policy`, `X-Frame-Options: DENY`), are
+  never cached, and speak Polish to a browser that prefers it.
+* The consent page names the app (its own name — the page says Brulion cannot check it — or its
+  metadata document's), the host it returns to, prominently, with a warning for a loopback one,
+  and offers writing only when the app asked for `notes:write` and the server is not read-only.
+* `POST /token`: the code (60 s, single use; used twice, the connection it made is revoked) with
+  its PKCE verifier, the same client and return address; refresh tokens rotate on every use. A
+  replaced refresh token used again within 30 s (an answer lost on the way) gives a new pair once
+  more; later it means a copy exists, and the whole connection is revoked. Access tokens live an
+  hour, refresh tokens 60 days from their last use. Tokens are 256 random bits, stored as SHA-256
+  hashes and compared in constant time.
+* `POST /revoke` (RFC 7009) ends the connection of a token of that client.
+* Every MCP request needs a bearer token of this server issued for this endpoint (the audience);
+  a connection that may only read gets the tools that read, and a tool that writes is `403
+  insufficient_scope` (the app may ask the owner again).
+
+### Security notes
+
+* Anyone who knows the password can connect an app: choose a long one. Only the owner signs in;
+  there are no accounts.
+* An allowed app acts with the notebook's full read access, and with write access if allowed: use
+  "read only" for apps you only ask questions. Destructive tools need `--allow-destructive` on
+  the server as for `mcp`, and deleted pages go to the trash; every change is in the version
+  history ("Replaced from the command line (agent)").
+* Note text is untrusted data for the model too: a note can carry instructions a model might
+  follow (prompt injection) — the server's instructions tell it not to, and the consent page lets
+  you keep an app read-only.
+* `Origin` and `Host` are checked on every request (DNS rebinding): a browser page of another site
+  cannot reach the server, even on `127.0.0.1`. Limits: 64 connections (16 per address), 32 KiB of
+  header fields, 16 MiB per MCP request, 15 s for the header fields, 120 s for a body, 60 s idle
+  keep-alive, 1000 requests per connection; malformed requests (two `Content-Length`s, one with
+  `Transfer-Encoding`, folded or control characters in header fields …) are refused with 400.
+* Bind it to `127.0.0.1` behind a proxy or tunnel (the default). Without TLS it refuses a public
+  URL that is not https.
 
 ## The running app
 
@@ -587,10 +793,17 @@ latest read, and check dates with `date parse` before writing them.
 `src/cli` (library `brulion_cli` + executable `brulion-cli`): `registry.cpp` (the registry, help,
 schema, completion), `args.cpp` (argv), `context.cpp` (the notebook, refs, dates, writes),
 `commands_*.cpp` (`commands_app.cpp`: the running app), `output.cpp` (envelope, text, diff),
-`mcp.cpp`, `run.cpp`. Tests: `tests/cli`
+`mcp.cpp` (the MCP methods, `McpDispatcher` of `mcp_p.h`, and the stdio transport), the remote
+server — `http.cpp` (HTTP/1.1), `oauth.cpp` (secrets, the state file), `authserver.cpp` (the
+authorization server and its pages), `mcpremote.cpp` (Streamable HTTP, `mcp serve` and its
+commands) — and `run.cpp`. Tests: `tests/cli`
 (`tst_cli_args` in process, `tst_cli_process` runs the binary on temporary notebooks, also the MCP
-server; `messagesInTheSystemLanguage` and `polishMessagesKeepTheMachineFieldsEnglish` run it under
-Polish and other locales); the shared logic is tested in `tests/core/notebook`. Human messages have
+server and `mcp serve`; `messagesInTheSystemLanguage` and `polishMessagesKeepTheMachineFieldsEnglish`
+run it under Polish and other locales; `tst_cli_http` the remote server's parser, secrets, checks
+and state file; `tst_cli_remote_mcp` its whole flow over a real socket);
+`scripts/mcp-remote-interop.sh` signs in and calls tools with the official Python MCP SDK (from
+nixpkgs; it needs the network to fetch that, so it is no ctest). The shared logic is tested in
+`tests/core/notebook`. Human messages have
 English source text in the context `brulion::cli` ("Language" above): error and warning messages
 through `tr()` (the free function in `registry.cpp`; classes with `tr()` calls declare
 `Q_DECLARE_TR_FUNCTIONS(brulion::cli)` so that lupdate files them under the same context), whole
