@@ -40,7 +40,8 @@ qt_add_library(brulion_editor STATIC
     queryresultmodel.h queryresultmodel.cpp
     viewresultmodel.h viewresultmodel.cpp
     pagecontroller.h pagecontroller.cpp pagecontroller_selection.cpp pagecontroller_properties.cpp
-    pagecontroller_find.cpp
+    pagecontroller_find.cpp pagecontroller_vim.cpp
+    vimsession.h vimsession.cpp vimpagebuffer.h vimpagebuffer.cpp vimsourcebuffer.h vimsourcebuffer.cpp
     notefind.h notefind.cpp
     lazyhtmlmimedata.h lazyhtmlmimedata.cpp
     streamselection.h streamselection.cpp
@@ -73,7 +74,8 @@ target_link_libraries(brulion_editor
             brulion_core_webpicture brulion_core_drawing
             brulion_core_notebook brulion_core_stats brulion_core_syntax brulion_core_views
     PUBLIC brulion_core_diagram brulion_core_chart
-    PRIVATE brulion_core_io)
+    PRIVATE brulion_core_io
+    PUBLIC brulion_core_vim)
 # External changes while the page has unsaved edits are merged three-way with sync::merge3 when
 # the sync module is part of the build (otherwise the local text is kept and a conflict flagged).
 if(TARGET brulion_core_sync)

@@ -31,6 +31,7 @@
 #include "streamselection.h"
 #include "suggestionmodel.h"
 #include "viewresultmodel.h"
+#include "vimsession.h"
 
 #include <QJSEngine>
 #include <QtQml/qqmlregistration.h>
@@ -47,6 +48,12 @@ struct SourceTextSyncForeign {
     Q_GADGET
     QML_FOREIGN(brulion::editor::SourceTextSync)
     QML_NAMED_ELEMENT(SourceTextSync)
+};
+
+struct VimSessionForeign {
+    Q_GADGET
+    QML_FOREIGN(brulion::editor::VimSession)
+    QML_NAMED_ELEMENT(VimSession)
 };
 
 struct NoteFindForeign {

@@ -1015,6 +1015,21 @@ void Engine::startInsert()
     enterInsert(m_buffer->cursor(), u"i"_s);
 }
 
+void Engine::adoptSelection(Position anchor, Position cursor, bool lines)
+{
+    if (m_mode == Mode::Insert || m_mode == Mode::Replace)
+        finishInsert();
+    m_pending.clear();
+    m_cmdType = QChar();
+    m_cmdText.clear();
+    m_visualAnchor = anchor;
+    setMode(lines ? Mode::VisualLine : Mode::Visual);
+    m_want = cursor.column;
+    m_wantEnd = false;
+    m_wantAt = cursor;
+    m_buffer->showSelection(anchor, cursor, lines ? SelectionShape::Lines : SelectionShape::Characters);
+}
+
 void Engine::finishInsert()
 {
     const bool replaceMode = m_mode == Mode::Replace;

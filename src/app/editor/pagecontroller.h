@@ -1043,6 +1043,58 @@ public:
     /// the text there) or when nothing changes.
     bool replaceTextRanges(const QList<text::TextRange> &ranges, const QString &replacement);
 
+    // --- Vim keys (docs/UI.md "Vim mode"; VimPageBuffer drives these, pagecontroller_vim.cpp) --------
+    // Rows and positions as everywhere here: rows of the model, positions in a row's edit text.
+    /// The caret to `cursor` of `row` (a motion): the block being edited gets it where it is
+    /// (editTextReset()), another block is edited from there.
+    Q_INVOKABLE void placeCaret(int row, int cursor);
+    /// The undo steps made since `token` (undoToken() taken before them) joined into one step: one
+    /// change of Vim is one step. False when the history went another way since (an undo, a reload,
+    /// another page), when the steps do not chain, or in source mode; true also for one step or none.
+    bool joinUndoSteps(const QString &token);
+    /// [`fromRow`:`from`, `toRow`:`to`) replaced by `text`, as one step: the rows between them go
+    /// (with the children a fold hides), the children of `toRow` stay. A line break in `text` makes
+    /// new blocks after a text block (list items in a list; a line in code, quotes, callouts).
+    /// False when refused (read-only, a table or the frontmatter, an invalid range).
+    bool replaceAcross(int fromRow, int from, int toRow, int to, const QString &text);
+    /// Lines [`firstLine` of `firstRow`, `lastLine` of `lastRow`] removed, as one step: blocks whose
+    /// every line goes are removed (a folded one with its children; an open one's children move up),
+    /// the others lose those lines. A page left without a block gets an empty one.
+    bool removeLines(int firstRow, int firstLine, int lastRow, int lastLine);
+    /// Vim's linewise put, as one step: `lines` (or the blocks of `markdown`, when given) as new
+    /// blocks after `row` and its children (`below`) or before it — into the text of a code block,
+    /// quote… below / above its line `line` instead. `freedIds`: block ids the text may keep (it
+    /// was deleted from this page: a move). The first new row (the row itself for lines put into
+    /// its text), -1 when refused.
+    int putLines(int row, int line, bool below, const QStringList &lines, const QString &markdown,
+                 const QSet<QString> &freedIds = {});
+    /// o / O: a new line to type into below / above line `line` of `row` — a new block on a text
+    /// block's last / first line (Enter at its end / start), a line in the text otherwise.
+    /// {row, cursor}: where the caret goes; row -1 when refused.
+    QVariantMap openLine(int row, int line, bool below);
+    /// > / <: rows [firstRow, lastRow] indented (`levels` > 0) or outdented `levels` times as Tab
+    /// does (with their children; a document indents list items only); lines [firstLine, lastLine]
+    /// of a code block, quote… (firstRow == lastRow) get or lose tabs instead. One step.
+    bool shiftLines(int firstRow, int firstLine, int lastRow, int lastLine, int levels);
+    /// The Markdown of rows [first, last] (each with the children a fold hides), as a block copy
+    /// writes it — what a linewise yank of whole blocks keeps.
+    QString rowsMarkdown(int first, int last) const;
+    /// The block ids of rows [first, last] (what a delete frees for a put elsewhere on the page).
+    QSet<QString> rowsBlockIds(int first, int last) const;
+    /// A row Vim's lines come from: every visible row but the frontmatter, in order; a table is one
+    /// line of no text (`opaque`: its cells are edited in the table).
+    struct TextRow {
+        int row = -1;
+        QString text; ///< the edit text
+        bool opaque = false;
+        bool collapsed = false;
+    };
+    QList<TextRow> textRows() const;
+    /// `row` as textRows() has it; row -1 for a row that is none of them (hidden, the frontmatter).
+    TextRow textRow(int row) const;
+    /// `row`'s edit text ("" for an invalid row).
+    QString editTextOf(int row) const;
+
     // --- Undo -------------------------------------------------------------------------------------
     Q_INVOKABLE void undo();
     Q_INVOKABLE void redo();
@@ -1438,6 +1490,7 @@ private:
     quint64 m_typingUid = 0;
     QPoint m_typingCell{-1, -2}; ///< table cell (column, table row) of a table typing session
     bool m_undoing = false;      ///< applyStep() runs (undo/redo): moving the caret changes no text
+    bool m_joiningSteps = false; ///< joinUndoSteps(): stepping back over the steps it joins changes nothing
     /// > 0: a selection command runs — updateSelection() waits for its end (no empty selection in
     /// between: the touch selection mode would end).
     int m_selectionHold = 0;

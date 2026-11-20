@@ -132,6 +132,9 @@ public:
     }
     /// Characters held by the step.
     qsizetype size() const { return m_delta.size(); }
+    const BlockDocument::Delta &delta() const { return m_delta; }
+    const PageController::Focus &focusBefore() const { return m_focusBefore; }
+    const PageController::Focus &focusAfter() const { return m_focusAfter; }
     /// Unique among the steps of the app's run (PageController::undoToken(): an edit undone and
     /// replaced by another at the same place in the history is another step).
     quint64 serial() const { return m_serial; }
@@ -1297,6 +1300,8 @@ EditResult PageController::applyOp(const std::function<EditResult(BlockDocument 
 
 void PageController::applyStep(const BlockDocument::Delta &delta, StepDirection direction, const Focus &focus)
 {
+    if (m_joiningSteps)
+        return; // joinUndoSteps(): the document stays as it is
     const QScopedValueRollback undoing(m_undoing, true);
     m_typingOpen = false;
     const quint64 zoomBefore = m_model->zoomUid();
@@ -4894,6 +4899,47 @@ QString PageController::undoToken() const
     const int index = m_undo->index();
     const auto *last = index > 0 ? static_cast<const EditCommand *>(m_undo->command(index - 1)) : nullptr;
     return u"%1:%2:%3"_s.arg(m_undoGeneration).arg(index).arg(last ? last->serial() : 0);
+}
+
+bool PageController::joinUndoSteps(const QString &token)
+{
+    if (m_sourceMode || token.isEmpty())
+        return false;
+    const QStringList parts = token.split(u':');
+    if (parts.size() != 3 || parts[0].toInt() != m_undoGeneration)
+        return false;
+    const int start = parts[1].toInt();
+    const quint64 serial = parts[2].toULongLong();
+    const int end = m_undo->index();
+    if (start < 0 || start > end)
+        return false;
+    // The next keystroke starts a step of its own (typing after a change of Vim is another change).
+    m_typingOpen = false;
+    // The step before them must still be the one the token named (no undo and other edits since).
+    const auto *before = start > 0 ? static_cast<const EditCommand *>(m_undo->command(start - 1)) : nullptr;
+    if ((before ? before->serial() : 0) != serial)
+        return false;
+    if (end - start <= 1)
+        return true;
+    // Composed from the last step back (composed() wants the document at its second delta's end).
+    std::optional<BlockDocument::Delta> joined = static_cast<const EditCommand *>(m_undo->command(end - 1))->delta();
+    for (int i = end - 2; i >= start && joined; --i)
+        joined = m_model->document().composed(static_cast<const EditCommand *>(m_undo->command(i))->delta(), *joined);
+    if (!joined)
+        return false;
+    if (joined->isEmpty())
+        return true; // back where it started: the steps stay (undo walks through them)
+    const Focus focusBefore = static_cast<const EditCommand *>(m_undo->command(start))->focusBefore();
+    const Focus focusAfter = static_cast<const EditCommand *>(m_undo->command(end - 1))->focusAfter();
+    {
+        // Back to `start` without touching the document (the steps' undo does nothing meanwhile),
+        // then one step in their place (pushing drops the ones after it).
+        const QScopedValueRollback joining(m_joiningSteps, true);
+        m_undo->setIndex(start);
+    }
+    m_undo->push(new EditCommand(this, std::move(*joined), focusBefore, focusAfter, 0));
+    m_typingOpen = false;
+    return true;
 }
 
 bool PageController::undoStep(const QString &token)
