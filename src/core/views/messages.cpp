@@ -4,33 +4,24 @@
 
 namespace brulion::views::messages {
 
-namespace {
-
-QString tr(const char *text)
-{
-    return QCoreApplication::translate("brulion::Views", text);
-}
-
-} // namespace
-
 QString columnLabel(QueryColumnKind kind)
 {
     switch (kind) {
-    case QueryColumnKind::Title: return tr("Title");
-    case QueryColumnKind::Path: return tr("Path");
-    case QueryColumnKind::Folder: return tr("Folder");
-    case QueryColumnKind::Tags: return tr("Tags");
-    case QueryColumnKind::Modified: return tr("Modified");
-    case QueryColumnKind::Size: return tr("Size");
-    case QueryColumnKind::Date: return tr("Date");
-    case QueryColumnKind::Text: return tr("Text");
-    case QueryColumnKind::Status: return tr("Status");
-    case QueryColumnKind::Priority: return tr("Priority");
-    case QueryColumnKind::Due: return tr("Due");
-    case QueryColumnKind::Scheduled: return tr("Scheduled");
-    case QueryColumnKind::Start: return tr("Start");
-    case QueryColumnKind::Done: return tr("Done");
-    case QueryColumnKind::Created: return tr("Created");
+    case QueryColumnKind::Title: return QCoreApplication::translate("brulion::Views", "Title");
+    case QueryColumnKind::Path: return QCoreApplication::translate("brulion::Views", "Path");
+    case QueryColumnKind::Folder: return QCoreApplication::translate("brulion::Views", "Folder");
+    case QueryColumnKind::Tags: return QCoreApplication::translate("brulion::Views", "Tags");
+    case QueryColumnKind::Modified: return QCoreApplication::translate("brulion::Views", "Modified");
+    case QueryColumnKind::Size: return QCoreApplication::translate("brulion::Views", "Size");
+    case QueryColumnKind::Date: return QCoreApplication::translate("brulion::Views", "Date");
+    case QueryColumnKind::Text: return QCoreApplication::translate("brulion::Views", "Text");
+    case QueryColumnKind::Status: return QCoreApplication::translate("brulion::Views", "Status");
+    case QueryColumnKind::Priority: return QCoreApplication::translate("brulion::Views", "Priority");
+    case QueryColumnKind::Due: return QCoreApplication::translate("brulion::Views", "Due");
+    case QueryColumnKind::Scheduled: return QCoreApplication::translate("brulion::Views", "Scheduled");
+    case QueryColumnKind::Start: return QCoreApplication::translate("brulion::Views", "Start");
+    case QueryColumnKind::Done: return QCoreApplication::translate("brulion::Views", "Done");
+    case QueryColumnKind::Created: return QCoreApplication::translate("brulion::Views", "Created");
     case QueryColumnKind::Property:
     case QueryColumnKind::Formula: break;
     }
@@ -40,35 +31,35 @@ QString columnLabel(QueryColumnKind kind)
 QString summaryName(const QString &function)
 {
     if (function == u"sum")
-        return tr("Sum");
+        return QCoreApplication::translate("brulion::Views", "Sum");
     if (function == u"average")
-        return tr("Average");
+        return QCoreApplication::translate("brulion::Views", "Average");
     if (function == u"median")
-        return tr("Median");
+        return QCoreApplication::translate("brulion::Views", "Median");
     if (function == u"min")
-        return tr("Min");
+        return QCoreApplication::translate("brulion::Views", "Min");
     if (function == u"max")
-        return tr("Max");
+        return QCoreApplication::translate("brulion::Views", "Max");
     if (function == u"range")
-        return tr("Range");
+        return QCoreApplication::translate("brulion::Views", "Range");
     if (function == u"stddev")
-        return tr("Std. deviation");
+        return QCoreApplication::translate("brulion::Views", "Std. deviation");
     if (function == u"count")
-        return tr("Count");
+        return QCoreApplication::translate("brulion::Views", "Count");
     if (function == u"empty")
-        return tr("Empty");
+        return QCoreApplication::translate("brulion::Views", "Empty");
     if (function == u"filled")
-        return tr("Filled");
+        return QCoreApplication::translate("brulion::Views", "Filled");
     if (function == u"unique")
-        return tr("Unique");
+        return QCoreApplication::translate("brulion::Views", "Unique");
     if (function == u"checked")
-        return tr("Checked");
+        return QCoreApplication::translate("brulion::Views", "Checked");
     if (function == u"unchecked")
-        return tr("Unchecked");
+        return QCoreApplication::translate("brulion::Views", "Unchecked");
     if (function == u"earliest")
-        return tr("Earliest");
+        return QCoreApplication::translate("brulion::Views", "Earliest");
     if (function == u"latest")
-        return tr("Latest");
+        return QCoreApplication::translate("brulion::Views", "Latest");
     return function;
 }
 
@@ -91,7 +82,7 @@ QString days(int n)
 
 QString mapAsTable()
 {
-    return tr("Map views are shown as a table: Brulion has no maps.");
+    return QCoreApplication::translate("brulion::Views", "Map views are shown as a table: Brulion has no maps.");
 }
 
 QString unknownViewType(const QString &type)
@@ -102,23 +93,23 @@ QString unknownViewType(const QString &type)
 
 QString boardNeedsGroup()
 {
-    return tr("A board needs a group: its columns are the values of a property (group:status, groupBy). Shown as a "
+    return QCoreApplication::translate("brulion::Views", "A board needs a group: its columns are the values of a property (group:status, groupBy). Shown as a "
               "table.");
 }
 
 QString boardWithoutDrops()
 {
-    return tr("Cards cannot be moved between these columns: nothing in the notes holds their value.");
+    return QCoreApplication::translate("brulion::Views", "Cards cannot be moved between these columns: nothing in the notes holds their value.");
 }
 
 QString notYaml()
 {
-    return tr("This base is not a YAML mapping (filters, formulas, properties, views).");
+    return QCoreApplication::translate("brulion::Views", "This base is not a YAML mapping (filters, formulas, properties, views).");
 }
 
 QString noViews()
 {
-    return tr("This base has no views.");
+    return QCoreApplication::translate("brulion::Views", "This base has no views.");
 }
 
 QString badView(int number, const QString &message)
@@ -162,7 +153,7 @@ QString blockKeyNotAscii(const QString &key)
 
 QString notEditable()
 {
-    return tr("This cell cannot be changed here.");
+    return QCoreApplication::translate("brulion::Views", "This cell cannot be changed here.");
 }
 
 QString invalidValue(const QString &type)
@@ -172,18 +163,18 @@ QString invalidValue(const QString &type)
 
 QString yamlNotEditable()
 {
-    return tr("The base's YAML cannot be changed safely here (a flow mapping or an unusual layout): edit the file as "
+    return QCoreApplication::translate("brulion::Views", "The base's YAML cannot be changed safely here (a flow mapping or an unusual layout): edit the file as "
               "text.");
 }
 
 QString noValue()
 {
-    return tr("No value");
+    return QCoreApplication::translate("brulion::Views", "No value");
 }
 
 QString fileName()
 {
-    return tr("Name");
+    return QCoreApplication::translate("brulion::Views", "Name");
 }
 
 } // namespace brulion::views::messages

@@ -24,11 +24,6 @@ namespace {
 using T = Value::Type;
 using Args = ValueList;
 
-QString tr(const char *text)
-{
-    return QCoreApplication::translate("brulion::Bases", text);
-}
-
 // ---- tokens ----------------------------------------------------------------------------------------
 
 struct BToken {
@@ -135,7 +130,7 @@ QList<BToken> lex(const QString &s)
             t.text = s.sliced(i, j - i);
             i = j;
         } else if (c == u'/' && operandNext()) {
-            throw BError{tr("Regular expressions are not supported: a note from anywhere could make one run for "
+            throw BError{QCoreApplication::translate("brulion::Bases", "Regular expressions are not supported: a note from anywhere could make one run for "
                             "minutes. Use contains(), startsWith() or split() with a text.")};
         } else {
             static const QStringList twoChar{u"=="_s, u"!="_s, u"<="_s, u">="_s, u"&&"_s, u"||"_s, u"=>"_s};
@@ -852,7 +847,7 @@ QString relative(const DateValue &d, Context &ctx)
     const qint64 a = std::abs(secs);
     QString amount;
     if (a < 45)
-        amount = tr("a few seconds");
+        amount = QCoreApplication::translate("brulion::Bases", "a few seconds");
     else if (a < 45 * 60)
         amount = messages::minutes(int(std::max<qint64>(1, (a + 30) / 60)));
     else if (a < 22 * 3600)
@@ -863,7 +858,7 @@ QString relative(const DateValue &d, Context &ctx)
         amount = messages::months(int(std::max<qint64>(1, (a + 15 * 86400) / (30 * 86400))));
     else
         amount = messages::years(int(std::max<qint64>(1, (a + 182 * 86400) / (365 * 86400))));
-    return secs >= 0 ? tr("in %1").arg(amount) : tr("%1 ago").arg(amount);
+    return secs >= 0 ? QCoreApplication::translate("brulion::Bases", "in %1").arg(amount) : QCoreApplication::translate("brulion::Bases", "%1 ago").arg(amount);
 }
 
 const ValueList &listOrEmpty(const Value &v)

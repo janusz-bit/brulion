@@ -2916,6 +2916,34 @@ All of it in the Nix package (`nix build .#brulion`; before: the 0.23.0 package,
 | `lib/brulion` (llama.cpp, ggml, the plugin) | 16.3 MB | 14.5 MB | −1.8 MB |
 | the package | 143.0 MB | 93.6 MB | −49.5 MB (−35 %) |
 
+### Database views and property filters (2026-11-20)
+
+Query blocks with `view:` and Obsidian bases (docs/SYNTAX.md §10 "Views", "Obsidian Bases") read
+properties of many notes, so they follow the rules of query blocks:
+
+* **Property filters** (`koszt::>100`) run in the query's own pass over the notes: a note's page
+  properties are listed once per run with their keys folded (a key is folded once per run — keys
+  repeat across notes), and a value is typed (number, date, link, checkbox) only for the key a
+  filter, sort or group asks for. A block's properties are its `Block::properties`, already parsed.
+  A query with property filters or a property group follows the index through a `QueryCache` like
+  any query: after one edit only the edited note is evaluated again, all of them when names change
+  (property values may be links). An earlier version that typed every property of every note took
+  182 ms for three filters over 4000 notes; now 65 ms (a tag filter: 15 ms; Debug -O0, this machine).
+* **Views** build their cells for the rows shown only (the query's `limit:`, else 500); a calendar
+  runs its query without the limit and keeps the rows of its month's grid. Formulas share one
+  `dataview::Evaluator` per build: its step budget bounds the whole view, so a costly formula
+  stops with its message in the cells instead of freezing the app. `Workspace` keeps a
+  `QueryCache` per query view, as for query blocks.
+* **Bases** read every file (Obsidian's semantics: no `FROM`): a base's view runs its filters over
+  the notes and attachments, computes formulas only when a filter reads them or for the rows shown,
+  and `Workspace` keeps its last result for the index version and the minute (like a Dataview
+  block), so a page with a base costs one run per change of the notebook.
+
+`tst_views_perf` (4000 notes, CPU time, medians; `tests/common/testtiming.h`) guards it: three property
+filters and a property sort within 12× a tag filter and 4 s (65 vs 15 ms measured), a `QueryCache`
+after one edit within ¼ of a full run + 2 ms (12.8 vs 58 ms), a board of 4000 notes within 6 s
+(170 ms) and a base over them within 12 s (0.5 s), all times `BRULION_TEST_SLOWDOWN`.
+
 ### Budgets
 
 Desktop = the laptop above (the graph: a GitHub runner, see its row), phone = Pi 4 (floor) and the

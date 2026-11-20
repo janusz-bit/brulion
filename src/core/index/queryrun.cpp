@@ -400,8 +400,17 @@ private:
     /// The values of the property `key` (folded) of an item: a page's page properties; a block's
     /// own, else its nearest ancestor's, else its page's. `found`: the key is there (maybe empty).
     QList<PropertyItem> propertyItems(const View &view, const QString &key, bool *found = nullptr);
-    /// The page properties of a note, keys folded (once per run).
-    const QList<std::pair<QString, QList<PropertyItem>>> &pageProperties(const Entry &entry);
+    /// A note's page property as written: its folded key, value and where it is written.
+    struct RawProperty {
+        QString key; ///< folded
+        QString name; ///< as written
+        QVariant value;
+        bool logseq = false;
+    };
+    /// The page properties of a note, keys folded (once per run; values typed when asked).
+    const QList<RawProperty> &pageProperties(const Entry &entry);
+    /// queryPropertyKey() of a key as written, folded once per run (keys repeat across notes).
+    const QString &foldedKey(const QString &key);
     bool propertyMatches(const QueryPropertyCondition &c, const PropertyItem &item);
     /// Do the link targets `a` and `b` (written in the item's note / the query) name one page?
     bool sameLink(const QString &a, const QString &b);
@@ -419,7 +428,8 @@ private:
     QHash<QString, QSet<int>> m_refLines;
     QHash<QString, QSet<QString>> m_refTags;
     QHash<QString, QString> m_folded;
-    QHash<const Entry *, QList<std::pair<QString, QList<PropertyItem>>>> m_pageProps;
+    QHash<const Entry *, QList<RawProperty>> m_pageProps;
+    QHash<QString, QString> m_foldedKeys;
     /// A property condition's value read once per run: as a number, a date (resolved), a link.
     struct ConditionValue {
         QString folded, foldedTo;
@@ -789,36 +799,47 @@ QString Runner::folded(const QString &value)
 
 // ---- properties ---------------------------------------------------------------------------------
 
-const QList<std::pair<QString, QList<PropertyItem>>> &Runner::pageProperties(const Entry &entry)
+const QString &Runner::foldedKey(const QString &key)
+{
+    if (const auto it = m_foldedKeys.constFind(key); it != m_foldedKeys.cend())
+        return *it;
+    return *m_foldedKeys.insert(key, queryPropertyKey(key));
+}
+
+const QList<Runner::RawProperty> &Runner::pageProperties(const Entry &entry)
 {
     if (const auto it = m_pageProps.constFind(&entry); it != m_pageProps.cend())
         return *it;
-    QList<std::pair<QString, QList<PropertyItem>>> out;
+    QList<RawProperty> out;
     const ParsedNote &note = entry.note;
-    QSet<QString> seen;
     const auto add = [&](const QString &key, const QVariant &value, bool logseq) {
-        const QString k = queryPropertyKey(key);
-        if (k.isEmpty() || seen.contains(k))
+        const QString &k = foldedKey(key);
+        if (k.isEmpty() || std::ranges::any_of(out, [&k](const RawProperty &p) { return p.key == k; }))
             return;
-        seen.insert(k);
-        QList<PropertyItem> items;
-        if (isNamesKey(k)) {
-            for (const QString &name : markdown::namesFrom(value, k.startsWith(u"tag"))) {
-                PropertyItem item;
-                item.text = item.link = name;
-                item.folded = text::foldKey(name);
-                items.append(item);
-            }
-        } else {
-            addPropertyItems(value, logseq, items);
-        }
-        out.append({k, items});
+        out.append(RawProperty{k, key, value, logseq});
     };
     for (auto [key, value] : note.frontmatter.asKeyValueRange())
         add(key, value, false);
     for (auto [key, value] : note.properties.asKeyValueRange())
         add(key, value, true);
     return *m_pageProps.insert(&entry, out);
+}
+
+/// The items of a page property's value (tags and aliases by their names).
+QList<PropertyItem> itemsOf(const QString &folded, const QVariant &value, bool logseq)
+{
+    QList<PropertyItem> items;
+    if (isNamesKey(folded)) {
+        for (const QString &name : markdown::namesFrom(value, folded.startsWith(u"tag"))) {
+            PropertyItem item;
+            item.text = item.link = name;
+            item.folded = text::foldKey(name);
+            items.append(item);
+        }
+    } else {
+        addPropertyItems(value, logseq, items);
+    }
+    return items;
 }
 
 QList<PropertyItem> Runner::propertyItems(const View &view, const QString &key, bool *found)
@@ -830,7 +851,7 @@ QList<PropertyItem> Runner::propertyItems(const View &view, const QString &key, 
     const QList<Block> &blocks = view.note().blocks;
     for (int b = view.block; b >= 0 && b < blocks.size(); b = blocks[b].parent) {
         for (auto [k, value] : blocks[b].properties.asKeyValueRange()) {
-            if (queryPropertyKey(k) != key)
+            if (foldedKey(k) != key)
                 continue;
             if (found)
                 *found = true;
@@ -839,11 +860,11 @@ QList<PropertyItem> Runner::propertyItems(const View &view, const QString &key, 
             return items;
         }
     }
-    for (const auto &[k, items] : pageProperties(*view.entry)) {
-        if (k == key) {
+    for (const RawProperty &p : pageProperties(*view.entry)) {
+        if (p.key == key) {
             if (found)
                 *found = true;
-            return items;
+            return itemsOf(p.key, p.value, p.logseq);
         }
     }
     return {};

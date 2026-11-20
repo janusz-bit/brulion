@@ -5801,8 +5801,8 @@ void checkIgnoreTasks(QQuickWindow *window, AppController *app, const Check &che
 /// Database views (docs/SYNTAX.md §10 "Views", docs/UI.md "Database views"): a ```query with
 /// view:tabela over pages with properties — a cell tapped, typed into and committed with Enter
 /// writes that page's property, only that line —, and a view:tablica of the page's own tasks —
-/// a card dragged from "To do" to "Done" (the mouse; on the phone run a finger held on it first)
-/// ticks the task in the page, one undo step.
+/// a card dragged from "To do" to "In progress" (the mouse; on the phone run a finger held on it
+/// first) gives the task that status in the page.
 void checkDatabaseViews(QQuickWindow *window, AppController *app, const Check &check)
 {
     Workspace *ws = app->workspace();
@@ -5826,10 +5826,32 @@ void checkDatabaseViews(QQuickWindow *window, AppController *app, const Check &c
     check(waitFor([&] { return shownNamed(window->contentItem(), u"pageEditor"_s) != nullptr; }, 10000),
           "the page is open");
     mouseMove(window, {1, 1});
+    // An item of the view once it stays put (the same point on two looks 100 ms apart): a table's
+    // cell or a board's column takes no press at its centre itself — the sideways Flickable does.
+    const auto settled = [&](const QString &name, QPointF fraction, QPointF *at) -> QQuickItem * {
+        QPointer<QQuickItem> item;
+        QPointF where(-1, -1);
+        const bool still = waitFor(
+                [&] {
+                    QQuickItem *found = shownNamed(window->contentItem(), name);
+                    const QPointF now = found ? uidriver::pointIn(found, fraction.x(), fraction.y()) : QPointF(-1, -1);
+                    const bool same = found && found == item && now == where && window->contentItem()->contains(now);
+                    item = found;
+                    where = now;
+                    if (!same)
+                        settle(100);
+                    return same;
+                },
+                10000);
+        *at = where;
+        if (!still)
+            std::fprintf(stderr, "selftest: %s at (%.1f, %.1f): %s\n", qPrintable(name), where.x(), where.y(),
+                         item ? "moving or off screen" : "not found");
+        return still ? item.data() : nullptr;
+    };
     // The table: Alfa's status cell (row 0, column 1).
     QPointF at;
-    QQuickItem *cell = steadyItem(window, [&] { return shownNamed(window->contentItem(), u"viewCell0_1"_s); }, &at,
-                                  10000);
+    QQuickItem *cell = settled(u"viewCell0_1"_s, {0.5, 0.5}, &at);
     check(cell != nullptr, "the table shows its cells");
     if (cell) {
         tapOrClick(window, at, touch);
@@ -5850,23 +5872,22 @@ void checkDatabaseViews(QQuickWindow *window, AppController *app, const Check &c
             check(ws->readFile(pageB).contains(u"status: zrobione"_s), "the other row's page is as it was");
         }
     }
-    // The board: the card from "To do" (column 0) to "Done" (column 2).
+    // The board: the card from "To do" (column 0) to "In progress" (column 1, on screen also on a
+    // phone's width: near its left edge).
     mouseMove(window, {1, 1});
     QPointF from;
     QPointF to;
-    QQuickItem *card = steadyItem(window, [&] { return shownNamed(window->contentItem(), u"viewCard0"_s); }, &from,
-                                  10000);
-    QQuickItem *done = steadyItem(window, [&] { return shownNamed(window->contentItem(), u"viewBoardColumn2"_s); }, &to,
-                                  10000);
-    check(card != nullptr && done != nullptr, "the board shows its card and the Done column");
-    if (card && done) {
+    QQuickItem *card = settled(u"viewCard0"_s, {0.5, 0.5}, &from);
+    QQuickItem *doing = settled(u"viewBoardColumn1"_s, {0.12, 0.5}, &to);
+    check(card != nullptr && doing != nullptr, "the board shows its card and the next column");
+    if (card && doing) {
         const auto ghost = [window] { return shownNamed(window->contentItem(), u"viewDragGhost"_s) != nullptr; };
         if (touch)
             uidriver::touchHoldDragNow(window, from, to, ghost, 3000);
         else
             mouseDrag(window, from, to, 150);
-        check(waitFor([&] { return ws->readFile(host).contains(u"- [x] Karta do przeniesienia"_s); }, 5000),
-              "a card dropped on Done ticks its task");
+        check(waitFor([&] { return ws->readFile(host).contains(u"- [/] Karta do przeniesienia"_s); }, 5000),
+              "a card dropped on In progress gives its task that status");
         check(waitFor([&] { return !ghost(); }), "the dragged copy is gone");
     }
     ws->deletePage(host);

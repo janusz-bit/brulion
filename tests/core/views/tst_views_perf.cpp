@@ -67,7 +67,7 @@ private Q_SLOTS:
     {
         const Query plain = std::get<Query>(parseQuery(u"type:pages tag:projekt"_s));
         const Query props = std::get<Query>(parseQuery(u"type:pages koszt::>500 status::\"w toku\",planowany "
-                                                       u"właściciel::[[Osoba 3]] sort:-koszt"_s));
+                                                       u"właściciel::[[Osoba 1]] sort:-koszt"_s));
         int total = 0;
         const qint64 plainMs = cpuMs([&] { total = runQuery(plain, m_index, Today).total; });
         QCOMPARE(total, Notes / 5);
