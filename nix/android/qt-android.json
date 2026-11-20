@@ -4,7 +4,8 @@
   "modules": [
     "qtbase",
     "qtdeclarative",
-    "qtsvg"
+    "qtsvg",
+    "qtmultimedia"
   ],
   "abis": {
     "arm64-v8a": {
@@ -22,6 +23,10 @@
         "qtsvg": {
           "path": "all_os/android/qt6_6120/qt6_6120_arm64_v8a/qt.qt6.6120.android_arm64_v8a/6.12.0-0-202609280346qtsvg-MacOS-MacOS_15-Clang-Android-Android_ANY-ARM64.7z",
           "hash": "sha256-ZNj1Jk3tYV+EuHWk05q1vRUj6qHKcgPWk51G1xYWkwQ="
+        },
+        "qtmultimedia": {
+          "path": "all_os/android/qt6_6120/qt6_6120_arm64_v8a/qt.qt6.6120.addons.qtmultimedia.android_arm64_v8a/6.12.0-0-202609280346qtmultimedia-MacOS-MacOS_15-Clang-Android-Android_ANY-ARM64.7z",
+          "hash": "sha256-FW9b5dLnpQOZ/x/VyjG5uSFPSDza104cohHAPgHkAVo="
         }
       }
     },
@@ -40,6 +45,10 @@
         "qtsvg": {
           "path": "all_os/android/qt6_6120/qt6_6120_armv7/qt.qt6.6120.android_armv7/6.12.0-0-202609280346qtsvg-Windows-Windows_11_24H2-Clang-Android-Android_ANY-ARMv7.7z",
           "hash": "sha256-zHndTi+ApwyFp8oHTCqNeiNpLZS79GA59iaGz8z6QXs="
+        },
+        "qtmultimedia": {
+          "path": "all_os/android/qt6_6120/qt6_6120_armv7/qt.qt6.6120.addons.qtmultimedia.android_armv7/6.12.0-0-202609280346qtmultimedia-Windows-Windows_11_24H2-Clang-Android-Android_ANY-ARMv7.7z",
+          "hash": "sha256-7xKcDBomWVz6/CA0he9zqVI4oOqESF/BTwKVO0nDRPM="
         }
       }
     },
@@ -58,6 +67,10 @@
         "qtsvg": {
           "path": "all_os/android/qt6_6120/qt6_6120_x86_64/qt.qt6.6120.android_x86_64/6.12.0-0-202609280346qtsvg-Linux-RHEL_9_6-Clang-Android-Android_ANY-X86_64.7z",
           "hash": "sha256-T55fMxNW6WbcLQw1e7ofxgesBVNkFtj0vZRI8tWEECw="
+        },
+        "qtmultimedia": {
+          "path": "all_os/android/qt6_6120/qt6_6120_x86_64/qt.qt6.6120.addons.qtmultimedia.android_x86_64/6.12.0-0-202609280346qtmultimedia-Linux-RHEL_9_6-Clang-Android-Android_ANY-X86_64.7z",
+          "hash": "sha256-nasAR+dUiai1JUxUT1IRbpnR68e/9eW/Jac8Zy6cn/0="
         }
       }
     },
@@ -76,6 +89,10 @@
         "qtsvg": {
           "path": "all_os/android/qt6_6120/qt6_6120_x86/qt.qt6.6120.android_x86/6.12.0-0-202609280346qtsvg-Linux-RHEL_9_6-Clang-Android-Android_ANY-X86.7z",
           "hash": "sha256-SF30xUGY4fZ8QVvCI0VTxfMZDURXsbLt8BrNk+9x79o="
+        },
+        "qtmultimedia": {
+          "path": "all_os/android/qt6_6120/qt6_6120_x86/qt.qt6.6120.addons.qtmultimedia.android_x86/6.12.0-0-202609280346qtmultimedia-Linux-RHEL_9_6-Clang-Android-Android_ANY-X86.7z",
+          "hash": "sha256-LZyoBqeiTAr/YwRXlD9J7/qnwlu/4SP66DUAcOS3lyU="
         }
       }
     }

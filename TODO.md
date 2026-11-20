@@ -220,10 +220,16 @@ done in the repository simply disappears from the list.
 * **Web Clipper** — a Chrome and Firefox extension saving an article, a selection or a screenshot
   as Markdown with pictures, with a choice of place and a template (Obsidian, Joplin). Today:
   "Share" with the title and address, without the article's content.
-* **Voice notes** — a recording in the app as an attachment and on-device transcription, also in
-  Polish, without sending audio to the cloud (Joplin, Obsidian for iOS in preparation).
-* **Audio and video in notes** — a player for `![[recording.mp3]]` and `![[video.mp4]]`; today such
-  files open only read-only as text.
+* **Audio, video and voice notes: what is still missing** — players in notes, the player view, voice
+  notes and their transcripts on the device are done (docs/UI.md "Audio and video", "Voice notes").
+  Missing: checks on a real phone of Qt's Android backend (playback, a video's picture and poster,
+  the system's MediaRecorder writing a voice note, the microphone's permission) and of the
+  AppImage's and Windows' packages with Qt Multimedia (built by CI only); players inside the
+  browser version (Qt Multimedia's WebAssembly backend over the notebook's files — today a new tab)
+  and recording there; transcripts in the AppImage and on Windows (with the model on the device,
+  above); text while it is being recorded (whisper.cpp's streaming), a transcript's sentences
+  linked to their moments (`#t=`), and whisper.cpp computing without spinning threads on a busy
+  processor (docs/PERFORMANCE.md "Audio and video: what Qt Multimedia costs").
 * **Photo and scan from the camera** — `/Photo` on the phone, straightening and cropping a
   document, scanning to PDF.
 * **On-device automation** — `brulion://` addresses (open a page, append under a heading), intents

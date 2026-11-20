@@ -316,6 +316,10 @@ const SlashCommand *slashCommand(QStringView id);
 /// Commands matching `filter` (diacritic- and case-insensitive; names in both languages and
 /// keywords), best first: name prefix, then word prefix, then substring; menu order otherwise.
 QList<const SlashCommand *> filterSlashCommands(QStringView filter);
+/// Commands this build cannot run, left out of filterSlashCommands() (the app sets them at start:
+/// "voiceNote" without a recorder, docs/UI.md "Voice notes").
+void setUnavailableSlashCommands(const QStringList &ids);
+QStringList &unavailableSlashCommands();
 
 /// Markdown inserted by text-only slash commands for a new/empty block ("calc" -> "```calc\n\n```").
 /// `cursor` receives the caret offset inside the returned text. Empty for commands that open a

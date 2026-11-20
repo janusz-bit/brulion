@@ -6,7 +6,8 @@
 # qmltyperegistrar, qmlimportscanner, androiddeployqt, qsb, lrelease…) and Qt's translations,
 # then Qt for Android with the NDK (r27c) — only the modules Brulion's Android build uses:
 #   host:    qtbase qtshadertools qtsvg qtdeclarative qttools (Linguist tools only) qttranslations
-#   Android: qtbase qtshadertools qtsvg qtdeclarative
+#   Android: qtbase qtshadertools qtsvg qtdeclarative qtmultimedia (its Android backend — the
+#            system's MediaPlayer and MediaRecorder —, no FFmpeg: audio and video in notes)
 # Both in the layout aqt installs (scripts/android-build.sh reads it), under QT_ROOT:
 #   $QT_ROOT/6.12.0/gcc_64              host Qt (QT_HOST_PATH)
 #   $QT_ROOT/6.12.0/android_<arch>      Qt for Android, one per ABI
@@ -65,10 +66,13 @@ declare -A QT_SHA256=(
   [qtdeclarative]=311f3a2603e1973bb59baef9dfa740a376de713157d4782ee043681e889c9260
   [qttools]=8dab8f3611496486a470ad5f115ceea584f36bc22a2b8b6f6ebdbafbb8160693
   [qttranslations]=85929c0c30d6f273f23bd879bb69803ea17b010ab73cab2f8abf95357f6f6bbb
+  [qtmultimedia]=3143f53b64257ba2a0685c940f5dce476c75871ff86b516de45cfd54ea93a62d
 )
 # In build order (each module needs the ones before it).
 HOST_MODULES=(qtbase qtshadertools qtsvg qtdeclarative qttools qttranslations)
-ANDROID_MODULES=(qtbase qtshadertools qtsvg qtdeclarative)
+ANDROID_MODULES=(qtbase qtshadertools qtsvg qtdeclarative qtmultimedia)
+# Every module's sources (the host's and qtmultimedia, built for Android only).
+SOURCE_MODULES=("${HOST_MODULES[@]}" qtmultimedia)
 SDK_CMAKE=3.31.6
 # Time stamp of the files in Qt's own resources (rcc): fixed, so that every build of Qt for
 # Android gives the same libraries (1980-01-01, like nixpkgs and zip archives).
@@ -157,15 +161,15 @@ echo "JDK: $JAVA_HOME"
 
 if [[ -n ${BRULION_QT_SOURCE_DIR:-} ]]; then
   SRC=$(cd -- "$BRULION_QT_SOURCE_DIR" && pwd) || die "BRULION_QT_SOURCE_DIR=$BRULION_QT_SOURCE_DIR does not exist"
-  for module in "${HOST_MODULES[@]}"; do
+  for module in "${SOURCE_MODULES[@]}"; do
     conf=$SRC/$module/.cmake.conf
-    [[ -f $conf ]] || die "$SRC/$module is missing (init-repository --module-subset=$(IFS=, && echo "${HOST_MODULES[*]}"))"
+    [[ -f $conf ]] || die "$SRC/$module is missing (init-repository --module-subset=$(IFS=, && echo "${SOURCE_MODULES[*]}"))"
     grep -q "QT_REPO_MODULE_VERSION \"$QT_VERSION\"" "$conf" || die "$SRC/$module is not Qt $QT_VERSION ($conf)"
   done
   src_id="source tree $SRC"
 else
   SRC=$QT_ROOT/src/$QT_VERSION
-  for module in "${HOST_MODULES[@]}"; do
+  for module in "${SOURCE_MODULES[@]}"; do
     name=$module-everywhere-src-$QT_VERSION.tar.xz
     archive=$DOWNLOADS/$name
     if [[ ! -f $archive ]] || ! echo "${QT_SHA256[$module]}  $archive" | sha256sum -c --quiet - 2>/dev/null; then
@@ -193,7 +197,7 @@ else
       printf '%s\n' "${QT_SHA256[$module]}" >"$SRC/$module/.brulion-sha256"
     fi
   done
-  src_id="archives $(for m in "${HOST_MODULES[@]}"; do printf '%s ' "${QT_SHA256[$m]:0:12}"; done)"
+  src_id="archives $(for m in "${SOURCE_MODULES[@]}"; do printf '%s ' "${QT_SHA256[$m]:0:12}"; done)"
 fi
 
 # --- build helpers ------------------------------------------------------------------------------
@@ -281,6 +285,13 @@ declarative_features=(
   -DFEATURE_quickcontrols2_stylekit=OFF -DFEATURE_quick_dialogs=OFF -DFEATURE_quick_designer=OFF
   -DFEATURE_quickshapes_designhelpers=OFF
 )
+# qtmultimedia (Android only: no host tools): Qt's Android backend, without FFmpeg (no FFmpeg for
+# Android is built here — docs/PERFORMANCE.md "Audio and video: what Qt Multimedia costs"), spatial
+# audio or Qt Quick 3D.
+multimedia_features=(
+  -DFEATURE_ffmpeg=OFF -DFEATURE_spatialaudio=OFF -DFEATURE_spatialaudio_quick3d=OFF
+  -DFEATURE_gstreamer=OFF
+)
 # The host Qt only runs tools: no OpenGL (-no-opengl), X11 or Wayland (the offscreen platform is enough for
 # qsb and svgtoqml), no TLS; qttools only with the Linguist tools (lrelease, lupdate).
 host_features=(
@@ -343,6 +354,7 @@ for abi in "${ABIS[@]}"; do
     build=$BUILD_ROOT/$abi-$module
     stamp="qt $QT_VERSION $abi $module ($src_id) ndk $ndk_revision openssl-headers $ssl_id features ${common_features[*]} ${android_features[*]} epoch $QT_SOURCE_DATE_EPOCH"
     [[ $module == qtdeclarative ]] && stamp+=" ${declarative_features[*]}"
+    [[ $module == qtmultimedia ]] && stamp+=" ${multimedia_features[*]}"
     if [[ $module == qtbase ]]; then
       configure=("$SRC/qtbase/configure" -prefix "$prefix" -platform android-clang
         -android-sdk "$SDK" -android-ndk "$NDK" -android-abis "$abi" -qt-host-path "$HOST_PREFIX"
@@ -353,6 +365,7 @@ for abi in "${ABIS[@]}"; do
       extra=("${module_cmake[@]}")
     fi
     [[ $module == qtdeclarative ]] && extra+=("${declarative_features[@]}")
+    [[ $module == qtmultimedia ]] && extra+=("${multimedia_features[@]}")
     # The NDK's (legacy) toolchain file ignores CFLAGS/CXXFLAGS from the environment, but adds its
     # flags to CMAKE_C(XX)_FLAGS given on the command line.
     flags=$(prefix_maps "$build" "$prefix")

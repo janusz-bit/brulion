@@ -30,7 +30,7 @@ Builds:
       - sdkmanager 'platforms;android-36' 'build-tools;36.0.0' 'cmake;3.31.6'
       - export PATH="$$SDK$$/cmake/3.31.6/bin:$PATH"
       - cd $$Qt5$$
-      - ./init-repository -f --module-subset=qtbase,qtshadertools,qtsvg,qtdeclarative,qttools,qttranslations
+      - ./init-repository -f --module-subset=qtbase,qtshadertools,qtsvg,qtdeclarative,qttools,qttranslations,qtmultimedia
     scandelete:
       - tests/core/io/fixtures/trilium
       - tests/data/drawing/lzstring

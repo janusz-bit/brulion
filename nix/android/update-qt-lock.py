@@ -45,11 +45,10 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("version", help="Qt version, e.g. 6.11.2 (the nixpkgs qt6.qtbase version)")
     parser.add_argument("output", help="the JSON lock to write")
-    parser.add_argument("--modules", default="qtbase qtdeclarative qtsvg",
-                        help="Qt modules to fetch (space separated; default: %(default)s). Only modules "
-                             "of the main package (qtbase, qtdeclarative, qtsvg, qttools, qttranslations…); "
-                             "add-ons such as qtimageformats or qtmultimedia are separate packages and not "
-                             "supported yet")
+    parser.add_argument("--modules", default="qtbase qtdeclarative qtsvg qtmultimedia",
+                        help="Qt modules to fetch (space separated; default: %(default)s): modules of the "
+                             "main package (qtbase, qtdeclarative, qtsvg, qttools, qttranslations…) and add-ons, "
+                             "which are packages of their own (qtmultimedia, qtimageformats…)")
     parser.add_argument("--abis", default=" ".join(ABIS), help="ABIs (default: %(default)s)")
     args = parser.parse_args()
 
@@ -75,10 +74,20 @@ def main() -> int:
         for module in modules:
             # Archive names look like "qtbase-Linux-RHEL_9_6-Clang-Android-Android_ANY-X86_64.7z".
             matches = [a for a in archives if a.split("-", 1)[0] == module]
+            owner, owner_version = package_name, package_version
+            if not matches:
+                # An add-on (qtmultimedia, qtimageformats…): a package of its own in the same
+                # repository, qt.qt6.<v>.addons.<module>.<arch>, with one archive.
+                addon_name = f"qt.qt6.{compact}.addons.{module}.{qt_arch}"
+                addon = next((p for p in updates.iter("PackageUpdate") if p.findtext("Name") == addon_name), None)
+                if addon is not None:
+                    owner, owner_version = addon_name, addon.findtext("Version")
+                    matches = [a.strip() for a in (addon.findtext("DownloadableArchives") or "").split(",")
+                               if a.strip() and a.strip().split("-", 1)[0] == module]
             if len(matches) != 1:
                 sys.exit(f"{package_name}: expected one archive of {module}, found {matches} in {archives}"
-                         " (add-on modules are separate packages, not supported yet)")
-            path = f"{base}/{package_name}/{package_version}{matches[0]}"
+                         f" (nor one in the add-on package of {module})")
+            path = f"{base}/{owner}/{owner_version}{matches[0]}"
             hex_digest = fetch(f"{REPO}/{path}.sha256").decode().split()[0]
             if len(hex_digest) != 64:
                 sys.exit(f"unexpected checksum file for {path}: {hex_digest!r}")

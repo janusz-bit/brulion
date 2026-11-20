@@ -35,6 +35,9 @@ import Brulion
 // the PDF viewer. Without a renderer (the browser) or a thumbnail cache it is the file's chip with a
 // page icon; its click opens the PDF in a new browser tab / the system's viewer (pdfClicked too:
 // PageController.openPdf decides, inside the click — the browser's user gesture).
+// A sound or a video (`media`: `![[Nagranie.m4a]]`, `![](film.mp4#t=83)`; docs/UI.md "Audio and
+// video") is a player (MediaEmbedTile): its "Transcribe" emits transcribeRequested(path, target),
+// its "Copy link to …" copyRequested(text).
 Column {
     id: root
 
@@ -55,6 +58,10 @@ Column {
     signal backgroundClicked()
     /// A finger held beside the picture / chip (touch UIs).
     signal backgroundLongPressed()
+    /// A recording's "Transcribe" (MediaEmbedTile): the editor queues it (AppController.speech).
+    signal transcribeRequested(string path, string target)
+    /// A recording's "Copy link to …": `text` to the clipboard.
+    signal copyRequested(string text)
 
     spacing: Theme.space2
     // (`revision`: itemAt() notifies nothing, a Repeater's items may come after its count; read for
@@ -94,9 +101,11 @@ Column {
             /// A PDF (BlockListModel's PDF embed); shown as its thumbnail where PDFs are drawn.
             readonly property bool pdf: rec.map.pdf === true
             readonly property bool pdfTile: pdf && rec.map.viewable === true && rec.map.state !== "unsupported"
+            /// A sound or a video (BlockListModel's media embed): a player.
+            readonly property bool media: rec.map.media === true
             readonly property string urlText: "" + (rec.map.url || "")
             readonly property string darkUrlText: "" + (rec.map.darkUrl || "")
-            readonly property bool image: !pdf && rec.map.image === true && (web || urlText !== "")
+            readonly property bool image: !pdf && !media && rec.map.image === true && (web || urlText !== "")
             readonly property string state_: rec.map.state || ""
             readonly property string name: rec.map.name || ""
             readonly property string alt: rec.map.alt || ""
@@ -131,12 +140,12 @@ Column {
             readonly property real knownHeight: !sizeKnown ? 0 : drawing ? Math.floor(fileHeight * drawingScale)
                                                                         : Math.floor(fileHeight * fitScale) / dpr
             width: root.width
-            height: embed.pdfTile ? pdfLoader.height : image ? picture.height : chip.height
+            height: embed.media ? mediaLoader.height : embed.pdfTile ? pdfLoader.height : image ? picture.height : chip.height
 
             // Beside the picture / chip: a click there edits the block (an embed-only paragraph of
             // a document has no text line to click).
             Item {
-                x: embed.pdfTile ? pdfLoader.width : embed.image ? picture.width : chip.width
+                x: embed.media ? mediaLoader.width : embed.pdfTile ? pdfLoader.width : embed.image ? picture.width : chip.width
                 width: Math.max(0, embed.width - x)
                 height: embed.height
                 HoverHandler { cursorShape: root.readOnly ? Qt.ArrowCursor : Qt.IBeamCursor; enabled: !Theme.touchUi }
@@ -349,10 +358,23 @@ Column {
                 }
             }
 
+            // A sound or a video: its player.
+            Loader {
+                id: mediaLoader
+                active: embed.media
+                visible: active
+                sourceComponent: MediaEmbedTile {
+                    entry: embed.modelData
+                    columnWidth: root.width
+                    onTranscribeRequested: (path, target) => root.transcribeRequested(path, target)
+                    onCopyRequested: (text) => root.copyRequested(text)
+                }
+            }
+
             BChip {
                 id: chip
                 objectName: embed.pdf ? "pdfEmbedChip" : ""
-                visible: !embed.image && !embed.pdfTile
+                visible: !embed.image && !embed.pdfTile && !embed.media
                 interactive: true
                 iconName: embed.pdf ? "file-text" : embed.rec.map.image === true ? "image" : "file"
                 text: embed.name

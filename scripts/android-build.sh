@@ -59,6 +59,8 @@
 #                                (F-Droid's srclibs) instead of their pinned source archives
 #   BRULION_LOCAL_AI=OFF         an APK without the model on the device (no llama.cpp libraries;
 #                                default: with it, for the 64-bit ABIs — docs/EXTENSIONS.md "AI")
+#   BRULION_WHISPER_SOURCE_DIR   whisper.cpp's sources (3rdparty/whisper/pin.json; default:
+#                                scripts/llama-source.sh --whisper downloads them)
 #   BRULION_LLAMA_SOURCE_DIR     llama.cpp's sources, the release pinned in 3rdparty/llama/pin.json
 #                                (default: scripts/llama-source.sh downloads and checks them;
 #                                F-Droid: a srclib)
@@ -293,11 +295,14 @@ aqt() {
 QT_HOST_PATH=${QT_HOST_PATH:-$QT_ROOT/$QT_VERSION/gcc_64}
 for abi in "${ABIS[@]}"; do
   arch=$(qt_arch "$abi")
-  if [[ ! -f $QT_ROOT/$QT_VERSION/$arch/lib/cmake/Qt6/qt.toolchain.cmake ]]; then
+  # With Qt Multimedia (audio and video in notes, voice notes; its Android backend — the FFmpeg one
+  # is left out of the APK: src/app/media/area.cmake); a Qt installed before without it gets it now.
+  if [[ ! -f $QT_ROOT/$QT_VERSION/$arch/lib/cmake/Qt6/qt.toolchain.cmake
+    || ( $QT_SOURCE == aqt && ! -f $QT_ROOT/$QT_VERSION/$arch/lib/cmake/Qt6Multimedia/Qt6MultimediaConfig.cmake ) ]]; then
     [[ $QT_SOURCE == aqt ]] || die "$QT_ROOT/$QT_VERSION/$arch has no Qt for Android (scripts/android-qt-from-source.sh failed?)"
-    info "Installing Qt $QT_VERSION $arch (aqt) into $QT_ROOT"
+    info "Installing Qt $QT_VERSION $arch with qtmultimedia (aqt) into $QT_ROOT"
     mkdir -p "$QT_ROOT"
-    aqt install-qt all_os android "$QT_VERSION" "$arch" -O "$QT_ROOT"
+    aqt install-qt all_os android "$QT_VERSION" "$arch" -O "$QT_ROOT" -m qtmultimedia
   fi
 done
 if [[ ! -x $QT_HOST_PATH/libexec/moc ]]; then
@@ -424,6 +429,13 @@ if [[ $LOCAL_AI == on ]]; then
   [[ -f $BRULION_LLAMA_SOURCE_DIR/include/llama.h ]] || die "BRULION_LLAMA_SOURCE_DIR=$BRULION_LLAMA_SOURCE_DIR has no include/llama.h"
   echo "llama.cpp: $BRULION_LLAMA_SOURCE_DIR"
   cmake_args+=(-DBRULION_LLAMA_SOURCE_DIR="$BRULION_LLAMA_SOURCE_DIR")
+  # Speech recognition (voice notes' transcripts): whisper.cpp over that llama.cpp's ggml.
+  if [[ -z ${BRULION_WHISPER_SOURCE_DIR:-} ]]; then
+    BRULION_WHISPER_SOURCE_DIR=$("$ROOT/scripts/llama-source.sh" --whisper) || die "no whisper.cpp sources"
+  fi
+  [[ -f $BRULION_WHISPER_SOURCE_DIR/include/whisper.h ]] || die "BRULION_WHISPER_SOURCE_DIR=$BRULION_WHISPER_SOURCE_DIR has no include/whisper.h"
+  echo "whisper.cpp: $BRULION_WHISPER_SOURCE_DIR"
+  cmake_args+=(-DBRULION_SPEECH=ON -DBRULION_WHISPER_SOURCE_DIR="$BRULION_WHISPER_SOURCE_DIR")
 else
   cmake_args+=(-DBRULION_LOCAL_AI=OFF)
 fi
@@ -525,7 +537,7 @@ label=Brulion
 [[ -z $ID_SUFFIX ]] || label="Brulion (${ID_SUFFIX#.})"
 grep -qxF "application-label:'$label'" <<<"$badging" || die "wrong app name (not \"$label\")"
 for permission in MANAGE_EXTERNAL_STORAGE POST_NOTIFICATIONS SCHEDULE_EXACT_ALARM USE_EXACT_ALARM \
-  RECEIVE_BOOT_COMPLETED VIBRATE WAKE_LOCK USE_FULL_SCREEN_INTENT INTERNET ACCESS_NETWORK_STATE; do
+  RECEIVE_BOOT_COMPLETED VIBRATE WAKE_LOCK USE_FULL_SCREEN_INTENT INTERNET ACCESS_NETWORK_STATE RECORD_AUDIO; do
   grep -q "uses-permission: name='android.permission.$permission'" <<<"$badging" ||
     die "permission $permission missing from the merged manifest"
 done
@@ -611,10 +623,12 @@ if [[ $LOCAL_AI == on ]]; then
     for lib in libbrulion_localai.so libllama.so libmtmd.so libggml.so libggml-base.so "${cpus[@]}"; do
       grep -q "lib/$abi/$lib" <<<"$listing" || die "lib/$abi/$lib missing from the APK: no model on the device"
     done
+    grep -q "lib/$abi/libbrulion_speech.so" <<<"$listing" ||
+      die "lib/$abi/libbrulion_speech.so missing from the APK: no transcripts of voice notes"
   done
   libs_xml=$BUILD_DIR/src/app/android-build/res/values/libs.xml
   [[ -f $libs_xml ]] || die "$libs_xml not found: cannot tell what the app loads when it starts"
-  if grep -E 'brulion_localai|llama|mtmd|ggml' "$libs_xml"; then
+  if grep -E 'brulion_localai|brulion_speech|llama|mtmd|ggml' "$libs_xml"; then
     die "the model runner's libraries are loaded when the app starts ($libs_xml): they are for the first question to a model (src/app/CMakeLists.txt)"
   fi
   echo "the model on the device: llama.cpp's libraries are in the APK, none loaded when the app starts"

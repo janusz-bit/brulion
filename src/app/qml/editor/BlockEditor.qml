@@ -1585,6 +1585,81 @@ FocusScope {
     }
     MapHolder { id: drawing }
 
+    /// A voice note at the caret `cursor` of `row` (-1: a block of its own after it; docs/UI.md
+    /// "Voice notes"): the recorder dialog, then the file stored and embedded there
+    /// (PageController.insertRecording) and — with a speech model here and "Transcribe voice notes"
+    /// on — transcribed under its block (AppController.speech).
+    function recordVoiceNote(row: int, cursor: int): void {
+        if (!controller || controller.readOnly)
+            return
+        if (!MediaPlayback.available) {
+            notice(qsTr("This version of Brulion cannot record."), "info", null)
+            return
+        }
+        editor.voiceRow = row
+        editor.voiceCursor = cursor
+        voiceLoader.active = true
+        const dialog = voiceLoader.item as VoiceRecorderDialog
+        if (dialog)
+            dialog.open()
+    }
+    property int voiceRow: -1
+    property int voiceCursor: -1
+    function storeVoiceNote(file: string): void {
+        if (!controller)
+            return
+        recorded.map = controller.insertRecording(editor.voiceRow, editor.voiceCursor, editor.voiceCursor, file)
+        const path = "" + (recorded.map.path || "")
+        const target = "" + (recorded.map.target || "")
+        const line = recorded.map.line === undefined ? -1 : 0 + recorded.map.line
+        if (path === "")
+            return
+        const page = "" + controller.path
+        if (AppController.speech.ready && AppController.speech.automatic)
+            AppController.speech.transcribe(path, page, target, line)
+    }
+    MapHolder { id: recorded }
+    Loader {
+        id: voiceLoader
+        active: false
+        sourceComponent: VoiceRecorderDialog {
+            onRecorded: (file) => editor.storeVoiceNote(file)
+            onReleased: voiceLater.restart()
+        }
+    }
+    /// The dialog goes once it has closed and its recording is stored or thrown away (not inside
+    /// its own signal).
+    Later {
+        id: voiceLater
+        onTriggered: {
+            // (Not one opened again meanwhile.)
+            const dialog = voiceLoader.item as VoiceRecorderDialog
+            if (editor.alive && (!dialog || !dialog.visible))
+                voiceLoader.active = false
+        }
+    }
+
+    /// A recording's "Transcribe" (MediaEmbedTile): queued for the speech recognizer, the
+    /// transcript then under its block (`row`'s line, saved first).
+    function transcribeRecording(row: int, path: string, target: string): void {
+        if (!controller)
+            return
+        const line = controller.savedLineAt(row)
+        if (!AppController.speech.transcribe(path, controller.path, target, line))
+            notice(AppController.speech.ready ? qsTr("It is being transcribed already.")
+                                              : qsTr("Download a speech model first: Settings → Extensions → Speech."), "info", null)
+    }
+    /// Text to the clipboard with a toast ("Copied …").
+    function copyPlainText(text: string): void {
+        if (!controller)
+            return
+        copied.map = controller.copyText(text)
+        if (copied.map.ok === true)
+            notice(qsTr("Copied %1").arg(text), "success", null)
+        else
+            notice(copyFailure(copied.reason()), "error", null)
+    }
+
     /// Run the result of PageController.applySlashCommand / applyCompletion.
     function handleCommandResult(row: int, result: var): void {
         if (!result)
@@ -1604,6 +1679,7 @@ FocusScope {
         case "csvTable": dialogs.pickCsvTable(row); break
         case "webImage": dialogs.pickWebImage(row, cursor); break
         case "drawing": insertDrawing(row, cursor); break
+        case "voiceNote": recordVoiceNote(row, cursor); break
         case "drawingOn": dialogs.pickDrawingBackdrop(row, cursor); break
         case "table":
             list.forceActiveFocus()

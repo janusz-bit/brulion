@@ -1068,6 +1068,33 @@ GitHub runner, 1080 × 2400): TOTAL PSS 174 MB (`dumpsys meminfo`) after zooming
 | APK arm64 release (`android.yml`'s artifact, zipped) | 29 450 612 B | 29 746 852 B | +296 240 B (+1.0 %) |
 | Windows ZIP + installer (`windows.yml`'s artifact, zipped; Qt PDF was already shipped) | 80 169 509 B | 80 583 602 B | +414 093 B (+0.5 %) |
 
+### Audio and video: what Qt Multimedia costs (2026-11-20)
+
+Audio and video in notes and voice notes (docs/UI.md "Audio and video", "Voice notes") need Qt
+Multimedia, and it brings a media framework with it. What each package got, and what was left out:
+
+| Package | Qt Multimedia as it comes | As packaged | What was left out |
+|---|---|---|---|
+| Nix (closure of the package's Qt, poppler, hunspell, layer-shell: 766 MB) | nixpkgs' qtmultimedia: **+687 MB** (GStreamer with gst-plugins-bad 852 MB of closure, Qt Quick 3D for spatial audio, PipeWire 667 MB, FFmpeg with every codec library) | **+39 MB** (nix/multimedia.nix: libQt6Multimedia & co 9 MB, FFmpeg 13 MB, libpulseaudio) | GStreamer, spatial audio, the PipeWire library (sound goes through PulseAudio's API — PipeWire's pulse server answers it), VA-API; FFmpeg built with `--disable-everything` and only the decoders, demuxers, parsers and the encoders (AAC, libopus, PCM) and muxers (MP4, Ogg, WAV) notes need, LGPL, no programs, no network |
+| AppImage (Qt's own FFmpeg from aqt) | +23.7 MB of libraries: FFmpeg 20.3 MB (libavcodec 15.0), libQt6Multimedia 2.0, the FFmpeg plugin 0.9, MultimediaQuick 0.4 | the same, without the GStreamer plugin and Qt Quick 3D's spatial audio (scripts/appimage-build.sh) — some 10 MB more to download (squashfs) | the GStreamer backend (it needs the system's GStreamer) |
+| Windows (Qt's own FFmpeg DLLs) | +22.3 MB: FFmpeg 19.7 MB (avcodec-63.dll 14.1), Qt6Multimedia.dll 1.4, the FFmpeg plugin 0.8, the Windows plugin 0.3, MultimediaQuick 0.3 | windeployqt's (the installer and the ZIP compress it, some 9 MB) | — |
+| Android arm64 (Qt's prebuilt archives) | +21 MB per ABI: FFmpeg 17.3 MB (libavcodec 12.5), libQt6Multimedia 1.5, the FFmpeg plugin 0.8, the Android plugin 0.55, MultimediaQuick 0.4 — stored uncompressed in the APK (16 KB pages), some 7 MB more to download, past the 40 MB budget | **+2.6 MB** per ABI (about 1 MB to download): Qt's Android backend only | the FFmpeg backend and FFmpeg (`qt_import_plugins(… EXCLUDE Qt6::QFFmpegMediaPlugin)`, src/app/media/area.cmake; `-DBRULION_ANDROID_FFMPEG=ON` packages it). The system's MediaPlayer plays every format Android knows; a voice note is written by the system's MediaRecorder (AAC), without the level meter |
+| Browser | — | nothing: no Qt Multimedia (a media file plays in a new tab, in the browser's own player) | the whole module |
+
+Speech recognition (whisper.cpp over llama.cpp's ggml, the plugin `brulion_speech`) adds 0.9 MB
+(x86-64, stripped) beside llama.cpp's libraries, which it shares — no second ggml; the models are
+downloaded on request (78–547 MB). It runs only where the model on the device is built (the Nix
+package, Android's 64-bit APKs).
+
+**Speed of speech recognition** (Whisper Base 8-bit, 6 s of Polish speech made by espeak-ng, 16
+threads' machine, `tst_speech_plugin`): 0.6 s on an idle machine. On the same machine running 60–70
+compile jobs (load average 65 on 16 cores) the same recording took **225 s**: ggml's threads wait
+for each other spinning between the steps of a computation, so every thread descheduled holds up
+all the others. Whisper computes with at most 4 threads (whisper.cpp's own default; the language
+models' runner, which sets up its own thread pool, can switch the spinning off — whisper.cpp does
+not let it be chosen), and the speech thread runs at the normal priority: at a low one it got no
+processor at all under that load.
+
 ### Tabs, split view and windows: what a tab costs (2026-11-03)
 
 Tabs (docs/UI.md "Tabs, split view and windows") are kept cheap by design, not by tuning:

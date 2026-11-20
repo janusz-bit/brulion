@@ -47,6 +47,8 @@ brulion_enable_hardening()
 include(cmake/BrulionSize.cmake)
 brulion_enable_size_options()
 include(cmake/BrulionLocalAi.cmake)
+include(cmake/BrulionSpeech.cmake)
+include(cmake/BrulionMultimedia.cmake)
 include(cmake/BrulionPch.cmake)
 
 # The desktop (Linux and Windows): the system tray, one instance per session, the command line
@@ -108,6 +110,10 @@ add_subdirectory(src/core)
 # whose semantic search prototype may have found another llama.cpp of the system (its own targets).
 if(BRULION_LOCAL_AI_ENABLED)
     add_subdirectory(3rdparty/llama)
+endif()
+# whisper.cpp over that ggml for speech recognition (BRULION_SPEECH, 3rdparty/whisper).
+if(BRULION_SPEECH_ENABLED)
+    add_subdirectory(3rdparty/whisper)
 endif()
 # The desktop (Linux, Windows): the single-instance socket and the command line for scripts and AI
 # agents (brulion-cli, docs/CLI.md); the app hands `brulion cli …` over to it.

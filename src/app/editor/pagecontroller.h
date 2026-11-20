@@ -928,6 +928,13 @@ public:
     /// "Drawing <yyyy-MM-dd HH.mm>.svg" (a free name: " 2", " 3" …) and embedded like
     /// insertAttachment(). Returns { row, cursor, path } (row -1: it could not be stored).
     Q_INVOKABLE QVariantMap insertDrawing(int row, int from, int to);
+    /// A voice note just recorded (docs/UI.md "Voice notes"): the file `file` (VoiceRecorder's, in
+    /// the cache folder, named "Recording <yyyy-MM-dd HH.mm>.m4a") moved into the attachments folder
+    /// (a free name: " 2", …) and embedded like insertAttachment() — at [from, to) of the row's text,
+    /// else in a block of its own after it (row -1: at the end of the page). Returns { row, cursor,
+    /// path, target (the embed's as written), line (where its block starts in the file, saved) }
+    /// (row -1: it could not be stored).
+    Q_INVOKABLE QVariantMap insertRecording(int row, int from, int to, const QString &file);
     /// Open the drawing editor on the drawing at vault path `path` (route "drawing"); the page is
     /// saved first.
     Q_INVOKABLE void openDrawing(const QString &path);

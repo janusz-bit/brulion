@@ -258,6 +258,11 @@ How it works:
   permission the alarm still rings, but shows as an ordinary notification.
 * **Do Not Disturb**: alarms have the "alarm" category. If alarms are silenced in Do Not Disturb,
   allow them in that mode's settings.
+* **Microphone** (`RECORD_AUDIO`, voice notes): asked for the first time a voice note is recorded
+  (Qt's `QMicrophonePermission` shows the system's dialog); denied, the recorder says so with **Try
+  again**, and a permission denied for good is turned on in *Settings → Apps → Brulion →
+  Permissions*. Qt Multimedia's Android plugin also declares `MODIFY_AUDIO_SETTINGS` (routing the
+  sound), `CAMERA` and `BLUETOOTH` in the merged manifest; Brulion never asks for the last two.
 
 ### Battery saving
 
@@ -780,6 +785,20 @@ Still to be checked on a real phone: panning a zoomed picture with a finger and 
 gesture from the screen edge (the emulator gets only the Back key and simple drags), pasting an
 address copied in Chrome with **Paste** from Brulion's text menu, the HTML export with "Include
 copies", a real mobile network / Wi-Fi instead of the emulator's network.
+
+## Audio and video
+
+Recordings and videos in notes play through Qt Multimedia's **Android backend** — the system's
+`MediaPlayer` (every format the phone plays: MP3, AAC/M4A, Ogg Vorbis and Opus, FLAC, WAV, AMR/3GP,
+H.264/H.265 MP4, VP8/VP9 WebM, MKV) with the picture through a `SurfaceTexture` into Qt Quick. Qt's
+FFmpeg backend is left out of the APK (`src/app/media/area.cmake`: it would add 17 MB of FFmpeg per
+ABI; `-DBRULION_ANDROID_FFMPEG=ON` packages it): `nix/android.nix` fails a build whose APK has it, or
+lacks the Android one. A voice note is written by the system's `MediaRecorder` (AAC in MPEG-4), so
+the recorder shows a breathing microphone instead of the level meter there (with the FFmpeg backend
+the samples pass through the app and the meter shows). The microphone's permission: above,
+"Permissions". Transcripts run on the phone (the plugin `libbrulion_speech.so` beside llama.cpp's
+libraries, 64-bit APKs; docs/UI.md "Voice notes"); like a model's answer they run only while the
+app is on screen.
 
 ## PDF
 
@@ -1363,7 +1382,7 @@ OpenSSL, no `qmltooling`, 16 KB alignment).
 
 | Component | Source (`nix/android.nix`) |
 |---|---|
-| Qt for Android 6.12.0 (qtbase, qtdeclarative, qtsvg) | `.7z` archives from the Qt repository (the same ones aqt downloads), separately per module and ABI, SHA-256 hashes published by Qt — `nix/android/qt-android.json`, `nix/android/qt.nix` |
+| Qt for Android 6.12.0 (qtbase, qtdeclarative, qtsvg, qtmultimedia) | `.7z` archives from the Qt repository (the same ones aqt downloads), separately per module and ABI — an add-on such as qtmultimedia from its own package (`qt.qt6.6120.addons.qtmultimedia.<arch>`) —, SHA-256 hashes published by Qt — `nix/android/qt-android.json`, `nix/android/qt.nix` |
 | Host Qt (moc, rcc, qmlcachegen, androiddeployqt, lrelease…) | nixpkgs `qt6` — **the same version** as Qt for Android (checked at evaluation) |
 | SDK (platform 36, build-tools 36.0.0), NDK r27c, CMake 3.31.6 + Ninja | nixpkgs `androidenv` (the SDK licence accepted in `flake.nix`) |
 | Gradle / AGP | Gradle 9 from nixpkgs (JDK 21) instead of the wrapper from Qt's template; AGP 9.0.0, Kotlin, androidx — from `nix/android/gradle-deps.json` (mitm-cache), shared by all ABIs |
@@ -1461,9 +1480,11 @@ BRULION_ANDROID_QT=source BRULION_ANDROID_SIGN=0 scripts/android-build.sh # unsi
      qmlimportscanner, qsb, svgtoqml, androiddeployqt, lrelease, lupdate) and Qt's translations
      (`qtbase_pl.qm`…, built into the app): qtbase, qtshadertools, qtsvg, qtdeclarative, qttools
      (only the Linguist tools), qttranslations — without OpenGL, X11, Wayland and TLS;
-   * **Qt for Android**: qtbase, qtshadertools, qtsvg, qtdeclarative — exactly the modules the app
-     uses (`Core Gui Network Qml Quick QuickControls2 Svg`, `GuiPrivate`; LinguistTools is only a
-     host tool, Qt PDF on Android is replaced by the system's `PdfRenderer`), with the OpenSSL TLS
+   * **Qt for Android**: qtbase, qtshadertools, qtsvg, qtdeclarative, qtmultimedia — exactly the
+     modules the app uses (`Core Gui Network Qml Quick QuickControls2 Svg Multimedia`, `GuiPrivate`;
+     LinguistTools is only a host tool, Qt PDF on Android is replaced by the system's
+     `PdfRenderer`; qtmultimedia with its Android backend only — no FFmpeg is built, no spatial
+     audio: "Audio and video" above), with the OpenSSL TLS
      plugin loading the library at run time (`-openssl-runtime`, headers from step 1) and 16 KB
      pages (`ANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES`).
    * Off on both sides: SQL, printing, D-Bus, Qt Widgets (the UI is Qt Quick — which is also why
@@ -1529,7 +1550,7 @@ NDK, the SDK packages, Qt and OpenSSL match the scripts, the `versionCode` follo
 
 * **srclibs instead of downloading in `prebuild`** — F-Droid prefers sources from git repositories
   described in `fdroiddata/srclibs/`: `Qt5@v6.12.0` (the `qt5.git` super-repository;
-  `init-repository --module-subset=…` fetches only the six modules needed) and
+  `init-repository --module-subset=…` fetches only the seven modules needed) and
   `OpenSSL@openssl-3.5.9`. Both srclibs already exist in fdroiddata; the recipe
   `net.sourceforge.kid3`, for example, builds Qt 6 the same way. Without srclibs the scripts
   download the archives and check their SHA-256.

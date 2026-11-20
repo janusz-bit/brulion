@@ -15,6 +15,7 @@
 #include "markdown/inline.h"
 #include "markdown/linkformat.h"
 #include "markdown/math.h"
+#include "media/media.h"
 #include "util/paths.h"
 
 #include "picturesize.h"
@@ -1943,6 +1944,12 @@ void BlockListModel::ensureEmbeds(int row) const
                 st.embeds.append(pdfEmbed(em, path));
                 continue;
             }
+            // A sound or a video (docs/UI.md "Audio and video"): a player (MediaEmbedTile) that
+            // asks for the file's URL itself when it plays — never its bytes here.
+            if (paths::isMediaPath(path) && !em.image) {
+                st.embeds.append(mediaEmbed(em, path));
+                continue;
+            }
             drawing = (em.image || isDrawingTarget(em.target) || pageDrawings.contains(k)) && m_host->isDrawing(path);
             // (A scene file is no picture: its preview is the drawing provider's, never a data:
             // URL of its bytes in the browser.)
@@ -1980,6 +1987,21 @@ void BlockListModel::ensureEmbeds(int row) const
                                      {u"width"_s, size.width()},
                                      {u"height"_s, size.height()}});
     }
+}
+
+QVariantMap BlockListModel::mediaEmbed(const Embed &em, const QString &path) const
+{
+    const media::TimeRange at = media::parseTimeFragment(em.fragment);
+    return QVariantMap{{u"target"_s, em.target},
+                       {u"alt"_s, em.alt},
+                       {u"image"_s, false},
+                       {u"media"_s, true},
+                       {u"kind"_s, paths::isVideoPath(path) ? u"video"_s : u"audio"_s},
+                       {u"start"_s, double(at.startMs)},
+                       {u"end"_s, double(at.endMs)},
+                       {u"name"_s, paths::basename(path.isEmpty() ? em.target : path)},
+                       {u"path"_s, path},
+                       {u"drawing"_s, false}};
 }
 
 QVariantMap BlockListModel::pdfEmbed(const Embed &em, const QString &path) const

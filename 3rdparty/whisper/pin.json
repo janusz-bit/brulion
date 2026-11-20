@@ -1,0 +1,9 @@
+{
+  "!comment": "whisper.cpp, which recognizes speech on the device (3rdparty/whisper/CMakeLists.txt): one release, only its whisper library compiled from its sources, over llama.cpp's ggml (3rdparty/llama) — never its own ggml copy. `hash` is Nix's (fetchFromGitHub: nix/package.nix, nix/android.nix, the dev shell), `sha256` the release archive's (scripts that download it: scripts/llama-source.sh --whisper). Its ggml must keep llama.cpp's interface: whisper.cpp 1.9.5 bundles ggml 0.26.0, llama.cpp v0.9.0 has 0.29.0, and whisper.cpp uses only ggml's backend registry (no call into the processor plugins).",
+  "owner": "ggml-org",
+  "repo": "whisper.cpp",
+  "tag": "v1.9.5",
+  "hash": "sha256-Qqqpt+pvCQwSbyaBr1bdb7q+3LbELTcloHdiSikGPc4=",
+  "url": "https://github.com/ggml-org/whisper.cpp/archive/refs/tags/v1.9.5.tar.gz",
+  "sha256": "ff1a9053feb509ff9d7729703355541ae9690073a6b1c40eb692c962e0dc1720"
+}

@@ -69,13 +69,14 @@ jobs:
       # does not know the Windows repository layout of Qt 6.11 and later (qt6_6120_msvc2022_64/, aqtinstall
       # PR #1000, merged after 3.3.0): its master at a pinned commit until a release has it.
       # Qt PDF (`qtpdf`): the PDF pages of drawings' backdrops (src/platform/pdfpages_qtpdf.cpp).
+      # Qt Multimedia (`qtmultimedia`, with Qt's FFmpeg DLLs): audio and video in notes, voice notes.
       - uses: jurplel/install-qt-action@v4
         with:
           version: ${{ env.QT_VERSION }}
           host: windows
           target: desktop
           arch: win64_msvc2022_64
-          modules: qtpdf
+          modules: qtpdf qtmultimedia
           aqtversion: ==3.3.0
           aqtsource: git+https://github.com/miurahr/aqtinstall.git@076e1659807d0b362a3ed684d54c2e9c775eb9c7
           cache: true

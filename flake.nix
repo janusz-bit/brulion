@@ -127,9 +127,14 @@
               qtdeclarative
               qtsvg
               qtwayland
+              # (the package's own, nix/multimedia.nix: its FFmpeg plugin)
+              self.packages.${pkgs.stdenv.hostPlatform.system}.brulion.qtmultimedia
             ]
           );
-          QML_IMPORT_PATH = lib.makeSearchPath pkgs.qt6.qtbase.qtQmlPrefix [ pkgs.qt6.qtdeclarative ];
+          QML_IMPORT_PATH = lib.makeSearchPath pkgs.qt6.qtbase.qtQmlPrefix [
+            pkgs.qt6.qtdeclarative
+            self.packages.${pkgs.stdenv.hostPlatform.system}.brulion.qtmultimedia
+          ];
           # Hunspell's dictionaries for the spell checking of ./build (the package compiles their
           # store paths in instead: nix/package.nix).
           DICPATH = lib.concatMapStringsSep ":" (
@@ -138,6 +143,9 @@
           # llama.cpp's sources for the model on the device (cmake/BrulionLocalAi.cmake: a build
           # configured in this shell compiles them in; 3rdparty/llama/pin.json names the release).
           BRULION_LLAMA_SOURCE_DIR = self.packages.${pkgs.stdenv.hostPlatform.system}.brulion.llamaSrc;
+          # whisper.cpp's sources for speech recognition (cmake/BrulionSpeech.cmake: over that
+          # llama.cpp's ggml; 3rdparty/whisper/pin.json names the release).
+          BRULION_WHISPER_SOURCE_DIR = self.packages.${pkgs.stdenv.hostPlatform.system}.brulion.whisperSrc;
           # With the fortify hardening nixpkgs' compiler wrapper puts -O2 (and _FORTIFY_SOURCE=2) in
           # front of every compile, so a Debug build of this shell was an -O2 one: twice the compile
           # time, five times for the C++ of the QML, and code a debugger cannot follow. Without it the

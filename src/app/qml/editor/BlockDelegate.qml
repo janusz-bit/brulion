@@ -572,6 +572,8 @@ Item {
         onDownloadWeb: (url) => block.editor.downloadWebPictures(url)
         onWebMenu: (url, host, item, x, y) => block.editor.openWebPictureMenu(block.index, url, host, item, x, y)
         onWebOpen: (picture) => block.editor.openWebPictureViewer(block.index, picture)
+        onTranscribeRequested: (path, target) => block.editor.transcribeRecording(block.index, path, target)
+        onCopyRequested: (text) => block.editor.copyPlainText(text)
     }
 
     TransclusionView {

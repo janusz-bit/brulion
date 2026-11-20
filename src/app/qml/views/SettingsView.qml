@@ -1629,6 +1629,9 @@ Item {
                 }
             }
 
+            // Speech recognition on this device for voice notes (qml/media/MediaSpeechSettings).
+            MediaSpeechSettings {}
+
             SettingsGroup {
                 heading: qsTr("In this notebook")
                 note: qsTr("Your own extensions are pages of the notebook tagged #rozszerzenie (or #extension): the code in their luau code blocks runs, and runs again whenever you save the page. Code that arrives from another device, a sync or an import runs here only after you approve it.")

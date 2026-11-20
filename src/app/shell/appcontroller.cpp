@@ -1,5 +1,11 @@
 #include "appcontroller.h"
 
+#include "blocktext.h"
+#include "mediaengine.h"
+#include "voicerecorder.h"
+
+#include "media/transcript.h"
+
 #include "folderchoices.h"
 
 #include "log/categories.h"
@@ -28,6 +34,7 @@
 #include <QCursor>
 #include <QDir>
 #include <QEvent>
+#include <QFile>
 #include <QFileInfo>
 #include <QGuiApplication>
 #include <QJsonDocument>
@@ -268,7 +275,11 @@ AppController::AppController(const Options &options, QObject *parent)
             [this] { m_localAi->setChosen(m_settings->aiLocalModel()); });
     // A phone's screen stays on while a model is downloaded or answers: both go on only while the
     // app is on screen, and many phones turn the screen off after 30 seconds without a touch.
-    connect(m_localAi.get(), &LocalAi::workingChanged, this, [this] { platform::keepScreenOn(m_localAi->working()); });
+    setUpSpeech();
+    // (… and while a recording is transcribed.)
+    const auto keepScreenOn = [this] { platform::keepScreenOn(m_localAi->working() || m_speech->busy()); };
+    connect(m_localAi.get(), &LocalAi::workingChanged, this, keepScreenOn);
+    connect(m_speech.get(), &media::Transcriber::jobsChanged, this, keepScreenOn);
     connect(m_workspace->extensions(), &WorkspaceExtensions::message, this,
             [this](const QString &text, const QString &kind) { toast(text, kind); });
     // A result with a button (the habits' Undo, "Open"): a toast whose button the extensions press.
@@ -1566,6 +1577,50 @@ void AppController::restartIntro()
 
 // ---- Permissions ------------------------------------------------------------------------------
 
+void AppController::setUpSpeech()
+{
+    // Speech recognition (docs/UI.md "Voice notes"): its models in the app's data, the recognizer a
+    // plugin next to the model runner's, the settings in AppSettings' "speech/…" keys.
+    media::Transcriber::Options speech;
+    speech.folder = m_dataDir + u"/models/speech"_s;
+    speech.pluginDirs = localAiPluginDirs();
+    speech.setting = [this](const QString &key, const QVariant &fallback) { return m_settings->value(key, fallback); };
+    speech.setSetting = [this](const QString &key, const QVariant &value) { m_settings->setValue(key, value); };
+    speech.filePath = [this](const QString &attachment) { return m_workspace->assetUrl(attachment).toLocalFile(); };
+    m_speech = std::make_unique<media::Transcriber>(speech);
+    // A transcript under the block that embeds the recording, written over the note as it is now
+    // (the editor showing it merges the change).
+    m_speech->setPlacer([this](const QString &page, const QString &target, int line, const QString &text) {
+        for (int attempt = 0; attempt < 3; ++attempt) {
+            const QString before = m_workspace->readFile(page);
+            const media::TranscriptPlace placed = media::placeTranscript(before, target, line, text);
+            if (placed.line < 0)
+                return false;
+            switch (m_workspace->writeIfUnchanged(page, placed.content, before)) {
+            case EditorHost::WriteResult::Written: return true;
+            case EditorHost::WriteResult::Changed: continue; // (changed meanwhile: again)
+            case EditorHost::WriteResult::Failed: return false;
+            }
+        }
+        return false;
+    });
+    connect(m_speech.get(), &media::Transcriber::transcribed, this,
+            [this](const QString &attachment, const QString &page, bool ok, const QString &text, const QString &error) {
+                Q_UNUSED(text)
+                const QString name = QFileInfo(attachment).fileName();
+                if (ok)
+                    toast(tr("Transcribed %1").arg(name), u"success"_s);
+                else if (!error.isEmpty())
+                    toast(tr("%1 was not transcribed: %2").arg(name, error), u"error"_s);
+                Q_UNUSED(page)
+            });
+    // The voice notes' names follow the app's clock (--now in screenshots); a build that records
+    // nothing has no "Voice note" command.
+    media::VoiceRecorder::setClock([this] { return now(); });
+    if (!media::mediaSupported())
+        editor::setUnavailableSlashCommands({u"voiceNote"_s});
+}
+
 QVariantMap AppController::permissions() const
 {
     QVariantMap p{
@@ -1696,6 +1751,28 @@ bool AppController::capture(const QString &text)
         return false;
     // A date in the text makes it a task with a reminder / due date (notebook/capture.h).
     return !m_workspace->quickCapture(text).isEmpty();
+}
+
+QVariantMap AppController::captureRecording(const QString &file)
+{
+    if (!m_workspace->isOpen() || inDocsVault() || !QFileInfo(file).isFile()) {
+        toast(tr("The voice note could not be saved."), u"error"_s);
+        return {};
+    }
+    const QString path = m_workspace->importAttachment(QUrl::fromLocalFile(file));
+    if (path.isEmpty()) {
+        toast(tr("The voice note could not be saved."), u"error"_s);
+        return {};
+    }
+    QFile::remove(file); // (stored in the notebook: the recorder's copy goes)
+    const QString journal = m_workspace->journalPath(today(0));
+    // By its name where that finds it from the journal, else by its path (PageController::embedFor).
+    const QString name = QFileInfo(path).fileName();
+    const QString target = m_workspace->resolveLink(name, journal) == path ? name : path;
+    const QString page = m_workspace->captureToJournal(u"![["_s + target + u"]]"_s);
+    if (page.isEmpty())
+        return {};
+    return {{u"path"_s, path}, {u"page"_s, page}, {u"target"_s, target}};
 }
 
 void AppController::showWindow()

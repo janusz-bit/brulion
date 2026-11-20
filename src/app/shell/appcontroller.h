@@ -68,6 +68,7 @@
 #include "localai.h"
 #include "navigation.h"
 #include "tabs.h"
+#include "transcriber.h"
 #include "workspace.h"
 
 #include "notebook/share.h"
@@ -119,6 +120,9 @@ class AppController : public QObject {
     Q_PROPERTY(brulion::shell::AppUpdates *updates READ updates CONSTANT FINAL)
     /// The model on the device: downloads, and whether this build runs one (localai.h).
     Q_PROPERTY(brulion::shell::LocalAi *localAi READ localAi CONSTANT FINAL)
+    /// Speech recognition on the device for recordings in notes: the Whisper models, the queue
+    /// (media/transcriber.h; docs/UI.md "Voice notes").
+    Q_PROPERTY(brulion::media::Transcriber *speech READ speech CONSTANT FINAL)
 
     // ---- Navigation ---------------------------------------------------------------------
     Q_PROPERTY(QVariantMap currentRoute READ currentRoute NOTIFY currentRouteChanged FINAL)
@@ -262,6 +266,7 @@ public:
     Workspace *workspace() const { return m_workspace.get(); }
     AppUpdates *updates() const { return m_updates.get(); }
     LocalAi *localAi() const { return m_localAi.get(); }
+    media::Transcriber *speech() const { return m_speech.get(); }
     CommandModel *commands() const { return m_commands.get(); }
     /// The commands' keyboard shortcuts, custom ones included (Settings → Keyboard shortcuts).
     ShortcutMap *shortcuts() const { return m_shortcuts.get(); }
@@ -476,6 +481,11 @@ public:
     /// Append `text` to today's journal (Workspace::quickCapture: a date in it makes a task with
     /// a ⏰ reminder or 📅 due date); false when nothing was saved (also in the documentation).
     Q_INVOKABLE bool capture(const QString &text);
+    /// A voice note recorded off a note (VoiceRecorderDialog's `file`, in the cache folder): moved
+    /// into the attachments folder and embedded in a new block at the end of today's journal.
+    /// Returns { path (the attachment), page (the journal), target (the embed's) } — {} when it
+    /// could not be stored (a toast says why).
+    Q_INVOKABLE QVariantMap captureRecording(const QString &file);
     /// Bring the main window to the front (tray, second launch, notification tap). Hides the
     /// tray calendar (Main.qml).
     Q_INVOKABLE void showWindow();
@@ -739,11 +749,15 @@ private:
     QString docsLanguage(const QString &path) const;
     /// The notice for openRoute()'s route of another notebook than the open one.
     void refuseOtherNotebookRoute(const QString &vault);
+    /// The speech recognizer, its settings and where it writes (constructor).
+    void setUpSpeech();
 
     std::unique_ptr<AppSettings> m_settings;
     /// Before the workspace (its extensions hand it their requests): destroyed after it.
     std::unique_ptr<LocalAi> m_localAi;
     std::unique_ptr<Workspace> m_workspace;
+    /// After the workspace (it writes transcripts there): destroyed before it.
+    std::unique_ptr<media::Transcriber> m_speech;
     std::unique_ptr<AppUpdates> m_updates;
     std::unique_ptr<ShortcutMap> m_shortcuts;
     std::unique_ptr<CommandModel> m_commands;

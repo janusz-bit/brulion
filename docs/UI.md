@@ -3179,6 +3179,100 @@ written by hand with an outline, links and an annotation —, `tst_pdftext`, `ts
 mode and `tests/web/pdf.spec.mjs` (docs/ANDROID.md, docs/WEB.md). Screenshots:
 `tests/app/shell/screenshots.sh pdf-embed pdf-viewer pdf-zoom pdf-search pdf-jump pdf-locked`.
 
+## Audio and video (`qml/media`, `src/app/media`)
+
+A sound or a video in a note (docs/SYNTAX.md §2 "Audio and video": `![[Nagranie.m4a]]`,
+`![](film.mp4#t=83)`) is a player in its block, and the file opened as a page is the player view —
+never its bytes as text.
+
+* **The player in a block** (`qml/media/MediaEmbedTile.qml`, BlockListModel's media embed
+  `{media, kind, path, target, name, start, end}` — the file's URL is asked for only when it
+  plays): a card with the file's name and the bar (`MediaControls.qml`): play / pause, "1:23 /
+  3:42", the seek bar (`MediaSlider.qml`; a press on a file not loaded starts it there), the speed
+  (a click: the next of 0.5× … 2×), mute and — where there is room, not on touch UIs — the volume,
+  and **More** (`MediaEmbedMenu.qml`: Open in the player, Transcribe, Copy link to 1:23, Open in
+  another app). A video shows its first frame (the poster, below) with a play button over it until
+  it plays, then its picture (`MediaVideoSurface`: Qt Multimedia's `VideoOutput`); a click on the
+  picture plays or pauses it, the bar's **Full screen** puts it over the window (`MediaFullscreen`,
+  the window full screen too on the desktop; Escape, F or the button leave; Space, ← / → 5 s, M).
+  The length shows before anything plays. A file this device cannot play says so ("Cannot be played
+  here"). A time fragment starts the file there (the bar shows that time before it plays) and
+  pauses it at its end. A click on a player's buttons or bars never takes the keyboard (Tab reaches
+  them: `focusPolicy: Qt.TabFocus`) — pausing a recording does not stop the writing of a block.
+* **One player** (`MediaPlayback`, a QML singleton over Qt Multimedia's QMediaPlayer): every embed,
+  the player view and the now-playing bar steer the same one, so one file plays at a time —
+  starting another pauses the one before, which keeps its place (positionOf: the next Play goes on
+  from there; played to the end, from the start). Speed, volume and mute hold for every file.
+* **Off screen** — the decision: a **sound plays on** when its block scrolls away, its page closes
+  or the view changes (a lecture keeps playing while you write); the **now-playing bar**
+  (`MediaNowPlaying.qml`, floating over the bottom of the window, above the bottom navigation and
+  the keyboard) shows it while no view does: its name (a click opens the player view), the time,
+  play / pause and close (unloads it, its place kept). A **video plays only where it is seen**: when
+  the last surface showing it goes (its block scrolled away — the list deletes the delegate —, the
+  view closed) it pauses; the surface attached last has the picture (the full screen over the
+  embed, the player view over the journal), and the one before takes it back when that one goes.
+* **The player view** (`qml/content/ContentMediaView.qml`, PageView's `mediaRoute`): the bar with
+  the file's name and "Open in another app", the video large (or the sound's icon), the bar with
+  ±10 s, the volume and full screen, and under it the notes that embed or link it (ContentBacklinks).
+  A link with a time (`[[wykład.mp3#t=83]]`, PageController.activateLink: `route.mediaStart` /
+  `mediaEnd`) starts it there. Keys: Space or K, ← / →, M, F.
+* **Posters and lengths** (`MediaPlayback.info()`): read in the background, a file at a time, by a
+  second player without sound (`MediaProber`); a video's first frame is kept as a PNG in the cache
+  folder (`media-posters/`, keyed by the file's path, size and time), so a page opened again shows it
+  at once.
+* **Where nothing plays** (a build without Qt Multimedia — `BRULION_MULTIMEDIA` off, the browser):
+  the card names the file with "Open in another app" (a new tab in the browser, whose own player
+  plays it), the player view the same as an empty state; no "Voice note" command.
+
+Qt Multimedia's backend: FFmpeg on Linux (the Nix package's FFmpeg is built for exactly the formats
+above and the encoders of voice notes: nix/multimedia.nix), Windows and the AppImage (Qt's own
+FFmpeg); on Android Qt's Android backend — the system's MediaPlayer and MediaRecorder, every format
+Android plays — without the FFmpeg backend (docs/PERFORMANCE.md "Audio and video: what Qt Multimedia
+costs").
+
+## Voice notes (`qml/media/VoiceRecorderDialog.qml`, `src/app/media`)
+
+**Record voice note** — the slash command **Voice note** (`/nagranie`, `/record`, `/dictate`…), the
+microphone of the touch toolbar, the palette's "Record voice note" (uiAction `recordVoiceNote`) and
+quick capture's **Voice note** — opens the recorder: it asks for the microphone
+(`QMicrophonePermission`: Android's runtime request, the browser's, always granted on the desktop)
+and records at once. The dialog (a bottom sheet on phones) shows the time recorded, a level meter of
+the last seconds (48 bars, newest on the right; core `media::meterLevel`: the peak from −60 to
+0 dB), Recording / Paused / Saving…, **Pause** / **Resume**, and the microphone's name. **Save** ends
+it; **Cancel**, Escape, the back gesture throw it away (its file deleted). A denied microphone or a
+failure says why with **Try again**. It stops by itself after three hours.
+
+* **Where it goes**: from the editor at the caret of the block being edited (a block of its own
+  after it, or at the end of the page, when nothing is edited: PageController.insertRecording);
+  from the palette off a note and from quick capture into a new block at the end of today's journal
+  (AppController.captureRecording). The file moves from the cache folder into the notebook's
+  attachments folder under its name (docs/SYNTAX.md §2 "Voice notes and transcripts").
+* **The format** (`VoiceRecorder`, `voicerecorder_qt.cpp`): the samples come from QAudioSource — the
+  meter and the time are the recorder's own — and go to QMediaRecorder through QAudioBufferInput as
+  AAC in MPEG-4 (`.m4a`: plays on every phone, browser and computer, Obsidian on an iPhone too),
+  else Opus in Ogg; where the backend has no buffer input (Qt's Android backend) the system's own
+  recorder writes AAC from the microphone (`metered` false: the dialog shows a breathing microphone
+  instead of the meter); where nothing encodes, a WAV file written here.
+* **Transcripts** (`AppController.speech`, `Transcriber`; Settings → Extensions → **Speech**,
+  `qml/media/MediaSpeechSettings.qml`): speech recognition on the device — OpenAI's Whisper, run by
+  whisper.cpp over the same ggml as the local language models (core `speech`, the plugin
+  `brulion_speech`, loaded the first time) — so no sound leaves the device. The settings: the model
+  (Whisper Small 8-bit, 252 MB, the default — Polish good enough to edit; Base 8-bit, 78 MB — fast,
+  rough in Polish; Large v3 Turbo 5-bit, 547 MB — the most accurate), its file (Download / Stop /
+  Remove, from Hugging Face, pinned and checked as the language models' are), the language
+  (Automatic, Polish, English) and **Transcribe voice notes** (on: a voice note just recorded is
+  transcribed by itself when a model is here). Any recording in a note is transcribed from its
+  menu (**More → Transcribe**). Recordings are heard one after another on a worker thread: decoded
+  to 16 kHz mono (a WAV file read directly, anything else through QAudioDecoder), heard, and the text
+  written right under the block that embeds the recording — the note as it is then (a change made
+  meanwhile is kept; the editor showing it merges the write), as an ordinary block to edit. While it
+  works the player's card says so ("Reading the recording…", "Opening the speech model…",
+  "Transcribing… 42 %") with **Stop**; a toast says when it is done or why not (no speech heard, the
+  note no longer has the recording). The model stays in memory five minutes after the last one.
+  Absent in builds without the model on the device (`BRULION_LOCAL_AI` / `BRULION_SPEECH`).
+* **Tests without a microphone**: with `BRULION_TEST_MICROPHONE` set every recorder hears a made-up
+  voice (a tone that swells and fades) — the shell self-test's voice note, screenshots.
+
 ## Scrolling performance
 
 Long pages, the journal stream, Tasks and the calendar agenda are lazy `ListView`s: a row is
@@ -3239,7 +3333,11 @@ or agenda row) follows these; the reasons are below.
    the parts of its kind (a query row's group label, its checkbox); `BIcon` / `TaskBox` create
    no image for an empty name or a state without an icon. Do not set something in `onLoaded`
    that the Loader's own `active` binding reads (a binding loop; the QML self-tests fail on
-   "Binding loop detected").
+   "Binding loop detected"). Make such a Loader inactive only once its popup has closed
+   (`onClosed`, or a signal sent after it — `VoiceRecorderDialog.released`): a popup destroyed while
+   it still closes never tells Qt's overlay it is gone (Qt 6.12), and the next menu to close
+   anywhere in the window gives the keyboard to what had it when that popup opened — an editor long
+   hidden — instead of to what had it before the menu.
 5. **Cheap per row, on the GUI thread.** No file reads beyond a header, no parsing of whole
    documents, no icon theme lookups: an SVG's size comes from its root element only (Qt's SVG
    reader parses the whole drawing — 0.6 s for a 2.4 MB one on a Raspberry Pi 4). Bound what one

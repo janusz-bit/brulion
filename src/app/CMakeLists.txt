@@ -440,6 +440,11 @@ install(TARGETS brulion
 #   Android  lib/<abi>/ of the APK (found by name)
 if(BRULION_LOCAL_AI_ENABLED)
     set(_brulion_local_ai brulion_localai ${BRULION_LLAMA_LIBRARIES} ${BRULION_LLAMA_CPU_VARIANTS})
+    # … and the speech recognizer's plugin over the same ggml (BRULION_SPEECH, src/core/speech),
+    # packaged the same way.
+    if(TARGET brulion_speech)
+        list(APPEND _brulion_local_ai brulion_speech)
+    endif()
     add_dependencies(brulion ${_brulion_local_ai})
     if(ANDROID)
         # Copied into android-build/libs/<abi>/, where Qt puts the app's own library (and a

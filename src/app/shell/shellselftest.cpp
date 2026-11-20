@@ -6,10 +6,13 @@
 #include "demovault.h"
 #include "extensionviewmodel.h"
 #include "keyboardinsets.h"
+#include "mediaengine.h"
+#include "mediaplayback.h"
 #include "pagecontroller.h"
 #include "shortcutmap.h"
 #include "traypopup.h"
 #include "uidriver.h"
+#include "voicerecorder.h"
 #include "workspace.h"
 #include "workspacesync.h"
 
@@ -20,6 +23,7 @@
 #include "log/categories.h"
 #include "log/logger.h"
 #include "log/redact.h"
+#include "media/pcm.h"
 #include "notebook/share.h"
 #include "openexternal.h"
 #include "pdfpages.h"
@@ -68,6 +72,7 @@
 #include <cmath>
 #include <cstdio>
 #include <functional>
+#include <numbers>
 
 using namespace Qt::StringLiterals;
 
@@ -249,6 +254,7 @@ void composeWord(QQuickItem *item, const QString &word)
 /// runs, which this running self-test does not let it do: open, it takes the next press
 /// elsewhere just to close itself. A live tooltip of a hidden control would do that in the app
 /// too (a bug).
+
 QStringList closeToolTipsWaitingForDeletion(QQuickWindow *window)
 {
     QStringList stray;
@@ -3717,6 +3723,176 @@ void checkPictureView(QQuickWindow *window, AppController *app, const Check &che
 /// DOCX opens read-only and "Open in another app" hands it over as a Word document. Builds without
 /// a renderer: the chip, its click hands the file over, the viewer's message with its button. A PDF
 /// without text: the search's sentence whole, under the row in the narrow bar (phones).
+// Audio and video in notes (docs/UI.md "Audio and video", "Voice notes"): a recording embedded in
+// a note is a player — its length read before it plays, Play and Pause with real input, its place
+// moving; off its page the now-playing bar shows it and closes it; opened as a page it is the player
+// view; a voice note recorded from the made-up microphone (VoiceRecorder::TestMicrophoneVariable)
+// lands in the note as an embed of a new attachment. Silent: the player is muted. Skipped in a build
+// that plays nothing.
+void checkMediaPlayer(QQuickWindow *window, AppController *app, const Check &check)
+{
+    if (!media::mediaSupported())
+        return;
+    const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
+    Workspace *workspace = app->workspace();
+    media::MediaPlayback *player = media::MediaPlayback::instance();
+    player->setMuted(true); // (the machine running the self-test may have speakers)
+    player->stop();
+
+    // Three seconds of a tone, embedded in a note of its own.
+    media::Pcm tone;
+    tone.sampleRate = 22050;
+    tone.channels = 1;
+    tone.samples.resize(3 * 22050);
+    for (qsizetype i = 0; i < tone.samples.size(); ++i)
+        tone.samples[i] = 0.3f * float(std::sin(2 * std::numbers::pi * 440.0 * double(i) / 22050.0));
+    const QString attachment = workspace->saveAttachment(u"Nagranie próbne żółwia.wav"_s, media::wavFile(tone));
+    const QString page = u"Nagrania próbne.md"_s;
+    const QString name = QFileInfo(attachment).fileName();
+    check(!attachment.isEmpty() && workspace->writeFile(page, u"- Notatka ![["_s + name + u"]]\n- Dalej\n"_s),
+          "a note embeds a recording");
+    app->openPage(page);
+    QQuickItem *tile = nullptr;
+    check(waitFor([&] { return (tile = shownNamed(window->contentItem(), u"mediaEmbed"_s)) != nullptr; }, 5000),
+          "the recording's embed is a player");
+    if (!tile)
+        return;
+    // (The label shows once the length is known.)
+    QQuickItem *duration = nullptr;
+    const bool lengthShown = waitFor(
+            [&] {
+                duration = shownNamed(tile, u"mediaDuration"_s);
+                return duration && duration->property("text").toString() == u"0:03";
+            },
+            10000);
+    if (!lengthShown)
+        std::fprintf(stderr, "selftest: media: the length shown is \"%s\"\n",
+                     duration ? qPrintable(duration->property("text").toString()) : "(no label)");
+    check(lengthShown, "its length is read before it plays (0:03)");
+    QQuickItem *play = shownNamed(tile, u"mediaPlayButton"_s);
+    if (!play) {
+        check(false, "the player has its play button");
+        return;
+    }
+    check(waitFor([&] { return uidriver::onScreen(window, play); }), "the play button is on screen");
+    tapOrClick(window, pointIn(play), touch);
+    mouseMove(window, QPointF(1, 1)); // (away: the button's tooltip never opens)
+    const bool playing = waitFor([&] { return player->path() == attachment && player->playing(); }, 10000);
+    if (!playing)
+        std::fprintf(stderr, "selftest: media: loaded \"%s\" (embedded \"%s\"), playing %d, at %.0f ms, error \"%s\"\n",
+                     qPrintable(player->path()), qPrintable(attachment), int(player->playing()), player->position(),
+                     qPrintable(player->error()));
+    check(playing, "Play plays the embedded file");
+    const bool moved = waitFor([&] { return player->position() > 300; }, 10000);
+    QQuickItem *position = shownNamed(tile, u"mediaPosition"_s);
+    if (!moved)
+        std::fprintf(stderr, "selftest: media: at %.0f ms, playing %d, the label says \"%s\"\n", player->position(),
+                     int(player->playing()), position ? qPrintable(position->property("text").toString()) : "(none)");
+    check(moved, "and its place moves on");
+    check(position && waitFor([&] { return position->property("text").toString() != u"0:00"; }, 10000),
+          "the time shown follows it");
+    tapOrClick(window, pointIn(play), touch);
+    mouseMove(window, QPointF(1, 1));
+    check(waitFor([&] { return !player->playing(); }), "Pause pauses it");
+    const double pausedAt = player->position();
+    check(pausedAt > 0, "where it was paused is kept");
+
+    // Off its page: the now-playing bar names it; its close unloads the file.
+    app->navigate({{u"view"_s, u"tasks"_s}});
+    closeToolTipsWaitingForDeletion(window);
+    QQuickItem *bar = nullptr;
+    check(waitFor([&] { return (bar = shownNamed(window->contentItem(), u"mediaNowPlaying"_s)) != nullptr; }),
+          "away from its page the now-playing bar shows the recording");
+    QQuickItem *barName = bar ? shownNamed(bar, u"mediaNowPlayingName"_s) : nullptr;
+    check(barName && barName->property("text").toString() == name, "the bar names the file");
+    QQuickItem *close = bar ? shownNamed(bar, u"mediaNowPlayingClose"_s) : nullptr;
+    if (close) {
+        tapOrClick(window, pointIn(close), touch);
+        mouseMove(window, QPointF(1, 1));
+        check(waitFor([&] { return player->path().isEmpty() && !shown(bar); }), "the bar's close unloads the file");
+    }
+    check(player->positionOf(attachment) == pausedAt, "and the file keeps its place for next time");
+
+    // Opened as a page: the player view, never the editor.
+    app->openPage(attachment);
+    QQuickItem *view = nullptr;
+    check(waitFor([&] { return (view = shownNamed(window->contentItem(), u"mediaView"_s)) != nullptr; }, 5000),
+          "the recording opened as a page is the player view");
+    QQuickItem *viewName = view ? shownNamed(view, u"mediaViewName"_s) : nullptr;
+    check(viewName && viewName->property("text").toString() == name, "the player view names the file");
+
+    // A voice note into the note, from the made-up microphone.
+    qputenv(media::VoiceRecorder::TestMicrophoneVariable, "1");
+    app->openPage(page);
+    check(waitFor([&] { return shownNamed(window->contentItem(), u"mediaEmbed"_s) != nullptr; }, 5000),
+          "the note is back");
+    app->requestUiAction(u"recordVoiceNote"_s);
+    QObject *recorder = nullptr;
+    check(waitFor(
+                  [&] {
+                      recorder = window->contentItem()->findChild<QObject *>(u"voiceRecorder"_s);
+                      if (!recorder) {
+                          for (QObject *popup : uidriver::openPopups(window))
+                              if ((recorder = popup->findChild<QObject *>(u"voiceRecorder"_s)))
+                                  break;
+                      }
+                      return recorder && recorder->property("state").toString() == u"recording"
+                             && recorder->property("duration").toDouble() > 400;
+                  },
+                  10000),
+          "Record voice note records (the made-up microphone)");
+    QObject *dialog = recorder ? recorder->parent() : nullptr;
+    while (dialog && !dialog->inherits("QQuickDialog"))
+        dialog = dialog->parent();
+    const QPointer<QObject> recorderDialog(dialog);
+    if (dialog)
+        QMetaObject::invokeMethod(dialog, "accept");
+    check(dialog
+                  && waitFor(
+                          [&] {
+                              return workspace->readFile(page).contains(u".m4a]]"_s)
+                                     || workspace->readFile(page).contains(u".ogg]]"_s)
+                                     || workspace->readFile(page).contains(u".wav]]"_s);
+                          },
+                          15000),
+          "Save embeds the voice note in the note");
+    // The dialog gone for good: it gives the keyboard back when its closing ends (later on a busy
+    // machine), which must not land in the next test's view.
+    check(waitFor([&] { return !recorderDialog || !recorderDialog->property("visible").toBool(); }, 10000),
+          "the recorder closes");
+    settle(300);
+    // Destroyed only once closed (VoiceRecorderDialog.released): one destroyed while it still
+    // closed left Qt's overlay remembering what had the keyboard when it opened, and the next menu
+    // to close anywhere gave the keyboard to that instead (the drawing lost its keys).
+    {
+        QQuickItem *before = window->activeFocusItem();
+        QQuickItem *tileNow = shownNamed(window->contentItem(), u"mediaEmbed"_s);
+        QQuickItem *more = tileNow ? shownNamed(tileNow, u"mediaMoreButton"_s) : nullptr;
+        if (more && before) {
+            tapOrClick(window, pointIn(more), touch);
+            mouseMove(window, QPointF(1, 1));
+            check(waitFor([&] { return uidriver::openMenus(window) > 0; }), "the embed's More opens its menu");
+            closeMenus(window);
+            const bool back = waitFor([&] { return window->activeFocusItem() == before; }, 5000);
+            if (!back)
+                std::fprintf(stderr, "selftest: media: the keyboard went to %s, not back to %s\n",
+                             window->activeFocusItem() ? qPrintable(uidriver::typeName(window->activeFocusItem()))
+                                                       : "nothing",
+                             qPrintable(uidriver::typeName(before)));
+            check(back, "after the recorder a closed menu gives the keyboard back to what had it");
+        }
+    }
+    qunsetenv(media::VoiceRecorder::TestMicrophoneVariable);
+    player->stop();
+    // The player's tooltips of the pages left wait for a deletion this running test does not let
+    // happen (see closeToolTipsWaitingForDeletion): closed, so that they take nothing later.
+    closeToolTipsWaitingForDeletion(window);
+    closeMenus(window);
+    // No popup of this test left closing (one that gives the keyboard back on its way out).
+    waitFor([&] { return uidriver::openPopups(window).isEmpty(); }, 5000);
+    settle(200);
+}
+
 void checkPdfViewer(QQuickWindow *window, AppController *app, const Check &check,
                     const std::function<QObject *(const QString &)> &controllerFor)
 {
@@ -9379,6 +9555,8 @@ void checkBlockEditor(QQmlApplicationEngine *engine, QQuickWindow *window, AppCo
         checkPictureView(window, app, check, controllerFor);
         // 5k. PDFs: the thumbnail, the viewer, drawing on a page (checkPdfViewer).
         checkPdfViewer(window, app, check, controllerFor);
+        // Audio and video: the player of an embed, the now-playing bar, the player view, a voice note.
+        checkMediaPlayer(window, app, check);
         // 5i. A drawing: opened from its embed, drawn with real input, saved by itself.
         checkDrawing(window, app, check);
         // 5j. A drawing another program wrote: its embed's frame never moves.

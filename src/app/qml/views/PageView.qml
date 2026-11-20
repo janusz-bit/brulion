@@ -29,8 +29,10 @@ import Brulion
 //   * a PDF (assets/lecture.pdf) in the PDF viewer (ContentPdfView, docs/UI.md "PDF viewer": its
 //     pages, zoom, the page jump, search, "Open in another app", "Draw on this page";
 //     route.pdfPage, route.from / fromLine — where it was opened from —, its own route.open values),
-//     never loaded into the editor; any other attachment that is no note (DOCX, ZIP, MP3…) read-only
-//     as text (ContentPictureView's `textOnly`): no file's bytes reach the block editor.
+//     never loaded into the editor; a sound or a video (MP3, M4A, MP4…) in the player view
+//     (ContentMediaView, docs/UI.md "Audio and video": route.mediaStart / mediaEnd from a link's
+//     `#t=`); any other attachment that is no note (DOCX, ZIP…) read-only as text
+//     (ContentPictureView's `textOnly`): no file's bytes reach the block editor.
 // Kept from the first version (and checked by the shell's self-test, objectNames "pageController"
 // and "pageEditor"): the route's path is applied one event-loop turn late and
 // Workspace.pathRenamed goes to followRename(), so a rename never saves unsaved edits under the
@@ -279,12 +281,15 @@ FocusScope {
     property bool pictureAsText: false
     /// A PDF opens in the PDF viewer (its bytes never reach the editor).
     readonly property bool pdfRoute: root.routePath !== "" && Workspace.isPdf(root.routePath)
-    /// Any other file that is no note (DOCX, ZIP, MP3…): read-only as text — a typed character
+    /// A sound or a video opens in the player view (ContentMediaView; its bytes never reach the
+    /// editor).
+    readonly property bool mediaRoute: root.routePath !== "" && Workspace.isMedia(root.routePath)
+    /// Any other file that is no note (DOCX, ZIP…): read-only as text — a typed character
     /// would have been saved over its bytes.
-    readonly property bool fileRoute: root.routePath !== "" && !root.pictureRoute && !root.pdfRoute
+    readonly property bool fileRoute: root.routePath !== "" && !root.pictureRoute && !root.pdfRoute && !root.mediaRoute
                                       && !Js.test(root.routePath, "\\.(md|markdown)$", "i")
-    /// A note (Markdown) in the block editor: not a picture, a PDF or another file.
-    readonly property bool noteRoute: !root.pictureRoute && !root.pdfRoute && !root.fileRoute
+    /// A note (Markdown) in the block editor: not a picture, a PDF, a sound or video or another file.
+    readonly property bool noteRoute: !root.pictureRoute && !root.pdfRoute && !root.mediaRoute && !root.fileRoute
     /// The view swipes sideways from the left edge itself: a PDF zoomed past the view's width pans
     /// (the drawer's edge strip yields to it, ShellRouteView.viewEdgeSwipe).
     readonly property bool edgeSwipe: root.pdfRoute && pdfLoader.item !== null && (pdfLoader.item as ContentPdfView).pannedSideways
@@ -803,7 +808,7 @@ FocusScope {
         // A picture, a PDF or another file fills the view instead (its bytes are never loaded into
         // the editor).
         visible: root.noteRoute
-        focus: !root.pdfRoute
+        focus: !root.pdfRoute && !root.mediaRoute
         controller: page
         // The reading mode's toast: "Edit" leaves it.
         onReadOnlyLeaveRequested: AppSettings.readingMode = false
@@ -1015,6 +1020,28 @@ FocusScope {
             rendererPalette: editor.rendererPalette
             onTextToggleRequested: root.togglePictureText()
         }
+    }
+
+    // A sound or a video: the player view (the editor behind it stays unloaded and hidden).
+    Loader {
+        id: mediaLoader
+        objectName: "mediaLoader"
+        anchors.fill: parent
+        active: root.mediaRoute
+        focus: root.mediaRoute
+        sourceComponent: ContentMediaView {
+            path: root.routePath
+            route: root.route
+            rendererPalette: editor.rendererPalette
+        }
+        // The player takes the keys (Space, ←, →…) when it opens in the main pane — as the PDF
+        // viewer, after its creation (taken inside it, the focus of the views around it was left
+        // to the item being made).
+        onLoaded: if (!root.inSidePanel) mediaFocusLater.restart()
+    }
+    Later {
+        id: mediaFocusLater
+        onTriggered: if (mediaLoader.item !== null) (mediaLoader.item as Item).forceActiveFocus()
     }
 
     // A PDF: the PDF viewer (the editor behind it stays unloaded and hidden). Created for PDFs only.
@@ -1352,6 +1379,9 @@ FocusScope {
                 editor.runExtensionCommand(Js.sliceFrom(action, 10))
             else if (action === "saveWebPictures" && editor.visible)
                 editor.downloadWebPictures("")
+            else if (action === "recordVoiceNote" && editor.visible)
+                editor.recordVoiceNote(editor.controller ? editor.controller.editingRow : -1,
+                                       editor.activeEditor ? editor.activeEditor.cursorPosition : -1)
             else if (action === "addProperty" && editor.visible)
                 editor.addProperty()
             else if (action === "toggleTasksIgnored" && editor.visible)
