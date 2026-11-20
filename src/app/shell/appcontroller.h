@@ -790,9 +790,8 @@ private:
     void applyPendingUris();
     /// A read request for the open notebook: worked out, checked, done or asked.
     void handleAutomation(const automation::Request &request, const QString &origin);
-    /// Carry out an allowed request; its outcome (callbacks: the key was valid).
-    automation::Outcome carryOutAutomation(const automation::Request &request, const automation::Plan &plan,
-                                           bool keyed);
+    /// Carry out an allowed request: show it, write it (a toast with "Open"), or run the command.
+    automation::Outcome carryOutAutomation(const automation::Request &request, const automation::Plan &plan);
     /// The x-success / x-error address of a keyed request, opened with the outcome's parameters.
     void callBack(const automation::Request &request, const automation::Outcome &outcome);
     /// The translated message of an automation error code.

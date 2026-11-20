@@ -371,13 +371,13 @@ void AppController::handleAutomation(const automation::Request &request, const Q
         requestUiAction(u"automation"_s);
         return;
     }
-    const automation::Outcome outcome = carryOutAutomation(request, plan, keyed);
+    const automation::Outcome outcome = carryOutAutomation(request, plan);
     if (keyed)
         callBack(request, outcome);
 }
 
 automation::Outcome AppController::carryOutAutomation(const automation::Request &request,
-                                                      const automation::Plan &plan, bool keyed)
+                                                      const automation::Plan &plan)
 {
     using automation::Access;
     if (plan.access == Access::Open) {
@@ -446,7 +446,6 @@ automation::Outcome AppController::carryOutAutomation(const automation::Request 
     } else {
         m_automationToasts.insert(toastWithAction(text, u"success"_s, tr("Open")), route);
     }
-    Q_UNUSED(keyed);
     return outcome;
 }
 
@@ -511,7 +510,7 @@ QVariantMap AppController::confirmAutomation()
         return {{u"ok"_s, false}, {u"error"_s, message}};
     }
     qCInfo(lcApp).noquote() << u"brulion:// %1 confirmed by the user"_s.arg(automation::actionName(plan.action));
-    const automation::Outcome outcome = carryOutAutomation(pending.request, plan, false);
+    const automation::Outcome outcome = carryOutAutomation(pending.request, plan);
     return {{u"ok"_s, outcome.ok},
             {u"error"_s, outcome.ok ? QString() : automationErrorText(outcome.error, outcome.message)},
             {u"path"_s, outcome.path}};

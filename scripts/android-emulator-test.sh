@@ -211,6 +211,8 @@
 #   BRULION_EMULATOR_PORT    console port (default 5584; adb serial emulator-<port>; 5554-5584:
 #                            the emulator warns that adb may not work with others)
 #   BRULION_EMULATOR_OUT     logs and screenshots (default dist-android/emulator-test)
+#   BRULION_EMULATOR_BOOT_SECONDS  how long the emulator may take to come up (default 120; a busy
+#                            machine's cold boot takes longer)
 #   BRULION_EMULATOR_GPU     the emulator's -gpu mode (default swangle_indirect)
 #   BRULION_EMULATOR_VULKAN  1: the guest has Vulkan (default 1, but 0 for --web-keyboard: Chrome's
 #                            Vulkan on the host's SwiftShader crashed the emulator in half the runs)
@@ -340,6 +342,7 @@ fi
 SDK=${ANDROID_SDK_ROOT:-${ANDROID_HOME:-$HOME/.cache/brulion-android-sdk}}
 IMAGE=${BRULION_EMULATOR_IMAGE:-system-images;android-36;google_apis;x86_64}
 PORT=${BRULION_EMULATOR_PORT:-5584}
+BOOT_SECONDS=${BRULION_EMULATOR_BOOT_SECONDS:-120}
 SERIAL=emulator-$PORT
 OUT=${BRULION_EMULATOR_OUT:-dist-android/emulator-test}
 PKG=io.github.januszbit.brulion
@@ -458,9 +461,9 @@ start_emulator() {
   "${emulator[@]}" -avd "$AVD" -port "$PORT" -no-window -no-audio -no-boot-anim -no-snapshot -wipe-data \
     "${emulator_args[@]}" >"$OUT/emulator.log" 2>&1 &
   emulator_pid=$!
-  timeout 120 "$SDK/platform-tools/adb" -s "$SERIAL" wait-for-device || die "the emulator did not come up (see $OUT/emulator.log)"
+  timeout "$BOOT_SECONDS" "$SDK/platform-tools/adb" -s "$SERIAL" wait-for-device || die "the emulator did not come up (see $OUT/emulator.log)"
   local _
-  for _ in $(seq 1 120); do
+  for _ in $(seq 1 "$BOOT_SECONDS"); do
     [[ $(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r') == 1 ]] && break
     emulator_alive || die "the emulator stopped while booting (see $OUT/emulator.log)"
     sleep 2
