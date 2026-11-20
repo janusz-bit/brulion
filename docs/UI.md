@@ -701,7 +701,8 @@ everything near the bottom, the same way on Android, in the browser and with a s
 | Ctrl+Enter | (in dialogs) accept |
 
 Every key of this table but Delete and Ctrl+Enter is a command's shortcut and can be changed
-("Custom shortcuts" below); the block editor's keys below cannot.
+("Custom shortcuts" below); the block editor's keys below cannot. With Vim keys on, the editor's keys are Vim's
+first ("Vim mode" below).
 
 Keys go from the focused item up to its parents, so the keyboard focus must stay inside the screen
 (`stage`, the Loader of `Main.qml`): on an item above it — the window's content item, its content
@@ -1278,7 +1279,147 @@ titles, ids and keys (case and diacritics ignored), **Change** — the row waits
 (an invisible recorder takes the keyboard and every ShortcutOverride, so no window shortcut fires;
 a modifier alone waits; Esc or Back cancel; focus leaving ends it) —, the refusal or the conflict
 under the row with **Assign here**, ✕ (no shortcut), ↺ (the default, shown as "Default: …"
-for a custom one) and **Restore all** with a confirmation. Vim mode is not there (TODO.md).
+for a custom one) and **Restore all** with a confirmation. Above the list the **Vim keys** switch
+(the same device setting as Settings → Editor; "Vim mode" below).
+
+## Vim mode
+
+Vim's keys in the block editor and in source mode — a device setting, off by default
+(`AppSettings.vimMode`, key `editor/vimMode`): Settings → Editor → **Vim keys**, the same switch at
+the top of Settings → Keyboard shortcuts, the palette's `view.vim` ("Vim keys" / "Turn off Vim
+keys"). Off, nothing of it runs: no key is looked at, the editor is as it was. Reading mode has none
+(nothing is edited). It is meant for a hardware keyboard: in normal mode the text takes no typing,
+so a phone's on-screen keyboard only types in insert mode.
+
+**Pieces.** The core module `vim` (`src/core/vim/vim.h`) is the whole of Vim's logic: a GUI-free
+state machine (`vim::Engine`) reading keys and moving the caret and editing text through an
+abstract `vim::Buffer` of lines and columns (a column is a UTF-16 index; the caret steps over
+surrogate pairs and combining marks), registers and the last search / change / command line in a
+`vim::Shared` (one per app: yank in one page, put in another), `vim::TextBuffer` the plain buffer of
+its tests. The app (`src/app/editor`): `VimSession` (QML type, one per `BlockEditor`:
+`BlockEditor.vimSession`) owns an engine over `VimPageBuffer` (the page's blocks,
+`PageController`'s operations in `pagecontroller_vim.cpp`) or, while source mode's TextEdit exists,
+`VimSourceBuffer` (its `QTextDocument`); its properties are what the UI shows (`mode`, `modeLabel`,
+`pending`, `commandLine`, `message`, `status`).
+
+**Keys.** BlockEditor gives a key to Vim before its own handling: an inline editor's
+(`handleEditorKey`), the list's while no block is edited or blocks are selected
+(`handleVimListKey`; a block selection made with the mouse or Shift+↓ becomes Vim's visual line
+selection), source mode's (`handleVimSourceKey`; a text selected with the mouse in normal mode
+becomes the visual selection). In insert mode Vim takes only Esc and Ctrl+[ — every other key is
+the editor's as without Vim (Enter splits the block, the completion popups, Tab indents). In the
+command modes (normal, visual, replace) it takes every key that types a character and the keys Vim
+has (Esc, Enter, Backspace, Delete, the arrows, Home, End, PgUp, PgDn, Ctrl+R, Ctrl+D, Ctrl+U); of
+the rest only the editor's shortcuts go on (`vimPasses`: Ctrl, Alt or Meta with anything, Tab /
+Shift+Tab, F-keys, Shift+arrows), nothing that would type. The TextEdit is read-only in the command
+modes (`InlineEditor.vimCommands`; no input method composes into it) with a block caret over the
+character (`vimCaretBox`; visual mode shows the TextEdit's own selection) — switched with the caret
+kept, as a TextEdit moves its caret to the end whenever `readOnly` changes. A modifier pressed
+alone (Shift for a capital, AltGr for ą) or a dead key keeps a pending command.
+
+**Polish keyboards.** Commands are read from the character a key types, not from its place (Vim's
+way): on the Polish programmer's layout the letters and signs are where Vim has them, and the AltGr
+letters (ą ć ę ł ń ó ś ź ż) are no commands — only arguments (`fą`, `tę`, `rź`, `/żółw`, `ma`…).
+Windows' AltGr (Ctrl+Alt with the character) counts as typing; keypad digits are counts. On the
+typist's (QWERTZ) layout y and z are where that layout has them.
+
+**The page as lines.** `VimPageBuffer`: Vim's lines are the lines of the visible blocks' edit texts
+in order (a block with a line break has several; a folded block is one line and what it hides goes
+with it; the frontmatter is no line — the properties panel edits it; a table is one line of no
+text: the caret on it selects the table, its text is not Vim's to change, `dd` `yy` `p` take it
+whole). So `j` `k` and counts go across blocks keeping the caret's column, `w` `b` `e` `}` `%` and
+searches run on into the next block, `gg` `G` `:N` are the first, last, N-th line of the page. Edits
+map onto the controller (each one step, `PageController::joinUndoSteps()` joins the steps of one
+change of Vim — an operator, `x`, `p`, an insert from `i` to Esc with what was typed — into one
+undo step, so `u`, Ctrl+Z and the toolbar's Undo take it back whole):
+
+* text within a block is text (`x` `r` `~` `cw` `:s`… cost what a keystroke costs: typing's own
+  path); across blocks the blocks between go and the two are joined as Backspace at the second
+  one's start joins them (`J`, `vjd`, `d}` mid-line; the last block's children follow the first);
+* a line break typed or put into a text block makes a new block after it (Enter in insert mode
+  splits as always; `p` of text with line breaks, `:s/,/\r/`), into code, quotes, callouts a line;
+* `dd` (and `d` of whole lines: `dj`, `dip`, `V…d`) removes the block — an open one alone (its
+  children move up, as the text would read without its line), a folded one with what it hides; a
+  line of a code block, quote, callout is a line of its text; a page left without blocks gets an
+  empty one (Vim's one empty line);
+* `yy` keeps the blocks' Markdown (markers, tasks, the nesting relative to the first; a folded
+  block with its children) besides the lines' text, and `p` / `P` put blocks after the block and its
+  children / before it at its depth (into the text of a code block below / above the line). A
+  block id (`^id`) of this page stays on the put copy only after a delete (`dd` `p` is a move;
+  `yy` `p` is a copy without it — `((id))` stays one block's);
+* `o` / `O` open a block as Enter at the block's end / start does (a task goes on as a task; a
+  block with children gets its first child), a line in a code block or a middle line of a text;
+* `>` `<` indent and outdent as Tab and Shift+Tab (with children, all or nothing for a range; a
+  document indents list items only); lines of code get or lose a tab;
+* a list item's text never starts with blanks (they would join its marker): `cw` on its first word
+  puts the blank after what is typed again.
+
+The visual selection is the edited block's text selection while it stays in one block; across
+blocks the caret's block stays edited and the rows of the selection are drawn as selected (a band:
+`PageController::showLineSelection()`, the model's selected rows — no block selection of the
+controller, so no selection tools, no subtrees: `V` on an open parent takes its line only). `za`
+`zo` `zc` `zR` `zM` fold and unfold blocks, `zt` `zz` `zb` scroll the caret's block. In the
+journal stream every day is a buffer of its own (`j` `k` stop at its edges, as ↑ ↓ do). Insert mode
+ends when no block is edited any more.
+
+**Source mode** (`VimSourceBuffer`): Vim over the page's text as in Vim itself; `>` `<` indent with
+a tab, or the spaces the text's list items are indented with. One change of Vim is one step of `u`
+/ Ctrl+R there too: the document's own history steps a change made are undone and redone together
+(a change starts with an empty step, so its typing never merges into the one before; Ctrl+Z in the
+text walks the document's steps one by one).
+
+**What it shows.** The mode, the command being typed (Vim's showcmd), the command line (`:` `/`
+`?` typed into the engine itself: Backspace, Ctrl+U, Ctrl+W, ↑ ↓ history; Esc cancels) and the
+last message ("Not found: …", "3 substitutions on 2 lines", "Already at the oldest change" — in the
+UI's language, `VimSession::messageText()`) — on desktops at the left of the status bar
+(`statusBarVim`, from `PageView.statusVim` / `JournalsView.statusVim` through `ViewTraits`),
+elsewhere (phones, the side panel, focus mode, a page's window without the bar) in the view's
+bottom left corner (`VimStatus`, above a docked touch toolbar). The mode badge: normal quiet,
+insert in the accent's colour, visual amber, replace red. `:q` (also `:wq`, `:x`, `ZZ`) goes back
+in the tab's history, at its start closes the tab when there are others, else goes home; `:q!` too
+(notes are saved as they are typed: nothing is lost); `:w` saves now.
+
+| Keys | |
+|---|---|
+| `i` `a` `I` `A` `o` `O` `gi`, Insert; Esc / Ctrl+[ | insert mode; back to normal mode (the caret steps back) |
+| `R` (Backspace restores) | replace mode |
+| `v` `V`, `o` (other end), `gv` | visual, visual line |
+| `h` `j` `k` `l`, arrows, Space, Backspace, Enter, `+` `-` `_` | characters and lines (counts) |
+| `w` `W` `b` `B` `e` `E` `ge` `gE` | words (Polish letters are word characters) |
+| `0` `^` `$` `g_` `|`, Home, End | in the line |
+| `gg` `G` `N%` `{` `}` `%` | the page, paragraphs (empty lines), the matching bracket |
+| `f` `F` `t` `T` + a character, `;` `,` | in the line |
+| `/` `?` `n` `N` `*` `#` (`g*` `g#`) | search: plain text, smart case (a capital letter: exact case), wraps around |
+| Ctrl+D / Ctrl+U, PgDn / PgUp | half a screen / a screen |
+| `m` + `a`–`z`; `` ` `` `'` + mark, `` `` `` `''` `` `. `` `` `^ `` `'<` `'>` | marks (a block's mark follows the block) |
+| `d` `c` `y` `>` `<` `g~` `gu` `gU` + motion or text object; doubled (`dd` `cc` `yy` `>>` `<<` `g~~` `guu` `gUU`) for lines | operators (counts before and after) |
+| `iw` `aw` `iW` `aW` `ip` `ap` `i"` `a"` `i'` `a'` `` i` `` `` a` `` `i(` `a(` `ib` `ab` `i[` `a[` `i{` `a{` `iB` `aB` `i<` `a<` | text objects (also in visual mode) |
+| `x` `X` Delete `D` `C` `s` `S` `Y` `r` `~` `J` `gJ` `p` `P` `gp` `gP` | the usual |
+| `u`, Ctrl+R, `.` (with a new count) | undo, redo, repeat the last change |
+| `"a`–`"z` (`"A`–`"Z` append), `""` `"0`–`"9` `"-` `"_`, `"+` `"*` (the system clipboard), `".` `"/` `":` | registers |
+| `:w` `:q` `:q!` `:wq` `:x` `ZZ` `ZQ`, `:N` `:$`, `:[range]d` `y` `>` `<` `j`, `:u` `:red`, `:noh` | the command line (ranges: `%` `.` `$` N `'a` `'<,'>` `+N` `-N`) |
+| `:[range]s/old/new/[g i I n]`, `:s`, `&` | substitute plain text (never a pattern): `&` in the new text is the match, `\r` a line break, any delimiter |
+| `za` `zo` `zc` `zR` `zM`, `zt` `zz` `zb` | folds, scrolling |
+
+Not there: block visual mode (Ctrl+V pastes), macros (`q` `@`), patterns in `/` and `:s`, `:g`,
+`H` `M` `L`, sentences, Ctrl+A / Ctrl+X on numbers, the jump list (Ctrl+O / Ctrl+I). TODO.md has
+them.
+
+**Clashes with the app's keys.** The app's shortcuts keep working in normal mode where Vim has
+nothing on them (Ctrl+K, Ctrl+O, Ctrl+F, Ctrl+E, Ctrl+Z / Ctrl+Y, Ctrl+C / Ctrl+V, Ctrl+A, Tab,
+Alt+↑ …). Vim's in the command modes: Ctrl+R (redo; also over a custom shortcut given Ctrl+R —
+it works in insert mode and elsewhere), Ctrl+D / Ctrl+U, Ctrl+[ (Esc), and Ctrl+W, Ctrl+U in the
+command line. Esc in normal mode with nothing to cancel does not select the block (`V` does): it
+goes on to the view — focus mode ends. Ctrl+V, Ctrl+A, Ctrl+X, Ctrl+O, Ctrl+I, Ctrl+F, Ctrl+E,
+Ctrl+N, Ctrl+P keep the app's meaning, not Vim's.
+
+Tests: `tst_vim` (the engine on a TextBuffer: 400+ key sequences with Polish text, counts, undo
+grouping, the dot repeat, registers and the clipboard, the command line, boundaries and malformed
+input), `tst_editor_vim` (VimSession over a PageController and over a source TextEdit: blocks as
+lines, one undo step per change, visual selections, folds, tables and the frontmatter, block ids,
+registers across pages, `:w` `:q`, a key's cost on a 5000-block page against a keystroke's), the
+shell self-test (`checkVimKeys`: real keys into a page and its source on the phone and the desktop
+layout).
 
 ## Navigation
 

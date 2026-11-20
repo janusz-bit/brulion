@@ -2957,6 +2957,31 @@ filters and a property sort within 12× a tag filter and 4 s (65 vs 15 ms measur
 after one edit within ¼ of a full run + 2 ms (12.8 vs 58 ms), a board of 4000 notes within 6 s
 (170 ms) and a base over them within 12 s (0.5 s), all times `BRULION_TEST_SLOWDOWN`.
 
+### Vim keys (2026-11-20)
+
+Vim keys (docs/UI.md "Vim mode") put their engine in front of every key of the editor; the budgets
+below hold as they are:
+
+* **Insert mode** — most typing — costs one comparison more per key (the engine takes only Esc):
+  0.002 ms per keystroke on a 5000-block page, against the 16 ms of "keystroke → frame".
+* **The engine's lines** (`VimPageBuffer`: the visible blocks' lines) are read once and then follow
+  the model's signals: rows that come or go read them all again (2–5 ms on 5000 blocks, Debug), an
+  edit within a block reads that block's lines only, a keystroke in insert mode sets a flag.
+* **An edit of Vim within a block** (`x`, `r`, `~`, `cw`'s deletion, `:s` on a line) goes typing's
+  way (`PageController::setEditText()`, `BlockDocument`'s typing shortcut): `x` on a 5000-block page
+  22.0 ms against 21.4 ms of a keystroke typed into the same block (Debug -O0, this machine, the
+  first edit of a block each time: the long way of `setBody()`); repeated in one block it costs what
+  repeated keystrokes cost. One change of Vim is one undo step: `joinUndoSteps()` composes the
+  deltas of its steps (the blocks they changed, not the page) when the change ends.
+* **A motion** to another block costs what ↑ / ↓ cost (the edited block changes: 4.7–5.3 ms on 5000
+  blocks, Debug); within a block nothing is read again.
+* **Edits across blocks** (`dd`, `p`, `o`, `J`, `>>`) are commands like Enter: within the "Enter /
+  undo" budget.
+
+`tst_editor_vim` (`normalModeKeyCost`, CPU time, medians; `tests/common/testtiming.h`) guards it on a
+5000-block page: a motion within 16 ms, `x` within twice a keystroke in the same block + 2 ms and
+within 50 ms, insert mode's own cost within 0.1 ms, all times `BRULION_TEST_SLOWDOWN`.
+
 ### Budgets
 
 Desktop = the laptop above (the graph: a GitHub runner, see its row), phone = Pi 4 (floor) and the

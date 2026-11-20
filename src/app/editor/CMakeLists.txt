@@ -8,7 +8,9 @@
 # (live ```query results), ViewResultModel (database views: ```query with view:, ```base, .base files), RowHeightTree, ScrollAnchor and PageRows (one item per page: the rows'
 # heights, the scroll position as a row and an offset), the pure helpers of blocktext.h and the
 # in-memory FakeEditorHost (playground, tests; queries run on the real index module), MermaidView
-# (a ```mermaid block drawn by the core module diagram), ChartView (a ```chart block: core module chart).
+# (a ```mermaid block drawn by the core module diagram), ChartView (a ```chart block: core module chart),
+# VimSession (Vim keys: the core module vim over the page's blocks — VimPageBuffer — or source mode's
+# text — VimSourceBuffer; docs/UI.md "Vim mode").
 # A static library so tests/app/editor links it without the app; the app's QML module "Brulion"
 # registers the classes through QML_FOREIGN wrappers (editorforeign.h, included by area.cmake),
 # which needs the metatypes extracted below.

@@ -58,6 +58,10 @@ import Brulion
 // (spanRefuses() tells so for the other tools). In an edited block
 // Ctrl+C / Ctrl+X copy its exact characters and a right-click opens Cut / Copy / Paste / Select
 // all.
+// Vim keys (AppSettings.vimMode; docs/UI.md "Vim mode"): `vimSession` (VimSession, the core module
+// vim) gets the keys of the inline editors, the list and source mode first; in its normal and visual
+// mode the text is read-only with a block caret, a visual selection over several blocks is drawn as
+// selected rows while the caret's block stays edited.
 // Input methods: a word still being composed (preedit — Android keyboards compose every word)
 // counts for completions and is committed before Enter/Backspace/Tab/… are handled, before
 // toolbar actions and when the app is left. Keys typed while the edited block's delegate is
