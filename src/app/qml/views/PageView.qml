@@ -891,9 +891,15 @@ FocusScope {
                                               ? Workspace.extensions.pageMessage(root.routePath) : ""
             readonly property int errorLine: Workspace.extensions.revision >= 0 && state === "error"
                                              ? Workspace.extensions.pageErrorLine(root.routePath) : -1
+            // What Luau's type checker says of the code (warnings: the code runs all the same).
+            readonly property int typeCount: Workspace.extensions.revision >= 0 && state !== ""
+                                             ? Workspace.extensions.pageTypeCount(root.routePath) : 0
+            readonly property int typeLine: typeCount > 0 ? Workspace.extensions.pageTypeLine(root.routePath) : -1
+            readonly property string typeMessage: typeCount > 0 ? Workspace.extensions.pageTypeMessage(root.routePath) : ""
             readonly property string label: {
                 switch (state) {
-                case "running": return qsTr("Extension: runs")
+                case "running": return typeCount > 0 ? qsTr("Extension: runs · %n type warning(s), %1", "", typeCount).arg(typeMessage)
+                                                     : qsTr("Extension: runs")
                 case "error": return errorLine >= 0 ? qsTr("Error on line %1: %2").arg(errorLine + 1).arg(message)
                                                     : qsTr("Error: %1").arg(message)
                 case "approval": return qsTr("Extension: new or changed elsewhere — read it, then run it")
@@ -945,14 +951,31 @@ FocusScope {
                     visible: extensionState.state === "approval"
                     size: "small"
                     variant: "primary"
-                    text: qsTr("Run")
-                    onClicked: Workspace.extensions.approve(root.routePath)
+                    text: qsTr("Read and run")
+                    onClicked: AppController.requestUiAction("approveExtension:" + root.routePath)
+                }
+                BIconButton {
+                    objectName: "pageExtensionSettings"
+                    visible: extensionState.state === "running" && Workspace.extensions.revision >= 0
+                             && Workspace.extensions.settingsCount(Workspace.extensions.pageExtension(root.routePath)) > 0
+                    label: qsTr("Settings of the extension")
+                    iconName: "settings"
+                    size: "small"
+                    onClicked: AppController.requestUiAction("extensionSettings:" + Workspace.extensions.pageExtension(root.routePath))
                 }
                 BButton {
                     visible: extensionState.state === "error" && extensionState.errorLine >= 0
                     size: "small"
                     text: qsTr("Line %1").arg(extensionState.errorLine + 1)
                     onClicked: AppController.openPage(root.routePath, extensionState.errorLine)
+                }
+                BButton {
+                    objectName: "pageExtensionTypeLine"
+                    visible: extensionState.state === "running" && extensionState.typeLine >= 0
+                    size: "small"
+                    variant: "ghost"
+                    text: qsTr("Line %1").arg(extensionState.typeLine + 1)
+                    onClicked: AppController.openPage(root.routePath, extensionState.typeLine)
                 }
                 BButton {
                     visible: extensionState.state === "off"
@@ -1368,6 +1391,8 @@ FocusScope {
                 editor.copyCurrentLink(Js.sliceFrom(action, 9))
             else if (Js.startsWith(action, "extension:") && editor.visible)
                 editor.runExtensionCommand(Js.sliceFrom(action, 10))
+            else if (action === "offerSelection" && editor.visible)
+                Workspace.extensions.offerSelection(root.routePath, editor.selectionForExtensions())
             else if (action === "saveWebPictures" && editor.visible)
                 editor.downloadWebPictures("")
             else if (action === "addProperty" && editor.visible)

@@ -2,6 +2,7 @@
 
 #include "extensions/notebookhost.h"
 #include "markdown/frontmatter.h"
+#include "sync/diff.h"
 #include "text/text.h"
 
 #include <QCryptographicHash>
@@ -486,6 +487,66 @@ QString builtinSourcePage(const Extension &builtin, const QString &language)
         chunk << line;
     }
     flush();
+    return out;
+}
+
+QList<CodeDiffLine> codeDiff(const QString &approved, const QString &code, int context)
+{
+    const auto linesOfCode = [](const QString &text) {
+        QStringList lines = text.split(u'\n');
+        for (QString &line : lines)
+            if (line.endsWith(u'\r'))
+                line.chop(1);
+        while (!lines.isEmpty() && lines.last().isEmpty())
+            lines.removeLast();
+        return lines;
+    };
+    const QStringList a = linesOfCode(approved), b = linesOfCode(code);
+    QList<CodeDiffLine> all;
+    qsizetype ia = 0, ib = 0;
+    const auto same = [&](qsizetype until) {
+        for (; ib < until; ++ia, ++ib)
+            all.append({CodeDiffLine::Same, b[ib], int(ib + 1), 1});
+    };
+    for (const sync::DiffHunk &h : sync::diffLines(a, b)) {
+        same(h.bStart);
+        for (qsizetype i = 0; i < h.aLength; ++i)
+            all.append({CodeDiffLine::Removed, a[h.aStart + i], int(h.aStart + i + 1), 1});
+        for (qsizetype i = 0; i < h.bLength; ++i)
+            all.append({CodeDiffLine::Added, b[h.bStart + i], int(h.bStart + i + 1), 1});
+        ia = h.aStart + h.aLength;
+        ib = h.bStart + h.bLength;
+    }
+    same(b.size());
+    // Only the changes with their context: a run of unchanged lines longer than that is one line
+    // saying how many there are.
+    context = std::max(0, context);
+    QList<CodeDiffLine> out;
+    for (qsizetype i = 0; i < all.size();) {
+        if (all[i].kind != CodeDiffLine::Same) {
+            out << all[i++];
+            continue;
+        }
+        qsizetype end = i;
+        while (end < all.size() && all[end].kind == CodeDiffLine::Same)
+            ++end;
+        const qsizetype keepBefore = i == 0 ? 0 : context, keepAfter = end == all.size() ? 0 : context;
+        if (end - i <= keepBefore + keepAfter + 1) {
+            for (; i < end; ++i)
+                out << all[i];
+            continue;
+        }
+        for (qsizetype k = 0; k < keepBefore; ++k)
+            out << all[i + k];
+        CodeDiffLine skipped;
+        skipped.kind = CodeDiffLine::Skipped;
+        skipped.count = int(end - i - keepBefore - keepAfter);
+        skipped.line = all[i + keepBefore].line;
+        out << skipped;
+        for (qsizetype k = end - keepAfter; k < end; ++k)
+            out << all[k];
+        i = end;
+    }
     return out;
 }
 

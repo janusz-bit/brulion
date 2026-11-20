@@ -26,6 +26,10 @@ QVariant ExtensionListModel::data(const QModelIndex &index, int role) const
     case ViewsRole: return r.views;
     case HooksRole: return r.hooks;
     case ErrorLineRole: return r.errorLine;
+    case SettingsRole: return r.settings;
+    case ModulesRole: return r.modules.join(u", "_s);
+    case TypesRole: return r.types;
+    case TypeMessageRole: return r.typeMessage;
     }
     return {};
 }
@@ -43,7 +47,11 @@ QHash<int, QByteArray> ExtensionListModel::roleNames() const
             {CommandsRole, "extCommands"},
             {ViewsRole, "extViews"},
             {HooksRole, "extHooks"},
-            {ErrorLineRole, "extErrorLine"}};
+            {ErrorLineRole, "extErrorLine"},
+            {SettingsRole, "extSettings"},
+            {ModulesRole, "extModules"},
+            {TypesRole, "extTypes"},
+            {TypeMessageRole, "extTypeMessage"}};
 }
 
 void ExtensionListModel::setRows(const QList<ExtensionRow> &rows)

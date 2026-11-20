@@ -6,7 +6,7 @@ brulion: document
 
 A habit is an item you want to check off regularly: meditation, running, reading. Brulion counts your streak of days without a break, shows how often you succeed and draws a month calendar. Everything stays in ordinary notes: a habit is a list item with a property, and every check-off is a task in that day's journal — so it syncs like any note and is readable in Obsidian and Logseq.
 
-Habits are an [[Extensions|extension]] built into Brulion and on from the start. **Settings → Extensions → Habits** switches them off (the sidebar's Habits and the palette's command go with them, your notes stay as they are) and on again; **The habits' code → Edit the code** puts their code into a page of your notebook, where you can read and change it ([[Extensions#The code of the gym and the habits]]).
+Habits are an [[Extensions|extension]] built into Brulion and on from the start. **Settings → Extensions → Habits** switches them off (the sidebar's Habits and the palette's command go with them, your notes stay as they are) and on again; **The habits' code → Edit the code** puts their code into a page of your notebook, where you can read and change it ([[Extensions#The code of the gym, the habits, the flashcards and the assistant]]).
 
 ## The Habits view
 Open **Habits** from the sidebar (below Tasks) or from the command palette (Ctrl+K, “Habits”). At the top it says how many of today's habits are done (“2 of 3 done today”), and every habit has a card:

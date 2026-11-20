@@ -962,13 +962,42 @@ this notebook**: "New extension" (a page in `Rozszerzenia/` with an example — 
 hook — approved on this device, opened), "Console", and a row per extension page
 (`Workspace.extensions.list`): its title, its state ("Runs: 2 commands, 1 view, 1 reaction", "Error
 on line 14: …", "New or changed elsewhere: read the code, then run it on this device.", "Off on
-this device."), what it may do and its description; "Code" (or "Line 14") opens the page (at the
-line of the error), "Run" approves it, "Switch off" / "Switch on".
+this device."), what it may do, the pages of shared code it uses ("Uses the code of: …"), the type
+checker's warnings ("Type check: 2 warnings, line 14: …") and its description; "Code" (or "Line
+14") opens the page (at the line of the error), "Read and run" opens the approval (below),
+"Settings" (`extensionSettingsButton`, when it declares some) its settings, the copy button
+(`extensionCopyButton`) "Copy to another notebook", "Switch off" / "Switch on". The built-ins' code
+rows have "Settings" too (`builtinSettings`: the gym's rest between sets), and the AI group has
+**The assistant's code** (`assistantSourceSetting`).
 
 An extension page shows its state in its bottom-left corner (`pageExtensionState` in
-`PageView.qml`): "Extension: runs", the error with its line and a button to it, "new or changed
-elsewhere — read it, then run it" with "Run", "off on this device" with "Switch on"; the console's
+`PageView.qml`): "Extension: runs" (with the type checker's first warning and a button to its line,
+`pageExtensionTypeLine`), the error with its line and a button to it, "new or changed elsewhere —
+read it, then run it" with "Read and run" (`pageExtensionApprove`), "off on this device" with
+"Switch on"; a settings button (`pageExtensionSettings`) when it declares settings; the console's
 button. It follows every save: the page's code loads again as it is saved.
+
+**The approval** (`ShellExtensionApproval.qml`, uiAction `approveExtension:<path>`, made by the
+shell): the title "Run “…”?", what changed in words (new on this device; replaces the built-in …;
+"3 lines added, 1 removed" since the version approved here), badges of what it may do — a
+permission it did not ask for before in the warning colour, with a sentence —, the code against the
+version approved before in `BDiffView` (side by side when wide, one below the other on a phone),
+"Run this version". A sync that changes the code while it is open shows a warning band ("The code
+changed while you read it … Nothing was approved") with "Show the new version", and "Run this
+version" stays disabled until it is shown: only the version on screen is ever approved
+(`approveVersion(path, hash)`).
+
+**An extension's settings** (`ShellExtensionSettings.qml`, uiAction `extensionSettings:<id>`): a
+row per declared setting (`extensionSetting`) — a number with − / + and a field taking `82,5`, a
+text field, a switch, chips of a choice —, each kept at once; "Defaults" puts them back. **Copy to
+another notebook** (`ShellExtensionCopy.qml`, uiAction `copyExtension:<path>`): the recent notebooks
+but this one and the documentation (`extensionCopyTarget`); a page there with other text asks
+"Replace" (danger) first.
+
+**Timers** (`ShellTimerBanner.qml`, under the top bar in every view, below the update banner): a
+line per extension's timer (`Workspace.extensions.timers`) — its label and extension, the time
+left in monospace, a bar, × (`shellTimerStop`) — while one runs; hidden while typing and in focus
+mode; in the Gym view the gym's own rest stays in the Gym's banner and this one shows the others.
 
 **Luau console** (`qml/views/ConsoleView.qml`, route `console`, the palette's "Luau console", icon
 `terminal`): a line of Luau and "Run" (Enter); Up / Down recall what was typed; the lines above —
@@ -2327,6 +2356,7 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   elsewhere (Shift / Ctrl+click: block selection; a finger held: the block's selection) edits the
   source in place with the view under it; a source that names no view, a view that cannot be drawn
   or an extension that does not run here show why, the last with a button that opens
+  `ShellExtensionApproval` (its code to read and run) when it waits for approval, else
   `ShellMacroDialog`; the slash menu's "View: …" rows — one per labelled view,
   `EditorHost::embeddableViews` — insert one), callout, embeds/transclusions
   (`![[…]]`, `!((…))`), images, headings, horizontal rule, properties / frontmatter
@@ -2336,7 +2366,9 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   Luau, a cached value or "…") and shows the value's pieces — text in a tone, bold, a page link,
   code — escaped in the text; a placeholder of an extension waiting for approval, off, unknown or
   failed is a chip that is a `macro:<from>-<to>` link (its range in the rendered body): a click
-  opens `ShellMacroDialog` (run the extension, read its code, switch it on, open its error).
+  of an extension waiting for approval opens `ShellExtensionApproval` (the code read, then "Run
+  this version": the approval of the version read, as the page's "Read and run"), any other
+  `ShellMacroDialog` (switch it on, open its error, none offers it).
   A value is recorded as the row's `RenderRead::Macro`: on `EditorHost::macrosChanged` (values
   computed, extensions approved or loaded again; coalesced, 30 ms) `BlockListModel::followMacros()`
   asks again only for those rows and renders again the ones whose macro shows something else; an

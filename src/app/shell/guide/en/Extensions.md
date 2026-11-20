@@ -74,10 +74,10 @@ end, { label = "Note with the time" })
 `b.appendToJournal` adds to a day's note and `b.appendToPage` to any page, `b.write` makes or replaces a page, `b.replaceBlock` changes one line, `b.insertBlock`, `b.removeBlock`, `b.setTask` and `b.setProperty` add a block, remove one, tick it off or give it a property — and all of them refuse when the line has changed since the code read it, so a sync that arrives in the middle is never overwritten.
 
 ## When something goes wrong
-An error names the **line of the page**: the page's corner shows "Error on line 14: …" with a button to that line, and so do **Settings → Extensions** and the **Luau console**. While you are still typing, the version before the error keeps running — half-written code never takes a working extension away. `print(…)` writes to the Luau console: the quickest way to see what your code has in hand. The messages you may meet are explained in [[Extension API#Errors]].
+An error names the **line of the page**: the page's corner shows "Error on line 14: …" with a button to that line, and so do **Settings → Extensions** and the **Luau console**. While you are still typing, the version before the error keeps running — half-written code never takes a working extension away. `print(…)` writes to the Luau console: the quickest way to see what your code has in hand. On a computer and on Android, Brulion also reads the code's **types** every time you save: a function that is not there (`b.raed`), a name you never defined, a call with too many arguments show as a warning with its line in the page's corner ("runs · 1 type warning, line 14: …") — before that line ever runs. A warning never stops the code. `--!strict` as the code's first line checks your own type annotations too. The messages you may meet are explained in [[Extension API#Errors]].
 
 ## Code from other devices
-Pages arrive from everywhere: a sync, an import, a shared folder. So a page's code runs on a device only after you **approve** it there: the page's corner says "new or changed elsewhere — read it, then run it" with **Run**, and so does **Settings → Extensions**. What you write on this device in Brulion stays approved; a change that comes any other way waits for you again. Words around the code never need a new approval.
+Pages arrive from everywhere: a sync, an import, a shared folder. So a page's code runs on a device only after you **approve** it there: the page's corner says "new or changed elsewhere — read it, then run it" with **Read and run**, and so does **Settings → Extensions**. That button shows the code first: what changed since you approved it on this device — the lines added in green, the removed ones in red —, or all of it when it is new here, what it may do and what it asks for that it did not before. **Run this version** approves exactly what you read: if a sync changes the code while you read it, nothing is approved, and the window says so and shows the new version when you ask. What you write on this device in Brulion stays approved; a change that comes any other way waits for you again. Words around the code never need a new approval.
 
 What an extension may do beyond reading is written on its page:
 
@@ -108,7 +108,13 @@ b.view("projects", function(params)
 end, nil, { label = "Projects" })
 ```
 
-A reaction runs when something happens: `b.on("save", function(e) … end)` after this device saved a page (`e.page`), `b.on("change", function(e) … end)` after notes changed anywhere (`e.pages`). One that keeps failing is switched off until the extension loads again.
+A reaction runs when something happens: `b.on("save", function(e) … end)` after this device saved a page (`e.page`), `b.on("change", function(e) … end)` after notes changed anywhere — also by another extension (`e.pages`) —, `"task"` when a task is ticked off, `"journal"` when a day's note is made, `"open"`, `"day"` and `"timer"` (all in [[Extension API#Reactions]]). One that keeps failing is switched off until the extension loads again.
+
+## Settings, shortcuts and timers
+An extension can have **settings** of its own (`b.settings`): **Settings → Extensions** shows **Settings** for it, kept on this device. Each of its commands is in **Settings → Keyboard shortcuts**, where you can give it a key. And `b.timer` starts a timer of its own, which counts down under the top bar in every view and says what the extension wants when it ends. The details are in [[Extension API]].
+
+## In another notebook
+An extension is a page of its notebook. To use it in another one, **Settings → Extensions** has a copy button on its row: choose the notebook, and the page goes there — with the pages of shared code it uses (`b.require`) —, approved there on this device. A page there with other text is replaced only after you agree.
 
 ## In your notes: macros, views and panels
 - A **macro** shows what an extension computes right in the text of any note, always current: `{{ext:silownia/rekord Squat}}` shows your best squat, `{{ext:nawyki/seria Reading}}` a habit's streak. Type `{{` to pick one. A macro of an extension that has not run on this device shows a lock; a click asks to run it.
@@ -118,10 +124,10 @@ A reaction runs when something happens: `b.on("save", function(e) … end)` afte
 [[Extension API]] shows how to write them.
 
 ## Written by AI
-Ask the [[AI|AI assistant]] for one — in a new conversation of the AI chat (✨ → **New conversation**), "a command that counts the words of today's note". It reads how extensions are written, tries its code on your notes without changing anything, and with your yes writes the page into **Extensions/**. An agent such as Claude Code does the same through [[Command line and AI agents|the command line]]: it reads the API (`brulion-cli extension docs`), tries its code (`extension eval`, `extension run` — what the code would write comes back as a diff) and writes the page (`extension write`). Either way the code waits for you like code from another device: read the page, and press **Run** when you agree with what it does. Every later change by the AI waits again.
+Ask the [[AI|AI assistant]] for one — in a new conversation of the AI chat (✨ → **New conversation**), "a command that counts the words of today's note". It reads how extensions are written, tries its code on your notes without changing anything, and with your yes writes the page into **Extensions/**. An agent such as Claude Code does the same through [[Command line and AI agents|the command line]]: it reads the API (`brulion-cli extension docs`), tries its code (`extension eval`, `extension run` — what the code would write comes back as a diff) and writes the page (`extension write`). Either way the code waits for you like code from another device: read the page, and press **Read and run** when you agree with what it does. Every later change by the AI waits again.
 
-## The code of the gym and the habits
-The [[Gym]] and the [[Habits]] are extensions too. **Settings → Extensions → The gym's code** (or **The habits' code**) **→ Edit the code** writes the source into a page of your notebook (`Extensions/Gym`, `Extensions/Habits`), one section per heading, and from then on it runs **from that page**: change it, save, and the change works. **Restore** puts the page in the trash and the built-in code runs again. The [[Flashcards]] have the same button, **The flashcards' code**.
+## The code of the gym, the habits, the flashcards and the assistant
+The [[Gym]], the [[Habits]], the [[Flashcards]] and the [[AI|AI assistant]] are extensions too. **Settings → Extensions → The gym's code** (or **The habits' code**, **The flashcards' code**, or under AI **The assistant's code**) **→ Edit the code** writes the source into a page of your notebook (`Extensions/Gym`, `Extensions/Habits`, `Extensions/Flashcards`, `Extensions/AI assistant`), one section per heading, and from then on it runs **from that page**: change it, save, and the change works. **Restore** puts the page in the trash and the built-in code runs again.
 
 ## Learn more
 - [[Extension API]] — every function of `b`, what a block looks like, the limits and the error messages.

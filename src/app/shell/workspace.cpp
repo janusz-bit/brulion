@@ -645,6 +645,7 @@ void Workspace::onVaultChanged(const QList<VaultChange> &changes)
             before.insert(path, note ? note->properties : Properties());
         }
     }
+    m_extensions->notesChanging(changes); // (where they come from, the tasks before: hooks)
     const int versionBefore = m_index->version();
     const quint64 reporting = m_vault->reportingWrite(); // (0: no async write of an editor)
     {

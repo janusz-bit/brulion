@@ -91,6 +91,9 @@ local INTERFACE = {
         weight = "Ciężar",
         reps = "Powtórzenia",
         rest = "Przerwa",
+        nextSet = "Czas na kolejną serię.",
+        restSetting = "Przerwa między seriami",
+        restSettingNote = "Gdy ani ćwiczenie, ani trening, ani plan nie podają jej we właściwości przerwa::.",
         whichExercise = "Jakie ćwiczenie? (część nazwy)",
         pickExercise = "Wybierz ćwiczenie",
         nothingFound = "Nie ma takiego ćwiczenia w katalogu",
@@ -137,6 +140,9 @@ local INTERFACE = {
         weight = "Weight",
         reps = "Reps",
         rest = "Rest",
+        nextSet = "Time for the next set.",
+        restSetting = "Rest between sets",
+        restSettingNote = "When neither the exercise, the workout nor the plan gives one in a rest:: property.",
         whichExercise = "Which exercise? (part of the name)",
         pickExercise = "Choose an exercise",
         nothingFound = "No such exercise in the catalog",
@@ -184,6 +190,11 @@ end
 
 local W = if b.lang() == "pl" then WRITTEN.pl else WRITTEN.en
 local T = if b.uiLang() == "pl" then INTERFACE.pl else INTERFACE.en
+
+-- The gym's own setting (Settings → Extensions → Gym → Settings), kept on the device.
+b.settings({
+    { key = "rest", label = T.restSetting, description = T.restSettingNote, value = 120, step = 15, unit = "s" },
+})
 
 local function trim(s: string): string
     return (s:match("^%s*(.-)%s*$") :: string)
@@ -791,7 +802,7 @@ local function workoutText(plan: string): string
     return table.concat(lines, "\n")
 end
 
--- Rest between sets: the line's or the workout's `przerwa::` / `rest::`, else 2 minutes.
+-- Rest between sets: the line's or the workout's `przerwa::` / `rest::`, else the setting (2 minutes).
 local function restSeconds(props: { [string]: string }?): number
     local text = props and (props["przerwa"] or props["rest"])
     if text then
@@ -800,7 +811,7 @@ local function restSeconds(props: { [string]: string }?): number
             return sets[1].seconds :: number
         end
     end
-    return 120
+    return math.clamp(tonumber(b.setting("rest")) or 120, 1, 86400)
 end
 
 -- A workout's rest: its own property, else its plan page's (`plan:: [[Trening A]]`).
@@ -864,7 +875,7 @@ b.command("add-set", function(ctx)
     end
     table.insert(entry.sets, set)
     b.replaceBlock(block.ref, formatEntry(entry), block.task)
-    b.timer(restSeconds(block.props), T.rest)
+    b.timer(restSeconds(block.props), { label = T.rest, message = T.nextSet })
     return nil
 end, { label = T.addSet, block = true })
 
@@ -1176,7 +1187,7 @@ b.view("today", function(params) return todayView() end, {
             set.rpe = nil
             table.insert(entry.sets, set)
         end)
-        b.timer(tonumber(args.rest) or 120, T.rest)
+        b.timer(tonumber(args.rest) or restSeconds(nil), { label = T.rest, message = T.nextSet })
     end,
     removeSet = function(args)
         editLine(args, function(entry)

@@ -103,7 +103,8 @@ jobs:
           rm -rf ~/.cache/brulion-emsdk/emsdk/downloads
 
       # Headless Chrome (preinstalled) under a base path (/brulion/): the app starts, its emoji and
-      # symbols draw (no empty boxes: the bundled fallback fonts), it follows a phone's on-screen
+      # symbols draw (no empty boxes: the bundled fallback fonts), hostile extensions are stopped by
+      # the engine's limits as on the desktop (?selftest=extensions), it follows a phone's on-screen
       # keyboard (a stubbed visualViewport; on an emulated phone the editing toolbar ends on it and
       # a page the browser shrank gets no overlap), the notes survive a reload and a browser
       # restart, a big vault gets indexed without input (and its index cache, kept in a database of
@@ -120,7 +121,7 @@ jobs:
           export CHROME
           CHROME=$(command -v google-chrome)
           node scripts/wasm-smoke.mjs --url http://127.0.0.1:8123/brulion/ --profile "$RUNNER_TEMP/profile" \
-            --loads 2 --selftest --glyphs --keyboard --expect-first 1 --screenshot "$RUNNER_TEMP/shots/online.png"
+            --loads 2 --selftest --glyphs --extensions --keyboard --expect-first 1 --screenshot "$RUNNER_TEMP/shots/online.png"
           node scripts/wasm-smoke.mjs --url http://127.0.0.1:8123/brulion/ --profile "$RUNNER_TEMP/profile-phone" \
             --keyboard-phone --screenshot "$RUNNER_TEMP/shots/phone.png"
           # A 3000-note vault must index completely without any input (Qt's WebAssembly timers).

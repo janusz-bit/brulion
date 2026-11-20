@@ -6,7 +6,7 @@ brulion: document
 
 Nawyk to punkt, który chcesz odhaczać regularnie: medytacja, bieganie, czytanie. Brulion liczy serię dni bez przerwy, pokazuje, jak często się udaje, i rysuje kalendarz miesiąca. Wszystko zostaje w zwykłych notatkach: nawyk to punkt z właściwością, a każde odhaczenie to zadanie w dzienniku danego dnia — więc synchronizuje się jak każda notatka i jest czytelne w Obsidianie i Logsequ.
 
-Nawyki to [[Rozszerzenia|rozszerzenie]] wbudowane w Brulion i włączone od początku. **Ustawienia → Rozszerzenia → Nawyki** je wyłączają (razem z nimi znikają Nawyki z paska bocznego i polecenie z palety, a notatki zostają, jakie były) i włączają z powrotem; **Kod nawyków → Edytuj kod** umieszcza ich kod na stronie Twojego notatnika, gdzie możesz go przeczytać i zmienić ([[Rozszerzenia#Kod Siłowni i Nawyków]]).
+Nawyki to [[Rozszerzenia|rozszerzenie]] wbudowane w Brulion i włączone od początku. **Ustawienia → Rozszerzenia → Nawyki** je wyłączają (razem z nimi znikają Nawyki z paska bocznego i polecenie z palety, a notatki zostają, jakie były) i włączają z powrotem; **Kod nawyków → Edytuj kod** umieszcza ich kod na stronie Twojego notatnika, gdzie możesz go przeczytać i zmienić ([[Rozszerzenia#Kod Siłowni, Nawyków, Fiszek i Asystenta]]).
 
 ## Widok Nawyki
 Otwórz **Nawyki** z paska bocznego (pod Zadaniami) albo z palety poleceń (Ctrl+K, „Nawyki”). Na górze widać, ile dzisiejszych nawyków jest już zrobionych („2 z 3 zrobione dziś”), a każdy nawyk ma kartę:

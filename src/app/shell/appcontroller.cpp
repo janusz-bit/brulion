@@ -243,6 +243,8 @@ AppController::AppController(const Options &options, QObject *parent)
     // The built-in extensions the settings switch on (the gym, habits, the AI assistant), their messages
     // as toasts; the model b.ai asks on this device.
     m_workspace->extensions()->setEnabled(m_settings->enabledExtensions());
+    // "Copy to another notebook": each notebook's device state, where its approvals are kept.
+    m_workspace->extensions()->setDeviceStates([this](const QString &root) { return deviceStatePath(root); });
     connect(m_settings.get(), &AppSettings::gymEnabledChanged, this,
             [this] { m_workspace->extensions()->setEnabled(m_settings->enabledExtensions()); });
     connect(m_settings.get(), &AppSettings::habitsEnabledChanged, this,

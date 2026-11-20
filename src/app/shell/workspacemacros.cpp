@@ -331,6 +331,12 @@ QVariantMap WorkspaceExtensions::macroExtension(const QString &extension) const
     return out;
 }
 
+QString WorkspaceExtensions::approvalPageOf(const QString &extension) const
+{
+    const QVariantMap info = macroExtension(extension);
+    return info.value(u"state"_s).toString() == u"approval" ? info.value(u"path"_s).toString() : QString();
+}
+
 QVariantMap WorkspaceExtensions::noteParams(const QString &path) const
 {
     QVariantMap params = macroContext(QString(), path);

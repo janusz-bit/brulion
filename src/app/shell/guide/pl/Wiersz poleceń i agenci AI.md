@@ -76,9 +76,12 @@ brulion-cli extension eval 'b.query("type:tasks status:open").total'
 brulion-cli extension write "Licznik słów" --code "$(cat licznik.luau)" --description "Liczy słowa"
 brulion-cli extension run "Licznik słów" policz --page Dom  # zmiany wracają jako różnica, nic nie jest zapisywane
 brulion-cli extension list                           # „approval”: czeka na Ciebie
+brulion-cli extension diff "Licznik słów"             # co się zmieniło, odkąd je tu zatwierdziłeś
+brulion-cli extension settings Siłownia --set rest=90 # ustawienia rozszerzenia na tym urządzeniu
+brulion-cli extension copy "Licznik słów" --to ~/Notatki/Praca  # do innego notatnika, gdzie też czeka
 ```
 
-Kod nie uruchomi się w aplikacji, dopóki go tam nie zatwierdzisz (**Uruchom** na stronie albo **Ustawienia → Rozszerzenia**), a każda zmiana agenta znowu na Ciebie czeka.
+Kod nie uruchomi się w aplikacji, dopóki go tam nie zatwierdzisz (**Przeczytaj i uruchom** na stronie albo **Ustawienia → Rozszerzenia**), a każda zmiana agenta znowu na Ciebie czeka.
 
 ## Otwórz w aplikacji
 `brulion-cli app open <strona>` pokazuje stronę w działającej aplikacji (na tym samym komputerze), `app today` — dzisiejszy dziennik, a `app capture` otwiera szybką notatkę.

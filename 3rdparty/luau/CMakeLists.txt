@@ -1,7 +1,9 @@
 # Luau 0.743 (https://github.com/luau-lang/luau, MIT, see LICENSE.txt and lua_LICENSE.txt) — the
-# language of Brulion's extensions (src/core/extensions, docs/EXTENSIONS.md). Vendored: only the
-# VM, the compiler and what it needs (Common, Ast, Bytecode, Compiler, VM — no Analysis, CodeGen,
-# CLI, tests). Patches, marked "Brulion:":
+# language of Brulion's extensions (src/core/extensions, docs/EXTENSIONS.md). Vendored: the VM, the
+# compiler and what it needs (Common, Ast, Bytecode, Compiler, VM), and the type checker (Analysis,
+# Config: brulion_luau_analysis, only with BRULION_LUAU_CHECK — src/core/extensions/typecheck.h);
+# no CodeGen, Require, CLI, tests. Analysis and Config are upstream's files unchanged. Patches,
+# marked "Brulion:":
 #   * VM/src/lstrlib.cpp: the plain string search calls the interrupt callback, so the extensions'
 #     time limit also stops a long `string.find(s, p, 1, true)`;
 #   * Common/include/Luau/StrtodC.h (new), used by Ast/src/Parser.cpp and VM/src/lnumutils.h:
@@ -90,4 +92,99 @@ target_compile_options(brulion_luau PRIVATE $<$<CXX_COMPILER_ID:GNU,Clang,AppleC
 if(MSVC AND MSVC_VERSION GREATER_EQUAL 1924)
     # Luau's own setting: partial redundancy elimination makes MSVC's interpreter loop much slower.
     set_source_files_properties(VM/src/lvmexecute.cpp PROPERTIES COMPILE_OPTIONS /d2ssa-pre-)
+endif()
+
+# Luau's type checker (Analysis, Config), for the extensions' type check on save: desktop and
+# Android (BRULION_LUAU_CHECK, src/core/extensions/CMakeLists.txt). It reports its own errors with
+# C++ exceptions, caught at its edge (typecheck.cpp); the VM it runs nothing on stays longjmp's.
+if(BRULION_LUAU_CHECK)
+    add_library(brulion_luau_analysis STATIC
+    Analysis/src/Anyification.cpp
+    Analysis/src/ApplyTypeFunction.cpp
+    Analysis/src/AstJsonEncoder.cpp
+    Analysis/src/AstQuery.cpp
+    Analysis/src/AstUtils.cpp
+    Analysis/src/Autocomplete.cpp
+    Analysis/src/AutocompleteCore.cpp
+    Analysis/src/BuiltinDefinitions.cpp
+    Analysis/src/BuiltinTypeFunctions.cpp
+    Analysis/src/Clone.cpp
+    Analysis/src/Constraint.cpp
+    Analysis/src/ConstraintGenerator.cpp
+    Analysis/src/ConstraintGraph.cpp
+    Analysis/src/ConstraintSolver.cpp
+    Analysis/src/ControlFlowGraph.cpp
+    Analysis/src/DataFlowGraph.cpp
+    Analysis/src/DcrLogger.cpp
+    Analysis/src/Def.cpp
+    Analysis/src/DumpCFG.cpp
+    Analysis/src/EmbeddedBuiltinDefinitions.cpp
+    Analysis/src/Error.cpp
+    Analysis/src/ExpectedTypeVisitor.cpp
+    Analysis/src/FileResolver.cpp
+    Analysis/src/FragmentAutocomplete.cpp
+    Analysis/src/Frontend.cpp
+    Analysis/src/Generalization.cpp
+    Analysis/src/GlobalTypes.cpp
+    Analysis/src/Instantiation.cpp
+    Analysis/src/Instantiation2.cpp
+    Analysis/src/IostreamHelpers.cpp
+    Analysis/src/IterativeTypeFunctionTypeVisitor.cpp
+    Analysis/src/IterativeTypeVisitor.cpp
+    Analysis/src/JsonEmitter.cpp
+    Analysis/src/LValue.cpp
+    Analysis/src/Linter.cpp
+    Analysis/src/Module.cpp
+    Analysis/src/NativeStackGuard.cpp
+    Analysis/src/NonStrictTypeChecker.cpp
+    Analysis/src/Normalize.cpp
+    Analysis/src/OverloadResolver.cpp
+    Analysis/src/Quantify.cpp
+    Analysis/src/RecursionCounter.cpp
+    Analysis/src/Refinement.cpp
+    Analysis/src/RequireTracer.cpp
+    Analysis/src/Scope.cpp
+    Analysis/src/Simplify.cpp
+    Analysis/src/StructuralTypeEquality.cpp
+    Analysis/src/Substitution.cpp
+    Analysis/src/Subtyping.cpp
+    Analysis/src/Symbol.cpp
+    Analysis/src/TableLiteralInference.cpp
+    Analysis/src/ToDot.cpp
+    Analysis/src/ToString.cpp
+    Analysis/src/TopoSortStatements.cpp
+    Analysis/src/TxnLog.cpp
+    Analysis/src/Type.cpp
+    Analysis/src/TypeArena.cpp
+    Analysis/src/TypeAttach.cpp
+    Analysis/src/TypeChecker2.cpp
+    Analysis/src/TypeFunction.cpp
+    Analysis/src/TypeFunctionError.cpp
+    Analysis/src/TypeFunctionReductionGuesser.cpp
+    Analysis/src/TypeFunctionRuntime.cpp
+    Analysis/src/TypeFunctionRuntimeBuilder.cpp
+    Analysis/src/TypeIds.cpp
+    Analysis/src/TypeInfer.cpp
+    Analysis/src/TypeOrPack.cpp
+    Analysis/src/TypePack.cpp
+    Analysis/src/TypePath.cpp
+    Analysis/src/TypeStateMap.cpp
+    Analysis/src/TypeUtils.cpp
+    Analysis/src/TypedAllocator.cpp
+    Analysis/src/Unifiable.cpp
+    Analysis/src/Unifier.cpp
+    Analysis/src/Unifier2.cpp
+    Analysis/src/UserDefinedTypeFunction.cpp
+        Config/src/Config.cpp
+        Config/src/LinterConfig.cpp
+        Config/src/LuauConfig.cpp)
+    set_target_properties(brulion_luau_analysis PROPERTIES POSITION_INDEPENDENT_CODE ON CXX_STANDARD 17)
+    target_include_directories(brulion_luau_analysis SYSTEM PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}/Analysis/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/Config/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/Ast/include)
+    target_include_directories(brulion_luau_analysis PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/Bytecode/include)
+    target_link_libraries(brulion_luau_analysis PUBLIC brulion_luau)
+    target_compile_options(brulion_luau_analysis PRIVATE
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-w -fno-math-errno> $<$<CXX_COMPILER_ID:MSVC>:/w /EHsc /D_CRT_SECURE_NO_WARNINGS /bigobj>)
 endif()

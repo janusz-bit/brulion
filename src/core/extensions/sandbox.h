@@ -16,7 +16,8 @@
 //   printed   what print / b.log wrote while loading
 //   writes    [{path, created, before, after}]: what its top-level code would have written
 // checkExtensionPage() adds what the page says: isExtension, id, title, path, permissions,
-// description, overrides, problems, blocks, codeHash.
+// description, overrides, problems, blocks, codeHash — and `types`, what Luau's type checker finds
+// ([{line, column, message, kind}], typecheck.h; `typesChecked` false in a build without it).
 //
 // A check never nests: called while one runs (code being checked calls b.checkExtension), it
 // reports an error instead.

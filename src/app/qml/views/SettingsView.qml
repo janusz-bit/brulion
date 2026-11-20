@@ -494,6 +494,16 @@ Item {
                     AppController.toast(sourceRow.restoredText, "success")
             }
         }
+        // Its own settings (b.settings), when it declares some.
+        BButton {
+            objectName: "builtinSettings"
+            visible: Workspace.extensions.revision >= 0 && Workspace.extensions.settingsCount(sourceRow.builtin) > 0
+            size: "small"
+            variant: "ghost"
+            iconName: "settings"
+            text: qsTr("Settings")
+            onClicked: AppController.requestUiAction("extensionSettings:" + sourceRow.builtin)
+        }
     }
 
     // ---- Layout -----------------------------------------------------------------------------
@@ -1494,6 +1504,14 @@ Item {
                     checked: AppSettings.assistantEnabled
                     onToggled: AppSettings.assistantEnabled = checked
                 }
+                BuiltinSourceRow {
+                    objectName: "assistantSourceSetting"
+                    visible: AppSettings.assistantEnabled
+                    builtin: "asystent"
+                    title: qsTr("The assistant's code")
+                    pageText: qsTr("The AI assistant runs from its page in this notebook (%1): change its tools and instructions there. Restore puts the page in the trash, and the built-in code runs again.")
+                    restoredText: qsTr("The built-in AI assistant runs again; its page is in the trash.")
+                }
                 ShellSettingRow {
                     title: qsTr("Provider")
                     description: aiGroup.local
@@ -1744,6 +1762,10 @@ Item {
                         required property int extViews
                         required property int extHooks
                         required property int extErrorLine
+                        required property int extSettings
+                        required property string extModules
+                        required property int extTypes
+                        required property string extTypeMessage
                         objectName: "extensionRow"
                         visible: extRow.extKind === "page"
                         Layout.fillWidth: true
@@ -1751,6 +1773,8 @@ Item {
                         description: root.extensionStateText(extRow.extState, extRow.extMessage, extRow.extErrorLine,
                                                              extRow.extCommands, extRow.extViews, extRow.extHooks)
                                      + (extRow.extPermissions !== "" ? "\n" + qsTr("May: %1").arg(extRow.extPermissions) : "")
+                                     + (extRow.extModules !== "" ? "\n" + qsTr("Uses the code of: %1").arg(extRow.extModules) : "")
+                                     + (extRow.extTypes > 0 ? "\n" + qsTr("Type check: %n warning(s), %1", "", extRow.extTypes).arg(extRow.extTypeMessage) : "")
                                      + (extRow.extDescription !== "" ? "\n" + extRow.extDescription : "")
                         BButton {
                             size: "small"
@@ -1766,8 +1790,24 @@ Item {
                             size: "small"
                             variant: "primary"
                             iconName: "shield-check"
-                            text: qsTr("Run")
-                            onClicked: Workspace.extensions.approve(extRow.extPath)
+                            text: qsTr("Read and run")
+                            onClicked: AppController.requestUiAction("approveExtension:" + extRow.extPath)
+                        }
+                        BButton {
+                            objectName: "extensionSettingsButton"
+                            visible: extRow.extSettings > 0
+                            size: "small"
+                            variant: "ghost"
+                            iconName: "settings"
+                            text: qsTr("Settings")
+                            onClicked: AppController.requestUiAction("extensionSettings:" + extRow.extId)
+                        }
+                        BIconButton {
+                            objectName: "extensionCopyButton"
+                            size: "small"
+                            iconName: "copy"
+                            label: qsTr("Copy to another notebook")
+                            onClicked: AppController.requestUiAction("copyExtension:" + extRow.extPath)
                         }
                         BButton {
                             visible: extRow.extState === "running" || extRow.extState === "error" || extRow.extState === "off"
