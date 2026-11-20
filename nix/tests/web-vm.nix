@@ -1,7 +1,9 @@
-# checks.x86_64-linux.web-vm: services.brulion-web and programs.brulion in a NixOS VM (needs
-# KVM): MIME types, precompressed gzip/brotli files, cache headers, the base-path redirect, the
-# Nextcloud WebDAV proxy (against a fake Nextcloud on the same machine), the autostart entry and
-# a headless start of the installed app.
+# checks.x86_64-linux.web-vm: services.brulion-web, programs.brulion and services.brulion-mcp in a
+# NixOS VM (needs KVM): MIME types, precompressed gzip/brotli files, cache headers, the base-path
+# redirect, the Nextcloud WebDAV proxy (against a fake Nextcloud on the same machine), the
+# autostart entry, a headless start of the installed app, and the remote MCP server as the
+# hardened service — `brulion-mcp password`, the whole sign-in (nix/tests/mcp-flow.py), a tool
+# call that writes into the notebook and `brulion-mcp revoke`.
 { pkgs, module }:
 
 let
@@ -10,48 +12,62 @@ in
 pkgs.testers.runNixOSTest {
   name = "brulion-web";
 
-  nodes.server = {
-    imports = [ module ];
+  nodes.server =
+    { config, ... }:
+    {
+      imports = [ module ];
 
-    virtualisation.memorySize = 1536;
-    environment.systemPackages = [
-      pkgs.curl
-      pkgs.brotli
-    ];
-    # The original files, to compare with what nginx sends.
-    environment.etc."brulion-web-check".source = fakeWebBuild;
-
-    programs.brulion = {
-      enable = true;
-      autostart = true;
-    };
-
-    services.brulion-web = {
-      enable = true;
-      package = fakeWebBuild;
-      basePath = "/notatki/";
-      # The fake "Nextcloud" below, installed under /nc like `https://example.com/nc`.
-      nextcloudUrl = "http://127.0.0.1:8081/nc";
-      openFirewall = true;
-    };
-
-    # Echoes what the proxy forwarded, and sets a cookie that must not reach the browser.
-    services.nginx.virtualHosts.fake-nextcloud = {
-      listen = [
-        {
-          addr = "127.0.0.1";
-          port = 8081;
-        }
+      virtualisation.memorySize = 1536;
+      environment.systemPackages = [
+        pkgs.curl
+        pkgs.brotli
+        pkgs.python3Minimal
       ];
-      locations."/nc/remote.php/dav/".extraConfig = ''
-        client_max_body_size 100m;
-        add_header Set-Cookie "oc_session=secret; Path=/";
-        return 207 "method=$request_method uri=$request_uri host=$http_host cookie=[$http_cookie] auth=$http_authorization\n";
-      '';
+      # The original files, to compare with what nginx sends.
+      environment.etc."brulion-web-check".source = fakeWebBuild;
+
+      programs.brulion = {
+        enable = true;
+        autostart = true;
+      };
+
+      # The app's package has brulion-cli too: nothing more to build.
+      services.brulion-mcp = {
+        enable = true;
+        package = config.programs.brulion.package;
+        vault = "/var/lib/notatki";
+        publicUrl = "http://localhost:8780";
+        readOnly = false;
+      };
+
+      services.brulion-web = {
+        enable = true;
+        package = fakeWebBuild;
+        basePath = "/notatki/";
+        # The fake "Nextcloud" below, installed under /nc like `https://example.com/nc`.
+        nextcloudUrl = "http://127.0.0.1:8081/nc";
+        openFirewall = true;
+      };
+
+      # Echoes what the proxy forwarded, and sets a cookie that must not reach the browser.
+      services.nginx.virtualHosts.fake-nextcloud = {
+        listen = [
+          {
+            addr = "127.0.0.1";
+            port = 8081;
+          }
+        ];
+        locations."/nc/remote.php/dav/".extraConfig = ''
+          client_max_body_size 100m;
+          add_header Set-Cookie "oc_session=secret; Path=/";
+          return 207 "method=$request_method uri=$request_uri host=$http_host cookie=[$http_cookie] auth=$http_authorization\n";
+        '';
+      };
     };
-  };
 
   testScript = ''
+    import json
+
     server.wait_for_unit("nginx.service")
     server.wait_for_open_port(80)
 
@@ -157,5 +173,31 @@ pkgs.testers.runNixOSTest {
         out = server.succeed("cat /tmp/brulion.log")
         assert status == 124, f"brulion exited with status {status} within 10 s:\n{out}"
         assert "QQmlApplicationEngine failed" not in out and "is not installed" not in out, out
+
+    with subtest("remote MCP server: password, sign-in, a tool call that writes, revoke"):
+        server.succeed(
+            "install -d -o brulion-mcp -g brulion-mcp -m 0750 /var/lib/notatki"
+            " && printf -- '- żółw błotny\\n' > /var/lib/notatki/Ogród.md"
+            " && chown brulion-mcp:brulion-mcp /var/lib/notatki/Ogród.md"
+        )
+        server.succeed("printf 'Hasło maszyny 123\\n' | brulion-mcp password --stdin")
+        server.fail("brulion-mcp serve")
+        server.succeed("systemctl restart brulion-mcp.service")
+        server.wait_for_open_port(8780)
+        out = server.succeed("systemctl show brulion-mcp.service -p User -p ProtectSystem -p NoNewPrivileges")
+        assert "User=brulion-mcp" in out and "ProtectSystem=strict" in out and "NoNewPrivileges=yes" in out, out
+        token = server.succeed(
+            "python3 ${./mcp-flow.py} connect http://localhost:8780 'Hasło maszyny 123'"
+        ).strip().splitlines()[-1]
+        server.succeed(f"python3 ${./mcp-flow.py} call http://localhost:8780 {token}")
+        server.succeed("grep -r 'Zapisane przez łącznik' /var/lib/notatki/journals")
+        clients = json.loads(server.succeed("brulion-mcp clients"))
+        assert len(clients["result"]["connections"]) == 1, clients
+        assert clients["result"]["connections"][0]["write"], clients
+        server.succeed("brulion-mcp revoke --all")
+        server.succeed(f"python3 ${./mcp-flow.py} refused http://localhost:8780 {token}")
+        journal = server.succeed("journalctl -u brulion-mcp.service")
+        assert "POST /token 200" in journal, journal
+        assert token not in journal and "Hasło maszyny" not in journal, journal
   '';
 }

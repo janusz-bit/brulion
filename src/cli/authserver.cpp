@@ -1472,7 +1472,7 @@ input[type=password]:focus{outline:2px solid var(--accent);outline-offset:1px}
 .actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:20px}
 button{font:inherit;font-weight:600;padding:10px 18px;border-radius:8px;border:1px solid var(--line);background:transparent;color:inherit;cursor:pointer}
 button.primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
-code{font-size:13px;word-break:break-all}
+code{font-size:13px;overflow-wrap:anywhere}
 )css"_s;
     const QString html = u"<!doctype html><html lang=\""_s + lang
                          + u"\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" "

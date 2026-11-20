@@ -29,6 +29,9 @@ namespace {
 constexpr qint64 kReadChunk = 64 * 1024;
 constexpr qint64 kDrainLimit = 64 * 1024; // the largest body read only to be dropped
 constexpr int kCloseGraceMs = 5000;
+constexpr int kLingerQuietMs = 500;             // a lingering close ends after this long without input
+constexpr int kLingerMaxMs = 5000;              // … or after this long at most
+constexpr qint64 kMaxDrainBytes = 1024 * 1024;  // … or once this much was dropped
 
 /// RFC 9110 tchar: the characters of a token (method, header name).
 bool isTchar(char c)
@@ -657,6 +660,21 @@ void Connection::timedOut()
 
 void Connection::readSome()
 {
+    if (m_closing) {
+        // Lingering: what the client still sends is dropped (a body never read, a request after
+        // the last one), for a while.
+        while (m_socket->bytesAvailable() > 0) {
+            const qint64 skipped = m_socket->skip(kReadChunk);
+            if (skipped <= 0)
+                break;
+            m_drained += skipped;
+        }
+        if (!m_shut && m_drained > kMaxDrainBytes)
+            shut();
+        else if (!m_shut && m_lingerQuiet)
+            m_lingerQuiet->start();
+        return;
+    }
     while (!m_inFlight && !m_closing && m_socket->bytesAvailable() > 0) {
         const QByteArray chunk = m_socket->read(kReadChunk);
         if (chunk.isEmpty())
@@ -807,6 +825,30 @@ void Connection::closeSoon()
         return;
     m_closing = true;
     m_timer->stop();
+    if (m_socket->state() == QAbstractSocket::UnconnectedState) {
+        finish();
+        return;
+    }
+    // A lingering close, as web servers do: closing a socket with unread input makes the kernel
+    // reset the connection, which can take the answer with it before the client read it. So the
+    // client's further bytes are read and dropped until it closes, sends nothing for a moment, or
+    // too much or for too long — then the socket closes.
+    m_lingerQuiet = new QTimer(this);
+    m_lingerQuiet->setSingleShot(true);
+    m_lingerQuiet->setInterval(kLingerQuietMs);
+    connect(m_lingerQuiet, &QTimer::timeout, this, &Connection::shut);
+    m_lingerQuiet->start();
+    QTimer::singleShot(kLingerMaxMs, this, &Connection::shut);
+    readSome();
+}
+
+void Connection::shut()
+{
+    if (m_shut)
+        return;
+    m_shut = true;
+    if (m_lingerQuiet)
+        m_lingerQuiet->stop();
     m_socket->disconnectFromHost();
     if (m_socket->state() == QAbstractSocket::UnconnectedState) {
         finish();
@@ -824,10 +866,10 @@ Server::Server(ServerLimits limits, QObject *parent) : QObject(parent), m_limits
 
 Server::~Server()
 {
-    // Connections are children; they must not call back into a half-destroyed server.
-    for (Connection *c : std::as_const(m_connections))
-        c->disconnect();
-    m_connections.clear();
+    // The open connections go first, while the lists they report to still exist (as QObject
+    // children they would be deleted after this class's members). A connection being destroyed
+    // never calls back: its signal connections are cut before its socket goes.
+    qDeleteAll(std::exchange(m_connections, {}));
 }
 
 #if QT_CONFIG(ssl)

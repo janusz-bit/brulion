@@ -37,6 +37,7 @@
 #include <QSettings>
 #include <QSignalSpy>
 #include <QStandardPaths>
+#include <QTcpServer>
 #include <QTemporaryDir>
 #include <QTest>
 #include <QTimer>
@@ -1915,6 +1916,8 @@ private Q_SLOTS:
         QCOMPARE(r.code, 5);
         r = run(dir, {u"mcp"_s, u"serve"_s, u"--listen"_s, u"nie-adres"_s});
         QCOMPARE(r.code, 2);
+        r = run(dir, {u"mcp"_s, u"serve"_s, u"--port"_s, u"70000"_s});
+        QCOMPARE(r.code, 2);
 
         QProcess server;
         const auto stopServer = qScopeGuard([&server] {
@@ -2058,7 +2061,14 @@ private Q_SLOTS:
         QVERIFY(!log.contains(password.toUtf8()));
         QVERIFY(!log.contains(bearer.mid(7)));
 
-        // --password-file with the hash: the state file's password is not needed.
+        // --password-file with the hash: the state file's password is not needed. On a port given
+        // (one free a moment ago).
+        quint16 freePort = 0;
+        {
+            QTcpServer probe;
+            QVERIFY(probe.listen(QHostAddress::LocalHost, 0));
+            freePort = probe.serverPort();
+        }
         const QString hashFile = m_tmp.filePath(u"mcp-hash.txt"_s);
         writeFile(hashFile, printedHash.toUtf8() + '\n');
         QProcess second;
@@ -2068,14 +2078,15 @@ private Q_SLOTS:
         });
         second.setProcessEnvironment(environment());
         second.start(QStringLiteral(BRULION_CLI),
-                     {u"--vault"_s, dir, u"mcp"_s, u"serve"_s, u"--port"_s, u"0"_s, u"--read-only"_s, u"--auth-file"_s,
-                      m_tmp.filePath(u"inny/stan.json"_s), u"--password-file"_s, hashFile});
+                     {u"--vault"_s, dir, u"mcp"_s, u"serve"_s, u"--port"_s, QString::number(freePort), u"--read-only"_s,
+                      u"--auth-file"_s, m_tmp.filePath(u"inny/stan.json"_s), u"--password-file"_s, hashFile});
         QVERIFY(second.waitForStarted(kTimeoutMs));
         QVERIFY(QTest::qWaitFor([&] { return second.canReadLine() || second.state() != QProcess::Running; },
                                 kTimeoutMs));
         const QJsonObject secondStarted = QJsonDocument::fromJson(second.readLine()).object();
         QVERIFY2(secondStarted.value(u"ok"_s).toBool(), second.readAllStandardError().constData());
         QVERIFY(secondStarted.value(u"result"_s).toObject().value(u"readOnly"_s).toBool());
+        QCOMPARE(secondStarted.value(u"result"_s).toObject().value(u"port"_s).toInt(), freePort);
         second.kill();
         QVERIFY(second.waitForFinished(kTimeoutMs));
     }
@@ -2191,6 +2202,17 @@ private Q_SLOTS:
         QVERIFY(reply.value(u"error"_s).toObject().value(u"message"_s).toString().contains(u"16777216"_s));
         reply = request(R"({"jsonrpc":"2.0","id":11,"method":"ping"})");
         QCOMPARE(reply.value(u"id"_s).toInt(), 11);
+        // The per-request protocol (2026-07-28) on the same connection: no handshake, the version
+        // in each request's _meta.
+        reply = request(
+                R"({"jsonrpc":"2.0","id":12,"method":"server/discover","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}}})");
+        QCOMPARE(reply.value(u"result"_s).toObject().value(u"resultType"_s).toString(), u"complete"_s);
+        QVERIFY(reply.value(u"result"_s).toObject().value(u"supportedVersions"_s).toArray().contains(u"2026-07-28"_s));
+        reply = request(
+                R"({"jsonrpc":"2.0","id":13,"method":"tools/list","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"1900-01-01","io.modelcontextprotocol/clientCapabilities":{}}}})");
+        QCOMPARE(reply.value(u"error"_s).toObject().value(u"code"_s).toInt(), -32022);
+        reply = request(R"({"jsonrpc":"2.0","id":14,"method":"initialize","params":{"protocolVersion":"2099-01-01"}})");
+        QCOMPARE(reply.value(u"result"_s).toObject().value(u"protocolVersion"_s).toString(), u"2025-11-25"_s);
         p.closeWriteChannel();
         QVERIFY(p.waitForFinished(kTimeoutMs));
         QCOMPARE(p.exitCode(), 0);

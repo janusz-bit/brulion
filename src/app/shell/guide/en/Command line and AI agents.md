@@ -51,6 +51,19 @@ An agent running on another computer (e.g. on a Raspberry Pi) works on a copy of
 
 **Reminders** added by an agent ring wherever the app runs: on a computer (in the tray) and on the phone, once the app sees the change — see [[Reminders and alarms|Reminders and alarms]].
 
+## Your notes in claude.ai and ChatGPT
+The AI apps themselves — claude.ai, the Claude app on your phone, ChatGPT — can use your notes too, through a **remote MCP server**: `brulion-cli mcp serve` on a computer of yours that holds the notes (e.g. a home server with the folder synced by Syncthing). You add it once in the app as a custom connector and sign in with a password of your own; on the sign-in page you decide whether the app may only read your notes or also write in them.
+
+1. Set a password: `brulion-cli mcp password` (only its hash is stored).
+2. Start the server: `brulion-cli mcp serve --public-url https://notes.example.com`. The apps reach it over the internet, so it needs an HTTPS address: a reverse proxy (Caddy, nginx) or, for a computer at home, a tunnel such as Tailscale Funnel or Cloudflare Tunnel. On NixOS it is one option: `services.brulion-mcp`.
+3. In **claude.ai**: Settings → Connectors → Add custom connector, the address `https://notes.example.com/mcp`, then Connect. A Brulion page opens: enter the password and choose **Allow**. The connector then works in the Claude app on your phone too. In **ChatGPT**: turn on developer mode and add an MCP app with the same address and OAuth.
+4. `brulion-cli mcp clients` lists the connected apps, `brulion-cli mcp revoke` disconnects them at once.
+
+> [!warning] Choose a long password
+> Whoever knows the password can connect an app to your notes. Allow writing only to apps you trust: every change lands in the version history, and deleting pages stays off unless you start the server with `--allow-destructive`.
+
+Details, and how to set up a proxy or a tunnel: “Remote MCP server” in `docs/CLI.md` in the repository; the NixOS service in `docs/NIXOS.md`.
+
 ## Extensions written by an agent
 An agent can also write [[Extensions|extensions]] — commands, views and reactions in Luau — and try them before you see them:
 

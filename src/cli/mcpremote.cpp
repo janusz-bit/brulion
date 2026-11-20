@@ -916,8 +916,13 @@ int serveRemoteMcp(Context &context, const Command &command, const QJsonObject &
     if (options.address.isNull())
         return fail(ExitUsage, u"bad_listen"_s, QCoreApplication::translate("brulion::cli", "--listen takes an IP address"),
                     {{u"listen"_s, listen}});
-    const int port = args.contains(u"port"_s) ? args.value(u"port"_s).toInt() : 8780;
-    if (port < 0 || port > 65535)
+    // From the command line a number comes as text, from JSON as a number.
+    const QJsonValue portValue = args.value(u"port"_s);
+    bool portOk = true;
+    const qint64 port = portValue.isUndefined() ? 8780
+                        : portValue.isDouble()  ? portValue.toInteger(-1)
+                                                : portValue.toString().toLongLong(&portOk);
+    if (!portOk || port < 0 || port > 65535)
         return fail(ExitUsage, u"bad_port"_s, QCoreApplication::translate("brulion::cli", "--port takes 0 … 65535"));
     options.port = quint16(port);
     options.publicUrl = args.value(u"publicUrl"_s).toString();

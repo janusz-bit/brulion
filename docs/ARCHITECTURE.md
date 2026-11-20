@@ -15,8 +15,8 @@ One C++/QML code base, four targets, all built against **Qt 6.12.0** (CMake acce
 | **Browser** | Qt for WebAssembly (single-threaded) + emsdk, offline PWA shell (`wasm/`) for any web server, and the same in one HTML file opened from disk | Emscripten IDBFS (IndexedDB) + import/export, Nextcloud sync | web Notification API (service worker where needed) while the page is open |
 
 On the desktop (Linux, Windows) a command line for scripts and AI agents comes with it:
-`brulion-cli` (also `brulion cli …`), with an MCP server (`brulion-cli mcp`) — see "Command line" below and
-docs/CLI.md.
+`brulion-cli` (also `brulion cli …`), with an MCP server (`brulion-cli mcp`; over HTTPS with sign-in for
+claude.ai and ChatGPT: `brulion-cli mcp serve`) — see "Command line" below and docs/CLI.md.
 
 ## Layers
 
@@ -340,7 +340,10 @@ QML smoke tests and screenshot scripts that run the real app headless).
 * **`brulion-cli`** (docs/CLI.md): headless commands over a notebook folder for scripts and AI
   agents — pages, folders, journals, capture, tasks, reminders, query, search, tags, backlinks,
   calendar, dates, calculations, block links, history —, JSON envelopes and stable exit codes,
-  `brulion-cli mcp` (MCP over stdio, tools only, the index kept warm). One registry
+  `brulion-cli mcp` (MCP over stdio, tools only, the index kept warm) and `brulion-cli mcp serve`
+  (the same tools over Streamable HTTP for the providers' apps: a small HTTP/1.1 server of its own
+  over `QTcpServer`/`QSslServer`, an OAuth 2.1 authorization server with sign-in and consent
+  pages, a state file of hashed tokens — docs/CLI.md "Remote MCP server"). One registry
   (`registry.cpp`) gives the argv parser, the help, the JSON Schema and the MCP tools. Built on
   `core/notebook` (never on the app's shell): it never creates a `ReminderScheduler`,
   `WorkspaceSync` or `AppSettings`, reads the app's settings file only for the current notebook

@@ -254,6 +254,7 @@ private:
     void process();
     void write(const Response &response);
     void closeSoon();
+    void shut();
     void armTimer();
     void timedOut();
     void finish();
@@ -278,6 +279,9 @@ private:
     QByteArray m_logMethod;
     QByteArray m_logPath;
     bool m_finished = false;
+    bool m_shut = false;
+    qint64 m_drained = 0;
+    QTimer *m_lingerQuiet = nullptr;
 };
 
 /// The origin of a URL ("https://example.com", "http://127.0.0.1:8780"): scheme and host lower
