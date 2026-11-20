@@ -1,6 +1,7 @@
 #include "shellselftest.h"
 
 #include "appcontroller.h"
+#include "applockcontroller.h"
 #include "appsettings.h"
 #include "commandmodel.h"
 #include "demovault.h"
@@ -13,13 +14,17 @@
 #include "workspace.h"
 #include "workspacesync.h"
 
+#include "crypto/secure.h"
 #include "drawing/backdrop.h"
 #include "drawing/drawing.h"
 #include "drawing/svgwrite.h"
+#include "encryption/fragments.h"
+#include "encryption/meld.h"
 #include "index/vaultindex.h"
 #include "log/categories.h"
 #include "log/logger.h"
 #include "log/redact.h"
+#include "markdown/encrypted.h"
 #include "notebook/share.h"
 #include "openexternal.h"
 #include "pdfpages.h"
@@ -6475,6 +6480,150 @@ void checkQrCode(QQuickWindow *window, AppController *app, const Check &check)
     settle(300);
 }
 
+/// Encrypted notes (docs/UI.md "Encrypted notes"): a page with a fragment as Meld Encrypt writes
+/// it — its lock chip tapped, a wrong password refused, the right one shows the text, edited and
+/// saved (the file holds a new fragment that opens with the password, and not the plaintext) —;
+/// an encrypted page unlocked with the password remembered from the fragment, typed into and saved
+/// encrypted, then locked again by "Lock encrypted notes" (its lock panel back).
+void checkEncryption(QQuickWindow *window, AppController *app, const Check &check)
+{
+    const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
+    Workspace *ws = app->workspace();
+    WorkspaceEncryption *enc = ws->encryption();
+    const QString passwordText = u"samotest-hasło"_s;
+    const crypto::SecureBytes password = crypto::SecureBytes::fromUtf8(passwordText);
+    const QString fragment = encryption::encryptFragment(u"tajny PIN 4711"_s, password, u"podpowiedź samotestu"_s);
+    const QString path = ws->newPagePath(u"Samotest szyfrowania"_s);
+    enc->lockAll();
+    check(ws->write(path, u"- Konto: "_s + fragment + u"\n"_s), "a page with an encrypted fragment is written");
+    app->openPage(path);
+    QQuickItem *editor = waitLoadedEditor(window->contentItem(), u"pageEditor"_s, path);
+    QObject *controller = controllerOf(editor);
+    check(controller && waitFor([&] { return renderedRow(controller, 0).contains(u"href=\"encrypted:"_s); }, 10000),
+          "the fragment is a locked chip");
+    QQuickItem *text = nullptr;
+    // (A chip's spaces are no-break ones: one word of the hint is looked for.)
+    check(waitFor([&] { return (text = renderedTextContaining(window->contentItem(), u"samotestu"_s)); }, 10000),
+          "the chip shows the hint");
+    settle(300);
+    if (text)
+        tapOrClick(window, linkPoint(text, u"encrypted:"_s), touch);
+    const auto openDialog = [window]() -> QObject * {
+        for (QObject *dialog : window->findChildren<QObject *>(u"encryptedTextDialog"_s)) {
+            if (dialog->property("opened").toBool())
+                return dialog;
+        }
+        return nullptr;
+    };
+    QObject *dialog = nullptr;
+    check(waitFor([&] { return (dialog = openDialog()) != nullptr; }, 10000), "a tap on the chip opens its dialog");
+    if (!dialog)
+        return;
+    const auto mode = [&] { return dialog->property("mode").toString(); };
+    check(waitFor([&] { return mode() == u"unlock" && !dialog->property("working").toBool(); }, 30000),
+          "nothing is remembered: it asks for the password");
+    QQuickItem *field = shownNamed(window->contentItem(), u"encryptedPasswordField"_s);
+    check(field != nullptr, "the dialog has a password field");
+    if (!field)
+        return;
+    field->setProperty("text", u"złe hasło"_s);
+    uidriver::callQml(dialog, "tryAccept", {});
+    check(waitFor([&] { return !dialog->property("error").toString().isEmpty(); }, 30000) && mode() == u"unlock",
+          "a wrong password is refused with a message");
+    field->setProperty("text", passwordText);
+    uidriver::callQml(dialog, "tryAccept", {});
+    check(waitFor([&] { return mode() == u"edit"; }, 30000), "the right password opens it");
+    QQuickItem *area = shownNamed(window->contentItem(), u"encryptedTextField"_s);
+    check(area && area->property("text").toString() == u"tajny PIN 4711"_s, "the dialog shows the decrypted text");
+    if (!area)
+        return;
+    area->setProperty("text", u"tajny PIN 9182"_s);
+    uidriver::callQml(dialog, "tryAccept", {});
+    check(waitFor([&] { return !dialog->property("opened").toBool(); }, 30000), "Save closes the dialog");
+    QString saved;
+    check(waitFor([&] {
+              saved = ws->readFile(path);
+              return !saved.contains(fragment) && saved.contains(u"%%\U0001F510γ \U0001F4A1podpowiedź samotestu"_s);
+          },
+                  10000),
+          "the page holds a new fragment with its hint");
+    const auto span = markdown::findEncryptedFragments(saved).value(0);
+    check(!saved.contains(u"9182"_s) && encryption::decryptFragment(saved, span, password).text == u"tajny PIN 9182"_s,
+          "it opens with the password, and the text is nowhere in the file");
+
+    // A whole encrypted page: the password typed for the fragment is remembered and opens it.
+    const QString pagePath = paths::join(paths::dirname(path), u"Samotest sejfu.mdenc"_s);
+    check(ws->writeFile(pagePath, encryption::writeNoteFile(u"- sejf: 3141\n"_s, password, u"podpowiedź"_s)),
+          "an encrypted page is written");
+    app->openPage(pagePath);
+    editor = waitLoadedEditor(window->contentItem(), u"pageEditor"_s, pagePath);
+    controller = controllerOf(editor);
+    check(controller && waitFor([&] { return renderedRow(controller, 0).contains(u"3141"_s); }, 30000),
+          "the remembered password unlocks the page: its text is in the editor");
+    if (!controller)
+        return;
+    QMetaObject::invokeMethod(controller, "setEditText", Q_ARG(int, 0), Q_ARG(QString, u"sejf: 2718"_s), Q_ARG(int, 10));
+    QMetaObject::invokeMethod(controller, "save");
+    QString file;
+    check(waitFor([&] {
+              file = ws->readFile(pagePath);
+              return encryption::decryptNote(file, password).text.contains(u"2718"_s);
+          },
+                  10000),
+          "what is typed is saved encrypted");
+    check(!file.contains(u"2718"_s) && encryption::readNoteFile(file).has_value(), "the file holds Meld Encrypt's JSON only");
+    enc->lockAll();
+    check(waitFor([&] { return shownNamed(window->contentItem(), u"encryptedPage"_s) != nullptr; }, 10000),
+          "“Lock encrypted notes” locks the open page again");
+    ws->deletePage(path);
+    ws->deletePage(pagePath);
+    app->goHome();
+    settle(300);
+}
+
+/// The app lock (docs/UI.md "App lock"): a PIN set, the app left and back (the lock screen over
+/// everything, the stage hidden), a wrong PIN refused, the right one opens it; the lock off again.
+void checkAppLock(QQuickWindow *window, AppController *app, const Check &check)
+{
+    AppLockController *lock = app->appLock();
+    QVariantMap result = lock->setPin(QString(), u"2580"_s);
+    check(result.value(u"ok"_s).toBool() && lock->enabled() && !lock->locked(), "a PIN turns the app lock on");
+    lock->setBackgroundMinutes(0);
+    lock->applicationStateChanged(Qt::ApplicationSuspended);
+    lock->applicationStateChanged(Qt::ApplicationActive);
+    check(lock->locked(), "back from the background, the app is locked");
+    const auto lockPopup = [window]() -> QObject * {
+        for (QObject *popup : window->findChildren<QObject *>(u"lockScreen"_s)) {
+            if (popup->property("opened").toBool())
+                return popup;
+        }
+        return nullptr;
+    };
+    QObject *popup = nullptr;
+    check(waitFor([&] { return (popup = lockPopup()) != nullptr; }, 10000), "the lock screen is up");
+    check(shownNamed(window->contentItem(), u"shellMainPane"_s) == nullptr
+                  && shownNamed(window->contentItem(), u"shellTopBar"_s) == nullptr,
+          "nothing of the notebook is shown under it");
+    int answers = 0;
+    bool unlocked = false;
+    const QMetaObject::Connection answered =
+            QObject::connect(lock, &AppLockController::unlockFinished, lock, [&](bool ok, const QString &) {
+                ++answers;
+                unlocked = ok;
+            });
+    lock->unlock(u"1111"_s);
+    check(waitFor([&] { return answers == 1; }, 30000) && !unlocked && lock->locked(), "a wrong PIN is refused");
+    if (popup)
+        check(waitFor([&] { return !popup->property("error").toString().isEmpty(); }), "the screen says why");
+    lock->unlock(u"2580"_s);
+    check(waitFor([&] { return answers == 2; }, 30000) && unlocked && !lock->locked(), "the right PIN opens it");
+    QObject::disconnect(answered);
+    check(waitFor([&] { return !popup || !popup->property("opened").toBool(); }, 10000), "the lock screen goes");
+    result = lock->turnOff(u"2580"_s);
+    check(result.value(u"ok"_s).toBool() && !lock->enabled(), "the lock is turned off with its PIN");
+    settle(300);
+}
+
 /// The AI assistant's ✨ on the top bar: none while the assistant is off; switched on, its menu on
 /// a page — "Summarise this page" enabled —, "New conversation" opening the AI chat on a new
 /// conversation about the page (its chip, the field, the suggestions; nothing sent: no model is
@@ -10166,6 +10315,12 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
     closeMenus(window);
     // 3h-qr. A note as QR codes: one code, the formats, a long note walked code by code.
     checkQrCode(window, app, check);
+    closeMenus(window);
+    // 3h-enc. Encrypted notes: a fragment unlocked, edited and saved; an encrypted page unlocked,
+    // typed into and locked again. The app lock: the lock screen after the background, the PIN.
+    checkEncryption(window, app, check);
+    closeMenus(window);
+    checkAppLock(window, app, check);
     closeMenus(window);
     // 3h-db. Database views: a table's cell edited, a board's card dragged to another column.
     checkDatabaseViews(window, app, check);

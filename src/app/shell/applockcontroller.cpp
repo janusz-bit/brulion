@@ -74,7 +74,7 @@ AppLockController::AppLockController(QObject *parent) : QObject(parent)
             scheduleTick();
     });
     if (auto *app = qobject_cast<QGuiApplication *>(QCoreApplication::instance()))
-        connect(app, &QGuiApplication::applicationStateChanged, this, &AppLockController::onApplicationState);
+        connect(app, &QGuiApplication::applicationStateChanged, this, &AppLockController::applicationStateChanged);
 #ifdef Q_OS_ANDROID
     connect(platform::AndroidBridge::instance(), &platform::AndroidBridge::deviceAuthFinished, this,
             [this](bool ok, const QString &error) {
@@ -196,7 +196,7 @@ void AppLockController::scheduleTick()
     m_tick.start(int(std::clamp<qint64>(deadline - monotonicNow(), 1000, 60 * 1000)));
 }
 
-void AppLockController::onApplicationState(Qt::ApplicationState state)
+void AppLockController::applicationStateChanged(Qt::ApplicationState state)
 {
     const qint64 now = monotonicNow();
     if (state == Qt::ApplicationActive) {

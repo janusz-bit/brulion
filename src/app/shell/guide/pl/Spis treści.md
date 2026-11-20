@@ -39,6 +39,7 @@ Brulion aktualizuje dokumentację razem z aplikacją: dochodzą nowe strony, a t
 - [[Synchronizacja|Synchronizacja]] — Syncthing, Nextcloud, notatniki z GitHuba, konflikty, historia wersji.
 - [[Import i eksport|Import i eksport]] — przenoszenie notatek z i do innych programów.
 - [[Kopie zapasowe|Kopie zapasowe]] — kopie notatnika według harmonogramu i ich przywracanie.
+- [[Prywatność i szyfrowanie|Prywatność i szyfrowanie]] — strony i tekst pod hasłem (zgodne z wtyczką Meld Encrypt do Obsidiana), blokada aplikacji PIN-em albo blokadą telefonu.
 - [[Format plików|Format plików]] — jak notatki wyglądają na dysku.
 - [[Wiersz poleceń i agenci AI|Wiersz poleceń i agenci AI]] — `brulion-cli`, skrypty i agenci AI (MCP).
 - [[Automatyzacja|Automatyzacja]] — linki brulion://, Tasker i inne aplikacje do automatyzacji, kafelki Szybkich ustawień i skróty aplikacji na telefonie.

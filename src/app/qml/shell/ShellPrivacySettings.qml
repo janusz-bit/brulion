@@ -304,8 +304,14 @@ ColumnLayout {
         acceptText: section.pinPurpose === "off" ? qsTr("Turn off") : qsTr("OK")
         acceptEnabled: !section.pinRejected && (!AppLock.hasPin || currentPin.typedText !== "")
                        && (section.pinPurpose !== "set" || (AppLock.validPin(newPin.text) && newPin.text === repeatPin.text))
-        // Kept open with the reason when the PIN was wrong (acceptEnabled turns false).
-        onAcceptRequested: section.pinRejected = !section.applyPin()
+        // Closed when it worked; kept open with the reason when the PIN was wrong (acceptEnabled
+        // turns false: the dialog's own accept() does not follow).
+        onAcceptRequested: {
+            if (section.applyPin())
+                pinDialog.close()
+            else
+                section.pinRejected = true
+        }
         onClosed: section.pinRejected = false
 
         BTextField {

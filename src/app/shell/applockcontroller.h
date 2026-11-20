@@ -113,6 +113,9 @@ public:
     Q_INVOKABLE void unlockWithDevice();
     /// Lock now (the command, the tray).
     Q_INVOKABLE void lockNow();
+    /// The app's state changed (QGuiApplication::applicationStateChanged; the self-test calls it):
+    /// in front again after the background may lock it.
+    void applicationStateChanged(Qt::ApplicationState state);
 
 Q_SIGNALS:
     void changed();
@@ -132,7 +135,6 @@ private:
     void applyWindowFlags();
     void storeAttempts();
     void scheduleTick();
-    void onApplicationState(Qt::ApplicationState state);
     qint64 monotonicNow() const;
     qint64 wallNow() const;
     QString stored(const QString &key, const QString &fallback = {}) const;
