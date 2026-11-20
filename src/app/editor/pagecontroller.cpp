@@ -316,6 +316,7 @@ void PageController::setHost(EditorHost *host)
         connect(m_host, &EditorHost::indexChanged, this, &PageController::onIndexChanged);
         connect(m_host, &EditorHost::webPictureChanged, this, &PageController::onWebPictureChanged);
         connect(m_host, &EditorHost::pdfThumbnailChanged, m_model, &BlockListModel::pdfThumbnailChanged);
+        connect(m_host, &EditorHost::macrosChanged, this, &PageController::onMacrosChanged);
     }
     Q_EMIT hostChanged();
     if (m_host && !m_path.isEmpty())
@@ -533,7 +534,17 @@ void PageController::setActive(bool active)
     m_active = active;
     if (m_active && m_indexStale)
         onIndexChanged();
+    if (m_active && m_macrosStale)
+        onMacrosChanged();
     Q_EMIT activeChanged();
+}
+
+void PageController::onMacrosChanged()
+{
+    // As the index: a hidden editor follows what its macros show once it is shown again.
+    m_macrosStale = !m_active;
+    if (!m_macrosStale)
+        m_model->followMacros();
 }
 
 void PageController::onIndexChanged()
@@ -2325,6 +2336,22 @@ int PageController::insertMarkdown(int row, const QString &markdown)
     return focusRow;
 }
 
+std::function<std::optional<QString>(const QString &, const QString &, const QString &)>
+PageController::templateVariables(const QString &templatePath, QDate date) const
+{
+    // An extension's variables (docs/TEMPLATES.md "Variables of extensions"): asked of the host
+    // for this page and the day the template is filled for.
+    const QPointer<EditorHost> host = m_host;
+    const QVariantMap context{{u"page"_s, title()},
+                              {u"path"_s, m_path},
+                              {u"date"_s, date.toString(Qt::ISODate)},
+                              {u"template"_s, templatePath}};
+    return [host, context](const QString &extension, const QString &name,
+                           const QString &arguments) -> std::optional<QString> {
+        return host ? host->templateVariable(extension, name, arguments, context) : std::nullopt;
+    };
+}
+
 int PageController::insertTemplate(int row, const QString &templatePath)
 {
     if (refusesEdit() || !m_host)
@@ -2337,6 +2364,7 @@ int PageController::insertTemplate(int row, const QString &templatePath)
     vars.now = currentDateTime();
     vars.title = title();
     vars.locale = m_english ? dates::UiLocale::English : dates::UiLocale::Polish;
+    vars.variable = templateVariables(templatePath, vars.now.date());
     return insertMarkdown(row, markdown::applyTemplate(tpl, vars).text);
 }
 
@@ -2364,6 +2392,7 @@ int PageController::startNewPage(const QString &templatePath)
     }
     vars.title = title();
     vars.locale = m_english ? dates::UiLocale::English : dates::UiLocale::Polish;
+    vars.variable = templateVariables(paths::normalize(templatePath), vars.now.date());
     const QString filled = markdown::applyTemplate(tpl, vars).text;
     if (filled.trimmed().isEmpty())
         return appendEmptyBlock();
@@ -3473,6 +3502,22 @@ QVariantMap PageController::applyCompletion(int row, const QVariantMap &triggerM
             typedClosing = 2;
         else
             replacement += u"))"_s;
+    } else if (t.mode == u"macros") {
+        // After the typed `{{`: `ext:extension/name example`, closed by `}}` unless one is there;
+        // the caret before the closing braces, on the example (its arguments) to type over.
+        replacement = insert;
+        if (t.closing != u"}}")
+            replacement += u"}}"_s;
+        const int cursorAt = from + int(insert.size());
+        const QString updated = edit.left(from) + replacement + edit.mid(to);
+        if (editingRow() == row)
+            m_cursor = cursorAt;
+        applyOp([&](BlockDocument &d) { return d.setBody(row, bodyWithEditText(d.at(row), updated)); });
+        endCommand(Focus{row, cursorAt});
+        if (editingRow() == row)
+            emitEditTextReset();
+        out[u"cursor"_s] = cursorAt;
+        return out;
     } else if (t.mode == u"tags" || t.mode == u"date") {
         // After the typed '#': the name, in brackets when it is no simple tag (#[[Jan Kowalski]],
         // #[[C++]]: markdown::tagSyntax). A space follows a tag or a date (unless one is there).
@@ -3936,6 +3981,28 @@ QVariantMap PageController::activateLink(int row, const QString &url, bool newPa
     }
     if (scheme == u"date" || scheme == u"recur" || scheme == u"prio")
         return out; // a click edits the text; their menu changes them (dateChip())
+    if (scheme == u"macro") {
+        // A macro's placeholder (not approved, off, unknown, failed: docs/SYNTAX.md §13 "Macros"):
+        // the macro it stands for, for the editor to offer what can be done about it.
+        static const QRegularExpression range(u"^(\\d+)-(\\d+)$"_s);
+        const auto m = range.match(rest);
+        if (!m.hasMatch() || !validRow(row))
+            return out;
+        const QString body = m_model->data(m_model->index(row), BlockListModel::BodyRole).toString();
+        const int offset = m_model->renderOffsetAt(row); // the range is the rendered text's
+        const qsizetype from = m.captured(1).toLongLong() + offset;
+        const qsizetype to = m.captured(2).toLongLong() + offset;
+        if (from < 0 || to > body.size() || from >= to)
+            return out;
+        const QList<markdown::MacroSpan> found = markdown::findMacros(QStringView(body).sliced(from, to - from));
+        if (found.size() != 1)
+            return out;
+        out[u"action"_s] = u"macro"_s;
+        out[u"extension"_s] = found[0].extension;
+        out[u"name"_s] = found[0].name;
+        out[u"arguments"_s] = found[0].arguments;
+        return out;
+    }
     if (scheme == u"day") {
         // A link to a day of the journal: the page its target names.
         const QString page = dateChip(row, url).value(u"url"_s).toString();

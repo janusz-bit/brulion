@@ -1569,12 +1569,16 @@ FocusScope {
             revealRow(activated.map.row)
         } else if (action === "notFound") {
             noticeNotFound(activated.map)
+        } else if (action === "macro") {
+            // A macro's placeholder: what can be done about its extension (ShellMacroDialog).
+            Workspace.extensions.showMacro(activated.text("extension"), activated.text("name"), activated.text("arguments"))
         }
     }
     /// PageController.activateLink's result.
     MapHolder {
         id: activated
         function action(): string { return activated.map.action }
+        function text(key: string): string { return AppController.routeText(activated.map, key) }
     }
 
     /// A new drawing at the caret `cursor` of `row` (-1: a block of its own after it), opened in the

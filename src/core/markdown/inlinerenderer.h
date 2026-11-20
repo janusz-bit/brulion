@@ -26,10 +26,13 @@
 //                                        passed to render() / the body passed to renderBlock()
 //   date:<from>-<to>                     a 📅 ⏳ 🛫 ➕ ✅ ❌ chip, the same range (only with
 //                                        RenderContext::dateLinks)
+//   macro:<from>-<to>                    a macro's placeholder (RenderContext::macro: not approved,
+//                                        off, unknown, failed), the macro's range in the body
 #pragma once
 
 #include "dates/names.h"
 #include "markdown/inline.h"
+#include "markdown/macros.h"
 #include "markdown/pagelook.h"
 #include "markdown/renderedtext.h"
 #include "types.h"
@@ -97,6 +100,13 @@ struct RenderContext {
     std::function<std::optional<TaskDependencyView>(const QString &id)> taskDependency;
     /// Inline calculation `= expr` -> result text; an empty result shows the code as written.
     std::function<QString(const QString &expr)> inlineCalc;
+    /// A macro of an extension, `{{ext:silownia/rekord Przysiad}}` (markdown/macros.h, docs/SYNTAX.md
+    /// §13 "Macros") -> what it shows: its pieces (text in a tone, bold, a `page:` link, code —
+    /// always escaped), "—" when it gave nothing; a placeholder while it is computed ("…"), and a
+    /// `macro:<from>-<to>` chip naming its range when its extension waits for approval on this
+    /// device, is off, is unknown or failed (the editor's menu on it), or the page has too many.
+    /// Unset (exports, the clipboard's HTML, brulion-cli): the macro as written.
+    std::function<MacroView(const MacroSpan &macro)> macro;
     /// Text shown for a wiki link or page embed without an alias, from its target as written
     /// (`[[2026-10-13]]` -> "wt 13 paź", see journalLinkTitle()); nullopt / unset: the target as
     /// written. Display only — the link and its `page:` URL keep the target.

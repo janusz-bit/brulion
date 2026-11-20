@@ -170,6 +170,8 @@ void SuggestionModel::refresh()
         items = dateItems();
     else if (m_mode == u"templates")
         items = templateItems();
+    else if (m_mode == u"macros")
+        items = macroItems();
     // "Create page" leads the list on top of `limit` matches; Enter takes the first match. The
     // slash commands are never capped: a fixed list of light rows (the popup builds only those in
     // view), each reachable by scrolling, a bare "/" included.
@@ -256,6 +258,25 @@ QVariantList SuggestionModel::blockItems() const
         it[u"path"_s] = path;
         it[u"line"_s] = b.value(u"line"_s, -1).toInt();
         it[u"blockId"_s] = b.value(u"blockId"_s).toString();
+        out.append(it);
+    }
+    return out;
+}
+
+QVariantList SuggestionModel::macroItems() const
+{
+    // The macros the extensions offer (docs/SYNTAX.md §13 "Macros"): `{{ext:silownia/rekord …}}`.
+    QVariantList out;
+    if (!m_host)
+        return out;
+    QString typed = m_filter.trimmed();
+    if (typed.startsWith(u"ext:", Qt::CaseInsensitive))
+        typed = typed.mid(4);
+    for (const QVariant &v : m_host->suggestMacros(typed, m_limit)) {
+        const QVariantMap m = v.toMap();
+        QVariantMap it = item(u"macro"_s, m.value(u"title"_s).toString(), m.value(u"subtitle"_s).toString(),
+                              m.value(u"icon"_s, u"puzzle"_s).toString(), m.value(u"insertText"_s).toString());
+        it[u"hint"_s] = m.value(u"hint"_s).toString();
         out.append(it);
     }
     return out;

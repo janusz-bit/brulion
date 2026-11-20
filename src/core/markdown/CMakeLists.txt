@@ -18,6 +18,7 @@ brulion_add_core_module(markdown
         linkformat.h linkformat.cpp
         lines_p.h lines.cpp
         logbook.h logbook.cpp
+        macros.h macros.cpp
         math.h math.cpp
         notemode.h notemode.cpp
         notetags.cpp

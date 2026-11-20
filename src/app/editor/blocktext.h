@@ -267,12 +267,12 @@ QString insertTokenAt(const QString &text, int cursor, const QString &token, int
 
 /// What is being completed at a cursor position of a block's edit text.
 struct CompletionTrigger {
-    QString mode;    ///< "" (nothing) | "pages" | "blocks" | "tags" | "slash" | "date"
+    QString mode;    ///< "" (nothing) | "pages" | "blocks" | "tags" | "slash" | "date" | "macros"
     QString filter;  ///< text typed so far (after `[[`, `((`, `#`, `/`, or the date phrase)
     int from = -1;   ///< start of the text a completion replaces
     int to = -1;     ///< end of the text a completion replaces (>= the cursor)
-    QString token;   ///< "[[", "![[", "((", "!((", "#", "/", or for dates "📅", "⏳", "🛫", "⏰", "⏰!", "@"
-    QString closing; ///< pages/blocks: "]]" / "))" / "|" already present after the target
+    QString token;   ///< "[[", "![[", "((", "!((", "#", "/", "{{", or for dates "📅", "⏳", "🛫", "⏰", "⏰!", "@"
+    QString closing; ///< pages/blocks/macros: "]]" / "))" / "|" / "}}" already present after the target
 
     bool active() const { return !mode.isEmpty(); }
     QVariantMap toMap() const;
@@ -285,6 +285,7 @@ struct CompletionTrigger {
 ///   blocks `((query` / `!((query` (not right after a word character)
 ///   tags   `#query` after start/whitespace/`(` (a bare `#` at the very start is a heading)
 ///   slash  `/query` after start/whitespace
+///   macros `{{query` / `{{ext:query` (a macro of an extension; not after a backslash)
 ///   date   `📅 `, `⏳ `, `🛫 `, `⏰ `, `⏰! ` + phrase (not a canonical date yet), or `@phrase`
 ///          (not the `@` of a written `(@2026-10-15 09:00)` reminder)
 CompletionTrigger completionTriggerAt(QStringView text, int cursor);

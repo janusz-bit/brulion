@@ -118,6 +118,10 @@
 //   math.h         LaTeX formulas (SYNTAX §11): findMathSpans(text) -> MathSpan{from, to,
 //                  contentFrom, contentTo, display} (`$…$`, `$$…$$`), renderMath(latex, display) ->
 //                  escaped Qt rich text (Unicode symbols, <sup> / <sub>, fractions, radicals)
+//   macros.h       macros of extensions in the text (SYNTAX §13 "Macros"): findMacros(text) ->
+//                  MacroSpan{from, to, extension, name, arguments} (`{{ext:silownia/rekord
+//                  Przysiad}}`), macroArguments (split at commas), MacroView (what one shows:
+//                  pieces of text, links, code; placeholders) for RenderContext::macro
 //   pagelook.h    a page's icon and cover (`icon` / `banner_icon`, `banner`, `banner_y`):
 //                  parsePageIcon (emoji, Iconize's `LiBookOpen`), parsePageCover (`![[file]]`,
 //                  a path, an http(s) URL), pageLook(properties), the values Brulion writes
@@ -147,6 +151,7 @@
 #include "markdown/journal.h"
 #include "markdown/linkformat.h"
 #include "markdown/logbook.h"
+#include "markdown/macros.h"
 #include "markdown/math.h"
 #include "markdown/notemode.h"
 #include "markdown/pagelook.h"

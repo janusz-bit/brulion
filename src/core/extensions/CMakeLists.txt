@@ -2,7 +2,8 @@
 # sandboxed VM, limits, questions, views and actions), what it asks of the app (host.h), the
 # notebook-backed host (notebookhost.h: the index's blocks, content-preserving writes), the
 # built-in extensions (builtin.h, builtin/*.luau as resources: the gym, silownia.luau) and the
-# extensions written in the notebook (pageextension.h: pages tagged #rozszerzenie).
+# extensions written in the notebook (pageextension.h: pages tagged #rozszerzenie); macros in the
+# text and their cache (macros.h: what a macro's value shows, computed again when what it read changes).
 if(NOT TARGET brulion_luau)
     add_subdirectory(${PROJECT_SOURCE_DIR}/3rdparty/luau ${CMAKE_BINARY_DIR}/3rdparty/luau)
 endif()
@@ -11,6 +12,7 @@ brulion_add_core_module(extensions
     SOURCES
         engine.h host.h builtin.h notebookhost.h blockedit.h pageextension.h sandbox.h
         engine.cpp builtin.cpp notebookhost.cpp blockedit.cpp pageextension.cpp sandbox.cpp
+        macros.h macros.cpp
     DEPS util text dates markdown vault index notebook)
 target_link_libraries(brulion_core_extensions PRIVATE brulion_luau)
 file(GLOB _brulion_builtin_extensions CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/builtin/*)

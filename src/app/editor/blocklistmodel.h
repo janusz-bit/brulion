@@ -283,6 +283,9 @@ public:
     /// added, removed or renamed), a change log that does not reach back, another index or
     /// another vault configuration: invalidateRendering().
     void followIndex();
+    /// What macros show changed (EditorHost::macrosChanged): the rows whose rendering showed a
+    /// macro ask the host again and render again when it shows something else.
+    void followMacros();
 
     /// The typing fast path of apply() (on by default): an edit that only changes the text of
     /// blocks and keeps their kind, depth, children, frontmatter and lines refreshes those rows
@@ -307,12 +310,12 @@ private:
     /// renders the row again only when the answer differs. (How links resolve — resolvePage,
     /// resolveLinkPart, journal titles — changes only with names: everything renders again then.)
     struct RenderRead {
-        enum Kind : quint8 { Icon, LinkedBlock, BlockText, TaskDependency };
+        enum Kind : quint8 { Icon, LinkedBlock, BlockText, TaskDependency, Macro };
         Kind kind = Icon;
         bool own = true;  ///< read through renderContext() (this page), else renderContextFor(fromPath)
         QString fromPath; ///< the note the text is written in
-        QString target;   ///< the link target as written; BlockText, TaskDependency: the id
-        QString id;       ///< LinkedBlock: the block id
+        QString target;   ///< the link target as written; BlockText, TaskDependency: the id; Macro: ext/name
+        QString id;       ///< LinkedBlock: the block id; Macro: its arguments
         QString note;     ///< Icon: the note the link leads to (asked again only when it changed)
         QString value;    ///< what was read, comparable (readValue())
     };
@@ -444,7 +447,9 @@ private:
     struct ReadContexts;
     /// Some read of `reads` gives something else now; `notes`: the notes changed (an icon is asked
     /// again only when its note changed).
-    bool readsChanged(const RenderReads &reads, const QSet<QString> &notes, ReadContexts &contexts) const;
+    /// `macrosOnly`: only the macros are asked again (followMacros()).
+    bool readsChanged(const RenderReads &reads, const QSet<QString> &notes, ReadContexts &contexts,
+                      bool macrosOnly = false) const;
     void ensureEmbeds(int row) const;
     /// The embeds role entry of a picture from the internet (EditorHost::webPicture).
     QVariantMap webEmbed(const Embed &em) const;

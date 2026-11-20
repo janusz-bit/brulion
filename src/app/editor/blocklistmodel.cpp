@@ -136,6 +136,15 @@ QString textValue(const std::optional<QString> &text)
     return text ? u'1' + *text : u"0"_s;
 }
 
+/// A macro's view as a comparable value: its state, then each piece's kind, tone, weight and text.
+QString macroValue(const markdown::MacroView &view)
+{
+    QString out = QString::number(int(view.state)) + u'\x1f' + view.message;
+    for (const markdown::MacroPiece &p : view.pieces)
+        out += u'\x1e' + QString::number(int(p.kind)) + p.tone + (p.bold ? u'b' : u'-') + p.text + u'\x1f' + p.page;
+    return out;
+}
+
 QString dependencyValue(const std::optional<markdown::TaskDependencyView> &dep)
 {
     return dep ? (dep->open ? u"o"_s : u"c"_s) + dep->text : u"0"_s;
@@ -256,7 +265,7 @@ bool calcInert(QStringView s)
 /// `by`. The renderer escapes the note's text, so every `href="` in it is one of its own links.
 QString shiftRangeLinks(const QString &html, qsizetype by)
 {
-    static const QRegularExpression link(u"href=\"(date|reminder|recur|prio|day):(\\d+)-(\\d+)\""_s);
+    static const QRegularExpression link(u"href=\"(date|reminder|recur|prio|day|macro):(\\d+)-(\\d+)\""_s);
     QString out;
     qsizetype last = 0;
     for (auto it = link.globalMatch(html); it.hasNext();) {
@@ -273,7 +282,7 @@ QString shiftRangeLinks(const QString &html, qsizetype by)
 /// shiftRangeLinks() of traced HTML: the anchors follow the longer or shorter numbers.
 void shiftRangeLinks(markdown::TracedHtml &traced, qsizetype by)
 {
-    static const QRegularExpression link(u"href=\"(date|reminder|recur|prio|day):(\\d+)-(\\d+)\""_s);
+    static const QRegularExpression link(u"href=\"(date|reminder|recur|prio|day|macro):(\\d+)-(\\d+)\""_s);
     QString out;
     qsizetype last = 0;
     QList<std::pair<qsizetype, qsizetype>> changes; // {end in the old HTML, growth}
@@ -1493,6 +1502,14 @@ void BlockListModel::recordReads(markdown::RenderContext &ctx, const QString &pa
             return text;
         };
     }
+    if (ctx.macro) {
+        ctx.macro = [slot, record, inner = std::move(ctx.macro)](const markdown::MacroSpan &macro) {
+            markdown::MacroView view = inner(macro);
+            if (*slot)
+                record(RenderRead::Macro, macro.extension + u'/' + macro.name, macro.arguments, QString(), macroValue(view));
+            return view;
+        };
+    }
     if (ctx.taskDependency) {
         ctx.taskDependency = [slot, record, inner = std::move(ctx.taskDependency)](const QString &id) {
             std::optional<markdown::TaskDependencyView> dep = inner(id);
@@ -1503,9 +1520,12 @@ void BlockListModel::recordReads(markdown::RenderContext &ctx, const QString &pa
     }
 }
 
-bool BlockListModel::readsChanged(const RenderReads &reads, const QSet<QString> &notes, ReadContexts &contexts) const
+bool BlockListModel::readsChanged(const RenderReads &reads, const QSet<QString> &notes, ReadContexts &contexts,
+                                  bool macrosOnly) const
 {
     for (const RenderRead &read : reads) {
+        if (macrosOnly && read.kind != RenderRead::Macro)
+            continue;
         // A page's icon is in its own text; the texts of blocks and tasks are asked for again
         // (a block may have moved to another note, a task id be taken by another one).
         if (read.kind == RenderRead::Icon && !notes.contains(read.note))
@@ -1533,6 +1553,14 @@ bool BlockListModel::readsChanged(const RenderReads &reads, const QSet<QString> 
         case RenderRead::TaskDependency:
             now = dependencyValue(ctx->taskDependency ? ctx->taskDependency(read.target) : std::nullopt);
             break;
+        case RenderRead::Macro: {
+            markdown::MacroSpan macro;
+            macro.extension = read.target.section(u'/', 0, 0);
+            macro.name = read.target.section(u'/', 1);
+            macro.arguments = read.id;
+            now = ctx->macro ? macroValue(ctx->macro(macro)) : QString();
+            break;
+        }
         }
         if (now != read.value)
             return true;
@@ -1626,6 +1654,12 @@ markdown::RenderContext BlockListModel::renderContext(int docIndex) const
             return r.value;
         return r.hasError() ? u"#ERR"_s : QString();
     };
+    // Macros of extensions (docs/SYNTAX.md §13 "Macros"): what the host computed for this note.
+    if (host && host->rendersMacros()) {
+        ctx.macro = [host, path](const markdown::MacroSpan &macro) {
+            return host ? host->macroView(macro, path) : markdown::MacroView{markdown::MacroView::State::Pending, {}, {}};
+        };
+    }
     recordReads(ctx, m_path, true);
     return ctx;
 }
@@ -1659,6 +1693,11 @@ markdown::RenderContext BlockListModel::renderContextFor(const QString &path, co
             return r.value;
         return r.hasError() ? u"#ERR"_s : QString();
     };
+    if (host && host->rendersMacros()) {
+        ctx.macro = [host, path](const markdown::MacroSpan &macro) {
+            return host ? host->macroView(macro, path) : markdown::MacroView{markdown::MacroView::State::Pending, {}, {}};
+        };
+    }
     recordReads(ctx, path, false);
     return ctx;
 }
@@ -2532,6 +2571,39 @@ void BlockListModel::followIndex()
     emitRowsChanged(propertyRows, {PropertiesRole});
     emitRowsChanged(tableRows, {TableDataRole});
     emitRowsChanged(chartRows, {ChartDataRole});
+}
+
+void BlockListModel::followMacros()
+{
+    ReadContexts contexts;
+    QList<int> htmlRows;
+    QList<int> transclusionRows;
+    const auto showsMacro = [](const RenderReads &reads) {
+        return std::ranges::any_of(reads, [](const RenderRead &r) { return r.kind == RenderRead::Macro; });
+    };
+    for (int row = 0; row < m_rows.size(); ++row) {
+        const int i = docIndexOfRow(row);
+        const quint64 uid = m_rows.at(row);
+        if (i < 0 || !m_state.contains(uid))
+            continue;
+        RowState &st = stateFor(uid);
+        if (st.htmlValid && showsMacro(st.htmlReads) && readsChanged(st.htmlReads, {}, contexts, true)) {
+            const QString before = st.html;
+            st.htmlValid = false;
+            if (renderHtml(i) != before)
+                htmlRows.append(row);
+        }
+        if (st.transclusionsValid && showsMacro(st.transclusionReads)
+            && readsChanged(st.transclusionReads, {}, contexts, true)) {
+            const QVariantList before = st.transclusions;
+            st.transclusionsValid = false;
+            ensureTransclusions(row);
+            if (st.transclusions != before)
+                transclusionRows.append(row);
+        }
+    }
+    emitRowsChanged(htmlRows, {HtmlRole, RenderedTextRole});
+    emitRowsChanged(transclusionRows, {TransclusionsRole});
 }
 
 } // namespace brulion::editor

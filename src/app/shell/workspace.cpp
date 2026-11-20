@@ -170,6 +170,7 @@ Workspace::Workspace(QObject *parent) : EditorHost(parent)
     });
     m_extensions->setAiPictures([this](const QString &name, QString *why) { return aiPicture(name, why); });
     m_chats = new WorkspaceChats(this, m_extensions, this);
+    connect(m_extensions, &WorkspaceExtensions::macrosChanged, this, &EditorHost::macrosChanged);
     m_replacing = new ReplaceSession(this);
     m_sync = new WorkspaceSync(this);
     m_sync->setClock([this] { return now(); });
@@ -1045,6 +1046,22 @@ QVariantList Workspace::suggestBlocks(const QString &text, int limit) const
         out.append(m);
     }
     return out;
+}
+
+markdown::MacroView Workspace::macroView(const markdown::MacroSpan &macro, const QString &path) const
+{
+    return m_extensions->macroView(macro, path);
+}
+
+QVariantList Workspace::suggestMacros(const QString &prefix, int limit) const
+{
+    return m_extensions->macroSuggestions(prefix, limit);
+}
+
+std::optional<QString> Workspace::templateVariable(const QString &extension, const QString &name,
+                                                   const QString &arguments, const QVariantMap &context)
+{
+    return m_extensions->templateVariable(extension, name, arguments, context);
 }
 
 QVariantList Workspace::suggestTags(const QString &prefix, int limit) const
