@@ -6541,10 +6541,12 @@ void checkEncryption(QQuickWindow *window, AppController *app, const Check &chec
     uidriver::callQml(dialog, "tryAccept", {});
     check(waitFor([&] { return !dialog->property("opened").toBool(); }, 30000), "Save closes the dialog");
     QString saved;
-    check(waitFor([&] {
-              saved = ws->readFile(path);
-              return !saved.contains(fragment) && saved.contains(u"%%\U0001F510γ \U0001F4A1podpowiedź samotestu"_s);
-          },
+    check(waitFor(
+                  [&] {
+                      saved = ws->readFile(path);
+                      return !saved.contains(fragment)
+                             && saved.contains(u"%%\U0001F510γ \U0001F4A1podpowiedź samotestu"_s);
+                  },
                   10000),
           "the page holds a new fragment with its hint");
     const auto span = markdown::findEncryptedFragments(saved).value(0);
@@ -6562,16 +6564,19 @@ void checkEncryption(QQuickWindow *window, AppController *app, const Check &chec
           "the remembered password unlocks the page: its text is in the editor");
     if (!controller)
         return;
-    QMetaObject::invokeMethod(controller, "setEditText", Q_ARG(int, 0), Q_ARG(QString, u"sejf: 2718"_s), Q_ARG(int, 10));
+    QMetaObject::invokeMethod(controller, "setEditText", Q_ARG(int, 0), Q_ARG(QString, u"sejf: 2718"_s),
+                              Q_ARG(int, 10));
     QMetaObject::invokeMethod(controller, "save");
     QString file;
-    check(waitFor([&] {
-              file = ws->readFile(pagePath);
-              return encryption::decryptNote(file, password).text.contains(u"2718"_s);
-          },
+    check(waitFor(
+                  [&] {
+                      file = ws->readFile(pagePath);
+                      return encryption::decryptNote(file, password).text.contains(u"2718"_s);
+                  },
                   10000),
           "what is typed is saved encrypted");
-    check(!file.contains(u"2718"_s) && encryption::readNoteFile(file).has_value(), "the file holds Meld Encrypt's JSON only");
+    check(!file.contains(u"2718"_s) && encryption::readNoteFile(file).has_value(),
+          "the file holds Meld Encrypt's JSON only");
     enc->lockAll();
     check(waitFor([&] { return shownNamed(window->contentItem(), u"encryptedPage"_s) != nullptr; }, 10000),
           "“Lock encrypted notes” locks the open page again");
