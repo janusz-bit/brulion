@@ -227,7 +227,7 @@ Reading needs no permission.
 | `b.query(source, limit?, offset?)` | a query of the query language (docs/SYNTAX.md §10): `{ total, items }` with at most `limit` items (50 by default, 1000 at most; a smaller `limit:` in the query wins) from item `offset` on (0, the first, by default): `total` counts them all, so a script pages through any number 1000 at a time. Items are blocks without `children`, `path` and `line`, plus a task's `due`, `scheduled`, `start` and a reminder's `reminder` (`"2026-11-12 09:00"`); for `type:pages` they are `{ page, date? }`. Weeks (`due:this-week` …) start on the notebook's first day of the week (`b.weekStart()`). A query that is none is an error with the reason |
 | `b.attachments()` | the notebook's files that are no notes — pictures, PDFs, any other file —, as paths in the notebook (`"assets/receipt.jpg"`), sorted; nothing of the hidden and ignored folders |
 | `b.revision()` | a number that changes whenever a note changes — the editor, a sync, any extension's write: what a script computed from the notebook stays true while it is the same (the habits keep their statistics so) |
-| `b.checkExtension(name, text)` | loads `text` as the extension page `name` would load (a new page: where new pages go), in an engine of its own — its top-level code runs with 1 s and 32 MB, writes only computed, nothing stays registered, no approval needed: `{ ok, id, title, path, permissions, problems, commands = { { name, label, block } }, views = { { name, label, icon, actions } }, hooks = { events… }, printed, writes? }`, or `ok = false` with `error`, `line` (the page's line, from 1) and `status` (`"timeout"` …). Text that is no extension page (no tag, no code) has `ok = false` too. Inside such a check it reports an error instead of checking again |
+| `b.checkExtension(name, text)` | loads `text` as the extension page `name` would load (a new page: where new pages go), in an engine of its own — its top-level code runs with 1 s and 32 MB, writes only computed, nothing stays registered, no approval needed: `{ ok, id, title, path, permissions, problems, commands = { { name, label, block } }, views = { { name, label, icon, actions } }, hooks = { events… }, printed, writes?, types }` — `types` what the type checker finds (`{ { line, column, message, kind } }`, "Types"; empty where there is none), or `ok = false` with `error`, `line` (the page's line, from 1) and `status` (`"timeout"` …). Text that is no extension page (no tag, no code) has `ok = false` too. Inside such a check it reports an error instead of checking again |
 
 `b.blocks({ tag = … })` and `tag:` in `b.query` differ: the first finds the blocks that carry the
 tag themselves, the query also those under a tagged block or on a tagged page, and `tag:project`
@@ -1215,7 +1215,8 @@ of the notebook — a photo, a scan, a screenshot — with a question about it: 
 with the picture, `b.ai`'s `images`, whose answer is the tool's result as text; a model that sees
 is needed), and for writing an extension
 `extension_reference` (this document, `b.data("reference")`: the list of its sections, or the
-sections whose heading has the words asked for), `check_extension` (`b.checkExtension`) and
+sections whose heading has the words asked for), `check_extension` (`b.checkExtension`, with the
+type checker's first five warnings: a misspelt function of `b` is fixed before the user sees it) and
 `write_extension` (checked first and refused while it does not load or when the page is no
 extension; a new page goes to `Rozszerzenia/` / `Extensions/`). A reminder asked for and written as a
 due date with a time goes in as the reminder (docs/SYNTAX.md §6; a due date rings nothing, and a
@@ -1489,7 +1490,7 @@ Emacs `config.org`). The page's properties (docs/SYNTAX.md §13), in English or 
   never takes a working extension away. "Reload extensions" (the palette) starts every extension
   in a fresh VM.
 * **Its state** shows in the page's bottom-left corner and in Settings → Extensions: runs (with its
-  commands, views and reactions counted), an error with its line, new or changed elsewhere ("Run"),
+  commands, views and reactions counted), an error with its line, new or changed elsewhere ("Read and run"),
   off on this device, another page has the same name, the built-in one it replaces is off, no
   ```` ```luau ```` block yet.
 * **Switched off** on this device in Settings → Extensions (`extensions/off`).
@@ -1579,7 +1580,7 @@ Home:7
 
 | What happens | Why, and what to do |
 |---|---|
-| The command is not in the palette | The page's state line says why: an error (the version before it still runs, without the new command), "new or changed elsewhere" (press **Run**), off on this device, or another page with the same title. A command with `block = true` shows only while the caret is in an editor |
+| The command is not in the palette | The page's state line says why: an error (the version before it still runs, without the new command), "new or changed elsewhere" (press **Read and run**), off on this device, or another page with the same title. A command with `block = true` shows only while the caret is in an editor |
 | "new or changed elsewhere" after every sync | The code was changed on another device: each device approves what it runs. Text around the code never asks again |
 | It asks for approval after I added `permissions` | More permissions are a new approval, also on the device that wrote them |
 | `permission denied: write` | `permissions: [write]` is missing in the page's properties (frontmatter or a `permissions::` line), or misspelt: Settings → Extensions shows "May: change notes" when it is understood |

@@ -3,6 +3,7 @@
 #include "extensions/typecheck.h"
 
 #include <QFile>
+#include <QStringList>
 
 using namespace Qt::StringLiterals;
 

@@ -29,6 +29,7 @@
 
 #include <QList>
 #include <QString>
+#include <QStringList>
 #include <QVariantMap>
 
 namespace brulion::extensions {

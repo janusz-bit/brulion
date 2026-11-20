@@ -15,6 +15,7 @@
 #include "Luau/LinterConfig.h"
 
 #include <QFile>
+#include <QStringList>
 
 #include <algorithm>
 #include <exception>

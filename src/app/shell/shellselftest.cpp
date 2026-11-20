@@ -5745,7 +5745,13 @@ void checkExtensionPages(QQuickWindow *window, AppController *app, const Check &
     if (runVersion)
         tapOrClick(window, at, touch);
     check(waitFor([&] { return ext->pageState(path) == u"running"; }, 10000), "approved, it runs");
-    check(waitFor([&] { return named(u"extensionApprovalSummary"_s) == nullptr; }, 5000), "and the dialog closed");
+    const bool closed = waitFor([&] { return named(u"extensionApprovalSummary"_s) == nullptr; }, 5000);
+    check(closed, "and the dialog closed");
+    if (!closed) { // (the checks after it need the window)
+        sendKey(window, Qt::Key_Escape);
+        settle(300);
+        ext->approve(path);
+    }
     // Its commands are in Settings → Keyboard shortcuts, with the key one of them suggests.
     check(waitFor([&] { return app->shortcuts()->sequence(u"ext.rozszerzenie-samotestu.pierwsze"_s) == u"Ctrl+Alt+F9"; }, 5000),
           "its command has the shortcut it suggests");
@@ -5758,9 +5764,12 @@ void checkExtensionPages(QQuickWindow *window, AppController *app, const Check &
     QQuickItem *more = steadyItem(
             window,
             [&] {
-                return findShown(window->contentItem(), [&](QQuickItem *item) {
+                // (In the dialog's row: the top bar has a "More" of its own, under the dialog.)
+                QQuickItem *row = named(u"extensionSetting"_s);
+                return row ? findShown(row, [&](QQuickItem *item) {
                     return isA(item, "BIconButton") && item->property("label").toString() == moreText;
-                });
+                })
+                           : nullptr;
             },
             &at, 5000);
     check(more != nullptr, "a number's + is there");

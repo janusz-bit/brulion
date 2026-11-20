@@ -4,6 +4,7 @@
 #include "extensions/host.h"
 
 #include <QElapsedTimer>
+#include <QStringList>
 #include <QVariantList>
 
 using namespace Qt::StringLiterals;

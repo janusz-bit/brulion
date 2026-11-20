@@ -14,10 +14,13 @@
 #include "vault/localstore.h"
 #include "vault/vault.h"
 
+#include <QCoreApplication>
 #include <QCryptographicHash>
 #include <QDir>
 #include <QPointer>
+#if QT_CONFIG(thread) && !defined(Q_OS_WASM)
 #include <QThreadPool>
+#endif
 #include <QJsonArray>
 #include <QRegularExpression>
 
@@ -511,29 +514,34 @@ void WorkspaceExtensions::checkTypes(const QString &path)
     const QString source = e->page.source, hash = e->page.hash, title = e->page.title;
     const quint64 generation = m_generation;
     const QPointer<WorkspaceExtensions> self(this);
-    // (A worker: a long page takes the checker some 100 ms, never the GUI thread's.)
-    // One worker for the checks (each thread keeps a checker of its own: one is enough).
+    // What the checker found, back on the GUI thread: for the code it read, if it is still there.
+    const auto apply = [self, path, hash, title, generation](const QList<extensions::TypeProblem> &problems) {
+        if (!self || generation != self->m_generation)
+            return;
+        const auto it = self->m_pages.find(paths::normalize(path));
+        if (it == self->m_pages.end() || it->page.hash != hash)
+            return; // (changed again meanwhile: its own check follows)
+        it->types = problems;
+        it->typedHash = hash;
+        if (!problems.isEmpty())
+            self->m_console->append(u"info"_s, extensions::describeTypeProblems(problems, title), title);
+        self->refreshList();
+        self->bumpRevision();
+    };
+#if QT_CONFIG(thread) && !defined(Q_OS_WASM)
+    // A worker of its own (a long page takes the checker some 100 ms, never the GUI thread's; each
+    // thread keeps a checker: one is enough).
     static QThreadPool pool;
     pool.setMaxThreadCount(1);
-    pool.start([self, path, source, hash, title, generation] {
+    pool.start([source, apply] {
         const QList<extensions::TypeProblem> problems = extensions::typeCheck(source);
-        QMetaObject::invokeMethod(
-                self.data(),
-                [self, path, hash, title, generation, problems] {
-                    if (!self || generation != self->m_generation)
-                        return;
-                    const auto it = self->m_pages.find(paths::normalize(path));
-                    if (it == self->m_pages.end() || it->page.hash != hash)
-                        return; // (changed again meanwhile: its own check follows)
-                    it->types = problems;
-                    it->typedHash = hash;
-                    if (!problems.isEmpty())
-                        self->m_console->append(u"info"_s, extensions::describeTypeProblems(problems, title), title);
-                    self->refreshList();
-                    self->bumpRevision();
-                },
-                Qt::QueuedConnection);
+        // (To the application's thread: `apply` asks there whether its extensions are still alive.)
+        if (QCoreApplication *app = QCoreApplication::instance())
+            QMetaObject::invokeMethod(app, [apply, problems] { apply(problems); }, Qt::QueuedConnection);
     });
+#else
+    QTimer::singleShot(0, this, [source, apply] { apply(extensions::typeCheck(source)); });
+#endif
 }
 
 void WorkspaceExtensions::notesChanging(const QList<VaultChange> &changes)

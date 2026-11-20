@@ -58,15 +58,19 @@ BDialog {
             AppController.toast(qsTr("The page is no extension any more."), "info")
     }
 
+    /// The code is another one now than the one shown: say so (never approved unread).
+    function checkChanged(): void {
+        const now = Workspace.extensions.pageHash(dialog.path)
+        if (dialog.shownHash !== "" && now !== dialog.shownHash)
+            dialog.changedMeanwhile = true
+    }
+    // From the moment it shows (its opening animation too: a sync does not wait for it).
     Connections {
         target: Workspace.extensions
-        enabled: dialog.opened
-        function onRevisionChanged() {
-            const now = Workspace.extensions.pageHash(dialog.path)
-            if (now !== dialog.shownHash)
-                dialog.changedMeanwhile = true
-        }
+        enabled: dialog.visible
+        function onRevisionChanged() { dialog.checkChanged() }
     }
+    onOpened: dialog.checkChanged()
 
     BText {
         objectName: "extensionApprovalSummary"
