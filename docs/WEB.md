@@ -847,6 +847,10 @@ older ones are released; they disappear with Brulion's tab. The app's route does
   open tabs by itself).
 * A file larger than the attachment limit (200 MB) — refused with a message (memory: bytes and blob).
 * Brulion never makes a `data:` address from a PDF (it used to do so for every embedded file).
+* **The whole-notebook search** finds notes only (docs/UI.md "Searching attachments"): without a PDF
+  renderer and without threads (the attachments' worker needs one) the browser version reads no PDFs
+  and recognizes no text in pictures — Settings → Search says so. A PDF opened in its tab is searched
+  by the browser's own viewer.
 
 Tests: `tests/web/pdf.spec.mjs` (Chromium and Firefox; `?selftest=pdf`, above): a click on the tile and
 on the link opens a tab with a `blob:` address of this site, `content-type` `application/pdf`, bytes as

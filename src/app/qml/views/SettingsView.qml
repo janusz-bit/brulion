@@ -16,7 +16,9 @@ import Brulion
 // BFontPickerDialog, not in the browser), Keyboard shortcuts (qml/shell/ShellShortcutSettings: the
 // commands' shortcuts), Notebook (the vault's shared settings in
 // .brulion/config.json: the note modes of new pages and of the journal, journal folder and file
-// names, attachments, templates, default reminder time, first day of the week), Reminders (on/off, permissions on Android and in the
+// names, attachments, templates, default reminder time, first day of the week), Search
+// (qml/attachments/AttachmentSettings: PDFs and pictures in the search, OCR and its languages, the
+// device's cache), Reminders (on/off, permissions on Android and in the
 // browser, the sounds of reminders and alarms — qml/notify/ReminderSoundSetting —, snooze, alarm
 // length, Android's background check of the notes, test notification), Sync (qml/io/SyncSettings: status,
 // the sync center, the Nextcloud account), Backups (qml/shell/ShellBackupSettings), Automation
@@ -57,6 +59,7 @@ Item {
         { key: "editor", title: qsTr("Editor"), iconName: "pencil" },
         { key: "shortcuts", title: qsTr("Keyboard shortcuts"), iconName: "keyboard" },
         { key: "vault", title: qsTr("Notebook"), iconName: "notebook-pen" },
+        { key: "search", title: qsTr("Search"), iconName: "search" },
         { key: "reminders", title: qsTr("Reminders"), iconName: "bell" },
         { key: "extensions", title: qsTr("Extensions"), iconName: "puzzle" },
         { key: "sync", title: qsTr("Sync"), iconName: "folder-sync" },
@@ -71,6 +74,7 @@ Item {
         case "editor": return editorSection
         case "shortcuts": return shortcutsSection
         case "vault": return vaultSection
+        case "search": return searchSection
         case "reminders": return remindersSection
         case "extensions": return extensionsSection
         case "sync": return syncSection
@@ -1991,6 +1995,11 @@ Item {
     Component {
         id: shortcutsSection
         ShellShortcutSettings {}
+    }
+
+    Component {
+        id: searchSection
+        AttachmentSettings {}
     }
 
     Component {

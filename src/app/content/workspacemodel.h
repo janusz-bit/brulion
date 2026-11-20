@@ -96,6 +96,9 @@ protected:
     virtual bool affectedBy(const IndexChanges &changes) const;
     /// Every role of row `row` by name ({} for a bad row): the subclasses' get().
     QVariantMap rowMap(int row) const;
+    /// Something else the rows come from changed (the attachments' text): as a change of the files
+    /// — a refresh after the delay, or the rows marked stale while inactive.
+    void markContentChanged() { contentChanged(); }
 
     /// Replace `rows` by `next` with fine-grained model signals. `key(row)` identifies rows
     /// (unique in each list); `same(a, b)` decides whether a kept row changed its data.

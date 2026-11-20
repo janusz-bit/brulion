@@ -3705,6 +3705,153 @@ void checkPictureView(QQuickWindow *window, AppController *app, const Check &che
           "the picture comes back and the editor stays unloaded");
 }
 
+/// 5q. Searching attachments (docs/UI.md "Searching attachments"): a PDF written here whose second
+/// page holds a word no note has is found by the whole-notebook search once the attachments' text is
+/// read (Workspace.attachments, in the background): its row names the PDF and "Page 2 of 3"; a tap
+/// opens the PDF viewer at page 2 with the word highlighted (route open "search": the viewer's hit is
+/// the current one, on that page). With OCR here (Tesseract with Polish and English: the Nix dev
+/// shell) and turned on, a picture of text written here is found by its words ("in:pictures"), its
+/// row says the text was recognized, and a tap opens the picture with the places framed. Settings →
+/// Search shows its switches. Builds without a PDF text layer reader and OCR: skipped.
+void checkAttachmentSearch(QQuickWindow *window, AppController *app, const Check &check)
+{
+    const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
+    Workspace *workspace = app->workspace();
+    attachsearch::AttachmentIndexer *attachments = workspace->attachments();
+    if (!platform::pdfTextAvailable()) {
+        std::fprintf(stderr, "selftest: no PDF text in this build: searching attachments not checked\n");
+        return;
+    }
+    QString pdf = u"assets/Botanika – rośliny.pdf"_s;
+    {
+        const auto plants = [](QPdfWriter &writer, QPainter &p) {
+            QFont font;
+            font.setPointSize(20);
+            p.setFont(font);
+            p.drawText(QPointF(60, 120), u"Rośliny ogrodowe: wstęp"_s);
+            writer.newPage();
+            p.drawText(QPointF(60, 120), u"Rododendron żółtawy kwitnie w maju"_s);
+            writer.newPage();
+            p.drawText(QPointF(60, 120), u"Strona trzecia bez nazw roślin"_s);
+        };
+        pdf = workspace->createAttachment(pdf, pdfBytes(plants, QMarginsF(0, 0, 0, 0)));
+    }
+    check(!pdf.isEmpty(), "a three-page PDF is added to the notebook");
+    // Read in the background (a few seconds after the notebook was ready).
+    check(waitFor([&] { return attachments->index().contains(pdf) && attachments->idle(); }, 60000),
+          "the attachments' text is read in the background");
+
+    const auto searchList = [window]() -> QQuickItem * {
+        QQuickItem *view = findShown(window->contentItem(), [](QQuickItem *item) { return isA(item, "SearchView"); });
+        return view ? findShown(view, [](QQuickItem *item) { return item->inherits("QQuickListView"); }) : nullptr;
+    };
+    const auto rowItem = [&](int row) -> QQuickItem * {
+        QQuickItem *list = searchList();
+        QQuickItem *item = nullptr;
+        if (list)
+            QMetaObject::invokeMethod(list, "itemAtIndex", Q_RETURN_ARG(QQuickItem *, item), Q_ARG(int, row));
+        return item && item->isVisible() ? item : nullptr;
+    };
+    /// The row of `path` in the results (-1: none), with its role values.
+    const auto rowOf = [&](const QString &path, QVariantMap *values) {
+        QQuickItem *list = searchList();
+        QObject *model = list ? list->property("model").value<QObject *>() : nullptr;
+        const int count = model ? model->property("count").toInt() : 0;
+        for (int row = 0; row < count; ++row) {
+            QVariantMap map;
+            QMetaObject::invokeMethod(model, "get", Q_RETURN_ARG(QVariantMap, map), Q_ARG(int, row));
+            if (map.value(u"path"_s).toString() == path) {
+                if (values)
+                    *values = map;
+                return row;
+            }
+        }
+        return -1;
+    };
+    const auto openRow = [&](int row) {
+        QPointF at;
+        // (The pointer out of the way first: a tooltip over the row would take the click.)
+        uidriver::mouseMoveNow(window, QPointF(2, window->height() - 2));
+        if (steadyItem(window, [&] { return rowItem(row); }, &at, 5000))
+            tapOrClick(window, at, touch);
+    };
+
+    app->navigate({{u"view"_s, u"search"_s}, {u"query"_s, u"rododendron zoltawy"_s}});
+    QVariantMap hit;
+    int row = -1;
+    check(waitFor([&] { return (row = rowOf(pdf, &hit)) >= 0; }, 10000) && hit.value(u"kind"_s).toString() == u"pdf"_s
+                  && hit.value(u"page"_s).toInt() == 2
+                  && hit.value(u"excerpt"_s).toString().contains(u"Rododendron żółtawy"_s),
+          "the search finds the PDF's page 2 by its words, without Polish letters, with an excerpt");
+    check(waitFor([&] {
+              QQuickItem *item = rowItem(row);
+              QQuickItem *page = item ? shownNamed(item, u"searchHitPage"_s) : nullptr;
+              return page
+                     && renderedTextContaining(page,
+                                               QCoreApplication::translate("SearchView", "Page %1 of %2").arg(2).arg(3))
+                                != nullptr;
+          }),
+          "its row names the page: “Page 2 of 3”");
+    openRow(row);
+    const auto pdfModel = [window]() -> QObject * {
+        QQuickItem *view = shownNamed(window->contentItem(), u"pdfView"_s);
+        return view ? view->property("model").value<QObject *>() : nullptr;
+    };
+    check(waitFor([&] { return app->currentRoute().value(u"path"_s).toString() == pdf; }, 5000)
+                  && app->currentRoute().value(u"pdfPage"_s).toInt() == 2,
+          "the result opens the PDF viewer at page 2");
+    check(waitFor(
+                  [&] {
+                      QObject *model = pdfModel();
+                      return model && model->property("hitCount").toInt() >= 1 && !model->property("searching").toBool()
+                             && model->property("currentPage").toInt() == 2;
+                  },
+                  10000)
+                  && waitFor([&] { return shownNamed(window->contentItem(), u"pdfHit"_s) != nullptr; }),
+          "the words are highlighted on page 2, the current hit");
+    app->back();
+    waitFor([&] { return app->currentView() == u"search"; });
+
+    // OCR of a picture, where this device has Tesseract with Polish and English.
+    waitFor([&] { return attachments->ocrUnavailableReason() != u"probing"_s; }, 20000);
+    if (attachments->ocrAvailable() && attachments->ocrInstalledLanguages().contains(u"pol"_s)) {
+        QImage board(900, 220, QImage::Format_RGB32);
+        board.fill(Qt::white);
+        {
+            QPainter p(&board);
+            QFont font;
+            font.setPixelSize(48);
+            p.setFont(font);
+            p.setPen(Qt::black);
+            p.drawText(QPointF(30, 90), u"Magnolia kwitnie"_s);
+            p.drawText(QPointF(30, 180), u"pod oknem w kwietniu"_s);
+        }
+        const QString picture = workspace->createAttachment(u"assets/Ogród tablica.png"_s, pngBytes(board));
+        app->settings()->setAttachmentOcr(true);
+        check(!picture.isEmpty()
+                      && waitFor([&] { return attachments->recognizedText(picture).contains(u"Magnolia"_s); }, 120000),
+              "with text recognition on, the picture's words are read");
+        app->navigate({{u"view"_s, u"search"_s}, {u"query"_s, u"in:pictures magnolia"_s}});
+        check(waitFor([&] { return (row = rowOf(picture, &hit)) >= 0; }, 10000) && hit.value(u"ocr"_s).toBool()
+                      && rowOf(pdf, nullptr) < 0,
+              "“in:pictures magnolia” finds the picture by its recognized text, and nothing else");
+        openRow(row);
+        check(waitFor([&] { return app->currentRoute().value(u"path"_s).toString() == picture; }, 5000)
+                      && waitFor([&] { return shownNamed(window->contentItem(), u"pictureMatch"_s) != nullptr; }, 5000),
+              "the result opens the picture with the word's place framed");
+        app->settings()->setAttachmentOcr(false);
+        app->back();
+    } else {
+        std::fprintf(stderr, "selftest: no Tesseract with Polish here: OCR in the app not checked\n");
+    }
+
+    // Settings → Search.
+    app->navigate({{u"view"_s, u"settings"_s}, {u"section"_s, u"search"_s}});
+    check(waitFor([&] { return shownNamed(window->contentItem(), u"attachmentSearchSwitch"_s) != nullptr; }),
+          "Settings → Search has the attachments' switch");
+    app->goHome();
+}
+
 /// 5k. PDFs (docs/UI.md "PDF viewer"): a note embedding a lecture written here (QPdfWriter, three
 /// pages) shows its first page's thumbnail on a white page; a tap / click opens the PDF viewer
 /// (route path = the PDF, the block editor holds no controller for it: no bytes loaded), "Page 1 of
@@ -4492,8 +4639,16 @@ void checkPdfViewer(QQuickWindow *window, AppController *app, const Check &check
             sendKey(window, Qt::Key_F, Qt::ControlModifier);
             check(waitFor([&] { return shownNamed(scanView, u"pdfSearchField"_s) != nullptr; }), "its search opens");
             typeChars(window, u"wzor"_s);
+            // (Where text recognition could read it but is off, the sentence says where to turn it on.)
+            const attachsearch::AttachmentIndexer *attachments = workspace->attachments();
+            waitFor([&] { return attachments->ocrUnavailableReason() != u"probing"_s; }, 20000);
+            const bool ocrHint = attachments->ocrAvailable() && !attachments->ocrEnabled();
             const QString textless =
-                    QCoreApplication::translate("ContentPdfView", "This PDF has no text to search (it may be a scan).");
+                    ocrHint ? QCoreApplication::translate("ContentPdfView",
+                                                          "This PDF has no text to search (it may be a scan). Turn on "
+                                                          "text recognition in Settings → Search to search it.")
+                            : QCoreApplication::translate("ContentPdfView",
+                                                          "This PDF has no text to search (it may be a scan).");
             QQuickItem *status = nullptr;
             const bool said = waitFor(
                     [&] {
@@ -4507,12 +4662,16 @@ void checkPdfViewer(QQuickWindow *window, AppController *app, const Check &check
             QQuickItem *close = shownNamed(scanView, u"pdfSearchClose"_s);
             const QRectF closeBox =
                     close ? close->mapRectToScene(QRectF(0, 0, close->width(), close->height())) : QRectF();
-            if (touch) {
+            // (With the OCR hint the sentence is long: under the row in the wide bar as well.)
+            if (touch || ocrHint) {
+                // (The wide bar keeps ‹ › — disabled without hits.)
                 check(said && line && line->property("text").toString() == textless && !status->isVisible()
-                              && shownNamed(scanView, u"pdfSearchPrevious"_s) == nullptr
-                              && shownNamed(scanView, u"pdfSearchNext"_s) == nullptr && close
-                              && closeBox.right() <= window->width() + 0.5,
-                      "in the narrow bar it is the line under the row, ‹ › hidden, × on the screen");
+                              && (!touch
+                                  || (shownNamed(scanView, u"pdfSearchPrevious"_s) == nullptr
+                                      && shownNamed(scanView, u"pdfSearchNext"_s) == nullptr))
+                              && close && closeBox.right() <= window->width() + 0.5,
+                      touch ? "in the narrow bar it is the line under the row, ‹ › hidden, × on the screen"
+                            : "the sentence with the OCR hint is the line under the row, × on the screen");
             } else {
                 check(said && status->isVisible() && line == nullptr, "in the wide bar it stays in the row");
             }
@@ -10620,6 +10779,8 @@ void checkBlockEditor(QQmlApplicationEngine *engine, QQuickWindow *window, AppCo
         checkPdfViewer(window, app, check, controllerFor);
         // Audio and video: the player of an embed, the now-playing bar, the player view, a voice note.
         checkMediaPlayer(window, app, check);
+        // 5q. Searching attachments: a PDF's page, a picture's recognized text.
+        checkAttachmentSearch(window, app, check);
         // 5i. A drawing: opened from its embed, drawn with real input, saved by itself.
         checkDrawing(window, app, check);
         // 5j. A drawing another program wrote: its embed's frame never moves.

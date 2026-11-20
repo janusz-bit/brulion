@@ -2,6 +2,9 @@
 // backlinks, links, unlinked, calendar.
 #include "commands_p.h"
 
+#include "attachments/attachmentsearch.h"
+#include "attachments/manifest.h"
+#include "attachments/searchfilters.h"
 #include "index/query.h"
 #include "index/vaultindex.h"
 #include "markdown/journal.h"
@@ -16,6 +19,9 @@
 #include "vault/vault.h"
 
 #include <QCoreApplication>
+#include <QDir>
+#include <QFile>
+#include <QStandardPaths>
 
 #include <algorithm>
 
@@ -201,26 +207,103 @@ Result query(Call &call)
     return call.ok(result, text);
 }
 
+/// The text of the notebook's PDFs and pictures as the app read it on this device (docs/UI.md
+/// "Searching attachments": <app cache>/attachment-text — the notebook's manifest and the records it
+/// names), searched read-only: the command line reads no PDF and recognizes no text itself.
+QJsonArray attachmentHits(Call &call, const QString &text, int limit, attachments::Scopes kinds, QString &out)
+{
+    QJsonArray hits;
+    Vault *vault = call.vault();
+    const QString cache = QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
+    if (!vault || cache.isEmpty())
+        return hits;
+    const QDir dir(QDir(cache).filePath(u"attachment-text"_s));
+    QFile manifestFile(dir.filePath(attachments::manifestFileName(vault->id())));
+    if (!manifestFile.open(QIODevice::ReadOnly))
+        return hits;
+    const std::optional<attachments::Manifest> manifest = attachments::decodeManifest(manifestFile.readAll());
+    if (!manifest)
+        return hits;
+    attachments::AttachmentSearch index;
+    QHash<QString, attachments::Record> records;
+    for (auto it = manifest->cbegin(); it != manifest->cend(); ++it) {
+        // A file changed since the app read it is not searched by its old text.
+        const std::optional<FileStat> st = vault->stat(it.key());
+        if (!st || st->size != it->size || st->mtime != it->mtime)
+            continue;
+        QFile f(dir.filePath(attachments::recordFileName(it->hash)));
+        if (!f.open(QIODevice::ReadOnly))
+            continue;
+        std::optional<attachments::Record> record = attachments::decodeRecord(f.readAll());
+        if (!record)
+            continue;
+        index.set(attachments::AttachmentSearch::prepare(it.key(), *record));
+        records.insert(it.key(), std::move(*record));
+    }
+    const auto pageText = [&records](const QString &path, int page) -> std::optional<attachments::Page> {
+        const auto it = records.constFind(path);
+        if (it == records.constEnd() || page < 1 || page > it->pages.size())
+            return std::nullopt;
+        return it->pages.at(page - 1);
+    };
+    for (const attachments::AttachmentSearch::Hit &hit : index.search(text, limit, kinds, pageText)) {
+        const bool pdf = hit.kind == attachments::Kind::Pdf;
+        hits.append(QJsonObject{{u"path"_s, hit.path},
+                                {u"kind"_s, pdf ? u"pdf"_s : u"picture"_s},
+                                {u"page"_s, hit.page},
+                                {u"pageCount"_s, hit.pageCount},
+                                {u"matchedPages"_s, hit.matchedPages},
+                                {u"ocr"_s, hit.ocr},
+                                {u"excerpt"_s, hit.excerpt},
+                                {u"find"_s, hit.find}});
+        out += hit.path + (pdf ? u"#page="_s + QString::number(hit.page) : QString()) + u"  "_s
+               + hit.excerpt.simplified() + u'\n';
+    }
+    return hits;
+}
+
 Result search(Call &call)
 {
     VaultIndex *index = call.index();
     if (!index)
         return call.failed();
-    const QString text = call.str(u"text"_s).trimmed();
+    const QString query = call.str(u"text"_s).trimmed();
+    if (query.isEmpty())
+        return call.fail(ExitUsage, u"text_required"_s, tr("Search for what?"));
+    // The search field's filters (in:pdf, w:dziennik …): their words are not searched.
+    const attachments::SearchFilters filters = attachments::parseSearchFilters(query);
+    const QString text = filters.filtered ? filters.text : query;
     if (text.isEmpty())
         return call.fail(ExitUsage, u"text_required"_s, tr("Search for what?"));
     const int limit = std::clamp(call.integer(u"limit"_s, 20), 1, 500);
     QJsonArray hits;
     QString out;
-    for (const QList<SearchHit> found = index->search(text, limit); const SearchHit &hit : found) {
-        QJsonObject o = notebook::searchHitJson(hit, index->config());
-        if (hit.line >= 0)
-            o.insert(u"ref"_s, Call::lineRef(hit.path, noteText(call, hit.path), hit.line));
-        hits.append(o);
-        out += hit.path + (hit.line >= 0 ? u':' + QString::number(hit.line + 1) : QString()) + u"  "_s
-               + hit.excerpt.simplified() + u'\n';
+    if (filters.scopes & attachments::NoteScopes) {
+        // (Asked for more when only some notes may come.)
+        const bool some = (filters.scopes & attachments::NoteScopes) != attachments::NoteScopes;
+        int listed = 0;
+        for (const QList<SearchHit> found = index->search(text, some ? std::min(1000, limit * 4) : limit);
+             const SearchHit &hit : found) {
+            const ParsedNote *note = index->note(hit.path);
+            const bool journal = note && note->journalDate;
+            if (!filters.scopes.testFlag(journal ? attachments::Scope::Journals : attachments::Scope::Pages))
+                continue;
+            if (listed++ >= limit)
+                break;
+            QJsonObject o = notebook::searchHitJson(hit, index->config());
+            if (hit.line >= 0)
+                o.insert(u"ref"_s, Call::lineRef(hit.path, noteText(call, hit.path), hit.line));
+            hits.append(o);
+            out += hit.path + (hit.line >= 0 ? u':' + QString::number(hit.line + 1) : QString()) + u"  "_s
+                   + hit.excerpt.simplified() + u'\n';
+        }
     }
-    return call.ok(QJsonObject{{u"query"_s, text}, {u"hits"_s, hits}}, out);
+    QJsonObject result{{u"query"_s, query}, {u"hits"_s, hits}};
+    // Attachments when asked for (--attachments) or named by a filter (in:pdf).
+    const attachments::Scopes kinds = filters.scopes & attachments::AttachmentScopes;
+    if (kinds && (call.flag(u"attachments"_s) || (filters.filtered && kinds == filters.scopes)))
+        result.insert(u"attachments"_s, attachmentHits(call, text, limit, kinds, out));
+    return call.ok(result, out);
 }
 
 Result tags(Call &call)
@@ -437,9 +520,14 @@ void addIndexCommands(QList<Command> &out)
             u"search"_s,
             QT_TRANSLATE_NOOP("brulion::cli", "Full-text search, diacritic-insensitive (\"zolw\" finds \"żółw\")"),
             search,
-            {positional(u"text"_s, ArgType::String, QT_TRANSLATE_NOOP("brulion::cli", "Words to find"), true, true),
-             option(u"limit"_s, ArgType::Int,
-                    QT_TRANSLATE_NOOP("brulion::cli", "At most this many hits (default 20)"))}));
+            {positional(u"text"_s, ArgType::String,
+                        QT_TRANSLATE_NOOP("brulion::cli", "Words to find (in:pdf, in:pictures, in:notes, "
+                                                          "in:journals narrow it)"),
+                        true, true),
+             option(u"limit"_s, ArgType::Int, QT_TRANSLATE_NOOP("brulion::cli", "At most this many hits (default 20)")),
+             option(u"attachments"_s, ArgType::Bool,
+                    QT_TRANSLATE_NOOP("brulion::cli", "Also the text of PDFs and pictures the app has read on "
+                                                      "this device"))}));
     out.append(make(
             u"tags"_s, QT_TRANSLATE_NOOP("brulion::cli", "Every tag, most used first, with the page it names"), tags,
             {option(u"prefix"_s, ArgType::String, QT_TRANSLATE_NOOP("brulion::cli", "Only tags starting with this"))}));

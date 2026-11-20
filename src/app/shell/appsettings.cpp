@@ -69,6 +69,9 @@ constexpr auto kSpellCheck = "spelling/enabled"_L1;
 constexpr auto kTaskStatusHistory = "tasks/statusHistory"_L1;
 constexpr auto kSpellLanguages = "spelling/languages"_L1;
 constexpr auto kSpellingWords = "spelling/words"_L1;
+constexpr auto kAttachmentSearch = "search/attachments"_L1;
+constexpr auto kAttachmentOcr = "search/ocr"_L1;
+constexpr auto kAttachmentOcrLanguages = "search/ocrLanguages"_L1;
 constexpr auto kExportWebPictures = "export/webPictures"_L1;
 constexpr auto kWordCount = "editor/wordCountShown"_L1;
 constexpr auto kFocusMode = "ui/focusMode"_L1;
@@ -878,6 +881,41 @@ void AppSettings::setSpellCheck(bool on)
 {
     if (store(kSpellCheck, on, spellCheck()))
         Q_EMIT spellCheckChanged();
+}
+
+bool AppSettings::attachmentSearch() const
+{
+    return m_settings->value(kAttachmentSearch, true).toBool();
+}
+
+void AppSettings::setAttachmentSearch(bool on)
+{
+    if (store(kAttachmentSearch, on, attachmentSearch()))
+        Q_EMIT attachmentSearchChanged();
+}
+
+bool AppSettings::attachmentOcr() const
+{
+    return m_settings->value(kAttachmentOcr, false).toBool();
+}
+
+void AppSettings::setAttachmentOcr(bool on)
+{
+    if (store(kAttachmentOcr, on, attachmentOcr()))
+        Q_EMIT attachmentSearchChanged();
+}
+
+QString AppSettings::attachmentOcrLanguages() const
+{
+    const QString value = m_settings->value(kAttachmentOcrLanguages).toString().trimmed();
+    return value.isEmpty() ? u"auto"_s : value;
+}
+
+void AppSettings::setAttachmentOcrLanguages(const QString &languages)
+{
+    const QString value = languages.trimmed().isEmpty() ? u"auto"_s : languages.trimmed().left(200);
+    if (store(kAttachmentOcrLanguages, value, attachmentOcrLanguages()))
+        Q_EMIT attachmentSearchChanged();
 }
 
 bool AppSettings::taskStatusHistory() const

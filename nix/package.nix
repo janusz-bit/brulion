@@ -23,6 +23,9 @@
   makeFontsConf,
   hunspell,
   hunspellDicts,
+  tesseract,
+  fetchurl,
+  linkFarm,
   fetchFromGitHub,
   callPackage,
   # Audio and video in notes, voice notes (docs/UI.md "Audio and video"): Qt Multimedia without
@@ -159,6 +162,12 @@ stdenv.mkDerivation (finalAttrs: {
     (lib.cmakeFeature "BRULION_SPELL_DICTIONARY_DIRS" (
       lib.concatMapStringsSep ";" (d: "${d}/share/hunspell") finalAttrs.passthru.spellDictionaries
     ))
+    # Text recognition (OCR) of pictures and scanned PDF pages for the search (docs/UI.md "Search",
+    # src/platform/ocr_tesseract.cpp): Tesseract is loaded at run time, from this store path (its
+    # string in the program keeps it in the closure); its English and Polish models from tessdata
+    # below. Elsewhere (the AppImage, Windows) the system's Tesseract is looked for instead.
+    (lib.cmakeFeature "BRULION_TESSERACT_LIBRARY" "${finalAttrs.passthru.tesseract}/lib/libtesseract.so.5")
+    (lib.cmakeFeature "BRULION_TESSDATA_DIRS" "${finalAttrs.passthru.tessdata}")
     (lib.cmakeFeature "BRULION_LOCAL_AI" (if withLocalAi then "ON" else "OFF"))
     (lib.cmakeFeature "BRULION_MULTIMEDIA" (if withMultimedia then "ON" else "OFF"))
     # The relative relocations packed (RELR, cmake/BrulionSize.cmake): the package runs on the
@@ -183,6 +192,28 @@ stdenv.mkDerivation (finalAttrs: {
   passthru.spellDictionaries = [
     hunspellDicts.pl_PL
     hunspellDicts.en_US
+  ];
+
+  # OCR (src/platform/ocr_tesseract.cpp, docs/PERFORMANCE.md "Searching attachments"): Tesseract
+  # without nixpkgs' models (its standard ones are 43 MB for these two languages) and the "fast"
+  # integer models of tessdata_fast instead — 9 MB, two to three times faster, plenty for search.
+  # Also the dev shell's (flake.nix: BRULION_TESSERACT_LIBRARY, BRULION_TESSDATA_DIR).
+  passthru.tesseract = tesseract.override { enableLanguages = [ ]; };
+  passthru.tessdata = linkFarm "brulion-tessdata" [
+    {
+      name = "eng.traineddata";
+      path = fetchurl {
+        url = "https://github.com/tesseract-ocr/tessdata_fast/raw/4.1.0/eng.traineddata";
+        hash = "sha256-fUMivSp3SXJIeWg/w5EstULxmQbIO8waUhMlVkJxcLI=";
+      };
+    }
+    {
+      name = "pol.traineddata";
+      path = fetchurl {
+        url = "https://github.com/tesseract-ocr/tessdata_fast/raw/4.1.0/pol.traineddata";
+        hash = "sha256-xEds28DjPYmNMjRRIre+HL+FrOFfkg8Gx3FHVuHvebI=";
+      };
+    }
   ];
 
   # The QML smoke tests are `#!/usr/bin/env bash` scripts; the build sandbox has no /usr/bin/env.

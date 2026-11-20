@@ -480,6 +480,10 @@ int main(int argc, char *argv[])
         spell->setEnabled(settings->spellCheck());
         QObject::connect(&devTools, &brulion::ui::DevTools::languageChanged, settings,
                          [spell, &devTools] { spell->setUiLanguage(devTools.language()); });
+        // OCR's "auto" languages too (docs/UI.md "Searching attachments").
+        workspace->attachments()->setUiLanguage(devTools.language());
+        QObject::connect(&devTools, &brulion::ui::DevTools::languageChanged, workspace,
+                         [workspace, &devTools] { workspace->attachments()->setUiLanguage(devTools.language()); });
         QObject::connect(settings, &brulion::shell::AppSettings::spellCheckChanged, spell,
                          [spell, settings] { spell->setEnabled(settings->spellCheck()); });
         QObject::connect(settings, &brulion::shell::AppSettings::spellLanguagesChanged, spell,

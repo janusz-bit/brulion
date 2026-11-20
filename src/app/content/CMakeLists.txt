@@ -25,6 +25,7 @@ qt_add_library(brulion_content STATIC
 target_include_directories(brulion_content PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(brulion_content
     PUBLIC Qt6::Core Qt6::Gui brulion_shell brulion_core_index brulion_core_markdown brulion_core_dates
+           brulion_attachments
     PRIVATE brulion_core_text brulion_core_util brulion_core_vault brulion_core_io brulion_core_chat)
 qt_extract_metatypes(brulion_content)
 brulion_set_warnings(brulion_content)

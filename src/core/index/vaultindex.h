@@ -155,6 +155,8 @@ struct SearchHit {
     /// those lines — -1 for e.g. title-only matches
     int line = -1;
     QString excerpt; ///< text around the match (or the start of the note)
+    /// Query terms matched as typed, not only through typo tolerance (SearchIndex::Hit::literal).
+    int literal = 0;
 };
 
 /// A page suggestion for `[[` completion / quick switcher.

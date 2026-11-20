@@ -760,7 +760,7 @@ QList<SearchHit> VaultIndex::search(const QString &query, int limit) const
         const Private::Entry *e = d->entry(raw.id);
         if (!e)
             continue;
-        SearchHit hit{raw.id, e->note.title, raw.score, -1, {}};
+        SearchHit hit{raw.id, e->note.title, raw.score, -1, {}, raw.literal};
         // Prefer a match in the body over one in the frontmatter (aliases, tags).
         const QList<text::Line> lines = text::splitLines(e->content);
         const qsizetype body = bodyStartLine(e->note);

@@ -140,6 +140,13 @@
           DICPATH = lib.concatMapStringsSep ":" (
             d: "${d}/share/hunspell"
           ) self.packages.${pkgs.stdenv.hostPlatform.system}.brulion.spellDictionaries;
+          # Tesseract and its English and Polish models for the OCR of ./build (the package compiles
+          # these store paths in instead: nix/package.nix; src/platform/ocr_tesseract.cpp loads the
+          # library at run time).
+          BRULION_TESSERACT_LIBRARY = "${
+            self.packages.${pkgs.stdenv.hostPlatform.system}.brulion.tesseract
+          }/lib/libtesseract.so.5";
+          BRULION_TESSDATA_DIR = self.packages.${pkgs.stdenv.hostPlatform.system}.brulion.tessdata;
           # llama.cpp's sources for the model on the device (cmake/BrulionLocalAi.cmake: a build
           # configured in this shell compiles them in; 3rdparty/llama/pin.json names the release).
           BRULION_LLAMA_SOURCE_DIR = self.packages.${pkgs.stdenv.hostPlatform.system}.brulion.llamaSrc;

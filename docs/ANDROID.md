@@ -987,6 +987,18 @@ Still to be checked on a real phone: smoothness of pinching and the Back gesture
 search on Android 15+ on a real device, "Open in another app" with real PDF apps, large scans of
 lectures.
 
+**The whole-notebook search** (docs/UI.md "Searching attachments") reads the PDFs' text the same
+way — page by page through `PdfRenderer`'s text API, so from Android 15 on (API 35; older versions
+find PDFs by their file names only) — on its worker thread at the lowest priority, its records in
+the app's cache (`cache/attachment-text`, pruned to 512 MiB; Android may clear it when storage runs
+low: the PDFs are then read again). **No OCR on Android** (Settings → Search says "Text recognition
+is not available in this version of Brulion"): Tesseract built with the NDK (with Leptonica and its
+image libraries) would add about 25 MB per ABI to the APK and its models 9 MB more (English and
+Polish, `tessdata_fast`) — against the APK budget of 40 MB (docs/PERFORMANCE.md "Budgets") —, and a
+page takes a phone's core several seconds; Google's ML Kit would make the app depend on Play
+services (GrapheneOS, F-Droid). Pictures are found by their file names; scans are searched on a
+computer, whose results sync as notes do not (the text stays on each device).
+
 ## Spell checking
 
 Brulion adds no dictionaries to the APK: it asks the **system spell checker** — the same one the

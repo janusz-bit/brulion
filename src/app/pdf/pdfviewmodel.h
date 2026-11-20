@@ -14,7 +14,9 @@
 // Search: setSearchText() (250 ms later) starts a job on PdfRenderPool at the lowest priority from
 // the current page, wrapping, page by page (PdfReader::find: case- and diacritics-insensitive), the
 // hits posted in batches; a new text cancels it between pages. The first hit at or after the current
-// page becomes the current one and is shown (moveViewport()). At most MaxHits.
+// page becomes the current one and is shown (moveViewport()). At most MaxHits. A page with (almost)
+// no text of its own — a scan — is searched in the text OCR read on it, where the app has it
+// (setOcrLookup(): the attachments' search, src/app/attachments), its hits placed by the words' boxes.
 //
 // Text selection (where platform::pdfSelectionAvailable()): selectText() between two points of a
 // page (fractions of it) or selectAll() of a page, run on PdfRenderPool (a newer request makes an
@@ -55,6 +57,7 @@
 #include <atomic>
 #include <functional>
 #include <memory>
+#include <optional>
 
 namespace brulion::pdfview {
 
@@ -174,6 +177,21 @@ private:
     Q_PROPERTY(int linkRevision READ linkRevision NOTIFY linksChanged FINAL)
 
 public:
+    /// The text OCR read on a page, as the attachments' search keeps it: the text and a box for
+    /// every UTF-16 unit of it in fractions of the page (empty between words).
+    struct OcrText {
+        QString text;
+        QList<QRectF> boxes;
+    };
+    /// Where the search finds the OCR text of a page of `file` at `version` (nullopt: none). Called
+    /// on the pool's threads; set by the app (Workspace) once, before any viewer opens. Empty: no
+    /// page is searched beyond its own text.
+    using OcrLookup = std::function<std::optional<OcrText>(const QString &file, const QString &version, int page)>;
+    static void setOcrLookup(OcrLookup lookup);
+    /// A page with fewer letters of its own is searched in its OCR text (AttachmentIndexer::
+    /// MinTextLayerLetters: the pages it reads with OCR).
+    static constexpr int OcrMaxLetters = 8;
+
     static constexpr int MaxViewerPages = 20'000;
     static constexpr int MaxHits = 5000;
     static constexpr int SizeChunk = 64;

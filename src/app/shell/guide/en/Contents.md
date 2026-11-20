@@ -49,6 +49,7 @@ Brulion updates the documentation together with the app: new pages are added, an
 - [[AI|AI]] — the AI assistant and `b.ai`: Claude, OpenAI-compatible APIs or your own server, also on the phone.
 
 ## Handy
+- [[Search|Search]] — words in notes, PDFs and pictures, filters, text recognition (OCR).
 - [[Keyboard shortcuts|Keyboard shortcuts]] — including your own command shortcuts.
 - [[Changelog|Changelog]] — what changed in each version of Brulion.
 

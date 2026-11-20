@@ -4,13 +4,17 @@ import QtQuick.Layouts
 import QtQuick.Templates as T
 import Brulion
 
-// SearchView — route "search" ({query?, folder?}): full-text search over every note
-// (SearchResultModel: folded words — "zolw" finds "Żółw" —, prefix of the last word, fuzzy, titles
-// first) with the matched words highlighted in titles and excerpts, filters (All / Pages /
-// Journals, a folder: the route's — the sidebar's "Search in folder", any depth — or a top-level
-// one from the menu) and the recent searches when the field is empty. A result opens its page at
-// the matching line. The query and the folder are kept in the route (back from a page returns to
-// the results; a folder renamed or moved is followed).
+// SearchView — route "search" ({query?, folder?}): full-text search over every note and the
+// notebook's PDFs and pictures (SearchResultModel: folded words — "zolw" finds "Żółw" —, prefix of
+// the last word, fuzzy, titles first; attachments by their text layer and OCR, docs/UI.md
+// "Searching attachments") with the matched words highlighted in titles and excerpts, filters (All /
+// Pages / Journals / Attachments, the query's own in:pdf, in:pictures…, a folder: the route's — the
+// sidebar's "Search in folder", any depth — or a top-level one from the menu) and the recent
+// searches when the field is empty. A note's result opens its page at the matching line; a PDF's
+// opens the PDF viewer at its page with the hit highlighted (route open "search"), a picture's the
+// picture with the places of the words framed. While attachments are being read, a line under the
+// filters says so, with Pause / Resume (Workspace.attachments). The query and the folder are kept in
+// the route (back from a page returns to the results; a folder renamed or moved is followed).
 //
 // Keys: the field has the focus whenever the view is shown, its query selected (on phones the
 // keyboard comes up); Up/Down move through the results, Enter opens (Ctrl+Enter in
@@ -41,17 +45,55 @@ FocusScope {
         AppSettings.clearRecentSearches()
     }
     MapHolder { id: resultInfo }
-    /// Open result `row`: here, in the side panel (`newPane`) or in `target` ("tab": a new tab).
+    /// Open result `row`: here, in the side panel (`newPane`) or in `target` ("tab": a new tab). A
+    /// PDF opens at its page with the search typed (the hit highlighted), a picture with its words
+    /// framed.
     function openResult(row: int, newPane: bool, target: string): void {
-        // { path, line, … }
+        // { path, line, kind, page, find, … }
         resultInfo.map = results.get(row)
         const path = "" + resultInfo.map.path
         if (resultInfo.map.path === undefined || path === "")
             return
         remember(field.text)
+        const pane = newPane && !Theme.narrow
+        const kind = AppController.routeText(resultInfo.map, "kind")
+        const find = AppController.routeText(resultInfo.map, "find")
         OpenIn.begin(target)
-        AppController.openPage(path, resultInfo.map.line, newPane && !Theme.narrow)
+        if (kind === "pdf")
+            AppController.navigate({ view: "page", path: path, pdfPage: AppController.routeInt(resultInfo.map, "page", 1),
+                                     open: "search", search: find }, pane)
+        else if (kind === "picture")
+            AppController.navigate({ view: "page", path: path, search: find }, pane)
+        else
+            AppController.openPage(path, resultInfo.map.line, pane)
         OpenIn.end()
+    }
+    /// What the attachments' reading is doing, for the line under the filters ("" when nothing).
+    readonly property AttachmentIndexer attachments: Workspace.attachments
+    readonly property string attachmentsStatus: {
+        if (!root.attachments.enabled)
+            return ""
+        switch (root.attachments.state) {
+        case "reading":
+            return root.attachments.filesTotal > 1
+                   ? qsTr("Reading attachments… %1 of %2").arg(root.attachments.filesDone).arg(root.attachments.filesTotal)
+                   : qsTr("Reading attachments…")
+        case "recognizing":
+            return root.attachments.currentPages > 1
+                   ? qsTr("Recognizing text: page %1 of %2 in “%3”").arg(root.attachments.currentPage)
+                         .arg(root.attachments.currentPages).arg(root.baseName(root.attachments.currentFile))
+                   : qsTr("Recognizing text in “%1”").arg(root.baseName(root.attachments.currentFile))
+        case "waiting":
+            return qsTr("Reading attachments waits for the sync to end.")
+        case "paused":
+            return qsTr("Reading attachments is paused: they are found only as far as they were read.")
+        default:
+            return ""
+        }
+    }
+    function baseName(path: string): string {
+        const i = Js.lastIndexOf(path, "/")
+        return i < 0 ? path : Js.sliceFrom(path, i + 1)
     }
     /// Open the current result (the side panel with `newPane`).
     function openCurrent(newPane: bool): void {
@@ -115,7 +157,18 @@ FocusScope {
         workspace: Workspace
         // Hidden (kept by ShellRouteView): edits do not run the search again until it is shown.
         active: root.visible
-        onQueryChanged: list.currentIndex = 0
+        // A new query starts at its first result — also once the rows came (the old query's current
+        // row kept by the diff would otherwise stay current).
+        property bool fresh: false
+        onQueryChanged: {
+            list.currentIndex = 0
+            fresh = true
+        }
+        onRefreshed: {
+            if (fresh)
+                list.currentIndex = 0
+            fresh = false
+        }
     }
 
     Rectangle {
@@ -175,9 +228,11 @@ FocusScope {
             BSegmented {
                 Layout.fillWidth: Theme.compact
                 fill: Theme.compact
-                model: [{ value: "all", text: qsTr("All"), icon: "files" },
-                        { value: "pages", text: qsTr("Pages"), icon: "file-text" },
-                        { value: "journals", text: qsTr("Journals"), icon: "calendar-days" }]
+                // (Without icons on compact windows: four choices across a phone.)
+                model: [{ value: "all", text: qsTr("All"), icon: Theme.compact ? "" : "files" },
+                        { value: "pages", text: qsTr("Pages"), icon: Theme.compact ? "" : "file-text" },
+                        { value: "journals", text: qsTr("Journals"), icon: Theme.compact ? "" : "calendar-days" },
+                        { value: "attachments", text: qsTr("Attachments"), icon: Theme.compact ? "" : "paperclip" }]
                 currentValue: results.scope
                 size: "small"
                 accessibleName: qsTr("Search in")
@@ -218,6 +273,47 @@ FocusScope {
             }
         }
 
+        // ---- Attachments being read ---------------------------------------------------------------------
+        // (Their hits come in as they are read: the user knows the list may grow, and can pause it.)
+        RowLayout {
+            objectName: "searchAttachmentsProgress"
+            visible: root.query !== "" && root.attachmentsStatus !== "" && results.scope !== "pages"
+                     && results.scope !== "journals"
+            Layout.fillWidth: true
+            Layout.leftMargin: root.sideMargin
+            Layout.rightMargin: root.sideMargin
+            spacing: Theme.space2
+            BSpinner {
+                visible: root.attachments.state === "reading" || root.attachments.state === "recognizing"
+                running: visible
+                size: Theme.iconSizeSm
+            }
+            BIcon {
+                visible: !(root.attachments.state === "reading" || root.attachments.state === "recognizing")
+                name: root.attachments.state === "paused" ? "pause" : "paperclip"
+                size: Theme.iconSizeSm
+                color: Theme.fgFaint
+            }
+            BText {
+                objectName: "searchAttachmentsStatus"
+                Layout.fillWidth: true
+                text: root.attachmentsStatus
+                variant: "caption"
+                color: Theme.fgMuted
+                wrapMode: Text.Wrap
+            }
+            BButton {
+                objectName: "searchAttachmentsPause"
+                visible: root.attachments.state !== "waiting"
+                size: "small"
+                variant: "ghost"
+                iconName: root.attachments.paused ? "play" : "pause"
+                text: Theme.compact ? "" : root.attachments.paused ? qsTr("Resume") : qsTr("Pause")
+                Accessible.name: root.attachments.paused ? qsTr("Resume reading attachments") : qsTr("Pause reading attachments")
+                onClicked: root.attachments.paused = !root.attachments.paused
+            }
+        }
+
         // ---- Results -----------------------------------------------------------------------------------
         ListView {
             id: list
@@ -245,8 +341,23 @@ FocusScope {
                 required property list<var> excerptMatches
                 required property list<var> titleMatches
                 required property string journalDate
+                required property string kind
+                required property int page
+                required property int pageCount
+                required property int matchedPages
+                required property bool ocr
                 readonly property bool journal: hit.journalDate !== ""
+                readonly property bool attachment: hit.kind !== "note"
                 readonly property string heading: hit.journal ? DatesHelper.formatLong(hit.journalDate) : hit.title
+                /// An attachment's page and how many more pages match ("" for a note).
+                readonly property string pageInfo: {
+                    if (!hit.attachment)
+                        return ""
+                    if (hit.matchedPages === 0)
+                        return qsTr("Found by its name")
+                    const where = hit.kind === "pdf" ? qsTr("Page %1 of %2").arg(hit.page).arg(hit.pageCount) : qsTr("Picture")
+                    return hit.matchedPages > 1 ? where + " · " + qsTr("%n more page(s) match", "", hit.matchedPages - 1) : where
+                }
                 // On the highlighted row the accent is too light: the text colour (the matches
                 // stay bold).
                 readonly property color matchColor: hit.highlighted ? Theme.fg : Theme.accentText
@@ -263,7 +374,7 @@ FocusScope {
                 highlighted: ListView.isCurrentItem
                 focusPolicy: Qt.NoFocus
                 Accessible.role: Accessible.ListItem
-                Accessible.name: hit.heading + ": " + hit.excerpt
+                Accessible.name: hit.heading + (hit.pageInfo !== "" ? ", " + hit.pageInfo : "") + ": " + hit.excerpt
                 // Ctrl+click: a new tab (OpenIn).
                 onClicked: root.openResult(hit.index, false, OpenIn.clickTarget(Qt.LeftButton, EditorInput.keyboardModifiers()))
                 TapHandler {
@@ -286,7 +397,7 @@ FocusScope {
                         Layout.fillWidth: true
                         spacing: Theme.space2
                         BIcon {
-                            name: hit.journal ? "calendar-days" : "file-text"
+                            name: hit.journal ? "calendar-days" : hit.kind === "pdf" ? "file" : hit.kind === "picture" ? "image" : "file-text"
                             size: Theme.iconSizeSm
                             color: Theme.fgMuted
                         }
@@ -320,6 +431,36 @@ FocusScope {
                         wrapMode: Text.Wrap
                         maximumLineCount: 2
                     }
+                    // An attachment's page, its other pages, text read by OCR.
+                    RowLayout {
+                        objectName: "searchHitPage"
+                        visible: hit.attachment
+                        Layout.fillWidth: true
+                        spacing: Theme.space1
+                        BText {
+                            Layout.fillWidth: !hit.ocr
+                            text: hit.pageInfo
+                            variant: "caption"
+                            color: hit.highlighted ? Theme.fgMuted : Theme.fgFaint
+                            elide: Text.ElideRight
+                        }
+                        BIcon {
+                            visible: hit.ocr
+                            Layout.leftMargin: Theme.space2
+                            name: "scan-text"
+                            size: Theme.iconSizeSm
+                            color: hit.highlighted ? Theme.fgMuted : Theme.fgFaint
+                        }
+                        BText {
+                            objectName: "searchHitOcr"
+                            visible: hit.ocr
+                            Layout.fillWidth: true
+                            text: qsTr("Recognized text")
+                            variant: "caption"
+                            color: hit.highlighted ? Theme.fgMuted : Theme.fgFaint
+                            elide: Text.ElideRight
+                        }
+                    }
                 }
             }
 
@@ -331,7 +472,8 @@ FocusScope {
                 iconName: "search"
                 title: qsTr("Nothing found for “%1”").arg(root.query)
                 description: results.totalCount > 0 ? qsTr("The filters hide %n result(s).", "", results.totalCount)
-                                                     : qsTr("Try fewer or shorter words. Polish letters are optional: “zolw” finds “Żółw”.")
+                             : results.queryFiltered ? qsTr("Nothing of that kind holds these words: try without “in:”.")
+                             : qsTr("Try fewer or shorter words. Polish letters are optional: “zolw” finds “Żółw”.")
                 actionText: results.totalCount > 0 ? qsTr("Show all results") : ""
                 onActionTriggered: {
                     results.scope = "all"
@@ -391,7 +533,7 @@ FocusScope {
                     Layout.topMargin: Theme.space12
                     iconName: "search"
                     title: qsTr("Search your notes")
-                    description: qsTr("Words anywhere in titles and text. Polish letters are optional: “zolw” finds “Żółw”; the last word may be the start of a word.")
+                    description: qsTr("Words anywhere in titles and text, and in PDFs and pictures. Polish letters are optional: “zolw” finds “Żółw”; the last word may be the start of a word. “in:pdf”, “in:pictures” or “in:notes” narrows the search.")
                 }
             }
         }

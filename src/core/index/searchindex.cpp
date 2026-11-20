@@ -304,6 +304,7 @@ QList<SearchIndex::Hit> SearchIndex::search(QStringView query, int limit) const
         Hit hit;
         hit.id = m_docs[doc].id;
         hit.score = total[doc];
+        hit.literal = literalTerms[doc];
         for (const QList<const QString *> &bestTerm : std::as_const(best)) {
             if (const QString *term = bestTerm.at(doc); term && !hit.terms.contains(*term))
                 hit.terms.append(*term);
