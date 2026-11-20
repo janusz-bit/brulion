@@ -10,6 +10,8 @@
 
 #include "canvas/canvas.h"
 
+#include <QSizeF>
+
 #include <functional>
 
 namespace brulion::canvas {

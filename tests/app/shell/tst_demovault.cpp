@@ -132,7 +132,7 @@ private Q_SLOTS:
         QVERIFY(files.contains(deck));
         QVERIFY(files.value(deck).contains(u"el perro::"_s));
         QVERIFY(files.value(deck).contains(u"<!--SR:!2026-10-14,4,250-->"_s));
-        QCOMPARE(files.size(), 11);
+        QCOMPARE(files.size(), 12); // … and the canvas of the renovation
         for (auto it = files.cbegin(); it != files.cend(); ++it) {
             QVERIFY2(!it.value().contains(u"{today}"_s) && !it.value().contains(u"{in2}"_s), qPrintable(it.key()));
             QVERIFY2(it.value().endsWith(u'\n'), qPrintable(it.key()));
