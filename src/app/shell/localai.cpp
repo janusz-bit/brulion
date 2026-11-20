@@ -480,7 +480,7 @@ void LocalAi::send(const ai::Settings &settings, const ai::Request &request, std
         if (!other) {
             const ai::LocalModel *any = seer(false);
             return refuse(any ? u"the model on this device (%1) does not see pictures: download %2 too in Settings → "
-                                 u"Extensions → AI, and it looks at them in its place"_s.arg(m->name, any->name)
+                                u"Extensions → AI, and it looks at them in its place"_s.arg(m->name, any->name)
                               : u"the model on this device (%1) does not see pictures"_s.arg(m->name));
         }
         qCInfo(lcLocalAi).noquote() << u"%1 does not see pictures: %2 looks at them"_s.arg(m->id, other->id);

@@ -5972,7 +5972,8 @@ void checkAiButton(QQuickWindow *window, AppController *app, const Check &check)
     QQuickItem *answer = nullptr;
     check(waitFor([&] { return (answer = named(u"chatMessageAi"_s)) != nullptr; }), "a conversation shows its answer");
     check(answer && waitFor([&] { return answer->width() > 200; }),
-          qPrintable(u"an answer with inline code fills its bubble's width (%1 px)"_s.arg(answer ? answer->width() : 0)));
+          qPrintable(
+                  u"an answer with inline code fills its bubble's width (%1 px)"_s.arg(answer ? answer->width() : 0)));
     app->back();
     check(waitFor([&] { return app->currentView() == u"chat" && named(u"chatConversations"_s) != nullptr; }),
           "Back returns to the conversations");

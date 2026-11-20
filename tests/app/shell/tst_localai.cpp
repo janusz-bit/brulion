@@ -578,9 +578,8 @@ private Q_SLOTS:
             const std::lock_guard lock(f.record.mutex);
             QCOMPARE(f.record.opened[1].modelPath, f.dir.path() + u"/models/sees.gguf"_s);
             QCOMPARE(f.record.opened[1].projectorPath, f.dir.path() + u"/models/sees-projector.gguf"_s);
-            QVERIFY(std::ranges::any_of(f.record.prompts.last().pieces, [](const ai::local::Piece &p) {
-                return p.image == "jpeg: paragon";
-            }));
+            QVERIFY(std::ranges::any_of(f.record.prompts.last().pieces,
+                                        [](const ai::local::Piece &p) { return p.image == "jpeg: paragon"; }));
         }
         // … and the next question without one opens the chosen model again.
         reply = ask(local, u"reads"_s);
