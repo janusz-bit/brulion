@@ -246,6 +246,11 @@ private:
     QTimer m_eventsTimer;
     QTimer m_startTimer;
     mutable QHash<QString, std::shared_ptr<const caldav::CalendarData>> m_data;
+    /// The last range asked for and its entries (the calendar asks for the same range again and
+    /// again: its days, its day panel); dropped with every change of the events.
+    mutable QDate m_cacheFrom;
+    mutable QDate m_cacheTo;
+    mutable QList<planning::ExternalEvent> m_cache;
     QSet<QString> m_trackedBlocks; ///< block ids of synced tasks (an edit of their notes syncs)
     QSet<QString> m_taskPages;
     QVariantMap m_lastDiscovery; ///< { server, user, principal, home }

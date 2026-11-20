@@ -174,7 +174,10 @@ through Syncthing or Nextcloud. So that it rings even while Brulion is closed, A
 * The notebook checked is the one whose reminders are set (the one opened last; the
   documentation does not count). When the notebook syncs with **Nextcloud**, one sync runs first
   (the same as in the app, with the same state), then the notes are read. With **Syncthing**,
-  Syncthing-Fork downloads the files itself and Brulion only reads them.
+  Syncthing-Fork downloads the files itself and Brulion only reads them. **CalDAV calendars** that
+  keep tasks in the notebook (docs/UI.md "Calendars") are synced next, so a reminder set on a task
+  in another app (Nextcloud Tasks, Tasks.org, Thunderbird) rings on the phone too; subscriptions and
+  the events of calendars are not fetched here (they ring nothing).
 * What is in the notes replaces the set reminders: new ones are added, and those deleted or moved
   on the computer disappear or move. Snoozes from a notification stay.
 * When the notebook cannot be read (missing or empty folder, e.g. after a card is removed or the
@@ -215,6 +218,11 @@ How it works:
   Nextcloud it runs one sync with the same `SyncEngine` and the same state from the device data
   folder. Then it computes the reminders with `upcomingFor()`, which gives the same set the app
   hands to Android (a 14-day horizon, at most 64 reminders, ring time, language, notebook id).
+  Between the two it runs the notebook's CalDAV calendars that sync tasks (`caldav::CalendarSync`
+  over `<stateDir>/calendars/`, the accounts' passwords from the app's `secrets/caldav-<account>`;
+  the result's `calendars`: "off" | "ok" | "failed" | "busy"). A lock file there (`sync.lock`)
+  keeps the app's process and this one from syncing the calendars at the same time, and each run
+  reads the calendars' state from the files again.
   This way the alarm ids match.
 * The result (JSON as in `scheduleReminders`) goes back through a `Messenger` to the job in the
   main process, which sets the alarms with `AlarmScheduler.replaceAll`. `ReminderStore`

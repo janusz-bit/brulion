@@ -114,7 +114,9 @@ private:
     void finish();
     void refresh(const Subscription &subscription);
     void syncCalendar(const CalendarEntry &entry);
-    CalDavClient *client(const Account &account, QString *problem);
+    /// The account's client (kept by the run that uses it: the clients are made again when a
+    /// password changes meanwhile).
+    std::shared_ptr<CalDavClient> client(const Account &account, QString *problem);
     void log(LogEntry entry);
 
     CalendarStore *m_store = nullptr;

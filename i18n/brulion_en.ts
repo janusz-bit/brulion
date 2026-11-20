@@ -246,10 +246,21 @@
     </message>
 </context>
 <context>
+    <name>CalendarEventDialog</name>
+    <message numerus="yes">
+        <location filename="../src/app/qml/planning/CalendarEventDialog.qml" line="74"/>
+        <source>%n minute(s) before</source>
+        <translation>
+            <numerusform>%n minute before</numerusform>
+            <numerusform>%n minutes before</numerusform>
+        </translation>
+    </message>
+</context>
+<context>
     <name>CalendarHeader</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/planning/CalendarHeader.qml" line="138"/>
-        <location filename="../src/app/qml/planning/CalendarHeader.qml" line="139"/>
+        <location filename="../src/app/qml/planning/CalendarHeader.qml" line="141"/>
+        <location filename="../src/app/qml/planning/CalendarHeader.qml" line="142"/>
         <source>%n overdue</source>
         <translation>
             <numerusform>%n overdue</numerusform>
@@ -260,7 +271,7 @@
 <context>
     <name>CalendarMonthGrid</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/planning/CalendarMonthGrid.qml" line="260"/>
+        <location filename="../src/app/qml/planning/CalendarMonthGrid.qml" line="261"/>
         <source>%n entries</source>
         <translation>
             <numerusform>%n entry</numerusform>
@@ -268,7 +279,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/planning/CalendarMonthGrid.qml" line="395"/>
+        <location filename="../src/app/qml/planning/CalendarMonthGrid.qml" line="407"/>
         <source>+%n more</source>
         <translation>
             <numerusform>+%n more</numerusform>
@@ -279,7 +290,7 @@
 <context>
     <name>CalendarWeekGrid</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/planning/CalendarWeekGrid.qml" line="266"/>
+        <location filename="../src/app/qml/planning/CalendarWeekGrid.qml" line="269"/>
         <source>+%n more</source>
         <translation>
             <numerusform>+%n more</numerusform>
@@ -424,7 +435,7 @@
     <name>ContentPdfView</name>
     <message numerus="yes">
         <location filename="../src/app/qml/content/ContentPdfView.qml" line="1513"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="3825"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="3863"/>
         <source>%n page(s)</source>
         <translation>
             <numerusform>%n page</numerusform>
@@ -1340,7 +1351,7 @@
     <name>ShellShareDialog</name>
     <message numerus="yes">
         <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="32"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="6834"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="6876"/>
         <source>%n file(s) to save in the notebook</source>
         <translation>
             <numerusform>%n file to save in the notebook</numerusform>
@@ -1494,7 +1505,7 @@
 <context>
     <name>SyncView</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SyncView.qml" line="307"/>
+        <location filename="../src/app/qml/views/SyncView.qml" line="310"/>
         <source>%n change(s)</source>
         <translation>
             <numerusform>%n change</numerusform>
@@ -1502,7 +1513,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SyncView.qml" line="337"/>
+        <location filename="../src/app/qml/views/SyncView.qml" line="340"/>
         <source>%n note(s) changed on two devices at once</source>
         <translation>
             <numerusform>%n note changed on two devices at once</numerusform>
@@ -1510,7 +1521,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SyncView.qml" line="438"/>
+        <location filename="../src/app/qml/views/SyncView.qml" line="446"/>
         <source>%n note(s) with two versions</source>
         <translation>
             <numerusform>%n note with two versions</numerusform>
@@ -1948,6 +1959,41 @@
         <translation>
             <numerusform>The last backup is missing %n file that could not be read or disappeared while it ran. The event log names it. Older complete backups are kept.</numerusform>
             <numerusform>The last backup is missing %n files that could not be read or disappeared while it ran. The event log names them. Older complete backups are kept.</numerusform>
+        </translation>
+    </message>
+</context>
+<context>
+    <name>brulion::shell::WorkspaceCalendars</name>
+    <message numerus="yes">
+        <location filename="../src/app/shell/workspacecalendars.cpp" line="1324"/>
+        <source>Updated: %n event(s)</source>
+        <translation>
+            <numerusform>Updated: %n event</numerusform>
+            <numerusform>Updated: %n events</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/shell/workspacecalendars.cpp" line="1341"/>
+        <source>%n deletion(s) wait for a confirmation: %1</source>
+        <translation>
+            <numerusform>%n deletion waits for a confirmation: %1</numerusform>
+            <numerusform>%n deletions wait for a confirmation: %1</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/shell/workspaceintegration.cpp" line="331"/>
+        <source>%n task(s) changed both here and on the server — see the sync center</source>
+        <translation>
+            <numerusform>%n task changed both here and on the server — see the sync center</numerusform>
+            <numerusform>%n tasks changed both here and on the server — see the sync center</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/shell/workspaceintegration.cpp" line="337"/>
+        <source>%n deletion(s) of synced tasks wait for a confirmation in the sync center</source>
+        <translation>
+            <numerusform>%n deletion of a synced task waits for a confirmation in the sync center</numerusform>
+            <numerusform>%n deletions of synced tasks wait for a confirmation in the sync center</numerusform>
         </translation>
     </message>
 </context>

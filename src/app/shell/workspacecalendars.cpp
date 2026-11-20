@@ -94,7 +94,11 @@ QStringList WorkspaceCalendars::palette()
 
 WorkspaceCalendars::WorkspaceCalendars(QObject *parent) : planning::EventSource(parent)
 {
+#if QT_CONFIG(timezone)
     m_zone = QTimeZone::systemTimeZone();
+#else
+    m_zone = QTimeZone(QTimeZone::LocalTime); // (no database: the browser's own local time)
+#endif
     m_eventsTimer.setSingleShot(true);
     m_eventsTimer.setInterval(0);
     connect(&m_eventsTimer, &QTimer::timeout, this, [this] {
@@ -151,6 +155,7 @@ void WorkspaceCalendars::setLanguage(const QString &language)
     Q_EMIT configurationChanged();
     Q_EMIT statusChanged();
     Q_EMIT logChanged();
+    scheduleEventsChanged(); // "(no title)" in the new language
 }
 
 void WorkspaceCalendars::setBrowser(bool browser)
@@ -372,6 +377,8 @@ void WorkspaceCalendars::invalidate(const QString &id)
 
 void WorkspaceCalendars::scheduleEventsChanged()
 {
+    m_cacheFrom = QDate();
+    m_cache.clear();
     m_eventsTimer.start();
 }
 
@@ -403,6 +410,13 @@ QList<planning::ExternalEvent> WorkspaceCalendars::eventsBetween(QDate from, QDa
     QList<planning::ExternalEvent> out;
     if (!m_store || !from.isValid() || !to.isValid() || from > to || from.daysTo(to) > 800)
         return out;
+    if (m_cacheFrom.isValid() && from >= m_cacheFrom && to <= m_cacheTo) {
+        for (const planning::ExternalEvent &e : std::as_const(m_cache)) {
+            if (e.date >= from && e.date <= to)
+                out.append(e);
+        }
+        return out;
+    }
     const caldav::CalendarSettings s = m_store->settings();
     struct Source {
         QString id;
@@ -457,6 +471,9 @@ QList<planning::ExternalEvent> WorkspaceCalendars::eventsBetween(QDate from, QDa
             return !at; // all-day (and continued) first
         return at && a.start < b.start;
     });
+    m_cacheFrom = from;
+    m_cacheTo = to;
+    m_cache = out;
     return out;
 }
 

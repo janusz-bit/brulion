@@ -36,6 +36,17 @@ On a phone the month shows a small icon for each kind of open entry: a red excla
 
 Clicking a day — in the agenda, its header — opens its plan, from which you can add a task or reminder without leaving the calendar. A right click on an entry (on a phone, a long press) opens the menu of its date or reminder — the change goes into the note, and the notification has an **Undo** button. The side panel of a journal page also has a small month calendar.
 
+### Other calendars: subscriptions and CalDAV
+The calendar also shows the events of **other calendars**, each in its own colour: holidays, a school's or a team's calendar, your Nextcloud, Fastmail or iCloud calendar. You add them in the *Sync center → Calendars* (or with the calendar button at the top of the calendar → **Manage calendars…**):
+
+- **Subscribe** to a calendar by its address (`https://…` or `webcal://…`): its events show in the calendar, read-only, and Brulion fetches it again every few hours. Google Calendar's “secret address in iCal format” (Settings → the calendar → Integrate calendar) works this way.
+- **Add a CalDAV account** (Nextcloud, Fastmail, iCloud with an app-specific password, Radicale, Baïkal…): the server, your user name and an app password; **Find calendars** lists them. For each calendar you choose **Events in the calendar** and **Tasks in the notes**. Google's CalDAV needs a Google sign-in Brulion does not have — subscribe to its secret iCal address instead.
+- The calendar button at the top shows or hides each calendar, and **New event…** adds one to a CalDAV calendar. Clicking an event shows when and where it is, its calendar and description; **Note in the journal** writes a line about it in that day's journal, and in a CalDAV calendar you can **Edit** it (for a repeating event — this one or all of them) and **Delete** it. Changes go to the server at once, or as soon as there is a network.
+- **Tasks** of a CalDAV calendar become ordinary task lines on its page (by default `Calendars/<name>.md`) and stay in sync both ways: tick one off, change its date, priority or reminder, and the other app sees it — and the other way round. A new open task you write on that page goes to the server. Each synced line ends with a short id like `^c8ox0d31vdpib` (hidden in Brulion): it keeps the line linked to its task, even if you move the line to another page. More in [[Tasks|Tasks]].
+- When a task changed both here and on the server, the account's setting decides: **keep the newer** or **keep both**. Each such case is listed in the *Sync center → Calendars → What happened*.
+
+Everything about other calendars is kept on this device: another device of the same notebook adds its own subscriptions and accounts.
+
 ### Calendar from the tray icon
 On a computer (Windows and Linux) you open a small calendar without bringing up the Brulion window: from Brulion's icon in the system tray, next to the clock. Just click the icon (or choose **Calendar** from its menu, right click). The pop-up shows today's date, the month with dots on days with entries, and the list of tasks and reminders of the selected day. Clicking a task or **Open journal** shows that day in the Brulion window, and at the bottom there are **Open Brulion** and **Quick capture…**. The calendar goes away when you click elsewhere, press Escape or click the icon again.
 

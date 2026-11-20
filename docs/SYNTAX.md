@@ -1159,6 +1159,63 @@ apply to subtasks as to any task: a subtask that does not match is not shown, an
 whose task does not match is listed on its own. A task's subtasks fold in the list (a view state:
 nothing is written into the note, unlike a folded block's `collapsed:: true`).
 
+### Tasks synced with CalDAV
+
+A CalDAV calendar whose tasks the user syncs with the notebook (docs/UI.md "Calendars") keeps
+each of its tasks (VTODO) as an ordinary task line — nothing new to learn, every task feature
+works on it — and the line keeps its task by its **block id**:
+
+```markdown
+- [ ] Kupić mleko #zakupy ⏫ 📅 2026-11-21 ⏰ 2026-11-21 17:30 ^c8ox0d31vdpib
+  Pełnotłuste, dwa kartony
+	- [ ] Chleb ^cbofyt3gl0b4t
+- [ ] Nowe zadanie z Brulionu 📅 2026-11-25 ^k3x9a2b4c6d8
+```
+
+* **The id.** A task made on the server gets `^c` and 12 characters of its UID's hash (base 36):
+  every device reaches the same id from the same UID. A line written in Brulion is sent with the
+  UID `brulion-<its block id>` — a line without an id gets a 12-character one when it is sent.
+  Block ids are hidden in Brulion's editor and in Obsidian's reading view; Obsidian Tasks keeps
+  them at the end of the line. A line moved to another page (the journal) stays the same task: it
+  is found by its id anywhere in the notebook.
+* **Where new tasks go.** The server's new tasks are appended to the calendar's page (chosen per
+  calendar; by default `Kalendarze/<calendar>.md`, `Calendars/<calendar>.md` in English), a subtask
+  (RELATED-TO) under its parent's line. New open task lines **of that page** go to the server; done
+  or cancelled ones written there by hand stay notes, and tasks elsewhere in the notebook are never
+  sent unless they were synced before.
+* **What maps to what** (each field compared on its own, so a change on one side never undoes a
+  change of another field on the other):
+
+  | Task line | VTODO |
+  |---|---|
+  | the text (without the trailing tags) | SUMMARY |
+  | `[ ]` `[/]` `[x]` `[-]` (`[>]` counts as to do) | STATUS NEEDS-ACTION, IN-PROCESS, COMPLETED, CANCELLED |
+  | `📅` | DUE |
+  | `⏳` (or `🛫` when the line has it instead) | DTSTART |
+  | `🔺` / `⏫` · `🔼` · `🔽` / `⏬` | PRIORITY 1 · 5 · 9 (read: 1–4 high, 5 medium, 6–9 low) |
+  | `✅` | COMPLETED (UTC; the local date) |
+  | `🔁` | RRULE (§7; a rule Brulion cannot write — "every second Tuesday" — shows no 🔁 and stays on the server as it is) |
+  | `⏰` / `⏰!` | VALARM DISPLAY / AUDIO, an absolute trigger (a done task's alarms are not sent) |
+  | the trailing `#tags` of the text | CATEGORIES (a category with spaces becomes `#Dom-i-ogród`) |
+  | the continuation lines (not properties or drawers) | DESCRIPTION (a line that would start a list or a heading gets a `\`) |
+  | nesting under a synced task | RELATED-TO;RELTYPE=PARENT (when a task is created) |
+
+  Dates without a time are DATE values; times are wall-clock times written with the device's zone
+  (TZID and a VTIMEZONE) and read in it. Everything else of the server's VTODO (X- properties,
+  attachments, e-mail alarms, SEQUENCE + 1) is kept: Brulion patches the fields that changed.
+* **Recurring tasks.** Completing one in Brulion writes its next occurrence above it (§5); the
+  sync moves the id to that new line and sends the series on with its next date (as task apps keep
+  a series), the done line staying the note's record. A task completed on the server is done here.
+* **Both sides changed.** Different fields are merged. The same field changed differently: the
+  account's choice — *keep the newer* (the server's LAST-MODIFIED against the note's modification
+  time) or *keep both* (the line keeps its text and the server's version becomes a second line
+  right under it, sent as a task of its own). Each conflict is logged in the sync center.
+* **Deletions.** A task deleted on the server removes its unchanged line (its nested blocks move
+  up); a line deleted here deletes the unchanged task on the server. A change beats a deletion: a
+  task changed on one side and deleted on the other comes back. When a run would delete more than
+  half of a calendar's synced tasks (and more than 5), nothing is deleted until the user confirms
+  it in the sync center; a calendar that is suddenly empty on the server deletes nothing at all.
+
 ### Time tracking and status history (Logseq `:LOGBOOK:`)
 
 A task's time is kept in a Logseq `:LOGBOOK:` drawer — continuation lines of its list item, read

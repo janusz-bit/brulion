@@ -177,12 +177,23 @@ void setProperty(io::ical::Component &c, const QString &name, const QString &val
     c.properties.append(io::ical::Property{name, params, value});
 }
 
+/// The IANA id of a zone ("" when unknown: builds without the time zone database).
+QString zoneId(const QTimeZone &zone)
+{
+#if QT_CONFIG(timezone)
+    return zone.isValid() ? QString::fromUtf8(zone.id()) : QString();
+#else
+    Q_UNUSED(zone);
+    return {};
+#endif
+}
+
 bool usableZone(const QTimeZone &zone)
 {
     if (!zone.isValid() || zone.timeSpec() != Qt::TimeZone)
         return false;
-    const QByteArray id = zone.id();
-    return !id.isEmpty() && id != "UTC" && !id.startsWith("UTC");
+    const QString id = zoneId(zone);
+    return !id.isEmpty() && id != u"UTC" && !id.startsWith(u"UTC"_s);
 }
 
 /// A DATE or DATE-TIME value of `spec` (the device's wall clock): TZID of the device's zone.
@@ -194,7 +205,7 @@ void setDate(io::ical::Component &c, const QString &name, const DateSpec &spec, 
     }
     if (usableZone(zone)) {
         setProperty(c, name, io::ical::formatLocalDateTime(spec.date, *spec.time),
-                    {{u"TZID"_s, QString::fromUtf8(zone.id())}});
+                    {{u"TZID"_s, zoneId(zone)}});
         if (usedZone)
             *usedZone = true;
     } else if (zone.isValid() && zone.timeSpec() == Qt::UTC) {
@@ -322,7 +333,7 @@ void ensureTimezone(io::ical::Component &calendar, const TodoContext &ctx)
 {
     if (!usableZone(ctx.zone))
         return;
-    const QString id = QString::fromUtf8(ctx.zone.id());
+    const QString id = zoneId(ctx.zone);
     for (const io::ical::Component &c : calendar.children) {
         if (c.name == u"VTIMEZONE" && c.text(u"TZID").trimmed() == id)
             return;
@@ -940,10 +951,10 @@ std::optional<io::ical::Component> vtimezoneFor(const QTimeZone &zone, int year)
 {
     if (!usableZone(zone))
         return std::nullopt;
+#if QT_CONFIG(timezone)
     io::ical::Component tz;
     tz.name = u"VTIMEZONE"_s;
-    tz.properties.append({u"TZID"_s, {}, QString::fromUtf8(zone.id())});
-#if QT_CONFIG(timezone)
+    tz.properties.append({u"TZID"_s, {}, zoneId(zone)});
     const QDateTime from(QDate(year, 1, 1), QTime(0, 0), QTimeZone::UTC);
     const QDateTime to(QDate(year + 1, 1, 1), QTime(0, 0), QTimeZone::UTC);
     const QTimeZone::OffsetDataList list = zone.transitions(from, to);

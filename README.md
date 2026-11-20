@@ -110,6 +110,12 @@ Pandoc Markdown document for Word, LibreOffice, PDF or EPUB).
   copy when they fail), your changes committed to the branch or proposed as a **pull request** —
   from your fork when you may not push; a personal access token for private repositories and for
   sending changes (docs/UI.md "Notebooks from GitHub").
+* **Other calendars**: subscriptions to ICS calendars (`https://…`, `webcal://`, Google Calendar's
+  secret iCal address) shown read-only in the calendar, and **CalDAV** accounts (Nextcloud,
+  Fastmail, iCloud, Radicale, Baïkal) whose events show in their colours — created, edited and
+  deleted in the app — and whose tasks become ordinary task lines synced both ways (status, dates,
+  priority, repetition, reminders; conflicts by "keep the newer" or "keep both", deletions behind a
+  guard; docs/UI.md "Calendars", docs/SYNTAX.md §5).
 * Weekly (ISO week, `2026-W45.md`) and monthly notes (`2026-11.md`) next to the daily ones, with
   their own folders, file names and templates, opened from the calendar's week numbers and month
   title or with `Ctrl+Alt+W` / `Ctrl+Alt+M`; `Ctrl+F` in the journal searches every day at once.
@@ -397,6 +403,12 @@ przykładowym notatnikiem.
   oznacza zadanie jako zrobione bez otwierania notatki.
   Przypomnienia, które minęły przy wyłączonym urządzeniu, czekają w dzienniku. Daty wpisujesz
   po polsku: „jutro o 9”, „w piątek 18:00”, „za 2 godziny”.
+* **Inne kalendarze.** Subskrypcje kalendarzy ICS (`https://…`, `webcal://`, tajny adres iCal
+  Kalendarza Google) widoczne w kalendarzu tylko do odczytu oraz konta **CalDAV** (Nextcloud,
+  Fastmail, iCloud, Radicale, Baïkal): ich wydarzenia w kolorach kalendarzy — dodawane, zmieniane
+  i usuwane w aplikacji — a zadania jako zwykłe linie zadań synchronizowane w obie strony (status,
+  daty, priorytet, powtarzanie, przypomnienia; konflikty „zachowaj nowsze” albo „zachowaj oba”,
+  usunięcia za zabezpieczeniem).
 * **Udostępnij / Otwórz w Brulionie.** Stronę z przeglądarki, tekst albo pliki `.md`/`.txt`
   z innej aplikacji zapiszesz w dzisiejszym dzienniku albo jako nową stronę — w oknie, w którym
   poprawisz tekst i tytuł: na Androidzie przez **Udostępnij → Brulion**

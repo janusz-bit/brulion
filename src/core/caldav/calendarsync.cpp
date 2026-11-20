@@ -145,7 +145,11 @@ struct CalendarSync::Run {
 
 CalendarSync::CalendarSync(CalendarStore *store, QObject *parent) : QObject(parent), m_store(store)
 {
+#if QT_CONFIG(timezone)
     m_zone = QTimeZone::systemTimeZone();
+#else
+    m_zone = QTimeZone(QTimeZone::LocalTime); // (no database: the browser's own local time)
+#endif
 }
 
 CalendarSync::~CalendarSync() = default;
@@ -195,16 +199,22 @@ bool CalendarSync::begin()
         return true;
     QDir().mkpath(m_store->folder());
     m_run->lock = std::make_unique<QLockFile>(m_store->folder() + u"/sync.lock"_s);
-    m_run->lock->setStaleLockTime(10 * 60 * 1000);
+    m_run->lock->setStaleLockTime(0); // only a dead owner makes the lock stale, never its age
     if (!m_run->lock->tryLock(0)) {
-        m_run->lock.reset();
-        m_run->report.error = sync::WebDavError::make(sync::WebDavErrorCode::Cancelled,
-                                                      u"Another process of this device syncs the calendars"_s);
-        m_run->report.cancelled = true;
-        m_running = true;
-        Q_EMIT runningChanged();
-        QTimer::singleShot(0, this, [this] { finish(); });
-        return false;
+        if (m_run->lock->error() != QLockFile::LockFailedError) {
+            // The folder cannot hold a lock file (the browser's storage, a read-only folder):
+            // nobody to share it with — without one.
+            m_run->lock.reset();
+        } else {
+            m_run->lock.reset();
+            m_run->report.error = sync::WebDavError::make(sync::WebDavErrorCode::Cancelled,
+                                                          u"Another process of this device syncs the calendars"_s);
+            m_run->report.cancelled = true;
+            m_running = true;
+            Q_EMIT runningChanged();
+            QTimer::singleShot(0, this, [this] { finish(); });
+            return false;
+        }
     }
     // What another process wrote meanwhile.
     m_store->reload();
@@ -308,7 +318,7 @@ void CalendarSync::log(LogEntry entry)
     Q_EMIT logChanged();
 }
 
-CalDavClient *CalendarSync::client(const Account &account, QString *problem)
+std::shared_ptr<CalDavClient> CalendarSync::client(const Account &account, QString *problem)
 {
     const QString password = m_passwords ? m_passwords(account.id) : QString();
     if (password.isEmpty()) {
@@ -327,7 +337,7 @@ CalDavClient *CalendarSync::client(const Account &account, QString *problem)
         e.client = std::make_shared<CalDavClient>(m_caldav, base, account.user, password);
         e.client->setBrowser(m_browser);
     }
-    return e.client.get();
+    return e.client;
 }
 
 void CalendarSync::discover(const QString &server, const QString &user, const QString &password,
@@ -452,7 +462,7 @@ namespace {
 struct Job {
     CalendarEntry entry;
     Account account;
-    CalDavClient *client = nullptr;
+    std::shared_ptr<CalDavClient> client;
     CalendarState state;
     ChangeSet changes;
     int outboxIndex = 0;
@@ -475,7 +485,7 @@ void CalendarSync::syncCalendar(const CalendarEntry &entry)
     const CalendarSettings settings = m_store->settings();
     const Account *account = settings.account(entry.account);
     QString problem;
-    CalDavClient *c = account ? client(*account, &problem) : nullptr;
+    const std::shared_ptr<CalDavClient> c = account ? client(*account, &problem) : nullptr;
     if (!c) {
         m_run->report.failed.append(entry.id);
         CalendarState state = m_store->state(entry.id);
