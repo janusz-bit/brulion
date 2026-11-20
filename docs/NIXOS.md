@@ -161,6 +161,20 @@ from cache.nixos.org for x86_64 and aarch64). CMake finds it through pkg-config
 the `tst_pdfpages` tests check the poppler backend there. Building without PDFs:
 `-DBRULION_PDF_BACKEND=none`.
 
+### Text recognition (OCR) for the search
+
+The search reads the text of PDFs and pictures (docs/UI.md "Searching attachments"); scanned pages
+and pictures need **Tesseract**, which the Nix package brings: `tesseract` from nixpkgs without its
+own models (`passthru.tesseract`, 5 MB; Leptonica and image libraries already in the closure or
+small) and the English and Polish "fast" models of `tessdata_fast` 4.1.0 (`passthru.tessdata`,
+9 MB, fetched by `nix/package.nix`). The program loads the library at run time from the store path
+compiled into it (`BRULION_TESSERACT_LIBRARY`, `BRULION_TESSDATA_DIRS`): nothing to install, and OCR
+stays off until Settings → Search turns it on. More languages: their `*.traineddata` files in
+`~/.local/share/Brulion/Brulion/tessdata` (the user's folder is looked in first and replaces the
+built-in ones; copy `eng` and `pol` there too). `nix develop` sets `BRULION_TESSERACT_LIBRARY` and
+`BRULION_TESSDATA_DIR` for `./build`, so `tst_ocr` and the OCR parts of `tst_attachmentindexer` and
+the shell self-test run there.
+
 ### The model on the device
 
 The Nix package has the AI provider "On this device" (docs/EXTENSIONS.md "AI"): llama.cpp is

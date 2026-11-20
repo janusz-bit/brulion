@@ -265,6 +265,13 @@ Application → Check for new versions** turns it off.
   from the LibreOffice dictionaries repository, with verified SHA-256 sums), the dictionaries live in the
   `dictionaries\` folder next to `brulion.exe` (with their licences). Not yet checked on real
   Windows: a program folder with Polish characters in its path.
+* **Text recognition (OCR)** for the search (docs/UI.md "Searching attachments") is not bundled:
+  Brulion loads an installed **Tesseract** (the UB Mannheim installer, with Polish ticked among the
+  languages): `libtesseract-5.dll` (or `tesseract55.dll`…) in `Program Files\Tesseract-OCR`,
+  `%LOCALAPPDATA%\Programs\Tesseract-OCR` or on `PATH`, its models in `tessdata\` beside it or in
+  `%APPDATA%\Brulion\Brulion\tessdata`. Without it Settings → Search says what to install; the PDFs'
+  own text is searched either way (Qt PDF). Not yet checked on real Windows: loading UB Mannheim's
+  MinGW-built DLL into the MSVC program (only its C functions are used, so it should work).
 * Symbolic links and junctions in a notebook are not tested on Windows.
 * x86_64 only (no Windows on ARM) and only Windows 10/11.
 * The tray calendar does not replace the Windows clock calendar (above, "Tray calendar").

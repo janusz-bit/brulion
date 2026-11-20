@@ -235,9 +235,18 @@ done in the repository simply disappears from the list.
 
 ## Search
 
-* **Searching attachments and OCR** — text of PDFs and pictures in the whole-notebook search, in
-  the background and offline, with a jump to the hit on the page (Joplin, SiYuan). Today a PDF is
-  searched only after it is opened.
+* **Searching attachments — check on devices and further ideas.** The text of PDFs and pictures
+  in the whole-notebook search, OCR with Tesseract and the jump to the hit on the page (docs/UI.md
+  "Searching attachments") are checked automatically: the core's and the indexer's tests, Tesseract
+  in the Nix dev shell and `nix flake check`, the shell self-test. What remains:
+  * by hand: Windows with UB Mannheim's Tesseract installer (its MinGW DLL loaded into the MSVC
+    program), the AppImage on Ubuntu / Fedora with the system's `tesseract-ocr` packages, PDFs'
+    text on a real Android 15+ phone, a semester of real lecture scans (hundreds of MB) on a slower
+    laptop — time, memory, the cache's size;
+  * OCR on the phone (decided against for now: +25 MB per ABI, docs/ANDROID.md) — reconsider with an
+    on-demand download of the engine and models;
+  * the text of other attachments (DOCX, ODT, EPUB, PPTX), the recognized text written into a scanned
+    PDF as its text layer ("Make searchable…"), handwriting in drawings.
 
 ## Privacy and security
 

@@ -201,6 +201,12 @@ most about four screens of image (phone about 41 MB, a 2560 × 1440 monitor abou
 matter how large the PDF is and how far you zoom in; a PDF of 300 pages opens at once. The
 browser version downloads about 0.14 MB more, the APK is about 0.3 MB larger.
 
+**Searching PDFs and pictures**: the text of a notebook's PDFs is read in the background at the
+lowest priority — a 1000-page PDF in about 1.5 s on a computer, an 80 MB scan without reading its
+pictures — and kept on the device (about 1.3 KB a page), so later starts only load it (0.06 s for
+the same 1000 pages); a search through them takes half a millisecond. Text recognition (OCR, off by
+default) takes about 2–3 s of one core per scanned A4 page; a phone does not recognize text.
+
 ### Known slow spots
 
 * **Indexing large notebooks on a phone** — it was about 15 s for 10,000 notes; now the notes
@@ -2956,6 +2962,48 @@ properties of many notes, so they follow the rules of query blocks:
 filters and a property sort within 12× a tag filter and 4 s (65 vs 15 ms measured), a `QueryCache`
 after one edit within ¼ of a full run + 2 ms (12.8 vs 58 ms), a board of 4000 notes within 6 s
 (170 ms) and a base over them within 12 s (0.5 s), all times `BRULION_TEST_SLOWDOWN`.
+
+### Searching attachments: text layers and OCR (2026-11-20)
+
+The whole-notebook search reads the notebook's PDFs and pictures (docs/UI.md "Searching
+attachments"); the rules that keep it out of the way:
+
+* **One worker thread at the lowest priority** (`QThread::IdlePriority`, SCHED_IDLE on Linux), one
+  file at a time, the text of new and changed files before OCR, waiting while a sync holds the PDFs
+  or the user paused it; started 3 s after the notebook's index is ready (never competing with
+  the start).
+* **Memory bounded by a page, not a file:** a PDF's text layer is read page by page through
+  `PdfReaderPool` leases (16 pages a lease: Windows can move the file in between); OCR draws one
+  page at ~300 dpi (at most 4200 px a side), recognizes it and lets it go. The file itself is only
+  hashed, in 1 MiB chunks.
+* **The GUI thread merges, never reads:** the worker tokenises (`AttachmentSearch::prepare`) and
+  posts 24 pages per event-loop turn (`PagesPerPost`); search results follow 250 ms later
+  (coalesced). Excerpts read only the pages of the rows shown, from the cache (a 64-page `QCache`).
+* **Nothing read twice:** records by content hash survive restarts, renames and copies; an
+  unchanged file (size and modification time) is not even hashed.
+
+Measured with `BRULION_ATTACHMENT_BENCH=1 tst_attachmentindexer largePdf` (this machine — a
+16-thread i5-13450HX — shared with other builds at load 18–24, so OCR's time varies by half): a
+1000-page text PDF (1.8 MB, ~120 words a page) and a 60-page scan (82 MB, A4 at 150 dpi, grey noise
+with 24 lines of text a page), poppler. Release (-O3) twice, and Debug (-O0) for comparison:
+
+| | Release run 1 | Release run 2 | Debug |
+|---|---|---|---|
+| text layers read, hashed and indexed (1060 pages, 84 MB hashed) | 1.45 s (733 pages/s) | 1.39 s (762 pages/s) | 1.7–3.9 s |
+| peak memory during that (VmHWM) | +30 MiB | +30 MiB | +28–30 MiB |
+| the cache for both files | 1.3 MB | 1.3 MB | 1.3 MB |
+| a search with excerpts (median of 5 queries over 1000 pages) | 0.54 ms | 0.53 ms | 4–6 ms |
+| the GUI thread per turn, 24 pages merged | median 0.47 ms, longest 0.61 ms | median 0.47 ms, longest 0.58 ms | median 4.6 ms, longest 9.6 ms |
+| a restart: both files from the cache | 63 ms | 55 ms | 0.24–0.48 s |
+| OCR, pol+eng, one thread, a noisy A4 page at 300 dpi | 2.2 s a page | 3.3 s a page | 2.1–4.2 s a page |
+| peak memory during OCR | +114 MiB | +114 MiB | +115–121 MiB |
+
+OCR's time is Tesseract's own (an optimised library; the `tessdata_fast` models, 2–3× faster than
+the standard ones at a few points less accuracy, `nix/package.nix`): a clean page of the fixtures
+(`tst_ocr`, a 2479 × 3508 scan with three lines) takes 0.27 s, a whiteboard's photo 0.05 s. That
+is why OCR is **off by default** (Settings → Search): a 300-page scanned book is 10–20 minutes of
+one core, in the background; the text layer of the same book, a second or two. Tesseract's OpenMP
+threads are held to one (`OMP_THREAD_LIMIT=1`): background work never takes the machine.
 
 ### Budgets
 

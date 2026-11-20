@@ -249,6 +249,11 @@ Pandoc Markdown document for Word, LibreOffice, PDF or EPUB).
   Ctrl+wheel, buttons, fit width), "Page 3 of 12" with a page jump, search ignoring case and
   Polish diacritics (Android 15+), **Open in another app** and **Draw on this page** — notes on
   slides straight from the PDF. In the browser the PDF opens in a new tab.
+* **Search in PDFs and pictures.** The whole-notebook search finds words in the notebook's PDFs
+  too, page by page — read in the background, offline, kept on the device —, and a result opens the
+  PDF at its page with the words highlighted. With text recognition on (OCR, Tesseract; off by
+  default) photos of whiteboards, screenshots and scanned pages are searchable as well, their
+  words framed on the picture. `in:pdf`, `in:pictures`, `in:notes` narrow the search.
 * English UI by default, Polish available. Natural-language dates in English and Polish.
 * **A short intro on the first start**: the language, the look (black by default — easy on the
   eyes and on OLED screens —, dark blue-grey, light or the system's), the permissions reminders
@@ -313,7 +318,9 @@ outline of drawings ported from perfect-freehand (MIT, © Stephen Ruiz Ltd), the
 Obsidian Excalidraw plugin drawings ported from lz-string (MIT, © 2013 Pieroxy), emoji and
 symbol fallback fonts: subsets of Noto Emoji and Noto Sans Math (SIL OFL 1.1, `assets/fonts`); PDF
 thumbnails, the PDF viewer and PDF pages of drawing backdrops: Qt PDF (pdfium, BSD-3-Clause; Windows, AppImage), poppler
-(GPL-2.0-or-later, compatible with the AGPL; the Nix package), Android's own `PdfRenderer`.
+(GPL-2.0-or-later, compatible with the AGPL; the Nix package), Android's own `PdfRenderer`; text
+recognition: Tesseract (Apache-2.0, loaded at run time; with the Nix package its `tessdata_fast`
+English and Polish models, Apache-2.0).
 
 Performance (numbers per platform, budgets, how to benchmark, regression guards): [docs/PERFORMANCE.md](docs/PERFORMANCE.md).
 
@@ -480,6 +487,11 @@ przykładowym notatnikiem.
   szukanie bez polskich znaków i wielkości liter (na Androidzie od wersji 15), **Otwórz w innej
   aplikacji** i **Rysuj na tej stronie** — notatki na slajdach prosto z PDF-a. W przeglądarce PDF
   otwiera się w nowej karcie.
+* **Szukanie w PDF-ach i obrazach.** Wyszukiwanie w całym notatniku znajduje słowa także w jego
+  PDF-ach, strona po stronie — czytanych w tle, bez internetu, przechowywanych na urządzeniu —, a
+  wynik otwiera PDF na swojej stronie z podświetlonymi słowami. Z włączonym rozpoznawaniem tekstu
+  (OCR, Tesseract; domyślnie wyłączone) dają się wyszukać także zdjęcia tablic, zrzuty ekranu i
+  skany, a słowa są zaznaczone na obrazie. `w:pdf`, `w:obrazy`, `w:notatki` zawężają wyszukiwanie.
 * **Znajdź i zamień.** `Ctrl+F` w otwartej notatce, bez polskich znaków i wielkości liter („zolw”
   znajdzie „ŻÓŁW”), a zamiana — w notatce (jedno `Ctrl+Z`) albo w całym notatniku, z podglądem
   każdego trafienia, odznaczaniem i cofnięciem.

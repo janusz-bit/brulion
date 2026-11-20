@@ -1308,7 +1308,7 @@ panel keeps none.
 | `tasks` | `TasksView` — quick add, filters, sections (Overdue, Today, Tomorrow, This week, Later, No date, Done), "Show as query"; subtasks under their task (`TaskListModel.nestSubtasks`, docs/SYNTAX.md §5 "Subtasks": indented by their depth in the note's order, done ones too; one more urgent than its task's section — an overdue step of a task for later, an open step of a done task — is listed in its own section; the filters apply to them, the home screen widget lists every task on its own); a task with subtasks under it folds them with its progress chip, a chevron before "3/5" (or "2 subtasks" when none counts), and with Left / Right on its row (`TaskListModel.toggleSubtasks`: view state kept while Tasks is open, nothing written; the fold follows its task when an edit moves it in its note, the section counts keep the folded ones); a click on a task's `#tag` filters the list, Ctrl+click opens the tag's page, a long press or right-click its menu (Filter by tag, Open tag page, Tag overview, Open in side panel, Copy tag); a right-click or long press on a chip: its token's menu ("Token and link menus") | `query?` |
 | `habits` | `HabitsView` — the habits (docs/SYNTAX.md §5 "Habits"; the built-in extension `nawyki`), each a card: today's check, schedule, streaks, completion rate, the month grid ("Habits" below) | `month?` ("YYYY-MM"), `open?` (`add`: Add habit's form) |
 | `graph` | `GraphView` — whole / local graph (depth 1–2), toggles for tags (the "#tag" nodes of tags that name no page; a tag naming a page is an edge to it), missing pages, journals, templates. The layout is computed on a worker thread (in slices between frames in the browser) and unfolds over about a second at the display's frame rate (phones 60 fps): pan, zoom, select and drag work from the first frame, a dragged node follows the finger at once. Reduced motion: the layout is computed without animation and shown once; a fresh one shows a spinner (`graphModel.settling`) instead of a spiral that jumps — also when a filter, the local graph or the index changes before it is shown. Drawn through the scene graph (GPU) | `path?`, `depth?`, `select?` |
-| `search` | `SearchView` — results in a folder of any depth with `folder` (the tree's "Search in folder"; the route follows its renames and moves). Shown (made, built ahead and shown, or shown again), its field takes the keys with the query selected, and on touch it asks for the on-screen keyboard (`DeviceInfo.showInputMethod()`: focus alone does not raise it on Android). The filters are one row; on compact windows (< 600 px) two — the scope (All / Pages / Journals) alone across the width, then Replace…, the folder and the result count —, so they never make the view wider than a phone (one row needed ~426 px in Polish) | `query?`, `folder?` |
+| `search` | `SearchView` — notes and the notebook's PDFs and pictures ("Searching attachments"); results in a folder of any depth with `folder` (the tree's "Search in folder"; the route follows its renames and moves). Shown (made, built ahead and shown, or shown again), its field takes the keys with the query selected, and on touch it asks for the on-screen keyboard (`DeviceInfo.showInputMethod()`: focus alone does not raise it on Android). The filters are one row; on compact windows (< 600 px) two — the scope (All / Pages / Journals / Attachments, without icons) alone across the width, then Replace…, the folder and the result count —, so they never make the view wider than a phone (one row needed ~426 px in Polish) | `query?`, `folder?` |
 | `allPages` | `AllPagesView` — with `path` a folder browser: its subfolders as rows, its pages (with subfolders' or not), a breadcrumb in the top bar; follows the folder's renames and moves; a path part of a link naming a folder opens it (below) | `path?` (folder), `sort?` |
 | `tags` / `tag` | `TagsView` — every tag (a row opens the tag's page, its trailing button the tag overview) / the tag overview (the pages and blocks carrying the tag, parent and sub-tags, "Open page" or "Create page", "Tasks with this tag"). A tag names a page (docs/SYNTAX.md §3): a click on `#tag` anywhere asks `Workspace::navigate({view: "tag", tag})`, which `resolveRoute()` turns into the page route (`Workspace.tagPage`); routes the shell navigates to itself (`AppController.navigate`, `--route`) and `overview: true` keep the overview | `tag?`, `overview?` |
 | `sync` | `SyncView` — Overview, Syncthing, Nextcloud (live progress, history of runs), GitHub (a notebook kept in a GitHub repository: "Notebooks from GitHub" below; `{tab: "github"}` is where a notebook opened from GitHub lands), Calendars (ICS subscriptions and CalDAV accounts: "Calendars" below; `{tab: "calendars"}`), Conflicts (merge; drawings element by element). Conflicts: the list beside the resolver on wide windows; on narrow ones (< 900 px) one at a time, and a conflict opens through the route (`{tab: "conflicts", copy}`, the entry before it showing the list, also when the tab was chosen here), so the top bar's ← and Android's Back return to the list — the resolver has no ← of its own — and a resolved one goes back to it too. `copy` is read on every route change: a route without one shows the list | `tab?`, `copy?`, `run?` (open a run's details) |
@@ -1863,6 +1863,103 @@ notebook). Core: `notebook/replace.h`; the app: `src/app/shell/replacesession.h`
 Tests: `tst_text_find`, `tst_notebook_replace`, `tst_markdown_render`, `tst_editor_controller`, `tst_editor_streamfind`,
 `tst_editor_highlighter`, `tst_shell_workspace_wiring`, `tst_shell_workspace_editor`, `--selftest-shell`
 (`checkFindAndReplace`), `tst_remote_control_qml` (the real Ctrl+F and Ctrl+H), `tst_content_qml`.
+
+## Searching attachments (`src/app/attachments`, core `attachments`)
+
+The whole-notebook search (route `search`, `SearchView`) finds words in the notebook's **PDFs** and
+**pictures** too, page by page, in the background and offline. User guide: the documentation's page
+"Search" ("Szukanie").
+
+* **What is read** (`attachsearch::AttachmentIndexer`, owned by `Workspace`, QML
+  `Workspace.attachments`): every PDF (`paths::isPdfPath`) and picture (png, jpg, jpeg, webp, bmp —
+  not SVG, GIF or icons) the vault lists, ignored paths and conflict copies left out. A PDF's own text
+  (its text layer: `PdfReader::pageText`, poppler, Qt PDF, Android 15+) page by page; a page with fewer
+  than 8 letters of its own (`MinTextLayerLetters`: a scan, a page number, a slide that is one
+  picture) waits for **OCR** (text recognition), which reads it and keeps its few own words after
+  OCR's. A picture is read only by OCR; without it — or in a format the device cannot decode (WebP
+  without Qt's image plugins), or over 64 MB — only its file name is searched (nothing read, nothing
+  hashed). A password-protected PDF is found by its name only; a file that is a link is never read.
+* **In the background, never in the way:** one worker thread at the lowest priority there is
+  (`QThread::IdlePriority`: SCHED_IDLE on Linux), started 3 s after the notebook's index is ready,
+  one file at a time: the text of new and changed files first (newest change first), then OCR page
+  by page — a file changed meanwhile goes before the next OCR page. A 100+ MB lecture scan costs one
+  page's picture of memory, never the file (`PdfReaderPool` leases, given back every 16 pages, so
+  Windows can move the file). It waits while a Nextcloud sync runs (`PdfReaderPool::idleSuspended`:
+  the sync may replace, move or delete PDFs) and while **paused** (the search view's line, Settings →
+  Search; a page in the middle of OCR stops within a fraction of a second and is read again on
+  resume; the pause lasts until resumed or the app restarts). The GUI thread only merges what the
+  worker found, 24 pages per event-loop turn (`AttachmentSearch::set`/`setPage`), and the search
+  results follow 250 ms later (`contentChanged`, coalesced).
+* **Cached on the device, never in the notebook:** `<app cache>/attachment-text/<sha256>.bat` — one
+  record per content (core `attachments/record.h`: each page's text, where it came from — text layer,
+  OCR with its languages, waiting for OCR —, OCR's words with their boxes; checksummed, a page read
+  alone) — and the notebook's manifest `notebooks/<id>.manifest` (path → size, modification time,
+  hash). An unchanged file is not even hashed again; a renamed, moved or copied one keeps its record
+  (nothing read again); a changed one is hashed and read again. Records no notebook of the device
+  names are pruned beyond 512 MiB (`DefaultCacheBytes`), oldest first; a newer extractor
+  (`ExtractorVersion`) reads every file again. Settings → Search shows the size and **Clear** (with a
+  confirmation): every notebook's attachments are read again.
+* **The index** (core `attachments::AttachmentSearch`): a `SearchIndex` of its own — BM25+, the last
+  word as a prefix, typo tolerance, diacritics optional ("zolw" finds "żółw") — with one document per
+  page with text and one for the file's name ("wykład" finds "Wykład 3.pdf"). A hit is one row per
+  file at its **best page**, with how many of its pages match; notes and attachments merge by the
+  query's words typed as such (`SearchIndex::Hit::literal`), then by score. Excerpts come from the
+  cache's records for the rows shown (a few pages of text kept in memory, `QCache`).
+* **The search view:** a PDF's row has the file icon, its name, the excerpt and "Page 3 of 12 · 4 more
+  pages match"; a picture's "Picture"; text from OCR "Recognized text" (scan icon); a file found by
+  its name only "Found by its name". The scope has **Attachments** beside All / Pages / Journals; the
+  query's own filters narrow further (core `attachments/searchfilters.h`): `in:attachments`,
+  `in:pdf`, `in:pictures`, `in:notes`, `in:pages`, `in:journals` — also `type:`, Polish `w:` / `typ:`
+  and Polish values (`w:załączniki`, `w:obrazy`, `w:notatki`, `w:dziennik`; diacritics optional),
+  several add up; a word only looking like one (`12:30`, `https://…`, `in:xyz`) is searched. While
+  attachments are read, a line under the filters says so ("Reading attachments… 3 of 40",
+  "Recognizing text: page 4 of 120 in “skan.pdf”", "waits for the sync") with **Pause** / **Resume**.
+* **Opening a result:** a PDF opens the **PDF viewer at the page** with the search typed — route
+  `{view: "page", path, pdfPage, open: "search", search: find}` — and the first hit at or after that
+  page is the current one, highlighted ("PDF viewer" → Search). `find` is what shows the hit there:
+  several words when the page holds them in a row, else the page's own spelling of the best matched
+  word ("Żółw" for "zolw"). A scanned page has no text of its own: the viewer's search reads its OCR
+  text (`PdfViewModel::setOcrLookup`, set by `Workspace`: the record's page when the cache was made
+  from the file's very size and time) and places the hits by OCR's word boxes. A picture opens with
+  `search`: `ContentPictureView` frames the places of the words on the picture (accent frames over
+  the picture at any size; `Workspace.attachments.matchRects` — OCR's boxes on the file's own pixels:
+  a photo turned upright by its EXIF orientation for OCR is framed where the view shows it),
+  "2 places" with × in the bar (wide views), and **Recognized text** shows what OCR read, read-only and
+  selectable ("It may hold mistakes").
+* **OCR** (`platform/ocr.h`): Tesseract 4 or 5 loaded at run time through its C API (no build
+  dependency): the Nix package and dev shell bring Tesseract 5 with the English and Polish "fast"
+  models (`tessdata_fast`, 9 MB); the AppImage and Linux builds use the system's
+  (`libtesseract.so.5/.4`, models in `/usr/share/tesseract-ocr/…`, `TESSDATA_PREFIX`); Windows a
+  Tesseract installation (UB Mannheim's installer in Program Files, `libtesseract-5.dll`); a folder of
+  the user's own models (`<app data>/tessdata`) is looked in first (`platform/ocrdata.h`). **Off by
+  default** (Settings → Search, "Recognize text in pictures and scans"): a page costs a core about a
+  second (docs/PERFORMANCE.md "Searching attachments"). Its languages: **Automatic** — the UI language
+  and English — or chosen (chips of the models installed, by their own names); a change reads the
+  recognized pages again in the new ones. Words below 40 % confidence are left out (a photo without
+  text gives no noise). A PDF page is drawn at ~300 dpi (its long side 1000–4200 px); a picture is
+  read as taken (EXIF orientation applied), at most 4200 px and 24 MP, a small one (a screenshot)
+  twice its size. Where OCR is not available, Settings says why and what to install; the PDF viewer's
+  "no text to search" adds "Turn on text recognition in Settings → Search" where OCR could read it.
+* **Platforms:** the desktop (Linux, Windows): text layers and OCR as above. **Android:** PDFs' text
+  on Android 15+ (PdfRenderer's text API; older versions find PDFs by name only); no OCR — Tesseract
+  through the NDK would add some 25 MB per ABI and its models to the APK (docs/ANDROID.md); Settings
+  says so. **The browser:** no PDF renderer and no threads: attachments are not read (Settings:
+  "This version of Brulion reads no PDFs and recognizes no text").
+
+Settings → **Search** (`qml/attachments/AttachmentSettings.qml`): "Search in attachments" (on by
+default; `AppSettings.attachmentSearch`), "Recognize text in pictures and scans (OCR)" (off;
+`attachmentOcr`), "Recognition languages" (`attachmentOcrLanguages`: "auto" or codes "pol+eng"),
+"In this notebook" (files read, pages with text, what is being read, Pause / Resume), "Text kept on
+this device" (its size, Clear). Device settings, for every notebook.
+
+Tests: `tst_attachments` (core: records — round trips, a page alone, malformed and random bytes —,
+the manifest, the index — pages, names, OCR pages, renames, kinds, excerpts, the viewer's text —, the
+filters), `tst_ocrdata`, `tst_ocr` (Tesseract on `tests/data/attachments`: a whiteboard, a photo
+stored sideways, a scanned PDF page; skipped without Tesseract), `tst_attachmentindexer` (the
+indexer on a notebook: text layers, the cache reused, renames, changes, OCR, pause, languages, the
+viewer's lookup; `largePdf` measures — BRULION_ATTACHMENT_BENCH=1), `tst_content_models` (the
+search model's attachment rows and filters), `--selftest-shell` (`checkAttachmentSearch`: a PDF's
+page found and opened highlighted, a picture's recognized words framed).
 
 ## Spell checking
 
@@ -3537,10 +3634,16 @@ the wide window's side panel lists them), "Showing the first 20 000 pages." beyo
 * **Search** (`pdfSearchBar`, where `Workspace.pdfSearchable`: Qt PDF, poppler, Android 15+): typed
   250 ms later the pages are searched on `PdfRenderPool` at the lowest priority from the current
   page, wrapping (`PdfReader::find`, `src/platform/pdfsearch.h`: case and Polish letters ignored —
-  "gesla" finds "gęślą" —, a line break of the PDF equal to a space, soft hyphens ignored); hits come
+  "gesla" finds "gęślą" —, a line break of the PDF equal to a space, soft hyphens ignored; a scanned
+  page — fewer than 8 letters of its own — in the text OCR read on it, its hits placed by OCR's word
+  boxes: "Searching attachments"); a result of the whole-notebook search opens here at its page with
+  its words typed (route `open: "search"`, `search`, `pdfPage`: the first hit at or after that page
+  is the current one; another result of the same PDF searches again from its page); hits come
   in batches, the first one at or after the current page is shown at once, highlighted in the
   accent (the current one stronger, framed). "3 of 12" ("+" while searching or past 5000 hits),
-  "Searching… page 4 of 12", "No results", "This PDF has no text to search (it may be a scan).";
+  "Searching… page 4 of 12", "No results", "This PDF has no text to search (it may be a scan)." (where
+  OCR could read it but is off: "… Turn on text recognition in Settings → Search to search it.",
+  on the line under the row in every bar — the row would cut it);
   in the narrow bar (phones, the side panel) only the counters stay in the row: the two long states
   take the line under it, full width (`pdfSearchStatusLine`; `pdfSearchStatus` holds the text in
   every state), and ‹ › show only with hits, so the field keeps its room and × stays on screen.

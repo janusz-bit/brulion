@@ -48,6 +48,7 @@ Brulion aktualizuje dokumentację razem z aplikacją: dochodzą nowe strony, a t
 - [[AI|AI]] — Asystent AI i `b.ai`: Claude, API zgodne z OpenAI albo własny serwer, także na telefonie.
 
 ## Pod ręką
+- [[Szukanie|Szukanie]] — słowa w notatkach, PDF-ach i obrazach, filtry, rozpoznawanie tekstu (OCR).
 - [[Skróty klawiszowe|Skróty klawiszowe]] — także własne skróty poleceń.
 - [[Lista zmian|Lista zmian]] — co się zmieniło w kolejnych wersjach Brulionu.
 
