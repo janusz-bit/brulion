@@ -120,7 +120,7 @@ HttpResponse FakeMicrosoft::login(const HttpRequest &request)
                                u"'Microsoft Accounts'.\r\nTrace ID: 0000\r\nTimestamp: 2026-10-27 10:00:00Z"_s.arg(
                                        form.value(u"client_id"_s))},
                               {u"error_codes"_s, QJsonArray{700016}}});
-        if (form.value(u"scope"_s) != u"Tasks.Read")
+        if (form.value(u"scope"_s) != scope)
             return json(400, {{u"error"_s, u"invalid_scope"_s}});
         return json(200, {{u"user_code"_s, userCode},
                           {u"device_code"_s, u"fake-device-code"_s},
@@ -152,7 +152,7 @@ HttpResponse FakeMicrosoft::login(const HttpRequest &request)
             return json(400, {{u"error"_s, step}, {u"error_description"_s, u"AADSTS70016: pending"_s}});
         }
         return json(200, {{u"token_type"_s, u"Bearer"_s},
-                          {u"scope"_s, u"Tasks.Read"_s},
+                          {u"scope"_s, scope},
                           {u"expires_in"_s, 3599},
                           {u"access_token"_s, accessToken}});
     }
@@ -175,6 +175,14 @@ HttpResponse FakeMicrosoft::graph(const HttpRequest &request)
         --throttle;
         HttpResponse r = graphError(429, u"TooManyRequests"_s, u"Please retry again later."_s);
         r.headers.insert("retry-after", "1");
+        return r;
+    }
+    const QString key = request.url.path(QUrl::FullyEncoded)
+                        + (request.url.hasQuery() ? u'?' + request.url.query(QUrl::FullyEncoded) : QString());
+    if (const auto other = otherGraph.constFind(key); other != otherGraph.constEnd()) {
+        HttpResponse r;
+        r.status = 200;
+        r.body = *other;
         return r;
     }
     const QStringList path = request.url.path().split(u'/', Qt::SkipEmptyParts);

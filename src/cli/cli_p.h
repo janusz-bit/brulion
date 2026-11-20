@@ -151,6 +151,7 @@ void addUriCommands(QList<Command> &out);
 void addExtensionCommands(QList<Command> &out);
 void addClipCommands(QList<Command> &out);
 void addPublishCommands(QList<Command> &out);
+void addImportCommands(QList<Command> &out);
 void addMetaCommands(QList<Command> &out);
 /// `mcp serve`, `mcp password`, `mcp clients`, `mcp revoke` (mcpremote.cpp; addMetaCommands adds
 /// them after `mcp`).

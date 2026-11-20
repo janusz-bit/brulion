@@ -86,10 +86,10 @@ private Q_SLOTS:
             // Every importer survives empty input.
             QVERIFY(runImport(*i, {}, iotest::options()).files.isEmpty());
         }
-        QCOMPARE(ids, QStringList({u"obsidian"_s, u"logseq"_s, u"notion"_s, u"evernote"_s, u"keep"_s, u"mstodo"_s,
-                                   u"joplin"_s,
-                                   u"simplenote"_s, u"roam"_s, u"trilium"_s, u"bear"_s, u"markdown"_s, u"html"_s,
-                                   u"ics"_s}));
+        QCOMPARE(ids,
+                 QStringList({u"obsidian"_s, u"logseq"_s, u"notion"_s, u"evernote"_s, u"keep"_s, u"onenote"_s,
+                              u"applenotes"_s, u"mstodo"_s, u"todoist"_s, u"joplin"_s, u"simplenote"_s, u"roam"_s,
+                              u"trilium"_s, u"bear"_s, u"airtable"_s, u"markdown"_s, u"html"_s, u"csv"_s, u"ics"_s}));
         QCOMPARE(importerById(u"keep")->name(), u"Google Keep"_s);
         QVERIFY(importerById(u"nope") == nullptr);
     }

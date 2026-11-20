@@ -38,6 +38,13 @@ brulion_add_core_module(io
         import_trilium.cpp trilium_p.h trilium.cpp
         import_html.cpp
         import_ics.cpp
+        csvimport.h csvimport_p.h csvimport.cpp
+        import_csv.cpp
+        import_todoist.cpp
+        import_onenote.cpp
+        import_applenotes.cpp
+        sqlitereader_p.h sqlitereader.cpp
+        protobuf_p.h protobuf.cpp
         exporter.h exporter.cpp exporters_p.h
         exportutil_p.h exportutil.cpp
         rendercommon_p.h rendercommon.cpp

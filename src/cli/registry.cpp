@@ -36,6 +36,7 @@ const QList<Command> &commands()
         addUriCommands(out);
         addClipCommands(out);
         addPublishCommands(out);
+        addImportCommands(out);
         addAppCommands(out);
         addMetaCommands(out);
         return out;

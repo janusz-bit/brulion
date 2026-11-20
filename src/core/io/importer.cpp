@@ -32,8 +32,9 @@ struct Registry {
     {
         for (auto *make :
              {makeObsidianImporter, makeLogseqImporter, makeNotionImporter, makeEvernoteImporter, makeKeepImporter,
-              makeMsTodoImporter, makeJoplinImporter, makeSimplenoteImporter, makeRoamImporter, makeTriliumImporter, makeBearImporter,
-              makeMarkdownImporter, makeHtmlImporter, makeIcsImporter}) {
+              makeOneNoteImporter, makeAppleNotesImporter, makeMsTodoImporter, makeTodoistImporter, makeJoplinImporter,
+              makeSimplenoteImporter, makeRoamImporter, makeTriliumImporter, makeBearImporter, makeAirtableImporter,
+              makeMarkdownImporter, makeHtmlImporter, makeCsvImporter, makeIcsImporter}) {
             owned.push_back(make());
             list.append(owned.back().get());
         }

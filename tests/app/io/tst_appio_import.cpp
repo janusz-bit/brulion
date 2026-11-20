@@ -354,7 +354,9 @@ private Q_SLOTS:
             QVERIFY2(!m.value(u"howTo"_s).toString().isEmpty(), qPrintable(m.value(u"id"_s).toString()));
             // The phone's steps (Android): every app says where its notes are and what to pick.
             QVERIFY2(!m.value(u"phoneHowTo"_s).toString().isEmpty(), qPrintable(m.value(u"id"_s).toString()));
-            QVERIFY(QStringList({ u"files"_s, u"folder"_s, u"both"_s }).contains(m.value(u"pick"_s).toString()));
+            // "none": OneNote signs in, it has no file to pick.
+            QVERIFY(QStringList({u"files"_s, u"folder"_s, u"both"_s, u"none"_s})
+                            .contains(m.value(u"pick"_s).toString()));
             QVERIFY(!m.value(u"fileTypes"_s).toStringList().isEmpty());
         }
         QVERIFY(ids.contains(u"notion"_s) && ids.contains(u"keep"_s) && ids.contains(u"ics"_s));

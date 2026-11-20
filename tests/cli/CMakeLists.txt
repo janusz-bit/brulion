@@ -35,3 +35,12 @@ target_compile_definitions(tst_cli_clip PRIVATE BRULION_CLI="$<TARGET_FILE:bruli
 add_dependencies(tst_cli_clip brulion-cli)
 math(EXPR _cli_clip_timeout "120 * ${BRULION_TEST_SLOWDOWN}")
 set_tests_properties(tst_cli_clip PROPERTIES TIMEOUT ${_cli_clip_timeout})
+
+# `import` as a process: a CSV with its mapping, a dry run, nothing overwritten, daily notes
+# appended, Apple Notes from the io fixtures, refusals.
+brulion_add_test(tst_cli_import SOURCES tst_cli_import.cpp LIBS Qt6::Core)
+target_compile_definitions(tst_cli_import PRIVATE BRULION_CLI="$<TARGET_FILE:brulion-cli>"
+    BRULION_APPLENOTES_FIXTURES="${PROJECT_SOURCE_DIR}/tests/core/io/fixtures/applenotes")
+add_dependencies(tst_cli_import brulion-cli)
+math(EXPR _cli_import_timeout "120 * ${BRULION_TEST_SLOWDOWN}")
+set_tests_properties(tst_cli_import PROPERTIES TIMEOUT ${_cli_import_timeout})

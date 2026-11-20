@@ -2,10 +2,15 @@
 # and exporter (the Pandoc one also through pandoc itself when it is installed, DOCX through
 # LibreOffice), the paper documents (PDF, DOCX, printing) and the Logseq round trip. QTEST_MAIN with the offscreen platform (QtGui is used for QTextDocument). iotest.h
 # holds shared helpers (fixtures built in code, a tiny tar writer).
-foreach(_t formats html import logseq import_apps import_ics import_mstodo export pandoc robust tablecsv paper)
+foreach(_t formats html import logseq import_apps import_ics import_mstodo import_csv export pandoc robust tablecsv paper)
     brulion_add_test(tst_io_${_t} SOURCES tst_io_${_t}.cpp iotest.h LIBS brulion_core_io)
 endforeach()
 # Trilium: real exports of Trilium servers (fixtures/trilium, see its README) plus synthetic ones.
 brulion_add_test(tst_io_import_trilium SOURCES tst_io_import_trilium.cpp iotest.h LIBS brulion_core_io)
 target_compile_definitions(tst_io_import_trilium
     PRIVATE BRULION_TRILIUM_FIXTURES="${CMAKE_CURRENT_SOURCE_DIR}/fixtures/trilium")
+# OneNote and Apple Notes (with the SQLite reader under it): fixtures/applenotes is a
+# group.com.apple.notes folder built by its make-fixture.py.
+brulion_add_test(tst_io_import_notes SOURCES tst_io_import_notes.cpp iotest.h LIBS brulion_core_io)
+target_compile_definitions(tst_io_import_notes
+    PRIVATE BRULION_APPLENOTES_FIXTURES="${CMAKE_CURRENT_SOURCE_DIR}/fixtures/applenotes")

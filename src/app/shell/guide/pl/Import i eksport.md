@@ -7,7 +7,7 @@ brulion: document
 Widok **Import i eksport** otwierasz z menu **Więcej** → **Notatnik** albo z palety poleceń. Import jest też na stronie startowej pustego notatnika („Importuj notatki”).
 
 ## Import
-Obsługiwane źródła: Obsidian, Logseq, Notion, Evernote, Google Keep, Microsoft To Do, Joplin, Simplenote, Roam, Trilium, Bear, pliki Markdown, TXT i HTML oraz kalendarze iCalendar. Możesz wskazać pliki, archiwum ZIP albo cały folder.
+Obsługiwane źródła: Obsidian, Logseq, Notion, Evernote, Google Keep, OneNote, Apple Notes, Microsoft To Do, Todoist, Joplin, Simplenote, Roam, Trilium, Bear, Airtable, pliki Markdown, TXT i HTML, arkusze (CSV) oraz kalendarze iCalendar. Możesz wskazać pliki, archiwum ZIP albo cały folder.
 
 1. Wybierz źródło i pliki.
 2. Obejrzyj **podgląd**: co powstanie, co zostanie pominięte i dlaczego.
@@ -36,6 +36,37 @@ Każda lista zadań z Microsoft To Do staje się stroną z [[Zadania|zadaniami]]
 Potem **Zaloguj się w Microsoft**: otwórz microsoft.com/devicelogin (także na telefonie), wpisz pokazany kod i zaloguj się. Brulion prosi tylko o odczyt zadań, a token logowania trzyma w pamięci tylko na czas pobierania — nic nie zapisuje.
 
 Bez rejestracji: w Graph Explorerze (developer.microsoft.com/graph/graph-explorer) zaloguj się, zgódź się na `Tasks.Read`, uruchom `GET https://graph.microsoft.com/v1.0/me/todo/lists?$expand=tasks`, zapisz odpowiedź jako plik `.json` i wybierz go przyciskiem **Wybierz pliki…** — bez kroków i plików. W przeglądarce działa tylko ta droga.
+
+### Arkusze (CSV) i Airtable
+Arkusz zapisany jako CSV — z Excela, LibreOffice, Arkuszy Google, Numbers albo innej aplikacji — staje się **stroną na wiersz**: komórki trafiają do [[Tagi i właściwości|właściwości]] strony z typami (liczby, daty, pola wyboru, listy, tagi, linki do stron innych wierszy), a baza Obsidiana obok stron pokazuje je wszystkie jako tabelę ([[Zapytania#Bazy z Obsidiana (Bases)|bazy]]). Możesz też wybrać **Jedną stronę z tabelą**.
+
+Przed importem karta **Kolumny i właściwości** pokazuje, co Brulion znalazł, i pozwala to zmienić:
+- **Tytuły stron z** kolumny (wykrywana: *Nazwa*, *Tytuł*, *Name*… albo pierwsza kolumna z niepowtarzającymi się wartościami) albo z **szablonu tytułu**, np. `{{Autor}} – {{Tytuł}}`; **Podfoldery**, np. `{{Kategoria}}`;
+- **Treść strony z** kolumny (wykrywana: długa kolumna *Notatki* albo *Opis*) — pozostałe kolumny to właściwości;
+- dla każdej kolumny nazwę właściwości i typ albo **Pomiń**;
+- pod **Kodowanie, separator, wiersz nagłówka…**: polskie eksporty ze starego Excela (Windows-1250), separator `;` i pliki bez wiersza nagłówka Brulion rozpoznaje sam, a można je też wybrać ręcznie;
+- pierwsze wiersze z tytułami, jakie dostaną ich strony, i pierwszą stronę dokładnie tak, jak zostanie zapisana.
+
+**Airtable**: pobierz widok jako CSV (**••• → Download CSV**) i wybierz go — załączniki („zdjęcie.jpg (https://…)”) można pobrać do notatnika przyciskiem **Pobierz załączniki** (linki Airtable wygasają po kilku godzinach), a powiązane rekordy stają się linkami do stron wierszy, które wskazują. Albo połącz się **osobistym tokenem dostępu** (utwórz go na airtable.com/create/tokens z zakresami `data.records:read` i `schema.bases:read`): wybierz bazę i jej tabele, a Brulion pobierze je z typami pól i załącznikami. Token jest tylko w pamięci, do końca pobierania.
+
+### Todoist
+Każdy projekt staje się stroną z [[Zadania|zadaniami]]: sekcje jako nagłówki, podzadania z wcięciem, priorytety (p1 `🔺`, p2 `⏫`, p3 `🔼`), terminy `📅` (z terminem ostatecznym: data `⏳` i termin ostateczny `📅`), powtarzające się terminy jako reguły `🔁` tam, gdzie Brulion je rozumie („every monday”, „co tydzień”, `every!` liczy od wykonania), etykiety jako tagi, opisy i komentarze pod zadaniem.
+- **Z tokenem API** (Todoist: **Ustawienia → Integracje → Programista**): wklej go, a Brulion pobierze wszystkie projekty z komentarzami i ich plikami. Token nie jest nigdzie zapisywany.
+- **Bez niego**: wyeksportuj projekt jako szablon (**••• → Eksportuj jako szablon**, CSV) albo pobierz kopię zapasową (**Ustawienia → Kopie zapasowe**) i wybierz pliki — kilka projektów albo cały ZIP kopii naraz.
+
+### OneNote
+**Zaloguj się w Microsoft** tą samą bezpłatną rejestracją aplikacji co dla Microsoft To Do (wyżej) — dodaj do niej uprawnienie delegowane **`Notes.Read`**. Po zalogowaniu wybierz notesy; Brulion pobierze ich sekcje, grupy sekcji i strony z obrazkami (w pełnej rozdzielczości) i załączonymi plikami. Notesy, grupy sekcji i sekcje stają się folderami, podstrony strony — folderem obok niej; tagi „Do zrobienia” stają się zadaniami, pozostałe tagi (`#important`…) tagami, linki między stronami — linkami wiki. OneNote pozwala aplikacjom pobierać tylko kilka stron na minutę, więc duży notes chwilę trwa. W wersji przeglądarkowej OneNote nie da się zaimportować (Microsoft nie pozwala na to logowanie ze stron WWW).
+
+### Apple Notes
+Notatki Apple trzymają notatki w bazie danych na Macu, którą Brulion czyta bez Maca:
+1. Na Macu w Finderze wybierz **Idź → Idź do folderu…** i wpisz `~/Library/Group Containers/group.com.apple.notes`.
+2. Skopiuj cały ten folder (albo jego ZIP: prawy przycisk → **Kompresuj**) na komputer albo telefon z Brulionem.
+3. **Importuj notatki → Apple Notes** i wybierz folder albo ZIP.
+
+Foldery zostają folderami (kilka kont — po folderze na konto), pierwszy wiersz notatki jest jej tytułem, a formatowanie przechodzi: nagłówki, pogrubienie, kursywa, przekreślenie, wyróżnienia, listy, listy kontrolne, kod, cytaty, tabele, linki między notatkami, `#tagi`. Obrazki i pliki, rysunki (jako obrazki) i zeskanowane dokumenty (jako PDF albo obrazki) stają się załącznikami. Notatki zablokowane i te w *Ostatnio usuniętych* zostają pominięte (podgląd mówi, ile ich jest); załączniki, które są tylko w iCloud, trzeba najpierw otworzyć na Macu.
+
+### Z wiersza poleceń
+`brulion-cli import <plik, folder albo ZIP>` robi to samo co ten ekran — z `--dry-run` tylko pokazuje, co zostałoby zapisane, `--from` wybiera aplikację, a mapowanie CSV ma swoje opcje (`--title-template`, `--columns "Rok=text; Cena=skip"`…). Zobacz [[Wiersz poleceń i agenci AI]].
 
 ### Skarbiec Obsidiana bez importu
 Folder Obsidiana — także synchronizowany Syncthingiem — otwórz po prostu jako notatnik (*Przełącz notatnik → Otwórz inny notatnik…*) na każdym urządzeniu i zostaw synchronizację Syncthingowi; nie włączaj dla niego dodatkowo Nextclouda. Folderu `.obsidian/` Brulion nie pokazuje i nigdy nie zmienia — czyta z niego tylko ustawienia dziennika i załączników.

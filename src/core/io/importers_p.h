@@ -21,5 +21,10 @@ std::unique_ptr<Importer> makeBearImporter();
 std::unique_ptr<Importer> makeMarkdownImporter();
 std::unique_ptr<Importer> makeHtmlImporter();
 std::unique_ptr<Importer> makeIcsImporter();
+std::unique_ptr<Importer> makeCsvImporter();
+std::unique_ptr<Importer> makeAirtableImporter();
+std::unique_ptr<Importer> makeTodoistImporter();
+std::unique_ptr<Importer> makeOneNoteImporter();
+std::unique_ptr<Importer> makeAppleNotesImporter();
 
 } // namespace brulion::io::detail

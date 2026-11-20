@@ -235,8 +235,12 @@ done in the repository simply disappears from the list.
   Received", the provisional reminder ringing), the tiles and shortcuts in a real launcher, a
   brulion:// link from Firefox and Chrome on Linux (the desktop entry's handler) and on Windows (the
   installer's URL protocol), `registerProtocolHandler` in Chrome, Edge and Firefox.
-* **More import sources** — Apple Notes, OneNote (Obsidian Importer), Todoist, Airtable and CSV as
-  pages with properties (Obsidian).
+* **New import sources: checks with real accounts and data** — OneNote, Todoist and Airtable are
+  tested against fake servers and Apple Notes against a database built after Obsidian Importer's
+  schema (docs/IMPORT.md); to check with real ones: OneNote's throttling of a large notebook and the
+  HTML of real pages (ink, math, positioned outlines), Todoist's completed tasks (the Sync API leaves
+  them out: the archive endpoint could add them), Airtable's tokens and attachment links, and
+  NoteStore.sqlite of recent macOS versions (other columns, newer attachment types).
 
 ## Search
 

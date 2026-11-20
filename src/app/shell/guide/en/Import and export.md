@@ -7,7 +7,7 @@ brulion: document
 You open the **Import and export** view from the **More** menu → **Notebook** or from the command palette. Import is also on the start page of an empty notebook (“Import notes”).
 
 ## Import
-Supported sources: Obsidian, Logseq, Notion, Evernote, Google Keep, Microsoft To Do, Joplin, Simplenote, Roam, Trilium, Bear, Markdown, TXT and HTML files, and iCalendar calendars. You can pick files, a ZIP archive or a whole folder.
+Supported sources: Obsidian, Logseq, Notion, Evernote, Google Keep, OneNote, Apple Notes, Microsoft To Do, Todoist, Joplin, Simplenote, Roam, Trilium, Bear, Airtable, Markdown, TXT and HTML files, spreadsheets (CSV) and iCalendar calendars. You can pick files, a ZIP archive or a whole folder.
 
 1. Choose the source and the files.
 2. Look at the **preview**: what will be created, what will be skipped and why.
@@ -36,6 +36,37 @@ Every task list from Microsoft To Do becomes a page with [[Tasks|tasks]]: status
 Then **Sign in to Microsoft**: open microsoft.com/devicelogin (on a phone too), type the code shown and sign in. Brulion asks only for reading tasks, and keeps the sign-in token in memory only for the time of the download — it saves nothing.
 
 Without a registration: in Graph Explorer (developer.microsoft.com/graph/graph-explorer) sign in, consent to `Tasks.Read`, run `GET https://graph.microsoft.com/v1.0/me/todo/lists?$expand=tasks`, save the response as a `.json` file and pick it with the **Choose files…** button — without steps and files. In the browser only this way works.
+
+### Spreadsheets (CSV) and Airtable
+A spreadsheet saved as CSV — from Excel, LibreOffice, Google Sheets, Numbers or another app — becomes **a page per row**: the cells go into the page's [[Tags and properties|properties]] with their types (numbers, dates, checkboxes, lists, tags, links to the pages of other rows), and an Obsidian base next to the pages shows them all as a table ([[Queries#Obsidian Bases|bases]]). Or choose **One page with the table**.
+
+Before importing, the **Columns and properties** card shows what Brulion found and lets you change it:
+- **Page titles from** a column (detected: *Name*, *Title*, *Tytuł*… or the first column with unique values), or a **title template** such as `{{Author}} – {{Title}}`; **Subfolders** such as `{{Category}}`;
+- **Page text from** a column (detected: a long *Notes* or *Description* column) — the other columns are properties;
+- for every column its property name and type, or **Leave out**;
+- under **Encoding, separator, header row…**: Polish exports from old Excel (Windows-1250), `;` separators and files without a header row are recognised by themselves, and can be chosen by hand;
+- the first rows with the titles their pages get, and the first page exactly as it will be written.
+
+**Airtable**: download a view as CSV (**••• → Download CSV**) and pick it — attachments (“photo.jpg (https://…)”) can be downloaded into the notebook with **Download the attachments** (Airtable's links expire after a few hours), and linked records become links to the pages of the rows they name. Or connect with a **personal access token** (create it at airtable.com/create/tokens with the scopes `data.records:read` and `schema.bases:read`): choose the base and its tables, and Brulion downloads them with their field types and attachments. The token is kept only in memory until the download ends.
+
+### Todoist
+Each project becomes a page with [[Tasks|tasks]]: sections as headings, subtasks indented, priorities (p1 `🔺`, p2 `⏫`, p3 `🔼`), due dates `📅` (with a deadline: the date `⏳` and the deadline `📅`), recurring dates as `🔁` rules where Brulion understands them (“every monday”, “co tydzień”, `every!` counts from the completion), labels as tags, descriptions and comments under the task.
+- **With the API token** (Todoist: **Settings → Integrations → Developer**): paste it and Brulion downloads every project with its comments and their files. The token is not saved anywhere.
+- **Without it**: export a project as a template (**••• → Export as a template**, CSV) or download a backup (**Settings → Backups**) and pick the files — several projects or a whole backup ZIP at once.
+
+### OneNote
+**Sign in to Microsoft** with the same free app registration as for Microsoft To Do (above) — add the delegated permission **`Notes.Read`** to it. After signing in, choose the notebooks; Brulion downloads their sections, section groups and pages with pictures (in full resolution) and attached files. Notebooks, section groups and sections become folders, a page's subpages a folder next to it; to-do tags become tasks, other tags (`#important`…) tags, links between pages wiki links. OneNote lets apps download only a few pages a minute, so a large notebook takes a while. In the browser version OneNote cannot be imported (Microsoft does not allow this sign-in from web pages).
+
+### Apple Notes
+Apple Notes keeps its notes in a database on the Mac, which Brulion reads without the Mac:
+1. On the Mac, in Finder choose **Go → Go to Folder…** and enter `~/Library/Group Containers/group.com.apple.notes`.
+2. Copy that whole folder (or a ZIP of it: right click → **Compress**) to the computer or phone with Brulion.
+3. **Import notes → Apple Notes** and choose the folder or the ZIP.
+
+Folders stay folders (several accounts — a folder each), the first line of a note is its title, and the formatting comes along: headings, bold, italic, strikethrough, highlights, lists, checklists, code, quotes, tables, links between notes, `#tags`. Pictures and files, drawings (as pictures) and scanned documents (as PDF or pictures) become attachments. Locked notes and those in *Recently Deleted* are left out (the preview says how many); attachments that are only in iCloud need to be opened on the Mac first.
+
+### From the command line
+`brulion-cli import <file, folder or ZIP>` does the same as this screen — with `--dry-run` it only shows what would be written, `--from` chooses the app, and the CSV mapping has its options (`--title-template`, `--columns "Year=text; Price=skip"`…). See [[Command line and AI agents]].
 
 ### An Obsidian vault without importing
 Simply open an Obsidian folder — also one synced with Syncthing — as a notebook (*Switch notebook → Open another notebook…*) on every device, and leave syncing to Syncthing; don't turn on Nextcloud for it as well. Brulion doesn't show the `.obsidian/` folder and never changes it — it only reads the journal and attachment settings from it.

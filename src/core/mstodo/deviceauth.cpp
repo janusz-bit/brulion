@@ -107,7 +107,8 @@ QString validateAuthority(const QString &authority)
                               "accounts), common (both), or your directory's tenant ID or domain.");
 }
 
-AuthError describeAuthError(const QString &error, const QString &description, const QList<int> &codes)
+AuthError describeAuthError(const QString &error, const QString &description, const QList<int> &codes,
+                            QStringView scope)
 {
     const int aadsts = aadstsCode(description, codes);
     const QString tail = aadsts ? u" (AADSTS%1)"_s.arg(aadsts) : QString();
@@ -130,9 +131,12 @@ AuthError describeAuthError(const QString &error, const QString &description, co
     if (aadsts == 65001 || aadsts == 90094 || aadsts == 90008 || error == u"consent_required"
         || error == u"interaction_required")
         return {u"consent"_s,
-                MsTodoMessages::tr("Permission to read your tasks was not granted. Add the delegated permission "
-                                   "Tasks.Read to the app registration; at work an administrator may have to "
-                                   "approve it.")
+                (scope == NotesScope ? MsTodoMessages::tr("Permission to read your notebooks was not granted. Add the "
+                                                          "delegated permission Notes.Read to the app registration; at "
+                                                          "work an administrator may have to approve it.")
+                                     : MsTodoMessages::tr("Permission to read your tasks was not granted. Add the "
+                                                          "delegated permission Tasks.Read to the app registration; at "
+                                                          "work an administrator may have to approve it."))
                         + tail};
     if (error == u"authorization_declined" || error == u"access_denied")
         return {u"declined"_s, MsTodoMessages::tr("The sign-in was declined. Nothing was imported.")};
@@ -213,7 +217,7 @@ void DeviceCodeLogin::send(const QString &url, const QByteArray &body, sync::Htt
 
 void DeviceCodeLogin::requestCode()
 {
-    send(endpoint(u"devicecode"), form({{u"client_id"_s, m_clientId}, {u"scope"_s, Scope.toString()}}),
+    send(endpoint(u"devicecode"), form({{u"client_id"_s, m_clientId}, {u"scope"_s, m_scope}}),
          [this](const sync::HttpResponse &response) {
              if (response.status == 0) {
                  fail({u"network"_s, MsTodoMessages::tr("Microsoft's sign-in page cannot be reached. Check the "
@@ -223,7 +227,7 @@ void DeviceCodeLogin::requestCode()
              const QJsonObject o = QJsonDocument::fromJson(response.body).object();
              if (response.status != 200) {
                  fail(describeAuthError(o.value(u"error"_s).toString(), o.value(u"error_description"_s).toString(),
-                                        errorCodes(o)));
+                                        errorCodes(o), m_scope));
                  return;
              }
              const QString userCode = o.value(u"user_code"_s).toString().trimmed();
@@ -290,7 +294,7 @@ void DeviceCodeLogin::poll()
                  again();
                  return;
              }
-             fail(describeAuthError(error, o.value(u"error_description"_s).toString(), errorCodes(o)));
+             fail(describeAuthError(error, o.value(u"error_description"_s).toString(), errorCodes(o), m_scope));
          });
 }
 

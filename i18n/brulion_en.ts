@@ -372,6 +372,17 @@
     </message>
 </context>
 <context>
+    <name>CloudMessages</name>
+    <message numerus="yes">
+        <location filename="../src/core/cloudimport/downloads.cpp" line="136"/>
+        <source>Files larger than %n MB were left out.</source>
+        <translation>
+            <numerusform>Files larger than %n MB were left out.</numerusform>
+            <numerusform>Files larger than %n MB were left out.</numerusform>
+        </translation>
+    </message>
+</context>
+<context>
     <name>ContentBacklinks</name>
     <message numerus="yes">
         <location filename="../src/app/qml/content/ContentBacklinks.qml" line="245"/>
@@ -770,6 +781,41 @@
     </message>
 </context>
 <context>
+    <name>ImportCsvMapping</name>
+    <message numerus="yes">
+        <location filename="../src/app/qml/io/ImportCsvMapping.qml" line="42"/>
+        <source>%n row(s)</source>
+        <translation>
+            <numerusform>%n row</numerusform>
+            <numerusform>%n rows</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/io/ImportCsvMapping.qml" line="84"/>
+        <source>%n attachment(s) downloaded.</source>
+        <translation>
+            <numerusform>%n attachment downloaded.</numerusform>
+            <numerusform>%n attachments downloaded.</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/io/ImportCsvMapping.qml" line="274"/>
+        <source>All %n attachment(s) are downloaded: the pages embed them.</source>
+        <translation>
+            <numerusform>The %n attachment is downloaded: the pages embed it.</numerusform>
+            <numerusform>All %n attachments are downloaded: the pages embed them.</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/io/ImportCsvMapping.qml" line="275"/>
+        <source>The cells name %n attachment file(s) on the web. Download them to keep them in the notebook; otherwise the pages link to their addresses (Airtable&apos;s links expire after a few hours).</source>
+        <translation>
+            <numerusform>The cells name %n attachment file on the web. Download it to keep it in the notebook; otherwise the pages link to its address (Airtable&apos;s links expire after a few hours).</numerusform>
+            <numerusform>The cells name %n attachment files on the web. Download them to keep them in the notebook; otherwise the pages link to their addresses (Airtable&apos;s links expire after a few hours).</numerusform>
+        </translation>
+    </message>
+</context>
+<context>
     <name>ImportPreview</name>
     <message numerus="yes">
         <location filename="../src/app/qml/io/ImportPreview.qml" line="118"/>
@@ -804,7 +850,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/io/ImportPreview.qml" line="376"/>
+        <location filename="../src/app/qml/io/ImportPreview.qml" line="384"/>
         <source>… and %n more</source>
         <translation>
             <numerusform>… and %n more</numerusform>
@@ -812,7 +858,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/io/ImportPreview.qml" line="414"/>
+        <location filename="../src/app/qml/io/ImportPreview.qml" line="422"/>
         <source>Import %n file(s)</source>
         <translation>
             <numerusform>Import %n file</numerusform>
@@ -852,7 +898,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/io/ImportPreview.qml" line="440"/>
+        <location filename="../src/app/qml/io/ImportPreview.qml" line="448"/>
         <source>%n file(s) got a new name because the name was taken.</source>
         <translation>
             <numerusform>%n file got a new name because the name was taken.</numerusform>
@@ -910,6 +956,126 @@
             <numerusform>%n empty lists were skipped.</numerusform>
         </translation>
     </message>
+    <message numerus="yes">
+        <location filename="../src/core/io/csvimport.cpp" line="1344"/>
+        <source>%n row(s) had no title; their pages are named after the file and the row number.</source>
+        <translation>
+            <numerusform>%n row had no title; its page is named after the file and the row number.</numerusform>
+            <numerusform>%n rows had no title; their pages are named after the file and the row number.</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/core/io/csvimport.cpp" line="1347"/>
+        <source>%n row(s) have the same title as an earlier row; their pages got a number (“… 2”).</source>
+        <translation>
+            <numerusform>%n row has the same title as an earlier row; its page got a number (“… 2”).</numerusform>
+            <numerusform>%n rows have the same title as an earlier row; their pages got a number (“… 2”).</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/core/io/csvimport.cpp" line="1350"/>
+        <source>%n value(s) did not fit their column&apos;s type and were kept as text.</source>
+        <translation>
+            <numerusform>%n value did not fit its column&apos;s type and was kept as text.</numerusform>
+            <numerusform>%n values did not fit their column&apos;s type and were kept as text.</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/core/io/import_todoist.cpp" line="473"/>
+        <source>%n due date(s) could not be read and were left out.</source>
+        <translation>
+            <numerusform>%n due date could not be read and was left out.</numerusform>
+            <numerusform>%n due dates could not be read and were left out.</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/core/io/import_todoist.cpp" line="475"/>
+        <source>%n recurring date(s) cannot be written as a 🔁 rule; only their next date was kept.</source>
+        <translation>
+            <numerusform>%n recurring date cannot be written as a 🔁 rule; only its next date was kept.</numerusform>
+            <numerusform>%n recurring dates cannot be written as a 🔁 rule; only their next date was kept.</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/core/io/import_todoist.cpp" line="485"/>
+        <source>%n comment file(s) are not in the import and were linked to Todoist.</source>
+        <translation>
+            <numerusform>%n comment file is not in the import and was linked to Todoist.</numerusform>
+            <numerusform>%n comment files are not in the import and were linked to Todoist.</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/core/io/import_onenote.cpp" line="155"/>
+        <source>%n picture(s) or file(s) were not downloaded and were left out.</source>
+        <translation>
+            <numerusform>%n picture or file was not downloaded and was left out.</numerusform>
+            <numerusform>%n pictures or files were not downloaded and were left out.</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/core/io/import_onenote.cpp" line="158"/>
+        <source>%n link(s) lead to OneNote pages outside the import; their text was kept.</source>
+        <translation>
+            <numerusform>%n link leads to a OneNote page outside the import; its text was kept.</numerusform>
+            <numerusform>%n links lead to OneNote pages outside the import; their text was kept.</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/core/io/import_onenote.cpp" line="161"/>
+        <source>%n page(s) are too large to convert; they were saved as HTML files.</source>
+        <translation>
+            <numerusform>%n page is too large to convert; it was saved as an HTML file.</numerusform>
+            <numerusform>%n pages are too large to convert; they were saved as HTML files.</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/core/io/import_onenote.cpp" line="164"/>
+        <source>%n page(s) were not downloaded and were left out.</source>
+        <translation>
+            <numerusform>%n page was not downloaded and was left out.</numerusform>
+            <numerusform>%n pages were not downloaded and were left out.</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/core/io/import_applenotes.cpp" line="388"/>
+        <source>%n locked note(s) were left out: unlock them in Apple Notes (on the Mac) and copy the folder again.</source>
+        <translation>
+            <numerusform>%n locked note was left out: unlock it in Apple Notes (on the Mac) and copy the folder again.</numerusform>
+            <numerusform>%n locked notes were left out: unlock them in Apple Notes (on the Mac) and copy the folder again.</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/core/io/import_applenotes.cpp" line="392"/>
+        <source>%n recently deleted note(s) were left out.</source>
+        <translation>
+            <numerusform>%n recently deleted note was left out.</numerusform>
+            <numerusform>%n recently deleted notes were left out.</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/core/io/import_applenotes.cpp" line="394"/>
+        <source>%n note(s) could not be read and were left out.</source>
+        <translation>
+            <numerusform>%n note could not be read and was left out.</numerusform>
+            <numerusform>%n notes could not be read and were left out.</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/core/io/import_applenotes.cpp" line="396"/>
+        <source>%n attachment(s) are not in the copied folder (still in iCloud, or the folder was copied without them) and were left out.</source>
+        <translation>
+            <numerusform>%n attachment is not in the copied folder (still in iCloud, or the folder was copied without it) and was left out.</numerusform>
+            <numerusform>%n attachments are not in the copied folder (still in iCloud, or the folder was copied without them) and were left out.</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/core/io/import_applenotes.cpp" line="400"/>
+        <source>%n attachment(s) of a kind Brulion does not know were left out.</source>
+        <translation>
+            <numerusform>%n attachment of a kind Brulion does not know was left out.</numerusform>
+            <numerusform>%n attachments of a kind Brulion does not know were left out.</numerusform>
+        </translation>
+    </message>
 </context>
 <context>
     <name>JournalsView</name>
@@ -944,11 +1110,19 @@
 <context>
     <name>MsTodoSignIn</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/io/MsTodoSignIn.qml" line="180"/>
+        <location filename="../src/app/qml/io/MsTodoSignIn.qml" line="237"/>
         <source>The code expires in %n minute(s).</source>
         <translation>
             <numerusform>The code expires in %n minute.</numerusform>
             <numerusform>The code expires in %n minutes.</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/io/MsTodoSignIn.qml" line="152"/>
+        <source>Download %n notebook(s)</source>
+        <translation>
+            <numerusform>Download %n notebook</numerusform>
+            <numerusform>Download %n notebooks</numerusform>
         </translation>
     </message>
 </context>
@@ -1460,7 +1634,7 @@
     <name>ShellShareDialog</name>
     <message numerus="yes">
         <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="32"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="7885"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="7889"/>
         <source>%n file(s) to save in the notebook</source>
         <translation>
             <numerusform>%n file to save in the notebook</numerusform>
@@ -1801,6 +1975,25 @@
     </message>
 </context>
 <context>
+    <name>TokenSignIn</name>
+    <message numerus="yes">
+        <location filename="../src/app/qml/io/TokenSignIn.qml" line="117"/>
+        <source>%n field(s)</source>
+        <translation>
+            <numerusform>%n field</numerusform>
+            <numerusform>%n fields</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/io/TokenSignIn.qml" line="128"/>
+        <source>Download %n table(s)</source>
+        <translation>
+            <numerusform>Download %n table</numerusform>
+            <numerusform>Download %n tables</numerusform>
+        </translation>
+    </message>
+</context>
+<context>
     <name>TransclusionView</name>
     <message numerus="yes">
         <location filename="../src/app/qml/editor/TransclusionView.qml" line="510"/>
@@ -1925,6 +2118,17 @@
     </message>
 </context>
 <context>
+    <name>brulion::cli</name>
+    <message numerus="yes">
+        <location filename="../src/cli/commands_import.cpp" line="415"/>
+        <source>%n file(s) could not be written.</source>
+        <translation>
+            <numerusform>%n file could not be written.</numerusform>
+            <numerusform>%n files could not be written.</numerusform>
+        </translation>
+    </message>
+</context>
+<context>
     <name>brulion::editor::SuggestionModel</name>
     <message numerus="yes">
         <location filename="../src/app/editor/suggestionmodel.cpp" line="308"/>
@@ -1969,7 +2173,7 @@
 <context>
     <name>brulion::ioviews::ImportController</name>
     <message numerus="yes">
-        <location filename="../src/app/io/importcontroller.cpp" line="706"/>
+        <location filename="../src/app/io/importcontroller.cpp" line="731"/>
         <source>Import stopped: %n file(s) saved.</source>
         <translation>
             <numerusform>Import stopped: %n file saved.</numerusform>
@@ -1977,7 +2181,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/io/importcontroller.cpp" line="707"/>
+        <location filename="../src/app/io/importcontroller.cpp" line="732"/>
         <source>Import finished: %n file(s) saved.</source>
         <translation>
             <numerusform>Import finished: %n file saved.</numerusform>
@@ -1988,7 +2192,7 @@
 <context>
     <name>brulion::ioviews::MsTodoImport</name>
     <message numerus="yes">
-        <location filename="../src/app/io/mstodoimport.cpp" line="206"/>
+        <location filename="../src/app/io/mstodoimport.cpp" line="268"/>
         <source>%n task(s)</source>
         <translation>
             <numerusform>%n task</numerusform>
@@ -2118,7 +2322,7 @@
 <context>
     <name>brulion::shell::CommandModel</name>
     <message numerus="yes">
-        <location filename="../src/app/shell/commandmodel.cpp" line="609"/>
+        <location filename="../src/app/shell/commandmodel.cpp" line="617"/>
         <source>%n card(s) to study now</source>
         <translation>
             <numerusform>%n card to study now</numerusform>
@@ -2207,7 +2411,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspaceextensions.cpp" line="2319"/>
+        <location filename="../src/app/shell/workspaceextensions.cpp" line="2325"/>
         <source>%1 copied to %2 (%n page(s)).</source>
         <translation>
             <numerusform>%1 copied to %2 (%n page).</numerusform>
