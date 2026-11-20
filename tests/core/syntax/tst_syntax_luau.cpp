@@ -177,7 +177,7 @@ void TestSyntaxLuau::spansInOrder_data()
     QTest::newRow("mixed") << u"local t = { a = `x{b.y}`, [\"k\"] = 0x10 } -- c"_s;
     QTest::newRow("garbage") << u"`{`{`{`{\"'[[--[==[ ]] `}}}`"_s;
     QTest::newRow("deep interpolation") << QString(u"`{"_s.repeated(100));
-    QTest::newRow("control characters") << u"\u0001\u0000local\u0007 = \"\u0000\""_s;
+    QTest::newRow("control characters") << u"\x0001\x0000local\x0007 = \"\x0000\""_s;
     QTest::newRow("surrogates") << u"s = \"😀\" -- 😀 \xd83d"_s;
 }
 
