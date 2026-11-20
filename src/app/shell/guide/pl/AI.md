@@ -48,7 +48,7 @@ Włącz go w **Ustawieniach → Rozszerzenia → AI → Asystent AI**. Rozmawias
 - **Streść tę stronę** — nowa rozmowa, która prosi o streszczenie strony i jej zadań; dopytasz w niej o resztę.
 - **Ustawienia AI…** — dostawca, klucz i model.
 
-AI **samo przeszukuje i czyta cały notatnik** — strony, dziennik, zadania z terminami, tagi, przypomnienia — więc możesz zapytać „Co mam do zrobienia w tym tygodniu?”, „Co pisałem o wyjeździe?” albo poprosić „Dopisz mleko do listy zakupów”. **Odpowiedź widać na żywo**, słowo po słowie, a przed nią to, co model myśli (małymi szarymi literami; model na urządzeniu myśli po angielsku, a Brulion Assistant 1.7B odpowiada bez namysłu). Gdy szuka albo czyta, mówi o tym: „Szukam w notatkach: „wyjazd”…”, „Czytam „Zakupy”…”. **Zatrzymaj** przerywa od razu — model też przestaje pisać, więc kolejne pytanie nie czeka. **Ogląda też obrazki** w notatkach, gdy model widzi (Claude, LFM3-VL na urządzeniu): „Ile zapłaciłem za mleko? Paragon jest w Zakupach.” Brulion Assistant 1.7B i LFM3 1.7B czytają tylko tekst: gdy pobierzesz też LFM3-VL 2B, Brulion wczyta go do obrazka na ich miejsce (kilka sekund dłużej), a potem wraca do wybranego modelu — w pamięci jest zawsze jeden model, więc nie zajmuje jej więcej. To samo jest w palecie (Ctrl+K) jako **AI: nowa rozmowa** i **Czat z AI**.
+AI **samo przeszukuje i czyta cały notatnik** — strony, dziennik, zadania z terminami, tagi, przypomnienia — więc możesz zapytać „Co mam do zrobienia w tym tygodniu?”, „Co pisałem o wyjeździe?” albo poprosić „Dopisz mleko do listy zakupów”. **Odpowiedź widać na żywo**, słowo po słowie, a nad nią to, co model myśli, zwinięte do jednej szarej linijki — stuknij, żeby przeczytać całość (model na urządzeniu myśli po angielsku, Brulion Assistant 1.7B odpowiada bez namysłu, a nowsze modele Claude przysyłają streszczenie swojego namysłu). Gdy szuka albo czyta, mówi o tym: „Szukam w notatkach: „wyjazd”…”, „Czytam „Zakupy”…”. **Zatrzymaj** przerywa od razu — model też przestaje pisać, więc kolejne pytanie nie czeka. **Ogląda też obrazki** w notatkach, gdy model widzi (Claude, LFM3-VL na urządzeniu): „Ile zapłaciłem za mleko? Paragon jest w Zakupach.” Brulion Assistant 1.7B i LFM3 1.7B czytają tylko tekst: gdy pobierzesz też LFM3-VL 2B, Brulion wczyta go do obrazka na ich miejsce (kilka sekund dłużej), a potem wraca do wybranego modelu — w pamięci jest zawsze jeden model, więc nie zajmuje jej więcej. To samo jest w palecie (Ctrl+K) jako **AI: nowa rozmowa** i **Czat z AI**.
 
 **Także rozszerzenia.** Poproś o nowe polecenie, widok albo reakcję — „polecenie, które policzy słowa dzisiejszej notatki” — a AI przeczyta, jak się pisze rozszerzenia, wypróbuje kod na Twoich notatkach, niczego nie zmieniając, i zapisze stronę w **Rozszerzenia/**. Potem czeka na Ciebie jak kod z innego urządzenia: przeczytaj stronę i naciśnij **Przeczytaj i uruchom**, gdy zgadzasz się z tym, co robi (zob. [[Rozszerzenia]]).
 
@@ -56,7 +56,40 @@ AI **samo przeszukuje i czyta cały notatnik** — strony, dziennik, zadania z t
 
 **Każda rozmowa to strona** w folderze **AI/**, nazwana od Twojego pierwszego pytania — `AI/2026-11-15 Co mam do zrobienia w tym tygodniu` — a dziennik z tego dnia dostaje wiersz z linkiem do niej. Przeczytasz ją więc później na telefonie, wyszukasz, podlinkujesz albo poprawisz; czat ciągnie się dalej od tego, co jest na stronie. Jej zadania nie trafiają do Twoich list zadań, a przypomnienie w odpowiedzi nigdy nie zadzwoni (strona ma `zadania: ignoruj`). **Otwórz rozmowę jako stronę** (w czacie) pokazuje ją w edytorze.
 
-Asystent pracuje narzędziami (szukanie, czytanie, zapis): na własnym serwerze wybierz model, który je obsługuje (np. Qwen 3 albo Llama 3.1); Claude je obsługuje. Gdy model odpowiada, przycisk ✨ się kręci. Naraz powstaje jedna odpowiedź; pisze się dalej, gdy oglądasz inne strony, i trafia do swojej rozmowy.
+**Obrazki, aparat i głos.** Spinacz obok pola dodaje do wiadomości obrazki — z pliku albo, na telefonie, **Zrób zdjęcie** aparatem; obrazek można też wkleić (Ctrl+V) albo upuścić na rozmowę. Trafiają do folderu załączników notatnika, widać je w rozmowie, a AI je ogląda, gdy jego model widzi (Claude, LFM3-VL na urządzeniu). Na Androidzie przycisk **mikrofonu** pozwala podyktować wiadomość (rozpoznawanie mowy telefonu).
+
+**Każda wiadomość ma swoją godzinę** — pod spodem, a nad pierwszą wiadomością dnia jest ten dzień. **Kilka rozmów odpowiada naraz**: zapytaj w jednej i pisz dalej w drugiej. Model na urządzeniu odpowiada po kolei: pozostałe czekają w kolejce, a rozmowa o tym mówi („Czekam na model na tym urządzeniu…”).
+
+**Długie rozmowy.** Mały model przeczyta tylko tyle, ile się w nim zmieści: gdy rozmowa robi się dla niego za długa, AI dostaje ją od późniejszego pytania — całe pytania z odpowiedziami od początku zostają pominięte, nigdy Twoje ostatnie — a linia w rozmowie pokazuje, od którego miejsca czyta.
+
+**Zmień nazwę albo usuń** rozmowę z jej menu na liście (prawy przycisk albo długie przytrzymanie na telefonie): data zostaje przed nazwą, a **Cofnij** w komunikacie przywraca dawną nazwę albo usuniętą rozmowę.
+
+Asystent pracuje narzędziami (szukanie, czytanie, zapis): na własnym serwerze wybierz model, który je obsługuje (np. Qwen 3 albo Llama 3.1); Claude je obsługuje. Gdy model odpowiada, przycisk ✨ się kręci. Odpowiedź pisze się dalej, gdy oglądasz inne strony, i trafia do swojej rozmowy.
+
+## AI w edytorze
+Z włączonym Asystentem AI sztuczna inteligencja pomaga też **pisać**. Zaznacz tekst (albo tylko postaw kursor w bloku, albo zaznacz bloki) i wybierz:
+
+- **Przepisz…** — wybierz, jak: **Krócej**, **Jaśniej**, **Popraw pisownię i gramatykę**, **Bardziej oficjalnie**, **Swobodniej**, **Przetłumacz na angielski** albo **na polski** — albo powiedz to własnymi słowami („jako lista”, „cieplej, do listu”).
+- **Pisz dalej** — następne zdanie czy dwa za kursorem, w tonie notatki.
+- **Streść** — krótkie streszczenie pod tekstem.
+
+Znajdziesz je w menu zaznaczonego tekstu (prawy przycisk), w menu bloku, w palecie (**AI: Przepisz…** — **Ctrl+Shift+A** —, **AI: Pisz dalej**, **AI: Streść**), a na telefonie pod **✨** na pasku edycji albo na pasku zaznaczonych bloków. Działa też w trybie źródła. Odpowiedź widać na żywo, a przy przepisywaniu także **co się zmienia**, słowo po słowie; nic nie jest wysyłane, dopóki nie wybierzesz, a w notatce nic się nie zmienia, dopóki nie naciśniesz **Zastąp** albo **Wstaw** — i jedno **Cofnij** to odwraca. **Spróbuj ponownie** prosi o inną odpowiedź.
+
+## Własny rozmówca
+W czacie z AI zamiast Asystenta AI może odpowiadać rozszerzenie: polecenie z `chat = true` dostaje rozmowę (`ctx.messages`) i zwraca swoją odpowiedź. Gdy takie jest, czat pozwala wybrać, **kto odpowiada** w rozmowie (nad jej wiadomościami albo „Odpowiada: …” przed pierwszą); strona rozmowy to zapamiętuje.
+
+```luau
+b.command("pirat", function(ctx)
+    if type(ctx.messages) ~= "table" or #ctx.messages == 0 then
+        return "Porozmawiaj ze mną w czacie z AI."
+    end
+    return b.ai({
+        system = "Jesteś wesołym piratem. Odpowiadaj najwyżej dwoma zdaniami.",
+        messages = ctx.messages,
+        maxTokens = 400,
+    })
+end, { label = "Pirat", chat = true })
+```
 
 ## We własnych rozszerzeniach
 Strona rozszerzenia z `ai` wśród uprawnień może pytać model:
@@ -75,7 +108,7 @@ end, { label = "Haiku na dziś" })
 ```
 ````
 
-`b.ai("pytanie")` zwraca tekst; tabela dodaje `system`, `model`, `maxTokens`, `effort`, `images` (obrazki z notatnika, nazwane tak, jak osadzają je notatki: `images = { "paragon.jpg" }`) albo `messages` dla rozmowy. Gdy model pisze, Brulion działa dalej. W **konsoli Luau** spróbuj `b.ai("Ile to 2 + 2?")`. Gdy modelu nie da się zapytać — brak klucza, brak połączenia — polecenie zatrzymuje się z podaniem powodu; `pcall(b.ai, "…")` to łapie.
+`b.ai("pytanie")` zwraca tekst; tabela dodaje `system`, `model`, `maxTokens`, `effort`, `thoughts = true` (to, co model myślał, w polu `thoughts` odpowiedzi), `images` (obrazki z notatnika, nazwane tak, jak osadzają je notatki: `images = { "paragon.jpg" }`) albo `messages` dla rozmowy. Gdy model pisze, Brulion działa dalej. W **konsoli Luau** spróbuj `b.ai("Ile to 2 + 2?")`. Gdy modelu nie da się zapytać — brak klucza, brak połączenia — polecenie zatrzymuje się z podaniem powodu; `pcall(b.ai, "…")` to łapie.
 
 ## Narzędzia: model, który sam sprawdza
 Dzięki `tools` model może wywoływać funkcje Twojego kodu — przeszukać notatki, przeczytać stronę — zanim odpowie; tak działa Asystent AI. Narzędzie ma nazwę, opis mówiący, kiedy je wywołać, i kształt danych wejściowych. Odpowiedź, która wywołuje narzędzia, ma `toolCalls`: Twój kod je wykonuje i pyta ponownie, z turą modelu (`raw`, bez zmian) i wszystkimi wynikami w jednej wiadomości, aż przyjdzie odpowiedź bez wywołań.

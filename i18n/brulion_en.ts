@@ -159,7 +159,7 @@
 <context>
     <name>BlockEditor</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1147"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1173"/>
         <source>Copied %n block(s) from several days</source>
         <translation>
             <numerusform>Copied %n block from several days</numerusform>
@@ -167,7 +167,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1149"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1175"/>
         <source>Copied %n block(s)</source>
         <translation>
             <numerusform>Copied %n block</numerusform>
@@ -175,7 +175,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1190"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1216"/>
         <source>Cut %n block(s)</source>
         <translation>
             <numerusform>Cut %n block</numerusform>
@@ -183,7 +183,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1206"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1232"/>
         <source>Deleted %n block(s)</source>
         <translation>
             <numerusform>Deleted %n block</numerusform>
@@ -191,7 +191,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1279"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1305"/>
         <source>Pasted %n picture(s) from the internet</source>
         <translation>
             <numerusform>Pasted %n picture from the internet</numerusform>
@@ -199,7 +199,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="2269"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="2295"/>
         <source>%n picture(s) saved to the notebook</source>
         <translation>
             <numerusform>%n picture saved to the notebook</numerusform>
@@ -210,7 +210,7 @@
 <context>
     <name>BlockMenu</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockMenu.qml" line="227"/>
+        <location filename="../src/app/qml/editor/BlockMenu.qml" line="228"/>
         <source>Copy %n block(s)</source>
         <translation>
             <numerusform>Copy %n block</numerusform>
@@ -218,7 +218,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockMenu.qml" line="241"/>
+        <location filename="../src/app/qml/editor/BlockMenu.qml" line="242"/>
         <source>Cut %n block(s)</source>
         <translation>
             <numerusform>Cut %n block</numerusform>
@@ -226,7 +226,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockMenu.qml" line="576"/>
+        <location filename="../src/app/qml/editor/BlockMenu.qml" line="607"/>
         <source>Delete %n block(s)</source>
         <translation>
             <numerusform>Delete %n block</numerusform>
@@ -306,6 +306,25 @@
         <translation>
             <numerusform>%1 · %n page</numerusform>
             <numerusform>%1 · %n pages</numerusform>
+        </translation>
+    </message>
+</context>
+<context>
+    <name>ChatView</name>
+    <message numerus="yes">
+        <location filename="../src/app/qml/views/ChatView.qml" line="711"/>
+        <source>The model on this device does not get the %n message(s) above: too long for it</source>
+        <translation>
+            <numerusform>The model on this device does not get the %n message above: too long for it</numerusform>
+            <numerusform>The model on this device does not get the %n messages above: too long for it</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/views/ChatView.qml" line="712"/>
+        <source>The AI does not get the %n message(s) above: too long</source>
+        <translation>
+            <numerusform>The AI does not get the %n message above: too long</numerusform>
+            <numerusform>The AI does not get the %n messages above: too long</numerusform>
         </translation>
     </message>
 </context>
@@ -446,7 +465,7 @@
     <name>ContentPdfView</name>
     <message numerus="yes">
         <location filename="../src/app/qml/content/ContentPdfView.qml" line="1513"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="3863"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="3866"/>
         <source>%n page(s)</source>
         <translation>
             <numerusform>%n page</numerusform>
@@ -895,7 +914,7 @@
 <context>
     <name>JournalsView</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/JournalsView.qml" line="612"/>
+        <location filename="../src/app/qml/views/JournalsView.qml" line="617"/>
         <source>%n day(s) with notes</source>
         <translation>
             <numerusform>%n day with notes</numerusform>
@@ -1430,7 +1449,7 @@
     <name>ShellShareDialog</name>
     <message numerus="yes">
         <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="32"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="7444"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="7703"/>
         <source>%n file(s) to save in the notebook</source>
         <translation>
             <numerusform>%n file to save in the notebook</numerusform>
@@ -2020,7 +2039,7 @@
 <context>
     <name>brulion::shell::CommandModel</name>
     <message numerus="yes">
-        <location filename="../src/app/shell/commandmodel.cpp" line="563"/>
+        <location filename="../src/app/shell/commandmodel.cpp" line="585"/>
         <source>%n card(s) to study now</source>
         <translation>
             <numerusform>%n card to study now</numerusform>
@@ -2101,7 +2120,7 @@
 <context>
     <name>brulion::shell::WorkspaceExtensions</name>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspaceextensions.cpp" line="766"/>
+        <location filename="../src/app/shell/workspaceextensions.cpp" line="775"/>
         <source>Extensions answering each other&apos;s changes stopped after %1 rounds: %n change(s) not passed on.</source>
         <translation>
             <numerusform>Extensions answering each other&apos;s changes stopped after %1 rounds: %n change not passed on.</numerusform>
@@ -2109,7 +2128,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspaceextensions.cpp" line="2118"/>
+        <location filename="../src/app/shell/workspaceextensions.cpp" line="2319"/>
         <source>%1 copied to %2 (%n page(s)).</source>
         <translation>
             <numerusform>%1 copied to %2 (%n page).</numerusform>

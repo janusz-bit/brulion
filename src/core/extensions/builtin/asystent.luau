@@ -48,6 +48,7 @@ local WRITTEN = {
         about = "Rozmowa dotyczy strony [[%s]]:\n\n%s\n\n---\n\n",
         lookAsk = "Opisz krótko, co jest na tym obrazku, i przepisz widoczny na nim tekst.",
         cut = "_(Strona [[%s]] poszła do AI przycięta do %d znaków.)_",
+        omitted = "(Początek tej rozmowy — %d wcześniejszych wiadomości — nie zmieścił się w modelu i go tu nie ma.)\n\n",
         tooLong = "_(AI nie skończyło po %d krokach. Napisz, co dalej.)_",
         done = "Gotowe.",
     },
@@ -59,6 +60,7 @@ local WRITTEN = {
         about = "The conversation is about the page [[%s]]:\n\n%s\n\n---\n\n",
         lookAsk = "Describe briefly what this picture shows and write out the text on it.",
         cut = "_(The page [[%s]] went to the AI cut to %d characters.)_",
+        omitted = "(The start of this conversation — %d earlier messages — did not fit the model and is not here.)\n\n",
         tooLong = "_(The AI did not finish in %d steps. Say how to go on.)_",
         done = "Done.",
     },
@@ -1776,9 +1778,11 @@ end
 
 -- ---- Commands -----------------------------------------------------------------------------------
 
--- One turn of a conversation of the chat: ctx.messages ({role, content}, the user's last), ctx.page
--- (the page it is about, "" none: its text goes along before the first message, read again each
--- turn), ctx.conversation (the conversation's own page, which its tools do not find). Returns the AI's message: its answer, the pages it changed, a note on a page cut short.
+-- One turn of a conversation of the chat: ctx.messages ({role, content, images?}, the user's last),
+-- ctx.page (the page it is about, "" none: its text goes along before the first message, read again
+-- each turn), ctx.conversation (the conversation's own page, which its tools do not find),
+-- ctx.omitted (the earlier messages left out: they do not fit the model). Returns the AI's message:
+-- its answer, the pages it changed, a note on a page cut short.
 b.command("chat", function(ctx)
     local history = ctx.messages
     if type(history) ~= "table" or #history == 0 then
@@ -1789,13 +1793,22 @@ b.command("chat", function(ctx)
     -- The day goes in the first message, not in the system text: the system text and the tools
     -- stay the same from day to day, and a model on the device keeps what it read of them on
     -- disk (docs/EXTENSIONS.md "AI"). The page the conversation is about goes there too.
+    -- A conversation too long for the model came without its first turns (ctx.omitted of them):
+    -- the model is told so, before the rest.
+    local omitted = if type(ctx.omitted) == "number" then ctx.omitted else 0
     local messages: { any } = {}
     for i, m in history do
         local content = str(m.content)
         if i == 1 then
-            content = todayLine() .. (if text ~= "" then string.format(W.about, page, text) else "") .. content
+            content = todayLine() .. (if omitted > 0 then string.format(W.omitted, omitted) else "")
+                .. (if text ~= "" then string.format(W.about, page, text) else "") .. content
         end
-        table.insert(messages, { role = if str(m.role) == "assistant" then "assistant" else "user", content = content })
+        local message: any = { role = if str(m.role) == "assistant" then "assistant" else "user", content = content }
+        -- The pictures sent with a user's message (the chat's attachments): the model sees them.
+        if message.role == "user" and type(m.images) == "table" and #m.images > 0 then
+            message.images = m.images
+        end
+        table.insert(messages, message)
     end
     local session: Session = { all = false, changed = {}, conversation = str(ctx.conversation), calls = {},
         writes = 0, lastPage = "", made = {}, tasks = {}, asked = b.fold(str(history[#history].content)),
@@ -1805,7 +1818,7 @@ b.command("chat", function(ctx)
     local idle = 0 -- turns in a row, after a change, whose every call only repeated what was done
     for round = 1, MAX_ROUNDS do
         b.status("") -- (the model thinks: the chat's dots alone)
-        local said, reply = b.ai({ system = system, messages = messages, tools = TOOLS, maxTokens = 8000 })
+        local said, reply = b.ai({ system = system, messages = messages, tools = TOOLS, maxTokens = 8000, thoughts = true })
         table.insert(messages, { role = "assistant", raw = reply.raw })
         if not reply.toolCalls then
             if round < MAX_ROUNDS and claimsUnmade(session, history, str(said)) then
@@ -1900,4 +1913,4 @@ b.command("chat", function(ctx)
         table.insert(parts, string.format(W.cut, page, MAX_PAGE))
     end
     return table.concat(parts, "\n\n")
-end, { label = T.chat, palette = false })
+end, { label = T.chat, palette = false, chat = true })

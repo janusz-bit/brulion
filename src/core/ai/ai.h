@@ -138,7 +138,16 @@ struct Request
     int maxTokens = 0; ///< 0 = the provider's default (Anthropic: DefaultMaxTokens)
     QString effort; ///< "" | "low" | "medium" | "high" | "xhigh" | "max" (Anthropic's output_config.effort)
     QList<Tool> tools;
+    /// The model's thinking shown where it can be (b.ai's `thoughts = true`): Claude's models
+    /// that think anyway and take `thinking.display` send a summary of it (showsThinking()); a
+    /// server's reasoning and the model on the device's thoughts come without asking.
+    bool thoughts = false;
 };
+
+/// Does Anthropic's `model` think by itself and take `thinking: {display: "summarized"}`: Claude
+/// Opus 5 and later, Sonnet 5 and later, Haiku 5.5, Fable, Mythos (Opus 4.7 and 4.8 take
+/// `display` but think only when asked to; older models refuse it)?
+bool showsThinking(const QString &model);
 
 /// A tool the model asked for (Reply::toolCalls).
 struct ToolCall {
@@ -158,9 +167,12 @@ struct Reply
     qint64 outputTokens = 0;
     QList<ToolCall> toolCalls; ///< the tools the model asked for (a request with tools)
     QByteArray raw;            ///< the assistant's turn as the provider wrote it (compact JSON)
+    /// What the model thought before it answered, as it shows it (Claude's summary of its
+    /// thinking blocks, a server's reasoning_content, the model on the device's): "" none.
+    QString thoughts;
 
     /// b.ai's answer: {text, model, stopReason, inputTokens, outputTokens, raw, toolCalls = {{id,
-    /// name, input}} (only when there are some)} or {error}.
+    /// name, input}} (only when there are some), thoughts (only when there are some)} or {error}.
     QVariantMap toVariant() const;
 };
 
@@ -202,7 +214,8 @@ private:
 QString defaultModel(const QString &provider);
 
 /// A request from b.ai's argument: {prompt = "…"} or {messages = {…}}, with system, model,
-/// maxTokens (1–128000), effort and tools ({{name, description, input = schema}}); nothing when it
+/// maxTokens (1–128000), effort, thoughts (a boolean) and tools ({{name, description, input =
+/// schema}}); nothing when it
 /// is not one (`error` says why). A message is {role, content}, an assistant's {role = "assistant",
 /// raw = reply.raw} or a user's {role = "user", results = {{id, content, isError?}}}; the last one
 /// is the user's. Pictures: `images = {"name", …}` next to `prompt`, or in a user's message with

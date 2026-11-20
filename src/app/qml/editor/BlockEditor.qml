@@ -968,16 +968,42 @@ FocusScope {
         Workspace.extensions.runBlockCommand(name, path, line, selection)
         return true
     }
-    /// What an extension's command gets as ctx.selection (docs/EXTENSIONS.md "Commands"): the text
-    /// selected in the block being edited, else the selected blocks as Markdown, else "".
-    function selectionForExtensions(): string {
+    /// What the user points at — one reading for the AI in the editor (startWriting) and an
+    /// extension's ctx.selection (selectionForExtensions), so the two never disagree: "source"
+    /// (source mode: its text and selection), "edit" (the block being edited: its text and
+    /// selection), "blocks" (selected blocks, not over several days: selectionMarkdown()), "" none.
+    function pointedAt(): string {
         if (!controller)
             return ""
+        if (controller.sourceMode)
+            return sourceTextEdit ? "source" : ""
         const edit = activeEditor
-        if (edit && differs(edit.selectionStart, edit.selectionEnd))
-            return edit.getText(Math.min(edit.selectionStart, edit.selectionEnd), Math.max(edit.selectionStart, edit.selectionEnd))
+        if (edit && edit.active && controller.editingRow >= 0)
+            return "edit"
         if (!inSpan && controller.selectionCount > 0)
+            return "blocks"
+        return ""
+    }
+    /// What an extension's command gets as ctx.selection (docs/EXTENSIONS.md "Commands"): the text
+    /// selected in source mode or in the block being edited, else the selected blocks as Markdown,
+    /// else "" (pointedAt()).
+    function selectionForExtensions(): string {
+        switch (pointedAt()) {
+        case "source": {
+            const source = sourceTextEdit
+            const from = Math.min(source.selectionStart, source.selectionEnd)
+            const to = Math.max(source.selectionStart, source.selectionEnd)
+            return differs(from, to) ? Js.slice("" + EditorInput.plainText(source.textDocument), from, to) : ""
+        }
+        case "edit": {
+            const edit = activeEditor
+            const from = Math.min(edit.selectionStart, edit.selectionEnd)
+            const to = Math.max(edit.selectionStart, edit.selectionEnd)
+            return differs(from, to) ? Js.slice("" + edit.plain(), from, to) : ""
+        }
+        case "blocks":
             return controller.selectionMarkdown()
+        }
         return ""
     }
 
@@ -3973,6 +3999,179 @@ FocusScope {
         }
     }
 
+    // ---- The AI in the editor (docs/UI.md "AI in the editor") ------------------------------------------
+    /// The writing assistant's dialog (WritingDialog), made when first asked.
+    property WritingDialog writingDialog: null
+    /// The AI may be asked here: the assistant is on and the page can be changed.
+    readonly property bool writingAvailable: AppSettings.assistantEnabled && controller !== null && !controller.readOnly
+    /// `action` ("rewrite" | "continue" | "summarize"; a rewrite after `preset`, or "" to choose one)
+    /// on what the user points at: the selected text of the block being edited (none: its whole
+    /// text; a continuation: up to the caret), else the selected blocks, else the selected block;
+    /// in source mode its selection, else the paragraph at the caret. Asks nothing yet for a
+    /// rewrite without a preset (the dialog offers them). False (and a notice) when there is
+    /// nothing to work on.
+    function startWriting(action: string, preset: string): bool {
+        if (!controller)
+            return false
+        if (!AppSettings.assistantEnabled) {
+            notice(qsTr("Switch the AI assistant on first: Settings → Extensions → AI"), "info", null)
+            return false
+        }
+        if (controller.readOnly) {
+            notice(qsTr("Reading mode: the page is not changed"), "info", null)
+            return false
+        }
+        if (!writingDialog)
+            writingDialog = writingComponent.createObject(editor) as WritingDialog
+        const dialog = writingDialog
+        // (What it works on is what an extension's ctx.selection reads: pointedAt().)
+        const pointed = pointedAt()
+        if (controller.sourceMode && pointed !== "source")
+            return false
+        if (pointed === "source") {
+            const source = sourceTextEdit
+            EditorInput.commitPreedit(source)
+            const text = "" + EditorInput.plainText(source.textDocument)
+            const from = source.selectionStart + 0
+            const to = source.selectionEnd + 0
+            return dialog.startSource(action, preset, text, from, to)
+        }
+        if (pointed === "edit") {
+            const edit = activeEditor
+            EditorInput.commitPreedit(edit)
+            const r = edit.row + 0
+            const text = "" + edit.plain()
+            const from = (action === "continue" ? edit.cursorPosition : edit.selectionStart) + 0
+            const to = (action === "continue" ? edit.cursorPosition : edit.selectionEnd) + 0
+            return dialog.startInline(action, preset, r, text, from, to)
+        }
+        if (pointed === "blocks") {
+            const markdown = "" + controller.selectionMarkdown()
+            const first = controller.selectionFirstRow + 0
+            const last = controller.selectionLastRow + 0
+            if (Js.trim(markdown) !== "")
+                return dialog.startBlocks(action, preset, markdown, first, last)
+        }
+        const row = currentRow()
+        if (row >= 0) {
+            writingHeld.map = controller.blocks.get(row)
+            const text = "" + AppController.routeText(writingHeld.map, "editText")
+            const length = Js.trim(text) !== "" ? text.length : -1
+            if (length >= 0)
+                return dialog.startInline(action, preset, row, text, action === "continue" ? length : 0, length)
+        }
+        notice(qsTr("Select text, or put the caret in a block, first"), "info", null)
+        return false
+    }
+    MapHolder { id: writingHeld }
+    /// A row's edit text as the model has it now ("" for none).
+    function editTextOf(row: int): string {
+        if (!controller)
+            return ""
+        writingHeld.map = controller.blocks.get(row)
+        return AppController.routeText(writingHeld.map, "editText")
+    }
+    /// The AI's change into `row`'s edit text [from, to) (one undo step), editing on after it.
+    function pasteWritten(row: int, from: int, to: int, text: string): void {
+        if (controller)
+            controller.pasteAndEdit(row, from, to, text)
+    }
+    /// Source mode's text exactly (no-break spaces kept), "" outside it.
+    function sourcePlainText(): string {
+        return sourceTextEdit ? EditorInput.plainText(sourceTextEdit.textDocument) : ""
+    }
+    /// [from, to) of source mode's text replaced by `text` as one step of its own undo, and selected.
+    function replaceSourceRange(from: int, to: int, text: string): void {
+        if (!sourceTextEdit)
+            return
+        EditorInput.replaceRange(sourceTextEdit.textDocument, from, to, text)
+        sourceTextEdit.select(from, from + text.length)
+    }
+    Component {
+        id: writingComponent
+        WritingDialog {
+            editorItem: editor
+        }
+    }
+    /// The writing assistant's menu of the touch toolbar and the selection tools (its button with
+    /// the sparkles): Rewrite… and its most asked presets, Continue writing, Summarize. Made when
+    /// first opened.
+    property BMenu writingMenu: null
+    function openWritingMenu(item: Item, above: bool): void {
+        if (!writingMenu)
+            writingMenu = writingMenuComponent.createObject(editor) as BMenu
+        writingMenu.bottomMargin = menuBottomMargin()
+        if (above) {
+            const y = -writingMenu.implicitHeight - Theme.space1
+            writingMenu.popup(item, 0, y)
+            followToolbarWith(writingMenu, item, y)
+        } else {
+            writingMenu.popup(item, 0, item.height)
+        }
+    }
+    Component {
+        id: writingMenuComponent
+        BMenu {
+            objectName: "writingMenu"
+            BMenuItem {
+                objectName: "writingRewrite"
+                text: qsTr("Rewrite…")
+                iconName: "sparkles"
+                onTriggered: editor.startWritingLater("rewrite", "")
+            }
+            BMenuItem {
+                objectName: "writingShorter"
+                text: qsTr("Shorter")
+                iconName: "minimize"
+                onTriggered: editor.startWritingLater("rewrite", "shorter")
+            }
+            BMenuItem {
+                objectName: "writingClearer"
+                text: qsTr("Clearer")
+                iconName: "eye"
+                onTriggered: editor.startWritingLater("rewrite", "clearer")
+            }
+            BMenuItem {
+                objectName: "writingGrammar"
+                text: qsTr("Fix spelling and grammar")
+                iconName: "check"
+                onTriggered: editor.startWritingLater("rewrite", "grammar")
+            }
+            BMenuItem {
+                objectName: "writingTranslate"
+                text: DatesHelper.locale === "pl" ? qsTr("Translate to English") : qsTr("Translate to Polish")
+                iconName: "languages"
+                onTriggered: editor.startWritingLater("rewrite", DatesHelper.locale === "pl" ? "english" : "polish")
+            }
+            BMenuSeparator {}
+            BMenuItem {
+                objectName: "writingContinue"
+                text: qsTr("Continue writing")
+                iconName: "pencil"
+                onTriggered: editor.startWritingLater("continue", "")
+            }
+            BMenuItem {
+                objectName: "writingSummarize"
+                text: qsTr("Summarize")
+                iconName: "scroll-text"
+                onTriggered: editor.startWritingLater("summarize", "")
+            }
+        }
+    }
+    /// startWriting() once the menu that asked has closed (the edited text has its focus and
+    /// selection back first).
+    function startWritingLater(action: string, preset: string): void {
+        writingLater.action = action
+        writingLater.preset = preset
+        writingLater.restart()
+    }
+    Later {
+        id: writingLater
+        property string action
+        property string preset
+        onTriggered: if (editor.alive) editor.startWriting(writingLater.action, writingLater.preset)
+    }
+
     // ---- The edited text's menu (desktop right-click) -------------------------------------------------
     /// Cut, Copy, Paste, Select all for the text of the block being edited: a right-click
     /// in it with a mouse, touchpad or stylus (a bare TextEdit has no menu of its own; touch UIs have
@@ -4153,6 +4352,35 @@ FocusScope {
                 text: qsTr("Highlight…")
                 iconName: "highlighter"
                 onTriggered: editor.openAfterTextMenu(menu.edit, true)
+            }
+            // The AI in the editor (the selection, else the block's text).
+            HidingMenuSeparator {
+                visible: menu.textItems && editor.writingAvailable
+            }
+            HidingMenuItem {
+                objectName: "editTextRewrite"
+                visible: menu.textItems && editor.writingAvailable
+                text: qsTr("Rewrite with AI…")
+                iconName: "sparkles"
+                shortcut: ShortcutMap.sequences["ai.rewrite"] || ""
+                onTriggered: editor.startWritingLater("rewrite", "")
+            }
+            HidingMenuItem {
+                objectName: "editTextContinue"
+                visible: menu.textItems && editor.writingAvailable
+                text: qsTr("Continue writing with AI")
+                iconName: "pencil"
+                onTriggered: editor.startWritingLater("continue", "")
+            }
+            HidingMenuItem {
+                objectName: "editTextSummarize"
+                visible: menu.textItems && editor.writingAvailable
+                text: qsTr("Summarize with AI")
+                iconName: "scroll-text"
+                onTriggered: editor.startWritingLater("summarize", "")
+            }
+            HidingMenuSeparator {
+                visible: menu.textItems && editor.writingAvailable
             }
             HidingMenuItem {
                 objectName: "editTextSelectAll"

@@ -4,7 +4,10 @@
 // look-alikes that are no messages), the page a conversation is about, a message written into a
 // page and appended to one byte for byte (reminders kept quiet, code untouched, a fence left open
 // closed), the first lines of a new page, its name, the journal's line, the history b.ai gets and
-// the previews of the list.
+// the previews of the list; the time of each message (its `czas::` / `time::` line, old pages
+// without one), pictures sent with a message (embeds, the newest of them as the model's images),
+// who answers (the frontmatter's `partner:`) and a conversation too long for the model cut by
+// whole turns.
 #include "chat/chat.h"
 
 #include <QTest>
@@ -273,6 +276,239 @@ private Q_SLOTS:
         QCOMPARE(h.at(2).toMap().value(u"content"_s).toString(), u"Trzecie"_s);
         QVERIFY(history(parse(u"- 🤖 tylko AI\n"_s)).isEmpty());
         QVERIFY(history(Conversation{}).isEmpty());
+    }
+
+    void timesOfMessages_data()
+    {
+        QTest::addColumn<QString>("page");
+        QTest::addColumn<QString>("roles");
+        QTest::addColumn<QString>("times");  // "HH:mm" of each message, "-" none
+        QTest::addColumn<QString>("last");
+
+        QTest::newRow("Polish") << u"- 🧑 Pytanie\n  czas:: 2026-11-15 09:12\n- 🤖 Odpowiedź\n  czas:: 2026-11-15 09:13\n  dalej\n"_s
+                                << u"UA"_s << u"09:12 09:13"_s << u"Odpowiedź\ndalej"_s;
+        QTest::newRow("English, a list first")
+                << u"- 🧑 Q\n  time:: 2026-11-15 21:05\n- 🤖\n  time:: 2026-11-15 21:06\n  - one\n  - two\n"_s << u"UA"_s
+                << u"21:05 21:06"_s << u"- one\n- two"_s;
+        QTest::newRow("an old page: none") << u"- 🧑 Pytanie\n- 🤖 Odpowiedź\n"_s << u"UA"_s << u"- -"_s << u"Odpowiedź"_s;
+        QTest::newRow("a tab (Logseq), any case") << u"- 🧑 Pytanie\n\tCZAS:: 2026-11-15 7:05\n\tdalej\n"_s << u"U"_s
+                                                  << u"07:05"_s << u"Pytanie\ndalej"_s;
+        QTest::newRow("not the first line under it: text")
+                << u"- 🧑 Pytanie\n  dalej\n  czas:: 2026-11-15 09:12\n"_s << u"U"_s << u"-"_s
+                << u"Pytanie\ndalej\nczas:: 2026-11-15 09:12"_s;
+        QTest::newRow("malformed: text") << u"- 🧑 Pytanie\n  czas:: wczoraj\n"_s << u"U"_s << u"-"_s
+                                         << u"Pytanie\nczas:: wczoraj"_s;
+        QTest::newRow("no such day: text") << u"- 🧑 Pytanie\n  czas:: 2026-02-30 09:12\n"_s << u"U"_s << u"-"_s
+                                           << u"Pytanie\nczas:: 2026-02-30 09:12"_s;
+        QTest::newRow("no such hour: text") << u"- 🧑 Pytanie\n  czas:: 2026-11-15 25:00\n"_s << u"U"_s << u"-"_s
+                                            << u"Pytanie\nczas:: 2026-11-15 25:00"_s;
+        QTest::newRow("at the margin: no message's") << u"- 🧑 Pytanie\nczas:: 2026-11-15 09:12\n"_s << u"U"_s << u"-"_s
+                                                     << u"Pytanie\nczas:: 2026-11-15 09:12"_s;
+        QTest::newRow("CRLF") << u"- 🧑 Ą\r\n  czas:: 2026-11-15 09:12\r\n  ę\r\n"_s << u"U"_s << u"09:12"_s << u"Ą\nę"_s;
+    }
+    void timesOfMessages()
+    {
+        QFETCH(QString, page);
+        QFETCH(QString, roles);
+        QFETCH(QString, times);
+        QFETCH(QString, last);
+        const Conversation c = parse(page);
+        QCOMPARE(::roles(c), roles);
+        QStringList got;
+        for (const Message &m : c.messages)
+            got << (m.time.isValid() ? m.time.toString(u"HH:mm"_s) : u"-"_s);
+        QCOMPARE(got.join(u' '), times);
+        QCOMPARE(c.messages.last().text, last);
+        if (c.messages.first().time.isValid()) {
+            QCOMPARE(c.messages.first().time.date(), QDate(2026, 11, 15));
+            QCOMPARE(c.messages.first().time.timeSpec(), Qt::LocalTime);
+        }
+    }
+
+    void writesTimes()
+    {
+        const QDateTime at(QDate(2026, 11, 15), QTime(9, 12));
+        QCOMPARE(formatMessage(Role::User, u"Zażółć"_s, u"\n", at, u"pl"), u"- 🧑 Zażółć\n  czas:: 2026-11-15 09:12\n"_s);
+        QCOMPARE(formatMessage(Role::Assistant, u"- jeden\n- dwa"_s, u"\n", at, u"en"),
+                 u"- 🤖\n  time:: 2026-11-15 09:12\n  - jeden\n  - dwa\n"_s);
+        QCOMPARE(formatMessage(Role::Assistant, QString(), u"\r\n", at, u"pl"), u"- 🤖\r\n  czas:: 2026-11-15 09:12\r\n"_s);
+        QCOMPARE(formatMessage(Role::User, u"bez czasu"_s, u"\n", QDateTime(), u"pl"), u"- 🧑 bez czasu\n"_s);
+        // The key the page uses already, else its frontmatter's language, else the one given.
+        QCOMPARE(appendMessage(u"- 🧑 Q\n  time:: 2026-11-15 09:00\n"_s, Role::Assistant, u"A"_s, at, u"pl"),
+                 u"- 🧑 Q\n  time:: 2026-11-15 09:00\n- 🤖 A\n  time:: 2026-11-15 09:12\n"_s);
+        QCOMPARE(appendMessage(u"---\nzadania: ignoruj\n---\n- 🧑 Q\n"_s, Role::Assistant, u"A"_s, at, u"en"),
+                 u"---\nzadania: ignoruj\n---\n- 🧑 Q\n- 🤖 A\n  czas:: 2026-11-15 09:12\n"_s);
+        QCOMPARE(appendMessage(u"- 🧑 Q\n"_s, Role::Assistant, u"A"_s, at, u"en"), u"- 🧑 Q\n- 🤖 A\n  time:: 2026-11-15 09:12\n"_s);
+        // Written and read back: the same text and time.
+        const QString page = appendMessage(newConversation(u"Co mam jutro?"_s, u"Dom"_s, u"pl"_s, at),
+                                           Role::Assistant, u"Jutro:\n\n- czynsz"_s, at.addSecs(60), u"pl"_s);
+        const Conversation c = parse(page);
+        QCOMPARE(roles(c), u"UA"_s);
+        QCOMPARE(c.page, u"Dom"_s);
+        QCOMPARE(c.messages.at(0).text, u"Co mam jutro? ([[Dom]])"_s);
+        QCOMPARE(c.messages.at(0).time, at);
+        QCOMPARE(c.messages.at(0).endLine, 4);
+        QCOMPARE(c.messages.at(1).text, u"Jutro:\n\n- czynsz"_s);
+        QCOMPARE(c.messages.at(1).time, at.addSecs(60));
+        // The model gets no time line.
+        QCOMPARE(history(c).at(0).toMap().value(u"content"_s).toString(), u"Co mam jutro? ([[Dom]])"_s);
+    }
+
+    void partners_data()
+    {
+        QTest::addColumn<QString>("content");
+        QTest::addColumn<QString>("partner");
+        QTest::addColumn<QString>("expected");
+
+        QTest::newRow("added at the end of the frontmatter") << u"---\nzadania: ignoruj\n---\n- 🧑 Ą\n"_s << u"pirat/rozmowa"_s
+                                                             << u"---\nzadania: ignoruj\npartner: pirat/rozmowa\n---\n- 🧑 Ą\n"_s;
+        QTest::newRow("replaced") << u"---\npartner: stary\ntasks: ignore\n---\n- 🧑 Ą\n"_s << u"nowy"_s
+                                  << u"---\npartner: nowy\ntasks: ignore\n---\n- 🧑 Ą\n"_s;
+        QTest::newRow("taken out") << u"---\nzadania: ignoruj\nPartner: stary\n---\n- 🧑 Ą\n"_s << QString()
+                                   << u"---\nzadania: ignoruj\n---\n- 🧑 Ą\n"_s;
+        QTest::newRow("taken out, none there") << u"- 🧑 Ą\n"_s << QString() << u"- 🧑 Ą\n"_s;
+        QTest::newRow("no frontmatter") << u"- 🧑 Ą\n"_s << u"pirat"_s << u"---\npartner: pirat\n---\n- 🧑 Ą\n"_s;
+        QTest::newRow("CRLF") << u"---\r\nzadania: ignoruj\r\npartner: a\r\n---\r\n- 🧑 Ą\r\n"_s << u"b"_s
+                              << u"---\r\nzadania: ignoruj\r\npartner: b\r\n---\r\n- 🧑 Ą\r\n"_s;
+        QTest::newRow("an unclosed frontmatter") << u"---\n- 🧑 Ą\n"_s << u"b"_s << u"---\npartner: b\n---\n---\n- 🧑 Ą\n"_s;
+    }
+    void partners()
+    {
+        QFETCH(QString, content);
+        QFETCH(QString, partner);
+        QFETCH(QString, expected);
+        const QString changed = setPartner(content, partner);
+        QCOMPARE(changed, expected);
+        QCOMPARE(parse(changed).partner, partner);
+        QCOMPARE(setPartner(changed, partner), changed); // (again: nothing more)
+    }
+
+    void partnerOfAPage()
+    {
+        QCOMPARE(parse(u"---\npartner: \"pirat/rozmowa\"\n---\n- 🧑 Ą\n"_s).partner, u"pirat/rozmowa"_s);
+        QCOMPARE(parse(u"---\nzadania: ignoruj\n---\n- 🧑 Ą\n"_s).partner, QString());
+        QCOMPARE(parse(u"- 🧑 Ą\n  partner: x\n"_s).partner, QString()); // (no frontmatter's)
+        QCOMPARE(newConversation(u"Ahoj"_s, QString(), u"pl"_s, QDateTime(), u"pirat"_s),
+                 u"---\nzadania: ignoruj\npartner: pirat\n---\n- 🧑 Ahoj\n"_s);
+    }
+
+    void pictures_data()
+    {
+        QTest::addColumn<QString>("markdown");
+        QTest::addColumn<QStringList>("pictures");
+
+        QTest::newRow("an embed") << u"Co to?\n![[Pasted image 20261115091200.jpg]]"_s
+                                  << QStringList{u"Pasted image 20261115091200.jpg"_s};
+        QTest::newRow("a size and a Markdown picture") << u"![[a.PNG|300]] i ![zdjęcie](assets/żółw.webp \"tytuł\")"_s
+                                                       << QStringList{u"a.PNG"_s, u"assets/żółw.webp"_s};
+        QTest::newRow("each once") << u"![[a.jpg]] ![[a.jpg]]"_s << QStringList{u"a.jpg"_s};
+        QTest::newRow("no pictures") << u"![[Notatka]] ![[plik.pdf]] [[b.jpg]]"_s << QStringList();
+        QTest::newRow("from the internet") << u"![](https://example.com/a.jpg)"_s << QStringList();
+        QTest::newRow("in code") << u"`![[a.jpg]]`\n```\n![[b.jpg]]\n```\n![[c.gif]]"_s << QStringList{u"c.gif"_s};
+        QTest::newRow("malformed") << u"![[a.jpg\n![](b.jpg\n![[]]"_s << QStringList();
+    }
+    void pictures()
+    {
+        QFETCH(QString, markdown);
+        QFETCH(QStringList, pictures);
+        QCOMPARE(picturesIn(markdown), pictures);
+    }
+
+    void picturesSent()
+    {
+        QCOMPARE(withPictures(u"  Co to za roślina?  "_s, {u"a.jpg"_s, u"assets/b.png"_s}),
+                 u"Co to za roślina?\n![[a.jpg]]\n![[assets/b.png]]"_s);
+        QCOMPARE(withPictures(QString(), {u"a.jpg"_s}), u"![[a.jpg]]"_s);
+        QCOMPARE(withoutPictures(u"Co to?\n![[a.jpg]]\nA to ![[b.png|200]] tu\n![[Notatka]]"_s),
+                 u"Co to?\nA to  tu\n![[Notatka]]"_s);
+        QCOMPARE(withoutPictures(u"![[a.jpg]]"_s), QString());
+        // A message written with its pictures: the model gets them as images, not as text.
+        QString page = appendMessage(QString(), Role::User, withPictures(u"Co to?"_s, {u"a.jpg"_s}));
+        page = appendMessage(page, Role::Assistant, u"Paproć."_s);
+        page = appendMessage(page, Role::User, withPictures(QString(), {u"b.jpg"_s, u"c.jpg"_s}));
+        const Conversation c = parse(page);
+        QCOMPARE(c.messages.at(0).pictures, QStringList{u"a.jpg"_s});
+        const QVariantList h = history(c);
+        QCOMPARE(h.size(), 3);
+        QCOMPARE(h.at(0).toMap().value(u"content"_s).toString(), u"Co to?"_s);
+        QCOMPARE(h.at(0).toMap().value(u"images"_s).toStringList(), QStringList{u"a.jpg"_s});
+        QCOMPARE(h.at(1).toMap().contains(u"images"_s), false);
+        // (A message of pictures alone is no empty message.)
+        QCOMPARE(h.at(2).toMap().value(u"content"_s).toString(), QString());
+        QCOMPARE(h.at(2).toMap().value(u"images"_s).toStringList(), (QStringList{u"b.jpg"_s, u"c.jpg"_s}));
+        // Without pictures (a model that does not see): the embeds stay text.
+        QCOMPARE(history(c, 0, false).at(0).toMap().value(u"content"_s).toString(), u"Co to?\n![[a.jpg]]"_s);
+        QVERIFY(!history(c, 0, false).at(0).toMap().contains(u"images"_s));
+    }
+
+    void theNewestPictures()
+    {
+        // Ten pictures in three messages: the newest eight go as pictures, the oldest stay embeds.
+        QString page;
+        page = appendMessage(page, Role::User, withPictures(u"Pierwsze"_s, {u"1.jpg"_s, u"2.jpg"_s, u"3.jpg"_s}));
+        page = appendMessage(page, Role::Assistant, u"Widzę."_s);
+        page = appendMessage(page, Role::User, withPictures(u"Drugie"_s, {u"4.jpg"_s, u"5.jpg"_s, u"6.jpg"_s}));
+        page = appendMessage(page, Role::Assistant, u"Też."_s);
+        page = appendMessage(page, Role::User, withPictures(u"Trzecie"_s, {u"7.jpg"_s, u"8.jpg"_s, u"9.jpg"_s, u"10.jpg"_s}));
+        const QVariantList h = history(parse(page));
+        QCOMPARE(h.size(), 5);
+        QCOMPARE(h.at(0).toMap().value(u"images"_s).toStringList(), QStringList{u"3.jpg"_s});
+        QCOMPARE(h.at(0).toMap().value(u"content"_s).toString(), u"Pierwsze\n![[1.jpg]]\n![[2.jpg]]"_s);
+        QCOMPARE(h.at(2).toMap().value(u"images"_s).toStringList().size(), 3);
+        QCOMPARE(h.at(4).toMap().value(u"images"_s).toStringList().size(), 4);
+        int all = 0;
+        for (const QVariant &m : h)
+            all += int(m.toMap().value(u"images"_s).toStringList().size());
+        QCOMPARE(all, MaxPictures);
+    }
+
+    void cutByTurns_data()
+    {
+        QTest::addColumn<QStringList>("messages"); // "U:text" / "A:text"
+        QTest::addColumn<int>("budget");
+        QTest::addColumn<int>("first");
+
+        const QString ten(10, u'ż');
+        const QStringList four{u"U:"_s + ten, u"A:"_s + ten, u"U:"_s + ten, u"A:"_s + ten, u"U:"_s + ten};
+        QTest::newRow("no budget: all") << four << 0 << 0;
+        QTest::newRow("it fits: all") << four << 50 << 0;
+        QTest::newRow("the oldest turn out") << four << 49 << 2;
+        QTest::newRow("only the latest turn") << four << 10 << 4;
+        QTest::newRow("the latest too long: still sent") << four << 3 << 4;
+        QTest::newRow("a run of the user's messages is one turn")
+                << QStringList{u"U:"_s + ten, u"A:"_s + ten, u"U:"_s + ten, u"U:"_s + ten, u"A:"_s + ten, u"U:"_s + ten}
+                << 45 << 2;
+        QTest::newRow("the AI's first") << QStringList{u"A:"_s + ten, u"U:"_s + ten, u"A:"_s + ten, u"U:"_s + ten} << 25 << 3;
+        QTest::newRow("a picture counts") << QStringList{u"U:![[a.jpg]]"_s, u"A:"_s + ten, u"U:"_s + ten} << 1000 << 2;
+    }
+    void cutByTurns()
+    {
+        QFETCH(QStringList, messages);
+        QFETCH(int, budget);
+        QFETCH(int, first);
+        QString page;
+        for (const QString &m : messages)
+            page = appendMessage(page, m.startsWith(u'U') ? Role::User : Role::Assistant, m.mid(2));
+        const Conversation c = parse(page);
+        QCOMPARE(c.messages.size(), messages.size());
+        QCOMPARE(firstSent(c, budget), first);
+        // What is sent then starts with the user's turn and ends with the question.
+        const QVariantList h = history(c, first);
+        QVERIFY(!h.isEmpty());
+        QCOMPARE(h.first().toMap().value(u"role"_s).toString(), u"user"_s);
+        QCOMPARE(h.last().toMap().value(u"role"_s).toString(), u"user"_s);
+    }
+
+    void costs()
+    {
+        Message m;
+        m.text = u"Zażółć"_s;
+        QCOMPARE(cost(m), 6);
+        m.pictures = {u"a.jpg"_s, u"b.jpg"_s};
+        QCOMPARE(cost(m), 6 + 2 * PictureChars);
+        QCOMPARE(firstSent(Conversation{}, 10), 0);
+        QCOMPARE(history(Conversation{}, 5).size(), 0);
+        QCOMPARE(history(parse(u"- 🧑 Ą\n"_s), -3).size(), 1);
     }
 
     void previews_data()

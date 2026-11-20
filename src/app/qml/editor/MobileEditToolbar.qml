@@ -279,6 +279,15 @@ Rectangle {
             StructureTools { objectName: "toolbarStructure" }
             Separator {}
             WritingTools { objectName: "toolbarWriting"; visible: !bar.documentMode }
+            // The AI in the editor: the selected text, else the block's (docs/UI.md "AI in the editor").
+            ToolButton {
+                id: aiButton
+                objectName: "toolbarAi"
+                visible: bar.editor.writingAvailable
+                iconName: "sparkles"
+                label: qsTr("AI: rewrite, continue, summarize")
+                onClicked: { bar.commitComposition(); bar.editor.openWritingMenu(aiButton, true) }
+            }
             ToolButton {
                 iconName: "calendar"
                 label: qsTr("Due date")
@@ -423,6 +432,15 @@ Rectangle {
                 label: qsTr("Commands")
                 enabled: bar.sourceEdit !== null
                 onClicked: bar.insertText("/")
+            }
+            ToolButton {
+                id: sourceAiButton
+                objectName: "toolbarSourceAi"
+                visible: bar.editor.writingAvailable
+                iconName: "sparkles"
+                label: qsTr("AI: rewrite, continue, summarize")
+                enabled: bar.sourceEdit !== null
+                onClicked: bar.editor.openWritingMenu(sourceAiButton, true)
             }
             Separator {}
             ToolButton {

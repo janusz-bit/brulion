@@ -485,6 +485,12 @@ public:
     /// Insert Markdown (templates, pasted text): replaces `row` when it is empty, else goes after
     /// its top-level block. Returns the first new row.
     Q_INVOKABLE int insertMarkdown(int row, const QString &markdown);
+    /// `markdown`'s blocks after `row` with its subtree, at the depth of `depthRow` (-1: `row`'s;
+    /// a selection's first block: after the selection's last top block) — their nesting kept below
+    /// it; list items in an outline, and after a list item; paragraphs after a paragraph of the
+    /// document mode — the AI in the editor's summary and continuation of blocks (docs/UI.md "AI in
+    /// the editor"). One undo step. Returns the first new row (-1: nothing inserted).
+    Q_INVOKABLE int insertAfterBlock(int row, const QString &markdown, int depthRow = -1);
     /// Fill the template at vault path `templatePath` ({{date}}, {{title}}, …) and insert it
     /// like insertMarkdown(). Returns the first new row (-1 when the template cannot be read).
     Q_INVOKABLE int insertTemplate(int row, const QString &templatePath);
@@ -551,6 +557,9 @@ public:
     /// text after the caret goes to the end of the last one); a single multi-line block is
     /// inserted as is. One undo step. Returns { row, cursor } of the caret.
     Q_INVOKABLE QVariantMap pasteText(int row, int from, int to, const QString &text);
+    /// pasteText() of the AI in the editor's change (docs/UI.md "AI in the editor"), then editing
+    /// at its end. Returns the row edited (-1: nothing changed).
+    Q_INVOKABLE int pasteAndEdit(int row, int from, int to, const QString &text);
     /// The block id of a row, adding ` ^id` when missing as one undo step (ids any block of the
     /// vault has — EditorHost::blockIdTaken() — are avoided). "" when the block cannot carry an id.
     Q_INVOKABLE QString ensureBlockRef(int row);

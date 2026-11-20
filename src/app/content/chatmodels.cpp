@@ -2,6 +2,8 @@
 
 #include "contentutil.h"
 #include "chat/chat.h"
+#include "dates/dates.h"
+#include "workspacechats.h"
 #include "markdown/blockdocument.h"
 #include "markdown/inlinerenderer.h"
 #include "util/paths.h"
@@ -69,6 +71,15 @@ void ChatMessageModel::setLocale(const QString &locale)
     scheduleRefresh();
 }
 
+void ChatMessageModel::setBudget(int budget)
+{
+    if (m_budget == budget)
+        return;
+    m_budget = budget;
+    Q_EMIT budgetChanged();
+    scheduleRefresh();
+}
+
 QString ChatMessageModel::renderMessage(const QString &markdown, const markdown::RenderContext &context)
 {
     const markdown::BlockDocument doc(markdown);
@@ -129,6 +140,7 @@ void ChatMessageModel::refresh()
     QList<Row> next;
     QString page, title;
     bool exists = false;
+    int omitted = 0;
     shell::Workspace *ws = workspace();
     if (ws && ws->isOpen() && !m_path.isEmpty() && ws->exists(m_path)) {
         bool ok = false;
@@ -137,24 +149,52 @@ void ChatMessageModel::refresh()
         exists = !conversation.messages.isEmpty();
         page = conversation.page;
         title = ChatListModel::splitTitle(paths::pageTitle(m_path)).second;
-        const markdown::RenderContext context = renderContext(
-                vaultIndex(), m_path, effectiveToday(QString(), ws), uiLocale(m_locale), paletteFromMap(m_palette));
-        for (const chat::Message &m : conversation.messages) {
+        const QDate today = effectiveToday(QString(), ws);
+        const markdown::RenderContext context = renderContext(vaultIndex(), m_path, today, uiLocale(m_locale),
+                                                              paletteFromMap(m_palette));
+        omitted = chat::firstSent(conversation, m_budget);
+        QDate lastDay;
+        for (qsizetype i = 0; i < conversation.messages.size(); ++i) {
+            const chat::Message &m = conversation.messages.at(i);
             Row r;
             r.role = m.role == chat::Role::User ? u"user"_s : u"assistant"_s;
             r.text = m.text;
-            r.html = renderMessage(m.text, context);
+            // (The pictures are shown apart: the bubble's text is the rest.)
+            const QString words = m.pictures.isEmpty() ? m.text : chat::withoutPictures(m.text);
+            r.html = words.trimmed().isEmpty() && !m.pictures.isEmpty() ? QString() : renderMessage(words, context);
             r.line = m.line;
+            if (m.time.isValid()) {
+                r.time = m.time.toString(u"HH:mm"_s);
+                if (m.time.date() != lastDay) {
+                    r.day = dates::formatHuman(DateSpec{m.time.date(), QTime()}, uiLocale(m_locale), today);
+                    if (!r.day.isEmpty())
+                        r.day[0] = r.day.at(0).toUpper(); // ("Dziś", "Wczoraj": a heading of its own)
+                }
+                lastDay = m.time.date();
+            }
+            for (const QString &picture : m.pictures) {
+                const QUrl url = ws->chats()->pictureUrl(picture, m_path);
+                if (!url.isValid())
+                    continue;
+                r.pictures.append(url);
+                const QString resolved = ws->chats()->picturePath(picture, m_path);
+                r.picturePaths.append(resolved.isEmpty() ? picture : resolved);
+            }
+            r.sent = i >= omitted;
+            r.firstSent = omitted > 0 && i == omitted;
             next.append(r);
         }
     }
     // Rows by their first line: a message keeps its place, a new one comes last (its delegate
     // and the list's position stay as they are).
-    applyRows(m_rows, next, [](const Row &r) { return r.line; },
-              [](const Row &a, const Row &b) { return a.role == b.role && a.text == b.text && a.html == b.html; });
+    applyRows(m_rows, next, [](const Row &r) { return r.line; }, [](const Row &a, const Row &b) {
+        return a.role == b.role && a.text == b.text && a.html == b.html && a.time == b.time && a.day == b.day
+               && a.pictures == b.pictures && a.sent == b.sent && a.firstSent == b.firstSent;
+    });
     m_page = page;
     m_title = title;
     m_exists = exists;
+    m_omitted = omitted;
     Q_EMIT loaded();
 }
 
@@ -168,13 +208,21 @@ QVariant ChatMessageModel::data(const QModelIndex &index, int role) const
     case HtmlRole: return r.html;
     case TextRole: return r.text;
     case LineRole: return r.line;
+    case TimeRole: return r.time;
+    case DayRole: return r.day;
+    case PicturesRole: return QVariant::fromValue(r.pictures);
+    case PicturePathsRole: return r.picturePaths;
+    case SentRole: return r.sent;
+    case FirstSentRole: return r.firstSent;
     default: return {};
     }
 }
 
 QHash<int, QByteArray> ChatMessageModel::roleNames() const
 {
-    return {{RoleRole, "sender"}, {HtmlRole, "messageHtml"}, {TextRole, "markdown"}, {LineRole, "line"}};
+    return {{RoleRole, "sender"}, {HtmlRole, "messageHtml"}, {TextRole, "markdown"}, {LineRole, "line"},
+            {TimeRole, "time"},   {DayRole, "day"},          {PicturesRole, "pictures"}, {SentRole, "sent"},
+            {FirstSentRole, "firstSent"}, {PicturePathsRole, "picturePaths"}};
 }
 
 QString ChatMessageModel::textAt(int row) const
@@ -187,6 +235,18 @@ QString ChatMessageModel::textAt(int row) const
 ChatListModel::ChatListModel(QObject *parent)
     : WorkspaceListModel(parent)
 {
+    // The turns that run or wait: the rows say so (no reading of the pages).
+    connect(this, &WorkspaceListModel::workspaceChanged, this, [this] {
+        disconnect(m_turnsChanged);
+        if (shell::Workspace *ws = workspace())
+            m_turnsChanged = connect(ws->chats(), &shell::WorkspaceChats::stateChanged, this, &ChatListModel::turnsChanged);
+    });
+}
+
+void ChatListModel::turnsChanged()
+{
+    if (!m_rows.isEmpty())
+        Q_EMIT dataChanged(index(0), index(int(m_rows.size()) - 1), {RunningRole, QueuedRole});
 }
 
 void ChatListModel::setLocale(const QString &locale)
@@ -200,10 +260,7 @@ void ChatListModel::setLocale(const QString &locale)
 
 std::pair<QString, QString> ChatListModel::splitTitle(const QString &title)
 {
-    static const QRegularExpression dated(u"^(\\d{4}-\\d{2}-\\d{2})\\s+(.+)$"_s);
-    if (const auto m = dated.match(title); m.hasMatch())
-        return {m.captured(1), m.captured(2)};
-    return {QString(), title};
+    return chat::splitTitle(title);
 }
 
 void ChatListModel::refresh()
@@ -257,6 +314,13 @@ QVariant ChatListModel::data(const QModelIndex &index, int role) const
     case PreviewRole: return r.preview;
     case FromAiRole: return r.fromAi;
     case MessagesRole: return r.messages;
+    case RunningRole:
+    case QueuedRole: {
+        const shell::Workspace *ws = workspace();
+        if (!ws)
+            return false;
+        return role == RunningRole ? ws->chats()->isRunning(r.path) : ws->chats()->isQueued(r.path);
+    }
     default: return {};
     }
 }
@@ -264,7 +328,8 @@ QVariant ChatListModel::data(const QModelIndex &index, int role) const
 QHash<int, QByteArray> ChatListModel::roleNames() const
 {
     return {{PathRole, "path"},       {TitleRole, "title"},   {DateRole, "date"},          {DateLabelRole, "dateLabel"},
-            {PreviewRole, "preview"}, {FromAiRole, "fromAi"}, {MessagesRole, "messages"}};
+            {PreviewRole, "preview"}, {FromAiRole, "fromAi"}, {MessagesRole, "messages"}, {RunningRole, "running"},
+            {QueuedRole, "queued"}};
 }
 
 int ChatListModel::rowOf(const QString &path) const

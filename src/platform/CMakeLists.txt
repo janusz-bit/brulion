@@ -15,8 +15,9 @@
 #                Hunspell's dictionaries are; pure, tested everywhere), spellbackends (spell checking
 #                of the editor: one backend per build, below), traywindow (the tray calendar placed
 #                by Wayland's layer shell: one backend per build, below), crashreport (a crash's
-#                signal, thread and stack on stderr: Linux with glibc, nothing elsewhere). Tests:
-#                tests/platform.
+#                signal, thread and stack on stderr: Linux with glibc, nothing elsewhere), capture (a
+#                photo from the camera and dictation for the AI chat: one backend per build, below;
+#                the hook for a speech recognizer of the app's own). Tests: tests/platform.
 qt_add_library(brulion_platform STATIC
     platform.h platform.cpp
     autostart.h autostart.cpp
@@ -33,6 +34,7 @@ qt_add_library(brulion_platform STATIC
     traywindow.h
     crashreport.h crashreport.cpp
     filesync.h filesync.cpp
+    capture.h capture.cpp
 )
 target_include_directories(brulion_platform PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(brulion_platform PUBLIC brulion_core Qt6::Gui)
@@ -146,6 +148,15 @@ else()
 endif()
 set(BRULION_SPELL_BACKEND_USED "${_spell_backend}" CACHE INTERNAL "The spell checking backend of this build")
 message(STATUS "Brulion: spell checking through ${_spell_backend} (src/platform/spellbackends.h)")
+
+# A photo from the camera and dictation for the AI chat (capture.h): Android — the system's camera
+# app and speech recognizer through intents (MediaCapture.kt); elsewhere none (a speech recognizer
+# of the app's own registers itself: setSpeechRecognizer).
+if(ANDROID)
+    target_sources(brulion_platform PRIVATE capture_android.cpp)
+else()
+    target_sources(brulion_platform PRIVATE capture_none.cpp)
+endif()
 
 # A file handed to the system's app (openexternal.h): Android's ACTION_VIEW, the browser's new tab
 # (wasm/wasmopen.cpp, below), the desktop's default app.

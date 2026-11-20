@@ -66,6 +66,8 @@ public:
     /// `replacement` as one step of its undo history (source mode's Replace all).
     Q_INVOKABLE void replaceRanges(QQuickTextDocument *document, const QVariantList &ranges,
                                    const QString &replacement) const;
+    /// [from, to) replaced by `replacement` the same way (the AI in the editor's change in source mode).
+    Q_INVOKABLE void replaceRange(QQuickTextDocument *document, int from, int to, const QString &replacement) const;
 
     /// The keyboard modifiers (Qt.KeyboardModifiers) of the input event being handled — a click's
     /// Shift for handlers whose signal does not carry it (a frame's, a bullet's tap).

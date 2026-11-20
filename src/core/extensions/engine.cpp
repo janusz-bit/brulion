@@ -1017,7 +1017,8 @@ QList<CommandInfo> Engine::commands() const
     QList<CommandInfo> out;
     for (auto it = m_commands.cbegin(); it != m_commands.cend(); ++it) {
         const QString name = it.key().mid(it->extension.size() + 1);
-        out.append({it->extension, name, it->label.isEmpty() ? name : it->label, it->needsBlock, it->palette, it->key});
+        out.append({it->extension, name, it->label.isEmpty() ? name : it->label, it->needsBlock, it->palette, it->key,
+                    it->chat});
     }
     std::sort(out.begin(), out.end(), [](const CommandInfo &a, const CommandInfo &b) {
         return a.extension != b.extension ? a.extension < b.extension : a.name < b.name;
@@ -1439,6 +1440,7 @@ int Engine::commandImpl(lua_State *L)
     QString label, shortcut;
     bool needsBlock = false;
     bool palette = true;
+    bool chat = false;
     if (lua_type(L, 3) == LUA_TTABLE) {
         lua_rawgetfield(L, 3, "label");
         if (lua_type(L, -1) == LUA_TSTRING)
@@ -1447,8 +1449,12 @@ int Engine::commandImpl(lua_State *L)
         lua_rawgetfield(L, 3, "block");
         needsBlock = lua_toboolean(L, -1);
         lua_pop(L, 1);
+        lua_rawgetfield(L, 3, "chat");
+        chat = lua_toboolean(L, -1);
+        lua_pop(L, 1);
+        // (A chat partner answers in the chat: the palette offers it only when told to.)
         lua_rawgetfield(L, 3, "palette");
-        palette = lua_type(L, -1) != LUA_TBOOLEAN || lua_toboolean(L, -1);
+        palette = lua_type(L, -1) == LUA_TBOOLEAN ? bool(lua_toboolean(L, -1)) : !chat;
         lua_pop(L, 1);
         lua_rawgetfield(L, 3, "key");
         if (lua_type(L, -1) == LUA_TSTRING)
@@ -1456,7 +1462,7 @@ int Engine::commandImpl(lua_State *L)
         lua_pop(L, 1);
     }
     lua_pushvalue(L, 2);
-    Handler h{extension, lua_ref(L, -1), 0, label, needsBlock, {}, palette, {}, shortcut};
+    Handler h{extension, lua_ref(L, -1), 0, label, needsBlock, {}, palette, {}, shortcut, chat};
     lua_pop(L, 1);
     const QString key = extension + u'/' + name;
     if (const auto it = m_commands.constFind(key); it != m_commands.constEnd())
@@ -1477,7 +1483,7 @@ int Engine::viewImpl(lua_State *L)
         return failWith(L, u"b.view: argument 3 must be a table of actions"_s);
     if (!lua_isnoneornil(L, 4) && lua_type(L, 4) != LUA_TTABLE)
         return failWith(L, u"b.view: argument 4 must be a table ({label = …, icon = …})"_s);
-    Handler h{extension, 0, 0, {}, false, {}, true, {}, {}};
+    Handler h{extension, 0, 0, {}, false, {}, true, {}, {}, false};
     if (lua_type(L, 4) == LUA_TTABLE) {
         lua_rawgetfield(L, 4, "label");
         if (lua_type(L, -1) == LUA_TSTRING)

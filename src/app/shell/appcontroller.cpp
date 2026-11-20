@@ -2012,6 +2012,15 @@ int AppController::toastRestorePage(const QString &text, const QString &actionTe
     return toastRestore(text, actionText, QStringList{trashPath});
 }
 
+int AppController::toastUndoRename(const QString &text, const QString &actionText, const QString &path,
+                                   const QString &oldTitle)
+{
+    const int id = ++m_lastToastId;
+    m_renameToasts.insert(id, {path, oldTitle});
+    Q_EMIT toastWithActionRequested(id, text, u"success"_s, actionText);
+    return id;
+}
+
 void AppController::setToastHostId(int id, int hostId)
 {
     if (id > 0 && hostId > 0)
@@ -2026,6 +2035,12 @@ void AppController::hostToastActionTriggered(int hostId)
     if (m_restoreToasts.contains(id)) {
         if (m_workspace)
             m_workspace->restoreAll(m_restoreToasts.take(id));
+        return;
+    }
+    if (m_renameToasts.contains(id)) {
+        const auto [path, oldTitle] = m_renameToasts.take(id);
+        if (m_workspace && m_workspace->exists(path))
+            m_workspace->renamePage(path, oldTitle);
         return;
     }
     if (m_functionToasts.contains(id)) {
@@ -2045,6 +2060,7 @@ void AppController::hostToastRemoved(int hostId)
 {
     const int id = m_toastIdsByHostId.take(hostId);
     m_restoreToasts.remove(id);
+    m_renameToasts.remove(id);
     m_functionToasts.remove(id);
     if (m_extensionToasts.contains(id))
         m_workspace->extensions()->forgetButton(m_extensionToasts.take(id));

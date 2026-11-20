@@ -61,6 +61,11 @@ void EditorInput::replaceRanges(QQuickTextDocument *document, const QVariantList
     cursor.endEditBlock();
 }
 
+void EditorInput::replaceRange(QQuickTextDocument *document, int from, int to, const QString &replacement) const
+{
+    replaceRanges(document, {QVariantMap{{QStringLiteral("from"), from}, {QStringLiteral("to"), to}}}, replacement);
+}
+
 void mapDocumentSeparators(QString &text)
 {
     for (QChar &c : text) {

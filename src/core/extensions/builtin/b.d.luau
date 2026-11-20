@@ -53,9 +53,21 @@ type Context = {
     selection: string,
     messages: { any }?,
     conversation: string?,
+    omitted: number?,
 }
 
 type Node = { [string]: any }
+
+-- b.command's meta (docs/EXTENSIONS.md "Commands"): the palette's label, a command on the block
+-- under the caret, offered by the palette or not, a suggested keyboard shortcut, a chat partner.
+type CommandMeta = {
+    label: string?,
+    block: boolean?,
+    palette: boolean?,
+    key: string?,
+    chat: boolean?,
+    [string]: any,
+}
 
 -- What a macro's or a template variable's function gets (docs/EXTENSIONS.md "Macros").
 type MacroContext = {
@@ -90,11 +102,12 @@ type AiReply = {
     outputTokens: number?,
     raw: any,
     toolCalls: { any }?,
+    thoughts: string?,
 }
 
 declare b: {
     -- registering
-    command: (name: string, fn: (ctx: Context) -> ...any, meta: { [string]: any }?) -> (),
+    command: (name: string, fn: (ctx: Context) -> ...any, meta: CommandMeta?) -> (),
     view: (name: string, render: (params: { [string]: any }) -> any, actions: { [string]: (args: { [string]: any }) -> ...any }?, meta: { [string]: any }?) -> (),
     on: (event: string, fn: (e: { [string]: any }) -> ...any) -> (),
     settings: (fields: { { [string]: any } }?) -> { [string]: any },

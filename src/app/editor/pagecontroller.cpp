@@ -2238,6 +2238,43 @@ int PageController::insertBlockAfter(int row, const QString &body)
     return f.row;
 }
 
+int PageController::insertAfterBlock(int row, const QString &markdown, int depthRow)
+{
+    if (refusesEdit() || !validRow(row))
+        return -1;
+    if (!validRow(depthRow))
+        depthRow = row;
+    QString text = markdown;
+    text.replace(u"\r\n"_s, u"\n"_s).replace(u'\r', u'\n');
+    text = withoutTakenIds(text, {});
+    const BlockDocument inserted(text.trimmed());
+    if (inserted.isEmpty())
+        return -1;
+    const BlockDocument &doc = m_model->document();
+    const markdown::BlockEntry &anchor = doc.at(depthRow);
+    const int baseDepth = anchor.depth;
+    const bool intoList = !documentMode() || anchor.kind == BlockKind::ListItem;
+    const int firstDepth = inserted.at(0).depth;
+    // After the subtree of `row`: its last block, the first new one at `row`'s depth.
+    int last = doc.subtreeRange(row).last();
+    int first = -1;
+    beginCommand();
+    for (int k = 0; k < inserted.count(); ++k) {
+        const markdown::BlockEntry &e = inserted.at(k);
+        const int depth = baseDepth + std::max(0, e.depth - firstDepth);
+        const bool listItem = intoList || e.kind == BlockKind::ListItem;
+        const EditResult r = applyOp([&](BlockDocument &d) { return d.insertAfter(last, e.body, depth, listItem); });
+        if (r.focus >= 0) {
+            last = r.focus;
+            if (first < 0)
+                first = r.focus;
+        }
+    }
+    const Focus f{first >= 0 ? first : row, -1};
+    endCommand(f);
+    return first;
+}
+
 int PageController::appendEmptyBlock()
 {
     if (refusesEdit())
@@ -2805,6 +2842,15 @@ QVariantMap PageController::pasteText(int row, int from, int to, const QString &
     endCommand(f);
     setFocus(f, true);
     return caretResult(f.row, f.cursor);
+}
+
+int PageController::pasteAndEdit(int row, int from, int to, const QString &text)
+{
+    const QVariantMap caret = pasteText(row, from, to, text);
+    const int r = caret.value(u"row"_s, -1).toInt();
+    if (r >= 0)
+        startEditing(r, caret.value(u"cursor"_s, -1).toInt());
+    return r;
 }
 
 QString PageController::ensureBlockRef(int row)
