@@ -22,7 +22,7 @@ import Brulion
 // canStepBack` and `function stepBack()` (Back has a step of its own in the view, taken before
 // the history: PageView and JournalsView zoom a block zoomed into out one level),
 // `property bool toolbarDocked` (an editor's touch toolbar is docked at the view's bottom edge:
-// on the keyboard, or on the phone's bottom navigation once the keyboard went), `replacesBottomNav` (DrawingView on phones: the view's own bar at the
+// on the keyboard, or on the phone's bottom navigation once the keyboard went), `replacesBottomNav` (DrawingView, CanvasView on phones: the view's own bar at the
 // bottom takes the bottom navigation's place),
 // `takeFocus()` (a kept view built ahead, hidden, shown the first time: the keyboard to its list or
 // field — what its Component.onCompleted does only when made shown),
@@ -155,6 +155,7 @@ Item {
         case "settings": return settingsView
         case "logs": return logsView
         case "drawing": return drawingView
+        case "canvas": return canvasView
         default: return null
         }
     }
@@ -354,4 +355,5 @@ Item {
     Component { id: settingsView; SettingsView { route: root.otherRoute } }
     Component { id: logsView; LogsView { route: root.otherRoute } }
     Component { id: drawingView; DrawingView { route: root.otherRoute; inSidePanel: root.inSidePanel } }
+    Component { id: canvasView; CanvasView { route: root.otherRoute; inSidePanel: root.inSidePanel } }
 }

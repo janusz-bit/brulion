@@ -516,6 +516,12 @@ public:
     Q_INVOKABLE void hiddenToTray();
     /// Show a toast: kind "info" | "success" | "warning" | "error".
     Q_INVOKABLE void toast(const QString &text, const QString &kind = QStringLiteral("info"));
+    /// A file dragged from the sidebar's tree let go beside it, at (sceneX, sceneY) of the window:
+    /// a view that takes files may add it (the canvas view: a card where it lands).
+    Q_INVOKABLE void dropOnView(const QString &path, qreal sceneX, qreal sceneY)
+    {
+        Q_EMIT fileDroppedOnView(path, sceneX, sceneY);
+    }
     /// Show a toast with a button (the editor's "Undo"): `onAction`, a function, runs when it is
     /// pressed (Main.qml shows it as toastWithAction()'s).
     Q_INVOKABLE void toastAction(const QString &text, const QString &kind, const QString &actionText,
@@ -645,6 +651,8 @@ public:
     Q_INVOKABLE QVariantMap routeWith(const QVariant &base, const QVariant &route, const QStringList &keys) const;
 
 Q_SIGNALS:
+    /// dropOnView().
+    void fileDroppedOnView(const QString &path, qreal sceneX, qreal sceneY);
     void statusChanged();
     void introPendingChanged();
     void currentRouteChanged();

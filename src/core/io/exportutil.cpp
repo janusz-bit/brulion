@@ -1,5 +1,7 @@
 #include "io/exportutil_p.h"
 
+#include "canvas/canvas.h"
+#include "canvas/svg.h"
 #include "drawing/drawingfile.h"
 #include "drawing/excalidrawmd.h"
 #include "drawing/svgwrite.h"
@@ -34,7 +36,8 @@ ExportVault::ExportVault(const ExportInput &input) : m_input(input), m_index(std
                 m_noteIndex.insert(f.path, m_notes.size());
                 m_notes.append(Note{f.path, content, nullptr, markdown::journalDateFromPath(f.path, input.config)});
             } else {
-                m_index->update(f.path, QString());
+                // (A canvas's text too: its links count, as in the app.)
+                m_index->update(f.path, VaultIndex::readsText(f.path) ? decodeText(f.data) : QString());
                 m_attachmentIndex.insert(f.path, m_attachments.size());
                 m_attachments.append(f);
             }
@@ -73,6 +76,36 @@ ExportVault::ExportVault(const ExportInput &input) : m_input(input), m_index(std
             m_made.append(FileEntry{*picture, drawing::toSvg(d)});
         }
         m_drawingPictures.insert(n.path, *picture);
+    }
+    // Canvases (docs/SYNTAX.md §2 "Canvases"): their pictures — cards, groups, edges and labels,
+    // the pictures and the first lines of the notes their cards show (canvas::toSvg) — made at
+    // `Plan.canvas.svg`; embeds and links show them.
+    for (const FileEntry &f : std::as_const(m_attachments)) {
+        if (!canvas::isCanvasPath(f.path))
+            continue;
+        const canvas::ReadResult read = canvas::readCanvas(decodeText(f.data));
+        if (!read.canvas)
+            continue;
+        canvas::SvgOptions options;
+        qsizetype budget = 32 * 1024 * 1024; // pictures embedded in one canvas's picture
+        options.pictureDataUrl = [this, &budget](const QString &path) -> QString {
+            const FileEntry *a = attachment(paths::normalize(path));
+            const QString mime = a ? mimeForPictureFormat(paths::extension(a->path).mid(1)) : QString();
+            if (!a || mime.isEmpty() || a->data.size() > budget)
+                return {};
+            budget -= a->data.size();
+            return u"data:"_s + mime + u";base64,"_s + QString::fromLatin1(a->data.toBase64());
+        };
+        options.noteText = [this](const QString &path, const QString &) -> QString {
+            const Note *n = note(paths::normalize(path));
+            return n ? n->content.left(4000) : QString();
+        };
+        const VaultPath picture = f.path + u".svg"_s;
+        if (m_attachmentIndex.contains(picture))
+            continue;
+        m_madeIndex.insert(picture, m_made.size());
+        m_made.append(FileEntry{picture, canvas::toSvg(*read.canvas, options).toUtf8()});
+        m_drawingPictures.insert(f.path, picture);
     }
 }
 

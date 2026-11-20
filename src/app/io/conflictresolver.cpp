@@ -1,5 +1,7 @@
 #include "conflictresolver.h"
 
+#include "canvas/canvas.h"
+#include "canvas/merge.h"
 #include "drawing/drawingfile.h"
 #include "drawing/merge.h"
 #include "util/paths.h"
@@ -193,6 +195,13 @@ void ConflictResolver::load()
         loadDrawings(original, copy, originalExists);
         return;
     }
+    if (isCanvas()) {
+        m_loaded.ours = ours;
+        m_loaded.theirs = theirs;
+        if (originalExists)
+            loadCanvases(original);
+        return;
+    }
     if (!isText()) {
         if (m_loaded.oursSize == m_loaded.theirsSize && originalExists)
             m_loaded.identical = vault->readBinary(original) == vault->readBinary(copy);
@@ -291,6 +300,52 @@ void ConflictResolver::loadDrawings(const QString &original, const QString &copy
                         {u"onlyOurs"_s, c.onlyOurs}, {u"onlyTheirs"_s, c.onlyTheirs}, {u"merged"_s, c.merged}};
 }
 
+void ConflictResolver::loadCanvases(const QString &original)
+{
+    const canvas::ReadResult mine = canvas::readCanvas(m_loaded.ours);
+    const canvas::ReadResult other = canvas::readCanvas(m_loaded.theirs);
+    if (!mine.canvas || !other.canvas) {
+        m_loaded.identical = sameText(m_loaded.ours, m_loaded.theirs);
+        return; // one is no canvas: keep one of them
+    }
+    m_loaded.identical = mine.canvas->sameContent(*other.canvas);
+    if (m_loaded.identical)
+        return;
+    // A common version from this device's history of the original, as for text.
+    QStringList candidates;
+    QList<QDateTime> times;
+    if (History *history = m_workspace->vault()->history()) {
+        const QList<HistoryEntry> entries = history->list(original);
+        for (const HistoryEntry &entry : entries) {
+            if (candidates.size() >= MaxBaseCandidates)
+                break;
+            bool ok = false;
+            const QString text = history->read(entry.id, &ok);
+            if (!ok || sameText(text, m_loaded.ours) || !canvas::readCanvas(text).canvas)
+                continue;
+            candidates.append(text);
+            times.append(entry.time);
+        }
+    }
+    std::optional<canvas::Canvas> base;
+    if (const std::optional<qsizetype> index = pickMergeBase(candidates, m_loaded.ours, m_loaded.theirs)) {
+        base = canvas::readCanvas(candidates.at(*index)).canvas;
+        m_loaded.hasBase = base.has_value();
+        m_loaded.base = candidates.at(*index);
+        m_loaded.baseWhen = times.at(*index).toString(u"yyyy-MM-dd HH:mm"_s);
+    }
+    // The original is the primary side (its layout, order); the copy's changes and cards onto it.
+    const canvas::Canvas merged = canvas::merge(base ? &*base : nullptr, *other.canvas, *mine.canvas);
+    m_loaded.copyIsOlder = merged.sameContent(*mine.canvas);
+    m_loaded.merged = canvas::writeCanvas(merged);
+    m_loaded.canMergeCanvases = !m_loaded.copyIsOlder && canvas::readCanvas(m_loaded.merged).canvas.has_value();
+    const canvas::MergeCounts c = canvas::mergeCounts(*mine.canvas, *other.canvas, merged);
+    m_loaded.canvasCounts = QVariantMap{{u"ours"_s, c.ours},           {u"theirs"_s, c.theirs},
+                                        {u"common"_s, c.common},       {u"onlyOurs"_s, c.onlyOurs},
+                                        {u"onlyTheirs"_s, c.onlyTheirs}, {u"changed"_s, c.changed},
+                                        {u"merged"_s, c.merged}};
+}
+
 bool ConflictResolver::finish(bool ok, const QString &message)
 {
     if (!ok) {
@@ -361,13 +416,25 @@ bool ConflictResolver::mergeDrawings()
                      : tr("The merged drawing could not be saved."));
 }
 
+bool ConflictResolver::mergeCanvases()
+{
+    if (!loaded() || !isCanvas() || !m_loaded.canMergeCanvases || !unchangedSinceLoaded())
+        return false;
+    const QString original = m_loaded.conflict.value(u"original"_s).toString();
+    const QString title = m_loaded.conflict.value(u"title"_s).toString();
+    const bool ok = m_workspace->sync()->resolveConflict(original, m_copy, m_loaded.merged);
+    return finish(ok, ok ? tr("Merged the canvas “%1”. Your previous version is in the history, the copy in the trash.")
+                                   .arg(title)
+                         : tr("The merged canvas could not be saved."));
+}
+
 bool ConflictResolver::keepCopy()
 {
     if (!loaded())
         return false;
     const QString original = m_loaded.conflict.value(u"original"_s).toString();
     const QString title = m_loaded.conflict.value(u"title"_s).toString();
-    if (isDrawing() || isText()) {
+    if (isDrawing() || isText() || isCanvas()) {
         // A drawing: the copy's bytes as they are; the drawing they replace stays in the history.
         if (!unchangedSinceLoaded())
             return false;

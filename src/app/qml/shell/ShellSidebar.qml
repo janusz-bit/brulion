@@ -357,9 +357,21 @@ Rectangle {
         const path = sidebar.dragPath
         const folder = sidebar.dropFolder
         const valid = sidebar.dropValid
+        // Dropped beside the sidebar: the view there may take it (a canvas adds the page's card).
+        const outside = sidebar.dragPoint.x < 0 || sidebar.dragPoint.x > sidebar.width
+        const sceneX = sidebar.dragScenePos.x
+        const sceneY = sidebar.dragScenePos.y
         sidebar.cancelDrag()
         if (valid)
             sidebar.dropMoveRequested(path, folder)
+        else if (outside && !sidebar.dragIsDir)
+            AppController.dropOnView(path, sceneX, sceneY)
+    }
+    /// A new empty canvas in `folder` ("" the new pages' folder), opened.
+    function openNewCanvas(folder: string): void {
+        const path = Workspace.createCanvas(folder)
+        if (path !== "")
+            AppController.openPage(path)
     }
 
     color: Theme.bgSunken
@@ -964,6 +976,13 @@ Rectangle {
                 onTriggered: sidebar.newPageRequested(contextMenu.path)
             }
             HidingItem {
+                objectName: "treeMenuNewCanvas"
+                visible: contextMenu.isDir
+                text: qsTr("New canvas here")
+                iconName: "layout-dashboard"
+                onTriggered: sidebar.openNewCanvas(contextMenu.path)
+            }
+            HidingItem {
                 objectName: "treeMenuNewFolder"
                 visible: contextMenu.isDir
                 text: qsTr("New folder…")
@@ -1079,6 +1098,12 @@ Rectangle {
                 iconName: "square-pen"
                 shortcut: ShortcutMap.sequences["page.new"] || ""
                 onTriggered: sidebar.newPageRequested("")
+            }
+            BMenuItem {
+                objectName: "pagesMenuNewCanvas"
+                text: qsTr("New canvas")
+                iconName: "layout-dashboard"
+                onTriggered: sidebar.openNewCanvas("")
             }
             BMenuItem {
                 objectName: "pagesMenuNewFolder"

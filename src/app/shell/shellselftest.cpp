@@ -5798,6 +5798,136 @@ void checkIgnoreTasks(QQuickWindow *window, AppController *app, const Check &che
     settle(300);
 }
 
+/// A canvas (docs/UI.md "Canvas view"): "New canvas" makes an empty JSON Canvas file; a canvas
+/// written as Obsidian writes it opens in the canvas view from a page route, its cards shown; the
+/// wheel or a finger moves it, Ctrl + wheel or a pinch zooms it; a double click / tap on empty canvas
+/// adds a card that is typed into in place; a drag from a card's side handle onto another card
+/// connects them; undo takes the edge back; each change is saved by itself, the card that did not
+/// change written back as it was; the canvas's card is found by search.
+void checkCanvas(QQuickWindow *window, AppController *app, const Check &check)
+{
+    const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
+    Workspace *ws = app->workspace();
+    // "New canvas": an empty canvas, as Obsidian makes them.
+    const QString fresh = ws->createCanvas(QString());
+    check(fresh.endsWith(u".canvas"_s) && ws->readFile(fresh).contains(u"\"nodes\":[]"_s),
+          "“New canvas” makes an empty canvas file");
+    if (!fresh.isEmpty())
+        ws->deletePage(fresh);
+
+    const QString target = ws->newPagePath(u"Samotest tablicy cel"_s);
+    check(ws->write(target, u"# Cel\n\nTreść celu samotestu.\n"_s), "a page for the canvas is written");
+    const QString path = u"Samotest tablicy.canvas"_s;
+    const QString fileLine = u"\t\t{\"id\":\"b2\",\"type\":\"file\",\"file\":\""_s + target
+                             + u"\",\"x\":500,\"y\":0,\"width\":300,\"height\":200}"_s;
+    const QString text = u"{\n\t\"nodes\":[\n\t\t{\"id\":\"a1\",\"type\":\"text\",\"text\":\"Pierwsza karta samotestu\",\"x\":0,\"y\":0,\"width\":250,\"height\":80},\n"_s
+                         + fileLine + u"\n\t],\n\t\"edges\":[]\n}"_s;
+    check(ws->write(path, text), "a canvas is written as Obsidian writes one");
+    app->openPage(path);
+    check(waitFor([&] { return app->currentRoute().value(u"view"_s).toString() == u"canvas"; }, 10000),
+          "a page route naming a canvas opens the canvas view");
+    QQuickItem *board = nullptr;
+    waitFor([&] {
+        board = shownNamed(window->contentItem(), u"canvasBoard"_s);
+        return board && board->width() > 100 && board->property("nodeCount").toInt() == 2;
+    }, 10000);
+    if (!board) {
+        check(false, "the canvas view shows its board");
+        return;
+    }
+    const auto cardsShown = [&] {
+        return uidriver::matching(window, [](QQuickItem *item) {
+                   return item->objectName() == u"canvasCard" && shown(item);
+               }).size();
+    };
+    check(waitFor([&] { return cardsShown() == 2; }), "both cards are shown");
+    check(renderedTextContaining(window->contentItem(), u"Pierwsza karta samotestu"_s) != nullptr,
+          "a text card shows its text");
+    check(waitFor([&] { return renderedTextContaining(window->contentItem(), u"Treść celu samotestu"_s) != nullptr; }, 5000),
+          "a note card shows its page");
+    const auto screen = [&](qreal x, qreal y) {
+        QPointF at;
+        QMetaObject::invokeMethod(board, "toScreen", Q_RETURN_ARG(QPointF, at), Q_ARG(qreal, x), Q_ARG(qreal, y));
+        return board->mapToScene(at);
+    };
+    const auto savedHas = [&](const QString &needle) { return ws->readFile(path).contains(needle); };
+
+    // Moving and zooming.
+    settle(200);
+    const qreal panY = board->property("panY").toReal();
+    const QPointF empty = screen(250, 400);
+    if (touch)
+        touchDrag(window, empty, QPointF(0, -60));
+    else
+        uidriver::run(uidriver::wheel(window, empty, QPointF(0, 120)));
+    check(waitFor([&] { return qAbs(board->property("panY").toReal() - panY) > 20; }),
+          touch ? "a finger moves the canvas" : "the wheel moves the canvas");
+    const qreal zoom = board->property("zoom").toReal();
+    if (touch)
+        uidriver::run(uidriver::touchPinch(window, pointIn(board, 0.5, 0.6), 80, 200));
+    else
+        uidriver::run(uidriver::wheel(window, pointIn(board, 0.5, 0.6), QPointF(0, -240), Qt::ControlModifier));
+    check(waitFor([&] { return qAbs(board->property("zoom").toReal() - zoom) > 0.05; }),
+          touch ? "a pinch zooms the canvas" : "Ctrl + wheel zooms the canvas");
+    if (QQuickItem *fit = shownNamed(window->contentItem(), u"canvasFit"_s))
+        tapOrClick(window, pointIn(fit), touch);
+    settle(400);
+
+    // A card added where the canvas is double-clicked, typed into.
+    const QPointF spot = screen(100, 260);
+    if (touch)
+        uidriver::run(uidriver::touchDoubleTap(window, spot));
+    else
+        uidriver::run(uidriver::mouseDoubleClick(window, spot));
+    QQuickItem *area = nullptr;
+    check(waitFor([&] {
+              area = shownNamed(window->contentItem(), u"canvasTextArea"_s);
+              return area && area->hasActiveFocus() && board->property("nodeCount").toInt() == 3;
+          }, 5000),
+          "a double click on empty canvas adds a card to type into");
+    uidriver::run(uidriver::typeText(window, u"Nowa karta samotestu"_s, uidriver::KeyDelivery::FocusItem));
+    sendKey(window, Qt::Key_Escape);
+    check(waitFor([&] { return !shown(area) && savedHas(u"Nowa karta samotestu"_s); }, 5000),
+          "Escape ends the typing; the card is saved by itself");
+    check(savedHas(fileLine), "the card that did not change is written back as it was");
+
+    // Connected: from the first card's right handle onto the note card.
+    if (touch)
+        touchTap(window, screen(125, 40));
+    else
+        mouseMove(window, screen(125, 40));
+    settle(200);
+    const QPointF handle = screen(250, 40);
+    const QPointF onto = screen(650, 100);
+    if (touch)
+        touchDrag(window, handle, onto - handle);
+    else
+        mouseDrag(window, handle, onto);
+    check(waitFor([&] { return board->property("edgeCount").toInt() == 1; }), "a drag from a card's side connects it");
+    check(waitFor([&] { return savedHas(u"\"fromNode\":\"a1\",\"fromSide\":\"right\",\"toNode\":\"b2\""_s); }, 5000),
+          "the edge is saved, from the side it was dragged out of");
+    if (touch) {
+        if (QQuickItem *undo = shownNamed(window->contentItem(), u"canvasUndo"_s))
+            touchTap(window, pointIn(undo));
+    } else {
+        board->forceActiveFocus();
+        sendKey(window, Qt::Key_Z, Qt::ControlModifier);
+    }
+    check(waitFor([&] { return board->property("edgeCount").toInt() == 0; }), "undo takes the edge back");
+    check(waitFor([&] { return !savedHas(u"fromNode"_s); }, 5000), "the undo is saved too");
+
+    // Found by search: the canvas, by its card's text.
+    const QVariantList hits = ws->search(u"samotestu"_s, 50);
+    check(std::ranges::any_of(hits, [&](const QVariant &h) { return h.toMap().value(u"path"_s).toString() == path; }),
+          "search finds the canvas by its cards' text");
+
+    app->goHome();
+    settle(300);
+    ws->deletePage(path);
+    ws->deletePage(target);
+    settle(200);
+}
+
 /// "QR code…" (docs/UI.md "QR code"): the top bar's More and the palette (uiAction "qrCode") open
 /// the dialog on the page shown — its code drawn (QrCodeView), the note's Markdown with the title
 /// first —; "Plain text" and the title's box change what the code holds; a note longer than one
@@ -9560,6 +9690,9 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
     closeMenus(window);
     // 3h-qr. A note as QR codes: one code, the formats, a long note walked code by code.
     checkQrCode(window, app, check);
+    closeMenus(window);
+    // 3h-canvas. A canvas: made, opened, moved, zoomed, a card added and typed, connected, undone, saved.
+    checkCanvas(window, app, check);
     closeMenus(window);
     // 3i. Focus mode, the word count, typewriter scrolling and a custom shortcut.
     checkFocusAndShortcuts(window, app, check);

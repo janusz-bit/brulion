@@ -63,6 +63,7 @@ QtObject {
         case "logs": return qsTranslate("AppShell", "Event log")
         case "settings": return qsTranslate("AppShell", "Settings")
         case "drawing": return Js.replaceRegExp(Workspace.pageTitle(path), "\\.(svg|excalidraw)$", "i", "")
+        case "canvas": return Js.replaceRegExp(Workspace.pageTitle(path), "\\.canvas$", "i", "")
         }
         return "Brulion"
     }
@@ -93,6 +94,7 @@ QtObject {
         case "logs": return "scroll-text"
         case "settings": return "settings"
         case "drawing": return "pencil"
+        case "canvas": return "layout-dashboard"
         }
         return "file-text"
     }

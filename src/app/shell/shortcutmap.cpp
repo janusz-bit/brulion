@@ -62,6 +62,8 @@ const QHash<QString, QString> &reservedKeys()
                            "Alt+H", "Alt+V", "Ctrl+0", "Ctrl++", "Ctrl+-", "Ctrl+=", "Ctrl+Shift+="});
         // The PDF viewer.
         add(u"pdf"_s, {"Ctrl+G", "F3", "Shift+F3"});
+        // The canvas view (docs/UI.md "Canvas view"; its other keys are the drawing editor's too).
+        add(u"canvas"_s, {"Ctrl+Shift+G"});
         // Tabs: the browsers' keys AppShell has besides the tab commands (docs/UI.md "Tabs, split
         // view and windows").
         add(u"tabs"_s, {"Ctrl+1", "Ctrl+2", "Ctrl+3", "Ctrl+4", "Ctrl+5", "Ctrl+6", "Ctrl+7", "Ctrl+8", "Ctrl+9",
@@ -102,6 +104,8 @@ QString areaName(const QString &area)
         return ShortcutMap::tr("drawings");
     if (area == u"pdf")
         return ShortcutMap::tr("the PDF viewer");
+    if (area == u"canvas")
+        return ShortcutMap::tr("the canvas");
     if (area == u"tabs")
         return ShortcutMap::tr("switching tabs");
     return ShortcutMap::tr("menus");

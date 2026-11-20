@@ -842,7 +842,7 @@ void AppController::restoreTabs(const QString &vaultPath)
     // Pages deleted, moved or renamed while the notebook was closed (sync, another program).
     m_tabs.removeIf([this](const QVariantMap &route) {
         const QString view = route.value(u"view"_s).toString();
-        return (view == u"page" || view == u"history" || view == u"drawing")
+        return (view == u"page" || view == u"history" || view == u"drawing" || view == u"canvas")
                && !m_workspace->exists(route.value(u"path"_s).toString());
     });
     m_tabsVault = vaultPath;

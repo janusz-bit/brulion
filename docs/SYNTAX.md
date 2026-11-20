@@ -606,6 +606,92 @@ page may have the same one), else, moved away, the block the link now leads to (
 itself while the block is unknown. Both show the block's current text, in table cells too: an edit
 of a block on the same page shows at once.
 
+### Canvases (JSON Canvas)
+
+A **canvas** is a whiteboard file `*.canvas` in the [JSON Canvas](https://jsoncanvas.org) format
+(version 1.0, the format of Obsidian Canvas): cards laid out on an endless surface and connected
+by edges. Brulion opens it in the canvas view (docs/UI.md "Canvas view") from the file tree,
+links (`[[Plan remontu.canvas]]`), search and the quick switcher; "New canvas" creates
+`Untitled canvas.canvas` (Polish UI: `Tablica bez tytułu.canvas`) in `newPagesFolder`. Core
+module `canvas` (`src/core/canvas/canvas.h`).
+
+```json
+{
+	"nodes":[
+		{"id":"5b4c2f0e9a1d3c7e","type":"group","x":-420,"y":-320,"width":1380,"height":660,"label":"Remont kuchni"},
+		{"id":"a1b2c3d4e5f60718","type":"text","text":"# Plan\n\n- [ ] zamówić płytki\n\nZobacz [[Budżet domowy]]","x":-400,"y":-280,"width":320,"height":240,"color":"4"},
+		{"id":"0f1e2d3c4b5a6978","type":"file","file":"Projekty/Kuchnia.md","subpath":"#Szafki","x":-40,"y":-280,"width":400,"height":400},
+		{"id":"abcdefabcdefabcd","type":"link","url":"https://example.com","x":520,"y":-280,"width":400,"height":200}
+	],
+	"edges":[
+		{"id":"e1e1e1e1e1e1e1e1","fromNode":"a1b2c3d4e5f60718","fromSide":"right","toNode":"0f1e2d3c4b5a6978","toSide":"left","label":"szczegóły"}
+	]
+}
+```
+
+**Nodes** (in z-order: the first lies below): `id`, `type`, `x`, `y`, `width`, `height` (canvas
+units: Obsidian's pixels at 100 %), optional `color`. Types: `text` (`text`: Markdown, rendered as
+in an embed — §2 links, tags, tasks shown with their status, headings, lists, code), `file` (`file`:
+the vault path of a note, a picture, a PDF, a drawing, another canvas or any file; `subpath`:
+`#Heading` or `#^block-id` of a note — the card shows that section or block), `link` (`url`: a web
+address; Brulion shows the address as a card and never fetches the page), `group` (a labelled
+frame: `label`, `background` — a picture's vault path —, `backgroundStyle` `cover` | `ratio` |
+`repeat`). A node of another type (plugins: Advanced Canvas' portals) is kept as written and drawn
+as a plain card with its text. A node lies in a group when its rectangle lies inside the group's:
+moving a group moves them.
+
+**Edges:** `id`, `fromNode`, `toNode`, optional `fromSide` / `toSide` (`top`, `right`, `bottom`,
+`left`; without one the sides facing each other are used), `fromEnd` / `toEnd` (`none` | `arrow`;
+the defaults: no arrow at the start, an arrow at the end), `color`, `label`. An edge to a node that
+does not exist is kept and not drawn.
+
+**Colours** (`canvasColor`): `"1"` red, `"2"` orange, `"3"` yellow, `"4"` green, `"5"` cyan, `"6"`
+purple — drawn in Obsidian's colours, lighter in the dark theme — or `"#rrggbb"` / `"#rgb"`
+(validated: anything else is no colour, never CSS).
+
+**What Brulion writes** (`canvas::writeCanvas`): the file keeps its layout. A node or edge Brulion
+did not change is written back byte for byte; a changed one keeps its keys in their order (a
+changed value in its place, a removed optional key left out, a new key after the others), every
+key Brulion does not know (`styleAttributes`, `zIndex`, the root's `metadata` …) as written, the
+file's whitespace (Obsidian's tabs and one compact node per line, a pretty-printed file's
+indentation and spaces after colons, CRLF, a BOM, a final newline) and everything outside the
+`nodes` and `edges` arrays. New nodes and edges are written as Obsidian writes them, in the
+indentation of the file; positions and sizes Brulion sets are whole numbers (a coordinate it does
+not move keeps its fraction). A new canvas is `{` + tab-indented `"nodes":[]` and `"edges":[]` +
+`}`, as Obsidian makes them; an empty file is an empty canvas. Ids are 16 hex digits; a node
+without an id, or with one an earlier node has, gets one of its own (written once the file is
+saved).
+
+**Reading** (`canvas::readCanvas`) is strict JSON (a file that is not — or whose `nodes` / `edges`
+are no arrays of objects — is shown with why and never written), bounded: at most 16 Mi characters,
+10 000 nodes, 20 000 edges, 400 000 JSON values and a nesting depth of 64; coordinates beyond
+±10 000 000 are drawn clamped.
+
+**In the notebook** (`canvas::indexText`, `VaultIndex`): the index reads a canvas as a note of its
+cards' Markdown — each text node's text, each file node as a link to its file
+(`[[Projekty/Kuchnia.md#Szafki]]`), a link node's address, a group's label, an edge's label, in
+the canvas's order, a blank line between them. So a canvas's file nodes and the links of its text
+cards are its links: they show in the linked page's backlinks (the card's text as the context; a
+click opens the canvas at that card), in the graph and in "unreferenced files"; its words are found
+by search (a hit opens the canvas zoomed to its card); its text cards' `#tags` list it under the
+tag. Nothing else of a note applies: a card's tasks, reminders, dates, properties, aliases and
+block ids are its text only — never in the tasks view, never armed, never written by anything but
+the canvas view. Unlinked mentions in canvases are not offered. A canvas is named by its file name
+like an attachment: `[[Plan.canvas]]` (Obsidian's form), never `[[Plan]]`.
+
+**Rename and move** (`RelocationPlan`, the rules above): a canvas whose file nodes name a moved
+file (or a group's background) gets the new path — file nodes hold exact vault paths —, and the
+links in its text cards follow as a note's do; the file is rewritten as above (only the changed
+nodes differ). A moved canvas's own paths stay (they are vault paths), the notes linking to it
+follow it.
+
+**Sync** (`canvas::mergeCanvasFiles`): a canvas changed on two devices is merged node by node and
+field by field against the version both had last — a card moved on one device and edited on the
+other keeps both changes; cards new on either side are kept (this device's on top), deleted ones
+stay deleted, a field both changed takes this device's; edges to removed nodes go — in the
+server's layout; never line by line. A canvas that cannot be read keeps both versions (a conflict
+copy); the sync center merges such a copy with the original ("Merge canvases": a union).
+
 ### Headings and blocks in links
 
 **Heading fragments** (`markdown::headingFragment`, `src/core/markdown/linkformat.h`): what

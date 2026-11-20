@@ -8,6 +8,7 @@
 
 #include "documentpaths.h"
 
+#include "canvas/canvas.h"
 #include "dates/dates.h"
 #include "drawing/excalidrawmd.h"
 #include "index/vaultindex.h"
@@ -999,6 +1000,19 @@ QString Workspace::createAttachment(const QString &rawPath, const QByteArray &da
     if (created.isEmpty())
         Q_EMIT errorOccurred(
                 tr("Could not save the drawing %1: %2").arg(paths::basename(path), m_vault->errorString()));
+    return created;
+}
+
+QString Workspace::createCanvas(const QString &folder)
+{
+    if (!m_vault)
+        return {};
+    const QString base = paths::normalize(folder.isEmpty() ? m_vault->config().newPagesFolder : folder);
+    const QString wanted = paths::join(base, paths::sanitizeFileName(tr("Untitled canvas")) + u".canvas"_s);
+    const QString path = paths::uniquePath(wanted, [this](const VaultPath &p) { return m_vault->exists(p); });
+    const VaultPath created = m_vault->createBinary(path, canvas::emptyCanvasText().toUtf8(), ChangeSource::User);
+    if (created.isEmpty())
+        Q_EMIT errorOccurred(tr("Could not create the canvas %1: %2").arg(paths::basename(path), m_vault->errorString()));
     return created;
 }
 

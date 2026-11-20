@@ -139,7 +139,8 @@ ColumnLayout {
     BText {
         Layout.fillWidth: true
         visible: resolverObject.loaded && (!Theme.compact || view.originalDeleted
-                                           || (!resolverObject.text && !drawingScroll.visible && !notesView.visible))
+                                           || (!resolverObject.text && !drawingScroll.visible && !notesView.visible
+                                               && !canvasCard.visible))
         variant: "muted"
         wrapMode: Text.Wrap
         text: view.originalDeleted
@@ -148,6 +149,8 @@ ColumnLayout {
                  : qsTr("The note was deleted on this device while it changed on another one. The other version is in the copy."))
               : resolverObject.drawing
                 ? qsTr("This drawing changed on two devices at the same time. Your version is in the drawing, the other one in a copy next to it. Nothing is lost until you decide.")
+                : resolverObject.canvas
+                ? qsTr("This canvas changed on two devices at the same time. Your version is in the canvas, the other one in a copy next to it. Nothing is lost until you decide.")
                 : !resolverObject.text
                   ? qsTr("This file changed on two devices at the same time. Nothing is lost until you decide.")
                   : qsTr("This note changed on two devices at the same time. Your version is in the note, the other one in a copy next to it. Nothing is lost until you decide.")
@@ -206,6 +209,7 @@ ColumnLayout {
 
     IoCard {
         visible: resolverObject.loaded && !resolverObject.text && !resolverObject.identical && !resolverObject.drawing
+                 && !(resolverObject.canvas && resolverObject.canMergeCanvases) && !resolverObject.copyIsOlder
         iconName: "file"
         title: qsTr("Two versions of a file")
         subtitle: qsTr("This file cannot be merged line by line. Keep one of the versions; the other goes to the trash.")
@@ -329,6 +333,101 @@ ColumnLayout {
                 iconName: "git-merge"
                 variant: "primary"
                 onClicked: resolverObject.mergeDrawings()
+            }
+        }
+    }
+
+    // ---- Canvases: both versions as pictures and their merge, card by card ----------------------------
+    CanvasCards {
+        id: canvasPictures
+        host: Workspace
+    }
+    IoCard {
+        id: canvasCard
+        objectName: "canvasConflictCard"
+        Layout.fillWidth: true
+        visible: resolverObject.loaded && resolverObject.canvas && resolverObject.canMergeCanvases
+                 && !resolverObject.identical && !view.originalDeleted
+        iconName: "layout-dashboard"
+        title: qsTr("Two versions of a canvas")
+        subtitle: resolverObject.hasBase
+                  ? qsTr("Merging keeps the cards and connections of both versions: what changed in the copy since the version from %1 goes into yours.").arg(DatesHelper.formatHuman(resolverObject.baseWhen))
+                  : qsTr("Merging keeps the cards and connections of both versions: yours as they are, the copy's other cards added. Cards deleted on one device only come back – delete them again.")
+        GridLayout {
+            Layout.fillWidth: true
+            columns: 2
+            columnSpacing: Theme.space3
+            rowSpacing: Theme.space3
+            CanvasTile {
+                label: qsTr("This device")
+                path: view.original
+                detail: qsTr("%n card(s) and connection(s)", "", resolverObject.canvasCounts.ours || 0)
+            }
+            CanvasTile {
+                label: view.otherLabel
+                path: view.copyPath
+                detail: qsTr("%n card(s) and connection(s)", "", resolverObject.canvasCounts.theirs || 0)
+            }
+        }
+        BText {
+            Layout.fillWidth: true
+            variant: "small"
+            color: Theme.fgMuted
+            wrapMode: Text.Wrap
+            text: qsTr("After merging: %n card(s) and connection(s)", "", resolverObject.canvasCounts.merged || 0) + " · "
+                  + qsTr("%1 in both (%2 changed), %3 only here, %4 only in the copy")
+                        .arg(resolverObject.canvasCounts.common || 0).arg(resolverObject.canvasCounts.changed || 0)
+                        .arg(resolverObject.canvasCounts.onlyOurs || 0).arg(resolverObject.canvasCounts.onlyTheirs || 0)
+        }
+        BButton {
+            objectName: "mergeCanvasesButton"
+            Layout.fillWidth: Theme.compact
+            //: Polish: "Scal tablice"
+            text: qsTr("Merge canvases")
+            iconName: "git-merge"
+            variant: "primary"
+            onClicked: resolverObject.mergeCanvases()
+        }
+    }
+    component CanvasTile: Rectangle {
+        id: canvasTile
+        property string label
+        property string detail
+        property string path
+        Layout.fillWidth: true
+        Layout.preferredWidth: 1
+        Layout.alignment: Qt.AlignTop
+        implicitHeight: canvasTileColumn.implicitHeight + 2 * Theme.space2
+        radius: Theme.radius
+        color: Theme.bgSunken
+        ColumnLayout {
+            id: canvasTileColumn
+            anchors.fill: parent
+            anchors.margins: Theme.space2
+            spacing: Theme.space1
+            Image {
+                Layout.fillWidth: true
+                Layout.preferredHeight: Theme.compact ? 120 : 200
+                source: canvasCard.visible && canvasTile.path !== "" ? canvasPictures.canvasUrl(canvasTile.path, Theme.dark) : ""
+                sourceSize.height: Theme.compact ? 240 : 400
+                fillMode: Image.PreserveAspectFit
+                asynchronous: true
+                cache: false
+                Accessible.role: Accessible.Graphic
+                Accessible.name: canvasTile.label
+            }
+            BText {
+                Layout.fillWidth: true
+                text: canvasTile.label
+                variant: "label"
+                elide: Text.ElideRight
+            }
+            BText {
+                Layout.fillWidth: true
+                text: canvasTile.detail
+                variant: "small"
+                color: Theme.fgMuted
+                wrapMode: Text.Wrap
             }
         }
     }

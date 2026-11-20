@@ -48,7 +48,10 @@ public:
     /// `.png`), else the SVG Brulion makes of it (drawing::toSvg, the pictures of its "## Embedded
     /// Files" in it; one Brulion does not draw: its elements with a dashed box for each of the others)
     /// — made at `Szkic.excalidraw.svg` (madePictures()). Embeds, links to it as an attachment
-    /// and the note's own page show it. nullopt for any other note.
+    /// and the note's own page show it. A canvas (`*.canvas`, docs/SYNTAX.md §2 "Canvases") has one
+    /// too: canvas::toSvg of it, the pictures and the notes its cards show in it, made at
+    /// `Plan.canvas.svg` — embeds show it, the HTML exports' links lead to it. nullopt for any
+    /// other note or file.
     std::optional<VaultPath> drawingPicture(const VaultPath &note) const;
     /// SYNTAX §2 resolution of a link written in note `from` (notes and attachments). `target`
     /// is a parsed link target (FoundLink::target): '#' and '|' in it belong to the file name.
