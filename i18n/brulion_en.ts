@@ -446,7 +446,7 @@
     <name>ContentPdfView</name>
     <message numerus="yes">
         <location filename="../src/app/qml/content/ContentPdfView.qml" line="1513"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="3863"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="3868"/>
         <source>%n page(s)</source>
         <translation>
             <numerusform>%n page</numerusform>
@@ -1441,7 +1441,7 @@
     <name>ShellShareDialog</name>
     <message numerus="yes">
         <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="32"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="7475"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="7629"/>
         <source>%n file(s) to save in the notebook</source>
         <translation>
             <numerusform>%n file to save in the notebook</numerusform>
@@ -2031,7 +2031,7 @@
 <context>
     <name>brulion::shell::AppLockController</name>
     <message numerus="yes">
-        <location filename="../src/app/shell/applockcontroller.cpp" line="407"/>
+        <location filename="../src/app/shell/applockcontroller.cpp" line="413"/>
         <source>Too many wrong PINs. Try again in %n second(s).</source>
         <translation>
             <numerusform>Too many wrong PINs. Try again in %n second.</numerusform>
@@ -2039,7 +2039,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/shell/applockcontroller.cpp" line="432"/>
+        <location filename="../src/app/shell/applockcontroller.cpp" line="438"/>
         <source>Wrong PIN. Try again in %n second(s).</source>
         <translation>
             <numerusform>Wrong PIN. Try again in %n second.</numerusform>
