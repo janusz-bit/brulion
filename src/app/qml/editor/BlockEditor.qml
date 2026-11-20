@@ -58,6 +58,10 @@ import Brulion
 // (spanRefuses() tells so for the other tools). In an edited block
 // Ctrl+C / Ctrl+X copy its exact characters and a right-click opens Cut / Copy / Paste / Select
 // all.
+// Vim keys (AppSettings.vimMode; docs/UI.md "Vim mode"): `vimSession` (VimSession, the core module
+// vim) gets the keys of the inline editors, the list and source mode first; in its normal and visual
+// mode the text is read-only with a block caret, a visual selection over several blocks is drawn as
+// selected rows while the caret's block stays edited.
 // Input methods: a word still being composed (preedit — Android keyboards compose every word)
 // counts for completions and is committed before Enter/Backspace/Tab/… are handled, before
 // toolbar actions and when the app is left. Keys typed while the edited block's delegate is
@@ -1808,6 +1812,146 @@ FocusScope {
     MapHolder { id: chosenTrigger }
     MapHolder { id: chosenResult }
 
+    // ---- Vim keys (docs/UI.md "Vim mode"; VimSession: the core module vim over this page) ------
+    /// Vim keys (the device setting; nothing of it in reading mode).
+    property bool vimEnabled: AppSettings.vimMode
+    final property VimSession vimSession: vim
+    VimSession {
+        id: vim
+        enabled: editor.vimEnabled && editor.controller !== null && !editor.readOnly
+        controller: editor.controller
+        // Ctrl+D / Ctrl+U: half of what the view shows.
+        pageLines: Math.max(4, Math.floor((editor.scroller !== null ? editor.scroller.height : editor.height)
+                                          / Math.max(1, editor.lineHeight)))
+    }
+    /// Keys are Vim's commands (normal, visual, replace mode): the text takes no typing, the caret
+    /// is a block.
+    readonly property bool vimCommands: vim.enabled && vim.commands
+    /// Vim's visual selection in the text of the block `vimSelectionRow` (-1: none): what its inline
+    /// editor selects (now, or once it is there).
+    property int vimSelectionRow: -1
+    property int vimSelectionAnchor: 0
+    property int vimSelectionCursor: 0
+    signal vimSelectionChanged()
+    /// :q, :wq, ZZ — the view closes the page (PageView goes back, a page's window closes).
+    signal vimQuitRequested(bool force)
+
+    Connections {
+        target: vim
+        function onTextSelectionRequested(row: int, anchor: int, cursor: int) {
+            editor.vimSelectionRow = row
+            editor.vimSelectionAnchor = anchor
+            editor.vimSelectionCursor = cursor
+            editor.vimSelectionChanged()
+        }
+        function onScrollRequested(row: int, position: int, where: int) {
+            if (row >= 0)
+                editor.scrollRowTo(row, where)
+        }
+        function onQuitRequested(force: bool) { editor.vimQuitRequested(force) }
+    }
+    Connections {
+        target: editor.controller
+        // Insert mode ends when no block is edited any more (a click away, Esc of a popup…).
+        function onEditingRowChanged() {
+            if (editor.controller.editingRow < 0 && vim.typing)
+                vim.reset()
+        }
+    }
+
+    /// zt / zz / zb: the row to the view's top, middle or bottom.
+    function scrollRowTo(row: int, where: int): void {
+        const item = list.itemAtIndex(row) as Item
+        if (!item) {
+            ensureRowVisible(row)
+            return
+        }
+        if (where === 0)
+            centerInView(item, Qt.rect(0, 0, item.width, item.height))
+        else
+            ensureRowVisible(row)
+    }
+
+    /// A key goes to Vim first: true when it is taken (Vim's, or dropped — in a command mode only
+    /// the editor's shortcuts go on: Ctrl, Alt, Tab, function keys, Shift+arrows).
+    function vimTakes(key: int, modifiers: int, text: string): bool {
+        if (!vim.enabled)
+            return false
+        if (vim.key(key, modifiers, text)) {
+            afterVimKey()
+            return true
+        }
+        return vim.commands && !vimPasses(key, modifiers)
+    }
+    /// Esc with nothing of Vim's to end (normal mode, no command typed): it goes on to the view —
+    /// focus mode ends —, the block is not selected (V selects).
+    function vimIdleEscape(key: int, modifiers: int): bool {
+        return vim.enabled && key === Qt.Key_Escape && modifiers === Qt.NoModifier && vim.mode === "normal"
+               && vim.pending === "" && vim.commandLine === ""
+    }
+    /// Ctrl+R, Ctrl+D, Ctrl+U and Ctrl+[ are Vim's in its command modes, Ctrl+W and Ctrl+H in its
+    /// command line (a window shortcut given one of them yields there; docs/UI.md "Vim mode").
+    function vimOwnsShortcut(key: int, modifiers: int): bool {
+        if ((modifiers & (Qt.AltModifier | Qt.MetaModifier | Qt.ShiftModifier)) !== 0 || (modifiers & Qt.ControlModifier) === 0)
+            return false
+        // The command line's Ctrl+W (a word back) and Ctrl+H (a character) too: not the window's.
+        if (vim.commandLine !== "" && (key === Qt.Key_W || key === Qt.Key_H))
+            return true
+        return key === Qt.Key_R || key === Qt.Key_D || key === Qt.Key_U || key === Qt.Key_BracketLeft
+    }
+    function vimPasses(key: int, modifiers: int): bool {
+        if ((modifiers & (Qt.ControlModifier | Qt.AltModifier | Qt.MetaModifier)) !== 0)
+            return true
+        switch (key) {
+        case Qt.Key_Tab: case Qt.Key_Backtab: case Qt.Key_Back: case Qt.Key_Menu:
+        case Qt.Key_Shift: case Qt.Key_Control: case Qt.Key_Alt: case Qt.Key_AltGr: case Qt.Key_Meta:
+            return true
+        case Qt.Key_Up: case Qt.Key_Down: case Qt.Key_Left: case Qt.Key_Right: case Qt.Key_Home: case Qt.Key_End:
+            return (modifiers & Qt.ShiftModifier) !== 0 // (Shift+arrows select)
+        }
+        return key >= Qt.Key_F1 && key <= Qt.Key_F35
+    }
+    /// After a key of Vim's: the keyboard and the view follow the caret (a block edited, or the
+    /// blocks Vim selected).
+    function afterVimKey(): void {
+        if (!controller || controller.sourceMode)
+            return
+        if (controller.editingRow >= 0) {
+            ensureRowVisible(controller.editingRow)
+            if (activeEditor && activeEditor.row === controller.editingRow && !activeEditor.activeFocus
+                    && !findKeepsKeyboard)
+                activeEditor.forceActiveFocus()
+        } else if (controller.selectedRow >= 0) {
+            if (!list.activeFocus)
+                list.forceActiveFocus()
+            ensureRowVisible(controller.selectedRow)
+        }
+        if (!vim.typing)
+            closeSuggestions()
+    }
+    /// A key of the list (blocks selected, or none edited): Vim's first — a block selection made
+    /// with the mouse or Shift+↓ becomes Vim's visual line selection.
+    function handleVimListKey(event: KeyEvent): bool {
+        if (!vim.enabled || !controller || controller.sourceMode || controller.editingRow >= 0)
+            return false
+        if (vimIdleEscape(event.key, event.modifiers))
+            return false
+        if (controller.selectedRow >= 0 && !vim.ownsBlockSelection() && !vim.typing)
+            vim.adoptBlockSelection()
+        return vimTakes(event.key, event.modifiers, event.text)
+    }
+    /// A key of source mode's text (SourceEditor): Vim's first. A text selected with the mouse in
+    /// normal mode becomes the visual selection.
+    function handleVimSourceKey(event: KeyEvent, source: TextEdit): bool {
+        if (!vim.enabled)
+            return false
+        if (vimIdleEscape(event.key, event.modifiers))
+            return false
+        if (vim.mode === "normal" && vim.pending === "" && differs(source.selectionStart, source.selectionEnd))
+            vim.adoptSourceSelection(source.selectionStart, source.selectionEnd)
+        return vimTakes(event.key, event.modifiers, event.text)
+    }
+
     // ---- Keyboard -----------------------------------------------------------------------------
 
     function isFirstLine(edit: InlineEditor): bool {
@@ -1849,7 +1993,18 @@ FocusScope {
 
     /// Keys of an inline editor (InlineEditor.qml). Returns true when handled.
     function handleEditorKey(event: KeyEvent, input: TextEdit): bool {
-        return handleEditorKeyCode(event.key, event.modifiers, input as InlineEditor)
+        const edit = input as InlineEditor
+        if (vim.enabled) {
+            // Esc in normal mode: on to the view (the block stays edited).
+            if (vimIdleEscape(event.key, event.modifiers))
+                return false
+            // A text selected with the mouse in normal mode: Vim's visual selection.
+            if (edit && vim.mode === "normal" && vim.pending === "" && differs(edit.selectionStart, edit.selectionEnd))
+                vim.adoptTextSelection(edit.row, edit.selectionStart, edit.selectionEnd)
+            if (vimTakes(event.key, event.modifiers, event.text))
+                return true
+        }
+        return handleEditorKeyCode(event.key, event.modifiers, edit)
     }
     /// handleEditorKey() for key `key` with `modifiers` (also the self-tests' keys).
     function handleEditorKeyCode(key: int, modifiers: int, edit: InlineEditor): bool {
@@ -2622,7 +2777,7 @@ FocusScope {
                 event.accepted = editor.selectionMode || editor.spanTools
                 return
             }
-            if (editor.forwardToEditingRow(event) || editor.handleSelectionKey(event))
+            if (editor.forwardToEditingRow(event) || editor.handleVimListKey(event) || editor.handleSelectionKey(event))
                 event.accepted = true
         }
         Keys.onReleased: (event) => {
@@ -2633,6 +2788,11 @@ FocusScope {
         }
         // The selection's keys win over application-wide shortcuts while the list has the keyboard.
         Keys.onShortcutOverride: (event) => {
+            // Vim's Ctrl+R, Ctrl+D, Ctrl+U win over shortcuts given to them.
+            if (editor.vimCommands && editor.vimOwnsShortcut(event.key, event.modifiers)) {
+                event.accepted = true
+                return
+            }
             if (!editor.controller || editor.controller.selectedRow < 0 || !(event.modifiers & Qt.ControlModifier))
                 return
             switch (event.key) {

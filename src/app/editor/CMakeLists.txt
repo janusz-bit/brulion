@@ -8,7 +8,9 @@
 # (live ```query results), ViewResultModel (database views: ```query with view:, ```base, .base files), RowHeightTree, ScrollAnchor and PageRows (one item per page: the rows'
 # heights, the scroll position as a row and an offset), the pure helpers of blocktext.h and the
 # in-memory FakeEditorHost (playground, tests; queries run on the real index module), MermaidView
-# (a ```mermaid block drawn by the core module diagram), ChartView (a ```chart block: core module chart).
+# (a ```mermaid block drawn by the core module diagram), ChartView (a ```chart block: core module chart),
+# VimSession (Vim keys: the core module vim over the page's blocks — VimPageBuffer — or source mode's
+# text — VimSourceBuffer; docs/UI.md "Vim mode").
 # A static library so tests/app/editor links it without the app; the app's QML module "Brulion"
 # registers the classes through QML_FOREIGN wrappers (editorforeign.h, included by area.cmake),
 # which needs the metatypes extracted below.
@@ -40,7 +42,8 @@ qt_add_library(brulion_editor STATIC
     queryresultmodel.h queryresultmodel.cpp
     viewresultmodel.h viewresultmodel.cpp
     pagecontroller.h pagecontroller.cpp pagecontroller_selection.cpp pagecontroller_properties.cpp
-    pagecontroller_find.cpp
+    pagecontroller_find.cpp pagecontroller_vim.cpp
+    vimsession.h vimsession.cpp vimpagebuffer.h vimpagebuffer.cpp vimsourcebuffer.h vimsourcebuffer.cpp
     notefind.h notefind.cpp
     lazyhtmlmimedata.h lazyhtmlmimedata.cpp
     streamselection.h streamselection.cpp
@@ -73,7 +76,8 @@ target_link_libraries(brulion_editor
             brulion_core_webpicture brulion_core_drawing
             brulion_core_notebook brulion_core_stats brulion_core_syntax brulion_core_views brulion_core_media
     PUBLIC brulion_core_diagram brulion_core_chart
-    PRIVATE brulion_core_io)
+    PRIVATE brulion_core_io
+    PUBLIC brulion_core_vim)
 # External changes while the page has unsaved edits are merged three-way with sync::merge3 when
 # the sync module is part of the build (otherwise the local text is kept and a conflict flagged).
 if(TARGET brulion_core_sync)

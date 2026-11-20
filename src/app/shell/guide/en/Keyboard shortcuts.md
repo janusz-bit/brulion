@@ -130,6 +130,39 @@ The task status menu also opens with a right click on the checkbox (on a phone: 
 
 In a document, Backspace at the start of a list item first removes the task checkbox, then the list marker. How the modes work: [[Document and outline|Document and outline]].
 
+## Vim keys
+Used to Vim? Turn on *Settings → Editor → Vim keys* (the same switch is at the top of *Settings → Keyboard shortcuts*, and “Vim keys” is in the command palette). It is a setting of this device, made for a hardware keyboard.
+
+- **Normal mode** (`NORMAL` at the bottom left): keys are commands — the block takes no typing and the cursor is a block. `i`, `a`, `o`… start **insert mode** (`INSERT`): you type as always (Enter splits the block, `[[` and `/` suggest), **Esc** goes back. `v` and `V` select characters and lines (**visual mode**).
+- The page is a column of lines: `j` and `k` go from block to block and keep the column; `w`, `b`, `}` and searches run on into the next block. A folded block is one line, a table too (it gets selected).
+- `dd` deletes the block (a folded one with what it hides), `yy` copies it (with its checkbox and its marker), `p` puts the copied blocks below the block and its children, `P` above it. `o` / `O` make a new block below / above, as Enter does. `>>` / `<<` indent and outdent like Tab and Shift+Tab. `J` joins the next block to this one. In a code block, a quote or a callout a line is a line of its text.
+- Every change is one step of undo: `u` (or Ctrl+Z) takes back a whole `cw` together with what you typed. Ctrl+R redoes, `.` repeats the last change.
+- `/text` and `?text` search (plain text; a capital letter makes the case count), `n` / `N` go on. `:s/old/new/g` replaces in the line, `:%s/old/new/g` in the whole page — plain text, not patterns.
+- `:w` saves, `:q` goes back.
+- `"a` … `"z` are registers (`"ayy`, then `"ap` — also in another page), `"+` is the system clipboard: `"+yy` copies the block for other apps.
+- In Markdown source mode (Ctrl+E) the same keys work on the page's text.
+
+| Keys | Action |
+|---|---|
+| `h` `j` `k` `l`, `w` `b` `e`, `0` `^` `$`, `gg` `G`, `{` `}`, `%` | moving (with a count: `3j`, `2w`) |
+| `f` `t` `F` `T` + a letter, `;` `,` | to a character in the line |
+| `i` `a` `I` `A` `o` `O`, `R`, Esc | insert mode, replace mode, back to normal mode |
+| `v` `V`, `o` | visual mode (characters, lines), its other end |
+| `d` `c` `y` `>` `<` + a motion (`dw`, `cw`, `y$`, `>j`) | delete, change, copy, indent |
+| `iw` `aw` `ip` `i"` `i(` `i[` `i{` … | text objects (`ciw`, `da(`, `yip`) |
+| `dd` `cc` `yy` `>>` `<<` | whole lines (blocks) |
+| `x` `X` `D` `C` `s` `S` `r` `~` `J` `p` `P` | delete a character, to the end, replace, letter case, join, put |
+| `u`, Ctrl+R, `.` | undo, redo, repeat |
+| `/text`, `?text`, `n` `N` `*` `#` | search |
+| `:s/a/b/g`, `:%s/a/b/g` | replace (plain text) |
+| `:w`, `:q`, `:wq`, `ZZ`, `:12` | save, back, line 12 |
+| `ma`, `` `a ``, `'a` | marks |
+| `za` `zo` `zc` `zR` `zM` | fold and unfold blocks |
+
+Polish letters: a command is the character its key types. On the Polish programmer's keyboard everything is where Vim has it, and ą, ę, ż… are only what commands look for: `fą` jumps to the next “ą”, `rż` turns the letter into “ż”.
+
+Where Vim and Brulion meet: Ctrl+R is redo; Esc in normal mode does not select the block (`V` does) — it leaves focus mode; Ctrl+V, Ctrl+A, Ctrl+F, Ctrl+E, Ctrl+O, Tab and the app's other shortcuts keep working as they do without Vim. Not there yet: the block selection of Ctrl+V, macros (`q`, `@`), patterns in searches.
+
 ## Drawings
 In the drawing editor (when you aren't typing text). More: [[Drawings|Drawings]].
 

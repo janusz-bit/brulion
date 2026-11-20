@@ -253,6 +253,11 @@ FocusScope {
                                          : root.selectionCounted
                                            ? qsTr("Selection: %1").arg(root.statsSummary(selectionStatsInfo, false))
                                            : root.statsSummary(pageStatsInfo, false)
+    /// Vim's mode, the command typed or the command line while the editor has the keys (the
+    /// status bar's left part; docs/UI.md "Vim mode").
+    readonly property string statusVim: editor.vimSession.enabled && root.noteRoute
+                                        && (editor.activeFocus || editor.vimSession.commandLine !== "")
+                                        ? editor.vimSession.status : ""
     readonly property string statusPosition: page.loaded && !page.sourceMode && page.editingRow >= 0
                                              ? qsTr("Block %1 of %2").arg(page.editingRow + 1).arg(page.blocks.count) : ""
     /// The tab this page's context panel showed last in the side panel ("": never shown).
@@ -840,6 +845,12 @@ FocusScope {
         bottomSpace: (refsSection.visible ? root.refsGap + refsSection.height + Theme.space16 : Theme.space16 * 2)
                      + (typewriter ? height / 2 : 0)
         typewriter: AppSettings.typewriterScrolling && !root.inSidePanel
+        // :q / ZZ of Vim's keys: back in the tab's history; at its start the tab closes when there
+        // are others (a page's own window too), else home.
+        onVimQuitRequested: (force) => {
+            if (!AppController.back() && !(AppController.tabCount > 1 && AppController.closeTab()))
+                AppController.goHome()
+        }
         // The editor's own keys as the shortcuts are now (ShortcutMap).
         copyRefShortcut: ShortcutMap.sequences["block.copyRef"] || ""
         sourceModeShortcut: ShortcutMap.sequences["page.source"] || ""
@@ -997,6 +1008,19 @@ FocusScope {
                 }
             }
         }
+    }
+
+    // Vim's mode in the corner where the shell's status bar does not show it (docs/UI.md "Vim mode").
+    VimStatus {
+        objectName: "pageVimStatus"
+        session: editor.vimSession
+        visible: root.statusVim !== "" && !(root.paneActive && AppController.statusBarShown)
+        anchors.left: parent.left
+        anchors.bottom: parent.bottom
+        anchors.leftMargin: Theme.space4
+        // (Above a touch toolbar docked on the view.)
+        anchors.bottomMargin: Theme.space2 + (root.toolbarDocked ? editor.toolbarHeight : 0)
+        z: 2
     }
 
     // The page's word count in the corner (the selection's while there is one); its details in a

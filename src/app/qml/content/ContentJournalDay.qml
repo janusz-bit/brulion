@@ -385,6 +385,8 @@ FocusScope {
         id: dayEditor
         // (Every day tints the matches; the day written in also shows the current one.)
         find: day.find && day.find.active ? day.find : null
+        // :q / ZZ of Vim's keys: back in the history (the journal is often home: then nothing).
+        onVimQuitRequested: (force) => AppController.back()
         objectName: "journalDayEditor"
         y: emptyPrompt.active ? emptyPrompt.y + emptyPrompt.height : headerRow.height
         width: day.width

@@ -159,7 +159,7 @@
 <context>
     <name>BlockEditor</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1173"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1177"/>
         <source>Copied %n block(s) from several days</source>
         <translation>
             <numerusform>Copied %n block from several days</numerusform>
@@ -167,7 +167,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1175"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1179"/>
         <source>Copied %n block(s)</source>
         <translation>
             <numerusform>Copied %n block</numerusform>
@@ -175,7 +175,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1216"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1220"/>
         <source>Cut %n block(s)</source>
         <translation>
             <numerusform>Cut %n block</numerusform>
@@ -183,7 +183,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1232"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1236"/>
         <source>Deleted %n block(s)</source>
         <translation>
             <numerusform>Deleted %n block</numerusform>
@@ -191,7 +191,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1305"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1309"/>
         <source>Pasted %n picture(s) from the internet</source>
         <translation>
             <numerusform>Pasted %n picture from the internet</numerusform>
@@ -199,7 +199,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="2371"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="2526"/>
         <source>%n picture(s) saved to the notebook</source>
         <translation>
             <numerusform>%n picture saved to the notebook</numerusform>
@@ -1080,7 +1080,7 @@
 <context>
     <name>JournalsView</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/JournalsView.qml" line="617"/>
+        <location filename="../src/app/qml/views/JournalsView.qml" line="638"/>
         <source>%n day(s) with notes</source>
         <translation>
             <numerusform>%n day with notes</numerusform>
@@ -1129,7 +1129,7 @@
 <context>
     <name>PageView</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/PageView.qml" line="680"/>
+        <location filename="../src/app/qml/views/PageView.qml" line="685"/>
         <source>%n word(s)</source>
         <translation>
             <numerusform>%n word</numerusform>
@@ -1137,7 +1137,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/PageView.qml" line="680"/>
+        <location filename="../src/app/qml/views/PageView.qml" line="685"/>
         <source>%n character(s)</source>
         <translation>
             <numerusform>%n character</numerusform>
@@ -1145,7 +1145,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/PageView.qml" line="681"/>
+        <location filename="../src/app/qml/views/PageView.qml" line="686"/>
         <source>%n without spaces</source>
         <comment>characters</comment>
         <translation>
@@ -1154,7 +1154,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/PageView.qml" line="682"/>
+        <location filename="../src/app/qml/views/PageView.qml" line="687"/>
         <source>%n min read</source>
         <translation>
             <numerusform>%n min read</numerusform>
@@ -1162,7 +1162,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/PageView.qml" line="907"/>
+        <location filename="../src/app/qml/views/PageView.qml" line="918"/>
         <source>Extension: runs · %n type warning(s), %1</source>
         <translation>
             <numerusform>Extension: runs · %n type warning, %1</numerusform>
@@ -1383,7 +1383,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="2058"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2065"/>
         <source>%n warning(s) or error(s)</source>
         <translation>
             <numerusform>%n warning or error</numerusform>
@@ -1391,7 +1391,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1938"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1945"/>
         <source>Last check %1: %n reminder(s), the sync failed.</source>
         <translation>
             <numerusform>Last check %1: %n reminder, the sync failed.</numerusform>
@@ -1423,7 +1423,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1780"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1787"/>
         <source>Type check: %n warning(s), %1</source>
         <translation>
             <numerusform>Type check: %n warning, %1</numerusform>
@@ -1431,7 +1431,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1940"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1947"/>
         <source>Last check %1: %n reminder(s).</source>
         <translation>
             <numerusform>Last check %1: %n reminder.</numerusform>
@@ -1634,7 +1634,7 @@
     <name>ShellShareDialog</name>
     <message numerus="yes">
         <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="32"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="8005"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="8115"/>
         <source>%n file(s) to save in the notebook</source>
         <translation>
             <numerusform>%n file to save in the notebook</numerusform>
@@ -1653,7 +1653,7 @@
 <context>
     <name>ShellShortcutSettings</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/shell/ShellShortcutSettings.qml" line="255"/>
+        <location filename="../src/app/qml/shell/ShellShortcutSettings.qml" line="265"/>
         <source>%n command(s) have a shortcut of their own now.</source>
         <translation>
             <numerusform>%n command has a shortcut of its own now.</numerusform>
@@ -2140,6 +2140,26 @@
     </message>
 </context>
 <context>
+    <name>brulion::editor::VimSession</name>
+    <message numerus="yes">
+        <location filename="../src/app/editor/vimsession.cpp" line="198"/>
+        <source>%n substitution(s)</source>
+        <translation>
+            <numerusform>%n substitution</numerusform>
+            <numerusform>%n substitutions</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/editor/vimsession.cpp" line="198"/>
+        <source>on %n line(s)</source>
+        <comment>substitutions</comment>
+        <translation>
+            <numerusform>on %n line</numerusform>
+            <numerusform>on %n lines</numerusform>
+        </translation>
+    </message>
+</context>
+<context>
     <name>brulion::ioviews::ExportController</name>
     <message numerus="yes">
         <location filename="../src/app/io/exportcontroller.cpp" line="637"/>
@@ -2322,7 +2342,7 @@
 <context>
     <name>brulion::shell::CommandModel</name>
     <message numerus="yes">
-        <location filename="../src/app/shell/commandmodel.cpp" line="617"/>
+        <location filename="../src/app/shell/commandmodel.cpp" line="625"/>
         <source>%n card(s) to study now</source>
         <translation>
             <numerusform>%n card to study now</numerusform>

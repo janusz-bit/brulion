@@ -12,7 +12,7 @@ import Brulion
 // navigation's buttons, the quick note button),
 // Editor (font — serif, sans or any installed family —, code font, size, line spacing, width,
 // source mode, spell checking — on/off, its languages, the personal dictionary's dialog, shown only
-// where SpellCheck.available —, word count, focus mode, typewriter scrolling; font pickers:
+// where SpellCheck.available —, word count, focus mode, typewriter scrolling, Vim keys; font pickers:
 // BFontPickerDialog, not in the browser), Keyboard shortcuts (qml/shell/ShellShortcutSettings: the
 // commands' shortcuts), Notebook (the vault's shared settings in
 // .brulion/config.json: the note modes of new pages and of the journal, journal folder and file
@@ -1137,6 +1137,13 @@ Item {
                 description: qsTr("The line you are writing stays in the middle of the screen.")
                 checked: AppSettings.typewriterScrolling
                 onToggled: AppSettings.typewriterScrolling = checked
+            }
+            SettingSwitch {
+                objectName: "settingsVimMode"
+                text: qsTr("Vim keys")
+                description: qsTr("Move and edit with Vim's keys in the blocks and in the Markdown source: Esc for normal mode, i to type, :w to save. For a hardware keyboard; on this device only.")
+                checked: AppSettings.vimMode
+                onToggled: AppSettings.vimMode = checked
             }
             SettingSwitch {
                 objectName: "settingsWebPictures"

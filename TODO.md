@@ -165,8 +165,12 @@ done in the repository simply disappears from the list.
   * a user dictionary synced between devices (today a device setting — Nextcloud carries only
     `config.json` from `.brulion/`, and merging by keys would lose words);
   * underlines also outside the edited block and in the Markdown source mode.
-* **Vim mode** — optional movement and editing with Vim keys in the block editor and in source
-  mode (Obsidian); command shortcuts can already be changed in Settings → Keyboard shortcuts.
+* **Vim mode: what Vim has beyond it** (docs/UI.md "Vim mode") — block visual mode (Ctrl+V:
+  the app's paste today), macros (`q`, `@`), patterns in `/` `?` and `:s` (plain text today: a
+  safe pattern engine first), `:g`, `H` `M` `L` (the view's lines), sentences (`(` `)`, `is` `as`),
+  Ctrl+A / Ctrl+X on numbers, the jump list (Ctrl+O / Ctrl+I: the app's keys today); checked with
+  a hardware keyboard on an Android phone and in the browser build (offscreen and the shell
+  self-test only so far).
 * **Start screen on real devices** — the redesigned start screen (docs/UI.md "The start screen")
   was checked offscreen only: on an Android phone, a recent notebook on shared storage without
   "All files access" (shown as available, opening it asks) and the rows' × as touch targets; in

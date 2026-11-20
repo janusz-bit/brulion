@@ -155,6 +155,12 @@ FocusScope {
     /// The editor and the page of activeDay (null with none).
     readonly property BlockEditor activeEditor: activeDay !== null ? activeDay.editor : null
     readonly property PageController activeController: activeDay !== null ? activeDay.controller : null
+    /// Vim's mode of the day written in, the command typed or the command line (the status bar's
+    /// left part; docs/UI.md "Vim mode"). One day shown: its page's.
+    readonly property string statusVim: single ? (pageView !== null ? pageView.statusVim : "")
+                                        : activeEditor !== null && activeEditor.vimSession.enabled
+                                          && (activeEditor.activeFocus || activeEditor.vimSession.commandLine !== "")
+                                          ? activeEditor.vimSession.status : ""
 
     readonly property string title: single ? DatesHelper.formatLong(date) : ""
     readonly property bool editing: single ? (pageView !== null && pageView.editing)
@@ -365,6 +371,21 @@ FocusScope {
         active: !root.single
         focus: !root.single
         sourceComponent: journalsComponent
+    }
+
+    // Vim's mode in the corner where the shell's status bar does not show it (the stream's days;
+    // one day shown has its page's).
+    VimStatus {
+        objectName: "journalVimStatus"
+        session: root.activeEditor !== null ? root.activeEditor.vimSession : null
+        visible: !root.single && root.statusVim !== "" && !(root.paneActive && AppController.statusBarShown)
+        anchors.left: parent.left
+        anchors.bottom: parent.bottom
+        anchors.leftMargin: Theme.space4
+        // (Above a touch toolbar docked on the view.)
+        anchors.bottomMargin: Theme.space2 + (root.toolbarDocked && root.activeEditor !== null
+                                              ? root.activeEditor.toolbarHeight : 0)
+        z: 2
     }
 
     Component {

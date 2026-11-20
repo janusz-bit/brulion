@@ -53,6 +53,12 @@ brulion_add_test(tst_editor_highlighter
 # Source mode's TextEdit handing its edits to PageController one at a time (SourceTextSync): random
 # edits, undo / redo and formats over every kind of line ending, the fallbacks, the safety net and a
 # keystroke's cost on a 500 KB page against handing over the whole text.
+# Vim keys (VimSession): the engine of the core module vim over a page's blocks (VimPageBuffer) and
+# over source mode's TextEdit (VimSourceBuffer) — lines and blocks, one undo step per change,
+# visual selections, registers across pages, a key's cost on a 5000-block page.
+brulion_add_test(tst_editor_vim
+    SOURCES tst_editor_vim.cpp
+    LIBS brulion_editor brulion_core_vim Qt6::Qml Qt6::Quick)
 brulion_add_test(tst_editor_sourcesync
     SOURCES tst_editor_sourcesync.cpp
     LIBS brulion_editor)

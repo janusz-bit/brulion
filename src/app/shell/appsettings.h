@@ -160,6 +160,8 @@ class AppSettings : public QObject {
     /// Typewriter scrolling: the editor keeps the caret's line in the middle of the view.
     Q_PROPERTY(bool typewriterScrolling READ typewriterScrolling WRITE setTypewriterScrolling NOTIFY
                        typewriterScrollingChanged FINAL)
+    /// Vim keys in the block editor and source mode (docs/UI.md "Vim mode"); off by default.
+    Q_PROPERTY(bool vimMode READ vimMode WRITE setVimMode NOTIFY vimModeChanged FINAL)
     /// The export's choice for pictures from the internet (ExportController::webPictures):
     /// "link" (default: the addresses stay) | "include" (copies in the HTML and Pandoc exports).
     Q_PROPERTY(QString exportWebPictures READ exportWebPictures WRITE setExportWebPictures NOTIFY
@@ -350,6 +352,8 @@ public:
     bool readingMode() const;
     void setReadingMode(bool on);
     bool typewriterScrolling() const;
+    bool vimMode() const;
+    void setVimMode(bool on);
     void setTypewriterScrolling(bool on);
 
     /// Custom keyboard shortcuts (ShortcutMap): the stored values of group "shortcuts", command id
@@ -515,6 +519,7 @@ Q_SIGNALS:
     void focusModeChanged();
     void readingModeChanged();
     void typewriterScrollingChanged();
+    void vimModeChanged();
     void currentVaultChanged();
     void recentVaultsChanged();
     void followsOutsideLinksChanged();

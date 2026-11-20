@@ -1852,6 +1852,13 @@ private Q_SLOTS:
             QVERIFY(model->run(u"view.typewriter"_s));
             QVERIFY(app->settings()->typewriterScrolling());
             QVERIFY(model->run(u"view.typewriter"_s));
+            // Vim keys too (docs/UI.md "Vim mode").
+            QVERIFY(!app->settings()->vimMode());
+            QVERIFY(model->run(u"view.vim"_s));
+            QVERIFY(app->settings()->vimMode());
+            QCOMPARE(commandNamed(u"view.vim"_s).value(u"title"_s).toString(), CommandModel::tr("Turn off Vim keys"));
+            QVERIFY(model->run(u"view.vim"_s));
+            QVERIFY(!app->settings()->vimMode());
             QVERIFY(model->run(u"settings.shortcuts"_s));
             QCOMPARE(app->currentRoute().value(u"section"_s).toString(), u"shortcuts"_s);
             QVERIFY(app->back());

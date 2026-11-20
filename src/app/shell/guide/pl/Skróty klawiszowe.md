@@ -130,6 +130,39 @@ Menu statusu zadania otwiera też prawy przycisk myszy na polu wyboru (na telefo
 
 W dokumencie Backspace na początku punktu listy najpierw zdejmuje pole zadania, potem znacznik listy. Opis działania trybów: [[Dokument i konspekt|Dokument i konspekt]].
 
+## Klawisze Vima
+Znasz Vima? Włącz *Ustawienia → Edytor → Klawisze Vima* (ten sam przełącznik jest na górze *Ustawienia → Skróty klawiszowe*, a „Klawisze Vima” są w palecie poleceń). To ustawienie tego urządzenia, pomyślane dla fizycznej klawiatury.
+
+- **Tryb normalny** (`NORMALNY` w lewym dolnym rogu): klawisze są poleceniami — blok nie przyjmuje pisania, a kursor jest prostokątem na literze. `i`, `a`, `o`… włączają **tryb wstawiania** (`WSTAWIANIE`): piszesz jak zawsze (Enter dzieli blok, `[[` i `/` podpowiadają), **Esc** wraca. `v` i `V` zaznaczają znaki i wiersze (**tryb wizualny**).
+- Strona to kolumna wierszy: `j` i `k` przechodzą z bloku do bloku i trzymają kolumnę; `w`, `b`, `}` i wyszukiwanie idą dalej w następnym bloku. Zwinięty blok to jeden wiersz, tabela też (zostaje zaznaczona).
+- `dd` usuwa blok (zwinięty — razem z tym, co ukrywa), `yy` kopiuje go (z polem zadania i znacznikiem), `p` wstawia skopiowane bloki pod blokiem i jego dziećmi, `P` nad nim. `o` / `O` robią nowy blok pod / nad, jak Enter. `>>` / `<<` wcinają i wysuwają jak Tab i Shift+Tab. `J` dołącza następny blok do tego. W bloku kodu, cytacie i wyróżnieniu wiersz to wiersz jego tekstu.
+- Każda zmiana to jeden krok cofania: `u` (albo Ctrl+Z) cofa całe `cw` razem z tym, co wpisałeś. Ctrl+R ponawia, `.` powtarza ostatnią zmianę.
+- `/tekst` i `?tekst` szukają (zwykły tekst; wielka litera sprawia, że wielkość liter się liczy), `n` / `N` idą dalej. `:s/stare/nowe/g` zamienia w wierszu, `:%s/stare/nowe/g` na całej stronie — zwykły tekst, nie wzorce.
+- `:w` zapisuje, `:q` wraca.
+- `"a` … `"z` to rejestry (`"ayy`, potem `"ap` — także na innej stronie), `"+` to schowek systemu: `"+yy` kopiuje blok dla innych programów.
+- W trybie źródła Markdown (Ctrl+E) te same klawisze działają na tekście strony.
+
+| Klawisze | Działanie |
+|---|---|
+| `h` `j` `k` `l`, `w` `b` `e`, `0` `^` `$`, `gg` `G`, `{` `}`, `%` | ruch (z liczbą: `3j`, `2w`) |
+| `f` `t` `F` `T` + litera, `;` `,` | do znaku w wierszu |
+| `i` `a` `I` `A` `o` `O`, `R`, Esc | tryb wstawiania, tryb zastępowania, powrót do trybu normalnego |
+| `v` `V`, `o` | tryb wizualny (znaki, wiersze), jego drugi koniec |
+| `d` `c` `y` `>` `<` + ruch (`dw`, `cw`, `y$`, `>j`) | usuń, zmień, kopiuj, wetnij |
+| `iw` `aw` `ip` `i"` `i(` `i[` `i{` … | obiekty tekstu (`ciw`, `da(`, `yip`) |
+| `dd` `cc` `yy` `>>` `<<` | całe wiersze (bloki) |
+| `x` `X` `D` `C` `s` `S` `r` `~` `J` `p` `P` | usuń znak, do końca, zastąp, wielkość liter, połącz, wstaw |
+| `u`, Ctrl+R, `.` | cofnij, ponów, powtórz |
+| `/tekst`, `?tekst`, `n` `N` `*` `#` | szukaj |
+| `:s/a/b/g`, `:%s/a/b/g` | zamień (zwykły tekst) |
+| `:w`, `:q`, `:wq`, `ZZ`, `:12` | zapisz, wstecz, wiersz 12 |
+| `ma`, `` `a ``, `'a` | znaczniki |
+| `za` `zo` `zc` `zR` `zM` | zwijanie i rozwijanie bloków |
+
+Polskie litery: polecenie to znak, który daje klawisz. Na polskiej klawiaturze programisty wszystko jest tam, gdzie ma to Vim, a ą, ę, ż… są tylko tym, czego polecenia szukają: `fą` skacze do następnego „ą”, `rż` zamienia literę na „ż”.
+
+Gdzie Vim spotyka się z Brulionem: Ctrl+R to ponów; Esc w trybie normalnym nie zaznacza bloku (robi to `V`) — wychodzi z trybu skupienia; Ctrl+V, Ctrl+A, Ctrl+F, Ctrl+E, Ctrl+O, Tab i pozostałe skróty aplikacji działają tak jak bez Vima. Jeszcze ich nie ma: zaznaczenia blokowego Ctrl+V, makr (`q`, `@`), wzorców w wyszukiwaniu.
+
 ## Rysunki
 W edytorze rysunku (gdy nie piszesz tekstu). Więcej: [[Rysunki|Rysunki]].
 
