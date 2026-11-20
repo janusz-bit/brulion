@@ -145,6 +145,7 @@ void addHabitCommands(QList<Command> &out);
 void addIndexCommands(QList<Command> &out);
 void addToolCommands(QList<Command> &out);
 void addAppCommands(QList<Command> &out);
+void addUriCommands(QList<Command> &out);
 void addExtensionCommands(QList<Command> &out);
 void addMetaCommands(QList<Command> &out);
 

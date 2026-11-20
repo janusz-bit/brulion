@@ -12,11 +12,13 @@
 // tools/call, errors, a request line over the 16 MiB limit, the warm index seeing a file written
 // meanwhile).
 #include "appmessage.h"
+#include "automation/policy.h"
 #include "controlprotocol.h"
 #include "controlserver.h"
 #include "notebook/journals.h"
 #include "notebook/session.h"
 #include "singleinstance.h"
+#include "vault/vault.h"
 
 #include <QCryptographicHash>
 #include <QDir>
@@ -1712,6 +1714,96 @@ private Q_SLOTS:
         QTRY_VERIFY_WITH_TIMEOUT(p.state() == QProcess::NotRunning, kTimeoutMs);
         QTRY_COMPARE(messages.size(), 2);
         QCOMPARE(messages.last().first().toByteArray(), QByteArray("capture"));
+    }
+
+    // brulion:// addresses (docs/CLI.md "brulion:// addresses"): built (with the notebook's key from
+    // the app's key file), read, carried out headless — Polish text, a heading, a reminder from a
+    // phrase, a dry run with its diff, --read-only, an address of another notebook, errors with
+    // their exit codes — and handed to the running app as a `uri` message.
+    void uriCommands()
+    {
+        const QString dir = vault({{u"Zakupy.md"_s, "# Zakupy\n\n## Dziś\n- chleb\n"_ba},
+                                   {u"templates/journal.md"_s, "## Plan\n- \n"_ba}});
+        Run r = run(dir, {u"uri"_s, u"build"_s, u"append"_s, u"--page"_s, u"Zakupy"_s, u"--heading"_s, u"Dziś"_s,
+                          u"--text"_s, u"Mleko 2% i żółty ser"_s});
+        QCOMPARE(r.code, 0);
+        const QString built = r.result().value(u"uri"_s).toString();
+        QCOMPARE(built,
+                 u"brulion://append?page=Zakupy&heading=Dzi%C5%9B&text=Mleko%202%25%20i%20%C5%BC%C3%B3%C5%82ty%20ser"_s);
+        // No key yet: --with-key says so.
+        r = run(dir, {u"uri"_s, u"build"_s, u"capture"_s, u"--text"_s, u"x"_s, u"--with-key"_s});
+        QCOMPARE(r.code, 3);
+        QCOMPARE(r.errorCode(), u"no_key"_s);
+        brulion::automation::KeyStore keys(brulion::automation::KeyStore::fileIn(appDataDir()));
+        const QString key = keys.ensureKey(brulion::Vault::idForPath(dir));
+        QVERIFY(!key.isEmpty());
+        r = run(dir, {u"uri"_s, u"build"_s, u"capture"_s, u"--text"_s, u"x"_s, u"--with-key"_s});
+        QCOMPARE(r.code, 0);
+        QVERIFY(r.result().value(u"uri"_s).toString().endsWith(u"&key="_s + key));
+        QVERIFY(r.result().value(u"uri"_s).toString().contains(u"vault="_s));
+        r = run(dir, {u"uri"_s, u"build"_s, u"open"_s, u"--text"_s, u"x"_s});
+        QCOMPARE(r.code, 2);
+        QCOMPARE(r.errorCode(), u"unknown_parameter"_s);
+        // parse: never shows the key.
+        r = cli({u"uri"_s, u"parse"_s, built + u"&key=tajny"_s});
+        QCOMPARE(r.code, 0);
+        QCOMPARE(r.result().value(u"action"_s).toString(), u"append"_s);
+        QCOMPARE(r.result().value(u"access"_s).toString(), u"write"_s);
+        QCOMPARE(r.result().value(u"params"_s).toObject().value(u"text"_s).toString(), u"Mleko 2% i żółty ser"_s);
+        QVERIFY(r.result().value(u"hasKey"_s).toBool());
+        QVERIFY(!r.out.contains("tajny"));
+        r = cli({u"uri"_s, u"parse"_s, u"brulion://append?text=%C5"_s});
+        QCOMPARE(r.code, 2);
+        QCOMPARE(r.errorCode(), u"bad_uri"_s);
+        // run: a dry run first, then for real.
+        r = run(dir, {u"--dry-run"_s, u"uri"_s, u"run"_s, built});
+        QCOMPARE(r.code, 0);
+        QVERIFY(r.result().value(u"diff"_s).toString().contains(u"+- Mleko 2% i żółty ser"_s));
+        QCOMPARE(readFile(dir + u"/Zakupy.md"_s), "# Zakupy\n\n## Dziś\n- chleb\n"_ba);
+        r = run(dir, {u"uri"_s, u"run"_s, built});
+        QCOMPARE(r.code, 0);
+        QCOMPARE(readFile(dir + u"/Zakupy.md"_s), "# Zakupy\n\n## Dziś\n- chleb\n- Mleko 2% i żółty ser\n"_ba);
+        QCOMPARE(r.result().value(u"line"_s).toInt(), 5);
+        r = run(dir, {u"uri"_s, u"run"_s, u"brulion://task?text=Zadzwoni%C4%87&remind=jutro+o+18"_s});
+        QCOMPARE(r.code, 0);
+        QCOMPARE(readFile(dir + u"/journals/2026-10-14.md"_s), "## Plan\n- [ ] Zadzwonić ⏰ 2026-10-15 18:00\n"_ba);
+        QCOMPARE(r.result().value(u"reminder"_s).toString(), u"2026-10-15 18:00"_s);
+        r = run(dir, {u"uri"_s, u"run"_s, u"brulion://open?page=zakupy"_s});
+        QCOMPARE(r.code, 0);
+        QCOMPARE(r.result().value(u"route"_s).toObject().value(u"path"_s).toString(), u"Zakupy.md"_s);
+        r = run(dir, {u"--read-only"_s, u"uri"_s, u"run"_s, built});
+        QCOMPARE(r.code, 7);
+        r = run(dir, {u"uri"_s, u"run"_s, u"brulion://append?page=Brak&text=x"_s});
+        QCOMPARE(r.code, 3);
+        QCOMPARE(r.errorCode(), u"page_not_found"_s);
+        r = run(dir, {u"uri"_s, u"run"_s, u"brulion://new?title=zakupy"_s});
+        QCOMPARE(r.code, 4);
+        QCOMPARE(r.errorCode(), u"exists"_s);
+        r = run(dir, {u"uri"_s, u"run"_s, u"brulion://append?vault=Inny&text=x"_s});
+        QCOMPARE(r.code, 3);
+        QCOMPARE(r.errorCode(), u"unknown_notebook"_s);
+        r = run(dir, {u"uri"_s, u"run"_s, u"brulion://task?text=x&due=kiedy%C5%9B"_s});
+        QCOMPARE(r.code, 6);
+        r = run(dir, {u"uri"_s, u"run"_s, u"brulion://run?extension=a&command=b"_s});
+        QCOMPARE(r.code, 5);
+        QCOMPARE(r.errorCode(), u"needs_app"_s);
+        // open: to the running app (a stand-in on its socket) as a `uri` message.
+        r = run(dir, {u"uri"_s, u"open"_s, built});
+        QCOMPARE(r.code, 5);
+        QCOMPARE(r.errorCode(), u"app_not_running"_s);
+        brulion::ipc::SingleInstance app(brulion::ipc::SingleInstance::keyFor(appDataDir()));
+        QVERIFY(app.listen());
+        QSignalSpy messages(&app, &brulion::ipc::SingleInstance::messageReceived);
+        QProcess p;
+        p.setProcessEnvironment(environment());
+        p.start(QStringLiteral(BRULION_CLI), {u"uri"_s, u"open"_s, built});
+        QTRY_VERIFY_WITH_TIMEOUT(p.state() == QProcess::NotRunning, kTimeoutMs);
+        QCOMPARE(p.exitCode(), 0);
+        QTRY_COMPARE(messages.size(), 1);
+        const auto message = brulion::ipc::parseMessage(messages.first().first().toByteArray());
+        QVERIFY(message);
+        QCOMPARE(message->verb, QByteArray("uri"));
+        QCOMPARE(message->payload.value(u"uri"_s).toString(), built);
     }
 
     // The running app's remote control (docs/CLI.md "Remote control") as the command line sees it:

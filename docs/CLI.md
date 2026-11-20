@@ -247,6 +247,10 @@ Never compute a hash yourself.
 | `extension run <name> [<command>]` | `[--view V [--action A]] [--hook E] [--args JSON] [--page P] [--block REF] [--answers JSON]` | try a command, a view (its node tree), an action or the hooks of an event in a sandbox: `{status, value, writes (diffs, never made), printed, questions}`; `--args` is a view's params, an action's args or a command's `ctx.args` | |
 | `extension eval <code>` | `[--extension N] [--answers JSON] [--stdin]` | Luau with the notebook's `b`, as the app's console (writes only computed) | |
 | `extension write <name>` | `(--content T \| --stdin \| --code C [--description D] [--permissions P]) [--folder F] [--expect-hash H] [--force]` | write an extension page, checked first (exit 6 when it does not load); replacing one needs its hash. The app runs it once the user approves it | yes |
+| `uri build <action>` | `[--page P] [--title T] [--heading H] [--date D] [--text T \| --stdin] [--due D] [--remind D] [--query Q] [--params JSON] [--named] [--with-key] [--web]` | a brulion:// address (docs/UI.md "Automation"): `{uri, action}`; `--with-key` adds the notebook's automation key from this device (exit 3 `no_key` without one) and its name | |
+| `uri parse <uri>` | `[--stdin]` | what an address asks: `{action, access (open, write, run), scheme, params, vault?, source?, id?, xSuccess?, xError?, hasKey}` — never the key itself | |
+| `uri run <uri>` | `[--stdin]` | carry an address out in the notebook (below "brulion:// addresses"): a write's `{ok, action, path, line, block, kind, reminder?, created, changed, hashBefore, hashAfter, diff?}`, an opening's `route` | yes |
+| `uri open <uri>` | `[--stdin]` | hand an address to the running app (exit 5 when none runs), which checks it as any link's: a write without the key asks the user | yes |
 | `app open <target>` | a ref, `today` or `capture`; `[--line N] [--block-id ID] [--heading H] [--side]` | show the running app there (exit 5 when none runs); with its remote control on the app resolves the ref and says what it opened | |
 | `app today` | | the running app at today's note | |
 | `app capture [<text>]` | `[--stdin]` | no text: open quick capture in the running app; a text: save it as quick capture does (remote control) | yes |
@@ -413,8 +417,10 @@ notice and the command a warning). Without a running app: exit 5 with `{"gui": {
 The same socket carries a second launch of the app: `brulion --today`, `--capture`, a plain
 `brulion` (`activate`) and `brulion --open <file>…` — files opened with Brulion from a file manager
 ("Open with"), sent as `share` with their absolute paths: the running app offers them in its
-share dialog (copies, the files stay unchanged; a page of the open notebook opens). Each carries the
-launcher's Wayland activation token, so the window comes to the front.
+share dialog (copies, the files stay unchanged; a page of the open notebook opens) — and
+brulion:// addresses (`brulion 'brulion://…'`, `--uri <address>`, an address among the `--open`
+files: the desktop entry's `%U`), sent as `uri`. Each carries the launcher's Wayland activation
+token, so the window comes to the front.
 
 The single-instance socket (`$XDG_RUNTIME_DIR/brulion-<hash>`, owner-only) is, like the remote
 control's, only ever in a folder of the user's own that nobody else can change: without a private
@@ -426,6 +432,35 @@ starting or receiving what is sent. Both ends check who is at the other one (Lin
 credentials): the app drops other users' connections, and `brulion-cli` (and a second launch)
 sends nothing to a socket another user listens on (exit 5 `app_not_reached` with
 `{"reason": "foreign_socket"}`).
+
+## brulion:// addresses
+
+The `uri` commands work with the addresses other apps, launchers, scripts and automation tools use
+to reach Brulion (docs/UI.md "Automation" lists the actions and their parameters; the core is
+`src/core/automation`):
+
+```sh
+brulion-cli uri build task --text "Zadzwonić do mamy" --remind "jutro o 18" --with-key
+# {"uri": "brulion://task?text=Zadzwoni%C4%87%20do%20mamy&remind=jutro%20o%2018&vault=Notatki&key=…"}
+brulion-cli uri run 'brulion://append?page=Zakupy&heading=Dzi%C5%9B&text=Mleko'
+brulion-cli uri open 'brulion://open?page=Zakupy%23Jutro'   # the running app shows it
+```
+
+`uri run` carries an address out without the app, as Android's background run of Tasker's intents
+does: in the notebook of `--vault` (an address naming another notebook, `vault=…`, is refused:
+exit 3 `unknown_notebook`), with the command line's own safety — the device's lock, `--dry-run`,
+`--diff`, `--read-only`, History — and no key needed (the command line writes anyway; the key is
+for links that come from elsewhere). An address that only opens something returns the `route` the
+app would show; an extension's command needs the app (exit 5 `needs_app`). Errors keep the
+address's codes (docs/UI.md "Automation", "Errors") with the command line's exit codes:
+`page_not_found`, `heading_not_found`, `block_not_found`, `template_not_found` 3; `exists`,
+`conflict`, `not_utf8` 4; `date_not_understood`, `recurrence_not_understood` 6; a malformed
+address `bad_uri` and the other mistakes 2.
+
+`uri open` sends the address to the running app over the single-instance socket (a `uri`
+message, as a second launch `brulion 'brulion://…'` does): it is then checked as any link —
+opening at once, writing with the notebook's key or after the user's confirmation, as Settings →
+Automation says.
 
 ## Remote control
 
