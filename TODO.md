@@ -324,6 +324,12 @@ done in the repository simply disappears from the list.
   start).
 * **Themes** — theme files exchanged between users (colours, fonts, spacing), beyond the appearance
   settings (Obsidian, Joplin); no code from notes.
+* **A crash at quit** — the AppImage job's QML smoke test (tst_planning_qml: the tasks view's query
+  dialog at phone size, the app quitting right after its screenshot) crashed once on 2026-11-20 as
+  the window was destroyed: SIGSEGV in Qt's `QQmlDelegateModelItem::destroyObjectLater` from
+  `QQmlDelegateModel::cancel` in a `QQuickItemView`'s destructor. Find the view whose delegate was
+  still being created, and whether destroying the window before the engine (or letting incubation
+  finish) avoids it.
 
 ## Windows
 
