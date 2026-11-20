@@ -318,7 +318,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellRouteTitles.qml" line="63"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="7248"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="7340"/>
         <source>Event log</source>
         <translation>Rejestr zdarzeń</translation>
     </message>
@@ -2915,7 +2915,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/views/CleanupView.qml" line="117"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="6481"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="6573"/>
         <source>Attachments (%1)</source>
         <translation>Załączniki (%1)</translation>
     </message>
@@ -2936,7 +2936,7 @@
     <message>
         <location filename="../src/app/qml/views/CleanupView.qml" line="144"/>
         <location filename="../src/app/qml/views/CleanupView.qml" line="234"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="6494"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="6586"/>
         <source>Move to trash</source>
         <translation>Przenieś do kosza</translation>
     </message>
@@ -4385,12 +4385,12 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
         <translation>Lokalny graf</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/content/ContentSidePanel.qml" line="251"/>
+        <location filename="../src/app/qml/content/ContentSidePanel.qml" line="253"/>
         <source>The view could not be drawn: %1</source>
         <translation>Nie udało się narysować widoku: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/content/ContentSidePanel.qml" line="267"/>
+        <location filename="../src/app/qml/content/ContentSidePanel.qml" line="269"/>
         <source>Calendar</source>
         <translation>Kalendarz</translation>
     </message>
@@ -12701,7 +12701,7 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
     <message>
         <location filename="../src/app/qml/views/SettingsView.qml" line="486"/>
         <location filename="../src/app/qml/views/SettingsView.qml" line="808"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="8226"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="8318"/>
         <source>Restore</source>
         <translation>Przywróć</translation>
     </message>
@@ -13835,7 +13835,7 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="319"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="6761"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="6853"/>
         <source>Restore</source>
         <translation>Przywróć</translation>
     </message>
@@ -13846,7 +13846,7 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="330"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="6784"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="6876"/>
         <source>Delete</source>
         <translation>Usuń</translation>
     </message>
@@ -14037,61 +14037,61 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="157"/>
-        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="1061"/>
+        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="1065"/>
         <source>No date</source>
         <translation>Bez daty</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="408"/>
-        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="643"/>
+        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="412"/>
+        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="647"/>
         <source>More</source>
         <translation>Więcej</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="491"/>
-        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="620"/>
-        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="977"/>
-        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="1065"/>
+        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="495"/>
+        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="624"/>
+        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="981"/>
+        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="1069"/>
         <source>%1: %2</source>
         <translation>%1: %2</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="621"/>
+        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="625"/>
         <source>Done</source>
         <translation>Zrobione</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="622"/>
+        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="626"/>
         <source>Right-click or press and hold for more</source>
         <translation>Kliknij prawym przyciskiem lub przytrzymaj, by zobaczyć więcej</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="793"/>
+        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="797"/>
         <source>Less: %1</source>
         <translation>Mniej: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="812"/>
+        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="816"/>
         <source>Number (%1)</source>
         <translation>Liczba (%1)</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="813"/>
+        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="817"/>
         <source>Number</source>
         <translation>Liczba</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="839"/>
+        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="843"/>
         <source>More: %1</source>
         <translation>Więcej: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="938"/>
+        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="942"/>
         <source>Add</source>
         <translation>Dodaj</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="972"/>
+        <location filename="../src/app/qml/shell/ShellExtensionView.qml" line="976"/>
         <source>Choose…</source>
         <translation>Wybierz…</translation>
     </message>
@@ -14140,6 +14140,7 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellMacroDialog.qml" line="55"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="5827"/>
         <source>Run</source>
         <translation>Uruchom</translation>
     </message>
@@ -14203,7 +14204,7 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellMoveDialog.qml" line="127"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="8335"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="8427"/>
         <source>Move “%1”</source>
         <translation>Przenieś „%1”</translation>
     </message>
@@ -14506,7 +14507,7 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellQuickCapture.qml" line="17"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="7488"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="7580"/>
         <source>Add</source>
         <translation>Dodaj</translation>
     </message>
@@ -14711,7 +14712,7 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
     </message>
     <message numerus="yes">
         <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="32"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="6876"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="6968"/>
         <source>%n file(s) to save in the notebook</source>
         <translation>
             <numerusform>%n plik do zapisania w notatniku</numerusform>
@@ -14730,7 +14731,7 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="36"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="6813"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="6905"/>
         <source>Save</source>
         <translation>Zapisz</translation>
     </message>
@@ -14944,164 +14945,164 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
 <context>
     <name>ShellSidebar</name>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="367"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="372"/>
         <source>Sidebar</source>
         <translation>Pasek boczny</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="242"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="247"/>
         <source>Copied %1</source>
         <translation>Skopiowano %1</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="478"/>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="1078"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="483"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="1139"/>
         <source>New page</source>
         <translation>Nowa strona</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="866"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="927"/>
         <source>Favorites</source>
         <translation>Ulubione</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="910"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="971"/>
         <source>Recent</source>
         <translation>Ostatnie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="561"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="566"/>
         <source>Pages</source>
         <translation>Strony</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="567"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="572"/>
         <source>New page or folder</source>
         <translation>Nowa strona lub folder</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="615"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="620"/>
         <location filename="../src/app/shell/shellselftest.cpp" line="1931"/>
         <source>Empty folder</source>
         <translation>Pusty folder</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="627"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="632"/>
         <source>expanded folder</source>
         <translation>folder rozwinięty</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="627"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="632"/>
         <source>collapsed folder</source>
         <translation>folder zwinięty</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="704"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="709"/>
         <source>More: %1</source>
         <translation>Więcej: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="801"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="862"/>
         <source>%1 → %2</source>
         <translation>%1 → %2</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="803"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="864"/>
         <source>Notebook root</source>
         <translation>Główny folder notatnika</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="962"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="1023"/>
         <source>New page here</source>
         <translation>Nowa strona tutaj</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="969"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="1030"/>
         <source>New folder…</source>
         <translation>Nowy folder…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="979"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="1040"/>
         <source>Show folder pages</source>
         <translation>Pokaż strony folderu</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="986"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="1047"/>
         <source>Search in folder</source>
         <translation>Szukaj w folderze</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="1000"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="1061"/>
         <source>Open in side panel</source>
         <translation>Otwórz w panelu bocznym</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="1013"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="1074"/>
         <source>Remove from favorites</source>
         <translation>Usuń z ulubionych</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="1013"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="1074"/>
         <source>Add to favorites</source>
         <translation>Dodaj do ulubionych</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="1019"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="1080"/>
         <source>Move to…</source>
         <translation>Przenieś do…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="1026"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="1087"/>
         <source>Copy link</source>
         <translation>Kopiuj link</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="1033"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="1094"/>
         <source>Export folder…</source>
         <translation>Eksportuj folder…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="1039"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="1100"/>
         <source>Rename…</source>
         <translation>Zmień nazwę…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="1045"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="1106"/>
         <source>Page history</source>
         <translation>Historia strony</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="1052"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="1113"/>
         <source>Move to trash</source>
         <translation>Przenieś do kosza</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="1085"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="1146"/>
         <source>New folder</source>
         <translation>Nowy folder</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="1092"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="1153"/>
         <source>Collapse all</source>
         <translation>Zwiń wszystkie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="1098"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="1159"/>
         <source>Show attachments</source>
         <translation>Pokaż załączniki</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="1113"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="1174"/>
         <source>Show the open page</source>
         <translation>Pokazuj otwartą stronę</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="993"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="1054"/>
         <source>Open in new tab</source>
         <translation>Otwórz w nowej karcie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="1007"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="1068"/>
         <source>Open in new window</source>
         <translation>Otwórz w nowym oknie</translation>
     </message>
@@ -15630,13 +15631,13 @@ Kliknij, aby zsynchronizować teraz · prawy przycisk: centrum synchronizacji</t
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellTrayCalendar.qml" line="109"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="9674"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="9767"/>
         <source>Opening the notebook…</source>
         <translation>Otwieranie notatnika…</translation>
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellTrayCalendar.qml" line="110"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="9664"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="9757"/>
         <source>Open a notebook to see its tasks and reminders.</source>
         <translation>Otwórz notatnik, aby zobaczyć zadania i przypomnienia.</translation>
     </message>
@@ -15953,7 +15954,7 @@ Kliknij, aby zsynchronizować teraz · prawy przycisk: centrum synchronizacji</t
     </message>
     <message>
         <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="550"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="6602"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="6694"/>
         <source>Keep mine</source>
         <translation>Zachowaj moją</translation>
     </message>
@@ -16708,7 +16709,7 @@ Kliknij, aby zsynchronizować teraz · prawy przycisk: centrum synchronizacji</t
     </message>
     <message>
         <location filename="../src/app/qml/views/SyncView.qml" line="340"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="6577"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="6669"/>
         <source>Merge</source>
         <translation>Scal</translation>
     </message>
@@ -20116,324 +20117,339 @@ Kliknij, aby zsynchronizować teraz · prawy przycisk: centrum synchronizacji</t
         <translation>Wiersz jest teraz wierszem %1 (powyżej dodano lub usunięto wiersze)</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_extensions.cpp" line="93"/>
+        <location filename="../src/cli/commands_extensions.cpp" line="95"/>
         <source>The extension reference is missing from this build</source>
         <translation>W tej wersji brakuje opisu rozszerzeń</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_extensions.cpp" line="123"/>
+        <location filename="../src/cli/commands_extensions.cpp" line="125"/>
         <source>No section of the extension reference is called %1</source>
         <translation>Opis rozszerzeń nie ma części o nazwie %1</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_extensions.cpp" line="225"/>
+        <location filename="../src/cli/commands_extensions.cpp" line="227"/>
         <source>Which extension? (extension list shows them)</source>
         <translation>Które rozszerzenie? (pokazuje je extension list)</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_extensions.cpp" line="256"/>
-        <location filename="../src/cli/commands_extensions.cpp" line="848"/>
+        <location filename="../src/cli/commands_extensions.cpp" line="258"/>
+        <location filename="../src/cli/commands_extensions.cpp" line="874"/>
         <source>%1 is no extension page: tag it #extension (extension write makes one)</source>
         <translation>%1 nie jest stroną rozszerzenia: oznacz ją #extension (extension write ją utworzy)</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_extensions.cpp" line="259"/>
+        <location filename="../src/cli/commands_extensions.cpp" line="261"/>
         <source>No extension %1 (extension list shows them)</source>
         <translation>Nie ma rozszerzenia %1 (pokazuje je extension list)</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_extensions.cpp" line="397"/>
+        <location filename="../src/cli/commands_extensions.cpp" line="399"/>
         <location filename="../src/cli/commands_habits.cpp" line="52"/>
         <source>The Luau engine did not start: %1</source>
         <translation>Silnik Luau nie wystartował: %1</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_extensions.cpp" line="500"/>
+        <location filename="../src/cli/commands_extensions.cpp" line="502"/>
         <source>The text is no extension page: it needs the tag in its properties (tags: [extension])</source>
         <translation>Ten tekst nie jest stroną rozszerzenia: potrzebuje tagu we właściwościach (tags: [extension])</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_extensions.cpp" line="530"/>
+        <location filename="../src/cli/commands_extensions.cpp" line="532"/>
         <source>Which extension? Give its title</source>
         <translation>Które rozszerzenie? Podaj jego tytuł</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_extensions.cpp" line="546"/>
-        <location filename="../src/cli/commands_extensions.cpp" line="661"/>
+        <location filename="../src/cli/commands_extensions.cpp" line="548"/>
+        <location filename="../src/cli/commands_extensions.cpp" line="663"/>
         <source>The extension does not load: %1</source>
         <translation>Rozszerzenie się nie wczytuje: %1</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_extensions.cpp" line="549"/>
+        <location filename="../src/cli/commands_extensions.cpp" line="551"/>
         <source>%1 loads: %2 commands, %3 views, %4 hooks
 </source>
         <translation>%1 wczytuje się: polecenia: %2, widoki: %3, reakcje: %4
 </translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_extensions.cpp" line="568"/>
+        <location filename="../src/cli/commands_extensions.cpp" line="570"/>
         <source>--%1 is a JSON list: &apos;[&quot;text&quot;, {&quot;key&quot;: 1}, null]&apos;</source>
         <translation>--%1 to lista JSON: &apos;[&quot;tekst&quot;, {&quot;klucz&quot;: 1}, null]&apos;</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_extensions.cpp" line="569"/>
+        <location filename="../src/cli/commands_extensions.cpp" line="571"/>
         <source>--%1 is a JSON object: &apos;{&quot;key&quot;: &quot;value&quot;}&apos;</source>
         <translation>--%1 to obiekt JSON: &apos;{&quot;klucz&quot;: &quot;wartość&quot;}&apos;</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_extensions.cpp" line="632"/>
+        <location filename="../src/cli/commands_extensions.cpp" line="634"/>
         <source>b.ai was called: brulion-cli asks no model, the call got an error</source>
         <translation>Wywołano b.ai: brulion-cli nie pyta żadnego modelu, wywołanie dostało błąd</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_extensions.cpp" line="636"/>
+        <location filename="../src/cli/commands_extensions.cpp" line="638"/>
         <source>The extension asked a question with no answer left: give it with --answers</source>
         <translation>Rozszerzenie zadało pytanie, na które zabrakło odpowiedzi: podaj ją w --answers</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_extensions.cpp" line="643"/>
+        <location filename="../src/cli/commands_extensions.cpp" line="645"/>
         <source>The extension failed: %1</source>
         <translation>Błąd rozszerzenia: %1</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_extensions.cpp" line="676"/>
-        <source>Name one thing to run: a command, --view or --hook</source>
-        <translation>Wskaż jedną rzecz do uruchomienia: polecenie, --view albo --hook</translation>
+        <location filename="../src/cli/commands_extensions.cpp" line="683"/>
+        <source>Name one thing to run: a command, --view, --hook, --macro or --variable</source>
+        <translation>Wskaż jedną rzecz do uruchomienia: polecenie, --view, --hook, --macro albo --variable</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_extensions.cpp" line="678"/>
+        <location filename="../src/cli/commands_extensions.cpp" line="685"/>
         <source>--action is an action of a view: give --view too</source>
         <translation>--action to akcja widoku: podaj też --view</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_extensions.cpp" line="704"/>
+        <location filename="../src/cli/commands_extensions.cpp" line="711"/>
         <source>--block is a block&apos;s ref: Dom.md#L12@hash</source>
         <translation>--block to odwołanie do bloku: Dom.md#L12@hash</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_extensions.cpp" line="711"/>
+        <location filename="../src/cli/commands_extensions.cpp" line="718"/>
         <location filename="../src/cli/commands_tasks.cpp" line="257"/>
         <location filename="../src/cli/commands_tools.cpp" line="148"/>
         <source>The line changed since the ref was taken: read the page again</source>
         <translation>Wiersz zmienił się od pobrania odwołania: odczytaj stronę ponownie</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_extensions.cpp" line="740"/>
+        <location filename="../src/cli/commands_extensions.cpp" line="766"/>
         <source>No event %1: %2</source>
         <translation>Nie ma zdarzenia %1: %2</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_extensions.cpp" line="750"/>
+        <location filename="../src/cli/commands_extensions.cpp" line="776"/>
         <source>The extension registers no %1 hook</source>
         <translation>Rozszerzenie nie rejestruje reakcji na %1</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_extensions.cpp" line="771"/>
+        <location filename="../src/cli/commands_extensions.cpp" line="797"/>
         <source>What to run? Give Luau code (or --stdin)</source>
         <translation>Co uruchomić? Podaj kod Luau (albo --stdin)</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_extensions.cpp" line="819"/>
+        <location filename="../src/cli/commands_extensions.cpp" line="845"/>
         <source>Give either the whole page (--content, --stdin) or its code (--code)</source>
         <translation>Podaj albo całą stronę (--content, --stdin), albo jej kod (--code)</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_extensions.cpp" line="834"/>
+        <location filename="../src/cli/commands_extensions.cpp" line="860"/>
         <source>%1 exists: replacing it needs --expect-hash with its hash (extension show)</source>
         <translation>%1 istnieje: zastąpienie jej wymaga --expect-hash z jej skrótem (extension show)</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_extensions.cpp" line="866"/>
+        <location filename="../src/cli/commands_extensions.cpp" line="892"/>
         <source>Unknown permission %1: write, ai</source>
         <translation>Nieznane uprawnienie %1: write, ai</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_extensions.cpp" line="869"/>
+        <location filename="../src/cli/commands_extensions.cpp" line="895"/>
         <source>The whole page is written anew: give --content to keep its text</source>
         <translation>Cała strona jest zapisana od nowa: podaj --content, by zachować jej tekst</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_extensions.cpp" line="880"/>
+        <location filename="../src/cli/commands_extensions.cpp" line="906"/>
         <source>Not written: the extension does not load: %1 (--force writes it anyway)</source>
         <translation>Nie zapisano: rozszerzenie się nie wczytuje: %1 (--force i tak je zapisze)</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_extensions.cpp" line="905"/>
+        <location filename="../src/cli/commands_extensions.cpp" line="931"/>
         <source>The app runs this code once the user approves it on that device: Settings → Extensions, or Run on the page&apos;s state line</source>
         <translation>Aplikacja uruchomi ten kod, gdy użytkownik zatwierdzi go na tamtym urządzeniu: Ustawienia → Rozszerzenia albo Uruchom w wierszu stanu strony</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_extensions.cpp" line="928"/>
+        <location filename="../src/cli/commands_extensions.cpp" line="954"/>
         <source>The extension: its page&apos;s title, id or path, or a built-in one (silownia, asystent)</source>
         <translation>Rozszerzenie: tytuł, identyfikator albo ścieżka jego strony, albo wbudowane (silownia, asystent)</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_extensions.cpp" line="932"/>
+        <location filename="../src/cli/commands_extensions.cpp" line="958"/>
         <source>Answers to its questions in order, a JSON list: text for b.ask and b.choose, an object for b.form, null to cancel</source>
         <translation>Odpowiedzi na jego pytania po kolei, lista JSON: tekst dla b.ask i b.choose, obiekt dla b.form, null, by anulować</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_extensions.cpp" line="937"/>
+        <location filename="../src/cli/commands_extensions.cpp" line="963"/>
         <source>The reference for writing extensions (Luau, the b API, recipes)</source>
         <translation>Opis pisania rozszerzeń (Luau, API b, przepisy)</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_extensions.cpp" line="940"/>
+        <location filename="../src/cli/commands_extensions.cpp" line="966"/>
         <source>Only the sections whose heading has these words (Views, Recipes, Hooks …)</source>
         <translation>Tylko części, których nagłówek zawiera te słowa (Views, Recipes, Hooks …)</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_extensions.cpp" line="943"/>
+        <location filename="../src/cli/commands_extensions.cpp" line="969"/>
         <source>docs/EXTENSIONS.md as this build has it; `sections` lists the headings.</source>
         <translation>docs/EXTENSIONS.md w wersji z tej kompilacji; `sections` wymienia nagłówki.</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_extensions.cpp" line="947"/>
+        <location filename="../src/cli/commands_extensions.cpp" line="973"/>
         <source>The extension pages of the notebook (their state on this device) and the built-in ones</source>
         <translation>Strony rozszerzeń notatnika (ich stan na tym urządzeniu) i rozszerzenia wbudowane</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_extensions.cpp" line="951"/>
+        <location filename="../src/cli/commands_extensions.cpp" line="977"/>
         <source>state: approved (runs in the app), approval (waits for the user to approve this code), off, problem (no ```luau block), duplicate (another page has the id).</source>
         <translation>state: approved (działa w aplikacji), approval (czeka, aż użytkownik zatwierdzi ten kod), off (wyłączone), problem (brak bloku ```luau), duplicate (inna strona ma ten identyfikator).</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_extensions.cpp" line="956"/>
+        <location filename="../src/cli/commands_extensions.cpp" line="982"/>
         <source>An extension&apos;s code, page and properties (a built-in&apos;s source)</source>
         <translation>Kod, strona i właściwości rozszerzenia (źródło wbudowanego)</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_extensions.cpp" line="958"/>
+        <location filename="../src/cli/commands_extensions.cpp" line="984"/>
         <source>`hash` is what extension write --expect-hash needs; for a built-in, `overridePage` is the page that replaces it when written.</source>
         <translation>`hash` jest potrzebny dla extension write --expect-hash; dla wbudowanego `overridePage` to strona, która je zastąpi, gdy zostanie zapisana.</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_extensions.cpp" line="963"/>
+        <location filename="../src/cli/commands_extensions.cpp" line="989"/>
         <source>Load an extension in a sandbox: errors with the page&apos;s line, or what it registers</source>
         <translation>Wczytaj rozszerzenie w piaskownicy: błędy z wierszem strony albo to, co rejestruje</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_extensions.cpp" line="967"/>
+        <location filename="../src/cli/commands_extensions.cpp" line="993"/>
         <source>A page text to check instead of the saved page (nothing is written)</source>
         <translation>Tekst strony do sprawdzenia zamiast zapisanej strony (nic nie jest zapisywane)</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_extensions.cpp" line="970"/>
+        <location filename="../src/cli/commands_extensions.cpp" line="996"/>
         <source>Nothing needs approving and nothing is written: the top-level code runs once (as when the app loads it) over the notebook with writes only computed. Exit 6 when it does not load.</source>
         <translation>Nic nie wymaga zatwierdzenia i nic nie jest zapisywane: kod najwyższego poziomu działa raz (jak przy wczytaniu w aplikacji) na notatniku, a zapisy są tylko obliczane. Kod wyjścia 6, gdy się nie wczytuje.</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_extensions.cpp" line="976"/>
+        <location filename="../src/cli/commands_extensions.cpp" line="1002"/>
         <source>Try an extension&apos;s command, view, view action or hook in a sandbox (writes shown as diffs, never made)</source>
         <translation>Wypróbuj polecenie, widok, akcję widoku albo reakcję rozszerzenia w piaskownicy (zapisy jako różnice, nigdy niewykonane)</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_extensions.cpp" line="981"/>
+        <location filename="../src/cli/commands_extensions.cpp" line="1007"/>
         <source>The command&apos;s name</source>
         <translation>Nazwa polecenia</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_extensions.cpp" line="982"/>
+        <location filename="../src/cli/commands_extensions.cpp" line="1008"/>
         <source>Draw this view instead: its node tree</source>
         <translation>Zamiast tego narysuj ten widok: jego drzewo węzłów</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_extensions.cpp" line="984"/>
+        <location filename="../src/cli/commands_extensions.cpp" line="1010"/>
         <source>With --view: call this action of the view</source>
         <translation>Z --view: wywołaj tę akcję widoku</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_extensions.cpp" line="986"/>
+        <location filename="../src/cli/commands_extensions.cpp" line="1012"/>
         <source>The view&apos;s params, the action&apos;s args or the command&apos;s ctx.args, a JSON object</source>
         <translation>Parametry widoku, argumenty akcji albo ctx.args polecenia, obiekt JSON</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_extensions.cpp" line="988"/>
+        <location filename="../src/cli/commands_extensions.cpp" line="1014"/>
         <source>Call the extension&apos;s hooks of this event (save, change)</source>
         <translation>Wywołaj reakcje rozszerzenia na to zdarzenie (save, change)</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_extensions.cpp" line="990"/>
-        <source>The page on screen: ctx.page, the hook&apos;s page</source>
-        <translation>Strona na ekranie: ctx.page, strona reakcji</translation>
+        <location filename="../src/cli/commands_extensions.cpp" line="1016"/>
+        <source>Compute this macro instead ({{ext:extension/macro …}}): its value and what a note shows</source>
+        <translation>Zamiast tego policz to makro ({{ext:rozszerzenie/makro …}}): jego wartość i to, co pokaże notatka</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_extensions.cpp" line="992"/>
+        <location filename="../src/cli/commands_extensions.cpp" line="1018"/>
+        <source>Fill this template variable instead ({{extension/variable …}})</source>
+        <translation>Zamiast tego wypełnij tę zmienną szablonu ({{rozszerzenie/zmienna …}})</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_extensions.cpp" line="1020"/>
+        <source>With --macro or --variable: its arguments as written (&quot;Przysiad, 30&quot;)</source>
+        <translation>Z --macro albo --variable: jego argumenty tak, jak je zapisano (&quot;Przysiad, 30&quot;)</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_extensions.cpp" line="1022"/>
+        <source>The page on screen: ctx.page, the hook&apos;s page, the note of a macro</source>
+        <translation>Strona na ekranie: ctx.page, strona reakcji, notatka makra</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_extensions.cpp" line="1024"/>
         <source>The block under the caret (ctx.block): its ref, Dom.md#L12@hash</source>
         <translation>Blok pod kursorem (ctx.block): jego odwołanie, Dom.md#L12@hash</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_extensions.cpp" line="994"/>
+        <location filename="../src/cli/commands_extensions.cpp" line="1026"/>
         <source>A fresh engine each run, as the app&apos;s limits (2 s a call). Writes go to `writes` as diffs, and later reads of the run see them; b.ai gets an error. Exit 6 when it fails.</source>
         <translation>Za każdym razem nowy silnik z limitami aplikacji (2 s na wywołanie). Zapisy trafiają do `writes` jako różnice, a późniejsze odczyty tego uruchomienia je widzą; b.ai dostaje błąd. Kod wyjścia 6, gdy zawiedzie.</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_extensions.cpp" line="1000"/>
+        <location filename="../src/cli/commands_extensions.cpp" line="1032"/>
         <source>Run Luau code with the notebook&apos;s b, as the app&apos;s Luau console</source>
         <translation>Uruchom kod Luau z b notatnika, jak konsola Luau w aplikacji</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_extensions.cpp" line="1003"/>
+        <location filename="../src/cli/commands_extensions.cpp" line="1035"/>
         <source>Luau: an expression gives its value (b.today(), #b.pages()), statements run</source>
         <translation>Luau: wyrażenie daje swoją wartość (b.today(), #b.pages()), instrukcje są wykonywane</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_extensions.cpp" line="1008"/>
+        <location filename="../src/cli/commands_extensions.cpp" line="1040"/>
         <source>Run it inside this extension, after loading it (its globals)</source>
         <translation>Uruchom go wewnątrz tego rozszerzenia, po jego wczytaniu (jego zmienne globalne)</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_extensions.cpp" line="1010"/>
+        <location filename="../src/cli/commands_extensions.cpp" line="1042"/>
         <source>Writes are only computed (`writes`), as in extension run.</source>
         <translation>Zapisy są tylko obliczane (`writes`), jak w extension run.</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_extensions.cpp" line="1012"/>
+        <location filename="../src/cli/commands_extensions.cpp" line="1044"/>
         <source>Write an extension page (checked first; the app runs it once the user approves it)</source>
         <translation>Zapisz stronę rozszerzenia (najpierw sprawdzoną; aplikacja uruchomi ją, gdy użytkownik ją zatwierdzi)</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_extensions.cpp" line="1016"/>
+        <location filename="../src/cli/commands_extensions.cpp" line="1048"/>
         <source>Its title (a new page goes to Extensions/), or an extension page to replace</source>
         <translation>Jego tytuł (nowa strona trafia do Extensions/) albo strona rozszerzenia do zastąpienia</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_extensions.cpp" line="1021"/>
+        <location filename="../src/cli/commands_extensions.cpp" line="1053"/>
         <source>The whole page: properties (tags: [extension]), text, ```luau blocks</source>
         <translation>Cała strona: właściwości (tags: [extension]), tekst, bloki ```luau</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_extensions.cpp" line="1025"/>
+        <location filename="../src/cli/commands_extensions.cpp" line="1057"/>
         <source>Only the Luau code: the page is made around it</source>
         <translation>Sam kod Luau: strona powstanie wokół niego</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_extensions.cpp" line="1027"/>
+        <location filename="../src/cli/commands_extensions.cpp" line="1059"/>
         <source>With --code: the description Settings shows</source>
         <translation>Z --code: opis, który pokazują Ustawienia</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_extensions.cpp" line="1029"/>
+        <location filename="../src/cli/commands_extensions.cpp" line="1061"/>
         <source>With --code: write, ai (comma-separated)</source>
         <translation>Z --code: write, ai (rozdzielone przecinkami)</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_extensions.cpp" line="1031"/>
+        <location filename="../src/cli/commands_extensions.cpp" line="1063"/>
         <source>The folder of a new page (default: Extensions/, Rozszerzenia/ in a Polish notebook)</source>
         <translation>Folder nowej strony (domyślnie Extensions/, w polskim notatniku Rozszerzenia/)</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_extensions.cpp" line="1034"/>
+        <location filename="../src/cli/commands_extensions.cpp" line="1066"/>
         <source>Replacing a page: its hash (extension show), refused when it changed</source>
         <translation>Przy zastępowaniu strony: jej skrót (extension show); odmowa, gdy się zmieniła</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_extensions.cpp" line="1036"/>
+        <location filename="../src/cli/commands_extensions.cpp" line="1068"/>
         <source>Write it even when it does not load</source>
         <translation>Zapisz, nawet gdy się nie wczytuje</translation>
     </message>
     <message>
-        <location filename="../src/cli/commands_extensions.cpp" line="1037"/>
+        <location filename="../src/cli/commands_extensions.cpp" line="1069"/>
         <source>Refused when the code does not load (exit 6, the error with its line) or when a page of that name is no extension. The old text is kept in the version history. The app never runs code written here before the user approves it there.</source>
         <translation>Odmowa, gdy kod się nie wczytuje (kod wyjścia 6, błąd z wierszem) albo gdy strona o tej nazwie nie jest rozszerzeniem. Stary tekst zostaje w historii wersji. Aplikacja nigdy nie uruchomi zapisanego tu kodu, zanim użytkownik go tam nie zatwierdzi.</translation>
     </message>
@@ -21740,7 +21756,7 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
     </message>
     <message>
         <location filename="../src/app/editor/pagecontroller_properties.cpp" line="79"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="8975"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="9067"/>
         <source>An alias with this character cannot be used in a link</source>
         <translation>Aliasu z takim znakiem nie da się użyć w linku</translation>
     </message>
