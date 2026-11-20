@@ -13,6 +13,7 @@
 
 #include <QBuffer>
 #include <QClipboard>
+#include <QCursor>
 #include <QDateTime>
 #include <QFile>
 #include <QFileInfo>
