@@ -11,7 +11,9 @@
 #include <QDir>
 #include <QFileInfo>
 #include <QLocale>
+#if QT_CONFIG(process) // (not in the browser: AI agents run in the desktop app)
 #include <QProcess>
+#endif
 #include <QStandardPaths>
 #include <QTimer>
 #include <QUrl>
@@ -50,18 +52,19 @@ struct WorkspaceAgents::Terminal
 
 namespace {
 
+// (What only the desktop app uses is [[maybe_unused]] where there are no programs: the browser.)
 /// The longest end of an agent's standard error kept (its last line says why it stopped).
-constexpr qsizetype MaxErrorChars = 4000;
+[[maybe_unused]] constexpr qsizetype MaxErrorChars = 4000;
 /// The output a terminal keeps when the agent names no limit.
-constexpr qint64 DefaultOutputLimit = 1024 * 1024;
+[[maybe_unused]] constexpr qint64 DefaultOutputLimit = 1024 * 1024;
 /// The terminals one agent may have at once.
-constexpr int MaxTerminals = 32;
+[[maybe_unused]] constexpr int MaxTerminals = 32;
 /// The key of an agent's check (no conversation's path starts with it).
 const QString CheckKey = u"\x1f" "check"_s;
 const QString StoreKey = u"acp/sessions"_s;
 
 /// The last line of `errors` that says something ("" none).
-QString lastLine(const QString &errors)
+[[maybe_unused]] QString lastLine(const QString &errors)
 {
     const QStringList lines = errors.split(u'\n', Qt::SkipEmptyParts);
     for (qsizetype i = lines.size() - 1; i >= 0; --i) {
@@ -77,17 +80,27 @@ QString fileUrl(const QString &root, const QString &path)
     return QUrl::fromLocalFile(QDir(root).filePath(path)).toString(QUrl::FullyEncoded);
 }
 
-QString findProgram(const QString &program)
+[[maybe_unused]] QString findProgram(const QString &program)
 {
     return QStandardPaths::findExecutable(program);
 }
 
-bool windows()
+[[maybe_unused]] bool windows()
 {
 #ifdef Q_OS_WIN
     return true;
 #else
     return false;
+#endif
+}
+
+/// `command` split as a shell would.
+QStringList splitCommand(const QString &command)
+{
+#if QT_CONFIG(process)
+    return QProcess::splitCommand(command);
+#else
+    return command.split(u' ', Qt::SkipEmptyParts);
 #endif
 }
 
@@ -174,6 +187,7 @@ WorkspaceAgents::~WorkspaceAgents()
     for (Terminal *t : std::as_const(m_terminals))
         delete t; // (their programs: below)
     m_terminals.clear();
+#if QT_CONFIG(process)
     for (Process *p : std::as_const(m_processes)) {
         p->client->blockSignals(true);
         p->process->disconnect(this);
@@ -189,6 +203,7 @@ WorkspaceAgents::~WorkspaceAgents()
         }
         delete process;
     }
+#endif
 }
 
 // ---- pure parts ---------------------------------------------------------------------------------------
@@ -229,7 +244,7 @@ QString WorkspaceAgents::toolsProgram()
 QStringList WorkspaceAgents::commandLine(const QString &command, bool onWindows,
                                          const std::function<QString(const QString &)> &find)
 {
-    return resolved(QProcess::splitCommand(command), onWindows, find);
+    return resolved(splitCommand(command), onWindows, find);
 }
 
 QString WorkspaceAgents::context(const QString &root, const QString &conversation, const QString &page, bool tools)
@@ -356,6 +371,10 @@ QString WorkspaceAgents::label(const QString &partner) const
 
 WorkspaceAgents::Process *WorkspaceAgents::processFor(const AgentConfig &config)
 {
+#if !QT_CONFIG(process)
+    Q_UNUSED(config)
+    return nullptr;
+#else
     if (Process *p = m_processes.value(config.id))
         return p;
     auto *p = new Process;
@@ -437,7 +456,7 @@ WorkspaceAgents::Process *WorkspaceAgents::processFor(const AgentConfig &config)
                 if (!message.trimmed().isEmpty())
                     details << message.trimmed();
                 QStringList terminal;
-                const QStringList program = QProcess::splitCommand(p->config.command);
+                const QStringList program = splitCommand(p->config.command);
                 for (const acp::AuthMethod &m : methods) {
                     if (m.terminal) {
                         terminal << (program + m.args).join(u' ');
@@ -542,6 +561,7 @@ WorkspaceAgents::Process *WorkspaceAgents::processFor(const AgentConfig &config)
     qCInfo(logging::lcApp, "AI agent %s: starting %s", qUtf8Printable(config.name), qUtf8Printable(config.command));
     proc->start();
     return p;
+#endif
 }
 
 void WorkspaceAgents::activityDue(const QString &path)
@@ -557,6 +577,9 @@ void WorkspaceAgents::activityDue(const QString &path)
 
 void WorkspaceAgents::stopProcess(const QString &id)
 {
+#if !QT_CONFIG(process)
+    Q_UNUSED(id)
+#else
     Process *p = m_processes.take(id);
     if (!p)
         return;
@@ -572,6 +595,7 @@ void WorkspaceAgents::stopProcess(const QString &id)
     proc->terminate();
     QTimer::singleShot(3000, proc, [proc] { proc->kill(); });
     delete p;
+#endif
 }
 
 acp::TurnInput WorkspaceAgents::baseInput(const AgentConfig &config) const
@@ -600,7 +624,7 @@ void WorkspaceAgents::run(const QString &path, const QString &partner, const QVa
                                     .arg(id));
         return;
     }
-    if (QProcess::splitCommand(agent->command).isEmpty()) {
+    if (splitCommand(agent->command).isEmpty()) {
         Q_EMIT failed(path, tr("The AI agent “%1” has no command: set it in Settings → Extensions → AI agents.").arg(agent->name));
         return;
     }
@@ -906,7 +930,7 @@ void WorkspaceAgents::learn(const QString &agent, const QString &key)
 void WorkspaceAgents::check(const QString &id)
 {
     const AgentConfig *agent = config(id);
-    if (!available() || !agent || QProcess::splitCommand(agent->command).isEmpty()) {
+    if (!available() || !agent || splitCommand(agent->command).isEmpty()) {
         Q_EMIT checked(id, false, tr("The AI agent “%1” has no command: set it in Settings → Extensions → AI agents.")
                                           .arg(agent ? agent->name : id));
         return;
@@ -998,6 +1022,11 @@ void WorkspaceAgents::terminalRequest(Process *p, const QString &key, const QJso
                                       const QJsonObject &params)
 {
     acp::Client *client = p->client;
+#if !QT_CONFIG(process)
+    Q_UNUSED(key)
+    Q_UNUSED(params)
+    client->respondError(id, acp::MethodNotFound, u"Method not found: %1"_s.arg(method));
+#else
     if (method == u"terminal/create") {
         const QString agent = p->config.id;
         const auto count = std::ranges::count_if(m_terminals, [&agent](const Terminal *t) { return t->agent == agent; });
@@ -1106,10 +1135,15 @@ void WorkspaceAgents::terminalRequest(Process *p, const QString &key, const QJso
     } else {
         client->respondError(id, acp::MethodNotFound, u"Method not found: %1"_s.arg(method));
     }
+#endif
 }
 
 void WorkspaceAgents::endTerminals(const QString &agent, const QString &key)
 {
+#if !QT_CONFIG(process)
+    Q_UNUSED(agent)
+    Q_UNUSED(key)
+#else
     for (auto it = m_terminals.begin(); it != m_terminals.end();) {
         Terminal *t = it.value();
         if (t->agent != agent || (!key.isEmpty() && t->key != key)) {
@@ -1126,6 +1160,7 @@ void WorkspaceAgents::endTerminals(const QString &agent, const QString &key)
         }
         delete t;
     }
+#endif
 }
 
 // ---- the record of sessions ---------------------------------------------------------------------------
