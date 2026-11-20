@@ -10,9 +10,11 @@ Extensions come from two places:
   and versioned like any note. Saved, a page's code runs again at once;
 * **built in** — the **gym** (`src/core/extensions/builtin/silownia.luau`, docs/SYNTAX.md §5 "Gym",
   docs/UI.md "Gym"), the **habits** (`nawyki.luau`, docs/SYNTAX.md §5 "Habits", docs/UI.md
-  "Habits"; on by default, and `brulion-cli habit …` runs it too) and the **AI assistant**
-  (`asystent.luau`, "AI" below), switched on and off in Settings → Extensions and written with the
-  same API: nothing of them is C++ but the views' QML headers.
+  "Habits"; on by default, and `brulion-cli habit …` runs it too), the **flashcards**
+  (`fiszki.luau`, docs/SYNTAX.md "Flashcards", docs/UI.md "Flashcards"; on by default, `brulion-cli
+  card …` runs it too) and the **AI assistant** (`asystent.luau`, "AI" below), switched on and off
+  in Settings → Extensions and written with the same API: nothing of them is C++ but the views'
+  QML headers.
 
 The idea is Emacs' and TiddlyWiki's: the program you use is made of code you can read and change
 from inside it. Emacs gives every user an init file and `eval-buffer`, a `*scratch*` buffer and a
@@ -177,6 +179,7 @@ Reading needs no permission.
 | `b.blocks({ prop = "habit" })`, `b.blocks({ prop = { "habit", "nawyk" }, tag = …, journal = …, from = …, to = … })` | every block that has one of the properties among its own (`habit:: …` under it; the frontmatter never — a page's properties are `b.pages`'), in the same order and with the same `journal` / `from` / `to`. With `tag` the blocks that have both. With `page` (`{ page = …, prop = … }`, and `{ page = …, tag = … }` too) only that page's matching blocks, at any depth — not its top level |
 | `b.search(text, limit?)` | full-text search as the search view does it (words in any form, diacritics optional, the best first): one hit per page, at most `limit` (20 by default, 200 at most), each `{ page, date?, excerpt, line?, ref?, text?, task? }` — `line` the line that matches best (the most of the query's words; the first of those lines), counted from 1 (none when only the title matched), `ref` / `text` / `task` of the block holding that line |
 | `b.query(source, limit?, offset?)` | a query of the query language (docs/SYNTAX.md §10): `{ total, items }` with at most `limit` items (50 by default, 1000 at most; a smaller `limit:` in the query wins) from item `offset` on (0, the first, by default): `total` counts them all, so a script pages through any number 1000 at a time. Items are blocks without `children`, `path` and `line`, plus a task's `due`, `scheduled`, `start` and a reminder's `reminder` (`"2026-11-12 09:00"`); for `type:pages` they are `{ page, date? }`. Weeks (`due:this-week` …) start on the notebook's first day of the week (`b.weekStart()`). A query that is none is an error with the reason |
+| `b.lines(name)` | the page's lines as written — indentation, markers, comments and all, without line endings (a BOM is no part of the first) —, each `{ text, ref }`: `ref` names that line as a block's `ref` names its first, for `b.replaceLine`, `b.insertLine` and `b.removeLine` (and the block functions when the line is a block's first). `nil` for a page that does not exist. What the flashcards write their scheduling comments with: a card's lines are no blocks of their own |
 | `b.attachments()` | the notebook's files that are no notes — pictures, PDFs, any other file —, as paths in the notebook (`"assets/receipt.jpg"`), sorted; nothing of the hidden and ignored folders |
 | `b.revision()` | a number that changes whenever a note changes — the editor, a sync, any extension's write: what a script computed from the notebook stays true while it is the same (the habits keep their statistics so) |
 | `b.checkExtension(name, text)` | loads `text` as the extension page `name` would load (a new page: where new pages go), in an engine of its own — its top-level code runs with 1 s and 32 MB, writes only computed, nothing stays registered, no approval needed: `{ ok, id, title, path, permissions, problems, commands = { { name, label, block } }, views = { { name, label, icon, actions } }, hooks = { events… }, printed, writes? }`, or `ok = false` with `error`, `line` (the page's line, from 1) and `status` (`"timeout"` …). Text that is no extension page (no tag, no code) has `ok = false` too. Inside such a check it reports an error instead of checking again |
@@ -262,6 +265,10 @@ line stays byte for byte, the index, the views and a sync follow.
 | `b.removeBlock(ref)` | removes the block with its children; the lines around it stay as they are |
 | `b.setTask(ref, status)` | the checkbox alone, as a click sets it: `status` one character (`"x"`, `" "`, `"/"`, `"-"`, `">"`); done adds `✅` today, cancelled `❌` today, leaving them takes those away, a Logseq keyword stays a keyword (`DONE`, `CANCELED`), a recurring task gets its next occurrence (docs/SYNTAX.md §5), a plain line becomes a task. The same status again writes nothing. Returns the block's `ref` |
 | `b.setProperty(ref, key, value)` | the block's property `key` (letters, digits, `-`, `_`): an existing `key:: …` line (any letter case) gets `value`, else a line `key:: value` goes after the block's last property line — or right under its first line —, indented as its other properties, else under its text. `value` is one line of text or a number; `nil` or `""` removes the property's lines. Returns the block's `ref` |
+| `b.setProperties(ref, { { key, value }, … })` | several properties of the block at once, in one write, each as `b.setProperty` sets it — new ones in the list's order (Logseq's six `card-*` properties of a flashcard). At most 64. Returns the block's `ref` |
+| `b.replaceLine(ref, text)` | the whole line `ref` names (of `b.lines`, or a block's) becomes `text`, as written — nothing of the old line is kept, not its indentation; its line ending stays. One line. Returns the line's new `ref` |
+| `b.insertLine(ref, text, where?)` | the lines of `text`, as written, `"after"` the line `ref` names (the default) or `"before"` it — an empty line stays one; new lines end as the note's do. Returns the first new line's `ref` |
+| `b.removeLine(ref)` | that line alone (not the block's other lines, not its children) |
 
 These calls never write over what they did not see: when the line changed since `ref` was read —
 a sync arrived, another pane edited it — the call is an error with `stale:` in it and nothing is
@@ -328,6 +335,24 @@ b.command("archive", function(ctx)
 end, { label = "Archive the done tasks" })
 ```
 
+```luau
+-- Lines as written: the first "TODO" line of the page on screen gets a comment, every other byte
+-- stays — a line that is no block's first (a paragraph's second line) too.
+b.command("seen", function(ctx)
+    if ctx.page == "" then
+        return "Open a page first."
+    end
+    for _, line in b.lines(ctx.page) or {} do
+        if line.text:find("TODO", 1, true) and not line.text:find("<!-- seen -->", 1, true) then
+            local ref = b.replaceLine(line.ref, line.text .. " <!-- seen -->")
+            b.insertLine(ref, "<!-- seen on " .. b.now() .. " -->", "after")
+            return "Marked: " .. line.text
+        end
+    end
+    return "No TODO on this page"
+end, { label = "Mark the first TODO as seen" })
+```
+
 ### Helpers
 
 | Function | Gives |
@@ -348,6 +373,8 @@ end, { label = "Archive the done tasks" })
 | `b.parseWeekdays(text)` | a list of weekdays as people write it — `"pn, śr i pt"` → `{ 1, 3, 5 }`, `"mondays and fridays"` → `{ 1, 5 }` —, or `nil` when any of them is no weekday |
 | `b.formatRecurrence(rule, lang?)` | such a rule in words, in `lang` (`"pl"` or `"en"`, the interface's by default): `"every week on Monday, Friday"`. A rule that is none is an error |
 | `b.formatNumber(n, decimals?)` | the number as text with at most `decimals` decimals (2 by default, 10 at most), trailing zeros dropped, with a decimal comma in a Polish notebook: `82,5`, `100`. Not a number: `—` |
+| `b.toUtc(datetime)` | a local date and time (`"2026-11-20 18:30"`, a date alone at midnight) as the moment in UTC that other apps write — `"2026-11-20T17:30:00.000Z"` in Warsaw in November — by the device's time zone (its daylight saving time on that day). For other apps' formats only (Logseq's `card-next-schedule::`, the Spaced Repetition plugin's FSRS dates): Brulion's own dates are local. Not a date: an error |
+| `b.fromUtc(iso)` | such a moment (`"…Z"`, `"…+01:00"`, with or without milliseconds) as the local `"2026-11-20 18:30"`; `nil` for anything else, a time without its zone too |
 | `b.lang()` | the language to write notes in: `"pl"` or `"en"` |
 | `b.uiLang()` | the interface's language (labels, messages): `"pl"` or `"en"`. The app gives both the interface's language today; ask each for what it means |
 | `b.log(text)`, `print(…)` | a line in the Luau console and in the event log, under the extension's name (at most 4000 characters). `print` joins its values with tabs and writes a table as `table`: build the text yourself |
@@ -438,7 +465,11 @@ of one of the app's icons (`assets/icons/`: `folder`, `calendar-check`, `chart-c
 | `b.ui.heading(text)` | a heading |
 | `b.ui.text(text, muted?)`, `b.ui.text(text, { muted?, icon?, tone? })` | a paragraph that wraps; `muted = true` in the secondary colour; `icon` one of the app's icons before it (`"flame"`); `tone` `"success"`, `"danger"` or `"accent"` its colour |
 | `b.ui.link(page, label?, line?)` | a link that opens the page (and makes it when it does not exist) — at its `line`, counted from 1 as a block's `line` |
-| `b.ui.button(label, action, args?)` | a button that calls the view's action `action` with `args` |
+| `b.ui.button(label, action, args?, { key?, primary?, tone?, hint?, icon? })` | a button that calls the view's action `action` with `args`. `key` is its keyboard shortcut while the view has the focus — `"space"`, `"enter"`, `"escape"`, `"backspace"`, a digit, a letter, `"ctrl+z"`, shown beside its label where there is a keyboard (the flashcards' Space and 1–4); `primary = true` fills it with the accent (the one thing to do — alone in a row it takes the row); `tone` (`"success"`, `"danger"`, `"warning"`, `"info"`, `"accent"`) tints it; `hint` is a second line under its label (a grade's next interval: buttons with one share their row, four to a line); `icon` one of the app's icons |
+| `b.ui.markdown(text, { size?, align?, muted? })` | Markdown as a note shows it — emphasis, links that open their pages, tags, highlights and clozes, lists, code —, rendered by the app (escaped: never the text's own HTML). `size` `"large"` (a flashcard's question) or `"small"`, `align = "center"`, `muted = true` |
+| `b.ui.progress(value, max, label?)` | a progress bar, `value` of `max`, with a caption above it |
+| `b.ui.stats({ { label, value, tone? }, … })` | numbers side by side, each a tile with its label under it (at most 8; four to a line, two on a phone) |
+| `b.ui.divider()` | a thin line across (between a card's question and its answer) |
 | `b.ui.menu(items, label?)` | a "⋯" button whose menu lists `items` (below); `label` is its name for a screen reader and its tooltip ("More" without one). On a line of its own or in a row |
 | `b.ui.row(children)` | a card whose controls sit side by side and wrap: `check`, `stepper`, `text`, `link`, `button`, `menu`, `open`, `run` (at most 24) |
 | `b.ui.check(checked, action, args?, { menu?, label? })` | the tasks' checkbox; a tap calls the action. `checked` is `true` (done), `false` (open) or `"skipped"` (a cancelled task's look); `menu` — items, below — opens on a right-click or a long press; `label` names it for a screen reader ("Reading: done"). **Only inside a row** |
@@ -447,14 +478,18 @@ of one of the app's icons (`assets/icons/`: `folder`, `calendar-check`, `chart-c
 | `b.ui.chart({ kind, title?, labels, series })` | a chart drawn like the notes' charts: `kind` `"line"` (the default) or `"bar"`, `labels` a list of texts, `series = { { name = …, values = { … } } }` with a value per label (`nil` leaves a gap) |
 | `b.ui.month({ month, days, label? })` | a month as a grid, a cell per day under the weekdays' heads (from the notebook's first day of the week), today ringed: `month` `"2026-11"`, `days = { ["2026-11-03"] = { state, action?, args?, menu? } }` — `state` `"done"` (the success tint), `"missed"` (the danger tint), `"skipped"` (struck out), `"due"` (a thin ring), `"rest"` (nothing due: the default), `"future"` or `"outside"` (faint); a day with an `action` is a button that calls it with its `args`, its `menu` opens on a right-click or a long press. `label` is a title above it |
 | `b.ui.empty(title, text, icon?)` | an empty state: an icon (`icon`, one of the app's; else the gym's dumbbell), a title and a sentence |
-| `b.ui.open(label, view, params?)` | opens another view of the extension (`""`: this one) with `params` — a link in a row, a "back"-like button on its own |
+| `b.ui.open(label, view, params?, options?)` | opens another view of the extension (`""`: this one) with `params` — a link in a row, a "back"-like button on its own; with `options` as `b.ui.button`'s (`{ primary = true, icon = "play", key = "enter" }`) a button |
 | `b.ui.run(label, command)` | a button that runs one of the extension's commands (`ctx.page` is `""` there) |
 
 **Menus** — of `b.ui.menu`, of a check, of a month's day — are lists of items, each `{ label,
 action, args?, icon? }` (the view's action), `{ label, page, line? }` (opens the page, at its line
-counted from 1) or `{ label, journal = "2026-11-03" }` (that day's daily note); an item without a
-label or without any of those is left out, and the app gives a page and a journal item its icon
-when it has none.
+counted from 1), `{ label, view, params? }` (another view of the extension, as `b.ui.open`) or `{
+label, journal = "2026-11-03" }` (that day's daily note); an item without a label or without any of
+those is left out, and the app gives a page and a journal item its icon when it has none.
+
+**Keys**: while a view has the focus, a key pressed that a button names as its `key` (a button
+line, a row's button, an `open` with options) taps the first such button — unless a field of the
+view takes the key first (a stepper's number). Keys no button names go on as usual.
 
 A view shows at most 2000 lines; nodes it does not know are left out. `params` are the route's
 other keys — what an `open` node passed, `{}` from the palette; `view`, `extension`, `name` and
@@ -558,6 +593,37 @@ end, {
         }
     end,
 }, { label = "The journal's month", icon = "calendar" })
+```
+
+```luau
+-- Numbers, a progress bar, Markdown and a button with a keyboard shortcut (R).
+b.view("reading", function(params)
+    local read, listed = 0, 0
+    for _, task in b.query("type:tasks tag:book", 1000).items do
+        listed += 1
+        if task.task == "x" then
+            read += 1
+        end
+    end
+    return b.ui.column({
+        b.ui.stats({
+            { label = "Read", value = read, tone = "success" },
+            { label = "On the list", value = listed },
+        }),
+        b.ui.progress(read, math.max(listed, 1), `{read} of {listed} books`),
+        b.ui.divider(),
+        b.ui.markdown("**Next:** pick one from [[Books]] — or write one down ==today==."),
+        b.ui.row({
+            b.ui.button("Pick for me", "pick", {}, { key = "r", primary = true, icon = "play" }),
+            b.ui.open("All views", "", {}, { icon = "layers" }),
+        }),
+    })
+end, {
+    pick = function(args)
+        local open = b.query("type:tasks tag:book status:open", 1)
+        return if open.total > 0 then open.items[1].plain else "Nothing left to read"
+    end,
+}, { label = "Reading", icon = "book-open" })
 ```
 
 ## Hooks
@@ -1047,12 +1113,15 @@ Word count:9: b.replaceBlock: stale: the block changed since it was read (Home.m
 |---|---|
 | `b.write: permission denied: write` | the page has no `permissions: [write]` |
 | `b.ai: permission denied: ai` | the same for `ai` |
-| `b.replaceBlock: stale: …` (also `b.insertBlock`, `b.removeBlock`, `b.setTask`, `b.setProperty`) | the line changed since its `ref` was read, or its page is gone: read again |
+| `b.replaceBlock: stale: …` (also `b.insertBlock`, `b.removeBlock`, `b.setTask`, `b.setProperty`, `b.setProperties`, `b.replaceLine`, `b.insertLine`, `b.removeLine`) | the line changed since its `ref` was read, or its page is gone: read again |
 | `b.replaceBlock: not a block reference: …` (and the same four) | the `ref` is not one a block had: made by hand, without its hash, or naming a file that is no note |
 | `b.replaceBlock: the text must be one line`, `b.setProperty: the value must be one line` | no line breaks in a block's first line, nor in a property's value |
 | `b.replaceBlock: the task status must be one character`, `b.setTask: …` | `task` / `status` is `"x"`, `" "`, `"/"` …, not `"done"` |
 | `b.setProperty: cannot set the property "…"` | the key is no property name (letters, digits, `-`, `_`: not `"my key"`) |
 | `b.insertBlock: argument 3 is "after", "before" or "child"`, `b.insertBlock: nothing to insert` | the place is none of the three; `markdown` is empty or blank lines only |
+| `b.replaceLine: the text must be one line`, `b.insertLine: argument 3 is "after" or "before"` | a line break in a line; another place |
+| `b.setProperties: argument 2 must be a list of { key, value } pairs`, `b.setProperties: a value must be a text or a number` | `{ key = value }` instead of `{ { "key", "value" } }`; a table as a value |
+| `b.toUtc: not a date and time: …` | not `YYYY-MM-DD HH:MM` (or a date alone) |
 | `b.appendToPage: the page's name is empty`, `b.appendToPage: nothing to append` | a name of spaces; nothing but white space to add |
 | `b.blocks: the query needs a page, a tag or a prop` | `b.blocks({})` |
 | `b.blocks: prop must be a text or a list of texts`, `b.pages: …` | `prop = 3`: a key, or a list of keys |
@@ -1351,10 +1420,11 @@ Home:7
 | `src/core/extensions/engine.h` | `Engine`: one VM; extensions, their commands and views; calls, questions, limits |
 | `src/core/extensions/host.h` | `Host`: what an extension may ask of the app (blocks and pages by tag and property, a query from an offset, attachments, the revision, writes — a page, a journal, a block's line, status and property, blocks inserted and removed —, today and now, the week's first day, languages, the timer, the log) |
 | `src/core/extensions/notebookhost.h` | `NotebookHost`: the Host over a `Vault` and its `VaultIndex` — blocks from the index, content-preserving writes (`blockedit.h`, `notebook/journals.h`, `notebook/pages.h`, `markdown::setTaskStatus`), every ref resolved the same way (`resolveRef`: a note's line, stale when changed); a dry run that only computes them (`brulion-cli extension …`, `brulion-cli habit …`) |
-| `src/core/extensions/blockedit.h` | the pure edits behind the writes: a block's line replaced, lines inserted around a block or under it, a block removed, a property set; `plainWords` (a block's `plain`, `b.plain`) |
+| `src/core/extensions/blockedit.h` | the pure edits behind the writes: a block's line replaced, lines inserted around a block or under it, a block removed, a property set, a line replaced, inserted or removed as written (`b.replaceLine` …); `plainWords` (a block's `plain`, `b.plain`) |
 | `src/core/extensions/sandbox.h` | `checkExtension()`, `checkExtensionPage()`: an extension loaded in an engine of its own over a dry-run `NotebookHost` — `b.checkExtension`, `brulion-cli extension check / write` |
-| `src/core/extensions/builtin.h` | the built-in extensions (resources `:/extensions/…`: `silownia.luau` with `exercises.json`, `nawyki.luau`, `asystent.luau`), `builtinFor()`: which one a page overrides |
+| `src/core/extensions/builtin.h` | the built-in extensions (resources `:/extensions/…`: `silownia.luau` with `exercises.json`, `nawyki.luau`, `fiszki.luau`, `asystent.luau`), `builtinFor()`: which one a page overrides |
 | `src/cli/commands_habits.cpp` | `brulion-cli habit list / set / tick / skip`: `nawyki`'s commands `list` and `set` over a dry-run `NotebookHost`, the write it computed applied through the command line's own edit (its lock, `--dry-run`, `--diff`, hashes, exit codes) |
+| `src/cli/commands_cards.cpp` | `brulion-cli card list / due / show / review / stats`: `fiszki`'s commands the same way — a grade's writes (the card's note, the review log) each through the command line's edit |
 | `src/core/ai/ai.h` | AI for `b.ai`: the request from a script's table (pictures through an `ai::ImageLoader`), the HTTP requests of Anthropic's Messages API and of OpenAI-compatible chat APIs, reading their answers and errors; `ai::Client` over `sync::HttpTransport`, the provider "local" handed to an `ai::LocalBackend` |
 | `src/core/ai/local.h`, `localfiles.h`, `localrunner.h` | the model on the device: the models the app knows, LFM3's chat format (a request as pieces of text and control tokens, the answer read back, a long request cut), the models' files (downloads), what runs a model and the plugin with it (`llamarunner.h`: llama.cpp, only in builds with `BRULION_LOCAL_AI`) |
 | `src/app/shell/localai.h` | `AppController.localAi`: the chosen model, its download and removal, requests answered on a worker thread |
@@ -1365,7 +1435,7 @@ Home:7
 | `src/app/shell/extensionmodels.h` | `ExtensionListModel` (Settings → Extensions), `ExtensionConsoleModel` (the console's lines) |
 | `src/app/shell/extensionviewmodel.h` | `ExtensionView` (QML): a view's node tree as a list; `qml/shell/ShellExtensionView.qml` draws it |
 | `qml/views/ConsoleView.qml`, `qml/views/ExtensionRouteView.qml` | the Luau console (route `console`), an extension page's view (route `extension`) |
-| `qml/views/GymView.qml`, `qml/views/HabitsView.qml` | the built-ins' own views (routes `gym`, `habits`): a header of QML — tabs, a month row, buttons — over `ShellExtensionView` |
+| `qml/views/GymView.qml`, `qml/views/HabitsView.qml`, `qml/views/FlashcardsView.qml` | the built-ins' own views (routes `gym`, `habits`, `flashcards`): a header of QML — tabs, a month row, buttons — over `ShellExtensionView` |
 | `qml/shell/ShellExtensionQuestion.qml` | the dialog of `b.ask` / `b.choose` / `b.form` (number and text fields) |
 
 A new function of `b`: its implementation in `engine.cpp` (a thin `api…` wrapper around an `…Impl`
@@ -1381,6 +1451,14 @@ browser build — and the fastest; its type checker (not vendored yet) finds mis
 column.
 
 ## Tests
+
+`tests/core/extensions/tst_extensions_flashcards.cpp`: the flashcards (`fiszki.luau`) on a real
+notebook — FSRS-6 against py-fsrs's, ts-fsrs's and fsrs-rs's vectors (intervals, stability and
+difficulty step by step, the SM-2 conversion, the fuzz's range and generator), every card format of
+the Spaced Repetition plugin and of Logseq with Polish text and malformed lines, the state written
+and read back (FSRS and SM-2 segments, siblings, a comment on its own line, Logseq's properties,
+every other byte kept), the queue and its limits, the views' nodes, a grade and its undo, the
+review log; `tst_sync_cardmerge` the merge of two devices' reviews (`sync/cardmerge.h`).
 
 `tests/core/extensions`: the engine (sandbox escapes, limits that cannot be caught, questions,
 views, hooks, evaluation, the locale), block edits, the API added for the habits on a real notebook

@@ -2,7 +2,14 @@
 
 #include "workspaceextensions.h"
 
+#include "index/vaultindex.h"
+#include "markdown/blockdocument.h"
+#include "markdown/inlinerenderer.h"
+
+#include <QColor>
 #include <QDate>
+#include <QRegularExpression>
+#include <QTextDocumentFragment>
 
 #include <algorithm>
 #include <cmath>
@@ -28,11 +35,96 @@ QString textOf(const QVariantMap &node)
     return node.value(u"text"_s).toString();
 }
 
-/// A text node's tone: "success" | "danger" | "accent", else "".
+/// A text node's or a button's tone: "success" | "danger" | "accent" | "warning" | "info", else "".
 QString toneOf(const QVariantMap &node)
 {
     const QString tone = node.value(u"tone"_s).toString();
-    return tone == u"success" || tone == u"danger" || tone == u"accent" ? tone : QString();
+    return tone == u"success" || tone == u"danger" || tone == u"accent" || tone == u"warning" || tone == u"info"
+                   ? tone
+                   : QString();
+}
+
+/// A keyboard shortcut as the view matches it: lower case, "" for none.
+QString keyOf(const QVariantMap &node)
+{
+    return node.value(u"key"_s).toString().trimmed().toLower();
+}
+
+/// Renderer colours from QML (BlockEditor.rendererPalette's keys); missing keys keep the defaults.
+markdown::Palette paletteOf(const QVariantMap &map)
+{
+    markdown::Palette p;
+    const auto get = [&map](const QString &key, const QString &fallback) {
+        const QVariant v = map.value(key);
+        if (!v.isValid())
+            return fallback;
+        const QColor c = v.value<QColor>();
+        return c.isValid() ? c.name(QColor::HexArgb) : v.toString();
+    };
+    p.link = get(u"link"_s, p.link);
+    p.unresolved = get(u"unresolved"_s, p.unresolved);
+    p.muted = get(u"muted"_s, p.muted);
+    p.codeBackground = get(u"codeBackground"_s, p.codeBackground);
+    p.highlightBackground = get(u"highlightBackground"_s, p.highlightBackground);
+    const auto chip = [&get](const QString &name, markdown::ChipColors &c) {
+        c.foreground = get(name + u"Fg"_s, c.foreground);
+        c.background = get(name + u"Bg"_s, c.background);
+    };
+    chip(u"tag"_s, p.tag);
+    chip(u"due"_s, p.due);
+    chip(u"overdue"_s, p.overdue);
+    chip(u"scheduled"_s, p.scheduled);
+    chip(u"reminder"_s, p.reminder);
+    chip(u"alarm"_s, p.alarm);
+    chip(u"recurrence"_s, p.recurrence);
+    chip(u"done"_s, p.done);
+    chip(u"neutral"_s, p.neutral);
+    return p;
+}
+
+/// Markdown as b.ui.markdown shows it: its blocks as rich text, one paragraph each — indented by
+/// their depth, a list item after its bullet or number, a heading in bold, code and tables as
+/// preformatted text (escaped: InlineRenderer's HTML, never the text's own).
+QString markdownHtml(const QString &markdown, const markdown::RenderContext &context)
+{
+    const markdown::BlockDocument doc(markdown);
+    const markdown::InlineRenderer renderer(context);
+    static const QRegularExpression ordered(u"^\\s*(\\d{1,9}[.)])"_s);
+    QStringList parts;
+    for (int i = 0; i < doc.count(); ++i) {
+        const markdown::BlockEntry &b = doc.at(i);
+        const int indent = b.depth * 18;
+        const int below = b.trailing.contains(u'\n') ? 10 : b.kind == BlockKind::ListItem ? 2 : 6;
+        switch (b.kind) {
+        case BlockKind::Code:
+        case BlockKind::Table:
+        case BlockKind::Html:
+        case BlockKind::Frontmatter:
+            parts.append(u"<pre style=\"margin-top:0px; margin-bottom:%1px; margin-left:%2px;\">%3</pre>"_s.arg(below).arg(indent).arg(
+                    b.body.toHtmlEscaped()));
+            continue;
+        case BlockKind::Rule:
+            parts.append(u"<hr/>"_s);
+            continue;
+        default:
+            break;
+        }
+        QString html = renderer.renderBlock(b.body, b.kind);
+        if (b.kind == BlockKind::Heading)
+            html = u"<b>"_s + html + u"</b>"_s;
+        if (b.kind == BlockKind::ListItem && !b.taskStatus) {
+            const auto number = ordered.match(b.prefix);
+            html = (number.hasMatch() ? number.captured(1) + u"&nbsp;"_s : u"•&nbsp;"_s) + html;
+        }
+        if (html.isEmpty())
+            continue;
+        parts.append(u"<p style=\"margin-top:0px; margin-bottom:%1px; margin-left:%2px;\">%3</p>"_s.arg(below).arg(indent).arg(html));
+    }
+    if (parts.isEmpty())
+        return QString();
+    static const QRegularExpression room(u"margin-bottom:\\d+px;"_s);
+    parts.last().replace(room, u"margin-bottom:0px;"_s);
+    return parts.join(QString());
 }
 
 /// A check's state: "done" | "open" | "skipped" (a node without one: from `checked`).
@@ -68,6 +160,7 @@ QVariantList itemsOf(const QVariant &value)
         if (item.value(u"label"_s).toString().isEmpty())
             continue;
         if (!item.value(u"action"_s).toString().isEmpty() || !item.value(u"page"_s).toString().isEmpty()
+            || !item.value(u"view"_s).toString().isEmpty()
             || QDate::fromString(item.value(u"journal"_s).toString(), Qt::ISODate).isValid())
             out << item;
     }
@@ -77,6 +170,26 @@ QVariantList itemsOf(const QVariant &value)
 QVariantList menuOfNode(const QVariantMap &node)
 {
     return itemsOf(node.value(node.value(u"type"_s).toString() == u"menu" ? u"items"_s : u"menu"_s));
+}
+
+/// A list of tables from the script (a sequence, or numbered keys of a table with holes).
+QVariantList itemsOfList(const QVariant &value)
+{
+    if (value.metaType().id() == QMetaType::QVariantList)
+        return value.toList();
+    const QVariantMap map = value.toMap();
+    QList<int> keys;
+    for (auto it = map.cbegin(); it != map.cend(); ++it) {
+        bool ok = false;
+        const int key = it.key().toInt(&ok);
+        if (ok && key >= 1)
+            keys << key;
+    }
+    std::sort(keys.begin(), keys.end());
+    QVariantList out;
+    for (const int key : std::as_const(keys))
+        out << map.value(QString::number(key));
+    return out;
 }
 
 const QStringList kDayStates{u"outside"_s, u"future"_s, u"rest"_s, u"due"_s, u"done"_s, u"skipped"_s, u"missed"_s};
@@ -202,6 +315,10 @@ QVariant ExtensionControlsModel::value(int row, int role) const
     case IconRole: return c.value(u"icon"_s).toString();
     case ToneRole: return toneOf(c);
     case HasMenuRole: return !menuOfNode(c).isEmpty();
+    case KeyRole: return keyOf(c);
+    case PrimaryRole: return c.value(u"primary"_s).toBool();
+    case HintRole: return c.value(u"hint"_s).toString();
+    case StyledRole: return c.value(u"button"_s).toBool();
     case NumberRole: return formatExtensionNumber(c.value(u"value"_s).toDouble(), m_comma);
     case DisplayRole: {
         const QString unit = c.value(u"unit"_s).toString();
@@ -219,7 +336,8 @@ QHash<int, QByteArray> ExtensionControlsModel::roleNames() const
             {UnitRole, "controlUnit"},       {IndexRole, "controlIndex"}, {MutedRole, "controlMuted"},
             {DisplayRole, "controlDisplay"}, {NumberRole, "controlNumber"}, {StateRole, "controlState"},
             {LabelRole, "controlLabel"},     {IconRole, "controlIcon"},   {ToneRole, "controlTone"},
-            {HasMenuRole, "controlHasMenu"}};
+            {HasMenuRole, "controlHasMenu"}, {KeyRole, "controlKey"},     {PrimaryRole, "controlPrimary"},
+            {HintRole, "controlHint"},       {StyledRole, "controlStyled"}};
 }
 
 bool ExtensionControlsModel::sameKinds(const QList<QVariantMap> &controls) const
@@ -296,6 +414,16 @@ QVariant ExtensionViewModel::data(const QModelIndex &index, int role) const
     case CardRole: return l.card;
     case MonthRole: return l.month;
     case DaysRole: return l.days;
+    case HtmlRole: return l.html;
+    case SizeRole: return l.size;
+    case AlignRole: return l.align;
+    case ValueRole: return l.value;
+    case MaxRole: return l.max;
+    case ItemsRole: return l.items;
+    case KeyRole: return l.key;
+    case PrimaryRole: return l.primary;
+    case HintRole: return l.hint;
+    case StyledRole: return l.styled;
     }
     return {};
 }
@@ -306,7 +434,11 @@ QHash<int, QByteArray> ExtensionViewModel::roleNames() const
             {MutedRole, "lineMuted"},        {PageRole, "linePage"},       {CellsRole, "lineCells"},
             {ChartDataRole, "lineChartData"}, {ChartSourceRole, "lineChartSource"}, {ControlsRole, "lineControls"},
             {HasControlsRole, "lineHasControls"}, {IconRole, "lineIcon"}, {ToneRole, "lineTone"},
-            {CardRole, "lineCard"},          {MonthRole, "lineMonth"},     {DaysRole, "lineDays"}};
+            {CardRole, "lineCard"},          {MonthRole, "lineMonth"},     {DaysRole, "lineDays"},
+            {HtmlRole, "lineHtml"},          {SizeRole, "lineSize"},       {AlignRole, "lineAlign"},
+            {ValueRole, "lineValue"},        {MaxRole, "lineMax"},         {ItemsRole, "lineItems"},
+            {KeyRole, "lineKey"},            {PrimaryRole, "linePrimary"}, {HintRole, "lineHint"},
+            {StyledRole, "lineStyled"}};
 }
 
 void ExtensionViewModel::setExtensions(WorkspaceExtensions *extensions)
@@ -353,6 +485,15 @@ void ExtensionViewModel::setParams(const QVariantMap &params)
 
 void ExtensionViewModel::scheduleRefresh() { m_refreshTimer.start(); }
 
+void ExtensionViewModel::setPalette(const QVariantMap &palette)
+{
+    if (m_palette == palette)
+        return;
+    m_palette = palette;
+    Q_EMIT paletteChanged();
+    scheduleRefresh();
+}
+
 void ExtensionViewModel::setParamKey(const QString &key)
 {
     if (m_paramKey == key)
@@ -395,6 +536,19 @@ QVariantMap ExtensionViewModel::routeFor(const QString &view, const QVariantMap 
     return route;
 }
 
+QVariantMap ExtensionViewModel::tabRoute(const QString &routeView, const QString &view, const QVariantMap &params) const
+{
+    QVariantMap route;
+    for (auto it = params.cbegin(); it != params.cend(); ++it) {
+        const QString value = it.value().toString();
+        if (!value.isEmpty())
+            route.insert(it.key(), value);
+    }
+    route.insert(u"view"_s, routeView);
+    route.insert(u"tab"_s, view);
+    return route;
+}
+
 void ExtensionViewModel::refresh() { render(true); }
 
 void ExtensionViewModel::render(bool reshape)
@@ -413,6 +567,29 @@ void ExtensionViewModel::render(bool reshape)
     QList<Line> lines;
     flatten(root, 0, &lines);
     const bool comma = m_extensions && m_extensions->language() == u"pl";
+    // Markdown lines as rich text, their links resolved in the notebook.
+    std::optional<markdown::RenderContext> context;
+    for (Line &l : lines) {
+        if (l.type != u"markdown")
+            continue;
+        if (!context) {
+            context.emplace();
+            const VaultIndex *index = m_extensions ? m_extensions->index() : nullptr;
+            if (index) {
+                context->resolvePage = [index](const QString &target) -> std::optional<QString> {
+                    return index->resolveLink(target);
+                };
+                context->linkTitle = markdown::journalLinkTitle(index->config(),
+                                                                comma ? dates::UiLocale::Polish : dates::UiLocale::English,
+                                                                m_extensions->today());
+            }
+            context->today = m_extensions ? m_extensions->today() : QDate::currentDate();
+            context->locale = comma ? dates::UiLocale::Polish : dates::UiLocale::English;
+            context->palette = paletteOf(m_palette);
+        }
+        l.html = markdownHtml(l.text, *context);
+        l.title = QTextDocumentFragment::fromHtml(l.html).toPlainText().simplified(); // for screen readers
+    }
 
     // The same view drawn again, its lines of the same kinds: changed in place. Another view (or
     // params: another exercise) starts afresh, at its top.
@@ -489,6 +666,26 @@ QList<int> ExtensionViewModel::changedRoles(const Line &before, const Line &afte
         roles << MonthRole;
     if (before.days != after.days)
         roles << DaysRole;
+    if (before.html != after.html)
+        roles << HtmlRole;
+    if (before.size != after.size)
+        roles << SizeRole;
+    if (before.align != after.align)
+        roles << AlignRole;
+    if (before.value != after.value)
+        roles << ValueRole;
+    if (before.max != after.max)
+        roles << MaxRole;
+    if (before.items != after.items)
+        roles << ItemsRole;
+    if (before.key != after.key)
+        roles << KeyRole;
+    if (before.primary != after.primary)
+        roles << PrimaryRole;
+    if (before.hint != after.hint)
+        roles << HintRole;
+    if (before.styled != after.styled)
+        roles << StyledRole;
     return roles;
 }
 
@@ -547,6 +744,10 @@ void ExtensionViewModel::addLine(const QVariantMap &node, QList<Line> *lines)
     line.page = node.value(u"page"_s).toString();
     line.icon = node.value(u"icon"_s).toString();
     line.tone = toneOf(node);
+    line.key = keyOf(node);
+    line.primary = node.value(u"primary"_s).toBool();
+    line.hint = node.value(u"hint"_s).toString();
+    line.styled = node.value(u"button"_s).toBool();
     if (type == u"empty") {
         line.title = node.value(u"title"_s).toString();
     } else if (type == u"month") {
@@ -585,8 +786,35 @@ void ExtensionViewModel::addLine(const QVariantMap &node, QList<Line> *lines)
             lines->append(cells);
         }
         return;
+    } else if (type == u"markdown") {
+        const QString size = node.value(u"size"_s).toString();
+        line.size = size == u"large" || size == u"small" ? size : QString();
+        line.align = node.value(u"align"_s).toString() == u"center" ? u"center"_s : QString();
+    } else if (type == u"progress") {
+        const double max = node.value(u"max"_s).toDouble();
+        line.max = std::isfinite(max) && max > 0 ? max : 1;
+        const double value = node.value(u"value"_s).toDouble();
+        line.value = std::isfinite(value) ? std::clamp(value, 0.0, line.max) : 0;
+        line.text = node.value(u"label"_s).toString();
+    } else if (type == u"stats") {
+        for (const QVariant &v : itemsOfList(node.value(u"items"_s))) {
+            const QVariantMap item = v.toMap();
+            const QVariant value = item.value(u"value"_s);
+            QString shown = value.toString();
+            if (value.metaType().id() == QMetaType::Double || value.metaType().id() == QMetaType::Float)
+                shown = formatExtensionNumber(value.toDouble(), false);
+            if (item.value(u"label"_s).toString().isEmpty() && shown.isEmpty())
+                continue;
+            line.items << QVariantMap{{u"label"_s, item.value(u"label"_s).toString()},
+                                      {u"value"_s, shown},
+                                      {u"tone"_s, toneOf(item)}};
+            if (line.items.size() >= 8)
+                break;
+        }
+        if (line.items.isEmpty())
+            return;
     } else if (type != u"heading" && type != u"text" && type != u"link" && type != u"open" && type != u"run"
-               && type != u"button" && type != u"menu") {
+               && type != u"button" && type != u"menu" && type != u"divider") {
         return; // unknown nodes are left out
     }
     lines->append(line);
@@ -657,6 +885,8 @@ void ExtensionViewModel::activateMenuItem(int row, int control, const QString &d
     const QVariantMap chosen = menuItems(row, control, date).value(item).toMap();
     if (!chosen.value(u"action"_s).toString().isEmpty()) {
         runAction(chosen.value(u"action"_s).toString(), chosen.value(u"args"_s).toMap());
+    } else if (!chosen.value(u"view"_s).toString().isEmpty()) {
+        Q_EMIT viewRequested(chosen.value(u"view"_s).toString(), chosen.value(u"params"_s).toMap());
     } else if (!chosen.value(u"page"_s).toString().isEmpty()) {
         const int line = chosen.value(u"line"_s).toInt();
         Q_EMIT pageRequested(chosen.value(u"page"_s).toString(), line > 0 ? line - 1 : -1);
@@ -672,6 +902,26 @@ void ExtensionViewModel::activateDay(int row, const QString &date)
     const QVariantMap day = m_lines[row].node.value(u"days"_s).toMap().value(date).toMap();
     if (!day.value(u"action"_s).toString().isEmpty())
         runAction(day.value(u"action"_s).toString(), day.value(u"args"_s).toMap());
+}
+
+bool ExtensionViewModel::activateKey(const QString &key)
+{
+    const QString wanted = key.trimmed().toLower();
+    if (m_updating || wanted.isEmpty())
+        return false;
+    for (int row = 0; row < m_lines.size(); ++row) {
+        const Line &l = m_lines[row];
+        if (l.controls) {
+            for (int c = 0; c < l.controls->rowCount(); ++c) {
+                const QVariantMap control = l.controls->control(c);
+                if (keyOf(control) == wanted)
+                    return run(control, 0);
+            }
+        } else if (l.key == wanted) {
+            return run(l.node, 0);
+        }
+    }
+    return false;
 }
 
 void ExtensionViewModel::activate(int row)

@@ -115,6 +115,10 @@ class WorkspaceExtensions : public QObject {
     Q_PROPERTY(QStringList enabled READ enabled NOTIFY enabledChanged FINAL)
     Q_PROPERTY(bool gymEnabled READ gymEnabled NOTIFY enabledChanged FINAL)
     Q_PROPERTY(bool habitsEnabled READ habitsEnabled NOTIFY enabledChanged FINAL)
+    Q_PROPERTY(bool flashcardsEnabled READ flashcardsEnabled NOTIFY enabledChanged FINAL)
+    /// The flashcards to study now (the built-in `fiszki`'s command `count`: cards due and new
+    /// ones left today), counted again after notes change and every few minutes; 0 while off.
+    Q_PROPERTY(int flashcardsDue READ flashcardsDue NOTIFY flashcardsDueChanged FINAL)
     /// The language of the extensions' words: "pl" | "en".
     Q_PROPERTY(QString language READ language NOTIFY commandsChanged FINAL)
     /// The question waiting for an answer: "" (none), "ask", "choose", "form".
@@ -168,10 +172,21 @@ public:
     /// Asks the model "Say OK." with the settings as they are: the answer or the error as a message.
     Q_INVOKABLE void testAi();
 
+    /// The open notebook's index (nullptr: none) and today's date by the app's clock: what an
+    /// extension view's Markdown is rendered with (ExtensionViewModel).
+    VaultIndex *index() const { return m_index; }
+    QDate today() const;
     QStringList enabled() const { return m_enabled; }
     QString language() const { return m_language; }
     bool gymEnabled() const { return m_enabled.contains(QStringLiteral("silownia")); }
     bool habitsEnabled() const { return m_enabled.contains(QStringLiteral("nawyki")); }
+    bool flashcardsEnabled() const { return m_enabled.contains(QStringLiteral("fiszki")); }
+    int flashcardsDue() const { return m_flashcardsDue; }
+    /// The flashcards' settings on this device ({tags, newPerDay, retention}: AppSettings): given
+    /// to `fiszki` with every view's params, action's args and command's ctx.args (theirs win).
+    void setFlashcardSettings(const QVariantMap &settings);
+    /// Counts the flashcards to study now again (flashcardsDue), at once.
+    Q_INVOKABLE void refreshFlashcardsDue();
     QList<extensions::CommandInfo> commands() const;
     QList<extensions::ViewInfo> views() const;
     /// An extension's title: a built-in's in the UI language ("Siłownia"), a page's title, the
@@ -280,6 +295,7 @@ Q_SIGNALS:
     void restChanged();
     void revisionChanged();
     void aiPendingChanged();
+    void flashcardsDueChanged();
     /// A command's result or an error, for a toast (kind "info" | "success" | "error").
     void message(const QString &text, const QString &kind);
     /// A result { message, tone, button = { label, … } }: a toast with a button; its press is
@@ -400,6 +416,14 @@ private:
     QHash<int, int> m_hookFailures;
     QStringList m_changedPages;
     QTimer m_changeTimer;
+    /// The flashcards' due count: after notes change (coalesced) and every five minutes.
+    QTimer m_dueTimer;
+    QTimer m_dueClock;
+    int m_flashcardsDue = 0;
+    /// Settings the app gives a built-in with its calls (setFlashcardSettings), by its id.
+    QHash<QString, QVariantMap> m_settingsFor;
+    /// `values` under the settings of `extension` (the values win).
+    QVariantMap withSettings(const QString &extension, const QVariantMap &values) const;
     CallContext m_current; // the context of the call starting now
     QHash<int, Button> m_buttons; // the buttons of messages shown, by id
     int m_lastButton = 0;

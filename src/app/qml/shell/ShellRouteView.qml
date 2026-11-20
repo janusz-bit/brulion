@@ -140,6 +140,7 @@ Item {
         case "page": return pageView
         case "habits": return habitsView
         case "gym": return gymView
+        case "flashcards": return flashcardsView
         case "console": return consoleView
         case "chat": return chatView
         case "extension": return extensionView
@@ -338,6 +339,7 @@ Item {
     Component { id: tasksView; TasksView { route: root.tasksRoute } }
     Component { id: habitsView; HabitsView { route: root.otherRoute } }
     Component { id: gymView; GymView { route: root.otherRoute } }
+    Component { id: flashcardsView; FlashcardsView { route: root.otherRoute } }
     Component { id: consoleView; ConsoleView { route: root.otherRoute } }
     Component { id: chatView; ChatView { route: root.otherRoute; inSidePanel: root.inSidePanel } }
     Component { id: extensionView; ExtensionRouteView { route: root.otherRoute } }

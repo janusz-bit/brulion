@@ -115,6 +115,9 @@
 //                  palette; any CSS colour mapped to its nearest), markTagAt, findMarkPairs,
 //                  findHighlights, setHighlight(text, from, to, color | nullopt) (the editor's
 //                  "Highlight…": wrap, recolour, remove)
+//   cloze.h        cloze deletions of flashcards (SYNTAX "Flashcards"): findClozes(text) ->
+//                  ClozeSpan{from, to, textFrom, textTo, number, hintFrom, hintTo} (`{{c1::a}}`,
+//                  `{{c1::a::hint}}`, Logseq's `{{cloze a}}`), shown tinted by the renderer
 //   math.h         LaTeX formulas (SYNTAX §11): findMathSpans(text) -> MathSpan{from, to,
 //                  contentFrom, contentTo, display} (`$…$`, `$$…$$`), renderMath(latex, display) ->
 //                  escaped Qt rich text (Unicode symbols, <sup> / <sub>, fractions, radicals)
@@ -139,6 +142,7 @@
 
 #include "markdown/blockclipboard.h"
 #include "markdown/blockdocument.h"
+#include "markdown/cloze.h"
 #include "markdown/edit.h"
 #include "markdown/frontmatter.h"
 #include "markdown/highlight.h"

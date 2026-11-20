@@ -48,6 +48,10 @@ constexpr auto kCaptureButton = "ui/captureButton"_L1;
 constexpr auto kGym = "extensions/silownia"_L1;
 constexpr auto kHabits = "extensions/nawyki"_L1;
 constexpr auto kAssistant = "extensions/asystent"_L1;
+constexpr auto kFlashcards = "extensions/fiszki"_L1;
+constexpr auto kFlashcardsNew = "flashcards/newPerDay"_L1;
+constexpr auto kFlashcardsRetention = "flashcards/retention"_L1;
+constexpr auto kFlashcardsTags = "flashcards/tags"_L1;
 constexpr auto kAiProvider = "ai/provider"_L1;
 constexpr auto kAiModel = "ai/model"_L1;
 constexpr auto kAiLocalModel = "ai/localModel"_L1;
@@ -374,7 +378,7 @@ void AppSettings::setReducedMotion(bool on)
 
 QStringList AppSettings::sidebarItems()
 {
-    return {u"journals"_s, u"calendar"_s, u"tasks"_s,  u"habits"_s,    u"gym"_s,   u"allPages"_s,
+    return {u"journals"_s, u"calendar"_s, u"tasks"_s,  u"habits"_s,    u"gym"_s,   u"flashcards"_s, u"allPages"_s,
             u"tags"_s,     u"graph"_s,    u"search"_s, u"favorites"_s, u"recent"_s};
 }
 
@@ -385,7 +389,8 @@ QStringList AppSettings::sidebarSectionIds()
 
 QStringList AppSettings::bottomNavViews()
 {
-    return {u"journals"_s, u"calendar"_s, u"search"_s, u"tasks"_s, u"habits"_s, u"gym"_s, u"allPages"_s, u"tags"_s, u"graph"_s};
+    return {u"journals"_s, u"calendar"_s, u"search"_s, u"tasks"_s, u"habits"_s, u"gym"_s, u"flashcards"_s,
+            u"allPages"_s, u"tags"_s, u"graph"_s};
 }
 
 QStringList AppSettings::defaultBottomNavTabs()
@@ -575,6 +580,65 @@ void AppSettings::setAssistantEnabled(bool on)
         Q_EMIT assistantEnabledChanged();
 }
 
+bool AppSettings::flashcardsEnabled() const
+{
+    return m_settings->value(kFlashcards, true).toBool();
+}
+
+void AppSettings::setFlashcardsEnabled(bool on)
+{
+    if (store(kFlashcards, on, flashcardsEnabled()))
+        Q_EMIT flashcardsEnabledChanged();
+}
+
+int AppSettings::flashcardsNewPerDay() const
+{
+    bool ok = false;
+    const int n = m_settings->value(kFlashcardsNew, 20).toInt(&ok);
+    return ok ? std::clamp(n, 0, 9999) : 20;
+}
+
+void AppSettings::setFlashcardsNewPerDay(int n)
+{
+    if (store(kFlashcardsNew, std::clamp(n, 0, 9999), flashcardsNewPerDay()))
+        Q_EMIT flashcardsSettingsChanged();
+}
+
+int AppSettings::flashcardsRetention() const
+{
+    bool ok = false;
+    const int n = m_settings->value(kFlashcardsRetention, 90).toInt(&ok);
+    return ok ? std::clamp(n, 70, 99) : 90;
+}
+
+void AppSettings::setFlashcardsRetention(int percent)
+{
+    if (store(kFlashcardsRetention, std::clamp(percent, 70, 99), flashcardsRetention()))
+        Q_EMIT flashcardsSettingsChanged();
+}
+
+QString AppSettings::flashcardsTags() const
+{
+    const QString tags = m_settings->value(kFlashcardsTags, QString()).toString().simplified();
+    return tags.isEmpty() ? u"flashcards, fiszki"_s : tags;
+}
+
+void AppSettings::setFlashcardsTags(const QString &tags)
+{
+    QString clean = tags.simplified();
+    if (clean.isEmpty())
+        clean = u"flashcards, fiszki"_s;
+    if (store(kFlashcardsTags, clean, flashcardsTags()))
+        Q_EMIT flashcardsSettingsChanged();
+}
+
+QVariantMap AppSettings::flashcardsSettings() const
+{
+    return {{u"tags"_s, flashcardsTags()},
+            {u"newPerDay"_s, flashcardsNewPerDay()},
+            {u"retention"_s, flashcardsRetention() / 100.0}};
+}
+
 QStringList AppSettings::enabledExtensions() const
 {
     QStringList out;
@@ -584,6 +648,8 @@ QStringList AppSettings::enabledExtensions() const
         out << u"nawyki"_s;
     if (assistantEnabled())
         out << u"asystent"_s;
+    if (flashcardsEnabled())
+        out << u"fiszki"_s;
     return out;
 }
 

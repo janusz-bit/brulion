@@ -80,6 +80,15 @@ class AppSettings : public QObject {
     /// The built-in habits extension (`nawyki`; Settings → Extensions; docs/UI.md "Habits"): the
     /// Habits view, its palette commands. On by default (habits were always there).
     Q_PROPERTY(bool habitsEnabled READ habitsEnabled WRITE setHabitsEnabled NOTIFY habitsEnabledChanged FINAL)
+    /// The built-in flashcards extension (`fiszki`; Settings → Extensions; docs/UI.md
+    /// "Flashcards"): the Flashcards view, its due count, its palette commands. On by default.
+    Q_PROPERTY(bool flashcardsEnabled READ flashcardsEnabled WRITE setFlashcardsEnabled NOTIFY flashcardsEnabledChanged FINAL)
+    /// Flashcards on this device (Settings → Extensions → Flashcards; passed to the extension with
+    /// each view and count): new cards a day (0 … 9999, 20), the desired retention in percent (70 …
+    /// 99, 90), the tags that make a note a deck ("flashcards, fiszki").
+    Q_PROPERTY(int flashcardsNewPerDay READ flashcardsNewPerDay WRITE setFlashcardsNewPerDay NOTIFY flashcardsSettingsChanged FINAL)
+    Q_PROPERTY(int flashcardsRetention READ flashcardsRetention WRITE setFlashcardsRetention NOTIFY flashcardsSettingsChanged FINAL)
+    Q_PROPERTY(QString flashcardsTags READ flashcardsTags WRITE setFlashcardsTags NOTIFY flashcardsSettingsChanged FINAL)
     /// The built-in AI assistant extension (asks about a page, summarises it). Off by default.
     Q_PROPERTY(bool assistantEnabled READ assistantEnabled WRITE setAssistantEnabled NOTIFY assistantEnabledChanged FINAL)
     /// AI for extensions (b.ai, docs/EXTENSIONS.md "AI") on this device: "anthropic" | "openai"
@@ -274,6 +283,16 @@ public:
     void setHabitsEnabled(bool on);
     bool assistantEnabled() const;
     void setAssistantEnabled(bool on);
+    bool flashcardsEnabled() const;
+    void setFlashcardsEnabled(bool on);
+    int flashcardsNewPerDay() const;
+    void setFlashcardsNewPerDay(int n);
+    int flashcardsRetention() const;
+    void setFlashcardsRetention(int percent);
+    QString flashcardsTags() const;
+    void setFlashcardsTags(const QString &tags);
+    /// The flashcards' settings as the extension takes them ({tags, newPerDay, retention}).
+    QVariantMap flashcardsSettings() const;
     /// The ids of the built-in extensions switched on ("silownia", "asystent").
     QStringList enabledExtensions() const;
     QString aiProvider() const;
@@ -474,6 +493,8 @@ Q_SIGNALS:
     void gymEnabledChanged();
     void habitsEnabledChanged();
     void assistantEnabledChanged();
+    void flashcardsEnabledChanged();
+    void flashcardsSettingsChanged();
     void aiChanged();
     void editorLineSpacingChanged();
     void editorFontChanged();

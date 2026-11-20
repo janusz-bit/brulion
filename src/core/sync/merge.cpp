@@ -1,5 +1,7 @@
 #include "sync/merge.h"
 
+#include "sync/cardmerge.h"
+
 #include "sync/diff.h"
 
 #include <QHash>
@@ -81,7 +83,8 @@ std::optional<QStringList> besideChange(const QStringList &base, const QStringLi
 }
 
 /// Resolve one diff3 conflict region, or std::nullopt when it is a real conflict.
-std::optional<QStringList> resolveRegion(const QStringList &base, const QStringList &local, const QStringList &remote)
+std::optional<QStringList> resolveRegion(const QStringList &base, const QStringList &local, const QStringList &remote,
+                                         CardSide cardSide = CardSide::Unknown)
 {
     if (local == remote)
         return local;
@@ -89,6 +92,10 @@ std::optional<QStringList> resolveRegion(const QStringList &base, const QStringL
         return remote;
     if (remote == base)
         return local;
+    // Flashcards both devices reviewed (their scheduling comments, Logseq's card-* properties):
+    // line by line, the later review (sync/cardmerge.h) — before the union of two additions.
+    if (const std::optional<QStringList> cards = mergeCardState(base, local, remote, cardSide))
+        return cards;
     if (base.isEmpty())
         return unionLines(local, remote);
     // One side only added lines next to lines the other side changed — diff3 calls adjacent
@@ -226,12 +233,38 @@ MergeResult merge3(const QString &base, const QString &local, const QString &rem
     const SplitText b = splitText(remote);
     MergeResult result;
     const QList<Diff3Region> regions = diff3Regions(a.lines, o.lines, b.lines);
-    for (const Diff3Region &region : regions) {
+    // A Logseq card's properties changed on both sides may fall into several regions (an
+    // unchanged card-repeats:: between them): each side's whole run of card-* lines says which
+    // review is the later (sync/cardmerge.h).
+    const auto allCardProperties = [](const QStringList &lines) {
+        return !lines.isEmpty() && std::ranges::all_of(lines, isCardProperty);
+    };
+    const auto inRun = [&](const Diff3Region &r) {
+        return r.conflict ? allCardProperties(r.a) && allCardProperties(r.b) : allCardProperties(r.ok);
+    };
+    QList<CardSide> cardSides(regions.size(), CardSide::Unknown);
+    for (qsizetype i = 0; i < regions.size(); ++i) {
+        if (!regions[i].conflict || !inRun(regions[i]))
+            continue;
+        qsizetype first = i, last = i;
+        while (first > 0 && inRun(regions[first - 1]))
+            --first;
+        while (last + 1 < regions.size() && inRun(regions[last + 1]))
+            ++last;
+        QStringList localRun, remoteRun;
+        for (qsizetype k = first; k <= last; ++k) {
+            localRun += regions[k].conflict ? regions[k].a : regions[k].ok;
+            remoteRun += regions[k].conflict ? regions[k].b : regions[k].ok;
+        }
+        cardSides[i] = laterCardSide(localRun, remoteRun);
+    }
+    for (qsizetype i = 0; i < regions.size(); ++i) {
+        const Diff3Region &region = regions[i];
         if (!region.conflict) {
             appendOk(result.hunks, region.ok);
             continue;
         }
-        if (const std::optional<QStringList> resolved = resolveRegion(region.o, region.a, region.b)) {
+        if (const std::optional<QStringList> resolved = resolveRegion(region.o, region.a, region.b, cardSides[i])) {
             appendOk(result.hunks, *resolved);
         } else {
             result.clean = false;

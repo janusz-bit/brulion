@@ -142,6 +142,7 @@ void addPageCommands(QList<Command> &out);
 void addJournalCommands(QList<Command> &out);
 void addTaskCommands(QList<Command> &out);
 void addHabitCommands(QList<Command> &out);
+void addCardCommands(QList<Command> &out);
 void addIndexCommands(QList<Command> &out);
 void addToolCommands(QList<Command> &out);
 void addAppCommands(QList<Command> &out);

@@ -12,7 +12,9 @@
 #include "lualib.h"
 
 #include <QDate>
+#include <QDateTime>
 #include <QRandomGenerator>
+#include <QTimeZone>
 
 #include <algorithm>
 #include <climits>
@@ -72,7 +74,36 @@ function ui.menu(items, label) return { type = "menu", items = present(items), l
 function ui.month(spec)
     return { type = "month", month = spec.month, days = spec.days, label = spec.label }
 end
-function ui.button(label, action, args) return { type = "button", label = label, action = action, args = args } end
+-- options: { key = "space" | "enter" | "1" … | "ctrl+z" (a keyboard shortcut of the view),
+-- primary = true, tone = "danger" | "success" | "accent" | "warning", hint = "4 d" (a second line) }
+function ui.button(label, action, args, options)
+    local node = { type = "button", label = label, action = action, args = args }
+    if type(options) == "table" then
+        node.key = options.key
+        node.primary = options.primary == true
+        node.tone = options.tone
+        node.hint = options.hint
+        node.icon = options.icon
+    end
+    return node
+end
+-- Markdown as a note shows it (rendered by the app, links that open their pages); options:
+-- { size = "large" | "small", align = "center", muted = true }
+function ui.markdown(text, options)
+    local node = { type = "markdown", text = text }
+    if type(options) == "table" then
+        node.size = options.size
+        node.align = options.align
+        node.muted = options.muted == true
+    end
+    return node
+end
+function ui.progress(value, max, label)
+    return { type = "progress", value = value, max = max, label = label }
+end
+-- Numbers side by side: { { label = "Due", value = 12, tone = "accent" }, … }
+function ui.stats(items) return { type = "stats", items = present(items) } end
+function ui.divider() return { type = "divider" } end
 -- checked: true, false or "skipped" (a cancelled task's look); options: { menu = items, label = … }
 function ui.check(checked, action, args, options)
     local state = if checked == "skipped" then "skipped" elseif checked == true then "done" else "open"
@@ -109,7 +140,19 @@ function ui.table(columns, rows)
     return { type = "table", columns = columns, rows = rows }
 end
 function ui.empty(title, text, icon) return { type = "empty", title = title, text = text, icon = icon } end
-function ui.open(label, view, params) return { type = "open", label = label, view = view, params = params } end
+-- options as b.ui.button's: { primary = true, icon = "play", key = "enter", tone = … } — a button
+-- rather than a link
+function ui.open(label, view, params, options)
+    local node = { type = "open", label = label, view = view, params = params }
+    if type(options) == "table" then
+        node.key = options.key
+        node.primary = options.primary == true
+        node.tone = options.tone
+        node.icon = options.icon
+        node.button = true
+    end
+    return node
+end
 function ui.run(label, command) return { type = "run", label = label, command = command } end
 return table.freeze(ui)
 )luau";
@@ -696,6 +739,13 @@ void Engine::pushEnvironment(const QString &extension)
     set("removeBlock", &Engine::apiRemoveBlock);
     set("setTask", &Engine::apiSetTask);
     set("setProperty", &Engine::apiSetProperty);
+    set("setProperties", &Engine::apiSetProperties);
+    set("toUtc", &Engine::apiToUtc);
+    set("fromUtc", &Engine::apiFromUtc);
+    set("lines", &Engine::apiLines);
+    set("replaceLine", &Engine::apiReplaceLine);
+    set("insertLine", &Engine::apiInsertLine);
+    set("removeLine", &Engine::apiRemoveLine);
     // b.ai = factory(raw): the raw C function yields; the Luau wrapper raises its errors.
     lua_getref(L, m_aiFactoryRef);
     lua_pushlstring(L, id.constData(), size_t(id.size()));
@@ -1140,6 +1190,13 @@ int Engine::apiInsertBlock(lua_State *L) { return finishApi(L, self(L)->insertBl
 int Engine::apiRemoveBlock(lua_State *L) { return finishApi(L, self(L)->removeBlockImpl(L)); }
 int Engine::apiSetTask(lua_State *L) { return finishApi(L, self(L)->setTaskImpl(L)); }
 int Engine::apiSetProperty(lua_State *L) { return finishApi(L, self(L)->setPropertyImpl(L)); }
+int Engine::apiSetProperties(lua_State *L) { return finishApi(L, self(L)->setPropertiesImpl(L)); }
+int Engine::apiToUtc(lua_State *L) { return finishApi(L, self(L)->toUtcImpl(L)); }
+int Engine::apiFromUtc(lua_State *L) { return finishApi(L, self(L)->fromUtcImpl(L)); }
+int Engine::apiLines(lua_State *L) { return finishApi(L, self(L)->linesImpl(L)); }
+int Engine::apiReplaceLine(lua_State *L) { return finishApi(L, self(L)->replaceLineImpl(L)); }
+int Engine::apiInsertLine(lua_State *L) { return finishApi(L, self(L)->insertLineImpl(L)); }
+int Engine::apiRemoveLine(lua_State *L) { return finishApi(L, self(L)->removeLineImpl(L)); }
 
 int Engine::apiRevision(lua_State *L)
 {
@@ -1975,6 +2032,155 @@ int Engine::setPropertyImpl(lua_State *L)
         return failWith(L, u"b.setProperty: "_s + error);
     Unlimited unlimited(&m_unlimited);
     pushString(L, newRef);
+    return 1;
+}
+
+int Engine::linesImpl(lua_State *L)
+{
+    QString name;
+    if (!argString(L, 1, "b.lines", &name))
+        return kRaise;
+    const std::optional<QVariantList> lines = m_host->lines(name);
+    Unlimited unlimited(&m_unlimited);
+    if (lines)
+        pushVariant(L, *lines);
+    else
+        lua_pushnil(L);
+    return 1;
+}
+
+int Engine::replaceLineImpl(lua_State *L)
+{
+    const QString extension = extensionOf(L);
+    QString ref, text;
+    if (!argString(L, 1, "b.replaceLine", &ref) || !argString(L, 2, "b.replaceLine", &text))
+        return kRaise;
+    if (text.contains(u'\n') || text.contains(u'\r'))
+        return failWith(L, u"b.replaceLine: the text must be one line"_s);
+    if (!mayWrite(L, extension, "b.replaceLine"))
+        return kRaise;
+    QString newRef;
+    const QString error = m_host->replaceLine(extension, ref, text, &newRef);
+    if (!error.isEmpty())
+        return failWith(L, u"b.replaceLine: "_s + error);
+    Unlimited unlimited(&m_unlimited);
+    pushString(L, newRef);
+    return 1;
+}
+
+int Engine::insertLineImpl(lua_State *L)
+{
+    const QString extension = extensionOf(L);
+    QString ref, text, where;
+    if (!argString(L, 1, "b.insertLine", &ref) || !argString(L, 2, "b.insertLine", &text)
+        || !argOptString(L, 3, "b.insertLine", &where))
+        return kRaise;
+    if (!where.isEmpty() && where != u"after" && where != u"before")
+        return failWith(L, u"b.insertLine: argument 3 is \"after\" or \"before\""_s);
+    if (!mayWrite(L, extension, "b.insertLine"))
+        return kRaise;
+    QString newRef;
+    const QString error = m_host->insertLines(extension, ref, text, where == u"before", &newRef);
+    if (!error.isEmpty())
+        return failWith(L, u"b.insertLine: "_s + error);
+    Unlimited unlimited(&m_unlimited);
+    pushString(L, newRef);
+    return 1;
+}
+
+int Engine::removeLineImpl(lua_State *L)
+{
+    const QString extension = extensionOf(L);
+    QString ref;
+    if (!argString(L, 1, "b.removeLine", &ref))
+        return kRaise;
+    if (!mayWrite(L, extension, "b.removeLine"))
+        return kRaise;
+    const QString error = m_host->removeLine(extension, ref);
+    if (!error.isEmpty())
+        return failWith(L, u"b.removeLine: "_s + error);
+    return 0;
+}
+
+int Engine::setPropertiesImpl(lua_State *L)
+{
+    const QString extension = extensionOf(L);
+    QString ref;
+    QVariant value;
+    if (!argString(L, 1, "b.setProperties", &ref))
+        return kRaise;
+    if (lua_type(L, 2) != LUA_TTABLE)
+        return failWith(L, u"b.setProperties: argument 2 must be a list of { key, value } pairs"_s);
+    if (!argValue(L, 2, "b.setProperties", &value))
+        return kRaise;
+    QList<std::pair<QString, QString>> props;
+    for (const QVariant &v : value.toList()) {
+        const QVariantList pair = v.toList();
+        if (pair.isEmpty() || pair.size() > 2 || pair.at(0).metaType().id() != QMetaType::QString)
+            return failWith(L, u"b.setProperties: argument 2 must be a list of { key, value } pairs"_s);
+        QString text;
+        if (pair.size() == 2) {
+            const QVariant &x = pair.at(1);
+            const int type = x.metaType().id();
+            if (type == QMetaType::Double || type == QMetaType::LongLong || type == QMetaType::Int)
+                text = numberToVariant(x.toDouble()).toString();
+            else if (type == QMetaType::QString)
+                text = x.toString();
+            else if (x.isValid())
+                return failWith(L, u"b.setProperties: a value must be a text or a number"_s);
+        }
+        if (text.contains(u'\n') || text.contains(u'\r'))
+            return failWith(L, u"b.setProperties: the value must be one line"_s);
+        props.append({pair.at(0).toString().trimmed(), text});
+    }
+    if (props.size() > 64)
+        return failWith(L, u"b.setProperties: at most 64 properties at once"_s);
+    if (!mayWrite(L, extension, "b.setProperties"))
+        return kRaise;
+    QString newRef;
+    const QString error = props.isEmpty() ? QString() : m_host->setProperties(extension, ref, props, &newRef);
+    if (!error.isEmpty())
+        return failWith(L, u"b.setProperties: "_s + error);
+    Unlimited unlimited(&m_unlimited);
+    pushString(L, props.isEmpty() ? ref : newRef);
+    return 1;
+}
+
+int Engine::toUtcImpl(lua_State *L)
+{
+    QString text;
+    if (!argString(L, 1, "b.toUtc", &text))
+        return kRaise;
+    const QString t = text.trimmed();
+    const QDate date = QDate::fromString(t.left(10), Qt::ISODate);
+    QTime time(0, 0);
+    if (t.size() > 10) {
+        time = QTime::fromString(t.mid(11).trimmed(), u"H:mm"_s);
+        if (!time.isValid())
+            time = QTime::fromString(t.mid(11).trimmed(), u"H:mm:ss"_s);
+    }
+    if (!date.isValid() || !time.isValid() || (t.size() > 10 && t.at(10) != u' ' && t.at(10) != u'T'))
+        return failWith(L, u"b.toUtc: not a date and time: "_s + text);
+    const QDateTime local(date, time, QTimeZone::LocalTime);
+    Unlimited unlimited(&m_unlimited);
+    pushString(L, local.toUTC().toString(u"yyyy-MM-dd'T'HH:mm:ss.zzz'Z'"_s));
+    return 1;
+}
+
+int Engine::fromUtcImpl(lua_State *L)
+{
+    QString text;
+    if (!argString(L, 1, "b.fromUtc", &text))
+        return kRaise;
+    QDateTime at = QDateTime::fromString(text.trimmed(), Qt::ISODateWithMs);
+    if (!at.isValid())
+        at = QDateTime::fromString(text.trimmed(), Qt::ISODate);
+    Unlimited unlimited(&m_unlimited);
+    // Only a time with its zone ("Z", "+01:00") is a moment: anything else is nil.
+    if (!at.isValid() || at.timeSpec() == Qt::LocalTime)
+        lua_pushnil(L);
+    else
+        pushString(L, at.toLocalTime().toString(u"yyyy-MM-dd HH:mm"_s));
     return 1;
 }
 

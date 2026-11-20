@@ -207,9 +207,68 @@ WorkspaceExtensions::WorkspaceExtensions(Clock clock, QObject *parent)
     m_pagesTimer.setSingleShot(true);
     m_pagesTimer.setInterval(0);
     connect(&m_pagesTimer, &QTimer::timeout, this, &WorkspaceExtensions::processPages);
+    // The flashcards' due count: once the notes stop changing for a moment, and every five
+    // minutes (a learning card's step ends, a new day begins).
+    m_dueTimer.setSingleShot(true);
+    m_dueTimer.setInterval(1500ms);
+    connect(&m_dueTimer, &QTimer::timeout, this, &WorkspaceExtensions::refreshFlashcardsDue);
+    m_dueClock.setInterval(5min);
+    connect(&m_dueClock, &QTimer::timeout, this, &WorkspaceExtensions::refreshFlashcardsDue);
+}
+
+QVariantMap WorkspaceExtensions::withSettings(const QString &extension, const QVariantMap &values) const
+{
+    const auto it = m_settingsFor.constFind(extension);
+    if (it == m_settingsFor.constEnd())
+        return values;
+    QVariantMap out = *it;
+    for (auto v = values.cbegin(); v != values.cend(); ++v)
+        out.insert(v.key(), v.value());
+    return out;
+}
+
+void WorkspaceExtensions::setFlashcardSettings(const QVariantMap &settings)
+{
+    if (m_settingsFor.value(u"fiszki"_s) == settings)
+        return;
+    m_settingsFor.insert(u"fiszki"_s, settings);
+    Q_EMIT changed(); // its views draw again with them
+    m_dueTimer.start();
+}
+
+void WorkspaceExtensions::refreshFlashcardsDue()
+{
+    m_dueTimer.stop();
+    int due = 0;
+    if (m_engine && flashcardsEnabled()) {
+        if (m_engine->isRunning() || isWaiting()) {
+            m_dueTimer.start(); // after the call, or the question's answer
+            return;
+        }
+        const QVariantMap ctx{{u"page"_s, QString()},
+                              {u"selection"_s, QString()},
+                              {u"args"_s, withSettings(u"fiszki"_s, {})}};
+        const extensions::Result r = m_engine->runCommand(u"fiszki"_s, u"count"_s, ctx);
+        if (r.ok()) {
+            const QVariantMap n = r.value.toMap();
+            due = n.value(u"due"_s).toInt() + n.value(u"new"_s).toInt();
+        } else if (r.status != extensions::Status::NotFound) {
+            qCWarning(lcApp, "flashcards' count: %s", qUtf8Printable(r.error.section(u'\n', 0, 0)));
+        }
+    }
+    if (flashcardsEnabled() && m_engine)
+        m_dueClock.start();
+    else
+        m_dueClock.stop();
+    if (due != m_flashcardsDue) {
+        m_flashcardsDue = due;
+        Q_EMIT flashcardsDueChanged();
+    }
 }
 
 WorkspaceExtensions::~WorkspaceExtensions() = default;
+
+QDate WorkspaceExtensions::today() const { return m_clock ? m_clock().date() : QDate::currentDate(); }
 
 void WorkspaceExtensions::attach(Vault *vault, VaultIndex *index)
 {
@@ -217,6 +276,7 @@ void WorkspaceExtensions::attach(Vault *vault, VaultIndex *index)
     m_index = index;
     // Views show the notebook: a note changed anywhere (the editor, a sync) draws them again.
     connect(m_index, &VaultIndex::changed, this, &WorkspaceExtensions::changed);
+    connect(m_index, &VaultIndex::changed, this, [this] { m_dueTimer.start(); });
     m_pages.clear();
     m_scanned = false;
     loadTrust();
@@ -229,6 +289,12 @@ void WorkspaceExtensions::detach()
         disconnect(m_index, nullptr, this, nullptr);
     cancelQuestion();
     m_changeTimer.stop();
+    m_dueTimer.stop();
+    m_dueClock.stop();
+    if (m_flashcardsDue != 0) {
+        m_flashcardsDue = 0;
+        Q_EMIT flashcardsDueChanged();
+    }
     m_engine.reset();
     m_host.reset();
     m_vault = nullptr;
@@ -272,6 +338,7 @@ void WorkspaceExtensions::setEnabled(const QStringList &ids)
     m_enabled = ids;
     Q_EMIT enabledChanged();
     reconcile();
+    m_dueTimer.start();
 }
 
 void WorkspaceExtensions::setNotifier(std::function<void(const QString &, const QString &)> notify)
@@ -1163,7 +1230,7 @@ void WorkspaceExtensions::runCommand(const QString &extension, const QString &na
         return;
     QVariantMap ctx{{u"page"_s, path.isEmpty() ? QString() : paths::pageTitle(path)},
                     {u"selection"_s, QString()},
-                    {u"args"_s, args}};
+                    {u"args"_s, withSettings(extension, args)}};
     if (!path.isEmpty() && line >= 0) {
         const QVariantMap block = m_host->blockAt(path, line);
         if (!block.isEmpty())
@@ -1191,7 +1258,7 @@ QVariantMap WorkspaceExtensions::render(const QString &extension, const QString 
 {
     if (!m_engine || isWaiting())
         return {};
-    const extensions::Result r = m_engine->render(extension, view, params);
+    const extensions::Result r = m_engine->render(extension, view, withSettings(extension, params));
     if (r.status == extensions::Status::Suspended) {
         m_engine->cancel(r.call); // a view never waits (b.ask, b.ai)
         if (error)
@@ -1218,7 +1285,7 @@ bool WorkspaceExtensions::act(const QString &extension, const QString &view, con
     m_current.fromAction = true;
     m_current.extension = extension;
     m_current.view = view;
-    const extensions::Result r = m_engine->act(extension, view, action, args);
+    const extensions::Result r = m_engine->act(extension, view, action, withSettings(extension, args));
     handleResult(r);
     m_current = CallContext{};
     return r.ok() || r.status == extensions::Status::Suspended;

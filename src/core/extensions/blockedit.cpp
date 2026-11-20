@@ -246,6 +246,65 @@ std::optional<QString> removeBlockLines(const QString &content, int line, int en
     return text::joinLines(lines);
 }
 
+std::optional<QString> replaceLineText(const QString &content, int line, const QString &text)
+{
+    if (text.contains(u'\n') || text.contains(u'\r') || line < 0)
+        return std::nullopt;
+    QList<text::Line> lines = text::splitLines(content);
+    const int count = int(lines.size()) - (lines.size() > 1 && lines.last().text.isEmpty() && lines.last().eol.isEmpty() ? 1 : 0);
+    if (line >= count)
+        return std::nullopt;
+    // A BOM belongs to the file, not to the line the script read.
+    const bool bom = line == 0 && lines[0].text.startsWith(QChar(0xFEFF));
+    lines[line].text = bom && !text.startsWith(QChar(0xFEFF)) ? QChar(0xFEFF) + text : text;
+    return text::joinLines(lines);
+}
+
+std::optional<QString> insertLinesAt(const QString &content, int line, const QString &text, bool before, int *firstLine)
+{
+    QList<text::Line> lines = text::splitLines(content);
+    const int count = int(lines.size()) - (lines.size() > 1 && lines.last().text.isEmpty() && lines.last().eol.isEmpty() ? 1 : 0);
+    if (line < 0 || line >= count)
+        return std::nullopt;
+    QString normalized = text;
+    normalized.replace(u"\r\n"_s, u"\n"_s);
+    normalized.replace(u'\r', u'\n');
+    const QStringList added = normalized.split(u'\n');
+    const int at = before ? line : line + 1;
+    const QString eol = text::preferredEol(lines, at > 0 ? at - 1 : 0);
+    QList<text::Line> inserted;
+    for (const QString &t : added)
+        inserted << text::Line{t, eol, 0};
+    // Before the first line of a note with a BOM: the BOM stays the file's first character.
+    if (at == 0 && lines[0].text.startsWith(QChar(0xFEFF))) {
+        lines[0].text.remove(0, 1);
+        inserted[0].text.prepend(QChar(0xFEFF));
+    }
+    if (at >= int(lines.size()) || (at == count && lines[at - 1].eol.isEmpty())) {
+        // After the note's last line, which has no line break: it gets one, the new last line none.
+        lines[at - 1].eol = eol;
+        inserted.last().eol.clear();
+    }
+    for (qsizetype i = 0; i < inserted.size(); ++i)
+        lines.insert(at + i, inserted[i]);
+    if (firstLine)
+        *firstLine = at;
+    return text::joinLines(lines);
+}
+
+std::optional<QString> removeLineAt(const QString &content, int line)
+{
+    // The first line of a note with a BOM: the BOM stays, on the line that becomes the first.
+    const QList<text::Line> lines = text::splitLines(content);
+    if (line == 0 && !lines.isEmpty() && lines[0].text.startsWith(QChar(0xFEFF))) {
+        std::optional<QString> out = removeBlockLines(content, 0, 0);
+        if (out && !out->isEmpty())
+            out->prepend(QChar(0xFEFF));
+        return out;
+    }
+    return removeBlockLines(content, line, line);
+}
+
 std::optional<QString> setBlockProperty(const QString &content, int line, int ownEndLine, const QString &key,
                                         const QString &value)
 {

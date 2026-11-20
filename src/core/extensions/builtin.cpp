@@ -51,7 +51,13 @@ QList<BuiltinExtension> builtinExtensions()
         habits.extension.permissions = {u"write"_s};
         habits.titleEn = u"Habits"_s;
         habits.titlePl = u"Nawyki"_s;
-        return QList<BuiltinExtension>{gym, assistant, habits};
+        BuiltinExtension cards;
+        cards.extension.id = u"fiszki"_s;
+        cards.extension.source = QString::fromUtf8(resource(u"fiszki.luau"_s));
+        cards.extension.permissions = {u"write"_s};
+        cards.titleEn = u"Flashcards"_s;
+        cards.titlePl = u"Fiszki"_s;
+        return QList<BuiltinExtension>{gym, assistant, habits, cards};
     }();
     return builtins;
 }

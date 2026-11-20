@@ -243,6 +243,13 @@ private:
     static int apiRemoveBlock(lua_State *L);
     static int apiSetTask(lua_State *L);
     static int apiSetProperty(lua_State *L);
+    static int apiSetProperties(lua_State *L);
+    static int apiToUtc(lua_State *L);
+    static int apiFromUtc(lua_State *L);
+    static int apiLines(lua_State *L);
+    static int apiReplaceLine(lua_State *L);
+    static int apiInsertLine(lua_State *L);
+    static int apiRemoveLine(lua_State *L);
 
     int commandImpl(lua_State *L);
     int viewImpl(lua_State *L);
@@ -282,6 +289,13 @@ private:
     int removeBlockImpl(lua_State *L);
     int setTaskImpl(lua_State *L);
     int setPropertyImpl(lua_State *L);
+    int setPropertiesImpl(lua_State *L);
+    int toUtcImpl(lua_State *L);
+    int fromUtcImpl(lua_State *L);
+    int linesImpl(lua_State *L);
+    int replaceLineImpl(lua_State *L);
+    int insertLineImpl(lua_State *L);
+    int removeLineImpl(lua_State *L);
 
     bool mayWrite(lua_State *L, const QString &extension, const char *function);
     void pushEnvironment(const QString &extension);

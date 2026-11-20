@@ -7,7 +7,8 @@ import Brulion
 // ShellRail — the sidebar's narrow column of views (docs/UI.md "Sidebar"). At the top the
 // notebook: its first letter, a click opens the notebook switcher (the recent notebooks, the
 // documentation, another folder). Then the views as icon buttons, their names in tooltips:
-// Journal, Calendar, Tasks, Habits, All pages, Tags, Graph, Search (without the ones
+// Journal, Calendar, Tasks, Habits, Gym, Flashcards (with the count of cards to study now), All
+// pages, Tags, Graph, Search (without the ones
 // hidden in Settings → Appearance → Layout; on phones also Import notes). They scroll when the
 // window is too low for all. At the bottom the sync status (ShellSyncFooter, compact; a click
 // syncs now, a right click or long press opens the sync center) and Settings. On wide windows the rail stays at the window's left edge when the page panel
@@ -28,6 +29,7 @@ Rectangle {
         { entryView: "tasks", entryAlso: "", entryTitle: qsTr("Tasks"), entryIcon: "list-todo" },
         { entryView: "habits", entryAlso: "", entryTitle: qsTr("Habits"), entryIcon: "flame" },
         { entryView: "gym", entryAlso: "", entryTitle: qsTr("Gym"), entryIcon: "dumbbell" },
+        { entryView: "flashcards", entryAlso: "", entryTitle: qsTr("Flashcards"), entryIcon: "layers" },
         { entryView: "allPages", entryAlso: "", entryTitle: qsTr("All pages"), entryIcon: "files" },
         { entryView: "tags", entryAlso: "tag", entryTitle: qsTr("Tags"), entryIcon: "tags" },
         { entryView: "graph", entryAlso: "", entryTitle: qsTr("Graph"), entryIcon: "waypoints" },
@@ -59,6 +61,8 @@ Rectangle {
     component RailButton: BIconButton {
         id: button
         property bool selected: false
+        /// A count at the icon's corner (the flashcards to study now); 0: none.
+        property int badge: 0
         checked: selected
         toolTipBeside: true
         Layout.alignment: Qt.AlignHCenter
@@ -74,6 +78,16 @@ Rectangle {
             radius: 2
             color: Theme.accent
         }
+        BBadge {
+            objectName: "railBadge"
+            visible: button.badge > 0
+            x: button.width - width + 2
+            y: 1
+            count: button.badge
+            variant: "accent"
+            Accessible.ignored: true
+        }
+        Accessible.description: button.badge > 0 ? qsTr("%n to study now", "", button.badge) : ""
     }
 
     ColumnLayout {
@@ -157,6 +171,8 @@ Rectangle {
                         // habits only while they are switched on (Settings → Extensions).
                         visible: AppSettings.sidebarHidden.indexOf(entryView) < 0 && (entryView !== "gym" || AppSettings.gymEnabled)
                                  && (entryView !== "habits" || AppSettings.habitsEnabled)
+                                 && (entryView !== "flashcards" || AppSettings.flashcardsEnabled)
+                        badge: entryView === "flashcards" ? Workspace.extensions.flashcardsDue : 0
                         label: entryTitle
                         iconName: entryIcon
                         shortcut: AppController.routeText(ShortcutMap.sequences, "go." + entryView)

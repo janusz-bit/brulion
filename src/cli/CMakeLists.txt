@@ -15,6 +15,7 @@ qt_add_library(brulion_cli STATIC
     commands_common.cpp
     commands_extensions.cpp
     commands_habits.cpp
+    commands_cards.cpp
     commands_index.cpp
     commands_journal.cpp
     commands_meta.cpp

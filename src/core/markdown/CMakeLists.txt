@@ -9,6 +9,7 @@ brulion_add_core_module(markdown
         markdown.h
         blockclipboard.h blockclipboard.cpp
         blockdocument.h blockdocument.cpp
+        cloze.h cloze.cpp
         edit.h edit.cpp
         frontmatter.h frontmatter_p.h frontmatter.cpp
         highlight.h highlight.cpp

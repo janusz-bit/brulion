@@ -67,4 +67,22 @@ std::optional<QString> removeBlockLines(const QString &content, int line, int en
 std::optional<QString> setBlockProperty(const QString &content, int line, int ownEndLine, const QString &key,
                                         const QString &value);
 
+// Lines as written (b.replaceLine, b.insertLine, b.removeLine): no indentation, marker or field is
+// added or kept — the script gives each whole line; every other line and every line ending stays.
+
+/// `content` with line `line` (0-based) replaced by `text`, its line ending kept; nullopt when the
+/// line does not exist or `text` has a line break.
+std::optional<QString> replaceLineText(const QString &content, int line, const QString &text);
+
+/// `content` with the lines of `text` (line breaks "\n", "\r\n" or "\r"; nothing dropped — an
+/// empty line stays one) inserted before (`before`) or after line `line`, as written. New lines end
+/// as the note's lines do; a note without a final line break keeps having none. `firstLine`: the
+/// first new line's number afterwards. nullopt when the line does not exist.
+std::optional<QString> insertLinesAt(const QString &content, int line, const QString &text, bool before,
+                                     int *firstLine = nullptr);
+
+/// `content` without line `line` (a note that had no final line break still has none); nullopt
+/// when the line does not exist.
+std::optional<QString> removeLineAt(const QString &content, int line);
+
 } // namespace brulion::extensions

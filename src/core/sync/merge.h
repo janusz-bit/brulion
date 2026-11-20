@@ -43,6 +43,9 @@ struct MergeResult {
 ///    (or starts) with is taken once. Still a conflict: a region the changed side emptied (a
 ///    deleted line next to an added one, an emptied file), lines added between changed lines,
 ///    and additions on both sides of lines next to which the changed side added lines too.
+///  * Regions where the sides differ only in flashcards' state (scheduling comments, Logseq's
+///    card-* properties: sync/cardmerge.h) merge line by line, a card both reviewed keeping the
+///    later review — also two first reviews of one card added at one place.
 ///  * Anything else is a conflict: `clean` is false and `text` holds the local side there.
 /// Nothing is dropped or doubled in a clean merge: every line of a change and every added line
 /// is in the result once (lines both sides added at one place once).

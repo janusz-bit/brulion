@@ -1,4 +1,6 @@
 #include "markdown/inlinerenderer.h"
+
+#include "markdown/cloze.h"
 #include "text/find.h"
 
 #include "dates/format.h"
@@ -837,6 +839,18 @@ QString InlineRenderer::renderInline(QStringView text, bool topLevel, int depth,
         }
     }
 
+    // Clozes (docs/SYNTAX.md "Flashcards", markdown/cloze.h): the answer tinted as a highlight, the
+    // braces, its number and its hint hidden.
+    if (masked.contains(u"{{")) {
+        int pair = 1 << 20; // apart from the <mark> pairs' numbers
+        for (const ClozeSpan &c : findClozes(masked)) {
+            atoms.append({c.from, c.textFrom,
+                          u"<span style=\"background-color:"_s + safeColor(pal.highlightBackground) + u"\">"_s, pair});
+            atoms.append({c.textTo, c.to, u"</span>"_s, pair});
+            ++pair;
+        }
+    }
+
     // Formulas: $…$ and $$…$$ (docs/SYNTAX.md §11, markdown/math.h). The scan runs
     // on the masked text, so a formula inside a code span or a comment is not one; like emphasis,
     // a formula works in a link label too.
@@ -1190,6 +1204,31 @@ QString InlineRenderer::renderInline(QStringView text, bool topLevel, int depth,
     return assemble(text, pieces, Trace{depth == 0 ? trace : nullptr, &runs});
 }
 
+namespace {
+
+/// `body` holds HTML comments and white space only (and at least one comment).
+bool onlyHtmlComments(QStringView body)
+{
+    qsizetype i = 0;
+    bool any = false;
+    while (i < body.size()) {
+        if (body[i].isSpace()) {
+            ++i;
+            continue;
+        }
+        if (!body.sliced(i).startsWith(u"<!--"))
+            return false;
+        const qsizetype close = body.indexOf(u"-->", i + 4);
+        if (close < 0)
+            return false;
+        i = close + 3;
+        any = true;
+    }
+    return any;
+}
+
+} // namespace
+
 QString InlineRenderer::renderBlock(QStringView body, BlockKind kind) const
 {
     QString html = renderBlockImpl(body, kind, nullptr);
@@ -1309,7 +1348,13 @@ QString InlineRenderer::renderBlockImpl(QStringView body, BlockKind kind, QList<
         return out;
     }
     case BlockKind::Rule: return u"<hr/>"_s;
-    case BlockKind::Html: break;
+    case BlockKind::Html:
+        // Nothing but HTML comments — an Obsidian Spaced Repetition plugin's scheduling comment on
+        // its own line (`<!--SR:!2026-11-20,3,250-->`, docs/SYNTAX.md "Flashcards") — is hidden as
+        // a comment inside a line is.
+        if (onlyHtmlComments(body))
+            return QString();
+        break;
     case BlockKind::Code:
     case BlockKind::Table:
     case BlockKind::Frontmatter: {
