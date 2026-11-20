@@ -869,6 +869,7 @@ QString relative(const DateValue &d, Context &ctx)
                      : QCoreApplication::translate("brulion::Bases", "%1 ago").arg(amount);
 }
 
+/// A reference into `v`: keep `v` alive while it is used (never a temporary in a range-for).
 const ValueList &listOrEmpty(const Value &v)
 {
     static const ValueList none;
@@ -1179,7 +1180,8 @@ Value bField(const Args &a, Context &ctx)
             return x;
         if (name == u"embeds") {
             ValueList out;
-            for (const Value &l : listOrEmpty(f(u"outlinks"_s))) {
+            const Value outlinks = f(u"outlinks"_s); // (a local: the loop reads into it)
+            for (const Value &l : listOrEmpty(outlinks)) {
                 if (l.is(T::Link) && l.asLink().embed)
                     out.append(l);
             }
@@ -1560,7 +1562,8 @@ bool linksTo(const Value &from, const Value &to, Context &ctx)
     const QString target = pathOf(to, ctx);
     if (file.isNull())
         return false;
-    for (const Value &l : listOrEmpty(file.asObject().field(u"outlinks"_s).value_or(Value()))) {
+    const Value outlinks = file.asObject().field(u"outlinks"_s).value_or(Value()); // (a local: the loop reads into it)
+    for (const Value &l : listOrEmpty(outlinks)) {
         if (!l.is(T::Link))
             continue;
         if (!target.isEmpty() ? l.asLink().path == target : basesEquals(l, to, ctx))
@@ -1606,7 +1609,8 @@ Value bHasTag(const Args &a, Context &ctx)
     if (file.isNull())
         return Value::boolean(false);
     QStringList tags;
-    for (const Value &t : listOrEmpty(file.asObject().field(u"etags"_s).value_or(Value()))) {
+    const Value etags = file.asObject().field(u"etags"_s).value_or(Value()); // (a local: the loop reads into it)
+    for (const Value &t : listOrEmpty(etags)) {
         if (t.is(T::String))
             tags.append(t.asString().startsWith(u'#') ? t.asString().sliced(1).toLower() : t.asString().toLower());
     }
