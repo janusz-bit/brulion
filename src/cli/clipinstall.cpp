@@ -83,8 +83,8 @@ QList<Arg> clipInstallArgs(bool install)
             option(u"browser"_s, ArgType::String,
                    QT_TRANSLATE_NOOP("brulion::cli",
                                      "Only these browsers: chrome, chromium, brave, edge, firefox (commas)")),
-            flag(u"system"_s, QT_TRANSLATE_NOOP("brulion::cli",
-                                                "For every user of the computer (system folders; administrator)")),
+            flag(u"system"_s,
+                 QT_TRANSLATE_NOOP("brulion::cli", "For every user of the computer (system folders; administrator)")),
     };
     if (install) {
         args.append(option(u"program"_s, ArgType::String,
@@ -92,8 +92,7 @@ QList<Arg> clipInstallArgs(bool install)
         args.append(option(u"extensionId"_s, ArgType::String,
                            QT_TRANSLATE_NOOP("brulion::cli",
                                              "More Chromium extension ids, separated by commas (a store's copy)")));
-        args.append(flag(u"all"_s, QT_TRANSLATE_NOOP("brulion::cli",
-                                                     "Also the browsers not found for this user")));
+        args.append(flag(u"all"_s, QT_TRANSLATE_NOOP("brulion::cli", "Also the browsers not found for this user")));
     }
     return args;
 }
@@ -143,21 +142,21 @@ Result clipInstall(Call &call)
         }
         installed.append(entry);
     }
-    const QJsonObject out{{u"installed"_s, installed},
-                          {u"skipped"_s, skipped},
-                          {u"failed"_s, failed},
-                          {u"program"_s, QDir::toNativeSeparators(setup.program)},
-                          {u"os"_s, osId(setup.os)},
-                          {u"scope"_s, setup.scope == Scope::System ? u"system"_s : u"user"_s}};
+    const QJsonObject out{
+            {u"installed"_s, installed}, {u"skipped"_s, skipped},
+            {u"failed"_s, failed},       {u"program"_s, QDir::toNativeSeparators(setup.program)},
+            {u"os"_s, osId(setup.os)},   {u"scope"_s, setup.scope == Scope::System ? u"system"_s : u"user"_s}};
     if (!failed.isEmpty() && installed.isEmpty())
-        return call.fail(ExitUnavailable, u"install_failed"_s,
-                         tr("No browser could be connected: %1").arg(failed.first().toObject().value(u"error"_s).toString()),
-                         out);
+        return call.fail(
+                ExitUnavailable, u"install_failed"_s,
+                tr("No browser could be connected: %1").arg(failed.first().toObject().value(u"error"_s).toString()),
+                out);
     if (installed.isEmpty())
         call.warn(u"no_browser"_s, tr("No browser found for this user: name one with --browser, or use --all"));
     QString text;
     for (const QJsonValue &e : std::as_const(installed))
-        text += e.toObject().value(u"name"_s).toString() + u": "_s + e.toObject().value(u"manifest"_s).toString() + u'\n';
+        text += e.toObject().value(u"name"_s).toString() + u": "_s + e.toObject().value(u"manifest"_s).toString()
+                + u'\n';
     return call.ok(out, text);
 }
 
@@ -237,9 +236,8 @@ Result clipManifest(Call &call)
     const auto browser = parseBrowser(call.str(u"browser"_s));
     if (!browser)
         return call.fail(ExitUsage, u"unknown_browser"_s, tr("Unknown browser: %1").arg(call.str(u"browser"_s)));
-    const QJsonObject manifest =
-            hostManifest(familyOf(*browser), QDir::toNativeSeparators(hostProgram(call)),
-                         call.str(u"extensionId"_s).split(u',', Qt::SkipEmptyParts));
+    const QJsonObject manifest = hostManifest(familyOf(*browser), QDir::toNativeSeparators(hostProgram(call)),
+                                              call.str(u"extensionId"_s).split(u',', Qt::SkipEmptyParts));
     Result r = call.ok(manifest);
     r.text = QString::fromUtf8(QJsonDocument(manifest).toJson());
     r.raw = true;

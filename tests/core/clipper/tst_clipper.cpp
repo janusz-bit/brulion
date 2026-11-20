@@ -76,7 +76,8 @@ QString toMarkdown(const QString &html, const QString &base = u"https://przyroda
     return withRemotePictures(c.markdown, pictures);
 }
 
-TemplateFill fillAt(const char *when = "2026-11-20 18:30", brulion::dates::UiLocale locale = brulion::dates::UiLocale::Polish)
+TemplateFill fillAt(const char *when = "2026-11-20 18:30",
+                    brulion::dates::UiLocale locale = brulion::dates::UiLocale::Polish)
 {
     return TemplateFill{QDateTime::fromString(QString::fromLatin1(when), u"yyyy-MM-dd HH:mm"_s), locale};
 }
@@ -113,29 +114,29 @@ private Q_SLOTS:
         const QByteArray hello = frame(R"({"t":"hello"})");
         const QByteArray polish = frame(QString(u"{\"t\":\"Zażółć gęślą jaźń\"}"_s).toUtf8());
         QTest::newRow("one") << QList<QByteArray>{hello} << QStringList{u"hello"_s} << false;
-        QTest::newRow("two in one piece") << QList<QByteArray>{hello + polish}
-                                          << QStringList{u"hello"_s, u"Zażółć gęślą jaźń"_s} << false;
+        QTest::newRow("two in one piece")
+                << QList<QByteArray>{hello + polish} << QStringList{u"hello"_s, u"Zażółć gęślą jaźń"_s} << false;
         QList<QByteArray> bytes;
         const QByteArray both = hello + polish;
         for (const char c : both)
             bytes.append(QByteArray(1, c));
         QTest::newRow("byte by byte") << bytes << QStringList{u"hello"_s, u"Zażółć gęślą jaźń"_s} << false;
-        QTest::newRow("split in the header") << QList<QByteArray>{hello.left(2), hello.mid(2)} << QStringList{u"hello"_s}
-                                             << false;
-        QTest::newRow("empty frame") << QList<QByteArray>{header(0), hello} << QStringList{u"invalid_json"_s, u"hello"_s}
-                                     << false;
-        QTest::newRow("no JSON, then one") << QList<QByteArray>{frame("{\"t\":"), hello}
-                                           << QStringList{u"invalid_json"_s, u"hello"_s} << false;
+        QTest::newRow("split in the header")
+                << QList<QByteArray>{hello.left(2), hello.mid(2)} << QStringList{u"hello"_s} << false;
+        QTest::newRow("empty frame") << QList<QByteArray>{header(0), hello}
+                                     << QStringList{u"invalid_json"_s, u"hello"_s} << false;
+        QTest::newRow("no JSON, then one")
+                << QList<QByteArray>{frame("{\"t\":"), hello} << QStringList{u"invalid_json"_s, u"hello"_s} << false;
         QTest::newRow("not an object") << QList<QByteArray>{frame("[1,2]"), frame("\"x\""), hello}
                                        << QStringList{u"not_object"_s, u"invalid_json"_s, u"hello"_s} << false;
-        QTest::newRow("invalid UTF-8") << QList<QByteArray>{frame("{\"t\":\"\xff\xfe\"}")} << QStringList{u"invalid_json"_s}
-                                       << false;
+        QTest::newRow("invalid UTF-8") << QList<QByteArray>{frame("{\"t\":\"\xff\xfe\"}")}
+                                       << QStringList{u"invalid_json"_s} << false;
         QTest::newRow("over the limit") << QList<QByteArray>{header(0xffffffffu) + hello, hello}
                                         << QStringList{u"too_large"_s} << false;
-        QTest::newRow("text typed at a terminal") << QList<QByteArray>{"abcdefgh\n"} << QStringList{u"too_large"_s}
-                                                  << false;
-        QTest::newRow("ends inside a frame") << QList<QByteArray>{hello, header(10) + "{\"t\""} << QStringList{u"hello"_s}
-                                             << true;
+        QTest::newRow("text typed at a terminal")
+                << QList<QByteArray>{"abcdefgh\n"} << QStringList{u"too_large"_s} << false;
+        QTest::newRow("ends inside a frame")
+                << QList<QByteArray>{hello, header(10) + "{\"t\""} << QStringList{u"hello"_s} << true;
         QTest::newRow("ends inside a header") << QList<QByteArray>{QByteArray("\x05\x00", 2)} << QStringList{} << true;
         QTest::newRow("nothing") << QList<QByteArray>{} << QStringList{} << false;
     }
@@ -193,49 +194,53 @@ private Q_SLOTS:
         QTest::addColumn<QString>("code"); ///< "" = accepted
         QTest::addColumn<QString>("field");
         QTest::newRow("minimal") << QByteArray("{}") << QString() << QString();
-        QTest::newRow("article") << QByteArray("{\"kind\":\"article\",\"url\":\"https://a.pl/x\",\"html\":\"<p>x</p>\"}") << QString()
-                                 << QString();
+        QTest::newRow("article") << QByteArray(
+                "{\"kind\":\"article\",\"url\":\"https://a.pl/x\",\"html\":\"<p>x</p>\"}")
+                                 << QString() << QString();
         QTest::newRow("unknown kind") << QByteArray(R"({"kind":"video"})") << u"bad_kind"_s << u"kind"_s;
         QTest::newRow("kind not a string") << QByteArray(R"({"kind":3})") << u"bad_kind"_s << u"kind"_s;
         QTest::newRow("title not a string") << QByteArray(R"({"title":["x"]})") << u"bad_value"_s << u"title"_s;
-        QTest::newRow("html too large") << (QByteArray("{\"html\":\"") + QByteArray(MaxHtmlChars + 1, 'a') + QByteArray("\"}")) << u"too_large"_s
-                                        << u"html"_s;
+        QTest::newRow("html too large") << (QByteArray("{\"html\":\"") + QByteArray(MaxHtmlChars + 1, 'a')
+                                            + QByteArray("\"}"))
+                                        << u"too_large"_s << u"html"_s;
         QTest::newRow("folder with ..") << QByteArray(R"({"place":{"kind":"page","folder":"Wycinki/../../etc"}})")
                                         << u"bad_folder"_s << u"place.folder"_s;
         QTest::newRow("absolute folder") << QByteArray(R"({"place":{"folder":"/home/x"}})") << u"bad_folder"_s
                                          << u"place.folder"_s;
-        QTest::newRow("drive") << QByteArray(R"({"place":{"folder":"C:\\Windows"}})") << u"bad_folder"_s << u"place.folder"_s;
+        QTest::newRow("drive") << QByteArray(R"({"place":{"folder":"C:\\Windows"}})") << u"bad_folder"_s
+                               << u"place.folder"_s;
         QTest::newRow("hidden folder") << QByteArray(R"({"place":{"folder":".brulion"}})") << u"bad_folder"_s
                                        << u"place.folder"_s;
-        QTest::newRow("git by another name") << QByteArray(R"({"place":{"folder":"a/GIT~1"}})") << u"bad_folder"_s
-                                             << u"place.folder"_s;
-        QTest::newRow("folder not a string") << QByteArray(R"({"place":{"folder":7}})") << u"bad_folder"_s
-                                             << u"place.folder"_s;
+        QTest::newRow("git by another name")
+                << QByteArray(R"({"place":{"folder":"a/GIT~1"}})") << u"bad_folder"_s << u"place.folder"_s;
+        QTest::newRow("folder not a string")
+                << QByteArray(R"({"place":{"folder":7}})") << u"bad_folder"_s << u"place.folder"_s;
         QTest::newRow("unknown place") << QByteArray(R"({"place":{"kind":"desktop"}})") << u"bad_place"_s
                                        << u"place.kind"_s;
-        QTest::newRow("heading without page") << QByteArray(R"({"place":{"kind":"heading","heading":"A"}})")
-                                              << u"bad_page"_s << u"place.page"_s;
+        QTest::newRow("heading without page")
+                << QByteArray(R"({"place":{"kind":"heading","heading":"A"}})") << u"bad_page"_s << u"place.page"_s;
         QTest::newRow("heading with ..") << QByteArray(R"({"place":{"kind":"heading","page":"../x.md","heading":"A"}})")
                                          << u"bad_page"_s << u"place.page"_s;
         QTest::newRow("heading without heading") << QByteArray(R"({"place":{"kind":"heading","page":"Czytelnia.md"}})")
                                                  << u"no_heading"_s << u"place.heading"_s;
-        QTest::newRow("screenshot without picture") << QByteArray(R"({"kind":"screenshot"})") << u"no_screenshot"_s
-                                                    << u"screenshot"_s;
+        QTest::newRow("screenshot without picture")
+                << QByteArray(R"({"kind":"screenshot"})") << u"no_screenshot"_s << u"screenshot"_s;
         QTest::newRow("screenshot not a picture")
                 << QByteArray(R"({"kind":"screenshot","screenshot":"data:text/html;base64,PHNjcmlwdD4="})")
                 << u"bad_screenshot"_s << u"screenshot"_s;
-        QTest::newRow("picture of javascript") << QByteArray("{\"kind\":\"picture\",\"pictureUrl\":\"javascript:alert(1)\"}")
-                                               << u"no_picture"_s << u"pictureUrl"_s;
-        QTest::newRow("link without address") << QByteArray(R"({"kind":"link","linkUrl":"javascript:x"})")
-                                              << u"no_link"_s << u"linkUrl"_s;
+        QTest::newRow("picture of javascript")
+                << QByteArray("{\"kind\":\"picture\",\"pictureUrl\":\"javascript:alert(1)\"}") << u"no_picture"_s
+                << u"pictureUrl"_s;
+        QTest::newRow("link without address")
+                << QByteArray(R"({"kind":"link","linkUrl":"javascript:x"})") << u"no_link"_s << u"linkUrl"_s;
         QTest::newRow("template page outside") << QByteArray(R"({"template":{"page":"../../.ssh/id_rsa"}})")
                                                << u"bad_template"_s << u"template.page"_s;
-        QTest::newRow("template too large")
-                << (QByteArray("{\"template\":{\"text\":\"") + QByteArray(MaxTemplateChars + 1, 'a') + QByteArray("\"}}")) << u"too_large"_s
-                << u"template.text"_s;
+        QTest::newRow("template too large") << (QByteArray("{\"template\":{\"text\":\"")
+                                                + QByteArray(MaxTemplateChars + 1, 'a') + QByteArray("\"}}"))
+                                            << u"too_large"_s << u"template.text"_s;
         QTest::newRow("tags of the wrong type") << QByteArray(R"({"tags":[1]})") << u"bad_value"_s << u"tags"_s;
-        QTest::newRow("pictures not a bool") << QByteArray(R"({"downloadPictures":"yes"})") << u"bad_value"_s
-                                             << u"downloadPictures"_s;
+        QTest::newRow("pictures not a bool")
+                << QByteArray(R"({"downloadPictures":"yes"})") << u"bad_value"_s << u"downloadPictures"_s;
     }
     void requests()
     {
@@ -324,29 +329,36 @@ private Q_SLOTS:
     {
         QTest::addColumn<QString>("tpl");
         QTest::addColumn<QString>("expected");
-        QTest::newRow("text") << u"# {{title}}\n\nŹródło: {{url}} ({{site}})"_s
-                              << u"# Żółw stepowy w ogrodzie\n\nŹródło: https://przyroda.example/artykuly/zolw.html?a=1#x (Przyroda Dziś)\n"_s;
+        QTest::newRow("text")
+                << u"# {{title}}\n\nŹródło: {{url}} ({{site}})"_s
+                << u"# Żółw stepowy w ogrodzie\n\nŹródło: https://przyroda.example/artykuly/zolw.html?a=1#x (Przyroda Dziś)\n"_s;
         QTest::newRow("dates of every template") << u"{{date}} {{time}} {{weekday}} {{date:d MMMM yyyy}} {{week}}"_s
                                                  << u"2026-11-20 18:30 piątek 20 listopada 2026 47\n"_s;
-        QTest::newRow("published") << u"{{published}} / {{published:dd.MM.yyyy HH:mm}}"_s << u"2026-11-19 / 19.11.2026 08:15\n"_s;
+        QTest::newRow("published") << u"{{published}} / {{published:dd.MM.yyyy HH:mm}}"_s
+                                   << u"2026-11-19 / 19.11.2026 08:15\n"_s;
         QTest::newRow("tags in text") << u"Tagi: {{tags}}"_s << u"Tagi: #gady #[[ogród zimą]]\n"_s;
-        QTest::newRow("content and quote") << u"{{selection:quote}}\n\n{{content}}"_s
-                                           << u"> gad, który **źle znosi** chłód\n\nŻółw stepowy to **gad**.\n\n- liście\n- kwiaty\n"_s;
+        QTest::newRow("content and quote")
+                << u"{{selection:quote}}\n\n{{content}}"_s
+                << u"> gad, który **źle znosi** chłód\n\nŻółw stepowy to **gad**.\n\n- liście\n- kwiaty\n"_s;
         QTest::newRow("text forms") << u"{{content:text}} | {{selection:text}}"_s
                                     << u"Żółw stepowy to gad. | gad, który źle znosi chłód\n"_s;
-        QTest::newRow("multi-line value indented") << u"- Wycinek\n  {{content}}"_s
-                                                   << u"- Wycinek\n  Żółw stepowy to **gad**.\n\n  - liście\n  - kwiaty\n"_s;
+        QTest::newRow("multi-line value indented")
+                << u"- Wycinek\n  {{content}}"_s
+                << u"- Wycinek\n  Żółw stepowy to **gad**.\n\n  - liście\n  - kwiaty\n"_s;
         QTest::newRow("unknown stays") << u"{{project}} {{title:x}}"_s << u"{{project}} Żółw stepowy w ogrodzie\n"_s;
         QTest::newRow("cursor removed") << u"{{title}}{{cursor}}"_s << u"Żółw stepowy w ogrodzie\n"_s;
-        QTest::newRow("link of the page") << u"[{{title}}]({{url}})"_s
-                                          << u"[Żółw stepowy w ogrodzie](https://przyroda.example/artykuly/zolw.html?a=1#x)\n"_s;
+        QTest::newRow("link of the page")
+                << u"[{{title}}]({{url}})"_s
+                << u"[Żółw stepowy w ogrodzie](https://przyroda.example/artykuly/zolw.html?a=1#x)\n"_s;
         QTest::newRow("yaml frontmatter")
                 << u"---\ntitle: {{title}}\nsource: {{url}}\nauthor: \"{{author}}\"\ntags: {{tags}}\nclipped: {{date}} {{time}}\n---\n{{content}}"_s
                 << u"---\ntitle: Żółw stepowy w ogrodzie\nsource: https://przyroda.example/artykuly/zolw.html?a=1#x\nauthor: \"Zofia Łęcka\"\ntags: [gady, ogród zimą]\nclipped: 2026-11-20 18:30\n---\nŻółw stepowy to **gad**.\n\n- liście\n- kwiaty\n"_s;
-        QTest::newRow("yaml list of tags") << u"---\ntags:\n  - clippings\n  - \"{{tags}}\"\n---\nx"_s
-                                           << u"---\ntags:\n  - clippings\n  - \"gady\"\n  - \"ogród zimą\"\n---\nx\n"_s;
-        QTest::newRow("key:: properties") << u"source:: {{url}}\ntags:: {{tags}}\nautor:: {{author}}\n\n{{selection}}"_s
-                                          << u"source:: https://przyroda.example/artykuly/zolw.html?a=1#x\ntags:: #gady, #[[ogród zimą]]\nautor:: Zofia Łęcka\n\ngad, który **źle znosi** chłód\n"_s;
+        QTest::newRow("yaml list of tags")
+                << u"---\ntags:\n  - clippings\n  - \"{{tags}}\"\n---\nx"_s
+                << u"---\ntags:\n  - clippings\n  - \"gady\"\n  - \"ogród zimą\"\n---\nx\n"_s;
+        QTest::newRow("key:: properties")
+                << u"source:: {{url}}\ntags:: {{tags}}\nautor:: {{author}}\n\n{{selection}}"_s
+                << u"source:: https://przyroda.example/artykuly/zolw.html?a=1#x\ntags:: #gady, #[[ogród zimą]]\nautor:: Zofia Łęcka\n\ngad, który **źle znosi** chłód\n"_s;
     }
     void templates()
     {
@@ -361,25 +373,27 @@ private Q_SLOTS:
         QTest::addColumn<QString>("title");
         QTest::addColumn<QString>("expected");
         // A value is never filled again, and the text around it cannot be broken by it.
-        QTest::newRow("variables in a value") << u"{{title}} {{date}}"_s << u"{{date}} {{content}}"_s
-                                              << u"{{date}} {{content}} 2026-11-20\n"_s;
+        QTest::newRow("variables in a value")
+                << u"{{title}} {{date}}"_s << u"{{date}} {{content}}"_s << u"{{date}} {{content}} 2026-11-20\n"_s;
         QTest::newRow("markdown in a title") << u"# {{title}}"_s << u"*Nowość* [x](javascript:alert(1)) <b>"_s
                                              << u"# \\*Nowość\\* \\[x\\](javascript:alert(1)) \\<b>\n"_s;
         QTest::newRow("title at a line's start") << u"{{title}}"_s << u"# nie nagłówek"_s << u"\\# nie nagłówek\n"_s;
         QTest::newRow("quotes in yaml") << u"---\ntitle: \"{{title}}\"\n---\n"_s << u"Ala \"ma\" \\ kota"_s
                                         << u"---\ntitle: \"Ala \\\"ma\\\" \\\\ kota\"\n---\n"_s;
-        QTest::newRow("single quotes in yaml") << u"---\ntitle: '{{title}}'\n---\n"_s << u"It's"_s
-                                               << u"---\ntitle: 'It''s'\n---\n"_s;
-        QTest::newRow("bare yaml quoted when needed") << u"---\ntitle: {{title}}\n---\n"_s << u"Cel: zysk #1"_s
-                                                      << u"---\ntitle: \"Cel: zysk #1\"\n---\n"_s;
-        QTest::newRow("yaml keyword") << u"---\ntitle: {{title}}\n---\n"_s << u"yes"_s << u"---\ntitle: \"yes\"\n---\n"_s;
-        QTest::newRow("yaml number") << u"---\ntitle: {{title}}\n---\n"_s << u"1984"_s << u"---\ntitle: \"1984\"\n---\n"_s;
-        QTest::newRow("yaml sexagesimal") << u"---\ntitle: {{title}}\n---\n"_s << u"18:30"_s
-                                          << u"---\ntitle: \"18:30\"\n---\n"_s;
+        QTest::newRow("single quotes in yaml")
+                << u"---\ntitle: '{{title}}'\n---\n"_s << u"It's"_s << u"---\ntitle: 'It''s'\n---\n"_s;
+        QTest::newRow("bare yaml quoted when needed")
+                << u"---\ntitle: {{title}}\n---\n"_s << u"Cel: zysk #1"_s << u"---\ntitle: \"Cel: zysk #1\"\n---\n"_s;
+        QTest::newRow("yaml keyword") << u"---\ntitle: {{title}}\n---\n"_s << u"yes"_s
+                                      << u"---\ntitle: \"yes\"\n---\n"_s;
+        QTest::newRow("yaml number") << u"---\ntitle: {{title}}\n---\n"_s << u"1984"_s
+                                     << u"---\ntitle: \"1984\"\n---\n"_s;
+        QTest::newRow("yaml sexagesimal")
+                << u"---\ntitle: {{title}}\n---\n"_s << u"18:30"_s << u"---\ntitle: \"18:30\"\n---\n"_s;
         QTest::newRow("yaml line break") << u"---\ntitle: {{title}}\n---\n"_s << u"a\nb: c"_s
                                          << u"---\ntitle: \"a b: c\"\n---\n"_s;
-        QTest::newRow("yaml delimiter in a value") << u"---\ntitle: {{title}}\n---\n"_s << u"---"_s
-                                                   << u"---\ntitle: \"---\"\n---\n"_s;
+        QTest::newRow("yaml delimiter in a value")
+                << u"---\ntitle: {{title}}\n---\n"_s << u"---"_s << u"---\ntitle: \"---\"\n---\n"_s;
     }
     void templateValuesAreData()
     {
@@ -397,8 +411,9 @@ private Q_SLOTS:
         v.title = u"Bez autora"_s;
         v.url = u"https://a.example/"_s;
         const QString obsidian = builtinTemplate(u"obsidian"_s)->text;
-        QCOMPARE(fillClipTemplate(obsidian, v, fillAt()),
-                 u"---\ntitle: \"Bez autora\"\nsource: \"https://a.example/\"\ncreated: 2026-11-20\ntags:\n  - \"clippings\"\n---\n"_s);
+        QCOMPARE(
+                fillClipTemplate(obsidian, v, fillAt()),
+                u"---\ntitle: \"Bez autora\"\nsource: \"https://a.example/\"\ncreated: 2026-11-20\ntags:\n  - \"clippings\"\n---\n"_s);
         QCOMPARE(fillClipTemplate(builtinTemplate(u"link"_s)->text, v, fillAt()),
                  u"[Bez autora](https://a.example/)\n"_s);
         QCOMPARE(fillClipTemplate(u"Przed\n\n{{selection}}\n\nPo"_s, v, fillAt()), u"Przed\n\nPo\n"_s);
@@ -418,13 +433,17 @@ private Q_SLOTS:
         QCOMPARE(defaultTemplateFor(false), u"link"_s);
         QVERIFY(builtinTemplate(u"JOPLIN"_s));
         QVERIFY(!builtinTemplate(u"evernote"_s));
-        QCOMPARE(fillClipTemplate(builtinTemplate(u"brulion"_s)->text, v, fillAt()),
-                 u"---\nsource: https://przyroda.example/artykuly/zolw.html?a=1#x\nauthor: Zofia Łęcka\npublished: 2026-11-19\n"
-                 "clipped: 2026-11-20 18:30\ntags: [gady, ogród zimą]\n---\n\nŻółw stepowy to **gad**.\n\n- liście\n- kwiaty\n"_s);
+        QCOMPARE(
+                fillClipTemplate(builtinTemplate(u"brulion"_s)->text, v, fillAt()),
+                u"---\nsource: https://przyroda.example/artykuly/zolw.html?a=1#x\nauthor: Zofia Łęcka\npublished: "
+                u"2026-11-19\n"
+                "clipped: 2026-11-20 18:30\ntags: [gady, ogród zimą]\n---\n\nŻółw stepowy to **gad**.\n\n- liście\n- kwiaty\n"_s);
         QCOMPARE(fillClipTemplate(builtinTemplate(u"obsidian"_s)->text, v, fillAt()),
-                 u"---\ntitle: \"Żółw stepowy w ogrodzie\"\nsource: \"https://przyroda.example/artykuly/zolw.html?a=1#x\"\n"
+                 u"---\ntitle: \"Żółw stepowy w ogrodzie\"\nsource: "
+                 u"\"https://przyroda.example/artykuly/zolw.html?a=1#x\"\n"
                  "author:\n  - \"[[Zofia Łęcka]]\"\npublished: 2026-11-19\ncreated: 2026-11-20\n"
-                 "description: \"Jak zimuje żółw: poradnik\"\ntags:\n  - \"clippings\"\n  - \"gady\"\n  - \"ogród zimą\"\n---\n"
+                 "description: \"Jak zimuje żółw: poradnik\"\ntags:\n  - \"clippings\"\n  - \"gady\"\n  - \"ogród "
+                 "zimą\"\n---\n"
                  "Żółw stepowy to **gad**.\n\n- liście\n- kwiaty\n"_s);
         QCOMPARE(fillClipTemplate(builtinTemplate(u"joplin"_s)->text, v, fillAt()),
                  u"---\ntitle: Żółw stepowy w ogrodzie\nsource: https://przyroda.example/artykuly/zolw.html?a=1#x\n"
@@ -434,7 +453,8 @@ private Q_SLOTS:
                  u"[Żółw stepowy w ogrodzie](https://przyroda.example/artykuly/zolw.html?a=1#x) #gady #[[ogród zimą]]\n"
                  "> gad, który **źle znosi** chłód\n"_s);
         // English names of days and months.
-        QCOMPARE(fillClipTemplate(u"{{weekday}} {{published:d MMMM}}"_s, v, fillAt("2026-11-20 18:30", brulion::dates::UiLocale::English)),
+        QCOMPARE(fillClipTemplate(u"{{weekday}} {{published:d MMMM}}"_s, v,
+                                  fillAt("2026-11-20 18:30", brulion::dates::UiLocale::English)),
                  u"Friday 19 November\n"_s);
     }
 
@@ -442,15 +462,18 @@ private Q_SLOTS:
     {
         QTest::addColumn<QString>("markdown");
         QTest::addColumn<QString>("expected");
-        QTest::newRow("brulion") << u"---\nsource: https://a.example/\ntags: [gady, ogród zimą]\n---\n\nPierwszy akapit.\n\nDrugi.\n"_s
-                                 << u"Pierwszy akapit.\nsource:: https://a.example/\ntags:: #gady, #[[ogród zimą]]\n\nDrugi.\n"_s;
-        QTest::newRow("obsidian lists") << u"---\ntitle: \"Żółw\"\nauthor:\n  - \"[[Zofia Łęcka]]\"\ntags:\n  - \"clippings\"\n---\nTreść"_s
-                                        << u"Treść\ntitle:: Żółw\nauthor:: [[Zofia Łęcka]]\ntags:: #clippings"_s;
+        QTest::newRow("brulion")
+                << u"---\nsource: https://a.example/\ntags: [gady, ogród zimą]\n---\n\nPierwszy akapit.\n\nDrugi.\n"_s
+                << u"Pierwszy akapit.\nsource:: https://a.example/\ntags:: #gady, #[[ogród zimą]]\n\nDrugi.\n"_s;
+        QTest::newRow("obsidian lists")
+                << u"---\ntitle: \"Żółw\"\nauthor:\n  - \"[[Zofia Łęcka]]\"\ntags:\n  - \"clippings\"\n---\nTreść"_s
+                << u"Treść\ntitle:: Żółw\nauthor:: [[Zofia Łęcka]]\ntags:: #clippings"_s;
         QTest::newRow("no body") << u"---\nsource: https://a.example/\n---\n"_s << u"source:: https://a.example/\n"_s;
         QTest::newRow("no frontmatter") << u"[Tytuł](https://a.example/)\n> cytat\n"_s
                                         << u"[Tytuł](https://a.example/)\n> cytat\n"_s;
         QTest::newRow("unclosed") << u"---\nsource: x\n"_s << u"---\nsource: x\n"_s;
-        QTest::newRow("keys that are no property") << u"---\n\"źródło\": x\nźródło: y\nok: z\n---\nT"_s << u"T\nok:: z"_s;
+        QTest::newRow("keys that are no property")
+                << u"---\n\"źródło\": x\nźródło: y\nok: z\n---\nT"_s << u"T\nok:: z"_s;
     }
     void frontmatterAsProperties()
     {
@@ -485,8 +508,9 @@ private Q_SLOTS:
     void articleFixture()
     {
         PictureList pictures;
-        const ConvertedHtml c = convertHtml(fixture(u"artykul.html"_s),
-                                            QUrl(u"https://przyroda.example/artykuly/zolw-stepowy.html"_s), pictures, true);
+        const ConvertedHtml c =
+                convertHtml(fixture(u"artykul.html"_s), QUrl(u"https://przyroda.example/artykuly/zolw-stepowy.html"_s),
+                            pictures, true);
         const QString markdown = withRemotePictures(c.markdown, pictures);
         // BRULION_CLIPPER_UPDATE_FIXTURES=1 writes what the converter gives now (look at the diff).
         if (qEnvironmentVariableIsSet("BRULION_CLIPPER_UPDATE_FIXTURES")) {
@@ -511,18 +535,20 @@ private Q_SLOTS:
         QTest::newRow("sections do not run together")
                 << u"<header>Nagłówek strony</header><section>Pierwsza</section><aside>Na marginesie</aside><footer>Stopka</footer>"_s
                 << u"Nagłówek strony\nPierwsza\nNa marginesie\nStopka\n"_s;
-        QTest::newRow("details and summary") << u"<details><summary>Więcej</summary><p>Ukryte</p></details>"_s
-                                             << u"**Więcej**\n\nUkryte\n"_s;
-        QTest::newRow("lazy picture") << u"<img src=\"data:image/gif;base64,R0lGODlhAQABAAAAACw=\" data-src=\"zdj/zolw.jpg\">"_s
-                                      << u"![](https://przyroda.example/artykuly/zdj/zolw.jpg)\n"_s;
+        QTest::newRow("details and summary")
+                << u"<details><summary>Więcej</summary><p>Ukryte</p></details>"_s << u"**Więcej**\n\nUkryte\n"_s;
+        QTest::newRow("lazy picture")
+                << u"<img src=\"data:image/gif;base64,R0lGODlhAQABAAAAACw=\" data-src=\"zdj/zolw.jpg\">"_s
+                << u"![](https://przyroda.example/artykuly/zdj/zolw.jpg)\n"_s;
         QTest::newRow("srcset only") << u"<img srcset=\"a.jpg 320w, b.jpg 1024w\" alt=\"Żółw\">"_s
                                      << u"![Żółw](https://przyroda.example/artykuly/b.jpg)\n"_s;
-        QTest::newRow("protocol-relative picture") << u"<img src=\"//cdn.example/x.png\">"_s
-                                                   << u"![](https://cdn.example/x.png)\n"_s;
-        QTest::newRow("picture of another scheme dropped") << u"<p>a<img src=\"file:///etc/passwd\">b</p>"_s
-                                                           << u"ab\n"_s;
-        QTest::newRow("relative links") << u"<p><a href=\"../inne/strona.html\">inna</a> <a href=\"/\">start</a></p>"_s
-                                        << u"[inna](https://przyroda.example/inne/strona.html) [start](https://przyroda.example/)\n"_s;
+        QTest::newRow("protocol-relative picture")
+                << u"<img src=\"//cdn.example/x.png\">"_s << u"![](https://cdn.example/x.png)\n"_s;
+        QTest::newRow("picture of another scheme dropped")
+                << u"<p>a<img src=\"file:///etc/passwd\">b</p>"_s << u"ab\n"_s;
+        QTest::newRow("relative links")
+                << u"<p><a href=\"../inne/strona.html\">inna</a> <a href=\"/\">start</a></p>"_s
+                << u"[inna](https://przyroda.example/inne/strona.html) [start](https://przyroda.example/)\n"_s;
         QTest::newRow("fragment") << u"<p>Przypis<a href=\"#p1\">1</a></p>"_s
                                   << u"Przypis[1](https://przyroda.example/artykuly/zolw.html#p1)\n"_s;
         QTest::newRow("mailto") << u"<p><a href=\"mailto:redakcja@przyroda.example\">napisz</a></p>"_s
@@ -532,24 +558,30 @@ private Q_SLOTS:
         QTest::newRow("data link") << u"<p><a href=\"data:text/html,&lt;script&gt;\">tu</a></p>"_s << u"tu\n"_s;
         QTest::newRow("picture linking to itself") << u"<a href=\"duze.jpg\"><img src=\"male.jpg\" alt=\"Żółw\"></a>"_s
                                                    << u"![Żółw](https://przyroda.example/artykuly/male.jpg)\n"_s;
-        QTest::newRow("picture linking elsewhere") << u"<a href=\"/artykul\"><img src=\"m.jpg\" alt=\"Okładka\"></a>"_s
-                                                   << u"[![Okładka](https://przyroda.example/artykuly/m.jpg)](https://przyroda.example/artykul)\n"_s;
-        QTest::newRow("youtube player") << u"<iframe src=\"https://www.youtube-nocookie.com/embed/AbCdEf12345\" title=\"Film\"></iframe>"_s
-                                        << u"[Film](https://www.youtube.com/watch?v=AbCdEf12345)\n"_s;
-        QTest::newRow("video with a source") << u"<video controls><source src=\"/media/zolw.mp4\" type=\"video/mp4\">Brak</video>"_s
-                                             << u"[zolw.mp4](https://przyroda.example/media/zolw.mp4)\n"_s;
+        QTest::newRow("picture linking elsewhere")
+                << u"<a href=\"/artykul\"><img src=\"m.jpg\" alt=\"Okładka\"></a>"_s
+                << u"[![Okładka](https://przyroda.example/artykuly/m.jpg)](https://przyroda.example/artykul)\n"_s;
+        QTest::newRow("youtube player")
+                << u"<iframe src=\"https://www.youtube-nocookie.com/embed/AbCdEf12345\" title=\"Film\"></iframe>"_s
+                << u"[Film](https://www.youtube.com/watch?v=AbCdEf12345)\n"_s;
+        QTest::newRow("video with a source")
+                << u"<video controls><source src=\"/media/zolw.mp4\" type=\"video/mp4\">Brak</video>"_s
+                << u"[zolw.mp4](https://przyroda.example/media/zolw.mp4)\n"_s;
         QTest::newRow("frame of javascript") << u"<iframe src=\"javascript:alert(1)\"></iframe><p>x</p>"_s << u"x\n"_s;
-        QTest::newRow("github code") << u"<div class=\"highlight highlight-source-rust notranslate\"><pre>fn main() {}\n</pre></div>"_s
-                                     << u"```rust\nfn main() {}\n```\n"_s;
-        QTest::newRow("code language on pre") << u"<pre class=\"lang-sql\"><code>SELECT 1;</code></pre>"_s
-                                              << u"```sql\nSELECT 1;\n```\n"_s;
+        QTest::newRow("github code")
+                << u"<div class=\"highlight highlight-source-rust notranslate\"><pre>fn main() {}\n</pre></div>"_s
+                << u"```rust\nfn main() {}\n```\n"_s;
+        QTest::newRow("code language on pre")
+                << u"<pre class=\"lang-sql\"><code>SELECT 1;</code></pre>"_s << u"```sql\nSELECT 1;\n```\n"_s;
         QTest::newRow("data-lang") << u"<pre data-lang=\"python\">print('żółw')</pre>"_s
                                    << u"```python\nprint('żółw')\n```\n"_s;
-        QTest::newRow("scripts and handlers") << u"<p onclick=\"steal()\">Tekst<script>alert(1)</script><style>p{}</style></p>"
-                                                 "<svg><script>alert(2)</script></svg><img src=x onerror=alert(3)>"_s
-                                              << u"Tekst![](https://przyroda.example/artykuly/x)\n"_s;
+        QTest::newRow("scripts and handlers")
+                << u"<p onclick=\"steal()\">Tekst<script>alert(1)</script><style>p{}</style></p>"
+                   "<svg><script>alert(2)</script></svg><img src=x onerror=alert(3)>"_s
+                << u"Tekst![](https://przyroda.example/artykuly/x)\n"_s;
         QTest::newRow("tokens in the input") << u"<p>a\uE0B00\uE0B1b</p>"_s << u"a0b\n"_s;
-        QTest::newRow("formula dollars") << u"<p>Cena $10, a <b>karmy</b> 15$</p>"_s << u"Cena \\$10, a **karmy** 15$\n"_s;
+        QTest::newRow("formula dollars") << u"<p>Cena $10, a <b>karmy</b> 15$</p>"_s
+                                         << u"Cena \\$10, a **karmy** 15$\n"_s;
     }
     void convert()
     {
@@ -578,9 +610,8 @@ private Q_SLOTS:
         QCOMPARE(list.pictures().size(), 2);
         QCOMPARE(list.pictures().first().alt, u"Jeden obraz"_s);
         const QString md = u"x "_s + a + u" ["_s + b + u"](https://h.example/) "_s + pictureToken(99) + u" \uE0B0"_s;
-        const QString out = replacePictureTokens(md, [](int index, bool inLink) {
-            return inLink ? u"LINK%1"_s.arg(index) : u"P%1"_s.arg(index);
-        });
+        const QString out = replacePictureTokens(
+                md, [](int index, bool inLink) { return inLink ? u"LINK%1"_s.arg(index) : u"P%1"_s.arg(index); });
         QCOMPARE(out, u"x P0 LINK1 P99 "_s);
         for (int i = 0; i < MaxPictures + 10; ++i)
             list.add(u"https://a.example/%1.png"_s.arg(i + 2), QString());
@@ -712,12 +743,16 @@ private Q_SLOTS:
 
     void dataPictures()
     {
-        QCOMPARE(decodeDataPicture(QString(u"data:image/png;base64,"_s + QString::fromLatin1(pngBytes().toBase64())), 1000), pngBytes());
+        QCOMPARE(decodeDataPicture(QString(u"data:image/png;base64,"_s + QString::fromLatin1(pngBytes().toBase64())),
+                                   1000),
+                 pngBytes());
         QCOMPARE(decodeDataPicture(u"data:image/svg+xml,%3Csvg%3E"_s, 1000), QByteArray("<svg>"));
-        QVERIFY(decodeDataPicture(QString(u"data:image/png;base64,"_s + QString(4000, u'A')), 1000).isEmpty()); // too large
+        QVERIFY(decodeDataPicture(QString(u"data:image/png;base64,"_s + QString(4000, u'A')), 1000)
+                        .isEmpty()); // too large
         QVERIFY(decodeDataPicture(u"https://a.example/x.png"_s, 1000).isEmpty());
         QVERIFY(decodeDataPicture(u"data:image/png;base64"_s, 1000).isEmpty());
-        QCOMPARE(pictureFileName({u"https://a.example/zdj%C4%99cia/%C5%BC%C3%B3%C5%82w.jpeg"_s, {}}, u"jpg"_s, u"x"_s, 0),
+        QCOMPARE(pictureFileName({u"https://a.example/zdj%C4%99cia/%C5%BC%C3%B3%C5%82w.jpeg"_s, {}}, u"jpg"_s, u"x"_s,
+                                 0),
                  u"żółw.jpeg"_s);
         QCOMPARE(pictureFileName({u"data:image/png;base64,AAAA"_s, {}}, u"png"_s, u"Żółw: stepowy"_s, 2),
                  u"Żółw stepowy 2.png"_s);
@@ -726,9 +761,9 @@ private Q_SLOTS:
     // ---- the host's manifests
     void manifests()
     {
-        const QJsonObject chromium = hostManifest(Family::Chromium, u"/usr/bin/brulion-cli"_s,
-                                                  {u"abcdefghijklmnopabcdefghijklmnop"_s, u"not-an-id"_s,
-                                                   chromeExtensionId()});
+        const QJsonObject chromium =
+                hostManifest(Family::Chromium, u"/usr/bin/brulion-cli"_s,
+                             {u"abcdefghijklmnopabcdefghijklmnop"_s, u"not-an-id"_s, chromeExtensionId()});
         QCOMPARE(chromium.value(u"name"_s).toString(), u"io.github.januszbit.brulion"_s);
         QCOMPARE(chromium.value(u"type"_s).toString(), u"stdio"_s);
         QCOMPARE(chromium.value(u"path"_s).toString(), u"/usr/bin/brulion-cli"_s);
@@ -737,7 +772,8 @@ private Q_SLOTS:
                              u"chrome-extension://abcdefghijklmnopabcdefghijklmnop/"_s}));
         QVERIFY(!chromium.contains(u"allowed_extensions"_s));
         const QJsonObject firefox = hostManifest(Family::Firefox, u"C:\\Brulion\\brulion-cli.exe"_s);
-        QCOMPARE(firefox.value(u"allowed_extensions"_s).toArray(), QJsonArray{u"brulion-clipper@januszbit.github.io"_s});
+        QCOMPARE(firefox.value(u"allowed_extensions"_s).toArray(),
+                 QJsonArray{u"brulion-clipper@januszbit.github.io"_s});
         QVERIFY(!firefox.contains(u"allowed_origins"_s));
     }
 
@@ -755,9 +791,9 @@ private Q_SLOTS:
         QTest::newRow("linux chrome") << linux << user << u"chrome"_s
                                       << u"/home/ja/.config/google-chrome/NativeMessagingHosts/"_s + file << QString()
                                       << u"/home/ja/.config/google-chrome"_s;
-        QTest::newRow("linux chromium xdg") << linux << user << u"chromium"_s
-                                            << u"/home/ja/cfg/chromium/NativeMessagingHosts/"_s + file << QString()
-                                            << u"/home/ja/cfg/chromium"_s;
+        QTest::newRow("linux chromium xdg")
+                << linux << user << u"chromium"_s << u"/home/ja/cfg/chromium/NativeMessagingHosts/"_s + file
+                << QString() << u"/home/ja/cfg/chromium"_s;
         QTest::newRow("linux brave") << linux << user << u"brave"_s
                                      << u"/home/ja/.config/BraveSoftware/Brave-Browser/NativeMessagingHosts/"_s + file
                                      << QString() << u"/home/ja/.config/BraveSoftware/Brave-Browser"_s;
@@ -767,44 +803,56 @@ private Q_SLOTS:
         QTest::newRow("linux firefox") << linux << user << u"firefox"_s
                                        << u"/home/ja/.mozilla/native-messaging-hosts/"_s + file << QString()
                                        << u"/home/ja/.mozilla"_s;
-        QTest::newRow("linux system chrome") << linux << system << u"chrome"_s
-                                             << u"/etc/opt/chrome/native-messaging-hosts/"_s + file << QString() << QString();
-        QTest::newRow("linux system chromium") << linux << system << u"chromium"_s
-                                               << u"/etc/chromium/native-messaging-hosts/"_s + file << QString() << QString();
-        QTest::newRow("linux system edge") << linux << system << u"edge"_s
-                                           << u"/etc/opt/edge/native-messaging-hosts/"_s + file << QString() << QString();
-        QTest::newRow("linux system firefox") << linux << system << u"firefox"_s
-                                              << u"/usr/lib/mozilla/native-messaging-hosts/"_s + file << QString() << QString();
+        QTest::newRow("linux system chrome")
+                << linux << system << u"chrome"_s << u"/etc/opt/chrome/native-messaging-hosts/"_s + file << QString()
+                << QString();
+        QTest::newRow("linux system chromium")
+                << linux << system << u"chromium"_s << u"/etc/chromium/native-messaging-hosts/"_s + file << QString()
+                << QString();
+        QTest::newRow("linux system edge")
+                << linux << system << u"edge"_s << u"/etc/opt/edge/native-messaging-hosts/"_s + file << QString()
+                << QString();
+        QTest::newRow("linux system firefox")
+                << linux << system << u"firefox"_s << u"/usr/lib/mozilla/native-messaging-hosts/"_s + file << QString()
+                << QString();
         QTest::newRow("mac chrome") << mac << user << u"chrome"_s
-                                    << u"/Users/ja/Library/Application Support/Google/Chrome/NativeMessagingHosts/"_s + file
+                                    << u"/Users/ja/Library/Application Support/Google/Chrome/NativeMessagingHosts/"_s
+                                               + file
                                     << QString() << u"/Users/ja/Library/Application Support/Google/Chrome"_s;
         QTest::newRow("mac firefox") << mac << user << u"firefox"_s
                                      << u"/Users/ja/Library/Application Support/Mozilla/NativeMessagingHosts/"_s + file
                                      << QString() << u"/Users/ja/Library/Application Support/Mozilla"_s;
-        QTest::newRow("mac system chrome") << mac << system << u"chrome"_s
-                                           << u"/Library/Google/Chrome/NativeMessagingHosts/"_s + file << QString() << QString();
+        QTest::newRow("mac system chrome")
+                << mac << system << u"chrome"_s << u"/Library/Google/Chrome/NativeMessagingHosts/"_s + file << QString()
+                << QString();
         QTest::newRow("mac system edge") << mac << system << u"edge"_s
-                                         << u"/Library/Microsoft/Edge/NativeMessagingHosts/"_s + file << QString() << QString();
-        QTest::newRow("windows chrome") << win << user << u"chrome"_s
-                                        << u"C:/Users/ja/AppData/Local/Brulion/NativeMessagingHosts/io.github.januszbit.brulion.chromium.json"_s
-                                        << u"HKEY_CURRENT_USER\\Software\\Google\\Chrome\\NativeMessagingHosts\\io.github.januszbit.brulion"_s
-                                        << u"C:/Users/ja/AppData/Local/Google/Chrome/User Data"_s;
-        QTest::newRow("windows edge") << win << user << u"edge"_s
-                                      << u"C:/Users/ja/AppData/Local/Brulion/NativeMessagingHosts/io.github.januszbit.brulion.chromium.json"_s
-                                      << u"HKEY_CURRENT_USER\\Software\\Microsoft\\Edge\\NativeMessagingHosts\\io.github.januszbit.brulion"_s
-                                      << u"C:/Users/ja/AppData/Local/Microsoft/Edge/User Data"_s;
-        QTest::newRow("windows brave") << win << user << u"brave"_s
-                                       << u"C:/Users/ja/AppData/Local/Brulion/NativeMessagingHosts/io.github.januszbit.brulion.chromium.json"_s
-                                       << u"HKEY_CURRENT_USER\\Software\\BraveSoftware\\Brave-Browser\\NativeMessagingHosts\\io.github.januszbit.brulion"_s
-                                       << u"C:/Users/ja/AppData/Local/BraveSoftware/Brave-Browser/User Data"_s;
-        QTest::newRow("windows firefox") << win << user << u"firefox"_s
-                                         << u"C:/Users/ja/AppData/Local/Brulion/NativeMessagingHosts/io.github.januszbit.brulion.firefox.json"_s
-                                         << u"HKEY_CURRENT_USER\\Software\\Mozilla\\NativeMessagingHosts\\io.github.januszbit.brulion"_s
-                                         << u"C:/Users/ja/AppData/Roaming/Mozilla/Firefox"_s;
-        QTest::newRow("windows system chromium") << win << system << u"chromium"_s
-                                                 << u"C:/ProgramData/Brulion/NativeMessagingHosts/io.github.januszbit.brulion.chromium.json"_s
-                                                 << u"HKEY_LOCAL_MACHINE\\Software\\Chromium\\NativeMessagingHosts\\io.github.januszbit.brulion"_s
-                                                 << QString();
+                                         << u"/Library/Microsoft/Edge/NativeMessagingHosts/"_s + file << QString()
+                                         << QString();
+        QTest::newRow("windows chrome")
+                << win << user << u"chrome"_s
+                << u"C:/Users/ja/AppData/Local/Brulion/NativeMessagingHosts/io.github.januszbit.brulion.chromium.json"_s
+                << u"HKEY_CURRENT_USER\\Software\\Google\\Chrome\\NativeMessagingHosts\\io.github.januszbit.brulion"_s
+                << u"C:/Users/ja/AppData/Local/Google/Chrome/User Data"_s;
+        QTest::newRow("windows edge")
+                << win << user << u"edge"_s
+                << u"C:/Users/ja/AppData/Local/Brulion/NativeMessagingHosts/io.github.januszbit.brulion.chromium.json"_s
+                << u"HKEY_CURRENT_USER\\Software\\Microsoft\\Edge\\NativeMessagingHosts\\io.github.januszbit.brulion"_s
+                << u"C:/Users/ja/AppData/Local/Microsoft/Edge/User Data"_s;
+        QTest::newRow("windows brave")
+                << win << user << u"brave"_s
+                << u"C:/Users/ja/AppData/Local/Brulion/NativeMessagingHosts/io.github.januszbit.brulion.chromium.json"_s
+                << u"HKEY_CURRENT_USER\\Software\\BraveSoftware\\Brave-Browser\\NativeMessagingHosts\\io.github.januszbit.brulion"_s
+                << u"C:/Users/ja/AppData/Local/BraveSoftware/Brave-Browser/User Data"_s;
+        QTest::newRow("windows firefox")
+                << win << user << u"firefox"_s
+                << u"C:/Users/ja/AppData/Local/Brulion/NativeMessagingHosts/io.github.januszbit.brulion.firefox.json"_s
+                << u"HKEY_CURRENT_USER\\Software\\Mozilla\\NativeMessagingHosts\\io.github.januszbit.brulion"_s
+                << u"C:/Users/ja/AppData/Roaming/Mozilla/Firefox"_s;
+        QTest::newRow("windows system chromium")
+                << win << system << u"chromium"_s
+                << u"C:/ProgramData/Brulion/NativeMessagingHosts/io.github.januszbit.brulion.chromium.json"_s
+                << u"HKEY_LOCAL_MACHINE\\Software\\Chromium\\NativeMessagingHosts\\io.github.januszbit.brulion"_s
+                << QString();
     }
     void locations()
     {
@@ -874,7 +922,8 @@ private Q_SLOTS:
         f.write(R"({"name":"org.example.x","path":"/bin/true"})");
         f.close();
         // A file of Brulion's name that is not its manifest stays too.
-        const QString imposter = home.path() + u"/.config/google-chrome/NativeMessagingHosts/io.github.januszbit.brulion.json"_s;
+        const QString imposter =
+                home.path() + u"/.config/google-chrome/NativeMessagingHosts/io.github.januszbit.brulion.json"_s;
         QVERIFY(QDir().mkpath(QFileInfo(imposter).absolutePath()));
         QFile g(imposter);
         QVERIFY(g.open(QIODevice::WriteOnly));
@@ -931,18 +980,21 @@ private Q_SLOTS:
         QTest::addColumn<QStringList>("arguments");
         QTest::addColumn<bool>("host");
         QTest::newRow("chrome") << QStringList{u"chrome-extension://calcbkckojhmdfecpcohaangneahmkgg/"_s} << true;
-        QTest::newRow("chrome on windows") << QStringList{u"chrome-extension://calcbkckojhmdfecpcohaangneahmkgg/"_s,
-                                                          u"--parent-window=1234"_s}
-                                           << true;
-        QTest::newRow("firefox") << QStringList{u"/home/ja/.mozilla/native-messaging-hosts/io.github.januszbit.brulion.json"_s,
-                                                u"brulion-clipper@januszbit.github.io"_s}
-                                 << true;
+        QTest::newRow("chrome on windows")
+                << QStringList{u"chrome-extension://calcbkckojhmdfecpcohaangneahmkgg/"_s, u"--parent-window=1234"_s}
+                << true;
+        QTest::newRow("firefox")
+                << QStringList{u"/home/ja/.mozilla/native-messaging-hosts/io.github.januszbit.brulion.json"_s,
+                               u"brulion-clipper@januszbit.github.io"_s}
+                << true;
         QTest::newRow("firefox on windows")
                 << QStringList{u"C:\\Users\\ja\\AppData\\Local\\Brulion\\NativeMessagingHosts\\io.github.januszbit.brulion.firefox.json"_s,
                                u"brulion-clipper@januszbit.github.io"_s}
                 << true;
-        QTest::newRow("another extension") << QStringList{u"/x/other.json"_s, u"brulion-clipper@januszbit.github.io"_s} << false;
-        QTest::newRow("another id") << QStringList{u"/x/io.github.januszbit.brulion.json"_s, u"evil@example.com"_s} << false;
+        QTest::newRow("another extension")
+                << QStringList{u"/x/other.json"_s, u"brulion-clipper@januszbit.github.io"_s} << false;
+        QTest::newRow("another id") << QStringList{u"/x/io.github.januszbit.brulion.json"_s, u"evil@example.com"_s}
+                                    << false;
         QTest::newRow("a command") << QStringList{u"page"_s, u"list"_s} << false;
         QTest::newRow("chrome with more") << QStringList{u"chrome-extension://x/"_s, u"page"_s, u"delete"_s} << false;
         QTest::newRow("nothing") << QStringList{} << false;

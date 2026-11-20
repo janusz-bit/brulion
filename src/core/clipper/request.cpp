@@ -20,8 +20,9 @@ struct NamedKind {
     QStringView name;
 };
 constexpr NamedKind ClipKinds[] = {
-        {ClipKind::Article, u"article"},   {ClipKind::Selection, u"selection"}, {ClipKind::Page, u"page"},
-        {ClipKind::Screenshot, u"screenshot"}, {ClipKind::Bookmark, u"bookmark"}, {ClipKind::Picture, u"picture"},
+        {ClipKind::Article, u"article"},   {ClipKind::Selection, u"selection"},
+        {ClipKind::Page, u"page"},         {ClipKind::Screenshot, u"screenshot"},
+        {ClipKind::Bookmark, u"bookmark"}, {ClipKind::Picture, u"picture"},
         {ClipKind::Link, u"link"},
 };
 
@@ -404,9 +405,8 @@ std::optional<ClipRequest> parseClipRequest(const QJsonObject &o, RequestProblem
     r.place.journalLink = boolOf(place, u"journalLink", false, &bad);
     const QJsonValue folder = place.value(u"folder");
     if (!folder.isUndefined() && !folder.isNull()) {
-        const auto checked = folder.isString() && folder.toString().size() <= 4096
-                                     ? checkedFolder(folder.toString())
-                                     : std::nullopt;
+        const auto checked =
+                folder.isString() && folder.toString().size() <= 4096 ? checkedFolder(folder.toString()) : std::nullopt;
         if (!checked) {
             refuse(problem, u"bad_folder"_s, u"place.folder"_s,
                    u"The folder is not a folder of the notebook: %1"_s.arg(folder.toString().left(200)));

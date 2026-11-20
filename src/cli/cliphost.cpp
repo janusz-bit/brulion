@@ -36,6 +36,7 @@
 #include <QProcess>
 #include <QStandardPaths>
 
+#include <algorithm>
 #include <cerrno>
 #include <cstdio>
 #include <map>
@@ -107,8 +108,8 @@ QString appProgram()
     // `brulion cli …`: this is the app.
     if (name == u"brulion"_s || name == u"brulion.exe"_s)
         return self;
-    const QString beside = QFileInfo(self).absolutePath() + u'/'
-                           + (name.endsWith(u".exe"_s) ? u"brulion.exe"_s : u"brulion"_s);
+    const QString beside =
+            QFileInfo(self).absolutePath() + u'/' + (name.endsWith(u".exe"_s) ? u"brulion.exe"_s : u"brulion"_s);
     if (QFileInfo(beside).isExecutable())
         return beside;
     return QStandardPaths::findExecutable(u"brulion"_s);
@@ -125,8 +126,8 @@ public:
         const QString type = message.value(u"type"_s).toString();
         if (type == u"hello")
             return writeFrame(hello(id, message));
-        if (type == u"folders" || type == u"pages" || type == u"headings" || type == u"templates"
-            || type == u"preview" || type == u"clip" || type == u"open")
+        if (type == u"folders" || type == u"pages" || type == u"headings" || type == u"templates" || type == u"preview"
+            || type == u"clip" || type == u"open")
             return writeFrame(withNotebook(type, id, message));
         writeFrame(errorMessage(id, u"unknown_type"_s, u"Unknown request: %1"_s.arg(type.left(40))));
     }
@@ -248,10 +249,13 @@ private:
         if (!request)
             return errorMessage(id, problem.code, problem.message, {{u"field"_s, problem.field}});
         const bool progress = type == u"clip" && message.value(u"progress"_s).toBool();
-        const Result r = runClip(call, *request, type == u"preview", progress ? ClipProgress([&id](int done, int total) {
-            writeFrame(QJsonObject{{u"type"_s, u"progress"_s}, {u"id"_s, id}, {u"done"_s, done}, {u"total"_s, total}});
-        })
-                                                                                  : ClipProgress());
+        const Result r =
+                runClip(call, *request, type == u"preview",
+                        progress ? ClipProgress([&id](int done, int total) {
+                            writeFrame(QJsonObject{
+                                    {u"type"_s, u"progress"_s}, {u"id"_s, id}, {u"done"_s, done}, {u"total"_s, total}});
+                        })
+                                 : ClipProgress());
         if (r.error)
             return errorMessage(id, r.error->code, r.error->message, r.error->details);
         out.insert(u"result"_s, r.value);
@@ -391,8 +395,8 @@ Result openInApp(Call &call, const QString &path, int line)
     process.setUnixProcessParameters(QProcess::UnixProcessFlag::CreateNewSession);
 #endif
     if (call.dryRun())
-        return call.ok(QJsonObject{{u"dryRun"_s, true}, {u"program"_s, program}, {u"arguments"_s,
-                                                                                  QJsonArray::fromStringList(arguments)}});
+        return call.ok(QJsonObject{
+                {u"dryRun"_s, true}, {u"program"_s, program}, {u"arguments"_s, QJsonArray::fromStringList(arguments)}});
     if (!process.startDetached())
         return call.fail(ExitUnavailable, u"app_not_started"_s, tr("Could not start %1").arg(program));
     return call.ok(QJsonObject{{u"opened"_s, true}, {u"via"_s, u"launch"_s}, {u"program"_s, program}});
@@ -412,7 +416,8 @@ int serveClipHost(Context &context)
                 return ExitUsage;
             }
             if (frame->error != FrameError::None) {
-                writeFrame(errorMessage(QJsonValue(), frameErrorCode(frame->error), u"The message is no JSON object"_s));
+                writeFrame(
+                        errorMessage(QJsonValue(), frameErrorCode(frame->error), u"The message is no JSON object"_s));
                 continue;
             }
             host.handle(frame->message);
@@ -423,7 +428,8 @@ int serveClipHost(Context &context)
         decoder.feed(QByteArrayView(buffer.constData(), n));
     }
     if (decoder.finish() == FrameError::Truncated) {
-        writeFrame(errorMessage(QJsonValue(), frameErrorCode(FrameError::Truncated), u"The input ended inside a message"_s));
+        writeFrame(errorMessage(QJsonValue(), frameErrorCode(FrameError::Truncated),
+                                u"The input ended inside a message"_s));
         return ExitUsage;
     }
     return ExitOk;

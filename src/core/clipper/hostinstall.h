@@ -32,9 +32,9 @@ struct HostSetup {
     Os os = Os::Linux;
     Scope scope = Scope::User;
     Environment env;
-    QString program;             ///< the program the manifests name (absolute)
-    QStringList extraChromeIds;  ///< more Chromium extension ids to let in
-    bool dryRun = false;         ///< compute, write nothing
+    QString program;            ///< the program the manifests name (absolute)
+    QStringList extraChromeIds; ///< more Chromium extension ids to let in
+    bool dryRun = false;        ///< compute, write nothing
 };
 
 /// The environment of this process ($HOME, $XDG_CONFIG_HOME, %LOCALAPPDATA%, …).

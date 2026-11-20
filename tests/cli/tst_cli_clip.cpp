@@ -220,12 +220,12 @@ private Q_SLOTS:
         server.files.insert("/artykuly/zdjecia/zolw-ma%C5%82y.jpg", pngBytes());
         const QString dir = vault();
         const QString url = server.url(u"/artykuly/zolw-stepowy.html"_s).toString();
-        const Run r = run(dir,
-                          {u"clip"_s, u"save"_s, u"--url"_s, url, u"--title"_s, u"Żółw stepowy: w ogrodzie?"_s,
-                           u"--author"_s, u"Zofia Łęcka"_s, u"--published"_s, u"2026-11-19T08:15:00+01:00"_s,
-                           u"--tags"_s, u"gady, ogród zimą"_s, u"--folder"_s, u"Wycinki/Przyroda"_s, u"--journal-link"_s,
-                           u"--stdin"_s},
-                          fixture(u"artykul.html"_s));
+        const Run r =
+                run(dir,
+                    {u"clip"_s, u"save"_s, u"--url"_s, url, u"--title"_s, u"Żółw stepowy: w ogrodzie?"_s, u"--author"_s,
+                     u"Zofia Łęcka"_s, u"--published"_s, u"2026-11-19T08:15:00+01:00"_s, u"--tags"_s,
+                     u"gady, ogród zimą"_s, u"--folder"_s, u"Wycinki/Przyroda"_s, u"--journal-link"_s, u"--stdin"_s},
+                    fixture(u"artykul.html"_s));
         QVERIFY2(r.code == 0, r.out.constData());
         const QJsonObject result = r.result();
         QCOMPARE(result.value(u"path"_s).toString(), u"Wycinki/Przyroda/Żółw stepowy w ogrodzie.md"_s);
@@ -237,8 +237,9 @@ private Q_SLOTS:
         QCOMPARE(pictures.value(u"failed"_s).toArray().size(), 1);
         QCOMPARE(pictures.value(u"failed"_s).toArray().first().toObject().value(u"reason"_s).toString(), u"http"_s);
         const QString page = QString::fromUtf8(readFile(dir + u"/Wycinki/Przyroda/Żółw stepowy w ogrodzie.md"_s));
-        QVERIFY2(page.startsWith(u"---\nsource: "_s + url + u"\nauthor: Zofia Łęcka\npublished: 2026-11-19\n"
-                                 u"clipped: 2026-11-20 18:30\ntags: [gady, ogród zimą]\n---\n\n"_s),
+        QVERIFY2(page.startsWith(u"---\nsource: "_s + url
+                                 + u"\nauthor: Zofia Łęcka\npublished: 2026-11-19\n"
+                                   u"clipped: 2026-11-20 18:30\ntags: [gady, ogród zimą]\n---\n\n"_s),
                  qPrintable(page));
         // Named by what the bytes are (a PNG behind a .jpg address).
         QVERIFY2(page.contains(u"![[zolw-mały.png]]\n\n*Żółw na trawie. Fot.*"_s), qPrintable(page));
@@ -252,8 +253,9 @@ private Q_SLOTS:
         QCOMPARE(QString::fromUtf8(readFile(dir + u"/journals/2026-11-20.md"_s)), u"- [[Żółw stepowy w ogrodzie]]\n"_s);
 
         // The same title again: a new page, never the first one.
-        const Run again = run(dir, {u"clip"_s, u"save"_s, u"--url"_s, url, u"--title"_s, u"żółw stepowy w ogrodzie"_s,
-                                    u"--folder"_s, u"Wycinki/Przyroda"_s, u"--no-pictures"_s, u"--html"_s, u"<p>Inny</p>"_s});
+        const Run again =
+                run(dir, {u"clip"_s, u"save"_s, u"--url"_s, url, u"--title"_s, u"żółw stepowy w ogrodzie"_s,
+                          u"--folder"_s, u"Wycinki/Przyroda"_s, u"--no-pictures"_s, u"--html"_s, u"<p>Inny</p>"_s});
         QCOMPARE(again.code, 0);
         QCOMPARE(again.result().value(u"path"_s).toString(), u"Wycinki/Przyroda/żółw stepowy w ogrodzie 2.md"_s);
     }
@@ -261,11 +263,12 @@ private Q_SLOTS:
     void intoJournalAndHeading()
     {
         const QByteArray journal = "- [ ] Zadanie\r\n- \r\n";
-        const QByteArray reading = "# Czytelnia\r\n\r\n## Do przeczytania\r\n- [Stary](https://a.example/)\r\n\r\n## Przeczytane\r\n- nic\r\n";
+        const QByteArray reading = "# Czytelnia\r\n\r\n## Do przeczytania\r\n- [Stary](https://a.example/)\r\n\r\n## "
+                                   "Przeczytane\r\n- nic\r\n";
         const QString dir = vault({{u"journals/2026-11-20.md"_s, journal}, {u"Czytelnia.md"_s, reading}});
         Run r = run(dir, {u"clip"_s, u"save"_s, u"--place"_s, u"journal"_s, u"--url"_s, u"https://przyroda.example/a"_s,
-                          u"--title"_s, u"Żółw [stepowy]"_s, u"--selection"_s, u"<p>gad, który <b>źle znosi</b> chłód</p>"_s,
-                          u"--tags"_s, u"gady"_s});
+                          u"--title"_s, u"Żółw [stepowy]"_s, u"--selection"_s,
+                          u"<p>gad, który <b>źle znosi</b> chłód</p>"_s, u"--tags"_s, u"gady"_s});
         QVERIFY2(r.code == 0, r.out.constData());
         QCOMPARE(r.result().value(u"template"_s).toString(), u"link"_s);
         QCOMPARE(readFile(dir + u"/journals/2026-11-20.md"_s),
@@ -279,15 +282,18 @@ private Q_SLOTS:
                  QByteArray("# Czytelnia\r\n\r\n## Do przeczytania\r\n- [Stary](https://a.example/)\r\n"
                             "- [Nowy](https://b.example/x)\r\n\r\n## Przeczytane\r\n- nic\r\n"));
         // An article with the Brulion template in the journal: its frontmatter as the block's properties.
-        r = run(dir, {u"clip"_s, u"save"_s, u"--place"_s, u"journal"_s, u"--template"_s, u"brulion"_s, u"--url"_s,
-                      u"https://c.example/"_s, u"--html"_s, u"<p>Akapit pierwszy.</p><p>Drugi.</p>"_s, u"--no-pictures"_s});
+        r = run(dir,
+                {u"clip"_s, u"save"_s, u"--place"_s, u"journal"_s, u"--template"_s, u"brulion"_s, u"--url"_s,
+                 u"https://c.example/"_s, u"--html"_s, u"<p>Akapit pierwszy.</p><p>Drugi.</p>"_s, u"--no-pictures"_s});
         QVERIFY2(r.code == 0, r.out.constData());
         QVERIFY2(readFile(dir + u"/journals/2026-11-20.md"_s)
-                         .endsWith("- Akapit pierwszy.\r\n  source:: https://c.example/\r\n  clipped:: 2026-11-20 18:30\r\n"
+                         .endsWith("- Akapit pierwszy.\r\n  source:: https://c.example/\r\n  clipped:: 2026-11-20 "
+                                   "18:30\r\n"
                                    "  \r\n  Drugi.\r\n"),
                  readFile(dir + u"/journals/2026-11-20.md"_s).constData());
         // A heading the page does not have, a page that is not there.
-        r = run(dir, {u"clip"_s, u"save"_s, u"--page"_s, u"Czytelnia"_s, u"--heading"_s, u"Brak"_s, u"--url"_s, u"https://b.example/"_s});
+        r = run(dir, {u"clip"_s, u"save"_s, u"--page"_s, u"Czytelnia"_s, u"--heading"_s, u"Brak"_s, u"--url"_s,
+                      u"https://b.example/"_s});
         QCOMPARE(r.code, 3);
         QCOMPARE(r.errorCode(), u"under_not_found"_s);
         r = run(dir, {u"clip"_s, u"save"_s, u"--page"_s, u"Nie ma"_s, u"--heading"_s, u"X"_s});
@@ -297,15 +303,18 @@ private Q_SLOTS:
     void previewAndDryRunWriteNothing()
     {
         const QString dir = vault();
-        Run r = run(dir, {u"clip"_s, u"save"_s, u"--preview"_s, u"--url"_s, u"https://a.example/"_s, u"--title"_s, u"Podgląd"_s,
-                          u"--html"_s, u"<h2>Śródtytuł</h2><p>Tekst <img src=\"/a.png\" alt=\"A\"></p>"_s, u"--template"_s,
-                          u"joplin"_s});
+        Run r = run(dir, {u"clip"_s, u"save"_s, u"--preview"_s, u"--url"_s, u"https://a.example/"_s, u"--title"_s,
+                          u"Podgląd"_s, u"--html"_s, u"<h2>Śródtytuł</h2><p>Tekst <img src=\"/a.png\" alt=\"A\"></p>"_s,
+                          u"--template"_s, u"joplin"_s});
         QVERIFY2(r.code == 0, r.out.constData());
         QCOMPARE(r.result().value(u"path"_s).toString(), u"Podgląd.md"_s);
-        QVERIFY2(r.result().value(u"markdown"_s).toString().contains(u"## Śródtytuł\n\nTekst ![A](https://a.example/a.png)"_s),
+        QVERIFY2(r.result()
+                         .value(u"markdown"_s)
+                         .toString()
+                         .contains(u"## Śródtytuł\n\nTekst ![A](https://a.example/a.png)"_s),
                  r.out.constData());
-        r = run(dir, {u"--dry-run"_s, u"clip"_s, u"save"_s, u"--url"_s, u"https://a.example/"_s, u"--title"_s, u"Próba"_s,
-                      u"--html"_s, u"<p>x</p>"_s});
+        r = run(dir, {u"--dry-run"_s, u"clip"_s, u"save"_s, u"--url"_s, u"https://a.example/"_s, u"--title"_s,
+                      u"Próba"_s, u"--html"_s, u"<p>x</p>"_s});
         QCOMPARE(r.code, 0);
         QVERIFY(r.result().value(u"diff"_s).toString().contains(u"+++ b/Próba.md"_s));
         QCOMPARE(QDir(dir).entryList(QDir::Files | QDir::Dirs | QDir::NoDotAndDotDot), QStringList());
@@ -325,8 +334,8 @@ private Q_SLOTS:
         r = run(dir, {u"clip"_s, u"save"_s, u"--template"_s, u"nie-ma-takiego"_s, u"--html"_s, u"<p>x</p>"_s});
         QCOMPARE(r.code, 3);
         // A title that walks out of the folder is only a name.
-        r = run(dir, {u"clip"_s, u"save"_s, u"--title"_s, u"../../etc/passwd"_s, u"--html"_s, u"<p>x</p>"_s, u"--folder"_s,
-                      u"Wycinki"_s});
+        r = run(dir, {u"clip"_s, u"save"_s, u"--title"_s, u"../../etc/passwd"_s, u"--html"_s, u"<p>x</p>"_s,
+                      u"--folder"_s, u"Wycinki"_s});
         QCOMPARE(r.code, 0);
         QCOMPARE(r.result().value(u"path"_s).toString(), u"Wycinki/etc passwd.md"_s);
         QCOMPARE(QDir(dir).entryList(QDir::Dirs | QDir::NoDotAndDotDot), QStringList{u"Wycinki"_s});
@@ -378,12 +387,15 @@ private Q_SLOTS:
         a = h.receive();
         QCOMPARE(a.value(u"type"_s).toString(), u"clip"_s);
         QCOMPARE(a.value(u"result"_s).toObject().value(u"path"_s).toString(), u"Czytelnia.md"_s);
-        QCOMPARE(readFile(dir + u"/Czytelnia.md"_s),
-                 QByteArray("# Czytelnia\n\n## Do przeczytania\n- a\n### Pilne\n- [Żółw](https://przyroda.example/a)\n  > gad\n"));
+        QCOMPARE(readFile(dir + u"/Czytelnia.md"_s), QByteArray("# Czytelnia\n\n## Do przeczytania\n- a\n### Pilne\n- "
+                                                                "[Żółw](https://przyroda.example/a)\n  > gad\n"));
 
         // Another notebook of the app; one it does not know.
-        h.send({{u"type"_s, u"clip"_s}, {u"id"_s, 6}, {u"vault"_s, other},
-                {u"clip"_s, QJsonObject{{u"kind"_s, u"bookmark"_s}, {u"url"_s, u"https://d.example/"_s},
+        h.send({{u"type"_s, u"clip"_s},
+                {u"id"_s, 6},
+                {u"vault"_s, other},
+                {u"clip"_s, QJsonObject{{u"kind"_s, u"bookmark"_s},
+                                        {u"url"_s, u"https://d.example/"_s},
                                         {u"place"_s, QJsonObject{{u"kind"_s, u"journal"_s}}}}}});
         a = h.receive();
         QCOMPARE(a.value(u"result"_s).toObject().value(u"path"_s).toString(), u"journals/2026-11-20.md"_s);
@@ -394,7 +406,9 @@ private Q_SLOTS:
         QCOMPARE(a.value(u"code"_s).toString(), u"unknown_notebook"_s);
 
         // Hostile or broken requests are answered, the session goes on.
-        h.send({{u"type"_s, u"clip"_s}, {u"id"_s, 8}, {u"clip"_s, QJsonObject{{u"place"_s, QJsonObject{{u"folder"_s, u"../../x"_s}}}}}});
+        h.send({{u"type"_s, u"clip"_s},
+                {u"id"_s, 8},
+                {u"clip"_s, QJsonObject{{u"place"_s, QJsonObject{{u"folder"_s, u"../../x"_s}}}}}});
         QCOMPARE(h.receive().value(u"code"_s).toString(), u"bad_folder"_s);
         h.send({{u"type"_s, u"rm -rf"_s}, {u"id"_s, 9}});
         QCOMPARE(h.receive().value(u"code"_s).toString(), u"unknown_type"_s);
@@ -426,8 +440,9 @@ private Q_SLOTS:
     {
         QTest::addColumn<QStringList>("arguments");
         QTest::newRow("chromium") << QStringList{u"chrome-extension://calcbkckojhmdfecpcohaangneahmkgg/"_s};
-        QTest::newRow("firefox") << QStringList{m_home + u"/.mozilla/native-messaging-hosts/io.github.januszbit.brulion.json"_s,
-                                                u"brulion-clipper@januszbit.github.io"_s};
+        QTest::newRow("firefox") << QStringList{
+                m_home + u"/.mozilla/native-messaging-hosts/io.github.januszbit.brulion.json"_s,
+                u"brulion-clipper@januszbit.github.io"_s};
     }
     void browsersStartTheHost()
     {
@@ -509,7 +524,8 @@ private Q_SLOTS:
 
     void manifestForPackages()
     {
-        const Run r = cli({u"clip"_s, u"manifest"_s, u"firefox"_s, u"--program"_s, u"/run/current-system/sw/bin/brulion-cli"_s});
+        const Run r = cli(
+                {u"clip"_s, u"manifest"_s, u"firefox"_s, u"--program"_s, u"/run/current-system/sw/bin/brulion-cli"_s});
         QCOMPARE(r.code, 0);
         const QJsonObject m = QJsonDocument::fromJson(r.out).object();
         QCOMPARE(m.value(u"name"_s).toString(), u"io.github.januszbit.brulion"_s);

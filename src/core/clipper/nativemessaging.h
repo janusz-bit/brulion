@@ -38,7 +38,7 @@ public:
     explicit FrameDecoder(quint32 maxBytes = MaxIncomingBytes) : m_max(maxBytes) { }
 
     struct Frame {
-        QJsonObject message;                ///< empty unless error is None
+        QJsonObject message;                 ///< empty unless error is None
         FrameError error = FrameError::None; ///< InvalidJson / NotObject: this frame only; TooLarge: the end
         quint32 length = 0;                  ///< the length the frame announced
     };

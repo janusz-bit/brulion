@@ -5,6 +5,8 @@
 
 #include <QRegularExpression>
 
+#include <functional>
+
 using namespace Qt::StringLiterals;
 
 namespace brulion::clipper {

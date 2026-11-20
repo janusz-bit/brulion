@@ -7,6 +7,9 @@
 #include <QLocale>
 #include <QRegularExpression>
 
+#include <algorithm>
+#include <optional>
+
 using namespace Qt::StringLiterals;
 
 namespace brulion::clipper {
@@ -40,8 +43,8 @@ QLocale localeOf(dates::UiLocale locale)
 }
 
 /// The value of `{{name:arg}}`, or nullopt for a variable no template knows (kept as written).
-std::optional<Value> resolve(const QString &placeholder, const QString &name, const QString &arg,
-                             const ClipValues &v, const TemplateFill &fill)
+std::optional<Value> resolve(const QString &placeholder, const QString &name, const QString &arg, const ClipValues &v,
+                             const TemplateFill &fill)
 {
     const auto plain = [](const QString &text) { return Value{text, {}, false, false, false}; };
     const auto md = [](const QString &text) { return Value{text, {}, false, true, false}; };
@@ -137,10 +140,10 @@ bool needsYamlQuotes(const QString &s, bool flowItem)
         return true;
     static const QRegularExpression special(u"^(?:true|false|yes|no|on|off|y|n|null|~)$"_s,
                                             QRegularExpression::CaseInsensitiveOption);
-    static const QRegularExpression number(
-            u"^(?:[-+]?(?:\\d[\\d_]*(?:\\.\\d*)?|\\.\\d+)(?:[eE][-+]?\\d+)?|0x[0-9a-fA-F_]+|0o?[0-7_]+|[-+]?\\.(?:inf|nan)"
-            "|[-+]?\\d+(?::[0-5]?\\d)+(?:\\.\\d*)?)$"_s,
-            QRegularExpression::CaseInsensitiveOption);
+    static const QRegularExpression number(u"^(?:[-+]?(?:\\d[\\d_]*(?:\\.\\d*)?|\\.\\d+)(?:[eE][-+]?\\d+)?|0x[0-9a-fA-"
+                                           u"F_]+|0o?[0-7_]+|[-+]?\\.(?:inf|nan)"
+                                           "|[-+]?\\d+(?::[0-5]?\\d)+(?:\\.\\d*)?)$"_s,
+                                           QRegularExpression::CaseInsensitiveOption);
     return special.match(s).hasMatch() || number.match(s).hasMatch();
 }
 
@@ -596,9 +599,9 @@ QString fillClipTemplate(QStringView tplView, const ClipValues &values, const Te
             continue;
         }
         skipBlank = false;
-        const Context context = inFrontmatter                        ? Context::Yaml
+        const Context context = inFrontmatter                     ? Context::Yaml
                                 : property.match(line).hasMatch() ? Context::Property
-                                                                     : Context::Body;
+                                                                  : Context::Body;
         const LineOut filled = context == Context::Yaml       ? fillYaml(pieces, values, fill)
                                : context == Context::Property ? fillProperty(pieces, values, fill)
                                                               : fillBody(pieces, values, fill);
@@ -681,7 +684,8 @@ QString frontmatterAsBlockProperties(const QString &markdown)
     const auto flush = [&] {
         if (key.isEmpty())
             return;
-        const bool tags = key.compare(u"tags", Qt::CaseInsensitive) == 0 || key.compare(u"tag", Qt::CaseInsensitive) == 0;
+        const bool tags =
+                key.compare(u"tags", Qt::CaseInsensitive) == 0 || key.compare(u"tag", Qt::CaseInsensitive) == 0;
         QStringList values;
         for (const QString &item : std::as_const(items)) {
             const QString value = oneLine(unquote(item));

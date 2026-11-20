@@ -242,8 +242,8 @@ QString pictureSource(QStringView attrs)
     QString src = attribute(attrs, u"src"_s).value_or(QString()).trimmed();
     if (!src.isEmpty() && !(src.startsWith(u"data:"_s, Qt::CaseInsensitive) && src.size() < 512))
         return src;
-    for (const QStringView lazy : {u"data-src", u"data-lazy-src", u"data-original", u"data-actualsrc",
-                                   u"data-hi-res-src", u"data-full-src"}) {
+    for (const QStringView lazy :
+         {u"data-src", u"data-lazy-src", u"data-original", u"data-actualsrc", u"data-hi-res-src", u"data-full-src"}) {
         const QString value = attribute(attrs, lazy).value_or(QString()).trimmed();
         if (!value.isEmpty() && !value.startsWith(u"data:"_s, Qt::CaseInsensitive))
             return value;
@@ -260,8 +260,7 @@ QString pictureSource(QStringView attrs)
 /// `language-x` / `lang-x` / `highlight-source-x`, `data-lang`, `data-language`; "" when none.
 QString codeLanguage(QStringView attrs)
 {
-    static const QRegularExpression language(
-            u"(?:^|\\s)(?:language|lang|highlight-source)-([A-Za-z0-9_+#.-]+)"_s);
+    static const QRegularExpression language(u"(?:^|\\s)(?:language|lang|highlight-source)-([A-Za-z0-9_+#.-]+)"_s);
     static const QRegularExpression safe(u"^[A-Za-z0-9_+#.-]{1,40}$"_s);
     const auto m = language.match(attribute(attrs, u"class"_s).value_or(QString()));
     if (m.hasMatch())
@@ -311,9 +310,7 @@ QString embedLink(const QString &src, const QString &title)
         return {};
     // Its title, else the file it plays ("zolw.mp4"), else the address.
     const QString file = QUrl(address).fileName();
-    const QString label = !title.trimmed().isEmpty() ? title.simplified()
-                          : file.contains(u'.')       ? file
-                                                      : address;
+    const QString label = !title.trimmed().isEmpty() ? title.simplified() : file.contains(u'.') ? file : address;
     return u"<p><a href=\""_s + htmlEscaped(address) + u"\">"_s + htmlEscaped(label) + u"</a></p>"_s;
 }
 
@@ -398,8 +395,8 @@ Prepared prepare(const QString &html, const HtmlToMarkdownOptions &options)
         s = replaceTags(s, dropped, [](QStringView) { return QString(); });
     // HTML5's sections and groups are unknown to QTextDocument, which would run their texts
     // together: blocks. A figure's caption is a paragraph of its own, in italics.
-    for (const QStringView block : {u"article", u"section", u"header", u"footer", u"nav", u"aside", u"main",
-                                    u"figure", u"details", u"address", u"hgroup", u"search"})
+    for (const QStringView block : {u"article", u"section", u"header", u"footer", u"nav", u"aside", u"main", u"figure",
+                                    u"details", u"address", u"hgroup", u"search"})
         s = replaceTags(s, block, [](QStringView) { return u"<div>"_s; });
     s.replace(blockClose, u"</div>"_s);
     s = replaceTags(s, u"figcaption", [](QStringView) { return u"<p><em>"_s; });

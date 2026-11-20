@@ -35,12 +35,11 @@ done
 
 log() { printf '\033[1m[clipper-pack]\033[0m %s\n' "$*" >&2; }
 
-python=$(command -v python3 || true)
-if [[ -z $python ]]; then
+if command -v python3 >/dev/null; then
+  python=(python3)
+else
   command -v nix >/dev/null || { log "python3 is needed"; exit 2; }
   python=(nix shell nixpkgs#python3 --command python3)
-else
-  python=("$python")
 fi
 
 version=$(sed -nE 's/^[[:space:]]*VERSION[[:space:]]+([0-9]+\.[0-9]+\.[0-9]+)[[:space:]]*$/\1/p' "$root/CMakeLists.txt" | head -n 1)

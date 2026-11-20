@@ -70,7 +70,8 @@ private Q_SLOTS:
         chromium = rowOf(setup.browsers(), u"chromium"_s);
         QVERIFY(chromium.value(u"connected"_s).toBool());
         QVERIFY(!chromium.value(u"broken"_s).toBool());
-        const QString manifest = m_home.path() + u"/.config/chromium/NativeMessagingHosts/io.github.januszbit.brulion.json"_s;
+        const QString manifest =
+                m_home.path() + u"/.config/chromium/NativeMessagingHosts/io.github.januszbit.brulion.json"_s;
         QFile f(manifest);
         QVERIFY(f.open(QIODevice::ReadOnly));
         QCOMPARE(QJsonDocument::fromJson(f.readAll()).object().value(u"path"_s).toString(),
@@ -84,7 +85,8 @@ private Q_SLOTS:
         f.write(QJsonDocument(QJsonObject{{u"name"_s, u"io.github.januszbit.brulion"_s},
                                           {u"path"_s, u"/nonexistent/brulion-cli"_s},
                                           {u"type"_s, u"stdio"_s},
-                                          {u"allowed_origins"_s, QJsonArray{clipper::chromeOrigin(clipper::chromeExtensionId())}}})
+                                          {u"allowed_origins"_s,
+                                           QJsonArray{clipper::chromeOrigin(clipper::chromeExtensionId())}}})
                         .toJson());
         f.close();
         setup.refresh();

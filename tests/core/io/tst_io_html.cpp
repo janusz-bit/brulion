@@ -313,8 +313,9 @@ private Q_SLOTS:
                 << u"![Żółw](https://x.org/żółw.jpg)\n"_s;
         QTest::newRow("srcset picture") << u"<img srcset=\"https://x.org/a.jpg 1x, https://x.org/b.jpg 2x\">"_s
                                         << u"![](https://x.org/b.jpg)\n"_s;
-        QTest::newRow("src wins over srcset") << u"<img src=\"https://x.org/a.jpg\" srcset=\"https://x.org/b.jpg 2x\">"_s
-                                              << u"![](https://x.org/a.jpg)\n"_s;
+        QTest::newRow("src wins over srcset")
+                << u"<img src=\"https://x.org/a.jpg\" srcset=\"https://x.org/b.jpg 2x\">"_s
+                << u"![](https://x.org/a.jpg)\n"_s;
         QTest::newRow("github code") << u"<div class=\"highlight highlight-source-js\"><pre>let a = 1;\n</pre></div>"_s
                                      << u"```js\nlet a = 1;\n```\n"_s;
         QTest::newRow("language on pre") << u"<pre class=\"language-rust\"><code>fn x() {}</code></pre>"_s
@@ -323,8 +324,8 @@ private Q_SLOTS:
         QTest::newRow("human lang is no code language") << u"<pre lang=\"pl\">tekst</pre>"_s << u"```\ntekst\n```\n"_s;
         QTest::newRow("line break before the end tag")
                 << u"<pre><code>a\n\nb\n</code></pre>"_s << u"```\na\n\nb\n```\n"_s;
-        QTest::newRow("player dropped") << u"<p>a</p><iframe src=\"https://www.youtube.com/embed/AbCdEf12345\"></iframe>"_s
-                                        << u"a\n"_s;
+        QTest::newRow("player dropped")
+                << u"<p>a</p><iframe src=\"https://www.youtube.com/embed/AbCdEf12345\"></iframe>"_s << u"a\n"_s;
         // Dollars of the text never make a formula (SYNTAX §11), also across styles, lines and the
         // pieces of a paragraph; prices that pair with nothing, list items, table cells and
         // separate paragraphs stay as written; code and link destinations are never changed.

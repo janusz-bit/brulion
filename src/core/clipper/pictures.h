@@ -26,12 +26,12 @@ class PictureFetcher;
 namespace brulion::clipper {
 
 struct PictureLimits {
-    int maxCount = 60;                         ///< pictures saved at most; the rest stay links
-    qint64 maxBytes = 15 * 1024 * 1024;        ///< one picture
-    qint64 maxTotalBytes = 60 * 1024 * 1024;   ///< all of them together
-    int timeoutMs = 90 * 1000;                 ///< the whole download
-    int stallMs = webpicture::TimeoutMs;       ///< one request without progress
-    bool privateHosts = false;                 ///< also this device's and its network's pictures
+    int maxCount = 60;                       ///< pictures saved at most; the rest stay links
+    qint64 maxBytes = 15 * 1024 * 1024;      ///< one picture
+    qint64 maxTotalBytes = 60 * 1024 * 1024; ///< all of them together
+    int timeoutMs = 90 * 1000;               ///< the whole download
+    int stallMs = webpicture::TimeoutMs;     ///< one request without progress
+    bool privateHosts = false;               ///< also this device's and its network's pictures
 };
 
 /// What became of one picture.

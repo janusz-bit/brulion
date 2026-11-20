@@ -19,6 +19,7 @@
 
 #include <QEventLoop>
 #include <QFileInfo>
+#include <QHash>
 #include <QRegularExpression>
 #include <QSet>
 #include <QUrl>
@@ -109,8 +110,8 @@ std::optional<QString> templateText(Call &call, const ClipRequest &r, QString *i
         *id = *path;
         return current.text.left(MaxTemplateChars);
     }
-    const QString name = r.templ.builtin.isEmpty() ? defaultTemplateFor(r.place.kind == PlaceKind::Page)
-                                                   : r.templ.builtin;
+    const QString name =
+            r.templ.builtin.isEmpty() ? defaultTemplateFor(r.place.kind == PlaceKind::Page) : r.templ.builtin;
     const BuiltinTemplate *t = builtinTemplate(name);
     if (!t) {
         QJsonArray known;
@@ -147,7 +148,8 @@ std::optional<Built> build(Call &call, const ClipRequest &r)
         return std::nullopt;
     static const QRegularExpression wantsText(u"\\{\\{\\s*(?:content|selection)\\s*:\\s*text\\s*\\}\\}"_s,
                                               QRegularExpression::CaseInsensitiveOption);
-    static const QRegularExpression wantsImage(u"\\{\\{\\s*image\\s*\\}\\}"_s, QRegularExpression::CaseInsensitiveOption);
+    static const QRegularExpression wantsImage(u"\\{\\{\\s*image\\s*\\}\\}"_s,
+                                               QRegularExpression::CaseInsensitiveOption);
     static const QRegularExpression wantsScreenshot(u"\\{\\{\\s*screenshot\\s*\\}\\}"_s,
                                                     QRegularExpression::CaseInsensitiveOption);
     const bool plain = wantsText.match(*tpl).hasMatch();
@@ -426,10 +428,8 @@ Result runClip(Call &call, const ClipRequest &r, bool preview, const ClipProgres
     };
     const QString text = replacePictureTokens(built->text, embed);
     // Pictures inside links are counted once, as pictures of the text.
-    QJsonObject pictureJson{{u"total"_s, int(used.size())},
-                            {u"saved"_s, int(saved.size())},
-                            {u"kept"_s, kept},
-                            {u"failed"_s, failed}};
+    QJsonObject pictureJson{
+            {u"total"_s, int(used.size())}, {u"saved"_s, int(saved.size())}, {u"kept"_s, kept}, {u"failed"_s, failed}};
 
     QJsonObject out{{u"title"_s, built->title},
                     {u"kind"_s, clipKindName(r.kind)},
@@ -455,12 +455,13 @@ Result runClip(Call &call, const ClipRequest &r, bool preview, const ClipProgres
         if (!call.lock())
             return call.failed();
         const QString folder = r.place.defaultFolder ? QString() : r.place.folder;
-        const notebook::CreatedPage page =
-                notebook::createPage(*v, paths::pageTitle(planned.path), folder, std::nullopt, text, ChangeSource::User);
+        const notebook::CreatedPage page = notebook::createPage(*v, paths::pageTitle(planned.path), folder,
+                                                                std::nullopt, text, ChangeSource::User);
         if (page.path.isEmpty() || page.existing)
-            return failWith(problemError(page.problem.isOk() ? notebook::PathProblem{notebook::PathProblem::PageExists,
-                                                                                     paths::pageTitle(page.path), {}}
-                                                             : page.problem));
+            return failWith(problemError(
+                    page.problem.isOk()
+                            ? notebook::PathProblem{notebook::PathProblem::PageExists, paths::pageTitle(page.path), {}}
+                            : page.problem));
         out.insert(u"path"_s, page.path);
         out.insert(u"created"_s, true);
         out.insert(u"line"_s, 0);
@@ -538,11 +539,11 @@ Result clipSave(Call &call)
         request.insert(u"selectionHtml"_s, call.str(u"selection"_s));
     QString kind = call.has(u"kind"_s) ? call.str(u"kind"_s) : QString();
     if (kind.isEmpty())
-        kind = !html.isEmpty()              ? u"article"_s
-               : call.has(u"selection"_s)   ? u"selection"_s
-               : call.has(u"pictureUrl"_s)  ? u"picture"_s
-               : call.has(u"linkUrl"_s)     ? u"link"_s
-                                            : u"bookmark"_s;
+        kind = !html.isEmpty()             ? u"article"_s
+               : call.has(u"selection"_s)  ? u"selection"_s
+               : call.has(u"pictureUrl"_s) ? u"picture"_s
+               : call.has(u"linkUrl"_s)    ? u"link"_s
+                                           : u"bookmark"_s;
     request.insert(u"kind"_s, kind);
     if (call.has(u"tags"_s))
         request.insert(u"tags"_s, call.str(u"tags"_s));
@@ -625,11 +626,13 @@ void addClipCommands(QList<Command> &out)
             choice(u"place"_s, {u"page"_s, u"journal"_s, u"heading"_s},
                    QT_TRANSLATE_NOOP("brulion::cli", "Where it goes (default: a new page)")),
             option(u"folder"_s, ArgType::Path,
-                   QT_TRANSLATE_NOOP("brulion::cli", "The new page's folder (default: the folder for new pages; . = root)")),
+                   QT_TRANSLATE_NOOP("brulion::cli",
+                                     "The new page's folder (default: the folder for new pages; . = root)")),
             option(u"page"_s, ArgType::Ref,
                    QT_TRANSLATE_NOOP("brulion::cli", "The page with the heading (--place heading)")),
             option(u"heading"_s, ArgType::String,
-                   QT_TRANSLATE_NOOP("brulion::cli", "The heading whose section gets the clip (\"## Do przeczytania\")")),
+                   QT_TRANSLATE_NOOP("brulion::cli",
+                                     "The heading whose section gets the clip (\"## Do przeczytania\")")),
             option(u"template"_s, ArgType::String,
                    QT_TRANSLATE_NOOP("brulion::cli", "brulion, obsidian, joplin, link, or a template page")),
             option(u"tags"_s, ArgType::String, QT_TRANSLATE_NOOP("brulion::cli", "Tags, separated by commas")),
@@ -640,22 +643,23 @@ void addClipCommands(QList<Command> &out)
             option(u"description"_s, ArgType::String,
                    QT_TRANSLATE_NOOP("brulion::cli", "The description ({{description}})")),
             option(u"baseUrl"_s, ArgType::String,
-                   QT_TRANSLATE_NOOP("brulion::cli", "The address relative links are resolved against (default: --url)")),
+                   QT_TRANSLATE_NOOP("brulion::cli",
+                                     "The address relative links are resolved against (default: --url)")),
             option(u"linkUrl"_s, ArgType::String, QT_TRANSLATE_NOOP("brulion::cli", "A link's address (--kind link)")),
             option(u"linkText"_s, ArgType::String, QT_TRANSLATE_NOOP("brulion::cli", "A link's text (--kind link)")),
             option(u"pictureUrl"_s, ArgType::String,
                    QT_TRANSLATE_NOOP("brulion::cli", "A picture's address (--kind picture)")),
             flag(u"noPictures"_s, QT_TRANSLATE_NOOP("brulion::cli", "Leave the pictures on the internet")),
-            flag(u"journalLink"_s,
-                 QT_TRANSLATE_NOOP("brulion::cli", "Also a link to the new page in today's journal")),
-            flag(u"preview"_s, QT_TRANSLATE_NOOP("brulion::cli", "Only show the Markdown (nothing downloaded or written)")),
+            flag(u"journalLink"_s, QT_TRANSLATE_NOOP("brulion::cli", "Also a link to the new page in today's journal")),
+            flag(u"preview"_s,
+                 QT_TRANSLATE_NOOP("brulion::cli", "Only show the Markdown (nothing downloaded or written)")),
     };
     out.append(c);
 
     c = Command();
     c.id = u"clip.host"_s;
-    c.summary = cliText(QT_TRANSLATE_NOOP("brulion::cli",
-                                          "The Web Clipper's native messaging host (the browser starts it)"));
+    c.summary = cliText(
+            QT_TRANSLATE_NOOP("brulion::cli", "The Web Clipper's native messaging host (the browser starts it)"));
     c.run = clipHostCommand;
     c.needsVault = false;
     c.mcp = false;
@@ -684,8 +688,8 @@ void addClipCommands(QList<Command> &out)
 
     c = Command();
     c.id = u"clip.status"_s;
-    c.summary = cliText(QT_TRANSLATE_NOOP("brulion::cli",
-                                          "Which browsers can reach brulion-cli (the host manifests and their program)"));
+    c.summary = cliText(QT_TRANSLATE_NOOP(
+            "brulion::cli", "Which browsers can reach brulion-cli (the host manifests and their program)"));
     c.run = clipStatus;
     c.args = clipInstallArgs(false);
     c.needsVault = false;

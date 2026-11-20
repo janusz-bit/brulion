@@ -31,13 +31,13 @@
 #include "replacesession.h"
 #include "shortcutmap.h"
 #include "viewtraits.h"
+#include "webclippersetup.h"
 #include "workspace.h"
 #include "workspacebackups.h"
 #include "workspaceextensions.h"
 #include "workspacegithub.h"
 #include "workspacereminders.h"
 #include "workspacesync.h"
-#include "webclippersetup.h"
 
 #include <QJSEngine>
 #include <QtQml/qqmlregistration.h>

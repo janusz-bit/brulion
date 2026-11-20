@@ -8,6 +8,8 @@
 #include <QSaveFile>
 #include <QSettings>
 
+#include <optional>
+
 using namespace Qt::StringLiterals;
 
 namespace brulion::clipper {
@@ -141,8 +143,8 @@ HostState uninstallHost(Browser browser, const HostSetup &setup, const QList<Bro
         registry.sync();
         for (const Browser other : keepShared) {
             if (other != browser && familyOf(other) == familyOf(browser))
-                fileStays = fileStays
-                            || registryNames(hostLocation(other, setup.os, setup.scope, setup.env).registryKey);
+                fileStays =
+                        fileStays || registryNames(hostLocation(other, setup.os, setup.scope, setup.env).registryKey);
         }
     }
     if (ours && !fileStays && !QFile::remove(s.location.manifestPath)) {
