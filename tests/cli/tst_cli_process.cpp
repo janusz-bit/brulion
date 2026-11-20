@@ -126,7 +126,7 @@ class TestCliProcess : public QObject {
         return env;
     }
 
-    // Where brulion-cli (and the app) keep their settings, app data and log for this test: in the
+    // Where brulion-cli (and the app) keep their settings, app data, cache and log for this test: in the
     // private home's XDG folders, on Windows in the profile (src/ipc/profile.h), whose paths this
     // process gets from Qt under the profile's names (initTestCase()).
 #ifdef Q_OS_WIN
@@ -142,6 +142,7 @@ class TestCliProcess : public QObject {
     {
         return QStandardPaths::writableLocation(QStandardPaths::StateLocation) + u"/logs/brulion.log"_s;
     }
+    QString cacheDir() const { return QStandardPaths::writableLocation(QStandardPaths::CacheLocation); }
     /// The profile's folders (removed before and after the test).
     QStringList profileDirs() const
     {
@@ -152,6 +153,7 @@ class TestCliProcess : public QObject {
     QString settingsFile() const { return m_home + u"/config/Brulion/Brulion.ini"_s; }
     QString appDataDir() const { return m_home + u"/data/Brulion/Brulion"_s; }
     QString logFile() const { return m_home + u"/state/Brulion/Brulion/logs/brulion.log"_s; }
+    QString cacheDir() const { return m_home + u"/cache/Brulion/Brulion"_s; }
 #endif
 
     Run cli(const QStringList &args, const QByteArray &input = {}, const QProcessEnvironment &env = {})
@@ -986,7 +988,7 @@ private Q_SLOTS:
         const QString dir = vault({{u"Notatka.md"_s, "- żółw w notatce\n"},
                                    {u"assets/Wykład 3.pdf"_s, "%PDF-1.4 (bytes the app read)"},
                                    {u"assets/Stary.pdf"_s, "%PDF-1.4 (changed since)"}});
-        const QString cache = m_home + u"/cache/Brulion/Brulion/attachment-text"_s;
+        const QString cache = cacheDir() + u"/attachment-text"_s;
         QVERIFY(QDir().mkpath(cache + u"/notebooks"_s));
         Record lecture;
         lecture.pageCount = 3;

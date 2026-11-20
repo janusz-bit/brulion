@@ -109,7 +109,8 @@ public:
     void releasePassword(const QString &file);
     QString password(const QString &file) const;
     /// The file changed or went: its idle readers are closed (Workspace on fileChanged and renames;
-    /// a leased one is not given back to the pool when its version differs).
+    /// a leased one is not given back to the pool when its version differs). The attachments'
+    /// indexer too, once it has read a file: it keeps no PDF open in the background.
     void forget(const QString &file);
     /// Every idle reader closed (the viewer closed; tests; the app quits).
     void closeIdle();

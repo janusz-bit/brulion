@@ -11,6 +11,7 @@
 #include "attachmentindexer.h"
 #include "ocr.h"
 #include "pdfpages.h"
+#include "pdfrenderpool.h"
 
 #include "testtiming.h"
 #include "text/text.h"
@@ -238,6 +239,8 @@ private Q_SLOTS:
         openIndexer();
         QVERIFY(waitIdle());
         QCOMPARE(m_indexer->state(), u"idle"_s);
+        // No PDF kept open once read (Windows refuses to rename or replace an open file).
+        QCOMPARE(pdfview::PdfReaderPool::instance().idleCount(), 0);
         // Page 3 of the lecture, diacritics optional.
         QList<AttachmentSearch::Hit> hits = m_indexer->search(u"zolw"_s, 10);
         const AttachmentSearch::Hit *lecture = hitFor(hits, Lecture);

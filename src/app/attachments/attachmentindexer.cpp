@@ -433,6 +433,10 @@ std::optional<Record> IndexerWorker::extract(const AttachmentIndexer::FileJob &j
         record.pages.append(Page{PageSource::NeedsOcr, {}, {}, {}});
         return record;
     }
+    // Its readers closed once it is read (after the leases below are given back): an idle reader
+    // holds the file open, which Windows then refuses to rename, replace or delete — the user's
+    // file manager, Syncthing, a rename past the Workspace.
+    const auto letGo = qScopeGuard([&job] { pdfview::PdfReaderPool::instance().forget(job.file); });
     const QString version = fileVersion(job.size, job.mtime);
     platform::PdfInfo info;
     int pages = 0;
@@ -581,6 +585,8 @@ QImage IndexerWorker::ocrPicture(const OcrJob &job, int page, int *dpi, int *tra
         return image;
     }
     const QString version = fileVersion(job.job.size, job.job.mtime);
+    // (As extract(): not kept open once the page is drawn — a page takes seconds to recognize.)
+    const auto letGo = qScopeGuard([&job] { pdfview::PdfReaderPool::instance().forget(job.job.file); });
     pdfview::PdfReaderPool::Lease lease = pdfview::PdfReaderPool::instance().acquire(job.job.file, version);
     if (!lease || page < 1 || page > lease->pageCount())
         return {};
