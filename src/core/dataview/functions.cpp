@@ -1,6 +1,7 @@
 // The built-in functions of Dataview expressions (Dataview's own names and behaviour; the ones
 // that would run regular expressions or read other files are left out on purpose).
 #include "dataview/eval_p.h"
+#include "dataview/expression_p.h"
 
 #include "text/text.h"
 #include "util/paths.h"
@@ -907,6 +908,8 @@ const QHash<QString, Builtin> &builtins()
 
 const Builtin *findBuiltin(const QString &name)
 {
+    if (name.startsWith(u"b:"))
+        return findBasesBuiltin(name);
     const auto &table = builtins();
     const auto it = table.constFind(name.toLower());
     return it == table.constEnd() ? nullptr : &*it;

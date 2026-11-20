@@ -415,6 +415,68 @@ private:
     mutable std::optional<FileStat> m_stat;
 };
 
+// ---- a file that is no note (Bases rows of attachments) --------------------------------------------
+
+class AttachmentObject : public Object {
+public:
+    AttachmentObject(Context *ctx, VaultPath path) : m_ctx(ctx), m_path(std::move(path)) { }
+
+    QStringList keys() const override
+    {
+        return {u"name"_s,  u"folder"_s, u"path"_s,  u"ext"_s,     u"link"_s,     u"size"_s,  u"ctime"_s,
+                u"cday"_s,  u"mtime"_s,  u"mday"_s,  u"tags"_s,    u"etags"_s,    u"inlinks"_s, u"outlinks"_s,
+                u"aliases"_s, u"tasks"_s, u"lists"_s, u"frontmatter"_s};
+    }
+
+    std::optional<Value> field(const QString &key) const override
+    {
+        const QString ext = paths::extension(m_path);
+        if (key == u"name") {
+            const QString base = paths::basename(m_path);
+            return Value::string(ext.isEmpty() ? base : base.chopped(ext.size()));
+        }
+        if (key == u"path")
+            return Value::string(m_path);
+        if (key == u"folder")
+            return Value::string(paths::dirname(m_path));
+        if (key == u"ext")
+            return Value::string(ext.startsWith(u'.') ? ext.sliced(1) : ext);
+        if (key == u"link")
+            return Value::link(LinkValue{m_path, QString(), QString(), false, m_ctx->index().contains(m_path)});
+        if (key == u"size" || key == u"mtime" || key == u"ctime" || key == u"mday" || key == u"cday") {
+            const std::optional<FileStat> s = m_ctx->options().stat ? m_ctx->options().stat(m_path) : std::nullopt;
+            if (!s)
+                return Value();
+            if (key == u"size")
+                return Value::number(double(s->size));
+            if (s->mtime <= 0)
+                return Value();
+            const QDateTime at = QDateTime::fromMSecsSinceEpoch(s->mtime);
+            return key.endsWith(u"day") ? Value::date(at.date()) : Value::date(DateValue{at, true});
+        }
+        if (key == u"inlinks") {
+            ValueList out;
+            QSet<VaultPath> seen;
+            for (const QList<Backlink> backlinks = m_ctx->index().backlinks(m_path); const Backlink &b : backlinks) {
+                if (!seen.contains(b.path)) {
+                    seen.insert(b.path);
+                    out.append(Value::link(LinkValue{b.path, QString(), QString(), false, true}));
+                }
+            }
+            return Value::list(out);
+        }
+        if (key == u"frontmatter")
+            return Value::map({});
+        if (keys().contains(key))
+            return Value::list({});
+        return std::nullopt;
+    }
+
+private:
+    Context *m_ctx;
+    VaultPath m_path;
+};
+
 // ---- page ------------------------------------------------------------------------------------------
 
 class PageObject : public Object {
@@ -647,7 +709,10 @@ Value Context::page(const VaultPath &path)
 
 Value Context::thisPage()
 {
-    return m_options.currentPath.isEmpty() ? Value() : page(m_options.currentPath);
+    if (m_options.currentPath.isEmpty())
+        return Value();
+    // (A base opened on its own is no note: `this.file.folder` still names its folder.)
+    return m_index.note(m_options.currentPath) ? page(m_options.currentPath) : fileRow(m_options.currentPath);
 }
 
 LinkValue Context::resolveLink(const QString &target, const QString &display, const QString &subpath, bool embed,
@@ -712,6 +777,16 @@ Value Context::item(const VaultPath &path, int blockIndex)
         v = Value::object(std::make_shared<ItemObject>(this, path, note, blockIndex));
     m_items.insert(key, v);
     return v;
+}
+
+Value Context::fileRow(const VaultPath &path)
+{
+    if (m_index.note(path))
+        return page(path);
+    if (const auto it = m_files.constFind(path); it != m_files.constEnd())
+        return *it;
+    const Value file = Value::object(std::make_shared<AttachmentObject>(this, path));
+    return *m_files.insert(path, Value::map({{u"file"_s, file}}));
 }
 
 ValueList Context::tasksOf(const VaultPath &path)

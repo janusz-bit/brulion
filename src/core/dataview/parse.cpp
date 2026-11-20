@@ -1,5 +1,6 @@
 // The Dataview Query Language read into a Query (ast_p.h): a lexer and a recursive-descent parser.
 #include "dataview/ast_p.h"
+#include "dataview/expression_p.h"
 #include "dataview/eval_p.h"
 #include "dataview/messages_p.h"
 #include "util/unicode.h"
@@ -341,6 +342,17 @@ public:
             q.commands.append(cmd);
         }
         return q;
+    }
+
+    /// One expression and nothing after it (expression.h).
+    ExprPtr single()
+    {
+        if (peek().kind == Token::Kind::End)
+            throw ParseError{messages::expectedExpression(QString()), 0};
+        ExprPtr e = expression();
+        if (peek().kind != Token::Kind::End)
+            throw ParseError{messages::unexpected(describe(peek())), peek().line};
+        return e;
     }
 
 private:
@@ -780,6 +792,23 @@ private:
 };
 
 } // namespace
+
+std::variant<ParsedExpression, QString> parseDataviewExpression(const QString &source)
+{
+    try {
+        Lexer lexer(source);
+        Parser parser(source, lexer.run());
+        ParsedExpression out;
+        out.expr = parser.single();
+        if (out.expr->kind == Expr::Kind::Variable && out.expr->name != u"this" && out.expr->name != u"row")
+            out.property = source.trimmed();
+        return out;
+    } catch (const ParseError &e) {
+        if (e.line <= 0)
+            return e.message;
+        return messages::atLine(e.line, e.message);
+    }
+}
 
 std::variant<Query, QString> parseQuery(const QString &source)
 {

@@ -109,6 +109,10 @@ public:
     ValueList listsOf(const VaultPath &path);
     /// The object of block `blockIndex` of `path` (a list item or task).
     Value item(const VaultPath &path, int blockIndex);
+    /// The row of any file (Bases): a note's page object, else an object holding `file` — name,
+    /// path, folder, ext, link, size, times, empty lists — for an attachment the index knows (or
+    /// any path: a `.base` file showing itself).
+    Value fileRow(const VaultPath &path);
 
 private:
     static constexpr int MaxCallDepth = 64;
@@ -121,6 +125,7 @@ private:
     int m_callDepth = 0;
     QHash<VaultPath, Value> m_pages;
     QHash<QString, Value> m_items; ///< "path\x1fblock"
+    QHash<VaultPath, Value> m_files; ///< fileRow() of files that are no notes
     std::optional<QHash<QString, QString>> m_tagDisplay;
 };
 
