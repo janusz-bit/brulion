@@ -162,13 +162,16 @@ internal object Automation {
     return null
   }
 
-  /** A value as a form encodes it (UTF-8; a space is "+", which the core reads as a space). */
-  fun encode(value: String): String = URLEncoder.encode(value, Charsets.UTF_8)
+  /**
+   * A value as a form encodes it (UTF-8; a space is "+", which the core reads as a space). The
+   * charset by its name: the Charset overloads need API 33 (the app's minimum is 28).
+   */
+  fun encode(value: String): String = URLEncoder.encode(value, "UTF-8")
 
   /** A form-encoded value decoded; a malformed one ("%" without two hex digits) as it is. */
   fun decode(value: String): String =
     try {
-      URLDecoder.decode(value, Charsets.UTF_8)
+      URLDecoder.decode(value, "UTF-8")
     } catch (e: IllegalArgumentException) {
       value
     }
