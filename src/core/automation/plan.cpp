@@ -149,6 +149,12 @@ Resolved resolvePage(const QString &rawName, Vault &vault, const VaultIndex &ind
         out.detail = name.left(200);
         return out;
     }
+    // Never a file the notebook hides (.trash/, .brulion/, .obsidian/, .git/ …).
+    if (paths::isIgnored(path)) {
+        out.error = u"not_a_page"_s;
+        out.detail = name.left(200);
+        return out;
+    }
     QStringList candidates{path};
     if (!paths::isMarkdown(path))
         candidates.append(path + u".md"_s);
@@ -196,7 +202,8 @@ Resolved resolvePage(const QString &rawName, Vault &vault, const VaultIndex &ind
     }
     if (mayBeNew) {
         out.path = notebook::newPagePath(vault, name);
-        if (out.path.isEmpty()) {
+        if (out.path.isEmpty() || paths::isIgnored(out.path)) {
+            out.path.clear();
             out.error = u"not_a_page"_s;
             out.detail = name.left(200);
         }

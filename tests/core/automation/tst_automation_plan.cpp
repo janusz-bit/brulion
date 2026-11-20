@@ -84,6 +84,7 @@ private Q_SLOTS:
         put(m_root, u"templates/Spotkanie.md"_s, "# {{title}}\n\nData: {{date}}\n\n## Ustalenia\n-\n");
         put(m_root, u"journals/2026-11-19.md"_s, "- wczorajszy wpis\n");
         put(m_root, u"assets/foto.png"_s, "\x89PNG");
+        put(m_root, u".trash/stara.md"_s, "- w koszu\n");
         m_notebook = std::make_unique<notebook::Notebook>();
         notebook::Notebook::Options options;
         options.stateDir = m_dir.filePath(u"state"_s);
@@ -169,6 +170,10 @@ private Q_SLOTS:
         QTest::newRow("an attachment") << u"brulion://open?page=assets/foto.png"_s << u"not_a_page"_s;
         QTest::newRow("outside") << u"brulion://open?page=../sekret"_s << u"page_not_found"_s;
         QTest::newRow("absolute") << u"brulion://open?page=/etc/passwd"_s << u"page_not_found"_s;
+        QTest::newRow("a hidden folder") << u"brulion://append?page=.trash/stara&text=x"_s << u"not_a_page"_s;
+        QTest::newRow("a hidden new page") << u"brulion://append?page=.obsidian/x&create=yes&text=x"_s
+                                           << u"not_a_page"_s;
+        QTest::newRow("new page in a hidden folder") << u"brulion://new?title=x&folder=.git"_s << u"not_a_page"_s;
         QTest::newRow("bad line") << u"brulion://open?page=Zakupy&line=zero"_s << u"missing_parameter"_s;
         QTest::newRow("typo") << u"brulion://append?page=Zakupy&heding=Dzi%C5%9B&text=a"_s << u"unknown_parameter"_s;
         QTest::newRow("daily, no date") << u"brulion://daily?date=kiedy%C5%9B"_s << u"date_not_understood"_s;
