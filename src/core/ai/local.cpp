@@ -613,6 +613,7 @@ Reply lfm3Reply(const QList<Piece> &generated, const Request &request, bool comp
     Reply reply;
     reply.ok = true;
     reply.text = content.trimmed();
+    reply.thoughts = thoughts.trimmed();
     reply.stopReason = !calls.isEmpty() ? u"tool_calls"_s : complete ? u"stop"_s : u"length"_s;
 
     QJsonArray rawCalls;

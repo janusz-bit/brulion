@@ -15,11 +15,18 @@
 //        setFieldValue + answerForm / cancelQuestion
 //   extensions->runChat(u"AI/2026-11-15 Pytanie.md"_s, messages, u"Dom"_s);   // a turn of the AI chat
 //
-// The AI chat (WorkspaceChats): runChat() runs the assistant's command "chat" with a
-// conversation's messages; its value arrives as chatAnswered(), an error or a missing assistant as
-// chatFailed(), what it says it does (b.status) as chatStatus(). Its questions (a change to
-// confirm) are the usual question, with questionChat naming the conversation, so the chat shows it
-// in the conversation instead of the dialog.
+// The AI chat (WorkspaceChats): runChat() runs the conversation's partner — the assistant's command
+// "chat", or an extension's chat command (meta.chat, chatPartners()) — with a conversation's
+// messages; its value arrives as chatAnswered(), an error or a missing partner as chatFailed(),
+// what it says it does (b.status) as chatStatus(). Several conversations' turns may wait at once,
+// each its own call. Their questions (a change to confirm) are the usual question, with
+// questionChat naming the conversation, so the chat shows it in the conversation instead of the
+// dialog; a turn's question while another one is shown waits behind it (chatQuestion() of its
+// conversation shows it there all the same, answerChat() answers it) — a chat's question is never
+// cancelled by another one, and a command's question that comes meanwhile is shown first.
+//
+// sendAi(): the app's own requests to the model of b.ai (the editor's writing assistant), with
+// the same settings, client and count of requests on their way.
 //
 // The Workspace tells it about the notebook: indexReady() (scan every page once), notesChanged()
 // (the pages a change touched: an extension page loads again, "change" hooks), savedByEditor()
@@ -143,6 +150,8 @@ class WorkspaceExtensions : public QObject {
     Q_PROPERTY(int aiPending READ aiPending NOTIFY aiPendingChanged FINAL)
     /// The conversation (its path) whose turn asks the waiting question, "" for any other's.
     Q_PROPERTY(QString questionChat READ questionChat NOTIFY questionChanged FINAL)
+    /// Changes when a turn's question waits behind another one or stops waiting.
+    Q_PROPERTY(int chatQuestionSerial READ chatQuestionSerial NOTIFY chatQuestionsChanged FINAL)
 
 public:
     using Clock = std::function<QDateTime()>;
@@ -159,6 +168,7 @@ public:
     void setAi(const ai::Settings &settings);
     /// What answers the provider "local" (the app's LocalAi; not owned, nullptr: none).
     void setLocalAi(ai::LocalBackend *backend);
+    ai::LocalBackend *localAi() const { return m_localAi; }
     /// Loads the pictures a request names (b.ai's `images`): Workspace's, from the notebook.
     void setAiPictures(ai::ImageLoader loader);
     /// The engine's limits: extensions::Limits{} (the app's), unless a test whose subject is not the
@@ -167,6 +177,13 @@ public:
     int aiPending() const { return m_aiPending; }
     /// Asks the model "Say OK." with the settings as they are: the answer or the error as a message.
     Q_INVOKABLE void testAi();
+    /// The model b.ai asks, as set.
+    const ai::Settings &aiSettings() const { return m_aiSettings; }
+    /// A request of the app itself to that model (the editor's writing assistant): sent as b.ai's
+    /// are (the device's model, the network's provider), counted in aiPending until it ends;
+    /// `done` once, from the event loop. Stop it with the Pending.
+    ai::Pending sendAi(const ai::Request &request, std::function<void(const ai::Reply &)> done,
+                       ai::PartialCallback partial = {});
 
     QStringList enabled() const { return m_enabled; }
     QString language() const { return m_language; }
@@ -248,13 +265,32 @@ public:
     Q_INVOKABLE void forgetButton(int id);
 
     // ---- the AI chat (WorkspaceChats) --------------------------------------------------------
-    /// Runs the assistant's turn in the conversation `path` (asystent's "chat": ctx.messages,
-    /// ctx.page): its answer comes as chatAnswered(path, …), a failure as chatFailed(path, …).
-    /// False (and chatFailed) when the assistant is not loaded.
-    bool runChat(const QString &path, const QVariantList &messages, const QString &page);
+    /// Runs the turn of `partner` ("extension/command" or "extension": a chat command of it, ""
+    /// the assistant's "chat") in the conversation `path`: ctx.messages, ctx.page, ctx.conversation
+    /// and ctx.omitted (the earlier messages left out: chat::firstSent). Its answer comes as
+    /// chatAnswered(path, …), a failure as chatFailed(path, …). False (and chatFailed) when the
+    /// partner is not loaded.
+    bool runChat(const QString &path, const QVariantList &messages, const QString &page,
+                 const QString &partner = QString(), int omitted = 0);
     /// Drops the waiting turn of the conversation `path` (its question too): no answer comes.
     void stopChat(const QString &path);
     QString questionChat() const { return m_questionChat; }
+    /// Who may answer in the chat: {id ("" the built-in assistant, else "extension/command"),
+    /// label, extension (its title)} of every loaded chat command, the assistant first.
+    Q_INVOKABLE QVariantList chatPartners() const;
+    /// The name of a partner as the chat shows it ("" for one not loaded).
+    Q_INVOKABLE QString partnerLabel(const QString &partner) const;
+    /// The question the turn of the conversation `path` waits on — shown, or behind another one —
+    /// as {kind, title, options}; {} none. `serial` (questionSerial + chatQuestionSerial) only
+    /// makes a binding ask again.
+    Q_INVOKABLE QVariantMap chatQuestion(const QString &path, int serial = 0) const;
+    /// Its parts, typed for QML (the same `serial`): its kind ("" none), title and options.
+    Q_INVOKABLE QString chatQuestionKind(const QString &path, int serial = 0) const;
+    Q_INVOKABLE QString chatQuestionTitle(const QString &path, int serial = 0) const;
+    Q_INVOKABLE QStringList chatQuestionOptions(const QString &path, int serial = 0) const;
+    /// Answers that question with `option` (one of its options).
+    Q_INVOKABLE void answerChat(const QString &path, const QString &option);
+    int chatQuestionSerial() const { return m_chatQuestionSerial; }
 
     QString questionKind() const { return m_questionKind; }
     int questionSerial() const { return m_questionSerial; }
@@ -277,9 +313,13 @@ Q_SIGNALS:
     void enabledChanged();
     void commandsChanged();
     void questionChanged();
+    /// The questions waiting behind the shown one changed (chatQuestion()).
+    void chatQuestionsChanged();
     void restChanged();
     void revisionChanged();
     void aiPendingChanged();
+    /// setAi() changed the model asked.
+    void aiSettingsChanged();
     /// A command's result or an error, for a toast (kind "info" | "success" | "error").
     void message(const QString &text, const QString &kind);
     /// A result { message, tone, button = { label, … } }: a toast with a button; its press is
@@ -406,6 +446,22 @@ private:
     QHash<int, CallContext> m_calls; // waiting calls by id
     int m_questionCall = 0; // the call the shown question belongs to
     QString m_questionChat; // its conversation, when a chat's turn asks
+    QVariantMap m_questionRequest; // the question as the call asked it
+    /// A turn's question while another was shown: shown when that one is answered.
+    struct WaitingQuestion {
+        int call = 0;
+        QString chat;
+        QVariantMap request;
+    };
+    QList<WaitingQuestion> m_waitingQuestions;
+    int m_chatQuestionSerial = 0;
+    /// A question of a call to show: now, or after the one shown (a chat's).
+    void ask(int call, const QString &chat, const QVariantMap &request);
+    /// The first waiting question shown, when none is.
+    void showWaitingQuestion();
+    /// Before a command, an action or the console runs: an open question of a command goes
+    /// unanswered (cancelled) — a chat's stays.
+    void cancelCommandQuestion();
     QString m_statusChat; // the conversation of the call running now (b.status goes there)
     bool m_reconcilePending = false; // pages changed while a question waited
     QStringList m_pendingPaths; // changed notes not looked at yet (processPages())

@@ -72,6 +72,9 @@ constexpr UiAction kUiActions[] = {
         {u"heading.copyLink", u"copyLink:heading"},
         {u"task.clock", u"taskClock"},
         {u"task.addDependency", u"taskDependency"},
+        {u"ai.rewrite", u"writing:rewrite"},
+        {u"ai.continue", u"writing:continue"},
+        {u"ai.summarize", u"writing:summarize"},
         {u"folder.new", u"newFolder"},
         {u"page.move", u"movePage"},
         {u"page.reveal", u"revealInTree"},
@@ -123,6 +126,11 @@ CommandModel::CommandModel(AppController *app) : QObject(nullptr), m_app(app)
     if (ShortcutMap *shortcuts = app->shortcuts()) {
         shortcuts->setActions(shortcutActions());
         connect(shortcuts, &ShortcutMap::changed, this, &CommandModel::commandsChanged);
+        // The AI's commands come and go with the assistant (their shortcuts too: "AI: Rewrite…").
+        connect(app->settings(), &AppSettings::assistantEnabledChanged, this, [this, shortcuts] {
+            shortcuts->setActions(shortcutActions());
+            Q_EMIT commandsChanged();
+        });
     }
 }
 
@@ -437,7 +445,7 @@ static QList<Command> editorCommands(const AppController *app, bool editor)
     const VaultIndex *index = app->workspace()->taskIndex();
     const QList<notebook::TaskPlace> running =
             index ? notebook::runningClockPlaces(*index) : QList<notebook::TaskPlace>();
-    return {
+    QList<Command> out{
             // The note mode: document (Obsidian-like) / outline (Logseq-like), written into the note
             // (docs/UI.md "Note modes").
             {u"page.mode"_s,
@@ -497,6 +505,19 @@ static QList<Command> editorCommands(const AppController *app, bool editor)
              {},
              blocks},
     };
+    // The AI in the editor (docs/UI.md "AI in the editor") while the assistant is on: the selection,
+    // or the block or paragraph at the caret, rewritten, continued or summed up (uiAction
+    // "writing:<action>": BlockEditor.startWriting()); outline and source mode alike.
+    if (app->settings()->assistantEnabled()) {
+        out.append({u"ai.rewrite"_s, CommandModel::tr("AI: Rewrite…"),
+                    CommandModel::tr("The selection or the block: shorter, clearer, corrected, translated…"),
+                    u"sparkles"_s, u"Ctrl+Shift+A"_s, inEditor});
+        out.append({u"ai.continue"_s, CommandModel::tr("AI: Continue writing"),
+                    CommandModel::tr("The next sentences after the caret"), u"pencil"_s, {}, inEditor});
+        out.append({u"ai.summarize"_s, CommandModel::tr("AI: Summarize"),
+                    CommandModel::tr("A short summary under the selection or the block"), u"scroll-text"_s, {}, inEditor});
+    }
+    return out;
 }
 
 /// All commands in the palette's order: buildCommands() with the note's commands (editorCommands())

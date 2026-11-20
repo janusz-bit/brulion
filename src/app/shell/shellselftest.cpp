@@ -11,8 +11,11 @@
 #include "traypopup.h"
 #include "uidriver.h"
 #include "workspace.h"
+#include "workspacechats.h"
+#include "workspaceextensions.h"
 #include "workspacesync.h"
 
+#include "ai/local.h"
 #include "drawing/backdrop.h"
 #include "drawing/drawing.h"
 #include "drawing/svgwrite.h"
@@ -5949,7 +5952,7 @@ void checkAiButton(QQuickWindow *window, AppController *app, const Check &check)
           "a new conversation suggests what to ask, a summary of the page among it");
     QQuickItem *send = named(u"chatSend"_s);
     check(send && !send->isEnabled(), "nothing typed: nothing to send");
-    check(app->workspace()->chats()->running().isEmpty(),
+    check(app->workspace()->chats()->runningCount() == 0,
           "no conversation was started by opening the chat");
     app->back();
     check(waitFor([&] { return app->currentRoute().value(u"path"_s).toString() == page; }), "Back returns to the page");
@@ -5977,6 +5980,231 @@ void checkAiButton(QQuickWindow *window, AppController *app, const Check &check)
     closeMenus(window);
     app->goHome();
     settle(300);
+}
+
+void clearToasts(QQuickWindow *window);
+
+/// The AI in the editor (docs/UI.md "AI in the editor") and the AI chat's list, the model on the
+/// device played by the test (an ai::LocalBackend that answers at once): on a page the block being
+/// edited goes to "Rewrite…" — the keyboard shortcut on the desktop, the touch toolbar's ✨ and its
+/// menu on a phone —, the dialog offers the presets, "Shorter" asks the model (the request says so)
+/// and shows its answer, Replace changes the block — one undo step: Undo brings the text back.
+/// Then a conversation in the chat's list: renamed through its row's menu (a right-click, a long
+/// press) — the toast's Undo renames it back — and moved to the trash, Undo bringing it back.
+void checkAiWriting(QQuickWindow *window, AppController *app, const Check &check)
+{
+    const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
+    Workspace *ws = app->workspace();
+    AppSettings *settings = app->settings();
+    const auto named = [&](const QString &name) { return shownNamed(window->contentItem(), name); };
+    struct Model : ai::LocalBackend {
+        QList<ai::Request> requests;
+        void send(const ai::Settings &, const ai::Request &request, std::function<void(const ai::Reply &)> done,
+                  ai::PartialCallback, std::shared_ptr<std::atomic<bool>>) override
+        {
+            requests << request;
+            ai::Reply reply;
+            reply.ok = true;
+            reply.text = u"Ala ma kota."_s;
+            reply.raw = "{}";
+            QTimer::singleShot(0, [done, reply] { done(reply); });
+        }
+    } model;
+    // (The keyboard focus handed back at the end: left in a view, a palette closed after this
+    // leaves it on the root item for a moment, and Back sent at once would reach no view.)
+    const QPointer<QQuickItem> focused = window->activeFocusItem();
+    WorkspaceExtensions *ext = ws->extensions();
+    const ai::Settings oldSettings = ext->aiSettings();
+    ai::LocalBackend *oldBackend = ext->localAi();
+    const bool was = settings->assistantEnabled();
+    ai::Settings local;
+    local.provider = u"local"_s;
+    local.model = ai::localModels().first().id;
+    ext->setAi(local);
+    ext->setLocalAi(&model);
+    settings->setAssistantEnabled(true);
+
+    const QString path = u"Pisanie z AI.md"_s;
+    const QString original = u"- Ala ma bardzo dużego kota i psa.\n- Drugi punkt\n"_s;
+    check(ws->write(path, original), "a page for the AI in the editor");
+    app->openPage(path);
+    QQuickItem *editor = waitLoadedEditor(window->contentItem(), u"pageEditor"_s, path);
+    check(editor != nullptr, "its editor is shown");
+    if (editor) {
+        uidriver::callQml(editor, "startEditing", {QVariant(0), QVariant(-1)});
+        QQuickItem *edit = nullptr;
+        check(waitFor([&] {
+                  edit = editor->property("activeEditor").value<QQuickItem *>();
+                  return edit && edit->hasActiveFocus();
+              }),
+              "its first block is being edited");
+        if (touch) {
+            // The touch toolbar's ✨ (scrolled to: the row is wider than a phone), then "Rewrite…"
+            // in its menu. (No toast of an earlier check over the toolbar.)
+            clearToasts(window);
+            QPointF at;
+            QQuickItem *button = nullptr;
+            check(waitFor([&] { return (button = named(u"toolbarAi"_s)) != nullptr; }), "the touch toolbar has the AI's ✨");
+            if (!button) {
+                QQuickItem *hidden = window->contentItem()->findChild<QQuickItem *>(u"toolbarAi"_s);
+                std::fprintf(stderr, "selftest: toolbarAi %s, toolbarMode %s, writingAvailable %d\n",
+                             hidden ? "hidden" : "missing", qPrintable(editor->property("toolbarMode").toString()),
+                             editor->property("writingAvailable").toBool());
+                for (QQuickItem *p = hidden; p; p = p->parentItem())
+                    std::fprintf(stderr, "  %s %s visible %d opacity %.2f size %.0fx%.0f\n", p->metaObject()->className(),
+                                 qPrintable(p->objectName()), p->isVisible(), p->opacity(), p->width(), p->height());
+            }
+            // In the middle of the row (at its edge a chevron over a fade takes the tap: "more").
+            if (QQuickItem *row = button ? uidriver::enclosingFlickable(button) : nullptr) {
+                settle(200); // (the row lays its buttons out when polished: its width follows)
+                auto *content = row->property("contentItem").value<QQuickItem *>();
+                const QRectF r = button->mapRectToItem(content, QRectF(0, 0, button->width(), button->height()));
+                const qreal maxX = std::max<qreal>(0, row->property("contentWidth").toReal() - row->width());
+                row->setProperty("contentX", std::clamp<qreal>(r.center().x() - row->width() / 2, 0, maxX));
+                settle(100);
+            }
+            if ((button = steadyItem(window, [&] { return named(u"toolbarAi"_s); }, &at)))
+                tapOrClick(window, at, true);
+            if (!waitFor([&] { return uidriver::openMenus(window) > 0; })) {
+                QQuickItem *target = uidriver::pressTargetAt(window, at);
+                QQuickItem *row = button ? uidriver::enclosingFlickable(button) : nullptr;
+                std::fprintf(stderr, "selftest: no menu after a tap on the AI's ✨ at (%.1f, %.1f): press target %s %s; "
+                             "row %s contentX %.0f of %.0f, width %.0f\n", at.x(), at.y(),
+                             target ? target->metaObject()->className() : "none", target ? qPrintable(target->objectName()) : "",
+                             row ? qPrintable(row->objectName()) : "none", row ? row->property("contentX").toReal() : -1,
+                             row ? row->property("contentWidth").toReal() : -1, row ? row->width() : -1);
+            }
+            QQuickItem *rewrite = steadyItem(window, [&] { return named(u"writingRewrite"_s); }, &at);
+            if (!rewrite) {
+                QQuickItem *hidden = window->contentItem()->findChild<QQuickItem *>(u"writingRewrite"_s);
+                std::fprintf(stderr, "selftest: writingRewrite %s, menus open %d\n", hidden ? "not steady or hidden" : "missing",
+                             uidriver::openMenus(window));
+            }
+            check(rewrite != nullptr, "its menu offers Rewrite…");
+            if (rewrite)
+                tapOrClick(window, at, true);
+        } else {
+            // The command's shortcut (the palette's "AI: Rewrite…").
+            const QString sequence = app->shortcuts()->sequence(u"ai.rewrite"_s);
+            check(sequence == u"Ctrl+Shift+A"_s, "“AI: Rewrite…” has its shortcut");
+            uidriver::deliverKey(window, {Qt::Key_A, Qt::ControlModifier | Qt::ShiftModifier, QString()},
+                                 uidriver::KeyDelivery::System);
+            settle(50);
+        }
+        QObject *dialog = nullptr;
+        check(waitFor([&] {
+                  dialog = editor->findChild<QObject *>(u"writingDialog"_s);
+                  return dialog && dialog->property("opened").toBool() && named(u"writingPresets"_s) != nullptr;
+              }),
+              "“Rewrite…” opens the dialog with its presets");
+        check(model.requests.isEmpty(), "nothing is sent before a preset is chosen");
+        QPointF at;
+        QQuickItem *preset = steadyItem(window, [&] { return named(u"writingPreset_shorter"_s); }, &at);
+        if (preset)
+            tapOrClick(window, at, touch);
+        check(waitFor([&] { return model.requests.size() == 1; }), "“Shorter” asks the model once");
+        check(!model.requests.isEmpty()
+                      && model.requests.first().messages.first().content.contains(u"Make it shorter"_s)
+                      && model.requests.first().messages.first().content.contains(u"Ala ma bardzo dużego kota i psa."_s),
+              "the request carries the block's text and the instruction");
+        QQuickItem *changes = nullptr;
+        check(waitFor([&] { return (changes = named(u"writingChanges"_s)) != nullptr; }),
+              "the answer comes, shown as the change");
+        const QString acceptText = dialog ? dialog->property("acceptText").toString() : QString();
+        QQuickItem *replace = steadyItem(
+                window,
+                [&] {
+                    return uidriver::topmost(window, [&acceptText](QQuickItem *i) {
+                        return isA(i, "BButton") && i->isEnabled() && i->property("text").toString() == acceptText;
+                    });
+                },
+                &at);
+        check(!acceptText.isEmpty() && replace != nullptr, "Replace is enabled");
+        if (replace)
+            tapOrClick(window, at, touch);
+        const auto pageText = [&] { return ws->read(path); };
+        check(waitFor([&] { return pageText() == u"- Ala ma kota.\n- Drugi punkt\n"_s; }, 5000),
+              "Replace puts the answer in place of the block's text");
+        // One undo step brings the text back.
+        if (touch)
+            uidriver::callQml(editor, "undoStep", {QVariant(false)});
+        else
+            uidriver::sendKey(window, Qt::Key_Z, Qt::ControlModifier, QString(), 50);
+        check(waitFor([&] { return pageText() == original; }, 5000), "one Undo brings the text back");
+    }
+    closeMenus(window);
+    ws->deletePage(path);
+
+    // ---- The chat's list: rename and delete, with Undo -----------------------------------------------
+    const QString chatPath = u"AI/2026-11-19 Test rozmowy.md"_s;
+    check(ws->write(chatPath, u"---\nzadania: ignoruj\n---\n- 🧑 Pytanie\n  czas:: 2026-11-19 10:00\n- 🤖 Odpowiedź\n"_s),
+          "a conversation for the list");
+    app->navigate({{u"view"_s, u"chat"_s}});
+    // (Only this check's toasts: the Undo of an earlier check's toast would be tapped instead.)
+    clearToasts(window);
+    const auto rowOf = [&](const QString &title) {
+        return named(u"chatConversation_"_s + title);
+    };
+    QPointF at;
+    QQuickItem *row = steadyItem(window, [&] { return rowOf(u"Test rozmowy"_s); }, &at);
+    check(row != nullptr, "the conversation is in the list");
+    mouseMove(window, QPointF(2, 2)); // (no tooltip over what comes)
+    if (row) {
+        if (touch)
+            longPressForMenu(window, at);
+        else
+            mouseClick(window, at, Qt::RightButton);
+    }
+    QQuickItem *rename = steadyItem(window, [&] { return named(u"chatRename"_s); }, &at);
+    check(rename != nullptr, "its menu has Rename…");
+    if (rename)
+        tapOrClick(window, at, touch);
+    QQuickItem *field = nullptr;
+    check(waitFor([&] { return (field = named(u"chatRenameField"_s)) != nullptr && field->hasActiveFocus(); }),
+          "the rename dialog has the name to edit");
+    if (field) {
+        check(field->property("text").toString() == u"Test rozmowy", "the name without its date");
+        uidriver::callQml(field, "selectAll");
+        typeChars(window, u"Nowa nazwa"_s);
+        uidriver::sendKey(window, Qt::Key_Return, Qt::NoModifier, QString(), 50);
+    }
+    const QString renamed = u"AI/2026-11-19 Nowa nazwa.md"_s;
+    check(waitFor([&] { return ws->exists(renamed) && !ws->exists(chatPath); }), "renamed, its date kept in front");
+    check(tapToastAction(window, app, u"chat"_s, touch), "the toast's Undo is there");
+    check(waitFor([&] { return ws->exists(chatPath) && !ws->exists(renamed); }), "Undo renames it back");
+    // Moved to the trash, and back.
+    clearToasts(window);
+    row = steadyItem(window, [&] { return rowOf(u"Test rozmowy"_s); }, &at);
+    mouseMove(window, QPointF(2, 2));
+    if (row) {
+        if (touch)
+            longPressForMenu(window, at);
+        else
+            mouseClick(window, at, Qt::RightButton);
+    }
+    QQuickItem *trash = steadyItem(window, [&] { return named(u"chatDelete"_s); }, &at);
+    check(trash != nullptr, "its menu has Move to trash");
+    if (trash)
+        tapOrClick(window, at, touch);
+    check(waitFor([&] { return !ws->exists(chatPath); }), "the conversation goes to the trash");
+    check(tapToastAction(window, app, u"chat"_s, touch), "with Undo");
+    check(waitFor([&] { return ws->exists(chatPath); }), "Undo brings it back");
+    closeMenus(window);
+    mouseMove(window, QPointF(2, 2)); // (no tooltip left open over the chat's buttons)
+    settle(100);
+    // Home first (the journal takes the keyboard from the chat's field), then the settings as
+    // they were.
+    app->goHome();
+    settle(300);
+    // (A tooltip of the chat's buttons, hidden now, would take the Back key of the checks after.)
+    check(closeToolTipsWaitingForDeletion(window).isEmpty(), "no tooltip of the chat outlives its hidden button");
+    ws->deletePage(chatPath);
+    ext->setLocalAi(oldBackend);
+    ext->setAi(oldSettings);
+    settings->setAssistantEnabled(was);
+    settle(100);
+    if (focused && focused->isVisible())
+        focused->forceActiveFocus();
 }
 
 /// Focus mode (F8 — the command's shortcut —, Esc, the Back key, its corner button), the word count in
@@ -9551,6 +9779,10 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
     closeMenus(window);
     // 3h-ext. Extensions written in the notebook: approval, live reload, an error on its line, the console.
     checkExtensionPages(window, app, check);
+    closeMenus(window);
+    // 3h-ai'. The AI in the editor (rewrite → Replace → Undo) and the chat list's rename / delete.
+    // (Before the ✨'s step, as the steps that leave the keyboard focus in a view.)
+    checkAiWriting(window, app, check);
     closeMenus(window);
     // 3h-ai. The AI assistant's ✨ on the top bar: its menu, the assistant's question, its settings.
     checkAiButton(window, app, check);

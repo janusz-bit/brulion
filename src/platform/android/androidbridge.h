@@ -243,6 +243,15 @@ public:
     /// The screen does not turn off by itself while `on` (the activity's window keeps it on).
     static void setKeepScreenOn(bool on);
 
+    // A photo from the camera (kind 0) and dictation (kind 1) for the AI chat: the system's camera
+    // app and speech recognizer (MediaCapture.kt; src/platform/capture.h).
+
+    /// Does the device have an app for `kind`?
+    bool canCapture(int kind) const;
+    /// Starts it (`language`: BCP 47, speech only); the result arrives as captured(). False when it
+    /// could not be asked.
+    bool capture(int kind, const QString &language);
+
 Q_SIGNALS:
     /// A reminder notification (or "Open note" on the alarm screen) was tapped.
     void activated(const QString &path, int line);
@@ -264,6 +273,9 @@ Q_SIGNALS:
     /// The ringtone picker of pickSound() answered: `choice` is `{mode, uri, title}` or
     /// `{"error": …}` (no picker on this phone).
     void soundPicked(int kind, const QJsonObject &choice);
+    /// capture() of `kind` ended: {file} (a photo's path in the app's cache) / {text}, {cancelled:
+    /// true} or {error}.
+    void captured(int kind, const QJsonObject &result);
     /// The on-screen keyboard covers `overlap` physical pixels of Qt's view (0: hidden, or the
     /// window was resized above it); `shown` while it is up or coming up; `animating` for every
     /// frame of its slide (Android 11+), then once more settled (ImeInsets.kt; KeyboardInsets).

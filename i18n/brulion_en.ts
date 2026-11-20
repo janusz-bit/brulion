@@ -210,7 +210,7 @@
 <context>
     <name>BlockMenu</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockMenu.qml" line="227"/>
+        <location filename="../src/app/qml/editor/BlockMenu.qml" line="228"/>
         <source>Copy %n block(s)</source>
         <translation>
             <numerusform>Copy %n block</numerusform>
@@ -218,7 +218,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockMenu.qml" line="241"/>
+        <location filename="../src/app/qml/editor/BlockMenu.qml" line="242"/>
         <source>Cut %n block(s)</source>
         <translation>
             <numerusform>Cut %n block</numerusform>
@@ -226,7 +226,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockMenu.qml" line="576"/>
+        <location filename="../src/app/qml/editor/BlockMenu.qml" line="607"/>
         <source>Delete %n block(s)</source>
         <translation>
             <numerusform>Delete %n block</numerusform>
@@ -284,6 +284,25 @@
         <translation>
             <numerusform>+%n more</numerusform>
             <numerusform>+%n more</numerusform>
+        </translation>
+    </message>
+</context>
+<context>
+    <name>ChatView</name>
+    <message numerus="yes">
+        <location filename="../src/app/qml/views/ChatView.qml" line="711"/>
+        <source>The model on this device does not get the %n message(s) above: too long for it</source>
+        <translation>
+            <numerusform>The model on this device does not get the %n message above: too long for it</numerusform>
+            <numerusform>The model on this device does not get the %n messages above: too long for it</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/views/ChatView.qml" line="712"/>
+        <source>The AI does not get the %n message(s) above: too long</source>
+        <translation>
+            <numerusform>The AI does not get the %n message above: too long</numerusform>
+            <numerusform>The AI does not get the %n messages above: too long</numerusform>
         </translation>
     </message>
 </context>
@@ -424,7 +443,7 @@
     <name>ContentPdfView</name>
     <message numerus="yes">
         <location filename="../src/app/qml/content/ContentPdfView.qml" line="1513"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="3825"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="3866"/>
         <source>%n page(s)</source>
         <translation>
             <numerusform>%n page</numerusform>
@@ -843,7 +862,7 @@
 <context>
     <name>JournalsView</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/JournalsView.qml" line="607"/>
+        <location filename="../src/app/qml/views/JournalsView.qml" line="612"/>
         <source>%n day(s) with notes</source>
         <translation>
             <numerusform>%n day with notes</numerusform>
@@ -1340,7 +1359,7 @@
     <name>ShellShareDialog</name>
     <message numerus="yes">
         <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="32"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="6834"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="7055"/>
         <source>%n file(s) to save in the notebook</source>
         <translation>
             <numerusform>%n file to save in the notebook</numerusform>

@@ -9,6 +9,8 @@
 //   WorkspaceReminders, WorkspaceSync, WorkspaceGitHub, WorkspaceBackups, WorkspaceExtensions,
 //   WorkspaceChats   uncreatable —      Workspace.reminders / .sync / .github / .backups / .extensions
 //                                       / .chats
+//   ChatTurn         uncreatable — Workspace.chats.turn(path): one conversation's turn
+//   WritingSession   creatable — WritingSession { workspace: Workspace } (the editor's AI assistant)
 //   ExtensionFormModel, ExtensionControlsModel   uncreatable — a question's fields, a row's controls
 //   ExtensionListModel, ExtensionConsoleModel    uncreatable — Workspace.extensions.list / .console
 //   ExtensionView    creatable — ExtensionView { extensions: Workspace.extensions; extension; view }
@@ -32,6 +34,8 @@
 #include "viewtraits.h"
 #include "workspace.h"
 #include "workspacebackups.h"
+#include "workspacechats.h"
+#include "writingsession.h"
 #include "workspaceextensions.h"
 #include "workspacegithub.h"
 #include "workspacereminders.h"
@@ -183,6 +187,19 @@ struct WorkspaceChatsForeign {
     QML_FOREIGN(brulion::shell::WorkspaceChats)
     QML_NAMED_ELEMENT(WorkspaceChats)
     QML_UNCREATABLE("Use Workspace.chats")
+};
+
+struct WritingSessionForeign {
+    Q_GADGET
+    QML_FOREIGN(brulion::shell::WritingSession)
+    QML_NAMED_ELEMENT(WritingSession)
+};
+
+struct ChatTurnForeign {
+    Q_GADGET
+    QML_FOREIGN(brulion::shell::ChatTurn)
+    QML_NAMED_ELEMENT(ChatTurn)
+    QML_UNCREATABLE("Use Workspace.chats.turn(path)")
 };
 
 struct ExtensionFormModelForeign {

@@ -1929,8 +1929,8 @@ end, { label = "Policz słowa" })
 
 ## 14. Conversations with AI
 
-The AI chat (docs/UI.md "AI chat") keeps each conversation with the AI assistant as a page in the
-folder `AI/` (the same name in every language), named after its first question:
+The AI chat (docs/UI.md "AI chat") keeps each conversation with the AI as a page in the folder `AI/`
+(the same name in every language), named after its first question:
 `AI/2026-11-15 Co mam jutro do zrobienia.md` — the day it began and the question's first words (at
 most 60 characters, cut at a word; links, code and what a file name cannot hold left out;
 "Rozmowa" / "Conversation" when nothing is left, " 2" and on for a name in use). The day's journal
@@ -1943,13 +1943,17 @@ says:
 zadania: ignoruj
 ---
 - 🧑 Co mam jutro do zrobienia? ([[Dom]])
+  czas:: 2026-11-15 09:12
 - 🤖 Jutro masz trzy zadania:
+  czas:: 2026-11-15 09:12
 
   - zapłacić czynsz — [[Dom]]
   - oddać raport — [[Praca]]
 
   ✏️ Zmienione: [[Dom]]
-- 🧑 Przesuń czynsz na piątek
+- 🧑 Co to za roślina?
+  czas:: 2026-11-16 18:40
+  ![[Pasted image 20261116184012.png]]
 ```
 
 * **A message** is a top-level list item (`- `, `* ` or `+ ` at the start of a line) whose text
@@ -1959,18 +1963,41 @@ zadania: ignoruj
   lines and fenced code inside stay; a `- 🧑` inside fenced code, in the frontmatter or indented is
   no message. A message that begins with a list, a heading, a table, a quote or code has its marker
   alone on its first line and all of it under it.
+* **Its time**: a block property right under its first line (§4 "Block properties"),
+  `czas:: 2026-11-15 09:12` (`time::` in an English notebook; a page goes on with the key it has) —
+  the day and the minute it was written, local wall-clock time (as reminders, never through UTC).
+  It is no part of the message's text: the model does not get it, the chat shows it under the
+  message. A page without it — written before times were kept, or by hand — reads as before: its
+  messages have no time; a key with no valid date and time (`czas:: wczoraj`, `2026-02-30`), one not
+  right under the first line, or at the line's start is text of the message.
+* **Pictures** sent with a message are embeds of attachments of the notebook in it,
+  `![[Pasted image 20261116184012.png]]` (or `![](assets/foto.png)`; png, jpg, jpeg, gif, webp, bmp —
+  not an address on the internet, not inside code), on lines of their own under its text; any app
+  shows them. The model gets the pictures of the conversation's newest messages as pictures (at most
+  8; older ones stay embeds in the text, which the assistant may look at with its tool), not the
+  embeds' text; a model that does not see gets them as text.
 * What comes before the first message (the frontmatter, a title, a line of text) belongs to no
   message; another top-level line between messages — one typed into the page — belongs to the
   message before it.
 * **The page it is about**: a link in parentheses at the end of the first message's first line,
   `([[Dom]])` — its text goes to the AI with every turn.
+* **Who answers**: the frontmatter's `partner:` — an extension and its chat command,
+  `partner: pirat/rozmowa` (`pirat` alone: its first chat command; docs/EXTENSIONS.md "Chat
+  partners"); without it the built-in AI assistant. The chat writes it when another partner is
+  chosen and takes it out for the assistant.
 * **Written by the chat**: the frontmatter `zadania: ignoruj` (`tasks: ignore` in an English
   notebook: the checkboxes of answers stay out of the task lists, §5 "Ignoring a page's tasks"),
-  messages appended at the end of the page (its line ending kept, everything before byte for
-  byte), the AI's answer as the model wrote it. A reminder in a message (`⏰ 2026-11-16 09:00`,
-  `⏰! …`, `(@…)`) is written inside a code span — `` `⏰ 2026-11-16 09:00` `` — so a conversation
-  never rings; fenced code is left as it is, and code left open at the end of an answer is closed.
+  messages appended at the end of the page with their time (its line ending kept, everything
+  before byte for byte), the AI's answer as the model wrote it. A reminder in a message
+  (`⏰ 2026-11-16 09:00`, `⏰! …`, `(@…)`) is written inside a code span — `` `⏰ 2026-11-16 09:00` ``
+  — so a conversation never rings; fenced code is left as it is, and code left open at the end of
+  an answer is closed.
 * The model gets the conversation as its messages: the user's and the AI's turns, messages of one
-  side in a row joined, the AI's lines before the user's first left out.
-* Pure functions: `src/core/chat/chat.h` (`parse`, `appendMessage`, `newConversation`,
-  `pageTitle`, `journalEntry`, `history`, `preview`), tested in `tests/core/chat`.
+  side in a row joined, the AI's lines before the user's first left out. A conversation too long for
+  the model (a small one on the device holds some 16 000 characters of it, a picture counting
+  3 000) goes from a later turn on: whole turns — a user's message and the answers after it — from
+  the oldest left out, the latest always sent; the chat says so above the first message the model
+  gets.
+* Pure functions: `src/core/chat/chat.h` (`parse`, `appendMessage`, `formatMessage`,
+  `newConversation`, `setPartner`, `picturesIn`, `withPictures`, `withoutPictures`, `pageTitle`,
+  `splitTitle`, `journalEntry`, `history`, `firstSent`, `preview`), tested in `tests/core/chat`.

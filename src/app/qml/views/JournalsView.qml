@@ -215,6 +215,11 @@ FocusScope {
                 root.activeEditor.runExtensionCommand(Js.sliceFrom(action, 10))
                 return
             }
+            if (Js.startsWith(action, "writing:")) {
+                // The AI in the editor: the day being written in (docs/UI.md "AI in the editor").
+                root.activeEditor.startWriting(Js.sliceFrom(action, 8), "")
+                return
+            }
             if (action === "saveWebPictures") {
                 root.activeEditor.downloadWebPictures("")
                 return

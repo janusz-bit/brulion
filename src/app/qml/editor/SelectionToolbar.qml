@@ -5,7 +5,7 @@ import Brulion
 
 // SelectionToolbar — the tools of a block selection (docs/UI.md "Selecting and copying"):
 // "%n block(s) selected", Copy, Cut, Delete, Select all, One by one (docked: taps pick single
-// blocks, BlockEditor.pickMode), More (Copy as plain text, QR code… — docs/UI.md "QR code" —, the
+// blocks, BlockEditor.pickMode), AI (while the assistant is on: BlockEditor.openWritingMenu), More (Copy as plain text, QR code… — docs/UI.md "QR code" —, the
 // block menu's "Copy link" for a single block, Indent / Outdent, Move up / down — for blocks
 // picked with gaps between them shown disabled, a tap says why —, the task status) and Done (docked, first:
 // leaves the selection mode) or × (floating, last: clears the selection). Two places:
@@ -162,6 +162,16 @@ Row {
         enabled: true
         unavailable: bar.spanBlocked
         onClicked: if (!bar.editor.spanRefuses()) bar.editor.pickMode = !bar.editor.pickMode
+    }
+    // The AI in the editor on the selected blocks (docs/UI.md "AI in the editor"): rewrite,
+    // continue after them, sum them up.
+    Tool {
+        id: aiButton
+        objectName: "selectionAi"
+        visible: bar.editor !== null && bar.editor.writingAvailable && !bar.span
+        iconName: "sparkles"
+        label: qsTr("AI: rewrite, continue, summarize")
+        onClicked: bar.editor.openWritingMenu(aiButton, bar.docked)
     }
     Tool {
         id: moreButton

@@ -68,6 +68,7 @@ Nowy skrót działa od razu w całej aplikacji: paleta i podpowiedzi przy przyci
 | Ctrl+Shift+Enter | menu statusu zadania (dowolny status albo bez statusu) |
 | Ctrl+. | zwiń / rozwiń |
 | Ctrl+Shift+C | skopiuj odwołanie do bloku `((…))` |
+| Ctrl+Shift+A | AI: przepisz zaznaczony tekst albo blok (z włączonym Asystentem AI: [[AI#AI w edytorze]]) |
 | Ctrl+Z, Ctrl+Y | cofnij / ponów |
 | Ctrl+C / Ctrl+X | kopiuj / wytnij zaznaczony tekst bloku (dokładnie, z twardymi spacjami) |
 | Ctrl+V | wklej: Markdown z kilkoma blokami staje się blokami, skopiowany punkt listy wkleja się bez drugiego znacznika, tekst ze strony WWW przychodzi z listami i nagłówkami; obraz lub pliki jako załączniki |

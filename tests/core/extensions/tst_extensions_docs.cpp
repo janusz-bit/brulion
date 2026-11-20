@@ -1,7 +1,8 @@
 // The documentation of extensions keeps its word: every ```luau example of docs/EXTENSIONS.md,
 // docs/SYNTAX.md and the documentation notebook's pages (src/app/shell/guide, both languages) runs
 // on a real notebook — a vault, its index and the NotebookHost, the user and the model played by
-// the test: it loads, its commands run, its views draw and their actions work, its hooks fire —
+// the test: it loads, its commands run (a chat partner's in a turn of a conversation), its views
+// draw and their actions work, its hooks fire —
 // and the references name every function of `b` and every hook event, in both languages.
 //
 // An example is code as an extension page has it (statements that register commands, views and
@@ -273,6 +274,12 @@ class TestExtensionsDocs : public QObject {
             QVariantMap ctx{{u"page"_s, page}, {u"selection"_s, QString()}};
             if (c.needsBlock)
                 ctx.insert(u"block"_s, m_host->blockAt(path, 0));
+            if (c.chat) {
+                // A chat partner: a turn of a conversation, as the AI chat runs it.
+                ctx.insert(u"messages"_s, QVariantList{QVariantMap{{u"role"_s, u"user"_s}, {u"content"_s, u"Ahoj, co słychać?"_s}}});
+                ctx.insert(u"conversation"_s, u"AI/2026-11-11 Ahoj"_s);
+                ctx.insert(u"omitted"_s, 0);
+            }
             const Result r = drive(m_engine->runCommand(kExtension, c.name, ctx), true);
             if (!r.ok())
                 return u"command %1: %2"_s.arg(c.name, r.error);

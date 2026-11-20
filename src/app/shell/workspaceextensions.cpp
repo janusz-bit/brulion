@@ -227,6 +227,7 @@ void WorkspaceExtensions::detach()
 {
     if (m_index)
         disconnect(m_index, nullptr, this, nullptr);
+    m_waitingQuestions.clear(); // (their calls go with the engine)
     cancelQuestion();
     m_changeTimer.stop();
     m_engine.reset();
@@ -281,6 +282,11 @@ void WorkspaceExtensions::setNotifier(std::function<void(const QString &, const 
 
 void WorkspaceExtensions::reload()
 {
+    if (!m_waitingQuestions.isEmpty()) {
+        m_waitingQuestions.clear(); // (their calls go with the engine)
+        ++m_chatQuestionSerial;
+        Q_EMIT chatQuestionsChanged();
+    }
     cancelQuestion();
     // A turn of the AI chat on its way ends here: the chat says so.
     QStringList chats;
@@ -586,10 +592,7 @@ void WorkspaceExtensions::handleResult(const extensions::Result &r)
             hookResult(ctx, {extensions::Status::Error, {}, u"b.on(\"%1\"): a hook cannot ask a question"_s.arg(ctx.hookEvent)});
             return;
         }
-        cancelQuestion(); // one question at a time: an older one is answered "cancelled"
-        m_questionCall = r.call;
-        m_questionChat = ctx.chat;
-        setQuestion(request);
+        ask(r.call, ctx.chat, request);
         return;
     }
     if (r.call)
@@ -604,7 +607,14 @@ void WorkspaceExtensions::handleResult(const extensions::Result &r)
         handle(r, ctx);
 }
 
-void WorkspaceExtensions::setAi(const ai::Settings &settings) { m_aiSettings = settings; }
+void WorkspaceExtensions::setAi(const ai::Settings &settings)
+{
+    const bool changed = settings.provider != m_aiSettings.provider || settings.model != m_aiSettings.model
+                         || settings.baseUrl != m_aiSettings.baseUrl || settings.apiKey != m_aiSettings.apiKey;
+    m_aiSettings = settings;
+    if (changed)
+        Q_EMIT aiSettingsChanged();
+}
 
 void WorkspaceExtensions::setLocalAi(ai::LocalBackend *backend)
 {
@@ -716,10 +726,57 @@ extensions::Result WorkspaceExtensions::resumeCall(int call, const QVariant &val
 
 // ---- the AI chat ---------------------------------------------------------------------------------
 
-bool WorkspaceExtensions::runChat(const QString &path, const QVariantList &messages, const QString &page)
+QVariantList WorkspaceExtensions::chatPartners() const
 {
-    if (!m_engine || !m_engine->isLoaded(u"asystent"_s)) {
-        Q_EMIT chatFailed(path, tr("The AI assistant is off: switch it on in Settings → Extensions → AI."));
+    QVariantList out{QVariantMap{{u"id"_s, QString()}, {u"label"_s, title(u"asystent"_s)}, {u"extension"_s, title(u"asystent"_s)}}};
+    for (const extensions::CommandInfo &c : commands()) {
+        if (!c.chat || (c.extension == u"asystent" && c.name == u"chat"))
+            continue;
+        out.append(QVariantMap{{u"id"_s, QString(c.extension + u'/' + c.name)}, {u"label"_s, c.label}, {u"extension"_s, title(c.extension)}});
+    }
+    return out;
+}
+
+QString WorkspaceExtensions::partnerLabel(const QString &partner) const
+{
+    if (partner.trimmed().isEmpty())
+        return title(u"asystent"_s);
+    const QString extension = partner.section(u'/', 0, 0).trimmed();
+    const QString name = partner.section(u'/', 1).trimmed();
+    for (const extensions::CommandInfo &c : commands()) {
+        if (c.chat && c.extension == extension && (name.isEmpty() || c.name == name))
+            return c.label;
+    }
+    return {};
+}
+
+bool WorkspaceExtensions::runChat(const QString &path, const QVariantList &messages, const QString &page,
+                                  const QString &partner, int omitted)
+{
+    // Who answers: the assistant's "chat", or an extension's chat command ("x/y", "x": its first).
+    QString extension = u"asystent"_s, command = u"chat"_s;
+    if (!partner.trimmed().isEmpty()) {
+        extension = partner.section(u'/', 0, 0).trimmed();
+        command = partner.section(u'/', 1).trimmed();
+        if (command.isEmpty() && m_engine) {
+            for (const extensions::CommandInfo &c : m_engine->commands()) {
+                if (c.chat && c.extension == extension) {
+                    command = c.name;
+                    break;
+                }
+            }
+        }
+    }
+    const bool loaded = m_engine && m_engine->isLoaded(extension)
+                        && std::ranges::any_of(m_engine->commands(), [&](const extensions::CommandInfo &c) {
+                               return c.extension == extension && c.name == command;
+                           });
+    if (!loaded) {
+        if (extension == u"asystent")
+            Q_EMIT chatFailed(path, tr("The AI assistant is off: switch it on in Settings → Extensions → AI."));
+        else
+            Q_EMIT chatFailed(path, tr("The chat partner “%1” is not running: switch its extension on, or choose another partner.")
+                                            .arg(partner));
         return false;
     }
     // (The conversation's own page by its name, as b.read names pages: its tools leave it out.)
@@ -727,12 +784,14 @@ bool WorkspaceExtensions::runChat(const QString &path, const QVariantList &messa
     const QVariantMap ctx{{u"page"_s, page},
                           {u"selection"_s, QString()},
                           {u"messages"_s, messages},
-                          {u"conversation"_s, conversation}};
-    cancelQuestion();
+                          {u"conversation"_s, conversation},
+                          {u"omitted"_s, omitted}};
+    // (Another conversation's question, shown or waiting, stays: turns run side by side.)
     m_current = CallContext{};
     m_current.chat = path;
+    m_current.extension = extension;
     const QString before = std::exchange(m_statusChat, path);
-    const extensions::Result r = m_engine->runCommand(u"asystent"_s, u"chat"_s, ctx);
+    const extensions::Result r = m_engine->runCommand(extension, command, ctx);
     m_statusChat = before;
     handleResult(r);
     m_current = CallContext{};
@@ -743,6 +802,12 @@ void WorkspaceExtensions::stopChat(const QString &path)
 {
     if (!m_engine || path.isEmpty())
         return;
+    const qsizetype waiting = m_waitingQuestions.size();
+    m_waitingQuestions.removeIf([&path](const WaitingQuestion &q) { return q.chat == path; });
+    if (m_waitingQuestions.size() != waiting) {
+        ++m_chatQuestionSerial;
+        Q_EMIT chatQuestionsChanged();
+    }
     for (auto it = m_calls.begin(); it != m_calls.end();) {
         if (it->chat != path) {
             ++it;
@@ -755,6 +820,8 @@ void WorkspaceExtensions::stopChat(const QString &path)
             m_questionTitle.clear();
             m_questionOptions.clear();
             m_questionChat.clear();
+            m_questionRequest.clear();
+            ++m_questionSerial;
             Q_EMIT questionChanged();
         }
         m_engine->cancel(call); // (an answer on its way finds no call: finishAi drops it)
@@ -764,6 +831,7 @@ void WorkspaceExtensions::stopChat(const QString &path)
         }
         it = m_calls.erase(it);
     }
+    showWaitingQuestion();
     if (m_reconcilePending && !isWaiting())
         reconcile();
 }
@@ -799,6 +867,25 @@ void WorkspaceExtensions::chatResult(const QString &path, const extensions::Resu
     }
     }
     Q_EMIT changed(); // (its tools may have written pages: views show them)
+}
+
+ai::Pending WorkspaceExtensions::sendAi(const ai::Request &request, std::function<void(const ai::Reply &)> done,
+                                       ai::PartialCallback partial)
+{
+    ++m_aiPending;
+    Q_EMIT aiPendingChanged();
+    const QPointer<WorkspaceExtensions> self(this);
+    return aiClient()->send(
+            m_aiSettings, request,
+            [self, done = std::move(done)](const ai::Reply &reply) {
+                if (self) {
+                    self->m_aiPending = std::max(0, self->m_aiPending - 1);
+                    Q_EMIT self->aiPendingChanged();
+                }
+                if (done)
+                    done(reply);
+            },
+            std::move(partial));
 }
 
 void WorkspaceExtensions::testAi()
@@ -1169,7 +1256,7 @@ void WorkspaceExtensions::runCommand(const QString &extension, const QString &na
         if (!block.isEmpty())
             ctx.insert(u"block"_s, block);
     }
-    cancelQuestion();
+    cancelCommandQuestion();
     m_current = CallContext{};
     m_current.extension = extension;
     handleResult(m_engine->runCommand(extension, name, ctx));
@@ -1213,7 +1300,7 @@ bool WorkspaceExtensions::act(const QString &extension, const QString &view, con
 {
     if (!m_engine)
         return false;
-    cancelQuestion();
+    cancelCommandQuestion();
     m_current = CallContext{};
     m_current.fromAction = true;
     m_current.extension = extension;
@@ -1351,7 +1438,7 @@ void WorkspaceExtensions::evaluateIn(const QString &code, const QString &name, c
         m_console->append(u"error"_s, tr("The Luau engine is not available: open a notebook first."));
         return;
     }
-    cancelQuestion();
+    cancelCommandQuestion();
     m_current = CallContext{};
     m_current.console = true;
     m_current.toast = toast;
@@ -1394,6 +1481,109 @@ void WorkspaceExtensions::setQuestion(const QVariantMap &question)
     Q_EMIT questionChanged();
 }
 
+void WorkspaceExtensions::ask(int call, const QString &chat, const QVariantMap &request)
+{
+    if (!m_questionKind.isEmpty()) {
+        if (!chat.isEmpty()) {
+            // A turn's question waits behind the one shown: never cancelled by it.
+            m_waitingQuestions.append({call, chat, request});
+            ++m_chatQuestionSerial;
+            Q_EMIT chatQuestionsChanged();
+            return;
+        }
+        if (!m_questionChat.isEmpty()) {
+            // A command asks while a turn's question is shown: that one waits (first) meanwhile.
+            m_waitingQuestions.prepend({m_questionCall, m_questionChat, m_questionRequest});
+            ++m_chatQuestionSerial;
+            Q_EMIT chatQuestionsChanged();
+        } else {
+            cancelQuestion(); // one command's question at a time: an older one is answered "cancelled"
+        }
+    }
+    m_questionCall = call;
+    m_questionChat = chat;
+    m_questionRequest = request;
+    setQuestion(request);
+}
+
+void WorkspaceExtensions::showWaitingQuestion()
+{
+    if (!m_questionKind.isEmpty() || m_waitingQuestions.isEmpty() || !m_engine)
+        return;
+    const WaitingQuestion next = m_waitingQuestions.takeFirst();
+    ++m_chatQuestionSerial;
+    Q_EMIT chatQuestionsChanged();
+    m_questionCall = next.call;
+    m_questionChat = next.chat;
+    m_questionRequest = next.request;
+    setQuestion(next.request);
+}
+
+void WorkspaceExtensions::cancelCommandQuestion()
+{
+    if (!m_questionKind.isEmpty() && m_questionChat.isEmpty())
+        cancelQuestion();
+}
+
+QVariantMap WorkspaceExtensions::chatQuestion(const QString &path, int) const
+{
+    if (path.isEmpty())
+        return {};
+    const auto shape = [](const QVariantMap &request) {
+        const QString kind = request.value(u"kind"_s).toString();
+        return QVariantMap{{u"kind"_s, kind},
+                           {u"title"_s, request.value(kind == u"form" ? u"title"_s : u"prompt"_s).toString()},
+                           {u"options"_s, request.value(u"options"_s).toStringList()}};
+    };
+    if (!m_questionKind.isEmpty() && m_questionChat == path)
+        return shape(m_questionRequest);
+    for (const WaitingQuestion &q : m_waitingQuestions) {
+        if (q.chat == path)
+            return shape(q.request);
+    }
+    return {};
+}
+
+QString WorkspaceExtensions::chatQuestionKind(const QString &path, int serial) const
+{
+    return chatQuestion(path, serial).value(u"kind"_s).toString();
+}
+
+QString WorkspaceExtensions::chatQuestionTitle(const QString &path, int serial) const
+{
+    return chatQuestion(path, serial).value(u"title"_s).toString();
+}
+
+QStringList WorkspaceExtensions::chatQuestionOptions(const QString &path, int serial) const
+{
+    return chatQuestion(path, serial).value(u"options"_s).toStringList();
+}
+
+void WorkspaceExtensions::answerChat(const QString &path, const QString &option)
+{
+    if (!m_engine || path.isEmpty())
+        return;
+    if (!m_questionKind.isEmpty() && m_questionChat == path) {
+        answerChoice(option);
+        return;
+    }
+    for (qsizetype i = 0; i < m_waitingQuestions.size(); ++i) {
+        const WaitingQuestion q = m_waitingQuestions.at(i);
+        if (q.chat != path)
+            continue;
+        if (q.request.value(u"kind"_s).toString() == u"choose" && !q.request.value(u"options"_s).toStringList().contains(option))
+            return;
+        m_waitingQuestions.removeAt(i);
+        ++m_chatQuestionSerial;
+        Q_EMIT chatQuestionsChanged();
+        handleResult(resumeCall(q.call, option));
+        showWaitingQuestion();
+        if (m_reconcilePending && !isWaiting())
+            reconcile();
+        return;
+    }
+}
+
 void WorkspaceExtensions::answer(const QVariant &value)
 {
     if (!m_engine || m_questionKind.isEmpty())
@@ -1403,8 +1593,10 @@ void WorkspaceExtensions::answer(const QVariant &value)
     m_questionTitle.clear();
     m_questionOptions.clear();
     m_questionChat.clear();
+    m_questionRequest.clear();
     Q_EMIT questionChanged();
     handleResult(resumeCall(call, value));
+    showWaitingQuestion();
     if (m_reconcilePending && !isWaiting())
         reconcile();
 }

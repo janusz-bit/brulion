@@ -30,6 +30,17 @@ bool takesFallbacks(const QString &model)
     return models.contains(model);
 }
 
+/// The thoughts of an OpenAI-compatible message: llama.cpp's server, vLLM and DeepSeek say
+/// reasoning_content, others reasoning.
+QString reasoningOf(const QJsonObject &message)
+{
+    for (const QString &key : {u"reasoning_content"_s, u"reasoning"_s}) {
+        if (const QJsonValue v = message.value(key); v.isString() && !v.toString().isEmpty())
+            return v.toString();
+    }
+    return {};
+}
+
 QString modelOf(const Settings &settings, const Request &request)
 {
     if (!request.model.isEmpty())
@@ -141,6 +152,16 @@ bool Settings::unencrypted() const
     return host != u"localhost" && !host.endsWith(u".localhost") && !QHostAddress(host).isLoopback();
 }
 
+bool showsThinking(const QString &model)
+{
+    // (By family: "claude-opus-5" covers claude-opus-5 and claude-opus-5-5, and so on.)
+    static const QStringList families{u"claude-opus-5"_s,  u"claude-sonnet-5"_s, u"claude-haiku-5"_s,
+                                      u"claude-fable-5"_s, u"claude-mythos-5"_s};
+    return std::ranges::any_of(families, [&model](const QString &family) {
+        return model == family || model.startsWith(family + u'-');
+    });
+}
+
 QVariantMap Reply::toVariant() const
 {
     if (!ok)
@@ -157,6 +178,8 @@ QVariantMap Reply::toVariant() const
             calls << QVariantMap{{u"id"_s, call.id}, {u"name"_s, call.name}, {u"input"_s, call.input}};
         out.insert(u"toolCalls"_s, calls);
     }
+    if (!thoughts.isEmpty())
+        out.insert(u"thoughts"_s, thoughts);
     return out;
 }
 
@@ -315,6 +338,11 @@ std::optional<Request> requestFrom(const QVariantMap &table, QString *error, con
         if (!kEfforts.contains(r.effort))
             return fail(u"effort must be one of: "_s + kEfforts.join(u", "_s));
     }
+    if (const QVariant thoughts = table.value(u"thoughts"_s); thoughts.isValid() && !thoughts.isNull()) {
+        if (thoughts.metaType().id() != QMetaType::Bool)
+            return fail(u"thoughts must be true or false"_s);
+        r.thoughts = thoughts.toBool();
+    }
     return r;
 }
 
@@ -397,6 +425,10 @@ std::optional<sync::HttpRequest> httpRequest(const Settings &settings, const Req
             body.insert(u"system"_s, request.system);
         if (!request.effort.isEmpty())
             body.insert(u"output_config"_s, QJsonObject{{u"effort"_s, request.effort}});
+        // Its thinking shown: a summary in its thinking blocks (else they come empty). Only the
+        // models that think anyway get it — the request costs the same — and take `display`.
+        if (request.thoughts && showsThinking(model))
+            body.insert(u"thinking"_s, QJsonObject{{u"type"_s, u"adaptive"_s}, {u"display"_s, u"summarized"_s}});
         // A request a model's safeguards decline is answered by the model Anthropic recommends
         // for that kind of request instead of coming back as a refusal.
         if (takesFallbacks(model)) {
@@ -503,17 +535,21 @@ Reply readReply(const Settings &settings, const sync::HttpResponse &response)
             return reply;
         }
         QString text;
+        QStringList thoughts;
         const QJsonArray content = json.value(u"content"_s).toArray();
         for (const QJsonValue block : content) {
             const QJsonObject b = block.toObject();
             const QString type = b.value(u"type"_s).toString();
             if (type == u"text")
                 text += b.value(u"text"_s).toString();
+            else if (type == u"thinking" && !b.value(u"thinking"_s).toString().trimmed().isEmpty())
+                thoughts << b.value(u"thinking"_s).toString().trimmed();
             else if (type == u"tool_use")
                 reply.toolCalls << ToolCall{b.value(u"id"_s).toString(), b.value(u"name"_s).toString(),
                                             b.value(u"input"_s).toObject().toVariantMap()};
         }
         reply.text = text;
+        reply.thoughts = thoughts.join(u"\n\n"_s);
         reply.raw = QJsonDocument(content).toJson(QJsonDocument::Compact);
         const QJsonObject usage = json.value(u"usage"_s).toObject();
         reply.inputTokens = usage.value(u"input_tokens"_s).toInteger();
@@ -535,6 +571,7 @@ Reply readReply(const Settings &settings, const sync::HttpResponse &response)
         }
         reply.text = content.toString();
         const QJsonObject message = first.value(u"message"_s).toObject();
+        reply.thoughts = reasoningOf(message).trimmed();
         for (const QJsonValue v : message.value(u"tool_calls"_s).toArray()) {
             const QJsonObject call = v.toObject();
             const QJsonObject function = call.value(u"function"_s).toObject();

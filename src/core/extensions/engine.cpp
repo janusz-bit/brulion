@@ -817,7 +817,7 @@ QList<CommandInfo> Engine::commands() const
     QList<CommandInfo> out;
     for (auto it = m_commands.cbegin(); it != m_commands.cend(); ++it) {
         const QString name = it.key().mid(it->extension.size() + 1);
-        out.append({it->extension, name, it->label.isEmpty() ? name : it->label, it->needsBlock, it->palette});
+        out.append({it->extension, name, it->label.isEmpty() ? name : it->label, it->needsBlock, it->palette, it->chat});
     }
     std::sort(out.begin(), out.end(), [](const CommandInfo &a, const CommandInfo &b) {
         return a.extension != b.extension ? a.extension < b.extension : a.name < b.name;
@@ -1205,6 +1205,7 @@ int Engine::commandImpl(lua_State *L)
     QString label;
     bool needsBlock = false;
     bool palette = true;
+    bool chat = false;
     if (lua_type(L, 3) == LUA_TTABLE) {
         lua_rawgetfield(L, 3, "label");
         if (lua_type(L, -1) == LUA_TSTRING)
@@ -1213,12 +1214,16 @@ int Engine::commandImpl(lua_State *L)
         lua_rawgetfield(L, 3, "block");
         needsBlock = lua_toboolean(L, -1);
         lua_pop(L, 1);
+        lua_rawgetfield(L, 3, "chat");
+        chat = lua_toboolean(L, -1);
+        lua_pop(L, 1);
+        // (A chat partner answers in the chat: the palette offers it only when told to.)
         lua_rawgetfield(L, 3, "palette");
-        palette = lua_type(L, -1) != LUA_TBOOLEAN || lua_toboolean(L, -1);
+        palette = lua_type(L, -1) == LUA_TBOOLEAN ? bool(lua_toboolean(L, -1)) : !chat;
         lua_pop(L, 1);
     }
     lua_pushvalue(L, 2);
-    Handler h{extension, lua_ref(L, -1), 0, label, needsBlock, {}, palette};
+    Handler h{extension, lua_ref(L, -1), 0, label, needsBlock, {}, palette, chat};
     lua_pop(L, 1);
     const QString key = extension + u'/' + name;
     if (const auto it = m_commands.constFind(key); it != m_commands.constEnd())

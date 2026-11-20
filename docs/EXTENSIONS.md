@@ -370,13 +370,14 @@ return `{table.concat(days, ", ")}; {b.formatRecurrence(rule, "en")}; {b.lower("
 
 ## Commands
 
-`b.command(name, fn, { label = …, block = …, palette = … })` adds a command to the palette. `name`
+`b.command(name, fn, { label = …, block = …, palette = …, chat = … })` adds a command to the palette. `name`
 is its id within the extension (the palette's id is `ext.<extension>.<name>`); `label` is what the
 palette shows (else the name), with the extension's title under it. Registering a name again
 replaces it. With **`palette = false`** the palette does not offer it: a view's `b.ui.run` button,
 `brulion-cli extension run` or the app runs it — the AI chat runs the AI assistant's `chat` so
 ("AI"), `brulion-cli habit …` the habits' `list` and `set`; any other value of `palette` changes
-nothing.
+nothing. With **`chat = true`** the command is a **chat partner** ("Chat partners" below): the AI
+chat offers it as who answers a conversation, and the palette does not (unless `palette = true`).
 
 The function gets one table, `ctx`:
 
@@ -386,8 +387,9 @@ The function gets one table, `ctx`:
 | `ctx.block` | with `block = true`: the block under the caret (above, "Blocks") |
 | `ctx.args` | what the caller passes the command, a record: a toast's button (below), `brulion-cli extension run … --args '{"name": "Reading"}'`, the app's own callers (`brulion-cli habit set` runs the habits' `set` with `{ name, state, date }`); `{}` when nothing is passed. A turn of the AI chat has none: `ctx.args or {}` |
 | `ctx.selection` | always `""` so far |
-| `ctx.messages` | only in a turn of the AI chat (the AI assistant's `chat`, "AI"): the conversation's messages `{ role = "user" \| "assistant", content }`, the user's last |
+| `ctx.messages` | only in a turn of the AI chat (the AI assistant's `chat`, a chat partner's command, "AI"): the conversation's messages `{ role = "user" \| "assistant", content, images? }`, the user's last — `images` the pictures sent with a user's message, named as `b.ai`'s `images` takes them |
 | `ctx.conversation` | only in a turn of the AI chat: the name of the conversation's own page (`"AI/2026-11-16 Co mam jutro"`) |
+| `ctx.omitted` | only in a turn of the AI chat: how many of the conversation's first messages are not in `ctx.messages` (it was too long for the model: whole turns from the oldest left out), 0 none |
 
 With **`block = true`** the command works on the block under the caret: the palette offers it only
 in an editor (not in the Markdown source), and the page is saved first, so the block is read as
@@ -653,16 +655,23 @@ end, { label = "Note a book" })
 
 ## AI (`b.ai`)
 
-`b.ai(prompt)` or `b.ai({prompt = …, system = …, model = …, maxTokens = …, effort = …})` (or
-`messages = {{role = "user" | "assistant", content}, …}` for a conversation, the last message the
-user's) asks the model the user chose on this device and returns its text and the whole reply
-(`{text, model, stopReason, inputTokens, outputTokens, raw}`); a failure is an error at the
+`b.ai(prompt)` or `b.ai({prompt = …, system = …, model = …, maxTokens = …, effort = …, thoughts = …})`
+(or `messages = {{role = "user" | "assistant", content}, …}` for a conversation, the last message
+the user's) asks the model the user chose on this device and returns its text and the whole reply
+(`{text, model, stopReason, inputTokens, outputTokens, raw, thoughts?}`); a failure is an error at the
 script's line ("b.ai: the API key was refused (HTTP 401): …", "b.ai: no connection: …", "b.ai: the
 model declined to answer") that `pcall(b.ai, …)` catches. It needs the permission `ai`
 (`permissions: [ai]`, approved with the page like `write`; the console has it). `maxTokens` is a
 whole number from 1 to 128000 (Claude gets 16000 without one); `effort` is `"low"`, `"medium"`,
 `"high"`, `"xhigh"` or `"max"`: Claude's effort, and for a model on the device `"low"` means an
-answer without thinking first.
+answer without thinking first. **`thoughts = true`** asks to see what the model thought: Claude's
+models that think anyway — Opus 5 and later, Sonnet 5 and later, Haiku 5.5, Fable, Mythos — then
+send a summary of their thinking (`thinking: {type: "adaptive", display: "summarized"}`; without it
+their thinking blocks come empty; Opus 4.7 / 4.8 think only when asked to — that would cost more —
+and older models refuse `display`, so neither gets it), a server's reasoning (`reasoning_content`)
+and the model on the device's thoughts come without asking. The reply's `thoughts` holds them (only
+when there are some); the AI chat shows them, collapsed, while the answer is written
+(`ai::showsThinking`).
 
 `b.ai` returns once the answer is written. The app's own AI chat shows it while it is written
 (docs/UI.md "AI chat"): its requests go out with a watcher (`ai::Client::send`'s `partial`) — a
@@ -886,9 +895,12 @@ end, { label = "Ask my notes (AI)" })
 **The AI assistant** (built in, `src/core/extensions/builtin/asystent.luau`; Settings → Extensions →
 AI, off by default) is an agent that the **AI chat** talks to (docs/UI.md "AI chat"): a
 conversation is a page in `AI/` (docs/SYNTAX.md §14), and every message sent there runs one turn,
-its command `chat` (`palette = false`: the palette does not offer it; run by hand it says to use
-the chat). The app gives it the conversation's messages (`ctx.messages`, the user's last) and the
-page it is about (`ctx.page`); today's date with its weekday ("Today is Wednesday, 2026-11-11.",
+its command `chat` (`palette = false, chat = true`: the palette does not offer it; run by hand it
+says to use the chat). The app gives it the conversation's messages (`ctx.messages`, the user's
+last — with their pictures as `images`, which go to the model with them; a conversation too long for
+the model from a later turn on, `ctx.omitted` saying how many messages are left out, which the first
+message then tells the model) and the page it is about (`ctx.page`); its requests ask to see the
+model's thinking (`thoughts = true`); today's date with its weekday ("Today is Wednesday, 2026-11-11.",
 in the notes' language — not a calendar of the days after it: a small model took those dates for
 what the user said, and wrote them into the journal) and that page's text (at most
 30 000 characters, read again each turn) go before the first message — not into the system text,
@@ -1022,6 +1034,37 @@ habits only. How
 well a model does its work is measured by the assistant's bench (docs/FINETUNE.md): tasks with a
 known outcome on notebooks of their own, run by this script — a change of its tools or instructions
 shows there.
+
+### Chat partners
+
+The AI chat's conversations are answered by the built-in AI assistant — or by an extension of the
+user's own, a **chat partner**: a command registered with `chat = true`. The chat offers every
+loaded one as who answers (the conversation's row above its messages, "Answers: …" before a new
+conversation's first message: `WorkspaceExtensions::chatPartners()`), and the conversation's page
+keeps the choice in its frontmatter, `partner: <extension>/<command>` (docs/SYNTAX.md §14) — other
+conversations keep theirs. A turn runs the command like the assistant's `chat`: `ctx.messages` (the
+conversation, the user's last; pictures as `images`), `ctx.page` (the page it is about, "" none),
+`ctx.conversation` and `ctx.omitted`; what it returns — a text — is the AI's message, written into
+the conversation with its time; an error is the turn's failure, shown with Try again. It may ask
+(`b.choose`: the chat shows the question in the conversation), say what it does (`b.status`) and ask
+a model (`b.ai`, with the permission `ai`) — or answer without any: a partner needs no model. Turns
+of several conversations run side by side, each its own call. A partner that is not running (its
+extension off, its page not approved) fails the turn with "The chat partner “…” is not running".
+
+```luau
+-- A partner of one's own in the AI chat: it answers as a pirate, with the model of the settings.
+b.command("pirat", function(ctx)
+    if type(ctx.messages) ~= "table" or #ctx.messages == 0 then
+        return "Talk to me in the AI chat: choose “Pirate” as who answers."
+    end
+    local text = b.ai({
+        system = "You are a cheerful pirate. Answer in two sentences at most, in the user's language.",
+        messages = ctx.messages,
+        maxTokens = 400,
+    })
+    return text
+end, { label = "Pirate", chat = true })
+```
 
 ## Errors
 
@@ -1360,7 +1403,8 @@ Home:7
 | `src/app/shell/localai.h` | `AppController.localAi`: the chosen model, its download and removal, requests answered on a worker thread |
 | `src/core/extensions/pageextension.h` | extension pages: which pages are extensions, their id, their code with the page's line numbers, permissions, the hash an approval covers; the new-extension page and a built-in's source as a page |
 | `src/app/shell/workspaceextensions.h` | `WorkspaceExtensions` (QML `Workspace.extensions`): the engine for the open notebook, the built-ins the settings switch on, the extension pages and their approval on this device, reloading a page's code when it changes, hooks, the console, questions, messages and the rest timer; a turn of the AI chat (`runChat`: the assistant's `chat`, its answer, failure and `b.status` as signals, its question named by `questionChat`) |
-| `src/app/shell/workspacechats.h` | `WorkspaceChats` (QML `Workspace.chats`): the AI chat's conversations as pages (core `chat`), one turn at a time, Stop, Try again (docs/UI.md "AI chat") |
+| `src/app/shell/workspacechats.h` | `WorkspaceChats` (QML `Workspace.chats`): the AI chat's conversations as pages (core `chat`), a turn per conversation (`ChatTurn`; the model on the device's line), the partner of each, pictures, the camera and dictation, rename and delete, Stop, Try again (docs/UI.md "AI chat") |
+| `src/app/shell/writingsession.h` | `WritingSession`: the editor's AI assistant — a rewrite, a continuation or a summary through `WorkspaceExtensions::sendAi` (core `writing`; docs/UI.md "AI in the editor") |
 | `src/cli/commands_extensions.cpp` | `brulion-cli extension …` (docs/CLI.md "Extensions"): this reference (bundled), the extension pages and their state on the device, a sandbox for checks and runs, writing a page |
 | `src/app/shell/extensionmodels.h` | `ExtensionListModel` (Settings → Extensions), `ExtensionConsoleModel` (the console's lines) |
 | `src/app/shell/extensionviewmodel.h` | `ExtensionView` (QML): a view's node tree as a list; `qml/shell/ShellExtensionView.qml` draws it |

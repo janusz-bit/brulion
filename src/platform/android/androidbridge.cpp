@@ -242,6 +242,15 @@ void JNICALL nativeSoundPicked(JNIEnv *env, jclass, jint kind, jstring json)
     postToBridge([kind, choice](AndroidBridge *bridge) { Q_EMIT bridge->soundPicked(kind, choice); });
 }
 
+/// The camera app or the speech recognizer answered (MediaCapture.kt): `json` is the result.
+void JNICALL nativeCaptured(JNIEnv *env, jclass, jint kind, jstring json)
+{
+    QJsonObject result = QJsonDocument::fromJson(fromJString(env, json).toUtf8()).object();
+    if (result.isEmpty())
+        result.insert(u"error"_s, u"no answer"_s);
+    postToBridge([kind, result](AndroidBridge *bridge) { Q_EMIT bridge->captured(kind, result); });
+}
+
 /// The keyboard observer (ImeInsets.kt) reports, also every frame of the keyboard's slide: queued
 /// to Qt's thread like the other callbacks. Malformed values (negative) count as 0.
 void JNICALL nativeImeChanged(JNIEnv *, jclass, jint overlap, jboolean shown, jboolean animating)
@@ -284,6 +293,7 @@ AndroidBridge::AndroidBridge(QObject *parent)
             {"nativeShared", "(Ljava/lang/String;)V", reinterpret_cast<void *>(&nativeShared)},
             {"nativePermissionsChanged", "()V", reinterpret_cast<void *>(&nativePermissionsChanged)},
             {"nativeSoundPicked", "(ILjava/lang/String;)V", reinterpret_cast<void *>(&nativeSoundPicked)},
+            {"nativeCaptured", "(ILjava/lang/String;)V", reinterpret_cast<void *>(&nativeCaptured)},
             {"nativeDoneQueued", "()V", reinterpret_cast<void *>(&nativeDoneQueued)},
             {"nativeWidgetQueued", "()V", reinterpret_cast<void *>(&nativeWidgetQueued)},
             {"nativeWidgetWrote", "(Ljava/lang/String;)V", reinterpret_cast<void *>(&nativeWidgetWrote)},
@@ -672,6 +682,27 @@ bool AndroidBridge::pickSound(int kind, const QJsonObject &current)
             kClass, "pickSound", "(Landroid/content/Context;ILjava/lang/String;)Z", context.object(), jint(kind),
             QJniObject::fromString(compactJson(current)).object<jstring>());
     return !failed("pickSound") && asked != JNI_FALSE;
+}
+
+bool AndroidBridge::canCapture(int kind) const
+{
+    const QJniObject context = appContext();
+    if (!context.isValid())
+        return false;
+    const jboolean can = QJniObject::callStaticMethod<jboolean>(kClass, "canCapture", "(Landroid/content/Context;I)Z",
+                                                                context.object(), jint(kind));
+    return !failed("canCapture") && can != JNI_FALSE;
+}
+
+bool AndroidBridge::capture(int kind, const QString &language)
+{
+    const QJniObject context = appContext();
+    if (!context.isValid())
+        return false;
+    const jboolean asked = QJniObject::callStaticMethod<jboolean>(
+            kClass, "capture", "(Landroid/content/Context;ILjava/lang/String;)Z", context.object(), jint(kind),
+            QJniObject::fromString(language).object<jstring>());
+    return !failed("capture") && asked != JNI_FALSE;
 }
 
 bool AndroidBridge::previewSound(const QJsonObject &choice)

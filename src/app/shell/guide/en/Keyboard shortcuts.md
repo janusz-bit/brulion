@@ -68,6 +68,7 @@ A new shortcut works right away across the whole app: the palette and the button
 | Ctrl+Shift+Enter | task status menu (any status or no status) |
 | Ctrl+. | fold / unfold |
 | Ctrl+Shift+C | copy a reference to the block `((…))` |
+| Ctrl+Shift+A | AI: rewrite the selected text or the block (with the AI assistant on: [[AI#AI in the editor]]) |
 | Ctrl+Z, Ctrl+Y | undo / redo |
 | Ctrl+C / Ctrl+X | copy / cut the selected text of the block (exactly, with non-breaking spaces) |
 | Ctrl+V | paste: Markdown with several blocks becomes blocks, a copied list item is pasted without a second marker, text from a web page arrives with its lists and headings; a picture or files as attachments |

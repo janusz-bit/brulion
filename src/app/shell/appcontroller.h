@@ -604,6 +604,10 @@ public:
     Q_INVOKABLE int toastRestore(const QString &text, const QString &actionText, const QStringList &trashPaths);
     /// toastRestore() for one page (compiled QML cannot pass a list literal).
     Q_INVOKABLE int toastRestorePage(const QString &text, const QString &actionText, const QString &trashPath);
+    /// A "success" toast whose button renames the page `path` back to `oldTitle`
+    /// (Workspace::renamePage), also once the view that renamed it is gone: its id.
+    Q_INVOKABLE int toastUndoRename(const QString &text, const QString &actionText, const QString &path,
+                                    const QString &oldTitle);
     /// Main.qml: toast `id` of toastWithAction() is shown by the window's toast host as `hostId`.
     Q_INVOKABLE void setToastHostId(int id, int hostId);
     /// Main.qml: the button of the toast host's toast `hostId` was pressed (toastAction()'s
@@ -813,6 +817,7 @@ private:
     int m_lastToastId = 0;         ///< toastWithAction()'s ids
     QHash<int, int> m_toastIdsByHostId;      ///< the toast host's id → toastWithAction()'s
     QHash<int, QStringList> m_restoreToasts; ///< toastRestore()'s ids → the trash paths
+    QHash<int, std::pair<QString, QString>> m_renameToasts; ///< toastUndoRename()'s ids → {path, old title}
     QHash<int, QJSValue> m_functionToasts;   ///< toastAction()'s ids → the function
     QHash<int, int> m_extensionToasts;       ///< toastWithAction()'s ids → an extension's button
 #ifdef Q_OS_WASM

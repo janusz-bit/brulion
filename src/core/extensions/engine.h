@@ -91,6 +91,9 @@ struct CommandInfo
     QString label; ///< the palette's label (b.command's meta.label), else the name
     bool needsBlock = false; ///< meta.block: it works on the block under the caret (ctx.block)
     bool palette = true; ///< meta.palette ~= false: the palette offers it (else only the app or a view runs it)
+    /// meta.chat: a chat partner (docs/EXTENSIONS.md "Chat partners") — the AI chat may let it
+    /// answer a conversation (ctx.messages); the palette does not offer it unless meta.palette says so.
+    bool chat = false;
 };
 
 struct ViewInfo
@@ -173,6 +176,7 @@ private:
         bool needsBlock = false;
         QString icon;
         bool palette = true;
+        bool chat = false;
     };
     struct Hook
     {

@@ -48,7 +48,7 @@ Switch it on in **Settings → Extensions → AI → AI assistant**. You talk to
 - **Summarise this page** — a new conversation that asks for a summary of the page and its tasks; ask more about it there.
 - **AI settings…** — the provider, the key and the model.
 
-The AI **searches and reads the whole notebook** by itself — pages, the journal, tasks with their dates, tags, reminders — so you can ask "What do I have to do this week?", "What did I write about the trip?" or "Add milk to my shopping list". You **see the answer as it is written**, word by word, and before it what the model is thinking (in small grey letters — the model on the device thinks in English; Brulion Assistant 1.7B answers without thinking). While it searches or reads it says so: "Searching the notes: “trip”…", "Reading “Shopping”…". **Stop** ends it at once — the model stops writing too, so your next question does not wait. It also **looks at pictures** in your notes when the model can see (Claude, LFM3-VL on the device): "What did I pay for milk? The receipt is in Shopping." The same is in the palette (Ctrl+K) as **AI: new conversation** and **AI chat**.
+The AI **searches and reads the whole notebook** by itself — pages, the journal, tasks with their dates, tags, reminders — so you can ask "What do I have to do this week?", "What did I write about the trip?" or "Add milk to my shopping list". You **see the answer as it is written**, word by word, and above it what the model is thinking, folded to one grey line — tap it to read all of it (the model on the device thinks in English; Brulion Assistant 1.7B answers without thinking; Claude's newer models send a summary of their thinking). While it searches or reads it says so: "Searching the notes: “trip”…", "Reading “Shopping”…". **Stop** ends it at once — the model stops writing too, so your next question does not wait. It also **looks at pictures** in your notes when the model can see (Claude, LFM3-VL on the device): "What did I pay for milk? The receipt is in Shopping." The same is in the palette (Ctrl+K) as **AI: new conversation** and **AI chat**.
 
 **Extensions, too.** Ask for a new command, view or reaction — "a command that counts the words of today's note" — and the AI reads how extensions are written, tries its code on your notes without changing anything, and writes the page into **Extensions/**. It then waits for you like code from another device: read the page and press **Run** when you agree with what it does (see [[Extensions]]).
 
@@ -56,7 +56,40 @@ The AI **searches and reads the whole notebook** by itself — pages, the journa
 
 **Every conversation is a page** in the folder **AI/**, named after your first question — `AI/2026-11-15 What do I have to do this week` — and the day's journal gets a line that links to it. So you can read it later on the phone, search it, link it or edit it; the chat goes on from what the page says. Its tasks stay out of your task lists and a reminder in an answer never rings (the page has `tasks: ignore`). **Open the conversation as a page** (in the chat) shows it in the editor.
 
-The assistant works with tools (searching, reading, writing): on a server of your own pick a model that supports them (e.g. Qwen 3 or Llama 3.1); Claude does. While the model answers, the ✨ button spins. One answer is written at a time; it goes on while you look at other pages and lands in its conversation.
+**Pictures, the camera and your voice.** The paperclip next to the field adds pictures to your message — from a file, or on the phone **Take a photo** with the camera; you can also paste a picture (Ctrl+V) or drop it on the conversation. They are kept in the notebook's attachments folder and shown in the conversation, and the AI looks at them when its model can see (Claude, LFM3-VL on the device). On Android the **microphone** button lets you dictate the message (the phone's own speech recognition).
+
+**Every message has its time** — under it, and the day above the first message of a day. **Several conversations answer at once**: ask in one and go on in another. The model on the device answers one at a time: the others wait in line, and the conversation says so ("Waiting for the model on this device…").
+
+**Long conversations.** A small model reads only so much: when a conversation gets too long for it, the AI gets it from a later question on — whole questions and answers from the beginning are left out, never your last one — and a line in the conversation shows where it starts reading.
+
+**Rename or delete** a conversation from its menu in the list (right-click, or a long press on the phone): the day stays in front of its name, and **Undo** in the message brings the old name or the deleted conversation back.
+
+The assistant works with tools (searching, reading, writing): on a server of your own pick a model that supports them (e.g. Qwen 3 or Llama 3.1); Claude does. While the model answers, the ✨ button spins. An answer goes on while you look at other pages and lands in its conversation.
+
+## AI in the editor
+With the AI assistant on, the AI also helps you **write**. Select text (or just put the cursor in a block, or select blocks) and choose:
+
+- **Rewrite…** — pick how: **Shorter**, **Clearer**, **Fix spelling and grammar**, **More formal**, **More casual**, **Translate to English** or **to Polish** — or say it in your own words ("as a list", "friendlier, for a letter").
+- **Continue writing** — the next sentence or two after the cursor, in the note's tone.
+- **Summarize** — a short summary under the text.
+
+You find them in the menu of the selected text (right-click), the block's menu, the palette (**AI: Rewrite…** — **Ctrl+Shift+A** —, **AI: Continue writing**, **AI: Summarize**), and on the phone behind the **✨** on the editing toolbar or on the toolbar of selected blocks. Source mode works too. You see the answer as it is written and, for a rewrite, **what changes** word by word; nothing is sent until you choose, and nothing in the note changes until you press **Replace** or **Insert** — and one **Undo** takes it back. **Try again** asks for another answer.
+
+## Your own chat partner
+An extension can answer in the AI chat instead of the AI assistant: a command with `chat = true` gets the conversation (`ctx.messages`) and returns its answer. With one installed, the chat lets you choose **who answers** a conversation (above its messages, or "Answers: …" before the first one); the conversation's page remembers it.
+
+```luau
+b.command("pirate", function(ctx)
+    if type(ctx.messages) ~= "table" or #ctx.messages == 0 then
+        return "Talk to me in the AI chat."
+    end
+    return b.ai({
+        system = "You are a cheerful pirate. Answer in two sentences at most.",
+        messages = ctx.messages,
+        maxTokens = 400,
+    })
+end, { label = "Pirate", chat = true })
+```
 
 ## In your own extensions
 An extension page with `ai` among its permissions can ask a model:
@@ -75,7 +108,7 @@ end, { label = "A haiku for today" })
 ```
 ````
 
-`b.ai("question")` returns the text; a table adds `system`, `model`, `maxTokens`, `effort`, `images` (pictures of the notebook, named as notes embed them: `images = { "receipt.jpg" }`) or `messages` for a conversation. While the model writes, Brulion keeps working. In the **Luau console** try `b.ai("What is 2 + 2?")`. When the model cannot be asked — no key, no connection — the command stops with the reason; `pcall(b.ai, "…")` catches it.
+`b.ai("question")` returns the text; a table adds `system`, `model`, `maxTokens`, `effort`, `thoughts = true` (what the model thought, in the reply's `thoughts`), `images` (pictures of the notebook, named as notes embed them: `images = { "receipt.jpg" }`) or `messages` for a conversation. While the model writes, Brulion keeps working. In the **Luau console** try `b.ai("What is 2 + 2?")`. When the model cannot be asked — no key, no connection — the command stops with the reason; `pcall(b.ai, "…")` catches it.
 
 ## Tools: a model that looks things up
 With `tools`, the model can call functions of your code — search the notes, read a page — before it answers; this is how the AI assistant works. A tool has a name, a description that says when to call it, and the shape of its input. A reply that calls tools has `toolCalls`: your code runs them and asks again, with the model's turn (`raw`, unchanged) and every result in one message, until a reply comes without calls.

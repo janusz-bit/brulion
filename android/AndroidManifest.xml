@@ -47,6 +47,18 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
 
+    <!-- The camera app and the speech recognizer the AI chat asks (MediaCapture.kt): seen by the
+         app from Android 11 on only when named here. No CAMERA or RECORD_AUDIO permission: those
+         apps take the photo and listen. -->
+    <queries>
+        <intent>
+            <action android:name="android.media.action.IMAGE_CAPTURE" />
+        </intent>
+        <intent>
+            <action android:name="android.speech.action.RECOGNIZE_SPEECH" />
+        </intent>
+    </queries>
+
     <!-- %%INSERT_FEATURES -->
 
     <supports-screens

@@ -938,11 +938,12 @@ gym and the habits are offered as "Gym" and "Habits" (`go.gym`, `go.habits`, whi
 not as `extview.…`.
 ## AI chat
 
-`qml/views/ChatView.qml`, route `chat` (the palette's "AI chat", `go.chat`, and "AI: new
-conversation", `ai.newChat`, while the assistant is on; the ✨ menu, "Top bar" and "Extensions"
-above; icon `message-square`): conversations with the AI assistant, as in a messenger. Each one is a
-page in `AI/` (docs/SYNTAX.md §14), named after its first question and linked from that day's
-journal; the assistant's agent answers (docs/EXTENSIONS.md "AI").
+`qml/views/ChatView.qml`, route `chat` (the palette's "AI chat", `go.chat`, and "AI: new conversation",
+`ai.newChat`, while the assistant is on; the ✨ menu, "Top bar" and "Extensions" above; icon
+`message-square`): conversations with the AI, as in a messenger. Each one is a page in `AI/`
+(docs/SYNTAX.md §14), named after its first question and linked from that day's journal; the
+assistant's agent answers (docs/EXTENSIONS.md "AI") — or an extension's chat command chosen for the
+conversation (docs/EXTENSIONS.md "Chat partners").
 
 * **Routes**: `{view: "chat"}` the conversations; `{view: "chat", path}` one; `{view: "chat", new:
   true, page?, prompt?}` a new one about `page` (a page name as a link names it), `prompt` sent at
@@ -952,77 +953,183 @@ journal; the assistant's agent answers (docs/EXTENSIONS.md "AI").
   chat".
 * **Layout**: from 720 px (not in the side panel) the list (300 px) beside the conversation; under
   that one of them — a conversation opened from the list is a step of the history, Back returns.
-  The list (`chatConversations`, `ChatListModel`: newest change first): an item per conversation —
-  its name, its last message as one line (🤖 before the AI's), when it last changed — and "New"
-  (`chatNew`); empty: "No conversations yet" with the folder named.
+  The list (`chatConversations`, `ChatListModel`: newest change first): an item per conversation
+  (`chatConversation_<name>`) — its name, its last message as one line (🤖 before the AI's), when
+  it last changed, or while its turn runs a small spinner (an hourglass while it waits for the model
+  on the device: the rows' `running` / `queued`) — and "New" (`chatNew`); empty: "No conversations
+  yet" with the folder named.
+* **The list's menu** (`chatRowMenu`: a right-click, a long press): **Rename…** (`chatRename` →
+  `chatRenameDialog` with the name without its date, `chatRenameField`; `WorkspaceChats.rename()`
+  keeps the date in front and goes through `Workspace::renamePage`, so the day's link follows; the
+  toast's **Undo** renames it back — `AppController.toastUndoRename`, also once the view is gone),
+  **Open as a page** and **Move to trash** (`chatDelete`: its turn stops, `WorkspaceChats.remove()`,
+  the toast's **Undo** restores it — `AppController.toastRestorePage`; the conversation shown goes
+  back to the list).
 * **A conversation** (`chatMessages`, `ChatMessageModel`): the user's messages right-aligned in the
   accent's tint, the AI's left-aligned on a card (at most 82 % / 92 % of the width, 720 px), each a
   `BRichText` of the message rendered by `InlineRenderer` (`ChatMessageModel::renderMessage`: a
   paragraph per block, lists indented with their bullets or numbers, a task's box, headings bold,
-  code and tables preformatted — never a note's own HTML); a click on a link follows it (page:,
-  tag:, ext: through `PageTools.openLink`, from the conversation's page), a long press or
-  right-click has Copy (the message's Markdown) and "Show in the page" (the page at its line).
-  Above them a row with the page it is about (a chip that opens it), "Open the conversation as a
-  page" (`chatOpenPage`) and, without the list, "New conversation". New messages scroll the list to
-  its end (`WorkspaceChats.written`, the model's count).
-* **While the AI answers** (`Workspace.chats.running` is this conversation): the answer as the
-  model writes it, as PocketPal shows it — a card like the AI's messages (`chatLive`): first the
-  end of what the model thinks, a few lines in small grey italics (`chatThoughts`,
-  `Workspace.chats.thoughts`: plain text, the model's own words; a model that shows its thinking —
-  the one on the device, a server's that sends `reasoning_content`), then its words rendered as
-  its message will be (`chatPartial`: `ChatMessageModel.render()` of `Workspace.chats.partial`), at
-  most ten times a second, the list following them while it is at its end (scrolled up, it stays).
-  The words are two texts: the answer's finished blocks (`chatPartialSettled`, `partialSettled`:
-  rendered again only when a block is finished — Qt's "Calculating text layouts can be a slow
-  operation") and the block being written (`chatPartialTail`, `partialTail`, `WorkspaceChats::
-  splitWritten()`: cut before the last block at the margin after a blank line, never inside a code
-  block), which with the thoughts has `mutabilityGroup: Item.DynamicMutabilityGroup` (Qt 6.12;
-  `BRichText.mutability`): the renderer keeps it out of the other texts' batches, which are not
-  uploaded again with it. Under them, with the model on the device, its speed (`chatSpeed`).
+  code and tables preformatted — never a note's own HTML), its pictures above its text (`chatPicture`:
+  thumbnails up to 280 px wide, a tap opens the picture), the time it was written under it
+  (`chatTime`, "09:12": its `czas::` line; none on a page written before times were kept), and above
+  the first message of a day that day (`chatDay`: "Today", "Yesterday", "15 Nov"); a click on a link
+  follows it (page:, tag:, ext: through `PageTools.openLink`, from the conversation's page), a long
+  press or right-click has Copy (the message's Markdown) and "Show in the page" (the page at its
+  line). Above them a row with who answers (`chatPartner`, shown when an extension offers a partner
+  or the page names one: its menu, `chatPartnerMenu`, changes it for the next turns —
+  `WorkspaceChats.setPartner()` writes the page's `partner:`), the page it is about (a chip that
+  opens it), "Open the conversation as a page" (`chatOpenPage`) and, without the list, "New
+  conversation". New messages scroll the list to its end (`WorkspaceChats.written`, the model's
+  count).
+* **A conversation too long for the model** (`WorkspaceChats.historyBudget`: 16 000 characters for
+  the model on the device, 120 000 for a provider on the network — `chat::firstSent`, a picture
+  counting 3 000): the turn sends it from a later turn on, whole turns from the oldest left out, the
+  latest always sent; the partner gets `ctx.omitted` (the built-in assistant tells the model). The
+  view shows it: the messages the model does not get are faded, and a line above the first one it
+  gets says "The AI does not get the N messages above: too long" (`chatNotSent`; "the model on this
+  device …" with that one).
+* **While the AI answers** (the conversation's `ChatTurn`, `Workspace.chats.turn(path)`, runs): the
+  answer as the model writes it, as PocketPal shows it — a card like the AI's messages (`chatLive`):
+  first what the model thinks, **collapsed** to one line of its end in small grey italics
+  (`chatThoughtsToggle`, `chatThoughts`, `ChatTurn.thoughts`; "Thinking…" while no words came,
+  "Thoughts" after) — a tap opens all of them (`chatThoughtsAll`, `ChatTurn.allThoughts`): plain
+  text, the model's own words (a model that shows its thinking — the one on the device, a server's
+  `reasoning_content`, Claude's summarised thinking: docs/EXTENSIONS.md "AI") —, then its words
+  rendered as its message will be (`chatPartial`: `ChatMessageModel.render()` of `ChatTurn.partial`),
+  at most ten times a second, the list following them while it is at its end (scrolled up, it
+  stays). The words are two texts: the answer's finished blocks (`chatPartialSettled`,
+  `partialSettled`: rendered again only when a block is finished — Qt's "Calculating text layouts can
+  be a slow operation") and the block being written (`chatPartialTail`, `partialTail`,
+  `WorkspaceChats::splitWritten()`: cut before the last block at the margin after a blank line, never
+  inside a code block), which with the thoughts has `mutabilityGroup: Item.DynamicMutabilityGroup`
+  (Qt 6.12; `BRichText.mutability`): the renderer keeps it out of the other texts' batches, which are
+  not uploaded again with it. Under them, with the model on the device, its speed (`chatSpeed`).
   Each request of the assistant's loop starts the card anew: after a tool call the next round's
   thoughts. The written answer's message takes the card's place in one frame
   (`WorkspaceChats.written` comes before the turn ends; the view refreshes its model at once).
   Under it, while no words come or a tool runs, a spinner and what the AI does (`chatWorking`,
-  `chatStatus`: `Workspace.chats.status` from `b.status` — "Czytam „Dom”…" —, else "The AI is
+  `chatStatus`: `ChatTurn.status` from `b.status` — "Czytam „Dom”…" —, else "The AI is
   answering…"); while the words come there is no spinner: its frames would take a fast core from a
   model on the device (docs/PERFORMANCE.md "The model on the device"). The send button becomes
-  **Stop** (`chatStop`: `Workspace.chats.stop()`: nothing is written for that turn, the question
+  **Stop** (`chatStop`: `Workspace.chats.stop(path)`: nothing is written for that turn, the question
   stays for Try again, and the request itself ends — the model on the device stops writing, a
-  provider's connection is closed —, so it holds up no other question). One turn at a time in the
-  whole app: in another conversation the field says the AI is answering elsewhere and sending
-  waits. The turn goes on when the view closes: its answer is written into the page anyway
-  (`WorkspaceChats`).
-* **A change to allow**: the question of this conversation's turn (`Workspace.extensions
-  .questionChat`, kind "choose") as a card (`chatQuestion`, the accent's border): the first line in
-  bold, the lines after it as plain monospace text on a well (`chatQuestionDetails`: they quote
-  notes), its options as buttons (`chatQuestionOption`: Allow primary, the second secondary, No
-  ghost). The view tells `Workspace.chats.showing(path, true)` while it shows the conversation, so
-  `ShellExtensionQuestion` leaves the question to it — and asks it in its dialog once no view shows
-  it (another view, the panel closed); answered in one, the other goes.
-* **A failed turn** (`chatFailure`, `Workspace.chats.failure` for this conversation): the reason
-  in the danger tint ("AI: no connection: …", "The AI assistant is off: …"), **Try again**
-  (`chatRetry`: the turn again on the page as it is) and ×.
+  provider's connection is closed —, so it holds up no other question).
+* **Several conversations at once**: every conversation has a turn of its own — one per
+  conversation (its field waits while its own turn runs, "The AI is answering…") —, and with a
+  provider on the network they all answer side by side. **The model on the device** answers one turn
+  at a time: the others wait in line, in the order they were sent (`ChatTurn.queued`, its `place`):
+  the conversation shows an hourglass and "Waiting for the model on this device: it answers another
+  conversation first." (or how many are before it), Stop takes it out of the line. A turn goes on
+  when the view closes: its answer is written into the page anyway (`WorkspaceChats`); the top bar's
+  ✨ spins while one runs that no chat view shows (`WorkspaceChats.runningShown`).
+* **A change to allow**: the question of this conversation's turn as a card (`chatQuestion`, the
+  accent's border): the first line in bold, the lines after it as plain monospace text on a well
+  (`chatQuestionDetails`: they quote notes), its options as buttons (`chatQuestionOption`: Allow
+  primary, the second secondary, No ghost; `Workspace.extensions.answerChat(path, option)`). Two
+  turns that ask at once never cancel each other: the second waits behind the one shown
+  (`WorkspaceExtensions::chatQuestion*()`: each conversation shows its own, shown or waiting), and a
+  command's question that comes meanwhile is shown first. The view tells
+  `Workspace.chats.showing(path, true)` while it shows the conversation, so `ShellExtensionQuestion`
+  leaves the question to it — and asks it in its dialog once no view shows it (another view, the
+  panel closed); answered in one, the other goes.
+* **A failed turn** (`chatFailure`, `ChatTurn.failure`): the reason in the danger tint ("AI: no
+  connection: …", "The AI assistant is off: …", "The chat partner “…” is not running: …"), **Try
+  again** (`chatRetry`: the turn again on the page as it is) and ×.
 * **A new conversation**: an empty state ("Ask about your notes") with suggestions as chips —
   "Summarise this page" (with a page), "What do I have to do this week?", "What did I write
   yesterday?", "Plan my tomorrow" — sent when tapped; above the field the page it is about as a
-  removable chip (`chatPage`, "goes along with the question").
+  removable chip (`chatPage`, "goes along with the question") and, when an extension offers a chat
+  partner, who answers (`chatNewPartner`, "Answers: AI assistant ▾": the same menu).
+* **Pictures with a message**: the paperclip (`chatAttach`) picks pictures from files (`FilePicker`:
+  PNG, JPEG, WebP, GIF, BMP — several at once) or, on Android, opens a menu (`chatAttachMenu`) with
+  **Take a photo** (`chatTakePhoto`: the system's camera app, `platform/capture.h`) and **Picture
+  from a file…**; Ctrl+V with a picture on the clipboard (not with text) adds it, and pictures dropped
+  on the conversation do too (`DropArea`, `chatDropHint` while they hover). Each is stored at once as
+  an attachment of the notebook (`WorkspaceChats.addPicture` → `Workspace::importAttachment`, the
+  attachments folder) and shown as a thumbnail above the field (`chatAttached`,
+  `chatAttachedPicture`) with × (`chatDetachPicture`: deleted again — `dropPicture`; pictures never
+  sent go when the view closes); sent, they are embeds in the user's message (`![[…]]`,
+  docs/SYNTAX.md §14), and the model gets them as pictures (b.ai's `images`; the newest eight of the
+  conversation). A model on the device that reads text only gets their names, and the field says so
+  (`WorkspaceChats.seesPictures`).
+* **Dictation** (`chatDictate`, the microphone, shown while `WorkspaceChats.dictationAvailable`):
+  Android's speech recognizer through its intent (the system's dialog listens; no microphone
+  permission of Brulion's own); what it heard goes into the field at the caret. Elsewhere there is
+  none yet: a recognizer of the app's own (on-device speech recognition) registers itself with
+  `platform::setSpeechRecognizer()` and the button appears (`platform/capture.h`).
 * **The field** (`chatInput`, a `BTextArea` in a frame that grows to 168 px, then scrolls with the
   caret kept in view): with a keyboard Enter sends and Shift+Enter is a new line; on touch the
   keyboard's Enter is a new line and the round button sends (`chatSend`, an arrow up, disabled
-  without text). The view keeps above the on-screen keyboard as every view does (AppShell's
-  `keyboardRoom`); an existing conversation does not take the keyboard on touch when opened.
+  without text or pictures). The view keeps above the on-screen keyboard as every view does
+  (AppShell's `keyboardRoom`); an existing conversation does not take the keyboard on touch when
+  opened.
 
-`WorkspaceChats` (`src/app/shell/workspacechats.h`, QML `Workspace.chats`): `send(path, text,
-page)` writes the message (a new conversation: its page, then the journal's line) and runs the
-turn (`WorkspaceExtensions::runChat` → the assistant's `chat` with `chat::history()` of the page and
-its page); `chatAnswered` appends the AI's message where the page is now (a rename followed; a page
-deleted meanwhile ends the turn), `chatFailed` keeps the reason; `retry(path)`, `stop()`,
-`dismissFailure()`, `isConversation(path)`, `showing()` / `isShown()`; `partial` and `thoughts`
-(`partialChanged`, coalesced to ten a second; `thoughtsTail()`: the last 240 characters from a word
-on) from `WorkspaceExtensions::chatPartial` — every request of a chat's turn goes out with an
+`WorkspaceChats` (`src/app/shell/workspacechats.h`, QML `Workspace.chats`): `send(path, text, page,
+pictures, partner)` writes the message with its time and pictures (a new conversation: its page,
+then the journal's line) and runs the turn (`WorkspaceExtensions::runChat` → the partner's chat
+command with `chat::history()` of the page from `chat::firstSent()` on, its page and `ctx.omitted`);
+`chatAnswered` appends the AI's message with its time where the page is now (a rename followed; a
+page deleted meanwhile ends the turn), `chatFailed` keeps the reason in the conversation's
+`ChatTurn`; `turn(path)` (a `ChatTurn`: `running`, `queued`, `place`, `status`, `failure`,
+`omitted`, `partial`, `partialSettled`, `partialTail`, `thoughts`, `allThoughts`, `speed`),
+`retry(path)`, `stop(path)`, `stopAll()`, `dismissFailure(path)`, `isConversation(path)`,
+`showing()` / `isShown()`, `rename()`, `remove()`, `nameOf()`, `partnerOf()` / `setPartner()`, the
+pictures (`addPicture`, `addPictures(To)`, `addClipboardPicture`, `dropPicture`, `pictureUrl`,
+`picturePath`), the camera and dictation (`takePhoto` → `photoTaken`, `startDictation` /
+`stopDictation` / `cancelDictation` → `dictated`), `historyBudget`, `seesPictures`, `onDevice`,
+`runningCount`, `runningShown`; a turn's partial answer and thoughts (`ChatTurn.partialChanged`,
+coalesced to ten a second; `thoughtsTail()`: the last 240 characters from a word on) from
+`WorkspaceExtensions::chatPartial` — every request of a chat's turn goes out with an
 `ai::PartialCallback` (`ai::Client::send`: a provider on the network streams its answer, the model
 on the device hands on its tokens) and is stopped (`ai::Pending::stop`) with the turn, or when the
-extensions load again.
+extensions load again. The model on the device's line is kept here (`m_waiting`, one turn on it at a
+time); a change of the provider (`WorkspaceExtensions::aiSettingsChanged`) starts the waiting ones.
+
+## AI in the editor
+
+The **writing assistant** (while the AI assistant is on — `BlockEditor.writingAvailable`; never in
+reading mode): what the user points at — the selected text of the block being edited (none
+selected: its whole text; a continuation: the text up to the caret), else the selected blocks, else
+the selected block; in source mode its selection, else the paragraph at the caret — **rewritten**
+after a preset or the user's own words, **continued**, or **summed up**, by the model of Settings →
+Extensions → AI (the model on the device too). Nothing is sent but on the user's action, and nothing
+changes in the note but on Replace / Insert.
+
+* **Where**: the palette — **AI: Rewrite…** (`ai.rewrite`, **Ctrl+Shift+A**), **AI: Continue
+  writing** (`ai.continue`), **AI: Summarize** (`ai.summarize`): uiAction `writing:<action>` to the
+  page's editor or the journal day being written in (`BlockEditor.startWriting(action, preset)`);
+  the edited text's menu (a right-click: `editTextRewrite`, `editTextContinue`,
+  `editTextSummarize`); the block menu (`blockMenuRewrite`, …: the block with its children, or the
+  selection it is part of); on touch UIs the editing toolbar's ✨ (`toolbarAi`; in source mode
+  `toolbarSourceAi`) and the selection tools' ✨ (`selectionAi`), which open `writingMenu` above the
+  bar: Rewrite…, Shorter, Clearer, Fix spelling and grammar, Translate to English (Polish in an
+  English UI), Continue writing, Summarize.
+* **The dialog** (`qml/editor/WritingDialog.qml`, `writingDialog`: a centred card, a bottom sheet on
+  a phone — modal, so the text it works on stays as it was): "Rewrite…" without a preset shows the
+  text it will rewrite (`writingOriginal`) and the presets (`writingPresets`, chips
+  `writingPreset_<id>`: shorter, clearer, grammar, formal, casual, english, polish) and a field for
+  the user's own words (`writingInstruction`, `writingAsk`) — nothing is asked until one is chosen;
+  then, and for the other actions at once, what the model writes as it comes (`writingResult`,
+  `writingResultText`: the Markdown that would go in, plain text), "The AI is writing…" (`writingStatus`;
+  "Waiting for the model on this device…" before the first word), **Stop** (`writingStop`: what came
+  stays, "Stopped: what was written so far."), **Try again** (`writingRetry`: another answer), and a
+  rewrite's change word by word (`writingView`: Changes / New text; `writingChanges`: removed words
+  struck through in the danger colour, added ones on the success tint — `WritingSession.changesHtml`,
+  our own escaped HTML). **Replace** (a rewrite) / **Insert** (a continuation, a summary) is one undo
+  step: the block's text through `PageController.pasteAndEdit()` (a result of several blocks becomes
+  blocks, as a paste; editing goes on after it), the selected blocks through `replaceSelection()`, a
+  summary or a continuation of blocks after them through `insertAfterBlock()` (their nesting kept, at
+  the block's depth: a sibling list item in an outline); in source mode one step of the text's own
+  undo (`EditorInput.replaceRange`). A text that changed meanwhile (a sync) is left alone, with a
+  notice.
+* `WritingSession` (`src/app/shell/writingsession.h`, QML `WritingSession { workspace: Workspace }`):
+  `startInline` / `startBlocks` / `startSource` take the pieces (the text, the context around it, where
+  the result goes), `rewriteWith()`, `retry()`, `stop()`, `clear()`, `state` ("" → "waiting" →
+  "writing" → "done" | "stopped" | "failed"), `result` (cleaned for the note as it comes),
+  `change()` — the request and the answer are core `writing/writing.h` (pure: `request()`,
+  `clean()`, `edit()`, `apply()`, `diff()`, tests in `tests/core/writing`), sent through
+  `WorkspaceExtensions::sendAi()` (the settings and client of b.ai, counted in `aiPending`: the top
+  bar's ✨ spins).
 
 ## Statistics and focus mode
 
