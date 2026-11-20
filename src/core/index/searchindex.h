@@ -47,6 +47,9 @@ public:
         double score = 0;
         /// Matched document terms (folded): the best match of every query term, for excerpts.
         QStringList terms;
+        /// Query terms the document contains as typed (exactly or, the last one, as a prefix) — not
+        /// only through a typo-tolerant match: results of two indexes merge by it, then by score.
+        int literal = 0;
     };
 
     /// Tokens longer than this (base64 blobs, hashes) are not indexed.
