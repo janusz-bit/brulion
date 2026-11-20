@@ -5,9 +5,11 @@
 #include "media/media.h"
 #include "media/pcm.h"
 
+#include <QCoreApplication>
 #include <QDir>
 #include <QFile>
 #include <QStandardPaths>
+#include <QTimer>
 
 #include <cmath>
 #include <numbers>
@@ -22,6 +24,17 @@ std::function<QDateTime()> &clock()
 {
     static std::function<QDateTime()> c = [] { return QDateTime::currentDateTime(); };
     return c;
+}
+
+/// Removes a cancelled recording's file. On Windows the encoder (Media Foundation, FFmpeg) may
+/// still hold the file a moment after it was stopped, and an open file cannot be removed there:
+/// tried again every 100 ms for up to 5 s.
+void removeWhenFree(const QString &path, int attemptsLeft = 50)
+{
+    if (QFile::remove(path) || !QFile::exists(path) || attemptsLeft <= 0)
+        return;
+    QTimer::singleShot(100, QCoreApplication::instance(),
+                       [path, attemptsLeft] { removeWhenFree(path, attemptsLeft - 1); });
 }
 
 } // namespace
@@ -222,7 +235,7 @@ void VoiceRecorder::cancel()
     if (m_state == u"recording" || m_state == u"paused" || m_state == u"saving")
         m_backend->abort();
     if (!m_filePath.isEmpty() && m_state != u"done")
-        QFile::remove(m_filePath);
+        removeWhenFree(m_filePath);
     m_filePath.clear();
     m_levels.clear();
     m_durationMs = 0;

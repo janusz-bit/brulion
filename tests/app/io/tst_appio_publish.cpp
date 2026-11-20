@@ -144,6 +144,7 @@ private Q_SLOTS:
         QFile store(ws->vault()->deviceStatePath() + u"/publish/targets.json"_s);
         QVERIFY(store.open(QIODevice::ReadOnly));
         const QByteArray json = store.readAll();
+        store.close(); // on Windows an open file cannot be replaced: saveTarget() below writes it
         QVERIFY(!json.contains("Pieczątka"));
         QVERIFY(!json.contains("hasło"));
         // Saving again without passwords keeps them; removing the target forgets them.

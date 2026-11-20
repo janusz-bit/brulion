@@ -262,7 +262,8 @@ private Q_SLOTS:
         QVERIFY(QFileInfo::exists(file));
         recorder.cancel();
         QCOMPARE(recorder.state(), u"idle"_s);
-        QVERIFY(!QFileInfo::exists(file));
+        // (On Windows the encoder may hold the file a moment longer: removed as soon as it lets go.)
+        QTRY_VERIFY(!QFileInfo::exists(file));
         QCOMPARE(recorder.duration(), 0.0);
     }
 

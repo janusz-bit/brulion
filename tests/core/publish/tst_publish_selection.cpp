@@ -470,7 +470,7 @@ private Q_SLOTS:
         PublishTarget t = targetFromJson(QJsonDocument::fromJson(json.toUtf8()).object());
         t.id = u"t0123456789ab"_s;
         QCOMPARE(checkTarget(t), problem);
-        QCOMPARE(describe(t), described);
+        QCOMPARE(QDir::fromNativeSeparators(describe(t)), described); // (a folder's path in the system's spelling)
         if (!address.isEmpty() && problem.isEmpty())
             QCOMPARE(siteAddress(t), address);
         // A round trip keeps it.
