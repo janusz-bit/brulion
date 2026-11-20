@@ -462,6 +462,8 @@ private:
     /// alt, image false, pdf true, page (the fragment's, ≥ 1), viewable (EditorHost::pdfViewable),
     /// state, url (the thumbnail when ready), width, height (its pixels), pages, pageWidth,
     /// pageHeight, error, locked, name, path} — EditorHost::pdfThumbnail(), never assetUrl().
+    /// A sound's or a video's embed (MediaEmbedTile): {media, kind, path, name, start, end}.
+    QVariantMap mediaEmbed(const Embed &em, const QString &path) const;
     QVariantMap pdfEmbed(const Embed &em, const QString &path) const;
     void ensureTransclusions(int row) const;
     /// The vault path of the drawing a page embed `![[Plan]]` (no heading, no block) shows: a note

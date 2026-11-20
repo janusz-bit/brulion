@@ -1233,6 +1233,11 @@ const QList<SlashCommand> &slashCommands()
              u"rysunek w notatce (SVG)"_s, u"drawing in the note (SVG)"_s,
              {u"rysuj"_s, u"szkic"_s, u"notatka odręczna"_s, u"pismo odręczne"_s, u"pióro"_s, u"rysik"_s,
               u"draw"_s, u"sketch"_s, u"ink"_s, u"handwriting"_s, u"excalidraw"_s, u"pen"_s}},
+            {u"voiceNote"_s, u"Notatka głosowa"_s, u"Voice note"_s, u"mic"_s, u"![[….m4a]]"_s,
+             u"nagranie z mikrofonu, spisane na urządzeniu"_s, u"a recording from the microphone, transcribed on the device"_s,
+             {u"nagranie"_s, u"nagraj"_s, u"mikrofon"_s, u"dyktuj"_s, u"dyktowanie"_s, u"głos"_s, u"dźwięk"_s,
+              u"audio"_s, u"transkrypcja"_s, u"record"_s, u"recording"_s, u"microphone"_s, u"dictate"_s,
+              u"voice"_s, u"sound"_s, u"transcribe"_s, u"memo"_s}},
             {u"drawingOn"_s, u"Rysunek na obrazie lub PDF…"_s, u"Drawing on a picture or PDF…"_s, u"pen-tool"_s,
              u"![[… s. 1.svg]]"_s, u"notatki na slajdzie, stronie PDF, zdjęciu"_s,
              u"notes on a slide, a PDF page, a photo"_s,
@@ -1302,6 +1307,17 @@ const SlashCommand *slashCommand(QStringView id)
     return nullptr;
 }
 
+QStringList &unavailableSlashCommands()
+{
+    static QStringList ids;
+    return ids;
+}
+
+void setUnavailableSlashCommands(const QStringList &ids)
+{
+    unavailableSlashCommands() = ids;
+}
+
 QList<const SlashCommand *> filterSlashCommands(QStringView filter)
 {
     const QString q = text::foldKey(filter).trimmed();
@@ -1325,6 +1341,8 @@ QList<const SlashCommand *> filterSlashCommands(QStringView filter)
     int order = 0;
     for (const SlashCommand &c : slashCommands()) {
         ++order;
+        if (unavailableSlashCommands().contains(c.id))
+            continue;
         int best = std::min({rank(c.namePl), rank(c.nameEn), rank(c.id)});
         for (const QString &k : c.keywords)
             best = std::min(best, rank(k) + 3);

@@ -1,5 +1,7 @@
 #include "commandmodel.h"
 
+#include "mediaengine.h"
+
 #include "appcontroller.h"
 #include "appsettings.h"
 #include "shortcutmap.h"
@@ -68,6 +70,7 @@ constexpr UiAction kUiActions[] = {
         {u"page.saveWebPictures", u"saveWebPictures"},
         {u"page.copyLink", u"copyLink:page"},
         {u"page.qrCode", u"qrCode"},
+        {u"voice.record", u"recordVoiceNote"},
         {u"block.copyRef", u"copyLink:blockRef"},
         {u"block.copyLink", u"copyLink:blockLink"},
         {u"heading.copyLink", u"copyLink:heading"},
@@ -211,6 +214,14 @@ static QList<Command> buildCommands(const AppController *app)
             {u"page.switch"_s, CommandModel::tr("Go to page…"), {}, u"file-text"_s, u"Ctrl+O"_s, ready},
             {u"capture"_s, CommandModel::tr("Quick capture"), CommandModel::tr("Add a note to today's journal"),
              u"plus"_s, u"Ctrl+Shift+N"_s, ready},
+            // A voice note (docs/UI.md "Voice notes", uiAction "recordVoiceNote"): at the caret of the
+            // page on screen, else at the end of today's journal; builds that record nothing: off.
+            {u"voice.record"_s,
+             CommandModel::tr("Record voice note"),
+             CommandModel::tr("Into the note on screen, or today's journal; transcribed on this device"),
+             u"mic"_s,
+             {},
+             ready && media::mediaSupported()},
             {u"go.journals"_s, CommandModel::tr("Journals"), {}, u"book-open"_s, {}, ready},
             {u"go.calendar"_s, CommandModel::tr("Calendar"), {}, u"calendar"_s, {}, ready},
             {u"go.tasks"_s, CommandModel::tr("Tasks"), {}, u"list-todo"_s, {}, ready},

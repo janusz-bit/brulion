@@ -249,6 +249,14 @@ Pandoc Markdown document for Word, LibreOffice, PDF or EPUB).
   Ctrl+wheel, buttons, fit width), "Page 3 of 12" with a page jump, search ignoring case and
   Polish diacritics (Android 15+), **Open in another app** and **Draw on this page** — notes on
   slides straight from the PDF. In the browser the PDF opens in a new tab.
+* **Audio, video and voice notes.** A recording or a video in a note (`![[lecture.mp3]]`,
+  `![[trip.mp4]]` — Obsidian's formats) is a player: play/pause, seeking, speed, volume, a video's
+  first frame and full screen; `#t=1:23` starts it at a moment. One plays at a time, and a sound
+  plays on when you scroll away (a small bar shows it). **Voice notes** (`/Voice note`, the
+  microphone on the phone's toolbar, quick capture) record with a level meter into an M4A
+  attachment, and **on-device speech recognition** (OpenAI's Whisper through whisper.cpp — Polish
+  too, no sound leaves the device; the NixOS package and Android) writes the text right under the
+  recording.
 * English UI by default, Polish available. Natural-language dates in English and Polish.
 * **A short intro on the first start**: the language, the look (black by default — easy on the
   eyes and on OLED screens —, dark blue-grey, light or the system's), the permissions reminders
@@ -313,7 +321,9 @@ outline of drawings ported from perfect-freehand (MIT, © Stephen Ruiz Ltd), the
 Obsidian Excalidraw plugin drawings ported from lz-string (MIT, © 2013 Pieroxy), emoji and
 symbol fallback fonts: subsets of Noto Emoji and Noto Sans Math (SIL OFL 1.1, `assets/fonts`); PDF
 thumbnails, the PDF viewer and PDF pages of drawing backdrops: Qt PDF (pdfium, BSD-3-Clause; Windows, AppImage), poppler
-(GPL-2.0-or-later, compatible with the AGPL; the Nix package), Android's own `PdfRenderer`.
+(GPL-2.0-or-later, compatible with the AGPL; the Nix package), Android's own `PdfRenderer`.; audio and video:
+Qt Multimedia (LGPL-3.0) with FFmpeg (LGPL-2.1-or-later; Android: the system's own players);
+speech recognition: whisper.cpp (MIT) and OpenAI's Whisper models (MIT, downloaded on request).
 
 Performance (numbers per platform, budgets, how to benchmark, regression guards): [docs/PERFORMANCE.md](docs/PERFORMANCE.md).
 
@@ -480,6 +490,14 @@ przykładowym notatnikiem.
   szukanie bez polskich znaków i wielkości liter (na Androidzie od wersji 15), **Otwórz w innej
   aplikacji** i **Rysuj na tej stronie** — notatki na slajdach prosto z PDF-a. W przeglądarce PDF
   otwiera się w nowej karcie.
+* **Dźwięk, wideo i notatki głosowe.** Nagranie albo film w notatce (`![[wykład.mp3]]`,
+  `![[wycieczka.mp4]]` — formaty Obsidiana) to odtwarzacz: odtwarzanie, przewijanie, prędkość,
+  głośność, pierwsza klatka filmu i pełny ekran; `#t=1:23` zaczyna od wybranej chwili. Gra jedno
+  naraz, a dźwięk gra dalej po przewinięciu strony (pokazuje go mały pasek). **Notatki głosowe**
+  (`/Notatka głosowa`, mikrofon na pasku w telefonie, szybka notatka) nagrywają się ze wskaźnikiem
+  głośności do załącznika M4A, a **rozpoznawanie mowy na urządzeniu** (Whisper od OpenAI przez
+  whisper.cpp — także po polsku, żaden dźwięk nie opuszcza urządzenia; pakiet dla NixOS i
+  Android) wpisuje tekst tuż pod nagraniem.
 * **Znajdź i zamień.** `Ctrl+F` w otwartej notatce, bez polskich znaków i wielkości liter („zolw”
   znajdzie „ŻÓŁW”), a zamiana — w notatce (jedno `Ctrl+Z`) albo w całym notatniku, z podglądem
   każdego trafienia, odznaczaniem i cofnięciem.
@@ -788,4 +806,6 @@ w `src/core/drawing/lzstring.cpp`. Emoji i symbole tam, gdzie system nie ma
 czcionki z nimi (przeglądarka, część Linuksów): fragmenty [Noto Emoji](https://fonts.google.com/noto/specimen/Noto+Emoji)
 i Noto Sans Math (SIL OFL 1.1, [assets/fonts](assets/fonts/README.md)). Miniatury i przeglądarka PDF
 oraz strony PDF jako podkład rysunku: Qt PDF (pdfium, BSD-3-Clause; Windows, AppImage), [poppler](https://poppler.freedesktop.org)
-(GPL-2.0-or-later, zgodna z AGPL; pakiet Nix), a na Androidzie systemowy `PdfRenderer`.
+(GPL-2.0-or-later, zgodna z AGPL; pakiet Nix), a na Androidzie systemowy `PdfRenderer`. Dźwięk i
+wideo: Qt Multimedia (LGPL-3.0) z FFmpeg (LGPL-2.1-or-later; na Androidzie systemowe odtwarzacze);
+rozpoznawanie mowy: whisper.cpp (MIT) i modele Whisper od OpenAI (MIT, pobierane na życzenie).

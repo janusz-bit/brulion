@@ -487,6 +487,11 @@ public:
     Q_INVOKABLE QString folderOf(const QString &path) const;
     /// An attachment picture (png, jpg, ...): PageView shows it as a picture, not as text.
     Q_INVOKABLE bool isPicture(const QString &path) const;
+    /// A sound or a video by its name (paths::isMediaPath): PageView opens it in the player view
+    /// (ContentMediaView), a block embeds it as a player (docs/UI.md "Audio and video").
+    Q_INVOKABLE bool isMedia(const QString &path) const;
+    /// A video by its name (paths::isVideoPath).
+    Q_INVOKABLE bool isVideo(const QString &path) const;
     /// A picture whose format this device can decode (QImageReader's formats: WebP and AVIF need
     /// Qt's image plugins, which Android, the browser and some desktops lack); false for files
     /// that are no picture. The picture view and the editor's embeds name a format it cannot show.

@@ -108,6 +108,37 @@ bool isPdfPath(const VaultPath &path)
     return basename(path).endsWith(QLatin1StringView(".pdf"), Qt::CaseInsensitive);
 }
 
+const QStringList &audioExtensions()
+{
+    using namespace Qt::StringLiterals;
+    static const QStringList ext = {u".mp3"_s,  u".wav"_s,  u".m4a"_s, u".ogg"_s, u".3gp"_s,
+                                    u".flac"_s, u".opus"_s, u".oga"_s, u".aac"_s, u".weba"_s};
+    return ext;
+}
+
+const QStringList &videoExtensions()
+{
+    using namespace Qt::StringLiterals;
+    static const QStringList ext = {u".mp4"_s, u".webm"_s, u".ogv"_s, u".mov"_s, u".mkv"_s, u".m4v"_s};
+    return ext;
+}
+
+bool isAudioPath(const VaultPath &path)
+{
+    return audioExtensions().contains(extension(path));
+}
+
+bool isVideoPath(const VaultPath &path)
+{
+    return videoExtensions().contains(extension(path));
+}
+
+bool isMediaPath(const VaultPath &path)
+{
+    const QString ext = extension(path);
+    return audioExtensions().contains(ext) || videoExtensions().contains(ext);
+}
+
 QString stripMarkdownExtension(const VaultPath &path)
 {
     // (Called for every link and title: no regular expression.)

@@ -10,6 +10,8 @@ BDialog {
 
     /// Emitted after the text was saved (the shell shows a toast with "Open").
     signal captured()
+    /// The microphone: a voice note into today's journal instead (the shell's recorder).
+    signal voiceRequested()
 
     title: qsTr("Quick capture")
     subtitle: qsTr("Goes to the end of today's journal")
@@ -17,6 +19,21 @@ BDialog {
     acceptText: qsTr("Add")
     acceptEnabled: Js.trim(field.typedText) !== ""
     initialFocusItem: field
+
+    // Speaking instead of typing (docs/UI.md "Voice notes"): this dialog closes, the recorder opens.
+    footerLeading: [
+        BButton {
+            objectName: "captureVoiceNote"
+            visible: MediaPlayback.available
+            variant: "ghost"
+            iconName: "mic"
+            text: qsTr("Voice note")
+            onClicked: {
+                dialog.close()
+                dialog.voiceRequested()
+            }
+        }
+    ]
 
     onAboutToShow: field.text = ""
     onAccepted: {

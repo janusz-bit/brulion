@@ -28,6 +28,7 @@
 #include "markdown/taskdeps.h"
 #include "markdown/templates.h"
 #include "markdown/tokens.h"
+#include "media/media.h"
 #include "notebook/links.h"
 #include "notebook/tasktools.h"
 #include "periodic/periodic.h"
@@ -3585,7 +3586,7 @@ QVariantMap PageController::applySlashCommand(int row, int from, int to, const Q
         focus = {r, r >= 0 ? caretThroughEdit(before, m_model->editTextAt(r), cursor) : -1};
     } else if (cmd == u"reminder" || cmd == u"alarm" || cmd == u"due" || cmd == u"scheduled" || cmd == u"recurrence"
                || cmd == u"date" || cmd == u"template" || cmd == u"image" || cmd == u"fileLink" || cmd == u"webImage"
-               || cmd == u"drawing" || cmd == u"drawingOn" || cmd == u"csvTable") {
+               || cmd == u"drawing" || cmd == u"drawingOn" || cmd == u"csvTable" || cmd == u"voiceNote") {
         action = cmd;
     } else if (cmd == u"today" || cmd == u"tomorrow") {
         insertAt(journalLink(today().addDays(cmd == u"tomorrow" ? 1 : 0).toString(u"yyyy-MM-dd"_s)));
@@ -4062,6 +4063,18 @@ QVariantMap PageController::activateLink(int row, const QString &url, bool newPa
         // page, or — where PDFs cannot be shown — another app / a new tab, inside this click.
         if (m_host && !resolved.isEmpty() && paths::isPdfPath(resolved)) {
             openPdf(row, resolved, markdown::pdfFragmentPage(fragment), newPane);
+            return out;
+        }
+        // A link to a sound or a video (`[[wykład.mp3#t=1:23]]`, docs/UI.md "Audio and video"): the
+        // player view, started at the moment the fragment names.
+        if (m_host && !resolved.isEmpty() && paths::isMediaPath(resolved)) {
+            QVariantMap media{{u"view"_s, u"page"_s}, {u"path"_s, resolved}};
+            const media::TimeRange at = media::parseTimeFragment(fragment);
+            if (at.startMs >= 0)
+                media.insert(u"mediaStart"_s, at.startMs);
+            if (at.endMs >= 0)
+                media.insert(u"mediaEnd"_s, at.endMs);
+            navigate(media, newPane);
             return out;
         }
         QVariantMap route{{u"view"_s, u"page"_s}, {u"path"_s, resolved}};
@@ -4613,6 +4626,29 @@ QVariantMap PageController::insertDrawing(int row, int from, int to)
     }
     QVariantMap out = insertEmbeds(row, from, to, {path});
     out.insert(u"path"_s, path);
+    return out;
+}
+
+QVariantMap PageController::insertRecording(int row, int from, int to, const QString &file)
+{
+    if (refusesEdit())
+        return readOnlyResult();
+    const QString name = QFileInfo(file).fileName();
+    const QString path = m_host && QFileInfo(file).isFile()
+                                 ? m_host->importAttachment(QUrl::fromLocalFile(file), MaxAttachmentBytes)
+                                 : QString();
+    if (path.isEmpty()) {
+        Q_EMIT attachmentFailed(name.isEmpty() ? file : name);
+        return caretResult(-1, -1);
+    }
+    // (Stored in the notebook: the recorder's copy goes.)
+    QFile::remove(file);
+    const QString embed = embedFor(path);
+    QVariantMap out = insertEmbedText(row, from, to, embed, false);
+    const int at = out.value(u"row"_s, -1).toInt();
+    out.insert(u"path"_s, path);
+    out.insert(u"target"_s, embed.mid(3, embed.size() - 5));
+    out.insert(u"line"_s, at >= 0 ? savedLineAt(at) : -1);
     return out;
 }
 

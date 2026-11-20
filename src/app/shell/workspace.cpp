@@ -943,6 +943,16 @@ bool Workspace::isPicture(const QString &path) const
     return paths::isPicturePath(path);
 }
 
+bool Workspace::isMedia(const QString &path) const
+{
+    return paths::isMediaPath(path);
+}
+
+bool Workspace::isVideo(const QString &path) const
+{
+    return paths::isVideoPath(path);
+}
+
 bool Workspace::canDecodePicture(const QString &path) const
 {
     return paths::isPicturePath(path) && editor::canDecodePictureFormat(path);

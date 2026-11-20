@@ -21,6 +21,7 @@ Brulion aktualizuje dokumentację razem z aplikacją: dochodzą nowe strony, a t
 - [[Diagramy|Diagramy]] — schematy blokowe, diagramy sekwencji i wykresy kołowe z bloków `mermaid`.
 - [[Rysunki|Rysunki]] — pismo odręczne i szkice rysikiem, palcem albo myszką, także na slajdach i stronach PDF.
 - [[Tablice|Tablice]] — tablice z kart, notatek, obrazów i plików połączonych liniami (Obsidian Canvas).
+- [[Dźwięk, wideo i notatki głosowe|Dźwięk, wideo i notatki głosowe]] — odtwarzacze w notatkach, nagrywanie notatki głosowej i zamiana mowy na tekst na urządzeniu.
 - [[Dziennik, kalendarz i szablony|Dziennik, kalendarz i szablony]] — codzienne strony i szablony.
 
 ## Planowanie

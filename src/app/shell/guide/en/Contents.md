@@ -21,6 +21,7 @@ Brulion updates the documentation together with the app: new pages are added, an
 - [[Diagrams|Diagrams]] — flowcharts, sequence diagrams and pie charts from `mermaid` blocks.
 - [[Drawings|Drawings]] — handwriting and sketches with a stylus, finger or mouse, also on slides and PDF pages.
 - [[Canvas|Canvas]] — whiteboards of cards, notes, pictures and files connected with lines (Obsidian Canvas).
+- [[Audio, video and voice notes|Audio, video and voice notes]] — players in notes, recording a voice note and turning it into text on the device.
 - [[Journal, calendar and templates|Journal, calendar and templates]] — daily pages and templates.
 
 ## Planning

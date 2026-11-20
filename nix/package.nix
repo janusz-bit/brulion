@@ -24,6 +24,11 @@
   hunspell,
   hunspellDicts,
   fetchFromGitHub,
+  callPackage,
+  # Audio and video in notes, voice notes (docs/UI.md "Audio and video"): Qt Multimedia without
+  # what the app never uses (nix/multimedia.nix: FFmpeg for the formats notes play, no GStreamer).
+  # false: a build without it (media embeds then offer "Open in another app").
+  withMultimedia ? true,
   # The model on the device (docs/EXTENSIONS.md "AI"): llama.cpp compiled in from its pinned
   # sources as the plugin lib/brulion/libbrulion_localai.so with llama.cpp's libraries beside it.
   # false: a build without it (no "On this device" in the settings).
@@ -31,10 +36,23 @@
 }:
 
 let
+  # Qt Multimedia over a FFmpeg of the formats notes play and record (nix/multimedia.nix).
+  qtmultimedia = callPackage ./multimedia.nix { };
   # llama.cpp's sources, one release (3rdparty/llama/pin.json; cmake/BrulionLocalAi.cmake).
   llamaPin = lib.importJSON ../3rdparty/llama/pin.json;
   llamaSrc = fetchFromGitHub {
     inherit (llamaPin)
+      owner
+      repo
+      tag
+      hash
+      ;
+  };
+  # whisper.cpp's sources for speech recognition over that llama.cpp's ggml (3rdparty/whisper/pin.json;
+  # cmake/BrulionSpeech.cmake).
+  whisperPin = lib.importJSON ../3rdparty/whisper/pin.json;
+  whisperSrc = fetchFromGitHub {
+    inherit (whisperPin)
       owner
       repo
       tag
@@ -106,6 +124,7 @@ stdenv.mkDerivation (finalAttrs: {
     # the dictionaries are found through BRULION_SPELL_DICTIONARY_DIRS below.
     hunspell
   ]
+  ++ lib.optionals withMultimedia [ qtmultimedia ]
   ++ lib.optionals stdenv.hostPlatform.isLinux [
     qt6.qtwayland
     # The tray calendar next to the panel under Wayland: a layer-shell surface
@@ -141,16 +160,24 @@ stdenv.mkDerivation (finalAttrs: {
       lib.concatMapStringsSep ";" (d: "${d}/share/hunspell") finalAttrs.passthru.spellDictionaries
     ))
     (lib.cmakeFeature "BRULION_LOCAL_AI" (if withLocalAi then "ON" else "OFF"))
+    (lib.cmakeFeature "BRULION_MULTIMEDIA" (if withMultimedia then "ON" else "OFF"))
     # The relative relocations packed (RELR, cmake/BrulionSize.cmake): the package runs on the
     # glibc it was built with, always 2.36 or newer.
     (lib.cmakeBool "BRULION_PACK_RELOCATIONS" true)
   ]
   ++ lib.optionals withLocalAi [
     (lib.cmakeFeature "BRULION_LLAMA_SOURCE_DIR" "${llamaSrc}")
+    # Speech recognition (voice notes' transcripts) needs the model runner's ggml.
+    (lib.cmakeFeature "BRULION_SPEECH" "ON")
+    (lib.cmakeFeature "BRULION_WHISPER_SOURCE_DIR" "${whisperSrc}")
   ];
 
   # llama.cpp's sources for the dev shell (flake.nix: BRULION_LLAMA_SOURCE_DIR).
   passthru.llamaSrc = llamaSrc;
+  # whisper.cpp's sources for the dev shell (flake.nix: BRULION_WHISPER_SOURCE_DIR).
+  passthru.whisperSrc = whisperSrc;
+  # The Qt Multimedia it is built with (the dev shell's plugin and QML paths, flake.nix).
+  passthru.qtmultimedia = qtmultimedia;
 
   # Dictionaries of the editor's spell checking (also on DICPATH in the dev shell, flake.nix).
   passthru.spellDictionaries = [
@@ -199,14 +226,19 @@ stdenv.mkDerivation (finalAttrs: {
     # The QML self-tests run the unwrapped binary: point Qt at the plugins (SVG image format,
     # platform plugins) and QML modules that wrapQtAppsHook only adds to the installed wrapper.
     export QT_PLUGIN_PATH=${
-      lib.makeSearchPath qt6.qtbase.qtPluginPrefix [
-        qt6.qtbase
-        qt6.qtsvg
-        qt6.qtdeclarative
-      ]
+      lib.makeSearchPath qt6.qtbase.qtPluginPrefix (
+        [
+          qt6.qtbase
+          qt6.qtsvg
+          qt6.qtdeclarative
+        ]
+        ++ lib.optionals withMultimedia [ qtmultimedia ]
+      )
     }''${QT_PLUGIN_PATH:+:$QT_PLUGIN_PATH}
     export QML_IMPORT_PATH=${
-      lib.makeSearchPath qt6.qtbase.qtQmlPrefix [ qt6.qtdeclarative ]
+      lib.makeSearchPath qt6.qtbase.qtQmlPrefix (
+        [ qt6.qtdeclarative ] ++ lib.optionals withMultimedia [ qtmultimedia ]
+      )
     }''${QML_IMPORT_PATH:+:$QML_IMPORT_PATH}
   '';
 
@@ -231,6 +263,8 @@ stdenv.mkDerivation (finalAttrs: {
       # The model on the device: the plugin, llama.cpp's libraries and a processor plugin beside
       # it, each finding the others there (no library left unresolved).
       test -f $out/lib/brulion/libbrulion_localai.so
+      # … and the speech recognizer's plugin, over the same ggml.
+      test -f $out/lib/brulion/libbrulion_speech.so
       ls $out/lib/brulion/libggml-cpu-*.so >/dev/null
       # … where the app looks for it: lib/brulion, from its program's folder.
       grep -aqF -- '../lib/brulion' $out/bin/.brulion-wrapped

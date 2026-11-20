@@ -211,6 +211,65 @@ private Q_SLOTS:
         if (pdf)
             QVERIFY(!paths::isPicturePath(path));
     }
+    void mediaPaths_data()
+    {
+        QTest::addColumn<QString>("path");
+        QTest::addColumn<bool>("audio");
+        QTest::addColumn<bool>("video");
+        QTest::newRow("mp3") << QStringLiteral("assets/nagranie.mp3") << true << false;
+        QTest::newRow("upper case, Polish") << QStringLiteral("Nagrania/Wykład żółwia.MP3") << true << false;
+        QTest::newRow("wav") << QStringLiteral("dźwięk.wav") << true << false;
+        QTest::newRow("m4a") << QStringLiteral("assets/Nagranie 2026-11-20 18.30.m4a") << true << false;
+        QTest::newRow("ogg") << QStringLiteral("notatka głosowa.Ogg") << true << false;
+        QTest::newRow("3gp") << QStringLiteral("rozmowa.3gp") << true << false;
+        QTest::newRow("flac") << QStringLiteral("koncert.flac") << true << false;
+        QTest::newRow("opus") << QStringLiteral("assets/głos.opus") << true << false;
+        QTest::newRow("oga") << QStringLiteral("x.oga") << true << false;
+        QTest::newRow("aac") << QStringLiteral("x.aac") << true << false;
+        QTest::newRow("mp4") << QStringLiteral("assets/film.mp4") << false << true;
+        QTest::newRow("webm is a video") << QStringLiteral("assets/ekran.webm") << false << true;
+        QTest::newRow("ogv") << QStringLiteral("x.ogv") << false << true;
+        QTest::newRow("mov, upper case") << QStringLiteral("IMG_0042.MOV") << false << true;
+        QTest::newRow("mkv") << QStringLiteral("wakacje ąę.mkv") << false << true;
+        QTest::newRow("m4v") << QStringLiteral("x.m4v") << false << true;
+        QTest::newRow("markdown") << QStringLiteral("nagranie.mp3.md") << false << false;
+        QTest::newRow("a name, not an extension") << QStringLiteral("mp3") << false << false;
+        QTest::newRow("a hidden file") << QStringLiteral("assets/.mp4") << false << false;
+        QTest::newRow("media extension on a folder") << QStringLiteral("film.mp4/opis.md") << false << false;
+        QTest::newRow("picture") << QStringLiteral("assets/okładka.png") << false << false;
+        QTest::newRow("pdf") << QStringLiteral("assets/umowa.pdf") << false << false;
+        QTest::newRow("midi (no player)") << QStringLiteral("melodia.mid") << false << false;
+        QTest::newRow("empty") << QString() << false << false;
+    }
+    void mediaPaths()
+    {
+        QFETCH(QString, path);
+        QFETCH(bool, audio);
+        QFETCH(bool, video);
+        QCOMPARE(paths::isAudioPath(path), audio);
+        QCOMPARE(paths::isVideoPath(path), video);
+        QCOMPARE(paths::isMediaPath(path), audio || video);
+        // A sound or a video is never a picture or a PDF (PageView: one route view each).
+        if (audio || video)
+            QVERIFY(!paths::isPicturePath(path) && !paths::isPdfPath(path));
+    }
+    void mediaExtensions()
+    {
+        // Obsidian's audio formats and its video formats are all there; the two lists never share
+        // an extension (an extension names one kind of player).
+        const QStringList &audio = paths::audioExtensions();
+        const QStringList &video = paths::videoExtensions();
+        for (const QString &e : {u".mp3"_s, u".webm"_s, u".wav"_s, u".m4a"_s, u".ogg"_s, u".3gp"_s, u".flac"_s})
+            QVERIFY2(audio.contains(e) || video.contains(e), qPrintable(e));
+        for (const QString &e : {u".mp4"_s, u".webm"_s, u".ogv"_s, u".mov"_s, u".mkv"_s})
+            QVERIFY2(video.contains(e), qPrintable(e));
+        for (const QString &e : audio) {
+            QVERIFY2(e.startsWith(u'.') && e == e.toLower() && !video.contains(e), qPrintable(e));
+            QVERIFY2(paths::isAudioPath(u"Nagrania/GŁOS"_s + e.toUpper()), qPrintable(e));
+        }
+        for (const QString &e : video)
+            QVERIFY2(e.startsWith(u'.') && e == e.toLower() && paths::isVideoPath(u"f"_s + e), qPrintable(e));
+    }
     void pictureExtensions()
     {
         // One list: what isPicturePath accepts is exactly what the file dialogs and the export

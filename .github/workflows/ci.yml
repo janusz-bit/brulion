@@ -116,14 +116,16 @@ jobs:
           df -h /
 
       # Qt PDF (`qtpdf`, an extension of Qt's repository): the PDF pages of drawings' backdrops
-      # (src/platform/pdfpages_qtpdf.cpp; tests/platform/tst_pdfpages under the sanitizers).
+      # (src/platform/pdfpages_qtpdf.cpp; tests/platform/tst_pdfpages under the sanitizers). Qt
+      # Multimedia (`qtmultimedia`, with Qt's FFmpeg): audio and video in notes, voice notes
+      # (src/app/media; tests/app/media plays and records without a sound card).
       - uses: jurplel/install-qt-action@v4
         with:
           version: ${{ env.QT_VERSION }}
           host: linux
           target: desktop
           arch: linux_gcc_64
-          modules: qtpdf
+          modules: qtpdf qtmultimedia
           aqtversion: ==3.3.0
           cache: true
 

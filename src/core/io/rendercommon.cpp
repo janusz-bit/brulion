@@ -286,15 +286,13 @@ bool isWebPictureTarget(QStringView target)
 
 MediaKind mediaKind(const QString &path)
 {
-    static const QStringList audio = {u".mp3"_s, u".m4a"_s, u".wav"_s, u".ogg"_s, u".opus"_s, u".flac"_s, u".aac"_s};
-    static const QStringList video = {u".mp4"_s, u".webm"_s, u".mov"_s, u".m4v"_s};
-    // The pictures the app shows as pictures (one list: paths::pictureExtensions()).
+    // The pictures, sounds and videos the app shows and plays as such (one list each:
+    // paths::pictureExtensions(), audioExtensions(), videoExtensions()).
     if (paths::isPicturePath(path))
         return MediaKind::Image;
-    const QString ext = paths::extension(path);
-    if (audio.contains(ext))
+    if (paths::isAudioPath(path))
         return MediaKind::Audio;
-    if (video.contains(ext))
+    if (paths::isVideoPath(path))
         return MediaKind::Video;
     return MediaKind::Other;
 }

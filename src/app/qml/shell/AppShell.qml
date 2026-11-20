@@ -357,6 +357,12 @@ FocusScope {
         case "toggleSidePanel": AppController.sidePanelVisible = !AppController.sidePanelVisible; break
         case "toggleContextDrawer": contextDrawer.toggle(); break
         case "renamePage": if (shell.currentView === "page") shell.openRename(shell.routePath, false); break
+        // A voice note: the note on screen takes it at its caret (PageView); anywhere else it goes
+        // into today's journal.
+        case "recordVoiceNote":
+            if (shell.currentView !== "page" || !Js.test(shell.routePath, "\\.(md|markdown)$", "i"))
+                shell.recordVoiceNote()
+            break
         }
     }
 
@@ -634,6 +640,17 @@ FocusScope {
         color: KeyboardInsets.marked ? "#ff00ff" : Theme.bgElevated
     }
 
+    // The sound that plays on while nothing on screen shows it (docs/UI.md "Audio and video"):
+    // over the bottom of the window, above the bottom navigation and the keyboard.
+    MediaNowPlaying {
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: shell.keyboardRoom + (shell.bottomNavShown ? shell.bottomNavHeight + shell.navigationBar : shell.navigationBar)
+                              + Theme.space3
+        width: Math.min(implicitWidth, parent.width - 2 * Theme.space4)
+        z: 50
+    }
+
     // Focus mode's way out where no key is at hand (phones): a quiet button in the top corner,
     // clearer under the pointer.
     BIconButton {
@@ -862,6 +879,52 @@ FocusScope {
         }
     }
 
+    /// A voice note into today's journal (the palette's "Record voice note" off a note, quick
+    /// capture's microphone; docs/UI.md "Voice notes"): the recorder, then the file stored as an
+    /// attachment and embedded in a new block at the end of today's journal — transcribed there by
+    /// itself when a speech model is here.
+    function recordVoiceNote(): void {
+        if (!MediaPlayback.available) {
+            AppController.toast(qsTr("This version of Brulion cannot record."), "info")
+            return
+        }
+        voiceLoader.active = true
+        const dialog = voiceLoader.item as VoiceRecorderDialog
+        if (dialog)
+            dialog.open()
+    }
+    function storeVoiceNote(file: string): void {
+        journalVoice.map = AppController.captureRecording(file)
+        const path = "" + (journalVoice.map.path || "")
+        const page = "" + (journalVoice.map.page || "")
+        const target = "" + (journalVoice.map.target || "")
+        if (path === "")
+            return
+        if (shell.toasts)
+            shell._captureToast = AppController.toastWithAction(qsTr("Voice note added to today's journal"), "success", qsTr("Open"))
+        if (AppController.speech.ready && AppController.speech.automatic)
+            AppController.speech.transcribe(path, page, target, -1)
+    }
+    MapHolder { id: journalVoice }
+    Loader {
+        id: voiceLoader
+        active: false
+        sourceComponent: VoiceRecorderDialog {
+            objectName: "shellVoiceRecorder"
+            onRecorded: (file) => shell.storeVoiceNote(file)
+            onReleased: voiceLater.restart()
+        }
+    }
+    Later {
+        id: voiceLater
+        onTriggered: {
+            // (Not one opened again meanwhile.)
+            const dialog = voiceLoader.item as VoiceRecorderDialog
+            if (!dialog || !dialog.visible)
+                voiceLoader.active = false
+        }
+    }
+
     readonly property ShellQuickCapture capture: captureLoader.item as ShellQuickCapture
     function captureNow(): ShellQuickCapture {
         captureLoader.asynchronous = false
@@ -878,6 +941,7 @@ FocusScope {
                 if (shell.toasts)
                     shell._captureToast = AppController.toastWithAction(qsTr("Added to today's journal"), "success", qsTr("Open"))
             }
+            onVoiceRequested: shell.recordVoiceNote()
         }
     }
 

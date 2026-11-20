@@ -145,6 +145,7 @@ do not list them; cleaning up never proposes them or their templates.
 | `![[Page]]`, `![[Page#Heading]]`, `![[Page#^id]]` | embed (transclusion) |
 | `![[photo.png]]`, `![[doc.pdf]]` | attachment embed |
 | `![[doc.pdf#page=3]]`, `[[doc.pdf#page=3]]` | a PDF's page: its thumbnail / the PDF viewer at that page (Obsidian) |
+| `![[nagranie.m4a]]`, `![[film.mp4#t=83]]`, `[[wykład.mp3#t=1:23]]` | a sound or a video: a player (from that moment) / the player view at that moment (below, "Audio and video") |
 | `((abc123))` | Logseq-style block reference — resolves the id **vault-wide** |
 | `!((abc123))` | block embed |
 | `[text](url)`, `[text](relative/path.md)`, `<https://..>`, bare `https://...` | standard links (http, https, mailto and `brulion://` addresses are clickable — a `brulion://` link is checked as any link to Brulion, docs/UI.md "Automation"; other schemes stay text) |
@@ -257,6 +258,36 @@ opens the PDF viewer at that page (docs/UI.md "PDF viewer"); where no PDF render
 browser) the PDF opens in a new browser tab. PDFs are ordinary attachments otherwise: moves and
 renames rewrite their links like any other file's. A drawing made on a page of a PDF ("Draw on this
 page") is embedded as a block of its own right after the block embedding the PDF.
+
+**Audio and video:** an attachment named `.mp3`, `.wav`, `.m4a`, `.ogg`, `.3gp`, `.flac`, `.opus`,
+`.oga`, `.aac` or `.weba` is a sound, `.mp4`, `.webm`, `.ogv`, `.mov`, `.mkv` or `.m4v` a video
+(any case; Obsidian's audio and video formats and a few more — `paths::isAudioPath`,
+`isVideoPath`, the one list the editor, the player view and the HTML export share; `.webm` is a
+video, as in Obsidian, and a video without a picture shows as a sound). Embedded — `![[Nagranie
+2026-11-20 18.30.m4a]]`, `![](assets/film.mp4)` — it is a player in the block (docs/UI.md "Audio
+and video"); a link `[[wykład.mp3]]` and a click on the file open it in the player view, never as
+text. **Time fragments** (W3C Media Fragments URI 1.0's `t`, as browsers and Obsidian's media
+plugins read them; `media::parseTimeFragment`): `#t=83` or `#t=83.5` (seconds), `#t=1:23`,
+`#t=01:02:03.5` (`[hh:]mm:ss`, minutes and seconds below 60 after a colon), `#t=npt:83`, a span
+`#t=10,20` or `#t=,20`, and YouTube's `#t=1m23s`, `#t=90s`; other `&` pairs are ignored, the last
+valid `t=` counts, a span whose end is not after its start, SMPTE or clock times, more than 24 hours
+are no time. An embed with a fragment starts there and, with an end, pauses at the end; a link
+opens the player view there. "Copy link to 1:23" in a player's menu writes `[[name#t=83]]` (whole
+seconds — every player reads them). Like PDFs, they are ordinary attachments otherwise: moves and
+renames rewrite their links.
+
+**Voice notes and transcripts:** a voice note recorded in the app is an ordinary attachment named
+`Recording <yyyy-MM-dd HH.mm>.<ext>` — in a Polish UI `Nagranie <yyyy-MM-dd HH.mm>.<ext>`, a free
+name `… 2.m4a` when taken (`media::recordingName`) — in `attachmentsFolder`, AAC in MPEG-4 (`.m4a`)
+where the device encodes it, else Opus in Ogg (`.ogg`), else 16-bit WAV (`.wav`), embedded at the
+caret (or in a new block at the end of today's journal). Its transcript (speech recognition on the
+device: docs/UI.md "Voice notes") is plain note text right under the block that embeds the
+recording (`media::placeTranscript`): a list item's first child (one level deeper, before its other
+children), after a paragraph a paragraph of its own; the note's indentation and line endings kept.
+It is one paragraph — what Whisper heard, its segments joined, its notes for no speech left out
+(`[BLANK_AUDIO]`, `(music)`, subtitle credits) — with Markdown at its start escaped (`\#`, `\-`,
+`1\.`) and `[[`, `((`, `{{` and `#` before a letter escaped inside: a word heard is never a link,
+an embed, a template or a tag.
 
 **Drawings:** a drawing is an ordinary SVG attachment, embedded like any picture
 (`![[Drawing 2026-10-27 14.32.svg]]`; "/Drawing" creates `Drawing <yyyy-MM-dd HH.mm>.svg` — in a

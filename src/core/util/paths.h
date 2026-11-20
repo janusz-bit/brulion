@@ -32,6 +32,20 @@ const QStringList &pictureExtensions();
 /// An attachment PDF by its name (".pdf", any case; also a hidden file named ".pdf"): opened in the
 /// PDF viewer, embedded as its first page's thumbnail (docs/UI.md "PDF viewer").
 bool isPdfPath(const VaultPath &path);
+/// An attachment sound file by its name — Obsidian's audio formats (mp3, wav, m4a, ogg, 3gp, flac)
+/// plus opus, oga, aac and weba (any case): embedded as a player, opened in the player view
+/// (docs/SYNTAX.md §2 "Audio and video"). `.webm` is a video (Obsidian plays it in a video player,
+/// which shows sound alone as well).
+bool isAudioPath(const VaultPath &path);
+/// An attachment video by its name — Obsidian's video formats (mp4, webm, ogv, mov, mkv) plus m4v
+/// (any case).
+bool isVideoPath(const VaultPath &path);
+/// isAudioPath() || isVideoPath().
+bool isMediaPath(const VaultPath &path);
+/// The extensions isAudioPath() / isVideoPath() accept (".mp3", …: lower-case, with the dot), for
+/// lists that name them (file dialogs).
+const QStringList &audioExtensions();
+const QStringList &videoExtensions();
 /// "a/b/Page.md" -> "a/b/Page".
 QString stripMarkdownExtension(const VaultPath &path);
 /// "a/b/Page.md" -> "Page".

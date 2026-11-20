@@ -128,7 +128,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ~/.cache/brulion-qt/${{ env.QT_VERSION }}/android_arm64_v8a
-          key: qt-${{ env.QT_VERSION }}-android_arm64_v8a-aqt${{ env.AQT_VERSION }}
+          key: qt-${{ env.QT_VERSION }}-android_arm64_v8a-aqt${{ env.AQT_VERSION }}-multimedia
 
       - uses: gradle/actions/setup-gradle@v6
         with:

@@ -314,6 +314,16 @@ Rectangle {
                     bar.editor.insertDrawing(bar.row, bar.edit ? bar.edit.cursorPosition : -1)
                 }
             }
+            ToolButton {
+                objectName: "toolbarVoiceNote"
+                visible: MediaPlayback.available
+                iconName: "mic"
+                label: qsTr("Voice note")
+                onClicked: {
+                    bar.commitComposition()
+                    bar.editor.recordVoiceNote(bar.row, bar.edit ? bar.edit.cursorPosition : -1)
+                }
+            }
             Separator {}
             ToolButton {
                 iconName: "undo-2"

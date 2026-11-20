@@ -16,7 +16,8 @@
 #     Gradle Plugin, Kotlin and androidx from a mitm-cache of recorded downloads
 #     (nix/android/gradle-deps.json);
 #   * llama.cpp for the model on the device (64-bit ABIs): the sources of the release pinned in
-#     3rdparty/llama/pin.json, compiled by the NDK into libraries of the APK.
+#     3rdparty/llama/pin.json, compiled by the NDK into libraries of the APK; whisper.cpp's
+#     (3rdparty/whisper/pin.json) over its ggml for speech recognition.
 # Update the locks: nix/android/update-locks.sh.
 {
   lib,
@@ -119,9 +120,20 @@ let
       hash
       ;
   };
+  # whisper.cpp's sources for speech recognition over that llama.cpp's ggml (3rdparty/whisper).
+  whisperPin = lib.importJSON ../3rdparty/whisper/pin.json;
+  whisperSrc = fetchFromGitHub {
+    inherit (whisperPin)
+      owner
+      repo
+      tag
+      hash
+      ;
+  };
   # What the APK then has in lib/<abi>/ (3rdparty/llama: the processor plugins packaged for Android).
   localAiLibs = [
     "libbrulion_localai.so"
+    "libbrulion_speech.so"
     "libllama.so"
     "libmtmd.so"
     "libggml.so"
@@ -218,6 +230,9 @@ stdenvNoCC.mkDerivation (finalAttrs: {
       [
         "-DBRULION_LOCAL_AI=ON"
         "-DBRULION_LLAMA_SOURCE_DIR=${llamaSrc}"
+        # Speech recognition (voice notes' transcripts), over the same ggml.
+        "-DBRULION_SPEECH=ON"
+        "-DBRULION_WHISPER_SOURCE_DIR=${whisperSrc}"
       ]
     else
       [ "-DBRULION_LOCAL_AI=OFF" ]
@@ -358,11 +373,16 @@ stdenvNoCC.mkDerivation (finalAttrs: {
       for lib in ${lib.concatStringsSep " " localAiLibs}; do
         [[ $listing == *"lib/${abi}/$lib"* ]] || fail "$lib missing: no model on the device"
       done
-      if ${gnugrep}/bin/grep -E 'brulion_localai|llama|mtmd|ggml' ${androidBuildDir}/res/values/libs.xml; then
+      if ${gnugrep}/bin/grep -E 'brulion_localai|brulion_speech|llama|mtmd|ggml' ${androidBuildDir}/res/values/libs.xml; then
         fail "the model runner's libraries are loaded when the app starts (libs.xml)"
       fi
     ''}
     [[ $listing != *libplugins_qmltooling_* ]] || fail "QML debugging plugins (qmltooling) in a release APK"
+    # Audio and video (src/app/media): Qt Multimedia with its Android backend, without the FFmpeg
+    # backend and its 17 MB of FFmpeg (docs/PERFORMANCE.md "Audio and video: what Qt Multimedia costs").
+    [[ $listing == *libplugins_multimedia_androidmediaplugin_* ]] || fail "Qt Multimedia's Android backend missing: no player"
+    [[ $listing != *libplugins_multimedia_ffmpegmediaplugin_* && $listing != *libavcodec* ]] ||
+      fail "Qt Multimedia's FFmpeg backend in the APK (+17 MB)"
     # Only the Basic style, no QtQuick.Dialogs (docs/PERFORMANCE.md L9).
     if ${gnugrep}/bin/grep -qE 'QuickControls2(Material|Universal|Imagine|Fusion|FluentWinUI3)|Controls_(Material|Universal|Imagine|Fusion|FluentWinUI3)|QuickDialogs2|QtQuick_Dialogs' <<<"$listing"; then
       fail "unused Qt Quick styles or QtQuick.Dialogs in the APK"
@@ -384,7 +404,7 @@ stdenvNoCC.mkDerivation (finalAttrs: {
           awk '$1 == "LOAD" { a = strtonum($NF); if (min == "" || a < min) min = a } END { print min + 0 }')
         if ((min < 16384)); then
           [[ $so != */libbrulion_* && $so != */libssl_3.so && $so != */libcrypto_3.so &&
-            $so != */libllama.so && $so != */libmtmd.so && $so != */libggml* ]] ||
+            $so != */libllama.so && $so != */libmtmd.so && $so != */libggml* && $so != */libbrulion_speech.so ]] ||
             fail "$so: LOAD segments aligned to $min bytes"
           misaligned+=("''${so##*/} ($min)")
         fi
@@ -404,6 +424,7 @@ stdenvNoCC.mkDerivation (finalAttrs: {
       withAab
       withLocalAi
       llamaSrc
+      whisperSrc
       qtAndroid
       qtHost
       androidComposition

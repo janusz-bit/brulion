@@ -1,0 +1,3 @@
+brulion_add_test(tst_media SOURCES tst_media.cpp LIBS brulion_core_media)
+brulion_add_test(tst_media_pcm SOURCES tst_media_pcm.cpp LIBS brulion_core_media)
+brulion_add_test(tst_media_transcript SOURCES tst_media_transcript.cpp LIBS brulion_core_media)
