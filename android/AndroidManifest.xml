@@ -22,8 +22,16 @@
     android:versionCode="-- %%INSERT_VERSION_CODE%% --"
     android:versionName="-- %%INSERT_VERSION_NAME%% --">
 
-    <!-- Permissions of the Qt modules in use (Qt Network: INTERNET, ACCESS_NETWORK_STATE). -->
-    <!-- %%INSERT_PERMISSIONS -->
+    <!-- The permissions of the Qt modules in use, written here instead of Qt's placeholder
+         (androiddeployqt inserts its modules' list only where that placeholder is): Qt Network's
+         INTERNET and ACCESS_NETWORK_STATE, Qt Multimedia's MODIFY_AUDIO_SETTINGS (routing the
+         sound). Qt Multimedia's CAMERA and BLUETOOTH are left out on purpose: Brulion uses
+         neither, and an app that declares CAMERA without holding it may not start the camera app
+         (ACTION_IMAGE_CAPTURE, the AI chat's photo: MediaCapture.kt). Qt Core's
+         WRITE_EXTERNAL_STORAGE is below, with its maxSdkVersion. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
 
     <!-- Vault in a Syncthing folder on shared storage ("All files access", Android 11+). -->
     <uses-permission
@@ -50,9 +58,9 @@
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
 
     <!-- Voice notes (docs/UI.md "Voice notes"): the microphone, asked for when a recording starts
-         (QMicrophonePermission). Qt Multimedia's Android plugin declares it too, with
-         MODIFY_AUDIO_SETTINGS (and CAMERA and BLUETOOTH, never asked for: docs/ANDROID.md). -->
+         (QMicrophonePermission); a device without one still installs the app. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-feature android:name="android.hardware.microphone" android:required="false" />
     <!-- The camera app and the speech recognizer the AI chat asks (MediaCapture.kt): seen by the
          app from Android 11 on only when named here. Those apps take the photo and listen: no
          CAMERA permission, and RECORD_AUDIO above is the voice notes' own. -->

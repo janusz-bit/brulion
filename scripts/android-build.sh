@@ -542,6 +542,12 @@ for permission in MANAGE_EXTERNAL_STORAGE POST_NOTIFICATIONS SCHEDULE_EXACT_ALAR
   grep -q "uses-permission: name='android.permission.$permission'" <<<"$badging" ||
     die "permission $permission missing from the merged manifest"
 done
+# Qt Multimedia's CAMERA and BLUETOOTH stay out (android/AndroidManifest.xml): declared without
+# being held, CAMERA would keep the camera app from taking the AI chat's photo.
+for permission in CAMERA BLUETOOTH; do
+  ! grep -q "uses-permission: name='android.permission.$permission'" <<<"$badging" ||
+    die "permission $permission in the merged manifest (Qt's placeholder back in AndroidManifest.xml?)"
+done
 echo "permissions: $(grep -c '^uses-permission:' <<<"$badging") (all required present)"
 manifest=$("$BT/aapt2" dump xmltree --file AndroidManifest.xml "$apk")
 for component in BrulionActivity AlarmActivity ShareActivity ReminderReceiver ActionReceiver RingTimeoutReceiver BootReceiver; do

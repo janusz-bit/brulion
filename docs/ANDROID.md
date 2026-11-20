@@ -280,8 +280,10 @@ How it works:
 * **Microphone** (`RECORD_AUDIO`, voice notes): asked for the first time a voice note is recorded
   (Qt's `QMicrophonePermission` shows the system's dialog); denied, the recorder says so with **Try
   again**, and a permission denied for good is turned on in *Settings → Apps → Brulion →
-  Permissions*. Qt Multimedia's Android plugin also declares `MODIFY_AUDIO_SETTINGS` (routing the
-  sound), `CAMERA` and `BLUETOOTH` in the merged manifest; Brulion never asks for the last two.
+  Permissions*. Of Qt Multimedia's permissions the manifest keeps `MODIFY_AUDIO_SETTINGS` (routing
+  the sound) and leaves out `CAMERA` and `BLUETOOTH` (it lists the Qt modules' permissions itself
+  instead of Qt's placeholder): declared without being held, `CAMERA` would keep the camera app from
+  taking the AI chat's photo, and `scripts/android-build.sh` checks that neither is there.
 
 ### Battery saving
 
