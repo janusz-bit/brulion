@@ -44,9 +44,9 @@ class AppLockController : public QObject {
     Q_PROPERTY(int backgroundMinutes READ backgroundMinutes WRITE setBackgroundMinutes NOTIFY changed FINAL)
     /// Lock after this many minutes without input while the app is in front (0: never; the desktop).
     Q_PROPERTY(int idleMinutes READ idleMinutes WRITE setIdleMinutes NOTIFY changed FINAL)
-    /// Android: "whileLocked" (FLAG_SECURE while the lock screen is up; the recent apps' preview
-    /// left out on Android 13+ while the lock is on) | "always" (FLAG_SECURE while the lock is on:
-    /// no screenshots of Brulion at all).
+    /// Android: "whileLocked" (FLAG_SECURE while the lock screen is up and while Brulion is not in
+    /// front; the recent apps' preview left out on Android 13+ while the lock is on) | "always"
+    /// (FLAG_SECURE while the lock is on: no screenshots of Brulion at all).
     Q_PROPERTY(QString secureWindow READ secureWindow WRITE setSecureWindow NOTIFY changed FINAL)
     /// Reminders' notifications say only "Reminder" and the time, never the note's text.
     Q_PROPERTY(bool hideNotificationText READ hideNotificationText WRITE setHideNotificationText NOTIFY changed FINAL)
@@ -150,6 +150,7 @@ private:
     bool m_checking = false;
     bool m_filterInstalled = false;
     bool m_started = false;
+    bool m_foreground = true; // the app's state is Qt::ApplicationActive
 };
 
 } // namespace brulion::shell

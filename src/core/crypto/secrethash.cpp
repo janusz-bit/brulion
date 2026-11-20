@@ -4,6 +4,9 @@
 #include "crypto/hash.h"
 #include "crypto/secure.h"
 
+#include <QList>
+#include <QStringView>
+
 namespace brulion::crypto {
 
 namespace {

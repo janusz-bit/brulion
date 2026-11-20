@@ -390,6 +390,51 @@ read its private files), extras are read with exception handling, copy names are
 once and deletes the copy folder after saving or cancelling — only inside `files/share-in/` —
 and `ShareActivity` deletes leftovers older than a day at the next share.
 
+## App lock
+
+Settings → **Privacy** (docs/UI.md "App lock"): a PIN for Brulion, or **the phone's own lock** —
+the framework's `BiometricPrompt` (Android 10+, no androidx), biometrics (`BIOMETRIC_WEAK`) or the
+screen lock's PIN, pattern or password (`DEVICE_CREDENTIAL`; Android 10: `setDeviceCredentialAllowed`).
+The manifest asks for `USE_BIOMETRIC` (a normal permission, granted at install). Android 9 is not
+offered the phone's lock: its prompt has no screen lock to fall back on, and a phone
+without an enrolled finger would lock the app for good. A phone whose screen lock was removed after
+choosing it unlocks with a warning (there is nothing left to ask).
+
+* **When**: on start, after the app was in the background (1 minute by default; "At once" for every
+  return), and on **Lock now**. The background is Qt's application state; the event loop is paused
+  meanwhile, so the time away is counted when the app returns.
+* **Recent apps and screenshots** ("Hide Brulion's screen"): "While locked" — FLAG_SECURE while the
+  lock screen is up and while Brulion is not in front, and on Android 13+
+  `Activity.setRecentsScreenshotEnabled(false)` while the lock is on, so the recent apps never show
+  a note (older Android: choose "Always"); "Always" — FLAG_SECURE while the lock is on: no
+  screenshots, recordings, casting or previews of Brulion. The window turns secure in the
+  activity's `onPause` already (`AppLock.paused`), not when C++ hears of the background later: the
+  frame shown on the way back, before the lock screen is drawn, is never a note's; C++ clears it
+  once the app is in front and unlocked. Both are set again for an activity made anew
+  (`AppLock.apply` in `BrulionAndroid.onActivityCreated`); every change is logged
+  (`BrulionAppLock`: "FLAG_SECURE on/off").
+* **Widgets** ("Hide notes in widgets", on by default): the snapshot the app hands them while the
+  lock is on has `"locked": true` and no tasks, calendar entries, pages or notebook name
+  (`lockedSnapshot`, src/app/widgets/widgetsnapshot.h): every widget says "Brulion is locked. Open it
+  to see your notebook."; quick add still writes into the journal.
+* **Notifications** ("Hide the note's text in notifications", on by default): reminders and alarms
+  say "Reminder"/"Alarm" and Brulion, never the task — also those the background check arms while
+  the app is closed (the target's `hideText`). Tapping one opens the note behind the lock.
+* **The clipboard**: "Copy" in an unlocked encrypted text's dialog marks the clip sensitive
+  (`ClipDescription.EXTRA_IS_SENSITIVE` on Android 13+, its earlier name before): the clipboard's
+  preview and keyboards leave it out.
+* Back on the lock screen sends the app to the background; it never goes past the lock.
+
+The emulator test (`scripts/android-emulator-test.sh --lock`, Android 16): a PIN set through the
+settings; the next start locked — the keypad, nothing of the notes in the accessibility tree, the
+window secure (a screenshot black across the middle: `dumpsys window`'s copy of the flags follows
+the window's next relayout, which Qt's window may not need for half a minute), a wrong PIN refused,
+the right one typed on the keypad; Home — the window secure at once (`BrulionAppLock` in the log),
+the widgets' snapshot locked, the recent apps with no real screenshot (`mIsRealSnapshot=false`);
+back after more than a minute locked again, after a few seconds not; "Always"; and with a screen
+lock set on the emulator, "Use the phone's lock" and "Lock now": the system's prompt takes the
+phone's PIN and Brulion unlocks.
+
 ## Widgets
 
 On the home screen (long-press an empty spot → **Widgets** → **Brulion**) there are three
@@ -1896,7 +1941,7 @@ taps, swipes and types, and `adb exec-out screencap -p > ekran.png` takes a scre
 |---|---|
 | `android/AndroidManifest.xml` | manifest based on the Qt 6.11.2 template (`androiddeployqt` fills in the `%%INSERT_…%%` markers: package, version, name, library and the permissions of the Qt modules): permissions, `BrulionActivity`, receivers, `AlarmActivity`, `ShareActivity` (filters `ACTION_SEND`/`ACTION_SEND_MULTIPLE` for `text/*`), `AutomationActivity` (VIEW of `brulion:` and the `RUN` action), `AutomationReceiver`, `AutomationService`, the Quick Settings tiles, icons |
 | `android/res/` | strings (`values` — English, the default; `values-pl`), the notification icon `ic_stat_brulion`, the app icons (`mipmap-*` from the logo, the adaptive `mipmap-anydpi` with the `#283045` background and a monochrome layer), the alarm screen theme; widgets: layouts `layout/widget_*.xml` (also the previews for the widget picker), `xml/widget_*_info.xml`, colours `widget_colors.xml` (`values` light, `values-night` dark), the corner radius (`values-v31`: the system's), the theme of the quick add window |
-| `android/src/io/github/januszbit/brulion/android/` | Kotlin: `BrulionAndroid` (JNI facade), `BrulionActivity` (`QtActivity` + taps/permissions/ringtone choice) + `StartupRelaunch` (recreated before Qt started: restart of the app), `ImeInsets` (on-screen keyboard: how much of the Qt view it covers), `AlarmScheduler` + `WallClock`, `Reminder` + `ReminderStore`, `ReminderNotifier`, `ReminderSounds` (sounds: `SoundChoice`, channel versions `SoundChannel`, `SoundStore`, sample, ringtone picker), `RingTimeout`, `Receivers` (fire, buttons, boot/time change), `DoneQueue` (the "Done" queue for C++), `AlarmActivity` + `AlarmSlider` (the alarm screen and its slider; `SlideGesture`: its arithmetic), `Documents` (chosen documents and document trees for the import), `ShareActivity` + `ShareIntent` ("Share → Brulion": receiving, copies in `files/share-in/`, JSON for C++), widgets: `Widgets` (`TasksWidget`, `CalendarWidget`, `NotesWidget`), `WidgetViews` + `WidgetListService` (RemoteViews and list rows), `WidgetSnapshot` (the snapshot, moving tasks to the new day), `WidgetStore` + `WidgetUpdater` + `WidgetReceiver` (storing, refreshing, midnight, month buttons), `WidgetDates` (the app's day and month names), `QuickAddActivity` + `QuickAdd` + `JournalAppend` (quick add, writing to the journal), `WidgetInbox` (the queue of entries for C++), background check of the notes: `BackgroundCheck` (target, job, decision on the result), `BackgroundCheckJob` (JobScheduler job in the main process), `BackgroundCheckService` (`QtService` in the `:background` process), automation: `Automation` (the request from an intent, the target, the background run, the result broadcast, the provisional reminder), `AutomationActivity`, `AutomationReceiver`, `AutomationService` (`QtService` in the `:automation` process), `QuickTiles` (the Quick Settings tiles and the launcher's shortcuts) |
+| `android/src/io/github/januszbit/brulion/android/` | Kotlin: `BrulionAndroid` (JNI facade), `BrulionActivity` (`QtActivity` + taps/permissions/ringtone choice) + `StartupRelaunch` (recreated before Qt started: restart of the app), `ImeInsets` (on-screen keyboard: how much of the Qt view it covers), `AlarmScheduler` + `WallClock`, `Reminder` + `ReminderStore`, `ReminderNotifier`, `ReminderSounds` (sounds: `SoundChoice`, channel versions `SoundChannel`, `SoundStore`, sample, ringtone picker), `RingTimeout`, `Receivers` (fire, buttons, boot/time change), `DoneQueue` (the "Done" queue for C++), `AlarmActivity` + `AlarmSlider` (the alarm screen and its slider; `SlideGesture`: its arithmetic), `Documents` (chosen documents and document trees for the import), `ShareActivity` + `ShareIntent` ("Share → Brulion": receiving, copies in `files/share-in/`, JSON for C++), widgets: `Widgets` (`TasksWidget`, `CalendarWidget`, `NotesWidget`), `WidgetViews` + `WidgetListService` (RemoteViews and list rows), `WidgetSnapshot` (the snapshot, moving tasks to the new day), `WidgetStore` + `WidgetUpdater` + `WidgetReceiver` (storing, refreshing, midnight, month buttons), `WidgetDates` (the app's day and month names), `QuickAddActivity` + `QuickAdd` + `JournalAppend` (quick add, writing to the journal), `WidgetInbox` (the queue of entries for C++), background check of the notes: `BackgroundCheck` (target, job, decision on the result), `BackgroundCheckJob` (JobScheduler job in the main process), `BackgroundCheckService` (`QtService` in the `:background` process), automation: `Automation` (the request from an intent, the target, the background run, the result broadcast, the provisional reminder), `AutomationActivity`, `AutomationReceiver`, `AutomationService` (`QtService` in the `:automation` process), `QuickTiles` (the Quick Settings tiles and the launcher's shortcuts), `AppLock` (the app lock: the window's FLAG_SECURE and recent apps' preview, BiometricPrompt, the sensitive clipboard copy) |
 | `android/tests/` | Kotlin unit tests (JVM) + a Gradle init script that adds them |
 | `android/lint.xml` | Android lint configuration (exceptions for `res/values/libs.xml` generated by Qt) |
 | `android/settings.gradle`, `android/proguard-rules.pro` | R8 in release builds and its rules (classes called through JNI) — [APK size](#apk-size) |
@@ -1993,6 +2038,10 @@ loading QML (so that the tap that started the app reaches the UI); as long as no
 | signal `systemGesturesChanged(int left, int right)` | native `nativeGestureInsetsChanged(Int, Int)` (from `ImeInsets`, physical pixels of the system gesture zones at the edges of the Qt view; reported once more also through `requestImeState()`) |
 | `void setSystemBarsLight(bool light)` | `setSystemBarsLight(Boolean)` — system bar icons dark over a light window (Android 11+, window under the bars) |
 | `void setKeepScreenOn(bool on)` (static; `platform::keepScreenOn()`) | `setKeepScreenOn(Boolean)` — `FLAG_KEEP_SCREEN_ON` on the activity's window, set again for an activity made anew: while a model on the device is downloaded or answers ([above](#a-model-on-the-phone)) |
+| `static void setSecureWindow(bool secure, bool hideRecents)` (`platform::setSecureWindow()`) | `setSecureWindow(Boolean, Boolean)` — FLAG_SECURE and (Android 13+) `setRecentsScreenshotEnabled`, set again for an activity made anew (`AppLock.kt`, [App lock](#app-lock)) |
+| `static bool deviceAuthAvailable()` | `deviceAuthAvailable(Context): Boolean` — Android 10+ and `KeyguardManager.isDeviceSecure` |
+| `bool requestDeviceAuth(title, subtitle, cancel)` | `requestDeviceAuth(Context, String, String, String): Boolean` — `BiometricPrompt` over the running activity; the answer: native `nativeDeviceAuth(Boolean, String)` → signal `deviceAuthFinished(bool ok, QString error)` ("" cancelled) |
+| `static bool copySensitiveText(const QString &)` (`platform::copySensitiveText()`) | `copySensitive(Context, String): Boolean` — the clip marked sensitive |
 | `platform::PdfReader::open(file)` (`src/platform/pdfpages_android.cpp`, not `AndroidBridge`; any thread) | `pdfOpen(String): String` — `{"session", "pages", "size": [w, h] (first page, points), "locked", "error"}` (`PdfPages.kt`: a session of the system's `android.graphics.pdf.PdfRenderer`; `session` 0 — not opened) |
 | `PdfReader::pageSize(page)` (as above, 64 pages at a time) | `pdfPageSizes(Int, Int, Int): String` — `[[w, h], …]` |
 | `PdfReader::render(page, full, clip)` (as above) | `pdfRenderInto(Int, Int, Int, Int, Int, Int, Int, Int, ByteBuffer): Boolean` — the page scaled to `full`, its part `clip` on a white background straight into the RGBA_8888 pixels of the C++ image |

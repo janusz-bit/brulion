@@ -909,6 +909,7 @@ object BrulionAndroid {
 
   internal fun onActivityPaused() {
     uiResumed = false
+    AppLock.paused(currentActivity())
   }
 
   /** Brulion's activity is on the screen (resumed). */

@@ -48,6 +48,8 @@
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+    <!-- The app lock's "Use the phone's lock": BiometricPrompt (a normal permission: no prompt). -->
+    <uses-permission android:name="android.permission.USE_BIOMETRIC" />
 
     <!-- %%INSERT_FEATURES -->
 

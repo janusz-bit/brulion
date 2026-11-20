@@ -248,7 +248,7 @@ T.Popup {
                 Layout.alignment: Qt.AlignHCenter
                 variant: "primary"
                 iconName: lock.deviceMethod ? "fingerprint" : "lock-open"
-                text: lock.deviceMethod ? qsTr("Unlock") : qsTr("Unlock")
+                text: qsTr("Unlock")
                 busy: AppLock.checking
                 enabled: lock.wait === 0 && !AppLock.checking
                 onClicked: lock.deviceMethod ? lock.askDevice() : lock.submit()

@@ -178,6 +178,19 @@
 # still in memory (opened once); no crash. Screenshots la-*.png.
 # Pictures are not looked at here (ctest's tst_ai_llama and tst_ai_localplugin do that with the
 # same code on the desktop).
+# With --lock instead: the app lock (docs/ANDROID.md "App lock", docs/UI.md "App lock") — Settings →
+# Privacy ("Prywatność"): "Set a PIN…" with the on-screen keyboard (no FLAG_SECURE while the lock is
+# off or unlocked); the next start is locked (the lock screen's keypad, nothing of the notes in the
+# accessibility tree, the window secure: a screenshot black across the middle — dumpsys's copy of
+# the flags follows the window's next relayout, up to half a minute later), a wrong PIN keeps it
+# locked, the right one typed on the keypad brings the journal back; leaving it (Home) makes the
+# window secure at once (the app's log: "FLAG_SECURE on"), the widgets' snapshot is the locked one
+# and, on Android 13+, the recent apps hold no real screenshot of Brulion (mIsRealSnapshot=false);
+# back after more than a minute (a phone's default) it is locked again, after a few seconds not
+# (and no longer secure); "Hide Brulion's screen" → "Always" keeps it secure while unlocked; with a
+# screen lock set on the emulator (`locksettings set-pin`), "Use the phone's lock" and "Lock now":
+# the system's prompt asks for the phone's PIN and unlocks Brulion. Screenshots lk-*.png (those
+# taken while the window is secure are black); the same debuggable APK.
 # --selection, --folders, --share, --widgets, --web-pictures, --done and --pickers find what they tap by its accessible name (UiAutomator reads Qt's
 # accessibility tree; the keyboard's keys from its dump of every window),
 # so they work on other screens and Android versions too (checked: Android 16 and 11, Pixel 6).
@@ -201,6 +214,7 @@
 #        scripts/android-emulator-test.sh --pdf [DEBUG_APP_APK]
 #        scripts/android-emulator-test.sh --relaunch [DEBUG_APP_APK]
 #        scripts/android-emulator-test.sh --local-ai [DEBUG_APP_APK]
+#        scripts/android-emulator-test.sh --lock [DEBUG_APP_APK]
 #        scripts/android-emulator-test.sh --web-keyboard [SITE_DIR]   (default dist-wasm)
 #   default: dist-android/brulion-<version>-x86_64.apk, dist-android/brulion-selftest-<version>-x86_64.apk
 # Environment (optional):
@@ -270,6 +284,7 @@ PICKERS=0
 PDF=0
 RELAUNCH=0
 LOCALAI=0
+LOCK=0
 WEBKEYBOARD=0
 if [[ ${1:-} == --keyboard ]]; then
   KEYBOARD=1
@@ -313,6 +328,9 @@ elif [[ ${1:-} == --relaunch ]]; then
 elif [[ ${1:-} == --local-ai ]]; then
   LOCALAI=1
   shift
+elif [[ ${1:-} == --lock ]]; then
+  LOCK=1
+  shift
 elif [[ ${1:-} == --web-pictures ]]; then
   WEBPICTURES=1
   shift
@@ -328,7 +346,7 @@ else
   APP_APK=${1:-dist-android/brulion-$VERSION-x86_64.apk}
   SELFTEST_APK=${2:-dist-android/brulion-selftest-$VERSION-x86_64.apk}
   [[ -f $APP_APK ]] || die "$APP_APK not found (build it: BRULION_ANDROID_ABIS=x86_64 BRULION_ANDROID_SELFTEST=1 scripts/android-build.sh)"
-  ((KEYBOARD || SELECTION || FOLDERS || SHARE || AUTOMATION || WIDGETS || WEBPICTURES || DONE || BACKGROUND || DRAWING || STYLUS || PICKERS || PDF || RELAUNCH || LOCALAI)) ||
+  ((KEYBOARD || SELECTION || FOLDERS || SHARE || AUTOMATION || WIDGETS || WEBPICTURES || DONE || BACKGROUND || DRAWING || STYLUS || PICKERS || PDF || RELAUNCH || LOCALAI || LOCK)) ||
     [[ -f $SELFTEST_APK ]] ||
     die "$SELFTEST_APK not found"
 fi
@@ -1115,6 +1133,214 @@ if ((SELECTION)); then
   grep -E 'qml|Skopiowano|brulion' "$OUT/selection-logcat.txt" | tail -n 40 >"$OUT/selection-summary.txt" || true
   info "Result"
   cat "$OUT/selection-summary.txt"
+  echo "logs and screenshots: $(cd "$OUT" && pwd)"
+  ((failures == 0)) || die "$failures check(s) failed"
+  echo "all checks passed"
+  exit 0
+fi
+
+# --- the app lock (--lock) ------------------------------------------------------------------------
+
+# The flags of Brulion's window on screen: the "fl=…" line of its WindowState in `dumpsys window
+# windows` ("isOnScreen=true"; with "away": the last one listed, on screen or not). Not the first
+# one listed: an activity the app restarted while it started (StartupRelaunch.kt) leaves its
+# window, never made secure, in the list for a while. The app's own reports ("FLAG_SECURE on/off")
+# go to lock-applock.txt.
+lk_flags() { # [away]
+  adb logcat -d -s BrulionAppLock:I 2>/dev/null | grep -F 'FLAG_SECURE' >>"$OUT/lock-applock.txt" || true
+  adb shell dumpsys window windows | tr -d '\r' |
+    awk -v away="${1:-}" '
+      function done() {
+        if (on && (shown || away != "")) found = flags
+        if (on && shown) { print flags; printed = 1; exit }
+        on = 0; shown = 0; flags = ""
+      }
+      /^ *Window #[0-9]+ / { done(); on = /Window\{[^}]*BrulionActivity\}/; next }
+      on && / fl=/ { flags = $0; sub(/.* fl=/, "", flags) }
+      on && /isOnScreen=true/ { shown = 1 }
+      END { if (!printed) { done(); if (!printed && away != "" && found != "") print found } }'
+}
+# A band across the middle of a screenshot is black: what a secure window gives screencap. The
+# window manager's copy of the flags (dumpsys) follows the window's next relayout, which Qt's
+# window may not need for half a minute; the surface is secure at once.
+lk_screen_black() {
+  local raw="$OUT/lock-screen.raw" band="$OUT/lock-band.raw" w h header first rows others
+  adb exec-out screencap >"$raw" 2>/dev/null || return 1
+  read -r w h < <(od -An -tu4 -N8 "$raw")
+  [[ -n ${w:-} && -n ${h:-} ]] && ((w > 0 && h > 0)) || return 1
+  header=$(($(stat -c %s "$raw") - w * h * 4)) # 12 or 16 bytes
+  first=$((h * 40 / 100)) # whole rows: from 40 % of the height, 5 % of it
+  rows=$((h / 20))
+  dd if="$raw" of="$band" iflag=skip_bytes,count_bytes skip=$((header + first * w * 4)) \
+    count=$((rows * w * 4)) status=none || return 1
+  others=$(od -An -v -tx4 "$band" | tr -s ' ' '\n' | grep -c -v -e '^$' -e '^ff000000$' || true)
+  ((others == 0))
+}
+lk_secure() { lk_screen_black || lk_flags | grep -qw SECURE; }
+lk_not_secure() {
+  local flags
+  flags=$(lk_flags)
+  [[ -n $flags ]] && ! grep -qw SECURE <<<"$flags" && ! lk_screen_black
+}
+# The app's own report of the flag (AppLock.kt), the last one: on.
+lk_reported_secure() { adb logcat -d -s BrulionAppLock:I | grep -F 'FLAG_SECURE' | tail -n 1 | grep -q 'FLAG_SECURE on'; }
+lk_locked() { ui_has 'Usuń cyfrę'; } # the lock screen's keypad ("Delete digit")
+# A PIN typed on the lock screen's keypad (its keys named by their digits), then its "Unlock".
+lk_type_pin() { # <digits>
+  local i xy
+  ui_dump
+  for ((i = 0; i < ${#1}; i++)); do
+    xy=$(ui_nodes "${1:i:1}" | awk '{ print int(($1 + $3) / 2), int(($2 + $4) / 2); exit }')
+    if [[ -z $xy ]]; then
+      echo "    no key ${1:i:1} on the lock screen"
+      return 1
+    fi
+    adb shell input tap "$xy"
+    sleep 0.4
+  done
+  ui_tap 'Odblokuj' first 3
+}
+# The widgets' snapshot (WidgetStore.kt: shared preferences) — the locked one: "locked": true, no
+# tasks, days or notes.
+lk_snapshot() { adb shell run-as "$PKG" cat shared_prefs/$PKG.android.widgets.xml 2>/dev/null | tr -d '\r'; }
+lk_snapshot_locked() {
+  local snapshot
+  snapshot=$(lk_snapshot)
+  grep -q '&quot;locked&quot;:true' <<<"$snapshot" && ! grep -qE '&quot;(tasks|notes)&quot;:' <<<"$snapshot"
+}
+# Android 13+: the recent apps hold no screenshot of Brulion's task, only one drawn from the app's
+# theme (setRecentsScreenshotEnabled(false): "mIsRealSnapshot=false" in the window manager's
+# snapshot cache).
+lk_recents_screenshot_off() {
+  adb shell dumpsys window | tr -d '\r' >"$OUT/lock-window.txt"
+  grep -E 'TaskSnapshot\{.*mTopActivityComponent=[^ ]*BrulionActivity' "$OUT/lock-window.txt" | grep -q 'mIsRealSnapshot=false' &&
+    ! grep -E 'TaskSnapshot\{.*mTopActivityComponent=[^ ]*BrulionActivity' "$OUT/lock-window.txt" | grep -q 'mIsRealSnapshot=true'
+}
+lk_front() { # Brulion brought back to the front as its launcher icon does
+  adb shell monkey -p "$PKG" -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1
+  sleep 5
+}
+lk_show() { # <ERE>: the page dragged up until the item so named is on screen, clear of the bottom
+  local _ y
+  for _ in 1 2 3 4 5 6 7 8; do
+    y=$(ui_y "$1")
+    if [[ -n $y ]] && ((y < SCREEN_H * 80 / 100)); then return 0; fi
+    adb shell input swipe $((SCREEN_W / 2)) $((SCREEN_H * 65 / 100)) $((SCREEN_W / 2)) $((SCREEN_H * 40 / 100)) 600
+    sleep 2
+  done
+  echo "    not brought on screen: $1"
+  return 1
+}
+if ((LOCK)); then
+  info "App lock: $APP_APK on ${SCREEN_W}x$SCREEN_H, density $DENSITY, API $android_api"
+  adb install -r -g "$APP_APK" >/dev/null
+  adb shell run-as "$PKG" true 2>/dev/null || die "$APP_APK is not debuggable (BRULION_ANDROID_BUILD_TYPE=Debug)"
+  first_block='Pierwszy dzień z Brulionem #przewodnik'
+  privacy=$(json_arg '{"view":"settings","section":"privacy"}')
+  start_app "--demo --locale pl --route $privacy"
+  check "the app is running" running
+  check "Settings → Privacy offers a PIN" wait_for 30 ui_has 'Ustaw PIN…'
+  app_shot lk-1-privacy
+  check "no FLAG_SECURE while the lock is off" lk_not_secure
+  # The PIN dialog: its first field has the focus (and the keyboard), "Repeat the PIN" next.
+  ui_tap 'Ustaw PIN…' || true
+  ui_tap 'Nowy PIN.*' first 1 || true
+  adb shell input text 2580
+  ui_tap 'Powtórz PIN' first 1 || adb shell input keyevent 61
+  adb shell input text 2580
+  app_shot lk-2-pin-dialog
+  ui_tap 'OK' last || true
+  check "the PIN is set (the toast)" wait_for 8 ui_has 'PIN jest ustawiony'
+  app_shot lk-3-pin-set
+  check "no FLAG_SECURE while unlocked (\"While locked\", the default)" lk_not_secure
+
+  # The next start is locked ("Lock when Brulion starts", on by default).
+  start_app '--demo --locale pl --route journals'
+  check "locked on start: the lock screen's keypad" wait_for 20 lk_locked
+  check "nothing of the notes on screen (nor in the accessibility tree)" ui_lacks "$first_block"
+  check "FLAG_SECURE while locked (screenshots black)" wait_for 10 lk_secure
+  app_shot lk-4-locked-on-start
+  lk_type_pin 1111 || true
+  sleep 2
+  check "a wrong PIN keeps it locked" lk_locked
+  lk_type_pin 2580 || true
+  check "the right PIN unlocks: today's journal is back" wait_for 15 ui_has "$first_block"
+  app_shot lk-5-unlocked
+  check "no FLAG_SECURE once unlocked" lk_not_secure
+
+  # In the background: the window is secure at once, the widgets' snapshot hides the notes, the
+  # recent apps get no screenshot.
+  adb shell input keyevent 3
+  check "FLAG_SECURE as soon as Brulion leaves the front (the app's log)" wait_for 10 lk_reported_secure
+  check "the widgets' snapshot is the locked one" wait_for 20 lk_snapshot_locked
+  adb shell input keyevent 187 # the recent apps
+  sleep 3
+  app_shot lk-6-recents
+  if ((android_api >= 33)); then
+    check "the recent apps get no screenshot of Brulion (Android 13+)" wait_for 10 lk_recents_screenshot_off
+  fi
+  adb shell input keyevent 3
+  echo "    (70 s in the background: a phone locks after a minute by default)"
+  sleep 70
+  lk_front
+  check "back after more than a minute: locked" wait_for 15 lk_locked
+  check "nothing of the notes on screen" ui_lacks "$first_block"
+  check "FLAG_SECURE while locked (screenshots black)" wait_for 10 lk_secure
+  app_shot lk-7-locked-on-resume
+  lk_type_pin 2580 || true
+  check "unlocked again" wait_for 15 ui_has "$first_block"
+  adb shell input keyevent 3
+  sleep 8
+  lk_front
+  check "back after a few seconds: still unlocked" wait_for 10 ui_has "$first_block"
+  check "and its window no longer secure" wait_for 10 lk_not_secure
+  app_shot lk-8-short-leave
+
+  # "Hide Brulion's screen" → "Always": FLAG_SECURE while unlocked too.
+  start_app "--demo --locale pl --route $privacy"
+  wait_for 20 lk_locked || true
+  lk_type_pin 2580 || true
+  check "Settings → Privacy after unlocking" wait_for 15 ui_has 'Zmień PIN…'
+  lk_show 'Ukrywaj ekran Brulionu.*' || true
+  ui_tap 'Ukrywaj ekran Brulionu.*' last || true
+  ui_tap 'Zawsze' last || true
+  check "\"Always\": FLAG_SECURE while unlocked (screenshots black)" wait_for 10 lk_secure
+  ui_tap 'Ukrywaj ekran Brulionu.*' last || true
+  ui_tap 'Gdy zablokowany' last || true
+  check "\"While locked\" again: no FLAG_SECURE while unlocked" wait_for 10 lk_not_secure
+
+  # The phone's own lock (Android 10+): a screen lock set on the emulator, then "Use the phone's
+  # lock" (the PIN asked once more), "Lock now", the system's prompt asking for the phone's PIN.
+  if ((android_api >= 29)); then
+    adb shell locksettings set-pin 1379 >/dev/null
+    start_app "--demo --locale pl --route $privacy"
+    wait_for 20 lk_locked || true
+    lk_type_pin 2580 || true
+    wait_for 15 ui_has 'Zmień PIN…' || true
+    check "\"Use the phone's lock\" is offered with a screen lock set" ui_has 'Użyj blokady telefonu'
+    ui_tap 'Użyj blokady telefonu' || true
+    ui_tap 'Obecny PIN' first 1 || true
+    adb shell input text 2580
+    ui_tap 'OK' last || true
+    check "the phone's lock is chosen (the toast)" wait_for 8 ui_has 'Brulion odblokowuje się blokadą telefonu'
+    app_shot lk-9-device-method
+    lk_show 'Zablokuj teraz' || true
+    ui_tap 'Zablokuj teraz' last 4 || true
+    app_shot lk-10-device-prompt
+    # The system's prompt for the phone's PIN (its own window): typed, Enter.
+    adb shell input text 1379
+    adb shell input keyevent 66
+    check "the phone's PIN unlocks Brulion" wait_for 15 ui_has 'Użyj zamiast tego PIN-u…'
+    app_shot lk-11-device-unlocked
+    adb shell locksettings clear --old 1379 >/dev/null || true
+  fi
+  check "the app is still running" running
+  adb logcat -d >"$OUT/lock-logcat.txt"
+  check "no crash" bash -c "! grep -E 'FATAL EXCEPTION|Fatal signal' '$OUT/lock-logcat.txt'"
+  check "no QML errors" bash -c "! grep -E 'TypeError|ReferenceError|Binding loop detected' '$OUT/lock-logcat.txt'"
+  grep -E 'BrulionAppLock|brulion\.(applock|shell)|lock' "$OUT/lock-logcat.txt" | tail -n 40 >"$OUT/lock-summary.txt" || true
+  info "Result"
+  cat "$OUT/lock-summary.txt"
   echo "logs and screenshots: $(cd "$OUT" && pwd)"
   ((failures == 0)) || die "$failures check(s) failed"
   echo "all checks passed"

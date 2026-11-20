@@ -1842,9 +1842,9 @@ singleton `AppLock`, `src/app/shell/applockcontroller.h`, over core `applock`).
   5, 15 — the desktop's default — or 60 minutes in the background: Qt's application state;
   the desktop counts an inactive window too), **Lock after no activity** (the desktop: 5 … 60
   minutes without a key, click, wheel or touch while in front; never by default), on Android
-  **Hide Brulion's screen** ("While locked": FLAG_SECURE while the lock screen is up and, Android 13+,
-  the recent apps' preview left out while the lock is on; "Always": FLAG_SECURE while the lock is
-  on — no screenshots or recordings), **Hide the note's text in notifications** (on by default:
+  **Hide Brulion's screen** ("While locked": FLAG_SECURE while the lock screen is up and while Brulion
+  is not in front, and, Android 13+, the recent apps' preview left out while the lock is on;
+  "Always": FLAG_SECURE while the lock is on — no screenshots or recordings), **Hide the note's text in notifications** (on by default:
   reminders say "Reminder"/"Alarm" and the time — also those the background check arms), on
   Android **Hide notes in widgets** (on by default: the widgets say "Brulion is locked", quick add
   still writes), **Lock now**. All of it is this device's setting (AppSettings `privacy/lock/…`).

@@ -40,7 +40,12 @@ internal object AppLock {
 
   /** The flags on [activity]'s window as asked (main thread). */
   fun apply(activity: Activity?) {
-    val window = activity?.window ?: return
+    val window = activity?.window
+    if (window == null) {
+      Log.w(TAG, "no activity for the window's flags (secure: $secure)")
+      return
+    }
+    val was = window.attributes.flags and WindowManager.LayoutParams.FLAG_SECURE != 0
     if (secure) {
       window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
     } else {
@@ -49,6 +54,19 @@ internal object AppLock {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
       activity.setRecentsScreenshotEnabled(!(hideRecents || secure))
     }
+    if (was != secure) Log.i(TAG, "FLAG_SECURE ${if (secure) "on" else "off"} (lock on: $hideRecents)")
+  }
+
+  /**
+   * Brulion's activity leaves the front (onPause) while the lock is on: its window turns secure at
+   * once — before the system takes the recent apps' picture and before the lock screen is drawn
+   * again on the way back, both earlier than C++ hears of it. C++ clears it when the app is in
+   * front again and unlocked ([BrulionAndroid.setSecureWindow]).
+   */
+  fun paused(activity: Activity?) {
+    if (!hideRecents || secure) return
+    secure = true
+    apply(activity)
   }
 
   /**

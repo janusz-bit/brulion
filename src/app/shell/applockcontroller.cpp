@@ -199,12 +199,16 @@ void AppLockController::scheduleTick()
 void AppLockController::applicationStateChanged(Qt::ApplicationState state)
 {
     const qint64 now = monotonicNow();
-    if (state == Qt::ApplicationActive) {
-        if (m_state.cameToForeground(now))
+    m_foreground = state == Qt::ApplicationActive;
+    if (m_foreground) {
+        if (m_state.cameToForeground(now)) {
             setLocked(true);
+            return;
+        }
     } else {
         m_state.wentToBackground(now);
     }
+    applyWindowFlags();
     scheduleTick();
 }
 
@@ -219,8 +223,10 @@ void AppLockController::setLocked(bool locked)
 
 void AppLockController::applyWindowFlags()
 {
+    // Away from the front the window is secure too (Android sets it itself as the activity pauses,
+    // AppLock.kt): what comes back on screen before the lock screen is drawn is never a note.
     const bool on = enabled();
-    const bool secure = on && (secureWindow() == u"always" || m_state.locked());
+    const bool secure = on && (secureWindow() == u"always" || m_state.locked() || !m_foreground);
     platform::setSecureWindow(secure, on);
 }
 
