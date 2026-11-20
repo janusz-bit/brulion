@@ -42,8 +42,9 @@ private Q_SLOTS:
         const IndexText t = indexText(read(canvasfixtures::obsidian()));
         // Group label, the text card, the note, its section, the picture, the web page, the label.
         QVERIFY(t.text.startsWith(u"Remont kuchni\n\n# Plan\n\n- [ ] zamówić płytki\n"_s));
-        QVERIFY(t.text.contains(u"\n\n[[Projekty/Kuchnia.md]]\n\n[[Projekty/Kuchnia.md#Szafki]]\n\n[[assets/płytki.jpg]]\n\n"
-                                u"<https://example.com/żółw>\n\nszczegóły"_s));
+        QVERIFY(t.text.contains(
+                u"\n\n[[Projekty/Kuchnia.md]]\n\n[[Projekty/Kuchnia.md#Szafki]]\n\n[[assets/płytki.jpg]]\n\n"
+                u"<https://example.com/żółw>\n\nszczegóły"_s));
         QCOMPARE(t.segments.size(), 7);
         QCOMPARE(t.segments.at(0).nodeId, u"5b4c2f0e9a1d3c7e"_s);
         QCOMPARE(t.segments.at(1).firstLine, 2);
@@ -62,8 +63,9 @@ private Q_SLOTS:
         const IndexText t = indexText(read(canvasfixtures::obsidian()));
         const ParsedNote note = indexNote(u"Plany/Kuchnia.canvas"_s, t.text);
         QCOMPARE(note.title, u"Kuchnia"_s);
-        QCOMPARE(targets(note), (QStringList{u"Budżet domowy"_s, u"Projekty/Kuchnia.md"_s, u"Projekty/Kuchnia.md#Szafki"_s,
-                                             u"assets/płytki.jpg"_s, u"https://example.com/żółw"_s}));
+        QCOMPARE(targets(note),
+                 (QStringList{u"Budżet domowy"_s, u"Projekty/Kuchnia.md"_s, u"Projekty/Kuchnia.md#Szafki"_s,
+                              u"assets/płytki.jpg"_s, u"https://example.com/żółw"_s}));
         QVERIFY(note.tags.contains(u"remont"_s));
         // A card's task is no task of the notebook.
         QVERIFY(note.tasks.isEmpty());
@@ -74,7 +76,8 @@ private Q_SLOTS:
     {
         Canvas c;
         c = addNode(c, makeTextNode(u"---\ntags: [x]\naliases: [Inna]\n---\nkey:: value"_s, QRectF(0, 0, 250, 60)));
-        c = addNode(c, makeTextNode(u"- [ ] zadanie 📅 2026-11-21 ⏰ 2026-11-21 09:00 ^blok1"_s, QRectF(0, 100, 250, 60)));
+        c = addNode(c,
+                    makeTextNode(u"- [ ] zadanie 📅 2026-11-21 ⏰ 2026-11-21 09:00 ^blok1"_s, QRectF(0, 100, 250, 60)));
         const IndexText t = indexText(c);
         QVERIFY(t.text.startsWith(u"\n---"_s)); // never frontmatter
         const ParsedNote note = indexNote(u"journals/2026-11-20.canvas"_s, t.text);
@@ -146,19 +149,18 @@ private Q_SLOTS:
                     QString s = t;
                     return s.replace(u"[[Budżet domowy]]"_s, u"[[Finanse/Budżet domowy]]"_s);
                 },
-                [](const QString &p) {
-                    return p == u"Projekty/Kuchnia.md" ? u"Archiwum/Kuchnia.md"_s : p;
-                },
-                &paths);
+                [](const QString &p) { return p == u"Projekty/Kuchnia.md" ? u"Archiwum/Kuchnia.md"_s : p; }, &paths);
         QVERIFY(out);
         QCOMPARE(paths, 2);
         QVERIFY(out->contains(u"\"file\":\"Archiwum/Kuchnia.md\",\"x\":-40"_s));
         QVERIFY(out->contains(u"\"file\":\"Archiwum/Kuchnia.md\",\"subpath\":\"#Szafki\""_s));
         QVERIFY(out->contains(u"[[Finanse/Budżet domowy]]"_s));
         // Untouched lines as they were.
-        QVERIFY(out->contains(u"\t\t{\"id\":\"99aabbccddeeff00\",\"type\":\"file\",\"file\":\"assets/płytki.jpg\",\"x\":-400,\"y\":0,\"width\":320,\"height\":240},"_s));
+        QVERIFY(out->contains(
+                u"\t\t{\"id\":\"99aabbccddeeff00\",\"type\":\"file\",\"file\":\"assets/płytki.jpg\",\"x\":-400,\"y\":0,\"width\":320,\"height\":240},"_s));
         // Nothing to change: the same text, byte for byte.
-        const std::optional<QString> same = rewriteCanvas(text, [](const QString &t) { return t; }, [](const QString &p) { return p; });
+        const std::optional<QString> same =
+                rewriteCanvas(text, [](const QString &t) { return t; }, [](const QString &p) { return p; });
         QCOMPARE(*same, text);
         QVERIFY(!rewriteCanvas(u"{"_s, {}, {}));
     }
@@ -171,7 +173,8 @@ private Q_SLOTS:
         c = addNode(c, g);
         int paths = 0;
         const std::optional<QString> out = rewriteCanvas(
-                writeCanvas(c), {}, [](const QString &p) { return p == u"assets/tło.png" ? u"obrazy/tło.png"_s : p; }, &paths);
+                writeCanvas(c), {}, [](const QString &p) { return p == u"assets/tło.png" ? u"obrazy/tło.png"_s : p; },
+                &paths);
         QCOMPARE(paths, 1);
         QVERIFY(out->contains(u"\"background\":\"obrazy/tło.png\""_s));
     }
@@ -211,8 +214,10 @@ private Q_SLOTS:
     void plainCardLines()
     {
         QList<int> levels;
-        const QStringList lines = plainLines(u"# Tytuł\n\n**Ważne** i *mniej* [[Strona|link]]\n- punkt\n  - [ ] podpunkt"_s, 40, 10, &levels);
-        QCOMPARE(lines, (QStringList{u"Tytuł"_s, QString(), u"Ważne i mniej link"_s, u"• punkt"_s, u" [ ] podpunkt"_s}));
+        const QStringList lines = plainLines(
+                u"# Tytuł\n\n**Ważne** i *mniej* [[Strona|link]]\n- punkt\n  - [ ] podpunkt"_s, 40, 10, &levels);
+        QCOMPARE(lines,
+                 (QStringList{u"Tytuł"_s, QString(), u"Ważne i mniej link"_s, u"• punkt"_s, u" [ ] podpunkt"_s}));
         QCOMPARE(levels.at(0), 1);
         QCOMPARE(plainLines(u"jeden dwa trzy cztery"_s, 9, 10), (QStringList{u"jeden dwa"_s, u"trzy"_s, u"cztery"_s}));
         QCOMPARE(plainLines(u"a\nb\nc\nd"_s, 10, 2).size(), 2);

@@ -208,10 +208,11 @@ private Q_SLOTS:
         QCOMPARE(b.editor->nodeData(u"0ba565e7f30e0652"_s).value(u"height"_s).toDouble(), 350.0);
         // A side handle dragged onto another card connects them.
         const int edges = b.editor->edgeCount();
-        click(w, b.screen(-150, -400)); // logo.svg selected: its side handles connect
+        click(w, b.screen(-150, -400));                    // logo.svg selected: its side handles connect
         drag(w, b.screen(-63, -400), b.screen(500, -200)); // logo.svg's right side onto spec/1.0.md
         QCOMPARE(b.editor->edgeCount(), edges + 1);
-        QVERIFY(b.file().contains(u"\"fromNode\":\"7efdbbe0c4742315\",\"fromSide\":\"right\",\"toNode\":\"0ba565e7f30e0652\""_s));
+        QVERIFY(b.file().contains(
+                u"\"fromNode\":\"7efdbbe0c4742315\",\"fromSide\":\"right\",\"toNode\":\"0ba565e7f30e0652\""_s));
         // … and onto empty canvas: a new card there, connected, to type into.
         QSignalSpy edit(b.editor, &CanvasEditor::editRequested);
         const int nodes = b.editor->nodeCount();

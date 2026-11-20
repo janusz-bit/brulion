@@ -33,10 +33,11 @@ QList<std::pair<QString, QString>> notebook()
              lines({u"---"_s, u"status: planowany"_s, u"koszt: 300"_s, u"Budżet: 800"_s, u"termin: 2026-10-10"_s,
                     u"właściciel: \"[[Anna]]\""_s, u"etykiety: [ogród]"_s, u"pilne: false"_s, u"tags: [projekt]"_s,
                     u"---"_s, u"- [ ] Posadzić tulipany"_s})},
-            {u"Projekty/Garaż.md"_s, lines({u"status:: zrobione"_s, u"koszt:: 99.5"_s, u"wlasciciel:: [[Jan Kowalski]]"_s,
-                                            u"tags:: projekt"_s, u""_s, u"- [ ] Pomalować drzwi"_s})},
+            {u"Projekty/Garaż.md"_s,
+             lines({u"status:: zrobione"_s, u"koszt:: 99.5"_s, u"wlasciciel:: [[Jan Kowalski]]"_s, u"tags:: projekt"_s,
+                    u""_s, u"- [ ] Pomalować drzwi"_s})},
             {u"Projekty/Strych.md"_s, lines({u"---"_s, u"status: \"W toku\""_s, u"koszt: \"3,5\""_s,
-                                            u"tags: [projekt]"_s, u"---"_s, u"Notatki."_s})},
+                                             u"tags: [projekt]"_s, u"---"_s, u"Notatki."_s})},
             {u"Ludzie/Jan Kowalski.md"_s, lines({u"---"_s, u"aliases: [Janek]"_s, u"---"_s, u"Hydraulik."_s})},
             {u"Ludzie/Anna.md"_s, u"Ogrodniczka."_s},
             {u"Ekipa.md"_s, u"Ekipa remontowa."_s},
@@ -105,16 +106,16 @@ private Q_SLOTS:
                                       << QString() << true << false;
         QTest::newRow("Polish quotes") << u"status::„w toku”"_s << u"status"_s << int(O::Equals) << u"w toku"_s
                                        << QString() << true << false;
-        QTest::newRow("greater") << u"koszt::>100"_s << u"koszt"_s << int(O::Greater) << u"100"_s << QString()
+        QTest::newRow("greater") << u"koszt::>100"_s << u"koszt"_s << int(O::Greater) << u"100"_s << QString() << false
+                                 << false;
+        QTest::newRow("at most") << u"koszt::<=1200"_s << u"koszt"_s << int(O::LessOrEqual) << u"1200"_s << QString()
                                  << false << false;
-        QTest::newRow("at most") << u"koszt::<=1200"_s << u"koszt"_s << int(O::LessOrEqual) << u"1200"_s
-                                 << QString() << false << false;
         QTest::newRow("spaced operator") << u"koszt::\">= 5\""_s << u"koszt"_s << int(O::Equals) << u">= 5"_s
                                          << QString() << true << false; // quoted: a text
-        QTest::newRow("range") << u"koszt::100..200"_s << u"koszt"_s << int(O::Range) << u"100"_s << u"200"_s
-                               << false << false;
-        QTest::newRow("date range") << u"termin::today..+7d"_s << u"termin"_s << int(O::Range) << u"today"_s
-                                    << u"+7d"_s << false << false;
+        QTest::newRow("range") << u"koszt::100..200"_s << u"koszt"_s << int(O::Range) << u"100"_s << u"200"_s << false
+                               << false;
+        QTest::newRow("date range") << u"termin::today..+7d"_s << u"termin"_s << int(O::Range) << u"today"_s << u"+7d"_s
+                                    << false << false;
         QTest::newRow("none") << u"termin::none"_s << u"termin"_s << int(O::None) << QString() << QString() << false
                               << false;
         QTest::newRow("Polish none") << u"termin::brak"_s << u"termin"_s << int(O::None) << QString() << QString()
@@ -127,14 +128,14 @@ private Q_SLOTS:
                               << false;
         QTest::newRow("link") << u"właściciel::[[Jan Kowalski]]"_s << u"wlasciciel"_s << int(O::Equals)
                               << u"[[Jan Kowalski]]"_s << QString() << false << false;
-        QTest::newRow("Polish key folded") << u"Budżet::>=100"_s << u"budzet"_s << int(O::GreaterOrEqual)
-                                           << u"100"_s << QString() << false << false;
+        QTest::newRow("Polish key folded") << u"Budżet::>=100"_s << u"budzet"_s << int(O::GreaterOrEqual) << u"100"_s
+                                           << QString() << false << false;
         QTest::newRow("quoted key") << u"\"Termin oddania\"::2026-11-01"_s << u"termin-oddania"_s << int(O::Equals)
                                     << u"2026-11-01"_s << QString() << false << false;
-        QTest::newRow("key with a dash") << u"termin-oddania::any"_s << u"termin-oddania"_s << int(O::Any)
-                                         << QString() << QString() << false << false;
-        QTest::newRow("quoted none is text") << u"status::\"none\""_s << u"status"_s << int(O::Equals)
-                                             << u"none"_s << QString() << true << false;
+        QTest::newRow("key with a dash") << u"termin-oddania::any"_s << u"termin-oddania"_s << int(O::Any) << QString()
+                                         << QString() << false << false;
+        QTest::newRow("quoted none is text")
+                << u"status::\"none\""_s << u"status"_s << int(O::Equals) << u"none"_s << QString() << true << false;
         QTest::newRow("equals sign") << u"koszt::=99.5"_s << u"koszt"_s << int(O::Equals) << u"99.5"_s << QString()
                                      << false << false;
     }
@@ -198,8 +199,9 @@ private Q_SLOTS:
 
     void parseViews()
     {
-        const Query q = parsed(u"type:pages view:tabela kolumny:tytuł,status,Budżet,\"Brutto = koszt * 1.23\","
-                               u"\"Koszt (zł) = koszt\",due summary:koszt=suma,Brutto=średnia sort:-koszt group:status"_s);
+        const Query q =
+                parsed(u"type:pages view:tabela kolumny:tytuł,status,Budżet,\"Brutto = koszt * 1.23\","
+                       u"\"Koszt (zł) = koszt\",due summary:koszt=suma,Brutto=średnia sort:-koszt group:status"_s);
         QCOMPARE(q.view, QueryView::Table);
         QCOMPARE(q.columns.size(), 6);
         QCOMPARE(q.columns[0].kind, QueryColumnKind::Title);
@@ -246,8 +248,8 @@ private Q_SLOTS:
         QCOMPARE(u.sort[1].property, u"ocena"_s);
         QVERIFY(u.sort[1].descending);
         QCOMPARE(u.type, QueryType::Blocks);
-        for (const QString &view : {u"widok:kalendarz"_s, u"view:galeria"_s, u"view:cards"_s, u"view:lista"_s,
-                                    u"view:kanban"_s}) {
+        for (const QString &view :
+             {u"widok:kalendarz"_s, u"view:galeria"_s, u"view:cards"_s, u"view:lista"_s, u"view:kanban"_s}) {
             QVERIFY2(parsed(view).view != QueryView::None, qPrintable(view));
         }
     }
@@ -259,8 +261,8 @@ private Q_SLOTS:
         const QString pages = u"type:pages path:Projekty/ "_s;
         QTest::newRow("text equality, case and diacritics")
                 << pages + u"status::\"W TOKU\""_s << QStringList{u"Projekty/Dom.md"_s, u"Projekty/Strych.md"_s};
-        QTest::newRow("bare words need quotes") << pages + u"status::planowany"_s
-                                                << QStringList{u"Projekty/Ogród.md"_s};
+        QTest::newRow("bare words need quotes")
+                << pages + u"status::planowany"_s << QStringList{u"Projekty/Ogród.md"_s};
         QTest::newRow("folded value") << pages + u"status::\"w toku\",planowany"_s
                                       << QStringList{u"Projekty/Dom.md"_s, u"Projekty/Ogród.md"_s,
                                                      u"Projekty/Strych.md"_s};
@@ -273,8 +275,8 @@ private Q_SLOTS:
         QTest::newRow("number equal") << pages + u"koszt::99.5"_s << QStringList{u"Projekty/Garaż.md"_s};
         QTest::newRow("number range") << pages + u"koszt::99..1000"_s
                                       << QStringList{u"Projekty/Garaż.md"_s, u"Projekty/Ogród.md"_s};
-        QTest::newRow("Polish key, diacritics folded") << pages + u"budzet::>1000"_s
-                                                       << QStringList{u"Projekty/Dom.md"_s};
+        QTest::newRow("Polish key, diacritics folded")
+                << pages + u"budzet::>1000"_s << QStringList{u"Projekty/Dom.md"_s};
         QTest::newRow("date before") << pages + u"termin::<today"_s << QStringList{u"Projekty/Ogród.md"_s};
         QTest::newRow("date within a week") << pages + u"termin::today..+7d"_s << QStringList{u"Projekty/Dom.md"_s};
         QTest::newRow("date this month") << pages + u"termin::this-month"_s
@@ -291,14 +293,14 @@ private Q_SLOTS:
                                        << QStringList{u"Projekty/Dom.md"_s, u"Projekty/Garaż.md"_s};
         QTest::newRow("link by bare name") << pages + u"właściciel::anna"_s << QStringList{u"Projekty/Ogród.md"_s};
         QTest::newRow("list item") << pages + u"etykiety::łazienka"_s << QStringList{u"Projekty/Dom.md"_s};
-        QTest::newRow("list item folded") << pages + u"etykiety::lazienka,ogrod"_s
-                                          << QStringList{u"Projekty/Dom.md"_s, u"Projekty/Ogród.md"_s};
+        QTest::newRow("list item folded")
+                << pages + u"etykiety::lazienka,ogrod"_s << QStringList{u"Projekty/Dom.md"_s, u"Projekty/Ogród.md"_s};
         QTest::newRow("checkbox") << pages + u"pilne::tak"_s << QStringList{u"Projekty/Dom.md"_s};
         QTest::newRow("checkbox false") << pages + u"pilne::false"_s << QStringList{u"Projekty/Ogród.md"_s};
         QTest::newRow("glob") << pages + u"status::*tok*"_s
                               << QStringList{u"Projekty/Dom.md"_s, u"Projekty/Strych.md"_s};
-        QTest::newRow("quoted key with blank") << pages + u"\"termin oddania\"::2026-11-01"_s
-                                               << QStringList{u"Projekty/Dom.md"_s};
+        QTest::newRow("quoted key with blank")
+                << pages + u"\"termin oddania\"::2026-11-01"_s << QStringList{u"Projekty/Dom.md"_s};
         QTest::newRow("text compare") << pages + u"status::>r"_s
                                       << QStringList{u"Projekty/Dom.md"_s, u"Projekty/Strych.md"_s,
                                                      u"Projekty/Garaż.md"_s};
@@ -454,11 +456,23 @@ private Q_SLOTS:
 
     void malformedValuesNeverCrash()
     {
-        const QStringList sources{u"a::[["_s,     u"a::]]"_s,       u"a::\""_s,   u"a::„x"_s,
-                                  u"a::<<<5"_s,   u"a::.."_s,       u"a::*"_s,    u"a::[[x]].."_s,
-                                  u"::x"_s,       u"a:: "_s,        u"a::,,,"_s,  u"a::>=[[x]]"_s,
-                                  u"a::9999999999999999999999999"_s, u"a::-1e400"_s, u"a::2026-13-45"_s,
-                                  u"\"\"::x"_s,   u"a::b::c"_s};
+        const QStringList sources{u"a::[["_s,
+                                  u"a::]]"_s,
+                                  u"a::\""_s,
+                                  u"a::„x"_s,
+                                  u"a::<<<5"_s,
+                                  u"a::.."_s,
+                                  u"a::*"_s,
+                                  u"a::[[x]].."_s,
+                                  u"::x"_s,
+                                  u"a:: "_s,
+                                  u"a::,,,"_s,
+                                  u"a::>=[[x]]"_s,
+                                  u"a::9999999999999999999999999"_s,
+                                  u"a::-1e400"_s,
+                                  u"a::2026-13-45"_s,
+                                  u"\"\"::x"_s,
+                                  u"a::b::c"_s};
         for (const QString &s : sources) {
             const auto r = parseQuery(s);
             if (const Query *q = std::get_if<Query>(&r))

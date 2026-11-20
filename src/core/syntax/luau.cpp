@@ -12,17 +12,29 @@ namespace {
 
 constexpr int kMaxInterpolation = 32; // braces of `{…}` inside `…{…}…` strings, nested
 
-bool isIdentStart(QChar c) { return (c >= u'a' && c <= u'z') || (c >= u'A' && c <= u'Z') || c == u'_'; }
-bool isIdentPart(QChar c) { return isIdentStart(c) || (c >= u'0' && c <= u'9'); }
-bool isDigit(QChar c) { return c >= u'0' && c <= u'9'; }
-bool isHexDigit(QChar c) { return isDigit(c) || (c >= u'a' && c <= u'f') || (c >= u'A' && c <= u'F'); }
+bool isIdentStart(QChar c)
+{
+    return (c >= u'a' && c <= u'z') || (c >= u'A' && c <= u'Z') || c == u'_';
+}
+bool isIdentPart(QChar c)
+{
+    return isIdentStart(c) || (c >= u'0' && c <= u'9');
+}
+bool isDigit(QChar c)
+{
+    return c >= u'0' && c <= u'9';
+}
+bool isHexDigit(QChar c)
+{
+    return isDigit(c) || (c >= u'a' && c <= u'f') || (c >= u'A' && c <= u'F');
+}
 
 const QSet<QString> &keywords()
 {
-    static const QSet<QString> set{u"and"_s,   u"break"_s,  u"do"_s,     u"else"_s,  u"elseif"_s, u"end"_s,
-                                   u"for"_s,   u"function"_s, u"if"_s,   u"in"_s,    u"local"_s,  u"not"_s,
-                                   u"or"_s,    u"repeat"_s, u"return"_s, u"then"_s,  u"until"_s,  u"while"_s,
-                                   u"continue"_s};
+    static const QSet<QString> set{u"and"_s,   u"break"_s, u"do"_s,       u"else"_s,    u"elseif"_s,
+                                   u"end"_s,   u"for"_s,   u"function"_s, u"if"_s,      u"in"_s,
+                                   u"local"_s, u"not"_s,   u"or"_s,       u"repeat"_s,  u"return"_s,
+                                   u"then"_s,  u"until"_s, u"while"_s,    u"continue"_s};
     return set;
 }
 
@@ -30,12 +42,12 @@ const QSet<QString> &builtins()
 {
     // Luau's globals in Brulion's sandbox (docs/EXTENSIONS.md "Luau in Brulion"), and `b`.
     static const QSet<QString> set{
-            u"b"_s,         u"string"_s,       u"table"_s,    u"math"_s,     u"utf8"_s,      u"bit32"_s,
-            u"buffer"_s,    u"vector"_s,       u"coroutine"_s, u"os"_s,      u"debug"_s,     u"print"_s,
-            u"assert"_s,    u"error"_s,        u"getmetatable"_s, u"setmetatable"_s, u"ipairs"_s, u"pairs"_s,
-            u"next"_s,      u"pcall"_s,        u"xpcall"_s,   u"rawequal"_s, u"rawget"_s,    u"rawset"_s,
-            u"rawlen"_s,    u"select"_s,       u"tonumber"_s, u"tostring"_s, u"type"_s,      u"typeof"_s,
-            u"unpack"_s,    u"gcinfo"_s,       u"newproxy"_s, u"self"_s};
+            u"b"_s,      u"string"_s, u"table"_s,        u"math"_s,         u"utf8"_s,   u"bit32"_s,
+            u"buffer"_s, u"vector"_s, u"coroutine"_s,    u"os"_s,           u"debug"_s,  u"print"_s,
+            u"assert"_s, u"error"_s,  u"getmetatable"_s, u"setmetatable"_s, u"ipairs"_s, u"pairs"_s,
+            u"next"_s,   u"pcall"_s,  u"xpcall"_s,       u"rawequal"_s,     u"rawget"_s, u"rawset"_s,
+            u"rawlen"_s, u"select"_s, u"tonumber"_s,     u"tostring"_s,     u"type"_s,   u"typeof"_s,
+            u"unpack"_s, u"gcinfo"_s, u"newproxy"_s,     u"self"_s};
     return set;
 }
 
@@ -93,9 +105,7 @@ public:
             pos = end;
             break;
         }
-        case LuauState::Backtick:
-            pos = backtick(0, 0, true);
-            break;
+        case LuauState::Backtick: pos = backtick(0, 0, true); break;
         case LuauState::Code: break;
         }
         code(pos, 0, false);
@@ -234,7 +244,7 @@ private:
     {
         int braces = 0;
         bool afterFunction = false; // the name a `function` statement defines comes next
-        bool afterB = false; // a field of `b` comes next (after its `.`)
+        bool afterB = false;        // a field of `b` comes next (after its `.`)
         qsizetype i = pos;
         while (i < m_s.size()) {
             const QChar c = m_s[i];

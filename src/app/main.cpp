@@ -14,7 +14,7 @@
 #include "appcontroller.h" // the shell (src/app/shell): app state, vault, navigation
 #include "appsettings.h"
 #include "backdrops.h"            // a drawing's backdrop: vault paths → files (src/app/drawing)
-#include "canvasimageprovider.h"   // the pictures of canvases (src/app/canvas)
+#include "canvasimageprovider.h"  // the pictures of canvases (src/app/canvas)
 #include "drawingimageprovider.h" // the previews of drawings, light or dark (src/app/drawing)
 #include "localnetwork.h"         // QML loads nothing from the network (src/app/ui)
 #include "logcontroller.h"        // the event log page's controller (src/app/diag)
@@ -24,12 +24,12 @@
 #include "workspace.h"
 #include "workspacesync.h"
 
+#include "automation/uri.h"      // brulion:// addresses of a launch
 #include "extensions/selftest.h" // ?selftest=extensions in the browser: hostile extensions stopped
 #include "log/categories.h"
 #include "log/logger.h"
 #include "log/slowscope.h"
-#include "automation/uri.h" // brulion:// addresses of a launch
-#include "notebook/share.h"   // --open: files opened with Brulion
+#include "notebook/share.h" // --open: files opened with Brulion
 
 #include <QDir>
 #include <QElapsedTimer>

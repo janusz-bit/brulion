@@ -75,8 +75,7 @@ QStringList examplesIn(const QString &relativePath)
 }
 
 /// A host for an engine that only lists what `b` has.
-class NoHost : public Host
-{
+class NoHost : public Host {
 public:
     QStringList pages(const QString &) override { return {}; }
     std::optional<QString> read(const QString &) override { return std::nullopt; }
@@ -86,21 +85,21 @@ public:
     QVariantMap query(const QString &, int, QString *) override { return {}; }
     QString write(const QString &, const QString &, const QString &) override { return {}; }
     QString appendToJournal(const QString &, const QString &, const QString &) override { return {}; }
-    QString replaceBlock(const QString &, const QString &, const QString &, const std::optional<QString> &, QString *) override
+    QString replaceBlock(const QString &, const QString &, const QString &, const std::optional<QString> &,
+                         QString *) override
     {
         return {};
     }
     QString today() override { return u"2026-11-20"_s; }
     QString language() override { return u"pl"_s; }
     QString uiLanguage() override { return u"pl"_s; }
-    void timer(const QString &, int, const QString &) override {}
-    void log(const QString &, const QString &) override {}
+    void timer(const QString &, int, const QString &) override { }
+    void log(const QString &, const QString &) override { }
 };
 
 } // namespace
 
-class TestExtensionsTypes : public QObject
-{
+class TestExtensionsTypes : public QObject {
     Q_OBJECT
 
 private Q_SLOTS:
@@ -124,8 +123,8 @@ private Q_SLOTS:
         QTest::newRow("a colon for a dot") << u"local d = b:today()"_s << 1 << u"dot instead of a colon"_s;
         QTest::newRow("strict: a text where a number is")
                 << u"--!strict\nlocal n: number = b.today()"_s << 2 << u"number"_s;
-        QTest::newRow("strict: a nil that may be") << u"--!strict\nlocal p = b.page(\"Dom\")\nlocal x = p.name"_s << 3
-                                                    << u"nil"_s;
+        QTest::newRow("strict: a nil that may be")
+                << u"--!strict\nlocal p = b.page(\"Dom\")\nlocal x = p.name"_s << 3 << u"nil"_s;
         QTest::newRow("unreachable code")
                 << u"local function f(x)\n    if x then return 1 else return 2 end\n    print(\"nigdy\")\nend"_s << 3
                 << u"nreachable"_s;
@@ -187,12 +186,14 @@ private Q_SLOTS:
         while (it.hasNext()) {
             it.next();
             const QString content = readSource(samples + u'/' + it.fileName());
-            const PageExtension e = readPageExtension(it.fileName(), markdown::parseNote(it.fileName(), content), content);
+            const PageExtension e =
+                    readPageExtension(it.fileName(), markdown::parseNote(it.fileName(), content), content);
             QTest::newRow(qPrintable(u"sample "_s + it.fileName())) << e.source;
         }
         QStringList docs{u"docs/EXTENSIONS.md"_s};
         for (const QString &lang : {u"en"_s, u"pl"_s}) {
-            QDirIterator pages(QStringLiteral(BRULION_SOURCE_DIR) + u"/src/app/shell/guide/"_s + lang, {u"*.md"_s}, QDir::Files);
+            QDirIterator pages(QStringLiteral(BRULION_SOURCE_DIR) + u"/src/app/shell/guide/"_s + lang, {u"*.md"_s},
+                                              QDir::Files);
             while (pages.hasNext()) {
                 pages.next();
                 docs << u"src/app/shell/guide/"_s + lang + u'/' + pages.fileName();
@@ -232,7 +233,8 @@ private Q_SLOTS:
                 end
             end
             return names
-        )lua"_s, u"names"_s);
+        )lua"_s,
+                                             u"names"_s);
         QVERIFY2(names.ok(), qPrintable(names.error));
         const QString defs = apiDefinitions();
         QVERIFY(defs.contains(u"declare b"_s));

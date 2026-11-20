@@ -1114,7 +1114,8 @@ QVariantMap CanvasEditor::paste(qreal x, qreal y)
     const QMimeData *data = clipboard ? clipboard->mimeData() : nullptr;
     if (!data)
         return out;
-    QPointF at = x < 0 || y < 0 ? (m_pointer ? toCanvas(m_pointer->x(), m_pointer->y()) : viewCenter()) : toCanvas(x, y);
+    QPointF at =
+            x < 0 || y < 0 ? (m_pointer ? toCanvas(m_pointer->x(), m_pointer->y()) : viewCenter()) : toCanvas(x, y);
     const QString text = data->text();
     if (canvas::parseFragment(text))
         return pasteText(text, x, y);
@@ -1142,8 +1143,8 @@ QVariantMap CanvasEditor::paste(qreal x, qreal y)
         QByteArray png;
         QBuffer buffer(&png);
         if (!image.isNull() && buffer.open(QIODevice::WriteOnly) && image.save(&buffer, "PNG")) {
-            const QString name = tr("Pasted image %1").arg(QDateTime::currentDateTime().toString(u"yyyyMMddHHmmss"_s))
-                                 + u".png"_s;
+            const QString name =
+                    tr("Pasted image %1").arg(QDateTime::currentDateTime().toString(u"yyyyMMddHHmmss"_s)) + u".png"_s;
             const QString path = m_host->saveAttachment(name, png);
             if (!path.isEmpty()) {
                 addFile(path, QString(), at.x(), at.y());
@@ -1159,8 +1160,8 @@ QVariantMap CanvasEditor::paste(qreal x, qreal y)
 QVariantMap CanvasEditor::pasteText(const QString &text, qreal x, qreal y)
 {
     QVariantMap out{{u"pasted"_s, 0}, {u"kind"_s, QString()}};
-    const QPointF at = x < 0 || y < 0 ? (m_pointer ? toCanvas(m_pointer->x(), m_pointer->y()) : viewCenter())
-                                      : toCanvas(x, y);
+    const QPointF at =
+            x < 0 || y < 0 ? (m_pointer ? toCanvas(m_pointer->x(), m_pointer->y()) : viewCenter()) : toCanvas(x, y);
     if (const std::optional<canvas::Canvas> fragment = canvas::parseFragment(text)) {
         QStringList ids;
         // The fragment's middle where it is pasted.

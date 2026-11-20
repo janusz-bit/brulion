@@ -41,8 +41,7 @@ NoteChange change(const QString &path, Origin origin, const QString &by = QStrin
 
 } // namespace
 
-class TestExtensionsEvents : public QObject
-{
+class TestExtensionsEvents : public QObject {
     Q_OBJECT
 
 private Q_SLOTS:
@@ -89,7 +88,8 @@ private Q_SLOTS:
 
     void taskStatesOfANote()
     {
-        const QList<TaskState> tasks = tasksOf(u"# Dom\n\n- [ ] Zapłacić czynsz #dom\n- tekst\n  - [x] [[Książki/Lalka|Lalka]] ✅ 2026-11-01\n"_s);
+        const QList<TaskState> tasks = tasksOf(
+                u"# Dom\n\n- [ ] Zapłacić czynsz #dom\n- tekst\n  - [x] [[Książki/Lalka|Lalka]] ✅ 2026-11-01\n"_s);
         QCOMPARE(tasks.size(), 2);
         QCOMPARE(tasks[0].line, 2);
         QCOMPARE(tasks[0].status, u" "_s);

@@ -31,8 +31,7 @@ struct Evaluator::Private {
     bool exhausted = false;
 };
 
-Evaluator::Evaluator(const VaultIndex &index, Options options)
-    : d(std::make_unique<Private>(index, std::move(options)))
+Evaluator::Evaluator(const VaultIndex &index, Options options) : d(std::make_unique<Private>(index, std::move(options)))
 { }
 
 Evaluator::~Evaluator() = default;

@@ -128,9 +128,9 @@ Result base(Call &call)
             return call.failed();
         path = page->path;
         const ParsedNote *note = index->note(path);
-        const auto it = note ? std::ranges::find_if(note->blocks, [](const Block &b) {
-            return b.kind == BlockKind::Code && b.lang == u"base";
-        })
+        const auto it = note ? std::ranges::find_if(
+                                       note->blocks,
+                                       [](const Block &b) { return b.kind == BlockKind::Code && b.lang == u"base"; })
                              : QList<Block>::const_iterator();
         if (!note || it == note->blocks.cend())
             return call.fail(ExitNotFound, u"not_found"_s, tr("The page has no ```base block: %1").arg(ref));
@@ -419,21 +419,20 @@ void addIndexCommands(QList<Command> &out)
                         QT_TRANSLATE_NOOP("brulion::cli",
                                           "type:tasks status:open due:<=+7d sort:due — keys also in Polish"),
                         true, true),
-             option(u"page"_s, ArgType::Ref,
-                    QT_TRANSLATE_NOOP("brulion::cli", "The page page:this / ref:this mean")),
+             option(u"page"_s, ArgType::Ref, QT_TRANSLATE_NOOP("brulion::cli", "The page page:this / ref:this mean")),
              option(u"month"_s, ArgType::Date,
                     QT_TRANSLATE_NOOP("brulion::cli", "view:calendar: the month shown (any day of it)"))}));
-    out.append(make(
-            u"base"_s,
-            QT_TRANSLATE_NOOP("brulion::cli",
-                              "Show an Obsidian base (a .base file, or a page's ```base block) as a table"),
-            base,
-            {positional(u"ref"_s, ArgType::String,
-                        QT_TRANSLATE_NOOP("brulion::cli", "The .base file, or the page with the ```base block")),
-             option(u"view"_s, ArgType::String,
-                    QT_TRANSLATE_NOOP("brulion::cli", "The view: its name or number (default the first)")),
-             option(u"month"_s, ArgType::Date,
-                    QT_TRANSLATE_NOOP("brulion::cli", "A calendar view: the month shown (any day of it)"))}));
+    out.append(
+            make(u"base"_s,
+                 QT_TRANSLATE_NOOP("brulion::cli",
+                                   "Show an Obsidian base (a .base file, or a page's ```base block) as a table"),
+                 base,
+                 {positional(u"ref"_s, ArgType::String,
+                             QT_TRANSLATE_NOOP("brulion::cli", "The .base file, or the page with the ```base block")),
+                  option(u"view"_s, ArgType::String,
+                         QT_TRANSLATE_NOOP("brulion::cli", "The view: its name or number (default the first)")),
+                  option(u"month"_s, ArgType::Date,
+                         QT_TRANSLATE_NOOP("brulion::cli", "A calendar view: the month shown (any day of it)"))}));
     out.append(make(
             u"search"_s,
             QT_TRANSLATE_NOOP("brulion::cli", "Full-text search, diacritic-insensitive (\"zolw\" finds \"żółw\")"),

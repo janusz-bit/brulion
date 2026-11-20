@@ -175,8 +175,8 @@ EdgeShape edgeShape(const Edge &e, const QRectF &from, const QRectF &to)
     const auto [autoFrom, autoTo] = facingSides(from, to);
     const Side fs = sideFrom(e.fromSide).value_or(autoFrom);
     const Side ts = sideFrom(e.toSide).value_or(autoTo);
-    EdgeShape s = shapeBetween(anchor(from, fs), outward(fs), anchor(to, ts), outward(ts), e.arrowAtStart(),
-                               e.arrowAtEnd());
+    EdgeShape s =
+            shapeBetween(anchor(from, fs), outward(fs), anchor(to, ts), outward(ts), e.arrowAtStart(), e.arrowAtEnd());
     s.fromSide = fs;
     s.toSide = ts;
     return s;

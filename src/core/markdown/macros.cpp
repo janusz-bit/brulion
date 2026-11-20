@@ -11,13 +11,22 @@ namespace {
 constexpr int MaxArguments = 32;
 constexpr qsizetype MaxArgumentLength = 500;
 
-bool isBlank(QChar c) { return c == u' ' || c == u'\t'; }
-bool isLineBreak(QChar c) { return c == u'\n' || c == u'\r'; }
+bool isBlank(QChar c)
+{
+    return c == u' ' || c == u'\t';
+}
+bool isLineBreak(QChar c)
+{
+    return c == u'\n' || c == u'\r';
+}
 bool isIdChar(QChar c)
 {
     return (c >= u'a' && c <= u'z') || (c >= u'A' && c <= u'Z') || (c >= u'0' && c <= u'9') || c == u'-' || c == u'_';
 }
-bool isNameChar(QChar c) { return c.isLetterOrNumber() || c == u'-' || c == u'_' || c == u'.'; }
+bool isNameChar(QChar c)
+{
+    return c.isLetterOrNumber() || c == u'-' || c == u'_' || c == u'.';
+}
 
 } // namespace
 
@@ -195,7 +204,8 @@ QList<MacroSpan> findMacrosInNote(QStringView content)
         // Fenced code: from a line of three or more backticks or tildes to one of the same
         // character at least as long (a list item's indented fence too).
         const QStringView trimmed = line.trimmed();
-        const QStringView marker = trimmed.startsWith(u"- ") || trimmed.startsWith(u"* ") ? trimmed.sliced(2).trimmed() : trimmed;
+        const QStringView marker =
+                trimmed.startsWith(u"- ") || trimmed.startsWith(u"* ") ? trimmed.sliced(2).trimmed() : trimmed;
         qsizetype run = 0;
         const QChar first = marker.isEmpty() ? QChar() : marker.front();
         if (first == u'`' || first == u'~') {
@@ -292,7 +302,9 @@ QString macroViewText(const MacroView &view)
     for (const MacroPiece &p : view.pieces) {
         switch (p.kind) {
         case MacroPiece::Kind::Text: out += p.text; break;
-        case MacroPiece::Kind::Link: out += u"[["_s + p.page + (p.text.isEmpty() || p.text == p.page ? QString() : u'|' + p.text) + u"]]"_s; break;
+        case MacroPiece::Kind::Link:
+            out += u"[["_s + p.page + (p.text.isEmpty() || p.text == p.page ? QString() : u'|' + p.text) + u"]]"_s;
+            break;
         case MacroPiece::Kind::Code: out += u'`' + p.text + u'`'; break;
         }
     }

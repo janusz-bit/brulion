@@ -945,8 +945,7 @@ bool touchHoldNow(QQuickWindow *window, QPointF scenePos, const std::function<bo
     return reached;
 }
 
-bool touchHoldDragNow(QQuickWindow *window, QPointF from, QPointF to, const std::function<bool()> &until,
-                      int timeoutMs)
+bool touchHoldDragNow(QQuickWindow *window, QPointF from, QPointF to, const std::function<bool()> &until, int timeoutMs)
 {
     TouchSequence sequence(window, touchDevice());
     sequence.press(0, from.toPoint(), window).commit(false);

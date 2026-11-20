@@ -5838,15 +5838,22 @@ void checkExtensionPages(QQuickWindow *window, AppController *app, const Check &
     check(readAndRun != nullptr, "the page's state line offers Read and run");
     if (readAndRun)
         tapOrClick(window, at, touch);
-    check(waitFor([&] { return named(u"extensionApprovalSummary"_s) != nullptr && named(u"extensionApprovalDiff"_s) != nullptr; },
+    check(waitFor(
+                  [&] {
+                      return named(u"extensionApprovalSummary"_s) != nullptr
+                             && named(u"extensionApprovalDiff"_s) != nullptr;
+                  },
                   10000),
           "which shows the code before it runs");
     const QString samotest = page(
             u"-- z innego urządzenia\n"
-            "b.command(\"pierwsze\", function() return \"jeden\" end, { label = \"Samotest: pierwsze\", key = \"Ctrl+Alt+F9\" })\n"
-            "b.view(\"widok\", function() return b.ui.heading(\"Widok samotestu\") end, nil, { label = \"Samotest: widok\" })\n"
+            "b.command(\"pierwsze\", function() return \"jeden\" end, { label = \"Samotest: pierwsze\", key = "
+            "\"Ctrl+Alt+F9\" })\n"
+            "b.view(\"widok\", function() return b.ui.heading(\"Widok samotestu\") end, nil, { label = \"Samotest: "
+            "widok\" })\n"
             "b.settings({ { key = \"minuty\", label = \"Minuty samotestu\", value = 5, step = 1, unit = \"min\" } })\n"
-            "b.command(\"czas\", function() b.timer(600, { label = \"Samotest\", message = \"Koniec samotestu\" }) end, "
+            "b.command(\"czas\", function() b.timer(600, { label = \"Samotest\", message = \"Koniec samotestu\" }) "
+            "end, "
             "{ label = \"Samotest: czas\" })"_s);
     check(ws->vault()->writeText(path, samotest, ChangeSource::Sync), "a sync changes the code meanwhile");
     check(waitFor([&] { return named(u"extensionApprovalChanged"_s) != nullptr; }, 10000),
@@ -5856,7 +5863,8 @@ void checkExtensionPages(QQuickWindow *window, AppController *app, const Check &
     check(reloadButton != nullptr, "it offers the new version");
     if (reloadButton)
         tapOrClick(window, at, touch);
-    check(waitFor([&] { return named(u"extensionApprovalChanged"_s) == nullptr; }, 5000), "shown, the new version can run");
+    check(waitFor([&] { return named(u"extensionApprovalChanged"_s) == nullptr; }, 5000),
+          "shown, the new version can run");
     const QString runText = QCoreApplication::translate("ShellExtensionApproval", "Run this version");
     QQuickItem *runVersion = steadyItem(
             window,
@@ -5878,7 +5886,11 @@ void checkExtensionPages(QQuickWindow *window, AppController *app, const Check &
         ext->approve(path);
     }
     // Its commands are in Settings → Keyboard shortcuts, with the key one of them suggests.
-    check(waitFor([&] { return app->shortcuts()->sequence(u"ext.rozszerzenie-samotestu.pierwsze"_s) == u"Ctrl+Alt+F9"; }, 5000),
+    check(waitFor(
+                  [&] {
+                      return app->shortcuts()->sequence(u"ext.rozszerzenie-samotestu.pierwsze"_s) == u"Ctrl+Alt+F9";
+                  },
+                  5000),
           "its command has the shortcut it suggests");
     check(!app->shortcuts()->entries(u"Samotest: pierwsze"_s).isEmpty(), "and is listed among the shortcuts");
 
@@ -5891,16 +5903,26 @@ void checkExtensionPages(QQuickWindow *window, AppController *app, const Check &
             [&] {
                 // (In the dialog's row: the top bar has a "More" of its own, under the dialog.)
                 QQuickItem *row = named(u"extensionSetting"_s);
-                return row ? findShown(row, [&](QQuickItem *item) {
-                    return isA(item, "BIconButton") && item->property("label").toString() == moreText;
-                })
+                return row ? findShown(row,
+                                       [&](QQuickItem *item) {
+                                           return isA(item, "BIconButton")
+                                                  && item->property("label").toString() == moreText;
+                                       })
                            : nullptr;
             },
             &at, 5000);
     check(more != nullptr, "a number's + is there");
     if (more)
         tapOrClick(window, at, touch);
-    check(waitFor([&] { return ext->settingsOf(u"rozszerzenie-samotestu"_s).value(0).toMap().value(u"currentNumber"_s).toInt() == 6; },
+    check(waitFor(
+                  [&] {
+                      return ext->settingsOf(u"rozszerzenie-samotestu"_s)
+                                     .value(0)
+                                     .toMap()
+                                     .value(u"currentNumber"_s)
+                                     .toInt()
+                             == 6;
+                  },
                   5000),
           "+ sets it, kept on this device");
     sendKey(window, Qt::Key_Escape);
@@ -6044,7 +6066,8 @@ void checkExtensionMacros(QQuickWindow *window, AppController *app, const Check 
     check(acceptButton != nullptr, "the dialog asks to run it");
     if (acceptButton)
         tapOrClick(window, at, touch);
-    check(waitFor([&] { return ext->pageState(path) == u"running"; }, 10000), "Run this version approves the extension");
+    check(waitFor([&] { return ext->pageState(path) == u"running"; }, 10000),
+          "Run this version approves the extension");
     check(waitFor([&] { return renderedRow(controller, 0).contains(u"<b>1 wpisów</b>"_s); }, 10000),
           "the macro shows its value");
     QQuickItem *field = nullptr;
@@ -6239,30 +6262,34 @@ void checkCanvas(QQuickWindow *window, AppController *app, const Check &check)
     const QString path = u"Samotest tablicy.canvas"_s;
     const QString fileLine = u"\t\t{\"id\":\"b2\",\"type\":\"file\",\"file\":\""_s + target
                              + u"\",\"x\":500,\"y\":0,\"width\":300,\"height\":200}"_s;
-    const QString text = u"{\n\t\"nodes\":[\n\t\t{\"id\":\"a1\",\"type\":\"text\",\"text\":\"Pierwsza karta samotestu\",\"x\":0,\"y\":0,\"width\":250,\"height\":80},\n"_s
-                         + fileLine + u"\n\t],\n\t\"edges\":[]\n}"_s;
+    const QString text =
+            u"{\n\t\"nodes\":[\n\t\t{\"id\":\"a1\",\"type\":\"text\",\"text\":\"Pierwsza karta samotestu\",\"x\":0,\"y\":0,\"width\":250,\"height\":80},\n"_s
+            + fileLine + u"\n\t],\n\t\"edges\":[]\n}"_s;
     check(ws->write(path, text), "a canvas is written as Obsidian writes one");
     app->openPage(path);
     check(waitFor([&] { return app->currentRoute().value(u"view"_s).toString() == u"canvas"; }, 10000),
           "a page route naming a canvas opens the canvas view");
     QQuickItem *board = nullptr;
-    waitFor([&] {
-        board = shownNamed(window->contentItem(), u"canvasBoard"_s);
-        return board && board->width() > 100 && board->property("nodeCount").toInt() == 2;
-    }, 10000);
+    waitFor(
+            [&] {
+                board = shownNamed(window->contentItem(), u"canvasBoard"_s);
+                return board && board->width() > 100 && board->property("nodeCount").toInt() == 2;
+            },
+            10000);
     if (!board) {
         check(false, "the canvas view shows its board");
         return;
     }
     const auto cardsShown = [&] {
-        return uidriver::matching(window, [](QQuickItem *item) {
-                   return item->objectName() == u"canvasCard" && shown(item);
-               }).size();
+        return uidriver::matching(window,
+                                  [](QQuickItem *item) { return item->objectName() == u"canvasCard" && shown(item); })
+                .size();
     };
     check(waitFor([&] { return cardsShown() == 2; }), "both cards are shown");
     check(renderedTextContaining(window->contentItem(), u"Pierwsza karta samotestu"_s) != nullptr,
           "a text card shows its text");
-    check(waitFor([&] { return renderedTextContaining(window->contentItem(), u"Treść celu samotestu"_s) != nullptr; }, 5000),
+    check(waitFor([&] { return renderedTextContaining(window->contentItem(), u"Treść celu samotestu"_s) != nullptr; },
+                  5000),
           "a note card shows its page");
     const auto screen = [&](qreal x, qreal y) {
         QPointF at;
@@ -6299,10 +6326,12 @@ void checkCanvas(QQuickWindow *window, AppController *app, const Check &check)
     else
         uidriver::run(uidriver::mouseDoubleClick(window, spot));
     QQuickItem *area = nullptr;
-    check(waitFor([&] {
-              area = shownNamed(window->contentItem(), u"canvasTextArea"_s);
-              return area && area->hasActiveFocus() && board->property("nodeCount").toInt() == 3;
-          }, 5000),
+    check(waitFor(
+                  [&] {
+                      area = shownNamed(window->contentItem(), u"canvasTextArea"_s);
+                      return area && area->hasActiveFocus() && board->property("nodeCount").toInt() == 3;
+                  },
+                  5000),
           "a double click on empty canvas adds a card to type into");
     uidriver::run(uidriver::typeText(window, u"Nowa karta samotestu"_s, uidriver::KeyDelivery::FocusItem));
     sendKey(window, Qt::Key_Escape);

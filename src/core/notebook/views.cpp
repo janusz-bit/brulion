@@ -99,16 +99,12 @@ QJsonObject viewResultJson(const views::ViewResult &view)
                                      {u"error"_s, cell.error},
                                      {u"target"_s, cell.target}});
         }
-        QJsonObject row{{u"path"_s, r.path},
-                        {u"blockIndex"_s, r.blockIndex},
-                        {u"line"_s, r.line},
-                        {u"ownEndLine"_s, r.ownEndLine},
-                        {u"title"_s, r.title},
-                        {u"cover"_s, r.cover},
-                        {u"coverKind"_s, r.coverKind},
-                        {u"date"_s, r.date.isValid() ? r.date.toString(Qt::ISODate) : QString()},
-                        {u"group"_s, r.group},
-                        {u"cells"_s, cells}};
+        QJsonObject row{
+                {u"path"_s, r.path},           {u"blockIndex"_s, r.blockIndex},
+                {u"line"_s, r.line},           {u"ownEndLine"_s, r.ownEndLine},
+                {u"title"_s, r.title},         {u"cover"_s, r.cover},
+                {u"coverKind"_s, r.coverKind}, {u"date"_s, r.date.isValid() ? r.date.toString(Qt::ISODate) : QString()},
+                {u"group"_s, r.group},         {u"cells"_s, cells}};
         if (r.task)
             row.insert(u"task"_s, taskJson(*r.task));
         rows.append(row);
@@ -143,16 +139,16 @@ QJsonObject viewResultJson(const views::ViewResult &view)
             {u"rows"_s, rows},
             {u"groups"_s, groups},
             {u"newRow"_s, QJsonObject{{u"possible"_s, view.newRow.possible},
-                                       {u"task"_s, view.newRow.task},
-                                       {u"folder"_s, view.newRow.folder},
-                                       {u"tags"_s, QJsonArray::fromStringList(view.newRow.tags)},
-                                       {u"properties"_s, properties},
-                                       {u"taskPage"_s, view.newRow.taskPage}}},
+                                      {u"task"_s, view.newRow.task},
+                                      {u"folder"_s, view.newRow.folder},
+                                      {u"tags"_s, QJsonArray::fromStringList(view.newRow.tags)},
+                                      {u"properties"_s, properties},
+                                      {u"taskPage"_s, view.newRow.taskPage}}},
     };
 }
 
-QJsonObject runView(const VaultIndex &index, const QString &language, const QString &source,
-                    const ViewRequest &request, QueryCache *cache)
+QJsonObject runView(const VaultIndex &index, const QString &language, const QString &source, const ViewRequest &request,
+                    QueryCache *cache)
 {
     const views::ViewOptions options = optionsOf(request);
     if (language == u"base") {
@@ -167,7 +163,8 @@ QJsonObject runView(const VaultIndex &index, const QString &language, const QStr
         QJsonObject out = viewResultJson(std::get<views::ViewResult>(result));
         QJsonArray viewsJson;
         for (const views::BaseView &v : base.views)
-            viewsJson.append(QJsonObject{{u"name"_s, v.name}, {u"type"_s, v.type}, {u"kind"_s, views::viewKindName(v.kind)}});
+            viewsJson.append(
+                    QJsonObject{{u"name"_s, v.name}, {u"type"_s, v.type}, {u"kind"_s, views::viewKindName(v.kind)}});
         out.insert(u"views"_s, viewsJson);
         out.insert(u"view"_s, view >= 0 && view < base.views.size() ? view : 0);
         out.insert(u"problems"_s, QJsonArray::fromStringList(base.problems));
@@ -194,7 +191,8 @@ QJsonObject runView(const VaultIndex &index, const QString &language, const QStr
     out.insert(u"ok"_s, true);
     out.insert(u"error"_s, QString());
     out.insert(u"language"_s, u"query"_s);
-    out.insert(u"columnNames"_s, QJsonArray::fromStringList(views::columnNames(query, std::get<views::ViewResult>(built))));
+    out.insert(u"columnNames"_s,
+               QJsonArray::fromStringList(views::columnNames(query, std::get<views::ViewResult>(built))));
     return out;
 }
 
@@ -202,15 +200,16 @@ views::ViewResult viewResultFromJson(const QJsonObject &json)
 {
     using K = views::ColumnKind;
     static const QHash<QString, K> kinds{
-            {u"title"_s, K::Title},     {u"path"_s, K::Path},       {u"folder"_s, K::Folder},       {u"tags"_s, K::Tags},
-            {u"mtime"_s, K::Modified},  {u"size"_s, K::Size},       {u"date"_s, K::Date},           {u"text"_s, K::Text},
-            {u"status"_s, K::Status},   {u"priority"_s, K::Priority}, {u"due"_s, K::Due},          {u"scheduled"_s, K::Scheduled},
-            {u"start"_s, K::Start},     {u"done"_s, K::Done},       {u"created"_s, K::Created},     {u"property"_s, K::Property},
-            {u"formula"_s, K::Formula},
+            {u"title"_s, K::Title},       {u"path"_s, K::Path},       {u"folder"_s, K::Folder},
+            {u"tags"_s, K::Tags},         {u"mtime"_s, K::Modified},  {u"size"_s, K::Size},
+            {u"date"_s, K::Date},         {u"text"_s, K::Text},       {u"status"_s, K::Status},
+            {u"priority"_s, K::Priority}, {u"due"_s, K::Due},         {u"scheduled"_s, K::Scheduled},
+            {u"start"_s, K::Start},       {u"done"_s, K::Done},       {u"created"_s, K::Created},
+            {u"property"_s, K::Property}, {u"formula"_s, K::Formula},
     };
     static const QHash<QString, views::ViewKind> viewKinds{
-            {u"list"_s, views::ViewKind::List},       {u"table"_s, views::ViewKind::Table},
-            {u"board"_s, views::ViewKind::Board},     {u"gallery"_s, views::ViewKind::Gallery},
+            {u"list"_s, views::ViewKind::List},         {u"table"_s, views::ViewKind::Table},
+            {u"board"_s, views::ViewKind::Board},       {u"gallery"_s, views::ViewKind::Gallery},
             {u"calendar"_s, views::ViewKind::Calendar},
     };
     const auto variantOf = [](const QJsonValue &v) -> QVariant {
@@ -297,7 +296,8 @@ views::ViewResult viewResultFromJson(const QJsonObject &json)
     for (const QJsonValue &t : newRow.value(u"tags"_s).toArray())
         out.newRow.tags.append(t.toString());
     for (const QJsonValue &p : newRow.value(u"properties"_s).toArray())
-        out.newRow.properties.append({p.toObject().value(u"key"_s).toString(), p.toObject().value(u"value"_s).toString()});
+        out.newRow.properties.append(
+                {p.toObject().value(u"key"_s).toString(), p.toObject().value(u"value"_s).toString()});
     out.newRow.taskPage = newRow.value(u"taskPage"_s).toString();
     return out;
 }

@@ -3,9 +3,9 @@
 #include "index/vaultindex.h"
 #include "index/vaultindex_p.h"
 
-#include "index/textutil_p.h"
 #include "canvas/canvas.h"
 #include "canvas/indextext.h"
+#include "index/textutil_p.h"
 #include "markdown/inline.h"
 #include "markdown/parse.h"
 #include "markdown/properties.h"

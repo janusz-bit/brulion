@@ -1506,7 +1506,8 @@ void BlockListModel::recordReads(markdown::RenderContext &ctx, const QString &pa
         ctx.macro = [slot, record, inner = std::move(ctx.macro)](const markdown::MacroSpan &macro) {
             markdown::MacroView view = inner(macro);
             if (*slot)
-                record(RenderRead::Macro, macro.extension + u'/' + macro.name, macro.arguments, QString(), macroValue(view));
+                record(RenderRead::Macro, macro.extension + u'/' + macro.name, macro.arguments, QString(),
+                       macroValue(view));
             return view;
         };
     }
@@ -1657,7 +1658,8 @@ markdown::RenderContext BlockListModel::renderContext(int docIndex) const
     // Macros of extensions (docs/SYNTAX.md §13 "Macros"): what the host computed for this note.
     if (host && host->rendersMacros()) {
         ctx.macro = [host, path](const markdown::MacroSpan &macro) {
-            return host ? host->macroView(macro, path) : markdown::MacroView{markdown::MacroView::State::Pending, {}, {}};
+            return host ? host->macroView(macro, path)
+                        : markdown::MacroView{markdown::MacroView::State::Pending, {}, {}};
         };
     }
     recordReads(ctx, m_path, true);
@@ -1695,7 +1697,8 @@ markdown::RenderContext BlockListModel::renderContextFor(const QString &path, co
     };
     if (host && host->rendersMacros()) {
         ctx.macro = [host, path](const markdown::MacroSpan &macro) {
-            return host ? host->macroView(macro, path) : markdown::MacroView{markdown::MacroView::State::Pending, {}, {}};
+            return host ? host->macroView(macro, path)
+                        : markdown::MacroView{markdown::MacroView::State::Pending, {}, {}};
         };
     }
     recordReads(ctx, path, false);

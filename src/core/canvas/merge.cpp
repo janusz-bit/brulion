@@ -94,7 +94,7 @@ QList<Item> mergeItems(const QList<Item> *base, const QList<Item> &ours, const Q
         if (other.contains(o.id))
             continue;
         if (base && was.contains(o.id))
-            continue; // deleted there: stays deleted
+            continue;  // deleted there: stays deleted
         out.append(o); // (as our file wrote it, when it did not change since)
     }
     return out;

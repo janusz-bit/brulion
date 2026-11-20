@@ -408,8 +408,8 @@ QString writeNew(const Canvas &c)
 {
     const ItemStyle style = styleOf(c);
     const QString lead = u"\n\t"_s;
-    return u"{"_s + lead + u"\"nodes\":"_s + writeArray(nodeTexts(c, style), nullptr, lead) + u','
-           + lead + u"\"edges\":"_s + writeArray(edgeTexts(c, style), nullptr, lead) + u"\n}"_s;
+    return u"{"_s + lead + u"\"nodes\":"_s + writeArray(nodeTexts(c, style), nullptr, lead) + u',' + lead
+           + u"\"edges\":"_s + writeArray(edgeTexts(c, style), nullptr, lead) + u"\n}"_s;
 }
 
 } // namespace
@@ -430,8 +430,8 @@ bool Node::changed() const
 
 bool Edge::sameAs(const Edge &o) const
 {
-    return id == o.id && fromNode == o.fromNode && toNode == o.toNode && fromSide == o.fromSide
-           && toSide == o.toSide && fromEnd == o.fromEnd && toEnd == o.toEnd && color == o.color && label == o.label;
+    return id == o.id && fromNode == o.fromNode && toNode == o.toNode && fromSide == o.fromSide && toSide == o.toSide
+           && fromEnd == o.fromEnd && toEnd == o.toEnd && color == o.color && label == o.label;
 }
 
 bool Edge::changed() const

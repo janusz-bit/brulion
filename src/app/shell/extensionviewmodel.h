@@ -2,12 +2,13 @@
 // ExtensionViewModel — an extension's view as a list for QML (QML type `ExtensionView`, docs/UI.md
 // "Extension views"): the node tree of b.view's render function (b.ui: column, row, card, heading,
 // text, markdown, link, button, check, stepper, input, select, slider, date, toggle, progress,
-// stats, divider, menu, month, chart, table, empty, open, run) flattened into lines, a row's controls in a model of their own. A card's lines stay lines of the flat list, each
-// with its part of the card (lineCard: "first", "middle", "last", "only"; "" outside cards). It renders again when its extension, view or params change,
-// after Workspace.extensions.changed() (a command or an action finished) and when the index
-// changed (a note written anywhere: coalesced) — and at once after an action of its own controls.
-// The same view drawn again with lines of the same kinds changes them in place (dataChanged): the
-// delegates stay, so a number being typed into a stepper keeps its field and the on-screen keyboard.
+// stats, divider, menu, month, chart, table, empty, open, run) flattened into lines, a row's controls in a model of
+// their own. A card's lines stay lines of the flat list, each with its part of the card (lineCard: "first", "middle",
+// "last", "only"; "" outside cards). It renders again when its extension, view or params change, after
+// Workspace.extensions.changed() (a command or an action finished) and when the index changed (a note written anywhere:
+// coalesced) — and at once after an action of its own controls. The same view drawn again with lines of the same kinds
+// changes them in place (dataChanged): the delegates stay, so a number being typed into a stepper keeps its field and
+// the on-screen keyboard.
 //
 //   ExtensionView { id: today; extensions: Workspace.extensions; extension: "silownia"; view: "today" }
 //   Repeater { model: today; delegate: … lineType, lineText, controls … }

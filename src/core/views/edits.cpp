@@ -197,8 +197,8 @@ EditOutcome pagePropertyEdit(const QString &content, const RowEdit &edit)
     const PropertySource source = existing ? existing->source : props.addTarget();
     const QString key = existing ? existing->key : edit.key.trimmed();
     if (!existing && !markdown::checkPropertyKey(key, source).isEmpty())
-        return refused(content, source == PropertySource::Logseq ? messages::blockKeyNotAscii(key)
-                                                                 : messages::notEditable());
+        return refused(content,
+                       source == PropertySource::Logseq ? messages::blockKeyNotAscii(key) : messages::notEditable());
     const markdown::PropertyEditResult r =
             markdown::setPageProperty(content, source, key, pageValue(edit.value, type), type);
     switch (r.status) {
@@ -220,8 +220,7 @@ EditOutcome blockPropertyEdit(const QString &content, const RowEdit &edit)
     const std::optional<QString> value = blockLineValue(edit.value, type);
     if (!value)
         return refused(content, messages::invalidValue(type));
-    const std::optional<QString> current =
-            markdown::blockPropertyText(content, edit.line, edit.ownEndLine, edit.key);
+    const std::optional<QString> current = markdown::blockPropertyText(content, edit.line, edit.ownEndLine, edit.key);
     if (current && *current == *value)
         return outcome(content, content);
     if (!current && value->isEmpty())
@@ -284,8 +283,7 @@ QVariant writtenValue(const QString &value)
 EditOutcome applyRowEdit(const QString &content, const RowEdit &edit, QDate today)
 {
     switch (edit.field) {
-    case EditField::Property:
-        return edit.blockRow ? blockPropertyEdit(content, edit) : pagePropertyEdit(content, edit);
+    case EditField::Property: return edit.blockRow ? blockPropertyEdit(content, edit) : pagePropertyEdit(content, edit);
     case EditField::Status: {
         const QString name = edit.value.toString().trimmed();
         if (name.isEmpty())
@@ -349,8 +347,8 @@ std::optional<RowEdit> moveEdit(const ViewResult &view, const Row &row, int from
         const bool list = e.type == u"list" || e.type == u"tags" || e.type == u"aliases";
         if (list && col) {
             // A list: the old group's value swapped for the new one, its other items kept.
-            QStringList items = view.groupColumn < row.cells.size() ? listOf(row.cells.at(view.groupColumn).value)
-                                                                    : QStringList();
+            QStringList items =
+                    view.groupColumn < row.cells.size() ? listOf(row.cells.at(view.groupColumn).value) : QStringList();
             const QString old = from >= 0 && from < view.groups.size() ? view.groups.at(from).value : QString();
             const auto same = [](const QString &a, const QString &b) {
                 const auto bare = [](QString s) {
@@ -365,7 +363,8 @@ std::optional<RowEdit> moveEdit(const ViewResult &view, const Row &row, int from
             };
             if (!old.isEmpty())
                 items.removeIf([&](const QString &i) { return same(i, old); });
-            if (!target.value.isEmpty() && std::ranges::none_of(items, [&](const QString &i) { return same(i, target.value); }))
+            if (!target.value.isEmpty()
+                && std::ranges::none_of(items, [&](const QString &i) { return same(i, target.value); }))
                 items.append(target.value);
             e.value = items;
         } else {
@@ -413,7 +412,8 @@ QString newPageContent(const ViewResult &view, int group, QDate day)
         return {};
     QString content;
     const auto set = [&](const QString &key, const QVariant &value, PropertyType type) {
-        const markdown::PropertyEditResult r = markdown::setPageProperty(content, PropertySource::Yaml, key, value, type);
+        const markdown::PropertyEditResult r =
+                markdown::setPageProperty(content, PropertySource::Yaml, key, value, type);
         if (r.status == markdown::PropertyEditStatus::Changed)
             content = r.content;
     };
@@ -421,7 +421,8 @@ QString newPageContent(const ViewResult &view, int group, QDate day)
         const QVariant v = writtenValue(value);
         set(key, v, typeOfValue(v));
     }
-    if (group >= 0 && group < view.groups.size() && view.groupKind == u"property" && !view.groups.at(group).value.isEmpty()) {
+    if (group >= 0 && group < view.groups.size() && view.groupKind == u"property"
+        && !view.groups.at(group).value.isEmpty()) {
         const Column *col = view.groupColumn >= 0 ? &view.columns.at(view.groupColumn) : nullptr;
         const QString type = col ? col->type : QString();
         const QString value = view.groups.at(group).value;

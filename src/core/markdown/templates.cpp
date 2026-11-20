@@ -57,9 +57,10 @@ TemplateResult applyTemplate(QStringView tpl, const TemplateVars &vars)
         if (m.capturedLength(3) > 0) {
             // A variable of an extension: what it gives, else as written.
             const QString name = m.captured(4).trimmed();
-            const std::optional<QString> value = vars.variable && isMacroName(name)
-                                                         ? vars.variable(m.captured(3).toLower(), name, m.captured(5).trimmed())
-                                                         : std::nullopt;
+            const std::optional<QString> value =
+                    vars.variable && isMacroName(name)
+                            ? vars.variable(m.captured(3).toLower(), name, m.captured(5).trimmed())
+                            : std::nullopt;
             out.text += value ? *value : m.captured(0);
             continue;
         }

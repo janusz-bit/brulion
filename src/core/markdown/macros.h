@@ -34,10 +34,10 @@ namespace brulion::markdown {
 /// A macro found in a text.
 struct MacroSpan {
     qsizetype from = 0; ///< the `{{`
-    qsizetype to = 0; ///< after the `}}`
-    QString extension; ///< the extension's id, lower case ("silownia")
-    QString name; ///< the macro's name as written ("rekord")
-    QString arguments; ///< what follows the name, trimmed ("Przysiad"); "" for none
+    qsizetype to = 0;   ///< after the `}}`
+    QString extension;  ///< the extension's id, lower case ("silownia")
+    QString name;       ///< the macro's name as written ("rekord")
+    QString arguments;  ///< what follows the name, trimmed ("Przysiad"); "" for none
     bool operator==(const MacroSpan &other) const = default;
 };
 
@@ -78,13 +78,13 @@ struct MacroPiece {
 
 struct MacroView {
     enum class State {
-        Ok, ///< `pieces`
-        Pending, ///< being computed (nothing yet to show)
+        Ok,         ///< `pieces`
+        Pending,    ///< being computed (nothing yet to show)
         Unapproved, ///< its extension waits for approval on this device: a placeholder to approve
-        Off, ///< its extension is switched off on this device (or not running)
-        Unknown, ///< no such extension or macro
-        Error, ///< it failed: `message`
-        TooMany, ///< the page has more macros than are computed (`message` says how many)
+        Off,        ///< its extension is switched off on this device (or not running)
+        Unknown,    ///< no such extension or macro
+        Error,      ///< it failed: `message`
+        TooMany,    ///< the page has more macros than are computed (`message` says how many)
     };
     State state = State::Ok;
     QList<MacroPiece> pieces;
@@ -106,8 +106,8 @@ QString macroViewText(const MacroView &view);
 ///   cwiczenie: Przysiad
 ///   ```
 struct ViewBlock {
-    QString extension; ///< lower case ("silownia"); "" when the block names no view
-    QString view; ///< as written ("dzis")
+    QString extension;  ///< lower case ("silownia"); "" when the block names no view
+    QString view;       ///< as written ("dzis")
     QVariantMap params; ///< key → text
     /// Why it names no view, or a line it could not read ("line 3: not key: value"); "" fine.
     QString problem;

@@ -439,15 +439,32 @@ QVariant ExtensionControlsModel::value(int row, int role) const
 
 QHash<int, QByteArray> ExtensionControlsModel::roleNames() const
 {
-    return {{TypeRole, "controlType"},       {TextRole, "controlText"},   {PageRole, "controlPage"},
-            {CheckedRole, "controlChecked"}, {ValueRole, "controlValue"}, {StepRole, "controlStep"},
-            {UnitRole, "controlUnit"},       {IndexRole, "controlIndex"}, {MutedRole, "controlMuted"},
-            {DisplayRole, "controlDisplay"}, {NumberRole, "controlNumber"}, {StateRole, "controlState"},
-            {LabelRole, "controlLabel"},     {IconRole, "controlIcon"},   {ToneRole, "controlTone"},
-            {HasMenuRole, "controlHasMenu"}, {KeyRole, "controlKey"},     {PrimaryRole, "controlPrimary"},
-            {HintRole, "controlHint"},       {StyledRole, "controlStyled"}, {PlaceholderRole, "controlPlaceholder"},
-            {MultilineRole, "controlMultiline"}, {SubmitRole, "controlSubmit"}, {KeepRole, "controlKeep"},
-            {MinRole, "controlMin"},         {MaxRole, "controlMax"}};
+    return {{TypeRole, "controlType"},
+            {TextRole, "controlText"},
+            {PageRole, "controlPage"},
+            {CheckedRole, "controlChecked"},
+            {ValueRole, "controlValue"},
+            {StepRole, "controlStep"},
+            {UnitRole, "controlUnit"},
+            {IndexRole, "controlIndex"},
+            {MutedRole, "controlMuted"},
+            {DisplayRole, "controlDisplay"},
+            {NumberRole, "controlNumber"},
+            {StateRole, "controlState"},
+            {LabelRole, "controlLabel"},
+            {IconRole, "controlIcon"},
+            {ToneRole, "controlTone"},
+            {HasMenuRole, "controlHasMenu"},
+            {KeyRole, "controlKey"},
+            {PrimaryRole, "controlPrimary"},
+            {HintRole, "controlHint"},
+            {StyledRole, "controlStyled"},
+            {PlaceholderRole, "controlPlaceholder"},
+            {MultilineRole, "controlMultiline"},
+            {SubmitRole, "controlSubmit"},
+            {KeepRole, "controlKeep"},
+            {MinRole, "controlMin"},
+            {MaxRole, "controlMax"}};
 }
 
 bool ExtensionControlsModel::sameKinds(const QList<QVariantMap> &controls) const
@@ -539,14 +556,18 @@ QVariant ExtensionViewModel::data(const QModelIndex &index, int role) const
 
 QHash<int, QByteArray> ExtensionViewModel::roleNames() const
 {
-    return {{TypeRole, "lineType"},          {TextRole, "lineText"},       {TitleRole, "lineTitle"},
-            {MutedRole, "lineMuted"},        {PageRole, "linePage"},       {CellsRole, "lineCells"},
-            {ChartDataRole, "lineChartData"}, {ChartSourceRole, "lineChartSource"}, {ControlsRole, "lineControls"},
-            {HasControlsRole, "lineHasControls"}, {IconRole, "lineIcon"}, {ToneRole, "lineTone"},
-            {CardRole, "lineCard"},          {MonthRole, "lineMonth"},     {DaysRole, "lineDays"},
-            {HtmlRole, "lineHtml"},          {SizeRole, "lineSize"},       {AlignRole, "lineAlign"},
-            {ItemsRole, "lineItems"},        {KeyRole, "lineKey"},         {PrimaryRole, "linePrimary"},
-            {HintRole, "lineHint"},          {StyledRole, "lineStyled"},   {BareRole, "lineBare"}};
+    return {{TypeRole, "lineType"},           {TextRole, "lineText"},
+            {TitleRole, "lineTitle"},         {MutedRole, "lineMuted"},
+            {PageRole, "linePage"},           {CellsRole, "lineCells"},
+            {ChartDataRole, "lineChartData"}, {ChartSourceRole, "lineChartSource"},
+            {ControlsRole, "lineControls"},   {HasControlsRole, "lineHasControls"},
+            {IconRole, "lineIcon"},           {ToneRole, "lineTone"},
+            {CardRole, "lineCard"},           {MonthRole, "lineMonth"},
+            {DaysRole, "lineDays"},           {HtmlRole, "lineHtml"},
+            {SizeRole, "lineSize"},           {AlignRole, "lineAlign"},
+            {ItemsRole, "lineItems"},         {KeyRole, "lineKey"},
+            {PrimaryRole, "linePrimary"},     {HintRole, "lineHint"},
+            {StyledRole, "lineStyled"},       {BareRole, "lineBare"}};
 }
 
 void ExtensionViewModel::setExtensions(WorkspaceExtensions *extensions)

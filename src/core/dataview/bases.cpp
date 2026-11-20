@@ -130,8 +130,10 @@ QList<BToken> lex(const QString &s)
             t.text = s.sliced(i, j - i);
             i = j;
         } else if (c == u'/' && operandNext()) {
-            throw BError{QCoreApplication::translate("brulion::Bases", "Regular expressions are not supported: a note from anywhere could make one run for "
-                            "minutes. Use contains(), startsWith() or split() with a text.")};
+            throw BError{QCoreApplication::translate(
+                    "brulion::Bases",
+                    "Regular expressions are not supported: a note from anywhere could make one run for "
+                    "minutes. Use contains(), startsWith() or split() with a text.")};
         } else {
             static const QStringList twoChar{u"=="_s, u"!="_s, u"<="_s, u">="_s, u"&&"_s, u"||"_s, u"=>"_s};
             const QString two = s.sliced(i, std::min<qsizetype>(2, n - i));
@@ -165,10 +167,10 @@ struct Signature {
 const QHash<QString, Signature> &globalFunctions()
 {
     static const QHash<QString, Signature> table = {
-            {u"if"_s, {2, 3}},       {u"date"_s, {1, 1}},  {u"duration"_s, {1, 1}}, {u"file"_s, {1, 1}},
-            {u"link"_s, {1, 2}},     {u"list"_s, {1, 1}},  {u"max"_s, {1, -1}},     {u"min"_s, {1, -1}},
-            {u"now"_s, {0, 0}},      {u"today"_s, {0, 0}}, {u"number"_s, {1, 1}},   {u"random"_s, {0, 0}},
-            {u"escapehtml"_s, {1, 1}}, {u"html"_s, {1, 1}}, {u"image"_s, {1, 1}},   {u"icon"_s, {1, 1}},
+            {u"if"_s, {2, 3}},         {u"date"_s, {1, 1}},  {u"duration"_s, {1, 1}}, {u"file"_s, {1, 1}},
+            {u"link"_s, {1, 2}},       {u"list"_s, {1, 1}},  {u"max"_s, {1, -1}},     {u"min"_s, {1, -1}},
+            {u"now"_s, {0, 0}},        {u"today"_s, {0, 0}}, {u"number"_s, {1, 1}},   {u"random"_s, {0, 0}},
+            {u"escapehtml"_s, {1, 1}}, {u"html"_s, {1, 1}},  {u"image"_s, {1, 1}},    {u"icon"_s, {1, 1}},
     };
     return table;
 }
@@ -177,23 +179,23 @@ const QHash<QString, Signature> &globalFunctions()
 const QHash<QString, Signature> &methods()
 {
     static const QHash<QString, Signature> table = {
-            {u"istruthy"_s, {0, 0}},   {u"istype"_s, {1, 1}},      {u"tostring"_s, {0, 0}},
-            {u"isempty"_s, {0, 0}},    {u"contains"_s, {1, 1}},    {u"containsall"_s, {1, -1}},
+            {u"istruthy"_s, {0, 0}},     {u"istype"_s, {1, 1}},     {u"tostring"_s, {0, 0}},
+            {u"isempty"_s, {0, 0}},      {u"contains"_s, {1, 1}},   {u"containsall"_s, {1, -1}},
             {u"containsany"_s, {1, -1}}, {u"startswith"_s, {1, 1}}, {u"endswith"_s, {1, 1}},
-            {u"lower"_s, {0, 0}},      {u"upper"_s, {0, 0}},       {u"title"_s, {0, 0}},
-            {u"trim"_s, {0, 0}},       {u"reverse"_s, {0, 0}},     {u"repeat"_s, {1, 1}},
-            {u"slice"_s, {1, 2}},      {u"split"_s, {1, 2}},       {u"replace"_s, {2, 2}},
-            {u"abs"_s, {0, 0}},        {u"ceil"_s, {0, 0}},        {u"floor"_s, {0, 0}},
-            {u"round"_s, {0, 1}},      {u"tofixed"_s, {1, 1}},     {u"date"_s, {0, 0}},
-            {u"format"_s, {1, 1}},     {u"time"_s, {0, 0}},        {u"relative"_s, {0, 0}},
-            {u"filter"_s, {1, 1}},     {u"map"_s, {1, 1}},         {u"reduce"_s, {2, 2}},
-            {u"flat"_s, {0, 0}},       {u"join"_s, {0, 1}},        {u"sort"_s, {0, 0}},
-            {u"unique"_s, {0, 0}},     {u"asfile"_s, {0, 0}},      {u"linksto"_s, {1, 1}},
-            {u"aslink"_s, {0, 1}},     {u"haslink"_s, {1, 1}},     {u"hasproperty"_s, {1, 1}},
-            {u"hastag"_s, {1, -1}},    {u"infolder"_s, {1, 1}},    {u"keys"_s, {0, 0}},
-            {u"values"_s, {0, 0}},     {u"mean"_s, {0, 0}},        {u"average"_s, {0, 0}},
-            {u"sum"_s, {0, 0}},        {u"min"_s, {0, 0}},         {u"max"_s, {0, 0}},
-            {u"median"_s, {0, 0}},     {u"stddev"_s, {0, 0}},      {u"length"_s, {0, 0}},
+            {u"lower"_s, {0, 0}},        {u"upper"_s, {0, 0}},      {u"title"_s, {0, 0}},
+            {u"trim"_s, {0, 0}},         {u"reverse"_s, {0, 0}},    {u"repeat"_s, {1, 1}},
+            {u"slice"_s, {1, 2}},        {u"split"_s, {1, 2}},      {u"replace"_s, {2, 2}},
+            {u"abs"_s, {0, 0}},          {u"ceil"_s, {0, 0}},       {u"floor"_s, {0, 0}},
+            {u"round"_s, {0, 1}},        {u"tofixed"_s, {1, 1}},    {u"date"_s, {0, 0}},
+            {u"format"_s, {1, 1}},       {u"time"_s, {0, 0}},       {u"relative"_s, {0, 0}},
+            {u"filter"_s, {1, 1}},       {u"map"_s, {1, 1}},        {u"reduce"_s, {2, 2}},
+            {u"flat"_s, {0, 0}},         {u"join"_s, {0, 1}},       {u"sort"_s, {0, 0}},
+            {u"unique"_s, {0, 0}},       {u"asfile"_s, {0, 0}},     {u"linksto"_s, {1, 1}},
+            {u"aslink"_s, {0, 1}},       {u"haslink"_s, {1, 1}},    {u"hasproperty"_s, {1, 1}},
+            {u"hastag"_s, {1, -1}},      {u"infolder"_s, {1, 1}},   {u"keys"_s, {0, 0}},
+            {u"values"_s, {0, 0}},       {u"mean"_s, {0, 0}},       {u"average"_s, {0, 0}},
+            {u"sum"_s, {0, 0}},          {u"min"_s, {0, 0}},        {u"max"_s, {0, 0}},
+            {u"median"_s, {0, 0}},       {u"stddev"_s, {0, 0}},     {u"length"_s, {0, 0}},
     };
     return table;
 }
@@ -601,9 +603,9 @@ Value fileOf(const Value &v, Context &ctx)
         return f && isFileObject(*f) ? *f : Value();
     }
     if (v.is(T::Link) || v.is(T::String)) {
-        LinkValue l = v.is(T::Link) ? v.asLink()
-                                    : ctx.resolveLink(v.asString(), QString(), QString(), false,
-                                                      ctx.options().currentPath);
+        LinkValue l = v.is(T::Link)
+                              ? v.asLink()
+                              : ctx.resolveLink(v.asString(), QString(), QString(), false, ctx.options().currentPath);
         if (!l.resolved && v.is(T::Link))
             l = ctx.resolveLink(l.path, QString(), QString(), false, ctx.options().currentPath);
         if (!l.resolved)
@@ -648,7 +650,8 @@ bool basesEquals(const Value &x, const Value &y, Context &ctx)
                 return {r.path, r.resolved};
             }
             if (v.is(T::String)) {
-                const LinkValue r = ctx.resolveLink(v.asString(), QString(), QString(), false, ctx.options().currentPath);
+                const LinkValue r =
+                        ctx.resolveLink(v.asString(), QString(), QString(), false, ctx.options().currentPath);
                 return {r.resolved ? r.path : v.asString(), r.resolved};
             }
             return {QString(), false};
@@ -808,7 +811,11 @@ QString formatMoment(const DateValue &d, QStringView fmt)
             if (n == 1 && i + 2 < fmt.size() + 1 && fmt.sliced(i).startsWith(u"Do")) {
                 const int day = date.day();
                 const int r = day % 100;
-                const char *suffix = r >= 11 && r <= 13 ? "th" : day % 10 == 1 ? "st" : day % 10 == 2 ? "nd" : day % 10 == 3 ? "rd" : "th";
+                const char *suffix = r >= 11 && r <= 13 ? "th"
+                                     : day % 10 == 1    ? "st"
+                                     : day % 10 == 2    ? "nd"
+                                     : day % 10 == 3    ? "rd"
+                                                        : "th";
                 out += QString::number(day) + QLatin1String(suffix);
                 i += 2;
                 continue;
@@ -858,7 +865,8 @@ QString relative(const DateValue &d, Context &ctx)
         amount = messages::months(int(std::max<qint64>(1, (a + 15 * 86400) / (30 * 86400))));
     else
         amount = messages::years(int(std::max<qint64>(1, (a + 182 * 86400) / (365 * 86400))));
-    return secs >= 0 ? QCoreApplication::translate("brulion::Bases", "in %1").arg(amount) : QCoreApplication::translate("brulion::Bases", "%1 ago").arg(amount);
+    return secs >= 0 ? QCoreApplication::translate("brulion::Bases", "in %1").arg(amount)
+                     : QCoreApplication::translate("brulion::Bases", "%1 ago").arg(amount);
 }
 
 const ValueList &listOrEmpty(const Value &v)
@@ -1081,7 +1089,8 @@ Value bArith(const Args &a, Context &ctx)
     const Value &x = a.at(1);
     const Value &y = a.at(2);
     if ((op == u"+" || op == u"-") && x.is(T::Date) && (y.is(T::String) || y.is(T::Duration))) {
-        const std::optional<Duration> d = y.is(T::Duration) ? std::optional(y.asDuration()) : basesDuration(y.asString());
+        const std::optional<Duration> d =
+                y.is(T::Duration) ? std::optional(y.asDuration()) : basesDuration(y.asString());
         if (d)
             return Value::date(shift(x.asDate(), *d, op == u"+" ? 1 : -1));
         if (op == u"-")
@@ -1093,7 +1102,8 @@ Value bArith(const Args &a, Context &ctx)
             return Value();
         const double f = op == u"*" ? n : 1 / n;
         const Duration d = x.asDuration();
-        return Value::duration(Duration{qint64(std::llround(double(d.months) * f)), qint64(std::llround(double(d.ms) * f))});
+        return Value::duration(
+                Duration{qint64(std::llround(double(d.months) * f)), qint64(std::llround(double(d.ms) * f))});
     }
     if (op == u"*" && x.is(T::Number) && y.is(T::Duration))
         return bArith({Value::string(op), y, x}, ctx);

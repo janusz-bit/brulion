@@ -368,7 +368,9 @@ QVariantMap Workspace::runView(const QString &language, const QString &source, c
                                const QVariantMap &state)
 {
     if (!m_index || !m_vault) {
-        return QVariantMap{{u"ok"_s, false}, {u"error"_s, tr("No notebook is open.")}, {u"language"_s, language},
+        return QVariantMap{{u"ok"_s, false},
+                           {u"error"_s, tr("No notebook is open.")},
+                           {u"language"_s, language},
                            {u"complete"_s, !indexing()}};
     }
     const VaultPath path = paths::normalize(currentPath);
@@ -383,8 +385,8 @@ QVariantMap Workspace::runView(const QString &language, const QString &source, c
     const Vault *vault = m_vault.get();
     request.stat = [vault](const VaultPath &p) { return vault->stat(p); };
     request.newPagesFolder = config.newPagesFolder;
-    const QString key = language + u'\x1f' + source + u'\x1f' + path + u'\x1f' + QString::number(request.view)
-                        + u'\x1f' + request.viewName + u'\x1f' + request.month.toString(Qt::ISODate);
+    const QString key = language + u'\x1f' + source + u'\x1f' + path + u'\x1f' + QString::number(request.view) + u'\x1f'
+                        + request.viewName + u'\x1f' + request.month.toString(Qt::ISODate);
     QVariantMap out;
     if (language == u"base") {
         // A base reads every file: its result is kept for the index version and the minute.

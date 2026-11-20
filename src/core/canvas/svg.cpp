@@ -185,16 +185,16 @@ QString toSvg(const Canvas &c, const SvgOptions &options)
     out += u"<defs>\n"_s;
     for (qsizetype i = 0; i < c.nodes.size(); ++i) {
         const QRectF r = nodeRect(c.nodes.at(i));
-        out += u"<clipPath id=\"c"_s + QString::number(i) + u"\"><rect x=\""_s + num(r.x()) + u"\" y=\""_s
-               + num(r.y()) + u"\" width=\""_s + num(r.width()) + u"\" height=\""_s + num(r.height()) + u"\" rx=\""_s
+        out += u"<clipPath id=\"c"_s + QString::number(i) + u"\"><rect x=\""_s + num(r.x()) + u"\" y=\""_s + num(r.y())
+               + u"\" width=\""_s + num(r.width()) + u"\" height=\""_s + num(r.height()) + u"\" rx=\""_s
                + num(CardRadius) + u"\"/></clipPath>\n"_s;
     }
     out += u"</defs>\n"_s;
 
     const auto text = [&](double x, double y, const QString &t, double sizePx, const QString &color, bool bold) {
         return u"<text x=\""_s + num(x) + u"\" y=\""_s + num(y) + u"\" font-size=\""_s + num(sizePx) + u"\" fill=\""_s
-               + color + u'"' + (bold ? u" font-weight=\"600\""_s : QString()) + u" xml:space=\"preserve\">"_s
-               + esc(t) + u"</text>\n"_s;
+               + color + u'"' + (bold ? u" font-weight=\"600\""_s : QString()) + u" xml:space=\"preserve\">"_s + esc(t)
+               + u"</text>\n"_s;
     };
     const auto linesIn = [&](const QRectF &r, double top, const QString &markdown, const QString &clip) {
         QString s;
@@ -207,8 +207,10 @@ QString toSvg(const Canvas &c, const SvgOptions &options)
         double y = top;
         for (qsizetype i = 0; i < lines.size(); ++i) {
             const int level = levels.value(i);
-            const double sz = level == 1 ? TextSize * 1.5 : level == 2 ? TextSize * 1.3 : level > 2 ? TextSize * 1.1
-                                                                                                     : TextSize;
+            const double sz = level == 1   ? TextSize * 1.5
+                              : level == 2 ? TextSize * 1.3
+                              : level > 2  ? TextSize * 1.1
+                                           : TextSize;
             y += level > 0 ? sz * 1.4 : TextLine;
             s += text(r.x() + CardPadding, y - 6, lines.at(i), sz, p.text, level > 0);
         }
@@ -226,10 +228,12 @@ QString toSvg(const Canvas &c, const SvgOptions &options)
         const QString stroke = color.isEmpty() ? p.border : color;
         out += u"<rect x=\""_s + num(r.x()) + u"\" y=\""_s + num(r.y()) + u"\" width=\""_s + num(r.width())
                + u"\" height=\""_s + num(r.height()) + u"\" rx=\""_s + num(CardRadius) + u"\" fill=\""_s
-               + (color.isEmpty() ? p.card : color) + u"\" fill-opacity=\""_s + (color.isEmpty() ? u"0.35"_s : u"0.08"_s)
-               + u"\" stroke=\""_s + stroke + u"\" stroke-width=\"2\"/>\n"_s;
+               + (color.isEmpty() ? p.card : color) + u"\" fill-opacity=\""_s
+               + (color.isEmpty() ? u"0.35"_s : u"0.08"_s) + u"\" stroke=\""_s + stroke
+               + u"\" stroke-width=\"2\"/>\n"_s;
         if (!n.label.isEmpty())
-            out += text(r.x() + 4, r.y() - 10, n.label.simplified(), TextSize * 1.15, color.isEmpty() ? p.muted : color, true);
+            out += text(r.x() + 4, r.y() - 10, n.label.simplified(), TextSize * 1.15, color.isEmpty() ? p.muted : color,
+                        true);
     }
     for (const Edge &e : c.edges) {
         const EdgeShape s = edgeShape(c, e);
@@ -277,8 +281,9 @@ QString toSvg(const Canvas &c, const SvgOptions &options)
             const QString data = options.pictureDataUrl ? options.pictureDataUrl(n.file) : QString();
             if (!data.isEmpty() && safeDataUrl(data)) {
                 out += u"<image x=\""_s + num(r.x()) + u"\" y=\""_s + num(r.y()) + u"\" width=\""_s + num(r.width())
-                       + u"\" height=\""_s + num(r.height()) + u"\" preserveAspectRatio=\"xMidYMid meet\" clip-path=\"url(#"_s
-                       + clip + u")\" href=\""_s + esc(data) + u"\"/>\n"_s;
+                       + u"\" height=\""_s + num(r.height())
+                       + u"\" preserveAspectRatio=\"xMidYMid meet\" clip-path=\"url(#"_s + clip + u")\" href=\""_s
+                       + esc(data) + u"\"/>\n"_s;
             } else {
                 out += u"<g clip-path=\"url(#"_s + clip + u")\">"_s
                        + text(r.x() + CardPadding, r.y() + CardPadding + TextSize, name, TextSize, p.muted, true)
@@ -289,7 +294,8 @@ QString toSvg(const Canvas &c, const SvgOptions &options)
             }
         } else if (n.isLink()) {
             out += u"<g clip-path=\"url(#"_s + clip + u")\">"_s
-                   + text(r.x() + CardPadding, r.y() + CardPadding + TextSize, n.url.trimmed(), TextSize, p.muted, false)
+                   + text(r.x() + CardPadding, r.y() + CardPadding + TextSize, n.url.trimmed(), TextSize, p.muted,
+                          false)
                    + u"</g>\n"_s;
         } else {
             out += linesIn(r, r.y() + CardPadding - 4, n.text, clip);

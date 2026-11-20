@@ -75,8 +75,7 @@ QString toneOf(const QVariantMap &node)
     return tone == u"success" || tone == u"danger" || tone == u"accent" ? tone : QString();
 }
 
-struct Builder
-{
+struct Builder {
     bool comma = false;
     markdown::MacroView view;
     int characters = 0;
@@ -115,7 +114,8 @@ struct Builder
             error = u"the value is nested too deeply"_s;
             return false;
         }
-        if (value.metaType().id() == QMetaType::QString || isNumber(value) || value.metaType().id() == QMetaType::Bool) {
+        if (value.metaType().id() == QMetaType::QString || isNumber(value)
+            || value.metaType().id() == QMetaType::Bool) {
             add({markdown::MacroPiece::Kind::Text, scalarText(value, comma), {}, {}, false});
             return true;
         }
@@ -130,7 +130,11 @@ struct Builder
             const QVariantMap node = value.toMap();
             const QString type = node.value(u"type"_s).toString();
             if (type == u"text") {
-                add({markdown::MacroPiece::Kind::Text, scalarText(node.value(u"text"_s), comma), {}, toneOf(node), false});
+                add({markdown::MacroPiece::Kind::Text,
+                     scalarText(node.value(u"text"_s), comma),
+                     {},
+                     toneOf(node),
+                     false});
                 return true;
             }
             if (type == u"heading") {
@@ -252,7 +256,10 @@ bool MacroCache::store(const QString &key, const markdown::MacroView &view, cons
     return changed;
 }
 
-int MacroCache::timeouts(const QString &key) const { return m_entries.value(key).timeouts; }
+int MacroCache::timeouts(const QString &key) const
+{
+    return m_entries.value(key).timeouts;
+}
 
 void MacroCache::countTimeout(const QString &key)
 {

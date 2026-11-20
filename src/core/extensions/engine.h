@@ -115,19 +115,17 @@ struct ViewInfo
 
 /// A macro an extension offers (b.macro, docs/EXTENSIONS.md "Macros"): `{{ext:<extension>/<name> …}}`
 /// in a note shows what it returns.
-struct MacroInfo
-{
+struct MacroInfo {
     QString extension;
     QString name;
-    QString description; ///< meta.description: what it shows (the editor's suggestions)
+    QString description;   ///< meta.description: what it shows (the editor's suggestions)
     QStringList arguments; ///< meta.args: its arguments' names ("exercise"), for the suggestions
-    QString example; ///< meta.example: arguments to suggest ("Przysiad")
+    QString example;       ///< meta.example: arguments to suggest ("Przysiad")
 };
 
 /// A variable an extension offers to templates (b.variable, docs/TEMPLATES.md "Variables of
 /// extensions"): `{{<extension>/<name> …}}` in a template is filled with what it returns.
-struct VariableInfo
-{
+struct VariableInfo {
     QString extension;
     QString name;
     QString description;
@@ -136,10 +134,9 @@ struct VariableInfo
 
 /// What calls read of the notebook while a recording is on (Engine::startRecording): a macro is
 /// computed again when one of these changes.
-struct Reads
-{
-    QSet<QString> paths; ///< the notes it read by name (b.read, b.page, b.lines, b.blocks({page}))
-    QSet<QString> names; ///< names it read that are no note (b.read gave nil), folded (text::foldKey)
+struct Reads {
+    QSet<QString> paths;     ///< the notes it read by name (b.read, b.page, b.lines, b.blocks({page}))
+    QSet<QString> names;     ///< names it read that are no note (b.read gave nil), folded (text::foldKey)
     bool everything = false; ///< a query, a search, a list of pages or blocks, the revision: any note
 };
 
@@ -154,21 +151,20 @@ struct HookInfo
 /// What the questions and the settings may show (docs/EXTENSIONS.md "Sandbox and limits"): a
 /// question's text is cut to fit — a megabyte of prompt never reaches a dialog —, a list or a form
 /// that is too long is an error.
-struct QuestionLimits
-{
-    static constexpr int title = 300; ///< characters of a prompt's first line (the dialog's title)
-    static constexpr int text = 10000; ///< characters of the lines under it …
-    static constexpr int lines = 200; ///< … and lines
-    static constexpr int options = 500; ///< b.choose: options
-    static constexpr int option = 500; ///< characters of one option
-    static constexpr int fields = 50; ///< b.form: fields
-    static constexpr int label = 200; ///< characters of a field's label, a setting's label
-    static constexpr int value = 10000; ///< characters of a text field's value
-    static constexpr int timerLabel = 100; ///< b.timer's label
+struct QuestionLimits {
+    static constexpr int title = 300;        ///< characters of a prompt's first line (the dialog's title)
+    static constexpr int text = 10000;       ///< characters of the lines under it …
+    static constexpr int lines = 200;        ///< … and lines
+    static constexpr int options = 500;      ///< b.choose: options
+    static constexpr int option = 500;       ///< characters of one option
+    static constexpr int fields = 50;        ///< b.form: fields
+    static constexpr int label = 200;        ///< characters of a field's label, a setting's label
+    static constexpr int value = 10000;      ///< characters of a text field's value
+    static constexpr int timerLabel = 100;   ///< b.timer's label
     static constexpr int timerMessage = 300; ///< b.timer's message
-    static constexpr int settings = 32; ///< b.settings: fields
+    static constexpr int settings = 32;      ///< b.settings: fields
     static constexpr int settingText = 4000; ///< characters of a setting's text
-    static constexpr int requireDepth = 16; ///< b.require inside b.require
+    static constexpr int requireDepth = 16;  ///< b.require inside b.require
 };
 
 class Engine
@@ -261,11 +257,10 @@ private:
         QString icon;
         bool palette = true;
         QString panel; // a view's meta.panel
-        QString key; // a command's meta.key
+        QString key;   // a command's meta.key
     };
     /// A macro or a template variable (b.macro, b.variable).
-    struct Contribution
-    {
+    struct Contribution {
         QString extension;
         int ref = 0;
         QString description;
@@ -284,10 +279,10 @@ private:
         QStringList permissions;
         QVariantMap data;
         QString name; // as errors name it: Extension::name, else the id
-        QVariantList settings; // declared with b.settings (settingsOf())
-        QStringList modules; // the pages b.require loaded, by path, in order
+        QVariantList settings;          // declared with b.settings (settingsOf())
+        QStringList modules;            // the pages b.require loaded, by path, in order
         QHash<QString, int> moduleRefs; // path → registry ref of the module's value
-        QStringList requiring; // the modules whose code runs now (a cycle is an error)
+        QStringList requiring;          // the modules whose code runs now (a cycle is an error)
     };
 
     static void *alloc(void *ud, void *ptr, size_t osize, size_t nsize);
@@ -478,9 +473,9 @@ private:
     QHash<QString, Contribution> m_variables;
     Reads *m_reads = nullptr; // a recording is on (startRecording)
     Reads m_recorded;
-    bool m_noWrites = false; // a macro's or a variable's call runs: writes are refused
-    int m_requireFactoryRef = 0; // the b.require wrapper's factory (a prelude)
-    bool m_loading = false; // load(): what the top level returns is no result (a library's table)
+    bool m_noWrites = false;                 // a macro's or a variable's call runs: writes are refused
+    int m_requireFactoryRef = 0;             // the b.require wrapper's factory (a prelude)
+    bool m_loading = false;                  // load(): what the top level returns is no result (a library's table)
     QHash<QString, QByteArray> m_moduleCode; // a module's bytecode by its hash (compiled once)
 };
 

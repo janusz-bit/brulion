@@ -45,21 +45,19 @@ struct PageQuery
 
 /// b.require: the code of an extension page another extension uses (docs/EXTENSIONS.md "Shared
 /// code"), or why there is none (`error`).
-struct ModuleSource
-{
-    QString id; ///< the page's extension id ("wspolne-funkcje")
-    QString title; ///< as errors name it ("Wspólne funkcje")
-    QString path; ///< the page in the notebook
+struct ModuleSource {
+    QString id;     ///< the page's extension id ("wspolne-funkcje")
+    QString title;  ///< as errors name it ("Wspólne funkcje")
+    QString path;   ///< the page in the notebook
     QString source; ///< its code with the page's line numbers (ExtensionCode::source)
-    QString hash; ///< PageExtension::hash: what was approved
-    QString error; ///< "" or why it cannot be used ("waits for approval on this device")
+    QString hash;   ///< PageExtension::hash: what was approved
+    QString error;  ///< "" or why it cannot be used ("waits for approval on this device")
 };
 
 /// b.timer: an extension's own timer (one per extension: a new one replaces it).
-struct TimerSpec
-{
+struct TimerSpec {
     int seconds = 0; ///< 1 … 86 400
-    QString label; ///< what it times ("Herbata"), at most 100 characters; "" = the app's word
+    QString label;   ///< what it times ("Herbata"), at most 100 characters; "" = the app's word
     QString message; ///< what its end says ("Herbata gotowa."), at most 300 characters; "" = the app's
 };
 

@@ -24,12 +24,11 @@
 
 namespace brulion::extensions {
 
-struct TypeProblem
-{
-    int line = 0; ///< 1-based, as the code's lines (an extension page's own lines)
-    int column = 0; ///< 1-based
+struct TypeProblem {
+    int line = 0;    ///< 1-based, as the code's lines (an extension page's own lines)
+    int column = 0;  ///< 1-based
     QString message; ///< Luau's words: "Unknown global 'x'", "Key 'raed' not found in table 'b'"
-    QString kind; ///< "type" (the checker) | "lint" (a lint warning: its name, "LocalUnused" …)
+    QString kind;    ///< "type" (the checker) | "lint" (a lint warning: its name, "LocalUnused" …)
 };
 
 constexpr int kMaxTypeProblems = 50;

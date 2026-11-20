@@ -30,8 +30,7 @@ namespace {
 const std::string kModule = "extension";
 
 /// The one module a check reads: the code being checked.
-struct OneSource : Luau::FileResolver
-{
+struct OneSource : Luau::FileResolver {
     std::string source;
     std::optional<Luau::SourceCode> readSource(const Luau::ModuleName &name) override
     {
@@ -43,28 +42,29 @@ struct OneSource : Luau::FileResolver
 };
 
 /// Nonstrict (the code says `--!strict` or `--!nocheck` itself), the lints that point at mistakes.
-struct Settings : Luau::ConfigResolver
-{
+struct Settings : Luau::ConfigResolver {
     Luau::Config config;
     Settings()
     {
         config.mode = Luau::Mode::Nonstrict;
         config.enabledLint.warningMask = 0;
         using C = Luau::LintWarning::Code;
-        for (const C code : {C::Code_GlobalUsedAsLocal, C::Code_BuiltinGlobalWrite, C::Code_PlaceholderRead,
-                             C::Code_UnreachableCode, C::Code_UnknownType, C::Code_ForRange, C::Code_UnbalancedAssignment,
-                             C::Code_DuplicateLocal, C::Code_FormatString, C::Code_TableLiteral,
-                             C::Code_UninitializedLocal, C::Code_DuplicateFunction, C::Code_DeprecatedApi,
-                             C::Code_TableOperations, C::Code_DuplicateCondition, C::Code_MisleadingAndOr,
-                             C::Code_CommentDirective, C::Code_IntegerParsing, C::Code_ComparisonPrecedence})
+        for (const C code :
+             {C::Code_GlobalUsedAsLocal, C::Code_BuiltinGlobalWrite, C::Code_PlaceholderRead, C::Code_UnreachableCode,
+              C::Code_UnknownType, C::Code_ForRange, C::Code_UnbalancedAssignment, C::Code_DuplicateLocal,
+              C::Code_FormatString, C::Code_TableLiteral, C::Code_UninitializedLocal, C::Code_DuplicateFunction,
+              C::Code_DeprecatedApi, C::Code_TableOperations, C::Code_DuplicateCondition, C::Code_MisleadingAndOr,
+              C::Code_CommentDirective, C::Code_IntegerParsing, C::Code_ComparisonPrecedence})
             config.enabledLint.enableWarning(code);
     }
-    const Luau::Config &getConfig(const Luau::ModuleName &, const Luau::TypeCheckLimits &) const override { return config; }
+    const Luau::Config &getConfig(const Luau::ModuleName &, const Luau::TypeCheckLimits &) const override
+    {
+        return config;
+    }
 };
 
 /// A thread's checker: the builtins and the declarations of `b`, read once.
-struct Checker
-{
+struct Checker {
     OneSource source;
     Settings settings;
     std::unique_ptr<Luau::Frontend> frontend;
@@ -91,7 +91,10 @@ Checker &checker()
     return c;
 }
 
-QString text(const std::string &s) { return QString::fromStdString(s); }
+QString text(const std::string &s)
+{
+    return QString::fromStdString(s);
+}
 
 /// Whether an error of nonstrict code is a mistake whatever the code means: a name that is not
 /// there, a syntax error, a call with too few arguments, `b:today()` for `b.today()`. The rest —
@@ -100,9 +103,10 @@ QString text(const std::string &s) { return QString::fromStdString(s); }
 /// for that.
 bool mistakeWhateverTheMode(const Luau::TypeError &error)
 {
-    if (Luau::get<Luau::SyntaxError>(error) || Luau::get<Luau::UnknownSymbol>(error) || Luau::get<Luau::UnknownProperty>(error)
-        || Luau::get<Luau::UnknownPropButFoundLikeProp>(error) || Luau::get<Luau::DeprecatedApiUsed>(error)
-        || Luau::get<Luau::FunctionDoesNotTakeSelf>(error) || Luau::get<Luau::FunctionRequiresSelf>(error))
+    if (Luau::get<Luau::SyntaxError>(error) || Luau::get<Luau::UnknownSymbol>(error)
+        || Luau::get<Luau::UnknownProperty>(error) || Luau::get<Luau::UnknownPropButFoundLikeProp>(error)
+        || Luau::get<Luau::DeprecatedApiUsed>(error) || Luau::get<Luau::FunctionDoesNotTakeSelf>(error)
+        || Luau::get<Luau::FunctionRequiresSelf>(error))
         return true;
     // Too many arguments are often the extra values of a call (`trim(s:gsub(…))`): dropped, fine.
     const Luau::CountMismatch *count = Luau::get<Luau::CountMismatch>(error);
@@ -111,7 +115,10 @@ bool mistakeWhateverTheMode(const Luau::TypeError &error)
 
 } // namespace
 
-bool typeCheckerAvailable() { return true; }
+bool typeCheckerAvailable()
+{
+    return true;
+}
 
 QString apiDefinitions()
 {
@@ -140,7 +147,8 @@ QList<TypeProblem> typeCheck(const QString &source, int timeLimitMs)
             if (error.moduleName != kModule || (!strict && !mistakeWhateverTheMode(error)))
                 continue;
             out.append({int(error.location.begin.line) + 1, int(error.location.begin.column) + 1,
-                        text(Luau::toString(error, Luau::TypeErrorToStringOptions{c.frontend->fileResolver})), u"type"_s});
+                        text(Luau::toString(error, Luau::TypeErrorToStringOptions{c.frontend->fileResolver})),
+                        u"type"_s});
         }
         for (const auto *list : {&result.lintResult.errors, &result.lintResult.warnings}) {
             for (const Luau::LintWarning &w : *list)

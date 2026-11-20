@@ -219,7 +219,7 @@ class TestShellExtensions : public QObject {
     std::unique_ptr<VaultIndex> m_index;
     std::unique_ptr<WorkspaceExtensions> m_ext;
     QStringList m_messages; ///< the toasts, "kind: text"
-    QDateTime m_now; ///< the app's clock
+    QDateTime m_now;        ///< the app's clock
 
     QString disk(const QString &path) const { return readFile(m_dir + u'/' + path); }
     QString page(const QString &title) const { return kFolder + u'/' + title + u".md"_s; }
@@ -1178,7 +1178,8 @@ private Q_SLOTS:
     /// device's user writes and approved: running.
     void addExtension(const QString &title, const QString &code, const QString &permissions = u"write"_s)
     {
-        const QString text = u"---\ntags: [extension]\npermissions: [%1]\n---\n```luau\n%2\n```\n"_s.arg(permissions, code);
+        const QString text =
+                u"---\ntags: [extension]\npermissions: [%1]\n---\n```luau\n%2\n```\n"_s.arg(permissions, code);
         QVERIFY(m_vault->writeText(page(title), text, ChangeSource::User));
         QTRY_VERIFY(!m_ext->pageState(page(title)).isEmpty());
         m_ext->approve(page(title));
@@ -1198,7 +1199,8 @@ private Q_SLOTS:
         collect(tree, u"check"_s, &checks);
         QVERIFY(!checks.isEmpty());
         QVERIFY(m_ext->act(u"przeglad-zadan"_s, u"przeglad"_s, u"zrobione"_s, checks[0].value(u"args"_s).toMap()));
-        QTRY_VERIFY2(disk(u"Projekty.md"_s).contains(u"- [[Dom]] — otwarte zadania: 2"_s), qPrintable(disk(u"Projekty.md"_s)));
+        QTRY_VERIFY2(disk(u"Projekty.md"_s).contains(u"- [[Dom]] — otwarte zadania: 2"_s),
+                     qPrintable(disk(u"Projekty.md"_s)));
         QTRY_VERIFY2(disk(u"Licznik.md"_s).startsWith(u"zmiany: "_s), qPrintable(disk(u"Licznik.md"_s)));
         QTRY_VERIFY2(disk(u"Licznik.md"_s).contains(u"Projekty"_s), qPrintable(disk(u"Licznik.md"_s)));
         QTest::qWait(1500);
@@ -1225,19 +1227,20 @@ private Q_SLOTS:
                      "    local extra = b.insertLine(ref, \"- do usunięcia\")\n"
                      "    b.removeLine(extra)\n"
                      "end)"_s);
-        addExtension(u"Słuchacz linii"_s,
-                     u"b.on(\"change\", function(e)\n"
-                     "    if table.find(e.pages, \"Zakupy\") then\n"
-                     "        b.appendToPage(\"Słyszane linie\", `- change {table.concat(e.by, \",\")} {table.concat(e.sources, \",\")}`)\n"
-                     "    end\n"
-                     "end)"_s);
+        addExtension(u"Słuchacz linii"_s, u"b.on(\"change\", function(e)\n"
+                                          "    if table.find(e.pages, \"Zakupy\") then\n"
+                                          "        b.appendToPage(\"Słyszane linie\", `- change {table.concat(e.by, "
+                                          "\",\")} {table.concat(e.sources, \",\")}`)\n"
+                                          "    end\n"
+                                          "end)"_s);
         QTest::qWait(1500); // (the pages written above are heard and done with first)
         const QString echoBefore = disk(u"Echo linii.md"_s);
         m_ext->runCommand(u"linie"_s, u"pisz"_s);
         QTRY_VERIFY2(disk(u"Zakupy.md"_s).contains(u"- [x] masło"_s), qPrintable(disk(u"Zakupy.md"_s)));
         QVERIFY2(disk(u"Zakupy.md"_s).contains(u"sklep:: Żabka"_s), qPrintable(disk(u"Zakupy.md"_s)));
         QVERIFY(!disk(u"Zakupy.md"_s).contains(u"do usunięcia"_s));
-        QTRY_VERIFY2(disk(u"Słyszane linie.md"_s).contains(u"- change linie extension"_s), qPrintable(disk(u"Słyszane linie.md"_s)));
+        QTRY_VERIFY2(disk(u"Słyszane linie.md"_s).contains(u"- change linie extension"_s),
+                     qPrintable(disk(u"Słyszane linie.md"_s)));
         QTest::qWait(1500);
         // Its own writes are no change for its own hook.
         QCOMPARE(disk(u"Echo linii.md"_s), echoBefore);
@@ -1248,8 +1251,12 @@ private Q_SLOTS:
     {
         // Two extensions that write whenever the other one wrote: some rounds, then the chain ends
         // (ChangeBatch::kMaxDepth) and the console says so.
-        addExtension(u"Ping"_s, u"local n = 0\nb.on(\"change\", function(e)\n    n += 1\n    b.write(\"Ping wynik\", \"ping \" .. n .. \"\\n\")\nend)"_s);
-        addExtension(u"Pong"_s, u"local n = 0\nb.on(\"change\", function(e)\n    n += 1\n    b.write(\"Pong wynik\", \"pong \" .. n .. \"\\n\")\nend)"_s);
+        addExtension(
+                u"Ping"_s,
+                u"local n = 0\nb.on(\"change\", function(e)\n    n += 1\n    b.write(\"Ping wynik\", \"ping \" .. n .. \"\\n\")\nend)"_s);
+        addExtension(
+                u"Pong"_s,
+                u"local n = 0\nb.on(\"change\", function(e)\n    n += 1\n    b.write(\"Pong wynik\", \"pong \" .. n .. \"\\n\")\nend)"_s);
         QVERIFY(editorSaves(u"Zakupy.md"_s, disk(u"Zakupy.md"_s) + u"- [ ] chleb\n"_s));
         QTRY_VERIFY_WITH_TIMEOUT(consoleLines(u"stopped after"_s) == 1, 20000);
         const QString ping = disk(u"Ping wynik.md"_s), pong = disk(u"Pong wynik.md"_s);
@@ -1263,13 +1270,17 @@ private Q_SLOTS:
 
     void taskJournalOpenDayAndTimerEvents()
     {
-        addExtension(u"Zdarzenia"_s,
-                     u"b.on(\"task\", function(e) b.appendToPage(\"Dziennik zdarzeń\", `- task {e.plain} [{e.previous}]→[{e.task}] {e.source} {e.by}`) end)\n"
-                     "b.on(\"journal\", function(e) b.appendToPage(\"Dziennik zdarzeń\", `- journal {e.date} {e.source}`) end)\n"
-                     "b.on(\"day\", function(e) b.appendToPage(\"Dziennik zdarzeń\", `- day {e.previous}→{e.date}`) end)\n"
-                     "b.on(\"timer\", function(e) b.appendToPage(\"Dziennik zdarzeń\", `- timer {e.label} {e.seconds}`) end)\n"
-                     "b.on(\"open\", function(e) b.appendToPage(\"Dziennik zdarzeń\", `- open {e.date}`) end)\n"
-                     "b.command(\"herbata\", function() b.timer(1, { label = \"Herbata\", message = \"Herbata gotowa.\" }) end)"_s);
+        addExtension(
+                u"Zdarzenia"_s,
+                u"b.on(\"task\", function(e) b.appendToPage(\"Dziennik zdarzeń\", `- task {e.plain} "
+                u"[{e.previous}]→[{e.task}] {e.source} {e.by}`) end)\n"
+                "b.on(\"journal\", function(e) b.appendToPage(\"Dziennik zdarzeń\", `- journal {e.date} {e.source}`) "
+                "end)\n"
+                "b.on(\"day\", function(e) b.appendToPage(\"Dziennik zdarzeń\", `- day {e.previous}→{e.date}`) end)\n"
+                "b.on(\"timer\", function(e) b.appendToPage(\"Dziennik zdarzeń\", `- timer {e.label} {e.seconds}`) "
+                "end)\n"
+                "b.on(\"open\", function(e) b.appendToPage(\"Dziennik zdarzeń\", `- open {e.date}`) end)\n"
+                "b.command(\"herbata\", function() b.timer(1, { label = \"Herbata\", message = \"Herbata gotowa.\" }) end)"_s);
         // The editor ticks a task: one "task" event with its statuses.
         QString dom = disk(u"Dom.md"_s);
         dom.replace(u"- [ ] Wymienić żarówkę w łazience"_s, u"- [x] Wymienić żarówkę w łazience"_s);
@@ -1314,21 +1325,23 @@ private Q_SLOTS:
 
     void settingsOfAnExtension()
     {
-        addExtension(u"Waluta"_s,
-                     u"b.settings({\n"
-                     "    { key = \"waluta\", label = \"Waluta\", value = \"zł\" },\n"
-                     "    { key = \"limit\", label = \"Limit miesięczny\", value = 1000, step = 50, unit = \"zł\" },\n"
-                     "    { key = \"grosze\", label = \"Z groszami\", value = false },\n"
-                     "    { key = \"widok\", label = \"Widok\", options = { \"lista\", \"tabela\" } },\n"
-                     "})\n"
-                     "b.command(\"pokaz\", function() return `{b.setting(\"limit\")} {b.setting(\"waluta\")} {tostring(b.setting(\"grosze\"))} {b.setting(\"widok\")}` end)"_s);
+        addExtension(
+                u"Waluta"_s,
+                u"b.settings({\n"
+                "    { key = \"waluta\", label = \"Waluta\", value = \"zł\" },\n"
+                "    { key = \"limit\", label = \"Limit miesięczny\", value = 1000, step = 50, unit = \"zł\" },\n"
+                "    { key = \"grosze\", label = \"Z groszami\", value = false },\n"
+                "    { key = \"widok\", label = \"Widok\", options = { \"lista\", \"tabela\" } },\n"
+                "})\n"
+                "b.command(\"pokaz\", function() return `{b.setting(\"limit\")} {b.setting(\"waluta\")} {tostring(b.setting(\"grosze\"))} {b.setting(\"widok\")}` end)"_s);
         const QVariantList fields = m_ext->settingsOf(u"waluta"_s);
         QCOMPARE(fields.size(), 4);
         QCOMPARE(m_ext->settingsCount(u"waluta"_s), 4);
         QCOMPARE(fields[1].toMap().value(u"display"_s).toString(), u"1000"_s);
         QCOMPARE(fields[3].toMap().value(u"options"_s).toStringList(), (QStringList{u"lista"_s, u"tabela"_s}));
         // As the settings dialog sets them: a number typed with a comma and its unit, a switch, a choice.
-        QVERIFY(m_ext->setSetting(u"waluta"_s, u"limit"_s, u"1 250,5 zł"_s) || m_ext->setSetting(u"waluta"_s, u"limit"_s, u"1250,5 zł"_s));
+        QVERIFY(m_ext->setSetting(u"waluta"_s, u"limit"_s, u"1 250,5 zł"_s)
+                || m_ext->setSetting(u"waluta"_s, u"limit"_s, u"1250,5 zł"_s));
         QVERIFY(m_ext->setSetting(u"waluta"_s, u"grosze"_s, true));
         QVERIFY(m_ext->setSetting(u"waluta"_s, u"widok"_s, u"tabela"_s));
         QVERIFY(!m_ext->setSetting(u"waluta"_s, u"widok"_s, u"wykres"_s));
@@ -1384,7 +1397,9 @@ private Q_SLOTS:
         QCOMPARE(review.value(u"newPermissions"_s).toStringList(), QStringList{u"change notes"_s});
         bool added = false;
         for (const QVariant &l : review.value(u"lines"_s).toList())
-            added = added || (l.toMap().value(u"kind"_s) == u"added"_s && l.toMap().value(u"text"_s).toString().contains(u"ZMIENIONE"_s));
+            added = added
+                    || (l.toMap().value(u"kind"_s) == u"added"_s
+                        && l.toMap().value(u"text"_s).toString().contains(u"ZMIENIONE"_s));
         QVERIFY(added);
         const QString shown = review.value(u"hash"_s).toString();
         // While it is read, another sync replaces the code again: the version shown is not approved.
@@ -1398,16 +1413,23 @@ private Q_SLOTS:
         QCOMPARE(m_ext->approveVersion(path, m_ext->approvalReview(path).value(u"hash"_s).toString()), QString());
         QCOMPARE(m_ext->pageState(path), u"running"_s);
         // What was approved is kept for the next review (the device state, not the notebook).
-        QVERIFY(m_vault->store()->get(extensions::approvedCodeStoreKey(u"licznik-slow"_s)).toObject().value(u"code"_s)
-                        .toString().contains(u"ZMIENIONE_ZNOWU"_s));
+        QVERIFY(m_vault->store()
+                        ->get(extensions::approvedCodeStoreKey(u"licznik-slow"_s))
+                        .toObject()
+                        .value(u"code"_s)
+                        .toString()
+                        .contains(u"ZMIENIONE_ZNOWU"_s));
     }
 
     void sharedCode()
     {
-        const QString library = u"local M = {}\nfunction M.powitanie(imie) return \"Cześć, \" .. imie .. \"!\" end\nreturn M"_s;
+        const QString library =
+                u"local M = {}\nfunction M.powitanie(imie) return \"Cześć, \" .. imie .. \"!\" end\nreturn M"_s;
         addExtension(u"Wspólne"_s, library, QString());
-        addExtension(u"Powitanie"_s, u"local w = b.require(\"Wspólne\")\nb.command(\"witaj\", function() return w.powitanie(\"Żaneta\") end)"_s,
-                     QString());
+        addExtension(
+                u"Powitanie"_s,
+                u"local w = b.require(\"Wspólne\")\nb.command(\"witaj\", function() return w.powitanie(\"Żaneta\") end)"_s,
+                QString());
         m_messages.clear();
         m_ext->runCommand(u"powitanie"_s, u"witaj"_s);
         QCOMPARE(m_messages, QStringList{u"info: Cześć, Żaneta!"_s});
@@ -1434,7 +1456,8 @@ private Q_SLOTS:
 
     void selectionOfTheEditor()
     {
-        addExtension(u"Zaznaczenie"_s, u"b.command(\"pokaz\", function(ctx) return `[{ctx.selection}]` end)"_s, QString());
+        addExtension(u"Zaznaczenie"_s, u"b.command(\"pokaz\", function(ctx) return `[{ctx.selection}]` end)"_s,
+                     QString());
         m_messages.clear();
         m_ext->offerSelection(u"Dom.md"_s, u"Zapłacić czynsz"_s);
         m_ext->runCommand(u"zaznaczenie"_s, u"pokaz"_s, u"Dom.md"_s);

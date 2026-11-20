@@ -143,8 +143,9 @@ QString summarize(const QString &function, const QList<QVariant> &values)
             numbers.append(*n);
     }
     const bool dateFunction = function == u"earliest" || function == u"latest";
-    if (dateFunction || (numbers.isEmpty() && !dates.isEmpty()
-                         && (function == u"min" || function == u"max" || function == u"range"))) {
+    if (dateFunction
+        || (numbers.isEmpty() && !dates.isEmpty()
+            && (function == u"min" || function == u"max" || function == u"range"))) {
         if (dates.isEmpty())
             return {};
         const auto [lo, hi] = std::ranges::minmax(dates);

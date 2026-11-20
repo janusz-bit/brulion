@@ -37,9 +37,9 @@ struct RowEdit {
 };
 
 struct EditOutcome {
-    QString content;    ///< the new content (the input when nothing changed)
+    QString content; ///< the new content (the input when nothing changed)
     bool changed = false;
-    QString error;      ///< a translated reason when the edit was refused
+    QString error; ///< a translated reason when the edit was refused
 };
 
 /// Apply one edit to a note's `content`. Every other byte stays (line endings too); a value that

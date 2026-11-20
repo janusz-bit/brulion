@@ -2,9 +2,9 @@
 // the classes know nothing about QML; these wrappers make them types of the app's QML module
 // "Brulion" (PageController, BlockListModel, BlockRowData, MarkdownHighlighter, SourceTextSync, MermaidView, ChartView,
 // RichTextPills, RichTextLinks, RenderedTextItem (+ the value type renderedText), LinkPreview, SuggestionModel,
-// QueryResultModel, ViewResultModel, StreamSelection, FakeEditorHost, the EditorInput and SpellCheck singletons; EditorHost as an
-// uncreatable interface type), so qmllint/qmlcachegen see their full API from the library's extracted metatypes.
-// Also PageItem (one item per page, Z10 stage C).
+// QueryResultModel, ViewResultModel, StreamSelection, FakeEditorHost, the EditorInput and SpellCheck singletons;
+// EditorHost as an uncreatable interface type), so qmllint/qmlcachegen see their full API from the library's extracted
+// metatypes. Also PageItem (one item per page, Z10 stage C).
 #pragma once
 
 #include "blocklistmodel.h"
@@ -22,7 +22,6 @@
 #include "pagecontroller.h"
 #include "pageitem.h"
 #include "queryresultmodel.h"
-#include "viewresultmodel.h"
 #include "renderedtextitem.h"
 #include "richtextlinks.h"
 #include "richtextpills.h"
@@ -31,6 +30,7 @@
 #include "streamfind.h"
 #include "streamselection.h"
 #include "suggestionmodel.h"
+#include "viewresultmodel.h"
 
 #include <QJSEngine>
 #include <QtQml/qqmlregistration.h>

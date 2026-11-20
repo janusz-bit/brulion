@@ -93,18 +93,22 @@ QString unknownViewType(const QString &type)
 
 QString boardNeedsGroup()
 {
-    return QCoreApplication::translate("brulion::Views", "A board needs a group: its columns are the values of a property (group:status, groupBy). Shown as a "
-              "table.");
+    return QCoreApplication::translate(
+            "brulion::Views",
+            "A board needs a group: its columns are the values of a property (group:status, groupBy). Shown as a "
+            "table.");
 }
 
 QString boardWithoutDrops()
 {
-    return QCoreApplication::translate("brulion::Views", "Cards cannot be moved between these columns: nothing in the notes holds their value.");
+    return QCoreApplication::translate(
+            "brulion::Views", "Cards cannot be moved between these columns: nothing in the notes holds their value.");
 }
 
 QString notYaml()
 {
-    return QCoreApplication::translate("brulion::Views", "This base is not a YAML mapping (filters, formulas, properties, views).");
+    return QCoreApplication::translate("brulion::Views",
+                                       "This base is not a YAML mapping (filters, formulas, properties, views).");
 }
 
 QString noViews()
@@ -163,8 +167,10 @@ QString invalidValue(const QString &type)
 
 QString yamlNotEditable()
 {
-    return QCoreApplication::translate("brulion::Views", "The base's YAML cannot be changed safely here (a flow mapping or an unusual layout): edit the file as "
-              "text.");
+    return QCoreApplication::translate(
+            "brulion::Views",
+            "The base's YAML cannot be changed safely here (a flow mapping or an unusual layout): edit the file as "
+            "text.");
 }
 
 QString noValue()

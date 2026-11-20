@@ -25,7 +25,8 @@ QUrl CanvasImageProvider::url(const QString &absolutePath, bool dark)
     url.setHost(u"canvas"_s);
     url.setPath(u'/' + QString::fromLatin1(QUrl::toPercentEncoding(absolutePath)));
     QUrlQuery q;
-    q.addQueryItem(u"v"_s, QString::number(info.lastModified().toMSecsSinceEpoch()) + u'-' + QString::number(info.size()));
+    q.addQueryItem(u"v"_s,
+                   QString::number(info.lastModified().toMSecsSinceEpoch()) + u'-' + QString::number(info.size()));
     q.addQueryItem(u"dark"_s, dark ? u"1"_s : u"0"_s);
     url.setQuery(q);
     return url;
@@ -73,8 +74,8 @@ QImage CanvasImageProvider::requestImage(const QString &id, QSize *size, const Q
     QFile file(path);
     if (!file.open(QIODevice::ReadOnly) || file.size() > canvas::MaxCanvasChars * 4)
         return {};
-    const QImage image = picture(QString::fromUtf8(file.readAll()), query.queryItemValue(u"dark"_s) == u"1",
-                                 requestedSize, size);
+    const QImage image =
+            picture(QString::fromUtf8(file.readAll()), query.queryItemValue(u"dark"_s) == u"1", requestedSize, size);
     return image;
 }
 

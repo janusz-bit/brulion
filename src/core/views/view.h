@@ -43,9 +43,9 @@ using ColumnKind = QueryColumnKind;
 
 /// One column.
 struct Column {
-    QString id;     ///< stable within the view: "title", "status", "prop:koszt", "formula:Brutto",
-                    ///< Bases: the property as the base names it ("note.status", "file.name")
-    QString label;  ///< the header (a label of the query or the base, else the name as written)
+    QString id;    ///< stable within the view: "title", "status", "prop:koszt", "formula:Brutto",
+                   ///< Bases: the property as the base names it ("note.status", "file.name")
+    QString label; ///< the header (a label of the query or the base, else the name as written)
     ColumnKind kind = ColumnKind::Property;
     QString property; ///< Property: the key to write, as the notes spell it ("Budżet")
     /// How a cell is edited: "text", "number", "checkbox", "date", "datetime", "list", "tags",
@@ -104,9 +104,9 @@ struct Group {
     /// What a card dropped here writes: a status or priority name, a property value as written,
     /// a date (YYYY-MM-DD); "" removes the property (the group without a value).
     QString value;
-    QList<int> rows;           ///< indices into ViewResult::rows, in order
-    QStringList summaryTexts;  ///< per column: the group's summary ("" none)
-    bool droppable = false;    ///< cards may be dropped here (the group is something an edit writes)
+    QList<int> rows;          ///< indices into ViewResult::rows, in order
+    QStringList summaryTexts; ///< per column: the group's summary ("" none)
+    bool droppable = false;   ///< cards may be dropped here (the group is something an edit writes)
 
     friend bool operator==(const Group &, const Group &) = default;
 };
@@ -115,11 +115,11 @@ struct Group {
 /// equality filters, a board column's value), or — for a task view — a task on `taskPage`.
 struct NewRow {
     bool possible = false;
-    bool task = false;    ///< a task (written on `taskPage`), else a page
-    QString folder;       ///< new pages go there ("" the notebook's folder for new pages)
-    QStringList tags;     ///< written in `tags:`
+    bool task = false;                             ///< a task (written on `taskPage`), else a page
+    QString folder;                                ///< new pages go there ("" the notebook's folder for new pages)
+    QStringList tags;                              ///< written in `tags:`
     QList<std::pair<QString, QString>> properties; ///< key (as written) and value written
-    VaultPath taskPage;   ///< task views: the page with the query
+    VaultPath taskPage;                            ///< task views: the page with the query
 
     friend bool operator==(const NewRow &, const NewRow &) = default;
 };
@@ -129,18 +129,18 @@ struct ViewResult {
     QueryType type = QueryType::Pages; ///< what the rows are
     QList<Column> columns;
     QList<Row> rows;
-    QList<Group> groups;    ///< grouped views and every board (in order)
-    int total = 0;          ///< matches before the limit
-    QString notice;         ///< a note on what is shown differently ("Map views are shown as a table.")
+    QList<Group> groups; ///< grouped views and every board (in order)
+    int total = 0;       ///< matches before the limit
+    QString notice;      ///< a note on what is shown differently ("Map views are shown as a table.")
     /// Boards: what drops change — "status", "priority", "property", "date"; "" none (a group by
     /// page or tag).
     QString groupKind;
-    QString groupProperty;  ///< "property" / "date" drops: the key written (as notes spell it)
-    int groupColumn = -1;   ///< the column showing the group's value (-1 none)
-    int dateColumn = -1;    ///< calendars: the column the days come from (-1: the journal date)
-    QDate month;            ///< calendars: the month shown (the first day)
+    QString groupProperty; ///< "property" / "date" drops: the key written (as notes spell it)
+    int groupColumn = -1;  ///< the column showing the group's value (-1 none)
+    int dateColumn = -1;   ///< calendars: the column the days come from (-1: the journal date)
+    QDate month;           ///< calendars: the month shown (the first day)
     NewRow newRow;
-    bool limited = false;   ///< more rows match than are shown
+    bool limited = false; ///< more rows match than are shown
 };
 
 /// Extra context for building a view.
@@ -176,8 +176,8 @@ std::pair<QDate, QDate> calendarRange(QDate month, Qt::DayOfWeek weekStart);
 /// query run with MaxQueryLimit). A translated message for a view that cannot be built (a board
 /// grouped by something no edit writes is shown, only without drops; a summary of a column the
 /// view does not show, a formula that does not parse).
-std::variant<ViewResult, QString> buildQueryView(const Query &query, const QueryResult &result,
-                                                 const VaultIndex &index, const ViewOptions &options);
+std::variant<ViewResult, QString> buildQueryView(const Query &query, const QueryResult &result, const VaultIndex &index,
+                                                 const ViewOptions &options);
 
 /// The summary of `values` (cell values, Cell::value) for `function` (sum, average, median, min,
 /// max, range, stddev, count, empty, filled, unique, checked, unchecked, earliest, latest): its

@@ -89,7 +89,8 @@ private Q_SLOTS:
         QCOMPARE(ids(m).constFirst(), u"abcdefabcdefabcd"_s);
         QCOMPARE(ids(m).mid(ids(m).size() - 2), (QStringList{u"theirs1"_s, u"ours1"_s}));
         // An edge new here to a card new there… and one to a card deleted there: left out.
-        Canvas ours2 = connectNodes(base, u"0f1e2d3c4b5a6978"_s, {}, u"abcdefabcdefabcd"_s, {}, nullptr, fixed(u"x1"_s));
+        Canvas ours2 =
+                connectNodes(base, u"0f1e2d3c4b5a6978"_s, {}, u"abcdefabcdefabcd"_s, {}, nullptr, fixed(u"x1"_s));
         const Canvas theirs2 = removeItems(base, {u"abcdefabcdefabcd"_s}, {});
         QVERIFY(!merge(&base, ours2, theirs2).edge(u"x1"));
     }

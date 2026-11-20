@@ -1,8 +1,8 @@
 #include "canvascards.h"
 
 #include "blocklistmodel.h"
-#include "canvasimageprovider.h"
 #include "blockrender_p.h"
+#include "canvasimageprovider.h"
 #include "editorhost.h"
 #include "linkpreview.h"
 
@@ -326,8 +326,7 @@ void CanvasCardContent::update()
     rows.reserve(blocks.size());
     for (const QVariant &v : blocks) {
         QVariantMap m = v.toMap();
-        static const QStringList strings{u"kind"_s, u"view"_s,  u"task"_s, u"title"_s,
-                                         u"html"_s, u"raw"_s,   u"path"_s};
+        static const QStringList strings{u"kind"_s, u"view"_s, u"task"_s, u"title"_s, u"html"_s, u"raw"_s, u"path"_s};
         for (const QString &k : strings) {
             if (!m.contains(k))
                 m.insert(k, QString());

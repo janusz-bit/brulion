@@ -320,9 +320,19 @@ private Q_SLOTS:
         // without a rest:: anywhere, the gym's own setting decides (Settings → Extensions → Gym)
         QCOMPARE(m_engine->settingsOf(u"silownia"_s).value(0).toMap().value(u"key"_s).toString(), u"rest"_s);
         QVERIFY(m_host->setSetting(u"silownia"_s, u"rest"_s, 90).isEmpty());
-        QCOMPARE(control(cardOf(render(u"today"_s), u"Przysiad"_s), u"button"_s).value(u"args"_s).toMap().value(u"rest"_s).toInt(), 90);
+        QCOMPARE(control(cardOf(render(u"today"_s), u"Przysiad"_s), u"button"_s)
+                         .value(u"args"_s)
+                         .toMap()
+                         .value(u"rest"_s)
+                         .toInt(),
+                 90);
         QVERIFY(m_engine->evaluate(u"silownia"_s, u"b.setSetting(\"rest\", nil)"_s, u"t"_s).ok());
-        QCOMPARE(control(cardOf(render(u"today"_s), u"Przysiad"_s), u"button"_s).value(u"args"_s).toMap().value(u"rest"_s).toInt(), 120);
+        QCOMPARE(control(cardOf(render(u"today"_s), u"Przysiad"_s), u"button"_s)
+                         .value(u"args"_s)
+                         .toMap()
+                         .value(u"rest"_s)
+                         .toInt(),
+                 120);
 
         // every card has the same lines, however long its texts: the exercise, the last set's
         // steppers, the set buttons

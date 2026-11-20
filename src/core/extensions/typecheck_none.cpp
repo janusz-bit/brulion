@@ -9,7 +9,10 @@ using namespace Qt::StringLiterals;
 
 namespace brulion::extensions {
 
-bool typeCheckerAvailable() { return false; }
+bool typeCheckerAvailable()
+{
+    return false;
+}
 
 QList<TypeProblem> typeCheck(const QString &source, int timeLimitMs)
 {

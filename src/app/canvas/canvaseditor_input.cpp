@@ -557,8 +557,8 @@ void CanvasEditor::wheelEvent(QWheelEvent *event)
         event->accept();
         return;
     }
-    QPointF delta = !event->pixelDelta().isNull() ? QPointF(event->pixelDelta())
-                                                  : QPointF(event->angleDelta()) / 120.0 * 60.0;
+    QPointF delta =
+            !event->pixelDelta().isNull() ? QPointF(event->pixelDelta()) : QPointF(event->angleDelta()) / 120.0 * 60.0;
     if ((event->modifiers() & Qt::ShiftModifier) && qFuzzyIsNull(delta.x()))
         delta = QPointF(delta.y(), 0);
     // A selected card whose content is longer than it scrolls its content.

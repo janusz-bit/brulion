@@ -36,44 +36,41 @@ namespace brulion::extensions {
 
 /// Where a change comes from (an event's `source`).
 enum class Origin {
-    App, ///< this device's app: the editor, a capture, a journal opened for the first time
+    App,       ///< this device's app: the editor, a capture, a journal opened for the first time
     Extension, ///< an extension on this device (NoteChange::by says which)
-    Sync, ///< a sync brought it from another device
-    Other, ///< another program, an import
+    Sync,      ///< a sync brought it from another device
+    Other,     ///< another program, an import
 };
 
 /// "app", "extension", "sync" or "other".
 QString originName(Origin origin);
 
 /// One note's change as the hooks hear of it.
-struct NoteChange
-{
+struct NoteChange {
     VaultPath path;
     QString page; ///< its name (title)
     Origin origin = Origin::App;
-    QString by; ///< the extension that wrote it (Origin::Extension), else ""
-    int depth = 0; ///< 0: the user, a sync, another program; see the header
+    QString by;           ///< the extension that wrote it (Origin::Extension), else ""
+    int depth = 0;        ///< 0: the user, a sync, another program; see the header
     bool created = false; ///< the note was not there before
     bool deleted = false;
     QString date; ///< a daily note's day "2026-11-14", else ""
 };
 
 /// A task of a note as taskStates() finds it.
-struct TaskState
-{
-    int line = -1; ///< 0-based
+struct TaskState {
+    int line = -1;  ///< 0-based
     QString status; ///< its checkbox character (a Logseq keyword as one): " ", "x", "/", "-", ">"
-    QString key; ///< what finds it again after an edit (its text without status and ✅ / ❌ dates)
-    QString raw; ///< the line as written (for its ref)
-    QString text; ///< as a block's `text`
-    QString plain; ///< as a block's `plain`
+    QString key;    ///< what finds it again after an edit (its text without status and ✅ / ❌ dates)
+    QString raw;    ///< the line as written (for its ref)
+    QString text;   ///< as a block's `text`
+    QString plain;  ///< as a block's `plain`
 };
 
 /// The tasks of a note (`content` is its text, `note` the same text parsed), in the order of lines.
 QList<TaskState> taskStates(const ParsedNote &note, const QString &content);
 
-struct TaskChange
-{
+struct TaskChange {
     TaskState before, after;
 };
 
@@ -81,10 +78,9 @@ struct TaskChange
 QList<TaskChange> changedTasks(const QList<TaskState> &before, const QList<TaskState> &after);
 
 /// The changes of one burst and the events each extension's hooks get of them.
-class ChangeBatch
-{
+class ChangeBatch {
 public:
-    static constexpr int kMaxDepth = 4; ///< hooks answering hooks, at most this many rounds
+    static constexpr int kMaxDepth = 4;   ///< hooks answering hooks, at most this many rounds
     static constexpr int kMaxTasks = 200; ///< task events of one burst (a sync of a year: no flood)
 
     /// Adds one note's change; false (nothing added, dropped() counts it) when it is deeper than
@@ -110,8 +106,7 @@ public:
     QList<QVariantMap> journalEvents(const QString &extension) const;
 
 private:
-    struct Task
-    {
+    struct Task {
         NoteChange note;
         TaskChange change;
     };

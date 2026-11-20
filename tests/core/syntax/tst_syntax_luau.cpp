@@ -45,8 +45,9 @@ void TestSyntaxLuau::line_data()
     QTest::addColumn<QString>("spans");
 
     QTest::newRow("empty") << QString() << QString();
-    QTest::newRow("keywords") << u"local x = 1 if x then return end"_s
-                              << u"keyword:local | number:1 | keyword:if | keyword:then | keyword:return | keyword:end"_s;
+    QTest::newRow("keywords")
+            << u"local x = 1 if x then return end"_s
+            << u"keyword:local | number:1 | keyword:if | keyword:then | keyword:return | keyword:end"_s;
     QTest::newRow("constants") << u"x = nil or true and false"_s
                                << u"constant:nil | keyword:or | constant:true | keyword:and | constant:false"_s;
     QTest::newRow("b and its fields") << u"b.command(\"hi\", fn)"_s << u"builtin:b | api:command | string:\"hi\""_s;
@@ -56,8 +57,8 @@ void TestSyntaxLuau::line_data()
     QTest::newRow("b after concatenation") << u"x = a .. b.today()"_s << u"builtin:b | api:today"_s;
     QTest::newRow("library") << u"local n = string.len(s) + math.floor(2.5)"_s
                              << u"keyword:local | builtin:string | builtin:math | number:2.5"_s;
-    QTest::newRow("library field is not coloured") << u"string.format(\"%d\", 3)"_s
-                                                   << u"builtin:string | string:\"%d\" | number:3"_s;
+    QTest::newRow("library field is not coloured")
+            << u"string.format(\"%d\", 3)"_s << u"builtin:string | string:\"%d\" | number:3"_s;
     QTest::newRow("function name") << u"local function walk(blocks, depth)"_s
                                    << u"keyword:local | keyword:function | function:walk"_s;
     QTest::newRow("method name") << u"function M.go:run() end"_s
@@ -66,11 +67,11 @@ void TestSyntaxLuau::line_data()
                                         << u"keyword:function | keyword:return | keyword:end"_s;
     QTest::newRow("numbers") << u"x = 0x1F + 0b1010 + 1_000 + 2.5e-3 + .5"_s
                              << u"number:0x1F | number:0b1010 | number:1_000 | number:2.5e-3 | number:.5"_s;
-    QTest::newRow("range is no number dot") << u"for i = 1, 10 do end"_s
-                                            << u"keyword:for | number:1 | number:10 | keyword:do | keyword:end"_s;
+    QTest::newRow("range is no number dot")
+            << u"for i = 1, 10 do end"_s << u"keyword:for | number:1 | number:10 | keyword:do | keyword:end"_s;
     QTest::newRow("digit in a name") << u"local x2 = y3"_s << u"keyword:local"_s;
-    QTest::newRow("strings with escapes") << uR"(s = "a \"q\" b" .. 'it\'s')"_s
-                                          << uR"(string:"a \"q\" b" | string:'it\'s')"_s;
+    QTest::newRow("strings with escapes")
+            << uR"(s = "a \"q\" b" .. 'it\'s')"_s << uR"(string:"a \"q\" b" | string:'it\'s')"_s;
     QTest::newRow("unclosed quote") << u"s = \"zażółć gęślą"_s << u"string:\"zażółć gęślą"_s;
     QTest::newRow("long string on one line") << u"s = [==[ a ]] b ]==] .. x"_s << u"string:[==[ a ]] b ]==]"_s;
     QTest::newRow("comment") << u"x = 1 -- to jest komentarz: local"_s
@@ -114,19 +115,19 @@ void TestSyntaxLuau::multiline_data()
     QTest::newRow("long string") << QStringList{u"s = [["_s, u"local w środku"_s, u"]] .. 1"_s}
                                  << QStringList{u"string:[["_s, u"string:local w środku"_s, u"string:]] | number:1"_s}
                                  << int(LuauState::Code);
-    QTest::newRow("leveled long comment") << QStringList{u"--[=[ start"_s, u"]] still"_s, u"]=] return"_s}
-                                          << QStringList{u"comment:--[=[ start"_s, u"comment:]] still"_s,
-                                                         u"comment:]=] | keyword:return"_s}
-                                          << int(LuauState::Code);
+    QTest::newRow("leveled long comment")
+            << QStringList{u"--[=[ start"_s, u"]] still"_s, u"]=] return"_s}
+            << QStringList{u"comment:--[=[ start"_s, u"comment:]] still"_s, u"comment:]=] | keyword:return"_s}
+            << int(LuauState::Code);
     QTest::newRow("backtick continued") << QStringList{u"s = `jeden \\"_s, u"dwa {x}`"_s}
                                         << QStringList{u"string:`jeden \\"_s,
                                                        u"string:dwa  | interpolation:{ | interpolation:} | string:`"_s}
                                         << int(LuauState::Code);
-    QTest::newRow("unclosed long string") << QStringList{u"x = [==["_s, u"a ]] b"_s}
-                                          << QStringList{u"string:[==["_s, u"string:a ]] b"_s}
-                                          << int(LuauState::LongString);
-    QTest::newRow("unclosed long comment") << QStringList{u"--[[ a"_s} << QStringList{u"comment:--[[ a"_s}
-                                           << int(LuauState::LongComment);
+    QTest::newRow("unclosed long string")
+            << QStringList{u"x = [==["_s, u"a ]] b"_s} << QStringList{u"string:[==["_s, u"string:a ]] b"_s}
+            << int(LuauState::LongString);
+    QTest::newRow("unclosed long comment")
+            << QStringList{u"--[[ a"_s} << QStringList{u"comment:--[[ a"_s} << int(LuauState::LongComment);
 }
 
 void TestSyntaxLuau::multiline()

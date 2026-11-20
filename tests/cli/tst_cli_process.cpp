@@ -613,13 +613,13 @@ private Q_SLOTS:
     // table, `base` runs a .base file and a page's ```base block.
     void viewsAndBases()
     {
-        const QString dir = vault({{u"Projekty/Dom.md"_s, "---\nstatus: w toku\nkoszt: 1200\ntags: [projekt]\n---\nDom.\n"},
-                                   {u"Projekty/Ogród.md"_s, "---\nstatus: planowany\nkoszt: 300\ntags: [projekt]\n---\nOgród.\n"},
-                                   {u"Projekty.base"_s,
-                                    "filters: file.hasTag(\"projekt\")\nviews:\n  - type: table\n    name: Drogie\n"
-                                    "    filters: 'koszt > 500'\n    order: [file.name, koszt]\n  - type: kanban\n"
-                                    "    name: Stan\n    groupBy: {property: status, direction: ASC}\n"},
-                                   {u"Strona z bazą.md"_s, "Tekst.\n\n```base\nviews:\n  - type: list\n```\n"}});
+        const QString dir = vault(
+                {{u"Projekty/Dom.md"_s, "---\nstatus: w toku\nkoszt: 1200\ntags: [projekt]\n---\nDom.\n"},
+                 {u"Projekty/Ogród.md"_s, "---\nstatus: planowany\nkoszt: 300\ntags: [projekt]\n---\nOgród.\n"},
+                 {u"Projekty.base"_s, "filters: file.hasTag(\"projekt\")\nviews:\n  - type: table\n    name: Drogie\n"
+                                      "    filters: 'koszt > 500'\n    order: [file.name, koszt]\n  - type: kanban\n"
+                                      "    name: Stan\n    groupBy: {property: status, direction: ASC}\n"},
+                 {u"Strona z bazą.md"_s, "Tekst.\n\n```base\nviews:\n  - type: list\n```\n"}});
         Run r = run(dir, {u"query"_s, u"type:pages tag:projekt widok:tabela kolumny:tytuł,status,koszt "
                                       u"sortuj:-koszt podsumowanie:koszt=suma"_s});
         QCOMPARE(r.code, 0);
@@ -1496,13 +1496,14 @@ private Q_SLOTS:
     {
         // Macros and template variables tried in the sandbox (docs/EXTENSIONS.md "Macros"): the
         // check names them, a run gives the value and what a note would show.
-        const QByteArray page = "---\ntags: [rozszerzenie]\n---\n```luau\n"
-                                "b.macro(\"otwarte\", function(ctx)\n"
-                                "    local n = b.query(\"type:tasks status:open\").total\n"
-                                "    return { b.ui.heading(tostring(n)), ` na {ctx.page} ({table.concat(ctx.args, \"/\")})` }\n"
-                                "end, { description = \"Otwarte zadania\", args = { \"x\" }, example = \"a\" })\n"
-                                "b.variable(\"plan\", function(ctx) return `- plan {ctx.date or \"-\"}` end)\n"
-                                "```\n";
+        const QByteArray page =
+                "---\ntags: [rozszerzenie]\n---\n```luau\n"
+                "b.macro(\"otwarte\", function(ctx)\n"
+                "    local n = b.query(\"type:tasks status:open\").total\n"
+                "    return { b.ui.heading(tostring(n)), ` na {ctx.page} ({table.concat(ctx.args, \"/\")})` }\n"
+                "end, { description = \"Otwarte zadania\", args = { \"x\" }, example = \"a\" })\n"
+                "b.variable(\"plan\", function(ctx) return `- plan {ctx.date or \"-\"}` end)\n"
+                "```\n";
         const QString dir = vault({{u"Rozszerzenia/Makra.md"_s, page},
                                    {u"Zakupy.md"_s, "- [ ] mleko\n- [ ] chleb\n"},
                                    {u"journals/2026-10-14.md"_s, "- dzień\n"}});
@@ -1511,8 +1512,8 @@ private Q_SLOTS:
         QCOMPARE(r.result().value(u"macros"_s).toArray().size(), 1);
         QCOMPARE(r.result().value(u"macros"_s).toArray().first().toObject().value(u"example"_s).toString(), u"a"_s);
         QCOMPARE(r.result().value(u"variables"_s).toArray().first().toObject().value(u"name"_s).toString(), u"plan"_s);
-        r = run(dir, {u"extension"_s, u"run"_s, u"Makra"_s, u"--macro"_s, u"otwarte"_s, u"--text"_s, u"żółw, \"a, b\""_s,
-                      u"--page"_s, u"Zakupy"_s});
+        r = run(dir, {u"extension"_s, u"run"_s, u"Makra"_s, u"--macro"_s, u"otwarte"_s, u"--text"_s,
+                      u"żółw, \"a, b\""_s, u"--page"_s, u"Zakupy"_s});
         QCOMPARE(r.code, 0);
         QCOMPARE(r.result().value(u"shows"_s).toString(), u"2 na Zakupy (żółw/a, b)"_s);
         r = run(dir, {u"extension"_s, u"run"_s, u"Makra"_s, u"--variable"_s, u"plan"_s, u"--page"_s, u"2026-10-14"_s});
@@ -1528,7 +1529,8 @@ private Q_SLOTS:
     {
         // What changed since the approval on this device, an extension's settings on it, and a
         // copy into another notebook with the page it requires — the command line approves nothing.
-        const QByteArray shared = "---\ntags: [rozszerzenie]\n---\n```luau\nreturn { dwa = function(s) return s .. s end }\n```\n";
+        const QByteArray shared =
+                "---\ntags: [rozszerzenie]\n---\n```luau\nreturn { dwa = function(s) return s .. s end }\n```\n";
         const QByteArray counter = "---\ntags: [rozszerzenie]\n---\n```luau\n"
                                    "local w = b.require(\"Wspólne\")\n"
                                    "b.settings({ { key = \"ile\", label = \"Ile\", value = 3, step = 1 }, "
@@ -1536,7 +1538,8 @@ private Q_SLOTS:
                                    "b.command(\"x\", function() return w.dwa(\"ż\") end)\n"
                                    "b.on(\"task\", function(e) return e.task .. e.previous end)\n"
                                    "```\n";
-        const QString dir = vault({{u"Rozszerzenia/Licznik.md"_s, counter}, {u"Rozszerzenia/Wspólne.md"_s, shared},
+        const QString dir = vault({{u"Rozszerzenia/Licznik.md"_s, counter},
+                                   {u"Rozszerzenia/Wspólne.md"_s, shared},
                                    {u"Zakupy.md"_s, "- [ ] mleko\n"}});
         // Never approved here: all of its code is new.
         Run r = run(dir, {u"extension"_s, u"diff"_s, u"Licznik"_s});
@@ -1545,12 +1548,16 @@ private Q_SLOTS:
         QCOMPARE(r.result().value(u"added"_s).toInt(), 4);
         QVERIFY(r.warnings().contains(u"never_approved"_s));
         // Approved in the app with its code kept; a line changed since: one added, one removed.
-        const QString hash = run(dir, {u"extension"_s, u"show"_s, u"Licznik"_s}).result().value(u"codeHash"_s).toString();
-        const QString oldCode = run(dir, {u"extension"_s, u"show"_s, u"Licznik"_s}).result().value(u"code"_s).toString();
+        const QString hash =
+                run(dir, {u"extension"_s, u"show"_s, u"Licznik"_s}).result().value(u"codeHash"_s).toString();
+        const QString oldCode =
+                run(dir, {u"extension"_s, u"show"_s, u"Licznik"_s}).result().value(u"code"_s).toString();
         writeFile(stateDirOf(dir) + u"/store.json"_s,
                   QJsonDocument(QJsonObject{{u"extensions/approved"_s, QJsonArray{hash}},
                                             {u"extensions/approvedCode/licznik"_s,
-                                             QJsonObject{{u"hash"_s, hash}, {u"code"_s, oldCode}, {u"permissions"_s, QJsonArray{}}}}})
+                                             QJsonObject{{u"hash"_s, hash},
+                                                         {u"code"_s, oldCode},
+                                                         {u"permissions"_s, QJsonArray{}}}}})
                           .toJson());
         QByteArray changed = counter;
         changed.replace("w.dwa(\"ż\")", "w.dwa(\"ł\")");
@@ -1563,8 +1570,9 @@ private Q_SLOTS:
         QCOMPARE(r.result().value(u"removed"_s).toInt(), 1);
         bool addedLine = false;
         for (const QJsonValue &l : r.result().value(u"lines"_s).toArray())
-            addedLine = addedLine || (l.toObject().value(u"kind"_s) == u"added"_s
-                                      && l.toObject().value(u"text"_s).toString().contains(u"w.dwa(\"ł\")"_s));
+            addedLine = addedLine
+                        || (l.toObject().value(u"kind"_s) == u"added"_s
+                            && l.toObject().value(u"text"_s).toString().contains(u"w.dwa(\"ł\")"_s));
         QVERIFY(addedLine);
         // Its settings: declared, set, refused, back to the defaults.
         r = run(dir, {u"extension"_s, u"settings"_s, u"Licznik"_s});

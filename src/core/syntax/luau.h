@@ -29,8 +29,8 @@ namespace brulion::syntax {
 enum class LuauToken : quint8 {
     Keyword,
     Constant, ///< nil, true, false
-    Builtin, ///< a global of the standard library, and `b`
-    Api, ///< a field of `b`: the "command" of b.command, the "ui" of b.ui.text
+    Builtin,  ///< a global of the standard library, and `b`
+    Api,      ///< a field of `b`: the "command" of b.command, the "ui" of b.ui.text
     Function, ///< the name a `function` statement defines (`local function walk`, `function M.go`)
     Number,
     String,
@@ -49,9 +49,9 @@ struct LuauSpan {
 struct LuauState {
     enum Kind : quint8 {
         Code = 0,
-        LongString = 1, ///< inside [[ … ]] or [=…=[ … ]=…=]
+        LongString = 1,  ///< inside [[ … ]] or [=…=[ … ]=…=]
         LongComment = 2, ///< inside --[[ … ]]
-        Backtick = 3, ///< a `…` string whose line ended with a backslash
+        Backtick = 3,    ///< a `…` string whose line ended with a backslash
     };
     Kind kind = Code;
     int level = 0; ///< the number of `=` of the long bracket (0 … 255)

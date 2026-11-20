@@ -31,10 +31,9 @@ QString fixture(const QString &name)
 
 void build(VaultIndex &index)
 {
-    index.update(u"Książki/Lalka.md"_s,
-                 lines({u"---"_s, u"autor: \"[[Bolesław Prus]]\""_s, u"cena: 39.9"_s, u"strony: 680"_s,
-                        u"stan: czytam"_s, u"okladka: \"[[lalka.jpg]]\""_s, u"tags: [książka]"_s, u"---"_s,
-                        u"Powieść."_s}));
+    index.update(u"Książki/Lalka.md"_s, lines({u"---"_s, u"autor: \"[[Bolesław Prus]]\""_s, u"cena: 39.9"_s,
+                                               u"strony: 680"_s, u"stan: czytam"_s, u"okladka: \"[[lalka.jpg]]\""_s,
+                                               u"tags: [książka]"_s, u"---"_s, u"Powieść."_s}));
     index.update(u"Książki/Quo vadis.md"_s,
                  lines({u"---"_s, u"autor: \"[[Henryk Sienkiewicz]]\""_s, u"cena: 25"_s, u"strony: 600"_s,
                         u"stan: do przeczytania"_s, u"tags: [książka]"_s, u"---"_s, u"Powieść."_s}));
@@ -230,8 +229,9 @@ private Q_SLOTS:
         QVERIFY(paths(v).contains(u"Czytelnia.md"_s));
         QCOMPARE(v.rows.size(), 8); // six notes, two pictures
         // An attachment row: its file name, no properties.
-        const Base files = std::get<Base>(parseBase(lines({u"filters: 'file.ext == \"png\"'"_s, u"views:"_s,
-                                                           u"  - type: table"_s, u"    order: [file.name, file.ext, cena]"_s})));
+        const Base files =
+                std::get<Base>(parseBase(lines({u"filters: 'file.ext == \"png\"'"_s, u"views:"_s, u"  - type: table"_s,
+                                                u"    order: [file.name, file.ext, cena]"_s})));
         const ViewResult png = run(files, 0);
         QCOMPARE(paths(png), QStringList{u"Książki/okładka.png"_s});
         QCOMPARE(png.rows.first().cells.at(1).markdown, u"png"_s);
@@ -240,8 +240,8 @@ private Q_SLOTS:
 
     void thisIsThePageShowingIt()
     {
-        const Base b = std::get<Base>(parseBase(lines({u"filters: file.hasLink(this.file)"_s, u"views:"_s,
-                                                       u"  - type: list"_s})));
+        const Base b = std::get<Base>(
+                parseBase(lines({u"filters: file.hasLink(this.file)"_s, u"views:"_s, u"  - type: list"_s})));
         const ViewResult v = run(b, 0, options(u"Ludzie/Bolesław Prus.md"_s));
         QCOMPARE(paths(v), QStringList{u"Książki/Lalka.md"_s});
         const Base folder = std::get<Base>(parseBase(u"filters: file.inFolder(this.file.folder)\n"_s));
@@ -290,8 +290,9 @@ private Q_SLOTS:
         const QString yaml = fixture(u"ksiazki.base"_s);
         const std::optional<QString> out = setBaseViewSort(yaml, 1, {{u"note.cena"_s, false}, {u"file.name"_s, true}});
         QVERIFY(out);
-        QVERIFY(out->contains(u"    sort:\n      - property: note.cena\n        direction: ASC\n      - property: file.name\n"
-                              u"        direction: DESC\n"_s));
+        QVERIFY(out->contains(
+                u"    sort:\n      - property: note.cena\n        direction: ASC\n      - property: file.name\n"
+                u"        direction: DESC\n"_s));
         const Base back = std::get<Base>(parseBase(*out));
         QCOMPARE(back.views.at(1).sort, QList<BaseSort>({{u"note.cena"_s, false}, {u"file.name"_s, true}}));
         // Removed.

@@ -53,7 +53,8 @@ struct Env {
                 if (c.type == ChangeType::Deleted)
                     index->remove(c.path);
                 else if (c.type == ChangeType::Renamed)
-                    index->rename(c.oldPath, c.path, VaultIndex::readsText(c.path) ? vault->readText(c.path) : QString());
+                    index->rename(c.oldPath, c.path,
+                                  VaultIndex::readsText(c.path) ? vault->readText(c.path) : QString());
                 else
                     index->update(c.path, VaultIndex::readsText(c.path) ? vault->readText(c.path) : QString());
             }
@@ -462,8 +463,10 @@ private Q_SLOTS:
     void renameRewritesCanvases()
     {
         const QByteArray board = "{\n\t\"nodes\":[\n"
-                                 "\t\t{\"id\":\"t1\",\"type\":\"text\",\"text\":\"Zobacz [[Budżet]]\",\"x\":0,\"y\":0,\"width\":250,\"height\":60},\n"
-                                 "\t\t{\"id\":\"f1\",\"type\":\"file\",\"file\":\"Projekty/Kuchnia.md\",\"x\":300,\"y\":0,\"width\":400,\"height\":400}\n"
+                                 "\t\t{\"id\":\"t1\",\"type\":\"text\",\"text\":\"Zobacz "
+                                 "[[Budżet]]\",\"x\":0,\"y\":0,\"width\":250,\"height\":60},\n"
+                                 "\t\t{\"id\":\"f1\",\"type\":\"file\",\"file\":\"Projekty/"
+                                 "Kuchnia.md\",\"x\":300,\"y\":0,\"width\":400,\"height\":400}\n"
                                  "\t],\n\t\"edges\":[]\n}";
         auto env = open({{u"Projekty/Kuchnia.md"_s, "# Kuchnia\n"},
                          {u"Plany/Tablica.canvas"_s, board},
@@ -485,7 +488,8 @@ private Q_SLOTS:
         QCOMPARE(readRaw(env->root + u"/Plany/Tablica.canvas"_s), expected);
 
         // The canvas renamed: still a canvas, its links follow.
-        const Relocation board2 = renamePage(*env->vault, env->index.get(), u"Plany/Tablica.canvas"_s, u"Remont"_s, false);
+        const Relocation board2 =
+                renamePage(*env->vault, env->index.get(), u"Plany/Tablica.canvas"_s, u"Remont"_s, false);
         QVERIFY(board2.problem.isOk());
         QCOMPARE(board2.path, u"Plany/Remont.canvas"_s);
         QCOMPARE(readRaw(env->root + u"/Notatka.md"_s), QByteArray("- [[Remont.canvas]]\n"));

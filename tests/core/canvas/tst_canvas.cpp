@@ -86,13 +86,15 @@ private Q_SLOTS:
         QTest::newRow("pretty") << canvasfixtures::pretty();
         QTest::newRow("advanced canvas") << canvasfixtures::advanced();
         QTest::newRow("crlf and bom") << canvasfixtures::crlfBom();
-        QTest::newRow("compact") << uR"({"nodes":[{"id":"a","type":"text","text":"x","x":0,"y":0,"width":1,"height":1}],"edges":[]})"_s;
+        QTest::newRow("compact")
+                << uR"({"nodes":[{"id":"a","type":"text","text":"x","x":0,"y":0,"width":1,"height":1}],"edges":[]})"_s;
         QTest::newRow("only nodes") << uR"({"nodes":[]})"_s;
         QTest::newRow("empty object") << u"{}"_s;
-        QTest::newRow("escapes")
-                << canvasfixtures::escaped();
-        QTest::newRow("fractions") << uR"({"nodes":[{"id":"f","type":"text","text":"","x":12.5,"y":-0.25,"width":1e2,"height":60}]})"_s;
-        QTest::newRow("duplicate keys") << uR"({"nodes":[{"id":"d","x":1,"x":2,"type":"text","text":"a","y":0,"width":9,"height":9}]})"_s;
+        QTest::newRow("escapes") << canvasfixtures::escaped();
+        QTest::newRow("fractions")
+                << uR"({"nodes":[{"id":"f","type":"text","text":"","x":12.5,"y":-0.25,"width":1e2,"height":60}]})"_s;
+        QTest::newRow("duplicate keys")
+                << uR"({"nodes":[{"id":"d","x":1,"x":2,"type":"text","text":"a","y":0,"width":9,"height":9}]})"_s;
     }
     void roundTripUnchanged()
     {
@@ -104,7 +106,8 @@ private Q_SLOTS:
 
     void duplicateKeysLastWins()
     {
-        const Canvas c = read(uR"({"nodes":[{"id":"d","x":1,"x":2,"type":"text","text":"a","y":0,"width":9,"height":9}]})"_s);
+        const Canvas c =
+                read(uR"({"nodes":[{"id":"d","x":1,"x":2,"type":"text","text":"a","y":0,"width":9,"height":9}]})"_s);
         QCOMPARE(c.nodes.at(0).x, 2.0);
         // A move rewrites the occurrence JSON.parse keeps; the first stays as written.
         const Canvas moved = moveNodes(c, {u"d"_s}, {10, 0});
@@ -114,13 +117,11 @@ private Q_SLOTS:
 
     void escapesDecoded()
     {
-        const Canvas c = read(
-                canvasfixtures::escapedShort());
+        const Canvas c = read(canvasfixtures::escapedShort());
         QCOMPARE(c.nodes.at(0).text, u"\"a\" \\ / \t\ną 😀"_s);
         // Written back changed: JSON.stringify's escaping (Polish letters and emoji as they are).
         const Canvas edited = setNodeText(c, u"q"_s, u"\"b\" \\ \t\nżółw 😀"_s);
-        QCOMPARE(writeCanvas(edited),
-                 canvasfixtures::escapedWritten());
+        QCOMPARE(writeCanvas(edited), canvasfixtures::escapedWritten());
     }
 
     void movedNodeOnlyItsLine()
@@ -131,8 +132,9 @@ private Q_SLOTS:
         const QString out = writeCanvas(moved);
         const QStringList changed = changedLines(text, out);
         QCOMPARE(changed.size(), 1);
-        QCOMPARE(changed.at(0),
-                 u"\t\t{\"id\":\"0f1e2d3c4b5a6978\",\"type\":\"file\",\"file\":\"Projekty/Kuchnia.md\",\"x\":-20,\"y\":-290,\"width\":400,\"height\":400},"_s);
+        QCOMPARE(
+                changed.at(0),
+                u"\t\t{\"id\":\"0f1e2d3c4b5a6978\",\"type\":\"file\",\"file\":\"Projekty/Kuchnia.md\",\"x\":-20,\"y\":-290,\"width\":400,\"height\":400},"_s);
     }
 
     void keysAddedAndRemoved()
@@ -146,8 +148,9 @@ private Q_SLOTS:
         QCOMPARE(changed.size(), 3);
         QVERIFY(changed.at(0).endsWith(u"\"width\":320,\"height\":240},"_s));
         QVERIFY(changed.at(1).endsWith(u"\"width\":400,\"height\":400,\"color\":\"3\"},"_s));
-        QCOMPARE(changed.at(2),
-                 u"\t\t{\"id\":\"e2e2e2e2e2e2e2e2\",\"fromNode\":\"0f1e2d3c4b5a6978\",\"fromSide\":\"bottom\",\"toNode\":\"1122334455667788\",\"toSide\":\"top\",\"toEnd\":\"none\"},"_s);
+        QCOMPARE(
+                changed.at(2),
+                u"\t\t{\"id\":\"e2e2e2e2e2e2e2e2\",\"fromNode\":\"0f1e2d3c4b5a6978\",\"fromSide\":\"bottom\",\"toNode\":\"1122334455667788\",\"toSide\":\"top\",\"toEnd\":\"none\"},"_s);
     }
 
     void unknownKeysKept()
@@ -159,13 +162,15 @@ private Q_SLOTS:
         Canvas edited = setNodeText(c, u"n1"_s, u"Początek"_s);
         edited = setEdgeLabel(edited, u"x1"_s, u"dalej"_s);
         const QString out = writeCanvas(edited);
-        QVERIFY(out.startsWith(u"{\n\t\"metadata\":{\"version\":\"1.0-1.0\",\"frontmatter\":{\"tags\":[\"projekt\"]},\"startNode\":\"n1\"},"_s));
+        QVERIFY(out.startsWith(
+                u"{\n\t\"metadata\":{\"version\":\"1.0-1.0\",\"frontmatter\":{\"tags\":[\"projekt\"]},\"startNode\":\"n1\"},"_s));
         QVERIFY(out.contains(
                 u"{\"id\":\"n1\",\"type\":\"text\",\"text\":\"Początek\",\"styleAttributes\":{\"shape\":\"pill\",\"border\":\"dashed\"},\"x\":0,\"y\":0,\"width\":200,\"height\":80,\"zIndex\":3}"_s));
         QVERIFY(out.contains(
                 u"{\"id\":\"x1\",\"styleAttributes\":{\"path\":\"dotted\",\"pathfindingMethod\":\"square\"},\"fromNode\":\"n1\",\"fromSide\":\"right\",\"toNode\":\"n2\",\"toSide\":\"left\",\"label\":\"dalej\"}"_s));
         // The node of an unknown type is still as written.
-        QVERIFY(out.contains(u"{\"id\":\"n3\",\"type\":\"diagram\",\"text\":\"(typ, którego Brulion nie zna)\",\"x\":0,\"y\":200,\"width\":200,\"height\":100}"_s));
+        QVERIFY(out.contains(
+                u"{\"id\":\"n3\",\"type\":\"diagram\",\"text\":\"(typ, którego Brulion nie zna)\",\"x\":0,\"y\":200,\"width\":200,\"height\":100}"_s));
     }
 
     void addedNodeInObsidianLayout()
@@ -178,7 +183,8 @@ private Q_SLOTS:
         edited = connectNodes(edited, u"new1"_s, u"left"_s, u"8132d4d894c80022"_s, QString(), nullptr, ids);
         const QString out = writeCanvas(edited);
         QVERIFY(out.contains(
-                u"\t\t{\"id\":\"0ba565e7f30e0652\",\"type\":\"file\",\"file\":\"spec/1.0.md\",\"x\":360,\"y\":-400,\"width\":400,\"height\":400},\n"
+                u"\t\t{\"id\":\"0ba565e7f30e0652\",\"type\":\"file\",\"file\":\"spec/"
+                u"1.0.md\",\"x\":360,\"y\":-400,\"width\":400,\"height\":400},\n"
                 u"\t\t{\"id\":\"new1\",\"type\":\"text\",\"text\":\"Nowa karta\",\"x\":10,\"y\":21,\"width\":250,\"height\":60}\n\t],"_s));
         QVERIFY(out.contains(
                 u"\"toSide\":\"left\"},\n\t\t{\"id\":\"new2\",\"fromNode\":\"new1\",\"fromSide\":\"left\",\"toNode\":\"8132d4d894c80022\"}\n\t]"_s));
@@ -204,13 +210,15 @@ private Q_SLOTS:
     {
         QTest::addColumn<QString>("text");
         QTest::addColumn<QString>("expected");
-        const QString node = u"{\"id\":\"a\",\"type\":\"text\",\"text\":\"x\",\"x\":0,\"y\":0,\"width\":250,\"height\":60}"_s;
+        const QString node =
+                u"{\"id\":\"a\",\"type\":\"text\",\"text\":\"x\",\"x\":0,\"y\":0,\"width\":250,\"height\":60}"_s;
         QTest::newRow("empty") << QString() << u"{\n\t\"nodes\":[\n\t\t"_s + node + u"\n\t],\n\t\"edges\":[]\n}"_s;
         QTest::newRow("whitespace") << u" \n"_s << u"{\n\t\"nodes\":[\n\t\t"_s + node + u"\n\t],\n\t\"edges\":[]\n}"_s;
         QTest::newRow("{}") << u"{}"_s << u"{\n\t\"nodes\":[\n\t\t"_s + node + u"\n\t]\n}"_s;
-        QTest::newRow("compact without nodes") << u"{\"edges\":[]}"_s << u"{\"edges\":[],\"nodes\":["_s + node + u"]}"_s;
-        QTest::newRow("obsidian without edges") << u"{\n\t\"nodes\":[]\n}"_s
-                                                << u"{\n\t\"nodes\":[\n\t\t"_s + node + u"\n\t]\n}"_s;
+        QTest::newRow("compact without nodes")
+                << u"{\"edges\":[]}"_s << u"{\"edges\":[],\"nodes\":["_s + node + u"]}"_s;
+        QTest::newRow("obsidian without edges")
+                << u"{\n\t\"nodes\":[]\n}"_s << u"{\n\t\"nodes\":[\n\t\t"_s + node + u"\n\t]\n}"_s;
     }
     void emptyFiles()
     {
@@ -225,13 +233,17 @@ private Q_SLOTS:
 
     void edgesInsertedWhenMissing()
     {
-        const Canvas c = read(u"{\n\t\"nodes\":[\n\t\t{\"id\":\"a\",\"type\":\"text\",\"text\":\"1\",\"x\":0,\"y\":0,\"width\":9,\"height\":9},\n"
-                              u"\t\t{\"id\":\"b\",\"type\":\"text\",\"text\":\"2\",\"x\":50,\"y\":0,\"width\":9,\"height\":9}\n\t]\n}"_s);
+        const Canvas c = read(
+                u"{\n\t\"nodes\":[\n\t\t{\"id\":\"a\",\"type\":\"text\",\"text\":\"1\",\"x\":0,\"y\":0,\"width\":9,"
+                u"\"height\":9},\n"
+                u"\t\t{\"id\":\"b\",\"type\":\"text\",\"text\":\"2\",\"x\":50,\"y\":0,\"width\":9,\"height\":9}\n\t]\n}"_s);
         const Canvas linked = connectNodes(c, u"a"_s, u"right"_s, u"b"_s, u"left"_s, nullptr, [] { return u"e"_s; });
-        QCOMPARE(writeCanvas(linked),
-                 u"{\n\t\"nodes\":[\n\t\t{\"id\":\"a\",\"type\":\"text\",\"text\":\"1\",\"x\":0,\"y\":0,\"width\":9,\"height\":9},\n"
-                 u"\t\t{\"id\":\"b\",\"type\":\"text\",\"text\":\"2\",\"x\":50,\"y\":0,\"width\":9,\"height\":9}\n\t],\n"
-                 u"\t\"edges\":[\n\t\t{\"id\":\"e\",\"fromNode\":\"a\",\"fromSide\":\"right\",\"toNode\":\"b\",\"toSide\":\"left\"}\n\t]\n}"_s);
+        QCOMPARE(
+                writeCanvas(linked),
+                u"{\n\t\"nodes\":[\n\t\t{\"id\":\"a\",\"type\":\"text\",\"text\":\"1\",\"x\":0,\"y\":0,\"width\":9,"
+                u"\"height\":9},\n"
+                u"\t\t{\"id\":\"b\",\"type\":\"text\",\"text\":\"2\",\"x\":50,\"y\":0,\"width\":9,\"height\":9}\n\t],\n"
+                u"\t\"edges\":[\n\t\t{\"id\":\"e\",\"fromNode\":\"a\",\"fromSide\":\"right\",\"toNode\":\"b\",\"toSide\":\"left\"}\n\t]\n}"_s);
     }
 
     void prettyLayoutKept()
@@ -244,7 +256,8 @@ private Q_SLOTS:
         const QString out = writeCanvas(edited);
         QVERIFY(out.contains(u"      \"text\": \"Nowy tekst\",\n"_s));
         QVERIFY(out.contains(u"      \"height\": 60,\n      \"color\": \"5\"\n    },"_s));
-        QVERIFY(out.contains(u"    },\n    {\n      \"id\": \"t3\",\n      \"type\": \"text\",\n      \"text\": \"Trzecia\",\n"_s));
+        QVERIFY(out.contains(
+                u"    },\n    {\n      \"id\": \"t3\",\n      \"type\": \"text\",\n      \"text\": \"Trzecia\",\n"_s));
         QVERIFY(out.contains(u"      \"height\": 60\n    }\n  ],"_s));
         QVERIFY(out.endsWith(u"}\n"_s));
         QVERIFY(readCanvas(out).canvas);
@@ -263,7 +276,8 @@ private Q_SLOTS:
 
     void fractionsUntilMoved()
     {
-        const Canvas c = read(uR"({"nodes":[{"id":"f","type":"text","text":"","x":12.5,"y":-0.25,"width":1e2,"height":60}]})"_s);
+        const Canvas c =
+                read(uR"({"nodes":[{"id":"f","type":"text","text":"","x":12.5,"y":-0.25,"width":1e2,"height":60}]})"_s);
         QCOMPARE(c.nodes.at(0).width, 100.0);
         // Untouched numbers as written; moved ones whole.
         QCOMPARE(writeCanvas(moveNodes(c, {u"f"_s}, {0, 10})),
@@ -272,7 +286,8 @@ private Q_SLOTS:
 
     void idsMadeForMissingAndDuplicates()
     {
-        const QString text = uR"({"nodes":[{"id":"a","type":"text","text":"1","x":0,"y":0,"width":9,"height":9},{"id":"a","type":"text","text":"2","x":0,"y":0,"width":9,"height":9},{"type":"text","text":"3","x":0,"y":0,"width":9,"height":9}]})"_s;
+        const QString text =
+                uR"({"nodes":[{"id":"a","type":"text","text":"1","x":0,"y":0,"width":9,"height":9},{"id":"a","type":"text","text":"2","x":0,"y":0,"width":9,"height":9},{"type":"text","text":"3","x":0,"y":0,"width":9,"height":9}]})"_s;
         const Canvas c = read(text);
         QCOMPARE(c.nodes.at(0).id, u"a"_s);
         QVERIFY(c.nodes.at(1).id != u"a"_s);
@@ -306,7 +321,8 @@ private Q_SLOTS:
         QTest::newRow("edges string") << uR"({"edges":"x"})"_s << int(ReadError::NotCanvas);
         QTest::newRow("node number") << uR"({"nodes":[1]})"_s << int(ReadError::NotCanvas);
         QTest::newRow("edge null") << uR"({"edges":[null]})"_s << int(ReadError::NotCanvas);
-        QTest::newRow("too deep") << u"{\"x\":"_s + QString(200, u'[') + QString(200, u']') + u'}' << int(ReadError::TooLarge);
+        QTest::newRow("too deep") << u"{\"x\":"_s + QString(200, u'[') + QString(200, u']') + u'}'
+                                  << int(ReadError::TooLarge);
     }
     void malformed()
     {
@@ -320,14 +336,16 @@ private Q_SLOTS:
     void oddButReadable()
     {
         // Strings where numbers belong, numbers where strings belong: read leniently, kept as written.
-        const QString text = uR"({"nodes":[{"id":7,"type":"text","text":null,"x":"10","y":0,"width":9,"height":9,"color":3}]})"_s;
+        const QString text =
+                uR"({"nodes":[{"id":7,"type":"text","text":null,"x":"10","y":0,"width":9,"height":9,"color":3}]})"_s;
         const Canvas c = read(text);
         QCOMPARE(c.nodes.at(0).id, u"7"_s);
         QCOMPARE(c.nodes.at(0).x, 0.0);
         QCOMPARE(c.nodes.at(0).color, u"3"_s);
         QCOMPARE(writeCanvas(c), text);
         // Infinity (1e999) reads but stays within reach when drawn.
-        const Canvas far = read(uR"({"nodes":[{"id":"i","type":"text","text":"","x":1e999,"y":0,"width":9,"height":9}]})"_s);
+        const Canvas far =
+                read(uR"({"nodes":[{"id":"i","type":"text","text":"","x":1e999,"y":0,"width":9,"height":9}]})"_s);
         QVERIFY(qIsInf(far.nodes.at(0).x));
         QCOMPARE(nodeRect(far.nodes.at(0)).x(), 0.0);
     }
@@ -358,11 +376,12 @@ private Q_SLOTS:
         Canvas c;
         for (int i = 0; i < 1000; ++i) {
             c = addNode(c, makeTextNode(u"Karta %1 z [[Strona %1]] i tekstem do przeczytania"_s.arg(i),
-                                        QRectF((i % 40) * 300, (i / 40) * 200, 250, 120), [i] { return u"n%1"_s.arg(i); }));
+                                        QRectF((i % 40) * 300, (i / 40) * 200, 250, 120),
+                                        [i] { return u"n%1"_s.arg(i); }));
         }
         for (int i = 1; i < 1000; ++i)
             c = connectNodes(c, u"n%1"_s.arg(i - 1), QString(), u"n%1"_s.arg(i), QString(), nullptr,
-                        [i] { return u"e%1"_s.arg(i); });
+                             [i] { return u"e%1"_s.arg(i); });
         const QString text = writeCanvas(c);
         const Canvas back = read(text);
         QCOMPARE(back.nodes.size(), 1000);

@@ -352,8 +352,11 @@ class TestExtensionsDocs : public QObject {
                 event.insert(u"source"_s, u"app"_s);
                 event.insert(u"by"_s, QString());
             } else if (h.event == u"journal") {
-                event = {{u"date"_s, u"2026-11-11"_s}, {u"page"_s, u"2026-11-11"_s}, {u"path"_s, u"journals/2026-11-11.md"_s},
-                         {u"source"_s, u"app"_s}, {u"by"_s, QString()}};
+                event = {{u"date"_s, u"2026-11-11"_s},
+                         {u"page"_s, u"2026-11-11"_s},
+                         {u"path"_s, u"journals/2026-11-11.md"_s},
+                         {u"source"_s, u"app"_s},
+                         {u"by"_s, QString()}};
             } else if (h.event == u"open") {
                 event = {{u"date"_s, u"2026-11-11"_s}};
             } else if (h.event == u"day") {
@@ -371,8 +374,9 @@ class TestExtensionsDocs : public QObject {
             QVariantList args;
             for (const QString &a : markdown::macroArguments(arguments))
                 args << a;
-            return QVariantMap{{u"args"_s, args}, {u"text"_s, arguments}, {u"page"_s, page}, {u"path"_s, path},
-                               {u"date"_s, u"2026-11-20"_s}, {u"template"_s, u"templates/Dzień.md"_s}};
+            return QVariantMap{
+                    {u"args"_s, args}, {u"text"_s, arguments},       {u"page"_s, page},
+                    {u"path"_s, path}, {u"date"_s, u"2026-11-20"_s}, {u"template"_s, u"templates/Dzień.md"_s}};
         };
         for (const MacroInfo &m : m_engine->macros()) {
             const Result r = m_engine->runMacro(kExtension, m.name, ctxOf(m.example), 2000 * BRULION_TEST_SLOWDOWN);

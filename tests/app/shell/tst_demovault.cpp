@@ -147,7 +147,8 @@ private Q_SLOTS:
         QFETCH(QString, language);
         const Sample names = sample(language);
         const auto files = filesByPath(kNow, language);
-        const QString path = language == u"pl" ? u"Projekty/Plan remontu.canvas"_s : u"Projects/Home renovation plan.canvas"_s;
+        const QString path =
+                language == u"pl" ? u"Projekty/Plan remontu.canvas"_s : u"Projects/Home renovation plan.canvas"_s;
         QVERIFY(files.contains(path));
         const canvas::ReadResult read = canvas::readCanvas(files.value(path));
         QVERIFY(read.canvas);
@@ -155,7 +156,8 @@ private Q_SLOTS:
         QCOMPARE(read.canvas->edges.size(), 3);
         VaultIndex index;
         for (auto it = files.cbegin(); it != files.cend(); ++it)
-            index.update(it.key(), VaultIndex::readsText(it.key()) || paths::isMarkdown(it.key()) ? it.value() : QString());
+            index.update(it.key(),
+                         VaultIndex::readsText(it.key()) || paths::isMarkdown(it.key()) ? it.value() : QString());
         QStringList targets;
         for (const ResolvedLink &l : index.outgoingLinks(path))
             targets.append(l.target);

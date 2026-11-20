@@ -44,10 +44,10 @@
 #include "types.h"
 
 #include <QAbstractListModel>
-#include <QSet>
 #include <QDateTime>
 #include <QElapsedTimer>
 #include <QObject>
+#include <QSet>
 #include <QStringList>
 #include <QTimer>
 #include <QVariantList>
@@ -593,8 +593,7 @@ private:
     ExtensionListModel *m_list = nullptr;
     ExtensionConsoleModel *m_console = nullptr;
     QTimer m_restTimer; // ticks every timer of m_timers
-    struct RunningTimer
-    {
+    struct RunningTimer {
         extensions::TimerSpec spec;
         QDateTime end; // UTC
         int remaining = 0;
@@ -605,17 +604,16 @@ private:
     QString m_restLabel;
     std::function<void(const QString &, const QString &)> m_notify;
     extensions::MacroCache m_macros;
-    QTimer m_macroTimer; // runMacros()
-    QTimer m_macrosChangedTimer; // macrosChanged(), coalesced
-    QElapsedTimer m_macroClock; // the cache's time
+    QTimer m_macroTimer;                   // runMacros()
+    QTimer m_macrosChangedTimer;           // macrosChanged(), coalesced
+    QElapsedTimer m_macroClock;            // the cache's time
     QHash<QString, qint64> m_macroSpentMs; // per note, in the current round of changes
-    QString m_macroSignature; // what ran and the pages' states when macros were last reset
-    QSet<QString> m_macroNames; // "extension/name" of the macros registered
+    QString m_macroSignature;              // what ran and the pages' states when macros were last reset
+    QSet<QString> m_macroNames;            // "extension/name" of the macros registered
     // Events (events.h): the burst of changes the hooks hear after 0.6 s, where each change came
     // from (notesChanging()), the tasks of the notes as they were, the depth of the call running.
     extensions::ChangeBatch m_batch;
-    struct Changing
-    {
+    struct Changing {
         extensions::Origin origin = extensions::Origin::App;
         QString by;
         int depth = 0;
@@ -626,9 +624,9 @@ private:
     QHash<QString, Changing> m_changing; // by path, until notesChanged()
     int m_runningDepth = 0;
     bool m_opened = false; // "open" hooks ran for this notebook
-    QDate m_day; // "day" hooks: the day they last heard of
+    QDate m_day;           // "day" hooks: the day they last heard of
     QTimer m_dayTimer;
-    QString m_selectionPath, m_selection; // offerSelection()
+    QString m_selectionPath, m_selection;              // offerSelection()
     std::function<QString(const QString &)> m_stateOf; // setDeviceStates()
 };
 

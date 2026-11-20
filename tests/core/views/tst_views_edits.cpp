@@ -57,21 +57,22 @@ private Q_SLOTS:
         QTest::addColumn<QVariant>("value");
         QTest::addColumn<QString>("type");
         QTest::addColumn<QString>("line"); // the property's new line(s), as written
-        QTest::newRow("text keeps its comment") << u"status"_s << QVariant(u"zrobione"_s) << u"text"_s
-                                                << u"status: zrobione  # stan"_s;
+        QTest::newRow("text keeps its comment")
+                << u"status"_s << QVariant(u"zrobione"_s) << u"text"_s << u"status: zrobione  # stan"_s;
         QTest::newRow("number from a number") << u"koszt"_s << QVariant(1250.5) << u"number"_s << u"koszt: 1250.5"_s;
-        QTest::newRow("number typed with a comma") << u"koszt"_s << QVariant(u"1 300,5"_s) << u"number"_s
-                                                   << u"koszt: 1300.5"_s;
+        QTest::newRow("number typed with a comma")
+                << u"koszt"_s << QVariant(u"1 300,5"_s) << u"number"_s << u"koszt: 1300.5"_s;
         QTest::newRow("Polish key") << u"Budżet"_s << QVariant(6000.0) << u"number"_s << u"Budżet: 6000"_s;
         QTest::newRow("key folded") << u"budzet"_s << QVariant(7000.0) << u"number"_s << u"Budżet: 7000"_s;
         QTest::newRow("date") << u"termin"_s << QVariant(u"2026-11-01"_s) << u"date"_s << u"termin: 2026-11-01"_s;
         QTest::newRow("checkbox") << u"pilne"_s << QVariant(false) << u"checkbox"_s << u"pilne: false"_s;
-        QTest::newRow("list keeps untouched items") << u"etykiety"_s << QVariant(QStringList{u"remont"_s, u"łazienka"_s, u"kuchnia"_s})
-                                                    << u"list"_s << u"etykiety:\n  - remont\n  - \"łazienka\"\n  - kuchnia"_s;
-        QTest::newRow("list from a text") << u"etykiety"_s << QVariant(u"a, [[B]]"_s) << u"list"_s
-                                          << u"etykiety:\n  - a\n  - \"[[B]]\""_s;
-        QTest::newRow("text that YAML would read otherwise") << u"status"_s << QVariant(u"yes"_s) << u"text"_s
-                                                             << u"status: \"yes\"  # stan"_s;
+        QTest::newRow("list keeps untouched items")
+                << u"etykiety"_s << QVariant(QStringList{u"remont"_s, u"łazienka"_s, u"kuchnia"_s}) << u"list"_s
+                << u"etykiety:\n  - remont\n  - \"łazienka\"\n  - kuchnia"_s;
+        QTest::newRow("list from a text")
+                << u"etykiety"_s << QVariant(u"a, [[B]]"_s) << u"list"_s << u"etykiety:\n  - a\n  - \"[[B]]\""_s;
+        QTest::newRow("text that YAML would read otherwise")
+                << u"status"_s << QVariant(u"yes"_s) << u"text"_s << u"status: \"yes\"  # stan"_s;
         QTest::newRow("type kept when not given") << u"koszt"_s << QVariant(u"99"_s) << QString() << u"koszt: 99"_s;
         QTest::newRow("new key") << u"właściciel"_s << QVariant(u"[[Jan Kowalski]]"_s) << u"text"_s
                                  << u"właściciel: \"[[Jan Kowalski]]\""_s;
@@ -146,8 +147,8 @@ private Q_SLOTS:
 
     void blockProperties()
     {
-        const QString content = lines({u"# Zadania"_s, u""_s, u"- [ ] Kupić płytki 📅 2026-10-15"_s, u"  etap:: zakupy"_s,
-                                       u"  - [ ] Podzadanie"_s, u"- [ ] Drugie"_s, u""_s});
+        const QString content = lines({u"# Zadania"_s, u""_s, u"- [ ] Kupić płytki 📅 2026-10-15"_s,
+                                       u"  etap:: zakupy"_s, u"  - [ ] Podzadanie"_s, u"- [ ] Drugie"_s, u""_s});
         // Change an existing line.
         EditOutcome r = applyRowEdit(content, blockEdit(u"etap"_s, u"montaż"_s, 2, 3), Today);
         QCOMPARE(r.content, QString(content).replace(u"etap:: zakupy"_s, u"etap:: montaż"_s));

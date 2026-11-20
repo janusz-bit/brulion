@@ -216,8 +216,8 @@ Cell CellReader::propertyCell(const Row &row, const QString &folded)
                     Q_UNUSED(value);
                     if (queryPropertyKey(key) != folded)
                         continue;
-                    const std::optional<QString> raw =
-                            markdown::blockPropertyText(m_index.content(row.path), blocks[b].line, blocks[b].ownEndLine, key);
+                    const std::optional<QString> raw = markdown::blockPropertyText(
+                            m_index.content(row.path), blocks[b].line, blocks[b].ownEndLine, key);
                     if (raw)
                         return blockValueCell(key, *raw);
                 }
@@ -327,7 +327,7 @@ Cell CellReader::builtinCell(const Row &row, ColumnKind kind)
     case ColumnKind::Start: {
         if (!row.task)
             return {};
-        const std::optional<DateSpec> &d = kind == ColumnKind::Due ? row.task->due
+        const std::optional<DateSpec> &d = kind == ColumnKind::Due         ? row.task->due
                                            : kind == ColumnKind::Scheduled ? row.task->scheduled
                                                                            : row.task->start;
         Cell c;
@@ -390,7 +390,8 @@ void CellReader::coverFrom(Row &row, const QString &written)
     if (w.isEmpty())
         return;
     static const auto isHex = [](QStringView s) {
-        return std::ranges::all_of(s, [](QChar c) { return c.isDigit() || (c.toLower() >= u'a' && c.toLower() <= u'f'); });
+        return std::ranges::all_of(s,
+                                   [](QChar c) { return c.isDigit() || (c.toLower() >= u'a' && c.toLower() <= u'f'); });
     };
     if (w.startsWith(u'#') && (w.size() == 7 || w.size() == 4) && isHex(QStringView(w).sliced(1))) {
         row.cover = w;

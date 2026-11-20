@@ -451,7 +451,6 @@ dos::dwa
 tres::trzy
 )md"_s;
 
-
 /// A canvas (docs/SYNTAX.md §2 "Canvases"): the renovation on one board, as Obsidian writes it.
 const auto kCanvas = uR"json({
 	"nodes":[
@@ -851,7 +850,6 @@ dos::two
 tres::three
 )md"_s;
 
-
 /// A canvas (docs/SYNTAX.md §2 "Canvases"): the renovation on one board, as Obsidian writes it.
 const auto kCanvas = uR"json({
 	"nodes":[
@@ -889,16 +887,46 @@ bool isPolish(QStringView language)
 SampleTexts sampleTexts(QStringView language)
 {
     if (isPolish(language))
-        return {pl::kWelcome, pl::kDocsNotebook, pl::kToday, pl::kYesterday, pl::kWeekAgo,
-                u"Projekty/Remont mieszkania.md", pl::kRemont, u"Książki 2026.md", pl::kBooks, u"Przepisy.md",
-                pl::kRecipes, pl::kJournalTemplate, u"templates/Spotkanie.md", pl::kMeetingTemplate,
-                u"assets/plan-mieszkania.svg", pl::kPlanSvg, u"Nauka/Hiszpański.md", pl::kDeck,
-                u"Projekty/Plan remontu.canvas", pl::kCanvas};
-    return {en::kWelcome, en::kDocsNotebook, en::kToday, en::kYesterday, en::kWeekAgo,
-            u"Projects/Home renovation.md", en::kRenovation, u"Books 2026.md", en::kBooks, u"Recipes.md",
-            en::kRecipes, en::kJournalTemplate, u"templates/Meeting.md", en::kMeetingTemplate,
-            u"assets/floor-plan.svg", en::kPlanSvg, u"Learning/Spanish.md", en::kDeck,
-            u"Projects/Home renovation plan.canvas", en::kCanvas};
+        return {pl::kWelcome,
+                pl::kDocsNotebook,
+                pl::kToday,
+                pl::kYesterday,
+                pl::kWeekAgo,
+                u"Projekty/Remont mieszkania.md",
+                pl::kRemont,
+                u"Książki 2026.md",
+                pl::kBooks,
+                u"Przepisy.md",
+                pl::kRecipes,
+                pl::kJournalTemplate,
+                u"templates/Spotkanie.md",
+                pl::kMeetingTemplate,
+                u"assets/plan-mieszkania.svg",
+                pl::kPlanSvg,
+                u"Nauka/Hiszpański.md",
+                pl::kDeck,
+                u"Projekty/Plan remontu.canvas",
+                pl::kCanvas};
+    return {en::kWelcome,
+            en::kDocsNotebook,
+            en::kToday,
+            en::kYesterday,
+            en::kWeekAgo,
+            u"Projects/Home renovation.md",
+            en::kRenovation,
+            u"Books 2026.md",
+            en::kBooks,
+            u"Recipes.md",
+            en::kRecipes,
+            en::kJournalTemplate,
+            u"templates/Meeting.md",
+            en::kMeetingTemplate,
+            u"assets/floor-plan.svg",
+            en::kPlanSvg,
+            u"Learning/Spanish.md",
+            en::kDeck,
+            u"Projects/Home renovation plan.canvas",
+            en::kCanvas};
 }
 
 } // namespace

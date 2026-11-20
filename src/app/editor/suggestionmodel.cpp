@@ -332,14 +332,16 @@ QVariantList SuggestionModel::slashItems() const
     // their titles, and all of them for "view" / "widok".
     if (m_host) {
         const QString typed = text::foldKey(m_filter).simplified();
-        const bool all = !typed.isEmpty() && (QStringLiteral("view").startsWith(typed) || QStringLiteral("widok").startsWith(typed));
+        const bool all = !typed.isEmpty()
+                         && (QStringLiteral("view").startsWith(typed) || QStringLiteral("widok").startsWith(typed));
         for (const QVariant &v : m_host->embeddableViews()) {
             const QVariantMap view = v.toMap();
             const QString title = view.value(u"title"_s).toString();
             if (!typed.isEmpty() && !all && !text::foldKey(title).contains(typed))
                 continue;
             QVariantMap it = item(u"command"_s, (m_english ? u"View: "_s : u"Widok: "_s) + title,
-                                  u"```view "_s + view.value(u"source"_s).toString(), view.value(u"icon"_s).toString(), QString());
+                                  u"```view "_s + view.value(u"source"_s).toString(), view.value(u"icon"_s).toString(),
+                                  QString());
             it[u"command"_s] = QString(u"view:"_s + view.value(u"source"_s).toString());
             out.append(it);
         }

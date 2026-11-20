@@ -21,7 +21,7 @@ QString describe(const QString &text)
     QStringList out;
     for (const MacroSpan &m : findMacros(text))
         out << m.extension + u'/' + m.name + u'(' + m.arguments + u")@"_s + QString::number(m.from) + u'-'
-                       + QString::number(m.to);
+                        + QString::number(m.to);
     return out.join(u' ');
 }
 
@@ -113,8 +113,8 @@ void TestMarkdownMacros::find_data()
     QTest::addColumn<QString>("text");
     QTest::addColumn<QString>("macros");
 
-    QTest::newRow("one with an argument") << u"Rekord: {{ext:silownia/rekord Przysiad}}!"_s
-                                          << u"silownia/rekord(Przysiad)@8-40"_s;
+    QTest::newRow("one with an argument")
+            << u"Rekord: {{ext:silownia/rekord Przysiad}}!"_s << u"silownia/rekord(Przysiad)@8-40"_s;
     QTest::newRow("no arguments") << u"{{ext:licznik-slow/dzis}}"_s << u"licznik-slow/dzis()@0-25"_s;
     QTest::newRow("polish arguments") << u"{{ext:nawyki/seria Czytanie książek, 30}}"_s
                                       << u"nawyki/seria(Czytanie książek, 30)@0-41"_s;
@@ -167,12 +167,11 @@ void TestMarkdownMacros::arguments_data()
     QTest::newRow("empty quoted") << u"\"\""_s << QStringList{QString()};
     QTest::newRow("empty between commas") << u"a,,b"_s << QStringList{u"a"_s, QString(), u"b"_s};
     QTest::newRow("unclosed quote") << u"\"a, b"_s << QStringList{u"\"a, b"_s};
-    QTest::newRow("thirty-three") << QString(u"x,"_s.repeated(33) + u'y')
-                                  << [] {
-                                         QStringList l(31, u"x"_s);
-                                         l << QString(u"x,"_s.repeated(2) + u'y');
-                                         return l;
-                                     }();
+    QTest::newRow("thirty-three") << QString(u"x,"_s.repeated(33) + u'y') << [] {
+        QStringList l(31, u"x"_s);
+        l << QString(u"x,"_s.repeated(2) + u'y');
+        return l;
+    }();
 }
 
 void TestMarkdownMacros::arguments()
@@ -316,10 +315,10 @@ void TestMarkdownMacros::viewBlock_data()
                                   << QString();
     QTest::newRow("a key again") << u"a/b\nk: 1\nk: 2"_s << u"a"_s << u"b"_s << QVariantMap{{u"k"_s, u"2"_s}}
                                  << QString();
-    QTest::newRow("a value with a colon") << u"a/b\nczas: 10:30"_s << u"a"_s << u"b"_s
-                                          << QVariantMap{{u"czas"_s, u"10:30"_s}} << QString();
-    QTest::newRow("a bad line") << u"a/b\nto nie jest para\nk: v"_s << u"a"_s << u"b"_s
-                                << QVariantMap{{u"k"_s, u"v"_s}} << u"line 2: not key: value"_s;
+    QTest::newRow("a value with a colon")
+            << u"a/b\nczas: 10:30"_s << u"a"_s << u"b"_s << QVariantMap{{u"czas"_s, u"10:30"_s}} << QString();
+    QTest::newRow("a bad line") << u"a/b\nto nie jest para\nk: v"_s << u"a"_s << u"b"_s << QVariantMap{{u"k"_s, u"v"_s}}
+                                << u"line 2: not key: value"_s;
     QTest::newRow("empty") << QString() << QString() << QString() << QVariantMap()
                            << u"the first line names the view, <extension>/<view>"_s;
     QTest::newRow("no slash") << u"silownia"_s << QString() << QString() << QVariantMap()
@@ -349,9 +348,10 @@ void TestMarkdownMacros::viewBlock()
 void TestMarkdownMacros::inNote()
 {
     // A whole note: macros in fenced code (a list item's too), code spans and comments are text.
-    const QString note = u"# Trening\r\n- Rekord: {{ext:a/rekord Przysiad}}\r\n- ```\r\n  {{ext:a/w-kodzie}}\r\n  ```\r\n"
-                         u"`{{ext:a/span}}` %%{{ext:a/komentarz}}%% {{ext:a/b}}\r\n~~~~\r\n{{ext:a/x}}\r\n```\r\n"
-                         u"~~~~\r\nPo {{ext:a/po}}"_s;
+    const QString note =
+            u"# Trening\r\n- Rekord: {{ext:a/rekord Przysiad}}\r\n- ```\r\n  {{ext:a/w-kodzie}}\r\n  ```\r\n"
+            u"`{{ext:a/span}}` %%{{ext:a/komentarz}}%% {{ext:a/b}}\r\n~~~~\r\n{{ext:a/x}}\r\n```\r\n"
+            u"~~~~\r\nPo {{ext:a/po}}"_s;
     QStringList names;
     for (const MacroSpan &m : findMacrosInNote(note))
         names << m.name + u'@' + QString::number(m.from);

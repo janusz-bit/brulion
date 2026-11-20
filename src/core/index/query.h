@@ -241,9 +241,9 @@ QString queryPriorityLabel(Priority priority);
 /// A `key:value` token of a query's text (any spelling of a key; `key::value` property filters as
 /// "::"): what edits of the query by a view's UI (its columns, its sort) replace.
 struct QueryKeyToken {
-    QString key;           ///< canonical English key ("sort", "columns", "group", "view", "summary",
-                           ///< "status", …) or "::" for a property filter
-    qsizetype from = 0;    ///< the token (a leading '-' included)
+    QString key;        ///< canonical English key ("sort", "columns", "group", "view", "summary",
+                        ///< "status", …) or "::" for a property filter
+    qsizetype from = 0; ///< the token (a leading '-' included)
     qsizetype to = 0;
     qsizetype valueFrom = 0; ///< where its value starts (after the colon or colons)
     bool negated = false;

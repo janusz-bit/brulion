@@ -522,7 +522,8 @@ void WorkspaceExtensions::indexReady()
         m_opened = true;
         QTimer::singleShot(0, this, [this] {
             if (m_vault)
-                runHooks(u"open"_s, {{u"date"_s, (m_clock ? m_clock().date() : QDate::currentDate()).toString(Qt::ISODate)}});
+                runHooks(u"open"_s,
+                         {{u"date"_s, (m_clock ? m_clock().date() : QDate::currentDate()).toString(Qt::ISODate)}});
         });
     }
 }
@@ -763,9 +764,11 @@ void WorkspaceExtensions::flushChanged()
     }
     const extensions::ChangeBatch batch = std::exchange(m_batch, {});
     if (batch.dropped() > 0)
-        m_console->append(u"info"_s, tr("Extensions answering each other's changes stopped after %1 rounds: %n change(s) not passed on.",
-                                        "", batch.dropped())
-                                             .arg(extensions::ChangeBatch::kMaxDepth));
+        m_console->append(
+                u"info"_s,
+                tr("Extensions answering each other's changes stopped after %1 rounds: %n change(s) not passed on.", "",
+                   batch.dropped())
+                        .arg(extensions::ChangeBatch::kMaxDepth));
     if (!m_engine || batch.isEmpty())
         return;
     // In the order of registration; each extension's hooks hear what the others changed.
@@ -1429,7 +1432,8 @@ QVariantMap WorkspaceExtensions::approvalReview(const QString &path) const
         static const QStringList kinds{u"same"_s, u"added"_s, u"removed"_s, u"skipped"_s};
         addedLines += l.kind == extensions::CodeDiffLine::Added;
         removedLines += l.kind == extensions::CodeDiffLine::Removed;
-        lines << QVariantMap{{u"kind"_s, kinds.value(int(l.kind))}, {u"text"_s, l.text}, {u"line"_s, l.line}, {u"count"_s, l.count}};
+        lines << QVariantMap{
+                {u"kind"_s, kinds.value(int(l.kind))}, {u"text"_s, l.text}, {u"line"_s, l.line}, {u"count"_s, l.count}};
     }
     return {{u"path"_s, e->page.path},
             {u"title"_s, e->page.title},
@@ -1605,7 +1609,8 @@ void WorkspaceExtensions::runCommand(const QString &extension, const QString &na
     m_current = CallContext{};
 }
 
-void WorkspaceExtensions::runBlockCommand(const QString &command, const QString &path, int line, const QString &selection)
+void WorkspaceExtensions::runBlockCommand(const QString &command, const QString &path, int line,
+                                          const QString &selection)
 {
     if (command == u"*/run") {
         runCodeAt(path, line);
@@ -1908,7 +1913,10 @@ QString WorkspaceExtensions::restText() const
     return u"%1:%2"_s.arg(m_restRemaining / 60).arg(m_restRemaining % 60, 2, 10, QChar(u'0'));
 }
 
-void WorkspaceExtensions::stopRest() { stopTimer(u"silownia"_s); }
+void WorkspaceExtensions::stopRest()
+{
+    stopTimer(u"silownia"_s);
+}
 
 void WorkspaceExtensions::stopTimer(const QString &extension)
 {
@@ -1983,7 +1991,7 @@ void WorkspaceExtensions::timerEnded(const QString &extension)
     Q_EMIT timersChanged();
     // Its own words: the label and the message the extension gave, else the app's.
     const QString label = t.spec.label.isEmpty() ? title(extension) : t.spec.label;
-    const QString body = !t.spec.message.isEmpty() ? t.spec.message
+    const QString body = !t.spec.message.isEmpty()  ? t.spec.message
                          : extension == u"silownia" ? tr("Time for the next set.")
                                                     : tr("The timer of %1 has ended.").arg(title(extension));
     if (m_notify)
@@ -2045,13 +2053,15 @@ bool WorkspaceExtensions::setSetting(const QString &extension, const QString &ke
             bool ok = value.metaType().id() != QMetaType::QString;
             double number = ok ? value.toDouble(&ok) : 0;
             if (value.metaType().id() == QMetaType::QString) { // typed: "82,5", "82.5 kg"
-                const std::optional<double> typed = parseExtensionNumber(value.toString(), field.value(u"unit"_s).toString());
+                const std::optional<double> typed =
+                        parseExtensionNumber(value.toString(), field.value(u"unit"_s).toString());
                 ok = typed.has_value();
                 number = typed.value_or(0);
             }
             if (!ok || !std::isfinite(number))
                 return false;
-            stored = number == std::floor(number) && std::fabs(number) < 1e15 ? QVariant(qint64(number)) : QVariant(number);
+            stored = number == std::floor(number) && std::fabs(number) < 1e15 ? QVariant(qint64(number))
+                                                                              : QVariant(number);
         } else if (kind == u"toggle") {
             stored = value.toBool();
         } else if (kind == u"choice") {
@@ -2113,9 +2123,9 @@ QString WorkspaceExtensions::copyToNotebook(const QString &path, const QString &
         if (isApproved(page.hash))
             extensions::approveInStore(target.store(), page);
     target.store()->flush();
-    Q_EMIT message(report.written.isEmpty()
-                           ? tr("%1 is in %2 already.").arg(title, QDir(root).dirName())
-                           : tr("%1 copied to %2 (%n page(s)).", "", int(report.written.size())).arg(title, QDir(root).dirName()),
+    Q_EMIT message(report.written.isEmpty() ? tr("%1 is in %2 already.").arg(title, QDir(root).dirName())
+                                            : tr("%1 copied to %2 (%n page(s)).", "", int(report.written.size()))
+                                                      .arg(title, QDir(root).dirName()),
                    u"success"_s);
     return {};
 }

@@ -33,7 +33,7 @@ QSizeF defaultSize(QStringView type, QStringView file = {});
 Canvas addNode(Canvas c, Node node);
 /// An edge from `from` to `to` (sides as given, "" to choose when drawn), arrow at its end.
 Canvas connectNodes(Canvas c, const QString &from, const QString &fromSide, const QString &to, const QString &toSide,
-               QString *edgeId = nullptr, const IdSource &ids = newId);
+                    QString *edgeId = nullptr, const IdSource &ids = newId);
 /// The nodes and edges named removed, and the edges of removed nodes with them.
 Canvas removeItems(Canvas c, const QSet<QString> &nodeIds, const QSet<QString> &edgeIds);
 /// The nodes moved by `delta` (their new positions rounded).

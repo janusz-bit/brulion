@@ -21,10 +21,10 @@ QString lines(const QStringList &l)
 void build(VaultIndex &index)
 {
     index.update(u"Książki/Lalka.md"_s,
-                 lines({u"---"_s, u"autor: \"[[Bolesław Prus]]\""_s, u"cena: 39.9"_s, u"strony: 680"_s,
-                        u"ocena: 5"_s, u"przeczytana: true"_s, u"wydano: 1890-01-01"_s,
-                        u"tags: [książka, klasyka/polska]"_s, u"Data zakupu: 2026-10-01"_s, u"gatunki: [powieść, realizm]"_s,
-                        u"---"_s, u"Zobacz [[Bolesław Prus]] i ![[okładka.png]]."_s}));
+                 lines({u"---"_s, u"autor: \"[[Bolesław Prus]]\""_s, u"cena: 39.9"_s, u"strony: 680"_s, u"ocena: 5"_s,
+                        u"przeczytana: true"_s, u"wydano: 1890-01-01"_s, u"tags: [książka, klasyka/polska]"_s,
+                        u"Data zakupu: 2026-10-01"_s, u"gatunki: [powieść, realizm]"_s, u"---"_s,
+                        u"Zobacz [[Bolesław Prus]] i ![[okładka.png]]."_s}));
     index.update(u"Książki/Quo vadis.md"_s,
                  lines({u"---"_s, u"autor: \"[[Henryk Sienkiewicz]]\""_s, u"cena: 25"_s, u"strony: 600"_s,
                         u"przeczytana: false"_s, u"tags: [książka]"_s, u"---"_s, u"Treść."_s}));
@@ -54,7 +54,8 @@ QString show(const Value &v)
     case Value::Type::Number: return QString::number(v.asNumber(), 'g', 12);
     case Value::Type::String: return u'"' + v.asString() + u'"';
     case Value::Type::Date:
-        return v.asDate().hasTime ? v.asDate().at.toString(u"yyyy-MM-dd HH:mm"_s) : v.asDate().at.date().toString(Qt::ISODate);
+        return v.asDate().hasTime ? v.asDate().at.toString(u"yyyy-MM-dd HH:mm"_s)
+                                  : v.asDate().at.date().toString(Qt::ISODate);
     case Value::Type::Duration: return u"dur(%1m,%2ms)"_s.arg(v.asDuration().months).arg(v.asDuration().ms);
     case Value::Type::Link: return u"[["_s + v.asLink().path + u"]]"_s + (v.asLink().embed ? u"!"_s : QString());
     case Value::Type::List: {
@@ -266,9 +267,8 @@ private Q_SLOTS:
 
     void basesBoundNames()
     {
-        const QList<std::pair<QString, Value>> bound{
-                {u"formula"_s, Value::map({{u"netto"_s, Value::number(10)}})},
-                {u"values"_s, Value::list({Value::number(1), Value::number(4)})}};
+        const QList<std::pair<QString, Value>> bound{{u"formula"_s, Value::map({{u"netto"_s, Value::number(10)}})},
+                                                     {u"values"_s, Value::list({Value::number(1), Value::number(4)})}};
         QCOMPARE(eval(u"formula.netto * 2"_s, Syntax::Bases, u"Książki/Lalka.md"_s, bound), u"20"_s);
         QCOMPARE(eval(u"values.mean().round(3)"_s, Syntax::Bases, u"Książki/Lalka.md"_s, bound), u"2.5"_s);
         QCOMPARE(eval(u"formula[\"netto\"]"_s, Syntax::Bases, u"Książki/Lalka.md"_s, bound), u"10"_s);

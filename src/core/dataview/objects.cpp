@@ -423,9 +423,9 @@ public:
 
     QStringList keys() const override
     {
-        return {u"name"_s,  u"folder"_s, u"path"_s,  u"ext"_s,     u"link"_s,     u"size"_s,  u"ctime"_s,
-                u"cday"_s,  u"mtime"_s,  u"mday"_s,  u"tags"_s,    u"etags"_s,    u"inlinks"_s, u"outlinks"_s,
-                u"aliases"_s, u"tasks"_s, u"lists"_s, u"frontmatter"_s};
+        return {u"name"_s,    u"folder"_s,   u"path"_s,    u"ext"_s,   u"link"_s,  u"size"_s,
+                u"ctime"_s,   u"cday"_s,     u"mtime"_s,   u"mday"_s,  u"tags"_s,  u"etags"_s,
+                u"inlinks"_s, u"outlinks"_s, u"aliases"_s, u"tasks"_s, u"lists"_s, u"frontmatter"_s};
     }
 
     std::optional<Value> field(const QString &key) const override

@@ -432,13 +432,13 @@ BlockShape shapeOf(const markdown::BlockEntry &e)
         // ```dataview: an Obsidian Dataview query, shown like ```query (§10 "Dataview queries");
         // ```base: an Obsidian base, a database view (§10 "Obsidian Bases").
         const bool math = f.lang == u"math" || f.lang == u"latex" || f.lang == u"tex";
-        s.view = math                   ? BlockView::Math
-                 : f.lang == u"calc"    ? BlockView::Calc
+        s.view = math                                                               ? BlockView::Math
+                 : f.lang == u"calc"                                                ? BlockView::Calc
                  : f.lang == u"query" || f.lang == u"dataview" || f.lang == u"base" ? BlockView::Query
-                 : f.lang == u"mermaid" ? BlockView::Mermaid
-                 : f.lang == u"chart"   ? BlockView::Chart
-                 : f.lang == u"view"    ? BlockView::View
-                                        : BlockView::Code;
+                 : f.lang == u"mermaid"                                             ? BlockView::Mermaid
+                 : f.lang == u"chart"                                               ? BlockView::Chart
+                 : f.lang == u"view"                                                ? BlockView::View
+                                                                                    : BlockView::Code;
         s.editOffset = f.innerOffset;
         if (f.closed && !f.onlyMetadataAfter) {
             // More text after the closing fence (a list item with a description, a second fence):
@@ -675,8 +675,8 @@ QVariantMap queryInfo(QStringView source)
     // A query with `view:` is drawn as a database view (DatabaseView): its kind.
     QString view;
     if (source.contains(u"view:", Qt::CaseInsensitive) || source.contains(u"widok:", Qt::CaseInsensitive)) {
-        if (const auto parsed = parseQuery(source.toString()); std::holds_alternative<Query>(parsed)
-                                                                  && std::get<Query>(parsed).view != QueryView::None)
+        if (const auto parsed = parseQuery(source.toString());
+            std::holds_alternative<Query>(parsed) && std::get<Query>(parsed).view != QueryView::None)
             view = u"query"_s;
     }
     return {{u"source"_s, source.toString()}, {u"filters"_s, filters}, {u"terms"_s, terms}, {u"view"_s, view}};
@@ -995,7 +995,10 @@ CompletionTrigger CompletionTrigger::fromMap(const QVariantMap &map)
 
 namespace {
 /// The `{{` at `at` of `line` opens something (no backslash before it).
-bool opensAt(QStringView line, qsizetype at) { return at == 0 || line[at - 1] != u'\\'; }
+bool opensAt(QStringView line, qsizetype at)
+{
+    return at == 0 || line[at - 1] != u'\\';
+}
 } // namespace
 
 CompletionTrigger completionTriggerAt(QStringView text, int cursor)
@@ -1040,7 +1043,8 @@ CompletionTrigger completionTriggerAt(QStringView text, int cursor)
     // {{macros of extensions: `{{` or `{{ext:` and what is typed of `extension/name`
     // (docs/SYNTAX.md §13 "Macros"); a `}}` already after the caret is kept.
     {
-        static const QRegularExpression re = text::unicodeRegex(u"\\{\\{[ \\t]*((?:[Ee][Xx][Tt]:)?)([\\p{L}\\p{N}_\\-./]*)$"_s);
+        static const QRegularExpression re =
+                text::unicodeRegex(u"\\{\\{[ \\t]*((?:[Ee][Xx][Tt]:)?)([\\p{L}\\p{N}_\\-./]*)$"_s);
         static const QRegularExpression rest = text::unicodeRegex(u"^([^{}\\n]*)(\\}\\})"_s);
         if (const auto m = re.matchView(before); m.hasMatch() && opensAt(before, m.capturedStart(0))) {
             CompletionTrigger t = result(u"macros"_s, m.capturedStart(1), m.capturedStart(2), u"{{"_s);

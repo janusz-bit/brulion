@@ -1023,7 +1023,8 @@ QString Workspace::createCanvas(const QString &folder)
     const QString path = paths::uniquePath(wanted, [this](const VaultPath &p) { return m_vault->exists(p); });
     const VaultPath created = m_vault->createBinary(path, canvas::emptyCanvasText().toUtf8(), ChangeSource::User);
     if (created.isEmpty())
-        Q_EMIT errorOccurred(tr("Could not create the canvas %1: %2").arg(paths::basename(path), m_vault->errorString()));
+        Q_EMIT errorOccurred(
+                tr("Could not create the canvas %1: %2").arg(paths::basename(path), m_vault->errorString()));
     return created;
 }
 
@@ -1082,7 +1083,10 @@ QVariantList Workspace::suggestMacros(const QString &prefix, int limit) const
     return m_extensions->macroSuggestions(prefix, limit);
 }
 
-QVariantList Workspace::embeddableViews() const { return m_extensions->embeddableViews(); }
+QVariantList Workspace::embeddableViews() const
+{
+    return m_extensions->embeddableViews();
+}
 
 std::optional<QString> Workspace::templateVariable(const QString &extension, const QString &name,
                                                    const QString &arguments, const QVariantMap &context)

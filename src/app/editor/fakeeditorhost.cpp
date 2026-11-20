@@ -273,7 +273,10 @@ QVariantMap FakeEditorHost::runView(const QString &language, const QString &sour
 {
     ++m_queryRuns;
     if (m_queriesFail)
-        return {{u"ok"_s, false}, {u"error"_s, u"No notebook is open."_s}, {u"language"_s, language}, {u"complete"_s, true}};
+        return {{u"ok"_s, false},
+                {u"error"_s, u"No notebook is open."_s},
+                {u"language"_s, language},
+                {u"complete"_s, true}};
     notebook::ViewRequest request;
     request.currentPath = currentPath;
     request.now = clockTime(m_now);
@@ -1050,7 +1053,8 @@ void FakeEditorHost::populateSample()
 markdown::MacroView FakeEditorHost::macroView(const markdown::MacroSpan &macro, const QString & /*path*/) const
 {
     ++m_macroAsks;
-    const QString key = macro.extension + u'/' + macro.name + (macro.arguments.isEmpty() ? QString() : u' ' + macro.arguments);
+    const QString key =
+            macro.extension + u'/' + macro.name + (macro.arguments.isEmpty() ? QString() : u' ' + macro.arguments);
     if (const auto it = m_macroViews.constFind(key); it != m_macroViews.constEnd())
         return *it;
     markdown::MacroView pending;
@@ -1064,8 +1068,11 @@ QVariantList FakeEditorHost::suggestMacros(const QString &prefix, int limit) con
     for (auto it = m_macroViews.cbegin(); it != m_macroViews.cend() && out.size() < limit; ++it) {
         const QString name = it.key().section(u' ', 0, 0);
         if (name.startsWith(prefix, Qt::CaseInsensitive))
-            out << QVariantMap{{u"title"_s, name}, {u"subtitle"_s, u"Makro"_s}, {u"insertText"_s, QString(u"ext:"_s + it.key())},
-                               {u"hint"_s, QString()}, {u"icon"_s, u"puzzle"_s}};
+            out << QVariantMap{{u"title"_s, name},
+                               {u"subtitle"_s, u"Makro"_s},
+                               {u"insertText"_s, QString(u"ext:"_s + it.key())},
+                               {u"hint"_s, QString()},
+                               {u"icon"_s, u"puzzle"_s}};
     }
     return out;
 }

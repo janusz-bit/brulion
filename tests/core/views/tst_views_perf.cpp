@@ -24,14 +24,14 @@ QString note(int i)
     static const QStringList statuses{u"planowany"_s, u"w toku"_s, u"zrobione"_s, u"wstrzymany"_s};
     return u"---\nstatus: %1\nkoszt: %2\ntermin: 2026-%3-%4\ntags: [%5]\nwłaściciel: \"[[Osoba %6]]\"\n---\n"
            u"# Notatka %7\n\n- [ ] Zadanie %7 📅 2026-10-%4\n  etap:: %8\n- Treść o żółwiach i #dom\n"_s
-            .arg(statuses.at(i % 4))
-            .arg(i * 7 % 1000)
-            .arg(10 + i % 3, 2, 10, QChar(u'0'))
-            .arg(1 + i % 28, 2, 10, QChar(u'0'))
-            .arg(i % 5 == 0 ? u"projekt"_s : u"notatka"_s)
-            .arg(i % 20)
-            .arg(i)
-            .arg(i % 2 ? u"zakupy"_s : u"montaż"_s);
+                   .arg(statuses.at(i % 4))
+                   .arg(i * 7 % 1000)
+                   .arg(10 + i % 3, 2, 10, QChar(u'0'))
+                   .arg(1 + i % 28, 2, 10, QChar(u'0'))
+                   .arg(i % 5 == 0 ? u"projekt"_s : u"notatka"_s)
+                   .arg(i % 20)
+                   .arg(i)
+                   .arg(i % 2 ? u"zakupy"_s : u"montaż"_s);
 }
 
 qint64 cpuMs(const std::function<void()> &work, int runs = 3)

@@ -1,9 +1,9 @@
 #include "extensions/engine.h"
 
-#include "extensions/blockedit.h"
-#include "extensions/host.h"
 #include "dates/names.h"
 #include "dates/recurrence.h"
+#include "extensions/blockedit.h"
+#include "extensions/host.h"
 #include "markdown/macros.h"
 #include "text/text.h"
 #include "util/paths.h"
@@ -16,8 +16,8 @@
 #include <QDate>
 #include <QDateTime>
 #include <QRandomGenerator>
-#include <QTimeZone>
 #include <QRegularExpression>
+#include <QTimeZone>
 
 #include <algorithm>
 #include <climits>
@@ -1353,11 +1353,26 @@ int Engine::apiLines(lua_State *L) { return finishApi(L, self(L)->linesImpl(L));
 int Engine::apiReplaceLine(lua_State *L) { return finishApi(L, self(L)->replaceLineImpl(L)); }
 int Engine::apiInsertLine(lua_State *L) { return finishApi(L, self(L)->insertLineImpl(L)); }
 int Engine::apiRemoveLine(lua_State *L) { return finishApi(L, self(L)->removeLineImpl(L)); }
-int Engine::apiRequire(lua_State *L) { return finishApi(L, self(L)->requireImpl(L)); }
-int Engine::apiRequireDone(lua_State *L) { return finishApi(L, self(L)->requireDoneImpl(L)); }
-int Engine::apiSettings(lua_State *L) { return finishApi(L, self(L)->settingsImpl(L)); }
-int Engine::apiSetting(lua_State *L) { return finishApi(L, self(L)->settingImpl(L)); }
-int Engine::apiSetSetting(lua_State *L) { return finishApi(L, self(L)->setSettingImpl(L)); }
+int Engine::apiRequire(lua_State *L)
+{
+    return finishApi(L, self(L)->requireImpl(L));
+}
+int Engine::apiRequireDone(lua_State *L)
+{
+    return finishApi(L, self(L)->requireDoneImpl(L));
+}
+int Engine::apiSettings(lua_State *L)
+{
+    return finishApi(L, self(L)->settingsImpl(L));
+}
+int Engine::apiSetting(lua_State *L)
+{
+    return finishApi(L, self(L)->settingImpl(L));
+}
+int Engine::apiSetSetting(lua_State *L)
+{
+    return finishApi(L, self(L)->setSettingImpl(L));
+}
 
 int Engine::apiRevision(lua_State *L)
 {
@@ -1856,7 +1871,10 @@ int Engine::timerImpl(lua_State *L)
     return 0;
 }
 
-int Engine::apiStopTimer(lua_State *L) { return finishApi(L, self(L)->stopTimerImpl(L)); }
+int Engine::apiStopTimer(lua_State *L)
+{
+    return finishApi(L, self(L)->stopTimerImpl(L));
+}
 
 int Engine::stopTimerImpl(lua_State *L)
 {
@@ -1984,7 +2002,8 @@ int Engine::questionImpl(lua_State *L, const char *kind)
         QVariant fields;
         if (!argString(L, 1, fn.constData(), &title) || !argValue(L, 2, fn.constData(), &fields))
             return kRaise;
-        if (fields.metaType().id() != QMetaType::QVariantList && !(fields.toMap().isEmpty() && lua_type(L, 2) == LUA_TTABLE))
+        if (fields.metaType().id() != QMetaType::QVariantList
+            && !(fields.toMap().isEmpty() && lua_type(L, 2) == LUA_TTABLE))
             return failWith(L, function + u": argument 2 must be a list of fields"_s);
         const QVariantList list = fields.toList();
         if (list.size() > QuestionLimits::fields)
@@ -2026,7 +2045,8 @@ int Engine::questionImpl(lua_State *L, const char *kind)
                     return failWith(L, function + u": option %1 is not a string"_s.arg(i + 1));
                 const QString text = list[i].toString();
                 if (text.size() > QuestionLimits::option)
-                    return failWith(L, function + u": option %1 is longer than %2 characters"_s.arg(i + 1).arg(
+                    return failWith(L, function
+                                               + u": option %1 is longer than %2 characters"_s.arg(i + 1).arg(
                                                        QuestionLimits::option));
                 texts << text;
             }
@@ -2468,8 +2488,14 @@ namespace {
 constexpr int kMaxContributions = 256; // macros (and, apart, variables) of one extension
 }
 
-int Engine::apiMacro(lua_State *L) { return finishApi(L, self(L)->contributionImpl(L, false)); }
-int Engine::apiVariable(lua_State *L) { return finishApi(L, self(L)->contributionImpl(L, true)); }
+int Engine::apiMacro(lua_State *L)
+{
+    return finishApi(L, self(L)->contributionImpl(L, false));
+}
+int Engine::apiVariable(lua_State *L)
+{
+    return finishApi(L, self(L)->contributionImpl(L, true));
+}
 
 int Engine::contributionImpl(lua_State *L, bool variable)
 {
@@ -2480,8 +2506,10 @@ int Engine::contributionImpl(lua_State *L, bool variable)
     if (!argString(L, 1, function, &name))
         return kRaise;
     if (!markdown::isMacroName(name))
-        return failWith(L, fn + u": the name \""_s + name.left(80)
-                                   + u"\" is not one (letters, digits, -, _ and ., at most 64, the first a letter or a digit)"_s);
+        return failWith(
+                L,
+                fn + u": the name \""_s + name.left(80)
+                        + u"\" is not one (letters, digits, -, _ and ., at most 64, the first a letter or a digit)"_s);
     if (lua_type(L, 2) != LUA_TFUNCTION)
         return failWith(L, fn + u": argument 2 must be a function"_s);
     if (!lua_isnoneornil(L, 3) && lua_type(L, 3) != LUA_TTABLE)
@@ -2554,7 +2582,8 @@ QList<MacroInfo> Engine::macros() const
 {
     QList<MacroInfo> out;
     for (auto it = m_macros.cbegin(); it != m_macros.cend(); ++it)
-        out.append({it->extension, it.key().mid(it->extension.size() + 1), it->description, it->arguments, it->example});
+        out.append(
+                {it->extension, it.key().mid(it->extension.size() + 1), it->description, it->arguments, it->example});
     std::sort(out.begin(), out.end(), [](const MacroInfo &a, const MacroInfo &b) {
         return a.extension != b.extension ? a.extension < b.extension : a.name < b.name;
     });
@@ -2590,7 +2619,9 @@ Result Engine::runContribution(bool variable, const QString &extension, const QS
     const QHash<QString, Contribution> &map = variable ? m_variables : m_macros;
     const auto it = map.constFind(extension + u'/' + name);
     if (it == map.constEnd())
-        return {Status::NotFound, {}, (variable ? u"no template variable %1/%2"_s : u"no macro %1/%2"_s).arg(extension, name)};
+        return {Status::NotFound,
+                {},
+                (variable ? u"no template variable %1/%2"_s : u"no macro %1/%2"_s).arg(extension, name)};
     if (m_running)
         return {Status::Error, {}, QString::fromLatin1(kBusy)};
     // A macro is drawn as part of a page: a shorter time limit than a command's, no waiting, no
@@ -2603,8 +2634,10 @@ Result Engine::runContribution(bool variable, const QString &extension, const QS
     m_limits.timeoutMs = ownLimit;
     if (r.status == Status::Suspended) {
         cancel(r.call);
-        r = {Status::Error, {},
-             u"%1: a macro or a template variable cannot wait for a question or for AI"_s.arg(m_loaded.value(extension).name),
+        r = {Status::Error,
+             {},
+             u"%1: a macro or a template variable cannot wait for a question or for AI"_s.arg(
+                     m_loaded.value(extension).name),
              r.call};
     }
     return r;
@@ -2668,7 +2701,8 @@ bool fitsSetting(const QVariantMap &field, const QVariant &value)
     if (kind == u"toggle")
         return value.metaType().id() == QMetaType::Bool;
     if (kind == u"choice")
-        return value.metaType().id() == QMetaType::QString && field.value(u"options"_s).toStringList().contains(value.toString());
+        return value.metaType().id() == QMetaType::QString
+               && field.value(u"options"_s).toStringList().contains(value.toString());
     return value.metaType().id() == QMetaType::QString && value.toString().size() <= QuestionLimits::settingText;
 }
 
@@ -2684,7 +2718,7 @@ QString settingField(const QVariant &value, int index, QVariantMap *out)
     const QVariant initial = map.value(u"value"_s);
     QString kind = map.value(u"kind"_s).toString();
     if (kind.isEmpty())
-        kind = map.contains(u"options"_s)                      ? u"choice"_s
+        kind = map.contains(u"options"_s)                   ? u"choice"_s
                : initial.metaType().id() == QMetaType::Bool ? u"toggle"_s
                : isNumber(initial)                          ? u"number"_s
                                                             : u"text"_s;
@@ -2726,7 +2760,8 @@ QString settingField(const QVariant &value, int index, QVariantMap *out)
         if (initial.isValid() && initial.metaType().id() != QMetaType::QString)
             return u"the setting \"%1\": its value must be a text"_s.arg(key);
         field.insert(u"value"_s, cutText(initial.toString(), QuestionLimits::settingText));
-        field.insert(u"placeholder"_s, cutText(map.value(u"placeholder"_s).toString().simplified(), QuestionLimits::label));
+        field.insert(u"placeholder"_s,
+                     cutText(map.value(u"placeholder"_s).toString().simplified(), QuestionLimits::label));
     }
     *out = field;
     return {};
@@ -2740,7 +2775,8 @@ int Engine::requireImpl(lua_State *L)
     lua_rawcheckstack(L, 8);
     const QString extension = extensionOf(L);
     if (lua_type(L, 1) != LUA_TSTRING)
-        return requireFailed(L, u"argument 1 must be a page's name, not %1"_s.arg(QString::fromUtf8(luaL_typename(L, 1))));
+        return requireFailed(L,
+                             u"argument 1 must be a page's name, not %1"_s.arg(QString::fromUtf8(luaL_typename(L, 1))));
     const QString name = toQString(L, 1).trimmed();
     const auto loaded = m_loaded.find(extension);
     if (loaded == m_loaded.end() || name.isEmpty())
@@ -2840,9 +2876,15 @@ int Engine::requireDoneImpl(lua_State *L)
     return 0;
 }
 
-QStringList Engine::modulesOf(const QString &extension) const { return m_loaded.value(extension).modules; }
+QStringList Engine::modulesOf(const QString &extension) const
+{
+    return m_loaded.value(extension).modules;
+}
 
-QVariantList Engine::settingsOf(const QString &extension) const { return m_loaded.value(extension).settings; }
+QVariantList Engine::settingsOf(const QString &extension) const
+{
+    return m_loaded.value(extension).settings;
+}
 
 QVariantMap Engine::settingValues(const QString &extension) const
 {
@@ -2932,7 +2974,7 @@ int Engine::setSettingImpl(lua_State *L)
         if (field.value(u"key"_s).toString() != key || !value.isValid() || fitsSetting(field, value))
             continue;
         const QString kind = field.value(u"kind"_s).toString();
-        const QString what = kind == u"number" ? u"a number"_s
+        const QString what = kind == u"number"   ? u"a number"_s
                              : kind == u"toggle" ? u"true or false"_s
                              : kind == u"choice" ? u"one of its options"_s
                                                  : u"a text"_s;

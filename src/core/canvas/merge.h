@@ -24,13 +24,13 @@ Canvas merge(const Canvas *base, const Canvas &ours, const Canvas &theirs);
 
 /// How two versions and their merge relate (the sync center's card).
 struct MergeCounts {
-    int ours = 0;     ///< nodes and edges of each version
+    int ours = 0; ///< nodes and edges of each version
     int theirs = 0;
-    int common = 0;   ///< items both have (by id), whatever their fields
+    int common = 0; ///< items both have (by id), whatever their fields
     int onlyOurs = 0;
     int onlyTheirs = 0;
-    int changed = 0;  ///< items both have with other fields
-    int merged = 0;   ///< items of the merge
+    int changed = 0; ///< items both have with other fields
+    int merged = 0;  ///< items of the merge
 };
 MergeCounts mergeCounts(const Canvas &ours, const Canvas &theirs, const Canvas &merged);
 

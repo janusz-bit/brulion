@@ -20,14 +20,22 @@ const QString BoardPath = u"Plany/Kuchnia.canvas"_s;
 QString board()
 {
     return u"{\n\t\"nodes\":[\n"
-           u"\t\t{\"id\":\"g1\",\"type\":\"group\",\"x\":-420,\"y\":-320,\"width\":1380,\"height\":660,\"label\":\"Remont kuchni\"},\n"
-           u"\t\t{\"id\":\"t1\",\"type\":\"text\",\"text\":\"# Plan\\n\\n- [ ] zamówić płytki 📅 2026-11-21\\n- przypomnienie ⏰ 2026-11-21 09:00\\n\\nZobacz [[Budżet domowy]] i #remont\",\"x\":-400,\"y\":-280,\"width\":320,\"height\":240},\n"
-           u"\t\t{\"id\":\"f1\",\"type\":\"file\",\"file\":\"Projekty/Kuchnia.md\",\"x\":-40,\"y\":-280,\"width\":400,\"height\":400},\n"
-           u"\t\t{\"id\":\"f2\",\"type\":\"file\",\"file\":\"Projekty/Kuchnia.md\",\"subpath\":\"#Szafki\",\"x\":-40,\"y\":160,\"width\":400,\"height\":140},\n"
-           u"\t\t{\"id\":\"f3\",\"type\":\"file\",\"file\":\"assets/płytki.jpg\",\"x\":-400,\"y\":0,\"width\":320,\"height\":240},\n"
-           u"\t\t{\"id\":\"l1\",\"type\":\"link\",\"url\":\"https://example.com/sklep\",\"x\":520,\"y\":-280,\"width\":400,\"height\":200}\n"
+           u"\t\t{\"id\":\"g1\",\"type\":\"group\",\"x\":-420,\"y\":-320,\"width\":1380,\"height\":660,\"label\":"
+           u"\"Remont kuchni\"},\n"
+           u"\t\t{\"id\":\"t1\",\"type\":\"text\",\"text\":\"# Plan\\n\\n- [ ] zamówić płytki 📅 2026-11-21\\n- "
+           u"przypomnienie ⏰ 2026-11-21 09:00\\n\\nZobacz [[Budżet domowy]] i "
+           u"#remont\",\"x\":-400,\"y\":-280,\"width\":320,\"height\":240},\n"
+           u"\t\t{\"id\":\"f1\",\"type\":\"file\",\"file\":\"Projekty/"
+           u"Kuchnia.md\",\"x\":-40,\"y\":-280,\"width\":400,\"height\":400},\n"
+           u"\t\t{\"id\":\"f2\",\"type\":\"file\",\"file\":\"Projekty/"
+           u"Kuchnia.md\",\"subpath\":\"#Szafki\",\"x\":-40,\"y\":160,\"width\":400,\"height\":140},\n"
+           u"\t\t{\"id\":\"f3\",\"type\":\"file\",\"file\":\"assets/"
+           u"płytki.jpg\",\"x\":-400,\"y\":0,\"width\":320,\"height\":240},\n"
+           u"\t\t{\"id\":\"l1\",\"type\":\"link\",\"url\":\"https://example.com/"
+           u"sklep\",\"x\":520,\"y\":-280,\"width\":400,\"height\":200}\n"
            u"\t],\n\t\"edges\":[\n"
-           u"\t\t{\"id\":\"e1\",\"fromNode\":\"t1\",\"fromSide\":\"right\",\"toNode\":\"f1\",\"toSide\":\"left\",\"label\":\"szczegóły zamówienia\"}\n"
+           u"\t\t{\"id\":\"e1\",\"fromNode\":\"t1\",\"fromSide\":\"right\",\"toNode\":\"f1\",\"toSide\":\"left\","
+           u"\"label\":\"szczegóły zamówienia\"}\n"
            u"\t]\n}"_s;
 }
 
@@ -125,15 +133,19 @@ private Q_SLOTS:
         // The excerpt's line leads to its card.
         QCOMPARE(canvas::nodeAtLine(canvas::indexText(board()), hit->line), u"t1"_s);
         // An edge's label and a group's label are found too; JSON keys never.
-        QVERIFY(std::ranges::any_of(index.search(u"szczegóły zamówienia"_s), [](const SearchHit &h) { return h.path == BoardPath; }));
-        QVERIFY(std::ranges::none_of(index.search(u"fromSide"_s), [](const SearchHit &h) { return h.path == BoardPath; }));
+        QVERIFY(std::ranges::any_of(index.search(u"szczegóły zamówienia"_s),
+                                    [](const SearchHit &h) { return h.path == BoardPath; }));
+        QVERIFY(std::ranges::none_of(index.search(u"fromSide"_s),
+                                     [](const SearchHit &h) { return h.path == BoardPath; }));
     }
 
     void noUnlinkedMentions()
     {
         VaultIndex index;
         fill(index);
-        index.update(u"Plany/Druga.canvas"_s, u"{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"text\":\"Budżet domowy bez linku\",\"x\":0,\"y\":0,\"width\":250,\"height\":60}]}"_s);
+        index.update(
+                u"Plany/Druga.canvas"_s,
+                u"{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"text\":\"Budżet domowy bez linku\",\"x\":0,\"y\":0,\"width\":250,\"height\":60}]}"_s);
         const QList<UnlinkedRef> refs = index.unlinkedReferences(u"Budżet domowy.md"_s);
         QVERIFY(std::ranges::none_of(refs, [](const UnlinkedRef &r) { return r.path.endsWith(u".canvas"); }));
     }
@@ -200,7 +212,8 @@ private Q_SLOTS:
         VaultIndex index;
         fill(index);
         const RelocationPlan plan = index.planRelocation({{u"Projekty/Kuchnia.md"_s, u"Archiwum/Kuchnia.md"_s}});
-        const auto f = std::ranges::find_if(plan.files(), [](const RelocationPlan::File &x) { return x.path == BoardPath; });
+        const auto f =
+                std::ranges::find_if(plan.files(), [](const RelocationPlan::File &x) { return x.path == BoardPath; });
         QVERIFY(f != plan.files().cend());
         QCOMPARE(f->before, board()); // the file's JSON, for the compare-and-swap
         QCOMPARE(f->links, 2);
@@ -219,7 +232,8 @@ private Q_SLOTS:
         VaultIndex index;
         fill(index);
         const RelocationPlan plan = index.planRelocation({{u"Budżet domowy.md"_s, u"Finanse/Wydatki.md"_s}});
-        const auto f = std::ranges::find_if(plan.files(), [](const RelocationPlan::File &x) { return x.path == BoardPath; });
+        const auto f =
+                std::ranges::find_if(plan.files(), [](const RelocationPlan::File &x) { return x.path == BoardPath; });
         QVERIFY(f != plan.files().cend());
         QCOMPARE(f->links, 1);
         QVERIFY(f->after.contains(u"Zobacz [[Wydatki]] i #remont"_s));
@@ -235,10 +249,10 @@ private Q_SLOTS:
     {
         VaultIndex index;
         fill(index);
-        const RelocationPlan plan =
-                index.planRelocation({{u"assets/płytki.jpg"_s, u"zdjęcia/płytki.jpg"_s},
-                                      {u"Projekty/Kuchnia.md"_s, u"Stare/Projekty/Kuchnia.md"_s}});
-        const auto f = std::ranges::find_if(plan.files(), [](const RelocationPlan::File &x) { return x.path == BoardPath; });
+        const RelocationPlan plan = index.planRelocation({{u"assets/płytki.jpg"_s, u"zdjęcia/płytki.jpg"_s},
+                                                          {u"Projekty/Kuchnia.md"_s, u"Stare/Projekty/Kuchnia.md"_s}});
+        const auto f =
+                std::ranges::find_if(plan.files(), [](const RelocationPlan::File &x) { return x.path == BoardPath; });
         QVERIFY(f != plan.files().cend());
         QCOMPARE(f->links, 3);
         QVERIFY(f->after.contains(u"\"file\":\"zdjęcia/płytki.jpg\""_s));
@@ -251,10 +265,12 @@ private Q_SLOTS:
         fill(index);
         // The note linking to the canvas follows it; the canvas's own exact paths stay.
         const RelocationPlan plan = index.planRelocation({{BoardPath, u"Archiwum/Kuchnia.canvas"_s}});
-        const auto note = std::ranges::find_if(plan.files(), [](const RelocationPlan::File &x) { return x.path == u"Notatka.md"; });
+        const auto note = std::ranges::find_if(plan.files(),
+                                               [](const RelocationPlan::File &x) { return x.path == u"Notatka.md"; });
         QVERIFY(note != plan.files().cend());
         QVERIFY(note->after.contains(u"[[Archiwum/Kuchnia.canvas]]"_s));
-        const auto self = std::ranges::find_if(plan.files(), [](const RelocationPlan::File &x) { return x.path == BoardPath; });
+        const auto self =
+                std::ranges::find_if(plan.files(), [](const RelocationPlan::File &x) { return x.path == BoardPath; });
         QVERIFY(self == plan.files().cend());
     }
 };

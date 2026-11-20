@@ -402,7 +402,7 @@ private:
     QList<PropertyItem> propertyItems(const View &view, const QString &key, bool *found = nullptr);
     /// A note's page property as written: its folded key, value and where it is written.
     struct RawProperty {
-        QString key; ///< folded
+        QString key;  ///< folded
         QString name; ///< as written
         QVariant value;
         bool logseq = false;

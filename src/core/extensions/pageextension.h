@@ -113,17 +113,19 @@ int errorLine(const QString &title, const QString &error);
 /// compared with before it is approved), `settings/<id>` its settings (notebookhost.h).
 inline QString approvedStoreKey() { return QStringLiteral("extensions/approved"); }
 inline QString offStoreKey() { return QStringLiteral("extensions/off"); }
-inline QString approvedCodeStoreKey(const QString &id) { return QStringLiteral("extensions/approvedCode/") + id; }
+inline QString approvedCodeStoreKey(const QString &id)
+{
+    return QStringLiteral("extensions/approvedCode/") + id;
+}
 /// The code an approval keeps to compare with (approvedCodeStoreKey): longer code keeps its hash only.
 constexpr int kMaxApprovedCode = 512 * 1024;
 
 /// One line of what an approval shows: the code as it is now against the code approved before.
-struct CodeDiffLine
-{
+struct CodeDiffLine {
     enum Kind { Same, Added, Removed, Skipped };
     Kind kind = Same;
-    QString text; ///< the line (Skipped: empty)
-    int line = 0; ///< the line in the new code (Same, Added) or in the old (Removed), from 1
+    QString text;  ///< the line (Skipped: empty)
+    int line = 0;  ///< the line in the new code (Same, Added) or in the old (Removed), from 1
     int count = 1; ///< Skipped: how many unchanged lines are left out
 };
 

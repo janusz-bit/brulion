@@ -265,22 +265,54 @@ const QHash<QString, QueryColumnKind> &columnAliases()
 {
     using C = QueryColumnKind;
     static const QHash<QString, C> table = {
-            {u"title"_s, C::Title},         {u"tytul"_s, C::Title},         {u"page"_s, C::Title},
-            {u"strona"_s, C::Title},        {u"name"_s, C::Title},          {u"nazwa"_s, C::Title},
-            {u"file"_s, C::Title},          {u"plik"_s, C::Title},          {u"path"_s, C::Path},
-            {u"sciezka"_s, C::Path},        {u"folder"_s, C::Folder},       {u"katalog"_s, C::Folder},
-            {u"tags"_s, C::Tags},           {u"tagi"_s, C::Tags},           {u"tag"_s, C::Tags},
-            {u"mtime"_s, C::Modified},      {u"modified"_s, C::Modified},   {u"zmieniono"_s, C::Modified},
-            {u"zmiana"_s, C::Modified},     {u"size"_s, C::Size},           {u"rozmiar"_s, C::Size},
-            {u"date"_s, C::Date},           {u"data"_s, C::Date},           {u"dzien"_s, C::Date},
-            {u"text"_s, C::Text},           {u"tekst"_s, C::Text},          {u"task"_s, C::Text},
-            {u"zadanie"_s, C::Text},        {u"block"_s, C::Text},          {u"blok"_s, C::Text},
-            {u"status"_s, C::Status},       {u"stan"_s, C::Status},         {u"priority"_s, C::Priority},
-            {u"priorytet"_s, C::Priority},  {u"prio"_s, C::Priority},       {u"due"_s, C::Due},
-            {u"termin"_s, C::Due},          {u"deadline"_s, C::Due},        {u"scheduled"_s, C::Scheduled},
-            {u"zaplanowane"_s, C::Scheduled}, {u"plan"_s, C::Scheduled},    {u"start"_s, C::Start},
-            {u"poczatek"_s, C::Start},      {u"done"_s, C::Done},           {u"zrobione"_s, C::Done},
-            {u"wykonane"_s, C::Done},       {u"created"_s, C::Created},     {u"utworzone"_s, C::Created},
+            {u"title"_s, C::Title},
+            {u"tytul"_s, C::Title},
+            {u"page"_s, C::Title},
+            {u"strona"_s, C::Title},
+            {u"name"_s, C::Title},
+            {u"nazwa"_s, C::Title},
+            {u"file"_s, C::Title},
+            {u"plik"_s, C::Title},
+            {u"path"_s, C::Path},
+            {u"sciezka"_s, C::Path},
+            {u"folder"_s, C::Folder},
+            {u"katalog"_s, C::Folder},
+            {u"tags"_s, C::Tags},
+            {u"tagi"_s, C::Tags},
+            {u"tag"_s, C::Tags},
+            {u"mtime"_s, C::Modified},
+            {u"modified"_s, C::Modified},
+            {u"zmieniono"_s, C::Modified},
+            {u"zmiana"_s, C::Modified},
+            {u"size"_s, C::Size},
+            {u"rozmiar"_s, C::Size},
+            {u"date"_s, C::Date},
+            {u"data"_s, C::Date},
+            {u"dzien"_s, C::Date},
+            {u"text"_s, C::Text},
+            {u"tekst"_s, C::Text},
+            {u"task"_s, C::Text},
+            {u"zadanie"_s, C::Text},
+            {u"block"_s, C::Text},
+            {u"blok"_s, C::Text},
+            {u"status"_s, C::Status},
+            {u"stan"_s, C::Status},
+            {u"priority"_s, C::Priority},
+            {u"priorytet"_s, C::Priority},
+            {u"prio"_s, C::Priority},
+            {u"due"_s, C::Due},
+            {u"termin"_s, C::Due},
+            {u"deadline"_s, C::Due},
+            {u"scheduled"_s, C::Scheduled},
+            {u"zaplanowane"_s, C::Scheduled},
+            {u"plan"_s, C::Scheduled},
+            {u"start"_s, C::Start},
+            {u"poczatek"_s, C::Start},
+            {u"done"_s, C::Done},
+            {u"zrobione"_s, C::Done},
+            {u"wykonane"_s, C::Done},
+            {u"created"_s, C::Created},
+            {u"utworzone"_s, C::Created},
     };
     return table;
 }
@@ -303,20 +335,46 @@ bool isTaskColumn(QueryColumnKind k)
 const QHash<QString, QString> &summaryAliases()
 {
     static const QHash<QString, QString> table = {
-            {u"sum"_s, u"sum"_s},           {u"suma"_s, u"sum"_s},           {u"total"_s, u"sum"_s},
-            {u"average"_s, u"average"_s},   {u"avg"_s, u"average"_s},        {u"mean"_s, u"average"_s},
-            {u"srednia"_s, u"average"_s},   {u"median"_s, u"median"_s},      {u"mediana"_s, u"median"_s},
-            {u"min"_s, u"min"_s},           {u"minimum"_s, u"min"_s},        {u"max"_s, u"max"_s},
-            {u"maks"_s, u"max"_s},          {u"maximum"_s, u"max"_s},        {u"maksimum"_s, u"max"_s},
-            {u"range"_s, u"range"_s},       {u"zakres"_s, u"range"_s},       {u"rozpietosc"_s, u"range"_s},
-            {u"stddev"_s, u"stddev"_s},     {u"odchylenie"_s, u"stddev"_s},  {u"count"_s, u"count"_s},
-            {u"liczba"_s, u"count"_s},      {u"ilosc"_s, u"count"_s},        {u"empty"_s, u"empty"_s},
-            {u"puste"_s, u"empty"_s},       {u"filled"_s, u"filled"_s},      {u"wypelnione"_s, u"filled"_s},
-            {u"unique"_s, u"unique"_s},     {u"unikalne"_s, u"unique"_s},    {u"rozne"_s, u"unique"_s},
-            {u"checked"_s, u"checked"_s},   {u"zaznaczone"_s, u"checked"_s}, {u"unchecked"_s, u"unchecked"_s},
-            {u"niezaznaczone"_s, u"unchecked"_s}, {u"earliest"_s, u"earliest"_s},
-            {u"najwczesniej"_s, u"earliest"_s},   {u"najwczesniejsza"_s, u"earliest"_s},
-            {u"latest"_s, u"latest"_s},     {u"najpozniej"_s, u"latest"_s},  {u"najpozniejsza"_s, u"latest"_s},
+            {u"sum"_s, u"sum"_s},
+            {u"suma"_s, u"sum"_s},
+            {u"total"_s, u"sum"_s},
+            {u"average"_s, u"average"_s},
+            {u"avg"_s, u"average"_s},
+            {u"mean"_s, u"average"_s},
+            {u"srednia"_s, u"average"_s},
+            {u"median"_s, u"median"_s},
+            {u"mediana"_s, u"median"_s},
+            {u"min"_s, u"min"_s},
+            {u"minimum"_s, u"min"_s},
+            {u"max"_s, u"max"_s},
+            {u"maks"_s, u"max"_s},
+            {u"maximum"_s, u"max"_s},
+            {u"maksimum"_s, u"max"_s},
+            {u"range"_s, u"range"_s},
+            {u"zakres"_s, u"range"_s},
+            {u"rozpietosc"_s, u"range"_s},
+            {u"stddev"_s, u"stddev"_s},
+            {u"odchylenie"_s, u"stddev"_s},
+            {u"count"_s, u"count"_s},
+            {u"liczba"_s, u"count"_s},
+            {u"ilosc"_s, u"count"_s},
+            {u"empty"_s, u"empty"_s},
+            {u"puste"_s, u"empty"_s},
+            {u"filled"_s, u"filled"_s},
+            {u"wypelnione"_s, u"filled"_s},
+            {u"unique"_s, u"unique"_s},
+            {u"unikalne"_s, u"unique"_s},
+            {u"rozne"_s, u"unique"_s},
+            {u"checked"_s, u"checked"_s},
+            {u"zaznaczone"_s, u"checked"_s},
+            {u"unchecked"_s, u"unchecked"_s},
+            {u"niezaznaczone"_s, u"unchecked"_s},
+            {u"earliest"_s, u"earliest"_s},
+            {u"najwczesniej"_s, u"earliest"_s},
+            {u"najwczesniejsza"_s, u"earliest"_s},
+            {u"latest"_s, u"latest"_s},
+            {u"najpozniej"_s, u"latest"_s},
+            {u"najpozniejsza"_s, u"latest"_s},
     };
     return table;
 }
@@ -325,12 +383,12 @@ const QHash<QString, QString> &summaryAliases()
 std::optional<QueryPropertyOp> propertyKeyword(const QString &folded)
 {
     static const QHash<QString, QueryPropertyOp> table = {
-            {u"none"_s, QueryPropertyOp::None},    {u"brak"_s, QueryPropertyOp::None},
-            {u"empty"_s, QueryPropertyOp::None},   {u"puste"_s, QueryPropertyOp::None},
-            {u"pusty"_s, QueryPropertyOp::None},   {u"pusta"_s, QueryPropertyOp::None},
-            {u"any"_s, QueryPropertyOp::Any},      {u"dowolna"_s, QueryPropertyOp::Any},
-            {u"dowolny"_s, QueryPropertyOp::Any},  {u"dowolne"_s, QueryPropertyOp::Any},
-            {u"exists"_s, QueryPropertyOp::Any},   {u"istnieje"_s, QueryPropertyOp::Any},
+            {u"none"_s, QueryPropertyOp::None},   {u"brak"_s, QueryPropertyOp::None},
+            {u"empty"_s, QueryPropertyOp::None},  {u"puste"_s, QueryPropertyOp::None},
+            {u"pusty"_s, QueryPropertyOp::None},  {u"pusta"_s, QueryPropertyOp::None},
+            {u"any"_s, QueryPropertyOp::Any},     {u"dowolna"_s, QueryPropertyOp::Any},
+            {u"dowolny"_s, QueryPropertyOp::Any}, {u"dowolne"_s, QueryPropertyOp::Any},
+            {u"exists"_s, QueryPropertyOp::Any},  {u"istnieje"_s, QueryPropertyOp::Any},
     };
     const auto it = table.constFind(folded);
     return it == table.cend() ? std::nullopt : std::optional(*it);
@@ -640,7 +698,8 @@ qsizetype keyLength(QStringView raw)
 qsizetype propertyKeyLength(QStringView raw)
 {
     qsizetype k = 0;
-    while (k < raw.size() && (raw[k].isLetterOrNumber() || raw[k] == u'_' || (k > 0 && raw[k] == u'-') || raw[k].isMark()))
+    while (k < raw.size()
+           && (raw[k].isLetterOrNumber() || raw[k] == u'_' || (k > 0 && raw[k] == u'-') || raw[k].isMark()))
         ++k;
     return k > 0 && raw.sliced(k).startsWith(u"::") ? k : -1;
 }
@@ -833,8 +892,8 @@ bool Parser::applyKey(Key key, const QString &written, const QString &rawValue, 
     if (values.isEmpty())
         return fail(messages::emptyValue(written, exampleFor(key)));
     m_used.append(Used{key, values.join(u',')});
-    const bool once = key == Key::Type || key == Key::Sort || key == Key::Group || key == Key::Limit
-                      || key == Key::View || key == Key::Columns || key == Key::Summary;
+    const bool once = key == Key::Type || key == Key::Sort || key == Key::Group || key == Key::Limit || key == Key::View
+                      || key == Key::Columns || key == Key::Summary;
     if (once && negate)
         return fail(messages::notNegatable(written));
     QueryFilter f;
@@ -1141,10 +1200,9 @@ QueryType Parser::inferType() const
                          || (group && isTaskGroup(*group));
     if (taskish)
         return QueryType::Tasks;
-    const bool remind = std::ranges::any_of(m_used, [](const Used &u) { return u.key == Key::Remind; })
-                        || std::ranges::any_of(m_sortNames, [&](const auto &s) {
-                               return builtinSort(s) == QuerySortKey::Remind;
-                           });
+    const bool remind =
+            std::ranges::any_of(m_used, [](const Used &u) { return u.key == Key::Remind; })
+            || std::ranges::any_of(m_sortNames, [&](const auto &s) { return builtinSort(s) == QuerySortKey::Remind; });
     return remind ? QueryType::Reminders : QueryType::Blocks;
 }
 
@@ -1158,9 +1216,9 @@ void Parser::resolveNames()
         s.name = name;
         const auto it = sortAliases().constFind(valueKey(name));
         // On pages only the page keys are built-in: `sort:status` reads the page's property.
-        const bool builtin = !marked && it != sortAliases().cend()
-                             && (!pages || *it == QuerySortKey::Page || *it == QuerySortKey::Path
-                                 || *it == QuerySortKey::Date);
+        const bool builtin =
+                !marked && it != sortAliases().cend()
+                && (!pages || *it == QuerySortKey::Page || *it == QuerySortKey::Path || *it == QuerySortKey::Date);
         if (builtin) {
             s.key = *it;
         } else {
@@ -1172,9 +1230,9 @@ void Parser::resolveNames()
     if (m_groupName) {
         const auto [name, marked] = withoutPropertyMark(*m_groupName);
         const auto it = groupAliases().constFind(valueKey(name));
-        const bool builtin = !marked && it != groupAliases().cend()
-                             && (!pages || *it == QueryGroupKey::Page || *it == QueryGroupKey::Tag
-                                 || *it == QueryGroupKey::Date);
+        const bool builtin =
+                !marked && it != groupAliases().cend()
+                && (!pages || *it == QueryGroupKey::Page || *it == QueryGroupKey::Tag || *it == QueryGroupKey::Date);
         if (builtin) {
             m_query.group = *it;
         } else {
@@ -1442,8 +1500,8 @@ void tokenNames(QStringView token, qsizetype at, QList<QueryNameRef> &out)
         const qsizetype base = at + valueAt;
         forEachPart(raw.sliced(valueAt), [&](QStringView part, qsizetype offset) {
             qsizetype skip = 0;
-            while (skip < part.size() && (part[skip].isSpace() || part[skip] == u'<' || part[skip] == u'>'
-                                          || part[skip] == u'='))
+            while (skip < part.size()
+                   && (part[skip].isSpace() || part[skip] == u'<' || part[skip] == u'>' || part[skip] == u'='))
                 ++skip;
             const QStringView value = part.sliced(skip).trimmed();
             if (value.startsWith(u"[[") && value.endsWith(u"]]") && rangeDots(value) < 0)

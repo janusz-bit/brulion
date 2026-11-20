@@ -25,7 +25,9 @@ namespace brulion::editor {
 
 // ---- ViewListModel ---------------------------------------------------------------------------------
 
-ViewListModel::ViewListModel(QList<QByteArray> roles, QObject *parent) : QAbstractListModel(parent), m_roles(std::move(roles)) { }
+ViewListModel::ViewListModel(QList<QByteArray> roles, QObject *parent)
+    : QAbstractListModel(parent), m_roles(std::move(roles))
+{ }
 
 int ViewListModel::rowCount(const QModelIndex &parent) const
 {
@@ -88,12 +90,12 @@ QString statusOf(const QVariantMap &row)
 } // namespace
 
 ViewResultModel::ViewResultModel(QObject *parent)
-    : QAbstractListModel(parent),
-      m_view(std::make_unique<views::ViewResult>()),
-      m_columns(new ViewListModel({"label", "kind", "type", "editable", "sortKey", "sorted", "summaryLabel",
-                                   "summaryText", "number"},
-                                  this)),
-      m_groups(new ViewListModel({"label", "value", "count", "droppable", "summary", "group"}, this))
+    : QAbstractListModel(parent)
+    , m_view(std::make_unique<views::ViewResult>())
+    , m_columns(new ViewListModel(
+              {"label", "kind", "type", "editable", "sortKey", "sorted", "summaryLabel", "summaryText", "number"},
+              this))
+    , m_groups(new ViewListModel({"label", "value", "count", "droppable", "summary", "group"}, this))
 {
     m_timer.setSingleShot(true);
     m_timer.setInterval(150);
@@ -124,9 +126,9 @@ int ViewResultModel::rowCount(const QModelIndex &parent) const
 
 QHash<int, QByteArray> ViewResultModel::roleNames() const
 {
-    return {{PathRole, "path"},       {TitleRole, "title"},   {CellsRole, "cells"},       {TextsRole, "texts"},
-            {StatusRole, "status"},   {IsTaskRole, "isTask"}, {CoverRole, "cover"},       {CoverColorRole, "coverColor"},
-            {GroupRole, "group"},     {DateRole, "date"},     {LineRole, "line"},         {HeadlineRole, "headline"},
+    return {{PathRole, "path"},      {TitleRole, "title"},   {CellsRole, "cells"}, {TextsRole, "texts"},
+            {StatusRole, "status"},  {IsTaskRole, "isTask"}, {CoverRole, "cover"}, {CoverColorRole, "coverColor"},
+            {GroupRole, "group"},    {DateRole, "date"},     {LineRole, "line"},   {HeadlineRole, "headline"},
             {DetailsRole, "details"}};
 }
 
@@ -482,8 +484,8 @@ void ViewResultModel::refresh()
     m_ok = result.value(u"ok"_s).toBool();
     m_error = result.value(u"error"_s).toString();
     m_complete = result.value(u"complete"_s, true).toBool();
-    if (const int view = result.value(u"view"_s, m_viewIndex).toInt(); view != m_viewIndex && m_language == u"base"
-                                                                       && !m_viewName.isEmpty()) {
+    if (const int view = result.value(u"view"_s, m_viewIndex).toInt();
+        view != m_viewIndex && m_language == u"base" && !m_viewName.isEmpty()) {
         m_viewIndex = view; // (a view by its name)
         Q_EMIT viewIndexChanged();
     }
@@ -1102,7 +1104,8 @@ bool ViewResultModel::sortBy(int column, bool descending)
     if (column >= 0 && key.isEmpty())
         return false;
     if (m_language == u"query")
-        return writeViewText(views::setQueryOption(m_source, u"sort"_s, key.isEmpty() ? QString() : (descending ? u"-"_s : QString()) + key));
+        return writeViewText(views::setQueryOption(
+                m_source, u"sort"_s, key.isEmpty() ? QString() : (descending ? u"-"_s : QString()) + key));
     QList<views::BaseSort> sort;
     if (!key.isEmpty())
         sort.append(views::BaseSort{key, descending});

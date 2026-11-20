@@ -118,7 +118,7 @@ Canvas addNode(Canvas c, Node node)
 }
 
 Canvas connectNodes(Canvas c, const QString &from, const QString &fromSide, const QString &to, const QString &toSide,
-               QString *edgeId, const IdSource &ids)
+                    QString *edgeId, const IdSource &ids)
 {
     if (!c.node(from) || !c.node(to) || from == to)
         return c;
@@ -201,7 +201,7 @@ Canvas setGroupBackground(Canvas c, const QString &id, const QString &path, cons
 {
     if (Node *n = c.node(id)) {
         n->background = path;
-        n->backgroundStyle = path.isEmpty() ? QString()
+        n->backgroundStyle = path.isEmpty()                                                 ? QString()
                              : style == u"cover" || style == u"ratio" || style == u"repeat" ? style
                                                                                             : QString();
     }

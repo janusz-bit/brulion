@@ -419,8 +419,8 @@ private:
     // A gesture.
     Gesture m_gesture = Gesture::None;
     Hit m_pressHit;
-    QPointF m_pressPos;        ///< item coordinates
-    QPointF m_pressCanvas;     ///< canvas units
+    QPointF m_pressPos;    ///< item coordinates
+    QPointF m_pressCanvas; ///< canvas units
     QPointF m_lastPos;
     Qt::KeyboardModifiers m_pressModifiers;
     Qt::MouseButton m_pressButton = Qt::NoButton;

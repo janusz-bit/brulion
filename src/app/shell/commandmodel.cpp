@@ -138,9 +138,10 @@ void CommandModel::refreshShortcutActions()
         return;
     const QList<ShortcutMap::Action> actions = shortcutActions();
     const QList<ShortcutMap::Action> &now = shortcuts->actions();
-    const bool same = actions.size() == now.size() && std::ranges::equal(actions, now, [](const auto &a, const auto &b) {
-        return a.id == b.id && a.title == b.title && a.defaultSequence == b.defaultSequence;
-    });
+    const bool same =
+            actions.size() == now.size() && std::ranges::equal(actions, now, [](const auto &a, const auto &b) {
+                return a.id == b.id && a.title == b.title && a.defaultSequence == b.defaultSequence;
+            });
     if (!same)
         shortcuts->setActions(actions);
 }
@@ -677,7 +678,8 @@ QList<ShortcutMap::Action> CommandModel::shortcutActions() const
         if (c.id.startsWith(u"ext.")) {
             title = c.subtitle + u": "_s + c.title; // ("Licznik słów: Policz słowa")
             const QString n = ShortcutMap::normalize(shortcut);
-            shortcut = n.isEmpty() || ShortcutMap::typesText(n) || !ShortcutMap::reservedUse(n).isEmpty() || taken.contains(n)
+            shortcut = n.isEmpty() || ShortcutMap::typesText(n) || !ShortcutMap::reservedUse(n).isEmpty()
+                                       || taken.contains(n)
                                ? QString()
                                : n;
             if (!shortcut.isEmpty())
@@ -722,8 +724,7 @@ bool CommandModel::run(const QString &id)
         if (path.isEmpty())
             return false;
         m_app->openPage(path);
-    }
-    else if (id == u"extensions.runBlock")
+    } else if (id == u"extensions.runBlock")
         m_app->requestUiAction(u"extension:*/run"_s);
     else if (id == u"extensions.new") {
         const QString path = m_app->workspace()->extensions()->createExtension();

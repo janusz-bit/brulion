@@ -147,8 +147,8 @@
 #pragma once
 
 #include "markdown/blockclipboard.h"
-#include "markdown/blockprops.h"
 #include "markdown/blockdocument.h"
+#include "markdown/blockprops.h"
 #include "markdown/cloze.h"
 #include "markdown/edit.h"
 #include "markdown/frontmatter.h"

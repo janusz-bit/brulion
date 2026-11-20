@@ -1,8 +1,8 @@
 // Two devices syncing through one WebDAV server: edits, deletions, concurrent journal appends,
 // real conflicts (text and binary), drawings changed on both devices (merged element by element,
-// both versions kept when they cannot be), canvases changed on both devices (merged node by node), first sync with content on both sides, the vault
-// config, line endings, parallel transfers, files that are not UTF-8, failing conflict uploads,
-// renames.
+// both versions kept when they cannot be), canvases changed on both devices (merged node by node), first sync with
+// content on both sides, the vault config, line endings, parallel transfers, files that are not UTF-8, failing conflict
+// uploads, renames.
 #include "synctest.h"
 
 #include "drawing/drawingfile.h"
@@ -275,13 +275,17 @@ private Q_SLOTS:
         const QString path = u"Plany/Remont kuchni.canvas"_s;
         const auto canvasText = [](int x, const QString &text, bool third) {
             return u"{\n\t\"nodes\":[\n"
-                   u"\t\t{\"id\":\"a1\",\"type\":\"text\",\"text\":\"Płytki\",\"x\":%1,\"y\":0,\"width\":250,\"height\":60},\n"
-                   u"\t\t{\"id\":\"a2\",\"type\":\"text\",\"text\":\"%2\",\"x\":300,\"y\":0,\"width\":250,\"height\":60}%3\n"
+                   u"\t\t{\"id\":\"a1\",\"type\":\"text\",\"text\":\"Płytki\",\"x\":%1,\"y\":0,\"width\":250,"
+                   u"\"height\":60},\n"
+                   u"\t\t{\"id\":\"a2\",\"type\":\"text\",\"text\":\"%2\",\"x\":300,\"y\":0,\"width\":250,\"height\":"
+                   u"60}%3\n"
                    u"\t],\n\t\"edges\":[\n"
-                   u"\t\t{\"id\":\"e1\",\"fromNode\":\"a1\",\"fromSide\":\"right\",\"toNode\":\"a2\",\"toSide\":\"left\"}\n"
+                   u"\t\t{\"id\":\"e1\",\"fromNode\":\"a1\",\"fromSide\":\"right\",\"toNode\":\"a2\",\"toSide\":"
+                   u"\"left\"}\n"
                    u"\t]\n}"_s.arg(x)
-                    .arg(text, third ? u",\n\t\t{\"id\":\"a3\",\"type\":\"text\",\"text\":\"Nowa\",\"x\":0,\"y\":200,\"width\":250,\"height\":60}"_s
-                                     : QString());
+                           .arg(text,
+                                third ? u",\n\t\t{\"id\":\"a3\",\"type\":\"text\",\"text\":\"Nowa\",\"x\":0,\"y\":200,\"width\":250,\"height\":60}"_s
+                                      : QString());
         };
         Pair p({{path, canvasText(0, u"Farba"_s, false).toUtf8()}});
         p.a.sync();
@@ -302,7 +306,8 @@ private Q_SLOTS:
     void brokenCanvasKeepsBothVersions()
     {
         const QString path = u"Tablica.canvas"_s;
-        const QString good = u"{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"text\":\"x\",\"x\":0,\"y\":0,\"width\":9,\"height\":9}]}"_s;
+        const QString good =
+                u"{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"text\":\"x\",\"x\":0,\"y\":0,\"width\":9,\"height\":9}]}"_s;
         Pair p({{path, good.toUtf8()}});
         p.a.sync();
         p.b.sync();

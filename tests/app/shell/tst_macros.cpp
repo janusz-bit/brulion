@@ -36,7 +36,8 @@ const QString kJournal = u"journals/2026-11-20.md"_s;
 /// The extension "Pomiary" (id "pomiary"): macros over a page read by name and over a query, a
 /// macro that loops, a template variable, a view of every new control (its actions note what
 /// they got) and two panels.
-const QString kExtension = u"---\ntags: [rozszerzenie]\nuprawnienia: [zapis]\n---\n```luau\n"
+const QString kExtension =
+        u"---\ntags: [rozszerzenie]\nuprawnienia: [zapis]\n---\n```luau\n"
         "local got = {}\n"
         "b.macro(\"waga\", function(ctx)\n"
         "    local text = b.read(\"Waga\") or \"\"\n"
@@ -54,9 +55,11 @@ const QString kExtension = u"---\ntags: [rozszerzenie]\nuprawnienia: [zapis]\n--
         "b.view(\"kontrolki\", function(params)\n"
         "    return b.ui.column({\n"
         "        b.ui.text(`{params.page or \"-\"} {params.date or \"-\"} {params.kolor or \"-\"}`),\n"
-        "        b.ui.input({ placeholder = \"Pomiar\", action = \"zapisz\", label = \"Waga\", submit = \"Zapisz\" }),\n"
+        "        b.ui.input({ placeholder = \"Pomiar\", action = \"zapisz\", label = \"Waga\", submit = \"Zapisz\" "
+        "}),\n"
         "        b.ui.row({\n"
-        "            b.ui.select({ options = { \"mały\", { label = \"Duży\", value = \"d\" } }, value = \"d\", action = \"wybierz\" }),\n"
+        "            b.ui.select({ options = { \"mały\", { label = \"Duży\", value = \"d\" } }, value = \"d\", action "
+        "= \"wybierz\" }),\n"
         "            b.ui.date({ value = \"2026-11-21\", action = \"dzien\" }),\n"
         "            b.ui.toggle(true, \"wlacz\", { id = 7 }, { label = \"Włączone\" }),\n"
         "        }),\n"
@@ -94,7 +97,8 @@ class TestShellMacros : public QObject {
     std::unique_ptr<WorkspaceExtensions> m_ext;
     QStringList m_messages;
 
-    markdown::MacroSpan span(const QString &name, const QString &arguments = QString(), const QString &ext = u"pomiary"_s)
+    markdown::MacroSpan span(const QString &name, const QString &arguments = QString(),
+                             const QString &ext = u"pomiary"_s)
     {
         markdown::MacroSpan s;
         s.extension = ext;
@@ -175,7 +179,8 @@ private Q_SLOTS:
         QCOMPARE(m_ext->macroView(span(u"x"_s, {}, u"nikt"_s), kJournal).state, MacroView::State::Unknown);
         QCOMPARE(m_ext->macroExtension(u"nikt"_s).value(u"state"_s).toString(), u"unknown"_s);
         // A built-in that is off.
-        QCOMPARE(m_ext->macroView(span(u"rekord"_s, u"Przysiad"_s, u"silownia"_s), kJournal).state, MacroView::State::Off);
+        QCOMPARE(m_ext->macroView(span(u"rekord"_s, u"Przysiad"_s, u"silownia"_s), kJournal).state,
+                 MacroView::State::Off);
         QSignalSpy changed(m_ext.get(), &WorkspaceExtensions::macrosChanged);
         m_ext->approve(kPage);
         QCOMPARE(m_ext->pageState(kPage), u"running"_s);
@@ -207,7 +212,8 @@ private Q_SLOTS:
         QCOMPARE(markdown::macroViewText(m_ext->macroView(span(u"waga"_s), kJournal)), u"82 kg [[Waga]]"_s);
         QTRY_COMPARE(markdown::macroViewText(m_ext->macroView(span(u"waga"_s), kJournal)), u"81,5 kg [[Waga]]"_s);
         // The note's context.
-        QCOMPARE(markdown::macroViewText(settled(span(u"echo"_s, u"a, \"b, c\""_s))), u"2026-11-20|2026-11-20|a;b, c"_s);
+        QCOMPARE(markdown::macroViewText(settled(span(u"echo"_s, u"a, \"b, c\""_s))),
+                 u"2026-11-20|2026-11-20|a;b, c"_s);
         QCOMPARE(markdown::macroViewText(settled(span(u"echo"_s), u"Waga.md"_s)), u"Waga|-|"_s);
     }
 
@@ -245,8 +251,10 @@ private Q_SLOTS:
     void templateVariablesAndExports()
     {
         m_ext->approve(kPage);
-        const QVariantMap context{{u"page"_s, u"2026-11-21"_s}, {u"path"_s, u"journals/2026-11-21.md"_s},
-                                  {u"date"_s, u"2026-11-21"_s}, {u"template"_s, u"templates/journal.md"_s}};
+        const QVariantMap context{{u"page"_s, u"2026-11-21"_s},
+                                  {u"path"_s, u"journals/2026-11-21.md"_s},
+                                  {u"date"_s, u"2026-11-21"_s},
+                                  {u"template"_s, u"templates/journal.md"_s}};
         QCOMPARE(m_ext->templateVariable(u"pomiary"_s, u"dzien"_s, QString(), context),
                  std::optional<QString>(u"- Pomiar z 2026-11-21\n- 2026-11-21"_s));
         QCOMPARE(m_ext->templateVariable(u"pomiary"_s, u"brak"_s, QString(), context), std::nullopt);
@@ -276,7 +284,8 @@ private Q_SLOTS:
         model.setNotePath(kJournal);
         model.refresh();
         QVERIFY2(model.error().isEmpty(), qPrintable(model.error()));
-        QCOMPARE(model.data(model.index(0), ExtensionViewModel::TextRole).toString(), u"2026-11-20 2026-11-20 zielony"_s);
+        QCOMPARE(model.data(model.index(0), ExtensionViewModel::TextRole).toString(),
+                 u"2026-11-20 2026-11-20 zielony"_s);
         // A lone input is a bare row; the row of three keeps its card.
         QStringList kinds;
         QList<bool> bare;
@@ -287,9 +296,12 @@ private Q_SLOTS:
         QCOMPARE(kinds, (QStringList{u"text"_s, u"row"_s, u"row"_s, u"row"_s, u"row"_s, u"text"_s}));
         QCOMPARE(bare, (QList<bool>{false, true, false, true, true, false}));
         const auto controls = [&](int row) {
-            return qobject_cast<ExtensionControlsModel *>(model.data(model.index(row), ExtensionViewModel::ControlsRole).value<QObject *>());
+            return qobject_cast<ExtensionControlsModel *>(
+                    model.data(model.index(row), ExtensionViewModel::ControlsRole).value<QObject *>());
         };
-        const auto role = [&](int row, int control, int r) { return controls(row)->data(controls(row)->index(control), r); };
+        const auto role = [&](int row, int control, int r) {
+            return controls(row)->data(controls(row)->index(control), r);
+        };
         QCOMPARE(role(1, 0, ExtensionControlsModel::TypeRole).toString(), u"input"_s);
         QCOMPARE(role(1, 0, ExtensionControlsModel::PlaceholderRole).toString(), u"Pomiar"_s);
         QCOMPARE(role(1, 0, ExtensionControlsModel::SubmitRole).toString(), u"Zapisz"_s);
@@ -307,9 +319,9 @@ private Q_SLOTS:
         QCOMPARE(model.menuIcons(2, 0, QString()), (QStringList{QString(), u"check"_s}));
         model.activateMenuItem(2, 0, QString(), 0);
         QVERIFY(model.submitText(2, 1, u"2026-12-01"_s));
-        QVERIFY(model.submitText(2, 1, QString())); // "No date"
+        QVERIFY(model.submitText(2, 1, QString()));        // "No date"
         QVERIFY(!model.submitText(2, 1, u"2026-02-30"_s)); // no such day: nothing
-        QVERIFY(!model.submitText(2, 2, u"tekst"_s)); // a switch takes no text
+        QVERIFY(!model.submitText(2, 2, u"tekst"_s));      // a switch takes no text
         model.activateControl(2, 2, 0);
         QCOMPARE(model.snapped(3, 0, 3.7), 3.5);
         QCOMPARE(model.snapped(3, 0, 99), 5.0);

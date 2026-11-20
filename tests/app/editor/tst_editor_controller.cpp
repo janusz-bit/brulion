@@ -3103,7 +3103,9 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         // naming its range; another view of it renders again only the rows that show it.
         Fixture f(u"- Rekord: {{ext:silownia/rekord Przysiad}}\n- zwykły tekst\n- `{{ext:silownia/rekord Przysiad}}`\n"
                   u"- {{ext:nowe/x}}\n"_s);
-        const auto html = [&](int row) { return f.page.blocks()->data(f.page.blocks()->index(row), BlockListModel::HtmlRole).toString(); };
+        const auto html = [&](int row) {
+            return f.page.blocks()->data(f.page.blocks()->index(row), BlockListModel::HtmlRole).toString();
+        };
         // Without a host that computes macros: as written.
         QVERIFY2(html(0).contains(u"{{ext:silownia/rekord Przysiad}}"_s), qPrintable(html(0)));
         markdown::MacroView record;
@@ -3114,7 +3116,8 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         f.host.setMacroView(u"nowe/x"_s, locked);
         f.page.blocks()->invalidateRendering(); // (the host was told only now that it computes them)
         QVERIFY2(html(0).contains(u"<b>120 kg &lt;b&gt;</b>"_s), qPrintable(html(0)));
-        QVERIFY(html(2).contains(u"<code"_s) && html(2).contains(u"{{ext:silownia/rekord Przysiad}}"_s)); // code is code
+        QVERIFY(html(2).contains(u"<code"_s)
+                && html(2).contains(u"{{ext:silownia/rekord Przysiad}}"_s)); // code is code
         QVERIFY2(html(3).contains(u"href=\"macro:0-14\""_s), qPrintable(html(3)));
         // The placeholder's link: the macro it stands for.
         const QVariantMap clicked = f.page.activateLink(3, u"macro:0-14"_s, false);
@@ -3156,8 +3159,8 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         f.page.startEditing(0, 16);
         const QVariantMap trigger = completionTriggerAt(f.edit(0), 16).toMap();
         QCOMPARE(trigger.value(u"mode"_s).toString(), u"macros"_s);
-        const QVariantMap r = f.page.applyCompletion(0, trigger, {{u"insertText"_s, u"ext:silownia/rekord Przysiad"_s},
-                                                                  {u"kind"_s, u"macro"_s}});
+        const QVariantMap r = f.page.applyCompletion(
+                0, trigger, {{u"insertText"_s, u"ext:silownia/rekord Przysiad"_s}, {u"kind"_s, u"macro"_s}});
         QCOMPARE(f.text(), u"- Rekord {{ext:silownia/rekord Przysiad}}\n"_s);
         QCOMPARE(r.value(u"cursor"_s).toInt(), 37); // before the closing braces
         // Braces already there are kept.
@@ -3171,15 +3174,16 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
     {
         // The slash menu's "View: …": a ```view block of that view, edited at its first line.
         Fixture f(u"- \n"_s);
-        f.host.setEmbeddableViews({QVariantMap{{u"source"_s, u"nawyki/dzien"_s}, {u"title"_s, u"Nawyki dnia"_s},
-                                               {u"icon"_s, u"flame"_s}}});
+        f.host.setEmbeddableViews({QVariantMap{
+                {u"source"_s, u"nawyki/dzien"_s}, {u"title"_s, u"Nawyki dnia"_s}, {u"icon"_s, u"flame"_s}}});
         f.page.startEditing(0, 0);
         f.page.applySlashCommand(0, 0, 0, u"view:nawyki/dzien"_s);
         QCOMPARE(f.text(), u"- ```view\n  nawyki/dzien\n  ```\n"_s);
         QCOMPARE(f.page.blocks()->viewAt(0), u"view"_s);
         // A template's variables of extensions, filled for the page's day; a macro stays.
         Fixture t(u"- \n"_s);
-        t.host.setFile(u"templates/Trening.md"_s, u"- Plan: {{silownia/plan Nogi}}\n- {{ext:silownia/rekord Przysiad}}\n- {{nieznane/x}}\n"_s);
+        t.host.setFile(u"templates/Trening.md"_s,
+                       u"- Plan: {{silownia/plan Nogi}}\n- {{ext:silownia/rekord Przysiad}}\n- {{nieznane/x}}\n"_s);
         t.host.setTemplateVariable(u"silownia/plan"_s, u"{args} na {date}"_s);
         t.page.insertTemplate(0, u"templates/Trening.md"_s);
         QVERIFY2(t.text().contains(u"- Plan: Nogi na 2026-"_s), qPrintable(t.text()));

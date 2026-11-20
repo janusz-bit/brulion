@@ -1,7 +1,7 @@
 // The Dataview Query Language read into a Query (ast_p.h): a lexer and a recursive-descent parser.
 #include "dataview/ast_p.h"
-#include "dataview/expression_p.h"
 #include "dataview/eval_p.h"
+#include "dataview/expression_p.h"
 #include "dataview/messages_p.h"
 #include "util/unicode.h"
 

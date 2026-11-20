@@ -31,8 +31,7 @@ extern const char kSource[];
 
 } // namespace
 
-class TestExtensionsMacros : public QObject
-{
+class TestExtensionsMacros : public QObject {
     Q_OBJECT
 
     QTemporaryDir m_tmp;
@@ -113,12 +112,14 @@ private Q_SLOTS:
         for (const MacroInfo &m : macros)
             names << m.name;
         QVERIFY(names.contains(u"rekord"_s));
-        const auto rekord = std::find_if(macros.cbegin(), macros.cend(), [](const MacroInfo &m) { return m.name == u"rekord"; });
+        const auto rekord =
+                std::find_if(macros.cbegin(), macros.cend(), [](const MacroInfo &m) { return m.name == u"rekord"; });
         QCOMPARE(rekord->extension, u"g"_s);
         QCOMPARE(rekord->description, u"Najlepsza seria ćwiczenia"_s);
         QCOMPARE(rekord->arguments, QStringList{u"ćwiczenie"_s});
         QCOMPARE(rekord->example, u"Przysiad"_s);
-        const auto first = std::find_if(macros.cbegin(), macros.cend(), [](const MacroInfo &m) { return m.name == u"pierwsza"; });
+        const auto first =
+                std::find_if(macros.cbegin(), macros.cend(), [](const MacroInfo &m) { return m.name == u"pierwsza"; });
         QCOMPARE(first->arguments, QStringList{u"page"_s}); // a single text is one argument
         QCOMPARE(m_engine->variables().size(), 2);
         QCOMPARE(m_engine->variables().constFirst().name, u"plan"_s);
@@ -187,10 +188,14 @@ private Q_SLOTS:
         QTest::newRow("a button") << u"przycisk"_s << u"b.ui.button"_s;
         QTest::newRow("a write") << u"pisze"_s << u"b.write: a macro or a template variable cannot change notes"_s;
         QTest::newRow("a question") << u"pyta"_s << u"cannot wait for a question or for AI"_s;
-        QTest::newRow("a setting set") << u"ustawia"_s << u"b.setSetting: a macro or a template variable cannot change settings or timers"_s;
-        QTest::newRow("settings declared") << u"deklaruje"_s << u"b.settings: a macro or a template variable cannot change"_s;
-        QTest::newRow("a timer") << u"timer"_s << u"b.timer: a macro or a template variable cannot change settings or timers"_s;
-        QTest::newRow("a timer stopped") << u"stoper"_s << u"b.stopTimer: a macro or a template variable cannot change"_s;
+        QTest::newRow("a setting set")
+                << u"ustawia"_s << u"b.setSetting: a macro or a template variable cannot change settings or timers"_s;
+        QTest::newRow("settings declared")
+                << u"deklaruje"_s << u"b.settings: a macro or a template variable cannot change"_s;
+        QTest::newRow("a timer") << u"timer"_s
+                                 << u"b.timer: a macro or a template variable cannot change settings or timers"_s;
+        QTest::newRow("a timer stopped") << u"stoper"_s
+                                         << u"b.stopTimer: a macro or a template variable cannot change"_s;
         QTest::newRow("an error") << u"blad"_s << u"nie tym razem"_s;
         QTest::newRow("unknown") << u"nie-ma"_s << u"no macro g/nie-ma"_s;
     }
@@ -343,9 +348,11 @@ private Q_SLOTS:
 
     void variables()
     {
-        const Result r = m_engine->runVariable(u"g"_s, u"plan"_s, ctx(u"Wiosłowanie"_s), MacroTimeoutMs * BRULION_TEST_SLOWDOWN);
+        const Result r =
+                m_engine->runVariable(u"g"_s, u"plan"_s, ctx(u"Wiosłowanie"_s), MacroTimeoutMs * BRULION_TEST_SLOWDOWN);
         QVERIFY2(r.ok(), qPrintable(r.error));
-        QCOMPARE(variableTextFrom(r.value, true), std::optional<QString>(u"## Plan na 2026-11-20\n- Przysiad 3 × 5\n- Wiosłowanie"_s));
+        QCOMPARE(variableTextFrom(r.value, true),
+                 std::optional<QString>(u"## Plan na 2026-11-20\n- Przysiad 3 × 5\n- Wiosłowanie"_s));
         const Result table = m_engine->runVariable(u"g"_s, u"tabela"_s, ctx({}), 250);
         QVERIFY(table.ok());
         QVERIFY(!variableTextFrom(table.value, true));
@@ -379,7 +386,8 @@ private Q_SLOTS:
     void progressForms()
     {
         const Result table = m_engine->evaluate(
-            u"g"_s, u"return b.ui.progress({ value = 3, max = 4, label = \"3 z 4\", tone = \"success\" })"_s, u"t"_s);
+                u"g"_s, u"return b.ui.progress({ value = 3, max = 4, label = \"3 z 4\", tone = \"success\" })"_s,
+                u"t"_s);
         QVERIFY2(table.ok(), qPrintable(table.error));
         QCOMPARE(table.value.toMap(), (QVariantMap{{u"type"_s, u"progress"_s},
                                                    {u"value"_s, 3},
@@ -421,13 +429,16 @@ private Q_SLOTS:
         QVERIFY(run(u"silownia"_s, u"rekord"_s, u"Wiosłowanie"_s).contains(u"brak"_s));
         QCOMPARE(run(u"silownia"_s, u"sesje"_s, u"Przysiad"_s), u"2 sesje"_s);
         QCOMPARE(run(u"silownia"_s, u"sesje"_s, u"Przysiad, 2"_s), u"1 sesja"_s); // 19–20 November
-        QVERIFY2(run(u"nawyki"_s, u"seria"_s, u"Czytanie"_s).startsWith(u"Seria: 2 dni · "_s), qPrintable(run(u"nawyki"_s, u"seria"_s, u"Czytanie"_s)));
+        QVERIFY2(run(u"nawyki"_s, u"seria"_s, u"Czytanie"_s).startsWith(u"Seria: 2 dni · "_s),
+                 qPrintable(run(u"nawyki"_s, u"seria"_s, u"Czytanie"_s)));
         QVERIFY(run(u"nawyki"_s, u"seria"_s, u"Medytacja"_s).contains(u"Medytacja"_s));
         // {{silownia/plan Nogi}}: the plan's workout, as "Start a workout" writes it.
-        const Result plan = m_engine->runVariable(u"silownia"_s, u"plan"_s, ctx(u"nogi"_s), 2000 * BRULION_TEST_SLOWDOWN);
+        const Result plan =
+                m_engine->runVariable(u"silownia"_s, u"plan"_s, ctx(u"nogi"_s), 2000 * BRULION_TEST_SLOWDOWN);
         QVERIFY2(plan.ok(), qPrintable(plan.error));
         const QString workout = variableTextFrom(plan.value, true).value_or(QString());
-        QVERIFY2(workout.startsWith(u"- Nogi #trening\n  plan:: [[Nogi]]\n  - [ ] [[Przysiad]]"_s), qPrintable(workout));
+        QVERIFY2(workout.startsWith(u"- Nogi #trening\n  plan:: [[Nogi]]\n  - [ ] [[Przysiad]]"_s),
+                 qPrintable(workout));
         QCOMPARE(variableTextFrom(m_engine->runVariable(u"silownia"_s, u"plan"_s, ctx(u"Brak"_s), 250).value, true),
                  std::optional<QString>(QString()));
         // The habits' panel beside a day: a row per habit with that day's check.
@@ -452,11 +463,13 @@ private Q_SLOTS:
         // A macro that eats memory ends with the engine's memory limit; the next call works.
         Extension e;
         e.id = u"zly"_s;
-        e.source = u"b.macro(\"mem\", function() local t = {} for i = 1, 1e9 do t[i] = string.rep(\"x\", 1000) end end)\n"
-                   u"b.macro(\"rek\", function(ctx) local function f() return f() + 1 end return f() end)\n"
-                   u"b.macro(\"meta\", function() return setmetatable({}, { __index = function() error(\"x\") end }) end)"_s;
+        e.source =
+                u"b.macro(\"mem\", function() local t = {} for i = 1, 1e9 do t[i] = string.rep(\"x\", 1000) end end)\n"
+                u"b.macro(\"rek\", function(ctx) local function f() return f() + 1 end return f() end)\n"
+                u"b.macro(\"meta\", function() return setmetatable({}, { __index = function() error(\"x\") end }) end)"_s;
         QVERIFY(m_engine->load(e).ok());
-        QCOMPARE(m_engine->runMacro(u"zly"_s, u"mem"_s, ctx({}), 2000 * BRULION_TEST_SLOWDOWN).status, Status::OutOfMemory);
+        QCOMPARE(m_engine->runMacro(u"zly"_s, u"mem"_s, ctx({}), 2000 * BRULION_TEST_SLOWDOWN).status,
+                 Status::OutOfMemory);
         const Result deep = m_engine->runMacro(u"zly"_s, u"rek"_s, ctx({}), 2000 * BRULION_TEST_SLOWDOWN);
         QVERIFY(!deep.ok());
         // A table with a metatable crosses as plain data (no metamethod runs): no node, an error view.

@@ -83,9 +83,9 @@ QString sortKeyOf(const QueryColumn &c, QueryType type)
     case QueryColumnKind::Created: return tasks ? u"created"_s : QString();
     case QueryColumnKind::Property: {
         // A name that is a built-in sort key of the query's type needs the property mark.
-        static const QStringList builtins{u"due"_s,   u"termin"_s, u"scheduled"_s, u"start"_s,  u"done"_s,
-                                          u"created"_s, u"remind"_s, u"date"_s,    u"data"_s,   u"priority"_s,
-                                          u"status"_s, u"page"_s,  u"title"_s,     u"path"_s,   u"strona"_s};
+        static const QStringList builtins{u"due"_s,     u"termin"_s, u"scheduled"_s, u"start"_s, u"done"_s,
+                                          u"created"_s, u"remind"_s, u"date"_s,      u"data"_s,  u"priority"_s,
+                                          u"status"_s,  u"page"_s,   u"title"_s,     u"path"_s,  u"strona"_s};
         const bool clash = builtins.contains(c.property);
         QString name = c.name;
         if (name.contains(u' ') || name.contains(u','))
@@ -115,8 +115,8 @@ QueryColumn propertyColumn(const QString &name)
 /// Page-property keys no table needs a column for (the page's look and mode, tags and aliases).
 bool isHiddenKey(const QString &folded)
 {
-    static const QSet<QString> hidden{u"tags"_s,   u"tag"_s,       u"aliases"_s,  u"alias"_s,     u"brulion"_s,
-                                      u"icon"_s,   u"banner"_s,    u"banner-y"_s, u"banner-icon"_s, u"cssclasses"_s,
+    static const QSet<QString> hidden{u"tags"_s,     u"tag"_s,     u"aliases"_s,  u"alias"_s,       u"brulion"_s,
+                                      u"icon"_s,     u"banner"_s,  u"banner-y"_s, u"banner-icon"_s, u"cssclasses"_s,
                                       u"cssclass"_s, u"publish"_s, u"position"_s};
     return hidden.contains(folded);
 }
@@ -146,8 +146,8 @@ private:
     const ViewOptions &m_options;
     CellReader m_cells;
     ViewResult m_out;
-    QList<QueryColumn> m_columns;               ///< one per m_out.columns
-    QList<dataview::Expression> m_formulas;     ///< one per column (null for non-formulas)
+    QList<QueryColumn> m_columns;              ///< one per m_out.columns
+    QList<dataview::Expression> m_formulas;    ///< one per column (null for non-formulas)
     QHash<QString, PropertyKeyInfo> m_keyInfo; ///< the notebook's page-property keys (folded)
     /// Calendar: what the days come from.
     QString m_dateKind;
@@ -285,7 +285,8 @@ void Builder::fillCells(Row &row)
         case QueryColumnKind::Property: cell = m_cells.propertyCell(row, c.property); break;
         case QueryColumnKind::Formula: {
             dataview::Evaluator &eval = m_cells.evaluator();
-            const dataview::Value base = row.blockIndex >= 0 ? eval.block(row.path, row.blockIndex) : eval.page(row.path);
+            const dataview::Value base =
+                    row.blockIndex >= 0 ? eval.block(row.path, row.blockIndex) : eval.page(row.path);
             const auto value = eval.evaluate(m_formulas.at(i), base);
             if (const QString *error = std::get_if<QString>(&value)) {
                 cell.markdown = cell.text = *error;
@@ -320,7 +321,7 @@ QDate Builder::rowDate(const Row &row)
     if (m_dateKind == u"due" || m_dateKind == u"scheduled" || m_dateKind == u"start") {
         if (!row.task)
             return {};
-        const std::optional<DateSpec> &d = m_dateKind == u"due" ? row.task->due
+        const std::optional<DateSpec> &d = m_dateKind == u"due"         ? row.task->due
                                            : m_dateKind == u"scheduled" ? row.task->scheduled
                                                                         : row.task->start;
         return d ? d->date : QDate();
@@ -378,8 +379,8 @@ void Builder::calendar()
     m_out.groupKind = m_dateKind == u"journal" ? QString() : m_dateKind == u"property" ? u"date"_s : u"taskdate"_s;
     if (m_dateKind == u"property") {
         const auto info = m_keyInfo.constFind(m_dateProperty);
-        m_out.groupProperty = info != m_keyInfo.cend() && m_query.type == QueryType::Pages ? info->key
-                                                                                           : m_query.groupPropertyName;
+        m_out.groupProperty =
+                info != m_keyInfo.cend() && m_query.type == QueryType::Pages ? info->key : m_query.groupPropertyName;
         if (m_out.groupProperty.isEmpty() && m_out.dateColumn >= 0)
             m_out.groupProperty = m_out.columns.at(m_out.dateColumn).property;
     } else if (m_out.groupKind == u"taskdate") {
@@ -401,8 +402,8 @@ void Builder::buildGroups()
     case QueryGroupKey::Property: {
         m_out.groupKind = u"property"_s;
         const auto info = m_keyInfo.constFind(m_query.groupProperty);
-        m_out.groupProperty = info != m_keyInfo.cend() && m_query.type == QueryType::Pages ? info->key
-                                                                                           : m_query.groupPropertyName;
+        m_out.groupProperty =
+                info != m_keyInfo.cend() && m_query.type == QueryType::Pages ? info->key : m_query.groupPropertyName;
         if (m_query.type != QueryType::Pages && !markdown::isBlockPropertyKey(m_out.groupProperty))
             m_out.groupKind.clear(); // (block rows write `key::` lines: an ASCII key)
         break;
@@ -414,8 +415,8 @@ void Builder::buildGroups()
         break;
     default: break; // page, tag, journal date: no edit moves a row there
     }
-    if (m_query.type != QueryType::Tasks && (m_out.groupKind == u"status" || m_out.groupKind == u"priority"
-                                              || m_out.groupKind == u"taskdate"))
+    if (m_query.type != QueryType::Tasks
+        && (m_out.groupKind == u"status" || m_out.groupKind == u"priority" || m_out.groupKind == u"taskdate"))
         m_out.groupKind.clear();
 
     // The groups of the result (built from the items the view shows), by key.
@@ -500,7 +501,8 @@ void Builder::buildGroups()
     }
     for (qsizetype i = 0; i < m_columns.size(); ++i) {
         const QueryColumn &c = m_columns.at(i);
-        if ((group == QueryGroupKey::Property && c.kind == QueryColumnKind::Property && c.property == m_query.groupProperty)
+        if ((group == QueryGroupKey::Property && c.kind == QueryColumnKind::Property
+             && c.property == m_query.groupProperty)
             || (group == QueryGroupKey::Status && c.kind == QueryColumnKind::Status)
             || (group == QueryGroupKey::Priority && c.kind == QueryColumnKind::Priority)
             || (group == QueryGroupKey::Due && c.kind == QueryColumnKind::Due)
@@ -597,12 +599,16 @@ std::variant<ViewResult, QString> Builder::build()
         !error.isEmpty())
         return error;
     for (const QuerySummary &s : m_query.summaries) {
-        const bool found = std::ranges::any_of(m_columns, [&](const QueryColumn &c) {
-            return queryPropertyKey(c.name) == s.column || (!c.label.isEmpty() && queryPropertyKey(c.label) == s.column)
-                   || (c.kind == QueryColumnKind::Property && c.property == s.column);
-        }) || std::ranges::any_of(m_out.columns, [&](const Column &c) {
-            return queryPropertyKey(c.label) == s.column || c.id == s.column;
-        });
+        const bool found =
+                std::ranges::any_of(m_columns,
+                                    [&](const QueryColumn &c) {
+                                        return queryPropertyKey(c.name) == s.column
+                                               || (!c.label.isEmpty() && queryPropertyKey(c.label) == s.column)
+                                               || (c.kind == QueryColumnKind::Property && c.property == s.column);
+                                    })
+                || std::ranges::any_of(m_out.columns, [&](const Column &c) {
+                       return queryPropertyKey(c.label) == s.column || c.id == s.column;
+                   });
         if (!found)
             return messages::summaryWithoutColumn(s.column);
     }
@@ -640,8 +646,8 @@ std::variant<ViewResult, QString> Builder::build()
 
 } // namespace
 
-std::variant<ViewResult, QString> buildQueryView(const Query &query, const QueryResult &result,
-                                                 const VaultIndex &index, const ViewOptions &options)
+std::variant<ViewResult, QString> buildQueryView(const Query &query, const QueryResult &result, const VaultIndex &index,
+                                                 const ViewOptions &options)
 {
     return Builder(query, result, index, options).build();
 }

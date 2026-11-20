@@ -28,10 +28,10 @@ void build(VaultIndex &index)
                         u"- [x] Wybrać ekipę ✅ 2026-10-01"_s, u"- [-] Anulowane"_s}));
     index.update(u"Projekty/Ogród.md"_s,
                  lines({u"---"_s, u"status: planowany"_s, u"koszt: 300"_s, u"Budżet: 800"_s, u"termin: 2026-11-02"_s,
-                        u"pilne: false"_s, u"tags: [projekt]"_s, u"---"_s, u"Zdjęcie: ![[tulipany.png]]"_s,
-                        u""_s, u"- [ ] Posadzić tulipany 📅 2026-10-30"_s}));
-    index.update(u"Projekty/Garaż.md"_s, lines({u"status:: zrobione"_s, u"koszt:: 99.5"_s, u"tags:: projekt"_s, u""_s,
-                                                u"Bez zadań."_s}));
+                        u"pilne: false"_s, u"tags: [projekt]"_s, u"---"_s, u"Zdjęcie: ![[tulipany.png]]"_s, u""_s,
+                        u"- [ ] Posadzić tulipany 📅 2026-10-30"_s}));
+    index.update(u"Projekty/Garaż.md"_s,
+                 lines({u"status:: zrobione"_s, u"koszt:: 99.5"_s, u"tags:: projekt"_s, u""_s, u"Bez zadań."_s}));
     index.update(u"Projekty/Strych.md"_s,
                  lines({u"---"_s, u"status: w toku"_s, u"tags: [projekt]"_s, u"---"_s, u"Notatki."_s}));
     index.update(u"Ludzie/Jan Kowalski.md"_s, u"Hydraulik."_s);
@@ -127,9 +127,9 @@ private Q_SLOTS:
         const ViewResult v = view(u"type:pages tag:projekt view:table sort:-koszt "_s
                                   u"columns:title,status,Budżet,koszt,termin,pilne,etykiety,właściciel,"_s
                                   u"\"Brutto = koszt * 1.23\",\"Koszt (zł) = koszt\",path,mtime,size"_s);
-        QCOMPARE(labels(v), QStringList({u"Title"_s, u"status"_s, u"Budżet"_s, u"koszt"_s, u"termin"_s, u"pilne"_s,
-                                         u"etykiety"_s, u"właściciel"_s, u"Brutto"_s, u"Koszt (zł)"_s, u"Path"_s,
-                                         u"Modified"_s, u"Size"_s}));
+        QCOMPARE(labels(v),
+                 QStringList({u"Title"_s, u"status"_s, u"Budżet"_s, u"koszt"_s, u"termin"_s, u"pilne"_s, u"etykiety"_s,
+                              u"właściciel"_s, u"Brutto"_s, u"Koszt (zł)"_s, u"Path"_s, u"Modified"_s, u"Size"_s}));
         QCOMPARE(column(v, 0), QStringList({u"[[Dom]]"_s, u"[[Ogród]]"_s, u"[[Garaż]]"_s, u"[[Strych]]"_s}));
         const Row &dom = v.rows.first();
         QCOMPARE(dom.cells.at(1).markdown, u"w toku"_s);
@@ -189,12 +189,14 @@ private Q_SLOTS:
 
     void formulas()
     {
-        const ViewResult v = view(u"type:pages tag:projekt sort:page view:table "_s
-                                  u"columns:title,\"Rok = termin.year\",\"Tekst = upper(status)\",\"Zła = koszt + (\""_s);
+        const ViewResult v =
+                view(u"type:pages tag:projekt sort:page view:table "_s
+                     u"columns:title,\"Rok = termin.year\",\"Tekst = upper(status)\",\"Zła = koszt + (\""_s);
         QVERIFY(v.columns.isEmpty()); // a formula that does not parse is the view's error
         QVERIFY(viewError(u"type:pages view:table columns:\"Zła = koszt + (\""_s).startsWith(u"Column “Zła”"_s));
-        const ViewResult ok = view(u"type:pages tag:projekt sort:page view:table "_s
-                                   u"columns:title,\"Rok = termin.year\",\"Tekst = upper(status)\",\"Pętla = reduce(list(1,2,3), (a, b) => a + b)\""_s);
+        const ViewResult ok = view(
+                u"type:pages tag:projekt sort:page view:table "_s
+                u"columns:title,\"Rok = termin.year\",\"Tekst = upper(status)\",\"Pętla = reduce(list(1,2,3), (a, b) => a + b)\""_s);
         QCOMPARE(column(ok, 1), QStringList({u"2026"_s, QString(), u"2026"_s, QString()}));
         QCOMPARE(column(ok, 2).first(), u"W TOKU"_s);
         QCOMPARE(column(ok, 3).first(), u"6"_s);
@@ -384,8 +386,10 @@ private Q_SLOTS:
         QCOMPARE(setQueryOption(u"tag:x\r\n"_s, u"view"_s, u"board"_s), u"tag:x\r\nview:board\r\n"_s);
         QCOMPARE(setQueryOption(QString(), u"view"_s, u"table"_s), u"view:table"_s);
         // A filter `-sort:` (not an option) and a phrase are left alone.
-        QCOMPARE(setQueryOption(u"\"sort:x\" view:table"_s, u"sort"_s, u"page"_s), u"\"sort:x\" view:table\nsort:page"_s);
-        const Query q = std::get<Query>(parseQuery(u"type:pages view:table columns:title,\"Brutto = koszt * 1.23\",\"Koszt (zł) = koszt\""_s));
+        QCOMPARE(setQueryOption(u"\"sort:x\" view:table"_s, u"sort"_s, u"page"_s),
+                 u"\"sort:x\" view:table\nsort:page"_s);
+        const Query q = std::get<Query>(
+                parseQuery(u"type:pages view:table columns:title,\"Brutto = koszt * 1.23\",\"Koszt (zł) = koszt\""_s));
         QCOMPARE(columnNames(q, {}), QStringList({u"title"_s, u"Brutto = koszt * 1.23"_s, u"Koszt (zł) = koszt"_s}));
         QCOMPARE(queryList({u"a"_s, u"b c"_s, u"d,e"_s, u"Brutto = x"_s}), u"a,\"b c\",\"d,e\",\"Brutto = x\""_s);
     }

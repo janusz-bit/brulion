@@ -200,7 +200,9 @@ private Q_SLOTS:
         QCOMPARE(progress->data(progress->index(0), ExtensionControlsModel::TypeRole).toString(), u"progress"_s);
         QCOMPARE(progress->data(progress->index(0), ExtensionControlsModel::ValueRole).toDouble(), 0.0);
         QVERIFY(progress->data(progress->index(0), ExtensionControlsModel::MaxRole).toDouble() >= 1.0);
-        QVERIFY2(progress->data(progress->index(0), ExtensionControlsModel::LabelRole).toString().startsWith(u"0 ocenione · "_s),
+        QVERIFY2(progress->data(progress->index(0), ExtensionControlsModel::LabelRole)
+                         .toString()
+                         .startsWith(u"0 ocenione · "_s),
                  qPrintable(progress->data(progress->index(0), ExtensionControlsModel::LabelRole).toString()));
         const int question = rowOf(model, u"markdown"_s);
         QVERIFY(question > 0);

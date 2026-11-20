@@ -29,9 +29,9 @@ namespace brulion::extensions {
 /// Bounds of a macro's output (docs/EXTENSIONS.md "Sandbox and limits").
 inline constexpr int MaxMacroPieces = 32;
 inline constexpr int MaxMacroCharacters = 400; ///< all its pieces' texts together; more is cut with "…"
-inline constexpr int MacroTimeoutMs = 250; ///< per call
-inline constexpr int MaxMacrosPerPage = 200; ///< distinct macros a note computes; the rest say "too many"
-inline constexpr int MacroBudgetMs = 2000; ///< macro calls per page and round of changes, all together
+inline constexpr int MacroTimeoutMs = 250;     ///< per call
+inline constexpr int MaxMacrosPerPage = 200;   ///< distinct macros a note computes; the rest say "too many"
+inline constexpr int MacroBudgetMs = 2000;     ///< macro calls per page and round of changes, all together
 
 /// What a macro's value shows: a text, a number (as b.formatNumber writes it: `comma` in a
 /// Polish notebook), a boolean, b.ui.text (muted, tone), b.ui.link (page, label), b.ui.heading
@@ -46,8 +46,7 @@ markdown::MacroView macroViewFrom(const QVariant &value, bool comma, QString *er
 std::optional<QString> variableTextFrom(const QVariant &value, bool comma);
 
 /// What a macro is asked for: its extension, name, arguments (as written) and the note it is in.
-struct MacroRequest
-{
+struct MacroRequest {
     QString extension;
     QString name;
     QString arguments;
@@ -55,8 +54,7 @@ struct MacroRequest
     bool operator==(const MacroRequest &other) const = default;
 };
 
-class MacroCache
-{
+class MacroCache {
 public:
     static QString keyOf(const MacroRequest &request);
 
@@ -99,8 +97,7 @@ public:
     int size() const { return int(m_entries.size()); }
 
 private:
-    struct Entry
-    {
+    struct Entry {
         MacroRequest request;
         std::optional<markdown::MacroView> view;
         Reads reads;

@@ -3,10 +3,10 @@
 #include "index/vaultindex.h"
 #include "index/vaultindex_p.h"
 
+#include "canvas/canvas.h"
 #include "index/suggest_p.h"
 #include "index/textutil_p.h"
 #include "index/unlinked_p.h"
-#include "canvas/canvas.h"
 #include "markdown/inline.h"
 #include "markdown/parse.h"
 #include "markdown/properties.h"

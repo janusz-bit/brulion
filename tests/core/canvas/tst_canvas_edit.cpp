@@ -217,7 +217,8 @@ private Q_SLOTS:
         const Node *frame = c.node(g);
         QVERIFY(frame->isGroup());
         QCOMPARE(frame->label, u"Etap 1"_s);
-        QCOMPARE(nodeRect(*frame), QRectF(100 - GroupPadding, 40 - GroupPadding, 320 + 2 * GroupPadding, 320 + 2 * GroupPadding));
+        QCOMPARE(nodeRect(*frame),
+                 QRectF(100 - GroupPadding, 40 - GroupPadding, 320 + 2 * GroupPadding, 320 + 2 * GroupPadding));
         QCOMPARE(groupContents(c, g), (QSet<QString>{u"n2"_s, u"n3"_s}));
         QCOMPARE(withGroupContents(c, {g}), (QSet<QString>{g, u"n2"_s, u"n3"_s}));
         // A group inside a group: the outer one holds both.
@@ -291,7 +292,7 @@ private Q_SLOTS:
         QVERIFY(s.startArrow.isEmpty());
         QCOMPARE(s.endArrow.size(), 3);
         QCOMPARE(s.endArrow.at(0), QPointF(400, 50)); // the tip on the side's middle
-        QVERIFY(s.end.x() < 400); // the line ends inside the arrowhead
+        QVERIFY(s.end.x() < 400);                     // the line ends inside the arrowhead
         QCOMPARE(s.start, QPointF(100, 50));
         // Below: bottom to top.
         s = edgeShape(e, a, QRectF(0, 500, 100, 100));

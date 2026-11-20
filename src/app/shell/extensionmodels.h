@@ -27,9 +27,9 @@ struct ExtensionRow
     QString description;
     int commands = 0, views = 0, hooks = 0;
     int errorLine = -1; ///< 0-based line of the page the error names, -1 none
-    int settings = 0; ///< the settings it declared (b.settings): Settings → Extensions shows them
+    int settings = 0;   ///< the settings it declared (b.settings): Settings → Extensions shows them
     QStringList modules; ///< the extension pages it requires (b.require), their titles
-    int types = 0; ///< warnings of Luau's type checker (typecheck.h)
+    int types = 0;       ///< warnings of Luau's type checker (typecheck.h)
     QString typeMessage; ///< the first one: "line 14: Unknown global 'x'"
 
     friend bool operator==(const ExtensionRow &, const ExtensionRow &) = default;

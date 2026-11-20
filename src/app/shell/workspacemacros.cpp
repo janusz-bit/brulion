@@ -7,8 +7,8 @@
 #include "workspaceextensions.h"
 
 #include "extensions/builtin.h"
-#include "io/files.h"
 #include "index/vaultindex.h"
+#include "io/files.h"
 #include "log/categories.h"
 #include "markdown/journal.h"
 #include "text/text.h"
@@ -148,9 +148,9 @@ markdown::MacroView WorkspaceExtensions::computeMacro(const QString &key, const 
         QElapsedTimer clock;
         clock.start();
         m_engine->startRecording();
-        const extensions::Result r = m_engine->runMacro(request.extension, request.name,
-                                                        macroContext(request.arguments, request.path),
-                                                        extensions::MacroTimeoutMs);
+        const extensions::Result r =
+                m_engine->runMacro(request.extension, request.name, macroContext(request.arguments, request.path),
+                                   extensions::MacroTimeoutMs);
         reads = m_engine->stopRecording();
         spent += clock.elapsed();
         if (r.ok()) {
@@ -256,18 +256,21 @@ QVariantList WorkspaceExtensions::macroSuggestions(const QString &filter, int li
                 rank = 0;
             else if (folded.contains(wanted))
                 rank = 1;
-            else if (text::foldKey(m.description).contains(wanted) || text::foldKey(title(m.extension)).contains(wanted))
+            else if (text::foldKey(m.description).contains(wanted)
+                     || text::foldKey(title(m.extension)).contains(wanted))
                 rank = 2;
             else
                 continue;
         }
-        const QString subtitle = m.description.isEmpty() ? title(m.extension) : m.description + u" · "_s + title(m.extension);
-        found.append({rank,
-                      QVariantMap{{u"title"_s, name},
-                                  {u"subtitle"_s, subtitle},
-                                  {u"insertText"_s, QString(u"ext:"_s + name + (m.example.isEmpty() ? QString() : u' ' + m.example))},
-                                  {u"hint"_s, m.arguments.join(u", "_s)},
-                                  {u"icon"_s, u"puzzle"_s}}});
+        const QString subtitle =
+                m.description.isEmpty() ? title(m.extension) : m.description + u" · "_s + title(m.extension);
+        found.append(
+                {rank, QVariantMap{{u"title"_s, name},
+                                   {u"subtitle"_s, subtitle},
+                                   {u"insertText"_s,
+                                    QString(u"ext:"_s + name + (m.example.isEmpty() ? QString() : u' ' + m.example))},
+                                   {u"hint"_s, m.arguments.join(u", "_s)},
+                                   {u"icon"_s, u"puzzle"_s}}});
     }
     std::stable_sort(found.begin(), found.end(), [](const auto &a, const auto &b) { return a.first < b.first; });
     for (const auto &f : std::as_const(found)) {
@@ -289,12 +292,14 @@ std::optional<QString> WorkspaceExtensions::templateVariable(const QString &exte
             ctx.insert(key, context.value(key).toString());
     }
     const extensions::Result r = m_engine->runVariable(extension, name, ctx, kVariableTimeoutMs);
-    const QString variable = u"{{"_s + extension + u'/' + name + (arguments.isEmpty() ? QString() : u' ' + arguments) + u"}}"_s;
+    const QString variable =
+            u"{{"_s + extension + u'/' + name + (arguments.isEmpty() ? QString() : u' ' + arguments) + u"}}"_s;
     if (r.status == extensions::Status::NotFound)
         return std::nullopt;
     if (!r.ok()) {
         m_console->append(u"error"_s, variable + u": "_s + r.error.section(u'\n', 0, 0), title(extension));
-        Q_EMIT message(tr("The template variable %1 failed: %2").arg(variable, r.error.section(u'\n', 0, 0)), u"error"_s);
+        Q_EMIT message(tr("The template variable %1 failed: %2").arg(variable, r.error.section(u'\n', 0, 0)),
+                       u"error"_s);
         return std::nullopt;
     }
     const std::optional<QString> text = extensions::variableTextFrom(r.value, m_language == u"pl");
@@ -308,8 +313,8 @@ std::optional<QString> WorkspaceExtensions::templateVariable(const QString &exte
 
 QVariantMap WorkspaceExtensions::macroExtension(const QString &extension) const
 {
-    QVariantMap out{{u"state"_s, u"unknown"_s}, {u"title"_s, extension}, {u"path"_s, QString()},
-                    {u"line"_s, -1},          {u"message"_s, QString()}, {u"builtin"_s, false}};
+    QVariantMap out{{u"state"_s, u"unknown"_s}, {u"title"_s, extension}, {u"path"_s, QString()}, {u"line"_s, -1},
+                    {u"message"_s, QString()},  {u"builtin"_s, false}};
     for (const PageEntry &e : std::as_const(m_pages)) {
         if (e.runId != extension || e.state == u"duplicate")
             continue;
@@ -317,7 +322,7 @@ QVariantMap WorkspaceExtensions::macroExtension(const QString &extension) const
         out.insert(u"path"_s, e.page.path);
         out.insert(u"line"_s, e.errorLine);
         out.insert(u"message"_s, e.message);
-        out.insert(u"state"_s, e.state == u"approval"                      ? u"approval"_s
+        out.insert(u"state"_s, e.state == u"approval"                          ? u"approval"_s
                                : e.state == u"off" || e.state == u"builtinOff" ? u"off"_s
                                : e.state == u"error" || e.state == u"problem"  ? u"error"_s
                                                                                : u"running"_s);

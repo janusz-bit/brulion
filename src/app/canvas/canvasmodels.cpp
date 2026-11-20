@@ -101,15 +101,24 @@ QVariant CanvasNodeModel::data(const QModelIndex &index, int role) const
 QHash<int, QByteArray> CanvasNodeModel::roleNames() const
 {
     // (Not "color", "text", "title": delegates cannot require their own types' names.)
-    return {{NodeIdRole, "nodeId"},         {KindRole, "kind"},
-            {XRole, "nodeX"},               {YRole, "nodeY"},
-            {WidthRole, "nodeWidth"},       {HeightRole, "nodeHeight"},
-            {ColorRole, "cardColor"},       {TextRole, "cardText"},
-            {FileRole, "cardFile"},         {SubpathRole, "subpath"},
-            {UrlRole, "cardUrl"},           {LabelRole, "cardLabel"},
-            {BackgroundRole, "background"}, {BackgroundStyleRole, "backgroundStyle"},
-            {SelectedRole, "selected"},     {FileKindRole, "fileKind"},
-            {FilePathRole, "filePath"},     {TitleRole, "cardTitle"},
+    return {{NodeIdRole, "nodeId"},
+            {KindRole, "kind"},
+            {XRole, "nodeX"},
+            {YRole, "nodeY"},
+            {WidthRole, "nodeWidth"},
+            {HeightRole, "nodeHeight"},
+            {ColorRole, "cardColor"},
+            {TextRole, "cardText"},
+            {FileRole, "cardFile"},
+            {SubpathRole, "subpath"},
+            {UrlRole, "cardUrl"},
+            {LabelRole, "cardLabel"},
+            {BackgroundRole, "background"},
+            {BackgroundStyleRole, "backgroundStyle"},
+            {SelectedRole, "selected"},
+            {FileKindRole, "fileKind"},
+            {FilePathRole, "filePath"},
+            {TitleRole, "cardTitle"},
             {OrderRole, "order"}};
 }
 
@@ -223,10 +232,9 @@ QVariant CanvasEdgeModel::data(const QModelIndex &index, int role) const
 
 QHash<int, QByteArray> CanvasEdgeModel::roleNames() const
 {
-    return {{EdgeIdRole, "edgeId"},     {PathRole, "edgePath"},     {ArrowsRole, "arrows"},
-            {ColorRole, "edgeColor"},   {LabelRole, "edgeLabel"},   {LabelXRole, "labelX"},
-            {LabelYRole, "labelY"},     {SelectedRole, "selected"}, {FromNodeRole, "fromNode"},
-            {ToNodeRole, "toNode"}};
+    return {{EdgeIdRole, "edgeId"},     {PathRole, "edgePath"}, {ArrowsRole, "arrows"}, {ColorRole, "edgeColor"},
+            {LabelRole, "edgeLabel"},   {LabelXRole, "labelX"}, {LabelYRole, "labelY"}, {SelectedRole, "selected"},
+            {FromNodeRole, "fromNode"}, {ToNodeRole, "toNode"}};
 }
 
 void CanvasEdgeModel::sync(const canvas::Canvas &c, const QRectF &area, const QSet<QString> &selected)

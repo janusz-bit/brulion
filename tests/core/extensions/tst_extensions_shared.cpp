@@ -27,15 +27,15 @@ using namespace brulion::extensions;
 
 namespace {
 
-const QString kLibrary = u"---\ntags: [rozszerzenie]\n---\n# Wspólne funkcje\n\nPomocnicze funkcje dla innych rozszerzeń.\n\n"
-                         "```luau\nlocal M = {}\nlocal calls = 0\nfunction M.wielkie(s)\n    calls += 1\n"
-                         "    return string.rep(s, 2) .. \" (\" .. calls .. \")\"\nend\n"
-                         "function M.zapisz(strona, tekst)\n    return b.write(strona, tekst)\nend\nreturn M\n```\n"_s;
+const QString kLibrary =
+        u"---\ntags: [rozszerzenie]\n---\n# Wspólne funkcje\n\nPomocnicze funkcje dla innych rozszerzeń.\n\n"
+        "```luau\nlocal M = {}\nlocal calls = 0\nfunction M.wielkie(s)\n    calls += 1\n"
+        "    return string.rep(s, 2) .. \" (\" .. calls .. \")\"\nend\n"
+        "function M.zapisz(strona, tekst)\n    return b.write(strona, tekst)\nend\nreturn M\n```\n"_s;
 
 } // namespace
 
-class TestExtensionsShared : public QObject
-{
+class TestExtensionsShared : public QObject {
     Q_OBJECT
 
     QTemporaryDir m_tmp;
@@ -113,15 +113,17 @@ private Q_SLOTS:
         const Result paths = run(u"t"_s, u"b.pages({ tag = \"projekt\", paths = true })"_s);
         QCOMPARE(paths.value.toStringList(), (QStringList{u"Archiwum/Dom.md"_s, u"Projekty/Dom.md"_s}));
         QCOMPARE(run(u"t"_s, u"#b.pages({ paths = true })"_s).value.toInt(), 3);
-        const Result read = run(u"t"_s, u"local out = {}\n"
-                                        "for _, path in b.pages({ tag = \"projekt\", paths = true }) do\n"
-                                        "    for _, block in b.blocks({ page = path }) do\n"
-                                        "        if block.task then table.insert(out, b.page(path).path .. \"=\" .. block.plain) end\n"
-                                        "    end\n"
-                                        "end\nreturn table.concat(out, \"; \")"_s);
+        const Result read = run(
+                u"t"_s, u"local out = {}\n"
+                        "for _, path in b.pages({ tag = \"projekt\", paths = true }) do\n"
+                        "    for _, block in b.blocks({ page = path }) do\n"
+                        "        if block.task then table.insert(out, b.page(path).path .. \"=\" .. block.plain) end\n"
+                        "    end\n"
+                        "end\nreturn table.concat(out, \"; \")"_s);
         QVERIFY2(read.ok(), qPrintable(read.error));
         QCOMPARE(read.value.toString(), u"Archiwum/Dom.md=Stary dach; Projekty/Dom.md=Pomalować pokój"_s);
-        QVERIFY(run(u"t"_s, u"b.pages({ paths = \"tak\" })"_s).error.contains(u"b.pages: paths must be true or false"_s));
+        QVERIFY(run(u"t"_s, u"b.pages({ paths = \"tak\" })"_s)
+                        .error.contains(u"b.pages: paths must be true or false"_s));
     }
 
     void codeShared()
@@ -133,14 +135,16 @@ private Q_SLOTS:
         QVERIFY(load(u"drugie"_s, user, {}).ok());
         // The library runs as an extension of its own too: what its top level returns is no result.
         const ParsedNote note = markdown::parseNote(u"Rozszerzenia/Wspólne funkcje.md"_s, kLibrary);
-        const Result itself = m_engine->load(readPageExtension(u"Rozszerzenia/Wspólne funkcje.md"_s, note, kLibrary).extension());
+        const Result itself =
+                m_engine->load(readPageExtension(u"Rozszerzenia/Wspólne funkcje.md"_s, note, kLibrary).extension());
         QVERIFY2(itself.ok(), qPrintable(itself.error));
         // Each extension runs its own copy: the counter of one is not the other's.
         QCOMPARE(m_engine->runCommand(u"pierwsze"_s, u"krzycz"_s, {}).value.toString(), u"żółwżółw (1)"_s);
         QCOMPARE(m_engine->runCommand(u"pierwsze"_s, u"krzycz"_s, {}).value.toString(), u"żółwżółw (2)"_s);
         QCOMPARE(m_engine->runCommand(u"drugie"_s, u"krzycz"_s, {}).value.toString(), u"żółwżółw (1)"_s);
         // Required again: the same table.
-        QCOMPARE(run(u"pierwsze"_s, u"b.require(\"Wspólne funkcje\") == b.require(\"Rozszerzenia/Wspólne funkcje\")"_s).value,
+        QCOMPARE(run(u"pierwsze"_s, u"b.require(\"Wspólne funkcje\") == b.require(\"Rozszerzenia/Wspólne funkcje\")"_s)
+                         .value,
                  QVariant(true));
         QCOMPARE(m_engine->modulesOf(u"pierwsze"_s), QStringList{u"Rozszerzenia/Wspólne funkcje.md"_s});
         // The module writes with the requester's permissions, never its own page's.
@@ -161,9 +165,11 @@ private Q_SLOTS:
         QTest::newRow("no code") << u"b.require(\"Pusta\")"_s << u"t:1: b.require: “Pusta” has no ```luau block"_s;
         QTest::newRow("not approved") << u"b.require(\"Niezatwierdzona\")"_s
                                       << u"t:1: b.require: “Niezatwierdzona” waits for approval on this device"_s;
-        QTest::newRow("a number") << u"b.require(5)"_s << u"t:1: b.require: argument 1 must be a page's name, not number"_s;
+        QTest::newRow("a number") << u"b.require(5)"_s
+                                  << u"t:1: b.require: argument 1 must be a page's name, not number"_s;
         QTest::newRow("empty") << u"b.require(\"  \")"_s << u"t:1: b.require: the page's name is empty"_s;
-        QTest::newRow("a cycle") << u"b.require(\"Pierwsza\")"_s << u"b.require: a cycle: Pierwsza → Druga → Pierwsza"_s;
+        QTest::newRow("a cycle") << u"b.require(\"Pierwsza\")"_s
+                                 << u"b.require: a cycle: Pierwsza → Druga → Pierwsza"_s;
         QTest::newRow("its error") << u"b.require(\"Błędna\")"_s << u"Błędna:6: attempt to index nil with 'pole'"_s;
         QTest::newRow("its syntax") << u"b.require(\"Składnia\")"_s << u"Składnia:7: Expected identifier"_s;
         QTest::newRow("caught") << u"local ok, e = pcall(b.require, \"Nie ma\")\nerror(\"złapany: \" .. e, 0)"_s
@@ -173,7 +179,9 @@ private Q_SLOTS:
     {
         QFETCH(QString, code);
         QFETCH(QString, error);
-        const auto page = [](const QString &body) { return u"---\ntags: [extension]\n---\n```luau\n"_s + body + u"\n```\n"_s; };
+        const auto page = [](const QString &body) {
+            return u"---\ntags: [extension]\n---\n```luau\n"_s + body + u"\n```\n"_s;
+        };
         m_refused = {u"Niezatwierdzona.md"_s};
         open({{u"Dom.md"_s, u"- zwykła strona\n"_s},
               {u"Pusta.md"_s, u"tags:: rozszerzenie\n\nTylko tekst.\n"_s},
@@ -216,8 +224,10 @@ private Q_SLOTS:
     {
         QHash<QString, QString> notes;
         for (int i = 0; i <= QuestionLimits::requireDepth + 1; ++i)
-            notes.insert(u"M%1.md"_s.arg(i), u"---\ntags: [extension]\n---\n```luau\nreturn b.require(\"M%1\")\n```\n"_s.arg(i + 1));
-        notes.insert(u"M%1.md"_s.arg(QuestionLimits::requireDepth + 2), u"---\ntags: [extension]\n---\n```luau\nreturn 7\n```\n"_s);
+            notes.insert(u"M%1.md"_s.arg(i),
+                         u"---\ntags: [extension]\n---\n```luau\nreturn b.require(\"M%1\")\n```\n"_s.arg(i + 1));
+        notes.insert(u"M%1.md"_s.arg(QuestionLimits::requireDepth + 2),
+                     u"---\ntags: [extension]\n---\n```luau\nreturn 7\n```\n"_s);
         open(notes);
         QVERIFY(load(u"t"_s, QString()).ok());
         const Result r = run(u"t"_s, u"b.require(\"M0\")"_s);
@@ -228,14 +238,16 @@ private Q_SLOTS:
     void settings()
     {
         open({{u"Dom.md"_s, u"- a\n"_s}});
-        const QString declare = u"local s = b.settings({\n"
-                                "    { key = \"przerwa\", label = \"Przerwa między seriami\", value = 90, step = 15, unit = \"s\" },\n"
-                                "    { key = \"waluta\", label = \"Waluta\", value = \"zł\", placeholder = \"np. zł\" },\n"
-                                "    { key = \"dzwiek\", label = \"Dźwięk na koniec\", value = true },\n"
-                                "    { key = \"jednostka\", label = \"Jednostka\", options = { \"kg\", \"lb\" } },\n"
-                                "})\n"
-                                "b.command(\"pokaz\", function() return `{b.setting(\"przerwa\")} {b.setting(\"waluta\")} {tostring(b.setting(\"dzwiek\"))} {b.setting(\"jednostka\")}` end)\n"
-                                "assert(type(s.przerwa) == \"number\" and type(s.jednostka) == \"string\")\n"_s;
+        const QString declare =
+                u"local s = b.settings({\n"
+                "    { key = \"przerwa\", label = \"Przerwa między seriami\", value = 90, step = 15, unit = \"s\" },\n"
+                "    { key = \"waluta\", label = \"Waluta\", value = \"zł\", placeholder = \"np. zł\" },\n"
+                "    { key = \"dzwiek\", label = \"Dźwięk na koniec\", value = true },\n"
+                "    { key = \"jednostka\", label = \"Jednostka\", options = { \"kg\", \"lb\" } },\n"
+                "})\n"
+                "b.command(\"pokaz\", function() return `{b.setting(\"przerwa\")} {b.setting(\"waluta\")} "
+                "{tostring(b.setting(\"dzwiek\"))} {b.setting(\"jednostka\")}` end)\n"
+                "assert(type(s.przerwa) == \"number\" and type(s.jednostka) == \"string\")\n"_s;
         const Result loaded = load(u"silownia"_s, declare);
         QVERIFY2(loaded.ok(), qPrintable(u"%1 %2"_s.arg(int(loaded.status)).arg(loaded.error)));
         const QVariantList fields = m_engine->settingsOf(u"silownia"_s);
@@ -264,7 +276,8 @@ private Q_SLOTS:
         QCOMPARE(m_engine->runCommand(u"silownia"_s, u"pokaz"_s, {}).value.toString(), u"90 zł true kg"_s);
         // nil: back to the default; an undeclared key is kept as it is.
         QVERIFY(run(u"silownia"_s, u"b.setSetting(\"przerwa\", nil); b.setSetting(\"ostatnie\", \"Przysiad\")"_s).ok());
-        QCOMPARE(run(u"silownia"_s, u"b.setting(\"przerwa\") .. b.setting(\"ostatnie\")"_s).value.toString(), u"90Przysiad"_s);
+        QCOMPARE(run(u"silownia"_s, u"b.setting(\"przerwa\") .. b.setting(\"ostatnie\")"_s).value.toString(),
+                 u"90Przysiad"_s);
         QVERIFY(run(u"silownia"_s, u"b.setting(\"nie-ma\") == nil"_s).value.toBool());
     }
 
@@ -272,17 +285,21 @@ private Q_SLOTS:
     {
         QTest::addColumn<QString>("code");
         QTest::addColumn<QString>("error");
-        QTest::newRow("not a list") << u"b.settings(\"przerwa\")"_s << u"b.settings: argument 1 must be a list of settings"_s;
-        QTest::newRow("a record") << u"b.settings({ key = \"a\" })"_s << u"b.settings: argument 1 must be a list of settings"_s;
+        QTest::newRow("not a list") << u"b.settings(\"przerwa\")"_s
+                                    << u"b.settings: argument 1 must be a list of settings"_s;
+        QTest::newRow("a record") << u"b.settings({ key = \"a\" })"_s
+                                  << u"b.settings: argument 1 must be a list of settings"_s;
         QTest::newRow("no key") << u"b.settings({ { label = \"A\" } })"_s << u"setting 1 needs a key"_s;
         QTest::newRow("bad key") << u"b.settings({ { key = \"mój klucz\" } })"_s << u"setting 1 needs a key"_s;
-        QTest::newRow("twice") << u"b.settings({ { key = \"a\" }, { key = \"a\" } })"_s << u"the key \"a\" is there twice"_s;
+        QTest::newRow("twice") << u"b.settings({ { key = \"a\" }, { key = \"a\" } })"_s
+                               << u"the key \"a\" is there twice"_s;
         QTest::newRow("kind") << u"b.settings({ { key = \"a\", kind = \"kolor\" } })"_s << u"kind is \"number\""_s;
         QTest::newRow("number") << u"b.settings({ { key = \"a\", kind = \"number\", value = \"5\" } })"_s
                                 << u"its value must be a number"_s;
         QTest::newRow("choice") << u"b.settings({ { key = \"a\", options = { \"x\" }, value = \"y\" } })"_s
                                 << u"must be one of its options"_s;
-        QTest::newRow("no options") << u"b.settings({ { key = \"a\", kind = \"choice\" } })"_s << u"needs 1 to 50 options"_s;
+        QTest::newRow("no options") << u"b.settings({ { key = \"a\", kind = \"choice\" } })"_s
+                                    << u"needs 1 to 50 options"_s;
         QTest::newRow("too many") << u"local f = {}\nfor i = 1, 33 do f[i] = { key = \"k\" .. i } end\nb.settings(f)"_s
                                   << u"at most 32 settings"_s;
         QTest::newRow("set: kind") << u"b.settings({ { key = \"a\", value = 1 } })\nb.setSetting(\"a\", \"x\")"_s
@@ -318,9 +335,13 @@ private Q_SLOTS:
     {
         open({});
         QVERIFY(load(u"herbata"_s, QString()).ok());
-        QVERIFY(run(u"herbata"_s, u"b.timer(180, { label = \"Herbata\", message = \"Herbata gotowa — wyjmij torebkę.\" })"_s).ok());
+        QVERIFY(run(u"herbata"_s,
+                    u"b.timer(180, { label = \"Herbata\", message = \"Herbata gotowa — wyjmij torebkę.\" })"_s)
+                        .ok());
         QVERIFY(run(u"herbata"_s, u"b.timer(60, \"Jajko\")"_s).ok());
-        QVERIFY(run(u"herbata"_s, u"b.timer(5, { label = string.rep(\"ą\", 500), message = string.rep(\"\\n wiersz\", 200) })"_s).ok());
+        QVERIFY(run(u"herbata"_s,
+                    u"b.timer(5, { label = string.rep(\"ą\", 500), message = string.rep(\"\\n wiersz\", 200) })"_s)
+                        .ok());
         QVERIFY(run(u"herbata"_s, u"b.stopTimer()"_s).ok());
         QCOMPARE(m_timers.size(), 4);
         QCOMPARE(m_timers[0].first, u"herbata"_s);
@@ -341,23 +362,28 @@ private Q_SLOTS:
     void questionsHaveLimits()
     {
         open({});
-        QVERIFY(load(u"t"_s, u"b.command(\"duze\", function() return b.ask(\"Tytuł\\n\" .. string.rep(\"ż\", 1000000)) end)\n"
-                              "b.command(\"wiersze\", function() return b.ask(\"Tytuł\\n\" .. string.rep(\"wiersz\\n\", 1000)) end)\n"
-                              "b.command(\"tytul\", function() return b.ask(string.rep(\"T\", 5000)) end)\n"
-                              "b.command(\"lista\", function(ctx) local o = {}\n"
-                              "    for i = 1, ctx.args.n do o[i] = \"opcja \" .. i end\n"
-                              "    return b.choose(\"Która?\", o) end)\n"
-                              "b.command(\"dluga\", function() return b.choose(\"Która?\", { \"a\", string.rep(\"b\", 501) }) end)\n"
-                              "b.command(\"liczby\", function() return b.choose(\"Ile?\", { 1, 2.5 }) end)\n"
-                              "b.command(\"tabela\", function() return b.choose(\"Która?\", { {} }) end)\n"
-                              "b.command(\"pola\", function(ctx) local f = {}\n"
-                              "    for i = 1, ctx.args.n do f[i] = { key = \"k\" .. i, label = string.rep(\"ł\", 300), value = 1 } end\n"
-                              "    return b.form(\"Formularz\", f) end)\n"_s)
+        QVERIFY(load(u"t"_s,
+                     u"b.command(\"duze\", function() return b.ask(\"Tytuł\\n\" .. string.rep(\"ż\", 1000000)) end)\n"
+                     "b.command(\"wiersze\", function() return b.ask(\"Tytuł\\n\" .. string.rep(\"wiersz\\n\", 1000)) "
+                     "end)\n"
+                     "b.command(\"tytul\", function() return b.ask(string.rep(\"T\", 5000)) end)\n"
+                     "b.command(\"lista\", function(ctx) local o = {}\n"
+                     "    for i = 1, ctx.args.n do o[i] = \"opcja \" .. i end\n"
+                     "    return b.choose(\"Która?\", o) end)\n"
+                     "b.command(\"dluga\", function() return b.choose(\"Która?\", { \"a\", string.rep(\"b\", 501) }) "
+                     "end)\n"
+                     "b.command(\"liczby\", function() return b.choose(\"Ile?\", { 1, 2.5 }) end)\n"
+                     "b.command(\"tabela\", function() return b.choose(\"Która?\", { {} }) end)\n"
+                     "b.command(\"pola\", function(ctx) local f = {}\n"
+                     "    for i = 1, ctx.args.n do f[i] = { key = \"k\" .. i, label = string.rep(\"ł\", 300), value = "
+                     "1 } end\n"
+                     "    return b.form(\"Formularz\", f) end)\n"_s)
                         .ok());
         Result r = m_engine->runCommand(u"t"_s, u"duze"_s, {});
         QCOMPARE(r.status, Status::Suspended);
         QString prompt = r.value.toMap().value(u"prompt"_s).toString();
-        QVERIFY2(prompt.size() <= QuestionLimits::title + QuestionLimits::text + 3, qPrintable(QString::number(prompt.size())));
+        QVERIFY2(prompt.size() <= QuestionLimits::title + QuestionLimits::text + 3,
+                 qPrintable(QString::number(prompt.size())));
         QVERIFY(prompt.startsWith(u"Tytuł\nżżż"_s) && prompt.endsWith(u'…'));
         m_engine->cancel(r.call);
         r = m_engine->runCommand(u"t"_s, u"wiersze"_s, {});

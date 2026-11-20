@@ -1046,19 +1046,21 @@ private Q_SLOTS:
         QTest::newRow("second line") << u"pierwsza\n[[dru"_s << 14 << u"pages"_s << u"dru"_s << 11 << 14 << u"[["_s << QString();
         QTest::newRow("bad cursor") << u"[[x"_s << 99 << QString() << QString() << -1 << -1 << QString() << QString();
         // {{ completes the extensions' macros (docs/SYNTAX.md §13 "Macros"): what follows `ext:`.
-        QTest::newRow("macros") << u"Rekord {{ext:sil"_s << 16 << u"macros"_s << u"sil"_s << 9 << 16 << u"{{"_s << QString();
+        QTest::newRow("macros") << u"Rekord {{ext:sil"_s << 16 << u"macros"_s << u"sil"_s << 9 << 16 << u"{{"_s
+                                << QString();
         QTest::newRow("macros bare") << u"{{"_s << 2 << u"macros"_s << QString() << 2 << 2 << u"{{"_s << QString();
-        QTest::newRow("macros without ext") << u"x {{ nawyk"_s << 10 << u"macros"_s << u"nawyk"_s << 5 << 10 << u"{{"_s
-                                            << QString();
-        QTest::newRow("macros polish") << u"{{ext:nawyki/ś"_s << 14 << u"macros"_s << u"nawyki/ś"_s << 2 << 14 << u"{{"_s
-                                       << QString();
+        QTest::newRow("macros without ext")
+                << u"x {{ nawyk"_s << 10 << u"macros"_s << u"nawyk"_s << 5 << 10 << u"{{"_s << QString();
+        QTest::newRow("macros polish") << u"{{ext:nawyki/ś"_s << 14 << u"macros"_s << u"nawyki/ś"_s << 2 << 14
+                                       << u"{{"_s << QString();
         QTest::newRow("macros closed") << u"{{ext:si}} dalej"_s << 8 << u"macros"_s << u"si"_s << 2 << 8 << u"{{"_s
                                        << u"}}"_s;
-        QTest::newRow("macros with arguments") << u"{{ext:a/b Przysiad"_s << 18 << QString() << QString() << -1 << -1
-                                               << QString() << QString();
+        QTest::newRow("macros with arguments")
+                << u"{{ext:a/b Przysiad"_s << 18 << QString() << QString() << -1 << -1 << QString() << QString();
         QTest::newRow("macros escaped") << u"\\{{ext:a"_s << 8 << QString() << QString() << -1 << -1 << QString()
                                         << QString();
-        QTest::newRow("macros in code") << u"`{{ext:a"_s << 8 << QString() << QString() << -1 << -1 << QString() << QString();
+        QTest::newRow("macros in code") << u"`{{ext:a"_s << 8 << QString() << QString() << -1 << -1 << QString()
+                                        << QString();
     }
 
     void triggers()

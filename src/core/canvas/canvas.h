@@ -59,14 +59,14 @@ struct Node {
     double y = 0;
     double width = 0;
     double height = 0;
-    QString color;           ///< "" none, "1"–"6" a preset, "#rrggbb" (canvasColor)
-    QString text;            ///< text nodes: Markdown
-    QString file;            ///< file nodes: the vault path
-    QString subpath;         ///< file nodes: "#Heading", "#^block" ("" none)
-    QString url;             ///< link nodes
-    QString label;           ///< groups
-    QString background;      ///< groups: the vault path of a picture
-    QString backgroundStyle; ///< groups: "cover", "ratio", "repeat" ("" the default)
+    QString color;                                ///< "" none, "1"–"6" a preset, "#rrggbb" (canvasColor)
+    QString text;                                 ///< text nodes: Markdown
+    QString file;                                 ///< file nodes: the vault path
+    QString subpath;                              ///< file nodes: "#Heading", "#^block" ("" none)
+    QString url;                                  ///< link nodes
+    QString label;                                ///< groups
+    QString background;                           ///< groups: the vault path of a picture
+    QString backgroundStyle;                      ///< groups: "cover", "ratio", "repeat" ("" the default)
     std::shared_ptr<const detail::Origin> origin; ///< as read (null: made here)
 
     bool isText() const { return type == TextType; }

@@ -25,7 +25,7 @@ struct JsonValue;
 
 /// A member of an object: `"key": value` with the whitespace before it.
 struct JsonMember {
-    QString key;           ///< decoded
+    QString key;            ///< decoded
     qsizetype leadFrom = 0; ///< the whitespace before the key starts here (after `{` or `,`)
     qsizetype keyFrom = 0;  ///< the key's opening quote
     qsizetype keyTo = 0;    ///< after its closing quote

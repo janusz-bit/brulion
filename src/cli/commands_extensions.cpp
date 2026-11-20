@@ -396,7 +396,8 @@ bool startSandbox(Call &call, Sandbox &box)
     Sandbox *b = &box;
     box.host->onLog = [b](const QString &, const QString &text) { b->printed.append(text); };
     box.host->onExtensionTimer = [b](const QString &, const ext::TimerSpec &spec) {
-        b->timers.append(spec.seconds > 0 ? QJsonObject{{u"seconds"_s, spec.seconds}, {u"label"_s, spec.label},
+        b->timers.append(spec.seconds > 0 ? QJsonObject{{u"seconds"_s, spec.seconds},
+                                                        {u"label"_s, spec.label},
                                                         {u"message"_s, spec.message}}
                                           : QJsonObject{{u"stopped"_s, true}});
     };
@@ -738,11 +739,12 @@ Result extensionRun(Call &call)
         for (const QString &a : markdown::macroArguments(text))
             list << a;
         QVariantMap ctx{{u"args"_s, list}, {u"text"_s, text}, {u"page"_s, pageName}, {u"path"_s, QString(pagePath)}};
-        if (const auto day = pagePath.isEmpty() ? std::nullopt
-                                                : markdown::journalDateFromPath(pagePath, call.vault()->config()))
+        if (const auto day =
+                    pagePath.isEmpty() ? std::nullopt : markdown::journalDateFromPath(pagePath, call.vault()->config()))
             ctx.insert(u"date"_s, day->toString(Qt::ISODate));
         const int limit = macro.isEmpty() ? 1000 : ext::MacroTimeoutMs;
-        o.insert(u"ran"_s, QJsonObject{{macro.isEmpty() ? u"variable"_s : u"macro"_s, macro.isEmpty() ? variable : macro}});
+        o.insert(u"ran"_s,
+                 QJsonObject{{macro.isEmpty() ? u"variable"_s : u"macro"_s, macro.isEmpty() ? variable : macro}});
         r = macro.isEmpty() ? box.engine.runVariable(x.id, variable, ctx, limit)
                             : box.engine.runMacro(x.id, macro, ctx, limit);
         if (r.ok() && !macro.isEmpty()) {
@@ -787,7 +789,11 @@ Result extensionRun(Call &call)
             event.insert(u"source"_s, u"app"_s);
             event.insert(u"by"_s, QString());
         } else if (hook == u"journal") {
-            event = {{u"date"_s, today}, {u"page"_s, today}, {u"path"_s, pagePath}, {u"source"_s, u"app"_s}, {u"by"_s, QString()}};
+            event = {{u"date"_s, today},
+                     {u"page"_s, today},
+                     {u"path"_s, pagePath},
+                     {u"source"_s, u"app"_s},
+                     {u"by"_s, QString()}};
         } else if (hook == u"open") {
             event = {{u"date"_s, today}};
         } else if (hook == u"day") {
@@ -981,12 +987,20 @@ Result extensionDiff(Call &call)
     int added = 0, removed = 0;
     for (const ext::CodeDiffLine &l : ext::codeDiff(kept ? old : QString(), t->page.code)) {
         static const QStringList kinds{u"same"_s, u"added"_s, u"removed"_s, u"skipped"_s};
-        lines.append(QJsonObject{{u"kind"_s, kinds.value(int(l.kind))}, {u"text"_s, l.text}, {u"line"_s, l.line},
+        lines.append(QJsonObject{{u"kind"_s, kinds.value(int(l.kind))},
+                                 {u"text"_s, l.text},
+                                 {u"line"_s, l.line},
                                  {u"count"_s, l.count}});
         switch (l.kind) {
         case ext::CodeDiffLine::Same: text << u"  "_s + l.text; break;
-        case ext::CodeDiffLine::Added: text << u"+ "_s + l.text; ++added; break;
-        case ext::CodeDiffLine::Removed: text << u"- "_s + l.text; ++removed; break;
+        case ext::CodeDiffLine::Added:
+            text << u"+ "_s + l.text;
+            ++added;
+            break;
+        case ext::CodeDiffLine::Removed:
+            text << u"- "_s + l.text;
+            ++removed;
+            break;
         case ext::CodeDiffLine::Skipped: text << tr("… unchanged lines: %1").arg(l.count); break;
         }
     }
@@ -999,9 +1013,11 @@ Result extensionDiff(Call &call)
     o.insert(u"removed"_s, removed);
     o.insert(u"lines"_s, lines);
     if (before.isEmpty())
-        call.warn(u"never_approved"_s, tr("Nothing of this extension was approved on this device: all of its code is new"));
+        call.warn(u"never_approved"_s,
+                  tr("Nothing of this extension was approved on this device: all of its code is new"));
     else if (!kept)
-        call.warn(u"approved_code_not_kept"_s, tr("The approved version was too long to keep: all of the code is shown"));
+        call.warn(u"approved_code_not_kept"_s,
+                  tr("The approved version was too long to keep: all of the code is shown"));
     return call.ok(o, text.join(u'\n') + u'\n');
 }
 
@@ -1063,7 +1079,8 @@ Result extensionSettings(Call &call)
             parsed = value;
         } else {
             if (value.size() > ext::QuestionLimits::settingText)
-                return call.fail(ExitUsage, u"bad_value"_s, tr("%1: at most %2 characters").arg(key).arg(ext::QuestionLimits::settingText));
+                return call.fail(ExitUsage, u"bad_value"_s,
+                                 tr("%1: at most %2 characters").arg(key).arg(ext::QuestionLimits::settingText));
             parsed = value;
         }
         stored.insert(key, parsed);
@@ -1071,9 +1088,10 @@ Result extensionSettings(Call &call)
     }
     if (changed && !call.dryRun()) {
         if (!store)
-            return call.fail(ExitInternal, u"no_device_state"_s, tr("This notebook keeps no settings here (--no-history)"));
-        store->set(ext::settingsStoreKey(x.id),
-                   stored.isEmpty() ? QJsonValue(QJsonValue::Undefined) : QJsonValue(QJsonObject::fromVariantMap(stored)));
+            return call.fail(ExitInternal, u"no_device_state"_s,
+                             tr("This notebook keeps no settings here (--no-history)"));
+        store->set(ext::settingsStoreKey(x.id), stored.isEmpty() ? QJsonValue(QJsonValue::Undefined)
+                                                                 : QJsonValue(QJsonObject::fromVariantMap(stored)));
         store->flush();
     }
     // The values as the extension reads them: a stored one that fits its setting, else its default.
@@ -1084,18 +1102,19 @@ Result extensionSettings(Call &call)
         const QString key = field.value(u"key"_s).toString();
         const QVariant mine = stored.value(key);
         const QString kind = field.value(u"kind"_s).toString();
-        const bool fits = mine.isValid()
-                          && (kind == u"number"   ? mine.canConvert<double>() && mine.metaType().id() != QMetaType::QString
-                              : kind == u"toggle" ? mine.metaType().id() == QMetaType::Bool
-                              : kind == u"choice" ? field.value(u"options"_s).toStringList().contains(mine.toString())
-                                                  : mine.metaType().id() == QMetaType::QString);
+        const bool fits =
+                mine.isValid()
+                && (kind == u"number"   ? mine.canConvert<double>() && mine.metaType().id() != QMetaType::QString
+                    : kind == u"toggle" ? mine.metaType().id() == QMetaType::Bool
+                    : kind == u"choice" ? field.value(u"options"_s).toStringList().contains(mine.toString())
+                                        : mine.metaType().id() == QMetaType::QString);
         field.insert(u"current"_s, fits ? mine : field.value(u"value"_s));
         field.insert(u"set"_s, fits);
         list.append(QJsonObject::fromVariantMap(field));
-        text << u"%1 = %2%3 (%4)"_s.arg(key, field.value(u"current"_s).toString(),
-                                        field.value(u"unit"_s).toString().isEmpty() ? QString()
-                                                                                     : u" "_s + field.value(u"unit"_s).toString(),
-                                        field.value(u"label"_s).toString());
+        text << u"%1 = %2%3 (%4)"_s.arg(
+                key, field.value(u"current"_s).toString(),
+                field.value(u"unit"_s).toString().isEmpty() ? QString() : u" "_s + field.value(u"unit"_s).toString(),
+                field.value(u"label"_s).toString());
     }
     QJsonObject o = targetJson(*t);
     o.insert(u"settings"_s, list);
@@ -1113,7 +1132,8 @@ Result extensionCopy(Call &call)
     if (!t)
         return call.failed();
     if (!t->isPage)
-        return call.fail(ExitUsage, u"not_a_page"_s, tr("A built-in extension is in every notebook: extension write its page"));
+        return call.fail(ExitUsage, u"not_a_page"_s,
+                         tr("A built-in extension is in every notebook: extension write its page"));
     const QString to = QDir::cleanPath(QFileInfo(call.str(u"to"_s).trimmed()).absoluteFilePath());
     if (call.str(u"to"_s).trimmed().isEmpty() || !QFileInfo(to).isDir())
         return call.fail(ExitUsage, u"no_notebook"_s, tr("--to is the folder of another notebook"));
@@ -1132,7 +1152,8 @@ Result extensionCopy(Call &call)
     Vault target(to, notebook::deviceStatePath(call.ctx.appDataDir(), to));
     QString error;
     if (!target.open(&error))
-        return call.fail(ExitInternal, u"open_failed"_s, error.isEmpty() ? tr("The notebook %1 cannot be opened").arg(to) : error);
+        return call.fail(ExitInternal, u"open_failed"_s,
+                         error.isEmpty() ? tr("The notebook %1 cannot be opened").arg(to) : error);
     const ext::CopyReport report = ext::copyExtension(*call.index(), t->page.path, target, call.flag(u"replace"_s));
     if (!report.error.isEmpty())
         return call.fail(ExitInternal, u"copy_failed"_s, report.error);
@@ -1224,23 +1245,31 @@ void addExtensionCommands(QList<Command> &out)
             extensionRun,
             {name,
              positional(u"command"_s, ArgType::String, QT_TRANSLATE_NOOP("brulion::cli", "The command's name"), false),
-             option(u"view"_s, ArgType::String, QT_TRANSLATE_NOOP("brulion::cli", "Draw this view instead: its node tree")),
+             option(u"view"_s, ArgType::String,
+                    QT_TRANSLATE_NOOP("brulion::cli", "Draw this view instead: its node tree")),
              option(u"action"_s, ArgType::String,
                     QT_TRANSLATE_NOOP("brulion::cli", "With --view: call this action of the view")),
              option(u"args"_s, ArgType::String,
-                    QT_TRANSLATE_NOOP("brulion::cli", "The view's params, the action's args or the command's ctx.args, a JSON object")),
+                    QT_TRANSLATE_NOOP("brulion::cli",
+                                      "The view's params, the action's args or the command's ctx.args, a JSON object")),
              option(u"hook"_s, ArgType::String,
                     QT_TRANSLATE_NOOP("brulion::cli", "Call the extension's hooks of this event (save, change)")),
              option(u"macro"_s, ArgType::String,
-                    QT_TRANSLATE_NOOP("brulion::cli", "Compute this macro instead ({{ext:extension/macro …}}): its value and what a note shows")),
+                    QT_TRANSLATE_NOOP(
+                            "brulion::cli",
+                            "Compute this macro instead ({{ext:extension/macro …}}): its value and what a note shows")),
              option(u"variable"_s, ArgType::String,
-                    QT_TRANSLATE_NOOP("brulion::cli", "Fill this template variable instead ({{extension/variable …}})")),
+                    QT_TRANSLATE_NOOP("brulion::cli",
+                                      "Fill this template variable instead ({{extension/variable …}})")),
              option(u"text"_s, ArgType::String,
-                    QT_TRANSLATE_NOOP("brulion::cli", "With --macro or --variable: its arguments as written (\"Przysiad, 30\")")),
+                    QT_TRANSLATE_NOOP("brulion::cli",
+                                      "With --macro or --variable: its arguments as written (\"Przysiad, 30\")")),
              option(u"page"_s, ArgType::Ref,
-                    QT_TRANSLATE_NOOP("brulion::cli", "The page on screen: ctx.page, the hook's page, the note of a macro")),
+                    QT_TRANSLATE_NOOP("brulion::cli",
+                                      "The page on screen: ctx.page, the hook's page, the note of a macro")),
              option(u"block"_s, ArgType::Ref,
-                    QT_TRANSLATE_NOOP("brulion::cli", "The block under the caret (ctx.block): its ref, Dom.md#L12@hash")),
+                    QT_TRANSLATE_NOOP("brulion::cli",
+                                      "The block under the caret (ctx.block): its ref, Dom.md#L12@hash")),
              answers},
             QT_TRANSLATE_NOOP("brulion::cli",
                               "A fresh engine each run, as the app's limits (2 s a call). Writes go to `writes` as "
@@ -1291,13 +1320,13 @@ void addExtensionCommands(QList<Command> &out)
                                "never runs code written here before the user approves it there."));
     c.writes = true;
     out.append(c);
-    out.append(make(u"extension.diff"_s,
-                    QT_TRANSLATE_NOOP("brulion::cli",
-                                      "An extension page's code against the version approved on this device"),
-                    extensionDiff, {name},
-                    QT_TRANSLATE_NOOP("brulion::cli",
-                                      "What the app's \"Read and run\" shows: the lines added and removed since the "
-                                      "approval (all of them when nothing was approved here). Approves nothing.")));
+    out.append(make(
+            u"extension.diff"_s,
+            QT_TRANSLATE_NOOP("brulion::cli", "An extension page's code against the version approved on this device"),
+            extensionDiff, {name},
+            QT_TRANSLATE_NOOP("brulion::cli",
+                              "What the app's \"Read and run\" shows: the lines added and removed since the "
+                              "approval (all of them when nothing was approved here). Approves nothing.")));
     c = make(u"extension.settings"_s,
              QT_TRANSLATE_NOOP("brulion::cli", "An extension's settings (b.settings) and their values on this device"),
              extensionSettings,
@@ -1313,8 +1342,7 @@ void addExtensionCommands(QList<Command> &out)
              QT_TRANSLATE_NOOP("brulion::cli",
                                "Copy an extension page, with the pages it requires, into another notebook"),
              extensionCopy,
-             {name,
-              option(u"to"_s, ArgType::String, QT_TRANSLATE_NOOP("brulion::cli", "The other notebook's folder")),
+             {name, option(u"to"_s, ArgType::String, QT_TRANSLATE_NOOP("brulion::cli", "The other notebook's folder")),
               flag(u"replace"_s,
                    QT_TRANSLATE_NOOP("brulion::cli", "Write over a page there with other text (kept in its history)"))},
              QT_TRANSLATE_NOOP("brulion::cli",

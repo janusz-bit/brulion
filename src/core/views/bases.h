@@ -67,14 +67,14 @@ struct BaseView {
     ViewKind kind = ViewKind::Table;
     QString name;
     std::optional<BaseFilter> filters;
-    QStringList order;   ///< the columns (property ids)
+    QStringList order; ///< the columns (property ids)
     QList<BaseSort> sort;
     std::optional<BaseSort> groupBy;
-    std::optional<QStringList> groupOrder; ///< shown groups in order; "" stands for null (no value)
-    int limit = 0;                         ///< 0: no limit of its own
+    std::optional<QStringList> groupOrder;        ///< shown groups in order; "" stands for null (no value)
+    int limit = 0;                                ///< 0: no limit of its own
     QList<std::pair<QString, QString>> summaries; ///< property id -> summary name
-    QString image;  ///< cards / kanban: the image property
-    QString notice; ///< what Brulion shows differently (a map as a table, …), translated
+    QString image;                                ///< cards / kanban: the image property
+    QString notice;                               ///< what Brulion shows differently (a map as a table, …), translated
 };
 
 struct Base {
@@ -82,7 +82,7 @@ struct Base {
     /// Formulas by canonical name, dependencies first (formulas referring to themselves are left
     /// out: a problem says so).
     QList<std::pair<QString, dataview::Expression>> formulas;
-    QHash<QString, QString> displayNames; ///< property id (baseProperty()) -> display name
+    QHash<QString, QString> displayNames;                      ///< property id (baseProperty()) -> display name
     QList<std::pair<QString, dataview::Expression>> summaries; ///< custom summaries by name
     QList<BaseView> views;
     QStringList problems; ///< what is left out (translated): formulas, filters, summaries that do not parse

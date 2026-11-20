@@ -76,8 +76,10 @@ QVariantMap checkExtension(Vault &vault, VaultIndex &index, const Extension &ext
         QVariantList macros, variables;
         for (const MacroInfo &m : engine.macros())
             if (m.extension == extension.id)
-                macros << QVariantMap{{u"name"_s, m.name}, {u"description"_s, m.description},
-                                      {u"args"_s, m.arguments}, {u"example"_s, m.example}};
+                macros << QVariantMap{{u"name"_s, m.name},
+                                      {u"description"_s, m.description},
+                                      {u"args"_s, m.arguments},
+                                      {u"example"_s, m.example}};
         for (const VariableInfo &v : engine.variables())
             if (v.extension == extension.id)
                 variables << QVariantMap{{u"name"_s, v.name}, {u"description"_s, v.description}};
@@ -148,7 +150,8 @@ QVariantMap checkExtensionPage(Vault &vault, VaultIndex &index, const VaultPath 
     if (tagged && page.blocks > 0) {
         QVariantList types;
         for (const TypeProblem &p : typeCheck(page.source, std::max(100, limits.timeoutMs)))
-            types << QVariantMap{{u"line"_s, p.line}, {u"column"_s, p.column}, {u"message"_s, p.message}, {u"kind"_s, p.kind}};
+            types << QVariantMap{
+                    {u"line"_s, p.line}, {u"column"_s, p.column}, {u"message"_s, p.message}, {u"kind"_s, p.kind}};
         out.insert(u"types"_s, types);
         out.insert(u"typesChecked"_s, typeCheckerAvailable());
     }

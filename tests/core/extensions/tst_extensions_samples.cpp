@@ -1256,7 +1256,8 @@ private Q_SLOTS:
         // a break's end writes nothing.
         fire(u"timer"_s, {{u"label"_s, u"Raport kwartalny"_s}, {u"seconds"_s, 1500}});
         const QString endLine = disk(kJournal).trimmed().section(u'\n', -1);
-        QVERIFY2(endLine.contains(u"✓"_s) && endLine.endsWith(u" Raport kwartalny #pomodoro-end"_s), qPrintable(endLine));
+        QVERIFY2(endLine.contains(u"✓"_s) && endLine.endsWith(u" Raport kwartalny #pomodoro-end"_s),
+                 qPrintable(endLine));
         const QString ended = disk(kJournal);
         fire(u"timer"_s, {{u"label"_s, u"Break"_s}, {u"seconds"_s, 300}});
         QCOMPARE(disk(kJournal), ended);
@@ -1794,7 +1795,8 @@ private Q_SLOTS:
         // The review ticks a task off in its view; the project index hears that write and
         // rewrites its page — the index's own write never comes back to it.
         QVERIFY(command(u"indeks-projektow"_s, u"odswiez"_s).result.ok());
-        QVERIFY2(disk(u"Projekty.md"_s).contains(u"- [[Dom]] — otwarte zadania: 3"_s), qPrintable(disk(u"Projekty.md"_s)));
+        QVERIFY2(disk(u"Projekty.md"_s).contains(u"- [[Dom]] — otwarte zadania: 3"_s),
+                 qPrintable(disk(u"Projekty.md"_s)));
         const Result r = view(u"przeglad-zadan"_s, u"przeglad"_s);
         QVERIFY2(r.ok(), qPrintable(r.error));
         QVariantMap tick;
@@ -1806,7 +1808,8 @@ private Q_SLOTS:
         QVERIFY(tap(u"przeglad-zadan"_s, u"przeglad"_s, tick).result.ok());
         QCOMPARE(m_written.mid(since), QStringList{u"Dom.md"_s});
         othersHear(u"przeglad-zadan"_s, since);
-        QVERIFY2(disk(u"Projekty.md"_s).contains(u"- [[Dom]] — otwarte zadania: 2"_s), qPrintable(disk(u"Projekty.md"_s)));
+        QVERIFY2(disk(u"Projekty.md"_s).contains(u"- [[Dom]] — otwarte zadania: 2"_s),
+                 qPrintable(disk(u"Projekty.md"_s)));
         // The index wrote its page: the others hear that one, the index itself never does.
         const qsizetype indexWrote = m_written.size() - 1;
         QCOMPARE(m_written.value(indexWrote), u"Projekty.md"_s);
@@ -1821,7 +1824,7 @@ private Q_SLOTS:
         // A second "Dom", a project in another folder: two lines in the index, each linked by its
         // path; the link check reads both and names each source by its path.
         QVERIFY(syncBrings(u"Archiwum/Dom.md"_s, u"---\ntags: [projekt]\nstatus: zakończony\n---\n# Dom\n\n"
-                                                  "- [ ] Oddać klucze [[Nigdzie]]\n"_s));
+                                                 "- [ ] Oddać klucze [[Nigdzie]]\n"_s));
         QVERIFY(command(u"indeks-projektow"_s, u"odswiez"_s).result.ok());
         const QString index = disk(u"Projekty.md"_s);
         QVERIFY2(index.contains(u"- [[Dom.md]] — otwarte zadania: 3"_s), qPrintable(index));

@@ -20,9 +20,9 @@ namespace brulion::views {
 
 namespace {
 
-using dataview::Value;
 using dataview::Expression;
 using dataview::Syntax;
+using dataview::Value;
 
 QString text(const QVariant &v)
 {
@@ -177,11 +177,21 @@ QString defaultSummary(const QString &name)
 {
     const QString n = name.trimmed().toLower();
     static const QHash<QString, QString> table{
-            {u"average"_s, u"average"_s}, {u"min"_s, u"min"_s},         {u"max"_s, u"max"_s},
-            {u"sum"_s, u"sum"_s},         {u"range"_s, u"range"_s},     {u"median"_s, u"median"_s},
-            {u"stddev"_s, u"stddev"_s},   {u"earliest"_s, u"earliest"_s}, {u"latest"_s, u"latest"_s},
-            {u"checked"_s, u"checked"_s}, {u"unchecked"_s, u"unchecked"_s}, {u"empty"_s, u"empty"_s},
-            {u"filled"_s, u"filled"_s},   {u"unique"_s, u"unique"_s},   {u"count"_s, u"count"_s},
+            {u"average"_s, u"average"_s},
+            {u"min"_s, u"min"_s},
+            {u"max"_s, u"max"_s},
+            {u"sum"_s, u"sum"_s},
+            {u"range"_s, u"range"_s},
+            {u"median"_s, u"median"_s},
+            {u"stddev"_s, u"stddev"_s},
+            {u"earliest"_s, u"earliest"_s},
+            {u"latest"_s, u"latest"_s},
+            {u"checked"_s, u"checked"_s},
+            {u"unchecked"_s, u"unchecked"_s},
+            {u"empty"_s, u"empty"_s},
+            {u"filled"_s, u"filled"_s},
+            {u"unique"_s, u"unique"_s},
+            {u"count"_s, u"count"_s},
     };
     return table.value(n);
 }
@@ -205,11 +215,9 @@ Expression propertyExpression(const QString &id)
 QString scalarYaml(const QString &s)
 {
     static const QStringList reserved{u"true"_s, u"false"_s, u"null"_s, u"yes"_s, u"no"_s, u"on"_s, u"off"_s, u"~"_s};
-    const bool plain = !s.isEmpty() && (s[0].isLetter() || s[0] == u'_')
-                       && std::ranges::all_of(s, [](QChar c) {
-                              return c.isLetterOrNumber() || c == u'_' || c == u'.' || c == u'-' || c == u'/' || c.isMark();
-                          })
-                       && !reserved.contains(s.toLower());
+    const bool plain = !s.isEmpty() && (s[0].isLetter() || s[0] == u'_') && std::ranges::all_of(s, [](QChar c) {
+        return c.isLetterOrNumber() || c == u'_' || c == u'.' || c == u'-' || c == u'/' || c.isMark();
+    }) && !reserved.contains(s.toLower());
     if (plain)
         return s;
     QString out = s;
@@ -252,8 +260,8 @@ private:
     detail::CellReader m_cells;
     ViewResult m_out;
     QString m_error;
-    QStringList m_ids;                 ///< the columns' property ids
-    QList<Expression> m_columnExprs;   ///< one per column (null for properties and built-ins)
+    QStringList m_ids;               ///< the columns' property ids
+    QList<Expression> m_columnExprs; ///< one per column (null for properties and built-ins)
 };
 
 Value Runner::formulaMap(Candidate &c)
@@ -346,8 +354,9 @@ void Runner::columns()
             const auto it = builtins.constFind(id);
             if (it != builtins.cend()) {
                 col.kind = *it;
-                col.label = display.isEmpty() ? (*it == ColumnKind::Title ? messages::fileName() : messages::columnLabel(*it))
-                                              : display;
+                col.label = display.isEmpty()
+                                    ? (*it == ColumnKind::Title ? messages::fileName() : messages::columnLabel(*it))
+                                    : display;
             } else {
                 col.kind = ColumnKind::Formula;
                 col.label = display.isEmpty() ? id : display;
@@ -576,9 +585,8 @@ void Runner::summaries()
             continue;
         Column &col = m_out.columns[column];
         const QString function = defaultSummary(name);
-        const auto custom = std::ranges::find_if(m_base.summaries, [&](const auto &s) {
-            return s.first.compare(name, Qt::CaseInsensitive) == 0;
-        });
+        const auto custom = std::ranges::find_if(
+                m_base.summaries, [&](const auto &s) { return s.first.compare(name, Qt::CaseInsensitive) == 0; });
         const auto summaryOf = [&](const QList<int> &rows) -> QString {
             if (!function.isEmpty()) {
                 QList<QVariant> values;
@@ -603,15 +611,16 @@ void Runner::summaries()
                     break;
                 }
                 default:
-                    if (const auto d = QDate::fromString(v.toString().left(10), Qt::ISODate); d.isValid() && v.toString().size() == 10)
+                    if (const auto d = QDate::fromString(v.toString().left(10), Qt::ISODate);
+                        d.isValid() && v.toString().size() == 10)
                         values.append(Value::date(d));
                     else
                         values.append(v.isValid() ? Value::string(v.toString()) : Value());
                     break;
                 }
             }
-            const auto result = m_cells.evaluator().evaluate(custom->second, Value(),
-                                                             {{u"values"_s, Value::list(values)}});
+            const auto result =
+                    m_cells.evaluator().evaluate(custom->second, Value(), {{u"values"_s, Value::list(values)}});
             if (const QString *error = std::get_if<QString>(&result))
                 return *error;
             return dataview::toPlainText(std::get<Value>(result));
@@ -688,7 +697,7 @@ QList<YLine> yamlLines(const QString &yaml)
         l.text = yaml.sliced(start, end - start);
         if (end < yaml.size()) {
             l.eol = yaml[end] == u'\r' && end + 1 < yaml.size() && yaml[end + 1] == u'\n' ? u"\r\n"_s
-                                                                                         : QString(yaml[end]);
+                                                                                          : QString(yaml[end]);
         }
         while (l.indent < l.text.size() && l.text[l.indent] == u' ')
             ++l.indent;
@@ -896,7 +905,8 @@ std::optional<QString> setBaseViewSort(const QString &yaml, int view, const QLis
         wanted.append(QVariantMap{{u"property"_s, s.property}, {u"direction"_s, s.descending ? u"DESC"_s : u"ASC"_s}});
     }
     const std::optional<QString> out = setViewKey(yaml, view, u"sort"_s, block, sort.isEmpty());
-    if (!out || !verifyEdit(yaml, *out, view, u"sort"_s, sort.isEmpty() ? std::nullopt : std::optional(QVariant(wanted))))
+    if (!out
+        || !verifyEdit(yaml, *out, view, u"sort"_s, sort.isEmpty() ? std::nullopt : std::optional(QVariant(wanted))))
         return std::nullopt;
     return out;
 }

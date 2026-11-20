@@ -1938,8 +1938,7 @@ private Q_SLOTS:
         // need a page.
         const QStringList order = model->ids();
         QCOMPARE(order.mid(order.indexOf(u"page.new"_s) + 1, 5),
-                 (QStringList{u"canvas.new"_s, u"folder.new"_s, u"page.move"_s, u"page.reveal"_s,
-                              u"page.trash"_s}));
+                 (QStringList{u"canvas.new"_s, u"folder.new"_s, u"page.move"_s, u"page.reveal"_s, u"page.trash"_s}));
         ui.clear();
         QVERIFY(model->run(u"folder.new"_s));
         QVERIFY(model->run(u"page.move"_s));

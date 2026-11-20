@@ -340,10 +340,10 @@ void ConflictResolver::loadCanvases(const QString &original)
     m_loaded.merged = canvas::writeCanvas(merged);
     m_loaded.canMergeCanvases = !m_loaded.copyIsOlder && canvas::readCanvas(m_loaded.merged).canvas.has_value();
     const canvas::MergeCounts c = canvas::mergeCounts(*mine.canvas, *other.canvas, merged);
-    m_loaded.canvasCounts = QVariantMap{{u"ours"_s, c.ours},           {u"theirs"_s, c.theirs},
-                                        {u"common"_s, c.common},       {u"onlyOurs"_s, c.onlyOurs},
-                                        {u"onlyTheirs"_s, c.onlyTheirs}, {u"changed"_s, c.changed},
-                                        {u"merged"_s, c.merged}};
+    m_loaded.canvasCounts =
+            QVariantMap{{u"ours"_s, c.ours},         {u"theirs"_s, c.theirs},         {u"common"_s, c.common},
+                        {u"onlyOurs"_s, c.onlyOurs}, {u"onlyTheirs"_s, c.onlyTheirs}, {u"changed"_s, c.changed},
+                        {u"merged"_s, c.merged}};
 }
 
 bool ConflictResolver::finish(bool ok, const QString &message)
@@ -424,7 +424,7 @@ bool ConflictResolver::mergeCanvases()
     const QString title = m_loaded.conflict.value(u"title"_s).toString();
     const bool ok = m_workspace->sync()->resolveConflict(original, m_copy, m_loaded.merged);
     return finish(ok, ok ? tr("Merged the canvas “%1”. Your previous version is in the history, the copy in the trash.")
-                                   .arg(title)
+                                      .arg(title)
                          : tr("The merged canvas could not be saved."));
 }
 

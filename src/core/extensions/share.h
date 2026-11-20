@@ -30,12 +30,11 @@ namespace brulion::extensions {
 /// (a name computed at run time is not found), each once, in order.
 QStringList requiredNames(const QString &code);
 
-struct CopyReport
-{
-    QString error; ///< why nothing was copied ("" = it was)
-    QStringList written; ///< paths written in the target notebook
-    QStringList unchanged; ///< already there with the same text
-    QStringList conflicts; ///< there with another text and not replaced
+struct CopyReport {
+    QString error;              ///< why nothing was copied ("" = it was)
+    QStringList written;        ///< paths written in the target notebook
+    QStringList unchanged;      ///< already there with the same text
+    QStringList conflicts;      ///< there with another text and not replaced
     QList<PageExtension> pages; ///< the extension pages copied (written or unchanged), the first one first
 };
 

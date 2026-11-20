@@ -14,8 +14,7 @@ namespace brulion::extensions {
 namespace {
 
 /// A host without notes: what a hostile script may reach of the app, and nothing to harm.
-class EmptyHost : public Host
-{
+class EmptyHost : public Host {
 public:
     QStringList pages(const QString &) override { return {}; }
     std::optional<QString> read(const QString &) override { return std::nullopt; }
@@ -40,7 +39,7 @@ public:
     QString language() override { return u"pl"_s; }
     QString uiLanguage() override { return u"pl"_s; }
     void timer(const QString &, int, const QString &label) override { lastTimerLabel = label; }
-    void log(const QString &, const QString &) override {}
+    void log(const QString &, const QString &) override { }
     /// Two pages that require each other, and one that never ends.
     ModuleSource module(const QString &, const QString &name) override
     {
@@ -60,8 +59,7 @@ public:
     QString lastTimerLabel;
 };
 
-struct Check
-{
+struct Check {
     const char *name;
     const char *code; // a command's body
     Status expected;
@@ -91,15 +89,19 @@ QVariantMap hostileSelfTest(int limitMs)
             {"a loop in pcall, retried", "while true do pcall(function() while true do end end) end", Status::Timeout},
             {"a loop in an error handler", "xpcall(function() error('x') end, function() while true do end end)",
              Status::Timeout},
-            {"a loop in a coroutine", "local co = coroutine.wrap(function() while true do end end) co()", Status::Timeout},
+            {"a loop in a coroutine", "local co = coroutine.wrap(function() while true do end end) co()",
+             Status::Timeout},
             {"a loop in a sort's comparator", "local t = {3, 2, 1} table.sort(t, function(a, b) while true do end end)",
              Status::Timeout},
-            {"pattern backtracking", "return string.find(string.rep('a', 60), 'a-a-a-a-a-a-a-a-a-a-a-b')", Status::Timeout},
+            {"pattern backtracking", "return string.find(string.rep('a', 60), 'a-a-a-a-a-a-a-a-a-a-a-b')",
+             Status::Timeout},
             {"a plain search for ever",
-             "local s = string.rep('a', 2000000) local p = string.rep('a', 20000) .. 'b' while true do string.find(s, p, 1, true) end",
+             "local s = string.rep('a', 2000000) local p = string.rep('a', 20000) .. 'b' while true do string.find(s, "
+             "p, 1, true) end",
              Status::Timeout},
             {"a string that doubles", "local s = 'x' while true do s = s .. s end", Status::OutOfMemory},
-            {"a table that grows", "local t = {} local i = 0 while true do i += 1 t[i] = {i, i, i} end", Status::OutOfMemory},
+            {"a table that grows", "local t = {} local i = 0 while true do i += 1 t[i] = {i, i, i} end",
+             Status::OutOfMemory},
             {"memory in pcall", "while true do pcall(function() local s = 'x' while true do s = s .. s end end) end",
              Status::OutOfMemory},
             {"endless recursion", "local function f(n) return 1 + f(n + 1) end return f(1)", Status::StackOverflow},
@@ -149,7 +151,8 @@ QVariantMap hostileSelfTest(int limitMs)
         const QString text = r.status == Status::Ok ? r.value.toString() : r.error;
         if (ok && r.status != c.expected) {
             ok = false;
-            detail = u"%1 instead of %2: %3"_s.arg(statusName(r.status), statusName(c.expected), text.section(u'\n', 0, 0));
+            detail = u"%1 instead of %2: %3"_s.arg(statusName(r.status), statusName(c.expected),
+                                                   text.section(u'\n', 0, 0));
         }
         if (ok && c.contains && !text.contains(QString::fromUtf8(c.contains))) {
             ok = false;
@@ -182,15 +185,14 @@ QVariantMap hostileSelfTest(int limitMs)
             }
         }
         failed += ok ? 0 : 1;
-        results << QVariantMap{{u"name"_s, name}, {u"ok"_s, ok}, {u"got"_s, statusName(r.status)}, {u"ms"_s, ms},
+        results << QVariantMap{{u"name"_s, name},
+                               {u"ok"_s, ok},
+                               {u"got"_s, statusName(r.status)},
+                               {u"ms"_s, ms},
                                {u"detail"_s, detail}};
     }
-    return {{u"ok"_s, failed == 0},
-            {u"engine"_s, Engine::version()},
-            {u"limitMs"_s, limitMs},
-            {u"failed"_s, failed},
-            {u"memory"_s, engine.memoryUsed()},
-            {u"checks"_s, results}};
+    return {{u"ok"_s, failed == 0}, {u"engine"_s, Engine::version()},   {u"limitMs"_s, limitMs},
+            {u"failed"_s, failed},  {u"memory"_s, engine.memoryUsed()}, {u"checks"_s, results}};
 }
 
 } // namespace brulion::extensions
