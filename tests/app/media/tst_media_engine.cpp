@@ -111,6 +111,10 @@ private Q_SLOTS:
     {
         if (!media::mediaSupported())
             QSKIP("this build has no Qt Multimedia (BRULION_MULTIMEDIA)");
+        // Qt Multimedia's backend loaded (a library its plugin links missing: no backend, nothing
+        // plays — the AppImage's build container once).
+        QVERIFY2(media::createMediaEngine()->available(),
+                 "Qt Multimedia found no backend it could load (QT_DEBUG_PLUGINS=1 says why)");
         QVERIFY(m_dir.isValid());
         m_wav = m_dir.filePath(u"ton żółwia 440 Hz.wav"_s);
         QVERIFY(writeFile(m_wav, media::wavFile(tone(440, 44100, 2, 2.0))));

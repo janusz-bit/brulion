@@ -48,7 +48,7 @@ BDialog {
     signal fragmentCreated(string text)
 
     function openFragment(pagePath: string, fragmentText: string): void {
-        dialog.reset()
+        dialog.clearState()
         dialog.path = pagePath
         dialog.fragment = fragmentText
         info.map = Workspace.encryption.fragmentInfo(fragmentText)
@@ -61,7 +61,7 @@ BDialog {
         dialog.request = Workspace.encryption.openFragment(pagePath, fragmentText, "", true)
     }
     function openNew(pagePath: string, text: string, selection: bool): void {
-        dialog.reset()
+        dialog.clearState()
         dialog.path = pagePath
         dialog.fromSelection = selection
         dialog.mode = "new"
@@ -69,7 +69,8 @@ BDialog {
         dialog.open()
     }
 
-    function reset(): void {
+    // (Not reset(): Dialog has a signal of that name, which a function cannot override.)
+    function clearState(): void {
         if (dialog.session > 0)
             Workspace.encryption.closeFragment(dialog.session)
         dialog.session = 0
@@ -113,7 +114,7 @@ BDialog {
 
     // The work is asynchronous (a key derivation): the dialog stays open until it answered.
     onAcceptRequested: dialog.start()
-    onClosed: dialog.reset()
+    onClosed: dialog.clearState()
 
     function start(): void {
         if (dialog.working)

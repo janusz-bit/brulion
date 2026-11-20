@@ -102,8 +102,10 @@ install_deps() {
     # printing (Qt's CUPS print support plugin: "Print…" lists the system's printers)
     libcups2
     # sound: libQt6Multimedia links PulseAudio's client library (audio out and in on Linux; Qt's
-    # FFmpeg backend plays through it, PipeWire's pulse server included)
-    libpulse0
+    # FFmpeg backend plays through it, PipeWire's pulse server included); the FFmpeg backend's
+    # plugin links X11's RandR and Ext and libdrm (and FFmpeg bzip2 and zlib) — without them Qt
+    # finds no backend ("No QtMultimedia backends found") and nothing plays
+    libpulse0 libxrandr2 libxext6 libdrm2 libbz2-1.0 zlib1g
     # spell checking: Hunspell (bundled by linuxdeploy; CMake finds it through pkg-config, which
     # minimal containers lack) and the dictionaries copied into the AppDir
     pkg-config libhunspell-dev hunspell-pl hunspell-en-us
@@ -471,8 +473,10 @@ missing=$(find "$check_dir/squashfs-root/usr" -type f \( -name '*.so*' -o -path 
 [[ -z $missing ]] || die "unresolved libraries in the AppImage:"$'\n'"$missing"
 # platformthemes/libqxdgdesktopportal.so: the desktop's own file pickers through xdg-desktop-portal
 # (main.cpp selects it inside the AppImage; FilePicker, docs/UI.md "File pickers").
+# multimedia/libffmpegmediaplugin.so: Qt Multimedia's FFmpeg backend (audio and video in notes,
+# voice notes; the GStreamer one is left out above).
 for plugin in platforms/libqxcb.so platforms/libqwayland.so platforms/libqoffscreen.so \
-  platformthemes/libqxdgdesktopportal.so; do
+  platformthemes/libqxdgdesktopportal.so multimedia/libffmpegmediaplugin.so; do
   [[ -f $check_dir/squashfs-root/usr/plugins/$plugin ]] || die "plugin $plugin missing from the AppImage"
 done
 # Only the Basic style, no QtQuick.Dialogs (pruned above; docs/PERFORMANCE.md L9), no QtQuick.Pdf;

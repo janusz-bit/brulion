@@ -60,7 +60,9 @@ public:
         });
     }
 
-    bool available() const override { return true; }
+    // (No backend — Qt found no multimedia plugin it could load, e.g. a library of FFmpeg's plugin
+    // missing — plays nothing: the views offer the file to the system's program instead.)
+    bool available() const override { return m_player.isAvailable(); }
     void setSource(const QUrl &url) override
     {
         m_pending = -1;
@@ -171,6 +173,11 @@ private:
             return;
         m_current = m_queue.takeFirst();
         m_info = MediaInfo();
+        if (!m_player.isAvailable()) {
+            // At once, not after the time limit (and after this call, as every answer).
+            QTimer::singleShot(0, this, [this] { finish(u"this device has no backend to play it"_s); });
+            return;
+        }
         m_timeout.start();
         m_player.setSource(m_current);
     }
