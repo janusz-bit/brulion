@@ -114,6 +114,10 @@ int main(int argc, char *argv[])
     // notes in the background"): no window, no QML, no settings of the app — before anything of the app.
     if (argc > 1 && qstrcmp(argv[1], brulion::background::BackgroundCheckArgument) == 0)
         return brulion::background::runBackgroundCheck(argc, argv);
+    // Automation requests that write while the app is closed (AutomationService.kt, docs/ANDROID.md
+    // "Automation"): a process of their own too.
+    if (argc > 1 && qstrcmp(argv[1], brulion::background::AutomationArgument) == 0)
+        return brulion::background::runAutomationService(argc, argv);
 #endif
     brulion::ui::DevTools::applyEarlyArguments(argc, argv); // --scale (before the app exists)
 #ifdef BRULION_DESKTOP_INTEGRATION
@@ -529,6 +533,9 @@ int main(int argc, char *argv[])
         // "Share → Brulion" (ShareActivity.kt): the share dialog once a notebook is ready.
         QObject::connect(androidBridge, &brulion::platform::AndroidBridge::shared, controller.get(),
                          [ctl = controller.get()](const QByteArray &json) { ctl->receiveShareJson(json); });
+        // brulion:// links and automation intents that need the window (AutomationActivity.kt).
+        QObject::connect(androidBridge, &brulion::platform::AndroidBridge::uriReceived, controller.get(),
+                         [ctl = controller.get()](const QString &uri) { ctl->receiveUri(uri, u"android"_s); });
         // The home-screen widgets' snapshot and the entries their quick add queued (docs/ANDROID.md).
         if (mainUi)
             new brulion::widgets::WidgetPublisher(controller.get());

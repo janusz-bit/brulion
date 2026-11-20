@@ -68,6 +68,11 @@ object BrulionAndroid {
   /** A share ([ShareActivity]) not delivered to C++ yet, as JSON (guarded by [lock]). */
   private var pendingShare: String? = null
 
+  /** brulion:// addresses ([AutomationActivity]) not delivered to C++ yet (guarded by [lock]). */
+  private val pendingUris = ArrayList<String>()
+  /** More waiting addresses are dropped (a burst of intents while Qt starts). */
+  private const val MAX_PENDING_URIS = 8
+
   /** C++ registered the native methods and listens (guarded by [lock]). */
   private var nativeAttached = false
 
@@ -93,6 +98,12 @@ object BrulionAndroid {
    * it (`src/core/notebook/share.h`).
    */
   @JvmStatic external fun nativeShared(json: String)
+
+  /**
+   * A brulion:// address that needs the app's window ([AutomationActivity]) while Qt runs: C++
+   * checks it as any link's (AppController::receiveUri).
+   */
+  @JvmStatic external fun nativeUri(uri: String)
 
   /** A permission dialog was answered: the app should re-check its permissions. */
   @JvmStatic external fun nativePermissionsChanged()
@@ -395,6 +406,64 @@ object BrulionAndroid {
       }
       pendingShare = json
     }
+  }
+
+  /**
+   * The brulion:// addresses not delivered yet (a cold start: [AutomationActivity] started the
+   * process before Qt), as a JSON array, oldest first. Forgets them.
+   */
+  @JvmStatic
+  @Suppress("UNUSED_PARAMETER") // kept for a stable JNI signature
+  fun takeUris(context: Context): String =
+    synchronized(lock) {
+      val out = org.json.JSONArray(pendingUris)
+      pendingUris.clear()
+      out.toString()
+    }
+
+  /**
+   * Hands an address to C++ when it listens, else keeps it for [takeUris]. Called by
+   * [AutomationActivity] in this process — never from an intent extra of [BrulionActivity].
+   */
+  internal fun deliverUri(uri: String) {
+    synchronized(lock) {
+      if (nativeAttached) {
+        try {
+          nativeUri(uri)
+          return
+        } catch (e: UnsatisfiedLinkError) {
+          Log.w(TAG, "native uri callback not registered", e)
+        }
+      }
+      if (pendingUris.size < MAX_PENDING_URIS) pendingUris.add(uri) else Log.w(TAG, "dropping a brulion:// address")
+    }
+  }
+
+  // -----------------------------------------------------------------------------------------
+  // Automation (Automation.kt, docs/ANDROID.md "Automation")
+  // -----------------------------------------------------------------------------------------
+
+  /** What the background run of automation requests writes into (C++ publishAutomationTarget). */
+  @JvmStatic
+  fun setAutomationTarget(context: Context, json: String): String =
+    try {
+      Automation.saveTarget(context.applicationContext, json)
+    } catch (e: JSONException) {
+      errorJson("setAutomationTarget: not a target", e)
+    } catch (e: RuntimeException) {
+      errorJson("setAutomationTarget failed: $e", e)
+    }
+
+  /** In the automation process: the next job (`{uri, id, target}`), "{}" when none waits. */
+  @JvmStatic
+  @Suppress("UNUSED_PARAMETER") // kept for a stable JNI signature
+  fun takeAutomationJob(context: Context): String = AutomationService.takeJob().ifEmpty { "{}" }
+
+  /** In the automation process: C++ finished the job it took. */
+  @JvmStatic
+  @Suppress("UNUSED_PARAMETER") // kept for a stable JNI signature
+  fun automationFinished(context: Context, json: String) {
+    AutomationService.finished(json)
   }
 
   /**

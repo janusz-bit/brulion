@@ -6,6 +6,7 @@
 #include <QGuiApplication>
 #include <QJniEnvironment>
 #include <QJniObject>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLoggingCategory>
@@ -211,6 +212,12 @@ void JNICALL nativeShared(JNIEnv *env, jclass, jstring json)
     postToBridge([share = fromJString(env, json).toUtf8()](AndroidBridge *bridge) { Q_EMIT bridge->shared(share); });
 }
 
+/// AutomationActivity handed over a brulion:// address while Qt runs (BrulionAndroid.deliverUri).
+void JNICALL nativeUri(JNIEnv *env, jclass, jstring uri)
+{
+    postToBridge([address = fromJString(env, uri)](AndroidBridge *bridge) { Q_EMIT bridge->uriReceived(address); });
+}
+
 void JNICALL nativePermissionsChanged(JNIEnv *, jclass)
 {
     postToBridge([](AndroidBridge *bridge) { Q_EMIT bridge->permissionsChanged(); });
@@ -282,6 +289,7 @@ AndroidBridge::AndroidBridge(QObject *parent)
     const JNINativeMethod methods[] = {
             {"nativeActivated", "(Ljava/lang/String;I)V", reinterpret_cast<void *>(&nativeActivated)},
             {"nativeShared", "(Ljava/lang/String;)V", reinterpret_cast<void *>(&nativeShared)},
+            {"nativeUri", "(Ljava/lang/String;)V", reinterpret_cast<void *>(&nativeUri)},
             {"nativePermissionsChanged", "()V", reinterpret_cast<void *>(&nativePermissionsChanged)},
             {"nativeSoundPicked", "(ILjava/lang/String;)V", reinterpret_cast<void *>(&nativeSoundPicked)},
             {"nativeDoneQueued", "()V", reinterpret_cast<void *>(&nativeDoneQueued)},
@@ -306,6 +314,7 @@ AndroidBridge::AndroidBridge(QObject *parent)
                     Q_EMIT permissionsChanged();
                     deliverPendingActivation();
                     deliverPendingShare();
+                    deliverPendingUris();
                     Q_EMIT doneRequestsQueued();
                     Q_EMIT widgetActionsQueued();
                 });
@@ -315,6 +324,7 @@ AndroidBridge::AndroidBridge(QObject *parent)
     // likewise.
     QMetaObject::invokeMethod(this, &AndroidBridge::deliverPendingActivation, Qt::QueuedConnection);
     QMetaObject::invokeMethod(this, &AndroidBridge::deliverPendingShare, Qt::QueuedConnection);
+    QMetaObject::invokeMethod(this, &AndroidBridge::deliverPendingUris, Qt::QueuedConnection);
     QMetaObject::invokeMethod(this, &AndroidBridge::doneRequestsQueued, Qt::QueuedConnection);
     QMetaObject::invokeMethod(this, &AndroidBridge::widgetActionsQueued, Qt::QueuedConnection);
 }
@@ -742,6 +752,37 @@ void AndroidBridge::deliverPendingShare()
     const QByteArray share = takeShare();
     if (!share.isEmpty())
         Q_EMIT shared(share);
+}
+
+void AndroidBridge::deliverPendingUris()
+{
+    for (const QString &uri : takeUris())
+        Q_EMIT uriReceived(uri);
+}
+
+void AndroidBridge::setAutomationTarget(const QJsonObject &target)
+{
+    callLogged("setAutomationTarget", target);
+}
+
+QStringList AndroidBridge::takeUris()
+{
+    QStringList out;
+    for (const QJsonValue &v : callJson("takeUris").array()) {
+        if (v.isString())
+            out.append(v.toString());
+    }
+    return out;
+}
+
+QJsonObject AndroidBridge::takeAutomationJob()
+{
+    return callJson("takeAutomationJob").object();
+}
+
+void AndroidBridge::automationFinished(const QJsonObject &result)
+{
+    callVoid("automationFinished", compactJson(result));
 }
 
 } // namespace brulion::platform

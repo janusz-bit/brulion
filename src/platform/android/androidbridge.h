@@ -10,6 +10,7 @@
 #include <QObject>
 #include <QRect>
 #include <QString>
+#include <QStringList>
 
 namespace brulion::platform {
 
@@ -161,6 +162,22 @@ public:
     /// app's main process, which arms its reminders.
     static void backgroundCheckFinished(const QJsonObject &result);
 
+    // brulion:// addresses and automation intents (docs/ANDROID.md "Automation";
+    // src/app/background/automationrun.h, Automation*.kt).
+
+    /// What Android's background run of automation requests writes into: `{root, stateDir, name,
+    /// vault, policy, language, followOutsideLinks, remindersOn}` (AppController::
+    /// publishAutomationTarget()), kept by the Kotlin side; an empty object: no notebook.
+    void setAutomationTarget(const QJsonObject &target);
+    /// The addresses an intent or a link handed to the app while it started (cold start), in order.
+    QStringList takeUris();
+    /// In the automation process (no bridge instance there): the next job the Kotlin side queued
+    /// (`{uri, id, target}`), {} when none waits.
+    static QJsonObject takeAutomationJob();
+    /// In the automation process: a job's result (AutomationRunner::run()), sent back to the
+    /// receiver or activity that asked.
+    static void automationFinished(const QJsonObject &result);
+
     /**
      * Saves @p data as @p name in the public Download folder through MediaStore (Android 10+,
      * API 29): no storage permission is needed — with scoped storage a plain file write there
@@ -249,6 +266,9 @@ Q_SIGNALS:
     /// Another app shared text or files with Brulion ("Share → Brulion": ShareActivity.kt
     /// copied the files to files/share-in/<stamp>/); `json` as takeShare() gives it.
     void shared(const QByteArray &json);
+    /// A brulion:// address came from a link or an automation intent (AutomationActivity.kt): the
+    /// app checks it as any link's (AppController::receiveUri, origin "android").
+    void uriReceived(const QString &uri);
     /// A permission may have changed (dialog answered, or the app returned to the front).
     void permissionsChanged();
     /// "Done" was tapped (or the app returned to the front): takeDoneRequests() may have
@@ -276,6 +296,7 @@ private:
     explicit AndroidBridge(QObject *parent);
     void deliverPendingActivation();
     void deliverPendingShare();
+    void deliverPendingUris();
 };
 
 } // namespace brulion::platform
