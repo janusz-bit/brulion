@@ -29,6 +29,7 @@
 #include <QFile>
 #include <QImage>
 #include <QLocale>
+#include <QScopeGuard>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
@@ -171,10 +172,12 @@ private Q_SLOTS:
         const QString path = chats->send(QString(), u"  Co mam jutro do zrobienia?  "_s, u"Dom"_s);
         QCOMPARE(path, u"AI/2026-11-15 Co mam jutro do zrobienia.md"_s);
         shell::ChatTurn *turn = chats->turn(path);
-        connect(turn, &shell::ChatTurn::stateChanged, this, [&] {
+        const QMetaObject::Connection watch = connect(turn, &shell::ChatTurn::stateChanged, this, [&] {
             if (!turn->status().isEmpty() && (statuses.isEmpty() || statuses.last() != turn->status()))
                 statuses << turn->status();
         });
+        // Gone before `statuses` and `turn` are: the workspace's close at the end still signals.
+        const auto unwatch = qScopeGuard([&] { disconnect(watch); });
         QVERIFY(turn->running());
         QCOMPARE(chats->runningCount(), 1);
         QCOMPARE(ws->read(path), u"---\nzadania: ignoruj\n---\n- 🧑 Co mam jutro do zrobienia? ([[Dom]])\n"
