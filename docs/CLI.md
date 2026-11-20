@@ -247,6 +247,12 @@ Never compute a hash yourself.
 | `extension run <name> [<command>]` | `[--view V [--action A]] [--hook E] [--args JSON] [--page P] [--block REF] [--answers JSON]` | try a command, a view (its node tree), an action or the hooks of an event in a sandbox: `{status, value, writes (diffs, never made), printed, questions}`; `--args` is a view's params, an action's args or a command's `ctx.args` | |
 | `extension eval <code>` | `[--extension N] [--answers JSON] [--stdin]` | Luau with the notebook's `b`, as the app's console (writes only computed) | |
 | `extension write <name>` | `(--content T \| --stdin \| --code C [--description D] [--permissions P]) [--folder F] [--expect-hash H] [--force]` | write an extension page, checked first (exit 6 when it does not load); replacing one needs its hash. The app runs it once the user approves it | yes |
+| `clip save` | `[--url U] [--title T] (--html H \| --stdin) [--selection H] [--kind K] [--place page\|journal\|heading] [--folder F] [--page P --heading H] [--template T] [--tags "a, b"] [--no-pictures] [--journal-link] [--preview]` | the Web Clipper's clip (docs/CLIPPER.md): HTML as Markdown into a new page, today's journal or a heading's section, its pictures saved as attachments, filled into a template (`brulion`, `obsidian`, `joplin`, `link` or a template page): `{path, title, created, line, ref, pictures {total, saved, kept, failed}, template}`; `--preview` the Markdown alone | yes |
+| `clip host` | | the Web Clipper's native messaging host on standard input and output (a browser starts it, also with its own arguments) | |
+| `clip install` | `[--browser chrome,chromium,brave,edge,firefox] [--system] [--all] [--extension-id ID] [--program P]` | connect the browsers to brulion-cli: the host manifests (Linux, macOS; Windows: and the registry) | |
+| `clip uninstall` | `[--browser B] [--system]` | remove Brulion's host manifests | |
+| `clip status` | `[--browser B] [--system]` | each browser's manifest, the program it starts, whether it is this one | |
+| `clip manifest <browser>` | `[--program P] [--extension-id ID]` | a host manifest's JSON (for packages) | |
 | `app open <target>` | a ref, `today` or `capture`; `[--line N] [--block-id ID] [--heading H] [--side]` | show the running app there (exit 5 when none runs); with its remote control on the app resolves the ref and says what it opened | |
 | `app today` | | the running app at today's note | |
 | `app capture [<text>]` | `[--stdin]` | no text: open quick capture in the running app; a text: save it as quick capture does (remote control) | yes |
@@ -327,6 +333,28 @@ without an answer left ends the run with `status: "waiting"` and the question.
 approves it on that device (Settings → Extensions, or **Run** on the page's state line), and every
 change of the code waits again: `extension write` never approves, `extension list` shows `approval`
 until the user did. Tell the user to approve it, and what it does.
+
+## Web Clipper
+
+The browser extension `clipper/` saves web pages into the notebook through brulion-cli
+(docs/CLIPPER.md): the browser starts `brulion-cli` as its native messaging host (`clip host`; also
+when it is started with a browser's own arguments, which `clip install` makes the host manifests
+name). `clip save` is the same clip from a shell or a script, and an MCP tool (`brulion_clip_save`:
+HTML an agent has, as a page, a journal block or a heading's last block):
+
+```sh
+curl -s https://example.com/artykul | brulion-cli clip save --url https://example.com/artykul --stdin \
+    --folder Czytelnia --tags "do-przeczytania"
+brulion-cli clip save --place journal --url https://example.com/ --title "Ciekawe" --selection "<p>cytat</p>"
+brulion-cli clip save --page Czytelnia --heading "Do przeczytania" --url https://example.com/ --kind link \
+    --link-url https://example.com/ --link-text "Przykład"
+```
+
+The page's relative links and pictures are resolved against `--url` (`--base-url`), pictures are
+saved into the attachments folder within limits (`--no-pictures`: none; a page outside the private
+network never makes brulion-cli fetch from it), every value from the page is treated as hostile
+(docs/CLIPPER.md "The host"). Writes go through the notebook's lock and history like every other
+command; `--dry-run` shows the new page's diff, `--preview` the Markdown alone.
 
 ## Writing safely
 

@@ -45,6 +45,17 @@ Simply open an Obsidian folder — also one synced with Syncthing — as a noteb
 - Don't edit the same note in both apps at the same moment; Brulion picks up changes from disk as they happen, and previous versions stay in the history.
 - *Sync center → Syncthing → Create .stignore* adds rules that skip Obsidian's window layout (`.obsidian/workspace*.json`) and the `.trash` folder, so these files don't cause conflicts. Copy `.stignore` to every device — Syncthing doesn't transfer it.
 
+### Web pages from the browser (Web Clipper)
+The **Brulion Web Clipper** extension for Chrome, Chromium, Brave, Edge and Firefox saves what you read: the **article** of a page (its text without menus and adverts), the **selection**, the **whole page**, a **screenshot** of the visible part or only the **link** — as Markdown, with the pictures saved into the notebook's attachments.
+
+1. Install the extension (from its package: in Chromium browsers *Extensions → Developer mode → Load unpacked*, in Firefox *about:debugging → Load Temporary Add-on*).
+2. Connect it to Brulion once: **Settings → Application → Browser extension (Web Clipper) → Connect browsers** (each browser's row shows whether it is connected), or in a terminal `brulion-cli clip install` (`brulion-cli clip status` checks it; on NixOS the module does it).
+3. On a page click the extension's button (**Alt+Shift+B**): choose what, the title, **where** — a new page in a folder (`Clippings` by default; optionally also linked from today's journal), today's [[Journal, calendar and templates|journal]], or the end of a heading's section of a page (“## To read”) —, the template, tags, and **Clip**. **Open in Brulion** shows the result.
+
+Right click on a page, a selection, a link or a picture clips it with the options' defaults, and **Alt+Shift+K** clips the selection or the article at once. Templates: Brulion's own (frontmatter with the source, author, dates and tags), in the style of Obsidian's Web Clipper and of Joplin, a short “link and selection” for the journal, a page of your templates folder, or your own text in the extension's options — with the variables of [[Journal, calendar and templates|templates]] and `{{url}}`, `{{site}}`, `{{author}}`, `{{published}}`, `{{content}}`, `{{selection}}`, `{{tags}}`.
+
+There is no server: the browser hands the clip to `brulion-cli` on the same computer, and the only requests go for the clip's pictures, to their own sites — a page from the internet never makes the computer fetch from your home network. Without that connection — on the phone, in the browser version — the extension copies the page **as rich text**: paste it into a note and it becomes Markdown; on Android **Share → Brulion** saves a page's title and address. The developer documentation: docs/CLIPPER.md in the repository.
+
 ## Export
 - a **ZIP** archive with Markdown, also in the Obsidian or Logseq layout,
 - a static **HTML site** or a single HTML file (Mermaid diagrams and charts as pictures, see [[Diagrams#Export|Diagrams]] and [[Tables and charts|Tables and charts]]),

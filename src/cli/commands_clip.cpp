@@ -364,9 +364,10 @@ Result runClip(Call &call, const ClipRequest &r, bool preview, const ClipProgres
             }
         }
         PictureLimits limits;
-        // A page on this computer or its network may show pictures from there.
+        // A page on this computer or its network may show pictures from there — not one an AI
+        // agent hands the MCP server (its address may be anything the agent was told).
         const QUrl page(r.url);
-        limits.privateHosts = page.isLocalFile() || webpicture::isPrivateHost(page.host());
+        limits.privateHosts = !call.ctx.serving && (page.isLocalFile() || webpicture::isPrivateHost(page.host()));
         PictureBatch batch;
         QEventLoop loop;
         QObject::connect(&batch, &PictureBatch::finished, &loop, &QEventLoop::quit);

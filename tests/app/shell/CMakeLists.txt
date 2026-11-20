@@ -18,6 +18,8 @@ brulion_add_test(tst_shell_share SOURCES tst_share.cpp LIBS brulion_shell brulio
 # QGuiApplication for the screen lookup).
 brulion_add_test(tst_shell_traypopup SOURCES tst_traypopup.cpp LIBS brulion_shell Qt6::Gui)
 brulion_add_test(tst_shell_settings SOURCES tst_settings.cpp LIBS brulion_shell brulion_core_text)
+# Settings' "Browser extension (Web Clipper)" (webclippersetup.h): the host manifests in a private home.
+brulion_add_test(tst_shell_webclippersetup SOURCES tst_webclippersetup.cpp LIBS brulion_shell brulion_core_clipper)
 # The C++ behind the views (qml/views): route parameters read from a QVariantMap, SearchView's
 # recent searches, CleanupView's selection (CleanupSelection).
 brulion_add_test(tst_shell_views SOURCES tst_views.cpp LIBS brulion_shell)

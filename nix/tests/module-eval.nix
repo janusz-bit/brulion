@@ -91,6 +91,17 @@ pkgs.runCommand "brulion-nixos-module"
     nextcloudFrameConf = framedByNextcloud.config.environment.etc."nginx/nginx.conf".source;
     anyFrameConf = framedByAnyone.config.environment.etc."nginx/nginx.conf".source;
     autostart = main.config.environment.etc."xdg/autostart/io.github.januszbit.brulion.desktop".source;
+    # The Web Clipper's host for the Chromium browsers (docs/CLIPPER.md).
+    # (paths only: the package itself is not built here)
+    chromiumHost =
+      builtins.unsafeDiscardStringContext
+        main.config.environment.etc."chromium/native-messaging-hosts/io.github.januszbit.brulion.json".source;
+    chromeHost =
+      builtins.unsafeDiscardStringContext
+        main.config.environment.etc."opt/chrome/native-messaging-hosts/io.github.januszbit.brulion.json".source;
+    firefoxHosts = lib.boolToString (
+      lib.elem main.config.programs.brulion.package main.config.programs.firefox.nativeMessagingHosts.packages
+    );
     ports = toString main.config.networking.firewall.allowedTCPPorts;
     hasPackage = lib.boolToString (
       lib.elem main.config.programs.brulion.package main.config.environment.systemPackages
@@ -102,6 +113,11 @@ pkgs.runCommand "brulion-nixos-module"
     fail() { echo "error: $*" >&2; exit 1; }
     expect() { grep -qF -- "$1" "$nginxConf" || fail "nginx.conf has no '$1'"; }
     [ "$hasPackage" = true ] || fail "the package is not in environment.systemPackages"
+    [ "$firefoxHosts" = true ] || fail "the package is not in programs.firefox.nativeMessagingHosts.packages"
+    case "$chromiumHost$chromeHost" in
+      *share/brulion/native-messaging-hosts/io.github.januszbit.brulion.json*share/brulion/native-messaging-hosts/io.github.januszbit.brulion.json) ;;
+      *) fail "the Chromium browsers' host manifest is not linked into /etc: $chromiumHost $chromeHost" ;;
+    esac
     [ "$ports" = 80 ] || fail "open ports: '$ports', expected 80"
     grep -Eq '^Exec=/nix/store/[^ ]+/bin/brulion --hidden$' "$autostart" ||
       fail "no 'Exec=.../bin/brulion --hidden' in the autostart entry"

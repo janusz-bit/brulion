@@ -188,9 +188,8 @@
       const copy = document.cloneNode(true);
       const parsed = new Readability(copy, { keepClasses: true, charThreshold: 300 }).parse();
       if (!parsed || !parsed.content) return null;
-      // Parsed in a document of its own: nothing of it loads or runs.
-      const box = inertDocument().createElement('div');
-      box.innerHTML = parsed.content;
+      // Parsed into a document of its own: nothing of it loads or runs.
+      const box = new DOMParser().parseFromString(parsed.content, 'text/html').body;
       absolutize(box, base);
       return { ...parsed, content: cut(box.innerHTML) };
     } catch {

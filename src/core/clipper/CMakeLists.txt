@@ -13,5 +13,6 @@ brulion_add_core_module(clipper
         article.h article.cpp
         pictures.h pictures.cpp
         nativehost.h nativehost.cpp
+        hostinstall.h hostinstall.cpp
     DEPS util text dates markdown io webpicture
     QT Network)

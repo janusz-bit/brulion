@@ -9,11 +9,14 @@
 #include "fileserver.h"
 #include "testtiming.h"
 
+#include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QSignalSpy>
 #include <QTcpServer>
+#include <QTemporaryDir>
 #include <QTest>
 
 using namespace Qt::StringLiterals;
@@ -830,6 +833,85 @@ private Q_SLOTS:
         QCOMPARE(l.manifestPath, manifest);
         QCOMPARE(l.registryKey, registry);
         QCOMPARE(l.browserFolder, folder);
+    }
+
+    void hostInstallRoundTrip()
+    {
+        QTemporaryDir home;
+        QVERIFY(home.isValid());
+        Environment env;
+        env.home = home.path();
+        HostSetup setup;
+        setup.os = Os::Linux;
+        setup.env = env;
+        setup.program = QCoreApplication::applicationFilePath();
+        // No profile folder: the browser is not there for this user.
+        HostState s = hostState(Browser::Chromium, Os::Linux, Scope::User, env, setup.program);
+        QVERIFY(!s.browserFound);
+        QVERIFY(!s.installed);
+        QVERIFY(QDir().mkpath(home.path() + u"/.config/chromium"_s));
+        QVERIFY(hostState(Browser::Chromium, Os::Linux, Scope::User, env, setup.program).browserFound);
+
+        // A dry run writes nothing.
+        setup.dryRun = true;
+        QVERIFY(!installHost(Browser::Chromium, setup).installed);
+        QVERIFY(!QFileInfo::exists(s.location.manifestPath));
+        setup.dryRun = false;
+
+        s = installHost(Browser::Chromium, setup);
+        QVERIFY2(s.error.isEmpty(), qPrintable(s.error));
+        QVERIFY(s.installed);
+        QVERIFY(s.programExists);
+        QVERIFY(s.thisProgram);
+        QVERIFY(s.extensionAllowed);
+        QCOMPARE(s.program, QDir::toNativeSeparators(setup.program));
+        const HostState firefox = installHost(Browser::Firefox, setup);
+        QVERIFY(firefox.installed && firefox.extensionAllowed);
+        // Another program's manifest is not Brulion's: never counted, never removed.
+        const QString foreign = home.path() + u"/.mozilla/native-messaging-hosts/org.example.x.json"_s;
+        QFile f(foreign);
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        f.write(R"({"name":"org.example.x","path":"/bin/true"})");
+        f.close();
+        // A file of Brulion's name that is not its manifest stays too.
+        const QString imposter = home.path() + u"/.config/google-chrome/NativeMessagingHosts/io.github.januszbit.brulion.json"_s;
+        QVERIFY(QDir().mkpath(QFileInfo(imposter).absolutePath()));
+        QFile g(imposter);
+        QVERIFY(g.open(QIODevice::WriteOnly));
+        g.write(R"({"name":"someone.else"})");
+        g.close();
+        QVERIFY(!hostState(Browser::Chrome, Os::Linux, Scope::User, env, setup.program).installed);
+
+        QVERIFY(!uninstallHost(Browser::Chromium, setup).installed);
+        QVERIFY(!uninstallHost(Browser::Firefox, setup).installed);
+        QVERIFY(uninstallHost(Browser::Chrome, setup).error.isEmpty());
+        QVERIFY(!QFileInfo::exists(s.location.manifestPath));
+        QVERIFY(!QFileInfo::exists(firefox.location.manifestPath));
+        QVERIFY(QFileInfo::exists(foreign));
+        QVERIFY(QFileInfo::exists(imposter));
+
+        // A manifest naming a program that is gone.
+        setup.program = home.path() + u"/gone/brulion-cli"_s;
+        s = installHost(Browser::Chromium, setup);
+        QVERIFY(s.installed);
+        QVERIFY(!s.programExists);
+        QVERIFY(!s.thisProgram);
+    }
+
+    void hostProgramOfAnAppImage()
+    {
+        QTemporaryDir dir;
+        const QString appImage = dir.filePath(u"Brulion-x86_64.AppImage"_s);
+        QFile f(appImage);
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        f.close();
+        const QByteArray old = qgetenv("APPIMAGE");
+        qputenv("APPIMAGE", appImage.toLocal8Bit());
+        QCOMPARE(defaultHostProgram(u"/tmp/.mount_x/usr/bin/brulion"_s), appImage);
+        qunsetenv("APPIMAGE");
+        QCOMPARE(defaultHostProgram(u"/usr/bin/brulion-cli"_s), u"/usr/bin/brulion-cli"_s);
+        if (!old.isEmpty())
+            qputenv("APPIMAGE", old);
     }
 
     void browsers()

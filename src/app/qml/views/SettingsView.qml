@@ -1998,6 +1998,87 @@ Item {
                 }
             }
 
+            // The Web Clipper browser extension (desktop: src/app/shell/webclippersetup.h,
+            // docs/CLIPPER.md): which browsers reach Brulion's native messaging host; connecting
+            // them writes the host manifests as `brulion-cli clip install` does.
+            SettingsGroup {
+                objectName: "settingsWebClipper"
+                visible: WebClipperSetup.available
+                heading: qsTr("Browser extension (Web Clipper)")
+
+                BText {
+                    Layout.fillWidth: true
+                    variant: "muted"
+                    font.pixelSize: Theme.textSm
+                    wrapMode: Text.Wrap
+                    text: qsTr("Save articles, selections, whole pages and screenshots from Chrome, Chromium, Brave, Edge and Firefox into this notebook, with their pictures. Install the extension in the browser, then connect the browsers here — once.")
+                }
+                // One block of rows: the card's hairlines go around it (the list is built anew on
+                // every refresh, which the dividers between the card's own rows would not follow).
+                ColumnLayout {
+                    objectName: "settingsWebClipperBrowsers"
+                    Layout.fillWidth: true
+                    spacing: Theme.space4
+                    Repeater {
+                        model: WebClipperSetup.browsers
+                        delegate: ShellSettingRow {
+                            id: browserRow
+                            required property string browserId
+                            required property string browserName
+                            required property string statusText
+                            required property bool connected
+                            required property bool broken
+                            objectName: "settingsWebClipper_" + browserRow.browserId
+                            Layout.fillWidth: true
+                            title: browserRow.browserName
+                            description: browserRow.statusText
+                            BBadge {
+                                visible: browserRow.connected || browserRow.broken
+                                text: browserRow.broken ? qsTr("Broken") : qsTr("Connected")
+                                variant: browserRow.broken ? "warning" : "success"
+                            }
+                        }
+                    }
+                }
+                // A Flow: on a phone's width the buttons wrap instead of leaving the card.
+                Flow {
+                    Layout.fillWidth: true
+                    spacing: Theme.space2
+                    BButton {
+                        objectName: "settingsWebClipperConnect"
+                        text: WebClipperSetup.connectedCount > 0 ? qsTr("Connect again") : qsTr("Connect browsers")
+                        iconName: "link"
+                        size: "small"
+                        variant: WebClipperSetup.connectedCount > 0 ? "secondary" : "primary"
+                        onClicked: WebClipperSetup.connectBrowsers()
+                    }
+                    BButton {
+                        objectName: "settingsWebClipperDisconnect"
+                        visible: WebClipperSetup.connectedCount > 0
+                        text: qsTr("Disconnect")
+                        size: "small"
+                        variant: "ghost"
+                        onClicked: WebClipperSetup.disconnectBrowsers()
+                    }
+                    BButton {
+                        text: qsTr("How to install the extension")
+                        iconName: "external-link"
+                        size: "small"
+                        variant: "ghost"
+                        onClicked: Workspace.openUrl("https://github.com/janusz-bit/brulion/blob/main/docs/CLIPPER.md")
+                    }
+                }
+                BText {
+                    objectName: "settingsWebClipperMessage"
+                    Layout.fillWidth: true
+                    visible: WebClipperSetup.message !== ""
+                    color: WebClipperSetup.messageIsError ? Theme.dangerText : Theme.fgMuted
+                    font.pixelSize: Theme.textSm
+                    wrapMode: Text.Wrap
+                    text: WebClipperSetup.message
+                }
+            }
+
             // AI agents and scripts driving the running app (desktop: src/app/shell/remotecontrol.h,
             // docs/CLI.md "Remote control"). The setting is this device's; --remote-control turns it
             // on for one run.

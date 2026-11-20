@@ -27,10 +27,13 @@
 //                        decodeDataPicture(), pictureFileName()
 //   nativehost.h       hostName(), the extension ids, hostManifest(), hostLocation() per Browser /
 //                        Os / Scope, isNativeMessagingLaunch()
+//   hostinstall.h      hostState() / installHost() / uninstallHost() (files; Windows' registry),
+//                        currentEnvironment(), defaultHostProgram(), isNixOs()
 #pragma once
 
 #include "clipper/article.h"
 #include "clipper/cliptemplate.h"
+#include "clipper/hostinstall.h"
 #include "clipper/nativehost.h"
 #include "clipper/nativemessaging.h"
 #include "clipper/pictures.h"

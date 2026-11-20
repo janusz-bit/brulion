@@ -74,6 +74,8 @@ stdenv.mkDerivation (finalAttrs: {
         # tst_scripts_android_backup_rules: the manifest and the backup rules it names.
         ../android/AndroidManifest.xml
         ../android/res/xml
+        # tst_clipper_extension: the Web Clipper extension's scripts and its unit tests.
+        ../clipper
       ]
     );
   };
@@ -161,6 +163,18 @@ stdenv.mkDerivation (finalAttrs: {
     patchShebangs tests ${lib.optionalString finalAttrs.doCheck "scripts"}
   '';
 
+  # The Web Clipper's native messaging host manifests (docs/CLIPPER.md, docs/NIXOS.md): Firefox's where
+  # programs.firefox.nativeMessagingHosts.packages (and the Firefox wrapper) find them, the Chromium
+  # browsers' one for the NixOS module to link into /etc. Written by brulion-cli itself.
+  postInstall = ''
+    export HOME=$TMPDIR
+    mkdir -p $out/lib/mozilla/native-messaging-hosts $out/share/brulion/native-messaging-hosts
+    $out/bin/brulion-cli clip manifest firefox --program $out/bin/brulion-cli \
+      >$out/lib/mozilla/native-messaging-hosts/io.github.januszbit.brulion.json
+    $out/bin/brulion-cli clip manifest chromium --program $out/bin/brulion-cli \
+      >$out/share/brulion/native-messaging-hosts/io.github.januszbit.brulion.json
+  '';
+
   doCheck = false;
   # Without these the tests that need them skip themselves: git (tst_scripts_release), python3
   # (tst_scripts_wasm_single_file) and hostname (tst_scripts_bench_budget), node (tst_uibench_*),
@@ -209,6 +223,10 @@ stdenv.mkDerivation (finalAttrs: {
     test -x $out/bin/brulion
     test -x $out/bin/brulion-cli
     test -f $out/share/brulion/agent-skills/brulion/SKILL.md
+    # The Web Clipper's host manifests name this package's brulion-cli.
+    grep -qF "\"path\": \"$out/bin/brulion-cli\"" $out/lib/mozilla/native-messaging-hosts/io.github.januszbit.brulion.json
+    grep -qF "brulion-clipper@januszbit.github.io" $out/lib/mozilla/native-messaging-hosts/io.github.januszbit.brulion.json
+    grep -qF "chrome-extension://calcbkckojhmdfecpcohaangneahmkgg/" $out/share/brulion/native-messaging-hosts/io.github.januszbit.brulion.json
     ${lib.optionalString withLocalAi ''
       # The model on the device: the plugin, llama.cpp's libraries and a processor plugin beside
       # it, each finding the others there (no library left unresolved).
