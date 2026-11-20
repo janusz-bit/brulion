@@ -5,6 +5,7 @@
 #include "github/reposync_p.h"
 #include "util/unicode.h"
 
+#include "canvas/merge.h"
 #include "drawing/drawingfile.h"
 #include "drawing/merge.h"
 #include "log/categories.h"
@@ -95,6 +96,14 @@ std::optional<QString> mergeTexts(const VaultPath &path, const QString &base, co
         if (lines.clean && isJsonObject(lines.text))
             return lines.text;
         return sync::mergeJson3(base, local, remote);
+    }
+    // A canvas: node by node, never line by line (as Nextcloud's sync: sync/syncrun.cpp).
+    if (canvas::isCanvasPath(path)) {
+        if (remote == base)
+            return local;
+        if (local == base)
+            return remote;
+        return canvas::mergeCanvasFiles(base, local, remote);
     }
     if (isDrawingText(path, local) || isDrawingText(path, remote)) {
         if (remote == base)

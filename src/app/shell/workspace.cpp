@@ -449,7 +449,7 @@ void Workspace::indexFile(const QString &path)
 {
     if (!m_vault || !m_index || paths::isIgnored(path))
         return;
-    if (paths::isMarkdown(path)) {
+    if (VaultIndex::readsText(path)) { // notes and canvases
         bool ok = false;
         const QString content = m_vault->readText(path, &ok);
         if (ok)
@@ -666,7 +666,7 @@ void Workspace::onVaultChanged(const QList<VaultChange> &changes)
                 m_vault->store()->remove(foldStateKey(c.path));
                 break;
             case ChangeType::Renamed: {
-                const QString content = paths::isMarkdown(c.path) ? m_vault->readText(c.path) : QString();
+                const QString content = VaultIndex::readsText(c.path) ? m_vault->readText(c.path) : QString();
                 if (paths::isIgnored(c.path))
                     m_index->remove(c.oldPath);
                 else

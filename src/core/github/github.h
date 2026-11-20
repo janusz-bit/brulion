@@ -39,7 +39,8 @@
 //                 [LocalChange{path, kind added | modified | deleted, proposed}], headCommit,
 //                 lastPullMs, proposal, repository, resetState; signals progress, stateChanged.
 //                 Bookkeeping in the vault's LocalStore ("github/…"); merges as Nextcloud's sync
-//                 (sync::merge3, mergeJson3, drawing::mergeDrawingFiles); conflict copies
+//                 (sync::merge3, mergeJson3, drawing::mergeDrawingFiles,
+//                 canvas::mergeCanvasFiles); conflict copies
 //                 "Name.conflict-GitHub-<stamp>.ext", never committed
 //
 // Security: requests go to api.github.com and raw.githubusercontent.com only, with the token in an

@@ -184,7 +184,8 @@ struct IndexLoader::Private {
             std::lock_guard lock(shared.mutex);
             cache = shared.cache;
         }
-        if (!cache)
+        // (A canvas's record holds its cards' text, never the file's: parsed again, it is cheap.)
+        if (!cache || !paths::isMarkdown(item.path))
             return std::nullopt;
         const indexcache::Record *record = cache->find(item.path);
         if (!record || record->length <= 0 || record->fileSize != read.bytes.size()
@@ -218,7 +219,8 @@ struct IndexLoader::Private {
             // Documents of notes from the cache come with its search section (if it has one).
             if (shared.buildSearch && (!r.fromCache || !searchFromCache)) {
                 const ParsedNote &note = r.prepared.note();
-                SearchJob job{item.path, SearchIndex::prepare(note.title, note.aliases, r.read.text),
+                // (The text the index keeps: a canvas's cards, not its JSON.)
+                SearchJob job{item.path, SearchIndex::prepare(note.title, note.aliases, r.prepared.text()),
                               r.prepared.contentKey()};
                 std::lock_guard lock(shared.mutex);
                 if (!shared.searchAbandoned) {
@@ -524,7 +526,7 @@ void IndexLoader::start(const QList<FileStat> &files)
     for (const FileStat &f : files) {
         if (f.isDir || !VaultIndex::isIndexable(f.path))
             continue;
-        if (paths::isMarkdown(f.path))
+        if (VaultIndex::readsText(f.path)) // notes and canvases
             notes.append(f.path);
         else
             d->attachments.append(f.path);

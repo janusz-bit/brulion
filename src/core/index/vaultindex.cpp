@@ -4,6 +4,8 @@
 #include "index/vaultindex_p.h"
 
 #include "index/textutil_p.h"
+#include "canvas/canvas.h"
+#include "canvas/indextext.h"
 #include "markdown/inline.h"
 #include "markdown/parse.h"
 #include "markdown/properties.h"
@@ -88,6 +90,18 @@ QStringList unresolvedLinks(const Entry *e)
             out.append(l.key + u'\x1f' + e->note.links[l.link].target);
     }
     return out;
+}
+
+/// The text the index keeps of a file: a note's own, a canvas's cards (canvas/indextext.h).
+QString indexedText(const VaultPath &path, const QString &content)
+{
+    return canvas::isCanvasPath(path) ? canvas::indexText(content).text : content;
+}
+
+/// The ParsedNote of the text indexedText() kept.
+ParsedNote parseIndexed(const VaultPath &path, const QString &text, const VaultConfig &config)
+{
+    return canvas::isCanvasPath(path) ? canvas::indexNote(path, text, config) : markdown::parseNote(path, text, config);
 }
 
 bool hasPageProperties(const Entry *e)
@@ -352,6 +366,8 @@ QStringList IndexAccess::describeState(const VaultIndex &index)
     }
     for (const VaultPath &a : d.attachmentSet)
         out.append(u"attachment "_s + a);
+    for (auto it = d.canvasSources.cbegin(); it != d.canvasSources.cend(); ++it)
+        out.append(u"canvas %1 %2"_s.arg(it.key()).arg(VaultIndex::contentKey(*it)));
     for (const QString &line : d.names.describe())
         out.append(u"name "_s + line);
     const auto sets = [&out](const char *what, const QHash<QString, PathSet> &map) {
@@ -665,6 +681,15 @@ void VaultIndex::Private::emitIfPending()
     Q_EMIT q->changed();
 }
 
+bool VaultIndex::Private::sameText(const Entry &e, const QString &content) const
+{
+    if (canvas::isCanvasPath(e.path)) {
+        const auto it = canvasSources.constFind(e.path);
+        return it != canvasSources.cend() && *it == content;
+    }
+    return e.content == content;
+}
+
 void VaultIndex::Private::addAttachment(const VaultPath &path)
 {
     if (attachmentSet.contains(path))
@@ -691,6 +716,7 @@ std::optional<QSet<QString>> VaultIndex::Private::forget(const VaultPath &path)
 {
     if (const Entry *e = entry(path)) {
         QSet<QString> keys = entryKeys(*e);
+        canvasSources.remove(path);
         const std::shared_ptr<Entry> gone = detachNote(path, true);
         noteChanged(gone.get(), nullptr);
         namesChanged();
@@ -704,7 +730,11 @@ std::optional<QSet<QString>> VaultIndex::Private::forget(const VaultPath &path)
 QSet<QString> VaultIndex::Private::putNote(const VaultPath &path, const QString &content, bool updateSearch,
                                            std::optional<quint64> keepSeq)
 {
-    std::unique_ptr<Entry> e = index_detail::makeEntry(path, content, markdown::parseNote(path, content, config));
+    // (A canvas: the entry holds its cards' text, the file's own is kept beside it.)
+    const QString text = indexedText(path, content);
+    if (canvas::isCanvasPath(path))
+        canvasSources.insert(path, content);
+    std::unique_ptr<Entry> e = index_detail::makeEntry(path, text, parseIndexed(path, text, config));
     NoteKeys keys = index_detail::makeNoteKeys(*e, false);
     return putEntry(std::move(e), std::move(keys), updateSearch, keepSeq);
 }
@@ -1112,7 +1142,7 @@ void VaultIndex::setConfig(const VaultConfig &config)
     std::ranges::sort(all);
     for (const VaultPath &p : std::as_const(all)) {
         const Private::Entry *e = d->entry(p);
-        const QString content = e->content;
+        const QString content = canvas::isCanvasPath(p) ? d->canvasSources.value(p) : e->content;
         const quint64 seq = e->seq;
         d->relink(d->putNote(p, content, false, seq), p);
     }
@@ -1123,11 +1153,11 @@ void VaultIndex::update(const VaultPath &path, const QString &content)
 {
     if (!indexable(path))
         return;
-    if (!paths::isMarkdown(path)) {
+    if (!readsText(path)) {
         d->addAttachment(path);
         return;
     }
-    if (const Private::Entry *e = d->entry(path); e && e->content == content)
+    if (const Private::Entry *e = d->entry(path); e && d->sameText(*e, content))
         return;
     d->relink(d->putNote(path, content, true), path);
     d->markChanged();
@@ -1153,7 +1183,7 @@ void VaultIndex::rename(const VaultPath &oldPath, const VaultPath &newPath, cons
         keys = std::move(*old);
         touched = true;
     }
-    const bool markdown = paths::isMarkdown(newPath);
+    const bool markdown = readsText(newPath);
     if (indexable(newPath)) {
         if (markdown) {
             keys.unite(d->putNote(newPath, content, true));
@@ -1179,6 +1209,7 @@ void VaultIndex::clear()
     d->entries.clear();
     d->journalNotes = 0;
     d->attachmentSet.clear();
+    d->canvasSources.clear();
     d->names.clear();
     d->sourcesByKey.clear();
     d->incoming.clear();
@@ -1215,6 +1246,11 @@ VaultPath PreparedNote::path() const
     return m_entry ? m_entry->path : VaultPath();
 }
 
+QString PreparedNote::text() const
+{
+    return m_entry ? m_entry->content : QString();
+}
+
 quint64 PreparedNote::contentKey() const
 {
     return m_entry ? m_entry->contentKey : 0;
@@ -1229,6 +1265,11 @@ const ParsedNote &PreparedNote::note() const
 bool VaultIndex::isIndexable(const VaultPath &path)
 {
     return indexable(path);
+}
+
+bool VaultIndex::readsText(const VaultPath &path)
+{
+    return paths::isMarkdown(path) || canvas::isCanvasPath(path);
 }
 
 QString VaultIndex::parseFingerprint(const VaultConfig &config)
@@ -1253,7 +1294,7 @@ quint64 VaultIndex::contentKey(QStringView text)
 
 PreparedNote VaultIndex::prepare(const VaultPath &path, const QString &content, const VaultConfig &config)
 {
-    return prepareParsed(path, content, markdown::parseNote(path, content, config), config);
+    return prepareParsed(path, content, parseIndexed(path, indexedText(path, content), config), config);
 }
 
 PreparedNote VaultIndex::prepareParsed(const VaultPath &path, const QString &content, ParsedNote note,
@@ -1261,8 +1302,14 @@ PreparedNote VaultIndex::prepareParsed(const VaultPath &path, const QString &con
 {
     PreparedNote out;
     out.m_indexable = indexable(path); // (the path's checks off the index's thread too)
-    out.m_markdown = paths::isMarkdown(path);
-    out.m_entry = index_detail::makeEntry(path, content, std::move(note));
+    out.m_markdown = readsText(path);
+    if (canvas::isCanvasPath(path)) {
+        // The entry holds the cards' text; the file's own is kept beside it.
+        out.m_source = content;
+        out.m_entry = index_detail::makeEntry(path, indexedText(path, content), std::move(note));
+    } else {
+        out.m_entry = index_detail::makeEntry(path, content, std::move(note));
+    }
     out.m_keys = std::make_unique<NoteKeys>(index_detail::makeNoteKeys(*out.m_entry, true));
     out.m_parseFingerprint = parseFingerprint(config);
     return out;
@@ -1279,9 +1326,12 @@ void VaultIndex::updatePrepared(PreparedNote prepared, std::optional<quint64> se
         d->addAttachment(path);
         return;
     }
-    const QString &content = prepared.m_entry->content;
-    if (const Private::Entry *e = d->entry(path); e && e->content == content)
+    const bool isCanvas = canvas::isCanvasPath(path);
+    const QString content = isCanvas ? prepared.m_source : prepared.m_entry->content; // the file's text
+    if (const Private::Entry *e = d->entry(path); e && d->sameText(*e, content))
         return;
+    if (isCanvas)
+        d->canvasSources.insert(path, content);
     const QSet<QString> keys =
             prepared.m_parseFingerprint != d->fingerprint
                     ? d->putNote(path, content, true, sequence) // prepared with an older config

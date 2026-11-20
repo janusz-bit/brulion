@@ -47,15 +47,15 @@ struct Env {
     {
         index = std::make_unique<VaultIndex>(vault->config());
         for (const FileStat &f : vault->files())
-            index->update(f.path, paths::isMarkdown(f.path) ? vault->readText(f.path) : QString());
+            index->update(f.path, VaultIndex::readsText(f.path) ? vault->readText(f.path) : QString());
         QObject::connect(vault.get(), &Vault::changed, vault.get(), [this](const QList<VaultChange> &changes) {
             for (const VaultChange &c : changes) {
                 if (c.type == ChangeType::Deleted)
                     index->remove(c.path);
                 else if (c.type == ChangeType::Renamed)
-                    index->rename(c.oldPath, c.path, paths::isMarkdown(c.path) ? vault->readText(c.path) : QString());
+                    index->rename(c.oldPath, c.path, VaultIndex::readsText(c.path) ? vault->readText(c.path) : QString());
                 else
-                    index->update(c.path, paths::isMarkdown(c.path) ? vault->readText(c.path) : QString());
+                    index->update(c.path, VaultIndex::readsText(c.path) ? vault->readText(c.path) : QString());
             }
         });
         QObject::connect(vault.get(), &Vault::configChanged, vault.get(),
@@ -454,6 +454,42 @@ private Q_SLOTS:
         QFETCH(bool, slashMoves);
         QFETCH(QString, result);
         QCOMPARE(renamedPath(path, name, isDir, slashMoves), result);
+    }
+
+    // A canvas (docs/SYNTAX.md §2 "Canvases") follows a page it shows and the links of its text
+    // cards: its file is rewritten with the rest, every other byte kept; a renamed canvas keeps
+    // its extension and the notes linking to it follow it.
+    void renameRewritesCanvases()
+    {
+        const QByteArray board = "{\n\t\"nodes\":[\n"
+                                 "\t\t{\"id\":\"t1\",\"type\":\"text\",\"text\":\"Zobacz [[Budżet]]\",\"x\":0,\"y\":0,\"width\":250,\"height\":60},\n"
+                                 "\t\t{\"id\":\"f1\",\"type\":\"file\",\"file\":\"Projekty/Kuchnia.md\",\"x\":300,\"y\":0,\"width\":400,\"height\":400}\n"
+                                 "\t],\n\t\"edges\":[]\n}";
+        auto env = open({{u"Projekty/Kuchnia.md"_s, "# Kuchnia\n"},
+                         {u"Plany/Tablica.canvas"_s, board},
+                         {u"Budżet.md"_s, "Koszty\n"},
+                         {u"Notatka.md"_s, "- [[Tablica.canvas]]\n"}});
+        QVERIFY(env);
+        const Relocation moved =
+                renamePage(*env->vault, env->index.get(), u"Projekty/Kuchnia.md"_s, u"Archiwum/Kuchnia"_s, true);
+        QVERIFY(moved.problem.isOk());
+        QVERIFY(moved.rewritten.contains(u"Plany/Tablica.canvas"_s));
+        QByteArray expected = board;
+        expected.replace("\"file\":\"Projekty/Kuchnia.md\"", "\"file\":\"Archiwum/Kuchnia.md\"");
+        QCOMPARE(readRaw(env->root + u"/Plany/Tablica.canvas"_s), expected);
+        QCOMPARE(env->index->outgoingLinks(u"Plany/Tablica.canvas"_s).constLast().target, u"Archiwum/Kuchnia.md"_s);
+
+        const Relocation renamed = renamePage(*env->vault, env->index.get(), u"Budżet.md"_s, u"Wydatki"_s, false);
+        QVERIFY(renamed.problem.isOk());
+        expected.replace("[[Budżet]]", "[[Wydatki]]");
+        QCOMPARE(readRaw(env->root + u"/Plany/Tablica.canvas"_s), expected);
+
+        // The canvas renamed: still a canvas, its links follow.
+        const Relocation board2 = renamePage(*env->vault, env->index.get(), u"Plany/Tablica.canvas"_s, u"Remont"_s, false);
+        QVERIFY(board2.problem.isOk());
+        QCOMPARE(board2.path, u"Plany/Remont.canvas"_s);
+        QCOMPARE(readRaw(env->root + u"/Notatka.md"_s), QByteArray("- [[Remont.canvas]]\n"));
+        QCOMPARE(readRaw(env->root + u"/Plany/Remont.canvas"_s), expected);
     }
 };
 

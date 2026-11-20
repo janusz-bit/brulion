@@ -41,6 +41,9 @@ public:
 
     bool isValid() const;
     VaultPath path() const;
+    /// The text the index keeps of the file: a note's own, a canvas's cards (canvas/indextext.h;
+    /// what its full-text document is built from).
+    QString text() const;
     /// VaultIndex::contentKey() of the text.
     quint64 contentKey() const;
     /// The parsed note (invalid PreparedNote: an empty one).
@@ -52,7 +55,8 @@ private:
     std::unique_ptr<index_detail::NoteKeys> m_keys;
     QString m_parseFingerprint;
     bool m_indexable = false; ///< VaultIndex::isIndexable() of the path
-    bool m_markdown = false;  ///< a Markdown path
+    bool m_markdown = false;  ///< a path whose text is indexed (VaultIndex::readsText())
+    QString m_source;         ///< a canvas: the file's text (the entry holds its cards' text)
 };
 
 /// A link from another note (see VaultIndex::backlinks()).
@@ -321,7 +325,10 @@ private:
 /// Incremental in-memory index of a vault's notes.
 ///
 /// Feed it with update() / remove() / rename() (e.g. from Vault change signals). Markdown files
-/// are parsed with markdown::parseNote(); any other path is remembered as an attachment so
+/// are parsed with markdown::parseNote(); a canvas (`.canvas`, JSON Canvas) is indexed as a note of
+/// its cards' Markdown text (canvas::indexText(): its file nodes and text nodes' links are its
+/// links, its words are searched; no tasks, reminders, properties or aliases; named by its file
+/// name, as an attachment: `[[Tablica.canvas]]`); any other path is remembered as an attachment so
 /// `![[photo.png]]` resolves. Ignored paths (paths::isIgnored) and conflict copies are skipped.
 ///
 /// Every change is applied incrementally: the note is parsed once, its entries in the lookup
@@ -382,6 +389,9 @@ public:
     /// Can `path` be indexed at all: not empty, not ignored (paths::isIgnored), not a sync
     /// conflict copy? (update() skips the others.)
     static bool isIndexable(const VaultPath &path);
+    /// Is the file's text indexed (update() wants its content): a Markdown note or a canvas. Any
+    /// other file is an attachment, indexed by its path alone.
+    static bool readsText(const VaultPath &path);
     /// The config fields parsing depends on (journalsFolder, journalFileFormat,
     /// defaultReminderTime) as one string: notes parsed with another one are parsed again.
     static QString parseFingerprint(const VaultConfig &config);
@@ -473,7 +483,9 @@ public:
     QList<VaultPath> notesWithQueries() const;
     /// Is `path` an indexed note or attachment?
     bool contains(const VaultPath &path) const;
-    /// Raw content of a note as last indexed (null QString when unknown).
+    /// Raw content of a note as last indexed (null QString when unknown); of a canvas, the
+    /// Markdown text of its cards (canvas::indexText(): what its blocks, links and search hits
+    /// refer to), never the file's JSON.
     QString content(const VaultPath &path) const;
 
     // ---- links ----------------------------------------------------------------------------------

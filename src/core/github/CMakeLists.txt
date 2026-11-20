@@ -15,5 +15,5 @@ brulion_add_core_module(github
         client.h client.cpp
         reposync.h reposync.cpp reposync_commit.cpp
         reposync_p.h
-    DEPS util text vault log sync drawing
+    DEPS util text vault log sync drawing canvas
     QT Network)

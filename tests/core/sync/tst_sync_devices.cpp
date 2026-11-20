@@ -1,6 +1,6 @@
 // Two devices syncing through one WebDAV server: edits, deletions, concurrent journal appends,
 // real conflicts (text and binary), drawings changed on both devices (merged element by element,
-// both versions kept when they cannot be), first sync with content on both sides, the vault
+// both versions kept when they cannot be), canvases changed on both devices (merged node by node), first sync with content on both sides, the vault
 // config, line endings, parallel transfers, files that are not UTF-8, failing conflict uploads,
 // renames.
 #include "synctest.h"
@@ -265,6 +265,55 @@ private Q_SLOTS:
         QCOMPARE(p.a.read(path), merged);
         QCOMPARE(counts(p.a.sync()), Counts{});
         QCOMPARE(counts(p.b.sync()), Counts{});
+    }
+
+    void canvasChangedOnBothDevicesMergesByNode()
+    {
+        // An Obsidian canvas, one node per line: the laptop moves a card, the phone edits the text
+        // of the next one and adds a card. A line merge of the adjacent lines would conflict (or,
+        // at the array's end, lose a comma); merged node by node instead, in the server's layout.
+        const QString path = u"Plany/Remont kuchni.canvas"_s;
+        const auto canvasText = [](int x, const QString &text, bool third) {
+            return u"{\n\t\"nodes\":[\n"
+                   u"\t\t{\"id\":\"a1\",\"type\":\"text\",\"text\":\"Płytki\",\"x\":%1,\"y\":0,\"width\":250,\"height\":60},\n"
+                   u"\t\t{\"id\":\"a2\",\"type\":\"text\",\"text\":\"%2\",\"x\":300,\"y\":0,\"width\":250,\"height\":60}%3\n"
+                   u"\t],\n\t\"edges\":[\n"
+                   u"\t\t{\"id\":\"e1\",\"fromNode\":\"a1\",\"fromSide\":\"right\",\"toNode\":\"a2\",\"toSide\":\"left\"}\n"
+                   u"\t]\n}"_s.arg(x)
+                    .arg(text, third ? u",\n\t\t{\"id\":\"a3\",\"type\":\"text\",\"text\":\"Nowa\",\"x\":0,\"y\":200,\"width\":250,\"height\":60}"_s
+                                     : QString());
+        };
+        Pair p({{path, canvasText(0, u"Farba"_s, false).toUtf8()}});
+        p.a.sync();
+        p.b.sync();
+        QVERIFY(p.a.write(path, canvasText(40, u"Farba"_s, false)));
+        QVERIFY(p.b.write(path, canvasText(0, u"Farba żółta"_s, true)));
+        QCOMPARE(counts(p.a.sync()), (Counts{.up = 1}));
+        const SyncReport rb = p.b.sync();
+        QCOMPARE(counts(rb), (Counts{.merged = 1}));
+        QVERIFY(rb.conflictCopies.isEmpty());
+        QCOMPARE(p.b.read(path), canvasText(40, u"Farba żółta"_s, true));
+        QCOMPARE(counts(p.a.sync()), (Counts{.down = 1}));
+        QCOMPARE(p.a.read(path), p.b.read(path));
+        QCOMPARE(counts(p.a.sync()), Counts{});
+        QCOMPARE(counts(p.b.sync()), Counts{});
+    }
+
+    void brokenCanvasKeepsBothVersions()
+    {
+        const QString path = u"Tablica.canvas"_s;
+        const QString good = u"{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"text\":\"x\",\"x\":0,\"y\":0,\"width\":9,\"height\":9}]}"_s;
+        Pair p({{path, good.toUtf8()}});
+        p.a.sync();
+        p.b.sync();
+        QString moved = good;
+        moved.replace(u"\"x\":0"_s, u"\"x\":5"_s);
+        QVERIFY(p.a.write(path, moved));
+        QVERIFY(p.b.write(path, u"{\"nodes\":["_s)); // broken on the phone (another program)
+        p.a.sync();
+        const SyncReport rb = p.b.sync();
+        QCOMPARE(counts(rb), (Counts{.conflicts = 1}));
+        QCOMPARE(rb.conflictCopies.size(), 1);
     }
 
     void drawingsChangedOnBothDevicesMergeByStroke()
