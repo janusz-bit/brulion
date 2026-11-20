@@ -6,7 +6,10 @@
 // in 75 s ringing 1 minute, one in the past that must be skipped), two files saved to Downloads
 // (saveToDownloads: MediaStore), every activated() tap and every "Done" tap (reminders 101 and
 // 104 are on tasks: their notifications have the button; takeDoneRequests()). 104 comes due in
-// 200 s, after the script killed the process: its tap waits in the queue for the next start. A PDF
+// 200 s, after the script killed the process: its tap waits in the queue for the next start.
+// Timers' ends (scheduleTimer, TimerAlarms.kt — b.timer's notification with the app closed): 201 in
+// 60 s armed before the two scheduleReminders() rounds (which must not drop it), 202 cancelled,
+// one in the past refused, 203 in 240 s, after the script killed the process. A PDF
 // page through Android's PdfRenderer (pdfpages.h: a 1-page PDF written here with a red square, its
 // page count, its size and two pixels).
 
@@ -92,6 +95,26 @@ int main(int argc, char *argv[])
             reminder(103, u"Przeszłe"_s, now - 60'000, false, u"stare.md"_s, 1),
             task(104, u"Zadanie przy zamkniętej aplikacji"_s, 200'000, u"strony/Źródła.md"_s, 9),
     };
+    // Timers' ends, apart from the reminders: armed first, the rounds below keep them.
+    const auto timer = [now](int id, const QString &title, qint64 in) {
+        QJsonObject item = reminder(id, title, now + in, false, QString(), 0);
+        item.insert(u"timer"_s, true);
+        return item;
+    };
+    const struct {
+        int id;
+        qint64 in;
+        const char *title;
+    } timers[] = {{201, 60'000, "Przerwa — czas na serię"},
+                  {202, 35'000, "Odwołany minutnik"},
+                  {204, -5'000, "Przeszły minutnik"},
+                  {203, 240'000, "Minutnik przy zamkniętej aplikacji"}};
+    for (const auto &t : timers) {
+        const auto result = bridge->scheduleTimer(timer(t.id, QString::fromUtf8(t.title), t.in));
+        qCWarning(lcSelfTest, "SELFTEST timer id=%d ok=%d armed=%d exact=%d error=%s", t.id, result.ok,
+                  result.scheduled, result.exact, qUtf8Printable(result.error));
+    }
+    qCWarning(lcSelfTest, "SELFTEST timer-cancel id=202 ok=%d", bridge->cancelTimer(202));
     // Twice: replacing the set with the same items must be idempotent.
     for (int round = 1; round <= 2; ++round) {
         const auto result = bridge->scheduleReminders(items);

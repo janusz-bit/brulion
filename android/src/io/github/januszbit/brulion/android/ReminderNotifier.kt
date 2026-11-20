@@ -185,8 +185,11 @@ internal object ReminderNotifier {
         .setAutoCancel(true)
 
     contentIntent(context, reminder)?.let { builder.setContentIntent(it) }
-    actionIntent(context, reminder, Actions.SNOOZE)?.let {
-      builder.addAction(0, context.getString(R.string.brulion_action_snooze), it)
+    // A timer's end (the gym's rest) is no reminder to snooze: "OK" alone.
+    if (!reminder.timer) {
+      actionIntent(context, reminder, Actions.SNOOZE)?.let {
+        builder.addAction(0, context.getString(R.string.brulion_action_snooze), it)
+      }
     }
     // A task's reminder: "Done" marks the task done without opening the note (3 buttons, the
     // most a notification shows).

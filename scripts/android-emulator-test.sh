@@ -10,7 +10,10 @@
 #      fire on their channels, the alarm turns into "Missed alarm" after its ring time,
 #      notification taps reach C++ (cold start and while running, Polish path), "Done" in a
 #      task reminder's notification removes it and reaches C++ with the day of the tap — at once
-#      with the app on screen, at the next start when the app's process was gone (queued).
+#      with the app on screen, at the next start when the app's process was gone (queued); the
+#      ends of extensions' timers (b.timer: scheduleTimer, TimerAlarms.kt) armed apart from the
+#      reminders — the reminder rounds keep them —, ringing with "OK" alone, a cancelled one never,
+#      one with the app's process gone.
 # Needs an x86_64 Linux host with KVM. Build both APKs first:
 #   BRULION_ANDROID_ABIS=x86_64 BRULION_ANDROID_SELFTEST=1 scripts/android-build.sh
 # With --keyboard instead: the editing toolbar on the on-screen keyboard (docs/ANDROID.md,
@@ -484,7 +487,8 @@ check() { # <description> <command...>
     failures=$((failures + 1))
   fi
 }
-log_has() { adb logcat -d | grep -q -- "$1"; }
+# (grep reads it all: `grep -q` leaves at its first match, and adb, cut off, fails the pipe — pipefail.)
+log_has() { adb logcat -d | grep -- "$1" >/dev/null; }
 running() { [[ -n $(adb shell pidof "$PKG" | tr -d '\r') ]]; }
 not_running() { ! running; }
 notification_on() { # <id> <channel>
@@ -3190,6 +3194,10 @@ started=$SECONDS
 check "scheduleReminders round 1: 3 armed (past one skipped)" wait_for 20 log_has "SELFTEST schedule round=1 ok=1 scheduled=3 exact=1"
 check "scheduleReminders round 2: idempotent" wait_for 10 log_has "SELFTEST schedule round=2 ok=1 scheduled=3 exact=1"
 check "permissions reported (notifications granted, exact alarms)" wait_for 10 log_has "SELFTEST permissions(start) allFiles=0 notifications=1 exact=1"
+# The timers' ends (b.timer's notification with the app closed): armed apart from the reminders.
+check "timer 201 armed exactly" wait_for 10 log_has "SELFTEST timer id=201 ok=1 armed=1 exact=1"
+check "a timer in the past is not armed" wait_for 10 log_has "SELFTEST timer id=204 ok=1 armed=0"
+check "timer 202 cancelled" wait_for 10 log_has "SELFTEST timer-cancel id=202 ok=1"
 # A PDF page through Android's PdfRenderer (src/platform/pdfpages_android.cpp, PdfPages.kt).
 # (Waited for: the self-test writes and draws the PDFs after the lines above.)
 check "PDF page drawn by PdfRenderer (red square, white corner)" \
@@ -3212,6 +3220,8 @@ check "tap while running delivered to C++ (Polish path)" wait_for 10 log_has "SE
 adb shell dumpsys alarm >"$OUT/dumpsys-alarm.txt"
 check "AlarmManager holds Brulion's alarms" bash -c "grep -q '$PKG' '$OUT/dumpsys-alarm.txt'"
 check "reminder 101 fired on channel 'reminders'" wait_for $((60 - (SECONDS - started))) notification_on 101 reminders
+never_shown() { ! adb shell dumpsys notification --noredact | grep -E "pkg=$PKG .*id=$1 " >/dev/null; } # <id>
+check "the cancelled timer 202 never fired" never_shown 202
 # "Done" in the notification of the task reminder 101 with the app on screen (the shade pulled
 # over it: Qt's event loop runs): the tap is queued natively and taken by C++ at once, the
 # notification goes. (With the app in the background Qt's event loop is paused — no
@@ -3231,6 +3241,11 @@ tap_done 101
 check "'Zrobione' reached C++ at once (key, note, line, the day of the tap)" wait_for 10 log_has \
   "SELFTEST done key=selftest-101 local=.* path=dziennik/2026-10-14.md line=3 day=$today"
 check "notification 101 removed by 'Zrobione'" wait_for 6 notification_gone 101
+# The timer 201 comes due after that (beside 101 the two would be grouped: its buttons hidden).
+no_snooze() { ! adb shell dumpsys notification --noredact | grep -E "pkg=$PKG .*id=$1 " -A 40 | grep -iE 'Drzemka|Snooze' >/dev/null; } # <id>
+check "timer 201 fired, although scheduleReminders replaced the reminders twice since" \
+  wait_for $((70 - (SECONDS - started))) notification_on 201 reminders
+check "… with \"OK\" alone (no Snooze)" no_snooze 201
 adb shell input keyevent 3 # home: the alarm is posted while the app is in the background
 check "alarm 102 rings on channel 'alarms'" wait_for $((95 - (SECONDS - started))) notification_on 102 alarms
 adb exec-out screencap -p >"$OUT/alarm.png" || true
@@ -3256,6 +3271,9 @@ if adb shell run-as "$PKG" true 2>/dev/null; then # a debuggable APK: the queue 
 fi
 adb logcat -d >"$OUT/selftest-logcat.txt"
 check "… nothing reached C++ yet" bash -c "! grep -q 'SELFTEST done key=selftest-104' '$OUT/selftest-logcat.txt'"
+# The timer 203 comes due with the app still closed (its receiver runs without Qt) — after 104's
+# "Done": side by side the two would be grouped, 104's buttons hidden.
+check "timer 203 fired with the app closed" wait_for $((265 - (SECONDS - started))) notification_on 203 reminders
 adb shell am start -W -n "$ACTIVITY" >/dev/null
 check "the next start hands the queued tap to C++ (the day of the tap)" wait_for 20 log_has \
   "SELFTEST done key=selftest-104 local=.* path=strony/Źródła.md line=9 day=$today"

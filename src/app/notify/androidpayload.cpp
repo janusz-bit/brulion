@@ -34,6 +34,16 @@ QJsonObject androidReminderItem(const ScheduledNotification &n)
     };
 }
 
+QJsonObject androidTimerItem(const ScheduledNotification &notification)
+{
+    ScheduledNotification n = notification;
+    n.taskLine = -1; // no "Done"
+    n.alarm = false;
+    QJsonObject item = androidReminderItem(n);
+    item.insert(u"timer"_s, true);
+    return item;
+}
+
 QList<AndroidDoneRequest> androidDoneRequests(const QJsonArray &array)
 {
     QList<AndroidDoneRequest> out;

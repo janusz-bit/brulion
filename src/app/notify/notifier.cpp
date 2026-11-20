@@ -31,6 +31,20 @@ void Notifier::schedule(const QList<ScheduledNotification> &notifications)
     m_scheduled = notifications;
 }
 
+bool Notifier::armTimer(const ScheduledNotification &notification)
+{
+    m_timers.removeIf([&](const ScheduledNotification &n) { return n.id == notification.id; });
+    m_timers.append(notification);
+    std::stable_sort(m_timers.begin(), m_timers.end(),
+                     [](const ScheduledNotification &a, const ScheduledNotification &b) { return a.at < b.at; });
+    return false;
+}
+
+void Notifier::cancelTimer(const QString &id)
+{
+    m_timers.removeIf([&](const ScheduledNotification &n) { return n.id == id; });
+}
+
 void Notifier::setSounds(const SoundChoice &reminder, const SoundChoice &alarm)
 {
     m_reminderSound = normalizedSound(reminder);

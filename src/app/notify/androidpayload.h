@@ -7,7 +7,8 @@
 //     key: the occurrence's id (ScheduledNotification::id), local: its wall-clock time
 //     "yyyy-MM-ddTHH:mm" (never derived through UTC: a natively snoozed copy has another `at`),
 //     task: the reminder is on an open task (the notification offers "Done"),
-//     vault: the notebook's id (ScheduledNotification::vault) }
+//     vault: the notebook's id (ScheduledNotification::vault),
+//     timer: the end of an extension's timer (androidTimerItem(): armed apart, "OK" alone) }
 //
 // "Done" tapped in a notification or on the alarm screen is queued by the Kotlin side
 // (DoneQueue.kt) and taken by AndroidBridge::takeDoneRequests() as a JSON array of
@@ -35,6 +36,10 @@ namespace brulion::notify {
 
 /// One reminder (a missing nativeId is derived from the id with nativeIdFor()).
 QJsonObject androidReminderItem(const ScheduledNotification &notification);
+/// The end of an extension's timer (AndroidBridge::scheduleTimer(), TimerAlarms.kt): a reminder
+/// item with `timer: true` — its notification has no "Snooze" and no "Done" — and its moment to
+/// the millisecond.
+QJsonObject androidTimerItem(const ScheduledNotification &notification);
 
 /// All reminders, in order; entries without a valid time are left out.
 QJsonArray androidReminderPayload(const QList<ScheduledNotification> &notifications);

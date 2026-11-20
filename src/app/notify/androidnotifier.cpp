@@ -9,6 +9,8 @@
 #include <QJsonObject>
 #include <QLoggingCategory>
 
+#include <algorithm>
+
 namespace brulion::notify {
 
 Q_LOGGING_CATEGORY(lcAndroidNotify, "brulion.notify.android")
@@ -110,6 +112,30 @@ void AndroidNotifier::showNow(const ScheduledNotification &notification)
     all.removeIf([&](const ScheduledNotification &n) { return n.nativeId == now.nativeId; });
     all.append(now);
     arm(all);
+}
+
+bool AndroidNotifier::armTimer(const ScheduledNotification &notification)
+{
+    Notifier::armTimer(notification);
+    const platform::ScheduleResult result =
+            platform::AndroidBridge::instance()->scheduleTimer(androidTimerItem(notification));
+    if (!result.ok) {
+        qCWarning(lcAndroidNotify) << "Could not arm the timer's notification:" << result.error;
+        return false; // the app shows it when the timer ends, if it still runs then
+    }
+    if (!result.exact)
+        qCInfo(lcAndroidNotify) << "Timer" << notification.id << "armed inexactly (no exact-alarm permission)";
+    // Inexact (the permission is off): the app, while it runs, shows it on time itself and
+    // cancels the late one; closed, the late one comes at least.
+    return result.scheduled == 1 && result.exact;
+}
+
+void AndroidNotifier::cancelTimer(const QString &id)
+{
+    const auto it = std::ranges::find(m_timers, id, &ScheduledNotification::id);
+    const int nativeId = it == m_timers.cend() ? nativeIdFor(id) : (it->nativeId > 0 ? it->nativeId : nativeIdFor(id));
+    Notifier::cancelTimer(id);
+    platform::AndroidBridge::instance()->cancelTimer(nativeId);
 }
 
 QList<SoundChoice::Mode> AndroidNotifier::soundModes() const

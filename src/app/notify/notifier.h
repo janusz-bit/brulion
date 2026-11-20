@@ -74,6 +74,22 @@ public:
     // NotificationSink: schedule() remembers the set (subclasses arm it); showNow() is theirs.
     void schedule(const QList<ScheduledNotification> &notifications) override;
 
+    // ---- Timers (an extension's b.timer: WorkspaceExtensions, docs/EXTENSIONS.md "Timers") -----
+
+    /// Arms a notification at `notification.at` (with its seconds: a moment, not a reminder's
+    /// minute), the end of a timer, apart from the reminders: schedule() never drops it; the same
+    /// id again moves it. Returns true when the platform shows it at its time by itself — while
+    /// Brulion is closed too (Android's exact alarms) —, so the app does not show it again when the
+    /// timer ends while it runs. The default arms nothing and returns false: the app shows it when
+    /// the timer ends (the desktop, also in the tray with its window closed; the browser while the
+    /// page is open — browsers schedule no notifications).
+    virtual bool armTimer(const ScheduledNotification &notification);
+    /// Cancels what armTimer() armed for `id` (the timer stopped or replaced), its notification
+    /// too when it shows already.
+    virtual void cancelTimer(const QString &id);
+    /// The timers' notifications armed (armTimer() minus cancelTimer()), soonest first.
+    QList<ScheduledNotification> timers() const { return m_timers; }
+
     // ---- Sounds (ReminderSounds, Settings → Reminders) ----------------------------------------
 
     /// The sounds of ⏰ reminders and ⏰! alarms (normalised); applied at once (soundsChanged()).
@@ -117,6 +133,7 @@ protected:
     virtual void soundsChanged() { }
 
     QList<ScheduledNotification> m_scheduled;
+    QList<ScheduledNotification> m_timers;
     int m_snoozeMinutes = DefaultSnoozeMinutes;
     SoundChoice m_reminderSound;
     SoundChoice m_alarmSound;

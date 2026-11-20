@@ -4,6 +4,7 @@
 #include "appsettings.h"
 #include "workspace.h"
 #include "workspacebackups.h"
+#include "workspaceextensions.h"
 #include "workspacegithub.h"
 #include "workspacereminders.h"
 #include "workspacesync.h"
@@ -52,6 +53,13 @@ void wireReminders(AppController *app)
     reminders->setBackendInfo([guard] { return guard ? guard->backend() : QString(); },
                               [guard] { return guard && guard->canShow(); });
     reminders->setSink(notifier, notifier);
+    // The extensions' timers (b.timer: the gym's rest): their ends armed on the platform when they
+    // start, cancelled when they stop — Android rings them while Brulion is closed (TimerAlarms.kt).
+    ws->extensions()->setTimerAlarms([guard](const ScheduledNotification &n) { return guard && guard->armTimer(n); },
+                                     [guard](const QString &id) {
+                                         if (guard)
+                                             guard->cancelTimer(id);
+                                     });
 
     const auto apply = [settings, reminders, guard] {
         reminders->setEnabled(settings->remindersEnabled());
