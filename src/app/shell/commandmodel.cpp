@@ -692,7 +692,8 @@ static QList<Command> allCommands(const AppController *app)
                   {},
                   app->status() == u"ready"}});
     insertAfter(out, u"page.qrCode"_s, encryptionCommands(app, editor));
-    insertAfter(out, u"canvas.new"_s,
+    // After the page and folder commands ("New page", "New canvas", folders, move, show, trash).
+    insertAfter(out, u"page.trash"_s,
                 {{u"encrypt.newPage"_s,
                   CommandModel::tr("New encrypted page…"),
                   CommandModel::tr("A page readable only with its password (Meld Encrypt's format)"),
