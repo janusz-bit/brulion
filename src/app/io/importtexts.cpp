@@ -51,6 +51,48 @@ ImporterInfo ImportController::importerInfo(const QString &id)
                 tr("Signing in works on the phone too: tap “Sign in to Microsoft”, open the address in the "
                    "browser, enter the code and come back – the lists download by themselves. A JSON file saved "
                    "from Graph Explorer can be picked with “Choose files…”.")};
+    if (id == u"onenote")
+        return {tr("Sign in to Microsoft and choose the notebooks: Brulion downloads their sections, section groups "
+                   "and "
+                   "pages with pictures and attached files; to-do tags become tasks, subpages folders. Signing in "
+                   "needs "
+                   "your own free app registration in Microsoft Entra (the same one as for Microsoft To Do, with the "
+                   "permission Notes.Read) – the guide explains it step by step."),
+                u"none"_s, u"layers"_s,
+                tr("Signing in works on the phone too: tap “Sign in to Microsoft”, open the address in the browser, "
+                   "enter the code, come back and choose the notebooks.")};
+    if (id == u"applenotes")
+        return {tr("Apple Notes keeps its notes in a database on the Mac. In Finder choose Go → Go to Folder…, enter "
+                   "~/Library/Group Containers/group.com.apple.notes, copy that whole folder (or a ZIP of it) to this "
+                   "device and choose it. Folders, checklists, tables, pictures, scans and drawings come along; locked "
+                   "notes stay out. Notes only in iCloud: open them on the Mac first."),
+                u"both"_s, u"sticky-note"_s,
+                tr("Copy the group.com.apple.notes folder from the Mac (zipped is easiest: right-click → Compress), "
+                   "put "
+                   "the ZIP on the phone (Downloads, Google Drive…) and pick it with “Choose files…”.")};
+    if (id == u"todoist")
+        return {tr("Paste your Todoist API token and Brulion downloads every project: sections, tasks with priorities, "
+                   "due dates, repeats, labels, subtasks, descriptions and comments. Without a token, export a project "
+                   "as a template (••• → Export as a template, CSV) or download a backup (Settings → Backups) and "
+                   "choose the files."),
+                u"files"_s, u"square-check-big"_s,
+                tr("The token works on the phone too: copy it from Todoist's settings (Integrations → Developer) and "
+                   "paste it here. A template's CSV or a backup ZIP can be picked with “Choose files…”.")};
+    if (id == u"airtable")
+        return {tr("Connect with a personal access token and choose the base and its tables, or download a view as "
+                   "CSV in Airtable (••• → Download CSV) and choose the files. Each record becomes a page with its "
+                   "fields as properties, linked records become links, attachments files of the notebook."),
+                u"files"_s, u"grid-3x3"_s,
+                tr("Paste the token from airtable.com/create/tokens, or pick a CSV downloaded from Airtable with "
+                   "“Choose files…”.")};
+    if (id == u"csv")
+        return {tr("Any spreadsheet saved as CSV (Excel, LibreOffice, Google Sheets, Numbers, an export of another "
+                   "app): "
+                   "each row becomes a page with the columns as properties – you choose the title, the types and what "
+                   "is left out, and see the first pages before importing. Or the whole sheet as one table page."),
+                u"files"_s, u"table"_s,
+                tr("Pick the .csv file with “Choose files…”, e.g. from Downloads or Google Drive (Sheets: File → "
+                   "Download → CSV).")};
     if (id == u"joplin")
         return {tr("In Joplin choose File → Export all → “JEX – Joplin Export File” and choose that .jex file. "
                    "A folder exported as “MD – Markdown + Front Matter” works too."),

@@ -187,6 +187,14 @@ ColumnLayout {
         }
     }
 
+    // ---- The spreadsheet's columns (CSV, Airtable) ------------------------------------------------
+    ImportCsvMapping {
+        Layout.fillWidth: true
+        visible: preview.importer.csvMapping.available === true
+                 && (preview.phase === "ready" || preview.phase === "analyzing" || preview.phase === "error")
+        importer: preview.importer
+    }
+
     BMenu {
         id: asMenu
         BMenuItem {

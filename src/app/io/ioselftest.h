@@ -8,6 +8,8 @@
 //   5. with an app chosen the phone's steps for it show (phones only);
 //   6. an Obsidian vault (Polish names) typed as a path → the preview counts it, nothing written
 //      yet → "Import" → the report → "Open the imported folder" → All pages in Import/Obsidian;
+//   6b. a CSV file (Windows-1250) typed as a path → the mapping card → a column's type changed in
+//      its menu → the sample page follows → one table page and back → "Import" → pages and a base;
 //   7. the export tab: "Export…" → the file is produced → the save dialog opens with its name
 //      already set (Android's "Save as" takes the name when it opens) → cancelled;
 //   8. one page's export: PDF → "Save as file…" opens the save dialog with the PDF's name; "Print…".

@@ -65,6 +65,9 @@ public:
     QStringList missingLists;
     /// The tasks' paging link of this list points to another host.
     QString foreignNextLinkList;
+    /// Other Graph answers by path and query ("/v1.0/me/onenote/notebooks?…", fully encoded):
+    /// the OneNote import's requests (with the same token check).
+    QHash<QString, QByteArray> otherGraph;
 
     // ---- What happened ------------------------------------------------------------------------
     QList<brulion::sync::HttpRequest> requests;

@@ -15,6 +15,12 @@
 //                         (progressText) | "error" (errorText, errorCode)
 //   signIn(), cancel(), copyCode()
 //
+// OneNote (`service: "onenote"`) uses the same app registration and fields with the scope
+// Notes.Read: after the sign-in its notebooks are listed (state "listing", then "choosing" with
+// `notebooks` [{ id, name, checked }] — setNotebookChecked(), downloadNotebooks()), then the chosen
+// ones are downloaded (cloudimport::OneNoteDownload) and handed to the ImportController as the
+// "onenote" importer's input.
+//
 // The access token lives in memory only for the download (never logged, never written; no
 // refresh token). Not offered in the browser (WebAssembly): Microsoft's device-code endpoints
 // refuse requests from web pages (CORS) — the QML shows the file import there.
@@ -22,6 +28,7 @@
 
 #include "appsettings.h"
 #include "importcontroller.h"
+#include "log/redact.h"
 
 #include <QObject>
 #include <QPointer>
@@ -40,6 +47,10 @@ namespace brulion::mstodo {
 class DeviceCodeLogin;
 class TodoDownload;
 } // namespace brulion::mstodo
+
+namespace brulion::cloudimport {
+class OneNoteDownload;
+} // namespace brulion::cloudimport
 
 namespace brulion::ioviews {
 
@@ -64,6 +75,11 @@ class MsTodoImport : public QObject {
     Q_PROPERTY(QString progressText READ progressText NOTIFY progressChanged FINAL)
     Q_PROPERTY(QString errorText READ errorText NOTIFY stateChanged FINAL)
     Q_PROPERTY(QString errorCode READ errorCode NOTIFY stateChanged FINAL)
+    /// "mstodo" (Microsoft To Do, scope Tasks.Read) or "onenote" (scope Notes.Read).
+    Q_PROPERTY(QString service READ service WRITE setService NOTIFY serviceChanged FINAL)
+    /// OneNote: the account's notebooks while choosing ([{ id, name, checked }]).
+    Q_PROPERTY(QVariantList notebooks READ notebooks NOTIFY notebooksChanged FINAL)
+    Q_PROPERTY(int checkedNotebooks READ checkedNotebooks NOTIFY notebooksChanged FINAL)
 
 public:
     explicit MsTodoImport(QObject *parent = nullptr);
@@ -97,6 +113,15 @@ public:
     QString progressText() const { return m_progressText; }
     QString errorText() const { return m_errorText; }
     QString errorCode() const { return m_errorCode; }
+    QString service() const { return m_service; }
+    void setService(const QString &service);
+    QVariantList notebooks() const { return m_notebooks; }
+    int checkedNotebooks() const;
+
+    /// OneNote: include a notebook in the download or not.
+    Q_INVOKABLE void setNotebookChecked(const QString &id, bool checked);
+    /// OneNote: download the checked notebooks.
+    Q_INVOKABLE void downloadNotebooks();
 
     /// Sign in and download (fields valid: else showErrors turns on and nothing starts).
     Q_INVOKABLE void signIn();
@@ -115,6 +140,8 @@ Q_SIGNALS:
     void codeChanged();
     void secondsLeftChanged();
     void progressChanged();
+    void serviceChanged();
+    void notebooksChanged();
     /// The lists were downloaded and handed to the importer.
     void downloaded();
 
@@ -130,6 +157,11 @@ private:
     std::unique_ptr<sync::NetworkHttpTransport> m_ownTransport;
     std::unique_ptr<mstodo::DeviceCodeLogin> m_login;
     std::unique_ptr<mstodo::TodoDownload> m_download;
+    std::unique_ptr<cloudimport::OneNoteDownload> m_oneNote;
+    QString m_service = QStringLiteral("mstodo");
+    QVariantList m_notebooks;
+    QString m_token; ///< OneNote: between listing and downloading the notebooks
+    logging::ScopedSecret m_secret;
     QTimer m_countdown;
     QString m_clientId;
     QString m_authority;

@@ -11,7 +11,8 @@ import Brulion
 //   ImportSourcePicker { importer: importController; phone: true; onPickFiles: …; onPickFolder: … }
 //
 // `phone`: also the chosen app's steps on a phone (phoneHowTo) and how the system's picker works.
-// Microsoft To Do adds its sign-in (MsTodoSignIn) above the file buttons.
+// Microsoft To Do and OneNote add their sign-in (MsTodoSignIn), Todoist and Airtable their token
+// (TokenSignIn) above the file buttons; OneNote has no file to pick.
 ColumnLayout {
     id: picker
 
@@ -154,12 +155,25 @@ ColumnLayout {
             }
         }
 
-        // Microsoft To Do: sign in and download, or a file from Graph Explorer.
+        // Microsoft To Do and OneNote: sign in and download (To Do: or a file from Graph Explorer).
         Loader {
             Layout.fillWidth: true
-            active: picker.hasCurrent && picker.importer.chosenImporter.id === "mstodo"
+            active: picker.hasCurrent && (picker.importer.chosenImporter.id === "mstodo" || picker.importer.chosenImporter.id === "onenote")
             visible: active
-            sourceComponent: MsTodoSignIn { importer: picker.importer }
+            sourceComponent: MsTodoSignIn {
+                importer: picker.importer
+                service: "" + picker.importer.chosenImporter.id
+            }
+        }
+        // Todoist and Airtable: a personal token, or an exported file.
+        Loader {
+            Layout.fillWidth: true
+            active: picker.hasCurrent && (picker.importer.chosenImporter.id === "todoist" || picker.importer.chosenImporter.id === "airtable")
+            visible: active
+            sourceComponent: TokenSignIn {
+                importer: picker.importer
+                service: "" + picker.importer.chosenImporter.id
+            }
         }
 
         Flow {
@@ -167,7 +181,7 @@ ColumnLayout {
             spacing: Theme.space2
             BButton {
                 objectName: "importChooseFiles"
-                visible: picker.pick !== "folder"
+                visible: picker.pick !== "folder" && picker.pick !== "none"
                 text: picker.hasCurrent && picker.pick === "files" && picker.fileTypes.length === 1
                       ? qsTr("Choose the %1 file…").arg(Js.replace(picker.fileTypes[0], "*", ""))
                       : qsTr("Choose files…")
@@ -177,7 +191,7 @@ ColumnLayout {
             }
             BButton {
                 objectName: "importChooseFolder"
-                visible: picker.pick !== "files" && !AppController.isWasm
+                visible: picker.pick !== "files" && picker.pick !== "none" && !AppController.isWasm
                 text: qsTr("Choose a folder…")
                 iconName: "folder-open"
                 variant: picker.pick === "folder" ? "primary" : "secondary"
@@ -185,13 +199,13 @@ ColumnLayout {
             }
         }
         Hint {
-            visible: AppController.isWasm && picker.pick !== "files"
+            visible: AppController.isWasm && picker.pick !== "files" && picker.pick !== "none"
             text: qsTr("In the browser choose a ZIP of the folder.")
         }
         // The system's picker, briefly: where the places are, what Android refuses. (Its menu in
         // words: Android's fonts have no ☰, U+2630.)
         Hint {
-            visible: picker.phone
+            visible: picker.phone && picker.pick !== "none"
             text: picker.pick === "files"
                   ? qsTr("The system's picker opens: its menu (three lines in its top left corner) switches between Downloads, the phone's storage, Google Drive and other apps; a long press selects several files.")
                   : qsTr("The system's picker opens: its menu (three lines in its top left corner) switches between Downloads, the phone's storage, Google Drive and other apps. Android does not let apps take the whole Downloads folder or the top of the storage – choose a folder inside it, or type its path below.")

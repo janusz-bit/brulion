@@ -1411,7 +1411,7 @@ CsvAnalysis analyzeCsv(const QList<InputFile> &files, const CsvImportOptions &op
                     for (const CsvAttachmentRef &ref : parseAttachmentCell(row[c])) {
                         if (!urls.contains(ref.url)) {
                             urls.insert(ref.url);
-                            a.attachmentUrls.append(ref.url);
+                            a.attachments.append(ref);
                         }
                     }
                 }

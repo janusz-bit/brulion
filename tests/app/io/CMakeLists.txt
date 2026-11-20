@@ -25,6 +25,12 @@ if(TARGET brulion_mstodo_testsupport)
     brulion_add_test(tst_appio_mstodo SOURCES tst_appio_mstodo.cpp
         LIBS brulion_ioviews brulion_mstodo_testsupport brulion_core_vault)
 endif()
+# The new import sources: the CSV mapping, Todoist and Airtable with a token, OneNote's sign-in,
+# the attachments of CSV cells — against fake servers and FakeMicrosoft.
+if(TARGET brulion_mstodo_testsupport)
+    brulion_add_test(tst_appio_cloudimport SOURCES tst_appio_cloudimport.cpp
+        LIBS brulion_ioviews brulion_mstodo_testsupport brulion_core_vault brulion_core_io)
+endif()
 if(TARGET brulion_sync_testsupport)
     brulion_add_test(tst_appio_syncsetup SOURCES tst_appio_syncsetup.cpp
         LIBS brulion_ioviews brulion_sync_testsupport brulion_core_vault)

@@ -215,6 +215,7 @@ public:
         fromMoreMenu();
         phoneSteps();
         importTypedPath();
+        csvMapping();
         exportSaveDialog();
         pageExport();
         return m_failures;
@@ -486,6 +487,142 @@ private:
                          && m_app->currentRoute().value(u"path"_s).toString() == u"Import/Obsidian";
               }),
               "“Open the imported folder” shows Import/Obsidian in All pages");
+    }
+
+    /// The first shown item of the visual tree (the window's items and its overlay: popups,
+    /// menus) that `accept` takes — also the items of Repeaters and Instantiators, which
+    /// findChildren() does not see.
+    QQuickItem *visualItem(const std::function<bool(const QQuickItem *)> &accept) const
+    {
+        QQuickItem *root =
+                m_window->contentItem()->parentItem() ? m_window->contentItem()->parentItem() : m_window->contentItem();
+        QList<QQuickItem *> stack{root};
+        while (!stack.isEmpty()) {
+            QQuickItem *i = stack.takeLast();
+            if (!i->isVisible())
+                continue;
+            if (shown(i) && accept(i))
+                return i;
+            const QList<QQuickItem *> children = i->childItems();
+            for (qsizetype k = children.size() - 1; k >= 0; --k)
+                stack.append(children[k]);
+        }
+        return nullptr;
+    }
+
+    /// A shown menu item (an open BMenu's) with this text.
+    QQuickItem *menuItem(const QString &text) const
+    {
+        return visualItem([&text](const QQuickItem *i) {
+            return i->inherits("QQuickMenuItem") && i->property("text").toString() == text;
+        });
+    }
+
+    /// The shown segment of a BSegmented (`control`) with this text.
+    QQuickItem *segment(QQuickItem *control, const QString &text) const
+    {
+        if (!control)
+            return nullptr;
+        return visualItem([control, &text](const QQuickItem *i) {
+            return i->inherits("QQuickAbstractButton") && i->property("text").toString() == text
+                   && control->isAncestorOf(i);
+        });
+    }
+
+    // 6b. A CSV typed as a path: the mapping card; a column's type changed in its menu, and the
+    //     sample page follows; one table page and back; the import writes the pages and the base.
+    void csvMapping()
+    {
+        const QString csv = scratch().filePath(u"Książki.csv"_s);
+        {
+            QFile f(csv);
+            // Windows-1250, ";" — as Excel on Polish Windows saves it.
+            const QByteArray bytes = "Tytu\xb3;Autor;Rok\r\nPan Tadeusz;Adam Mickiewicz;1834\r\nLalka;Boles\xb3"
+                                     "aw Prus;1890\r\n";
+            if (!f.open(QIODevice::WriteOnly) || f.write(bytes) != bytes.size()) {
+                check(false, "the CSV file is written");
+                return;
+            }
+        }
+        m_app->navigate({{u"view"_s, u"importExport"_s}, {u"tab"_s, u"import"_s}});
+        QObject *controller = nullptr;
+        QQuickItem *field = nullptr;
+        QQuickItem *go = nullptr;
+        waitFor([&] {
+            controller = importController();
+            field = item("importPathField");
+            go = item("importPathButton");
+            return controller && shown(field) && go && controller->property("state").toString() == u"empty";
+        });
+        check(controller && shown(field) && go, "the import tab is back for the CSV file");
+        if (!controller || !field || !go)
+            return;
+        field->setProperty("text", csv);
+        settle(100);
+        tap(go);
+        check(waitFor([controller] { return controller->property("state").toString() == u"ready"; }, 15000),
+              "the CSV file is read and checked");
+        QQuickItem *card = nullptr;
+        waitFor([&] { return shown(card = item("importCsvMapping")); });
+        check(controller->property("effectiveId").toString() == u"csv" && shown(card),
+              "CSV is recognised and the mapping card shows");
+        const auto sample = [controller] {
+            return controller->property("csvMapping")
+                    .toMap()
+                    .value(u"file"_s)
+                    .toMap()
+                    .value(u"samplePage"_s)
+                    .toString();
+        };
+        check(sample().contains(u"Rok: 1834"_s) && sample().contains(u"Autor: Adam Mickiewicz"_s),
+              "the sample page: Windows-1250 read, the year a number");
+        // (A Repeater's row: in the visual tree, not among findChildren().)
+        QQuickItem *type = nullptr;
+        waitFor(
+                [&] {
+                    type = visualItem([](const QQuickItem *i) { return i->objectName() == u"importCsvType_2"; });
+                    return type != nullptr;
+                },
+                15000);
+        check(shown(type), "the column “Rok” has its type menu");
+        if (!shown(type))
+            return;
+        tap(type);
+        const QString textLabel = QCoreApplication::translate("brulion::ioviews::ImportController", "Text");
+        QQuickItem *entry = nullptr;
+        waitFor([&] { return (entry = menuItem(textLabel)) != nullptr; });
+        check(entry != nullptr, "the type menu lists “Text”");
+        if (!entry)
+            return;
+        tap(entry);
+        check(waitFor([&] { return sample().contains(u"Rok: \"1834\""_s); }, 15000),
+              "the year chosen as text: the sample page follows");
+        QQuickItem *mode = item("importCsvMode");
+        QQuickItem *table = segment(mode, QCoreApplication::translate("ImportCsvMapping", "One page with the table"));
+        check(table != nullptr, "the mapping offers one page with the table");
+        if (!table)
+            return;
+        tap(table);
+        const auto pages = [controller] { return controller->property("preview").toMap().value(u"pages"_s).toInt(); };
+        check(waitFor([&] { return pages() == 1 && controller->property("state").toString() == u"ready"; }, 15000),
+              "one page with the table: the preview counts one page");
+        QQuickItem *rows = segment(mode, QCoreApplication::translate("ImportCsvMapping", "A page per row"));
+        if (rows)
+            tap(rows);
+        check(waitFor([&] { return pages() == 2 && controller->property("state").toString() == u"ready"; }, 15000),
+              "a page per row again: two pages");
+        QQuickItem *importButton = item("importStartButton");
+        if (!shown(importButton)) {
+            check(false, "the preview offers “Import”");
+            return;
+        }
+        tap(importButton);
+        check(waitFor([controller] { return controller->property("state").toString() == u"done"; }, 15000),
+              "the CSV import finishes");
+        check(m_app->workspace()->exists(u"Import/CSV/Pan Tadeusz.md"_s)
+                      && m_app->workspace()->exists(u"Import/CSV/Lalka.md"_s)
+                      && m_app->workspace()->exists(u"Import/CSV/Książki.base"_s),
+              "the rows are pages, with a base");
     }
 
     // 7. The export's save dialog opens with the produced file's name.

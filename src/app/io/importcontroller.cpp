@@ -72,6 +72,7 @@ struct Analysis {
     QString target;
     bool ran = false;
     io::ImportResult result;
+    io::CsvAnalysis csv; ///< the spreadsheet mapping (csv / airtable)
 };
 
 Analysis analyzeImport(const QList<io::InputFile> &input, const QString &chosen, const QString &editedFolder,
@@ -87,6 +88,10 @@ Analysis analyzeImport(const QList<io::InputFile> &input, const QString &chosen,
     a.usedName = importer->name();
     a.target = folderEdited ? editedFolder : defaultImportFolder(importer->name());
     options.targetFolder = a.target;
+    if (a.used == u"csv" || a.used == u"airtable")
+        a.csv = io::analyzeCsv(io::prepareImportFiles(input), options.csv,
+                               a.used == u"airtable" ? io::CsvFlavor::Airtable : io::CsvFlavor::Generic,
+                               options.timeZone);
     a.result = io::runImport(*importer, input, options);
     a.ran = true;
     return a;
@@ -276,6 +281,17 @@ void ImportController::setImporterId(const QString &id)
         analyze();
 }
 
+void ImportController::resetCsvState()
+{
+    m_csvAnalysis = {};
+    m_csvFileIndex = 0;
+    if (!m_csvOptions.isEmpty()) {
+        m_csvOptions.clear();
+        Q_EMIT csvOptionsChanged();
+    }
+    updateCsvMapping();
+}
+
 void ImportController::updateDefaultFolder()
 {
     if (m_targetFolderEdited)
@@ -334,6 +350,7 @@ void ImportController::addUrls(const QList<QUrl> &urls)
     m_detectedId.clear();
     m_preview.clear();
     m_report.clear();
+    resetCsvState();
     Q_EMIT previewChanged();
     Q_EMIT reportChanged();
     setState(u"reading"_s);
@@ -398,6 +415,7 @@ void ImportController::setInput(const QList<io::InputFile> &files, const QString
         return; // a browser pick finishing during an import: the import goes on
     ++m_generation;
     m_input = files;
+    resetCsvState();
     m_sourceName = sourceName;
     m_readWarnings = warnings;
     m_inputBytes = 0;
@@ -424,6 +442,7 @@ void ImportController::clear()
     m_detectedId.clear();
     m_preview.clear();
     m_report.clear();
+    resetCsvState();
     m_writeQueue.clear();
     m_targetFolderEdited = false;
     m_targetFolderError.clear();
@@ -482,6 +501,8 @@ void ImportController::analyze()
     io::ImportOptions options;
     options.config = m_workspace->vault()->config();
     options.exists = existsSnapshot();
+    options.csv = csvImportOptions(m_csvOptions);
+    options.now = m_workspace->now();
     const QList<io::InputFile> input = m_input;
     const QString chosen = m_importerId;
     const QString edited = folder.value_or(QString());
@@ -495,6 +516,8 @@ void ImportController::analyze()
                 if (generation != m_generation)
                     return;
                 m_detectedId = a.detected;
+                m_csvAnalysis = a.csv;
+                updateCsvMapping();
                 if (!m_targetFolderEdited && a.target != m_targetFolder && !a.target.isEmpty()) {
                     m_targetFolder = a.target;
                     Q_EMIT targetFolderChanged();
@@ -600,6 +623,8 @@ void ImportController::startImport()
     options.config = m_workspace->vault()->config();
     options.exists = existsSnapshot();
     options.targetFolder = *folder;
+    options.csv = csvImportOptions(m_csvOptions);
+    options.now = m_workspace->now();
     const QList<io::InputFile> input = m_input;
     runInBackground<io::ImportResult>(
             this, [importer, input, options] { return io::runImport(*importer, input, options); },

@@ -105,6 +105,13 @@ struct CsvImportOptions {
     friend bool operator==(const CsvImportOptions &, const CsvImportOptions &) = default;
 };
 
+/// One attachment cell entry: Airtable writes "photo.jpg (https://dl.airtable.com/…)", several
+/// separated by ", ".
+struct CsvAttachmentRef {
+    QString name;
+    QString url;
+};
+
 /// One column as analysed.
 struct CsvColumnInfo {
     QString name;     ///< header text (or "Column 3" without a header row)
@@ -136,8 +143,8 @@ struct CsvFileAnalysis {
     /// The first row's page as it will be written (Pages mode), or the table page (Table mode)
     /// — shortened.
     QString samplePage;
-    /// Web addresses of attachment cells (Pages mode with `attachments`), each once.
-    QStringList attachmentUrls;
+    /// The attachment cells' files (Pages mode with `attachments`), each address once.
+    QList<CsvAttachmentRef> attachments;
     bool truncated = false; ///< rows, columns or cells over the bounds were left out
 };
 
@@ -164,12 +171,6 @@ bool looksLikeCsv(const InputFile &file);
 /// finds it: "_attachments/<hash of url>/<name>".
 QString csvAttachmentInputPath(const QString &url, const QString &name);
 
-/// One attachment cell entry: Airtable writes "photo.jpg (https://dl.airtable.com/…)", several
-/// separated by ", ".
-struct CsvAttachmentRef {
-    QString name;
-    QString url;
-};
 /// The attachments of a cell (empty when it holds none).
 QList<CsvAttachmentRef> parseAttachmentCell(const QString &cell);
 

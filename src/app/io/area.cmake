@@ -10,10 +10,14 @@
 #                      folder, a dry-run preview, writing with the collision policy (existing
 #                      daily note: appended under "## Import (<source>)"; other files: unique
 #                      names), progress and the report
-#   MsTodoImport       "Sign in to Microsoft" on the Microsoft To Do card: the device-code sign-in
-#                      with the user's app registration (client id + authority in AppSettings),
-#                      the Graph download (core module mstodo), the bundle handed to
-#                      ImportController::setInput (preview, report)
+#   MsTodoImport       "Sign in to Microsoft" on the Microsoft To Do and OneNote cards: the device-code
+#                      sign-in with the user's app registration (client id + authority in
+#                      AppSettings), the Graph download (core modules mstodo, cloudimport — OneNote
+#                      after choosing the notebooks), handed to ImportController::setInput
+#   TokenImport        Todoist and Airtable with the user's personal token (in memory only): the
+#                      download (Airtable: after choosing the base and its tables), handed to the
+#                      ImportController
+#   ImportAttachments  the files of a CSV's attachment cells, downloaded on request into the input
 #   ExportController   exporters, scope (vault / folder / page with its attachments), progress,
 #                      saving (FilePicker URL incl. Android content:// documents, an export folder
 #                      fallback, the browser's save picker or a download: wasmfiles.h), printing
@@ -37,7 +41,9 @@ qt_add_library(brulion_ioviews STATIC
     ${_brulion_ioviews_dir}/fileexchange.h ${_brulion_ioviews_dir}/fileexchange.cpp
     ${_brulion_ioviews_dir}/importcontroller.h ${_brulion_ioviews_dir}/importcontroller.cpp
     ${_brulion_ioviews_dir}/importtexts.cpp
+    ${_brulion_ioviews_dir}/importcsv.cpp
     ${_brulion_ioviews_dir}/mstodoimport.h ${_brulion_ioviews_dir}/mstodoimport.cpp
+    ${_brulion_ioviews_dir}/tokenimport.h ${_brulion_ioviews_dir}/tokenimport.cpp
     ${_brulion_ioviews_dir}/exportcontroller.h ${_brulion_ioviews_dir}/exportcontroller.cpp
     ${_brulion_ioviews_dir}/syncsetup.h ${_brulion_ioviews_dir}/syncsetup.cpp
     ${_brulion_ioviews_dir}/conflictresolver.h ${_brulion_ioviews_dir}/conflictresolver.cpp
@@ -46,7 +52,7 @@ qt_add_library(brulion_ioviews STATIC
 target_include_directories(brulion_ioviews PUBLIC ${_brulion_ioviews_dir})
 target_link_libraries(brulion_ioviews
     PUBLIC Qt6::Core Qt6::Gui brulion_shell brulion_core_io brulion_core_sync brulion_core_vault
-    PRIVATE Qt6::Network brulion_ui_helpers brulion_core_mstodo brulion_core_util brulion_core_markdown brulion_core_index brulion_core_dates
+    PRIVATE Qt6::Network brulion_ui_helpers brulion_core_mstodo brulion_core_cloudimport brulion_core_util brulion_core_markdown brulion_core_index brulion_core_dates
         brulion_core_webpicture brulion_core_drawing)
 # The browser pick's files (platform/pickedfiles.h, ImportController::setPickedFiles; everywhere, so
 # that tests/app/io checks it). Android: "Save to Downloads" (MediaStore through the platform's
@@ -98,6 +104,9 @@ qt_target_qml_sources(brulion QML_FILES
     qml/io/ImportPanel.qml
     qml/io/ImportSourcePicker.qml
     qml/io/MsTodoSignIn.qml
+    qml/io/TokenSignIn.qml
+    qml/io/IoChoiceButton.qml
+    qml/io/ImportCsvMapping.qml
     qml/io/ImportPreview.qml
     qml/io/ImportPathCard.qml
     qml/io/ExportPanel.qml

@@ -177,6 +177,14 @@ HttpResponse FakeMicrosoft::graph(const HttpRequest &request)
         r.headers.insert("retry-after", "1");
         return r;
     }
+    const QString key = request.url.path(QUrl::FullyEncoded)
+                        + (request.url.hasQuery() ? u'?' + request.url.query(QUrl::FullyEncoded) : QString());
+    if (const auto other = otherGraph.constFind(key); other != otherGraph.constEnd()) {
+        HttpResponse r;
+        r.status = 200;
+        r.body = *other;
+        return r;
+    }
     const QStringList path = request.url.path().split(u'/', Qt::SkipEmptyParts);
     const QHash<QString, QString> query = queryOf(request.url);
     if (request.method != "GET" || path.size() < 4 || path.mid(0, 4) != QStringList({u"v1.0"_s, u"me"_s, u"todo"_s, u"lists"_s}))

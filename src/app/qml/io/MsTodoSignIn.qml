@@ -3,23 +3,28 @@ import QtQuick
 import QtQuick.Layouts
 import Brulion
 
-// MsTodoSignIn — the "Sign in to Microsoft" block of the Microsoft To Do card (ImportSourcePicker):
+// MsTodoSignIn — the "Sign in to Microsoft" block of the Microsoft To Do and OneNote cards
+// (ImportSourcePicker; `service: "onenote"` asks for Notes.Read and, once signed in, lets the user
+// choose the notebooks to download):
 // the app registration's Application (client) ID, the authority under "More", the sign-in button;
 // then the device code in large monospace with "Copy code", the address to open (text and a
 // button), a spinner, the time left and "Cancel"; while downloading the progress. When the lists
 // are in, the ImportController shows its preview. In the browser only a hint: Microsoft does not
 // let web pages use this sign-in, so there the user picks a file saved from Graph Explorer.
 //
-//   MsTodoSignIn { Layout.fillWidth: true; importer: importController }
+//   MsTodoSignIn { Layout.fillWidth: true; importer: importController; service: "onenote" }
 ColumnLayout {
     id: block
 
     required property ImportController importer
+    property string service: "mstodo"
+    readonly property bool oneNote: service === "onenote"
     readonly property MsTodoImport signIn: signInObject
     property bool moreOpen: false
     /// Signing in works outside the browser only (see the hint below).
     readonly property bool canSignIn: !AppController.isWasm
     readonly property bool waiting: signIn.state === "waiting"
+    readonly property bool choosing: signIn.state === "choosing"
 
     component Hint: BText {
         Layout.fillWidth: true
@@ -32,14 +37,17 @@ ColumnLayout {
 
     MsTodoImport {
         id: signInObject
-        objectName: "msTodoImport"
+        objectName: block.oneNote ? "oneNoteImport" : "msTodoImport"
         settings: AppSettings
         importer: block.importer
+        service: block.service
     }
 
     Hint {
         visible: AppController.isWasm
-        text: qsTr("In the browser version choose a file saved from Graph Explorer – signing in to Microsoft works in the app for Linux, Windows and Android.")
+        text: block.oneNote
+              ? qsTr("In the browser version OneNote cannot be imported: Microsoft does not let web pages use this sign-in. Use the app for Linux, Windows or Android.")
+              : qsTr("In the browser version choose a file saved from Graph Explorer – signing in to Microsoft works in the app for Linux, Windows and Android.")
     }
 
     // ---- The app registration and the button --------------------------------------------------
@@ -64,7 +72,11 @@ ColumnLayout {
             onTextEdited: block.signIn.clientId = text
             onAccepted: block.signIn.signIn()
         }
-        Hint { text: qsTr("From your own free app registration in Microsoft Entra (the guide “Import i eksport” explains it step by step). Brulion remembers it on this device; nothing is stored about your account.") }
+        Hint {
+            text: block.oneNote
+                  ? qsTr("The same app registration as for Microsoft To Do, with the delegated permission Notes.Read (the guide “Import and export” explains it). Brulion remembers it on this device; nothing is stored about your account.")
+                  : qsTr("From your own free app registration in Microsoft Entra (the guide “Import i eksport” explains it step by step). Brulion remembers it on this device; nothing is stored about your account.")
+        }
 
         BButton {
             text: block.moreOpen ? qsTr("Less") : qsTr("More")
@@ -108,10 +120,53 @@ ColumnLayout {
         }
     }
 
+    // ---- OneNote: the notebooks to download ----------------------------------------------------
+    ColumnLayout {
+        Layout.fillWidth: true
+        visible: block.canSignIn && block.choosing
+        spacing: Theme.space2
+        BText {
+            Layout.fillWidth: true
+            text: qsTr("Which notebooks?")
+            variant: "label"
+        }
+        Repeater {
+            model: block.signIn.notebooks
+            delegate: BCheckBox {
+                id: notebook
+                // (A row's "id" cannot be a property name.)
+                required property var modelData
+                readonly property string notebookId: AppController.routeText(modelData, "id")
+                Layout.fillWidth: true
+                text: AppController.routeText(notebook.modelData, "name")
+                checked: AppController.routeFlag(notebook.modelData, "checked")
+                onToggled: block.signIn.setNotebookChecked(notebook.notebookId, checked)
+            }
+        }
+        Hint { text: qsTr("Large notebooks take a while: OneNote lets apps download only a few pages a minute, and pictures and files come one by one.") }
+        Flow {
+            Layout.fillWidth: true
+            spacing: Theme.space2
+            BButton {
+                objectName: "oneNoteDownload"
+                text: qsTr("Download %n notebook(s)", "", block.signIn.checkedNotebooks)
+                iconName: "download"
+                variant: "primary"
+                enabled: block.signIn.checkedNotebooks > 0
+                onClicked: block.signIn.downloadNotebooks()
+            }
+            BButton {
+                text: qsTr("Cancel")
+                variant: "ghost"
+                onClicked: block.signIn.cancel()
+            }
+        }
+    }
+
     // ---- Waiting for the code / for the user / downloading ------------------------------------
     Rectangle {
         Layout.fillWidth: true
-        visible: block.canSignIn && block.signIn.busy
+        visible: block.canSignIn && block.signIn.busy && !block.choosing
         implicitHeight: waitColumn.implicitHeight + 2 * Theme.space3
         radius: Theme.radius
         color: Theme.bgSunken
@@ -125,7 +180,9 @@ ColumnLayout {
             BText {
                 Layout.fillWidth: true
                 visible: block.waiting
-                text: qsTr("Open %1 on this or any other device, enter the code and sign in with the account that has your tasks:").arg(block.signIn.verificationText)
+                text: block.oneNote
+                      ? qsTr("Open %1 on this or any other device, enter the code and sign in with the account that has your notebooks:").arg(block.signIn.verificationText)
+                      : qsTr("Open %1 on this or any other device, enter the code and sign in with the account that has your tasks:").arg(block.signIn.verificationText)
                 wrapMode: Text.Wrap
             }
             RowLayout {
@@ -213,7 +270,7 @@ ColumnLayout {
     }
 
     Hint {
-        visible: block.canSignIn
+        visible: block.canSignIn && !block.oneNote
         text: qsTr("Or choose a JSON file saved from Graph Explorer:")
     }
 }

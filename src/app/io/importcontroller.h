@@ -22,6 +22,17 @@
 //                 folderExists }
 //   report      { pages, journals, appended, attachments, written, failed [{ path, message }],
 //                 renamed, warnings, folder, firstPage, cancelled }
+//   csvOptions  the mapping of a spreadsheet (CSV / Airtable; io::CsvImportOptions as a map: mode
+//               "pages" | "table", encoding, separator, header "auto" | "yes" | "no", titleColumn,
+//               titleTemplate, folderTemplate, bodyColumn ("" detected, "-" none), listSeparator,
+//               base, attachments, columns { name: { property, type } }); reset by new input
+//   csvMapping  what the analysis found for it (io::analyzeCsv, the dry run's thread): { available,
+//               files [{ value, text }], fileIndex, file { name, encoding, encodingDetected,
+//               separator, header, rowCount, truncated, titleColumn, bodyColumn, columns [{ name,
+//               property, chosenProperty, type (the choice), typeText (what is used),
+//               inferredText, isTitle, isBody, filled, sample }], headerCells, rows [{ title,
+//               cells }] (the first rows), titles, samplePage }, attachments (files of attachment
+//               cells), downloadedAttachments, warnings }
 //
 // Collision policy (applied by the dry run and again right before writing, against the vault as
 // it is then): a daily note that exists already gets the imported text appended under a heading
@@ -117,6 +128,15 @@ class ImportController : public QObject {
     Q_PROPERTY(QString errorText READ errorText NOTIFY stateChanged FINAL)
     /// Warnings of reading the picked files (too large, unreadable).
     Q_PROPERTY(QStringList readWarnings READ readWarnings NOTIFY inputChanged FINAL)
+    Q_PROPERTY(QVariantMap csvOptions READ csvOptions WRITE setCsvOptions NOTIFY csvOptionsChanged FINAL)
+    Q_PROPERTY(QVariantMap csvMapping READ csvMapping NOTIFY csvMappingChanged FINAL)
+    /// The choices of the mapping's menus (translated): [{ value, text }].
+    Q_PROPERTY(QVariantList csvTypeChoices READ csvTypeChoices NOTIFY importersChanged FINAL)
+    Q_PROPERTY(QVariantList csvEncodingChoices READ csvEncodingChoices NOTIFY importersChanged FINAL)
+    Q_PROPERTY(QVariantList csvSeparatorChoices READ csvSeparatorChoices NOTIFY importersChanged FINAL)
+    /// "Detected (…)", "None" and the chosen file's columns, for the title and the text column.
+    Q_PROPERTY(QVariantList csvTitleChoices READ csvTitleChoices NOTIFY csvMappingChanged FINAL)
+    Q_PROPERTY(QVariantList csvBodyChoices READ csvBodyChoices NOTIFY csvMappingChanged FINAL)
 
 public:
     explicit ImportController(QObject *parent = nullptr);
@@ -147,6 +167,31 @@ public:
     QVariantMap report() const { return m_report; }
     QString errorText() const { return m_errorText; }
     QStringList readWarnings() const { return m_readWarnings; }
+    QVariantMap csvOptions() const { return m_csvOptions; }
+    void setCsvOptions(const QVariantMap &options);
+    QVariantMap csvMapping() const { return m_csvMapping; }
+    QVariantList csvTypeChoices() const;
+    QVariantList csvEncodingChoices() const;
+    QVariantList csvSeparatorChoices() const;
+    QVariantList csvTitleChoices() const;
+    QVariantList csvBodyChoices() const;
+
+    /// One key of csvOptions (the mapping is analysed again).
+    Q_INVOKABLE void setCsvOption(const QString &key, const QVariant &value);
+    /// A column's property name and type ("auto", "text", "number" … io::csvColumnTypeName()).
+    Q_INVOKABLE void setCsvColumn(const QString &column, const QString &property, const QString &type);
+    /// Back to what Brulion detects.
+    Q_INVOKABLE void resetCsvMapping();
+    /// Which CSV file of the input the mapping card shows.
+    Q_INVOKABLE void setCsvFileIndex(int index);
+
+    /// csvOptions as the io module's options.
+    static io::CsvImportOptions csvImportOptions(const QVariantMap &options);
+    /// The attachment cells' files not yet in the input: {url, file name}.
+    QList<QPair<QString, QString>> pendingAttachments() const;
+    /// Add downloaded files to the input (the attachments of a CSV) and analyse again; the mapping
+    /// stays.
+    void addInputFiles(const QList<io::InputFile> &files, const QStringList &warnings);
 
     /// Read the picked files (QML FilePicker.selectedFiles; local or content:// URLs).
     Q_INVOKABLE void addUrls(const QList<QUrl> &urls);
@@ -196,6 +241,8 @@ Q_SIGNALS:
     void targetFolderChanged();
     void previewChanged();
     void reportChanged();
+    void csvOptionsChanged();
+    void csvMappingChanged();
     /// An import finished (also partly); `message` is a translated one-line summary.
     void imported(const QString &message);
 
@@ -214,6 +261,8 @@ private:
     void finishImport(bool cancelled);
     const io::Importer *effectiveImporter() const;
     void updateDefaultFolder();
+    void updateCsvMapping();
+    void resetCsvState();
 
     QPointer<shell::Workspace> m_workspace;
     FileGatherer m_gatherer;
@@ -231,6 +280,10 @@ private:
     QString m_targetFolderError;
     QVariantMap m_preview;
     QVariantMap m_report;
+    QVariantMap m_csvOptions;
+    QVariantMap m_csvMapping;
+    io::CsvAnalysis m_csvAnalysis;
+    int m_csvFileIndex = 0;
     QString m_errorText;
     int m_generation = 0;
     QTimer m_analyzeTimer;
