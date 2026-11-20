@@ -140,7 +140,9 @@ jobs:
           restore-keys: ccache-asan-clang18-O1-${{ env.QT_VERSION }}-
 
       # -O1 (what the sanitizers recommend) roughly halves the CPU-bound tests' time against
-      # -O0; Debug keeps Q_ASSERT on, -g1 the line tables the sanitizers' reports need.
+      # -O0; Debug keeps Q_ASSERT on, -g1 the line tables the sanitizers' reports need. No
+      # precompiled headers (cmake/BrulionPch.cmake): this build catches a missing #include that
+      # the other Linux builds' precompiled Qt headers would hide.
       - name: Configure
         run: >-
           cmake -S . -B build -G Ninja
@@ -149,6 +151,7 @@ jobs:
           -DCMAKE_C_COMPILER_LAUNCHER=ccache
           -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
           -DBRULION_WERROR=ON
+          -DBRULION_PCH=OFF
           "-DCMAKE_CXX_FLAGS_DEBUG=-g1 -O1"
           "-DCMAKE_CXX_FLAGS=-fsanitize=address,undefined -fno-sanitize-recover=undefined -fno-omit-frame-pointer -fno-optimize-sibling-calls"
           "-DCMAKE_EXE_LINKER_FLAGS=-fsanitize=address,undefined"

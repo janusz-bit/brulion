@@ -13,6 +13,14 @@ compared with `ef90077`) and a smooth graph (L16, compared with `64d0380` on a G
 
 ### What got better
 
+* **Smaller app on Linux and Android** (2026-11-19). The Nix package takes 94 instead of 143 MB
+  (the program 73 instead of 118 MB): it no longer carries the program's symbol table, a list of
+  the names of its functions that only a debugger reads, and its linker now shares identical
+  code and packs what the program fixes up when it starts. The AppImage leaves out the same table
+  (about 3 MB less to download), and the Android APK is 112.7 instead of 116.7 MB (1 MB less to
+  download). For contributors, a build from scratch takes less than half the time
+  ("Build times" below).
+
 * **Typing in a big notebook, after the save** (2026-11-18). When you pause typing, Brulion saves
   the page; in a notebook of 10,000 notes the program then also recomputed lists you were not
   looking at — All pages sorted all 10,000 pages again, the folder tree in the sidebar was built
@@ -1606,7 +1614,7 @@ a whole note in one `QPlainTextEdit`. What it does for speed, and where Brulion 
 | Backlinks not scanned again while typing when nothing they depend on changed (26.6.4) | `VaultIndex` follows changes (L3) |
 | Remote pictures cached after their download | `webpicture`, the device's picture cache |
 | Notes in an in-memory SQLite database | `VaultIndex`, `SearchIndex` (BM25+), the index cache (L2) |
-| Precompiled headers in developer builds (`pch.h`) | ccache only — a possible gain for cold builds (the Pi, CI after a Qt update), not tried |
+| Precompiled headers in developer builds (`pch.h`) | the Qt and standard headers precompiled in every Clang build on Linux, the developers' and the packages' (cmake/BrulionPch.cmake; "Build times" below) |
 
 **Source mode handed the whole page over on every keystroke.** `SourceEditor.qml` copied the
 TextEdit's whole text (`EditorInput.plainText`) on each `textChanged`, compared it with the last
@@ -2705,9 +2713,9 @@ other agents' load):
 | `lib/brulion` (llama.cpp, ggml, the plugin), stripped | 15.10 MB | 14.89 MB | −1.4 % |
 | Debug build directory, every target (`-g`; Clang's with the benchmarks too) | 33 GB | 18 GB | −45 % |
 
-The Nix package strips debug information only (nixpkgs' `-S` for `bin`): 45 MB of the 122 MB
-`.brulion-wrapped` of 0.21.1 are `.symtab` and `.strtab` (the generated QML's long names),
-whichever the compiler.
+The Nix package stripped debug information only (nixpkgs' `-S` for `bin`): 45 MB of the 122 MB
+`.brulion-wrapped` of 0.21.1 were `.symtab` and `.strtab` (the generated QML's long names),
+whichever the compiler — stripped since "Build times" below.
 
 **Core benchmarks** (`bench_calc`, `bench_text`, `bench_markdown`, `bench_index`, `bench_vault`:
 369 rows; QTest `-perf -perfcounter instructions:u`, then `cycles:u`; three rounds alternating
@@ -2798,8 +2806,115 @@ the one hot-path regression above was gone. The Nix package and `brulion-cli` (`
 nixpkgs' Clang over GCC's libstdc++, which Qt uses; the dev shell's `cc` / `c++` too), the
 AppImages (scripts/appimage-build.sh: Clang 18 — Ubuntu 24.04's own, LLVM's apt repository on
 22.04; GCC's libstdc++ 12 or newer at run time, as before), CI's sanitizer job and its
-performance smoke (the runner's Clang 18). `_FORTIFY_SOURCE=3` stays: cmake/BrulionHardening.cmake
-sets it after the wrapper's `=2`. The other differences of the table above stay as measured.
+performance smoke (the runner's Clang 18). The other differences of the table above stay as
+measured. `_FORTIFY_SOURCE` was not the same, although this section said so at first: the wrapper
+passes its `-D_FORTIFY_SOURCE=2` after the build's own flags, so cmake/BrulionHardening.cmake's `=3`
+lost and the Nix package and `brulion-cli` were built with level 2 from the switch on (glibc's
+`__USE_FORTIFY_LEVEL`, checked in the package's build environment). Since "Build times" below they
+turn the wrapper's fortify hardening off (`hardeningDisable`), and the CMake file's level 3 holds.
+
+### Build times (2026-11-19)
+
+Where a clean build's time went, and what took it off. Measured on the x86_64 desktop (i5-13450HX,
+16 threads; another agent's `llama-server` busy on a core or two in some runs), Clang 21.1.8,
+`-j16`, no ccache; instructions are the compilers' user-space ones (`perf stat -e instructions:u`
+over the whole build), which the load does not move.
+
+* **A Debug build was an -O2 one.** With the fortify hardening on, nixpkgs' compiler wrapper puts
+  `-O2` (and `-D_FORTIFY_SOURCE=2`) in front of every compile; CMake's Debug adds only `-g`, so
+  `scripts/dev-build.sh` compiled optimised code with debug information that a debugger cannot
+  follow. The optimiser took 16 of the 33 s of `BlockEditor.qml`'s C++, which takes 6.6 s at
+  -O0. The dev shell turns the fortify hardening off (`hardeningDisable` in flake.nix): the build
+  type decides, as with any compiler, and `_FORTIFY_SOURCE=3` comes from
+  cmake/BrulionHardening.cmake in optimised builds. The packages do the same (their level was 2,
+  "GCC or Clang" above).
+* **llama.cpp compiled every processor variant it knows** — its `ggml` target depends on all
+  of them: 14 on x86-64 of which 4 are packaged, 7 for Android of which 2. The others are now
+  compiled from an empty file (3rdparty/llama/CMakeLists.txt), some 450 s of CPU less a build.
+* **Every source parsed the Qt headers again**: 1.5–2.5 s of a file's 2–4 s at -O0, a third of
+  it at -O3. cmake/BrulionPch.cmake precompiles the Qt and standard headers that Brulion's code
+  includes most (QtCore's for every target, Qt Gui, Qml and Quick's and what qmlcachegen's C++
+  includes for the targets that link Qt Quick): a library or program with three or more sources
+  gets its own (38), the tests share one per set of Qt modules (7 stand-ins, since Qt Test
+  defines each test's folders, `QT_TESTCASE_BUILDDIR`, whose values a shared header cannot
+  have). The generated QML's C++ compiled for size (`-Oz`, L20) is left out in optimised builds
+  (Clang refuses a header made at another level). On for Clang on Linux; CI's Linux job builds
+  without (`-DBRULION_PCH=OFF`), so a missing `#include` still fails there. ccache caches these
+  compiles only with `sloppiness = pch_defines,time_macros` and `-fno-pch-timestamp`: both are
+  set for the targets with a header (the sloppiness as `ccache sloppiness=… clang++`, ccache 4.8+).
+* **Links**: the Nix builds and the dev shell link with lld (flake.nix `brulionStdenv`): the app
+  in 2.7 s instead of GNU ld's 7.4 s; the 276 test programs of a Debug build took 436 s of link
+  steps instead of 556 s (under the load of the table's last row).
+
+A Debug build with the tests (`scripts/dev-build.sh`, 2 894 steps):
+
+| | wall | CPU (user) | instructions |
+|---|---:|---:|---:|
+| before (105463d5) | 10.5 min | 8 978 s | 37.6 T |
+| Debug at -O0 | 7.5 min | 6 341 s | 26.3 T |
+| + only the packaged llama.cpp variants, precompiled headers of the libraries and the app | 5.2 min | 4 280 s | 18.5 T |
+| + the tests' shared precompiled headers | 4.4 min | 3 538 s | 15.8 T |
+| + lld (measured while another session ran a model and Gradle: load 30–58, so the wall time says little) | 5.5 min | 3 315 s | 14.9 T (−60 %) |
+
+With ccache (its own empty cache, then the build directory removed and built again): 420 s from
+the empty cache (ccache hashes and stores every compile; the `llama-server` ran meanwhile), 112 s
+from the full one — 1 670 of 1 683 compiles from the cache (99.2 %). The test suite (`ctest -j8`,
+352 tests) takes 482 s on the -O0 build against 467 s on the -O2 one: most of it is the QML
+self-tests' waits and Qt's own code. Its stack frames are larger, though — a level of a nested
+LaTeX formula takes 10.8 KB of stack at -O0 against 2.8 KB at -O2 — so the tests' small stacks
+(half an Android thread's) and wall-clock limits are multiplied by `BRULION_TEST_SLOWDOWN=4` in
+an unoptimised Debug build (25 under the sanitizers, 1 otherwise; tests/CMakeLists.txt).
+
+A Release build as `nix build` makes it (`-O3`, the generated QML at `-Oz`, the model on the device,
+no tests; 1 639–1 772 steps):
+
+| | wall | CPU (user) | instructions |
+|---|---:|---:|---:|
+| before (105463d5) | 6.4 min | 5 179 s | 21.6 T |
+| after: llama.cpp's variants, precompiled headers | 4.4 min | 3 637 s | 15.1 T (−30 %) |
+| `nix build .#brulion` with everything below too (lld, the size options; under the load above) | 4.9 min | – | – |
+
+`nix build .#checks.x86_64-linux.tests` — the package built with its tests, then the whole suite in
+the build sandbox (`nix flake check` runs it) — takes 11.8–12.3 min on the quiet machine, 5.4 of
+them the tests (351 of 351).
+
+**Size.** The app's file (x86-64 Release, `strip --strip-all`, 81.48 MB before) and what each
+step of linking takes off:
+
+| | `brulion` | change |
+|---|---:|---:|
+| unused functions and data dropped (`-ffunction-sections -fdata-sections`, `--gc-sections`) | 81.08 MB | −0.40 MB |
+| + relative relocations packed (RELR: `.rela.dyn` 4.8 → 0.7 MiB) | 76.86 MB | −4.62 MB |
+| the same linked by lld (2.7 s instead of 7.6 s) | 76.88 MB | −4.60 MB |
+| + identical code folded where no address of it is compared (`--icf=safe`) | 73.29 MB | **−8.19 MB (−10.0 %)** |
+| (`--icf=all`, which also folds functions whose address is compared — Qt compares signals' — not used) | 72.21 MB | −9.27 MB |
+
+cmake/BrulionSize.cmake applies them to optimised builds: the sections and `--gc-sections` on
+Linux (Android's NDK, the browser's linker and MSVC drop unused code already), `--icf=safe`
+wherever the linker is lld (with `-faddrsig`, which Clang does not emit on Android unless asked;
+without it lld folds nothing), RELR only with `-DBRULION_PACK_RELOCATIONS=ON` — it needs glibc
+2.36 or newer at run time, which the Nix package always has and the AppImage (Ubuntu 22.04's
+2.35) does not. Android (arm64 Release, `scripts/android-build.sh`, the same tree without and with
+`--icf=safe`): `libbrulion` 58.75 → 54.93 MB (−3.83 MB, −6.5 %), the APK 116.7 → 112.7 MB, its
+entries deflated — what a store's download moves — 44.14 → 43.07 MB (−1.07 MB).
+
+**Symbols.** The Nix package stripped only the debug information (nixpkgs' `-S`) and the AppImage
+nothing: a third of the app's file was its symbol table — 28.6 MiB of `.strtab` and 6.0 MiB of
+`.symtab`, the long names of the C++ that qmlcachegen writes. Both now strip them
+(`stripAllList`; `cmake --install --strip`): `brulion` 117.6 → 81.5 MB on the disk; the 0.24.0
+AppImage's binary stripped by hand 119.2 → 83.0 MB, some 3 MB less to download by a gzip estimate
+(the table compresses well). A crash report names functions from the dynamic symbols, which stay;
+its offsets resolve against the same build not stripped (src/platform/crashreport.h).
+
+All of it in the Nix package (`nix build .#brulion`; before: the 0.23.0 package, whose 117.6 MB
+`.brulion-wrapped` is what 105463d5's Release build gives too):
+
+| | before | after | change |
+|---|---:|---:|---:|
+| `bin/.brulion-wrapped` | 117.6 MB | 73.3 MB | −44.3 MB (−38 %) |
+| `bin/.brulion-cli-wrapped` | 9.1 MB | 5.7 MB | −3.4 MB (−37 %) |
+| `lib/brulion` (llama.cpp, ggml, the plugin) | 16.3 MB | 14.5 MB | −1.8 MB |
+| the package | 143.0 MB | 93.6 MB | −49.5 MB (−35 %) |
 
 ### Budgets
 

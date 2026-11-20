@@ -42,7 +42,12 @@ include(cmake/BrulionWindows.cmake)
 # (-DBRULION_HARDENING=OFF builds without them).
 include(cmake/BrulionHardening.cmake)
 brulion_enable_hardening()
+# Smaller programs in optimised builds: unused code dropped, identical code folded (lld), packed
+# relocations where asked for (-DBRULION_PACK_RELOCATIONS=ON: the Nix package).
+include(cmake/BrulionSize.cmake)
+brulion_enable_size_options()
 include(cmake/BrulionLocalAi.cmake)
+include(cmake/BrulionPch.cmake)
 
 # The desktop (Linux and Windows): the system tray, one instance per session, the command line
 # brulion-cli and the self-tests of the real app (BRULION_DESKTOP_INTEGRATION in the code).
@@ -122,3 +127,6 @@ if(BUILD_TESTING)
     find_package(Qt6 REQUIRED COMPONENTS Test)
     add_subdirectory(tests)
 endif()
+
+# Precompiled headers for the targets above that have enough sources (cmake/BrulionPch.cmake).
+brulion_precompile_headers()

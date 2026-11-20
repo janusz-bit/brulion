@@ -2,9 +2,16 @@
 # Link only the module(s) under test (e.g. LIBS brulion_core_dates) so a broken module never
 # blocks other modules' tests.
 # Sanitizer builds (CI: ASan + UBSan) run many times slower, with larger stack frames: tests
-# multiply their wall-clock limits and worker-thread stack sizes by BRULION_TEST_SLOWDOWN.
+# multiply their wall-clock limits and worker-thread stack sizes by BRULION_TEST_SLOWDOWN. An
+# unoptimised build (Debug at -O0: scripts/dev-build.sh) too, less so: a level of a nested LaTeX
+# formula takes 10.8 KB of stack there against 2.8 KB at -O2, and the small stacks the tests give
+# their parsers (half an Android thread's) would overflow before the parsers' depth limits.
+string(TOUPPER "${CMAKE_BUILD_TYPE}" _brulion_build_type)
 if(CMAKE_CXX_FLAGS MATCHES "-fsanitize=")
     set(BRULION_TEST_SLOWDOWN 25)
+elseif(_brulion_build_type STREQUAL "DEBUG"
+       AND NOT "${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_DEBUG}" MATCHES "(^| )[-/]O[1-3sgz]?( |$)")
+    set(BRULION_TEST_SLOWDOWN 4)
 else()
     set(BRULION_TEST_SLOWDOWN 1)
 endif()

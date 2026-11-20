@@ -111,6 +111,25 @@ stdenv.mkDerivation (finalAttrs: {
     kdePackages.layer-shell-qt
   ];
 
+  # _FORTIFY_SOURCE=3 (glibc's checked memcpy, snprintf…) comes from cmake/BrulionHardening.cmake,
+  # as on every other Linux build: nixpkgs' Clang wrapper knows only level 2 and, with its fortify
+  # hardening on, passes -D_FORTIFY_SOURCE=2 after the build's own flags, so the package ended up
+  # with 2 (docs/PERFORMANCE.md "Build times"). The rest of nixpkgs' hardening stays.
+  hardeningDisable = [
+    "fortify"
+    "fortify3"
+  ];
+
+  # The programs and libraries without their symbol tables (nixpkgs strips only the debug
+  # information by default): the local symbols are mostly the long names of the C++ that qmlcachegen
+  # writes for the QML, a third of the app's file (docs/PERFORMANCE.md "Build times"). A crash
+  # report names functions from the dynamic symbols (src/platform/crashreport.h), which stay; a
+  # profiler or debugger wants a build of one's own (scripts/dev-build.sh).
+  stripAllList = [
+    "bin"
+    "lib"
+  ];
+
   cmakeFlags = [
     (lib.cmakeBool "BUILD_TESTING" finalAttrs.finalPackage.doCheck)
     (lib.cmakeFeature "BRULION_QT_TRANSLATIONS_DIR" "${qt6.qttranslations}/translations")
@@ -120,6 +139,9 @@ stdenv.mkDerivation (finalAttrs: {
       lib.concatMapStringsSep ";" (d: "${d}/share/hunspell") finalAttrs.passthru.spellDictionaries
     ))
     (lib.cmakeFeature "BRULION_LOCAL_AI" (if withLocalAi then "ON" else "OFF"))
+    # The relative relocations packed (RELR, cmake/BrulionSize.cmake): the package runs on the
+    # glibc it was built with, always 2.36 or newer.
+    (lib.cmakeBool "BRULION_PACK_RELOCATIONS" true)
   ]
   ++ lib.optionals withLocalAi [
     (lib.cmakeFeature "BRULION_LLAMA_SOURCE_DIR" "${llamaSrc}")

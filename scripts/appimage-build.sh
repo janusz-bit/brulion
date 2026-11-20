@@ -332,7 +332,10 @@ fi
 
 info "Installing into $APPDIR"
 rm -rf -- "$APPDIR"
-DESTDIR=$(cd -- "$BUILD_DIR" && pwd)/AppDir cmake --install "$BUILD_DIR"
+# --strip: the programs and libraries without their symbol tables (a third of the app's file: the
+# long names of the C++ that qmlcachegen writes; docs/PERFORMANCE.md "Build times"). A crash report
+# names functions from the dynamic symbols, which stay (src/platform/crashreport.h).
+DESTDIR=$(cd -- "$BUILD_DIR" && pwd)/AppDir cmake --install "$BUILD_DIR" --strip
 [[ -x $APPDIR/usr/bin/brulion ]] || die "cmake --install did not install usr/bin/brulion"
 # The command line is reached through the app's binary (`Brulion.AppImage cli …`, docs/CLI.md):
 # the AppImage has one entry point, so the separate brulion-cli stays out.

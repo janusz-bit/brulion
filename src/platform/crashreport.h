@@ -3,8 +3,10 @@
 // builds, whose own reports are better). On SIGSEGV, SIGBUS, SIGFPE, SIGILL or SIGABRT it writes
 // to stderr the signal, the faulting address, the crashing thread's name and id, and that
 // thread's stack (glibc's backtrace: exported symbols by name, the rest as file(+offset), which
-// `addr2line -f -C -e <file> <offset>` resolves against the same build), then dies of the same
-// signal as before — the exit status and the core dump stay those of the crash.
+// `addr2line -f -C -e <file> <offset>` resolves against the same build with its symbols — the Nix
+// package and the AppImage ship without symbol tables, so against that build not stripped:
+// `dontStrip = true`, `cmake --install` without `--strip`; stripping leaves the addresses), then
+// dies of the same signal as before — the exit status and the core dump stay those of the crash.
 #pragma once
 
 namespace brulion::platform {

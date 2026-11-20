@@ -723,6 +723,12 @@ redirect check does not apply there); a failed one is told as CORS or mixed cont
   `QT_NO_KEYWORDS`, `QT_NO_CAST_FROM_ASCII`. Warnings: `cmake/BrulionWarnings.cmake`
   (`-DBRULION_WERROR=ON` in CI and the dev scripts). Translations: `qt_add_translations`
   (`i18n/brulion_pl.ts`, `brulion_en.ts` for plurals).
+* Build times (docs/PERFORMANCE.md "Build times"): precompiled Qt and standard headers
+  (`cmake/BrulionPch.cmake`, `BRULION_PCH`, on for Clang on Linux; a library or program with
+  three or more sources has its own, the tests share one per set of Qt modules; ccache is told to
+  cache them); a Debug build is `-O0` — the dev shell turns off nixpkgs' fortify hardening, whose
+  compiler wrapper put `-O2` in front of every compile; of llama.cpp's processor variants only the
+  ones packaged are compiled (`3rdparty/llama`).
 * Hardening: `cmake/BrulionHardening.cmake` (on by default, `-DBRULION_HARDENING=OFF` for a
   plain build) gives every target — Brulion's code and the vendored libraries — the options Qt
   builds its own libraries with and the OpenSSF compiler hardening guide recommends: stack
@@ -742,8 +748,9 @@ redirect check does not apply there); a failed one is told as CORS or mixed cont
   throwaway git repositories; `tst_scripts_appimage_update_check`). Development builds:
   `scripts/remote-build.sh` (x86_64 laptop) or
   `scripts/dev-build.sh` (locked, `-j2`) — see CLAUDE.md. Sanitizer builds (`-fsanitize=` in
-  `CMAKE_CXX_FLAGS`, CI) get `BRULION_TEST_SLOWDOWN=25`: tests multiply their wall-clock limits
-  and worker-thread stack sizes by it (1 otherwise), the editor playground's self-tests their
+  `CMAKE_CXX_FLAGS`, CI) get `BRULION_TEST_SLOWDOWN=25`, an unoptimised Debug build 4 (its stack
+  frames are about four times larger): tests multiply their wall-clock limits and worker-thread
+  stack sizes by it (1 otherwise), the editor playground's self-tests their
   waits for something asynchronous (`DevTools.testSlowdown`); CI builds them at `-O1`. The GUI
   tests run side by side with the others (`PROCESSORS 2` for a whole app's self-test): their
   checks wait for the state they read, never for a fixed time, and the self-tests' `waitFor()`

@@ -27,9 +27,14 @@ stdenv.mkDerivation (finalAttrs: {
 
   buildInputs = [ qt6.qtbase ];
 
+  # _FORTIFY_SOURCE=3 from cmake/BrulionHardening.cmake, not the wrapper's 2, and no symbol table
+  # (nix/package.nix).
+  inherit (brulion) hardeningDisable stripAllList;
+
   cmakeFlags = [
     (lib.cmakeBool "BRULION_BUILD_APP" false)
     (lib.cmakeBool "BUILD_TESTING" finalAttrs.finalPackage.doCheck)
+    (lib.cmakeBool "BRULION_PACK_RELOCATIONS" true)
   ];
 
   # QtCore only: no plugins to point it at.

@@ -15,6 +15,16 @@
       ];
       forAllSystems = f: lib.genAttrs systems (system: f nixpkgs.legacyPackages.${system});
 
+      # The compiler of the Linux builds here: nixpkgs' Clang over GCC's libstdc++ (clangStdenv; the
+      # C++ library Qt uses), linking with LLVM's lld instead of GNU ld — three times faster links,
+      # and identical code folded (cmake/BrulionSize.cmake: --icf=safe; docs/PERFORMANCE.md "Build
+      # times").
+      brulionStdenv =
+        pkgs:
+        pkgs.overrideCC pkgs.clangStdenv (
+          pkgs.clangStdenv.cc.override { bintools = pkgs.llvmPackages.bintools; }
+        );
+
       # The Android SDK and NDK are unfree: a nixpkgs that allows them (and accepts the Android
       # SDK license), used for the Android packages only.
       androidPkgs =
@@ -59,14 +69,14 @@
       packages = forAllSystems (
         pkgs:
         rec {
-          # Built with Clang (clangStdenv: nixpkgs' Clang over GCC's libstdc++, the one Qt uses):
-          # a smaller app and command line than with GCC, the same speed, and the compiler of the
-          # Android, browser and macOS builds (docs/PERFORMANCE.md "GCC or Clang").
-          brulion = pkgs.callPackage ./nix/package.nix { stdenv = pkgs.clangStdenv; };
+          # Built with Clang (brulionStdenv: nixpkgs' Clang over GCC's libstdc++, the one Qt uses,
+          # and lld): a smaller app and command line than with GCC, the same speed, and the
+          # compiler of the Android, browser and macOS builds (docs/PERFORMANCE.md "GCC or Clang").
+          brulion = pkgs.callPackage ./nix/package.nix { stdenv = brulionStdenv pkgs; };
           default = brulion;
           brulion-cli = pkgs.callPackage ./nix/cli.nix {
             inherit brulion;
-            stdenv = pkgs.clangStdenv;
+            stdenv = brulionStdenv pkgs;
           };
           brulion-android-sign = pkgs.callPackage ./nix/android/sign.nix { };
         }
@@ -86,8 +96,8 @@
 
       # pkgs.brulion (and pkgs.brulion-cli) built with the nixpkgs of whoever applies the overlay.
       overlays.default = final: _prev: {
-        brulion = final.callPackage ./nix/package.nix { stdenv = final.clangStdenv; };
-        brulion-cli = final.callPackage ./nix/cli.nix { stdenv = final.clangStdenv; };
+        brulion = final.callPackage ./nix/package.nix { stdenv = brulionStdenv final; };
+        brulion-cli = final.callPackage ./nix/cli.nix { stdenv = brulionStdenv final; };
       };
 
       # programs.brulion (desktop app, autostart in the tray) and services.brulion-web (the
@@ -98,8 +108,8 @@
       };
 
       devShells = forAllSystems (pkgs: {
-        # The packages' compiler: `cc` / `c++` are Clang (scripts/dev-build.sh).
-        default = pkgs.mkShell.override { stdenv = pkgs.clangStdenv; } {
+        # The packages' compiler: `cc` / `c++` are Clang, linking with lld (scripts/dev-build.sh).
+        default = pkgs.mkShell.override { stdenv = brulionStdenv pkgs; } {
           inputsFrom = [ self.packages.${pkgs.stdenv.hostPlatform.system}.brulion ];
           packages = with pkgs; [
             ccache
@@ -128,6 +138,15 @@
           # llama.cpp's sources for the model on the device (cmake/BrulionLocalAi.cmake: a build
           # configured in this shell compiles them in; 3rdparty/llama/pin.json names the release).
           BRULION_LLAMA_SOURCE_DIR = self.packages.${pkgs.stdenv.hostPlatform.system}.brulion.llamaSrc;
+          # With the fortify hardening nixpkgs' compiler wrapper puts -O2 (and _FORTIFY_SOURCE=2) in
+          # front of every compile, so a Debug build of this shell was an -O2 one: twice the compile
+          # time, five times for the C++ of the QML, and code a debugger cannot follow. Without it the
+          # build type decides, as with any other compiler: Debug -O0, Release -O3 with
+          # _FORTIFY_SOURCE=3 from cmake/BrulionHardening.cmake (docs/PERFORMANCE.md "Build times").
+          hardeningDisable = [
+            "fortify"
+            "fortify3"
+          ];
           shellHook = ''
             export CMAKE_GENERATOR=Ninja
             export CMAKE_CXX_COMPILER_LAUNCHER=ccache

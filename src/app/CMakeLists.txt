@@ -245,6 +245,12 @@ if(BRULION_QML_CODE_FOR_SIZE AND NOT MSVC)
     endif()
     set_source_files_properties(${_brulion_qml_cpp} PROPERTIES COMPILE_OPTIONS
         "$<$<CONFIG:Release,MinSizeRel,RelWithDebInfo>:${_brulion_qml_size_flag}>")
+    # A precompiled header (cmake/BrulionPch.cmake) is made at the target's level: Clang refuses
+    # it for a file compiled for size (__OPTIMIZE_SIZE__ differs).
+    get_property(_brulion_multi_config GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
+    if(_brulion_multi_config OR CMAKE_BUILD_TYPE MATCHES "^(Release|MinSizeRel|RelWithDebInfo)$")
+        set_source_files_properties(${_brulion_qml_cpp} PROPERTIES SKIP_PRECOMPILE_HEADERS ON)
+    endif()
 endif()
 
 # Builds that treat warnings as errors (scripts/dev-build.sh, CI, the AppImage, Android with

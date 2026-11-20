@@ -325,9 +325,9 @@ Details in docs/PERFORMANCE.md, "Next steps":
   stall ~97 ms) on the reference laptop, on a 32 KB page as on a 0.5 MB one — about twice what
   it blocks in the outline (docs/PERFORMANCE.md "Source mode: one edit, not the page"): find
   where it goes (`tests/bench/app/profile-cases.sh`, an `autosave` window) and cut it;
-* precompiled headers for cold builds (the Pi, CI after a Qt update; QOwnNotes uses them in its
-  developer builds): measure `target_precompile_headers` with the Qt headers against ccache alone
-  (ccache needs `sloppiness = pch_defines,time_macros`; MSVC, Android and the browser too);
+* precompiled headers in the Windows, Android and browser builds (cmake/BrulionPch.cmake: on for
+  Clang on Linux only, "Build times" in docs/PERFORMANCE.md): build and measure them in CI, with
+  the jobs' ccache (MSVC's `/Yc` / `/Yu` from ccache 4.10 on);
 * measuring the QML code compiled for size (`-Oz`) on a real phone against a build with
   `-DBRULION_QML_CODE_FOR_SIZE=OFF`: journal scrolling, opening a long page, the views — on the
   desktop no slowdown was measurable (L20b);

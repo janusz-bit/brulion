@@ -123,6 +123,29 @@ endforeach()
 if(NOT _variants)
     message(FATAL_ERROR "llama.cpp builds none of the processor plugins wanted here (${_wanted}) for ${CMAKE_SYSTEM_PROCESSOR}")
 endif()
+# llama.cpp's ggml depends on every variant it defines (14 on x86-64, 7 for Android on ARM), so all
+# of them were compiled while only the ones above are packaged and loaded: each of the others is
+# compiled from an empty file instead, into a folder of its own that nothing loads (x86-64: 10 of
+# 14 variants, 40 sources each — some 450 s of compile time in every clean build).
+set(_unused_dir ${CMAKE_CURRENT_BINARY_DIR}/unused-cpu-variants)
+set(_dirs ${CMAKE_CURRENT_BINARY_DIR}/llama.cpp)
+while(_dirs)
+    list(POP_FRONT _dirs _dir)
+    get_property(_targets DIRECTORY ${_dir} PROPERTY BUILDSYSTEM_TARGETS)
+    foreach(_t IN LISTS _targets)
+        get_target_property(_type ${_t} TYPE)
+        if(_type STREQUAL "MODULE_LIBRARY" AND _t MATCHES "^ggml-cpu-" AND NOT _t IN_LIST _variants)
+            set_property(TARGET ${_t} PROPERTY SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/unused-variant.cpp)
+            set_property(TARGET ${_t} PROPERTY LINK_LIBRARIES "")
+            set_target_properties(${_t} PROPERTIES
+                LIBRARY_OUTPUT_DIRECTORY ${_unused_dir}
+                RUNTIME_OUTPUT_DIRECTORY ${_unused_dir})
+        endif()
+    endforeach()
+    get_property(_sub DIRECTORY ${_dir} PROPERTY SUBDIRECTORIES)
+    list(APPEND _dirs ${_sub})
+endwhile()
+
 set(BRULION_LLAMA_LIBRARIES mtmd llama ggml ggml-base CACHE INTERNAL "llama.cpp's libraries to package")
 set(BRULION_LLAMA_CPU_VARIANTS ${_variants} CACHE INTERNAL "llama.cpp's processor plugins to package, the best first")
 

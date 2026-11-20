@@ -29,6 +29,9 @@ check() { # <description> <expected: ok|fail> <directory> [owner/repo]
 }
 
 appimage() { # <file> <update information, empty for none>
+  # A file made from the shell's binary keeps its mode (r-x in /nix/store: llvm-objcopy copies it,
+  # as cp does), so the next one replaces it instead of writing into it.
+  rm -f -- "$1"
   if [[ -z $2 ]]; then
     cp -- "$elf" "$1"
     return

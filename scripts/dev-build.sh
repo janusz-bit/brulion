@@ -9,12 +9,13 @@
 #   BRULION_CLANG=1 BUILD_DIR=build-clang scripts/dev-build.sh   # Clang even outside the dev shell
 #
 # Must be run inside `nix develop` (provides Qt, cmake, ninja, ccache and Clang: its `cc` / `c++`
-# are nixpkgs' Clang over GCC's libstdc++, the compiler of the Nix package and of every other
-# build — docs/PERFORMANCE.md "GCC or Clang").
+# are nixpkgs' Clang over GCC's libstdc++ linking with lld, the compiler of the Nix package and of
+# every other build — docs/PERFORMANCE.md "GCC or Clang", "Build times"). A Debug build is -O0 with
+# precompiled headers (cmake/BrulionPch.cmake).
 #
-# BRULION_CLANG=1 configures a new build directory with the flake's own Clang (nixpkgs#clang of
-# flake.lock) whatever `c++` is. The compiler of an existing build directory never changes (one
-# configured with GCC before 2026-11-19 stays GCC): use a new BUILD_DIR.
+# BRULION_CLANG=1 configures a new build directory with Clang whatever `c++` is: the dev shell's,
+# else the flake's own (nixpkgs#clang of flake.lock, with GNU ld). The compiler of an existing build
+# directory never changes (one configured with GCC before 2026-11-19 stays GCC): use a new BUILD_DIR.
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
@@ -39,8 +40,14 @@ jobs="${JOBS:-2}"
 
 if [[ ! -f "${build_dir}/build.ninja" ]]; then
   if [[ -n "${BRULION_CLANG:-}" ]]; then
-    clang_dir=$(nix build --no-link --print-out-paths --inputs-from . nixpkgs#clang)
-    export CC="${clang_dir}/bin/clang" CXX="${clang_dir}/bin/clang++"
+    # The dev shell's own Clang (it links with lld: flake.nix brulionStdenv), else the flake's.
+    shell_cxx=$(command -v c++ || true)
+    if [[ -n $shell_cxx && -x $(dirname "$shell_cxx")/clang++ ]] && "$shell_cxx" --version 2>/dev/null | grep -q clang; then
+      export CC="$(dirname "$shell_cxx")/clang" CXX="$(dirname "$shell_cxx")/clang++"
+    else
+      clang_dir=$(nix build --no-link --print-out-paths --inputs-from . nixpkgs#clang)
+      export CC="${clang_dir}/bin/clang" CXX="${clang_dir}/bin/clang++"
+    fi
   fi
   cmake -S . -B "${build_dir}" -G Ninja -DCMAKE_BUILD_TYPE=Debug \
     -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DBRULION_WERROR=ON
