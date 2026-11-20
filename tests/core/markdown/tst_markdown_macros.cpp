@@ -255,7 +255,7 @@ void TestMarkdownMacros::placeholderRanges()
     RenderContext en = context();
     en.locale = dates::UiLocale::English;
     QVERIFY(::render(u"{{ext:nowe/x}}"_s, en).contains(u"run?"_s));
-    QVERIFY(::render(u"{{ext:nieznane/x}}"_s, en).contains(u"nieznane/x?"_s));
+    QVERIFY(::render(u"{{ext:nieznane/x}}"_s, en).contains(u"nieznane/\u2060x?"_s));
     QVERIFY(::render(u"{{ext:a/duzo}}"_s, en).contains(u"200+"_s));
     // In a task's text, after its checkbox and before its date chip, the ranges stay the body's.
     const QString task = u"[ ] Trening {{ext:nowe/x}} 📅 2026-11-21"_s;

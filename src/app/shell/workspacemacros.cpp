@@ -346,7 +346,7 @@ void WorkspaceExtensions::showMacro(const QString &extension, const QString &nam
 
 void WorkspaceExtensions::showView(const QString &extension, const QString &view)
 {
-    Q_EMIT macroHelpRequested(extension, u"```view "_s + extension + u'/' + view);
+    Q_EMIT macroHelpRequested(extension, extension + u'/' + view);
 }
 
 QVariantList WorkspaceExtensions::panels(const QString &kind) const

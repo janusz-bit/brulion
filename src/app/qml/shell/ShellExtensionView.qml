@@ -178,7 +178,11 @@ ListView {
     boundsBehavior: Flickable.StopAtBounds
     bottomMargin: list.embedded ? 0 : Theme.space8
     interactive: !list.embedded
-    height: list.embedded ? list.contentHeight : implicitHeight
+    // Embedded: as tall as its lines (a view on its own is sized by what holds it).
+    Binding on height {
+        when: list.embedded
+        value: list.contentHeight
+    }
     BRowScrollBar { list: list; visible: !list.embedded }
     Accessible.role: Accessible.List
 

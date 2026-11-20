@@ -7,10 +7,12 @@
 
 #include "extensions/builtin.h"
 #include "extensions/engine.h"
+#include "extensions/macros.h"
 #include "extensions/notebookhost.h"
 #include "extensions/pageextension.h"
 #include "extensions/sandbox.h"
 #include "index/vaultindex.h"
+#include "markdown/journal.h"
 #include "markdown/parse.h"
 #include "notebook/itemref.h"
 #include "notebook/pages.h"
@@ -461,7 +463,7 @@ QJsonObject checkJson(Call &call, const Target &t, bool *loaded)
     *loaded = r.value(u"ok"_s).toBool();
     o.insert(u"loaded"_s, *loaded);
     if (*loaded) {
-        for (const QString &key : {u"commands"_s, u"views"_s, u"hooks"_s})
+        for (const QString &key : {u"commands"_s, u"views"_s, u"hooks"_s, u"macros"_s, u"variables"_s})
             o.insert(key, QJsonValue::fromVariant(r.value(key)).toArray());
     } else {
         QJsonObject error{{u"status"_s, r.value(u"status"_s).toString()}, {u"message"_s, r.value(u"error"_s).toString()}};
@@ -672,8 +674,13 @@ Result extensionRun(Call &call)
     const QString view = call.str(u"view"_s).trimmed();
     const QString action = call.str(u"action"_s).trimmed();
     const QString hook = call.str(u"hook"_s).trimmed();
-    if (int(!command.isEmpty()) + int(!view.isEmpty()) + int(!hook.isEmpty()) != 1)
-        return call.fail(ExitUsage, u"what_to_run"_s, tr("Name one thing to run: a command, --view or --hook"));
+    const QString macro = call.str(u"macro"_s).trimmed();
+    const QString variable = call.str(u"variable"_s).trimmed();
+    if (int(!command.isEmpty()) + int(!view.isEmpty()) + int(!hook.isEmpty()) + int(!macro.isEmpty())
+                + int(!variable.isEmpty())
+        != 1)
+        return call.fail(ExitUsage, u"what_to_run"_s,
+                         tr("Name one thing to run: a command, --view, --hook, --macro or --variable"));
     if (!action.isEmpty() && view.isEmpty())
         return call.fail(ExitUsage, u"what_to_run"_s, tr("--action is an action of a view: give --view too"));
     const auto args = jsonArg(call, u"args"_s, false);
@@ -718,7 +725,26 @@ Result extensionRun(Call &call)
     }
     QJsonObject o{{u"extension"_s, x.id}};
     ext::Result r;
-    if (!command.isEmpty()) {
+    if (!macro.isEmpty() || !variable.isEmpty()) {
+        // As in a note (--page) or a template filled for it: ctx {args, text, page, path, date}.
+        const QString text = call.str(u"text"_s).trimmed();
+        QVariantList list;
+        for (const QString &a : markdown::macroArguments(text))
+            list << a;
+        QVariantMap ctx{{u"args"_s, list}, {u"text"_s, text}, {u"page"_s, pageName}, {u"path"_s, QString(pagePath)}};
+        if (const auto day = pagePath.isEmpty() ? std::nullopt
+                                                : markdown::journalDateFromPath(pagePath, call.vault()->config()))
+            ctx.insert(u"date"_s, day->toString(Qt::ISODate));
+        const int limit = macro.isEmpty() ? 1000 : ext::MacroTimeoutMs;
+        o.insert(u"ran"_s, QJsonObject{{macro.isEmpty() ? u"variable"_s : u"macro"_s, macro.isEmpty() ? variable : macro}});
+        r = macro.isEmpty() ? box.engine.runVariable(x.id, variable, ctx, limit)
+                            : box.engine.runMacro(x.id, macro, ctx, limit);
+        if (r.ok() && !macro.isEmpty()) {
+            // What the note would show, as text: the pieces, a link as [[page|label]].
+            const markdown::MacroView shown = ext::macroViewFrom(r.value, box.host->language() == u"pl");
+            o.insert(u"shows"_s, markdown::macroViewText(shown));
+        }
+    } else if (!command.isEmpty()) {
         // --args: the command's ctx.args ({} when none), as the app passes a command its arguments.
         QVariantMap ctx{{u"page"_s, pageName}, {u"selection"_s, QString()}, {u"args"_s, args->toObject().toVariantMap()}};
         if (!blockMap.isEmpty())
@@ -986,8 +1012,14 @@ void addExtensionCommands(QList<Command> &out)
                     QT_TRANSLATE_NOOP("brulion::cli", "The view's params, the action's args or the command's ctx.args, a JSON object")),
              option(u"hook"_s, ArgType::String,
                     QT_TRANSLATE_NOOP("brulion::cli", "Call the extension's hooks of this event (save, change)")),
+             option(u"macro"_s, ArgType::String,
+                    QT_TRANSLATE_NOOP("brulion::cli", "Compute this macro instead ({{ext:extension/macro …}}): its value and what a note shows")),
+             option(u"variable"_s, ArgType::String,
+                    QT_TRANSLATE_NOOP("brulion::cli", "Fill this template variable instead ({{extension/variable …}})")),
+             option(u"text"_s, ArgType::String,
+                    QT_TRANSLATE_NOOP("brulion::cli", "With --macro or --variable: its arguments as written (\"Przysiad, 30\")")),
              option(u"page"_s, ArgType::Ref,
-                    QT_TRANSLATE_NOOP("brulion::cli", "The page on screen: ctx.page, the hook's page")),
+                    QT_TRANSLATE_NOOP("brulion::cli", "The page on screen: ctx.page, the hook's page, the note of a macro")),
              option(u"block"_s, ArgType::Ref,
                     QT_TRANSLATE_NOOP("brulion::cli", "The block under the caret (ctx.block): its ref, Dom.md#L12@hash")),
              answers},

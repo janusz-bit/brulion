@@ -5768,6 +5768,91 @@ void checkExtensionPages(QQuickWindow *window, AppController *app, const Check &
     settle(300);
 }
 
+/// The rendered HTML of row `row` of an editor's controller (its blocks' "html" role).
+QString renderedRow(QObject *controller, int row)
+{
+    auto *blocks = controller ? controller->property("blocks").value<QAbstractItemModel *>() : nullptr;
+    if (!blocks || row < 0 || row >= blocks->rowCount())
+        return {};
+    return blocks->data(blocks->index(row, 0), int(blocks->roleNames().key("html", -1))).toString();
+}
+
+/// Macros and ```view blocks (docs/EXTENSIONS.md "Macros", "View blocks and panels"): a note with a
+/// macro and a view block of an extension that arrived as a sync would — the macro's placeholder
+/// (a macro: link) and the block's "Run…" —, the dialog's Run (real taps) approves it, the macro
+/// shows its value and the block its view, a text typed into the view's field and Enter write a
+/// note through the view's action, and the macro, which reads that note, shows the new count.
+void checkExtensionMacros(QQuickWindow *window, AppController *app, const Check &check)
+{
+    const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
+    Workspace *ws = app->workspace();
+    WorkspaceExtensions *ext = ws->extensions();
+    const auto named = [&](const QString &name) { return shownNamed(window->contentItem(), name); };
+    const QString path = ws->newPagePath(u"Makra samotestu"_s);
+    const QString note = ws->newPagePath(u"Notatka z makrem samotestu"_s);
+    const QString counted = ws->newPagePath(u"Licznik samotestu"_s);
+    check(!ws->exists(path) && !ws->exists(note), "the self-test's macro pages are new");
+    const QString code =
+            u"---\ntags: [rozszerzenie]\nuprawnienia: [zapis]\n---\n```luau\n"
+            "b.macro(\"wpisy\", function(ctx)\n"
+            "    local n = 0\n"
+            "    for _ in (b.read(\"Licznik samotestu\") or \"\"):gmatch(\"%- \") do n += 1 end\n"
+            "    return b.ui.heading(`{n} wpisów`)\n"
+            "end)\n"
+            "b.view(\"wpis\", function(params)\n"
+            "    return b.ui.input({ placeholder = \"Nowy wpis\", action = \"dodaj\", submit = \"Dodaj\" })\n"
+            "end, { dodaj = function(args) b.appendToPage(\"Licznik samotestu\", \"- \" .. args.value) end })\n"
+            "```\n"_s;
+    check(ws->write(counted, u"- pierwszy\n"_s), "the counted page is written");
+    check(ws->write(note, u"- Wpisy: {{ext:makra-samotestu/wpisy}}\n- ```view\n  makra-samotestu/wpis\n  ```\n"_s),
+          "a note with a macro and a view block is written");
+    check(ws->vault()->writeText(path, code, ChangeSource::Sync), "the extension arrives as a sync would");
+    check(waitFor([&] { return ext->pageState(path) == u"approval"; }, 10000), "its code waits for approval");
+    app->openPage(note);
+    QQuickItem *editor = waitLoadedEditor(window->contentItem(), u"pageEditor"_s, note);
+    QObject *controller = controllerOf(editor);
+    check(controller != nullptr, "the note is open");
+    check(waitFor([&] { return renderedRow(controller, 0).contains(u"href=\"macro:"_s); }, 10000),
+          "the macro is a placeholder to run its extension");
+    QPointF at;
+    QQuickItem *run = steadyItem(window, [&] { return named(u"viewBlockExtension"_s); }, &at);
+    check(run != nullptr, "the view block offers to run its extension");
+    if (run)
+        tapOrClick(window, at, touch);
+    const QString accept = QCoreApplication::translate("ShellMacroDialog", "Run");
+    const auto findAccept = [&] {
+        return uidriver::findShown(window->contentItem(), [&](QQuickItem *item) {
+            return isA(item, "BButton") && item->property("text").toString() == accept && item != run;
+        });
+    };
+    QQuickItem *acceptButton = steadyItem(window, findAccept, &at);
+    check(acceptButton != nullptr, "the dialog asks to run it");
+    if (acceptButton)
+        tapOrClick(window, at, touch);
+    check(waitFor([&] { return ext->pageState(path) == u"running"; }, 10000), "Run approves the extension");
+    check(waitFor([&] { return renderedRow(controller, 0).contains(u"<b>1 wpisów</b>"_s); }, 10000),
+          "the macro shows its value");
+    QQuickItem *field = steadyItem(window, [&] { return named(u"extensionInputField"_s); }, &at, 10000);
+    check(field != nullptr, "the view block draws its view's text field");
+    if (field) {
+        tapOrClick(window, at, touch);
+        field->forceActiveFocus();
+        field->setProperty("text", u"drugi"_s);
+        sendKey(window, Qt::Key_Return);
+    }
+    check(waitFor([&] { return ws->readFile(counted).contains(u"- drugi"_s); }, 10000),
+          "Enter in the field writes the note through the view's action");
+    check(waitFor([&] { return renderedRow(controller, 0).contains(u"<b>2 wpisów</b>"_s); }, 10000),
+          "the macro follows the note it reads");
+    closeMenus(window);
+    ws->deletePage(note);
+    ws->deletePage(counted);
+    ws->deletePage(path);
+    check(waitFor([&] { return ext->pageState(path).isEmpty(); }, 10000), "the extension page goes");
+    app->goHome();
+    settle(300);
+}
+
 /// The page menu's "Ignore tasks on this page" (PageView.toggleTasksIgnored): the page gets
 /// `zadania: ignoruj` (`tasks: ignore` in English), its task leaves type:tasks (the Tasks view's query) and the menu
 /// offers to show it again; the second time the property goes and the task is back (docs/SYNTAX.md §5).
@@ -9551,6 +9636,7 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
     closeMenus(window);
     // 3h-ext. Extensions written in the notebook: approval, live reload, an error on its line, the console.
     checkExtensionPages(window, app, check);
+    checkExtensionMacros(window, app, check);
     closeMenus(window);
     // 3h-ai. The AI assistant's ✨ on the top bar: its menu, the assistant's question, its settings.
     checkAiButton(window, app, check);

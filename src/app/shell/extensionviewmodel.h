@@ -128,6 +128,8 @@ class ExtensionViewModel : public QAbstractListModel {
     /// False: nothing is drawn again (a block off the screen, a hidden page or panel); a change
     /// meanwhile draws it when it is live again.
     Q_PROPERTY(bool live READ live WRITE setLive NOTIFY liveChanged FINAL)
+    /// The lines drawn (0: nothing to show — a panel whose view shows nothing is left out).
+    Q_PROPERTY(int count READ count NOTIFY renderedChanged FINAL)
     /// The view's extension does not run: "approval" | "off" | "error" | "unknown"; "" it runs.
     Q_PROPERTY(QString extensionState READ extensionState NOTIFY renderedChanged FINAL)
     /// The view could not be drawn: the first line of the extension's error ("" = fine).
@@ -182,6 +184,7 @@ public:
     bool live() const { return m_live; }
     void setLive(bool live);
     QString extensionState() const { return m_extensionState; }
+    int count() const { return int(m_lines.size()); }
 
     /// Renders now (also what the model does by itself after a change).
     Q_INVOKABLE void refresh();

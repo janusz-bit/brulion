@@ -216,25 +216,27 @@ Item {
                     readonly property string extensionId: AppController.routeText(extensionSection.modelData, "extension")
                     readonly property string viewName: AppController.routeText(extensionSection.modelData, "view")
                     objectName: "sectionExtension_" + extensionSection.extensionId + "_" + extensionSection.viewName
+                    // A view that shows nothing for this note (an empty column) leaves its section out.
+                    visible: panelModel.count > 0 || panelModel.error !== ""
                     Layout.fillWidth: true
                     title: AppController.routeText(extensionSection.modelData, "title")
+                    ExtensionView {
+                        id: panelModel
+                        objectName: "sidePanelExtensionModel"
+                        extensions: Workspace.extensions
+                        extension: extensionSection.extensionId
+                        view: extensionSection.viewName
+                        notePath: panel.path
+                        live: panel.visible
+                        onPageRequested: (page, line) => AppController.openNamedPage(page, line)
+                        onJournalRequested: (date) => AppController.openJournal(date)
+                        onViewRequested: (view, params) => AppController.navigate(panelModel.routeFor(view, params))
+                        Component.onCompleted: panelModel.refresh()
+                    }
                     content: Component {
                         Item {
                             id: extensionPanel
                             implicitHeight: panelLines.height + Theme.space2
-                            ExtensionView {
-                                id: panelModel
-                                objectName: "sidePanelExtensionModel"
-                                extensions: Workspace.extensions
-                                extension: extensionSection.extensionId
-                                view: extensionSection.viewName
-                                notePath: panel.path
-                                live: extensionPanel.visible
-                                onPageRequested: (page, line) => AppController.openNamedPage(page, line)
-                                onJournalRequested: (date) => AppController.openJournal(date)
-                                onViewRequested: (view, params) => AppController.navigate(panelModel.routeFor(view, params))
-                                Component.onCompleted: panelModel.refresh()
-                            }
                             ShellExtensionView {
                                 id: panelLines
                                 objectName: "sidePanelExtensionLines"

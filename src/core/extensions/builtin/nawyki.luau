@@ -1302,9 +1302,7 @@ local function dayPanel(params: { [string]: any }): Node
             }))
         end
     end
-    if #rows == 0 then
-        return b.ui.text(T.noHabits, true)
-    end
+    -- No habits: nothing to show, and the side panel leaves the section out.
     return b.ui.column(rows)
 end
 

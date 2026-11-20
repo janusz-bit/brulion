@@ -188,7 +188,7 @@ Reading needs no permission.
 | `b.query(source, limit?, offset?)` | a query of the query language (docs/SYNTAX.md §10): `{ total, items }` with at most `limit` items (50 by default, 1000 at most; a smaller `limit:` in the query wins) from item `offset` on (0, the first, by default): `total` counts them all, so a script pages through any number 1000 at a time. Items are blocks without `children`, `path` and `line`, plus a task's `due`, `scheduled`, `start` and a reminder's `reminder` (`"2026-11-12 09:00"`); for `type:pages` they are `{ page, date? }`. Weeks (`due:this-week` …) start on the notebook's first day of the week (`b.weekStart()`). A query that is none is an error with the reason |
 | `b.attachments()` | the notebook's files that are no notes — pictures, PDFs, any other file —, as paths in the notebook (`"assets/receipt.jpg"`), sorted; nothing of the hidden and ignored folders |
 | `b.revision()` | a number that changes whenever a note changes — the editor, a sync, any extension's write: what a script computed from the notebook stays true while it is the same (the habits keep their statistics so) |
-| `b.checkExtension(name, text)` | loads `text` as the extension page `name` would load (a new page: where new pages go), in an engine of its own — its top-level code runs with 1 s and 32 MB, writes only computed, nothing stays registered, no approval needed: `{ ok, id, title, path, permissions, problems, commands = { { name, label, block } }, views = { { name, label, icon, actions } }, hooks = { events… }, printed, writes? }`, or `ok = false` with `error`, `line` (the page's line, from 1) and `status` (`"timeout"` …). Text that is no extension page (no tag, no code) has `ok = false` too. Inside such a check it reports an error instead of checking again |
+| `b.checkExtension(name, text)` | loads `text` as the extension page `name` would load (a new page: where new pages go), in an engine of its own — its top-level code runs with 1 s and 32 MB, writes only computed, nothing stays registered, no approval needed: `{ ok, id, title, path, permissions, problems, commands = { { name, label, block } }, views = { { name, label, icon, actions } }, hooks = { events… }, macros = { { name, description, args, example } }, variables = { { name, description } }, printed, writes? }`, or `ok = false` with `error`, `line` (the page's line, from 1) and `status` (`"timeout"` …). Text that is no extension page (no tag, no code) has `ok = false` too. Inside such a check it reports an error instead of checking again |
 
 `b.blocks({ tag = … })` and `tag:` in `b.query` differ: the first finds the blocks that carry the
 tag themselves, the query also those under a tagged block or on a tagged page, and `tag:project`
@@ -651,7 +651,8 @@ with the view's label (else the extension's title) and drawn for the note on scr
 `path`, `date` among its params). On the desktop that is the panel docked beside the text; on a
 phone and in narrow windows the drawer from the right edge (docs/UI.md "Side panel"). The habits
 show the day's checks there (`nawyki`'s view `dzien`); the "Mood" view above is a panel beside
-every day. `panel = "sidebar"` puts the view into the **pages panel** instead — the left sidebar
+every day. A panel whose view shows nothing for the note (an empty column: the habits' without
+habits) is left out. `panel = "sidebar"` puts the view into the **pages panel** instead — the left sidebar
 on the desktop, the left drawer on a phone —, a folding section after Favorites and Recent (its
 fold kept per device), drawn for the page or day on screen.
 

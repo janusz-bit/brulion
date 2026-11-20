@@ -162,7 +162,8 @@ QString macroHtml(const MacroView &view, const MacroSpan &span, const Palette &p
                   const QString &href, const std::function<std::optional<QString>(const QString &)> &resolvePage)
 {
     const bool english = locale == dates::UiLocale::English;
-    const QString name = span.extension + u'/' + span.name;
+    // (A word joiner after the slash: a line never breaks inside "extension/name".)
+    const QString name = span.extension + u"/\u2060"_s + span.name;
     const auto placeholder = [&](const ChipColors &c, const QString &text) {
         return href.isEmpty() ? chip(c, text) : linkChip(href, c, text);
     };

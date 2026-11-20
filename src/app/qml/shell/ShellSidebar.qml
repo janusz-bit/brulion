@@ -750,6 +750,20 @@ Rectangle {
                         readonly property string settingKey: "ui/sidebar/extension/" + extensionSection.extensionId + "/" + extensionSection.viewName
                         property bool open: sidebar.flag(AppSettings.value(extensionSection.settingKey, true))
                         width: parent.width
+                        // A view that shows nothing for this page (an empty column) leaves its section out.
+                        visible: sidebarModel.count > 0 || sidebarModel.error !== ""
+                        ExtensionView {
+                            id: sidebarModel
+                            extensions: Workspace.extensions
+                            extension: extensionSection.extensionId
+                            view: extensionSection.viewName
+                            notePath: sidebar.currentPath
+                            live: sidebar.visible
+                            onPageRequested: (page, line) => AppController.openNamedPage(page, line)
+                            onJournalRequested: (date) => AppController.openJournal(date)
+                            onViewRequested: (view, params) => AppController.navigate(sidebarModel.routeFor(view, params))
+                            Component.onCompleted: sidebarModel.refresh()
+                        }
                         BSectionHeader {
                             objectName: "sidebarExtension_" + extensionSection.extensionId + "_" + extensionSection.viewName
                             width: parent.width
@@ -768,18 +782,6 @@ Rectangle {
                             sourceComponent: Item {
                                 id: sidebarPanel
                                 implicitHeight: sidebarLines.height + Theme.space2
-                                ExtensionView {
-                                    id: sidebarModel
-                                    extensions: Workspace.extensions
-                                    extension: extensionSection.extensionId
-                                    view: extensionSection.viewName
-                                    notePath: sidebar.currentPath
-                                    live: sidebar.visible
-                                    onPageRequested: (page, line) => AppController.openNamedPage(page, line)
-                                    onJournalRequested: (date) => AppController.openJournal(date)
-                                    onViewRequested: (view, params) => AppController.navigate(sidebarModel.routeFor(view, params))
-                                    Component.onCompleted: sidebarModel.refresh()
-                                }
                                 ShellExtensionView {
                                     id: sidebarLines
                                     objectName: "sidebarExtensionLines"
