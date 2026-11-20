@@ -196,10 +196,7 @@ void Engine::runCommandLine(QChar type, const QString &text)
     m_shared->lastSearch = pattern;
     m_shared->lastSearchForward = forward;
     m_shared->lastSearchWholeWord = false;
-    const Command pendingCmd = m_cmdPending;
-    const bool op = m_cmdOperator;
-    searchCommand(pattern, forward, std::max(1, pendingCmd.count));
-    Q_UNUSED(op);
+    searchCommand(pattern, forward, std::max(1, m_cmdPending.count));
 }
 
 void Engine::searchCommand(const QString &pattern, bool forward, int count)

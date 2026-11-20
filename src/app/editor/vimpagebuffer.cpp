@@ -218,6 +218,12 @@ void VimPageBuffer::clearTextSelection()
         onTextSelection(-1, -1, -1);
 }
 
+bool VimPageBuffer::ownsBlockSelection() const
+{
+    return m_controller && m_tableCaretUid && m_controller->selectionCount() == 1
+           && m_controller->selectedRow() == m_controller->blocks()->rowOfUid(m_tableCaretUid);
+}
+
 void VimPageBuffer::clearBand()
 {
     if (!m_showingBlocks)
@@ -243,8 +249,10 @@ void VimPageBuffer::setCursor(Position p)
         // A table: the block is selected (its cells are edited in the table).
         m_controller->stopEditing();
         m_controller->selectRange(l.row, l.row);
+        m_tableCaretUid = m_controller->blocks()->uidAt(l.row);
         return;
     }
+    m_tableCaretUid = 0;
     m_controller->placeCaret(l.row, l.offset + p.column);
 }
 

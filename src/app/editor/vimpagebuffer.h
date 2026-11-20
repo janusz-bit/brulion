@@ -67,6 +67,8 @@ public:
     int shownSelectionAnchor() const { return m_selectionAnchor; }
     int shownSelectionCursor() const { return m_selectionCursor; }
     bool showsBlocks() const { return m_showingBlocks; }
+    /// The editor's block selection is the caret on a table (setCursor()), not one to take over.
+    bool ownsBlockSelection() const;
 
     // vim::Buffer
     int lineCount() const override;
@@ -126,6 +128,7 @@ private:
     int m_selectionRow = -1;
     int m_selectionAnchor = -1;
     int m_selectionCursor = -1;
+    quint64 m_tableCaretUid = 0; ///< the table the caret is on (selected for it)
     int m_changeDepth = 0;
     QString m_changeToken;
     QSet<QString> m_freedIds; ///< block ids deleted by Vim on this page (a put keeps them)

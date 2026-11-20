@@ -1787,11 +1787,14 @@ FocusScope {
         return vim.enabled && key === Qt.Key_Escape && modifiers === Qt.NoModifier && vim.mode === "normal"
                && vim.pending === "" && vim.commandLine === ""
     }
-    /// Ctrl+R, Ctrl+D, Ctrl+U and Ctrl+[ are Vim's in its command modes (a window shortcut given
-    /// one of them yields there; docs/UI.md "Vim mode", clashes).
+    /// Ctrl+R, Ctrl+D, Ctrl+U and Ctrl+[ are Vim's in its command modes, Ctrl+W and Ctrl+H in its
+    /// command line (a window shortcut given one of them yields there; docs/UI.md "Vim mode").
     function vimOwnsShortcut(key: int, modifiers: int): bool {
         if ((modifiers & (Qt.AltModifier | Qt.MetaModifier | Qt.ShiftModifier)) !== 0 || (modifiers & Qt.ControlModifier) === 0)
             return false
+        // The command line's Ctrl+W (a word back) and Ctrl+H (a character) too: not the window's.
+        if (vim.commandLine !== "" && (key === Qt.Key_W || key === Qt.Key_H))
+            return true
         return key === Qt.Key_R || key === Qt.Key_D || key === Qt.Key_U || key === Qt.Key_BracketLeft
     }
     function vimPasses(key: int, modifiers: int): bool {

@@ -400,6 +400,10 @@ void TestEditorVim::tablesAndFrontmatter()
     QCOMPARE(e.page.editingRow(), -1);
     QCOMPARE(e.page.selectedRow(), before + 1);
     QCOMPARE(e.page.blocks()->viewAt(e.page.selectedRow()), u"table"_s);
+    // That selection is Vim's caret: the list's keys do not take it over as visual line mode.
+    QVERIFY(e.vim.ownsBlockSelection());
+    e.vim.adoptBlockSelection();
+    QCOMPARE(e.vim.mode(), u"normal"_s);
     // Its text is not Vim's to change; dd takes the whole table.
     e.run(u"x"_s);
     QCOMPARE(e.text(), content);

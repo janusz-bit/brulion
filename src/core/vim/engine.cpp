@@ -1014,7 +1014,6 @@ void Engine::applyOperator(const QString &op, const Range &range, QChar reg, int
 
 void Engine::enterInsert(Position at, const QString &how)
 {
-    Q_UNUSED(how);
     beginChange();
     m_insertStart = at;
     m_buffer->setCursor(at);
@@ -1354,8 +1353,6 @@ void Engine::execute(const Command &cmd, bool repeating)
     if (!cmd.op.isEmpty()) {
         Range range;
         if (cmd.doubled) {
-            if (cur.line + n - 1 > lastLine() && n > 1 && cur.line == lastLine() && cmd.op != u"y" && false)
-                return;
             range.from = Position{cur.line, 0};
             range.to = Position{std::min(cur.line + n - 1, lastLine()), 0};
             range.linewise = true;

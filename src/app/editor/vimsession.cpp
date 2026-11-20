@@ -293,8 +293,12 @@ void VimSession::startInsert()
 
 bool VimSession::ownsBlockSelection() const
 {
-    return m_enabled && m_engine->buffer() == &m_page && m_page.showsBlocks()
-           && (m_engine->mode() == vim::Mode::Visual || m_engine->mode() == vim::Mode::VisualLine);
+    if (!m_enabled || m_engine->buffer() != &m_page)
+        return false;
+    // The caret on a table selects it; a visual selection over blocks is a band of Vim's own.
+    return m_page.ownsBlockSelection()
+           || (m_page.showsBlocks()
+               && (m_engine->mode() == vim::Mode::Visual || m_engine->mode() == vim::Mode::VisualLine));
 }
 
 void VimSession::adoptBlockSelection()
