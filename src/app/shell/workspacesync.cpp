@@ -4,6 +4,7 @@
 #include "picturesize.h"
 #include "workspace.h"
 
+#include "canvas/canvas.h"
 #include "dates/dates.h"
 #include "log/categories.h"
 #include "log/redact.h"
@@ -920,6 +921,8 @@ void WorkspaceSync::refreshConflicts()
                     {u"device"_s, c.device},
                     {u"source"_s, c.source == sync::ConflictCopy::Source::Syncthing ? u"syncthing"_s : u"brulion"_s},
                     {u"text"_s, sync::isSyncTextPath(c.copy)},
+                    // A canvas (docs/SYNTAX.md §2 "Canvases"): merged card by card, never by lines.
+                    {u"canvas"_s, canvas::isCanvasPath(c.original)},
                     // (The 4 KB head of each, cached by modification time and size.)
                     {u"drawing"_s, editor::localFileIsDrawing(m_vault->absolutePath(c.copy))
                                            || editor::localFileIsDrawing(m_vault->absolutePath(c.original))},

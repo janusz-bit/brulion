@@ -11,6 +11,8 @@
 #include "index/vaultindex.h"
 #include "index/vaultindex_p.h"
 
+#include "canvas/canvas.h"
+#include "canvas/indextext.h"
 #include "markdown/inline.h"
 #include "markdown/parse.h"
 #include "markdown/rename.h"
@@ -577,6 +579,43 @@ struct RelocationPlan::Private {
         return target == written ? QString() : target;
     }
 
+    /// A canvas (its file's JSON `json`): each text node's text planned as a note of the canvas's
+    /// folder would be (planFile()), each file path (file nodes, groups' backgrounds) naming a
+    /// moved file — exactly, any letter case — set to where it moves; every other byte kept
+    /// (canvas::rewriteCanvas()). A path counts as a link.
+    File planCanvas(const VaultPath &path, const QString &json) const
+    {
+        File file;
+        file.path = path;
+        file.newPath = moved.value(path, path);
+        file.before = json;
+        const auto movedPath = [this](const QString &written) {
+            const VaultPath p = paths::normalize(written);
+            if (const auto it = moved.constFind(p); it != moved.cend())
+                return *it;
+            for (auto it = moved.cbegin(); it != moved.cend(); ++it) {
+                if (it.key().compare(p, Qt::CaseInsensitive) == 0)
+                    return it.value();
+            }
+            return written;
+        };
+        int pathLinks = 0;
+        const std::optional<QString> out = canvas::rewriteCanvas(
+                json,
+                [&](const QString &text) {
+                    const File f = planFile(path, text);
+                    file.links += f.links;
+                    file.tags += f.tags;
+                    file.queries += f.queries;
+                    file.queryTags += f.queryTags;
+                    return f.after;
+                },
+                movedPath, &pathLinks);
+        file.links += pathLinks;
+        file.after = out.value_or(json);
+        return file;
+    }
+
     /// `entry`: the index's record of the note when `content` is its content — its links with
     /// their keys and resolutions (no parse, no lookup of before), and only a note of queryNotes
     /// has ```query filters, only one of taggedNotes a tag to rewrite.
@@ -703,7 +742,7 @@ QString RelocationPlan::rewrite(const VaultPath &path, const QString &content) c
         if (f.path == p && f.before == content)
             return f.after;
     }
-    const QString out = d->planFile(p, content).after;
+    const QString out = canvas::isCanvasPath(p) ? d->planCanvas(p, content).after : d->planFile(p, content).after;
     return out == content ? content : out;
 }
 
@@ -873,7 +912,9 @@ bool RelocationPlanner::step(int budgetMs)
         const VaultIndex::Private::Entry *e = s->index->d->entry(source);
         if (!e)
             continue;
-        RelocationPlan::File f = p.planFile(source, e->content, e);
+        RelocationPlan::File f = canvas::isCanvasPath(source)
+                                         ? p.planCanvas(source, s->index->d->canvasSources.value(source))
+                                         : p.planFile(source, e->content, e);
         if (f.after != f.before)
             s->plan.m_files.append(std::move(f));
     } while (!done() && clock.elapsed() < budgetMs);

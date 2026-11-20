@@ -178,13 +178,9 @@ done in the repository simply disappears from the list.
   build; Bases' map view (Obsidian's Maps plugin) is a table;
   a table's cells have no keyboard navigation (Tab / arrows between cells) and no multi-cell
   selection or paste, as Obsidian's tables have.
-* **Obsidian compatibility: `.canvas`** — `.canvas` files from a shared vault are today a file in
-  Brulion (docs/IMPORT.md); to be decided what to read and what to edit as well. Dataview's
-  `CALENDAR` views, inline `= …` queries and `dataviewjs` stay code (docs/SYNTAX.md §10 "Dataview
-  queries").
-* **Whiteboard (infinite canvas)** — notes, pictures, PDFs and drawings laid out on a canvas, with
-  connections; preferably in the JSON Canvas format (Obsidian Canvas, AFFiNE). The drawing editor
-  covers sketches, but does not embed notes in them.
+* **Obsidian compatibility: what remains** — canvases keep the Advanced Canvas plugin's shapes,
+  borders and portals in the file but draw plain cards; Dataview's `CALENDAR` views, inline `= …`
+  queries and `dataviewjs` stay code (docs/SYNTAX.md §10 "Dataview queries").
 * **Flashcards: what is still missing** — cards of the Spaced Repetition plugin and of Logseq, FSRS-6,
   the state next to each card, decks, sessions and statistics are there (docs/SYNTAX.md §15,
   docs/UI.md "Flashcards"); missing: FSRS parameters fitted to one's own reviews (an optimizer; the

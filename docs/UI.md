@@ -3293,19 +3293,7 @@ Screenshots: `tests/app/drawing/screenshots.sh` (the `theme` shot: the backgroun
 `shapes`, `selection`, `shapemenu`: a diagram, it all selected with its bar, the shapes' menu).
 
 ## Database views (`qml/editor/DatabaseView.qml`, `src/app/editor/viewresultmodel.h`, core `views`)
-
-A ```` ```query ```` block with `view:` (docs/SYNTAX.md §10 "Views"), a ```` ```base ```` block, a
-`.base` file opened as a page (§10 "Obsidian Bases"; `ContentBaseView`, PageView's `baseRoute`) and
-one embedded in a note (`![[Books.base#Reading]]`: BlockListModel's `base` embed, EmbedView —
-`thisPath` the note, `this` in the base's expressions; edits and toasts as in a block) draw
-a `DatabaseView`: `ViewResultModel` runs the view through the host (`QueryHost::runView` —
-`Workspace` keeps a `QueryCache` per query view like query blocks, and a base's last result per
-index version and minute; `notebook::runView` gives the JSON, the command line prints the same),
-renders the cells' Markdown with the page's renderer and gives the rows, the columns and the
-groups as models. In a block it takes the place of the query's result list under its header and
-filter chips (QueryBlockView: the query's `QueryResultModel` does not run); its height comes from
-bindings and the first run comes when the model is completed, so the block is created with its
-final height ("Scrolling performance").
+## Canvas view (`qml/canvas`, `src/app/canvas`)
 
 * **Header**: the kind's icon and name (a base: the view's name), the row count ("12 of 40 rows"),
   a spinner while the notebook is indexed, a base's other views (a menu; on its page also tabs),
@@ -3351,6 +3339,126 @@ final height ("Scrolling performance").
   `AppController.toastWithAction`) writes the file back while it holds what was written. A refused
   edit (a Polish key on a block's line, a number that is none, frontmatter that cannot be edited
   safely) says why in a toast.
+A ```` ```query ```` block with `view:` (docs/SYNTAX.md §10 "Views"), a ```` ```base ```` block, a
+`.base` file opened as a page (§10 "Obsidian Bases"; `ContentBaseView`, PageView's `baseRoute`) and
+one embedded in a note (`![[Books.base#Reading]]`: BlockListModel's `base` embed, EmbedView —
+`thisPath` the note, `this` in the base's expressions; edits and toasts as in a block) draw
+a `DatabaseView`: `ViewResultModel` runs the view through the host (`QueryHost::runView` —
+`Workspace` keeps a `QueryCache` per query view like query blocks, and a base's last result per
+index version and minute; `notebook::runView` gives the JSON, the command line prints the same),
+renders the cells' Markdown with the page's renderer and gives the rows, the columns and the
+groups as models. In a block it takes the place of the query's result list under its header and
+filter chips (QueryBlockView: the query's `QueryResultModel` does not run); its height comes from
+bindings and the first run comes when the model is completed, so the block is created with its
+final height ("Scrolling performance").
+Route `canvas` (`{path}`, optional `line`): `CanvasView` on a whiteboard file `*.canvas` (docs/SYNTAX.md
+§2 "Canvases": JSON Canvas, Obsidian Canvas; core module `canvas`) — text cards, notes, pictures,
+drawings, PDFs, other files, web addresses and groups on an endless canvas, connected by edges. A
+`page` route naming a canvas becomes a `canvas` route (`normalizeRoute`; `asFile: true` keeps it a
+page — "Open as text" for a file that is no canvas), so the file tree, links, search, backlinks,
+the quick switcher and tabs open canvases here. `line` (a search hit's or a backlink's line of the
+canvas's index text) selects that card and zooms to it (`CanvasEditor.focusLine`). "New canvas"
+(the command palette, the sidebar's pages menu, "New canvas here" in a folder's menu:
+`Workspace.createCanvas`) makes `Untitled canvas.canvas` and opens it.
+
+* **The board** (`CanvasEditor`, a `QQuickItem` without content of its own): the document (core
+  `canvas::Canvas`), its undo history (a snapshot per step, 200 steps; a gesture is one step at its
+  end), the view (`zoom` 5 %–400 %, `panX` / `panY`: screen = canvas × zoom + pan; moves to fit
+  animated unless motion is reduced), the selection and every pointer gesture. It lies under the
+  cards, which take no input themselves, and hit-tests the canvas: side handles, the corners and
+  sides of the one selected card, cards (groups only by their frame — a 14 px band — or label:
+  a group's inside is the canvas, so a rubber band can be drawn there), edges (within the handle
+  radius). Opened: the whole canvas in view, at most 100 %.
+* **Only what is in view is made** (docs/PERFORMANCE.md): `CanvasEditor.nodes` and `.edges`
+  (`CanvasNodeModel`, `CanvasEdgeModel`) list the cards and edges in the view and half a screen
+  around it, in z-order; after a change of the canvas, the view or the selection they change rows in
+  place, insert those that come into view and remove those that leave, so a canvas of a thousand
+  cards has the few dozen on screen as QML items. The cards and edges live in one item the board
+  moves and scales (`world`): panning changes its position, nothing is laid out again. Zoomed out
+  below 30 % (or a card smaller than 48 × 28 px on screen) a card shows only its colour and title,
+  large (`CanvasEditor.detailed`); its content is neither rendered nor loaded.
+* **Cards** (`CanvasCard`): a frame in the card's colour (presets as Obsidian shows them, lighter in
+  the dark theme; a file's hex colour as it is: `CanvasColors.hex`). What they show comes from
+  `CanvasCardContent` / `CanvasCards` (C++), kept per text and note until the index or the file
+  changes: a **text card** its Markdown rendered as an embed is (`BlockListModel::textPreview()`:
+  InlineRenderer's escaped rich text — never a note's own HTML —, headings, lists, tasks with
+  their status, quotes, code, embeds named; links follow on a click); a **note** its page, or the
+  section or block of its `subpath` (`BlockListModel::linkPreview()`), under its name; a longer
+  text scrolls with the wheel while the card is selected (a thin bar shows where); a **picture** the
+  picture (decoded at about the size shown, a few sizes, not each zoom), a **drawing** its preview
+  in the app's theme (`Workspace.drawingUrl`), a **PDF** its first page's thumbnail
+  (`EditorHost::pdfThumbnail`: the PDF thumbnails' cache) with its name and page count, another
+  **canvas** its picture (`CanvasImageProvider`, image provider `canvas`), any other file its icon
+  and name, a missing one what is missing; a **web address** its host and address — the page is
+  never fetched (no safe opt-in way to show other sites exists in the app); a **group** its frame,
+  tinted, its label above it (larger as the view zooms out) and its background picture (cover,
+  ratio, repeat).
+* **Edges** (`CanvasEdge`): Bézier curves out of the cards' sides (`canvas::edgeShape`: the named
+  sides, else those facing each other), with arrowheads at the ends that have them, in their colour
+  (else the theme's faint line), as Qt Quick Shapes in canvas units; a label in the middle on a
+  patch of the canvas's colour; a selected edge has an accent ring.
+* **Mouse:** a click selects a card or an edge (Shift / Ctrl adds or removes it); a drag moves the
+  selection (a group with the cards inside it); a drag on empty canvas draws a rubber band (cards
+  it touches; a group only when it holds the whole group; Shift adds); the middle button or Space
+  held moves the canvas; the wheel and a touchpad move it, Ctrl + wheel and a touchpad's pinch zoom
+  at the pointer, a touchpad's smart zoom fits; the four handles on the sides of the card under the
+  pointer connect: dragged onto a card, an edge to its nearest side (selected, to label or colour),
+  dragged onto empty canvas, a new text card there, connected, to type into; the corners and sides
+  of the one selected card resize it (at least 40 × 40). A double click edits a text card's
+  Markdown in place, opens a note or file (`subpath`: at that heading or block), opens a web address
+  in the browser, renames a group, labels an edge, and on empty canvas adds a text card there. A
+  right click: the context menu (add a card or a note here, edit, open, open in a new tab, change a
+  web address, label, copy, cut, paste, duplicate, group / ungroup, to the front / back, select
+  all, show the whole canvas, delete).
+* **Touch** (phones, tablets): one finger moves the canvas — or the selection, when it starts on
+  a selected card; a handle connects, a corner resizes —; two fingers move and zoom; a tap selects;
+  a double tap does what a double click does; a long press opens the menu; "Select several" in
+  the tool bar makes taps add to the selection and a drag draw a rubber band. Handles are larger.
+* **Keys** (none while text is typed): Ctrl+Z, Ctrl+Shift+Z / Ctrl+Y, Delete / Backspace, Ctrl+A,
+  Escape (a gesture dropped, else the selection cleared), Ctrl+C / Ctrl+X / Ctrl+V, Ctrl+D
+  (duplicate), Ctrl+G / Ctrl+Shift+G (group, ungroup), Enter (edit the selected card), the arrows
+  (move the selection by 10, with Shift by 1; with nothing selected the canvas), Ctrl+] / Ctrl+[ /
+  Ctrl+Shift+] / Ctrl+Shift+[ (z-order), Shift+1 (the whole canvas), Shift+2 (the selection), Ctrl+0
+  (100 %), Ctrl++ / Ctrl+- (zoom), Space held (the mouse moves the canvas).
+* **Text in place** (`CanvasTextEditor`): over the card, in the canvas's scale; Escape, Ctrl+Enter or
+  a click outside ends it and keeps the text (as Obsidian); the card grows to hold it. One undo
+  step. Labels and addresses: `CanvasTextDialog`.
+* **The tool bar** (`CanvasToolbar`; above the board, at the bottom on phones where it takes the
+  bottom navigation's place): undo, redo; add a text card (in the middle of the view, typed into),
+  a note (the page picker: a page, or a new one created), a file (the system's file picker, the file
+  imported into the notebook — or used where it is in it), a web address, a group (around the
+  selection, or an empty one); "Select several" (touch); zoom out, the zoom (a click: 100 %), zoom
+  in, the whole canvas; More: paste, select all, zoom to the selection, export as PNG / SVG.
+* **The selection's bar** (`CanvasSelectionBar`, floating above the selection, below it near the
+  top): colour (none, the six presets), edit / rename / label, open, arrowheads (none, one way,
+  both ways, reverse), duplicate, group / ungroup, align (left, centres, right, top, middles,
+  bottom; space evenly across or down), arrange (front, forward, backward, back), delete.
+* **Adding by drop and paste:** files dropped from another app are imported and added where they
+  land, side by side; a page dragged from the sidebar's tree and let go on the board is added as a
+  note card there (`AppController.dropOnView` → `fileDroppedOnView`). Ctrl+V: cards copied on a
+  canvas (Brulion's or Obsidian's JSON Canvas fragment: new ids, at the pointer), files copied in a
+  file manager (imported), a picture (a PNG in the attachments folder), a web address (a link card),
+  any other text (a text card sized to it). Ctrl+C copies the selected cards (a group with its
+  cards) and the edges between them as such a fragment.
+* **Saving:** 0.8 s after the last change (not while text is typed or a gesture runs), when the route
+  changes, the view goes and the app leaves the foreground (`Workspace.writeAttachment`) — the file
+  in its own layout, only what changed written differently (docs/SYNTAX.md §2 "Canvases"). Every
+  save first reads the file: another program's version (Obsidian, Syncthing, Nextcloud) not yet
+  reported is merged in, never written over; a version reported while the canvas is open is taken in
+  as it is when nothing changed here, else merged card by card and field by field
+  (`CanvasEditor.takeExternal`: `canvas::merge` against the version last loaded or saved; the undo
+  history starts anew). A file that is no canvas is shown with why ("Open as text") and never
+  written; what was done here before it turned so is kept beside it ("… (this device).canvas").
+  Renames follow the file; a deleted file is never written again.
+* **Export:** More → "Export as PNG picture" / "Export as SVG picture" writes `<name>.png` /
+  `<name>.svg` beside the canvas (`CanvasEditor.exportPicture`: core `canvas::toSvg` — cards,
+  groups, edges and labels, the pictures of its cards embedded, the first lines of its notes —; the
+  PNG at twice the size, at most 8192 px a side), in the app's theme.
+* **Elsewhere:** the sync center shows two versions of a canvas in conflict as pictures and merges
+  them ("Merge canvases": a union card by card, `ConflictResolver`); the HTML exports show a canvas
+  as its picture (`Plan.canvas.svg` beside it: the cards with their text, the pictures and the
+  notes' first lines they show, groups, edges and labels) where a note embeds it, and their links
+  to it lead there.
 
 ## PDF viewer (`qml/content/ContentPdfView.qml`, `src/app/pdf`)
 

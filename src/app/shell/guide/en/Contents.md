@@ -20,6 +20,7 @@ Brulion updates the documentation together with the app: new pages are added, an
 - [[Math formulas|Math formulas]] — LaTeX inline and in blocks: fractions, roots, matrices.
 - [[Diagrams|Diagrams]] — flowcharts, sequence diagrams and pie charts from `mermaid` blocks.
 - [[Drawings|Drawings]] — handwriting and sketches with a stylus, finger or mouse, also on slides and PDF pages.
+- [[Canvas|Canvas]] — whiteboards of cards, notes, pictures and files connected with lines (Obsidian Canvas).
 - [[Journal, calendar and templates|Journal, calendar and templates]] — daily pages and templates.
 
 ## Planning

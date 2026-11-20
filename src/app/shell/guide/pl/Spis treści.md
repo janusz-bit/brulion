@@ -20,6 +20,7 @@ Brulion aktualizuje dokumentację razem z aplikacją: dochodzą nowe strony, a t
 - [[Wzory matematyczne|Wzory matematyczne]] — LaTeX w tekście i blokach: ułamki, pierwiastki, macierze.
 - [[Diagramy|Diagramy]] — schematy blokowe, diagramy sekwencji i wykresy kołowe z bloków `mermaid`.
 - [[Rysunki|Rysunki]] — pismo odręczne i szkice rysikiem, palcem albo myszką, także na slajdach i stronach PDF.
+- [[Tablice|Tablice]] — tablice z kart, notatek, obrazów i plików połączonych liniami (Obsidian Canvas).
 - [[Dziennik, kalendarz i szablony|Dziennik, kalendarz i szablony]] — codzienne strony i szablony.
 
 ## Planowanie

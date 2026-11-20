@@ -1,6 +1,7 @@
 // HTML exporters: a static site in a ZIP (a page per note with relative links, tag pages, an
 // index of journals and pages, backlinks, CSS) and a single self-contained HTML document (table of
 // contents, links as anchors, images as data: URIs).
+#include "canvas/canvas.h"
 #include "index/query.h"
 #include "index/vaultindex.h"
 #include "io/exporters_p.h"
@@ -191,6 +192,11 @@ public:
                 return std::nullopt;
             if (m_vault.note(*resolved))
                 return m_noteHref(*resolved, fragment(*resolved, heading, blockId));
+            // A canvas: its picture (ExportVault::drawingPicture), not its JSON.
+            if (canvas::isCanvasPath(*resolved)) {
+                if (const auto picture = m_vault.drawingPicture(*resolved))
+                    return m_attachmentUrl(*picture);
+            }
             return m_attachmentUrl(*resolved);
         };
         l.drawing = [=, this](const QString &target) -> std::optional<QString> {

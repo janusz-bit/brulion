@@ -160,7 +160,7 @@ void Notebook::indexFile(const VaultPath &path)
 {
     if (paths::isIgnored(path))
         return;
-    if (paths::isMarkdown(path)) {
+    if (VaultIndex::readsText(path)) { // notes and canvases
         bool ok = false;
         const QString content = m_vault->readText(path, &ok);
         if (ok)
@@ -220,7 +220,7 @@ void Notebook::applyChanges(const QList<VaultChange> &changes)
         case ChangeType::Modified: indexFile(c.path); break;
         case ChangeType::Deleted: m_index->remove(c.path); break;
         case ChangeType::Renamed: {
-            const QString content = paths::isMarkdown(c.path) ? m_vault->readText(c.path) : QString();
+            const QString content = VaultIndex::readsText(c.path) ? m_vault->readText(c.path) : QString();
             if (paths::isIgnored(c.path))
                 m_index->remove(c.oldPath);
             else

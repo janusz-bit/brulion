@@ -14,6 +14,7 @@
 #include "appcontroller.h" // the shell (src/app/shell): app state, vault, navigation
 #include "appsettings.h"
 #include "backdrops.h"            // a drawing's backdrop: vault paths → files (src/app/drawing)
+#include "canvasimageprovider.h"   // the pictures of canvases (src/app/canvas)
 #include "drawingimageprovider.h" // the previews of drawings, light or dark (src/app/drawing)
 #include "localnetwork.h"         // QML loads nothing from the network (src/app/ui)
 #include "logcontroller.h"        // the event log page's controller (src/app/diag)
@@ -409,6 +410,8 @@ int main(int argc, char *argv[])
                      [] { QCoreApplication::exit(1); }, Qt::QueuedConnection);
     // image://drawing/…: the previews of drawings in the light or the dark theme (Workspace::drawingUrl).
     engine.addImageProvider(u"drawing"_s, new brulion::drawingview::DrawingImageProvider);
+    // image://canvas/…: the pictures of canvases (CanvasCards::canvasUrl, the sync center's tiles).
+    engine.addImageProvider(u"canvas"_s, new brulion::canvasview::CanvasImageProvider);
     // image://pdfpage/…: the thumbnails of a PDF's pages in the backdrop's page picker.
     engine.addImageProvider(u"pdfpage"_s, new brulion::drawingview::PdfPageImageProvider);
     // image://pdfview/…: the PDF viewer's pages and detail pictures (docs/UI.md "PDF viewer"), drawn

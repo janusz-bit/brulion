@@ -299,6 +299,17 @@
     </message>
 </context>
 <context>
+    <name>CanvasCard</name>
+    <message numerus="yes">
+        <location filename="../src/app/qml/canvas/CanvasCard.qml" line="302"/>
+        <source>%1 · %n page(s)</source>
+        <translation>
+            <numerusform>%1 · %n page</numerusform>
+            <numerusform>%1 · %n pages</numerusform>
+        </translation>
+    </message>
+</context>
+<context>
     <name>CleanupView</name>
     <message numerus="yes">
         <location filename="../src/app/qml/views/CleanupView.qml" line="53"/>
@@ -1419,7 +1430,7 @@
     <name>ShellShareDialog</name>
     <message numerus="yes">
         <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="32"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="7307"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="7444"/>
         <source>%n file(s) to save in the notebook</source>
         <translation>
             <numerusform>%n file to save in the notebook</numerusform>
@@ -1449,9 +1460,9 @@
 <context>
     <name>SyncConflictResolver</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="294"/>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="303"/>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="316"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="298"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="307"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="320"/>
         <source>%n element(s)</source>
         <translation>
             <numerusform>%n element</numerusform>
@@ -1459,7 +1470,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="464"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="563"/>
         <source>Changes made on one side only are merged already. Decide the %n place(s) changed on both sides.</source>
         <translation>
             <numerusform>Changes made on one side only are merged already. Decide the %n place changed on both sides.</numerusform>
@@ -2227,7 +2238,7 @@
 <context>
     <name>brulion::shell::WorkspaceSync</name>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspacesync.cpp" line="528"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="529"/>
         <source>%n file(s) would be deleted. Confirm in the sync center.</source>
         <translation>
             <numerusform>%n file would be deleted. Confirm in the sync center.</numerusform>
@@ -2235,7 +2246,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspacesync.cpp" line="526"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="527"/>
         <source>%n file(s) could not be synced.</source>
         <translation>
             <numerusform>%n file could not be synced.</numerusform>
@@ -2243,7 +2254,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspacesync.cpp" line="863"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="864"/>
         <source>Up to date with %n device(s).</source>
         <translation>
             <numerusform>Up to date with %n device.</numerusform>

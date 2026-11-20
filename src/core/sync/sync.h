@@ -42,7 +42,8 @@
 //     a three-way merged final newline; mergeJson3() key-wise for .brulion/config.json;
 //     diffLines/diffComm/diff3Regions (Myers with a work budget). Drawings (an SVG with an
 //     Excalidraw scene, `*.excalidraw.md`) are merged element by element against their base
-//     (drawing::mergeDrawingFiles, module "drawing"), never line by line.
+//     (drawing::mergeDrawingFiles, module "drawing"), never line by line; canvases (`.canvas`,
+//     JSON Canvas) node by node and field by field (canvas::mergeCanvasFiles, module "canvas").
 //
 //   Engine                                              sync/syncengine.h, sync/synctypes.h
 //     SyncEngine(vault, client, store, device): sync(options, done) / cancel() / isSyncing(),

@@ -1,6 +1,7 @@
 // One SyncEngine run: list both sides, decide per path (planSync), transfer, merge, record.
 #include "sync/syncrun_p.h"
 
+#include "canvas/merge.h"
 #include "drawing/drawingfile.h"
 #include "drawing/excalidraw.h"
 #include "drawing/merge.h"
@@ -1599,6 +1600,17 @@ std::optional<QString> SyncRun::mergeText(const VaultPath &path, const QString &
     }
     if (!haveBase)
         return std::nullopt;
+    // A canvas changed on both sides (docs/SYNTAX.md §2 "Canvases"): merged node by node and field
+    // by field against the base, written in the remote's layout (canvas::mergeCanvasFiles), never
+    // line by line — two merged arrays may lose a comma and stop being JSON. One that cannot be read
+    // keeps both versions.
+    if (canvas::isCanvasPath(path)) {
+        if (remote == base)
+            return local;
+        if (local == base)
+            return remote;
+        return canvas::mergeCanvasFiles(base, local, remote);
+    }
     // A drawing changed on both sides: merged element by element against the base (new elements
     // of both, erased ones gone, the remote's order with this device's new elements on top),
     // never line by line. One side as the base (a new ETag, the same text: a client uploaded it

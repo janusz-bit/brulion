@@ -1934,10 +1934,12 @@ private Q_SLOTS:
         QCOMPARE(ui.size(), 2);
         QCOMPARE(ui.at(1).first().toString(), u"toggleTheme"_s);
 
-        // The folder commands follow "New page"; moving and showing in the tree need a page.
+        // "New canvas" and the folder commands follow "New page"; moving and showing in the tree
+        // need a page.
         const QStringList order = model->ids();
-        QCOMPARE(order.mid(order.indexOf(u"page.new"_s) + 1, 4),
-                 (QStringList{u"folder.new"_s, u"page.move"_s, u"page.reveal"_s, u"page.trash"_s}));
+        QCOMPARE(order.mid(order.indexOf(u"page.new"_s) + 1, 5),
+                 (QStringList{u"canvas.new"_s, u"folder.new"_s, u"page.move"_s, u"page.reveal"_s,
+                              u"page.trash"_s}));
         ui.clear();
         QVERIFY(model->run(u"folder.new"_s));
         QVERIFY(model->run(u"page.move"_s));
@@ -1945,6 +1947,12 @@ private Q_SLOTS:
         QVERIFY(model->run(u"page.trash"_s));
         QCOMPARE(ui.size(), 4);
         QCOMPARE(strings(ui), (QStringList{u"newFolder"_s, u"movePage"_s, u"revealInTree"_s, u"trashPage"_s}));
+        // "New canvas" makes an empty canvas file and opens it in the canvas view.
+        QVERIFY(model->run(u"canvas.new"_s));
+        QCOMPARE(app->currentRoute().value(u"view"_s).toString(), u"canvas"_s);
+        const QString canvasPath = app->currentRoute().value(u"path"_s).toString();
+        QVERIFY(canvasPath.endsWith(u".canvas"_s));
+        QVERIFY(app->workspace()->exists(canvasPath));
         app->navigate({{u"view"_s, u"tasks"_s}});
         QVERIFY(model->run(u"folder.new"_s));
         QVERIFY(!model->run(u"page.move"_s));

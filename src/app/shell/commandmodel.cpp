@@ -626,6 +626,14 @@ static QList<Command> allCommands(const AppController *app)
                   {},
                   app->status() == u"ready"}});
     insertAfter(out, u"page.new"_s, folderCommands(app));
+    // A whiteboard (docs/UI.md "Canvas view"): "Untitled canvas.canvas" in the new pages' folder.
+    insertAfter(out, u"page.new"_s,
+                {{u"canvas.new"_s,
+                  CommandModel::tr("New canvas"),
+                  CommandModel::tr("A whiteboard of cards, notes, files and connections (JSON Canvas)"),
+                  u"layout-dashboard"_s,
+                  {},
+                  app->status() == u"ready"}});
     insertAfter(out, u"nav.forward"_s, tabCommands(app));
     out += backupCommands(app);
     return out;
@@ -709,6 +717,12 @@ bool CommandModel::run(const QString &id)
         m_app->openPeriodicNote(u"month"_s, QString(), periodOffset(id));
     else if (id == u"capture")
         m_app->quickCapture();
+    else if (id == u"canvas.new") {
+        const QString path = m_app->workspace()->createCanvas(QString());
+        if (path.isEmpty())
+            return false;
+        m_app->openPage(path);
+    }
     else if (id == u"extensions.runBlock")
         m_app->requestUiAction(u"extension:*/run"_s);
     else if (id == u"extensions.new") {

@@ -108,8 +108,8 @@ instead of a path) is skipped with a warning, and Brulion keeps its own.
   `SORT`, `GROUP BY`, `FLATTEN`, `LIMIT` and Dataview's fields and functions, read-only (tasks can
   be checked off; docs/SYNTAX.md §10 "Dataview queries"); `dataviewjs` blocks, inline `= …` queries,
   regular-expression functions and `CALENDAR` stay code or say they are not supported. Files of
-  other plugins are plain text or a page (exceptions: Excalidraw drawings, below, and bases);
-  `.canvas` files are not pages.
+  other plugins are plain text or a page (exceptions: Excalidraw drawings and canvases, below, and
+  bases).
 * **Bases** (Obsidian's core plugin): a `.base` file opens in Brulion as a page of its views — a
   table, cards (a gallery), a list or a Kanban board — with its filters, formulas, display names,
   sort, groups, limits and summaries; a note embedding it (`![[Books.base]]`, `![[Books.base#View]]`)
@@ -139,6 +139,20 @@ instead of a path) is skipped with a warning, and Brulion keeps its own.
   plain text; a drawing with frames or embedded web pages can only be viewed (its preview is the
   plugin's export next to it, if there is one); Brulion creates new drawings as SVG
   (docs/SYNTAX.md §2 "Drawings").
+* **Canvases** (`*.canvas`, Obsidian Canvas — the open JSON Canvas format) open in Brulion's canvas
+  view and are edited there (docs/UI.md "Canvas view"): every node type of the format — text
+  (rendered as Markdown), notes and their sections (`subpath`), pictures, PDFs, drawings, other
+  canvases, any file, web addresses (shown as an address, never loaded), groups with labels and
+  background pictures —, edges with sides, arrowheads, colours (the six presets and hex colours)
+  and labels. Brulion writes only what you change: a card it did not touch is written back byte
+  for byte, a changed one keeps its keys in their order, and keys it does not know — Advanced
+  Canvas' `styleAttributes`, `zIndex`, the file's `metadata`, a plugin's own node types — stay as
+  they are, so Obsidian and its plugins keep their settings (docs/SYNTAX.md §2 "Canvases"). A
+  canvas's notes and the links in its text cards count as links in Brulion too (backlinks, the
+  graph), its cards are found by search, and renaming or moving a page rewrites the canvases that
+  show it. Not shown: Obsidian's embedded web pages (a link card shows its address), the
+  Advanced Canvas plugin's shapes, borders and portals (kept in the file). In notes, a canvas is
+  linked as `[[Plan.canvas]]`, as in Obsidian.
 * Brulion keeps **favorites** (Obsidian's bookmarks from `.obsidian/bookmarks.json` are not read)
   and **folded blocks** on the device, not in the files.
 

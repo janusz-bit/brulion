@@ -6,6 +6,7 @@
 #include "index/suggest_p.h"
 #include "index/textutil_p.h"
 #include "index/unlinked_p.h"
+#include "canvas/canvas.h"
 #include "markdown/inline.h"
 #include "markdown/parse.h"
 #include "markdown/properties.h"
@@ -528,8 +529,8 @@ QList<UnlinkedRef> VaultIndex::unlinkedReferences(const VaultPath &path) const
     if (matchers.isEmpty())
         return out;
     for (const Private::Entry *other : d->entriesByRelevance()) {
-        if (other->path == path)
-            continue;
+        if (other->path == path || canvas::isCanvasPath(other->path))
+            continue; // (a canvas's text is its cards': no line of the file to link in place)
         const QString &lower = other->lowerContent();
         if (std::ranges::none_of(matchers, [&](const MentionMatcher &m) { return lower.contains(m.firstWord); }))
             continue;

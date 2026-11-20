@@ -35,6 +35,18 @@
 //                      the copy stays (updated(), not resolved()): its notes are carried over by
 //                      hand, then it is removed (notesOnly)
 //
+// Canvases (`canvas`: `*.canvas`, JSON Canvas; `text` is false for them: never merged line by line,
+// two merged arrays may lose a comma):
+//   canMergeCanvases   both read as canvases and the copy adds something: mergedText is the merge
+//                      card by card — against the common version from History when one is found
+//                      (the copy's changes since it applied onto the original), else a union (the
+//                      original's cards, order and layout, the copy's other cards on top)
+//   canvasCounts       { ours, theirs, common, onlyOurs, onlyTheirs, changed, merged } (cards and
+//                      edges)
+//   identical          the same cards and edges (whatever the files' layouts)
+//   copyIsOlder        the merge is the original: the copy adds nothing
+//   mergeCanvases()    mergedText replaces the original, the copy goes
+//
 //   keepMine()         the original stays, the copy goes to the trash
 //   keepCopy()         the copy's content replaces the original, the copy goes (binary files: the
 //                      original goes to the trash and the copy is renamed into its place; a
@@ -86,6 +98,10 @@ class ConflictResolver : public QObject {
     Q_PROPERTY(bool drawing READ isDrawing NOTIFY changed FINAL)
     /// Both are drawings Brulion edits, of one format: "Merge drawings".
     Q_PROPERTY(bool canMergeDrawings READ canMergeDrawings NOTIFY changed FINAL)
+    /// The original is a canvas: shown as canvases.
+    Q_PROPERTY(bool canvas READ isCanvas NOTIFY changed FINAL)
+    Q_PROPERTY(bool canMergeCanvases READ canMergeCanvases NOTIFY changed FINAL)
+    Q_PROPERTY(QVariantMap canvasCounts READ canvasCounts NOTIFY changed FINAL)
     Q_PROPERTY(QByteArray oursBytes READ oursBytes NOTIFY changed FINAL)
     Q_PROPERTY(QByteArray theirsBytes READ theirsBytes NOTIFY changed FINAL)
     Q_PROPERTY(QByteArray mergedBytes READ mergedBytes NOTIFY changed FINAL)
@@ -123,7 +139,13 @@ public:
 
     bool loaded() const { return !m_loaded.conflict.isEmpty(); }
     QVariantMap conflict() const { return m_loaded.conflict; }
-    bool isText() const { return m_loaded.conflict.value(QStringLiteral("text")).toBool() && !isDrawing(); }
+    bool isText() const
+    {
+        return m_loaded.conflict.value(QStringLiteral("text")).toBool() && !isDrawing() && !isCanvas();
+    }
+    bool isCanvas() const { return m_loaded.conflict.value(QStringLiteral("canvas")).toBool(); }
+    bool canMergeCanvases() const { return m_loaded.canMergeCanvases; }
+    QVariantMap canvasCounts() const { return m_loaded.canvasCounts; }
     bool isDrawing() const { return m_loaded.conflict.value(QStringLiteral("drawing")).toBool(); }
     bool canMergeDrawings() const { return m_loaded.canMergeDrawings; }
     QByteArray oursBytes() const { return m_loaded.oursBytes; }
@@ -159,6 +181,8 @@ public:
     /// Write mergedBytes into the original and move the copy to the trash (canMergeDrawings) —
     /// unless notesDiffer: then the copy stays, reloaded (updated()).
     Q_INVOKABLE bool mergeDrawings();
+    /// Write mergedText into the original and move the copy to the trash (canMergeCanvases).
+    Q_INVOKABLE bool mergeCanvases();
 
 Q_SIGNALS:
     void workspaceChanged();
@@ -187,6 +211,8 @@ private:
         qint64 oursSize = 0;
         qint64 theirsSize = 0;
         bool canMergeDrawings = false;
+        bool canMergeCanvases = false;
+        QVariantMap canvasCounts;
         QByteArray oursBytes;
         QByteArray theirsBytes;
         QByteArray mergedBytes;
@@ -206,6 +232,8 @@ private:
     bool unchangedSinceLoaded();
     /// Read both drawings and merge them (reload() of a drawing conflict).
     void loadDrawings(const QString &original, const QString &copy, bool originalExists);
+    /// Read both canvases and merge them (reload() of a canvas conflict; ours and theirs are set).
+    void loadCanvases(const QString &original);
 
     QPointer<shell::Workspace> m_workspace;
     QString m_copy;

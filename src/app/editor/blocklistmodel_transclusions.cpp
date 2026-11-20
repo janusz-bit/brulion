@@ -154,6 +154,30 @@ public:
         return out;
     }
 
+    /// Markdown that is no file's (a canvas's text card) rendered as an embed of it would be,
+    /// its links resolving from `fromPath`: {found: true, message ("empty" for no blocks), more,
+    /// blocks}.
+    QVariantMap buildText(const QString &text, const QString &fromPath)
+    {
+        auto doc = std::make_shared<markdown::BlockDocument>(text);
+        // (Kept with the documents read: the blocks refer to it while they are built.)
+        m_docs.insert(u"\n"_s, {text, doc});
+        Resolved r;
+        r.found = true;
+        r.src = Source{fromPath, text, doc.get()};
+        r.range = Range{0, doc->count() - 1, 0};
+        r.key = fromPath + u"\n#text"_s;
+        QVariantList blocks;
+        int budget = BlockListModel::MaxTransclusionBlocks;
+        int more = 0;
+        QSet<QString> visited{r.key};
+        addBlocks(r, 0, 1, visited, blocks, budget, more);
+        return {{u"found"_s, true},
+                {u"message"_s, blocks.isEmpty() ? u"empty"_s : QString()},
+                {u"more"_s, more},
+                {u"blocks"_s, blocks}};
+    }
+
 private:
     struct Source {
         QString path;
@@ -449,6 +473,11 @@ QVariantMap BlockListModel::linkPreview(const QString &url, const QString &fromP
             return {};
     }
     return Builder(*this).build(*t, from);
+}
+
+QVariantMap BlockListModel::textPreview(const QString &markdown, const QString &fromPath) const
+{
+    return Builder(*this).buildText(markdown, fromPath.isEmpty() ? m_path : fromPath);
 }
 
 void BlockListModel::ensureTransclusions(int row) const

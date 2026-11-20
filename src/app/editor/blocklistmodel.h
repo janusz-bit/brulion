@@ -266,6 +266,11 @@ public:
     /// found, message, more, blocks} —; {} for other links and for a page link to an attachment
     /// or a drawing.
     QVariantMap linkPreview(const QString &url, const QString &fromPath) const;
+    /// Markdown that is no file's — a canvas's text card (docs/UI.md "Canvas view") — rendered
+    /// read-only as an embed of it would be (linkPreview()'s blocks; links resolve from
+    /// `fromPath`, "" = this page; nested embeds shown, depth-limited): {found, message ("empty"),
+    /// more, blocks}.
+    QVariantMap textPreview(const QString &markdown, const QString &fromPath) const;
     /// The host's vault configuration (cached until the rendering is invalidated).
     const VaultConfig &vaultConfig() const;
     void setEnglish(bool english);

@@ -509,6 +509,9 @@ public:
     /// editor keeps what was drawn here beside a file changed elsewhere into one it cannot edit).
     /// The path used; "" (and errorOccurred) when it could not be written.
     Q_INVOKABLE QString createAttachment(const QString &path, const QByteArray &data);
+    /// A new empty canvas ("Untitled canvas.canvas", numbered when taken; docs/UI.md "Canvas
+    /// view") in `folder`, or the new pages' folder for ""; its path, "" when it could not be made.
+    Q_INVOKABLE QString createCanvas(const QString &folder = QString());
     /// The picture's pixels from its header ("assets/a.png" -> 4000 × 3000; -1 × -1 when the
     /// header has none): the picture view's own-pixels size, without decoding the picture; a
     /// `.excalidraw` or plugin drawing's preview size (drawingSize()).

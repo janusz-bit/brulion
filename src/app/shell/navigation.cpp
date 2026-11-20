@@ -1,5 +1,7 @@
 #include "navigation.h"
 
+#include "canvas/canvas.h"
+
 #include <QDate>
 
 using namespace Qt::StringLiterals;
@@ -12,7 +14,8 @@ QStringList routeViews()
                                    u"habits"_s,   u"graph"_s,   u"search"_s,       u"allPages"_s, u"tags"_s,
                                    u"tag"_s,      u"sync"_s,    u"importExport"_s, u"history"_s,  u"trash"_s,
                                    u"cleanup"_s,  u"replace"_s, u"settings"_s,     u"logs"_s,     u"drawing"_s,
-                                   u"gym"_s,      u"console"_s, u"extension"_s,    u"chat"_s,     u"flashcards"_s};
+                                   u"gym"_s,      u"console"_s, u"extension"_s,    u"chat"_s,     u"flashcards"_s,
+                                   u"canvas"_s};
     return views;
 }
 
@@ -39,8 +42,20 @@ QVariantMap normalizeRoute(const QVariantMap &route)
         out.insert(key, v);
     }
     // Views that need a parameter.
-    if ((view == u"page" || view == u"history" || view == u"drawing") && out.value(u"path"_s).toString().isEmpty())
+    if ((view == u"page" || view == u"history" || view == u"drawing" || view == u"canvas")
+        && out.value(u"path"_s).toString().isEmpty())
         return {};
+    // A canvas opens in the canvas view wherever a page route names it (the tree, links, search,
+    // the quick switcher) — as a file only when asked (`asFile`: one that is no canvas, as text).
+    if (view == u"page" && canvas::isCanvasPath(out.value(u"path"_s).toString())) {
+        if (out.value(u"asFile"_s).toBool()) {
+            out.remove(u"asFile"_s);
+        } else {
+            out.insert(u"view"_s, u"canvas"_s);
+            out.remove(u"heading"_s);
+            out.remove(u"blockId"_s);
+        }
+    }
     if (view == u"journal") {
         const QDate d = QDate::fromString(out.value(u"date"_s).toString(), Qt::ISODate);
         if (!d.isValid())

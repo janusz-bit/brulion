@@ -263,6 +263,9 @@ struct VaultIndex::Private {
     /// is never changed once attached but for its links and lazy caches — a change replaces it).
     std::unordered_map<VaultPath, std::shared_ptr<Entry>> entries;
     QSet<VaultPath> attachmentSet;
+    /// A canvas's file text (JSON) as indexed, by path; its entry holds its cards' text
+    /// (canvas::indexText()). A move rewrites the file (RelocationPlan).
+    QHash<VaultPath, QString> canvasSources;
     qsizetype journalNotes = 0; ///< entries with a journal date (VaultIndex::journalCount())
     index_detail::NameTable names;
     // Compact per-key sets (smallsets_p.h): nearly every key names one or two notes.
@@ -359,6 +362,8 @@ struct VaultIndex::Private {
     void emitIfPending();
     void addAttachment(const VaultPath &path);
     bool removeAttachment(const VaultPath &path);
+    /// The entry was made from the file text `content` (a canvas: its source, else its text).
+    bool sameText(const Entry &e, const QString &content) const;
     /// Parse and (re)index a note; returns the link keys whose resolution in *other* notes may
     /// have changed (the note's names when new, aliases when they changed).
     QSet<QString> putNote(const VaultPath &path, const QString &content, bool updateSearch,
