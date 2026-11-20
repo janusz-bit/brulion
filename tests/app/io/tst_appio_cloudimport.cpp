@@ -31,7 +31,8 @@ using brulion::ioviews::MsTodoImport;
 using brulion::ioviews::TokenImport;
 using brulion::shell::AppSettings;
 namespace io = brulion::io;
-namespace sync = brulion::sync;
+// No `namespace sync = brulion::sync`: POSIX declares a function ::sync() (unistd.h, which the
+// precompiled headers bring in on some systems), and the two names clash.
 
 namespace {
 
@@ -66,18 +67,18 @@ QByteArray readAll(const QString &dir)
 }
 
 /// Answers by host + path + query from memory, asynchronously.
-class FakeServer : public sync::HttpTransport {
+class FakeServer : public brulion::sync::HttpTransport {
 public:
     QHash<QString, QByteArray> answers;
     QHash<QString, int> statuses;
-    QList<sync::HttpRequest> requests;
+    QList<brulion::sync::HttpRequest> requests;
 
-    void send(const sync::HttpRequest &request, sync::HttpCallback done) override
+    void send(const brulion::sync::HttpRequest &request, brulion::sync::HttpCallback done) override
     {
         requests.append(request);
         const QString key = request.url.host() + request.url.path(QUrl::FullyEncoded)
                             + (request.url.hasQuery() ? u'?' + request.url.query(QUrl::FullyEncoded) : QString());
-        sync::HttpResponse r;
+        brulion::sync::HttpResponse r;
         r.status = statuses.value(key, answers.contains(key) ? 200 : 404);
         r.body = answers.value(key);
         QTimer::singleShot(0, [done, r] { done(r); });
@@ -305,8 +306,8 @@ private Q_SLOTS:
         QSignalSpy downloaded(&t, &TokenImport::downloaded);
         t.download();
         QVERIFY(downloaded.wait(5000 * BRULION_TEST_SLOWDOWN));
-        QVERIFY(std::ranges::none_of(s.requests,
-                                     [](const sync::HttpRequest &r) { return r.url.path().contains(u"tbl2"_s); }));
+        QVERIFY(std::ranges::none_of(
+                s.requests, [](const brulion::sync::HttpRequest &r) { return r.url.path().contains(u"tbl2"_s); }));
         QVERIFY(waitState(c, u"ready"_s));
         QCOMPARE(c.effectiveId(), u"airtable"_s);
         c.startImport();
