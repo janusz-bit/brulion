@@ -43,12 +43,16 @@ enum class Key {
     Sort,
     Group,
     Limit,
+    View,
+    Columns,
+    Summary,
 };
 
 const QString &publicKeys()
 {
     static const QString keys = u"type, status, tag, page, path, ref, due, scheduled, start, done, created, "
-                                u"remind, date, priority, is, text, sort, group, limit"_s;
+                                u"remind, date, priority, is, text, sort, group, limit, view, columns, summary, "
+                                u"key::value (a property)"_s;
     return keys;
 }
 
@@ -104,6 +108,17 @@ const QHash<QString, Key> &keyAliases()
             {u"limit"_s, Key::Limit},
             {u"is"_s, Key::Is},
             {u"jest"_s, Key::Is},
+            {u"view"_s, Key::View},
+            {u"widok"_s, Key::View},
+            {u"columns"_s, Key::Columns},
+            {u"column"_s, Key::Columns},
+            {u"cols"_s, Key::Columns},
+            {u"kolumny"_s, Key::Columns},
+            {u"kolumna"_s, Key::Columns},
+            {u"summary"_s, Key::Summary},
+            {u"summaries"_s, Key::Summary},
+            {u"podsumowanie"_s, Key::Summary},
+            {u"podsumowania"_s, Key::Summary},
     };
     return table;
 }
@@ -232,6 +247,95 @@ const QHash<QString, QueryGroupKey> &groupAliases()
     return table;
 }
 
+const QHash<QString, QueryView> &viewAliases()
+{
+    using V = QueryView;
+    static const QHash<QString, V> table = {
+            {u"list"_s, V::List},         {u"lista"_s, V::List},         {u"table"_s, V::Table},
+            {u"tabela"_s, V::Table},      {u"tabelka"_s, V::Table},      {u"board"_s, V::Board},
+            {u"kanban"_s, V::Board},      {u"tablica"_s, V::Board},      {u"gallery"_s, V::Gallery},
+            {u"cards"_s, V::Gallery},     {u"galeria"_s, V::Gallery},    {u"karty"_s, V::Gallery},
+            {u"calendar"_s, V::Calendar}, {u"kalendarz"_s, V::Calendar},
+    };
+    return table;
+}
+
+/// Built-in columns (folded) -> kind; any other name is a property.
+const QHash<QString, QueryColumnKind> &columnAliases()
+{
+    using C = QueryColumnKind;
+    static const QHash<QString, C> table = {
+            {u"title"_s, C::Title},         {u"tytul"_s, C::Title},         {u"page"_s, C::Title},
+            {u"strona"_s, C::Title},        {u"name"_s, C::Title},          {u"nazwa"_s, C::Title},
+            {u"file"_s, C::Title},          {u"plik"_s, C::Title},          {u"path"_s, C::Path},
+            {u"sciezka"_s, C::Path},        {u"folder"_s, C::Folder},       {u"katalog"_s, C::Folder},
+            {u"tags"_s, C::Tags},           {u"tagi"_s, C::Tags},           {u"tag"_s, C::Tags},
+            {u"mtime"_s, C::Modified},      {u"modified"_s, C::Modified},   {u"zmieniono"_s, C::Modified},
+            {u"zmiana"_s, C::Modified},     {u"size"_s, C::Size},           {u"rozmiar"_s, C::Size},
+            {u"date"_s, C::Date},           {u"data"_s, C::Date},           {u"dzien"_s, C::Date},
+            {u"text"_s, C::Text},           {u"tekst"_s, C::Text},          {u"task"_s, C::Text},
+            {u"zadanie"_s, C::Text},        {u"block"_s, C::Text},          {u"blok"_s, C::Text},
+            {u"status"_s, C::Status},       {u"stan"_s, C::Status},         {u"priority"_s, C::Priority},
+            {u"priorytet"_s, C::Priority},  {u"prio"_s, C::Priority},       {u"due"_s, C::Due},
+            {u"termin"_s, C::Due},          {u"deadline"_s, C::Due},        {u"scheduled"_s, C::Scheduled},
+            {u"zaplanowane"_s, C::Scheduled}, {u"plan"_s, C::Scheduled},    {u"start"_s, C::Start},
+            {u"poczatek"_s, C::Start},      {u"done"_s, C::Done},           {u"zrobione"_s, C::Done},
+            {u"wykonane"_s, C::Done},       {u"created"_s, C::Created},     {u"utworzone"_s, C::Created},
+    };
+    return table;
+}
+
+/// Columns that read a task: a page has none, so on type:pages they name a property instead.
+bool isTaskColumn(QueryColumnKind k)
+{
+    switch (k) {
+    case QueryColumnKind::Status:
+    case QueryColumnKind::Priority:
+    case QueryColumnKind::Due:
+    case QueryColumnKind::Scheduled:
+    case QueryColumnKind::Start:
+    case QueryColumnKind::Done:
+    case QueryColumnKind::Created: return true;
+    default: return false;
+    }
+}
+
+const QHash<QString, QString> &summaryAliases()
+{
+    static const QHash<QString, QString> table = {
+            {u"sum"_s, u"sum"_s},           {u"suma"_s, u"sum"_s},           {u"total"_s, u"sum"_s},
+            {u"average"_s, u"average"_s},   {u"avg"_s, u"average"_s},        {u"mean"_s, u"average"_s},
+            {u"srednia"_s, u"average"_s},   {u"median"_s, u"median"_s},      {u"mediana"_s, u"median"_s},
+            {u"min"_s, u"min"_s},           {u"minimum"_s, u"min"_s},        {u"max"_s, u"max"_s},
+            {u"maks"_s, u"max"_s},          {u"maximum"_s, u"max"_s},        {u"maksimum"_s, u"max"_s},
+            {u"range"_s, u"range"_s},       {u"zakres"_s, u"range"_s},       {u"rozpietosc"_s, u"range"_s},
+            {u"stddev"_s, u"stddev"_s},     {u"odchylenie"_s, u"stddev"_s},  {u"count"_s, u"count"_s},
+            {u"liczba"_s, u"count"_s},      {u"ilosc"_s, u"count"_s},        {u"empty"_s, u"empty"_s},
+            {u"puste"_s, u"empty"_s},       {u"filled"_s, u"filled"_s},      {u"wypelnione"_s, u"filled"_s},
+            {u"unique"_s, u"unique"_s},     {u"unikalne"_s, u"unique"_s},    {u"rozne"_s, u"unique"_s},
+            {u"checked"_s, u"checked"_s},   {u"zaznaczone"_s, u"checked"_s}, {u"unchecked"_s, u"unchecked"_s},
+            {u"niezaznaczone"_s, u"unchecked"_s}, {u"earliest"_s, u"earliest"_s},
+            {u"najwczesniej"_s, u"earliest"_s},   {u"najwczesniejsza"_s, u"earliest"_s},
+            {u"latest"_s, u"latest"_s},     {u"najpozniej"_s, u"latest"_s},  {u"najpozniejsza"_s, u"latest"_s},
+    };
+    return table;
+}
+
+/// `key::none` / `key::any` (folded): a property missing or empty / present.
+std::optional<QueryPropertyOp> propertyKeyword(const QString &folded)
+{
+    static const QHash<QString, QueryPropertyOp> table = {
+            {u"none"_s, QueryPropertyOp::None},    {u"brak"_s, QueryPropertyOp::None},
+            {u"empty"_s, QueryPropertyOp::None},   {u"puste"_s, QueryPropertyOp::None},
+            {u"pusty"_s, QueryPropertyOp::None},   {u"pusta"_s, QueryPropertyOp::None},
+            {u"any"_s, QueryPropertyOp::Any},      {u"dowolna"_s, QueryPropertyOp::Any},
+            {u"dowolny"_s, QueryPropertyOp::Any},  {u"dowolne"_s, QueryPropertyOp::Any},
+            {u"exists"_s, QueryPropertyOp::Any},   {u"istnieje"_s, QueryPropertyOp::Any},
+    };
+    const auto it = table.constFind(folded);
+    return it == table.cend() ? std::nullopt : std::optional(*it);
+}
+
 bool isTaskKey(Key k)
 {
     switch (k) {
@@ -289,6 +393,9 @@ QString keyName(Key k)
     case Key::Sort: return u"sort"_s;
     case Key::Group: return u"group"_s;
     case Key::Limit: return u"limit"_s;
+    case Key::View: return u"view"_s;
+    case Key::Columns: return u"columns"_s;
+    case Key::Summary: return u"summary"_s;
     }
     return {};
 }
@@ -308,41 +415,11 @@ QString exampleFor(Key k)
     case Key::Group: return u"group:page"_s;
     case Key::Limit: return u"limit:20"_s;
     case Key::Is: return u"is:blocked"_s;
+    case Key::View: return u"view:table"_s;
+    case Key::Columns: return u"columns:title,status,koszt"_s;
+    case Key::Summary: return u"summary:koszt=sum"_s;
     default: return keyName(k) + u":today"_s;
     }
-}
-
-QString sortName(QuerySortKey k)
-{
-    switch (k) {
-    case QuerySortKey::Due: return u"due"_s;
-    case QuerySortKey::Scheduled: return u"scheduled"_s;
-    case QuerySortKey::Start: return u"start"_s;
-    case QuerySortKey::Done: return u"done"_s;
-    case QuerySortKey::Created: return u"created"_s;
-    case QuerySortKey::Remind: return u"remind"_s;
-    case QuerySortKey::Date: return u"date"_s;
-    case QuerySortKey::Priority: return u"priority"_s;
-    case QuerySortKey::Status: return u"status"_s;
-    case QuerySortKey::Page: return u"page"_s;
-    case QuerySortKey::Path: return u"path"_s;
-    }
-    return {};
-}
-
-QString groupName(QueryGroupKey g)
-{
-    switch (g) {
-    case QueryGroupKey::None: return {};
-    case QueryGroupKey::Page: return u"page"_s;
-    case QueryGroupKey::Due: return u"due"_s;
-    case QueryGroupKey::Scheduled: return u"scheduled"_s;
-    case QueryGroupKey::Date: return u"date"_s;
-    case QueryGroupKey::Tag: return u"tag"_s;
-    case QueryGroupKey::Status: return u"status"_s;
-    case QueryGroupKey::Priority: return u"priority"_s;
-    }
-    return {};
 }
 
 QueryDateField dateField(Key k)
@@ -558,6 +635,49 @@ qsizetype keyLength(QStringView raw)
     return k < raw.size() && raw[k] == u':' ? k : -1;
 }
 
+/// `key` of a `key::value` token (a property filter): letters, digits, '_' or '-' (not first),
+/// then `::`; -1 when the token is none.
+qsizetype propertyKeyLength(QStringView raw)
+{
+    qsizetype k = 0;
+    while (k < raw.size() && (raw[k].isLetterOrNumber() || raw[k] == u'_' || (k > 0 && raw[k] == u'-') || raw[k].isMark()))
+        ++k;
+    return k > 0 && raw.sliced(k).startsWith(u"::") ? k : -1;
+}
+
+/// A property key written in quotes (`"termin oddania"::2026-10-15`): the end of the quotes when
+/// `::` follows them, else -1.
+qsizetype quotedPropertyKeyEnd(QStringView raw)
+{
+    if (raw.isEmpty() || !opensQuote(raw.front()))
+        return -1;
+    const qsizetype end = quoteEnd(raw, 0);
+    return end > 2 && raw.sliced(end).startsWith(u"::") ? end : -1;
+}
+
+/// A value of a comma list ends with `::` (`sort:status::`): a property even when the name is a
+/// built-in key. The name without it.
+std::pair<QString, bool> withoutPropertyMark(const QString &name)
+{
+    if (name.endsWith(u"::") && name.size() > 2)
+        return {name.chopped(2).trimmed(), true};
+    return {name, false};
+}
+
+/// Does a written value hold `..` outside quotes and `[[ ]]` (a range)? Its offset, else -1.
+qsizetype rangeDots(QStringView v)
+{
+    for (qsizetype i = 0; i + 1 < v.size(); ++i) {
+        if (const qsizetype end = groupEnd(v, i); end >= 0) {
+            i = end - 1;
+            continue;
+        }
+        if (v[i] == u'.' && v[i + 1] == u'.')
+            return i;
+    }
+    return -1;
+}
+
 // ---- parser -------------------------------------------------------------------------------------
 
 struct Used {
@@ -600,6 +720,13 @@ public:
 private:
     bool applyToken(const QString &token);
     bool applyKey(Key key, const QString &written, const QString &rawValue, bool negate);
+    /// A property filter `key::value` (`written`: the key as written, unquoted).
+    bool applyProperty(const QString &written, const QString &rawValue, bool negate);
+    bool applyColumns(const QString &written, const QString &rawValue);
+    bool applySummary(const QString &written, const QString &rawValue);
+    /// The sort keys, the group and the columns once the type is known (a task key names a
+    /// property on type:pages).
+    void resolveNames();
     bool applyDate(Key key, const QString &written, const QStringList &values, bool negate);
     /// The canonical value of a written one (`table`: by valueKey()); null after fail().
     template<typename T>
@@ -623,6 +750,10 @@ private:
     std::optional<QueryType> m_type;
     QList<Used> m_used;
     QString m_error;
+    QList<std::pair<QString, bool>> m_sortNames; ///< `sort:` names as written (without '-'), descending
+    std::optional<QString> m_groupName;          ///< `group:` as written
+    bool m_columnsSet = false;
+    bool m_summarySet = false;
 };
 
 template<typename T>
@@ -702,7 +833,8 @@ bool Parser::applyKey(Key key, const QString &written, const QString &rawValue, 
     if (values.isEmpty())
         return fail(messages::emptyValue(written, exampleFor(key)));
     m_used.append(Used{key, values.join(u',')});
-    const bool once = key == Key::Type || key == Key::Sort || key == Key::Group || key == Key::Limit;
+    const bool once = key == Key::Type || key == Key::Sort || key == Key::Group || key == Key::Limit
+                      || key == Key::View || key == Key::Columns || key == Key::Summary;
     if (once && negate)
         return fail(messages::notNegatable(written));
     QueryFilter f;
@@ -752,30 +884,38 @@ bool Parser::applyKey(Key key, const QString &written, const QString &rawValue, 
         f.kind = QueryFilterKind::Text;
         f.values = values;
         break;
-    case Key::Sort: {
-        const QString allowed = u"due, scheduled, start, done, created, remind, date, priority, status, page, path"_s;
+    case Key::Sort:
         for (const QString &v : values) {
             const bool desc = v.startsWith(u'-');
-            const QString name = desc || v.startsWith(u'+') ? v.sliced(1) : v;
-            const QuerySortKey *sortKey = lookup(written, name, sortAliases(), allowed);
-            if (!sortKey)
-                return false;
-            m_query.sort.append(QuerySort{*sortKey, desc});
+            const QString name = (desc || v.startsWith(u'+') ? v.sliced(1) : v).trimmed();
+            if (name.isEmpty() || name == u"::")
+                return fail(messages::emptyValue(written, exampleFor(key)));
+            m_sortNames.append({name, desc});
         }
         return true;
-    }
     case Key::Group: {
-        if (m_query.group != QueryGroupKey::None)
+        if (m_groupName)
             return fail(messages::duplicate(written));
-        const QString allowed = u"page, due, scheduled, date, tag, status, priority"_s;
         if (values.size() > 1)
-            return fail(messages::badValue(written, values.join(u','), allowed));
-        const QueryGroupKey *group = lookup(written, values.first(), groupAliases(), allowed);
-        if (!group)
-            return false;
-        m_query.group = *group;
+            return fail(messages::badValue(written, values.join(u','),
+                                           u"page, due, scheduled, date, tag, status, priority, a property"_s));
+        m_groupName = values.first().trimmed();
         return true;
     }
+    case Key::View: {
+        if (m_query.view != QueryView::None)
+            return fail(messages::duplicate(written));
+        const QString allowed = u"list, table, board, gallery, calendar"_s;
+        if (values.size() > 1)
+            return fail(messages::badValue(written, values.join(u','), allowed));
+        const QueryView *view = lookup(written, values.first(), viewAliases(), allowed);
+        if (!view)
+            return false;
+        m_query.view = *view;
+        return true;
+    }
+    case Key::Columns: return applyColumns(written, rawValue);
+    case Key::Summary: return applySummary(written, rawValue);
     case Key::Limit: {
         const QString &v = values.first();
         bool ok = values.size() == 1 && std::ranges::all_of(v, [](QChar c) { return c >= u'0' && c <= u'9'; });
@@ -791,12 +931,166 @@ bool Parser::applyKey(Key key, const QString &written, const QString &rawValue, 
     return true;
 }
 
+bool Parser::applyProperty(const QString &written, const QString &rawValue, bool negate)
+{
+    const QString shown = written + u':'; // messages show `key::`
+    const QString example = written + u"::"_s + u"done"_s;
+    QueryFilter f;
+    f.kind = QueryFilterKind::Property;
+    f.negate = negate;
+    f.propertyName = written;
+    f.property = queryPropertyKey(written);
+    if (f.property.isEmpty())
+        return fail(messages::emptyValue(u"::"_s, u"status::done"_s));
+    static constexpr std::pair<QStringView, QueryPropertyOp> operators[] = {
+            {u"<=", QueryPropertyOp::LessOrEqual}, {u">=", QueryPropertyOp::GreaterOrEqual},
+            {u"<", QueryPropertyOp::Less},         {u">", QueryPropertyOp::Greater},
+            {u"=", QueryPropertyOp::Equals},
+    };
+    bool failed = false;
+    forEachPart(rawValue, [&](QStringView part, qsizetype) {
+        if (failed)
+            return;
+        QStringView rest = part.trimmed();
+        if (rest.isEmpty())
+            return;
+        QueryPropertyCondition c;
+        QStringView op;
+        for (const auto &[spelling, propertyOp] : operators) {
+            if (rest.startsWith(spelling)) {
+                op = spelling;
+                c.op = propertyOp;
+                rest = rest.sliced(spelling.size()).trimmed();
+                break;
+            }
+        }
+        if (rest.isEmpty()) {
+            failed = !fail(messages::emptyValue(shown, example));
+            return;
+        }
+        if (opensQuote(rest.front()) && rest.size() >= 2 && closersFor(rest.front()).contains(rest.back())) {
+            c.value = rest.sliced(1, rest.size() - 2).toString();
+            c.quoted = true;
+            f.conditions.append(c);
+            return;
+        }
+        if (const auto keyword = propertyKeyword(valueKey(rest.toString()))) {
+            if (!op.isEmpty()) {
+                failed = !fail(messages::operatorWithKeyword(shown, op.toString(), rest.toString()));
+                return;
+            }
+            c.op = *keyword;
+            f.conditions.append(c);
+            return;
+        }
+        if (const qsizetype dots = rangeDots(rest); dots >= 0 && op.isEmpty()) {
+            c.op = QueryPropertyOp::Range;
+            c.value = unquote(rest.first(dots));
+            c.to = unquote(rest.sliced(dots + 2));
+            if (c.value.trimmed().isEmpty() || c.to.trimmed().isEmpty()) {
+                failed = !fail(messages::badRange(shown, rest.toString(), written + u"::100..200"_s));
+                return;
+            }
+            f.conditions.append(c);
+            return;
+        }
+        c.value = rest.toString();
+        if (op.isEmpty() && c.value.contains(u'*') && !c.value.startsWith(u"[["))
+            c.op = QueryPropertyOp::Glob;
+        f.conditions.append(c);
+    });
+    if (failed)
+        return false;
+    if (f.conditions.isEmpty())
+        return fail(messages::emptyValue(shown, example));
+    m_query.filters.append(std::move(f));
+    return true;
+}
+
+bool Parser::applyColumns(const QString &written, const QString &rawValue)
+{
+    if (m_columnsSet)
+        return fail(messages::duplicate(written));
+    m_columnsSet = true;
+    bool failed = false;
+    forEachPart(rawValue, [&](QStringView part, qsizetype) {
+        if (failed)
+            return;
+        const QString text = unquote(part).trimmed();
+        if (text.isEmpty())
+            return;
+        QueryColumn c;
+        // `Label = expression`: a formula, or a property under a label of its own.
+        if (const qsizetype eq = text.indexOf(u'='); eq >= 0) {
+            c.label = text.first(eq).trimmed();
+            QString expr = text.sliced(eq + 1).trimmed();
+            if (c.label.isEmpty() || expr.isEmpty()) {
+                failed = !fail(messages::badColumn(written, text));
+                return;
+            }
+            const auto [plain, marked] = withoutPropertyMark(expr);
+            if (propertyKeyLength(QString(plain + u"::"_s)) == plain.size() || marked) {
+                c.kind = QueryColumnKind::Property; // (a built-in name reads the property too)
+                c.name = plain;
+                c.property = queryPropertyKey(plain);
+            } else {
+                c.kind = QueryColumnKind::Formula;
+                c.name = c.label;
+                c.formula = expr;
+            }
+            m_query.columns.append(c);
+            return;
+        }
+        c.name = text;
+        m_query.columns.append(c); // resolved by resolveNames()
+    });
+    if (failed)
+        return false;
+    if (m_query.columns.isEmpty())
+        return fail(messages::emptyValue(written, exampleFor(Key::Columns)));
+    return true;
+}
+
+bool Parser::applySummary(const QString &written, const QString &rawValue)
+{
+    if (m_summarySet)
+        return fail(messages::duplicate(written));
+    m_summarySet = true;
+    const QString allowed = u"sum, average, median, min, max, range, stddev, count, empty, filled, unique, checked, "
+                            u"unchecked, earliest, latest"_s;
+    bool failed = false;
+    forEachPart(rawValue, [&](QStringView part, qsizetype) {
+        if (failed)
+            return;
+        const QString text = unquote(part).trimmed();
+        if (text.isEmpty())
+            return;
+        const qsizetype eq = text.lastIndexOf(u'=');
+        const QString column = eq > 0 ? withoutPropertyMark(text.first(eq).trimmed()).first : QString();
+        const QString function = eq > 0 ? querySummaryFunction(text.sliced(eq + 1)) : QString();
+        if (column.isEmpty() || function.isEmpty()) {
+            failed = !fail(messages::badValue(written, text, u"column=function ("_s + allowed + u')'));
+            return;
+        }
+        m_query.summaries.append(QuerySummary{queryPropertyKey(column), function});
+    });
+    if (failed)
+        return false;
+    if (m_query.summaries.isEmpty())
+        return fail(messages::emptyValue(written, exampleFor(Key::Summary)));
+    return true;
+}
+
 bool Parser::applyToken(const QString &token)
 {
     if (token == u"-")
         return true;
     const bool negate = token.startsWith(u'-');
     const QString raw = negate ? token.sliced(1) : token;
+    if (const qsizetype end = quotedPropertyKeyEnd(raw); end > 0)
+        return applyProperty(raw.sliced(1, end - 2).trimmed(), raw.sliced(end + 2), negate);
+    if (const qsizetype k = propertyKeyLength(raw); k > 0)
+        return applyProperty(raw.first(k), raw.sliced(k + 2), negate);
     if (opensQuote(raw.front())) {
         if (const QString phrase = unquote(raw); !phrase.trimmed().isEmpty())
             addFilter(QueryFilterKind::Text, phrase, negate);
@@ -827,14 +1121,81 @@ bool Parser::applyToken(const QString &token)
 
 QueryType Parser::inferType() const
 {
+    const auto builtinSort = [](const std::pair<QString, bool> &s) -> std::optional<QuerySortKey> {
+        const auto [name, property] = withoutPropertyMark(s.first);
+        const auto it = sortAliases().constFind(valueKey(name));
+        return property || it == sortAliases().cend() ? std::nullopt : std::optional(*it);
+    };
+    std::optional<QueryGroupKey> group;
+    if (m_groupName) {
+        const auto [name, property] = withoutPropertyMark(*m_groupName);
+        if (const auto it = groupAliases().constFind(valueKey(name)); !property && it != groupAliases().cend())
+            group = *it;
+    }
     const bool taskish = std::ranges::any_of(m_used, isTaskKey, &Used::key)
-                         || std::ranges::any_of(m_query.sort, isTaskSort, &QuerySort::key)
-                         || isTaskGroup(m_query.group);
+                         || std::ranges::any_of(m_sortNames,
+                                                [&](const auto &s) {
+                                                    const auto k = builtinSort(s);
+                                                    return k && isTaskSort(*k);
+                                                })
+                         || (group && isTaskGroup(*group));
     if (taskish)
         return QueryType::Tasks;
     const bool remind = std::ranges::any_of(m_used, [](const Used &u) { return u.key == Key::Remind; })
-                        || std::ranges::any_of(m_query.sort, [](QuerySort s) { return s.key == QuerySortKey::Remind; });
+                        || std::ranges::any_of(m_sortNames, [&](const auto &s) {
+                               return builtinSort(s) == QuerySortKey::Remind;
+                           });
     return remind ? QueryType::Reminders : QueryType::Blocks;
+}
+
+void Parser::resolveNames()
+{
+    const bool pages = m_query.type == QueryType::Pages;
+    for (const auto &[written, desc] : std::as_const(m_sortNames)) {
+        const auto [name, marked] = withoutPropertyMark(written);
+        QuerySort s;
+        s.descending = desc;
+        s.name = name;
+        const auto it = sortAliases().constFind(valueKey(name));
+        // On pages only the page keys are built-in: `sort:status` reads the page's property.
+        const bool builtin = !marked && it != sortAliases().cend()
+                             && (!pages || *it == QuerySortKey::Page || *it == QuerySortKey::Path
+                                 || *it == QuerySortKey::Date);
+        if (builtin) {
+            s.key = *it;
+        } else {
+            s.key = QuerySortKey::Property;
+            s.property = queryPropertyKey(name);
+        }
+        m_query.sort.append(s);
+    }
+    if (m_groupName) {
+        const auto [name, marked] = withoutPropertyMark(*m_groupName);
+        const auto it = groupAliases().constFind(valueKey(name));
+        const bool builtin = !marked && it != groupAliases().cend()
+                             && (!pages || *it == QueryGroupKey::Page || *it == QueryGroupKey::Tag
+                                 || *it == QueryGroupKey::Date);
+        if (builtin) {
+            m_query.group = *it;
+        } else {
+            m_query.group = QueryGroupKey::Property;
+            m_query.groupProperty = queryPropertyKey(name);
+            m_query.groupPropertyName = name;
+        }
+    }
+    for (QueryColumn &c : m_query.columns) {
+        if (c.kind == QueryColumnKind::Formula || !c.label.isEmpty())
+            continue; // a formula, or `Label = property`
+        const auto [name, marked] = withoutPropertyMark(c.name);
+        c.name = name;
+        const auto it = columnAliases().constFind(valueKey(name));
+        if (!marked && it != columnAliases().cend() && !(pages && isTaskColumn(*it))) {
+            c.kind = *it;
+        } else {
+            c.kind = QueryColumnKind::Property;
+            c.property = queryPropertyKey(name);
+        }
+    }
 }
 
 bool Parser::validatePages()
@@ -844,13 +1205,7 @@ bool Parser::validatePages()
         if (isTaskKey(u.key) || u.key == Key::Remind)
             return fail(messages::typeConflict(keyName(u.key), u.value, type));
     }
-    for (const QuerySort &s : std::as_const(m_query.sort)) {
-        if (s.key != QuerySortKey::Page && s.key != QuerySortKey::Path && s.key != QuerySortKey::Date)
-            return fail(messages::typeConflict(u"sort"_s, sortName(s.key), type));
-    }
-    const QueryGroupKey g = m_query.group;
-    if (g != QueryGroupKey::None && g != QueryGroupKey::Page && g != QueryGroupKey::Tag && g != QueryGroupKey::Date)
-        return fail(messages::typeConflict(u"group"_s, groupName(g), type));
+    // (Sort keys and groups were read for pages already: a task key names a property there.)
     return true;
 }
 
@@ -866,6 +1221,7 @@ std::variant<Query, QString> Parser::parse(const QString &source)
     }
     m_query.explicitType = m_type.has_value();
     m_query.type = m_type.value_or(inferType());
+    resolveNames();
     if (m_query.type == QueryType::Pages && !validatePages())
         return m_error;
     return m_query;
@@ -876,6 +1232,19 @@ std::variant<Query, QString> Parser::parse(const QString &source)
 std::variant<Query, QString> parseQuery(const QString &source)
 {
     return Parser().parse(source);
+}
+
+QString queryPropertyKey(QStringView key)
+{
+    QString k = valueKey(key.toString());
+    while (k.endsWith(u':'))
+        k.chop(1);
+    return k;
+}
+
+QString querySummaryFunction(QStringView name)
+{
+    return summaryAliases().value(valueKey(name.toString()));
 }
 
 // ---- Names in query blocks -----------------------------------------------------------------------
@@ -1032,6 +1401,22 @@ void tokenNames(QStringView token, qsizetype at, QList<QueryNameRef> &out)
     const qsizetype neg = token.startsWith(u'-') ? 1 : 0;
     const QStringView raw = token.sliced(neg);
     at += neg;
+    // A property filter: its `[[Page]]` values name pages (`projekt::[[Dom]]`, `-szef::=[[Jan]]`).
+    qsizetype valueAt = quotedPropertyKeyEnd(raw);
+    valueAt = valueAt > 0 ? valueAt + 2 : propertyKeyLength(raw) + 2;
+    if (valueAt > 1) {
+        const qsizetype base = at + valueAt;
+        forEachPart(raw.sliced(valueAt), [&](QStringView part, qsizetype offset) {
+            qsizetype skip = 0;
+            while (skip < part.size() && (part[skip].isSpace() || part[skip] == u'<' || part[skip] == u'>'
+                                          || part[skip] == u'='))
+                ++skip;
+            const QStringView value = part.sliced(skip).trimmed();
+            if (value.startsWith(u"[[") && value.endsWith(u"]]") && rangeDots(value) < 0)
+                addName(QueryFilterKind::Ref, part.sliced(skip), base + offset + skip, out);
+        });
+        return;
+    }
     if (raw.isEmpty() || opensQuote(raw.front()))
         return; // a phrase
     if (raw.size() > 1 && raw.front() == u'#' && !raw[1].isSpace()) {

@@ -68,6 +68,20 @@ QString duplicate(const QString &key)
     return QCoreApplication::translate("brulion::Query", "Filter “%1:” may appear only once.").arg(key);
 }
 
+QString badRange(const QString &key, const QString &value, const QString &example)
+{
+    return QCoreApplication::translate("brulion::Query", "The range “%1” in “%2:” needs both ends, e.g. %3.")
+            .arg(value, key, example);
+}
+
+QString badColumn(const QString &key, const QString &value)
+{
+    return QCoreApplication::translate("brulion::Query",
+                                       "Invalid column “%1” in “%2:”. Write a name (title, status, koszt) or "
+                                       "\"Label = expression\" in quotes.")
+            .arg(value, key);
+}
+
 QString noDate()
 {
     return QCoreApplication::translate("brulion::Query", "No date");
@@ -86,6 +100,11 @@ QString noStatus()
 QString noPriority()
 {
     return QCoreApplication::translate("brulion::Query", "No priority");
+}
+
+QString noValue()
+{
+    return QCoreApplication::translate("brulion::Query", "No value");
 }
 
 } // namespace index_detail::messages

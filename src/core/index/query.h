@@ -66,7 +66,22 @@ struct QueryDateCondition {
     friend bool operator==(const QueryDateCondition &, const QueryDateCondition &) = default;
 };
 
-enum class QueryFilterKind { Status, Priority, Tag, Page, Path, Ref, Text, Date, Is };
+enum class QueryFilterKind { Status, Priority, Tag, Page, Path, Ref, Text, Date, Is, Property };
+
+/// How a property filter compares (`key::value`, `key::>value`, `key::a..b`, `key::none`, …).
+enum class QueryPropertyOp { Equals, Less, LessOrEqual, Greater, GreaterOrEqual, Range, Glob, None, Any };
+
+/// One condition of a property filter (`koszt::>100`). The value is typed when the filter runs,
+/// by the property's value it meets: a number compares with numbers, a date expression with dates,
+/// a `[[link]]` with links (the page it resolves to), anything else as text (folded).
+struct QueryPropertyCondition {
+    QueryPropertyOp op = QueryPropertyOp::Equals;
+    QString value;       ///< as written, unquoted (a link keeps its `[[ ]]`); Range: the lower end
+    QString to;          ///< Range: the upper end
+    bool quoted = false; ///< written in quotes: a text, never a keyword, number, date or pattern
+
+    friend bool operator==(const QueryPropertyCondition &, const QueryPropertyCondition &) = default;
+};
 
 /// A filter. Values of one filter are ORed; `negate` (written `-key:`) inverts the filter.
 struct QueryFilter {
@@ -79,20 +94,72 @@ struct QueryFilter {
     QList<Priority> priorities;                 ///< Priority (Priority::None = no priority set)
     QueryDateField field = QueryDateField::Due; ///< Date
     QList<QueryDateCondition> dates;            ///< Date
+    QString property;                           ///< Property: the key folded (queryPropertyKey())
+    QString propertyName;                       ///< Property: the key as written
+    QList<QueryPropertyCondition> conditions;   ///< Property
 
     friend bool operator==(const QueryFilter &, const QueryFilter &) = default;
 };
 
-enum class QuerySortKey { Due, Scheduled, Start, Done, Created, Remind, Date, Priority, Status, Page, Path };
+enum class QuerySortKey { Due, Scheduled, Start, Done, Created, Remind, Date, Priority, Status, Page, Path, Property };
 
 struct QuerySort {
     QuerySortKey key = QuerySortKey::Due;
     bool descending = false; ///< written `-key`; missing values stay last either way
+    QString property;        ///< Property: the key folded (queryPropertyKey())
+    QString name;            ///< as written (without '-' and a trailing `::`)
 
     friend bool operator==(const QuerySort &, const QuerySort &) = default;
 };
 
-enum class QueryGroupKey { None, Page, Due, Scheduled, Date, Tag, Status, Priority };
+enum class QueryGroupKey { None, Page, Due, Scheduled, Date, Tag, Status, Priority, Property };
+
+/// How a query's results are shown (`view:`); None: the plain list of a ```query block.
+enum class QueryView { None, List, Table, Board, Gallery, Calendar };
+
+/// What a column (`columns:`) shows. Page columns read the row's page; task columns its task (a
+/// page row reads a property of that name instead); Property a property (as filters read it);
+/// Formula an expression (Dataview syntax) the views module evaluates.
+enum class QueryColumnKind {
+    Title,    ///< the page (a link)
+    Path,     ///< the file's path
+    Folder,   ///< its folder
+    Tags,     ///< the page's (a block row: the block's) tags
+    Modified, ///< the file's modification time
+    Size,     ///< the file's size
+    Date,     ///< the journal date of the page
+    Text,     ///< a block row's text (a page row: its title)
+    Status,
+    Priority,
+    Due,
+    Scheduled,
+    Start,
+    Done,
+    Created,
+    Property,
+    Formula,
+};
+
+/// One column of a view.
+struct QueryColumn {
+    QueryColumnKind kind = QueryColumnKind::Property;
+    QString name;     ///< as written ("koszt", "Brutto" of `"Brutto = koszt * 1.23"`, "title")
+    QString property; ///< Property: the key folded (queryPropertyKey())
+    QString formula;  ///< Formula: the expression
+    QString label;    ///< a label written with `=` ("" for none: the view names the column)
+
+    friend bool operator==(const QueryColumn &, const QueryColumn &) = default;
+};
+
+/// A column summary (`summary:koszt=sum`): the column (QueryColumn::name folded) and the function
+/// (canonical English name: sum, average, median, min, max, range, stddev, count, empty, filled,
+/// unique, checked, unchecked, earliest, latest).
+struct QuerySummary {
+    QString column;
+    QString function;
+
+    friend bool operator==(const QuerySummary &, const QuerySummary &) = default;
+};
 
 /// A validated query.
 struct Query {
@@ -102,8 +169,20 @@ struct Query {
     QList<QueryFilter> filters;
     QList<QuerySort> sort;
     QueryGroupKey group = QueryGroupKey::None;
+    QString groupProperty;     ///< group Property: the key folded
+    QString groupPropertyName; ///< … as written
     std::optional<int> limit;
+    QueryView view = QueryView::None;
+    QList<QueryColumn> columns;    ///< `columns:` in the order written (empty: the view's default)
+    QList<QuerySummary> summaries; ///< `summary:`
 };
+
+/// The folded form of a property key in queries and views: case- and diacritic-insensitive,
+/// blanks and '_' as '-' ("Termin oddania" -> "termin-oddania", "Budżet" -> "budzet").
+QString queryPropertyKey(QStringView key);
+/// The canonical summary function of a written name (English or Polish: "suma" -> "sum"); "" for
+/// none.
+QString querySummaryFunction(QStringView name);
 
 /// Parse and validate a query (the body of a ```query block). Returns the Query, or a
 /// translated, helpful error message (QCoreApplication::translate context "brulion::Query").
@@ -119,9 +198,11 @@ struct QueryItem {
 
 /// Items of one group (`group:` queries), in result order.
 struct QueryGroup {
-    QString key;   ///< path, ISO date, tag, status / priority name; empty for "none"
+    QString key;   ///< path, ISO date, tag, status / priority name, a property value folded (a
+                   ///< link: the page's path); empty for "none"
     QString label; ///< display text (translated for "none", statuses and priorities)
     QList<QueryItem> items;
+    QString value; ///< group:<property>: the value as written in a note ("[[Dom]]", "w toku")
 };
 
 struct QueryResult {
