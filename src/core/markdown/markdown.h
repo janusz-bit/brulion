@@ -39,6 +39,8 @@
 //                  setTaskStatusLogged / toggleTaskLogged (the status history setting)
 //   properties.h   parsePropertyValue(key, raw), matchPropertyLine(line),
 //                  frontmatterProperties(data), namesFrom(value, splitWhitespace)
+//   blockprops.h   a block's `key:: value` lines: setBlockProperty(content, line, ownEndLine, key,
+//                  value), blockPropertyText(…) (the value as written), isBlockPropertyKey
 //   frontmatter.h  findFrontmatter / parseFrontmatter(content), parseYaml(yaml) (subset, no
 //                  deps), stringifyYaml / stringifyFrontmatter(data, keyOrder),
 //                  setFrontmatterValue / removeFrontmatterValue(content, key[, value])
@@ -138,6 +140,7 @@
 #pragma once
 
 #include "markdown/blockclipboard.h"
+#include "markdown/blockprops.h"
 #include "markdown/blockdocument.h"
 #include "markdown/edit.h"
 #include "markdown/frontmatter.h"

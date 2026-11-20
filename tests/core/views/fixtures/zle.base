@@ -1,0 +1,17 @@
+filters:
+  or:
+    - file.name.replace(/x/, "y") == "a"
+    - 'file.hasTag("książka")'
+    - unknownFunction(1)
+formulas:
+  a: "formula.b + 1"
+  b: "formula.a + 1"
+  c: "formula.a * 2"
+  d: "cena * "
+  ok: "cena * 2"
+views:
+  - type: kanban
+    name: Bez grupy
+  - type: timeline
+    name: Wtyczka
+    order: [file.name, formula.ok, formula.a]

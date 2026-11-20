@@ -660,7 +660,7 @@ qsizetype quotedPropertyKeyEnd(QStringView raw)
 std::pair<QString, bool> withoutPropertyMark(const QString &name)
 {
     if (name.endsWith(u"::") && name.size() > 2)
-        return {name.chopped(2).trimmed(), true};
+        return {unquote(name.chopped(2).trimmed()), true}; // (`"termin oddania"::`)
     return {name, false};
 }
 
@@ -1232,6 +1232,40 @@ std::variant<Query, QString> Parser::parse(const QString &source)
 std::variant<Query, QString> parseQuery(const QString &source)
 {
     return Parser().parse(source);
+}
+
+QList<QueryKeyToken> queryKeyTokens(const QString &source)
+{
+    QList<QueryKeyToken> out;
+    QList<Token> tokens;
+    if (!tokenize(source, tokens))
+        return out;
+    for (const Token &t : std::as_const(tokens)) {
+        const bool negated = t.raw.startsWith(u'-') && t.raw.size() > 1;
+        const QStringView raw = QStringView(t.raw).sliced(negated ? 1 : 0);
+        QueryKeyToken k;
+        k.from = t.from;
+        k.to = t.from + t.raw.size();
+        k.negated = negated;
+        const qsizetype at = t.from + (negated ? 1 : 0);
+        if (const qsizetype end = quotedPropertyKeyEnd(raw); end > 0) {
+            k.key = u"::"_s;
+            k.valueFrom = at + end + 2;
+        } else if (const qsizetype p = propertyKeyLength(raw); p > 0) {
+            k.key = u"::"_s;
+            k.valueFrom = at + p + 2;
+        } else if (const qsizetype n = keyLength(raw); n > 0 && !raw.sliced(n + 1).startsWith(u"//")) {
+            const auto it = keyAliases().constFind(text::foldKey(raw.first(n)));
+            if (it == keyAliases().constEnd())
+                continue;
+            k.key = keyName(*it);
+            k.valueFrom = at + n + 1;
+        } else {
+            continue;
+        }
+        out.append(k);
+    }
+    return out;
 }
 
 QString queryPropertyKey(QStringView key)

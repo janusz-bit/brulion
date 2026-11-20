@@ -238,6 +238,22 @@ QueryResult runQuery(const Query &query, const VaultIndex &index, QDate today, Q
 QString queryStatusLabel(TaskStatus status);
 QString queryPriorityLabel(Priority priority);
 
+/// A `key:value` token of a query's text (any spelling of a key; `key::value` property filters as
+/// "::"): what edits of the query by a view's UI (its columns, its sort) replace.
+struct QueryKeyToken {
+    QString key;           ///< canonical English key ("sort", "columns", "group", "view", "summary",
+                           ///< "status", …) or "::" for a property filter
+    qsizetype from = 0;    ///< the token (a leading '-' included)
+    qsizetype to = 0;
+    qsizetype valueFrom = 0; ///< where its value starts (after the colon or colons)
+    bool negated = false;
+
+    friend bool operator==(const QueryKeyToken &, const QueryKeyToken &) = default;
+};
+/// The key tokens of `source` in order (comments and quoted phrases skipped, as parseQuery() reads
+/// them); empty for a source with an unclosed quote.
+QList<QueryKeyToken> queryKeyTokens(const QString &source);
+
 // ---- Names in query blocks (rename and move, docs/SYNTAX.md §2 "Rewriting on rename and move") ----
 
 /// A filter value of a ```query block that names a page, a folder or a tag: what renaming or
