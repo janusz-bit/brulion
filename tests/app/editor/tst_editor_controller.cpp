@@ -5328,6 +5328,37 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         QCOMPARE(host.assetUrlAsks(u"assets/wykład.pdf"_s), 0);
     }
 
+    void baseEmbeds()
+    {
+        // An Obsidian base embedded in a note (docs/SYNTAX.md §10 "Obsidian Bases"): its path and
+        // the view named by the fragment, for EmbedView's DatabaseView; a base not in the notebook
+        // stays a file's chip.
+        FakeEditorHost host;
+        host.setTextAsset(u"Biblioteka/Książki.base"_s, u"views:\n  - type: table\n    name: Czytam\n"_s);
+        host.setFile(Page, u"- Półka ![[Książki.base#Czytam]]\n- Cała ![[Biblioteka/Książki.base]]\n"
+                           u"- Brak ![[Zgubiona.base]]\n"_s);
+        PageController page;
+        page.setNow(Now);
+        page.setHost(&host);
+        page.setPath(Page);
+        const QHash<int, QByteArray> roles = page.blocks()->roleNames();
+        const auto embedOfRow = [&](int row) {
+            return page.blocks()->data(page.blocks()->index(row), roles.key("embeds")).toList().value(0).toMap();
+        };
+        const QVariantMap shelf = embedOfRow(0);
+        QVERIFY(shelf.value(u"base"_s).toBool());
+        QVERIFY(!shelf.value(u"image"_s).toBool());
+        QCOMPARE(shelf.value(u"path"_s).toString(), u"Biblioteka/Książki.base"_s);
+        QCOMPARE(shelf.value(u"view"_s).toString(), u"Czytam"_s);
+        QCOMPARE(shelf.value(u"name"_s).toString(), u"Książki.base"_s);
+        const QVariantMap whole = embedOfRow(1);
+        QVERIFY(whole.value(u"base"_s).toBool());
+        QCOMPARE(whole.value(u"view"_s).toString(), QString());
+        const QVariantMap missing = embedOfRow(2);
+        QVERIFY(!missing.value(u"base"_s).toBool());
+        QCOMPARE(missing.value(u"name"_s).toString(), u"Zgubiona.base"_s);
+    }
+
     void openPdf()
     {
         Fixture f(u"- Wstęp\n- Slajdy ![[wykład.pdf]] i [[wykład.pdf#page=2]]\n"_s);

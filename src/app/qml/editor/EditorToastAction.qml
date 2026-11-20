@@ -13,6 +13,8 @@ import Brulion
 //   "downloadWeb"    the pictures from the internet `urls` stored in the notebook
 //   "streamUndo"     StreamFind.undo(token): a replace over days of the journal stream
 //   "leaveReadOnly"  the editor's readOnlyLeaveRequested(): its host leaves reading mode
+//   "viewUndo"       a database view's edit of another file put back (ViewResultModel.undoLast():
+//                    while the file holds what was written)
 // Made by the editor (BlockEditor.toastAction()) as its child: a toast outliving the editor finds
 // it gone, and nothing happens (the closure's try/catch made sure of that). It goes by itself long
 // after its toast has (a toast lasts seconds; hovering it holds it), so the editor does not keep
@@ -36,6 +38,7 @@ QtObject {
     property string url
     property list<string> urls
     property StreamFind stream: null
+    property ViewResultModel view: null
 
     readonly property Timer expiry: Timer {
         interval: 10 * 60 * 1000
@@ -89,6 +92,10 @@ QtObject {
         case "leaveReadOnly":
             if (ed !== null)
                 ed.readOnlyLeaveRequested()
+            return
+        case "viewUndo":
+            if (action.view !== null && !action.view.undoLast() && ed !== null)
+                ed.notice(qsTr("Not undone: the page has changed since"), "info", null)
             return
         }
     }

@@ -17,11 +17,14 @@ QString unclosedQuote();
 QString notNegatable(const QString &key);
 QString typeConflict(const QString &key, const QString &value, const QString &type);
 QString duplicate(const QString &key);
+QString badRange(const QString &key, const QString &value, const QString &example);
+QString badColumn(const QString &key, const QString &value);
 
 /// Labels of groups without a value.
 QString noDate();
 QString noTag();
 QString noStatus();
 QString noPriority();
+QString noValue();
 
 } // namespace brulion::index_detail::messages

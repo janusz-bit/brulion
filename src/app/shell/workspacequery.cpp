@@ -7,6 +7,7 @@
 #include "index/querycache.h"
 #include "markdown/markdown.h"
 #include "notebook/json.h"
+#include "notebook/views.h"
 #include "reminders/calendar.h"
 #include "reminders/dayplan.h"
 #include "taskhelpers.h"
@@ -99,6 +100,8 @@ struct Workspace::ListCaches {
     RecentCaches<CalendarCache> ranges{MaxCachedRanges}; ///< the side panel's month, a picked day, …
     RecentCaches<QueryCache> queries{MaxCachedQueries};  ///< the ```query blocks of the open pages
     RecentCaches<DataviewEntry> dataview{MaxCachedQueries}; ///< the ```dataview blocks of the open pages
+    RecentCaches<QueryCache> viewQueries{MaxCachedQueries}; ///< the ```query views of the open pages
+    RecentCaches<DataviewEntry> bases{MaxCachedQueries};    ///< the bases shown (blocks and .base pages)
 };
 
 Workspace::ListCaches &Workspace::listCaches() const
@@ -358,6 +361,51 @@ QVariantMap Workspace::runDataview(const QString &source, const QString &current
     cached.version = m_index->version();
     cached.minute = minute;
     cached.result = out;
+    return out;
+}
+
+QVariantMap Workspace::runView(const QString &language, const QString &source, const QString &currentPath,
+                               const QVariantMap &state)
+{
+    if (!m_index || !m_vault) {
+        return QVariantMap{{u"ok"_s, false}, {u"error"_s, tr("No notebook is open.")}, {u"language"_s, language},
+                           {u"complete"_s, !indexing()}};
+    }
+    const VaultPath path = paths::normalize(currentPath);
+    const VaultConfig config = m_vault->config();
+    notebook::ViewRequest request;
+    request.currentPath = path;
+    request.now = now();
+    request.weekStart = config.weekStartsOn;
+    request.view = state.value(u"view"_s).toInt();
+    request.viewName = state.value(u"viewName"_s).toString();
+    request.month = QDate::fromString(state.value(u"month"_s).toString(), Qt::ISODate);
+    const Vault *vault = m_vault.get();
+    request.stat = [vault](const VaultPath &p) { return vault->stat(p); };
+    request.newPagesFolder = config.newPagesFolder;
+    const QString key = language + u'\x1f' + source + u'\x1f' + path + u'\x1f' + QString::number(request.view)
+                        + u'\x1f' + request.viewName + u'\x1f' + request.month.toString(Qt::ISODate);
+    QVariantMap out;
+    if (language == u"base") {
+        // A base reads every file: its result is kept for the index version and the minute.
+        QDateTime minute = request.now;
+        minute.setTime(QTime(minute.time().hour(), minute.time().minute()));
+        DataviewEntry &cached = listCaches().bases.get(key);
+        if (cached.version == m_index->version() && cached.minute == minute && !cached.result.isEmpty()) {
+            out = cached.result;
+        } else {
+            out = notebook::runView(*m_index, language, source, request).toVariantMap();
+            cached.version = m_index->version();
+            cached.minute = minute;
+            cached.result = out;
+        }
+    } else {
+        QueryCache &cache = listCaches().viewQueries.get(key);
+        out = notebook::runView(*m_index, u"query"_s, source, request, &cache).toVariantMap();
+        if (cache.total() > MaxCachedQueryMatches)
+            listCaches().viewQueries.remove(key);
+    }
+    out.insert(u"complete"_s, !indexing());
     return out;
 }
 

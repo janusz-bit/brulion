@@ -1534,8 +1534,10 @@ sort:due,-priority limit:20
   names a page (§3), `ref:` matches the page's tags too, while `tag:` stays tags-only (with
   sub-tags).
 * Renaming or moving a page, a folder or a tag's page rewrites the `tag:`, `#tag`, `ref:`,
-  `[[…]]`, `page:` and `path:` values that name it, so that they keep matching what they matched
-  (§2 "Rewriting on rename and move").
+  `[[…]]`, `page:` and `path:` values that name it, and the `[[Page]]` values of property filters
+  (`projekt::[[Dom]]`), so that they keep matching what they matched (§2 "Rewriting on rename and
+  move").
+* `key::value` (two colons) filters by a property — see "Properties" below.
 * Keys and keyword values are case- and diacritic-insensitive (`ścieżka:` = `sciezka:`,
   `STATUS:Zrobione`) and have Polish spellings. An unknown key or value shows a helpful error
   (in the UI language) instead of results.
@@ -1554,9 +1556,12 @@ sort:due,-priority limit:20
 | `remind:` (`reminder:`, `przypomnienie:`) | date condition on ⏰ reminders |
 | `date:` (`data:`, `dzień:`) | date condition on the journal date of the page |
 | `is:` (`jest:`) | `blocked` (`zablokowane`) — waits for an open task (§5 "Dependencies"); `blocking` (`blokujące`) — an open task waits for it; `running` (`mierzone`) — its clock runs; `tracked` (`z-czasem`) — it has clocked time. `-is:blocked` = not blocked. A task filter (makes the query `type:tasks`). |
-| `sort:` (`sortuj:`) | comma list of `due` (`termin`), `scheduled` (`zaplanowane`), `start`, `done` (`zrobione`), `created` (`utworzone`), `remind` (`przypomnienie`), `date` (`data`), `priority` (`priorytet`), `status`, `page` (`title`, `strona`, `tytuł`), `path` (`ścieżka`); `-key` descending. Missing values sort last. Default order: tasks and blocks by path then line, reminders by time, pages by title. |
-| `group:` (`grupuj:`) | `page` (`strona`), `due` (`termin`), `scheduled` (`zaplanowane`), `date` (`data`), `tag` (one group per tag), `status`, `priority` (`priorytet`) |
+| `sort:` (`sortuj:`) | comma list of `due` (`termin`), `scheduled` (`zaplanowane`), `start`, `done` (`zrobione`), `created` (`utworzone`), `remind` (`przypomnienie`), `date` (`data`), `priority` (`priorytet`), `status`, `page` (`title`, `strona`, `tytuł`), `path` (`ścieżka`), or a property (`sort:koszt`, `sort:-termin-oddania`); `-key` descending. Missing values sort last. Default order: tasks and blocks by path then line, reminders by time, pages by title. |
+| `group:` (`grupuj:`) | `page` (`strona`), `due` (`termin`), `scheduled` (`zaplanowane`), `date` (`data`), `tag` (one group per tag), `status`, `priority` (`priorytet`), or a property (`group:etap`) |
 | `limit:` | 1 … 10000 |
+| `view:` (`widok:`) | `list` (`lista`), `table` (`tabela`), `board` (`kanban`, `tablica`), `gallery` (`cards`, `galeria`, `karty`), `calendar` (`kalendarz`) — see "Views" |
+| `columns:` (`kolumny:`, `cols:`) | comma list of built-ins, properties and `"Label = expression"` formulas — see "Views" |
+| `summary:` (`podsumowanie:`) | comma list of `column=function` — see "Views" |
 
 **Date conditions.** An optional operator `<`, `<=`, `>`, `>=` (or `=`) followed by an
 expression; dates compare by day, and an item without that date matches only `none`:
@@ -1576,10 +1581,40 @@ Without an operator the date must lie inside the expression's day or period; `<`
 its start, `<=` up to its end, `>` after its end, `>=` from its start (`due:<=+7d` = due
 within a week, overdue included).
 
+**Properties.** `key::value` — the key, two colons, the value — filters by a property. Pages
+read their page properties (YAML frontmatter and the leading `key:: value` lines, §4); blocks,
+tasks and reminders the block's own `key:: value` lines, else its nearest ancestor's, else its
+page's (`type:tasks projekt::Dom` finds the tasks on pages with `projekt: Dom`; a task can
+override it with a line of its own). Keys are case- and diacritic-insensitive and read blanks and
+`_` as `-` (`budzet::` = `Budżet::`, `termin-oddania::` = `Termin oddania:`); a key with blanks can
+also be quoted (`"termin oddania"::2026-11-01`). A comma list ORs its values; `-key::value` negates.
+
+| Value | Matches |
+|---|---|
+| `status::zrobione`, `status::"w toku"` | the text, case- and diacritic-insensitively (`"W TOKU"`); a list (`tags: [a, b]`, `etykiety:: [[a]], [[b]]`) when one of its items does; a link when it names that page |
+| `koszt::100`, `koszt::>100`, `koszt::<=1200`, `koszt::>=1e3` | numbers compare as numbers (`3,5` and `1 200` read as numbers; write `3.5` in the query — a comma separates values) |
+| `koszt::100..200` | a range, both ends included: numbers, dates (`termin::today..+7d`, `2026-10-01..2026-10-31`) or texts |
+| `termin::2026-10-15`, `termin::this-week`, `termin::<today`, `termin::>=+7d` | a date (`YYYY-MM-DD`, with a time too, or `[[2026-10-15]]`) by the date conditions above: the day or period, before / after it; `termin::overdue` before today |
+| `właściciel::[[Jan Kowalski]]` | a link to that page (also through an alias, `[[Janek]]`); a bare name too (`właściciel::anna`) |
+| `pilne::true`, `pilne::tak`, `pilne::nie` | a checkbox (`true` / `false`, `yes` / `no`, `tak` / `nie`) |
+| `nazwa::*dom*` | a `*` pattern of the text |
+| `termin::none` (`brak`, `empty`, `puste`), `ocena::any` (`dowolna`, `exists`) | the property is missing or empty / has a value; `-termin::none` = has one |
+| `status::"none"`, `koszt::">5"` | in quotes: always the text itself, never a keyword, operator, number or pattern |
+
+A value is typed by the property it meets: a number condition matches only numbers, a date only
+dates; a text compares with `<`, `>` as text (folded). Property filters work with every `type:`
+and do not make a query `type:tasks`. `sort:` and `group:` take a property where the name is no
+built-in key of the query's type; on `type:pages` the task keys (`status`, `due`, `priority`, …)
+name properties; `name::` — the name with two colons — is always the property (`sort:status::`,
+`group:date::`). Sorting by a property: numbers by value, then dates, checkboxes, then texts (as
+names compare), missing values last. Grouping by a property: one group per value — a list per
+item, a link per page (labelled by its title) —, numbers by value, dates in order, texts by name,
+"No value" last.
+
 **Results.** `type:blocks` hides blocks whose ancestor also matched (they are shown inside
 it), frontmatter and `query` blocks. `type:pages` accepts only `tag`, `page`, `path`, `ref`,
-`text` and `date` filters, sorting by `page`, `path`, `date` and grouping by `page`, `tag`,
-`date`.
+`text`, `date` and property filters, sorting by `page`, `path`, `date` and properties, and
+grouping by `page`, `tag`, `date` and properties.
 
 More examples:
 
@@ -1600,7 +1635,195 @@ type:tasks ref:this status:open group:page
 ```query
 status:open -is:blocked sort:due        // what can be done right now
 ```
+```query
+type:pages tag:projekt status::"w toku",planowany koszt::>100 sort:-koszt
+```
 ````
+
+### Views
+
+`view:` shows the results as a database (docs/UI.md "Database views"): `table` (columns of
+fields, cells edited in place), `board` (a column per group, cards dragged between them),
+`gallery` (cards with each page's cover), `calendar` (a month's grid) or `list`. A query without
+`view:` keeps its plain list.
+
+````
+```query
+type:pages tag:projekt view:table sort:-koszt
+columns:title,status,Budżet,koszt,termin,"Brutto = koszt * 1.23"
+summary:koszt=sum,Brutto=average
+```
+```query
+type:tasks tag:praca view:board          // columns: to do, in progress, done
+```
+```query
+type:pages tag:projekt view:board group:etap
+```
+```query
+type:pages tag:podróż view:gallery
+```
+```query
+type:tasks view:calendar                 // tasks on their due date
+```
+````
+
+**Columns** (`columns:`, `kolumny:`): a comma list. Built-ins: `title` (`tytuł`, `page`, `strona`,
+`name`, `nazwa`, `file`) the page as a link; `text` (`tekst`, `task`, `zadanie`, `block`) a block's or
+task's text; `path` (`ścieżka`), `folder` (`katalog`), `tags` (`tagi`), `mtime` (`modified`,
+`zmieniono`) the file's modification time, `size` (`rozmiar`), `date` (`data`) the journal date;
+for tasks `status` (`stan`), `priority` (`priorytet`), `due` (`termin`), `scheduled`
+(`zaplanowane`), `start` (`początek`), `done` (`zrobione`), `created` (`utworzone`). Any other name
+is a property (read as the filters read it: a block's own line, its ancestors', its page's); on
+`type:pages` the task names are properties too, and `name::` always is. `"Label = name"` shows a
+property under a label of its own (`"Koszt (zł) = koszt"`); `"Label = expression"` is a formula —
+an expression of Dataview's language (§10 "Dataview queries": `koszt * 1.23`, `round(koszt / 3,
+2)`, `dateformat(termin, "MMMM")`, `length(file.tasks)`, `upper(status)`), evaluated for each row
+shown (a page row: the page's fields; a task row: the task's, then its page's). Formulas keep the
+limits of Dataview queries: a formula too costly or too large shows its message in its cell, the
+rest of the view stays. Without `columns:` a view shows the page's title and the five page
+properties most results have (tasks: text, status, due, priority, page; blocks: text, page); a
+board or calendar adds the property it groups by.
+
+**Summaries** (`summary:`, `podsumowanie:`): `column=function`, the column by its name or label,
+the function one of `sum` (`suma`), `average` (`avg`, `mean`, `średnia`), `median` (`mediana`),
+`min`, `max` (`maks`), `range` (`zakres`), `stddev` (`odchylenie`), `count` (`liczba`), `empty`
+(`puste`), `filled` (`wypełnione`), `unique` (`unikalne`), `checked` (`zaznaczone`), `unchecked`
+(`niezaznaczone`), `earliest` (`najwcześniej`), `latest` (`najpóźniej`) — over the rows shown (a
+grouped table and a board: also per group). Numbers with at most two decimals, dates ISO, a date
+range in days. A summary of a column the view does not show is an error.
+
+**Board.** The columns are the groups of `group:` — tasks by `status` without one (to do, in
+progress and done always; deferred and cancelled when they hold cards), a property's values
+(and, when the notebook has at most twelve, its other values, empty, so a card can go there;
+"No value" last). Dragging a card to another column writes the column's value: a task's status,
+priority or due / scheduled date, or the property (a page's page property; a block's own
+`key::` line — the key must then be `[A-Za-z0-9_-]+`); a list property swaps the old column's
+item for the new one; "No value" removes it. A board by page, tag or journal date shows its columns
+without drops. Cards are in the query's sort order; each shows its cover (below), the first
+column and up to three others.
+
+**Gallery.** A card per row with its cover: a note's `banner` (§4 "Page icon and cover"), else
+the first picture embedded in it (in the block, for a block row).
+
+**Calendar.** A month's grid (weeks start on `weekStartsOn`); each row on the day of its date:
+`group:` names the date (`due`, `scheduled`, `date` — the journal date —, or a property), else a
+task's due date, else the first date column, else the journal date. Dragging an entry to another
+day writes that date (a time stays). The month is the view's state (arrows in its header), not
+written.
+
+**Editing.** An editable cell — a property, a task's status, priority or date — changes its file
+with a pure edit (§4 "Editing page properties": only that property's lines, its type kept —
+`koszt:: 12,5` typed in a number cell is written `12.5`; `markdown/blockprops.h` for a block's
+`key::` line). An edit on the page holding the query is one undo step of the page; in another file
+the toast's Undo puts it back while the file holds what was written. A row's page name is no
+cell (rename the page). Formulas and built-ins other than the task fields are read-only.
+
+**New rows** ("+"): `type:pages` — a page named as typed, in the folder of the query's `path:`
+filter (else the notebook's folder for new pages), with the tag of its `tag:` filter and the
+values of its equality property filters (`status::planowany`), plus a board column's value or a
+calendar day's date; `type:tasks` — a task (`- [ ] …`) at the end of the page holding the query,
+with the tags, the column's status, priority or due date, the day as its due date and the
+property values as `key::` lines.
+
+**Changing the view in place.** Sorting by a column, hiding, adding or moving columns in the
+view's header rewrites the query's own `sort:` / `columns:` (a token of its own, the rest of the
+query as written) — one undo step.
+
+### Obsidian Bases
+
+A `.base` file — Obsidian's Bases, YAML that shares a vault's notes as views — opens in Brulion as
+a page of its views, a ```` ```base ```` block shows its YAML's views in place, and a note embedding
+the file (`![[Books.base]]`, `![[Books.base#Reading]]` that view) shows its view there (docs/UI.md
+"Database views"). Brulion reads it with its own YAML subset (§4) and its own parser of the Bases
+expression language: nothing runs as a script.
+
+````yaml
+filters:
+  and:
+    - file.hasTag("książka")
+    - file.inFolder("Książki")
+formulas:
+  cena_brutto: "cena * 1.23"
+  opis: 'if(cena, cena.toFixed(2) + " zł", "")'
+properties:
+  autor:
+    displayName: Autor
+summaries:
+  sredniaZaokr: 'values.mean().round(1)'
+views:
+  - type: table
+    name: Wszystkie
+    order: [file.name, autor, cena, formula.cena_brutto, strony]
+    sort:
+      - property: cena
+        direction: DESC
+    summaries:
+      cena: Sum
+      strony: sredniaZaokr
+  - type: cards
+    name: Okładki
+    image: note.okladka
+  - type: kanban
+    name: Stan
+    groupBy: {property: note.stan, direction: ASC}
+    groupOrder: [do przeczytania, czytam, przeczytana]
+````
+
+* **Rows**: every file of the notebook, attachments too (with their file properties only), that the
+  base's `filters` and the view's `filters` keep (both, ANDed). A filter is a statement — an
+  expression whose value is truthy — or `and:` / `or:` / `not:` (none of them true) of a list of
+  filters, nested at most 64 levels.
+* **Expressions** (Obsidian's syntax): `note.x` or `x` a note property (`note["Due date"]` for a
+  name with blanks), `file.x` a file property — `name` (with its extension), `basename`, `path`,
+  `folder`, `ext`, `size`, `ctime` / `mtime` (the file's modification time: the files do not say
+  when they were created), `tags` (with `#`), `links`, `backlinks`, `embeds`, `properties` — and
+  `file.hasTag(…)` (any of the tags, sub-tags too), `file.inFolder(f)` (sub-folders too),
+  `file.hasLink(page)`, `file.hasProperty(name)`, `file.asLink()`; `formula.x` another formula;
+  `this` the page showing the base (the embedding note, or the .base file itself: `this.file.folder`).
+  Operators `+ - * / %`, `== != < <= > >=`, `&& || !`, parentheses; dates with duration texts
+  (`today() + "7d"`, `file.mtime > now() - "1 week"`, units `y`, `M`, `w`, `d`, `h`, `m`, `s` and
+  their words). Global functions `if`, `date`, `duration`, `file`, `link`, `list`, `max`, `min`,
+  `now`, `today`, `number`, `random`, `escapeHTML`, `html` (its text, never markup), `image`, `icon`
+  (its name). Methods of any value (`isTruthy`, `isType`, `toString`), strings (`contains`,
+  `containsAll`, `containsAny`, `startsWith`, `endsWith`, `isEmpty`, `lower`, `upper`, `title`,
+  `trim`, `reverse`, `repeat`, `slice`, `split`, `replace` — of a text —, `length`), numbers (`abs`,
+  `ceil`, `floor`, `round(digits)`, `toFixed`), dates (`date`, `format` with Moment.js tokens —
+  `YYYY-MM-DD HH:mm`, `dddd D MMMM`, `[text]`; English names —, `time`, `relative`, `year` … `millisecond`),
+  lists (`contains…`, `filter`, `map` and `reduce` with `value`, `index`, `acc`, `flat`, `join`,
+  `sort`, `unique`, `reverse`, `slice`, `isEmpty`, `length`, and `mean`, `sum`, `min`, `max`,
+  `median`, `stddev`), links (`asFile`, `linksTo`) and objects (`isEmpty`, `keys`, `values`). Links
+  equal links, files and pages naming the same file. Regular expressions (`/…/`, `matches`) are
+  refused — a note from anywhere could make one run for minutes —; so are plugins' functions: a
+  statement that does not parse matches nothing, a formula that does not parse is left out, and
+  the view says why.
+* **Formulas** are computed for each row in an order where every formula comes after those it
+  reads; one reading itself (through others) is left out with a message. Their names are read as
+  Dataview's field names (lower-case, blanks as `-`, `_` dropped: `formula.cena_brutto` and
+  `formula.cenaBrutto` are one).
+* **Views**: `type` `table`, `cards` (a gallery: `image` the cover property — a link to a
+  picture, a URL or a colour `#rrggbb`; else the note's banner or first picture), `list`,
+  `kanban` (a board by `groupBy`; dragging a card writes that note property; by a file property or
+  a formula without drops) — `map` and any plugin's type are shown as a table with a note saying so;
+  `name`; `order` (the columns: property ids, labels from `properties.<id>.displayName`); `sort`
+  (`property`, `direction` ASC / DESC; then by file name); `groupBy` (`property`, `direction`) with
+  `groupOrder` (only those groups, in that order; `null` the files without a value); `limit`;
+  `summaries` (property → `Average`, `Min`, `Max`, `Sum`, `Range`, `Median`, `Stddev`, `Earliest`,
+  `Latest`, `Checked`, `Unchecked`, `Empty`, `Filled`, `Unique`, or a name of the top-level
+  `summaries` — a formula over `values`). Other keys of a view (a plugin's state) are kept as
+  written. `[[Books.base#Reading]]` opens the view of that name, `![[Books.base#Reading]]` shows it
+  in the note (without a name: the first view).
+* **Editing**: a note property's cell writes the note as a query view's cell does; a card dropped
+  on another column writes the `groupBy` property. Sorting by a column and hiding, adding or moving
+  columns in the app write that view's `sort:` / `order:` back — a block list at the view's
+  indentation, those lines only, every other byte (comments, other views, unknown keys) as it was,
+  and only when the result reads back as intended (a flow-style view `- {type: table}` is not
+  edited). New rows go into the folder of a plain `file.inFolder("…")` filter, with the tags of
+  `file.hasTag("…")` and the values of `prop == "value"` statements.
+
+**Limits** — a base comes from anywhere (sync, a vault shared with Obsidian): at most 1 MiB of YAML,
+filters nested 64 levels deep, and its expressions keep the limits of Dataview queries (depth and
+nesting of an expression, the size of the values it builds, a budget of steps shared by every
+expression of one run): a base too costly shows its message instead of freezing the app.
 
 ### Dataview queries
 

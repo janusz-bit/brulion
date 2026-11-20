@@ -8,6 +8,8 @@
 #include "index/resolve_p.h"
 #include "index/textutil_p.h"
 #include "index/vaultindex_p.h"
+#include "markdown/pageprops.h"
+#include "markdown/properties.h"
 #include "markdown/tasks.h"
 #include "text/text.h"
 #include "util/paths.h"
@@ -164,7 +166,151 @@ struct GroupInfo {
     QString label;
     int rank = 0;
     QString order;
+    double number = 0; ///< numeric group values (rank PropertyNumberRank) compare by it
+    QString value;     ///< group:<property>: the value as written
 };
+
+GroupInfo groupInfo(const QString &key, const QString &label, int rank, const QString &order)
+{
+    GroupInfo g;
+    g.key = key;
+    g.label = label;
+    g.rank = rank;
+    g.order = order;
+    return g;
+}
+
+// ---- property values (docs/SYNTAX.md §10 "Properties") ------------------------------------------
+
+/// One value of a property as filters, sorting and groups read it: a scalar, or one item of a list.
+struct PropertyItem {
+    QString text;   ///< as written ("[[Dom]]", "w toku", "12.5", "true")
+    QString folded; ///< foldKey(text); a link's: foldKey(its target)
+    QString link;   ///< a `[[link]]`'s (or a Logseq list item's) target, else ""
+    std::optional<double> number;
+    std::optional<DateSpec> date;
+    std::optional<bool> boolean;
+};
+
+/// Group ranks of property values: numbers first (by value), dates, checkboxes, then texts and links.
+constexpr int PropertyNumberRank = 0;
+constexpr int PropertyDateRank = 1;
+constexpr int PropertyBoolRank = 2;
+constexpr int PropertyTextRank = 3;
+
+/// "YYYY-MM-DD", "YYYY-MM-DD HH:mm[:ss]" / "…THH:mm[:ss]" (valid) as a date.
+std::optional<DateSpec> propertyDate(QStringView t)
+{
+    if (t.size() < 10 || t[4] != u'-' || t[7] != u'-')
+        return std::nullopt;
+    const QDate d = QDate::fromString(t.first(10).toString(), Qt::ISODate);
+    if (!d.isValid())
+        return std::nullopt;
+    if (t.size() == 10)
+        return DateSpec{d, std::nullopt};
+    if (t[10] != u'T' && t[10] != u' ')
+        return std::nullopt;
+    const QStringView time = t.sliced(11);
+    QTime tm = QTime::fromString(time.toString(), u"HH:mm"_s);
+    if (!tm.isValid())
+        tm = QTime::fromString(time.toString(), u"HH:mm:ss"_s);
+    if (!tm.isValid())
+        return std::nullopt;
+    return DateSpec{d, tm};
+}
+
+/// A text value: a `[[link]]` (its target; a date link `[[2026-10-28]]` is a date too), a date,
+/// a number (also "3,5", "1 200"), true / false, else a text.
+PropertyItem propertyText(const QString &written)
+{
+    PropertyItem item;
+    item.text = written.trimmed();
+    QStringView t(item.text);
+    if (t.startsWith(u"[[") && t.endsWith(u"]]") && t.size() > 4) {
+        QStringView target = t.sliced(2, t.size() - 4);
+        if (const qsizetype bar = target.indexOf(u'|'); bar >= 0)
+            target = target.first(bar);
+        item.link = target.trimmed().toString();
+        item.folded = text::foldKey(item.link);
+        item.date = propertyDate(item.link);
+        return item;
+    }
+    item.folded = text::foldKey(t);
+    if ((item.date = propertyDate(t)))
+        return item;
+    if (t.compare(u"true", Qt::CaseInsensitive) == 0 || t.compare(u"false", Qt::CaseInsensitive) == 0) {
+        item.boolean = t.compare(u"true", Qt::CaseInsensitive) == 0;
+        return item;
+    }
+    if (const auto n = markdown::parseNumberInput(t))
+        item.number = n->toDouble();
+    return item;
+}
+
+bool isNamesKey(const QString &folded)
+{
+    return folded == u"tags" || folded == u"tag" || folded == u"aliases" || folded == u"alias";
+}
+
+/// The items of a value as parseNote() keeps it (`logseq`: a list's items are names — links or
+/// tags — written without their `[[ ]]` / '#').
+void addPropertyItems(const QVariant &v, bool logseq, QList<PropertyItem> &out, int depth = 0)
+{
+    if (depth > 4 || !v.isValid() || v.isNull())
+        return;
+    switch (v.typeId()) {
+    case QMetaType::Bool: {
+        PropertyItem item;
+        item.boolean = v.toBool();
+        item.text = item.folded = *item.boolean ? u"true"_s : u"false"_s;
+        out.append(item);
+        return;
+    }
+    case QMetaType::Int:
+    case QMetaType::LongLong:
+    case QMetaType::UInt:
+    case QMetaType::ULongLong:
+    case QMetaType::Double: {
+        PropertyItem item;
+        item.number = v.toDouble();
+        item.text = item.folded = v.toString();
+        out.append(item);
+        return;
+    }
+    case QMetaType::QString:
+        if (const QString t = v.toString().trimmed(); !t.isEmpty())
+            out.append(propertyText(t));
+        return;
+    case QMetaType::QStringList:
+        for (const QString &name : v.toStringList()) {
+            if (name.trimmed().isEmpty())
+                continue;
+            if (!logseq) {
+                out.append(propertyText(name));
+                continue;
+            }
+            PropertyItem item;
+            item.text = name.trimmed();
+            item.link = item.text;
+            item.folded = text::foldKey(item.text);
+            item.date = propertyDate(item.text);
+            out.append(item);
+        }
+        return;
+    case QMetaType::QVariantList: {
+        const QVariantList list = v.toList();
+        // `up: [[Dom]]` unquoted: a list holding a list holding "Dom".
+        if (list.size() == 1 && list.first().typeId() == QMetaType::QString && depth > 0) {
+            out.append(propertyText(u"[["_s + list.first().toString() + u"]]"_s));
+            return;
+        }
+        for (const QVariant &item : list)
+            addPropertyItems(item, logseq, out, depth + 1);
+        return;
+    }
+    default: return; // maps and other values: no items
+    }
+}
 
 } // namespace
 
@@ -173,10 +319,11 @@ namespace index_detail {
 /// Sort value of an item (`present` false = missing, sorts last).
 struct QuerySortValue {
     bool present = false;
-    int number = 0;
+    int number = 0; ///< priority / status rank; QuerySortKey::Property: the value's kind (group ranks)
     QString text;
     DateSpec date;
-    QString nameKey; ///< nameSortKey(text) for QuerySortKey::Page
+    QString nameKey; ///< nameSortKey(text) for QuerySortKey::Page and property texts
+    double real = 0; ///< QuerySortKey::Property: a number's value
 };
 
 /// A match of a query: where it is and what it sorts by — no Task copy (a QueryCache keeps these
@@ -246,10 +393,27 @@ private:
     QString folded(const QString &value);
     /// Drop the candidates (of one note) inside the block of another one (type:blocks).
     void collapseNested(QList<Candidate> &cands) const;
-    SortValue sortValue(QuerySortKey key, const View &view) const;
+    SortValue sortValue(const QuerySort &sort, const View &view);
     int defaultCompare(const QueryMatch &a, const QueryMatch &b) const;
     QList<GroupInfo> groupsOf(const View &view);
     QList<QueryGroup> buildGroups(const QList<QueryItem> &items, const QList<View> &views);
+    /// The values of the property `key` (folded) of an item: a page's page properties; a block's
+    /// own, else its nearest ancestor's, else its page's. `found`: the key is there (maybe empty).
+    QList<PropertyItem> propertyItems(const View &view, const QString &key, bool *found = nullptr);
+    /// A note's page property as written: its folded key, value and where it is written.
+    struct RawProperty {
+        QString key; ///< folded
+        QString name; ///< as written
+        QVariant value;
+        bool logseq = false;
+    };
+    /// The page properties of a note, keys folded (once per run; values typed when asked).
+    const QList<RawProperty> &pageProperties(const Entry &entry);
+    /// queryPropertyKey() of a key as written, folded once per run (keys repeat across notes).
+    const QString &foldedKey(const QString &key);
+    bool propertyMatches(const QueryPropertyCondition &c, const PropertyItem &item);
+    /// Do the link targets `a` and `b` (written in the item's note / the query) name one page?
+    bool sameLink(const QString &a, const QString &b);
 
     const Query &m_query;
     const VaultIndex &m_index;
@@ -264,6 +428,18 @@ private:
     QHash<QString, QSet<int>> m_refLines;
     QHash<QString, QSet<QString>> m_refTags;
     QHash<QString, QString> m_folded;
+    QHash<const Entry *, QList<RawProperty>> m_pageProps;
+    QHash<QString, QString> m_foldedKeys;
+    /// A property condition's value read once per run: as a number, a date (resolved), a link.
+    struct ConditionValue {
+        QString folded, foldedTo;
+        std::optional<double> number, numberTo;
+        std::optional<dates::DateExpr> date; ///< Range: the range from..to
+        std::optional<bool> boolean;
+        QString link; ///< `[[X]]`: X
+    };
+    QHash<const QueryPropertyCondition *, ConditionValue> m_conditions;
+    const ConditionValue &conditionValue(const QueryPropertyCondition &c);
     bool m_trustEntries = true;
 };
 
@@ -323,7 +499,7 @@ void Runner::matchesOf(const Entry &e, QList<QueryMatch> &out)
         m.line = c.view.line();
         m.keys.reserve(m_query.sort.size());
         for (const QuerySort &s : m_query.sort) {
-            m.keys.append(sortValue(s.key, c.view));
+            m.keys.append(sortValue(s, c.view));
             if (s.key == QuerySortKey::Page)
                 m.keys.last().nameKey = noteTitleKey();
         }
@@ -367,6 +543,16 @@ bool Runner::test(const QueryFilter &f, const View &view)
         return std::ranges::any_of(f.values, [&](const QString &v) { return textMatches(v, view); });
     case QueryFilterKind::Date:
         return std::ranges::any_of(f.dates, [&](const QueryDateCondition &c) { return dateMatches(f.field, c, view); });
+    case QueryFilterKind::Property: {
+        const QList<PropertyItem> items = propertyItems(view, f.property);
+        return std::ranges::any_of(f.conditions, [&](const QueryPropertyCondition &c) {
+            if (c.op == QueryPropertyOp::None)
+                return items.isEmpty();
+            if (c.op == QueryPropertyOp::Any)
+                return !items.isEmpty();
+            return std::ranges::any_of(items, [&](const PropertyItem &item) { return propertyMatches(c, item); });
+        });
+    }
     case QueryFilterKind::Is:
         return view.task && std::ranges::any_of(f.values, [&](const QString &v) {
                    if (v == u"blocked")
@@ -611,11 +797,236 @@ QString Runner::folded(const QString &value)
     return *m_folded.insert(value, text::foldKey(value));
 }
 
+// ---- properties ---------------------------------------------------------------------------------
+
+const QString &Runner::foldedKey(const QString &key)
+{
+    if (const auto it = m_foldedKeys.constFind(key); it != m_foldedKeys.cend())
+        return *it;
+    return *m_foldedKeys.insert(key, queryPropertyKey(key));
+}
+
+const QList<Runner::RawProperty> &Runner::pageProperties(const Entry &entry)
+{
+    if (const auto it = m_pageProps.constFind(&entry); it != m_pageProps.cend())
+        return *it;
+    QList<RawProperty> out;
+    const ParsedNote &note = entry.note;
+    const auto add = [&](const QString &key, const QVariant &value, bool logseq) {
+        const QString &k = foldedKey(key);
+        if (k.isEmpty() || std::ranges::any_of(out, [&k](const RawProperty &p) { return p.key == k; }))
+            return;
+        out.append(RawProperty{k, key, value, logseq});
+    };
+    for (auto [key, value] : note.frontmatter.asKeyValueRange())
+        add(key, value, false);
+    for (auto [key, value] : note.properties.asKeyValueRange())
+        add(key, value, true);
+    return *m_pageProps.insert(&entry, out);
+}
+
+/// The items of a page property's value (tags and aliases by their names).
+QList<PropertyItem> itemsOf(const QString &folded, const QVariant &value, bool logseq)
+{
+    QList<PropertyItem> items;
+    if (isNamesKey(folded)) {
+        for (const QString &name : markdown::namesFrom(value, folded.startsWith(u"tag"))) {
+            PropertyItem item;
+            item.text = item.link = name;
+            item.folded = text::foldKey(name);
+            items.append(item);
+        }
+    } else {
+        addPropertyItems(value, logseq, items);
+    }
+    return items;
+}
+
+QList<PropertyItem> Runner::propertyItems(const View &view, const QString &key, bool *found)
+{
+    if (found)
+        *found = false;
+    if (!view.entry)
+        return {};
+    const QList<Block> &blocks = view.note().blocks;
+    for (int b = view.block; b >= 0 && b < blocks.size(); b = blocks[b].parent) {
+        for (auto [k, value] : blocks[b].properties.asKeyValueRange()) {
+            if (foldedKey(k) != key)
+                continue;
+            if (found)
+                *found = true;
+            QList<PropertyItem> items;
+            addPropertyItems(value, true, items);
+            return items;
+        }
+    }
+    for (const RawProperty &p : pageProperties(*view.entry)) {
+        if (p.key == key) {
+            if (found)
+                *found = true;
+            return itemsOf(p.key, p.value, p.logseq);
+        }
+    }
+    return {};
+}
+
+const Runner::ConditionValue &Runner::conditionValue(const QueryPropertyCondition &c)
+{
+    const auto [it, added] = m_conditions.tryEmplace(&c); // the query outlives the run
+    if (!added)
+        return *it;
+    ConditionValue &v = *it;
+    const QString value = c.value.trimmed();
+    v.folded = text::foldKey(value);
+    if (c.quoted)
+        return v;
+    if (value.startsWith(u"[[") && value.endsWith(u"]]") && value.size() > 4) {
+        v.link = value.sliced(2, value.size() - 4).trimmed();
+        v.folded = text::foldKey(v.link);
+        if (const qsizetype bar = v.link.indexOf(u'|'); bar >= 0)
+            v.link = v.link.first(bar).trimmed();
+    }
+    const QString plain = v.link.isEmpty() ? value : v.link;
+    if (const auto n = markdown::parseNumberInput(plain))
+        v.number = n->toDouble();
+    const QString folded = v.folded;
+    if (folded == u"true" || folded == u"yes" || folded == u"tak")
+        v.boolean = true;
+    else if (folded == u"false" || folded == u"no" || folded == u"nie")
+        v.boolean = false;
+    if (c.op == QueryPropertyOp::Range) {
+        const QString to = c.to.trimmed();
+        v.foldedTo = text::foldKey(to);
+        if (const auto n = markdown::parseNumberInput(to))
+            v.numberTo = n->toDouble();
+        v.date = dates::resolveDateExpr(QString(plain + u".."_s + to), m_today, m_weekStart);
+    } else {
+        v.date = dates::resolveDateExpr(plain, m_today, m_weekStart);
+    }
+    return v;
+}
+
+bool Runner::sameLink(const QString &a, const QString &b)
+{
+    if (a.isEmpty() || b.isEmpty())
+        return false;
+    if (folded(a) == folded(b))
+        return true;
+    const std::optional<VaultPath> x = resolveCached(a);
+    return x && x == resolveCached(b);
+}
+
+bool Runner::propertyMatches(const QueryPropertyCondition &c, const PropertyItem &item)
+{
+    const ConditionValue &v = conditionValue(c);
+    // A number with a number, a date with a date, else a text with a text (folded).
+    const auto numberCompare = [&](double x) -> std::optional<int> {
+        if (!v.number)
+            return std::nullopt;
+        const double y = *v.number;
+        return x < y ? -1 : (x > y ? 1 : 0);
+    };
+    const auto dateRange = [&]() -> const dates::DateRange * {
+        return v.date ? std::get_if<dates::DateRange>(&*v.date) : nullptr;
+    };
+    switch (c.op) {
+    case QueryPropertyOp::None:
+    case QueryPropertyOp::Any: return false; // (whole-property conditions: test())
+    case QueryPropertyOp::Glob:
+        return globMatch(item.folded, v.folded) || (!item.link.isEmpty() && globMatch(folded(item.link), v.folded));
+    case QueryPropertyOp::Equals: {
+        if (c.quoted)
+            return item.folded == v.folded || (!item.link.isEmpty() && folded(item.link) == v.folded);
+        if (!v.link.isEmpty())
+            return item.folded == v.folded || (!item.link.isEmpty() && sameLink(v.link, item.link));
+        if (item.boolean && v.boolean)
+            return *item.boolean == *v.boolean;
+        if (item.number && v.number)
+            return numberCompare(*item.number) == 0;
+        if (item.date && v.date) {
+            if (const auto *special = std::get_if<dates::SpecialDate>(&*v.date))
+                return *special == dates::SpecialDate::Overdue ? item.date->date < m_today
+                                                               : *special == dates::SpecialDate::Any;
+            if (const dates::DateRange *range = dateRange())
+                return range->contains(item.date->date);
+        }
+        if (item.folded == v.folded)
+            return true;
+        return !item.link.isEmpty() && sameLink(c.value.trimmed(), item.link);
+    }
+    case QueryPropertyOp::Range: {
+        if (item.number && v.number && v.numberTo)
+            return *item.number >= *v.number && *item.number <= *v.numberTo;
+        if (item.date) {
+            const dates::DateRange *range = dateRange();
+            return range && range->contains(item.date->date);
+        }
+        if (item.number || v.number || v.numberTo || v.date)
+            return false;
+        return QString::compare(item.folded, v.folded) >= 0 && QString::compare(item.folded, v.foldedTo) <= 0;
+    }
+    default: break;
+    }
+    // <, <=, >, >=
+    int cmp = 0;
+    if (item.number && v.number) {
+        cmp = *numberCompare(*item.number);
+    } else if (item.date && v.date) {
+        const dates::DateRange *range = dateRange();
+        if (!range)
+            return false;
+        const QDate d = item.date->date;
+        switch (c.op) {
+        case QueryPropertyOp::Less: return d < range->from;
+        case QueryPropertyOp::LessOrEqual: return d <= range->to;
+        case QueryPropertyOp::Greater: return d > range->to;
+        case QueryPropertyOp::GreaterOrEqual: return d >= range->from;
+        default: return false;
+        }
+    } else if (!item.number && !item.date && !item.boolean && !v.number && !v.date) {
+        cmp = QString::compare(item.folded, v.folded);
+    } else {
+        return false;
+    }
+    switch (c.op) {
+    case QueryPropertyOp::Less: return cmp < 0;
+    case QueryPropertyOp::LessOrEqual: return cmp <= 0;
+    case QueryPropertyOp::Greater: return cmp > 0;
+    case QueryPropertyOp::GreaterOrEqual: return cmp >= 0;
+    default: return false;
+    }
+}
+
 // ---- sorting and grouping -----------------------------------------------------------------------
 
-SortValue Runner::sortValue(QuerySortKey key, const View &view) const
+SortValue Runner::sortValue(const QuerySort &sort, const View &view)
 {
+    const QuerySortKey key = sort.key;
     switch (key) {
+    case QuerySortKey::Property: {
+        // The first value: numbers by value, dates, checkboxes, then texts (as names compare).
+        const QList<PropertyItem> items = propertyItems(view, sort.property);
+        if (items.isEmpty())
+            return SortValue{};
+        const PropertyItem &first = items.first();
+        SortValue v;
+        v.present = true;
+        if (first.number) {
+            v.number = PropertyNumberRank;
+            v.real = *first.number;
+        } else if (first.date) {
+            v.number = PropertyDateRank;
+            v.date = *first.date;
+        } else if (first.boolean) {
+            v.number = PropertyBoolRank;
+            v.real = *first.boolean ? 1 : 0;
+        } else {
+            v.number = PropertyTextRank;
+            v.text = first.link.isEmpty() ? first.text : first.link;
+            v.nameKey = nameSortKey(v.text);
+        }
+        return v;
+    }
     case QuerySortKey::Priority:
         return view.task ? SortValue{true, priorityRank(view.task->priority), {}, {}, {}} : SortValue{};
     case QuerySortKey::Status:
@@ -653,6 +1064,18 @@ bool Runner::less(const QueryMatch &a, const QueryMatch &b) const
         case QuerySortKey::Status: return x.number - y.number;
         case QuerySortKey::Page: return x.text == y.text ? 0 : compareNameKeys(x.nameKey, x.text, y.nameKey, y.text);
         case QuerySortKey::Path: return QString::compare(x.text, y.text);
+        case QuerySortKey::Property:
+            if (x.number != y.number)
+                return x.number - y.number;
+            switch (x.number) {
+            case PropertyNumberRank:
+            case PropertyBoolRank: return x.real < y.real ? -1 : (x.real > y.real ? 1 : 0);
+            case PropertyDateRank: return dates::compareDateSpecs(x.date, y.date);
+            default: // ("w toku" and "W toku" are one value: the next sort key decides)
+                return x.nameKey == y.nameKey || text::foldKey(x.text) == text::foldKey(y.text)
+                               ? 0
+                               : compareNameKeys(x.nameKey, x.text, y.nameKey, y.text);
+            }
         default: return dates::compareDateSpecs(x.date, y.date);
         }
     };
@@ -724,7 +1147,7 @@ QList<GroupInfo> Runner::groupsOf(const View &view)
         return {}; // a note gone from the index (viewOf()): in no group
     switch (m_query.group) {
     case QueryGroupKey::None: return {};
-    case QueryGroupKey::Page: return {GroupInfo{view.path(), view.note().title, 0, view.note().title}};
+    case QueryGroupKey::Page: return {groupInfo(view.path(), view.note().title, 0, view.note().title)};
     case QueryGroupKey::Due:
     case QueryGroupKey::Scheduled:
     case QueryGroupKey::Date: {
@@ -733,29 +1156,73 @@ QList<GroupInfo> Runner::groupsOf(const View &view)
                                                                                  : QueryDateField::Date;
         const DateValues values = dateValues(field, view);
         if (values.isEmpty())
-            return {GroupInfo{QString(), messages::noDate(), 1, QString()}};
+            return {groupInfo(QString(), messages::noDate(), 1, QString())};
         const QString day = values.first().date.toString(Qt::ISODate);
-        return {GroupInfo{day, day, 0, day}};
+        return {groupInfo(day, day, 0, day)};
     }
     case QueryGroupKey::Tag: {
         const QStringList tags = effectiveTags(view);
         if (tags.isEmpty())
-            return {GroupInfo{QString(), messages::noTag(), 1, QString()}};
+            return {groupInfo(QString(), messages::noTag(), 1, QString())};
         QList<GroupInfo> out;
         for (const QString &t : tags)
-            out.append(GroupInfo{t, u"#"_s + t, 0, t});
+            out.append(groupInfo(t, u"#"_s + t, 0, t));
         return out;
     }
     case QueryGroupKey::Status:
         if (!view.task)
-            return {GroupInfo{QString(), messages::noStatus(), 99, QString()}};
-        return {GroupInfo{statusKey(view.task->status), queryStatusLabel(view.task->status),
-                          statusRank(view.task->status), QString()}};
+            return {groupInfo(QString(), messages::noStatus(), 99, QString())};
+        return {groupInfo(statusKey(view.task->status), queryStatusLabel(view.task->status),
+                          statusRank(view.task->status), QString())};
     case QueryGroupKey::Priority:
         if (!view.task)
-            return {GroupInfo{QString(), messages::noPriority(), 99, QString()}};
-        return {GroupInfo{priorityKey(view.task->priority), queryPriorityLabel(view.task->priority),
-                          priorityRank(view.task->priority), QString()}};
+            return {groupInfo(QString(), messages::noPriority(), 99, QString())};
+        return {groupInfo(priorityKey(view.task->priority), queryPriorityLabel(view.task->priority),
+                          priorityRank(view.task->priority), QString())};
+    case QueryGroupKey::Property: {
+        // A group per value (a list: per item), "No value" last.
+        const QList<PropertyItem> items = propertyItems(view, m_query.groupProperty);
+        QList<GroupInfo> out;
+        QSet<QString> keys;
+        for (const PropertyItem &item : items) {
+            GroupInfo g;
+            g.value = item.text;
+            if (!item.link.isEmpty()) {
+                const std::optional<VaultPath> target = resolveCached(item.link);
+                g.key = target ? *target : u"link:"_s + folded(item.link);
+                g.label = target ? paths::pageTitle(*target) : item.link;
+                g.rank = PropertyTextRank;
+                g.order = g.label;
+            } else if (item.number) {
+                g.key = u"n:"_s + QString::number(*item.number, 'g', 15);
+                g.label = item.text;
+                g.rank = PropertyNumberRank;
+                g.number = *item.number;
+            } else if (item.date) {
+                g.key = item.date->toString();
+                g.label = item.text;
+                g.rank = PropertyDateRank;
+                g.order = g.key;
+            } else if (item.boolean) {
+                g.key = item.folded;
+                g.label = item.text;
+                g.rank = PropertyBoolRank;
+                g.number = *item.boolean ? 1 : 0;
+            } else {
+                g.key = item.folded;
+                g.label = item.text;
+                g.rank = PropertyTextRank;
+                g.order = item.text;
+            }
+            if (!keys.contains(g.key)) {
+                keys.insert(g.key);
+                out.append(g);
+            }
+        }
+        if (out.isEmpty())
+            out.append(groupInfo(QString(), messages::noValue(), 99, QString()));
+        return out;
+    }
     }
     return {};
 }
@@ -770,7 +1237,7 @@ QList<QueryGroup> Runner::buildGroups(const QList<QueryItem> &items, const QList
         for (const GroupInfo &g : itemGroups) {
             const auto [at, added] = byKey.tryEmplace(g.key, groups.size());
             if (added) {
-                groups.append(QueryGroup{g.key, g.label, {}});
+                groups.append(QueryGroup{g.key, g.label, {}, g.value});
                 infos.append(g);
             }
             groups[*at].items.append(items[i]);
@@ -778,7 +1245,8 @@ QList<QueryGroup> Runner::buildGroups(const QList<QueryItem> &items, const QList
     }
     QList<qsizetype> order(groups.size());
     std::iota(order.begin(), order.end(), 0);
-    const bool byName = m_query.group == QueryGroupKey::Page;
+    const bool property = m_query.group == QueryGroupKey::Property;
+    const bool byName = m_query.group == QueryGroupKey::Page || property;
     QStringList nameKeys;
     if (byName) {
         nameKeys.reserve(infos.size());
@@ -790,8 +1258,11 @@ QList<QueryGroup> Runner::buildGroups(const QList<QueryItem> &items, const QList
         const GroupInfo &y = infos.at(b);
         if (x.rank != y.rank)
             return x.rank < y.rank;
-        const int c = byName ? compareNameKeys(nameKeys.at(a), x.order, nameKeys.at(b), y.order)
-                             : QString::compare(x.order, y.order);
+        if (property && (x.rank == PropertyNumberRank || x.rank == PropertyBoolRank) && x.number != y.number)
+            return x.number < y.number;
+        const int c = byName && !(property && x.rank == PropertyDateRank)
+                              ? compareNameKeys(nameKeys.at(a), x.order, nameKeys.at(b), y.order)
+                              : QString::compare(x.order, y.order);
         if (c != 0)
             return c < 0;
         return x.key < y.key;
@@ -844,7 +1315,8 @@ QueryResult Runner::finish(const QList<QueryMatch> &sorted)
 bool sameQuery(const Query &a, const Query &b)
 {
     return a.source == b.source && a.type == b.type && a.explicitType == b.explicitType && a.filters == b.filters
-           && a.sort == b.sort && a.group == b.group && a.limit == b.limit;
+           && a.sort == b.sort && a.group == b.group && a.groupProperty == b.groupProperty && a.limit == b.limit
+           && a.view == b.view && a.columns == b.columns && a.summaries == b.summaries;
 }
 
 bool hasRemindFilter(const Query &query)
@@ -858,9 +1330,11 @@ bool hasRemindFilter(const Query &query)
 
 bool queryResolvesNames(const Query &query)
 {
-    return std::ranges::any_of(query.filters, [](const QueryFilter &f) {
-        return f.kind == QueryFilterKind::Page || f.kind == QueryFilterKind::Ref;
-    });
+    // (Property values may be links: filters compare and groups key them by the page they name.)
+    return query.group == QueryGroupKey::Property || std::ranges::any_of(query.filters, [](const QueryFilter &f) {
+               return f.kind == QueryFilterKind::Page || f.kind == QueryFilterKind::Ref
+                      || f.kind == QueryFilterKind::Property;
+           });
 }
 
 QueryResult runQuery(const Query &query, const VaultIndex &index, QDate today, Qt::DayOfWeek weekStart,

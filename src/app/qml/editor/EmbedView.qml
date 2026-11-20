@@ -35,10 +35,16 @@ import Brulion
 // the PDF viewer. Without a renderer (the browser) or a thumbnail cache it is the file's chip with a
 // page icon; its click opens the PDF in a new browser tab / the system's viewer (pdfClicked too:
 // PageController.openPdf decides, inside the click — the browser's user gesture).
+// An Obsidian base (`base`: `![[Books.base]]`, `![[Books.base#Reading]]`; docs/SYNTAX.md §10
+// "Obsidian Bases") is its view, live: a DatabaseView over the .base file (`this` the note),
+// edited as on the base's own page; its toasts go out as viewToast().
 Column {
     id: root
 
     property list<var> embeds
+    /// The page's controller and editor (an embedded base's view: rendering, edits, the keys).
+    property PageController controller: null
+    property BlockEditor editor: null
     /// Reading mode (BlockEditor.readOnly): a click beside a picture edits nothing (no text cursor).
     property bool readOnly: false
     signal clicked(string target)
@@ -53,6 +59,8 @@ Column {
     /// A click on a shown picture from the internet: `picture` is its embed (the cached copy).
     signal webOpen(var picture)
     signal backgroundClicked()
+    /// An embedded base's toast (DatabaseView.toastRequested; `undo`: model.undoLast() puts it back).
+    signal viewToast(string text, string kind, bool undo, ViewResultModel model)
     /// A finger held beside the picture / chip (touch UIs).
     signal backgroundLongPressed()
 
@@ -107,6 +115,8 @@ Column {
             readonly property bool webPending: web && state_ !== "ready"
             readonly property bool decodable: rec.map.decodable !== false
             readonly property bool drawing: rec.map.drawing === true
+            /// An Obsidian base: its view (its chip without a controller).
+            readonly property bool base: rec.map.base === true && root.controller !== null
             /// SVG: a local file by its name; a picture from the internet by the format the host
             /// found in its bytes (its URL need not end with .svg, `name` is "host › segment").
             readonly property bool scalable: drawing || (web ? Js.test(format, "^svgz?$", "i")
@@ -131,12 +141,30 @@ Column {
             readonly property real knownHeight: !sizeKnown ? 0 : drawing ? Math.floor(fileHeight * drawingScale)
                                                                         : Math.floor(fileHeight * fitScale) / dpr
             width: root.width
-            height: embed.pdfTile ? pdfLoader.height : image ? picture.height : chip.height
+            height: embed.base ? baseLoader.height : embed.pdfTile ? pdfLoader.height : image ? picture.height : chip.height
+
+            Loader {
+                id: baseLoader
+                active: embed.base
+                width: embed.width
+                height: baseLoader.implicitHeight
+                sourceComponent: DatabaseView {
+                    id: baseView
+                    width: baseLoader.width
+                    controller: root.controller
+                    editor: root.editor
+                    language: "base"
+                    basePath: "" + (embed.rec.map.path || "")
+                    viewName: "" + (embed.rec.map.view || "")
+                    thisPath: root.controller !== null ? root.controller.path : ""
+                    onToastRequested: (text, kind, undo) => root.viewToast(text, kind, undo, baseView.results)
+                }
+            }
 
             // Beside the picture / chip: a click there edits the block (an embed-only paragraph of
             // a document has no text line to click).
             Item {
-                x: embed.pdfTile ? pdfLoader.width : embed.image ? picture.width : chip.width
+                x: embed.base ? embed.width : embed.pdfTile ? pdfLoader.width : embed.image ? picture.width : chip.width
                 width: Math.max(0, embed.width - x)
                 height: embed.height
                 HoverHandler { cursorShape: root.readOnly ? Qt.ArrowCursor : Qt.IBeamCursor; enabled: !Theme.touchUi }
@@ -352,7 +380,7 @@ Column {
             BChip {
                 id: chip
                 objectName: embed.pdf ? "pdfEmbedChip" : ""
-                visible: !embed.image && !embed.pdfTile
+                visible: !embed.image && !embed.pdfTile && !embed.base
                 interactive: true
                 iconName: embed.pdf ? "file-text" : embed.rec.map.image === true ? "image" : "file"
                 text: embed.name

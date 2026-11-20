@@ -227,6 +227,11 @@ void touchTapNow(QQuickWindow *window, QPointF scenePos, int holdMs = 110);
 bool touchHoldNow(QQuickWindow *window, QPointF scenePos, const std::function<bool()> &until, int timeoutMs,
                   int afterMs = 100);
 void touchDragNow(QQuickWindow *window, QPointF from, QPointF delta);
+/// A finger pressed at `from` and held until `until` is true (at most `timeoutMs`: a long press
+/// that starts a drag — a board's card), then moved to `to` in small steps and lifted. Returns what
+/// `until` said.
+bool touchHoldDragNow(QQuickWindow *window, QPointF from, QPointF to, const std::function<bool()> &until,
+                      int timeoutMs);
 void mouseMoveNow(QQuickWindow *window, QPointF scenePos);
 void mouseClickNow(QQuickWindow *window, QPointF scenePos, Qt::MouseButton button = Qt::LeftButton,
                    Qt::KeyboardModifiers modifiers = Qt::NoModifier);

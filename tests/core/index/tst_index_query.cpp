@@ -169,7 +169,11 @@ private Q_SLOTS:
         QCOMPARE(q.filters[3].priorities, QList<Priority>({Priority::High, Priority::None}));
         QCOMPARE(q.filters[4].kind, QueryFilterKind::Text);
         QCOMPARE(q.filters[4].values, QStringList{u"a b"_s});
-        QCOMPARE(q.sort, QList<QuerySort>({{QuerySortKey::Due, false}, {QuerySortKey::Priority, true}}));
+        QCOMPARE(q.sort.size(), 2);
+        QCOMPARE(q.sort[0].key, QuerySortKey::Due);
+        QCOMPARE(q.sort[0].descending, false);
+        QCOMPARE(q.sort[1].key, QuerySortKey::Priority);
+        QCOMPARE(q.sort[1].descending, true);
         QCOMPARE(q.group, QueryGroupKey::Page);
         QCOMPARE(q.limit, std::optional<int>(20));
 
@@ -197,8 +201,6 @@ private Q_SLOTS:
         QTest::newRow("bad priority") << u"priority:urgent"_s << u"Invalid value “urgent”"_s;
         QTest::newRow("bad type") << u"type:files"_s << u"Invalid value “files”"_s;
         QTest::newRow("two types") << u"type:tasks,pages"_s << u"Invalid value"_s;
-        QTest::newRow("bad sort") << u"sort:size"_s << u"Invalid value “size”"_s;
-        QTest::newRow("bad group") << u"group:week"_s << u"Invalid value “week”"_s;
         QTest::newRow("bad date") << u"due:someday"_s << u"Cannot understand the date “someday”"_s;
         QTest::newRow("bad date in list") << u"due:today,nigdy"_s << u"“nigdy”"_s;
         QTest::newRow("operator without date") << u"due:<="_s << u"needs a value"_s;
@@ -214,8 +216,6 @@ private Q_SLOTS:
         QTest::newRow("pages with task filter")
                 << u"type:pages status:todo"_s << u"“status:todo” does not work with type:pages"_s;
         QTest::newRow("pages with remind") << u"type:pages remind:today"_s << u"does not work with type:pages"_s;
-        QTest::newRow("pages with task sort") << u"type:pages sort:due"_s << u"“sort:due” does not work"_s;
-        QTest::newRow("pages with task group") << u"type:pages group:status"_s << u"“group:status” does not work"_s;
         QTest::newRow("duplicate type") << u"type:tasks typ:bloki"_s << u"may appear only once"_s;
         QTest::newRow("duplicate group") << u"group:page group:tag"_s << u"may appear only once"_s;
         QTest::newRow("empty quoted value") << u"tag:\"\""_s << u"needs a value"_s;

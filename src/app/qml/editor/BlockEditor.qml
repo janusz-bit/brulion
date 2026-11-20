@@ -245,6 +245,12 @@ FocusScope {
         action.undo = token
         return action
     }
+    /// The "Undo" of a database view's edit of another file (DatabaseView): ViewResultModel.undoLast().
+    function viewUndoAction(model: ViewResultModel): EditorToastAction {
+        const action = toastAction("viewUndo", qsTr("Undo"))
+        action.view = model
+        return action
+    }
     /// A toast's action (EditorToastAction: `kind` and its values), the editor's child.
     function toastAction(kind: string, text: string): EditorToastAction {
         return toastActionComponent.createObject(editor, { kind: kind, text: text }) as EditorToastAction

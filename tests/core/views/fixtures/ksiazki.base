@@ -1,0 +1,58 @@
+# Książki do przeczytania — a base as Obsidian 1.9 writes one, with comments and odd spacing kept.
+filters:
+  and:
+    - file.hasTag("książka")
+    - file.inFolder("Książki")
+formulas:
+  cena_brutto: "cena * 1.23"
+  opis: 'if(cena, cena.toFixed(2) + " zł", "")'
+  na_strone: "(formula.cena_brutto / strony).toFixed(3)"
+properties:
+  autor:
+    displayName: Autor
+  formula.cena_brutto:
+    displayName: "Cena brutto"
+  file.name:
+    displayName: Tytuł
+summaries:
+  sredniaZaokr: 'values.mean().round(1)'
+views:
+  - type: table
+    name: Wszystkie
+    order:
+      - file.name
+      - autor
+      - cena
+      - formula.cena_brutto
+      - strony
+    sort:
+      - property: cena
+        direction: DESC
+    summaries:
+      cena: Sum
+      strony: sredniaZaokr
+  - type: cards   # a gallery
+    name: Okładki
+    image: note.okladka
+    order: [file.name, autor]
+  - type: kanban
+    name: Stan
+    groupBy:
+      property: note.stan
+      direction: ASC
+    groupOrder:
+      - do przeczytania
+      - czytam
+      - przeczytana
+    order:
+      - file.name
+      - stan
+  - type: list
+    name: Tanie
+    filters: 'cena < 30'
+    limit: 1
+    order:
+      - file.name
+  - type: map
+    name: Mapa
+    order: [file.name]

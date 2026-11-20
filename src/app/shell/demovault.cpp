@@ -327,6 +327,12 @@ tags: [czytanie]
 - [ ] Księgi Jakubowe — Olga Tokarczuk #[[do przeczytania]]
 - [ ] Cesarz — Ryszard Kapuściński #[[do przeczytania]]
 
+Te same książki jako tablica — przeciągnij kartę do innej kolumny, a zmieni się stan zadania:
+
+```query
+type:tasks page:this tag:[[do przeczytania]] widok:tablica
+```
+
 Ile dni zostało do końca „Lalki”?
 
 ```calc
@@ -703,6 +709,12 @@ tags: [reading]
   - Reading 40 pages a day.
 - [ ] Dune — Frank Herbert #[[to read]]
 - [ ] The Remains of the Day — Kazuo Ishiguro #[[to read]]
+
+The same books as a board — drag a card to another column and the task's status changes:
+
+```query
+type:tasks page:this tag:[[to read]] view:board
+```
 
 How many days until I finish “Middlemarch”?
 

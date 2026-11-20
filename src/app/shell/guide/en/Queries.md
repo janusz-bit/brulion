@@ -34,9 +34,12 @@ Insert a query with the `/Query` command or with the “Show as query” button 
 | `remind:` | a condition on a reminder's date |
 | `date:` | a condition on a journal date |
 | `is:` | `blocked` — the task waits for a task that isn't done (`⛔`), `blocking` — another task waits for it, `running` — its timer is running, `tracked` — it has logged time; `-is:blocked` is the tasks that aren't blocked |
-| `sort:` | e.g. `sort:due,-priority`; a minus reverses |
-| `group:` | `page`, `due`, `tag`, `status`, `priority`… |
+| `sort:` | e.g. `sort:due,-priority`; a minus reverses; also a property: `sort:-cost` |
+| `group:` | `page`, `due`, `tag`, `status`, `priority`… or a property: `group:stage` |
 | `limit:` | the maximum number of results |
+| `key::value` | a property — see below |
+| `view:` | `table`, `board`, `gallery`, `calendar`, `list` — see below |
+| `columns:`, `summary:` | a view's columns and its sums, averages… — see below |
 
 ## Dates in conditions
 The operators `<`, `<=`, `>`, `>=` go before the expression; without an operator the date must fall within the given day or period.
@@ -58,6 +61,55 @@ Example: `due:<=+7d` means “due within a week, overdue ones included”.
 - `status:open -is:blocked sort:due` — what you can do right now (without tasks that are waiting for something).
 
 See also [[Reminders and alarms|Reminders and alarms]]. If there is an error in a query, a description of what to fix appears in place of the results.
+
+## Properties
+Two colons filter by a property — of a page (its front matter or `key:: value` lines at the top) or of a block (its own `key:: value` lines, else its parent's, else its page's):
+
+- `status::done`, `status::"in progress"` — the text (letter case and accents don't matter); a list matches when one of its items does,
+- `cost::>100`, `cost::<=1200`, `cost::100..200` — numbers as numbers,
+- `due::<today`, `due::this-week`, `due::today..+7d` — dates, as in the date conditions above,
+- `owner::[[John Smith]]` — a link to that page (an alias works too),
+- `urgent::true` — a checkbox,
+- `name::*house*` — a pattern,
+- `due::none` — no such property (or an empty one), `rating::any` — it has one,
+- `-status::done` — everything else; values after a comma mean “or”: `status::planned,"in progress"`.
+
+A key doesn't depend on letter case or accents (`budzet::` finds `Budżet`); one with spaces goes in quotes: `"due date"::2026-11-01`. For pages `sort:` and `group:` take property names too (`type:pages sort:-cost group:status`); `status::` with two colons always means the property, also for tasks.
+
+```text
+type:pages tag:project status::"in progress",planned cost::>100 sort:-cost
+type:tasks stage::shopping status:open
+```
+
+## Views: tables, boards, galleries, calendars
+`view:` shows the results differently — and lets you change them in place:
+
+- `view:table` — a table: `columns:` chooses its columns (`title`, `status`, `due`, `tags`, `path`, `mtime`… or any property), and a column `"Gross = cost * 1.23"` is a formula (Dataview's functions: `round`, `dateformat`, `length`…). `summary:cost=sum,rating=average` adds totals under the columns (also `min`, `max`, `median`, `count`, `unique`, `earliest`, `latest`…). Click a cell to change it: Brulion writes that one property into the page (or the `key::` line of a task) and keeps everything else; Ctrl+Z undoes it on this page, and an edit of another page has **Undo** in its message. Clicking a column's header sorts by it; its menu (a right click, a long press) moves or hides it; **Columns** adds one. These change the query's own `sort:` and `columns:`.
+- `view:board` — a board: columns by `group:` (tasks by status by default), cards that you drag to another column with the mouse — on a phone after holding a finger on the card. Dropping a card writes the column's value: the task's status, or the property (`group:stage`). **+** in a column adds a page (or a task) with that value.
+- `view:gallery` — cards with each page's cover or its first picture.
+- `view:calendar` — a month with the rows on their dates (tasks by their due date, pages by a date property or `group:date-property`); drag an entry to another day to move it; the arrows change the month.
+- `view:list` — one line per row.
+
+**+** at the top makes a new row: a page in the folder of the query's `path:` with its `tag:` and the values of its `key::value` filters — or, for tasks, a task on this page.
+
+Try it: the board below shows the tasks of this page by status — drag a card to “Done”:
+
+```query
+type:tasks page:this view:board
+```
+
+- [ ] Read about views
+- [/] Try a board
+- [ ] Build a table of my projects
+
+```text
+type:pages tag:project view:table sort:-cost
+columns:title,status,cost,due,"Gross = cost * 1.23"
+summary:cost=sum
+```
+
+## Obsidian Bases
+A `.base` file from Obsidian opens in Brulion as a page with its views (table, cards, list, Kanban board; a map is shown as a table). Its filters (`file.hasTag("book")`, `file.inFolder("Books")`, `status != "done"`), formulas (`price.toFixed(2)`, `if(…)`), display names, sorting, groups, limits and summaries work as in Obsidian. A note shows a base's view where it embeds it — `![[Books.base]]`, or `![[Books.base#Reading]]` for the view of that name — and a code block with the language `base` shows a base's YAML right in a note. Editing a cell or dragging a card writes the note's property, and changing the sort or the columns writes them back into the base — only those lines change. Regular expressions and plugins' functions say they are not supported instead of failing.
 
 ## Dataview queries from Obsidian
 A vault shared with Obsidian often has queries of the Dataview plugin. Brulion shows their results too: a code block with the language `dataview` lists pages, a table or tasks, read-only — only the tasks can be checked off.

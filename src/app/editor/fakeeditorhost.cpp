@@ -15,6 +15,7 @@
 #include "markdown/parse.h"
 #include "markdown/properties.h"
 #include "notebook/json.h"
+#include "notebook/views.h"
 #include "text/text.h"
 #include "util/paths.h"
 #include "webpicture/webpicture.h"
@@ -264,6 +265,23 @@ QVariantMap FakeEditorHost::runDataview(const QString &source, const QString &cu
         return failedQuery(std::move(out), *error);
     out.insert(notebook::dataviewResultJson(index, std::get<dataview::Result>(result)).toVariantMap());
     out.insert(u"ok"_s, true);
+    return out;
+}
+
+QVariantMap FakeEditorHost::runView(const QString &language, const QString &source, const QString &currentPath,
+                                    const QVariantMap &state)
+{
+    ++m_queryRuns;
+    if (m_queriesFail)
+        return {{u"ok"_s, false}, {u"error"_s, u"No notebook is open."_s}, {u"language"_s, language}, {u"complete"_s, true}};
+    notebook::ViewRequest request;
+    request.currentPath = currentPath;
+    request.now = clockTime(m_now);
+    request.view = state.value(u"view"_s).toInt();
+    request.viewName = state.value(u"viewName"_s).toString();
+    request.month = QDate::fromString(state.value(u"month"_s).toString(), Qt::ISODate);
+    QVariantMap out = notebook::runView(currentIndex(), language, source, request).toVariantMap();
+    out.insert(u"complete"_s, true);
     return out;
 }
 

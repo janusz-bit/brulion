@@ -317,6 +317,10 @@ public:
     void setMergeFunction(MergeFunction merge) { m_merge = std::move(merge); }
     /// Current document text.
     QString text() const { return m_model->text(); }
+    /// Replace the page's text (the source text in source mode) by `edit(text)` as one undo step —
+    /// a database view's cell or card that is on this page (views/edits.h). False when the page
+    /// refuses edits or nothing changed.
+    bool applyContentEdit(const std::function<QString(const QString &)> &edit);
     /// The text last read from / written to the file (merge base).
     QString savedText() const { return m_savedText; }
     /// Characters held by the undo history (diagnostics, tests).

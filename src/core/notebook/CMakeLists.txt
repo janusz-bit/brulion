@@ -10,7 +10,8 @@
 # The shell's Workspace delegates to it; brulion-cli (src/cli) is built on it.
 # Public headers: notebook.h (overview), capture.h, journals.h, pages.h, links.h, itemref.h,
 # json.h (also of Dataview results), session.h, share.h, embeds.h, cleanup.h, replace.h, periodicnotes.h (weekly and monthly notes),
-# tasktools.h (task dependencies and clocks for the app's views).
+# tasktools.h (task dependencies and clocks for the app's views), views.h (database views of queries
+# and bases as JSON: the app's view blocks and base pages, brulion-cli query / base).
 brulion_add_core_module(notebook
     SOURCES
         notebook.h
@@ -29,4 +30,5 @@ brulion_add_core_module(notebook
         session.h session.cpp
         share.h share.cpp
         tasktools.h tasktools.cpp
-    DEPS util text dates markdown vault index dataview reminders log drawing periodic)
+        views.h views.cpp
+    DEPS util text dates markdown vault index dataview views reminders log drawing periodic)

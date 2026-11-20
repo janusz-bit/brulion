@@ -8,6 +8,7 @@ brulion_add_core_module(markdown
     SOURCES
         markdown.h
         blockclipboard.h blockclipboard.cpp
+        blockprops.h blockprops.cpp
         blockdocument.h blockdocument.cpp
         cloze.h cloze.cpp
         edit.h edit.cpp

@@ -609,6 +609,50 @@ private Q_SLOTS:
         QCOMPARE(r.errorCode(), u"query_error"_s);
     }
 
+    // Database views (docs/SYNTAX.md §10 "Views", "Obsidian Bases"): a query with view: prints its
+    // table, `base` runs a .base file and a page's ```base block.
+    void viewsAndBases()
+    {
+        const QString dir = vault({{u"Projekty/Dom.md"_s, "---\nstatus: w toku\nkoszt: 1200\ntags: [projekt]\n---\nDom.\n"},
+                                   {u"Projekty/Ogród.md"_s, "---\nstatus: planowany\nkoszt: 300\ntags: [projekt]\n---\nOgród.\n"},
+                                   {u"Projekty.base"_s,
+                                    "filters: file.hasTag(\"projekt\")\nviews:\n  - type: table\n    name: Drogie\n"
+                                    "    filters: 'koszt > 500'\n    order: [file.name, koszt]\n  - type: kanban\n"
+                                    "    name: Stan\n    groupBy: {property: status, direction: ASC}\n"},
+                                   {u"Strona z bazą.md"_s, "Tekst.\n\n```base\nviews:\n  - type: list\n```\n"}});
+        Run r = run(dir, {u"query"_s, u"type:pages tag:projekt widok:tabela kolumny:tytuł,status,koszt "
+                                      u"sortuj:-koszt podsumowanie:koszt=suma"_s});
+        QCOMPARE(r.code, 0);
+        QCOMPARE(r.result().value(u"kind"_s).toString(), u"table"_s);
+        const QJsonArray rows = r.result().value(u"rows"_s).toArray();
+        QCOMPARE(rows.size(), 2);
+        QCOMPARE(rows.at(0).toObject().value(u"path"_s).toString(), u"Projekty/Dom.md"_s);
+        QCOMPARE(r.result().value(u"columns"_s).toArray().at(2).toObject().value(u"summaryText"_s).toString(),
+                 u"1500"_s);
+        r = run(dir, {u"--format"_s, u"text"_s, u"query"_s, u"type:pages tag:projekt view:board group:status"_s});
+        QCOMPARE(r.code, 0);
+        const QString text = QString::fromUtf8(r.out);
+        QVERIFY2(text.contains(u"## planowany (1)"_s) && text.contains(u"## w toku (1)"_s), qPrintable(text));
+        // A base file: its first view, a view by name and by number; a page's block.
+        r = run(dir, {u"base"_s, u"Projekty.base"_s});
+        QCOMPARE(r.code, 0);
+        QCOMPARE(r.result().value(u"rows"_s).toArray().size(), 1);
+        QCOMPARE(r.result().value(u"views"_s).toArray().size(), 2);
+        r = run(dir, {u"base"_s, u"Projekty.base"_s, u"--view"_s, u"stan"_s});
+        QCOMPARE(r.code, 0);
+        QCOMPARE(r.result().value(u"kind"_s).toString(), u"board"_s);
+        QCOMPARE(r.result().value(u"groups"_s).toArray().size(), 2);
+        r = run(dir, {u"base"_s, u"Projekty.base"_s, u"--view"_s, u"2"_s});
+        QCOMPARE(r.result().value(u"view"_s).toInt(), 1);
+        r = run(dir, {u"base"_s, u"Strona z bazą"_s});
+        QCOMPARE(r.code, 0);
+        QCOMPARE(r.result().value(u"kind"_s).toString(), u"list"_s);
+        r = run(dir, {u"base"_s, u"Brak.base"_s});
+        QCOMPARE(r.code, 3);
+        r = run(dir, {u"query"_s, u"view:table columns:\"Zła = (\""_s});
+        QCOMPARE(r.code, 6);
+    }
+
     // Dependencies (⛔ / 🆔), the :LOGBOOK: clock (one at a time, local time) and time summaries.
     void taskDependenciesAndClock()
     {

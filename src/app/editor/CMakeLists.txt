@@ -5,7 +5,7 @@
 # EditorInput (TextEdit text and input-method helpers), SourceTextSync (source mode: the TextEdit's
 # edits handed to PageController one at a time), SpellCheck (spell checking on a worker thread:
 # the core module spell over the platform's backends, src/platform/spellbackends.h), QueryResultModel
-# (live ```query results), RowHeightTree, ScrollAnchor and PageRows (one item per page: the rows'
+# (live ```query results), ViewResultModel (database views: ```query with view:, ```base, .base files), RowHeightTree, ScrollAnchor and PageRows (one item per page: the rows'
 # heights, the scroll position as a row and an offset), the pure helpers of blocktext.h and the
 # in-memory FakeEditorHost (playground, tests; queries run on the real index module), MermaidView
 # (a ```mermaid block drawn by the core module diagram), ChartView (a ```chart block: core module chart).
@@ -38,6 +38,7 @@ qt_add_library(brulion_editor STATIC
     blockrowdata.h blockrowdata.cpp
     queryhost.h
     queryresultmodel.h queryresultmodel.cpp
+    viewresultmodel.h viewresultmodel.cpp
     pagecontroller.h pagecontroller.cpp pagecontroller_selection.cpp pagecontroller_properties.cpp
     pagecontroller_find.cpp
     notefind.h notefind.cpp
@@ -70,7 +71,7 @@ target_link_libraries(brulion_editor
     PUBLIC Qt6::Core Qt6::Gui Qt6::Quick brulion_editorhost brulion_core_markdown brulion_core_spell
     PRIVATE brulion_core_calc brulion_core_dates brulion_core_text brulion_core_util brulion_core_index
             brulion_core_webpicture brulion_core_drawing
-            brulion_core_notebook brulion_core_stats brulion_core_syntax
+            brulion_core_notebook brulion_core_stats brulion_core_syntax brulion_core_views
     PUBLIC brulion_core_diagram brulion_core_chart
     PRIVATE brulion_core_io)
 # External changes while the page has unsaved edits are merged three-way with sync::merge3 when

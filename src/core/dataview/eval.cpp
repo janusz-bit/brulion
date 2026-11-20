@@ -1,5 +1,6 @@
 // Evaluating Dataview expressions: names, fields, operators, lambdas.
 #include "dataview/eval_p.h"
+#include "dataview/expression_p.h"
 #include "dataview/messages_p.h"
 
 #include "dates/local.h"
@@ -244,6 +245,13 @@ ValueList evaluateAll(const QList<ExprPtr> &exprs, Context &ctx, const Value &ro
 }
 
 } // namespace
+
+Value applyOperator(const QString &op, const Value &a, const Value &b, Context &ctx)
+{
+    if (op == u"=" || op == u"!=" || op == u"<" || op == u"<=" || op == u">" || op == u">=")
+        return comparison(op, a, b);
+    return arithmetic(op, a, b, ctx);
+}
 
 void Context::throwTooDeep()
 {

@@ -262,7 +262,8 @@ Never compute a hash yourself.
 | `remind add <text>` | `--at D [--alarm] [--every R] [--task] [--page P \| --date D]` | a reminder ⏰ / alarm ⏰! | yes |
 | `remind list` | `[--upcoming DAYS] [--from D --to D] [--limit N]` | reminders due, recurring ones expanded; no state kept | |
 | `remind snooze <ref>` | `--minutes N \| --to D` | move a reminder (a recurring one gets a one-off child) | yes |
-| `query <query>` | `[--page P]` | a query (docs/SYNTAX.md §10), results as a ```` ```query ```` block shows them | |
+| `query <query>` | `[--page P] [--month D]` | a query (docs/SYNTAX.md §10), results as a ```` ```query ```` block shows them; a query with `view:` gives its view (notebook/views.h: `{kind, columns, rows [{path, cells [{markdown, text, value}]…}], groups, total, …}`; the text form is a table — groups as headings, summaries under it; `--month`: a calendar's month) | |
+| `base <ref>` | `[--view NAME\|N] [--month D]` | an Obsidian base (docs/SYNTAX.md §10 "Obsidian Bases"): a `.base` file, or the first ```` ```base ```` block of a page; its view (default the first) as `query` gives a view, plus `views [{name, type, kind}]` and `problems` (each also a `base_problem` warning) | |
 | `search <text>` | `[--limit N]` | full text, diacritic-insensitive (`zolw` finds `żółw`) | |
 | `tags` | `[--prefix P]` | every tag with its count and the page it names | |
 | `tag <name>` | | a tag: its page, sub-tags, the blocks carrying it | |

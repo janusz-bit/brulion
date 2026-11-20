@@ -1,5 +1,5 @@
-// Reading the notebook through its index: info, query, search, tags, tag, backlinks, links,
-// unlinked, calendar.
+// Reading the notebook through its index: info, query (a view too), base, search, tags, tag,
+// backlinks, links, unlinked, calendar.
 #include "commands_p.h"
 
 #include "index/query.h"
@@ -7,6 +7,7 @@
 #include "markdown/journal.h"
 #include "notebook/json.h"
 #include "notebook/pages.h"
+#include "notebook/views.h"
 #include "reminders/calendar.h"
 #include "singleinstance.h"
 #include "text/text.h"
@@ -89,6 +90,76 @@ Result info(Call &call)
     return call.ok(o);
 }
 
+notebook::ViewRequest viewRequest(Call &call, const VaultPath &currentPath)
+{
+    notebook::ViewRequest r;
+    r.currentPath = currentPath;
+    r.now = call.ctx.now();
+    r.weekStart = call.vault()->config().weekStartsOn;
+    r.newPagesFolder = call.vault()->config().newPagesFolder;
+    const Vault *vault = call.vault();
+    r.stat = [vault](const VaultPath &p) { return vault->stat(p); };
+    if (call.has(u"month"_s))
+        r.month = call.date(call.str(u"month"_s)).value_or(QDate());
+    return r;
+}
+
+/// An Obsidian base: a .base file or the first ```base block of a page (docs/SYNTAX.md §10).
+Result base(Call &call)
+{
+    VaultIndex *index = call.index();
+    if (!index)
+        return call.failed();
+    const QString ref = call.str(u"ref"_s);
+    VaultPath path;
+    QString yaml;
+    if (ref.endsWith(u".base"_s, Qt::CaseInsensitive)) {
+        const std::optional<VaultPath> p = call.vaultPath(ref);
+        if (!p)
+            return call.failed();
+        path = *p;
+        bool ok = false;
+        yaml = call.vault()->readText(path, &ok);
+        if (!ok)
+            return call.fail(ExitNotFound, u"not_found"_s, tr("No such base: %1").arg(ref));
+    } else {
+        const auto page = call.page(ref, true);
+        if (!page)
+            return call.failed();
+        path = page->path;
+        const ParsedNote *note = index->note(path);
+        const auto it = note ? std::ranges::find_if(note->blocks, [](const Block &b) {
+            return b.kind == BlockKind::Code && b.lang == u"base";
+        })
+                             : QList<Block>::const_iterator();
+        if (!note || it == note->blocks.cend())
+            return call.fail(ExitNotFound, u"not_found"_s, tr("The page has no ```base block: %1").arg(ref));
+        // The block's own lines without its fences.
+        QStringList lines = it->raw.toString().split(u'\n');
+        if (!lines.isEmpty())
+            lines.removeFirst();
+        if (!lines.isEmpty() && lines.last().trimmed().startsWith(u"```"_s))
+            lines.removeLast();
+        yaml = lines.join(u'\n');
+    }
+    notebook::ViewRequest request = viewRequest(call, path);
+    if (call.has(u"view"_s)) {
+        bool number = false;
+        const int n = call.str(u"view"_s).toInt(&number);
+        if (number && n >= 1)
+            request.view = n - 1;
+        else
+            request.viewName = call.str(u"view"_s);
+    }
+    const QJsonObject view = notebook::runView(*index, u"base"_s, yaml, request);
+    if (!view.value(u"ok"_s).toBool())
+        return call.fail(ExitParse, u"base_error"_s, view.value(u"error"_s).toString(), {{u"path"_s, path}});
+    QString text = notebook::viewText(view);
+    for (const QJsonValue &p : view.value(u"problems"_s).toArray())
+        call.warn(u"base_problem"_s, p.toString());
+    return call.ok(view, text);
+}
+
 Result query(Call &call)
 {
     VaultIndex *index = call.index();
@@ -105,6 +176,13 @@ Result query(Call &call)
         if (!ref)
             return call.failed();
         options.currentPath = ref->path;
+    }
+    if (std::get<Query>(parsed).view != QueryView::None) {
+        // A view (docs/SYNTAX.md §10 "Views"): its columns and cells, as the app's block shows them.
+        const QJsonObject view = notebook::runView(*index, u"query"_s, source, viewRequest(call, options.currentPath));
+        if (!view.value(u"ok"_s).toBool())
+            return call.fail(ExitParse, u"query_error"_s, view.value(u"error"_s).toString(), {{u"query"_s, source}});
+        return call.ok(view, notebook::viewText(view));
     }
     QJsonObject result = notebook::queryResultJson(*index, runQuery(std::get<Query>(parsed), *index, call.ctx.today(),
                                                                     call.vault()->config().weekStartsOn, options));
@@ -342,7 +420,20 @@ void addIndexCommands(QList<Command> &out)
                                           "type:tasks status:open due:<=+7d sort:due — keys also in Polish"),
                         true, true),
              option(u"page"_s, ArgType::Ref,
-                    QT_TRANSLATE_NOOP("brulion::cli", "The page page:this / ref:this mean"))}));
+                    QT_TRANSLATE_NOOP("brulion::cli", "The page page:this / ref:this mean")),
+             option(u"month"_s, ArgType::Date,
+                    QT_TRANSLATE_NOOP("brulion::cli", "view:calendar: the month shown (any day of it)"))}));
+    out.append(make(
+            u"base"_s,
+            QT_TRANSLATE_NOOP("brulion::cli",
+                              "Show an Obsidian base (a .base file, or a page's ```base block) as a table"),
+            base,
+            {positional(u"ref"_s, ArgType::String,
+                        QT_TRANSLATE_NOOP("brulion::cli", "The .base file, or the page with the ```base block")),
+             option(u"view"_s, ArgType::String,
+                    QT_TRANSLATE_NOOP("brulion::cli", "The view: its name or number (default the first)")),
+             option(u"month"_s, ArgType::Date,
+                    QT_TRANSLATE_NOOP("brulion::cli", "A calendar view: the month shown (any day of it)"))}));
     out.append(make(
             u"search"_s,
             QT_TRANSLATE_NOOP("brulion::cli", "Full-text search, diacritic-insensitive (\"zolw\" finds \"żółw\")"),

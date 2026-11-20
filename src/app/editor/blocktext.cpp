@@ -1,6 +1,7 @@
 #include "blocktext.h"
 
 #include "calc/table.h"
+#include "index/query.h"
 #include "markdown/blockclipboard.h"
 #include "markdown/frontmatter.h"
 #include "markdown/inline.h"
@@ -428,11 +429,12 @@ BlockShape shapeOf(const markdown::BlockEntry &e)
         s.lang = f.lang;
         // ```math / ```latex / ```tex: a formula block (docs/SYNTAX.md §11); ```mermaid: a diagram
         // (docs/SYNTAX.md §11 "Mermaid diagrams"); ```chart: a chart (docs/SYNTAX.md §9 "Charts");
-        // ```dataview: an Obsidian Dataview query, shown like ```query (§10 "Dataview queries").
+        // ```dataview: an Obsidian Dataview query, shown like ```query (§10 "Dataview queries");
+        // ```base: an Obsidian base, a database view (§10 "Obsidian Bases").
         const bool math = f.lang == u"math" || f.lang == u"latex" || f.lang == u"tex";
         s.view = math                   ? BlockView::Math
                  : f.lang == u"calc"    ? BlockView::Calc
-                 : f.lang == u"query" || f.lang == u"dataview" ? BlockView::Query
+                 : f.lang == u"query" || f.lang == u"dataview" || f.lang == u"base" ? BlockView::Query
                  : f.lang == u"mermaid" ? BlockView::Mermaid
                  : f.lang == u"chart"   ? BlockView::Chart
                  : f.lang == u"view"    ? BlockView::View
@@ -641,7 +643,7 @@ QString plainTextOf(const markdown::BlockEntry &e, int maxLength)
 
 QVariantMap queryInfo(QStringView source)
 {
-    static const QRegularExpression filterRe(u"^(-?)([A-Za-z]+):(.+)$"_s);
+    static const QRegularExpression filterRe(u"^(-?)([\\p{L}\\p{N}_-]+)::?(.+)$"_s);
     QVariantList filters;
     QStringList terms;
     const auto addWord = [&](QStringView w) {
@@ -670,7 +672,14 @@ QVariantMap queryInfo(QStringView source)
         }
     }
     addWord(source.sliced(start));
-    return {{u"source"_s, source.toString()}, {u"filters"_s, filters}, {u"terms"_s, terms}};
+    // A query with `view:` is drawn as a database view (DatabaseView): its kind.
+    QString view;
+    if (source.contains(u"view:", Qt::CaseInsensitive) || source.contains(u"widok:", Qt::CaseInsensitive)) {
+        if (const auto parsed = parseQuery(source.toString()); std::holds_alternative<Query>(parsed)
+                                                                  && std::get<Query>(parsed).view != QueryView::None)
+            view = u"query"_s;
+    }
+    return {{u"source"_s, source.toString()}, {u"filters"_s, filters}, {u"terms"_s, terms}, {u"view"_s, view}};
 }
 
 QVariantMap pagePropertyMap(const markdown::PageProperty &p)
