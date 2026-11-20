@@ -418,6 +418,41 @@ private Q_SLOTS:
         QVERIFY(iotest::textAt(imported, u"Projekty/Dom.md"_s).contains(u"![salon.png](../assets/Logseq/salon.png)"_s));
     }
 
+    void htmlSiteFiles()
+    {
+        // The site as files (publishing): what the ZIP holds in the notebook's folder, byte for byte;
+        // the search box and its index only when asked for.
+        const QList<FileEntry> zipped = readZip(exportWith(u"html-site"_s).data);
+        const QString root = u"Mój skarbiec/"_s;
+        const QList<FileEntry> files = brulion::io::htmlSiteFiles(fixture());
+        QCOMPARE(files.size(), zipped.size());
+        for (const FileEntry &f : files) {
+            const auto inZip = std::ranges::find(zipped, root + f.path, &FileEntry::path);
+            QVERIFY2(inZip != zipped.cend(), qPrintable(f.path));
+            QCOMPARE(inZip->data, f.data);
+        }
+        QVERIFY(std::ranges::none_of(files, [](const FileEntry &f) { return f.path == u"search.js"; }));
+        HtmlSiteOptions options;
+        options.search = true;
+        ExportInput in = fixture();
+        in.footer = u"Opublikowano w Brulionie"_s;
+        const QList<FileEntry> searchable = brulion::io::htmlSiteFiles(in, options);
+        const auto file = [&searchable](const QString &path) {
+            const auto it = std::ranges::find(searchable, path, &FileEntry::path);
+            return it == searchable.cend() ? QString() : QString::fromUtf8(it->data);
+        };
+        QVERIFY(file(u"search.js"_s).contains(u"brulionSearch"_s));
+        const QString index = file(u"search-index.js"_s);
+        QVERIFY(index.startsWith(u"window.brulionSearch="_s));
+        QVERIFY(index.contains(u"\"t\":\"Dom\""_s));
+        QVERIFY(index.contains(u"Projekty/Dom.html"_s));
+        const QString dom = file(u"Projekty/Dom.html"_s);
+        QVERIFY(dom.contains(u"<script src=\"../search.js\" data-root=\"../\" defer></script>"_s));
+        QVERIFY(dom.contains(u"<input type=\"search\" id=\"search\""_s));
+        QVERIFY(dom.contains(u"<footer>Opublikowano w Brulionie</footer>"_s));
+        QVERIFY(file(u"index.html"_s).contains(u"<script src=\"search.js\" data-root=\"\" defer></script>"_s));
+    }
+
     void htmlSite()
     {
         const QList<FileEntry> entries = readZip(exportWith(u"html-site"_s).data);

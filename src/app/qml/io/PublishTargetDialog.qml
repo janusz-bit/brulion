@@ -115,13 +115,13 @@ BDialog {
         color: Theme.fgMuted
         wrapMode: Text.Wrap
     }
-    component Label: BText {
+    component FieldLabel: BText {
         Layout.fillWidth: true
         variant: "label"
     }
 
     // ---- Where ---------------------------------------------------------------------------------
-    Label { text: qsTr("Where") }
+    FieldLabel { text: qsTr("Where") }
     GridLayout {
         objectName: "publishKinds"
         Layout.fillWidth: true
@@ -191,7 +191,7 @@ BDialog {
         }
     }
 
-    Label { text: qsTr("Name") }
+    FieldLabel { text: qsTr("Name") }
     BTextField {
         id: nameField
         objectName: "publishTargetName"
@@ -206,7 +206,7 @@ BDialog {
         Layout.fillWidth: true
         visible: dialog.kind === "github"
         spacing: Theme.space1
-        Label { text: qsTr("Repository") }
+        FieldLabel { text: qsTr("Repository") }
         BTextField {
             id: repositoryField
             objectName: "publishRepository"
@@ -222,8 +222,8 @@ BDialog {
             columns: Theme.compact ? 1 : 2
             columnSpacing: Theme.space3
             rowSpacing: Theme.space1
-            Label { text: qsTr("Branch") }
-            Label { visible: !Theme.compact; text: qsTr("Folder in the branch") }
+            FieldLabel { text: qsTr("Branch") }
+            FieldLabel { visible: !Theme.compact; text: qsTr("Folder in the branch") }
             BTextField {
                 id: branchField
                 Layout.fillWidth: true
@@ -231,7 +231,7 @@ BDialog {
                 placeholderText: "gh-pages"
                 inputMethodHints: Qt.ImhNoAutoUppercase | Qt.ImhNoPredictiveText
             }
-            Label { visible: Theme.compact; text: qsTr("Folder in the branch") }
+            FieldLabel { visible: Theme.compact; text: qsTr("Folder in the branch") }
             BTextField {
                 id: folderField
                 Layout.fillWidth: true
@@ -269,7 +269,7 @@ BDialog {
         Layout.fillWidth: true
         visible: dialog.kind === "webdav"
         spacing: Theme.space1
-        Label { text: qsTr("WebDAV address of the folder") }
+        FieldLabel { text: qsTr("WebDAV address of the folder") }
         BTextField {
             id: urlField
             Layout.fillWidth: true
@@ -286,7 +286,7 @@ BDialog {
         Layout.fillWidth: true
         visible: dialog.kind === "nextcloud"
         spacing: Theme.space1
-        Label { text: qsTr("Server") }
+        FieldLabel { text: qsTr("Server") }
         BTextField {
             id: serverField
             Layout.fillWidth: true
@@ -296,7 +296,7 @@ BDialog {
             inputMethodHints: Qt.ImhUrlCharactersOnly | Qt.ImhNoAutoUppercase | Qt.ImhNoPredictiveText
             onTextEdited: dialog.touched = true
         }
-        Label { text: qsTr("Folder for the site") }
+        FieldLabel { text: qsTr("Folder for the site") }
         BTextField {
             id: cloudFolderField
             Layout.fillWidth: true
@@ -315,8 +315,8 @@ BDialog {
         columns: Theme.compact ? 1 : 2
         columnSpacing: Theme.space3
         rowSpacing: Theme.space1
-        Label { text: qsTr("User name") }
-        Label { visible: !Theme.compact; text: dialog.kind === "nextcloud" ? qsTr("App password") : qsTr("Password") }
+        FieldLabel { text: qsTr("User name") }
+        FieldLabel { visible: !Theme.compact; text: dialog.kind === "nextcloud" ? qsTr("App password") : qsTr("Password") }
         BTextField {
             id: userField
             Layout.fillWidth: true
@@ -325,7 +325,7 @@ BDialog {
             inputMethodHints: Qt.ImhNoAutoUppercase | Qt.ImhNoPredictiveText
             onTextEdited: dialog.touched = true
         }
-        Label { visible: Theme.compact; text: dialog.kind === "nextcloud" ? qsTr("App password") : qsTr("Password") }
+        FieldLabel { visible: Theme.compact; text: dialog.kind === "nextcloud" ? qsTr("App password") : qsTr("Password") }
         BTextField {
             id: passwordField
             objectName: "publishPassword"
@@ -378,7 +378,7 @@ BDialog {
             placeholderText: dialog.hasSharePassword ? qsTr("Kept on this device") : qsTr("The link's password")
             inputMethodHints: Qt.ImhSensitiveData | Qt.ImhNoAutoUppercase | Qt.ImhNoPredictiveText | Qt.ImhHiddenText
         }
-        Label { visible: shareSwitch.checked; text: qsTr("The link expires on") }
+        FieldLabel { visible: shareSwitch.checked; text: qsTr("The link expires on") }
         BTextField {
             id: expiresField
             Layout.fillWidth: true
@@ -400,7 +400,7 @@ BDialog {
         Layout.fillWidth: true
         visible: dialog.kind === "folder"
         spacing: Theme.space1
-        Label { text: qsTr("Folder") }
+        FieldLabel { text: qsTr("Folder") }
         RowLayout {
             Layout.fillWidth: true
             spacing: Theme.space2
@@ -431,15 +431,15 @@ BDialog {
         columns: Theme.compact ? 1 : 2
         columnSpacing: Theme.space3
         rowSpacing: Theme.space1
-        Label { text: qsTr("Site title (optional)") }
-        Label { visible: !Theme.compact && dialog.kind !== "nextcloud"; text: qsTr("Site address (optional)") }
+        FieldLabel { text: qsTr("Site title (optional)") }
+        FieldLabel { visible: !Theme.compact && dialog.kind !== "nextcloud"; text: qsTr("Site address (optional)") }
         BTextField {
             id: titleField
             Layout.fillWidth: true
             accessibleName: qsTr("Site title")
             placeholderText: Workspace.name
         }
-        Label { visible: Theme.compact && dialog.kind !== "nextcloud"; text: qsTr("Site address (optional)") }
+        FieldLabel { visible: Theme.compact && dialog.kind !== "nextcloud"; text: qsTr("Site address (optional)") }
         BTextField {
             id: siteUrlField
             Layout.fillWidth: true

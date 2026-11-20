@@ -65,7 +65,8 @@ class TestAppIoPublish : public QObject {
     static QHash<QString, QByteArray> blog()
     {
         return {
-                {u"Blog/Pierwszy wpis.md"_s, "# Pierwszy\nZażółć gęślą jaźń, [[Drugi wpis]] i [[Szkic]].\n![[kot.png]]\n"},
+                {u"Blog/Pierwszy wpis.md"_s,
+                 "# Pierwszy\nZażółć gęślą jaźń, [[Drugi wpis]] i [[Szkic]].\n![[kot.png]]\n"},
                 {u"Blog/Drugi wpis.md"_s, "Drugi.\n"},
                 {u"Blog/Szkic.md"_s, "---\npublish: false\n---\nNie.\n"},
                 {u"assets/kot.png"_s, "\x89PNG kot"},
@@ -86,8 +87,12 @@ class TestAppIoPublish : public QObject {
 
     QVariantMap githubFields(const QString &name = u"Strona"_s) const
     {
-        return {{u"name"_s, name},          {u"kind"_s, u"github"_s},     {u"repository"_s, u"jan/strona"_s},
-                {u"branch"_s, u"gh-pages"_s}, {u"folder"_s, QString()},    {u"content"_s, u"site"_s}};
+        return {{u"name"_s, name},
+                {u"kind"_s, u"github"_s},
+                {u"repository"_s, u"jan/strona"_s},
+                {u"branch"_s, u"gh-pages"_s},
+                {u"folder"_s, QString()},
+                {u"content"_s, u"site"_s}};
     }
 
 private Q_SLOTS:
@@ -122,14 +127,10 @@ private Q_SLOTS:
         // A name taken.
         QVERIFY(!c.checkFields(githubFields()).isEmpty());
         // Nextcloud with its passwords: owner-only files, never in the store.
-        QVariantMap cloud{{u"name"_s, u"Chmura"_s},
-                          {u"kind"_s, u"nextcloud"_s},
-                          {u"server"_s, u"chmura.example.pl"_s},
-                          {u"username"_s, u"jan"_s},
-                          {u"folder"_s, u"Publiczne/Strona"_s},
-                          {u"share"_s, true},
-                          {u"sharePassword"_s, true},
-                          {u"shareExpires"_s, u"2026-13-40"_s}};
+        QVariantMap cloud{
+                {u"name"_s, u"Chmura"_s},   {u"kind"_s, u"nextcloud"_s},          {u"server"_s, u"chmura.example.pl"_s},
+                {u"username"_s, u"jan"_s},  {u"folder"_s, u"Publiczne/Strona"_s}, {u"share"_s, true},
+                {u"sharePassword"_s, true}, {u"shareExpires"_s, u"2026-13-40"_s}};
         QVERIFY(!c.checkFields(cloud).isEmpty()); // not a date
         cloud.insert(u"shareExpires"_s, u"2026-12-31"_s);
         const QString cloudId = c.saveTarget(cloud, u"hasło-aplikacji"_s, u"Pieczątka-123"_s);
@@ -242,8 +243,9 @@ private Q_SLOTS:
         // No target: the page waits for one.
         QVERIFY(c.addFromRoute({{u"add"_s, u"page"_s}, {u"path"_s, u"Przepisy/Bigos.md"_s}}));
         const QString www = m_tmp.filePath(u"www łąka"_s);
-        const QString id = c.saveTarget(
-                {{u"name"_s, u"Katalog"_s}, {u"kind"_s, u"folder"_s}, {u"path"_s, QUrl::fromLocalFile(www).toString()}});
+        const QString id = c.saveTarget({{u"name"_s, u"Katalog"_s},
+                                         {u"kind"_s, u"folder"_s},
+                                         {u"path"_s, QUrl::fromLocalFile(www).toString()}});
         QVERIFY(!id.isEmpty());
         QCOMPARE(brulion::publish::PublishStore(ws->vault()->deviceStatePath()).target(id)->path, www);
         c.addPending();

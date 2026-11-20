@@ -660,9 +660,11 @@ private Q_SLOTS:
         r = publishtest::run([&](auto done) { publisher.publish(t, site, manifest, {}, true, done); });
         QVERIFY(r.ok);
         manifest = r.manifest;
-        QFile css(t.path + u"/style.css"_s);
-        QVERIFY(css.open(QIODevice::ReadOnly));
-        QVERIFY(css.readAll() != "body{color:red}");
+        {
+            QFile css(t.path + u"/style.css"_s);
+            QVERIFY(css.open(QIODevice::ReadOnly));
+            QVERIFY(css.readAll() != "body{color:red}");
+        } // closed: Windows removes no open file
         // Unpublish: our files go, the folder's own stay.
         r = publishtest::run([&](auto done) { publisher.unpublish(t, manifest, {}, false, done); });
         QVERIFY(r.ok);

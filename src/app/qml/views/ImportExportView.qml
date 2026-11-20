@@ -104,8 +104,8 @@ FocusScope {
                 ExportPanel {
                     Layout.fillWidth: true
                     visible: Workspace.isOpen
-                    // format, scope, folder, path
-                    preset: root.route
+                    // format, scope, folder, path (not a publish route's page or folder)
+                    preset: AppController.routeText(root.route, "tab") === "publish" ? root.noRoute : root.route
                 }
             }
             Page {
