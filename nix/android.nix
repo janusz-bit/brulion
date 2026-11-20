@@ -296,8 +296,9 @@ stdenvNoCC.mkDerivation (finalAttrs: {
     apk=${androidBuildDir}/build/outputs/apk/release/android-build-release-unsigned.apk
     [[ -f $apk ]] || { echo "no unsigned APK at $apk" >&2; exit 1; }
     mkdir -p $out
-    # 16 KB alignment of the uncompressed native libraries (Android 15+ with 16 KB pages),
-    # which apksigner keeps when signing (brulion-android-sign checks it).
+    # 16 KB alignment of any native library stored uncompressed (Android 15+ with 16 KB pages;
+    # Brulion's are compressed, src/app/CMakeLists.txt), which apksigner keeps when signing
+    # (brulion-android-sign checks it).
     ${buildTools}/zipalign -P 16 -f 4 "$apk" $out/brulion-${version}-${abi}-unsigned.apk
     ${lib.optionalString withAab ''
       cp ${androidBuildDir}/build/outputs/bundle/release/android-build-release.aab \

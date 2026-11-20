@@ -890,7 +890,8 @@ another phone the model is downloaded again.
   of an answer. An answer that gets nowhere for five minutes — no part of the request read, no
   token written — ends as "the model on this device got nowhere for 5 minutes" (a slow phone
   writes on as long as it writes; frozen behind another app, the time away counts: TODO.md).
-* **In the APK** (`lib/arm64-v8a/`, 9.2 MB, stored uncompressed like every native library):
+* **In the APK** (`lib/arm64-v8a/`, 9.2 MB unpacked, compressed like every native library and
+  unpacked when the app is installed — "APK size"):
   `libbrulion_localai.so` (the model runner, 0.1 MB), llama.cpp — `libllama.so` 4.4 MB,
   `libmtmd.so` 1.9 MB (pictures), `libggml-base.so` 0.9 MB, `libggml.so` — and its processor
   code twice, 1.0 MB each: `libggml-cpu-android_armv8.6_1.so` (int8 matrix multiply: phones from
@@ -1315,6 +1316,7 @@ arm64-v8a APK (`tests/bench/mobile/size-report.py apk`):
 | the C++ generated from QML compiled with `-Oz` (2026-11-07; it was half of `libbrulion`'s code at `-O3`) | the `BRULION_QML_CODE_FOR_SIZE` option in `src/app/CMakeLists.txt` (Release, MinSizeRel, RelWithDebInfo) | `libbrulion` −5.7 MB |
 | `libbrulion` exports no symbols of the static libraries (`-Wl,--exclude-libs,ALL`: only Qt's loader opens it and looks up `main`; JNI goes through `RegisterNatives`) and packs its relative relocations (RELR with `--use-android-relr-tags`, read by Android 9+) | `src/app/CMakeLists.txt` (every Android build type) | −2.4 MB and −4.0 MB |
 | identical code folded where no address of it is compared (2026-11-19: lld's `--icf=safe`, with `-faddrsig`, which the NDK's Clang leaves out on Android unless asked; the C++ generated from QML repeats itself a lot) | `cmake/BrulionSize.cmake` (Release, MinSizeRel, RelWithDebInfo) | `libbrulion` −3.83 MB (58.75 → 54.93 MB), APK 116.7 → 112.7 MB, download −1.07 MB |
+| the native libraries compressed in the APK (2026-11-20: Gradle's `useLegacyPackaging`, `android:extractNativeLibs="true"`) instead of stored for loading straight from it: Android unpacks them when the app is installed or updated. The APK file — what GitHub, F-Droid and IzzyOnDroid hand out whole — is less than half as big; on the device the APK and the unpacked libraries (111 MB) take some 40 MB more than the uncompressed APK did, and an install or update takes the unpacking. Google Play compresses its download either way (unchanged). The 16 KB check still holds: no library is stored, every 64-bit one has 16 KB segments | `src/app/CMakeLists.txt` (`QT_ANDROID_LEGACY_PACKAGING`) | APK file 112.7 → 43.5 MB |
 | no QML source text in the resources (`DISCARD_QML_CONTENTS`; the compiled units always match the bundled Qt) | `src/app/CMakeLists.txt` (Release, MinSizeRel) | −1.1 MB |
 
 In total 83.15 MB → 81.02 MB (download size, compressed: 27.46 → 27.18 MB); without OpenSSL it
@@ -1733,8 +1735,9 @@ None of the below has been sent. The order:
    fast updates, independent of the (a)/(b) decision): an issue in `gitlab.com/IzzyOnDroid/repo`
    (the "App inclusion request" template). Requirements: an APK in the GitHub releases (there is
    one: `brulion-<version>-arm64-v8a.apk`), fastlane metadata in the repository; the APK file is
-   ~90 MB (v0.9.1: 90.0 MB; native libraries stored uncompressed, aligned to 16 KB), more than
-   IzzyOnDroid's default size limit — ask for an exception in the request.
+   ~43 MB (2026-11-20, with the model on the device; the native libraries compressed — 113 MB
+   before, when they were stored uncompressed), more than IzzyOnDroid's default size limit — ask
+   for an exception in the request.
    Text:
 
    > **App inclusion request: Brulion**
@@ -1746,7 +1749,7 @@ None of the below has been sent. The order:
    >   Nextcloud sync). No trackers, no proprietary libraries. Fastlane metadata in
    >   `fastlane/metadata/android`.
    > * The app has its own update notice (GitHub releases, can be turned off in the settings).
-   > * The APK is ~90 MB (Qt's native libraries are stored uncompressed for 16 KB page alignment);
+   > * The APK is ~43 MB (Qt, the app and llama.cpp for the on-device model are native libraries);
    >   please allow an exception to the size limit.
    > * I am the author.
 

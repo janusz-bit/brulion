@@ -296,6 +296,13 @@ if(ANDROID)
         QT_ANDROID_MIN_SDK_VERSION 28
         QT_ANDROID_TARGET_SDK_VERSION 36
         QT_ANDROID_COMPILE_SDK_VERSION 36
+        # The native libraries compressed in the APK and unpacked when the app is installed
+        # (Gradle's useLegacyPackaging, android:extractNativeLibs="true"): the APK that GitHub and
+        # F-Droid hand out whole is less than half as big. The price is on the device — the APK
+        # and the unpacked libraries together take more room than the APK alone did, and an
+        # update unpacks them again (docs/ANDROID.md "APK size"). Google Play compresses its
+        # download either way.
+        QT_ANDROID_LEGACY_PACKAGING ON
     )
 
     # Shipped APKs (Release, MinSizeRel) without the QML debugging plugins (qmltooling, 12

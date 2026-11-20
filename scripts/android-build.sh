@@ -466,7 +466,8 @@ cleanup_files+=("$ROOT/$aligned")
 apksigner=(java -jar "$BT/lib/apksigner.jar")
 
 sign_apk() { # <input apk> <output apk>
-  # 16 KB alignment of uncompressed native libraries (Android 15+ devices with 16 KB pages).
+  # 16 KB alignment of native libraries stored uncompressed (Android 15+ devices with 16 KB pages;
+  # Brulion's are compressed, src/app/CMakeLists.txt).
   if ((!SIGN)); then
     info "Zip-aligning $1 (unsigned)"
     "$BT/zipalign" -P 16 -f 4 "$1" "$2"
@@ -629,8 +630,9 @@ unused_qml=$(grep -oE 'lib/[^ ]*(QuickControls2(Material|Universal|Imagine|Fusio
 [[ -z $unused_qml ]] || die "unused Qt Quick styles or QtQuick.Dialogs in the APK (FilePicker and QtQuick.Controls.Basic instead): $(tr '\n' ' ' <<<"$unused_qml")"
 
 # 16 KB pages (Android 15+ devices with 16 KB memory pages refuse other libraries): the 64-bit
-# libraries must be stored uncompressed at 16 KB boundaries in the APK and have ELF LOAD
-# segments aligned to at least 16 KB. Brulion's own library and the OpenSSL it bundles must
+# libraries must have ELF LOAD segments aligned to at least 16 KB, and one stored uncompressed in
+# the APK must sit at a 16 KB boundary (Brulion's are compressed and unpacked at install:
+# QT_ANDROID_LEGACY_PACKAGING, src/app/CMakeLists.txt). Brulion's own library and the OpenSSL it bundles must
 # comply; Qt's prebuilt ones are reported (Qt built from source must comply as well).
 "$BT/zipalign" -c -P 16 4 "$apk" >/dev/null || die "$apk is not zip-aligned for 16 KB pages (zipalign -c -P 16 4)"
 if [[ -x $readelf_bin ]]; then

@@ -119,7 +119,7 @@ QStringList localAiPluginDirs()
         dirs << dir;
 #ifdef BRULION_LOCAL_AI
 #if defined(Q_OS_ANDROID)
-    dirs << QString(); // inside the APK: found by its name
+    dirs << QString(); // the app's native libraries (unpacked from the APK): found by its name
 #else
 #ifdef BRULION_LOCALAI_BUILD_DIR
     dirs << QString::fromUtf8(BRULION_LOCALAI_BUILD_DIR); // a debug build run from its build folder

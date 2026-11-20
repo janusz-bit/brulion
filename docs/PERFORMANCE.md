@@ -17,9 +17,11 @@ compared with `ef90077`) and a smooth graph (L16, compared with `64d0380` on a G
   (the program 73 instead of 118 MB): it no longer carries the program's symbol table, a list of
   the names of its functions that only a debugger reads, and its linker now shares identical
   code and packs what the program fixes up when it starts. The AppImage leaves out the same table
-  (about 3 MB less to download), and the Android APK is 112.7 instead of 116.7 MB (1 MB less to
-  download). For contributors, a build from scratch takes less than half the time
-  ("Build times" below).
+  (about 3 MB less to download). The Android APK file — what GitHub, F-Droid and IzzyOnDroid
+  download — is 43.5 instead of 116.7 MB: its libraries are compressed now and unpacked when the
+  app is installed, which takes some 40 MB more on the phone; Google Play's download is 1 MB
+  smaller. For contributors, a build from scratch takes less than half the time ("Build times"
+  below).
 
 * **Typing in a big notebook, after the save** (2026-11-18). When you pause typing, Brulion saves
   the page; in a notebook of 10,000 notes the program then also recomputed lists you were not
@@ -1291,7 +1293,8 @@ Measured in one session on the x86_64 desktop (NDK r27c, Qt 6.11.2, emsdk 4.0.7)
 The deflated download moves much less than the raw size: `-O3`'s copies of the same inlined
 sequences compress well, and RELR's relocations were mostly zeros. The raw size is what an APK from
 GitHub or F-Droid downloads (native libraries are stored uncompressed, page-aligned) and what it
-takes on the device.
+takes on the device — until 2026-11-20, when the libraries went into the APK compressed
+(docs/ANDROID.md "APK size").
 
 **Speed.** The app benchmarks on the 10 000-note vault (`bench-matrix.sh`, Xvfb, desktop Release
 builds with and without `-Oz` for the generated code, alternating rounds): opening a 5000-block
@@ -2936,7 +2939,7 @@ emulator (optimistic), web = headless Chromium (×4 CPU = phone). ✅ meets, ⚠
 | after a save, all derived lists (10k) | < 30 ms desktop, < 150 ms phone | ✅ 6.0 ms (L3; base in the same session 112 ms) | ❌ Pi 0.95 s before L3, not measured since (L3b) | – |
 | idle | < 0.5 % CPU | ✅ 0.1 % | ✅ background 0 % CPU, 0 wakeups/s | – |
 | memory | ≤ 100 MB + 10 B per Markdown byte (10k ≤ 330 MB) | ⚠️ 340 MB heap (wave 5; was 512 MB; index alone 221 MiB) | ❌ emulator PSS 359 MB at 5k before wave 5 (< 300 MB wanted; not measured since) | ✅ 86 MB of linear memory at 1k (was 104 MB) |
-| download | APK < 40 MB, web < 10 MB | – | ✅ 34.1 MB download (92.7 MB APK; L20: was 36.1 / 105.9 MB; L9 on 2026-10-30: 26.3 / 80.6 MB) | ❌ 17.1 MB gzip (11.3 MB brotli, not served; L20: was 18.5 / 12.1 MB; L9 on 2026-10-30: 13.5 MB) |
+| download | APK < 40 MB, web < 10 MB | – | ⚠️ 43.1 MB download, a 43.5 MB APK file (2026-11-20: the model on the device's libraries since 0.22.0, the native libraries compressed; was 116.7 MB) — 34.1 MB / 92.7 MB APK before the model (L20: was 36.1 / 105.9 MB; L9 on 2026-10-30: 26.3 / 80.6 MB) | ❌ 17.1 MB gzip (11.3 MB brotli, not served; L20: was 18.5 / 12.1 MB; L9 on 2026-10-30: 13.5 MB) |
 
 ### Next steps
 
