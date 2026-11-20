@@ -260,6 +260,23 @@ b.command("review", function(ctx)
 end, { label = "Review my week (AI)" })
 ```
 
+## A project's progress in its own text
+Write `{{ext:recipes/progress}}` on a project's page (or `{{ext:recipes/progress Garden}}` anywhere): it shows how many of its tasks are done, and follows them as you tick them off. Replace `recipes` with your extension's id — its page's title in small letters.
+
+```luau
+b.macro("progress", function(ctx)
+    local page = ctx.args[1] or ctx.page
+    local open = b.query(`type:tasks status:open page:"{page}"`, 1).total
+    local done = b.query(`type:tasks status:done page:"{page}"`, 1).total
+    local all = open + done
+    if all == 0 then
+        return b.ui.text("no tasks", { muted = true })
+    end
+    local share = math.floor(done / all * 100 + 0.5)
+    return b.ui.text(`{done} of {all} done ({share} %)`, { tone = if open == 0 then "success" else "accent" })
+end, { description = "How many of a page's tasks are done", args = { "page" }, example = "Dom" })
+```
+
 ## Good habits
 - Check what may be missing: `b.read` and `b.page` give `nil` for a page that is not there, `ctx.block` is not there outside a block, `ctx.page` is an empty text outside a page.
 - In a view, give a control what its action needs (`ref`, `text`) instead of looking it up again: a line that changed is then refused, not overwritten.
