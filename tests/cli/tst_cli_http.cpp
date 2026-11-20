@@ -553,6 +553,7 @@ private Q_SLOTS:
         QFile written(path);
         QVERIFY(written.open(QIODevice::ReadOnly));
         const QByteArray onDisk = written.readAll();
+        written.close(); // on Windows an open file cannot be replaced: b.update() below writes it
         QVERIFY(!onDisk.contains("bat_x") && !onDisk.contains("brt_x") && !onDisk.contains("hasło")); // hashes only
         QVERIFY(a.grantByAccessToken(u"bat_x"_s));
         QVERIFY(!a.grantByAccessToken(u"bat_y"_s));

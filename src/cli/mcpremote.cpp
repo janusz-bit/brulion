@@ -373,7 +373,9 @@ std::optional<http::Response> RemoteMcpServer::onHeaders(const http::Request &he
         // The token first: no body of a request without one is ever read.
         http::Response refusal;
         if (!m_auth->authenticate(head, &refusal)) {
-            for (const auto &f : corsHeaders(origin).fields())
+            // A local: the temporary's list would end before the loop (C++20's range-for).
+            const http::Headers cors = corsHeaders(origin);
+            for (const auto &f : cors.fields())
                 refusal.headers.add(f.name, f.value);
             return refusal;
         }

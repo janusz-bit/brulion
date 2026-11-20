@@ -11,6 +11,7 @@
 #include <QPasswordDigestor>
 #include <QRandomGenerator>
 #include <QSaveFile>
+#include <QThread>
 
 #include <algorithm>
 
@@ -405,18 +406,26 @@ bool Store::update(const std::function<bool(State &)> &change, QString *error)
     State next = m_state;
     if (!change(next))
         return true;
-    QSaveFile file(m_path);
-    if (!file.open(QIODevice::WriteOnly)) {
-        if (error)
-            *error = file.errorString();
-        return false;
-    }
-    file.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner);
-    file.write(QJsonDocument(next.toJson()).toJson(QJsonDocument::Indented));
-    if (!file.commit()) {
-        if (error)
-            *error = file.errorString();
-        return false;
+    const QByteArray bytes = QJsonDocument(next.toJson()).toJson(QJsonDocument::Indented);
+    // On Windows the file cannot be replaced while another process (`mcp clients`, a backup, an
+    // indexer) has it open for a moment: the replacement is tried again for up to a second.
+    for (int attempt = 0;; ++attempt) {
+        QSaveFile file(m_path);
+        if (!file.open(QIODevice::WriteOnly)) {
+            if (error)
+                *error = file.errorString();
+            return false;
+        }
+        file.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner);
+        file.write(bytes);
+        if (file.commit())
+            break;
+        if (attempt >= 20) {
+            if (error)
+                *error = file.errorString();
+            return false;
+        }
+        QThread::msleep(50);
     }
     QFile::setPermissions(m_path, QFileDevice::ReadOwner | QFileDevice::WriteOwner);
     return load(error);

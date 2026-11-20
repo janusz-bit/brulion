@@ -12,6 +12,7 @@
 #include "index/vaultindex.h"
 #include "reminders/reminders.h"
 
+#include <QDateTime>
 #include <QDir>
 #include <QJsonArray>
 #include <QJsonObject>
@@ -19,6 +20,7 @@
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
+#include <QTimeZone>
 
 using namespace brulion;
 using namespace brulion::background;
@@ -373,7 +375,12 @@ private Q_SLOTS:
         QVERIFY(titles(result).contains(u"Zadzwonić do lekarza"_s));
         QFile page(target.root + u"/Kalendarze/Praca.md"_s);
         QVERIFY(page.open(QIODevice::ReadOnly));
-        QVERIFY(QString::fromUtf8(page.readAll()).startsWith(u"- [ ] Zadzwonić do lekarza 📅 2026-10-15 ⏰ 2026-10-14 17:00 ^c"_s));
+        // The alarm's UTC moment in local wall-clock time (17:00 in Warsaw, 15:00 on a UTC runner).
+        const QString alarm = QDateTime(QDate(2026, 10, 14), QTime(15, 0), QTimeZone::UTC)
+                                      .toLocalTime()
+                                      .toString(u"yyyy-MM-dd HH:mm"_s);
+        QVERIFY(QString::fromUtf8(page.readAll())
+                        .startsWith(u"- [ ] Zadzwonić do lekarza 📅 2026-10-15 ⏰ "_s + alarm + u" ^c"_s));
         // Without the passwords nothing is asked.
         server.clearLog();
         Check quiet(target, {}, &server, [] { return kNow; });

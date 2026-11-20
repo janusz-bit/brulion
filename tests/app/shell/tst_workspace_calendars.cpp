@@ -194,7 +194,9 @@ void TestWorkspaceCalendars::accountTasksAndEvents()
     // The password: owner-only, not in the settings.
     const QString secret = m_dir->filePath(u"secrets/caldav-"_s + account);
     QVERIFY(QFile::exists(secret));
+#ifndef Q_OS_WIN // (NTFS rights, which QFile's permission bits do not show)
     QCOMPARE(QFile::permissions(secret) & (QFile::ReadGroup | QFile::ReadOther), QFile::Permissions());
+#endif
     QVERIFY(!QFile(m_dir->filePath(u"state/calendars/calendars.json"_s)).readAll().contains("hasło"));
     waitIdle();
     QTRY_VERIFY(QFile::exists(m_dir->filePath(u"notes/Kalendarze/Zakupy.md"_s)));

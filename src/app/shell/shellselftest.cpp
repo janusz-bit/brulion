@@ -4908,9 +4908,11 @@ void checkSettingsTabs(QQuickWindow *window, AppController *app, const Check &ch
     const qreal tabsWidth = list ? list->property("contentWidth").toReal() : 0;
     const qreal contentX = list ? list->property("contentX").toReal() : 0;
     const qreal scrolled = list ? contentX - list->property("originX").toReal() : 0;
+    // The first tab from the bar's left edge on: the edge itself may fall into the spacing between
+    // two tabs (indexAt -1 there), so a few points further in are asked too.
     int firstShown = -1;
-    if (list)
-        QMetaObject::invokeMethod(list, "indexAt", qReturnArg(firstShown), contentX + 1, list->height() / 2);
+    for (qreal dx = 1; list && firstShown < 0 && dx < 48; dx += 4)
+        QMetaObject::invokeMethod(list, "indexAt", qReturnArg(firstShown), contentX + dx, list->height() / 2);
     std::fprintf(stderr,
                  "selftest: the settings' tabs: %.0f px in a bar of %.0f px, scrolled %.0f px, the first in view %d\n",
                  tabsWidth, list ? list->width() : 0.0, scrolled, firstShown);

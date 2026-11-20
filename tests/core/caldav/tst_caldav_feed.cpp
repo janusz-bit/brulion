@@ -370,9 +370,12 @@ void TestCalDavFeed::storeFiles()
     QCOMPARE(again.log().first().kind, LogEntry::Kind::Conflict);
     again.forget(u"c-1"_s);
     QVERIFY(again.state(u"c-1"_s).tasks.isEmpty());
-    // Owner-only files: the folder holds the state of private calendars.
+    // Owner-only files: the folder holds the state of private calendars. (Windows: NTFS rights,
+    // which QFile's permission bits do not show.)
+#ifndef Q_OS_WIN
     QCOMPARE(QFileInfo(dir.path() + u"/calendars/calendars.json"_s).permissions() & (QFile::ReadOther | QFile::ReadGroup),
              QFile::Permissions());
+#endif
     // A broken file: empty settings, no crash.
     QFile broken(dir.path() + u"/calendars/calendars.json"_s);
     QVERIFY(broken.open(QIODevice::WriteOnly));

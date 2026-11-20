@@ -630,6 +630,7 @@ private Q_SLOTS:
         QFile f(m_authFile);
         QVERIFY(f.open(QIODevice::ReadOnly));
         const QByteArray state = f.readAll();
+        f.close(); // on Windows an open file cannot be replaced: the server writes it again below
         QVERIFY(state.contains("Claude"));
         QVERIFY(!state.contains(access.toLatin1()));
         // The code again: refused, and what it gave is revoked.
@@ -1274,7 +1275,13 @@ private Q_SLOTS:
         QTest::qWait(20); // another modification time
         QVERIFY(QFile::copy(data + u"cert2.pem"_s, cert));
         QVERIFY(QFile::copy(data + u"key2.pem"_s, key));
-        QFile(cert).setFileTime(QDateTime::currentDateTime().addSecs(5), QFileDevice::FileModificationTime);
+        // A copy keeps its source's modification time on Windows (CopyFile), and setFileTime() needs
+        // an open file: both are given a time of their own.
+        for (const QString &renewed : {cert, key}) {
+            QFile file(renewed);
+            QVERIFY(file.open(QIODevice::ReadWrite));
+            QVERIFY(file.setFileTime(QDateTime::currentDateTime().addSecs(5), QFileDevice::FileModificationTime));
+        }
         QVERIFY(QTest::qWaitFor([&] { return !m_log.filter(u"TLS certificate reloaded"_s).isEmpty(); }, kTimeoutMs));
         const QSslCertificate second = fetchCertificate(data + u"cert2.pem"_s);
         QVERIFY(!second.isNull());
