@@ -167,14 +167,16 @@ QString escapeText(QStringView s)
     return out.replace(u'\n', u"<br/>"_s);
 }
 
-/// The ext: href of an http(s) or mailto URL; "" for other schemes (such a URL stays text).
+/// The ext: href of an http(s), mailto or brulion:// URL (docs/UI.md "Automation": the app checks
+/// those as any link's); "" for other schemes (such a URL stays text).
 QString externalHref(QStringView url)
 {
     const qsizetype colon = url.indexOf(u':');
     if (colon <= 0)
         return {};
     const QString scheme = url.first(colon).toString().toLower();
-    if (scheme != u"http" && scheme != u"https" && scheme != u"mailto")
+    if (scheme != u"http" && scheme != u"https" && scheme != u"mailto" && scheme != u"brulion"
+        && scheme != u"web+brulion")
         return {};
     return u"ext:"_s + url.toString().replace(u' ', u"%20"_s);
 }

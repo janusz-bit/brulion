@@ -147,7 +147,7 @@ do not list them; cleaning up never proposes them or their templates.
 | `![[doc.pdf#page=3]]`, `[[doc.pdf#page=3]]` | a PDF's page: its thumbnail / the PDF viewer at that page (Obsidian) |
 | `((abc123))` | Logseq-style block reference — resolves the id **vault-wide** |
 | `!((abc123))` | block embed |
-| `[text](url)`, `[text](relative/path.md)`, `<https://..>`, bare `https://...` | standard links |
+| `[text](url)`, `[text](relative/path.md)`, `<https://..>`, bare `https://...` | standard links (http, https, mailto and `brulion://` addresses are clickable — a `brulion://` link is checked as any link to Brulion, docs/UI.md "Automation"; other schemes stay text) |
 | `#tag`, `#[[Strona]]`, `#Projekty/Dom` | a tag — also a link to the page it names (§3 "Tags as page links") |
 
 **Link resolution** (`target` → file): 1) exact vault path (with or without `.md`,

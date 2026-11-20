@@ -33,6 +33,8 @@
 #include <QStringDecoder>
 #include <QUrl>
 
+#include <algorithm>
+
 using namespace Qt::StringLiterals;
 
 namespace brulion::shell {
@@ -227,10 +229,18 @@ QString AppController::automationLink(const QString &action, const QVariantMap &
         return {};
     automation::Request r;
     r.action = *parsed;
-    for (auto it = params.cbegin(); it != params.cend(); ++it) {
-        const QString value = it.value().toString();
+    // The usual order (where, then what, then when); other parameters after them.
+    static const QStringList order{u"page"_s, u"title"_s, u"date"_s, u"heading"_s, u"block"_s, u"text"_s, u"due"_s,
+                                   u"remind"_s, u"alarm"_s, u"query"_s};
+    QStringList keys = params.keys();
+    std::ranges::stable_sort(keys, {}, [](const QString &key) {
+        const qsizetype at = order.indexOf(key);
+        return at < 0 ? order.size() : at;
+    });
+    for (const QString &key : std::as_const(keys)) {
+        const QString value = params.value(key).toString();
         if (!value.isEmpty())
-            r.params.append({it.key(), value});
+            r.params.append({key, value});
     }
     if (m_workspace->isOpen() && !inDocsVault())
         r.vault = QFileInfo(m_workspace->rootPath()).fileName();
@@ -592,8 +602,11 @@ void AppController::publishAutomationTarget()
 #ifdef Q_OS_ANDROID
     // Android's automation intents write while the app is closed (AutomationService.kt): into
     // the notebook open here, as the policy and the language of this device say.
+    // The documentation never is the target: the user's notebook stays it while that is open.
+    if (inDocsVault())
+        return;
     QJsonObject target;
-    if (m_workspace->isOpen() && !inDocsVault() && m_status == u"ready") {
+    if (m_workspace->isOpen() && m_status == u"ready") {
         const QString root = m_workspace->rootPath();
         target = QJsonObject{{u"root"_s, root},
                              {u"stateDir"_s, deviceStatePath(root)},

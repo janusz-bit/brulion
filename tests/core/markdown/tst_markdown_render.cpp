@@ -228,6 +228,8 @@ private Q_SLOTS:
                                         << link(u"ext:https://e.pl"_s, u"L"_s, u"a\u00a0[[X]] #t"_s);
         QTest::newRow("mailto") << u"[x](mailto:jan@example.com)"_s
                                 << link(u"ext:mailto:jan@example.com"_s, u"L"_s, u"x"_s);
+        QTest::newRow("brulion link") << u"[dodaj](brulion://capture?text=Mleko%202%25)"_s
+                                      << link(u"ext:brulion://capture?text=Mleko%202%25"_s, u"L"_s, u"dodaj"_s);
         QTest::newRow("relative") << u"[notatka](Folder/Moja%20notatka.md#Sekcja)"_s
                                   << link(u"page:Folder%2FMoja%20notatka.md#Sekcja"_s, u"L"_s, u"notatka"_s);
         QTest::newRow("image") << u"![wykres](https://x.pl/a.png)"_s

@@ -6,7 +6,6 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
-import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.IBinder
@@ -17,6 +16,8 @@ import android.os.RemoteException
 import android.util.Log
 import org.json.JSONException
 import org.json.JSONObject
+import java.net.URLDecoder
+import java.net.URLEncoder
 import java.time.LocalDateTime
 import java.time.ZoneId
 import java.util.UUID
@@ -121,12 +122,12 @@ internal object Automation {
     if (question >= 0) {
       for (pair in base.substring(question + 1).split('&')) {
         if (pair.isEmpty()) continue
-        val name = Uri.decode(pair.substringBefore('=')).trim().lowercase()
+        val name = decode(pair.substringBefore('=')).trim().lowercase()
         if (name in params || (name == "notebook" && "vault" in params) || (name == "vault" && "notebook" in params)) continue
         kept.add(pair)
       }
     }
-    for ((name, value) in params) kept.add(Uri.encode(name) + "=" + Uri.encode(value))
+    for ((name, value) in params) kept.add(encode(name) + "=" + encode(value))
     return if (kept.isEmpty()) head else head + "?" + kept.joinToString("&")
   }
 
@@ -155,11 +156,22 @@ internal object Automation {
     val question = uri.indexOf('?')
     if (question < 0) return null
     for (pair in uri.substring(question + 1).split('&')) {
-      val key = Uri.decode(pair.substringBefore('=').replace('+', ' ')).trim().lowercase()
-      if (key == name) return Uri.decode(pair.substringAfter('=', "").replace('+', ' '))
+      val key = decode(pair.substringBefore('=')).trim().lowercase()
+      if (key == name) return decode(pair.substringAfter('=', ""))
     }
     return null
   }
+
+  /** A value as a form encodes it (UTF-8; a space is "+", which the core reads as a space). */
+  fun encode(value: String): String = URLEncoder.encode(value, Charsets.UTF_8)
+
+  /** A form-encoded value decoded; a malformed one ("%" without two hex digits) as it is. */
+  fun decode(value: String): String =
+    try {
+      URLDecoder.decode(value, Charsets.UTF_8)
+    } catch (e: IllegalArgumentException) {
+      value
+    }
 
   /**
    * The request needs the app's window: it opens something (open, daily, search, view, capture
@@ -296,6 +308,8 @@ internal object Automation {
       intent.putExtra("reminder", result.optString("reminder", ""))
       intent.putExtra("message", result.optString("message", ""))
     }
+    // (The code and the action only: what was written stays out of the system log.)
+    Log.i(TAG, "result: ok=${result.optBoolean("ok", false)} error=${result.optString("error", "")} action=${result.optString("action", "")}")
     try {
       context.sendBroadcast(intent)
     } catch (e: RuntimeException) {

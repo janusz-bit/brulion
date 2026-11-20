@@ -19,6 +19,14 @@ ColumnLayout {
     /// The builder's action: "capture" | "task" | "append" | "open" | "new".
     property string action: "capture"
     property bool withKey: false
+    /// The builder's choices ({ value, text, icon }).
+    readonly property list<var> actions: [
+        { value: "capture", text: qsTr("Quick note"), icon: "zap" },
+        { value: "task", text: qsTr("Task"), icon: "list-todo" },
+        { value: "append", text: qsTr("Add to a page"), icon: "list" },
+        { value: "open", text: qsTr("Open"), icon: "file-text" },
+        { value: "new", text: qsTr("New page"), icon: "square-pen" }
+    ]
     readonly property string link: AppController.automationLink(section.action, {
         page: section.action === "append" || section.action === "open" ? Js.trim(pageField.text) : "",
         title: section.action === "new" ? Js.trim(pageField.text) : "",
@@ -179,18 +187,29 @@ ColumnLayout {
             anchors.fill: parent
             spacing: Theme.space3
 
-            BSegmented {
+            // What the link does: chips that wrap (five choices do not fit a phone's row).
+            Flow {
                 objectName: "automationAction"
                 Layout.fillWidth: true
-                fill: true
-                accessibleName: qsTr("What the link does")
-                model: [{ value: "capture", text: qsTr("Quick note"), icon: "zap" },
-                        { value: "task", text: qsTr("Task"), icon: "list-todo" },
-                        { value: "append", text: qsTr("Add to a page"), icon: "list" },
-                        { value: "open", text: qsTr("Open"), icon: "file-text" },
-                        { value: "new", text: qsTr("New page"), icon: "square-pen" }]
-                currentValue: section.action
-                onActivated: (value) => section.action = value
+                spacing: Theme.space2
+                Accessible.role: Accessible.Grouping
+                Accessible.name: qsTr("What the link does")
+
+                Repeater {
+                    model: section.actions
+                    delegate: BChip {
+                        id: actionChip
+                        // (The choices above: value, text, icon.)
+                        required property var modelData
+                        readonly property string value: AppController.routeText(modelData, "value")
+                        objectName: "automationAction_" + value
+                        text: AppController.routeText(modelData, "text")
+                        iconName: AppController.routeText(modelData, "icon")
+                        interactive: true
+                        selected: section.action === value
+                        onClicked: section.action = actionChip.value
+                    }
+                }
             }
             BTextField {
                 id: pageField
