@@ -20,8 +20,11 @@ języka interfejsu (`b.uiLang`), a słowa wpisywane do notatek z języka notatni
 
 ## Ustawienia i słowa
 
-Właściwość `waluta` tej strony (albo `currency`) to waluta nowych wpisów: rozszerzenie czyta ją z
-własnej strony, więc zmienia się ją bez dotykania kodu.
+Właściwość `waluta` tej strony (albo `currency`) to waluta nowych wpisów w całym notatniku:
+rozszerzenie czyta ją z własnej strony, więc zmienia się ją bez dotykania kodu. Na tym urządzeniu
+można ją zmienić też w ustawieniach rozszerzenia (Ustawienia → Rozszerzenia → Wydatki → Ustawienia,
+`b.settings`): ustawienie urządzenia wygrywa z właściwością strony. Nazwy miesięcy daje
+`b.monthName`, miesiące przesuwa `b.addMonths`.
 
 ```luau
 local polish = b.uiLang() == "pl"
@@ -32,21 +35,31 @@ end
 local TAGS = { "wydatek", "expense" } -- both are read
 local WRITTEN_TAG = b.lang() == "pl" and "wydatek" or "expense"
 local OTHER = t("inne", "other")
-local MONTHS = polish
-        and { "styczeń", "luty", "marzec", "kwiecień", "maj", "czerwiec", "lipiec", "sierpień", "wrzesień",
-            "październik", "listopad", "grudzień" }
-    or { "January", "February", "March", "April", "May", "June", "July", "August", "September", "October",
-        "November", "December" }
+local w = b.require("Wspólne funkcje")
+local trim = w.trim
 
-local function currency(): string
+-- The notebook's currency: this page's property, for every device of the notebook.
+local function pageCurrency(): string
     for _, name in { "Wydatki", "Expenses" } do
         local page = b.page(name)
         local value = page and (page.props.waluta or page.props.currency)
         if value and value ~= "" then
-            return value
+            return trim(value)
         end
     end
     return b.lang() == "pl" and "zł" or "USD"
+end
+
+-- This device's choice, the page's property until one is made (Settings → Extensions → Wydatki).
+b.settings({
+    { key = "waluta", label = t("Waluta nowych wpisów", "The currency of new entries"), value = "",
+      placeholder = pageCurrency(), description = t("Pusta: ta z właściwości strony (waluta::).",
+                                                     "Empty: the one of the page's property (currency::).") },
+})
+
+local function currency(): string
+    local chosen = trim(b.setting("waluta") or "")
+    return if chosen ~= "" then chosen else pageCurrency()
 end
 ```
 
@@ -56,10 +69,6 @@ Wzorce Luau cofają się, a notatki przychodzą skądkolwiek: wiersz dłuższy n
 wydatkiem, a wzorce zaczynają się od `^`.
 
 ```luau
-local function trim(s: string): string
-    return (s:match("^%s*(.-)%s*$"))
-end
-
 -- "12,50 zł jedzenie: obiad" → 12.5, "zł", "jedzenie", "obiad"; nil when the line has no amount.
 local function parse(text: string)
     if #text > 300 then
@@ -85,18 +94,16 @@ end
 
 -- "2026-11" and 1 → "2026-12"; month 13 rolls into the next year.
 local function shiftMonth(month: string, n: number): string
-    local y, m = month:match("^(%d+)-(%d+)$")
-    return os.date("!%Y-%m", os.time({ year = tonumber(y), month = tonumber(m) + n, day = 1 }))
+    return b.addMonths(month .. "-01", n):sub(1, 7)
 end
 
 local function lastDay(month: string): string
-    local y, m = month:match("^(%d+)-(%d+)$")
-    return os.date("!%Y-%m-%d", os.time({ year = tonumber(y), month = tonumber(m) + 1, day = 0 }))
+    return b.addDays(b.addMonths(month .. "-01", 1), -1)
 end
 
 local function monthName(month: string): string
     local y, m = month:match("^(%d+)-(%d+)$")
-    return `{MONTHS[tonumber(m)]} {y}`
+    return `{b.monthName(tonumber(m))} {y}`
 end
 
 -- The expenses of the daily notes from `from` to `to`, oldest first.
@@ -129,7 +136,7 @@ end
 Miesiąc przychodzi w `params` — strzałki to `b.ui.open` z innym miesiącem; z palety jest nim bieżący.
 
 ```luau
--- "2026-11" when the text is a month of a year os.time knows, else nil.
+-- "2026-11" when the text is a month of a year Brulion's dates know, else nil.
 local function validMonth(text): string?
     if type(text) ~= "string" then
         return nil

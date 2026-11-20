@@ -108,9 +108,10 @@ as an expression, string interpolation `` `Today: {b.today()}` `` (a literal bra
 `for i, v in list do` without `ipairs` / `pairs`, `//` (floor division) and optional type
 annotations (`local n: number = 0`).
 
-* **Types are not checked.** Brulion ships Luau's compiler and virtual machine only: annotations
-  and `--!strict` are accepted and ignored (a type checker on save is in TODO.md). Mistakes show
-  when the line runs.
+* **Types are checked on save** (desktop and Android: "Types" below): a function of `b` that is
+  not there, an unknown global, a wrong count of arguments show as warnings with their line before
+  the code runs; `--!strict` checks the annotations too. The code runs whatever they say; in the
+  browser nothing checks them.
 * **The library**: `string`, `table`, `math`, `utf8`, `bit32`, `buffer`, `vector`, `coroutine`,
   `os.date` / `os.time` / `os.clock` / `os.difftime`, `debug.traceback` / `debug.info`, and the
   base functions (`pcall`, `error`, `assert`, `tonumber`, `tostring`, `type`, `select`, `next`,
@@ -130,6 +131,48 @@ annotations (`local n: number = 0`).
 * **Patterns backtrack**: `^(%d+[,.]?%d*)%s*(%a+)` on a line of 20 000 digits is quadratic
   (seconds, then the time limit). Read long input in anchored steps (`silownia.luau`,
   `readNumber`).
+
+## Types
+
+Every time an extension page's code changes, Luau's own type checker (its Analysis library,
+`3rdparty/luau/Analysis`) reads it against the declarations of `b` (`src/core/extensions/builtin/b.d.luau`, the API of this
+document as Luau types) and says what is wrong before the code runs: a **warning** with the page's line, in the page's state line ("runs ·
+2 type warnings, line 14: Unknown global 'prnt'", with a button to that line), in Settings →
+Extensions and in the console. The code loads and runs whatever the warnings say — they point at
+mistakes, they never stop a page.
+
+* **Nonstrict** by default, as Luau checks code without annotations: unknown globals and
+  functions (`b.raed`, `b.ui.colum`), a call with a wrong count of arguments, a `nil` called.
+  `--!strict` as the first line checks every annotation too (`local n: number = b.today()` is a
+  warning there); `--!nocheck` turns it off for a page.
+* **Lints** that point at mistakes: code that cannot be reached, a local used before it has a
+  value, a duplicate key of a table, a format string that does not fit its values, `a and b or c`
+  that can mislead … (not the ones about style: unused locals, shadowing).
+* `b.checkExtension` and `brulion-cli extension check` give them too (`types`: `[{line, column,
+  message, kind}]`; `kind` "type" or the lint's name), so an AI writing an extension sees them.
+* **Bounded**: 2 s per check (then "ran out of time: the rest is not checked"), on a worker thread
+  of its own — never the GUI's —, at most 50 warnings; hostile code (nested thousands of times,
+  fifty thousand lines) ends the check, never the app (`tst_extensions_types`). The checker runs no
+  code: Luau's old solver, the default, has no user-defined type functions, and nothing is required.
+* **Where.** Built with `BRULION_LUAU_CHECK` (on by default, `src/core/extensions/CMakeLists.txt`):
+  in the desktop apps and the command line, and on Android. **Not in the browser**: the checker
+  reports its own trouble with C++ exceptions, which the browser's Qt cannot catch (a hostile page
+  would end the tab), and it would add 2.6 MB to the WebAssembly module (0.8 MB compressed) of a
+  download the browser has to fetch before anything shows. What it adds, measured on 2026-11-20 as
+  a small program with Luau's VM and compiler against the same with the checker linked in (`-O2`,
+  sections collected, stripped; the sizes compressed with `gzip -9`, as a download or an APK
+  stores them):
+
+  | Platform | VM + compiler | with the type checker | added (compressed) |
+  |---|---|---|---|
+  | desktop (x86_64, Clang) | 1.17 MB | 5.22 MB | 4.0 MB (1.7 MB) |
+  | Android (arm64, GCC's code as an estimate of the NDK's Clang) | 1.31 MB | 4.99 MB | 3.7 MB (1.6 MB) |
+  | browser (wasm32, Emscripten, wasm exceptions) | 0.85 MB | 3.42 MB | 2.6 MB (0.8 MB) |
+
+  On the desktop and on Android that is a few per cent of the app, for warnings the code gets on
+  every save; in the browser the cost is a slower first load and a tab a hostile page could end,
+  so `BRULION_LUAU_CHECK` is off there (`typecheck_none.cpp`: no warnings, the code runs as
+  everywhere).
 
 ## The API (`b`)
 
@@ -1595,6 +1638,14 @@ Home:7
   catchable either). After either limit the VM stays usable.
 * **Errors** name the extension and the line (`silownia:412: …`, a traceback); errors of the host's
   functions too (`b.replaceBlock: stale: …`).
+* **The browser too.** The same hostile extensions — loops for ever, in `pcall`, in an error
+  handler, a coroutine or a sort's comparator, backtracking patterns, a plain search for ever,
+  memory eaten, endless recursion, a module that never ends, modules in a cycle, a megabyte of
+  question, thousands of options or fields, a long timer label, a look for a way out, writes to the
+  library and to `b` — end as these limits say, in time, the engine working afterwards, on the
+  desktop (`tst_extensions_hostile`) and in the browser build, single-threaded with JavaScript's
+  clock (CI's smoke test in Chrome: `scripts/wasm-smoke.mjs --extensions`, `?selftest=extensions`,
+  `extensions::hostileSelfTest`).
 * Luau errors are `setjmp`/`longjmp` (`LUA_USE_LONGJMP=1`; the browser's Qt links without C++
   exception catching): the engine's C functions never keep a C++ object alive when they raise or
   yield — each is a thin wrapper around an implementation that returns first (`engine.cpp`).
@@ -1605,12 +1656,14 @@ Home:7
 
 | Where | What |
 |---|---|
-| `3rdparty/luau` | Luau 0.743, the VM and the compiler only, patched (see its CMakeLists.txt): the plain `string.find` honours the time limit; numbers are read and written with `.` whatever the C locale (Qt sets it from the environment — with a Polish locale Luau's own `strtod` rejected `82.5`) |
+| `3rdparty/luau` | Luau 0.743: the VM and the compiler, and the type checker (Analysis, Config: `brulion_luau_analysis`, with `BRULION_LUAU_CHECK`); patched (see its CMakeLists.txt): the plain `string.find` honours the time limit; numbers are read and written with `.` whatever the C locale (Qt sets it from the environment — with a Polish locale Luau's own `strtod` rejected `82.5`) |
 | `src/core/extensions/engine.h` | `Engine`: one VM; extensions, their commands and views; calls, questions, limits |
 | `src/core/extensions/host.h` | `Host`: what an extension may ask of the app (blocks and pages by tag and property, a query from an offset, attachments, the revision, writes — a page, a journal, a block's line, status and property, blocks inserted and removed —, today and now, the week's first day, languages, the timer, the log) |
 | `src/core/extensions/notebookhost.h` | `NotebookHost`: the Host over a `Vault` and its `VaultIndex` — blocks from the index, content-preserving writes (`blockedit.h`, `notebook/journals.h`, `notebook/pages.h`, `markdown::setTaskStatus`), every ref resolved the same way (`resolveRef`: a note's line, stale when changed); a dry run that only computes them (`brulion-cli extension …`, `brulion-cli habit …`) |
 | `src/core/extensions/blockedit.h` | the pure edits behind the writes: a block's line replaced, lines inserted around a block or under it, a block removed, a property set; `plainWords` (a block's `plain`, `b.plain`) |
 | `src/core/extensions/sandbox.h` | `checkExtension()`, `checkExtensionPage()`: an extension loaded in an engine of its own over a dry-run `NotebookHost` — `b.checkExtension`, `brulion-cli extension check / write` |
+| `src/core/extensions/typecheck.h` | Luau's type checker over an extension's code against `builtin/b.d.luau` (`typeCheck`: warnings with the page's lines; `typecheck_none.cpp` in a build without it) |
+| `src/core/extensions/selftest.h` | hostile extensions against the engine where it runs (`hostileSelfTest`: the tests and the browser's `?selftest=extensions`) |
 | `src/core/extensions/events.h` | what the hooks hear of a burst of changes: `ChangeBatch` (each extension's `"change"`, `"task"` and `"journal"` events — never its own writes, a chain of hooks cut after `kMaxDepth` rounds), a note's tasks and the tasks whose status changed (`taskStates`, `changedTasks`), where a change came from (`Origin`) |
 | `src/core/extensions/share.h` | an extension copied into another notebook with the pages it requires (`copyExtension`, `requiredNames`), an approval written into a notebook's device state (`approveInStore`, `approvedCode`) |
 | `src/core/extensions/builtin.h` | the built-in extensions (resources `:/extensions/…`: `silownia.luau` with `exercises.json`, `nawyki.luau`, `asystent.luau`), `builtinFor()`: which one a page overrides |
@@ -1639,8 +1692,8 @@ languages; `tst_extensions_docs` fails until all three name it.
 **Why Luau**: of eleven languages measured with the same extensions, tests and hostile scripts (the
 extension language experiment, branch `experiment/extension-languages`), it was the only ready-made
 one whose sandbox, time limit and memory limit held without changes — also in the single-threaded
-browser build — and the fastest; its type checker (not vendored yet) finds mistakes with line and
-column.
+browser build — and the fastest; its type checker (Analysis, vendored for the check on save:
+"Types") finds mistakes with line and column.
 
 ## Tests
 

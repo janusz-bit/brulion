@@ -32,7 +32,7 @@
 <context>
     <name>AppShell</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/shell/AppShell.qml" line="1010"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="1073"/>
         <source>This folder and %n page(s) in it will be moved to the trash.</source>
         <translation>
             <numerusform>This folder and %n page in it will be moved to the trash.</numerusform>
@@ -40,7 +40,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/shell/AppShell.qml" line="1047"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="1110"/>
         <source>%n occurrence(s) replaced</source>
         <translation>
             <numerusform>%n occurrence replaced</numerusform>
@@ -48,7 +48,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/shell/AppShell.qml" line="1048"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="1111"/>
         <source>%n note(s)</source>
         <translation>
             <numerusform>%n note</numerusform>
@@ -56,8 +56,8 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/shell/AppShell.qml" line="1057"/>
-        <location filename="../src/app/qml/shell/AppShell.qml" line="1059"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="1120"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="1122"/>
         <source>%n note(s) restored</source>
         <translation>
             <numerusform>%n note restored</numerusform>
@@ -159,7 +159,7 @@
 <context>
     <name>BlockEditor</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1124"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1138"/>
         <source>Copied %n block(s) from several days</source>
         <translation>
             <numerusform>Copied %n block from several days</numerusform>
@@ -167,7 +167,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1126"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1140"/>
         <source>Copied %n block(s)</source>
         <translation>
             <numerusform>Copied %n block</numerusform>
@@ -175,7 +175,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1167"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1181"/>
         <source>Cut %n block(s)</source>
         <translation>
             <numerusform>Cut %n block</numerusform>
@@ -183,7 +183,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1183"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1197"/>
         <source>Deleted %n block(s)</source>
         <translation>
             <numerusform>Deleted %n block</numerusform>
@@ -191,7 +191,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1256"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1270"/>
         <source>Pasted %n picture(s) from the internet</source>
         <translation>
             <numerusform>Pasted %n picture from the internet</numerusform>
@@ -199,7 +199,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="2242"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="2256"/>
         <source>%n picture(s) saved to the notebook</source>
         <translation>
             <numerusform>%n picture saved to the notebook</numerusform>
@@ -424,7 +424,7 @@
     <name>ContentPdfView</name>
     <message numerus="yes">
         <location filename="../src/app/qml/content/ContentPdfView.qml" line="1513"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="3825"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="3863"/>
         <source>%n page(s)</source>
         <translation>
             <numerusform>%n page</numerusform>
@@ -843,7 +843,7 @@
 <context>
     <name>JournalsView</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/JournalsView.qml" line="607"/>
+        <location filename="../src/app/qml/views/JournalsView.qml" line="612"/>
         <source>%n day(s) with notes</source>
         <translation>
             <numerusform>%n day with notes</numerusform>
@@ -914,6 +914,14 @@
         <translation>
             <numerusform>%n min read</numerusform>
             <numerusform>%n min read</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/views/PageView.qml" line="896"/>
+        <source>Extension: runs · %n type warning(s), %1</source>
+        <translation>
+            <numerusform>Extension: runs · %n type warning, %1</numerusform>
+            <numerusform>Extension: runs · %n type warnings, %1</numerusform>
         </translation>
     </message>
 </context>
@@ -1111,7 +1119,7 @@
 <context>
     <name>SettingsView</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1087"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1097"/>
         <source>%n word(s), kept on this device for all notebooks.</source>
         <translation>
             <numerusform>%n word, kept on this device for all notebooks.</numerusform>
@@ -1119,7 +1127,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1939"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1979"/>
         <source>%n warning(s) or error(s)</source>
         <translation>
             <numerusform>%n warning or error</numerusform>
@@ -1127,7 +1135,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1824"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1864"/>
         <source>Last check %1: %n reminder(s), the sync failed.</source>
         <translation>
             <numerusform>Last check %1: %n reminder, the sync failed.</numerusform>
@@ -1159,7 +1167,15 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1826"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1706"/>
+        <source>Type check: %n warning(s), %1</source>
+        <translation>
+            <numerusform>Type check: %n warning, %1</numerusform>
+            <numerusform>Type check: %n warnings, %1</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1866"/>
         <source>Last check %1: %n reminder(s).</source>
         <translation>
             <numerusform>Last check %1: %n reminder.</numerusform>
@@ -1340,7 +1356,7 @@
     <name>ShellShareDialog</name>
     <message numerus="yes">
         <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="32"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="6834"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="6949"/>
         <source>%n file(s) to save in the notebook</source>
         <translation>
             <numerusform>%n file to save in the notebook</numerusform>
@@ -1948,6 +1964,25 @@
         <translation>
             <numerusform>The last backup is missing %n file that could not be read or disappeared while it ran. The event log names it. Older complete backups are kept.</numerusform>
             <numerusform>The last backup is missing %n files that could not be read or disappeared while it ran. The event log names them. Older complete backups are kept.</numerusform>
+        </translation>
+    </message>
+</context>
+<context>
+    <name>brulion::shell::WorkspaceExtensions</name>
+    <message numerus="yes">
+        <location filename="../src/app/shell/workspaceextensions.cpp" line="673"/>
+        <source>Extensions answering each other&apos;s changes stopped after %1 rounds: %n change(s) not passed on.</source>
+        <translation>
+            <numerusform>Extensions answering each other&apos;s changes stopped after %1 rounds: %n change not passed on.</numerusform>
+            <numerusform>Extensions answering each other&apos;s changes stopped after %1 rounds: %n changes not passed on.</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/shell/workspaceextensions.cpp" line="2024"/>
+        <source>%1 copied to %2 (%n page(s)).</source>
+        <translation>
+            <numerusform>%1 copied to %2 (%n page).</numerusform>
+            <numerusform>%1 copied to %2 (%n pages).</numerusform>
         </translation>
     </message>
 </context>

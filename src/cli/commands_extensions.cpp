@@ -10,16 +10,20 @@
 #include "extensions/notebookhost.h"
 #include "extensions/pageextension.h"
 #include "extensions/sandbox.h"
+#include "extensions/share.h"
 #include "index/vaultindex.h"
 #include "markdown/parse.h"
 #include "notebook/itemref.h"
 #include "notebook/pages.h"
+#include "notebook/session.h"
 #include "text/text.h"
 #include "util/paths.h"
 #include "vault/localstore.h"
 #include "vault/vault.h"
 
+#include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QJsonDocument>
 #include <QRegularExpression>
 #include <QSet>
@@ -389,8 +393,10 @@ bool startSandbox(Call &call, Sandbox &box)
     box.host = std::make_unique<ext::NotebookHost>(*v, *index, options);
     Sandbox *b = &box;
     box.host->onLog = [b](const QString &, const QString &text) { b->printed.append(text); };
-    box.host->onTimer = [b](const QString &, int seconds, const QString &label) {
-        b->timers.append(QJsonObject{{u"seconds"_s, seconds}, {u"label"_s, label}});
+    box.host->onExtensionTimer = [b](const QString &, const ext::TimerSpec &spec) {
+        b->timers.append(spec.seconds > 0 ? QJsonObject{{u"seconds"_s, spec.seconds}, {u"label"_s, spec.label},
+                                                        {u"message"_s, spec.message}}
+                                          : QJsonObject{{u"stopped"_s, true}});
     };
     QString error;
     if (!box.engine.start(box.host.get(), ext::Limits{}, &error)) {
@@ -738,9 +744,33 @@ Result extensionRun(Call &call)
         if (!ext::Engine::hookEvents().contains(hook))
             return call.fail(ExitUsage, u"unknown_event"_s,
                              tr("No event %1: %2").arg(hook, ext::Engine::hookEvents().join(u", "_s)));
-        const QVariantMap event = hook == u"save"
-                                          ? QVariantMap{{u"page"_s, pageName}, {u"path"_s, pagePath}}
-                                          : QVariantMap{{u"pages"_s, pageName.isEmpty() ? QStringList() : QStringList{pageName}}};
+        // The event as the app gives it (docs/EXTENSIONS.md "Hooks"); --args gives one of its own.
+        const QString today = call.ctx.now().date().toString(Qt::ISODate);
+        QVariantMap event;
+        if (hook == u"save") {
+            event = {{u"page"_s, pageName}, {u"path"_s, pagePath}};
+        } else if (hook == u"change") {
+            event = {{u"pages"_s, pageName.isEmpty() ? QStringList() : QStringList{pageName}},
+                     {u"paths"_s, pagePath.isEmpty() ? QStringList() : QStringList{pagePath}},
+                     {u"by"_s, QStringList()},
+                     {u"sources"_s, QStringList{u"app"_s}}};
+        } else if (hook == u"task") {
+            event = blockMap.isEmpty() ? QVariantMap{{u"page"_s, pageName}, {u"path"_s, pagePath}} : blockMap;
+            event.insert(u"task"_s, u"x"_s);
+            event.insert(u"previous"_s, u" "_s);
+            event.insert(u"source"_s, u"app"_s);
+            event.insert(u"by"_s, QString());
+        } else if (hook == u"journal") {
+            event = {{u"date"_s, today}, {u"page"_s, today}, {u"path"_s, pagePath}, {u"source"_s, u"app"_s}, {u"by"_s, QString()}};
+        } else if (hook == u"open") {
+            event = {{u"date"_s, today}};
+        } else if (hook == u"day") {
+            event = {{u"date"_s, today}, {u"previous"_s, call.ctx.now().date().addDays(-1).toString(Qt::ISODate)}};
+        } else if (hook == u"timer") {
+            event = {{u"label"_s, QString()}, {u"seconds"_s, 0}};
+        }
+        if (const QVariantMap given = args->toObject().toVariantMap(); !given.isEmpty())
+            event = given;
         o.insert(u"ran"_s, QJsonObject{{u"hook"_s, hook}});
         QList<ext::HookInfo> hooks;
         for (const ext::HookInfo &h : box.engine.hooks(hook))
@@ -907,6 +937,195 @@ Result extensionWrite(Call &call)
     return call.ok(o, written->path + u'\n');
 }
 
+// ---- approval, settings, sharing ------------------------------------------------------------------
+
+/// The code of an extension page against the version approved on this device (what the app's
+/// "Read and run" shows): `lines` [{kind, text, line, count}], `added`, `removed`.
+Result extensionDiff(Call &call)
+{
+    const auto t = findExtension(call, call.str(u"name"_s), false);
+    if (!t)
+        return call.failed();
+    Vault *v = call.vault();
+    const QVariantMap before = ext::approvedCode(v ? v->store() : nullptr, t->runId);
+    const bool kept = before.contains(u"code"_s);
+    const QString old = before.value(u"code"_s).toString();
+    QJsonArray lines;
+    QStringList text;
+    int added = 0, removed = 0;
+    for (const ext::CodeDiffLine &l : ext::codeDiff(kept ? old : QString(), t->page.code)) {
+        static const QStringList kinds{u"same"_s, u"added"_s, u"removed"_s, u"skipped"_s};
+        lines.append(QJsonObject{{u"kind"_s, kinds.value(int(l.kind))}, {u"text"_s, l.text}, {u"line"_s, l.line},
+                                 {u"count"_s, l.count}});
+        switch (l.kind) {
+        case ext::CodeDiffLine::Same: text << u"  "_s + l.text; break;
+        case ext::CodeDiffLine::Added: text << u"+ "_s + l.text; ++added; break;
+        case ext::CodeDiffLine::Removed: text << u"- "_s + l.text; ++removed; break;
+        case ext::CodeDiffLine::Skipped: text << tr("… unchanged lines: %1").arg(l.count); break;
+        }
+    }
+    QJsonObject o = targetJson(*t);
+    o.insert(u"approvedBefore"_s, !before.isEmpty());
+    o.insert(u"approvedHash"_s, before.value(u"hash"_s).toString());
+    o.insert(u"approvedPermissions"_s, QJsonArray::fromStringList(before.value(u"permissions"_s).toStringList()));
+    o.insert(u"approved"_s, trust(call).approved.contains(t->page.hash));
+    o.insert(u"added"_s, added);
+    o.insert(u"removed"_s, removed);
+    o.insert(u"lines"_s, lines);
+    if (before.isEmpty())
+        call.warn(u"never_approved"_s, tr("Nothing of this extension was approved on this device: all of its code is new"));
+    else if (!kept)
+        call.warn(u"approved_code_not_kept"_s, tr("The approved version was too long to keep: all of the code is shown"));
+    return call.ok(o, text.join(u'\n') + u'\n');
+}
+
+/// The settings an extension declares (b.settings) with their values on this device; --set
+/// key=value changes one, --reset puts them all back. The extension's code is loaded in a sandbox
+/// to know them (its writes only computed); the values go into the notebook's device state as the
+/// app keeps them.
+Result extensionSettings(Call &call)
+{
+    const auto t = findExtension(call, call.str(u"name"_s));
+    if (!t)
+        return call.failed();
+    Sandbox box;
+    ext::Extension x;
+    if (!startSandbox(call, box) || !loadInto(call, box, *t, &x))
+        return call.failed();
+    const QVariantList fields = box.engine.settingsOf(x.id);
+    Vault *v = call.vault();
+    LocalStore *store = v ? v->store() : nullptr;
+    QVariantMap stored = store ? store->get(ext::settingsStoreKey(x.id)).toObject().toVariantMap() : QVariantMap();
+    bool changed = false;
+    if (call.flag(u"reset"_s)) {
+        changed = !stored.isEmpty();
+        stored.clear();
+    }
+    if (const QString set = call.str(u"set"_s).trimmed(); !set.isEmpty()) {
+        const qsizetype eq = set.indexOf(u'=');
+        const QString key = set.left(eq).trimmed(), value = eq < 0 ? QString() : set.mid(eq + 1).trimmed();
+        QVariantMap field;
+        for (const QVariant &f : fields)
+            if (f.toMap().value(u"key"_s).toString() == key)
+                field = f.toMap();
+        if (eq < 0 || field.isEmpty()) {
+            QStringList keys;
+            for (const QVariant &f : fields)
+                keys << f.toMap().value(u"key"_s).toString();
+            return call.fail(ExitUsage, u"unknown_setting"_s,
+                             tr("No setting %1 (--set key=value; the extension declares: %2)")
+                                     .arg(key, keys.isEmpty() ? tr("none") : keys.join(u", "_s)),
+                             {{u"settings"_s, QJsonArray::fromVariantList(fields)}});
+        }
+        const QString kind = field.value(u"kind"_s).toString();
+        QVariant parsed;
+        if (kind == u"number") {
+            bool ok = false;
+            const double n = QString(value).replace(u',', u'.').toDouble(&ok);
+            if (!ok || !std::isfinite(n))
+                return call.fail(ExitUsage, u"bad_value"_s, tr("%1 is a number").arg(key));
+            parsed = n == std::floor(n) && std::fabs(n) < 1e15 ? QVariant(qint64(n)) : QVariant(n);
+        } else if (kind == u"toggle") {
+            const QString b = value.toLower();
+            if (b != u"true" && b != u"false" && b != u"on" && b != u"off" && b != u"1" && b != u"0")
+                return call.fail(ExitUsage, u"bad_value"_s, tr("%1 is true or false").arg(key));
+            parsed = b == u"true" || b == u"on" || b == u"1";
+        } else if (kind == u"choice") {
+            const QStringList options = field.value(u"options"_s).toStringList();
+            if (!options.contains(value))
+                return call.fail(ExitUsage, u"bad_value"_s, tr("%1 is one of: %2").arg(key, options.join(u", "_s)));
+            parsed = value;
+        } else {
+            if (value.size() > ext::QuestionLimits::settingText)
+                return call.fail(ExitUsage, u"bad_value"_s, tr("%1: at most %2 characters").arg(key).arg(ext::QuestionLimits::settingText));
+            parsed = value;
+        }
+        stored.insert(key, parsed);
+        changed = true;
+    }
+    if (changed && !call.dryRun()) {
+        if (!store)
+            return call.fail(ExitInternal, u"no_device_state"_s, tr("This notebook keeps no settings here (--no-history)"));
+        store->set(ext::settingsStoreKey(x.id),
+                   stored.isEmpty() ? QJsonValue(QJsonValue::Undefined) : QJsonValue(QJsonObject::fromVariantMap(stored)));
+        store->flush();
+    }
+    // The values as the extension reads them: a stored one that fits its setting, else its default.
+    QJsonArray list;
+    QStringList text;
+    for (const QVariant &f : fields) {
+        QVariantMap field = f.toMap();
+        const QString key = field.value(u"key"_s).toString();
+        const QVariant mine = stored.value(key);
+        const QString kind = field.value(u"kind"_s).toString();
+        const bool fits = mine.isValid()
+                          && (kind == u"number"   ? mine.canConvert<double>() && mine.metaType().id() != QMetaType::QString
+                              : kind == u"toggle" ? mine.metaType().id() == QMetaType::Bool
+                              : kind == u"choice" ? field.value(u"options"_s).toStringList().contains(mine.toString())
+                                                  : mine.metaType().id() == QMetaType::QString);
+        field.insert(u"current"_s, fits ? mine : field.value(u"value"_s));
+        field.insert(u"set"_s, fits);
+        list.append(QJsonObject::fromVariantMap(field));
+        text << u"%1 = %2%3 (%4)"_s.arg(key, field.value(u"current"_s).toString(),
+                                        field.value(u"unit"_s).toString().isEmpty() ? QString()
+                                                                                     : u" "_s + field.value(u"unit"_s).toString(),
+                                        field.value(u"label"_s).toString());
+    }
+    QJsonObject o = targetJson(*t);
+    o.insert(u"settings"_s, list);
+    o.insert(u"changed"_s, changed);
+    if (fields.isEmpty())
+        call.warn(u"no_settings"_s, tr("The extension declares no settings (b.settings)"));
+    return call.ok(o, text.isEmpty() ? QString() : text.join(u'\n') + u'\n');
+}
+
+/// An extension page — with the pages its code requires — copied into another notebook at the same
+/// path (share.h). Nothing is approved there: that notebook's app asks as for any code.
+Result extensionCopy(Call &call)
+{
+    const auto t = findExtension(call, call.str(u"name"_s), false);
+    if (!t)
+        return call.failed();
+    if (!t->isPage)
+        return call.fail(ExitUsage, u"not_a_page"_s, tr("A built-in extension is in every notebook: extension write its page"));
+    const QString to = QDir::cleanPath(QFileInfo(call.str(u"to"_s).trimmed()).absoluteFilePath());
+    if (call.str(u"to"_s).trimmed().isEmpty() || !QFileInfo(to).isDir())
+        return call.fail(ExitUsage, u"no_notebook"_s, tr("--to is the folder of another notebook"));
+    Vault *source = call.vault();
+    if (source && QDir::cleanPath(source->rootPath()) == to)
+        return call.fail(ExitUsage, u"same_notebook"_s, tr("--to is this notebook: choose another"));
+    if (call.dryRun()) {
+        // What would be copied, without opening the other notebook for writing.
+        QStringList would{t->page.path};
+        for (const QString &name : ext::requiredNames(t->page.code))
+            if (const auto p = call.index()->resolveLink(name, t->page.path))
+                would << *p;
+        return call.ok(QJsonObject{{u"wouldCopy"_s, QJsonArray::fromStringList(would)}, {u"to"_s, to}},
+                       would.join(u'\n') + u'\n');
+    }
+    Vault target(to, notebook::deviceStatePath(call.ctx.appDataDir(), to));
+    QString error;
+    if (!target.open(&error))
+        return call.fail(ExitInternal, u"open_failed"_s, error.isEmpty() ? tr("The notebook %1 cannot be opened").arg(to) : error);
+    const ext::CopyReport report = ext::copyExtension(*call.index(), t->page.path, target, call.flag(u"replace"_s));
+    if (!report.error.isEmpty())
+        return call.fail(ExitInternal, u"copy_failed"_s, report.error);
+    QJsonObject o{{u"to"_s, to},
+                  {u"written"_s, QJsonArray::fromStringList(report.written)},
+                  {u"unchanged"_s, QJsonArray::fromStringList(report.unchanged)},
+                  {u"conflicts"_s, QJsonArray::fromStringList(report.conflicts)}};
+    if (!report.conflicts.isEmpty())
+        return call.fail(ExitConflict, u"conflict"_s,
+                         tr("A page there has other text: %1 (--replace writes over it; its text stays in that "
+                            "notebook's history)")
+                                 .arg(report.conflicts.join(u", "_s)),
+                         o);
+    if (!report.written.isEmpty())
+        call.warn(u"needs_approval"_s,
+                  tr("The app runs the copy once the user approves it on each device of that notebook"));
+    return call.ok(o, report.written.join(u'\n') + (report.written.isEmpty() ? QString() : u"\n"_s));
+}
+
 Command make(const QString &id, const char *summary, Handler run, QList<Arg> args, const char *help = nullptr)
 {
     Command c;
@@ -1038,6 +1257,37 @@ void addExtensionCommands(QList<Command> &out)
                                "Refused when the code does not load (exit 6, the error with its line) or when a page "
                                "of that name is no extension. The old text is kept in the version history. The app "
                                "never runs code written here before the user approves it there."));
+    c.writes = true;
+    out.append(c);
+    out.append(make(u"extension.diff"_s,
+                    QT_TRANSLATE_NOOP("brulion::cli",
+                                      "An extension page's code against the version approved on this device"),
+                    extensionDiff, {name},
+                    QT_TRANSLATE_NOOP("brulion::cli",
+                                      "What the app's \"Read and run\" shows: the lines added and removed since the "
+                                      "approval (all of them when nothing was approved here). Approves nothing.")));
+    c = make(u"extension.settings"_s,
+             QT_TRANSLATE_NOOP("brulion::cli", "An extension's settings (b.settings) and their values on this device"),
+             extensionSettings,
+             {name,
+              option(u"set"_s, ArgType::String, QT_TRANSLATE_NOOP("brulion::cli", "Change one: key=value (rest=90)")),
+              flag(u"reset"_s, QT_TRANSLATE_NOOP("brulion::cli", "Every setting back to its default"))},
+             QT_TRANSLATE_NOOP("brulion::cli",
+                               "The extension's code is loaded in a sandbox to know its settings (its writes only "
+                               "computed); the values are this device's, as the app keeps them (never synced)."));
+    c.writes = true;
+    out.append(c);
+    c = make(u"extension.copy"_s,
+             QT_TRANSLATE_NOOP("brulion::cli",
+                               "Copy an extension page, with the pages it requires, into another notebook"),
+             extensionCopy,
+             {name,
+              option(u"to"_s, ArgType::String, QT_TRANSLATE_NOOP("brulion::cli", "The other notebook's folder")),
+              flag(u"replace"_s,
+                   QT_TRANSLATE_NOOP("brulion::cli", "Write over a page there with other text (kept in its history)"))},
+             QT_TRANSLATE_NOOP("brulion::cli",
+                               "The same paths there; a page with the same text is left as it is. Nothing is "
+                               "approved: the app there asks as for any code that arrives. Exit 4 on a conflict."));
     c.writes = true;
     out.append(c);
 }

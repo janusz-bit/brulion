@@ -46,8 +46,12 @@ BDialog {
     // (BDialog closes after this unless acceptEnabled turned false: a version that changed stays.)
     onAcceptRequested: {
         const outcome = Workspace.extensions.approveVersion(dialog.path, dialog.shownHash)
-        if (outcome === "")
+        // (Approved, it may still not run: an error on a line, shared code that waits too.)
+        const state = outcome === "" ? Workspace.extensions.pageState(dialog.path) : ""
+        if (outcome === "" && state === "running")
             AppController.toast(qsTr("“%1” runs on this device").arg("" + review.map.title), "success")
+        else if (outcome === "")
+            AppController.toast(qsTr("Approved, but it does not run: %1").arg(Workspace.extensions.pageMessage(dialog.path)), "warning")
         else if (outcome === "changed")
             dialog.changedMeanwhile = true
         else
@@ -74,6 +78,35 @@ BDialog {
                 ? qsTr("This code is new on this device: it came from a sync, an import or another program. Read it before it runs.")
                 : qsTr("Its code changed since you approved it on this device: %1 line(s) added, %2 removed. Read what changed before it runs.")
                     .arg(0 + review.map.added).arg(0 + review.map.removed)
+    }
+
+    Rectangle {
+        objectName: "extensionApprovalChanged"
+        Layout.fillWidth: true
+        visible: dialog.changedMeanwhile
+        implicitHeight: changedRow.implicitHeight + 2 * Theme.space2
+        radius: Theme.radius
+        color: Theme.warningBg
+        border.color: Theme.warning
+        RowLayout {
+            id: changedRow
+            x: Theme.space2
+            y: Theme.space2
+            width: parent.width - 2 * Theme.space2
+            spacing: Theme.space2
+            BIcon { name: "triangle-alert"; size: Theme.iconSizeSm; color: Theme.warningText }
+            BText {
+                Layout.fillWidth: true
+                wrapMode: Text.Wrap
+                text: qsTr("The code changed while you read it (a sync?). Nothing was approved: read the new version.")
+            }
+            BButton {
+                objectName: "extensionApprovalReload"
+                size: "small"
+                text: qsTr("Show the new version")
+                onClicked: dialog.refresh()
+            }
+        }
     }
 
     // What it may do: reading always; the permissions of its page, those not approved before marked.
@@ -107,35 +140,7 @@ BDialog {
         newText: "" + review.map.code
         oldLabel: dialog.builtinName !== "" ? qsTr("The built-in code") : dialog.isNew ? qsTr("Nothing approved") : qsTr("Approved before")
         newLabel: qsTr("Now")
-        mode: Theme.narrow ? "unified" : "auto"
-    }
-
-    Rectangle {
-        objectName: "extensionApprovalChanged"
-        Layout.fillWidth: true
-        visible: dialog.changedMeanwhile
-        implicitHeight: changedRow.implicitHeight + 2 * Theme.space2
-        radius: Theme.radius
-        color: Theme.warningBg
-        border.color: Theme.warning
-        RowLayout {
-            id: changedRow
-            x: Theme.space2
-            y: Theme.space2
-            width: parent.width - 2 * Theme.space2
-            spacing: Theme.space2
-            BIcon { name: "triangle-alert"; size: Theme.iconSizeSm; color: Theme.warningText }
-            BText {
-                Layout.fillWidth: true
-                wrapMode: Text.Wrap
-                text: qsTr("The code changed while you read it (a sync?). Nothing was approved: read the new version.")
-            }
-            BButton {
-                objectName: "extensionApprovalReload"
-                size: "small"
-                text: qsTr("Show the new version")
-                onClicked: dialog.refresh()
-            }
-        }
+        // (All of the code is new: one column. A change: side by side where there is room.)
+        mode: Theme.narrow || dialog.isNew ? "unified" : "auto"
     }
 }

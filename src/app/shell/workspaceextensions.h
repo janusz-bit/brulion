@@ -39,6 +39,7 @@
 #include "extensions/events.h"
 #include "extensions/host.h"
 #include "extensions/pageextension.h"
+#include "extensions/typecheck.h"
 #include "types.h"
 
 #include <QAbstractListModel>
@@ -212,6 +213,11 @@ public:
     Q_INVOKABLE QString pageMessage(const QString &path) const;
     /// The 0-based line its error names, -1 none.
     Q_INVOKABLE int pageErrorLine(const QString &path) const;
+    /// What Luau's type checker says of its code (docs/EXTENSIONS.md "Types"): how many warnings,
+    /// the first one ("line 14: Unknown global 'x'") and its 0-based line (-1: none).
+    Q_INVOKABLE int pageTypeCount(const QString &path) const;
+    Q_INVOKABLE QString pageTypeMessage(const QString &path) const;
+    Q_INVOKABLE int pageTypeLine(const QString &path) const;
     /// Approves the page's code as it is now on this device and runs it (tests, the self-test: the
     /// app's "Run" approves the version it showed, approveVersion()).
     void approve(const QString &path);
@@ -371,6 +377,9 @@ private:
         QString state;
         QString message;
         int errorLine = -1;
+        /// What Luau's type checker found in its code (typecheck.h), of the code `typedHash`.
+        QList<extensions::TypeProblem> types;
+        QString typedHash;
     };
     /// What the editor is writing to a page: the key of its text, and the extension's hash in
     /// the text it writes over ("": unknown).
@@ -438,6 +447,8 @@ private:
     /// Keeps the code of `entry` as approved (approvedCode: the next approval's diff).
     void rememberApproved(const PageEntry &entry);
     void startTimerFor(const QString &extension, const extensions::TimerSpec &spec);
+    /// Luau's type checker over a page's code, on a worker (never in the browser: no checker).
+    void checkTypes(const QString &path);
     void timerEnded(const QString &extension);
     bool ensureConsole();
     /// Evaluates `code` in the console's environment (`name` in errors); `toast`: the result as a

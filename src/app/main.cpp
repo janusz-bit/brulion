@@ -23,6 +23,7 @@
 #include "workspace.h"
 #include "workspacesync.h"
 
+#include "extensions/selftest.h" // ?selftest=extensions in the browser: hostile extensions stopped
 #include "log/categories.h"
 #include "log/logger.h"
 #include "log/slowscope.h"
@@ -31,6 +32,7 @@
 #include <QDir>
 #include <QElapsedTimer>
 #include <QGuiApplication>
+#include <QJsonObject>
 #include <QLocale>
 #include <QQmlApplicationEngine>
 #include <QQmlFileSelector>
@@ -608,6 +610,11 @@ int main(int argc, char *argv[])
     // Brulion's emoji and symbols?
     if (args.contains(u"--selftest-glyphs"_s))
         wasm::publishSelfTestResult("brulionGlyphSelfTest", brulion::ui::fallbackFontsJson(fallbackFonts));
+    // ?selftest=extensions (scripts/wasm-smoke.mjs --extensions): hostile extensions stopped by the
+    // engine's limits in the browser too — no threads, JavaScript's clock (extensions/selftest.h).
+    if (args.contains(u"--selftest-extensions"_s))
+        wasm::publishSelfTestResult("brulionExtensionsSelfTest",
+                                    QJsonObject::fromVariantMap(brulion::extensions::hostileSelfTest()));
     // ?selftest=pickfiles,savefile in a test tab (scripts/wasm-smoke.mjs --pick-files): the
     // browser's file picker and download at the next clicks.
     if (args.contains(u"--selftest-pickfiles"_s) || args.contains(u"--selftest-savefile"_s))

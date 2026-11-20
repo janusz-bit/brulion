@@ -310,8 +310,20 @@ class TestShellExtensions : public QObject {
 
     void approveAll()
     {
+        approveShared();
         for (const QString &file : filesUnder(m_dir + u'/' + kFolder))
             m_ext->approve(kFolder + u'/' + file);
+    }
+
+    /// The code the samples share (b.require("Wspólne funkcje")): approved first, as their user
+    /// would, else they wait with it.
+    void approveShared() { m_ext->approve(page(u"Wspólne funkcje"_s)); }
+
+    /// A sample approved with the code it shares.
+    void approveSample(const QString &title)
+    {
+        approveShared();
+        m_ext->approve(page(title));
     }
 
     /// Workspace::writeIfUnchanged: this device's editor saves a page over the text it has
@@ -354,14 +366,19 @@ private Q_SLOTS:
         // Code that is in the notebook when it opens (a sync brought it, an import) runs nowhere
         // until it is approved on this device.
         const QStringList pages = filesUnder(m_dir + u'/' + kFolder);
-        QCOMPARE(pages.size(), 11);
-        QCOMPARE(m_ext->waitingApproval(), 11);
+        QCOMPARE(pages.size(), 12);
+        QCOMPARE(m_ext->waitingApproval(), 12);
         for (const QString &file : pages)
             QCOMPARE(m_ext->pageState(kFolder + u'/' + file), u"approval"_s);
         QVERIFY(m_ext->commands().isEmpty());
         QVERIFY(m_ext->views().isEmpty());
-        // One approved: it runs, the others still wait.
+        // One approved: it waits still, for the code it shares (b.require) — approved too, it runs;
+        // the others still wait.
         m_ext->approve(page(u"Licznik słów"_s));
+        QCOMPARE(m_ext->pageState(page(u"Licznik słów"_s)), u"error"_s);
+        QVERIFY2(m_ext->pageMessage(page(u"Licznik słów"_s)).contains(u"“Wspólne funkcje” waits for approval"_s),
+                 qPrintable(m_ext->pageMessage(page(u"Licznik słów"_s))));
+        approveShared();
         QCOMPARE(m_ext->pageState(page(u"Licznik słów"_s)), u"running"_s);
         QCOMPARE(m_ext->commands().size(), 3);
         QCOMPARE(m_ext->waitingApproval(), 10);
@@ -565,7 +582,7 @@ private Q_SLOTS:
     {
         // The project index: its "change" hook writes the page "Projekty" when a project changes —
         // once, with nothing to do for its own write —, its "save" hook notes the save.
-        m_ext->approve(page(u"Indeks projektów"_s));
+        approveSample(u"Indeks projektów"_s);
         QString dom = disk(u"Dom.md"_s);
         dom.replace(u"- [ ] Zapłacić czynsz"_s, u"- [x] Zapłacić czynsz"_s);
         QVERIFY(editorSaves(u"Dom.md"_s, dom));
@@ -678,7 +695,7 @@ private Q_SLOTS:
     {
         // "Quick entries" writes an extension page. It is code that did not come from this
         // device's editor: it waits for approval like code from a sync, then runs.
-        m_ext->approve(page(u"Quick entries"_s));
+        approveSample(u"Quick entries"_s);
         m_ext->runCommand(u"quick-entries"_s, u"new"_s);
         QCOMPARE(m_ext->questionKind(), u"ask"_s);
         m_ext->answerText(u"Kawa"_s);
@@ -1172,8 +1189,8 @@ private Q_SLOTS:
     {
         // A task ticked in the review's view reaches the page the project index keeps, and the
         // counter hears both writes — never its own.
-        m_ext->approve(page(u"Przegląd zadań"_s));
-        m_ext->approve(page(u"Indeks projektów"_s));
+        approveSample(u"Przegląd zadań"_s);
+        approveSample(u"Indeks projektów"_s);
         m_ext->approve(page(u"Licznik zmian"_s));
         QString error;
         const QVariantMap tree = m_ext->render(u"przeglad-zadan"_s, u"przeglad"_s, {}, &error);
@@ -1225,7 +1242,7 @@ private Q_SLOTS:
         QTRY_VERIFY2(disk(u"Dziennik zdarzeń.md"_s).contains(u"- task Wymienić żarówkę w łazience [ ]→[x] app"_s),
                      qPrintable(disk(u"Dziennik zdarzeń.md"_s)));
         // Another extension's tick is heard too, with its name.
-        m_ext->approve(page(u"Przegląd zadań"_s));
+        approveSample(u"Przegląd zadań"_s);
         QString error;
         const QVariantMap tree = m_ext->render(u"przeglad-zadan"_s, u"przeglad"_s, {}, &error);
         QList<QVariantMap> checks;
@@ -1301,6 +1318,7 @@ private Q_SLOTS:
 
     void approvingTheVersionRead()
     {
+        approveShared(); // (the code it shares)
         const QString path = page(u"Licznik słów"_s);
         // New on this device: the review shows all of the code, nothing to compare with.
         QVariantMap review = m_ext->approvalReview(path);
@@ -1412,22 +1430,23 @@ private Q_SLOTS:
         counter.replace(u"```luau\n"_s, u"```luau\nlocal wspolne = b.require(\"Wspólne\")\n"_s);
         QVERIFY(m_vault->writeText(page(u"Licznik słów"_s), counter, ChangeSource::User));
         QTRY_VERIFY(m_ext->approvalReview(page(u"Licznik słów"_s)).value(u"code"_s).toString().contains(u"wspolne"_s));
-        m_ext->approve(page(u"Licznik słów"_s));
+        approveSample(u"Licznik słów"_s);
         QCOMPARE(m_ext->pageState(page(u"Licznik słów"_s)), u"running"_s);
         const QString other = m_tmp.filePath(u"inny%1"_s.arg(m_n));
         QDir().mkpath(other);
         const QString otherState = m_tmp.filePath(u"inny-stan%1"_s.arg(m_n));
-        QCOMPARE(m_ext->copyToNotebook(page(u"Licznik słów"_s), other), tr("Extensions cannot be copied here."));
+        QCOMPARE(m_ext->copyToNotebook(page(u"Licznik słów"_s), other), u"Extensions cannot be copied here."_s);
         m_ext->setDeviceStates([&](const QString &) { return otherState; });
-        QCOMPARE(m_ext->copyToNotebook(page(u"Licznik słów"_s), m_dir), tr("Choose another notebook."));
+        QCOMPARE(m_ext->copyToNotebook(page(u"Licznik słów"_s), m_dir), u"Choose another notebook."_s);
         m_messages.clear();
         QCOMPARE(m_ext->copyToNotebook(page(u"Licznik słów"_s), other), QString());
         QCOMPARE(readFile(other + u'/' + page(u"Licznik słów"_s)), counter);
         QCOMPARE(readFile(other + u'/' + page(u"Wspólne"_s)), disk(page(u"Wspólne"_s)));
+        QCOMPARE(readFile(other + u'/' + page(u"Wspólne funkcje"_s)), disk(page(u"Wspólne funkcje"_s)));
         QCOMPARE(m_messages.size(), 1);
         {
             LocalStore store(otherState + u"/store.json"_s);
-            QCOMPARE(store.get(extensions::approvedStoreKey()).toArray().size(), 2);
+            QCOMPARE(store.get(extensions::approvedStoreKey()).toArray().size(), 3);
             QVERIFY(!store.get(extensions::approvedCodeStoreKey(u"licznik-slow"_s)).toObject().isEmpty());
         }
         // Again: nothing to do. Changed there: a conflict, replaced only when asked.
@@ -1440,7 +1459,7 @@ private Q_SLOTS:
         QCOMPARE(readFile(other + u'/' + page(u"Wspólne"_s)), u"zmieniona tam\n"_s);
         QCOMPARE(m_ext->copyToNotebook(page(u"Licznik słów"_s), other, true), QString());
         QCOMPARE(readFile(other + u'/' + page(u"Wspólne"_s)), disk(page(u"Wspólne"_s)));
-        QCOMPARE(m_ext->copyToNotebook(u"Dom.md"_s, other), tr("This page is no extension."));
+        QCOMPARE(m_ext->copyToNotebook(u"Dom.md"_s, other), u"This page is no extension."_s);
     }
 };
 

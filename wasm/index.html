@@ -559,9 +559,10 @@
         function start() {
           setStatus(loadingText);
           var params = new URLSearchParams(location.search);
-          // Debug flows (src/platform/wasm/wasmselftest.h): ?selftest=storage,notify,glyphs,keyboard,share
+          // Debug flows (src/platform/wasm/wasmselftest.h): ?selftest=storage,notify,glyphs,keyboard,share,
+          // extensions (hostile extensions against the engine: src/core/extensions/selftest.h)
           var args = [];
-          var flows = ['storage', 'notify', 'glyphs', 'keyboard', 'share'];
+          var flows = ['storage', 'notify', 'glyphs', 'keyboard', 'share', 'extensions'];
           // The flows that work on the open notebook (src/app/diag/webselftest.h: they fetch its
           // pictures from the internet and offer an export of it), the file picker's and the
           // download's (wasmselftest.h: at the next clicks) and ?route= / ?now= only in a tab

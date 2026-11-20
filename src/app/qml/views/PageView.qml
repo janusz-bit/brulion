@@ -886,9 +886,15 @@ FocusScope {
                                               ? Workspace.extensions.pageMessage(root.routePath) : ""
             readonly property int errorLine: Workspace.extensions.revision >= 0 && state === "error"
                                              ? Workspace.extensions.pageErrorLine(root.routePath) : -1
+            // What Luau's type checker says of the code (warnings: the code runs all the same).
+            readonly property int typeCount: Workspace.extensions.revision >= 0 && state !== ""
+                                             ? Workspace.extensions.pageTypeCount(root.routePath) : 0
+            readonly property int typeLine: typeCount > 0 ? Workspace.extensions.pageTypeLine(root.routePath) : -1
+            readonly property string typeMessage: typeCount > 0 ? Workspace.extensions.pageTypeMessage(root.routePath) : ""
             readonly property string label: {
                 switch (state) {
-                case "running": return qsTr("Extension: runs")
+                case "running": return typeCount > 0 ? qsTr("Extension: runs · %n type warning(s), %1", "", typeCount).arg(typeMessage)
+                                                     : qsTr("Extension: runs")
                 case "error": return errorLine >= 0 ? qsTr("Error on line %1: %2").arg(errorLine + 1).arg(message)
                                                     : qsTr("Error: %1").arg(message)
                 case "approval": return qsTr("Extension: new or changed elsewhere — read it, then run it")
@@ -957,6 +963,14 @@ FocusScope {
                     size: "small"
                     text: qsTr("Line %1").arg(extensionState.errorLine + 1)
                     onClicked: AppController.openPage(root.routePath, extensionState.errorLine)
+                }
+                BButton {
+                    objectName: "pageExtensionTypeLine"
+                    visible: extensionState.state === "running" && extensionState.typeLine >= 0
+                    size: "small"
+                    variant: "ghost"
+                    text: qsTr("Line %1").arg(extensionState.typeLine + 1)
+                    onClicked: AppController.openPage(root.routePath, extensionState.typeLine)
                 }
                 BButton {
                     visible: extensionState.state === "off"

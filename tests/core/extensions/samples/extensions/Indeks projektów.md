@@ -7,9 +7,11 @@ opis: Utrzymuje stronę „Projekty” — strony z tagiem #projekt według stat
 
 Rozszerzenie utrzymuje stronę [[Projekty]]: listę stron z tagiem `#projekt`, pogrupowaną według
 właściwości `status`, z liczbą otwartych zadań i najbliższym terminem. Strona powstaje od nowa po
-każdej zmianie notatek (`b.on("change")`) — ale jest zapisywana tylko wtedy, gdy jej treść naprawdę
-się zmieniła, więc synchronizacja nie ma czego wysyłać bez potrzeby. Polecenie „Odśwież indeks
-projektów” robi to samo na żądanie.
+każdej zmianie notatek (`b.on("change")`), także tej, którą zapisało inne rozszerzenie — ale jest
+zapisywana tylko wtedy, gdy jej treść naprawdę się zmieniła, więc synchronizacja nie ma czego
+wysyłać bez potrzeby. Dwa projekty o tej samej nazwie w różnych folderach to dwa wiersze, każdy z
+linkiem przez swoją ścieżkę (`b.pages({ paths = true })`); funkcje pomocnicze daje strona [[Wspólne
+funkcje]]. Polecenie „Odśwież indeks projektów” robi to samo na żądanie.
 
 ## Treść strony
 
@@ -19,17 +21,8 @@ local TAG = "projekt"
 local STATUSES = { "aktywny", "wstrzymany", "zakończony" } -- in this order on the page; others follow
 local NO_STATUS = "bez statusu"
 
--- A page name inside a query: in quotes the query language knows (a name may have spaces).
-local function quoted(name: string): string
-    return if name:find('"', 1, true) then `„{name}”` else `"{name}"`
-end
-
-local function capitalized(s: string): string
-    local stop = utf8.offset(s, 2) or #s + 1
-    local first = s:sub(1, stop - 1)
-    local upper = { ["ą"] = "Ą", ["ć"] = "Ć", ["ę"] = "Ę", ["ł"] = "Ł", ["ń"] = "Ń", ["ó"] = "Ó", ["ś"] = "Ś", ["ź"] = "Ź", ["ż"] = "Ż" }
-    return (upper[first] or first:upper()) .. s:sub(stop)
-end
+local w = b.require("Wspólne funkcje")
+local quoted, capitalized = w.quoted, w.capitalized
 
 -- One project's line: its link, its open tasks and the nearest due date.
 local function line(name: string): string
@@ -57,9 +50,18 @@ local function content(): (string, number)
     end
     local unsorted = { title = NO_STATUS, lines = {} }
     local count = 0
-    for _, name in b.pages({ tag = TAG }) do
+    -- By path: two projects of one name in different folders are two lines, each linked and
+    -- queried by its path (a name alone would find one of them, and a query both).
+    local paths = b.pages({ tag = TAG, paths = true })
+    local named = {}
+    for _, path in paths do
+        local title = b.page(path).name
+        named[title] = (named[title] or 0) + 1
+    end
+    for _, path in paths do
+        local page = b.page(path)
+        local name = if named[page.name] > 1 then path else page.name
         if name ~= INDEX then
-            local page = b.page(name)
             local status = (page and page.props.status or ""):match("^%s*(.-)%s*$")
             local key = b.fold(status)
             local group = if key == "" then unsorted else groups[key]
@@ -118,8 +120,9 @@ end
 
 ## Reakcje i polecenie
 
-To, co rozszerzenia zapisują same, nie wraca do nich jako „change”, więc przepisanie strony nie
-wywołuje kolejnego. Reakcja na „save” tylko odnotowuje w konsoli zapis strony projektu.
+To, co rozszerzenie zapisze samo, nie wraca do niego jako „change”, więc przepisanie strony nie
+wywołuje kolejnego. To, co zapisze inne rozszerzenie — zadanie odhaczone w widoku [[Przegląd
+zadań]] —, wraca jak każda zmiana (`e.by` mówi, które to było), więc strona nadąża i za nim. Reakcja na „save” tylko odnotowuje w konsoli zapis strony projektu.
 
 ```luau
 b.on("change", function(e)

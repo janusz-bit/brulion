@@ -3,7 +3,7 @@
 // Chromium over the DevTools protocol (Node >= 22 for the global WebSocket). See docs/WEB.md.
 //
 //   node scripts/wasm-smoke.mjs --url http://127.0.0.1:8123/brulion/ --profile /tmp/p \
-//       [--loads 2] [--selftest] [--expect-first N] [--notify] [--glyphs] [--keyboard] [--keyboard-phone] \
+//       [--loads 2] [--selftest] [--expect-first N] [--notify] [--glyphs] [--extensions] [--keyboard] [--keyboard-phone] \
 //       [--two-tabs] [--share] [--pick-files] [--lang pl-PL] \
 //       [--index-notes N [--cache-quota]] [--copy] [--screenshot shot.png] [--loader-screenshot loading.png] \
 //       [--timeout 120]
@@ -17,7 +17,11 @@
 // lets the app show a test notification (?selftest=notify), clicks it and expects the click to
 // reach the app. --glyphs runs ?selftest=glyphs: the bundled fallback fonts must be installed and
 // draw every emoji and symbol Brulion writes (src/app/ui/fallbackfonts.h — Qt for WebAssembly
-// itself has no emoji font, every ⏰ 🔔 📅 was an empty box). --keyboard stubs window.visualViewport
+// itself has no emoji font, every ⏰ 🔔 📅 was an empty box). --extensions runs
+// ?selftest=extensions: hostile extensions (loops for ever, memory eaten, endless recursion, a
+// megabyte of question, requires in a cycle, a look for a way out) must each end as the engine's
+// limits say, in time, the engine working afterwards (src/core/extensions/selftest.h;
+// `window.brulionExtensionsSelfTest`). --keyboard stubs window.visualViewport
 // (a phone browser's on-screen keyboard shrinks it) and runs ?selftest=keyboard: the app must
 // report how much of the page the keyboard covers (KeyboardInsets, src/app/ui/keyboardsources.h)
 // as the stub changes, 0 for malformed values and for a pinch-zoomed page, and put a page the
@@ -94,6 +98,7 @@ function parseArgs(argv) {
     else if (a === '--selftest') args.selftest = true;
     else if (a === '--notify') args.notify = true;
     else if (a === '--glyphs') args.glyphs = true;
+    else if (a === '--extensions') args.extensions = true;
     else if (a === '--keyboard') args.keyboard = true;
     else if (a === '--keyboard-phone') args.keyboardPhone = true;
     else if (a === '--two-tabs') args.twoTabs = true;
@@ -359,6 +364,7 @@ async function main() {
     ...(args.selftest ? ['storage'] : []),
     ...(args.notify ? ['notify'] : []),
     ...(args.glyphs ? ['glyphs'] : []),
+    ...(args.extensions ? ['extensions'] : []),
     ...(args.keyboard || args.keyboardPhone ? ['keyboard'] : []),
     ...(args.pickFiles ? ['pickfiles', 'savefile'] : []),
   ];
@@ -529,12 +535,14 @@ async function main() {
           selftest: window.brulionSelfTest ?? null,
           notify: window.brulionNotifySelfTest ?? null,
           glyphs: window.brulionGlyphSelfTest ?? null,
+          extensions: window.brulionExtensionsSelfTest ?? null,
           keyboard: window.brulionKeyboardSelfTest ?? null,
           screenElements: document.getElementById('screen')?.childElementCount ?? 0,
         };
       })()`);
       const appUp = state?.loaderHidden && (!args.selftest || state.selftest) && (!args.notify || state.notify)
-        && (!args.glyphs || state.glyphs) && (!(args.keyboard || args.keyboardPhone) || state.keyboard);
+        && (!args.glyphs || state.glyphs) && (!args.extensions || state.extensions)
+        && (!(args.keyboard || args.keyboardPhone) || state.keyboard);
       const failed = state && !state.loaderHidden && state.details;
       if (appUp || failed) break;
     }
@@ -551,6 +559,15 @@ async function main() {
         else if (f.missingAfter) problems.push(`load ${load}: ${f.family} leaves "${f.missingAfter}" as boxes`);
       }
       if (!state.glyphs?.ok || fonts.length === 0) problems.push(`load ${load}: glyph self-test failed: ${JSON.stringify(state.glyphs)}`);
+    }
+    if (args.extensions && state?.loaderHidden) {
+      const report = state.extensions ?? {};
+      for (const c of report.checks ?? []) {
+        console.log(`load ${load}: hostile extension "${c.name}": ${c.got} in ${c.ms} ms${c.ok ? '' : ` — ${c.detail}`}`);
+      }
+      if (!report.ok || (report.checks ?? []).length < 20) {
+        problems.push(`load ${load}: hostile extensions not stopped as they must: ${JSON.stringify(report)}`);
+      }
     }
     if (args.indexNotes > 0 && state?.loaderHidden) {
       // No input from here on: the index must complete by itself.

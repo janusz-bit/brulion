@@ -1438,6 +1438,90 @@ private Q_SLOTS:
         QCOMPARE(r.code, 0);
     }
 
+    void extensionsApprovedSettingsAndCopies()
+    {
+        // What changed since the approval on this device, an extension's settings on it, and a
+        // copy into another notebook with the page it requires — the command line approves nothing.
+        const QByteArray shared = "---\ntags: [rozszerzenie]\n---\n```luau\nreturn { dwa = function(s) return s .. s end }\n```\n";
+        const QByteArray counter = "---\ntags: [rozszerzenie]\n---\n```luau\n"
+                                   "local w = b.require(\"Wspólne\")\n"
+                                   "b.settings({ { key = \"ile\", label = \"Ile\", value = 3, step = 1 }, "
+                                   "{ key = \"tryb\", label = \"Tryb\", options = { \"krótko\", \"długo\" } } })\n"
+                                   "b.command(\"x\", function() return w.dwa(\"ż\") end)\n"
+                                   "b.on(\"task\", function(e) return e.task .. e.previous end)\n"
+                                   "```\n";
+        const QString dir = vault({{u"Rozszerzenia/Licznik.md"_s, counter}, {u"Rozszerzenia/Wspólne.md"_s, shared},
+                                   {u"Zakupy.md"_s, "- [ ] mleko\n"}});
+        // Never approved here: all of its code is new.
+        Run r = run(dir, {u"extension"_s, u"diff"_s, u"Licznik"_s});
+        QCOMPARE(r.code, 0);
+        QVERIFY(!r.result().value(u"approvedBefore"_s).toBool());
+        QCOMPARE(r.result().value(u"added"_s).toInt(), 4);
+        QVERIFY(r.warnings().contains(u"never_approved"_s));
+        // Approved in the app with its code kept; a line changed since: one added, one removed.
+        const QString hash = run(dir, {u"extension"_s, u"show"_s, u"Licznik"_s}).result().value(u"codeHash"_s).toString();
+        const QString oldCode = run(dir, {u"extension"_s, u"show"_s, u"Licznik"_s}).result().value(u"code"_s).toString();
+        writeFile(stateDirOf(dir) + u"/store.json"_s,
+                  QJsonDocument(QJsonObject{{u"extensions/approved"_s, QJsonArray{hash}},
+                                            {u"extensions/approvedCode/licznik"_s,
+                                             QJsonObject{{u"hash"_s, hash}, {u"code"_s, oldCode}, {u"permissions"_s, QJsonArray{}}}}})
+                          .toJson());
+        QByteArray changed = counter;
+        changed.replace("w.dwa(\"ż\")", "w.dwa(\"ł\")");
+        writeFile(dir + u"/Rozszerzenia/Licznik.md"_s, changed);
+        r = run(dir, {u"extension"_s, u"diff"_s, u"Licznik"_s});
+        QCOMPARE(r.code, 0);
+        QVERIFY(r.result().value(u"approvedBefore"_s).toBool());
+        QVERIFY(!r.result().value(u"approved"_s).toBool());
+        QCOMPARE(r.result().value(u"added"_s).toInt(), 1);
+        QCOMPARE(r.result().value(u"removed"_s).toInt(), 1);
+        bool addedLine = false;
+        for (const QJsonValue &l : r.result().value(u"lines"_s).toArray())
+            addedLine = addedLine || (l.toObject().value(u"kind"_s) == u"added"_s
+                                      && l.toObject().value(u"text"_s).toString().contains(u"w.dwa(\"ł\")"_s));
+        QVERIFY(addedLine);
+        // Its settings: declared, set, refused, back to the defaults.
+        r = run(dir, {u"extension"_s, u"settings"_s, u"Licznik"_s});
+        QCOMPARE(r.code, 0);
+        QCOMPARE(r.result().value(u"settings"_s).toArray().size(), 2);
+        QCOMPARE(r.result().value(u"settings"_s).toArray().first().toObject().value(u"current"_s).toInt(), 3);
+        r = run(dir, {u"extension"_s, u"settings"_s, u"Licznik"_s, u"--set"_s, u"ile=7,5"_s});
+        QCOMPARE(r.code, 0);
+        QCOMPARE(r.result().value(u"settings"_s).toArray().first().toObject().value(u"current"_s).toDouble(), 7.5);
+        r = run(dir, {u"extension"_s, u"settings"_s, u"Licznik"_s, u"--set"_s, u"tryb=średnio"_s});
+        QCOMPARE(r.code, 2);
+        r = run(dir, {u"extension"_s, u"settings"_s, u"Licznik"_s, u"--set"_s, u"nie-ma=1"_s});
+        QCOMPARE(r.errorCode(), u"unknown_setting"_s);
+        r = run(dir, {u"extension"_s, u"settings"_s, u"Licznik"_s, u"--set"_s, u"tryb=długo"_s});
+        QCOMPARE(r.result().value(u"settings"_s).toArray().at(1).toObject().value(u"current"_s).toString(), u"długo"_s);
+        r = run(dir, {u"extension"_s, u"settings"_s, u"Licznik"_s, u"--reset"_s});
+        QCOMPARE(r.result().value(u"settings"_s).toArray().first().toObject().value(u"current"_s).toInt(), 3);
+        // A hook of the new events, with the event the app would give.
+        r = run(dir, {u"extension"_s, u"run"_s, u"Licznik"_s, u"--hook"_s, u"task"_s, u"--page"_s, u"Zakupy"_s});
+        QCOMPARE(r.code, 0);
+        QCOMPARE(r.result().value(u"values"_s).toArray(), QJsonArray{u"x "_s});
+        // A copy: the page and the one it requires, at the same paths; a conflict, then replaced.
+        const QString other = vault({{u"Inne.md"_s, "- coś\n"}});
+        r = run(dir, {u"extension"_s, u"copy"_s, u"Licznik"_s, u"--to"_s, other});
+        QCOMPARE(r.code, 0);
+        QCOMPARE(readFile(other + u"/Rozszerzenia/Licznik.md"_s), changed);
+        QCOMPARE(readFile(other + u"/Rozszerzenia/Wspólne.md"_s), shared);
+        QVERIFY(r.warnings().contains(u"needs_approval"_s));
+        r = run(other, {u"extension"_s, u"list"_s});
+        QCOMPARE(r.result().value(u"pages"_s).toArray().first().toObject().value(u"state"_s).toString(), u"approval"_s);
+        writeFile(other + u"/Rozszerzenia/Wspólne.md"_s, "zmienione tam\n");
+        r = run(dir, {u"extension"_s, u"copy"_s, u"Licznik"_s, u"--to"_s, other});
+        QCOMPARE(r.code, 4);
+        QCOMPARE(r.errorCode(), u"conflict"_s);
+        r = run(dir, {u"extension"_s, u"copy"_s, u"Licznik"_s, u"--to"_s, other, u"--replace"_s});
+        QCOMPARE(r.code, 0);
+        QCOMPARE(readFile(other + u"/Rozszerzenia/Wspólne.md"_s), shared);
+        r = run(dir, {u"extension"_s, u"copy"_s, u"Licznik"_s, u"--to"_s, dir});
+        QCOMPARE(r.errorCode(), u"same_notebook"_s);
+        r = run(dir, {u"extension"_s, u"copy"_s, u"Licznik"_s, u"--to"_s, dir + u"/nie-ma"_s});
+        QCOMPARE(r.errorCode(), u"no_notebook"_s);
+    }
+
     void pageWriteCanEmptyAPage()
     {
         const QString dir = vault({{u"Dom.md"_s, "- farba\n"}});

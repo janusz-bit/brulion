@@ -16,6 +16,8 @@
 
 #include <QCryptographicHash>
 #include <QDir>
+#include <QPointer>
+#include <QThreadPool>
 #include <QJsonArray>
 #include <QRegularExpression>
 
@@ -489,9 +491,49 @@ bool WorkspaceExtensions::updatePage(const QString &path)
             && old->runId == entry.runId)
             return false;
         entry.state = old->state;
+        if (old->typedHash == entry.page.hash) { // (prose changed: the code's warnings stay)
+            entry.types = old->types;
+            entry.typedHash = old->typedHash;
+        }
     }
+    const bool typed = entry.typedHash == entry.page.hash;
     m_pages.insert(path, entry);
+    if (!typed)
+        checkTypes(path);
     return true;
+}
+
+void WorkspaceExtensions::checkTypes(const QString &path)
+{
+    const PageEntry *e = pageAt(path);
+    if (!e || e->page.blocks == 0 || !extensions::typeCheckerAvailable())
+        return;
+    const QString source = e->page.source, hash = e->page.hash, title = e->page.title;
+    const quint64 generation = m_generation;
+    const QPointer<WorkspaceExtensions> self(this);
+    // (A worker: a long page takes the checker some 100 ms, never the GUI thread's.)
+    // One worker for the checks (each thread keeps a checker of its own: one is enough).
+    static QThreadPool pool;
+    pool.setMaxThreadCount(1);
+    pool.start([self, path, source, hash, title, generation] {
+        const QList<extensions::TypeProblem> problems = extensions::typeCheck(source);
+        QMetaObject::invokeMethod(
+                self.data(),
+                [self, path, hash, title, generation, problems] {
+                    if (!self || generation != self->m_generation)
+                        return;
+                    const auto it = self->m_pages.find(paths::normalize(path));
+                    if (it == self->m_pages.end() || it->page.hash != hash)
+                        return; // (changed again meanwhile: its own check follows)
+                    it->types = problems;
+                    it->typedHash = hash;
+                    if (!problems.isEmpty())
+                        self->m_console->append(u"info"_s, extensions::describeTypeProblems(problems, title), title);
+                    self->refreshList();
+                    self->bumpRevision();
+                },
+                Qt::QueuedConnection);
+    });
 }
 
 void WorkspaceExtensions::notesChanging(const QList<VaultChange> &changes)
@@ -574,6 +616,7 @@ void WorkspaceExtensions::notesChanged(const QStringList &changedPaths)
             m_batch.addTasks(change, extensions::changedTasks(changing.tasks,
                                                               extensions::taskStates(*note, m_index->content(path))));
     }
+    m_changing.clear(); // (notesChanging() and notesChanged() come in pairs: nothing is left for later)
     if (!m_batch.isEmpty() || m_batch.dropped() > 0)
         m_changeTimer.start();
 }
@@ -1157,6 +1200,9 @@ void WorkspaceExtensions::refreshList()
         row.permissions = permissionsText(e->page.permissions);
         row.description = e->page.description;
         row.errorLine = e->errorLine;
+        row.types = int(e->types.size());
+        if (!e->types.isEmpty())
+            row.typeMessage = tr("line %1: %2").arg(e->types.first().line).arg(e->types.first().message);
         if (e->state == u"running" || e->state == u"error")
             counts(e->runId, row);
         rows << row;
@@ -1192,6 +1238,26 @@ int WorkspaceExtensions::pageErrorLine(const QString &path) const
 {
     const PageEntry *e = pageAt(path);
     return e ? e->errorLine : -1;
+}
+
+int WorkspaceExtensions::pageTypeCount(const QString &path) const
+{
+    const PageEntry *e = pageAt(path);
+    return e ? int(e->types.size()) : 0;
+}
+
+QString WorkspaceExtensions::pageTypeMessage(const QString &path) const
+{
+    const PageEntry *e = pageAt(path);
+    if (!e || e->types.isEmpty())
+        return {};
+    return tr("line %1: %2").arg(e->types.first().line).arg(e->types.first().message);
+}
+
+int WorkspaceExtensions::pageTypeLine(const QString &path) const
+{
+    const PageEntry *e = pageAt(path);
+    return e && !e->types.isEmpty() ? e->types.first().line - 1 : -1;
 }
 
 int WorkspaceExtensions::waitingApproval() const

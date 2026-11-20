@@ -57,18 +57,27 @@ one and says how far it got.
 local BUDGET_SECONDS = 1
 
 -- { missing = { { target, sources } … }, scanned, pages, links }: targets in alphabetical order.
+-- Every page by its path: two pages of one name in different folders are both read (a name would
+-- read one of them), and a source is named by its path when its name is another page's too.
 local function scan()
     local started = os.clock()
-    local names = b.pages()
+    local paths = b.pages({ paths = true })
+    local titles, named = {}, {}
+    for i, path in paths do
+        local page = b.page(path)
+        titles[i] = if page then page.name else path
+        named[b.fold(titles[i])] = (named[b.fold(titles[i])] or 0) + 1
+    end
     local exists = {}
     local missing, order = {}, {}
     local scanned, links = 0, 0
-    for _, name in names do
+    for i, path in paths do
         if os.clock() - started > BUDGET_SECONDS then
             break
         end
         scanned += 1
-        for _, target in targetsOf(b.read(name) or "") do
+        local name = if named[b.fold(titles[i])] == 1 then titles[i] else path
+        for _, target in targetsOf(b.read(path) or "") do
             links += 1
             if not isFile(target) and not isDate(target) then
                 local key = b.fold(target)
@@ -89,7 +98,7 @@ local function scan()
     for _, target in b.sorted(order) do
         table.insert(list, missing[b.fold(target)])
     end
-    return { missing = list, scanned = scanned, pages = #names, links = links }
+    return { missing = list, scanned = scanned, pages = #paths, links = links }
 end
 
 -- A page that exists and may be what `target` meant: the best full-text hit for its words.

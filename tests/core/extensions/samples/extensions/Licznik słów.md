@@ -51,16 +51,7 @@ local function stats(text: string)
 end
 
 -- 1 słowo, 2–4 słowa (but 12–14 słów), the rest słów.
-local function plural(n: number, one: string, few: string, many: string): string
-    local last, lastTwo = n % 10, n % 100
-    local word = many
-    if n == 1 then
-        word = one
-    elseif last >= 2 and last <= 4 and (lastTwo < 12 or lastTwo > 14) then
-        word = few
-    end
-    return `{n} {word}`
-end
+local plural = b.require("Wspólne funkcje").plural
 
 local function wordsOf(n: number): string
     return plural(n, "słowo", "słowa", "słów")

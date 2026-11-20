@@ -1693,6 +1693,8 @@ Item {
                         required property int extErrorLine
                         required property int extSettings
                         required property string extModules
+                        required property int extTypes
+                        required property string extTypeMessage
                         objectName: "extensionRow"
                         visible: extRow.extKind === "page"
                         Layout.fillWidth: true
@@ -1701,6 +1703,7 @@ Item {
                                                              extRow.extCommands, extRow.extViews, extRow.extHooks)
                                      + (extRow.extPermissions !== "" ? "\n" + qsTr("May: %1").arg(extRow.extPermissions) : "")
                                      + (extRow.extModules !== "" ? "\n" + qsTr("Uses the code of: %1").arg(extRow.extModules) : "")
+                                     + (extRow.extTypes > 0 ? "\n" + qsTr("Type check: %n warning(s), %1", "", extRow.extTypes).arg(extRow.extTypeMessage) : "")
                                      + (extRow.extDescription !== "" ? "\n" + extRow.extDescription : "")
                         BButton {
                             size: "small"

@@ -5705,8 +5705,81 @@ void checkExtensionPages(QQuickWindow *window, AppController *app, const Check &
     check(waitFor([&] { return ext->pageState(path) == u"approval"; }, 10000),
           "code from elsewhere waits for approval");
     check(!app->commands()->ids().contains(u"ext.rozszerzenie-samotestu.pierwsze"_s), "and its command is not offered");
-    ext->approve(path);
-    check(ext->pageState(path) == u"running", "approved, it runs");
+    // "Read and run" on the page's state line: the code first (docs/UI.md "Extensions") — and a
+    // sync that replaces it while it is read approves nothing.
+    app->openPage(path);
+    QPointF at;
+    QQuickItem *readAndRun = steadyItem(window, [&] { return named(u"pageExtensionApprove"_s); }, &at, 10000);
+    check(readAndRun != nullptr, "the page's state line offers Read and run");
+    if (readAndRun)
+        tapOrClick(window, at, touch);
+    check(waitFor([&] { return named(u"extensionApprovalSummary"_s) != nullptr && named(u"extensionApprovalDiff"_s) != nullptr; },
+                  10000),
+          "which shows the code before it runs");
+    const QString samotest = page(
+            u"-- z innego urządzenia\n"
+            "b.command(\"pierwsze\", function() return \"jeden\" end, { label = \"Samotest: pierwsze\", key = \"Ctrl+Alt+F9\" })\n"
+            "b.view(\"widok\", function() return b.ui.heading(\"Widok samotestu\") end, nil, { label = \"Samotest: widok\" })\n"
+            "b.settings({ { key = \"minuty\", label = \"Minuty samotestu\", value = 5, step = 1, unit = \"min\" } })\n"
+            "b.command(\"czas\", function() b.timer(600, { label = \"Samotest\", message = \"Koniec samotestu\" }) end, "
+            "{ label = \"Samotest: czas\" })"_s);
+    check(ws->vault()->writeText(path, samotest, ChangeSource::Sync), "a sync changes the code meanwhile");
+    check(waitFor([&] { return named(u"extensionApprovalChanged"_s) != nullptr; }, 10000),
+          "the dialog says the code changed while it was read");
+    check(ext->pageState(path) == u"approval", "and nothing was approved");
+    QQuickItem *reloadButton = steadyItem(window, [&] { return named(u"extensionApprovalReload"_s); }, &at, 5000);
+    check(reloadButton != nullptr, "it offers the new version");
+    if (reloadButton)
+        tapOrClick(window, at, touch);
+    check(waitFor([&] { return named(u"extensionApprovalChanged"_s) == nullptr; }, 5000), "shown, the new version can run");
+    const QString runText = QCoreApplication::translate("ShellExtensionApproval", "Run this version");
+    QQuickItem *runVersion = steadyItem(
+            window,
+            [&] {
+                return findShown(window->contentItem(), [&](QQuickItem *item) {
+                    return isA(item, "BButton") && item->isEnabled() && item->property("text").toString() == runText;
+                });
+            },
+            &at, 5000);
+    check(runVersion != nullptr, "Run this version");
+    if (runVersion)
+        tapOrClick(window, at, touch);
+    check(waitFor([&] { return ext->pageState(path) == u"running"; }, 10000), "approved, it runs");
+    check(waitFor([&] { return named(u"extensionApprovalSummary"_s) == nullptr; }, 5000), "and the dialog closed");
+    // Its commands are in Settings → Keyboard shortcuts, with the key one of them suggests.
+    check(waitFor([&] { return app->shortcuts()->sequence(u"ext.rozszerzenie-samotestu.pierwsze"_s) == u"Ctrl+Alt+F9"; }, 5000),
+          "its command has the shortcut it suggests");
+    check(!app->shortcuts()->entries(u"Samotest: pierwsze"_s).isEmpty(), "and is listed among the shortcuts");
+
+    // Its own settings: the dialog of Settings → Extensions, a + tapped, the value kept here.
+    app->requestUiAction(u"extensionSettings:rozszerzenie-samotestu"_s);
+    check(waitFor([&] { return named(u"extensionSetting"_s) != nullptr; }, 10000), "its settings show");
+    const QString moreText = QCoreApplication::translate("ShellExtensionSettings", "More");
+    QQuickItem *more = steadyItem(
+            window,
+            [&] {
+                return findShown(window->contentItem(), [&](QQuickItem *item) {
+                    return isA(item, "BIconButton") && item->property("label").toString() == moreText;
+                });
+            },
+            &at, 5000);
+    check(more != nullptr, "a number's + is there");
+    if (more)
+        tapOrClick(window, at, touch);
+    check(waitFor([&] { return ext->settingsOf(u"rozszerzenie-samotestu"_s).value(0).toMap().value(u"currentNumber"_s).toInt() == 6; },
+                  5000),
+          "+ sets it, kept on this device");
+    sendKey(window, Qt::Key_Escape);
+    settle(300);
+    // Its own timer: the banner under the top bar, stopped with its ×.
+    check(app->commands()->run(u"ext.rozszerzenie-samotestu.czas"_s), "a command starts the extension's timer");
+    QQuickItem *stopTimer = steadyItem(window, [&] { return named(u"shellTimerStop"_s); }, &at, 10000);
+    check(stopTimer != nullptr && named(u"shellTimerBanner"_s) != nullptr, "the banner shows it");
+    if (stopTimer)
+        tapOrClick(window, at, touch);
+    check(waitFor([&] { return ext->timers().isEmpty() && named(u"shellTimerBanner"_s) == nullptr; }, 5000),
+          "its × stops it");
+    ext->resetSettings(u"rozszerzenie-samotestu"_s);
     check(app->commands()->ids().contains(u"ext.rozszerzenie-samotestu.pierwsze"_s), "its command is in the palette");
     check(app->commands()->ids().contains(u"extview.rozszerzenie-samotestu.widok"_s), "its view too");
     check(app->commands()->run(u"extview.rozszerzenie-samotestu.widok"_s), "the palette opens the view");

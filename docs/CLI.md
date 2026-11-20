@@ -247,6 +247,9 @@ Never compute a hash yourself.
 | `extension run <name> [<command>]` | `[--view V [--action A]] [--hook E] [--args JSON] [--page P] [--block REF] [--answers JSON]` | try a command, a view (its node tree), an action or the hooks of an event in a sandbox: `{status, value, writes (diffs, never made), printed, questions}`; `--args` is a view's params, an action's args or a command's `ctx.args` | |
 | `extension eval <code>` | `[--extension N] [--answers JSON] [--stdin]` | Luau with the notebook's `b`, as the app's console (writes only computed) | |
 | `extension write <name>` | `(--content T \| --stdin \| --code C [--description D] [--permissions P]) [--folder F] [--expect-hash H] [--force]` | write an extension page, checked first (exit 6 when it does not load); replacing one needs its hash. The app runs it once the user approves it | yes |
+| `extension diff <name>` | | an extension page's code against the version approved on this device (what the app's "Read and run" shows): `{lines [{kind, text, line, count}], added, removed, approvedBefore, approved}`; approves nothing | |
+| `extension settings <name>` | `[--set key=value] [--reset]` | the settings it declares (`b.settings`) with their values on this device; `--set` changes one (checked against its kind), `--reset` puts all back — kept as the app keeps them, never synced | yes |
+| `extension copy <name>` | `--to DIR [--replace]` | copy an extension page, with the extension pages its code requires (`b.require`), into another notebook at the same paths; a page there with other text is a conflict (exit 4) unless `--replace` (its text stays in that notebook's history). Approves nothing there | yes |
 | `app open <target>` | a ref, `today` or `capture`; `[--line N] [--block-id ID] [--heading H] [--side]` | show the running app there (exit 5 when none runs); with its remote control on the app resolves the ref and says what it opened | |
 | `app today` | | the running app at today's note | |
 | `app capture [<text>]` | `[--stdin]` | no text: open quick capture in the running app; a text: save it as quick capture does (remote control) | yes |
@@ -315,7 +318,9 @@ add commands, views and hooks) and try them without the app:
 4. **Test it**: `extension run "Word count" count --page Dom` (`--args '{"limit": 10}'` is the
    command's `ctx.args`), `--view today --args '{"week": 2}'`, `--hook save --page Dom`, questions
    answered with `--answers '["Przysiad", {"kg": 80}, null]'` (a form's text fields as texts:
-   `{"name": "Medytacja"}`).
+   `{"name": "Medytacja"}`). `--hook` takes every event (`save`, `change`, `task`, `journal`,
+   `open`, `day`, `timer`), each with the event the app would give (`--page`, `--block` fill it in);
+   `--args` gives an event of its own.
 
 The sandbox is the app's engine with the app's limits (2 s a call, 64 MB), a fresh one for every
 call, over the notebook as it is: what the code writes comes back as `writes` (unified diffs, later
@@ -324,9 +329,11 @@ reads of the same run see them) and **nothing is written**; `print` and `b.log` 
 without an answer left ends the run with `status: "waiting"` and the question.
 
 **Approval stays the user's.** Code from anywhere but the app's own editor waits until the user
-approves it on that device (Settings → Extensions, or **Run** on the page's state line), and every
-change of the code waits again: `extension write` never approves, `extension list` shows `approval`
-until the user did. Tell the user to approve it, and what it does.
+approves it on that device (Settings → Extensions, or **Read and run** on the page's state line,
+which shows the code against the version approved before — `extension diff` shows the same), and
+every change of the code waits again: `extension write` never approves, `extension list` shows
+`approval` until the user did. Tell the user to approve it, and what it does. `extension copy`
+takes an extension to another notebook, where it waits the same way.
 
 ## Writing safely
 

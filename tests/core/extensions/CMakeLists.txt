@@ -2,7 +2,7 @@
 # notebook host (and its dry run), the built-in gym and AI assistant extensions, extensions written as pages of
 # the notebook, the documentation's Luau examples and API references, and ten sample extensions at
 # work on a notebook of their own (samples/).
-foreach(_t engine blockedit gym assistant pages host api habits docs samples events shared)
+foreach(_t engine blockedit gym assistant pages host api habits docs samples events shared hostile types)
     if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/tst_extensions_${_t}.cpp)
         brulion_add_test(tst_extensions_${_t} SOURCES tst_extensions_${_t}.cpp LIBS brulion_core_extensions)
     endif()
@@ -15,6 +15,10 @@ endif()
 # The sample extensions and their notebook are read from samples/ as they are written there.
 if(TARGET tst_extensions_samples)
     target_compile_definitions(tst_extensions_samples PRIVATE BRULION_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
+endif()
+# The type checker reads the code that works where it is written: the samples, the documentation.
+if(TARGET tst_extensions_types)
+    target_compile_definitions(tst_extensions_types PRIVATE BRULION_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
 endif()
 # The assistant's requests are checked as the app makes them (ai::requestFrom, ai::httpRequest).
 if(TARGET tst_extensions_assistant AND TARGET brulion_core_ai)
