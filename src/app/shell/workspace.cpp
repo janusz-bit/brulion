@@ -175,6 +175,9 @@ Workspace::Workspace(QObject *parent) : EditorHost(parent)
     m_sync->setClock([this] { return now(); });
     m_github = new WorkspaceGitHub(this);
     m_github->setClock([this] { return now(); });
+    m_calendars = new WorkspaceCalendars(this);
+    m_calendars->setClock([this] { return now(); });
+    connect(m_calendars, &WorkspaceCalendars::errorOccurred, this, &Workspace::errorOccurred);
     m_backups->setSyncControl([this](std::function<void()> ready) { m_sync->holdSync(std::move(ready)); },
                               [this] { m_sync->releaseSync(); });
     connect(m_backups, &WorkspaceBackups::saveOpenEditors, this, &EditorHost::saveOpenEditorsRequested);
@@ -199,6 +202,7 @@ Workspace::~Workspace()
     // destroyed by now): close quietly.
     m_sync->blockSignals(true);
     m_github->blockSignals(true);
+    m_calendars->blockSignals(true);
     m_reminders->blockSignals(true);
     m_backups->blockSignals(true);
     m_extensions->blockSignals(true);
@@ -289,6 +293,9 @@ bool Workspace::open(const QString &rootPath, const QString &deviceStatePath, QS
     m_extensions->attach(m_vault.get(), m_index.get());
     m_sync->attach(m_vault.get());
     m_github->attach(m_vault.get());
+    m_calendars->attach(m_vault.get(), m_index.get());
+    // (After onVaultChanged: the index knows the change by then.)
+    connect(m_vault.get(), &Vault::changed, m_calendars, &WorkspaceCalendars::notifyChanges);
     {
         // Backups next to History and LocalStore: in the browser a mount of their own, as the index
         // cache's (a quota failure must not touch History or settings), and their temporary file
@@ -342,6 +349,7 @@ void Workspace::close()
     m_backups->detach(); // before sync: it releases its hold there
     m_sync->detach();
     m_github->detach();
+    m_calendars->detach();
     m_indexTimer.stop();
     m_loadNotifyTimer.stop();
     m_loadChangesPending = false;
@@ -427,6 +435,7 @@ void Workspace::setUiLanguage(const QString &language)
     m_reminders->setLanguage(m_language);
     m_sync->setLanguage(m_language);
     m_github->setLanguage(m_language);
+    m_calendars->setLanguage(m_language);
     m_backups->setLanguage(m_language);
     m_extensions->setLanguage(m_language);
 }
@@ -1893,6 +1902,7 @@ void Workspace::setFavorite(const QString &rawPath, bool favorite)
 void Workspace::applicationStateChanged(Qt::ApplicationState state)
 {
     m_github->setAppActive(state == Qt::ApplicationActive);
+    m_calendars->setAppActive(state == Qt::ApplicationActive);
     if (state != Qt::ApplicationActive) {
         if (m_cacheKeeper) {
             // The editors' last edits first (their own flush on this signal may come after this

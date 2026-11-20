@@ -24,6 +24,8 @@
 using namespace Qt::StringLiterals;
 using brulion::VaultConfig;
 using brulion::planning::CalendarModel;
+using brulion::planning::EventSource;
+using brulion::planning::ExternalEvent;
 using brulion::planning::test::makeIndex;
 
 namespace {
@@ -1049,6 +1051,89 @@ private Q_SLOTS:
         QVERIFY(calendar->lastSync().full);
         QCOMPARE(shown(m), expected(m));
         QVERIFY(shown(m).isEmpty() || !shown(m).first().startsWith(u"2026-10-15"_s));
+    }
+
+    void eventsOfOtherCalendars()
+    {
+        // Events of subscriptions and CalDAV calendars (an EventSource) among the notes' entries:
+        // timed ones by their time, all-day ones last, a multi-day one on every day it covers.
+        struct Source : EventSource {
+            QList<ExternalEvent> events;
+            QList<ExternalEvent> eventsBetween(QDate from, QDate to) const override
+            {
+                QList<ExternalEvent> out;
+                for (const ExternalEvent &e : events) {
+                    if (e.date >= from && e.date <= to)
+                        out.append(e);
+                }
+                return out;
+            }
+            void changed() { Q_EMIT eventsChanged(); }
+        };
+        Source source;
+        const auto event = [](const QString &key, QDate day, QDate first, QDate last, QTime start, QTime end) {
+            ExternalEvent e;
+            e.key = key;
+            e.calendarId = u"c-1"_s;
+            e.calendarName = u"Praca"_s;
+            e.color = u"#1e88e5"_s;
+            e.title = u"Spotkanie zespołu — "_s + key;
+            e.location = u"Sala Wisła"_s;
+            e.date = day;
+            e.firstDay = first;
+            e.lastDay = last;
+            e.start = start;
+            e.end = end;
+            e.allDay = !start.isValid();
+            return e;
+        };
+        const QDate d(2026, 10, 15);
+        source.events = {event(u"rano"_s, d, d, d, QTime(9, 0), QTime(10, 30)),
+                         event(u"wyjazd"_s, d, d, d.addDays(2), QTime(), QTime()),
+                         event(u"wyjazd"_s, d.addDays(1), d, d.addDays(2), QTime(), QTime()),
+                         event(u"wieczór"_s, d, d, d.addDays(1), QTime(22, 0), QTime(1, 0)),
+                         event(u"wieczór"_s, d.addDays(1), d, d.addDays(1), QTime(22, 0), QTime(1, 0))};
+        auto index = makeIndex({{u"journals/2026-10-15.md"_s, u"- [ ] Zadanie 📅 2026-10-15 12:00\n"_s}});
+        CalendarModel m;
+        m.setToday(u"2026-10-15"_s);
+        m.setWeekStart(1);
+        m.setRefreshDelay(0);
+        m.setVaultIndex(index.get());
+        m.setEventsObject(&source);
+        QCOMPARE(m.eventsObject(), &source);
+        const QVariantList items = role(m, m.rowForDate(u"2026-10-15"_s), CalendarModel::ItemsRole).toList();
+        QStringList order;
+        for (const QVariant &v : items)
+            order.append(v.toMap().value(u"kind"_s).toString() + u':' + v.toMap().value(u"time"_s).toString());
+        QCOMPARE(order, (QStringList{u"event:09:00"_s, u"due:12:00"_s, u"event:22:00"_s, u"event:"_s}));
+        const QVariantMap first = items.first().toMap();
+        QCOMPARE(first.value(u"variant"_s).toString(), u"event"_s);
+        QCOMPARE(first.value(u"color"_s).toString(), u"#1e88e5"_s);
+        QCOMPARE(first.value(u"endTime"_s).toString(), u"10:30"_s);
+        QCOMPARE(first.value(u"endMinutes"_s).toInt(), 10 * 60 + 30);
+        QCOMPARE(first.value(u"calendarName"_s).toString(), u"Praca"_s);
+        QCOMPARE(first.value(u"eventKey"_s).toString(), u"rano"_s);
+        QCOMPARE(first.value(u"path"_s).toString(), QString());
+        QVERIFY(!first.value(u"isTask"_s).toBool());
+        // The evening event goes on past midnight: no end on its first day, continued the next.
+        QCOMPARE(items.at(2).toMap().value(u"endTime"_s).toString(), QString());
+        const QVariantList next = role(m, m.rowForDate(u"2026-10-16"_s), CalendarModel::ItemsRole).toList();
+        QCOMPARE(next.size(), 2);
+        QVERIFY(next.at(0).toMap().value(u"continued"_s).toBool());
+        QVERIFY(next.at(0).toMap().value(u"multiDay"_s).toBool());
+        QVERIFY(role(m, m.rowForDate(u"2026-10-15"_s), CalendarModel::KindsRole).toStringList().contains(u"event"_s));
+        QVERIFY(role(m, m.rowForDate(u"2026-10-16"_s), CalendarModel::OpenKindsRole).toStringList().contains(u"event"_s));
+        // The day panel lists them too, the journal first.
+        const QVariantList day = m.dayEntries(u"2026-10-15"_s);
+        QCOMPARE(day.size(), 4);
+        // A change of the events (a refresh, a calendar hidden) rebuilds without an index change.
+        const int revision = m.revision();
+        source.events.clear();
+        source.changed();
+        QTRY_VERIFY(m.revision() > revision);
+        QCOMPARE(role(m, m.rowForDate(u"2026-10-15"_s), CalendarModel::ItemsRole).toList().size(), 1);
+        m.setEventsObject(nullptr);
+        QCOMPARE(m.eventsObject(), nullptr);
     }
 };
 

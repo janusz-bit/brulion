@@ -34,6 +34,9 @@
 //                  task line edited token by token), newTodo / patchTodo (the server's VTODO
 //                  patched: what Brulion does not know stays), blockIdForUid / uidForBlockId /
 //                  newTaskBlockId (how a line keeps its UID), serialize, vtimezoneFor
+//   eventedit.h    EventEdit (the event dialog), newEvent / patchEvent (the series) / patchOccurrence (an
+//                  override) / excludeOccurrence (EXDATE): what the server has and Brulion does not
+//                  show stays
 //   store.h        CalendarStore (<device state>/calendars/: settings — accounts, calendars,
 //                  subscriptions —, feed caches with validators, per-calendar state — sync token,
 //                  members, tracked tasks, the outbox of events —, the log)
@@ -44,6 +47,7 @@
 
 #include "caldav/calendarsync.h"
 #include "caldav/client.h"
+#include "caldav/eventedit.h"
 #include "caldav/events.h"
 #include "caldav/feed.h"
 #include "caldav/rrule.h"

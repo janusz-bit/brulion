@@ -318,12 +318,36 @@ void wireGitHub(AppController *app)
                      });
 }
 
+void wireCalendars(AppController *app)
+{
+    // ICS subscriptions and CalDAV accounts (workspacecalendars.h): the passwords in owner-only
+    // files next to the Nextcloud app password, CORS told apart in the browser, what a run met as
+    // toasts (conflicts, deletions waiting for a confirmation).
+    AppSettings *settings = app->settings();
+    WorkspaceCalendars *calendars = app->workspace()->calendars();
+    calendars->setBrowser(app->isWasm());
+    calendars->setSecretsFolder(QFileInfo(settings->passwordFile()).absolutePath());
+    QObject::connect(calendars, &WorkspaceCalendars::conflictsFound, app, [app](const QStringList &titles) {
+        app->toast(QCoreApplication::translate("brulion::shell::WorkspaceCalendars",
+                                               "%n task(s) changed both here and on the server — see the sync center",
+                                               nullptr, int(titles.size())),
+                   u"warning"_s);
+    });
+    QObject::connect(calendars, &WorkspaceCalendars::deletionsHeld, app, [app](int count) {
+        app->toast(QCoreApplication::translate("brulion::shell::WorkspaceCalendars",
+                                               "%n deletion(s) of synced tasks wait for a confirmation in the sync center",
+                                               nullptr, count),
+                   u"warning"_s);
+    });
+}
+
 } // namespace
 
 void integrateWorkspace(AppController *app)
 {
     wireReminders(app);
     wireGitHub(app);
+    wireCalendars(app);
     wireSync(app);
     // Pictures from the internet: shown without asking only when the device's setting says so.
     AppSettings *settings = app->settings();

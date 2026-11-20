@@ -32,6 +32,7 @@ qt_target_qml_sources(brulion
         qml/planning/CalendarAgendaList.qml
         qml/planning/CalendarDayPanel.qml
         qml/planning/CalendarAddDialog.qml
+        qml/planning/CalendarEventDialog.qml
         qml/planning/TasksFilterBar.qml
         qml/planning/TasksQuickAdd.qml
         qml/planning/TasksRow.qml

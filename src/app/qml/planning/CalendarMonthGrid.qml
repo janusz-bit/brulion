@@ -85,6 +85,7 @@ FocusScope {
         case "overdue": return "circle-alert"
         case "reminder": return "bell"
         case "scheduled": return "hourglass"
+        case "event": return "calendar-clock"
         default: return "calendar"
         }
     }
@@ -332,7 +333,11 @@ FocusScope {
                                 // An alarm in the reminder's tint: its alarm clock tells it apart (a
                                 // solid amber pill was the loudest thing on the month).
                                 readonly property string tint: variant === "alarm" ? "reminder" : variant
-                                readonly property color fgColor: Theme.chipFg(tint)
+                                // An event of another calendar: in its calendar's colour.
+                                readonly property bool isEvent: variant === "event"
+                                readonly property string eventColorText: isEvent ? AppController.routeText(entry, "color") : "transparent"
+                                readonly property color eventColor: eventColorText
+                                readonly property color fgColor: isEvent ? Theme.fg : Theme.chipFg(tint)
                                 readonly property string title: AppController.routeText(entry, "title")
                                 width: parent ? parent.width : 0 // (null while the Repeater drops it: a new month)
                                 height: root.pillHeight
@@ -342,7 +347,14 @@ FocusScope {
                                 // (Done and cancelled entries: the "done" chip's colours at full
                                 // opacity — readable text, AA —, with a check, or struck out with
                                 // an x when cancelled, as in Tasks.)
-                                color: Theme.chipBg(pill.tint)
+                                color: pill.isEvent ? pill.eventColor.alpha(Theme.dark ? 0.32 : 0.2) : Theme.chipBg(pill.tint)
+                                Rectangle {
+                                    visible: pill.isEvent
+                                    width: 3
+                                    height: parent.height
+                                    radius: 1.5
+                                    color: pill.eventColor
+                                }
                                 Row {
                                     id: pillRow
                                     anchors.verticalCenter: parent.verticalCenter

@@ -33,6 +33,9 @@ target_compile_definitions(tst_shell_appupdates PRIVATE BRULION_UPDATE_CHECK_EXP
 # local HTTP server and its removal, requests answered on the worker thread by a fake runner.
 brulion_add_test(tst_shell_localai SOURCES tst_localai.cpp LIBS brulion_shell brulion_core_ai Qt6::Network)
 brulion_add_test(tst_shell_workspace SOURCES tst_workspace.cpp LIBS brulion_shell brulion_core_vault brulion_core_markdown)
+# Workspace.calendars against an in-memory CalDAV server (tests/core/caldav/fakecaldav.h) and a feed.
+brulion_add_test(tst_shell_workspace_calendars SOURCES tst_workspace_calendars.cpp
+    LIBS brulion_shell brulion_caldav_testsupport)
 # The extensions as the app runs them (workspaceextensions.h), on the sample extensions and their
 # notebook (tests/core/extensions/samples): approval per device, commands with the questions the
 # app shows, views and their actions, hooks as the Workspace delivers them (what an extension

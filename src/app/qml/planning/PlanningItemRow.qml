@@ -6,7 +6,8 @@ import Brulion
 // PlanningItemRow — one calendar entry (a CalendarModel entry map) in the day panel, the agenda
 // and the overdue list: the task checkbox (tasks) or the entry's icon, the time ("" = all day),
 // the title (plain text, two lines at most), where it is written (page title, or the day of a
-// daily note) and the kind of date as a small chip.
+// daily note) and the kind of date as a small chip; an event of another calendar: its colour, the
+// time it ends, its calendar and place.
 //
 //   PlanningItemRow { entry: modelData; onTaskToggled: actions.toggleTask(entry.path, entry.line, entry.title)
 //                     onStatusRequested: (status) => actions.setTaskStatus(entry.path, entry.line, status, entry.title)
@@ -33,6 +34,23 @@ T.ItemDelegate {
     readonly property string entryPageTitle: AppController.routeText(entry, "pageTitle")
     readonly property string entryDueLabel: AppController.routeText(entry, "dueLabel")
     readonly property bool recurring: AppController.routeFlag(entry, "recurring")
+    /// An event of another calendar (docs/UI.md "Calendars"): its colour, calendar, place, end.
+    readonly property bool isEvent: entryKind === "event"
+    readonly property string eventColorText: isEvent ? AppController.routeText(entry, "color") : "transparent"
+    readonly property color eventColor: eventColorText
+    readonly property string eventDetails: {
+        if (!isEvent)
+            return ""
+        const end = AppController.routeText(entry, "endTime")
+        const until = end !== "" ? qsTr("until %1").arg(end)
+                    : AppController.routeFlag(entry, "continued") ? qsTr("continues") : ""
+        return control.joinDots([until, AppController.routeText(entry, "calendarName"),
+                                 AppController.routeText(entry, "location")])
+    }
+    /// The non-empty parts joined with " · ".
+    function joinDots(parts: list<string>): string {
+        return Js.joinNonEmpty(parts, " · ")
+    }
     /// Show the entry's date in the subtitle (lists spanning several days: overdue tasks).
     property bool showDate: false
     /// The entry's day has passed (the agenda's past days): an open entry's title is muted too.
@@ -72,6 +90,8 @@ T.ItemDelegate {
         return ""
     }
     readonly property string subtitle: {
+        if (control.isEvent)
+            return control.eventDetails
         const where = journalDay !== "" ? qsTr("Journal · %1").arg(DatesHelper.formatShort(journalDay))
                                         : control.entryPageTitle
         if (showDate && control.entryDueLabel !== "")
@@ -147,9 +167,17 @@ T.ItemDelegate {
                         control.statusRequested(status)
                 }
             }
+            Rectangle {
+                anchors.centerIn: parent
+                visible: control.isEvent
+                width: 10
+                height: 10
+                radius: 5
+                color: control.eventColor
+            }
             BIcon {
                 anchors.centerIn: parent
-                visible: !control.isTask
+                visible: !control.isTask && !control.isEvent
                 name: control.entryIcon !== "" ? control.entryIcon : "calendar"
                 size: Theme.iconSizeSm
                 color: control.variant === "alarm" || control.variant === "reminder" ? Theme.markColor(control.variant)

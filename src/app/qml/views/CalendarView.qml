@@ -22,9 +22,14 @@ import Brulion
 // month's / week's note); W / M open the selected day's week / month note. Touch: swipe for the previous /
 // next period.
 //
+// Other calendars (Workspace.calendars: ICS subscriptions, CalDAV — docs/UI.md "Calendars"): their
+// events in their colours among the notes' entries; the header's calendars button lists them with
+// a tick each (shown or hidden), "New event…" and "Manage calendars…" (the sync center's tab); an
+// event opens CalendarEventDialog (details, edit, delete, "Note in the journal").
+//
 // Route parameters: date (the selected day), mode ("month" | "week" | "agenda"), open ("day" =
-// the day's sheet on phones, "task" / "reminder" = the add dialog for that day — also used by
-// tests/app/planning/screenshots.sh).
+// the day's sheet on phones, "task" / "reminder" = the add dialog for that day, "event" = a new
+// event that day — also used by tests/app/planning/screenshots.sh).
 //
 // Contract with the shell (qml/shell/ShellRouteView.qml): `route`, `covered`, optional `title`;
 // offers `edgeSwipe`.
@@ -71,6 +76,8 @@ FocusScope {
         } else if (open === "task" || open === "reminder") {
             later.addKind = open
             openAddLater.restart()
+        } else if (open === "event") {
+            openEventLater.restart()
         }
     }
     // An entry (the planning components' signals): a CalendarModel item { key, kind, title, path,
@@ -81,6 +88,10 @@ FocusScope {
         entryInfo.map = entry
         if (daySheet.opened)
             daySheet.close()
+        if (AppController.routeText(entryInfo.map, "kind") === "event") {
+            eventDialog.openFor(AppController.routeText(entryInfo.map, "eventKey"))
+            return
+        }
         AppController.openPage(entryInfo.map.path, entryInfo.map.line)
     }
     /// A toast whose button undoes the last change of `actions`.
@@ -103,6 +114,10 @@ FocusScope {
     function openEntryMenu(entry: var, item: Item, x: real, y: real): void {
         entryInfo.map = entry
         const e = entryInfo.map
+        if (AppController.routeText(entryInfo.map, "kind") === "event") {
+            eventDialog.openFor(AppController.routeText(entryInfo.map, "eventKey"))
+            return
+        }
         tokenMenu.openToken({ path: e.path, line: e.line, text: e.title, kind: e.kind, value: e.spec,
                               alarm: e.alarm, rule: e.rule, priority: e.priority,
                               isTask: e.isTask === true && e.status !== "", occurrence: e.occurrence,
@@ -195,6 +210,10 @@ FocusScope {
         id: openAddLater
         onTriggered: addDialog.openFor(later.addKind, cal.anchorDate)
     }
+    Later {
+        id: openEventLater
+        onTriggered: eventDialog.openNew(cal.anchorDate)
+    }
     Connections {
         target: toasts
         function onActionTriggered(toastId: int) {
@@ -242,6 +261,7 @@ FocusScope {
         today: DatesHelper.today
         weekStart: DatesHelper.weekStart
         locale: DatesHelper.locale
+        events: Workspace.calendars
     }
     PlanningTokenMenu {
         id: tokenMenu
@@ -287,6 +307,7 @@ FocusScope {
             onOverdueRequested: root.showDay(DatesHelper.today)
             titleHasNote: root.periodHasNote
             onTitleClicked: root.openPeriodNote(root.mode === "week" ? "week" : "month", cal.anchorDate)
+            onCalendarsRequested: (button) => sourcesMenu.popup(button, 0, button.height)
         }
 
         RowLayout {
@@ -436,6 +457,56 @@ FocusScope {
         marks: cal.marks(marksFrom, marksTo)
         onReminderChosen: (at, alarm, recurrence) => root.addReminder(draftText !== "" ? draftText : qsTr("Reminder"),
                                                                      at, alarm, recurrence)
+    }
+
+    // Other calendars: shown or hidden, a new event, the sync center's tab.
+    BMenu {
+        id: sourcesMenu
+        objectName: "calendarSourcesMenu"
+        Repeater {
+            model: Workspace.calendars !== null ? Workspace.calendars.calendars : root.noRows
+            delegate: BMenuItem {
+                required property var modelData
+                readonly property string sourceId: AppController.routeText(modelData, "id")
+                readonly property bool shown: AppController.routeFlag(modelData, "visible")
+                text: AppController.routeText(modelData, "name")
+                hint: AppController.routeText(modelData, "error") !== "" ? qsTr("Problem") : ""
+                readonly property string swatchText: AppController.routeText(modelData, "color")
+                swatch: swatchText
+                checkable: true
+                checked: shown
+                onTriggered: Workspace.calendars.setCalendarVisible(sourceId, !shown)
+            }
+        }
+        BMenuSeparator { visible: Workspace.calendars !== null && Workspace.calendars.hasCalendars }
+        BMenuItem {
+            objectName: "calendarNewEvent"
+            visible: Workspace.calendars !== null && Workspace.calendars.writableCalendars.length > 0
+            text: qsTr("New event…")
+            iconName: "calendar-plus"
+            onTriggered: eventDialog.openNew(cal.anchorDate)
+        }
+        BMenuItem {
+            visible: Workspace.calendars !== null && Workspace.calendars.hasCalendars
+            text: qsTr("Refresh calendars")
+            iconName: "refresh-cw"
+            onTriggered: Workspace.calendars.refresh("")
+        }
+        BMenuItem {
+            objectName: "calendarManage"
+            text: Workspace.calendars !== null && Workspace.calendars.hasCalendars ? qsTr("Manage calendars…")
+                                                                                   : qsTr("Add a calendar…")
+            iconName: "settings"
+            onTriggered: AppController.navigate({ view: "sync", tab: "calendars" })
+        }
+    }
+    readonly property list<var> noRows: []
+
+    CalendarEventDialog {
+        id: eventDialog
+        onMessage: (text, kind) => toasts.showToast(text, kind, "", -1)
+        onJournalRequested: (date, line) => root.appendToJournal(date, line, qsTr("Written in the journal of %1")
+                                                                                .arg(DatesHelper.formatShort(date)))
     }
 
     // Actionable toasts of this view ("Task done · Undo").

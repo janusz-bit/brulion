@@ -6,7 +6,7 @@
 //   AppSettings      singleton — AppController.settings
 //   LocalAi          uncreatable — AppController.localAi (the model on the device)
 //   Workspace        singleton — AppController.workspace (the EditorHost for the editor)
-//   WorkspaceReminders, WorkspaceSync, WorkspaceGitHub, WorkspaceBackups, WorkspaceExtensions,
+//   WorkspaceReminders, WorkspaceSync, WorkspaceGitHub, WorkspaceCalendars, WorkspaceBackups, WorkspaceExtensions,
 //   WorkspaceChats   uncreatable —      Workspace.reminders / .sync / .github / .backups / .extensions
 //                                       / .chats
 //   ExtensionFormModel, ExtensionControlsModel   uncreatable — a question's fields, a row's controls
@@ -32,6 +32,7 @@
 #include "viewtraits.h"
 #include "workspace.h"
 #include "workspacebackups.h"
+#include "workspacecalendars.h"
 #include "workspaceextensions.h"
 #include "workspacegithub.h"
 #include "workspacereminders.h"
@@ -131,6 +132,13 @@ struct WorkspaceGitHubForeign {
     QML_FOREIGN(brulion::shell::WorkspaceGitHub)
     QML_NAMED_ELEMENT(WorkspaceGitHub)
     QML_UNCREATABLE("Use Workspace.github")
+};
+
+struct WorkspaceCalendarsForeign {
+    Q_GADGET
+    QML_FOREIGN(brulion::shell::WorkspaceCalendars)
+    QML_NAMED_ELEMENT(WorkspaceCalendars)
+    QML_UNCREATABLE("Use Workspace.calendars")
 };
 
 struct WorkspaceBackupsForeign {

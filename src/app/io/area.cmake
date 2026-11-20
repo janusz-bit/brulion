@@ -88,6 +88,8 @@ qt_target_qml_sources(brulion QML_FILES
     qml/io/NextcloudForm.qml
     qml/io/SyncthingPanel.qml
     qml/io/GitHubPanel.qml
+    qml/io/CalendarsPanel.qml
+    qml/io/CalendarAccountDialog.qml
     qml/io/GitHubCommitDialog.qml
     qml/io/GitHubOpenDialog.qml
     qml/io/SyncConflictList.qml

@@ -1,5 +1,7 @@
 #include "caldav/taskmap.h"
 
+#include "caldav/eventedit.h"
+
 #include "dates/recurrence.h"
 #include "markdown/tokenedit.h"
 #include "markdown/tokens.h"
@@ -981,6 +983,209 @@ std::optional<io::ical::Component> vtimezoneFor(const QTimeZone &zone, int year)
     Q_UNUSED(year);
     return std::nullopt;
 #endif
+}
+
+// ---- events ---------------------------------------------------------------------------------------
+
+namespace {
+
+void writeEventFields(io::ical::Component &e, const EventEdit &edit, const TodoContext &ctx, bool *usedZone)
+{
+    setProperty(e, u"SUMMARY"_s, io::ical::escapeText(edit.title.simplified()));
+    if (edit.location.trimmed().isEmpty())
+        removeProperty(e, u"LOCATION");
+    else
+        setProperty(e, u"LOCATION"_s, io::ical::escapeText(edit.location.simplified()));
+    if (edit.description.trimmed().isEmpty())
+        removeProperty(e, u"DESCRIPTION");
+    else
+        setProperty(e, u"DESCRIPTION"_s, io::ical::escapeText(normalizedDescription(edit.description)));
+    removeProperty(e, u"DURATION");
+    if (edit.allDay()) {
+        setDate(e, u"DTSTART"_s, DateSpec{edit.startDate, std::nullopt}, ctx.zone, usedZone);
+        const QDate last = edit.endDate.isValid() && edit.endDate >= edit.startDate ? edit.endDate : edit.startDate;
+        setDate(e, u"DTEND"_s, DateSpec{last.addDays(1), std::nullopt}, ctx.zone, usedZone); // exclusive
+    } else {
+        setDate(e, u"DTSTART"_s, DateSpec{edit.startDate, edit.startTime}, ctx.zone, usedZone);
+        QDate endDay = edit.endDate.isValid() ? edit.endDate : edit.startDate;
+        QTime endTime = edit.endTime.value_or(edit.startTime->addSecs(3600));
+        if (QDateTime(endDay, endTime) < QDateTime(edit.startDate, *edit.startTime)) {
+            endDay = edit.startDate;
+            endTime = *edit.startTime;
+        }
+        setDate(e, u"DTEND"_s, DateSpec{endDay, endTime}, ctx.zone, usedZone);
+    }
+    if (edit.reminderChanged) {
+        e.children.removeIf([](const io::ical::Component &a) {
+            if (a.name != u"VALARM")
+                return false;
+            const QString action = a.text(u"ACTION").trimmed().toUpper();
+            return action.isEmpty() || action == u"DISPLAY" || action == u"AUDIO";
+        });
+        if (edit.reminderMinutes >= 0) {
+            io::ical::Component alarm;
+            alarm.name = u"VALARM"_s;
+            alarm.properties.append({u"ACTION"_s, {}, u"DISPLAY"_s});
+            alarm.properties.append({u"DESCRIPTION"_s, {}, io::ical::escapeText(edit.title.simplified())});
+            alarm.properties.append({u"TRIGGER"_s, {},
+                                     edit.reminderMinutes == 0 ? u"PT0S"_s : u"-PT%1M"_s.arg(edit.reminderMinutes)});
+            e.children.append(alarm);
+        }
+    }
+}
+
+void writeRule(io::ical::Component &e, const EventEdit &edit)
+{
+    if (!edit.ruleChanged)
+        return;
+    const auto rule = edit.rule.isEmpty() ? std::nullopt : dates::parseRecurrence(edit.rule);
+    if (rule)
+        setProperty(e, u"RRULE"_s, io::ical::formatRRule(*rule));
+    else
+        removeProperty(e, u"RRULE");
+}
+
+/// The series' component and its calendar in `roots`.
+std::pair<io::ical::Component *, io::ical::Component *> masterOf(QList<io::ical::Component> &roots, const QString &uid)
+{
+    for (io::ical::Component &root : roots) {
+        if (root.name != u"VCALENDAR")
+            continue;
+        for (io::ical::Component &c : root.children) {
+            if (c.name == u"VEVENT" && c.text(u"UID").trimmed() == uid && !c.property(u"RECURRENCE-ID"))
+                return {&root, &c};
+        }
+    }
+    return {nullptr, nullptr};
+}
+
+bool sameInstance(const io::ical::Property &rid, const io::ical::DateTimeValue &instance)
+{
+    const auto v = io::ical::parseDateTime(rid);
+    return v && v->date == instance.date && v->time == instance.time;
+}
+
+} // namespace
+
+QString formatDateTimeValue(const io::ical::DateTimeValue &v)
+{
+    if (!v.time)
+        return io::ical::formatDate(v.date);
+    QString text = io::ical::formatLocalDateTime(v.date, *v.time);
+    if (v.utc)
+        text += u'Z';
+    return text;
+}
+
+namespace {
+
+QHash<QString, QString> paramsOf(const io::ical::DateTimeValue &v)
+{
+    QHash<QString, QString> params;
+    if (!v.time)
+        params.insert(u"VALUE"_s, u"DATE"_s);
+    else if (!v.utc && !v.tzid.isEmpty())
+        params.insert(u"TZID"_s, v.tzid);
+    return params;
+}
+
+} // namespace
+
+QByteArray newEvent(const QString &uid, const EventEdit &edit, const TodoContext &context)
+{
+    io::ical::Component cal;
+    cal.name = u"VCALENDAR"_s;
+    cal.properties.append({u"VERSION"_s, {}, u"2.0"_s});
+    cal.properties.append({u"PRODID"_s, {}, context.prodId});
+    io::ical::Component e;
+    e.name = u"VEVENT"_s;
+    e.properties.append({u"UID"_s, {}, io::ical::escapeText(uid)});
+    e.properties.append({u"CREATED"_s, {}, io::ical::formatUtc(context.now)});
+    bool usedZone = false;
+    writeEventFields(e, edit, context, &usedZone);
+    writeRule(e, edit);
+    stamp(e, context, false);
+    cal.children.append(e);
+    if (usedZone)
+        ensureTimezone(cal, context);
+    return serialize({cal});
+}
+
+QByteArray patchEvent(const QByteArray &ics, const QString &uid, const EventEdit &edit, const TodoContext &context)
+{
+    QList<io::ical::Component> roots = io::ical::parse(ics);
+    auto [cal, e] = masterOf(roots, uid);
+    if (!e) {
+        // A single override without its series (an invitation to one meeting): that one.
+        for (io::ical::Component &root : roots) {
+            for (io::ical::Component &c : root.children) {
+                if (c.name == u"VEVENT" && c.text(u"UID").trimmed() == uid) {
+                    cal = &root;
+                    e = &c;
+                }
+            }
+        }
+        if (!e)
+            return {};
+    }
+    bool usedZone = false;
+    writeEventFields(*e, edit, context, &usedZone);
+    writeRule(*e, edit);
+    stamp(*e, context, true);
+    if (usedZone)
+        ensureTimezone(*cal, context);
+    return serialize(roots);
+}
+
+QByteArray patchOccurrence(const QByteArray &ics, const QString &uid, const io::ical::DateTimeValue &instance,
+                           const EventEdit &edit, const TodoContext &context)
+{
+    QList<io::ical::Component> roots = io::ical::parse(ics);
+    auto [cal, master] = masterOf(roots, uid);
+    if (!master)
+        return {};
+    io::ical::Component *target = nullptr;
+    for (io::ical::Component &c : cal->children) {
+        if (c.name != u"VEVENT" || c.text(u"UID").trimmed() != uid)
+            continue;
+        if (const io::ical::Property *rid = c.property(u"RECURRENCE-ID"); rid && sameInstance(*rid, instance))
+            target = &c;
+    }
+    if (!target) {
+        io::ical::Component copy = *master;
+        removeProperty(copy, u"RRULE");
+        removeProperty(copy, u"RDATE");
+        removeProperty(copy, u"EXDATE");
+        copy.properties.append({u"RECURRENCE-ID"_s, paramsOf(instance), formatDateTimeValue(instance)});
+        cal->children.append(copy);
+        target = &cal->children.last();
+    }
+    EventEdit one = edit;
+    one.ruleChanged = false;
+    bool usedZone = false;
+    writeEventFields(*target, one, context, &usedZone);
+    stamp(*target, context, true);
+    if (usedZone)
+        ensureTimezone(*cal, context);
+    return serialize(roots);
+}
+
+QByteArray excludeOccurrence(const QByteArray &ics, const QString &uid, const io::ical::DateTimeValue &instance,
+                             const TodoContext &context)
+{
+    QList<io::ical::Component> roots = io::ical::parse(ics);
+    auto [cal, master] = masterOf(roots, uid);
+    if (!master)
+        return {};
+    master->properties.append({u"EXDATE"_s, paramsOf(instance), formatDateTimeValue(instance)});
+    stamp(*master, context, true);
+    cal->children.removeIf([&uid, &instance](const io::ical::Component &c) {
+        if (c.name != u"VEVENT" || c.text(u"UID").trimmed() != uid)
+            return false;
+        const io::ical::Property *rid = c.property(u"RECURRENCE-ID");
+        return rid && sameInstance(*rid, instance);
+    });
+    return serialize(roots);
 }
 
 } // namespace brulion::caldav

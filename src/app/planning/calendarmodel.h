@@ -28,7 +28,10 @@
 // pageTitle, isTask, status ("todo" … or "" for reminders outside tasks), closed, overdue,
 // recurring, alarm, date, spec (the token as written, "YYYY-MM-DD[ HH:mm]": its menu names it),
 // occurrence (another date of a series than the written one), rule (the block's 🔁, canonical),
-// priority (the task's: "high" …, "" = none) }. Within a day timed entries come
+// priority (the task's: "high" …, "" = none), and for events of other calendars (`events`, kind
+// "event", variant "event"): color ("#rrggbb"), calendarName, location, endTime ("HH:mm" of its last
+// day, "" none), eventKey (WorkspaceCalendars::eventDetails()), allDay, multiDay, continued (a day
+// after its first), readOnly — "" / false in the other entries }. Within a day timed entries come
 // first by time, then all-day ones.
 //
 // The model watches the index (debounced by refreshDelay ms; refresh() rebuilds at once).
@@ -48,6 +51,7 @@
 // (mode, anchor, …) are computed as before, also while inactive.
 #pragma once
 
+#include "eventsource.h"
 #include "index/notecache.h"
 #include "reminders/calendar.h"
 #include "types.h"
@@ -128,6 +132,9 @@ class CalendarModel : public QAbstractListModel, public QQmlParserStatus {
     /// The days follow the index and the clock (false: a change only marks them stale; they are
     /// computed again when this is true again — a hidden view).
     Q_PROPERTY(bool active READ isActive WRITE setActive NOTIFY activeChanged FINAL)
+    /// Events not kept in the notes (an EventSource: `Workspace.calendars` — subscriptions and
+    /// CalDAV calendars); null: the notes' entries only.
+    Q_PROPERTY(QObject *events READ eventsObject WRITE setEventsObject NOTIFY eventsSourceChanged FINAL)
 
     Q_PROPERTY(QString rangeStart READ rangeStart NOTIFY rangeChanged FINAL)
     Q_PROPERTY(QString rangeEnd READ rangeEnd NOTIFY rangeChanged FINAL)
@@ -273,6 +280,9 @@ public:
     /// before the model builds.
     void setCaches(std::shared_ptr<CalendarCache> calendar, std::shared_ptr<OverdueCache> overdue);
 
+    QObject *eventsObject() const;
+    void setEventsObject(QObject *source);
+
 Q_SIGNALS:
     void vaultIndexChanged();
     void modeChanged();
@@ -283,6 +293,7 @@ Q_SIGNALS:
     void agendaDaysChanged();
     void refreshDelayChanged();
     void activeChanged();
+    void eventsSourceChanged();
     void rangeChanged();
     void itemsChanged();
 
@@ -316,9 +327,13 @@ private:
     void requestRebuild(bool forceReset);
     void rebuild(bool forceReset);
     QVariantMap itemMap(const CalendarItem &item, QDate today) const;
+    QVariantMap eventMap(const ExternalEvent &event, QDate today) const;
     void scheduleMidnight();
 
     QPointer<VaultIndex> m_index;
+    QPointer<EventSource> m_events;
+    QMetaObject::Connection m_eventsConnection;
+    bool m_eventsDirty = false; ///< the events changed: the next refresh rebuilds whatever the index did
     QMetaObject::Connection m_indexConnection;
     std::shared_ptr<CalendarCache> m_calendar;    ///< the range's entries
     std::shared_ptr<OverdueCache> m_overdueTasks; ///< open tasks due before today

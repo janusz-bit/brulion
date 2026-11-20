@@ -18,6 +18,7 @@ brulion_add_core_module(caldav
         davxml_p.h davxml.cpp
         client.h client.cpp
         taskmap.h taskmap.cpp
+        eventedit.h
         store.h store.cpp
         tasksync_p.h tasksync.cpp
         calendarsync.h calendarsync.cpp
