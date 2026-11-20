@@ -99,13 +99,13 @@ QStringList webPictureTargets(const ExportInput &input)
     return out;
 }
 
-ExportResult runExport(const Exporter &exporter, const ExportInput &input)
+ExportInput detail::prepareExportInput(const QString &exporterId, const ExportInput &input)
 {
     ExportInput clean = cleanExportInput(input);
     // The documents show what a macro of an extension showed in the app; the Markdown exports and
     // the data ones keep the macro as written (docs/SYNTAX.md §13 "Macros").
     static const QStringList documents{u"html-site"_s, u"html-single"_s, u"pdf"_s, u"docx"_s, u"pandoc"_s};
-    if (!input.macroTexts.isEmpty() && documents.contains(exporter.id())) {
+    if (!input.macroTexts.isEmpty() && documents.contains(exporterId)) {
         for (FileEntry &f : clean.files) {
             const auto texts = input.macroTexts.constFind(f.path);
             if (texts == input.macroTexts.constEnd() || texts->isEmpty() || !paths::isMarkdown(f.path))
@@ -117,7 +117,17 @@ ExportResult runExport(const Exporter &exporter, const ExportInput &input)
                      }).toUtf8();
         }
     }
-    return exporter.run(clean);
+    return clean;
+}
+
+ExportResult runExport(const Exporter &exporter, const ExportInput &input)
+{
+    return exporter.run(prepareExportInput(exporter.id(), input));
+}
+
+QList<FileEntry> htmlSiteFiles(const ExportInput &input, const HtmlSiteOptions &options)
+{
+    return htmlSiteEntries(prepareExportInput(u"html-site"_s, input), options);
 }
 
 } // namespace brulion::io

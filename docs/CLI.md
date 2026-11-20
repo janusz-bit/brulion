@@ -298,6 +298,16 @@ Never compute a hash yourself.
 | `clip uninstall` | `[--browser B] [--system]` | remove Brulion's host manifests | |
 | `clip status` | `[--browser B] [--system]` | each browser's manifest, the program it starts, whether it is this one | |
 | `clip manifest <browser>` | `[--program P] [--extension-id ID]` | a host manifest's JSON (for packages) | |
+| `publish targets` | | the notebook's publishing targets on this device ("Publishing" below): `{targets [{id, name, kind, address, siteUrl, title, content, items [{kind, value}], linkedPages, onlyMarked, extensionPages, aiConversations, hasPassword?, last {at, operation, ok, url, pages, uploaded, deleted, unchanged, commit?, errorCode?, message?}, …}]}` | |
+| `publish add <kind> <name>` | `github\|webdav\|nextcloud\|folder`; `[--repository R] [--branch B] [--folder F] [--url U] [--server S] [--username N] [--path P] [--site-url U] [--title T] [--content site\|document] [--share on\|off] [--share-password on\|off] [--share-expires D]` | a target (checked: `bad_target` with the problem; a name taken: `target_exists`) | yes |
+| `publish set <target>` | `[--name N]` and `publish add`'s options | change a target | yes |
+| `publish include <target>` | `[--page P] [--folder F] [--tag T] [--notebook] [--linked-pages on\|off] [--only-marked on\|off] [--extension-pages on\|off] [--ai-conversations on\|off]` | publish a page, a folder, a tag (with its sub-tags) or the whole notebook with the target; the options choose how pages are picked | yes |
+| `publish exclude <target>` | `[--page P] [--folder F] [--tag T] [--notebook]` | stop publishing an item | yes |
+| `publish secret <target>` | `[--share] (--password T \| --stdin)` | keep the target's password (`--share`: a Nextcloud link's) in an owner-only file of the app's data; empty forgets it | yes |
+| `publish remove <target>` | | forget a target (what it published stays) | destructive |
+| `publish preview <target>` | | the dry run: `{target, url, remoteChecked, remoteError?, counts {upload, update, unchanged, delete, conflict}, files [{path, action, size}], pages, attachments, bytes, leftOut [{path, reason, reasonText}], missingItems, encryptedFragmentsRemoved}` | |
+| `publish run <target>` | `[--force]` | publish: only what changed is sent (GitHub: one commit); `done {uploaded, updated, deleted, unchanged}`, `url`, `commit?`; a conflict is exit 4 `conflicts` until `--force` (needs `--allow-destructive`) | yes |
+| `publish unpublish <target>` | `[--force]` | remove what the target published (a Nextcloud link too) | destructive |
 | `app open <target>` | a ref, `today` or `capture`; `[--line N] [--block-id ID] [--heading H] [--side]` | show the running app there (exit 5 when none runs); with its remote control on the app resolves the ref and says what it opened | |
 | `app today` | | the running app at today's note | |
 | `app capture [<text>]` | `[--stdin]` | no text: open quick capture in the running app; a text: save it as quick capture does (remote control) | yes |
@@ -359,6 +369,53 @@ day ("jutro", `2027-01-01` — in week `2026-W53`); a phrase that names no week 
 `help --json` and `schema` describe every argument (type, required, positional or `--option`); the
 same registry builds the argument parser, the help, the schema and the MCP tools, and a test checks
 this table against it.
+
+## Publishing
+
+`publish …` publishes pages of the notebook as a website (docs/UI.md "Publishing" — the same targets
+as the app's Publish tab, kept in the notebook's device state folder, `publish/targets.json` and a
+manifest per target): to GitHub Pages, a WebDAV folder, Nextcloud with a public link, or a folder
+on this computer.
+
+```sh
+brulion-cli publish add github Blog --repository jan/blog            # branch gh-pages, made when missing
+brulion-cli publish include Blog --folder Blog --linked-pages on
+brulion-cli publish include Blog --tag przepisy
+brulion-cli publish preview Blog                                     # what would go up, what is left out
+brulion-cli publish run Blog                                         # → https://jan.github.io/blog/
+brulion-cli publish add nextcloud Rodzina --server chmura.example.pl --username jan \
+    --folder "Publiczne/Przepisy" --share-password on --share-expires 2026-12-31
+printf '%s' "$APP_PASSWORD" | brulion-cli publish secret Rodzina --stdin
+printf '%s' "$LINK_PASSWORD" | brulion-cli publish secret Rodzina --share --stdin
+brulion-cli publish run Rodzina                                      # → https://chmura.example.pl/s/…
+```
+
+* **What is published**: the target's items (`publish include`) — pages, folders, tags with their
+  sub-tags, the whole notebook — with the pages they link to when `--linked-pages on`. Never: hidden
+  folders, conflict copies, encrypted pages and files (their fragments are cut out of the pages),
+  pages marked `publish: false` (`publikuj: nie`); extension pages, conversations with AI (`AI/`)
+  and templates only when chosen (an extension page also needs `--extension-pages on`);
+  `--only-marked on` publishes only pages marked `publish: true` (a page named by itself is
+  published anyway). Macros of extensions stay as written (they are computed over the whole
+  notebook). The dry run lists every file left out with its reason.
+* **Incremental**: GitHub compares the branch's blob ids with the site's (also from another device);
+  WebDAV and Nextcloud compare ETags with the manifest of the last publish (PUT with `If-Match`,
+  new files with `If-None-Match: *`); a folder compares SHA-256. A file changed at the target since
+  the last publish (or there without having been published from here) is a conflict: nothing is
+  replaced, exit 4 `conflicts`, until `publish run --force --allow-destructive`.
+* **Secrets**: GitHub uses the token the app keeps (`<app data>/secrets/github-token`, Settings →
+  the sync center's GitHub tab) or `BRULION_GITHUB_TOKEN`; WebDAV and Nextcloud passwords and a
+  Nextcloud link's password are kept by `publish secret` in owner-only files
+  (`<app data>/secrets/publish-<id>`, `…-share`), or come from `BRULION_PUBLISH_PASSWORD` /
+  `BRULION_PUBLISH_SHARE_PASSWORD`. Never on the command line, never in the notebook; masked in
+  every log line.
+* **Exit codes**: 3 `nothing_to_publish` (no page chosen) or the target not found; 4 conflicts (or
+  a GitHub branch that kept moving); 5 offline, a sign-in refused, no token or password; 7 a token
+  that may not push, `--read-only`, `--force` or `unpublish` without `--allow-destructive`; the
+  error's `details` carry the plan.
+* **MCP**: `brulion_publish_targets`, `_preview` and `_run` (a write: refused by a read-only
+  server) are tools; adding targets, changing what they publish and their secrets are not — that is
+  the user's to set up. `_unpublish` and `--force` need `--allow-destructive`.
 
 ## Extensions
 

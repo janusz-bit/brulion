@@ -1167,6 +1167,16 @@ FocusScope {
             onTriggered: exportDialog.openFor(page.path, false)
         }
         BMenuItem {
+            // The page on the web (docs/UI.md "Publishing"): added to a publishing target.
+            objectName: "pageMenuPublish"
+            visible: root.noteRoute
+            height: visible ? implicitHeight : 0
+            text: qsTr("Publish…")
+            iconName: "globe"
+            enabled: page.exists
+            onTriggered: AppController.navigate({ view: "importExport", tab: "publish", add: "page", path: page.path })
+        }
+        BMenuItem {
             objectName: "pageMenuPrint"
             visible: root.printable
             height: visible ? implicitHeight : 0

@@ -1,6 +1,6 @@
 // The GitHub REST API (https://docs.github.com/rest, version 2022-11-28) as Brulion uses it:
-// repositories, branches, trees, blobs, commits, references, forks, pull requests and the
-// contents API, plus raw.githubusercontent.com for files of public repositories without a token.
+// repositories, branches, trees, blobs, commits, references, forks, pull requests, the
+// contents API and GitHub Pages, plus raw.githubusercontent.com for files of public repositories without a token.
 // Part of the github module — see github/github.h for the overview.
 #pragma once
 
@@ -132,6 +132,15 @@ struct NewTreeEntry {
     bool isDeletion() const { return !sha && !content; }
 };
 
+/// A repository's GitHub Pages site (publishing, publish/publish.h).
+struct PagesSite {
+    QUrl htmlUrl;   ///< where it is served ("https://jan.github.io/notatki/", or its custom domain)
+    QString status; ///< "built", "building", "errored", … ("" unknown)
+    QString branch; ///< served from this branch …
+    QString path;   ///< … and its folder: "/" or "/docs"
+    QString cname;  ///< the custom domain ("" none)
+};
+
 /// The rate limit of the last answer that named one.
 struct RateLimit {
     int limit = -1;
@@ -202,6 +211,14 @@ public:
     /// commit's sha.
     void putFile(const RepoId &repo, const QString &path, const QString &branch, const QString &message,
                  const QByteArray &content, Done<QString> done);
+
+    /// The repository's Pages site; NotFound while Pages is off.
+    void pages(const RepoId &repo, Done<PagesSite> done);
+    /// Turn Pages on, served from `branch`'s `path` ("/" or "/docs"): the new site (Conflict when it
+    /// is on already).
+    void enablePages(const RepoId &repo, const QString &branch, const QString &path, Done<PagesSite> done);
+    /// Serve an existing Pages site from `branch`'s `path` instead.
+    void updatePages(const RepoId &repo, const QString &branch, const QString &path, Finished done);
 
     /// The error of a finished request (status, headers, GitHub's JSON message).
     static GitHubError errorOf(const sync::HttpResponse &response);

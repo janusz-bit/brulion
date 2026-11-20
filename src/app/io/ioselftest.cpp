@@ -217,6 +217,7 @@ public:
         importTypedPath();
         exportSaveDialog();
         pageExport();
+        publishDryRun();
         return m_failures;
     }
 
@@ -588,6 +589,92 @@ private:
         QFile file(printed);
         check(file.open(QIODevice::ReadOnly) && file.read(5) == "%PDF-", "the printed pages are there");
         settle(300);
+    }
+
+    // 9. Publishing (docs/UI.md "Publishing"): the page's "Publish…" with no target yet asks for
+    //    one — a folder on this computer, named in the dialog —, the page goes to it and the dry
+    //    run lists its web page, writing nothing; "Publish" then puts the site into the folder.
+    void publishDryRun()
+    {
+        const QString pagePath = u"Import/Obsidian/Zażółć gęślą jaźń.md"_s;
+        const QString folder = scratch().filePath(u"strona łąka"_s);
+        m_app->navigate({{u"view"_s, u"importExport"_s},
+                         {u"tab"_s, u"publish"_s},
+                         {u"add"_s, u"page"_s},
+                         {u"path"_s, pagePath}});
+        QObject *controller = nullptr;
+        QObject *dialog = nullptr;
+        QQuickItem *name = nullptr;
+        QQuickItem *kind = nullptr;
+        waitFor(
+                [&] {
+                    controller = lastOf(m_window->findChildren<QObject *>(u"publishController"_s), parentShown);
+                    dialog = controller && controller->parent()
+                                     ? controller->parent()->findChild<QObject *>(u"publishTargetDialog"_s)
+                                     : nullptr;
+                    name = item("publishTargetName");
+                    // The tiles of a Repeater: items of the grid, not its QObject children.
+                    const QQuickItem *kinds = item("publishKinds");
+                    kind = kinds ? lastOf(kinds->childItems(),
+                                          [](const QQuickItem *tile) {
+                                              return tile->objectName() == u"publishKind_folder";
+                                          })
+                                 : nullptr;
+                    return controller && dialog && dialog->property("opened").toBool() && shown(name) && shown(kind);
+                },
+                10000);
+        std::fprintf(stderr,
+                     "selftest: view %s (%s), publish controller %s, target dialog %s, name field %s, folder tile %s\n",
+                     qPrintable(m_app->currentView()), qPrintable(m_app->currentRoute().value(u"tab"_s).toString()),
+                     controller ? "found" : "missing",
+                     dialog ? (dialog->property("opened").toBool() ? "open" : "closed") : "missing",
+                     name ? (shown(name) ? "shown" : "hidden") : "missing",
+                     kind ? (shown(kind) ? "shown" : "hidden") : "missing");
+        check(controller && dialog && shown(name) && shown(kind),
+              "“Publish…” of a page without a target asks for a new target");
+        if (!controller || !dialog || !shown(name) || !shown(kind))
+            return;
+        tap(kind);
+        QQuickItem *path = nullptr;
+        check(waitFor([&] {
+                  path = item("publishFolderPath");
+                  return shown(path);
+              }),
+              "the folder target asks for its folder");
+        if (!shown(path))
+            return;
+        name->setProperty("text", u"Strona łąkowa"_s);
+        path->setProperty("text", folder);
+        check(waitFor([dialog] { return dialog->property("acceptEnabled").toBool(); }), "the target can be saved");
+        QMetaObject::invokeMethod(dialog, "accept");
+        // The page is added to the new target and previewed: a dry run.
+        check(waitFor([controller] { return controller->property("state").toString() == u"previewed"; }, 20000),
+              "the page is added to the target and previewed");
+        const QVariantMap plan = controller->property("plan").toMap();
+        const QVariantList files = plan.value(u"files"_s).toList();
+        const bool listsPage = std::ranges::any_of(files, [](const QVariant &f) {
+            const QVariantMap row = f.toMap();
+            return row.value(u"path"_s).toString() == u"Import/Obsidian/Zażółć gęślą jaźń.html"
+                   && row.value(u"action"_s).toString() == u"upload";
+        });
+        std::fprintf(stderr, "selftest: the dry run lists %lld file(s): %s\n", qint64(files.size()),
+                     qPrintable(plan.value(u"summary"_s).toString()));
+        check(listsPage && plan.value(u"remoteChecked"_s).toBool(), "the dry run lists the page's web page as new");
+        check(!QFileInfo::exists(folder), "the dry run writes nothing");
+        QQuickItem *planCard = item("publishPlan");
+        QQuickItem *publish = item("publishFromPreview");
+        check(shown(planCard) && shown(publish), "the dry run is shown with “Publish”");
+        if (!shown(publish))
+            return;
+        tap(publish);
+        check(waitFor([controller] { return controller->property("state").toString() == u"published"; }, 20000),
+              "“Publish” publishes the page");
+        check(QFileInfo::exists(folder + u"/Import/Obsidian/Zażółć gęślą jaźń.html"_s)
+                      && QFileInfo::exists(folder + u"/index.html"_s) && QFileInfo::exists(folder + u"/search.js"_s),
+              "the site is in the folder");
+        check(shown(item("publishUrl")), "the published site's address is shown");
+        QMetaObject::invokeMethod(controller, "dismiss");
+        settle(200);
     }
 
     QQmlApplicationEngine *m_engine;

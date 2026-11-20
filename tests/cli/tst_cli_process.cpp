@@ -2608,6 +2608,93 @@ private Q_SLOTS:
         QVERIFY(!store.contains(u"reminders/"_s));
         QVERIFY(!QFileInfo::exists(settingsFile())); // never created
     }
+
+    void publishing()
+    {
+        // A folder target (no network): add, include, the dry run, a publish, an unchanged one, a
+        // changed page, refusals, secrets kept out of the store, unpublish (destructive).
+        const QString dir = vault({{u"Blog/Pierwszy wpis.md"_s, "# Wpis\nZażółć gęślą jaźń, [[Szkic]] ![[kot.png]]\n"},
+                                   {u"Blog/Szkic.md"_s, "---\npublish: false\n---\nTajne.\n"},
+                                   {u"assets/kot.png"_s, "\x89PNG kot"},
+                                   {u"Prywatne.md"_s, "Hasło.\n"}});
+        const QString www = m_tmp.filePath(u"www łąka"_s);
+        Run r = run(dir, {u"publish"_s, u"targets"_s});
+        QCOMPARE(r.code, 0);
+        QVERIFY(r.result().value(u"targets"_s).toArray().isEmpty());
+        r = run(dir, {u"publish"_s, u"add"_s, u"folder"_s, u"Strona łąkowa"_s, u"--path"_s, www});
+        QCOMPARE(r.code, 0);
+        const QString id = r.result().value(u"id"_s).toString();
+        QVERIFY(id.startsWith(u't'));
+        QCOMPARE(run(dir, {u"publish"_s, u"add"_s, u"folder"_s, u"strona ŁĄKOWA"_s, u"--path"_s, www}).errorCode(),
+                 u"target_exists"_s);
+        QCOMPARE(run(dir, {u"publish"_s, u"add"_s, u"github"_s, u"Zła"_s, u"--repository"_s, u"jan"_s}).errorCode(),
+                 u"bad_target"_s);
+        // Nothing chosen yet.
+        r = run(dir, {u"publish"_s, u"run"_s, u"Strona łąkowa"_s});
+        QCOMPARE(r.code, 3);
+        QCOMPARE(r.errorCode(), u"nothing_to_publish"_s);
+        QCOMPARE(run(dir, {u"publish"_s, u"include"_s, u"Strona łąkowa"_s, u"--folder"_s, u"Blog"_s}).code, 0);
+        // The dry run: what goes up and what is left out, nothing written.
+        r = run(dir, {u"publish"_s, u"preview"_s, u"Strona łąkowa"_s});
+        QCOMPARE(r.code, 0);
+        QCOMPARE(r.result().value(u"counts"_s).toObject().value(u"upload"_s).toInt(), 6);
+        const QJsonArray leftOut = r.result().value(u"leftOut"_s).toArray();
+        QCOMPARE(leftOut.size(), 1);
+        QCOMPARE(leftOut.first().toObject().value(u"reason"_s).toString(), u"private"_s);
+        QVERIFY(!QFileInfo::exists(www));
+        QCOMPARE(run(dir, {u"--dry-run"_s, u"publish"_s, u"run"_s, id}).result().value(u"operation"_s).toString(),
+                 u"preview"_s);
+        QVERIFY(!QFileInfo::exists(www));
+        // Read-only refuses a publish.
+        QCOMPARE(run(dir, {u"--read-only"_s, u"publish"_s, u"run"_s, id}).code, 7);
+        // Publish.
+        r = run(dir, {u"publish"_s, u"run"_s, u"Strona łąkowa"_s});
+        QCOMPARE(r.code, 0);
+        QCOMPARE(r.result().value(u"done"_s).toObject().value(u"uploaded"_s).toInt(), 6);
+        QVERIFY(readFile(www + u"/Blog/Pierwszy wpis.html"_s).contains("Zażółć gęślą jaźń"));
+        QVERIFY(!QFileInfo::exists(www + u"/Blog/Szkic.html"_s));
+        QVERIFY(!QFileInfo::exists(www + u"/Prywatne.html"_s));
+        QVERIFY(r.result().value(u"url"_s).toString().startsWith(u"file://"_s));
+        // Again: nothing to send.
+        r = run(dir, {u"publish"_s, u"run"_s, id});
+        QCOMPARE(r.result().value(u"counts"_s).toObject().value(u"unchanged"_s).toInt(), 6);
+        QCOMPARE(r.result().value(u"done"_s).toObject().value(u"uploaded"_s).toInt(), 0);
+        // The last status, the manifest in the device state.
+        r = run(dir, {u"publish"_s, u"targets"_s});
+        const QJsonObject target = r.result().value(u"targets"_s).toArray().first().toObject();
+        QVERIFY(target.value(u"last"_s).toObject().value(u"ok"_s).toBool());
+        QVERIFY(QFileInfo::exists(stateDirOf(dir) + u"/publish/"_s + id + u".json"_s));
+        // A file changed in the folder: a conflict (exit 4) until --force (destructive).
+        writeFile(www + u"/style.css"_s, "body{}");
+        writeFile(dir + u"/Blog/Pierwszy wpis.md"_s, "Nowy tekst.\n");
+        r = run(dir, {u"publish"_s, u"run"_s, id});
+        QCOMPARE(r.code, 4);
+        QCOMPARE(r.errorCode(), u"conflicts"_s);
+        QCOMPARE(run(dir, {u"publish"_s, u"run"_s, id, u"--force"_s}).code, 7);
+        QCOMPARE(run(dir, {u"--allow-destructive"_s, u"publish"_s, u"run"_s, id, u"--force"_s}).code, 0);
+        QVERIFY(readFile(www + u"/Blog/Pierwszy wpis.html"_s).contains("Nowy tekst"));
+        // A secret: from standard input, into an owner-only file, never into the store.
+        QCOMPARE(run(dir,
+                     {u"publish"_s, u"add"_s, u"webdav"_s, u"Serwer"_s, u"--url"_s, u"https://dav.example.pl/strona"_s})
+                         .code,
+                 0);
+        QCOMPARE(run(dir, {u"publish"_s, u"secret"_s, u"Serwer"_s, u"--stdin"_s}, "hasło-źdźbło\n").code, 0);
+        QVERIFY(!readFile(stateDirOf(dir) + u"/publish/targets.json"_s).contains("hasło"));
+        r = run(dir, {u"publish"_s, u"targets"_s});
+        QVERIFY(r.result().value(u"targets"_s).toArray().at(1).toObject().value(u"hasPassword"_s).toBool());
+        // Unpublishing needs --allow-destructive; the folder's own files stay.
+        writeFile(www + u"/.htaccess"_s, "Options -Indexes\n");
+        QCOMPARE(run(dir, {u"publish"_s, u"unpublish"_s, id}).code, 7);
+        r = run(dir, {u"--allow-destructive"_s, u"publish"_s, u"unpublish"_s, id});
+        QCOMPARE(r.code, 0);
+        QVERIFY(!QFileInfo::exists(www + u"/index.html"_s));
+        QVERIFY(QFileInfo::exists(www + u"/.htaccess"_s));
+        // Configuration is the user's: no MCP tool adds targets or changes what they publish.
+        r = cli({u"schema"_s});
+        QVERIFY(r.code == 0);
+        QCOMPARE(run(dir, {u"--allow-destructive"_s, u"publish"_s, u"remove"_s, u"Serwer"_s}).code, 0);
+        QCOMPARE(run(dir, {u"publish"_s, u"targets"_s}).result().value(u"targets"_s).toArray().size(), 1);
+    }
 };
 
 QTEST_GUILESS_MAIN(TestCliProcess)

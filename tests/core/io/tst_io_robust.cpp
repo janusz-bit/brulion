@@ -241,6 +241,17 @@ private Q_SLOTS:
             QVERIFY2(!html.contains(u"href=\"data:text"_s), qPrintable(id));
             QVERIFY2(!html.contains(u"src=\"vbscript:"_s), qPrintable(id));
         }
+        // The published site's search (htmlSiteFiles with search): its own script is the page's only one.
+        HtmlSiteOptions options;
+        options.search = true;
+        for (const FileEntry &e : htmlSiteFiles(in, options)) {
+            if (!e.path.endsWith(u".html"_s))
+                continue;
+            const QString html = QString::fromUtf8(e.data);
+            QCOMPARE(html.count(u"<script"_s, Qt::CaseInsensitive), 1);
+            QVERIFY2(html.contains(u"<script src=\"search.js\" data-root=\"\" defer></script>"_s), qPrintable(e.path));
+            QVERIFY(!html.contains(u"<iframe"_s, Qt::CaseInsensitive));
+        }
     }
 
     void pathologicalHtmlStaysLinear()

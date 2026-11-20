@@ -19,6 +19,9 @@
 #                      fallback, the browser's save picker or a download: wasmfiles.h), printing
 #                      (desktop: QPrintDialog; Android: the system's print service; browser: its
 #                      print dialog)
+#   PublishController  publishing (core publish): the notebook's targets on this device — GitHub
+#                      Pages, WebDAV, Nextcloud with a public link, a folder —, what each publishes,
+#                      the dry run, publishing, unpublishing, the targets' secrets
 #   NextcloudSetup     the Nextcloud form: drafts, validation, the WebDAV address, "Test
 #                      connection" with explained errors (401, 404 + create the folder, TLS,
 #                      CORS in the browser), saving into AppSettings
@@ -39,13 +42,14 @@ qt_add_library(brulion_ioviews STATIC
     ${_brulion_ioviews_dir}/importtexts.cpp
     ${_brulion_ioviews_dir}/mstodoimport.h ${_brulion_ioviews_dir}/mstodoimport.cpp
     ${_brulion_ioviews_dir}/exportcontroller.h ${_brulion_ioviews_dir}/exportcontroller.cpp
+    ${_brulion_ioviews_dir}/publishcontroller.h ${_brulion_ioviews_dir}/publishcontroller.cpp
     ${_brulion_ioviews_dir}/syncsetup.h ${_brulion_ioviews_dir}/syncsetup.cpp
     ${_brulion_ioviews_dir}/conflictresolver.h ${_brulion_ioviews_dir}/conflictresolver.cpp
     ${_brulion_ioviews_dir}/syncviews.h ${_brulion_ioviews_dir}/syncviews.cpp
 )
 target_include_directories(brulion_ioviews PUBLIC ${_brulion_ioviews_dir})
 target_link_libraries(brulion_ioviews
-    PUBLIC Qt6::Core Qt6::Gui brulion_shell brulion_core_io brulion_core_sync brulion_core_vault
+    PUBLIC Qt6::Core Qt6::Gui brulion_shell brulion_core_io brulion_core_sync brulion_core_vault brulion_core_publish
     PRIVATE Qt6::Network brulion_ui_helpers brulion_core_mstodo brulion_core_util brulion_core_markdown brulion_core_index brulion_core_dates
         brulion_core_webpicture brulion_core_drawing)
 # The browser pick's files (platform/pickedfiles.h, ImportController::setPickedFiles; everywhere, so
@@ -101,5 +105,7 @@ qt_target_qml_sources(brulion QML_FILES
     qml/io/ImportPreview.qml
     qml/io/ImportPathCard.qml
     qml/io/ExportPanel.qml
+    qml/io/PublishPanel.qml
+    qml/io/PublishTargetDialog.qml
     qml/io/IoPathPickerDialog.qml
 )

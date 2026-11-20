@@ -1,7 +1,8 @@
 // An in-memory GitHub for the github module's tests (and the app's): the REST API endpoints
 // RepoSync uses — repositories, branches (ETags, 304), matching refs, trees (recursive), the
 // contents API (folder listings, the first file of an empty repository), blobs (raw), commits,
-// references (fast-forward only), forks, pull requests — and raw.githubusercontent.com, answered
+// references (fast-forward only), forks, pull requests, GitHub Pages (GET / POST / PUT
+// …/pages) — and raw.githubusercontent.com, answered
 // from memory through sync::HttpTransport, asynchronously like the real transport. One object
 // store holds the blobs, trees and commits of every repository (GitHub shares them within a fork
 // network). Blob ids are Git's; trees and commits get ids of their own (unique, not Git's).
@@ -39,6 +40,11 @@ public:
         QString parent;                  ///< "owner/name" of the repository it was forked from
         QMap<QString, QString> branches; ///< name → commit
         QStringList collaborators;       ///< logins that may push (the owner may always)
+        /// GitHub Pages: served from `pagesBranch`'s `pagesPath` ("/" or "/docs") while on.
+        bool pages = false;
+        QString pagesBranch;
+        QString pagesPath = QStringLiteral("/");
+        QString pagesCname; ///< a custom domain ("" none)
     };
     struct PullRequest {
         int number = 0;
