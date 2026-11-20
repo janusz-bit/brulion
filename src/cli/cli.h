@@ -15,4 +15,8 @@ namespace brulion::cli {
 /// returns the exit code (docs/CLI.md "Exit codes").
 int run(int argc, char **argv);
 
+/// Is the program started by a browser as the Web Clipper's native messaging host (docs/CLIPPER.md)?
+/// The app's main() then hands over to run() (the AppImage's manifest names the app's binary).
+bool isNativeMessagingLaunch(int argc, char **argv);
+
 } // namespace brulion::cli

@@ -18,3 +18,13 @@ if(TARGET brulion)
 endif()
 math(EXPR _cli_timeout "120 * ${BRULION_TEST_SLOWDOWN}")
 set_tests_properties(tst_cli_process PROPERTIES TIMEOUT ${_cli_timeout})
+
+# The Web Clipper in brulion-cli (docs/CLIPPER.md) as a process: clip save into a page, the journal and a
+# heading's section (pictures from a server on 127.0.0.1), the native messaging host's frames, and the
+# host manifests installed into the private home.
+brulion_add_test(tst_cli_clip SOURCES tst_cli_clip.cpp LIBS brulion_core_clipper Qt6::Network)
+target_compile_definitions(tst_cli_clip PRIVATE BRULION_CLI="$<TARGET_FILE:brulion-cli>"
+    BRULION_CLIPPER_FIXTURES="${PROJECT_SOURCE_DIR}/tests/core/clipper/fixtures")
+add_dependencies(tst_cli_clip brulion-cli)
+math(EXPR _cli_clip_timeout "120 * ${BRULION_TEST_SLOWDOWN}")
+set_tests_properties(tst_cli_clip PROPERTIES TIMEOUT ${_cli_clip_timeout})

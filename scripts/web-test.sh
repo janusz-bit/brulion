@@ -5,6 +5,7 @@
 # "browsers"), and so can anyone with a built site:
 #
 #   scripts/web-test.sh [--dist DIR] [--single-file FILE] [--install] [-- <playwright test arguments>]
+#   scripts/web-test.sh --clipper [--cli FILE] [--install] [-- …]
 #
 #   --dist DIR   the built site (default dist-wasm/, scripts/wasm-build.sh)
 #   --single-file FILE
@@ -12,6 +13,9 @@
 #                scripts/wasm-build.sh; singlefile.spec.mjs)
 #   --install    npm ci and Playwright's Chromium and Firefox (on Ubuntu/Debian with sudo also
 #                their system libraries)
+#   --clipper    the Web Clipper extension (clipper/) in Chromium with brulion-cli as its native
+#                messaging host (tests/web/clipper.e2e.mjs, docs/CLIPPER.md "Tests"): no web build
+#   --cli FILE   brulion-cli for --clipper (default build-clang/, else build/)
 #   -- …         passed to `playwright test` (e.g. -- --project=firefox stylus.spec.mjs)
 #
 # Firefox draws WebGL 2 only with an X display: without $DISPLAY the run goes under xvfb-run.
@@ -27,12 +31,16 @@ root=$(cd "$(dirname "$script")/.." && pwd)
 dist="$root/dist-wasm"
 single_file="$root/dist-wasm-single/brulion.html"
 install=0
+clipper=0
+cli=""
 pw_args=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --dist) dist="$2"; shift 2 ;;
     --single-file) single_file="$2"; shift 2 ;;
     --install) install=1; shift ;;
+    --clipper) clipper=1; shift ;;
+    --cli) cli="$2"; shift 2 ;;
     --) shift; pw_args=("$@"); break ;;
     -h | --help) awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "$script"; exit 0 ;;
     *) echo "web-test: unknown option $1" >&2; exit 2 ;;
@@ -68,13 +76,27 @@ if [[ -e /etc/NIXOS && -z ${BRULION_WEB_IN_NIX_SHELL:-} ]]; then
   export BRULION_WEB_IN_NIX_SHELL=1
   again=(--dist "$dist" --single-file "$single_file")
   if ((install)); then again+=(--install); fi
+  if ((clipper)); then again+=(--clipper); fi
+  if [[ -n $cli ]]; then again+=(--cli "$cli"); fi
   exec nix shell nixpkgs#nodejs_22 nixpkgs#openssl nixpkgs#xvfb-run --command bash "$script" "${again[@]}" \
     -- ${pw_args[@]+"${pw_args[@]}"}
 fi
 
+if ((clipper)); then
+  # The Web Clipper needs brulion-cli, not the web build.
+  if [[ -z $cli ]]; then
+    for candidate in "$root/build-clang/src/cli/brulion-cli" "$root/build/src/cli/brulion-cli"; do
+      [[ -x $candidate ]] && { cli=$candidate; break; }
+    done
+  fi
+  [[ -n $cli && -x $cli ]] || { log "no brulion-cli (build it, or give --cli FILE)"; exit 2; }
+  BRULION_CLI=$(realpath -- "$cli")
+  export BRULION_CLI
+else
 dist=$(cd "$dist" 2>/dev/null && pwd) || { log "no site in $dist (scripts/wasm-build.sh)"; exit 2; }
 [[ -f "$dist/index.html" ]] || { log "$dist/index.html missing (scripts/wasm-build.sh)"; exit 2; }
 export BRULION_DIST="$dist"
+fi
 BRULION_SINGLE_FILE=$(realpath -m -- "$single_file")
 export BRULION_SINGLE_FILE
 command -v node >/dev/null || { log "Node.js 22 or newer is needed"; exit 2; }
@@ -102,6 +124,12 @@ if [[ -z ${DISPLAY:-} ]]; then
 fi
 
 status=0
+if ((clipper)); then
+  # Chromium only (Firefox cannot load an unpacked extension in Playwright), headless: no X display.
+  npx playwright test -c clipper.config.mjs ${pw_args[@]+"${pw_args[@]}"} || status=$?
+  log "report: $root/tests/web/playwright-report-clipper/index.html (exit code $status)"
+  exit "$status"
+fi
 ${run[@]+"${run[@]}"} npx playwright test ${pw_args[@]+"${pw_args[@]}"} || status=$?
 log "report: $root/tests/web/playwright-report/index.html (exit code $status)"
 exit "$status"

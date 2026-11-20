@@ -1,0 +1,383 @@
+{
+  "extensionName": {
+    "message": "Brulion Web Clipper"
+  },
+  "extensionDescription": {
+    "message": "Save an article, a selection, a whole page or a screenshot into your Brulion notebook as Markdown, with its pictures."
+  },
+  "actionTitle": {
+    "message": "Clip to Brulion"
+  },
+  "commandOpen": {
+    "message": "Open the clipper"
+  },
+  "commandQuickClip": {
+    "message": "Clip the selection or the article at once"
+  },
+  "menuArticle": {
+    "message": "Clip article to Brulion"
+  },
+  "menuSelection": {
+    "message": "Clip selection to Brulion"
+  },
+  "menuPage": {
+    "message": "Clip whole page to Brulion"
+  },
+  "menuScreenshot": {
+    "message": "Clip screenshot to Brulion"
+  },
+  "menuLink": {
+    "message": "Clip link to Brulion"
+  },
+  "menuPicture": {
+    "message": "Clip picture to Brulion"
+  },
+  "popupHeading": {
+    "message": "Clip to Brulion"
+  },
+  "notebookLabel": {
+    "message": "Notebook"
+  },
+  "currentNotebook": {
+    "message": "The notebook open in Brulion"
+  },
+  "loading": {
+    "message": "Connecting to Brulion…"
+  },
+  "notConnectedTitle": {
+    "message": "Brulion is not connected"
+  },
+  "notConnectedText": {
+    "message": "Install Brulion's command line and connect it to your browsers once:"
+  },
+  "notConnectedDetail": {
+    "message": "The browser found no native messaging host for Brulion."
+  },
+  "connectHelpMore": {
+    "message": "Then check again. On NixOS the module connects the browsers (programs.brulion); on Windows run brulion-cli.exe clip install."
+  },
+  "helpLink": {
+    "message": "How to connect"
+  },
+  "fallbackTitle": {
+    "message": "Without the connection"
+  },
+  "fallbackText": {
+    "message": "Copy the page and paste it into a note in Brulion — on the computer, the phone or in the browser version."
+  },
+  "copyRich": {
+    "message": "Copy as rich text"
+  },
+  "copyLink": {
+    "message": "Copy title and link"
+  },
+  "copied": {
+    "message": "Copied. Paste it into Brulion."
+  },
+  "kindLabel": {
+    "message": "What to clip"
+  },
+  "kindArticle": {
+    "message": "Article"
+  },
+  "kindSelection": {
+    "message": "Selection"
+  },
+  "kindPage": {
+    "message": "Whole page"
+  },
+  "kindScreenshot": {
+    "message": "Screenshot"
+  },
+  "kindBookmark": {
+    "message": "Link only"
+  },
+  "titleLabel": {
+    "message": "Title"
+  },
+  "placeLabel": {
+    "message": "Save to"
+  },
+  "placePage": {
+    "message": "A new page"
+  },
+  "placeJournal": {
+    "message": "Today's journal"
+  },
+  "placeHeading": {
+    "message": "Under a heading of a page"
+  },
+  "folderLabel": {
+    "message": "Folder"
+  },
+  "folderPlaceholder": {
+    "message": "Empty: the notebook's main folder"
+  },
+  "defaultFolder": {
+    "message": "Clippings"
+  },
+  "journalLinkLabel": {
+    "message": "Also link it from today's journal"
+  },
+  "pageLabel": {
+    "message": "Page"
+  },
+  "pagePlaceholder": {
+    "message": "Type to find a page"
+  },
+  "headingLabel": {
+    "message": "Heading"
+  },
+  "templateLabel": {
+    "message": "Template"
+  },
+  "templateGroup_builtin": {
+    "message": "Built-in"
+  },
+  "templateGroup_notebook": {
+    "message": "From the notebook"
+  },
+  "templateGroup_custom": {
+    "message": "Yours"
+  },
+  "template_brulion": {
+    "message": "Brulion page"
+  },
+  "template_obsidian": {
+    "message": "Obsidian Web Clipper"
+  },
+  "template_joplin": {
+    "message": "Joplin"
+  },
+  "template_link": {
+    "message": "Link and selection"
+  },
+  "tagsLabel": {
+    "message": "Tags"
+  },
+  "tagsPlaceholder": {
+    "message": "reading, recipes"
+  },
+  "picturesLabel": {
+    "message": "Save the pictures into the notebook"
+  },
+  "previewLabel": {
+    "message": "Preview"
+  },
+  "previewScreenshot": {
+    "message": "The screenshot is taken when you clip."
+  },
+  "clipButton": {
+    "message": "Clip"
+  },
+  "closeButton": {
+    "message": "Close"
+  },
+  "openInBrulion": {
+    "message": "Open in Brulion"
+  },
+  "optionsLink": {
+    "message": "Options"
+  },
+  "shortcutHint": {
+    "message": "Quick clip:"
+  },
+  "saving": {
+    "message": "Saving…"
+  },
+  "savingPictures": {
+    "message": "Saving pictures: $1 of $2…"
+  },
+  "savedNewPage": {
+    "message": "Saved as a new page:"
+  },
+  "savedBlock": {
+    "message": "Added to:"
+  },
+  "picturesSaved": {
+    "message": "pictures saved: $1"
+  },
+  "picturesFailed": {
+    "message": "pictures left on the internet: $1"
+  },
+  "picturesKept": {
+    "message": "pictures from the internet: $1"
+  },
+  "savedTitle": {
+    "message": "Saved in Brulion"
+  },
+  "savedTo": {
+    "message": "$1"
+  },
+  "savedWithFailedPictures": {
+    "message": "$1 — pictures left on the internet: $2"
+  },
+  "failedTitle": {
+    "message": "Brulion could not save the clip"
+  },
+  "cannotRead": {
+    "message": "The browser does not let extensions read this page: only a link or a screenshot can be clipped."
+  },
+  "errorFolder": {
+    "message": "The folder cannot be used: no “..”, no leading “/” or “.”, no backslash."
+  },
+  "errorNoPage": {
+    "message": "Choose the page with the heading."
+  },
+  "errorNoHeading": {
+    "message": "Choose the heading."
+  },
+  "hostError_not_connected": {
+    "message": "Brulion is not connected: run brulion-cli clip install."
+  },
+  "hostError_disconnected": {
+    "message": "The connection to Brulion ended before the clip was saved."
+  },
+  "hostError_no_answer": {
+    "message": "Brulion gave no answer."
+  },
+  "hostError_no_vault": {
+    "message": "No notebook yet: open one in Brulion first."
+  },
+  "hostError_vault_missing": {
+    "message": "The notebook's folder does not exist."
+  },
+  "hostError_unknown_notebook": {
+    "message": "This notebook is not among Brulion's notebooks."
+  },
+  "hostError_page_not_found": {
+    "message": "The page is not in the notebook."
+  },
+  "hostError_under_not_found": {
+    "message": "The page has no such heading."
+  },
+  "hostError_lock_timeout": {
+    "message": "The notebook is busy: try again in a moment."
+  },
+  "hostError_template_not_found": {
+    "message": "The template page is not in the notebook."
+  },
+  "hostError_unknown_template": {
+    "message": "Brulion does not know this template."
+  },
+  "hostError_too_large": {
+    "message": "The page is too large to clip."
+  },
+  "hostError_bad_folder": {
+    "message": "The folder cannot be used."
+  },
+  "hostError_bad_page": {
+    "message": "The page cannot be used."
+  },
+  "hostError_no_heading": {
+    "message": "Choose the heading."
+  },
+  "hostError_empty_clip": {
+    "message": "The template left nothing to save."
+  },
+  "hostError_no_app": {
+    "message": "Brulion's app is not installed next to brulion-cli."
+  },
+  "hostError_app_not_started": {
+    "message": "Brulion's app could not be started."
+  },
+  "hostError_app_not_reached": {
+    "message": "The running Brulion did not answer."
+  },
+  "hostError_invalid_utf8": {
+    "message": "The page is not valid UTF-8 text: Brulion leaves it as it is."
+  },
+  "optionsTitle": {
+    "message": "Brulion Web Clipper — Options"
+  },
+  "connectionHeading": {
+    "message": "Connection"
+  },
+  "connectedTo": {
+    "message": "Connected to brulion-cli $1, notebook “$2”."
+  },
+  "testConnection": {
+    "message": "Check again"
+  },
+  "whereHeading": {
+    "message": "Where clips go"
+  },
+  "contentHeading": {
+    "message": "What a clip holds"
+  },
+  "templatePageLabel": {
+    "message": "Template of a new page"
+  },
+  "templateBlockLabel": {
+    "message": "Template in the journal or under a heading"
+  },
+  "tagsDefaultLabel": {
+    "message": "Tags of every clip"
+  },
+  "customHeading": {
+    "message": "Your templates"
+  },
+  "customHelp": {
+    "message": "Templates kept in this browser. Pages of the notebook's templates folder are offered too."
+  },
+  "templateNameLabel": {
+    "message": "Name"
+  },
+  "templateTextLabel": {
+    "message": "Template"
+  },
+  "templateNew": {
+    "message": "New"
+  },
+  "templateSave": {
+    "message": "Save template"
+  },
+  "templateEdit": {
+    "message": "Edit"
+  },
+  "templateDelete": {
+    "message": "Delete"
+  },
+  "variablesHeading": {
+    "message": "Variables"
+  },
+  "varTitle": {
+    "message": "the title (of the clip and of the new page)"
+  },
+  "varUrl": {
+    "message": "the page's address"
+  },
+  "varSite": {
+    "message": "the site's name, the address's host"
+  },
+  "varAuthor": {
+    "message": "the author"
+  },
+  "varPublished": {
+    "message": "the publication date (yyyy-MM-dd, or your own format)"
+  },
+  "varDescription": {
+    "message": "the page's description"
+  },
+  "varContent": {
+    "message": "what was clipped as Markdown; as a quote; as plain text"
+  },
+  "varSelection": {
+    "message": "the selection (also with an article)"
+  },
+  "varTags": {
+    "message": "the tags: #a #b in the text, a list in the frontmatter"
+  },
+  "varImage": {
+    "message": "the page's picture; the screenshot"
+  },
+  "varDate": {
+    "message": "the date and time of the clip, as in Brulion's templates"
+  },
+  "settingsSaved": {
+    "message": "Saved."
+  },
+  "saveButton": {
+    "message": "Save"
+  }
+}

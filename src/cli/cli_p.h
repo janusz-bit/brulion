@@ -17,6 +17,7 @@
 #include <QString>
 #include <QStringList>
 #include <QThreadPool>
+#include <QVariant>
 
 #include <functional>
 #include <memory>
@@ -146,6 +147,7 @@ void addIndexCommands(QList<Command> &out);
 void addToolCommands(QList<Command> &out);
 void addAppCommands(QList<Command> &out);
 void addExtensionCommands(QList<Command> &out);
+void addClipCommands(QList<Command> &out);
 void addMetaCommands(QList<Command> &out);
 
 /// Options for the whole run (docs/CLI.md "Global options").
@@ -202,6 +204,8 @@ public:
 
     /// The app's settings, read-only (never AppSettings, which writes when constructed).
     QString settingsValue(const QString &key) const;
+    /// The same, as it is stored (lists, maps).
+    QVariant settingsVariant(const QString &key) const;
     QString appDataDir() const;
 
     /// Find the notebook folder (--vault, BRULION_VAULT, the app's current notebook).

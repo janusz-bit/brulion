@@ -1,6 +1,8 @@
 // brulion::cli::run — the program: Qt application object, arguments, one command, output.
 #include "cli.h"
 #include "cli_p.h"
+#include "clip_p.h"
+#include "clipper/nativehost.h"
 #include "profile.h" // the app's names (BRULION_PROFILE)
 
 #include <QCoreApplication>
@@ -143,6 +145,15 @@ int run(int argc, char **argv)
     };
     useLanguage(messageLanguage());
 
+    // A browser starting the Web Clipper's host (docs/CLIPPER.md): native messaging on standard input
+    // and output, in English (its client is the extension, which shows its own texts).
+    if (clipper::isNativeMessagingLaunch(arguments)) {
+        useLanguage(u"en"_s);
+        Context host;
+        host.program = program;
+        return serveClipHost(host);
+    }
+
     const Invocation inv = parseArguments(arguments);
     g_verbose = inv.globals.verbose;
     Context ctx;
@@ -181,7 +192,16 @@ int run(int argc, char **argv)
                         inv.globals.allowDestructive || inv.args.value(u"allowDestructive"_s).toBool(),
                         inv.args.value(u"appControl"_s).toBool());
     }
+    if (inv.command->id == u"clip.host") {
+        useLanguage(u"en"_s);
+        return serveClipHost(ctx);
+    }
     return output(inv.command, execute(ctx, *inv.command, inv.args));
+}
+
+bool isNativeMessagingLaunch(int argc, char **argv)
+{
+    return clipper::isNativeMessagingLaunch(commandLineArguments(argc, argv));
 }
 
 } // namespace brulion::cli

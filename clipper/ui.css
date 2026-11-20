@@ -1,0 +1,126 @@
+/* The clipper's popup and options page: Brulion's look (paper and coral in the light, black and
+   bright coral in the dark), following the browser's colour scheme. */
+:root {
+  color-scheme: light dark;
+  --bg: #faf7f0;
+  --bg-raised: #ffffff;
+  --bg-sunken: #f1ece1;
+  --fg: #23201b;
+  --fg-muted: #6b6457;
+  --border: #e4dccb;
+  --border-control: #928775;
+  --accent: #c4422f;
+  --accent-hover: #a83827;
+  --accent-text: #b13a28;
+  --accent-bg: rgba(196, 66, 47, 0.12);
+  --on-accent: #ffffff;
+  --danger: #b3261e;
+  --warning-bg: #fff4d6;
+  --warning-border: #f2b33d;
+  --link: #2a6ab0;
+  --radius: 8px;
+  --font: 13px/1.45 system-ui, -apple-system, 'Segoe UI', Roboto, Ubuntu, 'Noto Sans', sans-serif;
+  font: var(--font);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0b0c0f;
+    --bg-raised: #15171c;
+    --bg-sunken: #101216;
+    --fg: #e8e6e1;
+    --fg-muted: #a39f97;
+    --border: #262a32;
+    --border-control: #6c7793;
+    --accent: #ff7a66;
+    --accent-hover: #ff9585;
+    --accent-text: #ff8f7d;
+    --accent-bg: rgba(255, 122, 102, 0.18);
+    --on-accent: #2b0a05;
+    --danger: #ff8a80;
+    --warning-bg: #2a2110;
+    --warning-border: #b58620;
+    --link: #9fc3e6;
+  }
+}
+* { box-sizing: border-box; }
+/* Chromium gives extension pages a stylesheet of its own (body at 75 %): the body sets the font again. */
+body { margin: 0; background: var(--bg); color: var(--fg); font: var(--font); }
+a { color: var(--link); }
+h1 { font-size: 15px; margin: 0; font-weight: 600; }
+h2 { font-size: 14px; margin: 0 0 6px; }
+h3 { font-size: 13px; margin: 12px 0 4px; }
+p { margin: 0 0 8px; }
+code, pre { font-family: ui-monospace, 'JetBrains Mono', 'DejaVu Sans Mono', monospace; font-size: 12px; }
+[hidden] { display: none !important; }
+
+.popup { width: 400px; max-width: 100vw; }
+.bar { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-bottom: 1px solid var(--border); }
+.bar img { flex: none; }
+.bar h1 { flex: 1; }
+.bar select { max-width: 170px; }
+main, .content { padding: 12px 14px; }
+
+label.field { display: block; margin: 0 0 10px; }
+label.field > span, .field-label { display: block; font-size: 12px; color: var(--fg-muted); margin-bottom: 3px; }
+input[type='text'], input[type='search'], input:not([type]), select, textarea {
+  width: 100%; padding: 6px 8px; border: 1px solid var(--border-control); border-radius: 6px;
+  background: var(--bg-raised); color: var(--fg); font: inherit;
+}
+textarea { font-family: ui-monospace, 'JetBrains Mono', 'DejaVu Sans Mono', monospace; font-size: 12px; min-height: 160px; resize: vertical; }
+input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-visible, .kinds label:focus-within {
+  outline: 2px solid var(--link); outline-offset: 1px;
+}
+.row { display: flex; gap: 8px; align-items: flex-end; }
+.row > * { flex: 1; min-width: 0; }
+.row.stretch { align-items: stretch; }
+label.check { display: flex; gap: 8px; align-items: center; margin: 0 0 8px; }
+label.check input { margin: 0; accent-color: var(--accent); }
+
+.kinds { display: flex; flex-wrap: wrap; gap: 4px; border: 0; padding: 0; margin: 0 0 12px; }
+.kinds label { flex: 1 1 auto; text-align: center; padding: 6px 6px; border: 1px solid var(--border); border-radius: 6px;
+  cursor: pointer; font-size: 12px; background: var(--bg-raised); user-select: none; white-space: nowrap; }
+.kinds input { position: absolute; opacity: 0; pointer-events: none; }
+.kinds label:has(input:checked) { border-color: var(--accent); background: var(--accent-bg); color: var(--accent-text); font-weight: 600; }
+.kinds label:has(input:disabled) { opacity: 0.45; cursor: default; }
+
+button { font: inherit; padding: 6px 12px; border-radius: 6px; border: 1px solid var(--border-control);
+  background: var(--bg-raised); color: var(--fg); cursor: pointer; }
+button:hover { background: var(--bg-sunken); }
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 600; }
+button.primary:hover { background: var(--accent-hover); }
+button:disabled { opacity: 0.55; cursor: default; }
+.actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 4px; }
+.actions .spacer { flex: 1; }
+
+details { margin: 0 0 10px; }
+summary { cursor: pointer; color: var(--fg-muted); font-size: 12px; }
+pre.preview { max-height: 220px; overflow: auto; background: var(--bg-sunken); border: 1px solid var(--border);
+  border-radius: 6px; padding: 8px; white-space: pre-wrap; word-break: break-word; margin: 6px 0 0; }
+
+.panel { border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; background: var(--bg-raised); margin-bottom: 12px; }
+.panel.warning { background: var(--warning-bg); border-color: var(--warning-border); }
+pre.command { background: var(--bg-sunken); border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; margin: 0 0 8px;
+  user-select: all; overflow-x: auto; }
+.problem { color: var(--danger); }
+.muted { color: var(--fg-muted); font-size: 12px; }
+
+.status { text-align: left; }
+progress { width: 100%; height: 6px; accent-color: var(--accent); }
+.result-path { font-family: ui-monospace, 'JetBrains Mono', 'DejaVu Sans Mono', monospace; font-size: 12px; word-break: break-all;
+  background: var(--bg-sunken); border-radius: 6px; padding: 4px 6px; display: inline-block; }
+
+footer { display: flex; gap: 6px; justify-content: space-between; padding: 8px 14px; border-top: 1px solid var(--border); color: var(--fg-muted); font-size: 12px; }
+kbd { font-family: inherit; border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 4px; padding: 0 4px; }
+
+/* Options */
+.options { max-width: 760px; margin: 0 auto; padding: 24px 20px 48px; }
+.options h1 { font-size: 20px; display: flex; align-items: center; gap: 10px; margin-bottom: 18px; }
+.options section { margin-bottom: 26px; }
+.options h2 { font-size: 15px; border-bottom: 1px solid var(--border); padding-bottom: 6px; margin-bottom: 12px; }
+.template-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+.template-item { display: flex; gap: 8px; align-items: center; padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-raised); }
+.template-item span { flex: 1; }
+table.vars { border-collapse: collapse; width: 100%; font-size: 12px; }
+table.vars td { border-top: 1px solid var(--border); padding: 4px 6px; vertical-align: top; }
+table.vars td:first-child { white-space: nowrap; font-family: ui-monospace, monospace; }
+.saved-note { color: var(--accent-text); font-size: 12px; margin-left: 8px; }

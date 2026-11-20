@@ -25,4 +25,7 @@ aqtinstall.log
 /tests/web/node_modules/
 /tests/web/test-results/
 /tests/web/playwright-report/
+/tests/web/test-results-clipper/
+/tests/web/playwright-report-clipper/
+/dist-clipper/
 .claude/worktrees/

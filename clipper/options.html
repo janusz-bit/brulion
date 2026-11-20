@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title data-i18n="optionsTitle">Brulion Web Clipper — Options</title>
+<link rel="stylesheet" href="ui.css">
+</head>
+<body>
+<div class="options">
+  <h1><img src="icons/brulion-48.png" alt="" width="32" height="32"><span data-i18n="optionsTitle">Brulion Web Clipper — Options</span></h1>
+
+  <section>
+    <h2 data-i18n="connectionHeading">Connection</h2>
+    <p id="connection" class="muted" data-i18n="loading">Connecting to Brulion…</p>
+    <div id="connect-help" hidden>
+      <p data-i18n="notConnectedText">Install Brulion's command line and connect it to your browsers once:</p>
+      <pre class="command"><code>brulion-cli clip install</code></pre>
+      <p class="muted" data-i18n="connectHelpMore">Then reload this page. On NixOS the module does it (programs.brulion); in Windows run brulion-cli.exe clip install.</p>
+    </div>
+    <button type="button" id="test" data-i18n="testConnection">Check again</button>
+  </section>
+
+  <form id="settings" novalidate>
+    <section>
+      <h2 data-i18n="whereHeading">Where clips go</h2>
+      <label class="field"><span data-i18n="notebookLabel">Notebook</span><select id="notebook"></select></label>
+      <label class="field"><span data-i18n="placeLabel">Save to</span>
+        <select id="place">
+          <option value="page" data-i18n="placePage">A new page</option>
+          <option value="journal" data-i18n="placeJournal">Today's journal</option>
+          <option value="heading" data-i18n="placeHeading">Under a heading of a page</option>
+        </select>
+      </label>
+      <label class="field"><span data-i18n="folderLabel">Folder</span><input id="folder" type="text" list="folders" autocomplete="off" data-i18n-placeholder="folderPlaceholder"></label>
+      <datalist id="folders"></datalist>
+      <label class="check"><input type="checkbox" id="journal-link"><span data-i18n="journalLinkLabel">Also link it from today's journal</span></label>
+      <div class="row">
+        <label class="field"><span data-i18n="pageLabel">Page</span><input id="heading-page" type="text" data-i18n-placeholder="pagePlaceholder"></label>
+        <label class="field"><span data-i18n="headingLabel">Heading</span><input id="heading" type="text"></label>
+      </div>
+    </section>
+
+    <section>
+      <h2 data-i18n="contentHeading">What a clip holds</h2>
+      <div class="row">
+        <label class="field"><span data-i18n="templatePageLabel">Template of a new page</span><select id="template-page"></select></label>
+        <label class="field"><span data-i18n="templateBlockLabel">Template in the journal or under a heading</span><select id="template-block"></select></label>
+      </div>
+      <label class="field"><span data-i18n="tagsDefaultLabel">Tags of every clip</span><input id="tags" type="text" data-i18n-placeholder="tagsPlaceholder"></label>
+      <label class="check"><input type="checkbox" id="pictures"><span data-i18n="picturesLabel">Save the pictures into the notebook</span></label>
+    </section>
+
+    <section>
+      <h2 data-i18n="customHeading">Your templates</h2>
+      <p class="muted" data-i18n="customHelp">Templates kept in this browser. A page of the notebook's templates folder is offered too.</p>
+      <div id="custom-list" class="template-list"></div>
+      <div class="row">
+        <label class="field"><span data-i18n="templateNameLabel">Name</span><input id="custom-name" type="text" maxlength="100"></label>
+      </div>
+      <label class="field"><span data-i18n="templateTextLabel">Template</span><textarea id="custom-text" spellcheck="false"></textarea></label>
+      <div class="actions">
+        <span class="spacer"></span>
+        <button type="button" id="custom-new" data-i18n="templateNew">New</button>
+        <button type="button" id="custom-save" class="primary" data-i18n="templateSave">Save template</button>
+      </div>
+      <details>
+        <summary data-i18n="variablesHeading">Variables</summary>
+        <table class="vars">
+          <tbody>
+            <tr><td>{{title}}</td><td data-i18n="varTitle"></td></tr>
+            <tr><td>{{url}}</td><td data-i18n="varUrl"></td></tr>
+            <tr><td>{{site}}, {{domain}}</td><td data-i18n="varSite"></td></tr>
+            <tr><td>{{author}}</td><td data-i18n="varAuthor"></td></tr>
+            <tr><td>{{published}}, {{published:dd.MM.yyyy}}</td><td data-i18n="varPublished"></td></tr>
+            <tr><td>{{description}}</td><td data-i18n="varDescription"></td></tr>
+            <tr><td>{{content}}, {{content:quote}}, {{content:text}}</td><td data-i18n="varContent"></td></tr>
+            <tr><td>{{selection}}, {{selection:quote}}</td><td data-i18n="varSelection"></td></tr>
+            <tr><td>{{tags}}</td><td data-i18n="varTags"></td></tr>
+            <tr><td>{{image}}, {{screenshot}}</td><td data-i18n="varImage"></td></tr>
+            <tr><td>{{date}}, {{time}}, {{date:FORMAT}}, {{weekday}}</td><td data-i18n="varDate"></td></tr>
+          </tbody>
+        </table>
+      </details>
+    </section>
+
+    <div class="actions">
+      <span id="saved" class="saved-note" hidden data-i18n="settingsSaved">Saved.</span>
+      <span class="spacer"></span>
+      <button type="submit" class="primary" data-i18n="saveButton">Save</button>
+    </div>
+  </form>
+</div>
+<script type="module" src="options.js"></script>
+</body>
+</html>
