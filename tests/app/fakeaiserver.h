@@ -117,7 +117,7 @@ private:
         if (!finish.isEmpty())
             choice.insert(QStringLiteral("finish_reason"), finish);
         const QJsonObject event{{QStringLiteral("model"), QStringLiteral("fake")},
-                                {QStringLiteral("choices"), QJsonArray{choice}}};
+                                 {QStringLiteral("choices"), QJsonArray{choice}}};
         return "data: " + QJsonDocument(event).toJson(QJsonDocument::Compact) + "\n\n";
     }
 
@@ -134,39 +134,39 @@ private:
             const QJsonObject function{{QStringLiteral("name"), name}, {QStringLiteral("arguments"), arguments}};
             const QJsonObject message{
                     {QStringLiteral("role"), QStringLiteral("assistant")},
-                    {QStringLiteral("content"), QJsonValue()},
-                    {QStringLiteral("tool_calls"),
-                     QJsonArray{QJsonObject{{QStringLiteral("id"), QStringLiteral("call_%1").arg(++m_calls)},
-                                            {QStringLiteral("type"), QStringLiteral("function")},
-                                            {QStringLiteral("function"), function}}}}};
+                     {QStringLiteral("content"), QJsonValue()},
+                      {QStringLiteral("tool_calls"),
+                              QJsonArray{QJsonObject{{QStringLiteral("id"), QStringLiteral("call_%1").arg(++m_calls)},
+                                                      {QStringLiteral("type"), QStringLiteral("function")},
+                                                       {QStringLiteral("function"), function}}}}};
             const QJsonObject completion{
                     {QStringLiteral("model"), QStringLiteral("fake")},
-                    {QStringLiteral("choices"),
-                     QJsonArray{QJsonObject{{QStringLiteral("index"), 0},
-                                            {QStringLiteral("message"), message},
-                                            {QStringLiteral("finish_reason"), QStringLiteral("tool_calls")}}}}};
+                     {QStringLiteral("choices"),
+                                     QJsonArray{QJsonObject{
+                                             {QStringLiteral("index"), 0},
+                                              {QStringLiteral("message"), message},
+                                               {QStringLiteral("finish_reason"), QStringLiteral("tool_calls")}}}}};
             body = QJsonDocument(completion).toJson(QJsonDocument::Compact);
         } else if (stream) {
             type = "text/event-stream";
             const QStringList words = answer.split(QLatin1Char(' '));
             for (qsizetype i = 0; i < words.size(); ++i)
-                body += chunk(QJsonObject{{QStringLiteral("content"),
-                                           QString(words.at(i) + (i + 1 < words.size() ? QStringLiteral(" ") : QString()))}});
+                body += chunk(QJsonObject{{QStringLiteral("content"), QString(words.at(i) + (i + 1 < words.size() ? QStringLiteral(" ") : QString()))}});
             body += chunk(QJsonObject(), QStringLiteral("stop"));
             body += "data: [DONE]\n\n";
         } else {
             const QJsonObject message{{QStringLiteral("role"), QStringLiteral("assistant")},
-                                      {QStringLiteral("content"), answer}};
+                                       {QStringLiteral("content"), answer}};
             const QJsonObject completion{
                     {QStringLiteral("model"), QStringLiteral("fake")},
-                    {QStringLiteral("choices"),
-                     QJsonArray{QJsonObject{{QStringLiteral("index"), 0},
-                                            {QStringLiteral("message"), message},
-                                            {QStringLiteral("finish_reason"), QStringLiteral("stop")}}}}};
+                     {QStringLiteral("choices"), QJsonArray{QJsonObject{{QStringLiteral("index"), 0},
+                                                                         {QStringLiteral("message"), message},
+                                                                          {QStringLiteral("finish_reason"),
+                                                                                          QStringLiteral("stop")}}}}};
             body = QJsonDocument(completion).toJson(QJsonDocument::Compact);
         }
-        socket->write("HTTP/1.1 200 OK\r\nContent-Type: " + type + "\r\nContent-Length: " + QByteArray::number(body.size())
-                      + "\r\nConnection: close\r\n\r\n" + body);
+        socket->write("HTTP/1.1 200 OK\r\nContent-Type: " + type + "\r\nContent-Length: "
+                      + QByteArray::number(body.size()) + "\r\nConnection: close\r\n\r\n" + body);
         socket->flush();
         socket->disconnectFromHost();
     }

@@ -282,15 +282,17 @@ private Q_SLOTS:
     {
         QTest::addColumn<QString>("page");
         QTest::addColumn<QString>("roles");
-        QTest::addColumn<QString>("times");  // "HH:mm" of each message, "-" none
+        QTest::addColumn<QString>("times"); // "HH:mm" of each message, "-" none
         QTest::addColumn<QString>("last");
 
-        QTest::newRow("Polish") << u"- 🧑 Pytanie\n  czas:: 2026-11-15 09:12\n- 🤖 Odpowiedź\n  czas:: 2026-11-15 09:13\n  dalej\n"_s
-                                << u"UA"_s << u"09:12 09:13"_s << u"Odpowiedź\ndalej"_s;
+        QTest::newRow("Polish")
+                << u"- 🧑 Pytanie\n  czas:: 2026-11-15 09:12\n- 🤖 Odpowiedź\n  czas:: 2026-11-15 09:13\n  dalej\n"_s
+                << u"UA"_s << u"09:12 09:13"_s << u"Odpowiedź\ndalej"_s;
         QTest::newRow("English, a list first")
-                << u"- 🧑 Q\n  time:: 2026-11-15 21:05\n- 🤖\n  time:: 2026-11-15 21:06\n  - one\n  - two\n"_s << u"UA"_s
-                << u"21:05 21:06"_s << u"- one\n- two"_s;
-        QTest::newRow("an old page: none") << u"- 🧑 Pytanie\n- 🤖 Odpowiedź\n"_s << u"UA"_s << u"- -"_s << u"Odpowiedź"_s;
+                << u"- 🧑 Q\n  time:: 2026-11-15 21:05\n- 🤖\n  time:: 2026-11-15 21:06\n  - one\n  - two\n"_s
+                << u"UA"_s << u"21:05 21:06"_s << u"- one\n- two"_s;
+        QTest::newRow("an old page: none")
+                << u"- 🧑 Pytanie\n- 🤖 Odpowiedź\n"_s << u"UA"_s << u"- -"_s << u"Odpowiedź"_s;
         QTest::newRow("a tab (Logseq), any case") << u"- 🧑 Pytanie\n\tCZAS:: 2026-11-15 7:05\n\tdalej\n"_s << u"U"_s
                                                   << u"07:05"_s << u"Pytanie\ndalej"_s;
         QTest::newRow("not the first line under it: text")
@@ -304,7 +306,8 @@ private Q_SLOTS:
                                             << u"Pytanie\nczas:: 2026-11-15 25:00"_s;
         QTest::newRow("at the margin: no message's") << u"- 🧑 Pytanie\nczas:: 2026-11-15 09:12\n"_s << u"U"_s << u"-"_s
                                                      << u"Pytanie\nczas:: 2026-11-15 09:12"_s;
-        QTest::newRow("CRLF") << u"- 🧑 Ą\r\n  czas:: 2026-11-15 09:12\r\n  ę\r\n"_s << u"U"_s << u"09:12"_s << u"Ą\nę"_s;
+        QTest::newRow("CRLF") << u"- 🧑 Ą\r\n  czas:: 2026-11-15 09:12\r\n  ę\r\n"_s << u"U"_s << u"09:12"_s
+                              << u"Ą\nę"_s;
     }
     void timesOfMessages()
     {
@@ -328,20 +331,23 @@ private Q_SLOTS:
     void writesTimes()
     {
         const QDateTime at(QDate(2026, 11, 15), QTime(9, 12));
-        QCOMPARE(formatMessage(Role::User, u"Zażółć"_s, u"\n", at, u"pl"), u"- 🧑 Zażółć\n  czas:: 2026-11-15 09:12\n"_s);
+        QCOMPARE(formatMessage(Role::User, u"Zażółć"_s, u"\n", at, u"pl"),
+                 u"- 🧑 Zażółć\n  czas:: 2026-11-15 09:12\n"_s);
         QCOMPARE(formatMessage(Role::Assistant, u"- jeden\n- dwa"_s, u"\n", at, u"en"),
                  u"- 🤖\n  time:: 2026-11-15 09:12\n  - jeden\n  - dwa\n"_s);
-        QCOMPARE(formatMessage(Role::Assistant, QString(), u"\r\n", at, u"pl"), u"- 🤖\r\n  czas:: 2026-11-15 09:12\r\n"_s);
+        QCOMPARE(formatMessage(Role::Assistant, QString(), u"\r\n", at, u"pl"),
+                 u"- 🤖\r\n  czas:: 2026-11-15 09:12\r\n"_s);
         QCOMPARE(formatMessage(Role::User, u"bez czasu"_s, u"\n", QDateTime(), u"pl"), u"- 🧑 bez czasu\n"_s);
         // The key the page uses already, else its frontmatter's language, else the one given.
         QCOMPARE(appendMessage(u"- 🧑 Q\n  time:: 2026-11-15 09:00\n"_s, Role::Assistant, u"A"_s, at, u"pl"),
                  u"- 🧑 Q\n  time:: 2026-11-15 09:00\n- 🤖 A\n  time:: 2026-11-15 09:12\n"_s);
         QCOMPARE(appendMessage(u"---\nzadania: ignoruj\n---\n- 🧑 Q\n"_s, Role::Assistant, u"A"_s, at, u"en"),
                  u"---\nzadania: ignoruj\n---\n- 🧑 Q\n- 🤖 A\n  czas:: 2026-11-15 09:12\n"_s);
-        QCOMPARE(appendMessage(u"- 🧑 Q\n"_s, Role::Assistant, u"A"_s, at, u"en"), u"- 🧑 Q\n- 🤖 A\n  time:: 2026-11-15 09:12\n"_s);
+        QCOMPARE(appendMessage(u"- 🧑 Q\n"_s, Role::Assistant, u"A"_s, at, u"en"),
+                 u"- 🧑 Q\n- 🤖 A\n  time:: 2026-11-15 09:12\n"_s);
         // Written and read back: the same text and time.
-        const QString page = appendMessage(newConversation(u"Co mam jutro?"_s, u"Dom"_s, u"pl"_s, at),
-                                           Role::Assistant, u"Jutro:\n\n- czynsz"_s, at.addSecs(60), u"pl"_s);
+        const QString page = appendMessage(newConversation(u"Co mam jutro?"_s, u"Dom"_s, u"pl"_s, at), Role::Assistant,
+                                           u"Jutro:\n\n- czynsz"_s, at.addSecs(60), u"pl"_s);
         const Conversation c = parse(page);
         QCOMPARE(roles(c), u"UA"_s);
         QCOMPARE(c.page, u"Dom"_s);
@@ -360,8 +366,9 @@ private Q_SLOTS:
         QTest::addColumn<QString>("partner");
         QTest::addColumn<QString>("expected");
 
-        QTest::newRow("added at the end of the frontmatter") << u"---\nzadania: ignoruj\n---\n- 🧑 Ą\n"_s << u"pirat/rozmowa"_s
-                                                             << u"---\nzadania: ignoruj\npartner: pirat/rozmowa\n---\n- 🧑 Ą\n"_s;
+        QTest::newRow("added at the end of the frontmatter")
+                << u"---\nzadania: ignoruj\n---\n- 🧑 Ą\n"_s << u"pirat/rozmowa"_s
+                << u"---\nzadania: ignoruj\npartner: pirat/rozmowa\n---\n- 🧑 Ą\n"_s;
         QTest::newRow("replaced") << u"---\npartner: stary\ntasks: ignore\n---\n- 🧑 Ą\n"_s << u"nowy"_s
                                   << u"---\npartner: nowy\ntasks: ignore\n---\n- 🧑 Ą\n"_s;
         QTest::newRow("taken out") << u"---\nzadania: ignoruj\nPartner: stary\n---\n- 🧑 Ą\n"_s << QString()
@@ -370,7 +377,8 @@ private Q_SLOTS:
         QTest::newRow("no frontmatter") << u"- 🧑 Ą\n"_s << u"pirat"_s << u"---\npartner: pirat\n---\n- 🧑 Ą\n"_s;
         QTest::newRow("CRLF") << u"---\r\nzadania: ignoruj\r\npartner: a\r\n---\r\n- 🧑 Ą\r\n"_s << u"b"_s
                               << u"---\r\nzadania: ignoruj\r\npartner: b\r\n---\r\n- 🧑 Ą\r\n"_s;
-        QTest::newRow("an unclosed frontmatter") << u"---\n- 🧑 Ą\n"_s << u"b"_s << u"---\npartner: b\n---\n---\n- 🧑 Ą\n"_s;
+        QTest::newRow("an unclosed frontmatter")
+                << u"---\n- 🧑 Ą\n"_s << u"b"_s << u"---\npartner: b\n---\n---\n- 🧑 Ą\n"_s;
     }
     void partners()
     {
@@ -449,7 +457,8 @@ private Q_SLOTS:
         page = appendMessage(page, Role::Assistant, u"Widzę."_s);
         page = appendMessage(page, Role::User, withPictures(u"Drugie"_s, {u"4.jpg"_s, u"5.jpg"_s, u"6.jpg"_s}));
         page = appendMessage(page, Role::Assistant, u"Też."_s);
-        page = appendMessage(page, Role::User, withPictures(u"Trzecie"_s, {u"7.jpg"_s, u"8.jpg"_s, u"9.jpg"_s, u"10.jpg"_s}));
+        page = appendMessage(page, Role::User,
+                             withPictures(u"Trzecie"_s, {u"7.jpg"_s, u"8.jpg"_s, u"9.jpg"_s, u"10.jpg"_s}));
         const QVariantList h = history(parse(page));
         QCOMPARE(h.size(), 5);
         QCOMPARE(h.at(0).toMap().value(u"images"_s).toStringList(), QStringList{u"3.jpg"_s});
@@ -478,7 +487,8 @@ private Q_SLOTS:
         QTest::newRow("a run of the user's messages is one turn")
                 << QStringList{u"U:"_s + ten, u"A:"_s + ten, u"U:"_s + ten, u"U:"_s + ten, u"A:"_s + ten, u"U:"_s + ten}
                 << 45 << 2;
-        QTest::newRow("the AI's first") << QStringList{u"A:"_s + ten, u"U:"_s + ten, u"A:"_s + ten, u"U:"_s + ten} << 25 << 3;
+        QTest::newRow("the AI's first") << QStringList{u"A:"_s + ten, u"U:"_s + ten, u"A:"_s + ten, u"U:"_s + ten} << 25
+                                        << 3;
         QTest::newRow("a picture counts") << QStringList{u"U:![[a.jpg]]"_s, u"A:"_s + ten, u"U:"_s + ten} << 1000 << 2;
     }
     void cutByTurns()

@@ -23,9 +23,7 @@ namespace brulion::shell {
 
 // ---- ChatTurn -------------------------------------------------------------------------------------
 
-ChatTurn::ChatTurn(const QString &path, QObject *parent)
-    : QObject(parent)
-    , m_path(path)
+ChatTurn::ChatTurn(const QString &path, QObject *parent) : QObject(parent), m_path(path)
 {
     // The answer as it is written: shown ten times a second at most (a provider streams a word at
     // a time, every change renders the message anew, and a model on the device shares the
@@ -73,9 +71,7 @@ void ChatTurn::clearPartial()
 // ---- WorkspaceChats -------------------------------------------------------------------------------
 
 WorkspaceChats::WorkspaceChats(Workspace *workspace, WorkspaceExtensions *extensions, QObject *parent)
-    : QObject(parent)
-    , m_workspace(workspace)
-    , m_extensions(extensions)
+    : QObject(parent), m_workspace(workspace), m_extensions(extensions)
 {
     connect(m_extensions, &WorkspaceExtensions::chatAnswered, this, &WorkspaceChats::answered);
     connect(m_extensions, &WorkspaceExtensions::chatFailed, this, &WorkspaceChats::failed);
@@ -208,9 +204,15 @@ int WorkspaceChats::runningCount() const
     return n;
 }
 
-bool WorkspaceChats::onDevice() const { return m_extensions->aiSettings().provider == u"local"; }
+bool WorkspaceChats::onDevice() const
+{
+    return m_extensions->aiSettings().provider == u"local";
+}
 
-int WorkspaceChats::historyBudget() const { return onDevice() ? DeviceBudget : NetworkBudget; }
+int WorkspaceChats::historyBudget() const
+{
+    return onDevice() ? DeviceBudget : NetworkBudget;
+}
 
 bool WorkspaceChats::seesPictures() const
 {
@@ -263,7 +265,10 @@ bool WorkspaceChats::isConversation(const QString &path) const
     return ok && !chat::parse(content).messages.isEmpty();
 }
 
-ChatTurn *WorkspaceChats::find(const QString &path) const { return m_turns.value(path.toLower()); }
+ChatTurn *WorkspaceChats::find(const QString &path) const
+{
+    return m_turns.value(path.toLower());
+}
 
 bool WorkspaceChats::isRunning(const QString &path) const
 {
@@ -321,7 +326,8 @@ QString WorkspaceChats::send(const QString &path, const QString &text, const QSt
     } else {
         bool ok = false;
         const QString content = m_workspace->read(target, &ok);
-        if (!ok || !m_workspace->write(target, chat::appendMessage(content, chat::Role::User, markdown, now, language))) {
+        if (!ok
+            || !m_workspace->write(target, chat::appendMessage(content, chat::Role::User, markdown, now, language))) {
             setFailure(turn(target), tr("The conversation could not be saved."));
             return {};
         }
@@ -481,7 +487,10 @@ void WorkspaceChats::stopAll()
     }
 }
 
-void WorkspaceChats::dismissFailure(const QString &path) { setFailure(find(path), QString()); }
+void WorkspaceChats::dismissFailure(const QString &path)
+{
+    setFailure(find(path), QString());
+}
 
 void WorkspaceChats::reset()
 {
@@ -538,7 +547,10 @@ void WorkspaceChats::setFailure(ChatTurn *t, const QString &failure)
 
 // ---- the list's menu ------------------------------------------------------------------------------
 
-QString WorkspaceChats::nameOf(const QString &path) const { return chat::splitTitle(paths::pageTitle(path)).second; }
+QString WorkspaceChats::nameOf(const QString &path) const
+{
+    return chat::splitTitle(paths::pageTitle(path)).second;
+}
 
 QString WorkspaceChats::rename(const QString &path, const QString &name)
 {
@@ -665,9 +677,15 @@ QString WorkspaceChats::picturePath(const QString &name, const QString &conversa
 
 // ---- the camera and dictation ---------------------------------------------------------------------
 
-bool WorkspaceChats::cameraAvailable() const { return platform::cameraAvailable(); }
+bool WorkspaceChats::cameraAvailable() const
+{
+    return platform::cameraAvailable();
+}
 
-bool WorkspaceChats::dictationAvailable() const { return platform::speechRecognizer() != nullptr; }
+bool WorkspaceChats::dictationAvailable() const
+{
+    return platform::speechRecognizer() != nullptr;
+}
 
 bool WorkspaceChats::listening() const
 {

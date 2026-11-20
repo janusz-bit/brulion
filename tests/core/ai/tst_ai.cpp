@@ -374,8 +374,8 @@ private Q_SLOTS:
         QVERIFY(!ai::requestFrom({{u"prompt"_s, u"x"_s}, {u"thoughts"_s, u"tak"_s}}, &error));
         QVERIFY2(error.contains(u"thoughts"_s), qPrintable(error));
         // Claude's summarised thinking: its blocks' text, the empty ones (display omitted) none.
-        const ai::Reply claudeReply = ai::readReply(
-                claude(), json(200, R"({"model":"claude-opus-5-5","stop_reason":"end_turn","content":[
+        const ai::Reply claudeReply =
+                ai::readReply(claude(), json(200, R"({"model":"claude-opus-5-5","stop_reason":"end_turn","content":[
                     {"type":"thinking","thinking":"Najpierw zadania.","signature":"c2ln"},
                     {"type":"thinking","thinking":"","signature":"c2ln"},
                     {"type":"text","text":"Masz dwa."},
@@ -388,13 +388,14 @@ private Q_SLOTS:
         ai::Settings s;
         s.provider = u"openai"_s;
         s.model = u"qwen"_s;
-        const ai::Reply serverReply = ai::readReply(
-                s, json(200, R"({"model":"qwen","choices":[{"index":0,"finish_reason":"stop",
+        const ai::Reply serverReply =
+                ai::readReply(s, json(200, R"({"model":"qwen","choices":[{"index":0,"finish_reason":"stop",
                     "message":{"role":"assistant","content":"Tak.","reasoning_content":"Sprawdzam."}}]})"));
         QCOMPARE(serverReply.thoughts, u"Sprawdzam."_s);
         // None: no key in b.ai's answer.
         const ai::Reply plain = ai::readReply(
-                claude(), json(200, R"({"model":"m","stop_reason":"end_turn","content":[{"type":"text","text":"x"}]})"));
+                claude(),
+                json(200, R"({"model":"m","stop_reason":"end_turn","content":[{"type":"text","text":"x"}]})"));
         QVERIFY(plain.thoughts.isEmpty());
         QVERIFY(!plain.toVariant().contains(u"thoughts"_s));
     }

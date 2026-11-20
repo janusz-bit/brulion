@@ -1,14 +1,14 @@
 #include "chatmodels.h"
 
-#include "contentutil.h"
 #include "chat/chat.h"
+#include "contentutil.h"
 #include "dates/dates.h"
-#include "workspacechats.h"
 #include "markdown/blockdocument.h"
 #include "markdown/inlinerenderer.h"
 #include "util/paths.h"
 #include "vault/vault.h"
 #include "workspace.h"
+#include "workspacechats.h"
 
 #include <QRegularExpression>
 
@@ -150,8 +150,8 @@ void ChatMessageModel::refresh()
         page = conversation.page;
         title = ChatListModel::splitTitle(paths::pageTitle(m_path)).second;
         const QDate today = effectiveToday(QString(), ws);
-        const markdown::RenderContext context = renderContext(vaultIndex(), m_path, today, uiLocale(m_locale),
-                                                              paletteFromMap(m_palette));
+        const markdown::RenderContext context =
+                renderContext(vaultIndex(), m_path, today, uiLocale(m_locale), paletteFromMap(m_palette));
         omitted = chat::firstSent(conversation, m_budget);
         QDate lastDay;
         for (qsizetype i = 0; i < conversation.messages.size(); ++i) {
@@ -187,10 +187,12 @@ void ChatMessageModel::refresh()
     }
     // Rows by their first line: a message keeps its place, a new one comes last (its delegate
     // and the list's position stay as they are).
-    applyRows(m_rows, next, [](const Row &r) { return r.line; }, [](const Row &a, const Row &b) {
-        return a.role == b.role && a.text == b.text && a.html == b.html && a.time == b.time && a.day == b.day
-               && a.pictures == b.pictures && a.sent == b.sent && a.firstSent == b.firstSent;
-    });
+    applyRows(
+            m_rows, next, [](const Row &r) { return r.line; },
+            [](const Row &a, const Row &b) {
+                return a.role == b.role && a.text == b.text && a.html == b.html && a.time == b.time && a.day == b.day
+                       && a.pictures == b.pictures && a.sent == b.sent && a.firstSent == b.firstSent;
+            });
     m_page = page;
     m_title = title;
     m_exists = exists;
@@ -220,8 +222,10 @@ QVariant ChatMessageModel::data(const QModelIndex &index, int role) const
 
 QHash<int, QByteArray> ChatMessageModel::roleNames() const
 {
-    return {{RoleRole, "sender"}, {HtmlRole, "messageHtml"}, {TextRole, "markdown"}, {LineRole, "line"},
-            {TimeRole, "time"},   {DayRole, "day"},          {PicturesRole, "pictures"}, {SentRole, "sent"},
+    return {{RoleRole, "sender"},         {HtmlRole, "messageHtml"},
+            {TextRole, "markdown"},       {LineRole, "line"},
+            {TimeRole, "time"},           {DayRole, "day"},
+            {PicturesRole, "pictures"},   {SentRole, "sent"},
             {FirstSentRole, "firstSent"}, {PicturePathsRole, "picturePaths"}};
 }
 
@@ -239,7 +243,8 @@ ChatListModel::ChatListModel(QObject *parent)
     connect(this, &WorkspaceListModel::workspaceChanged, this, [this] {
         disconnect(m_turnsChanged);
         if (shell::Workspace *ws = workspace())
-            m_turnsChanged = connect(ws->chats(), &shell::WorkspaceChats::stateChanged, this, &ChatListModel::turnsChanged);
+            m_turnsChanged =
+                    connect(ws->chats(), &shell::WorkspaceChats::stateChanged, this, &ChatListModel::turnsChanged);
     });
 }
 
@@ -327,9 +332,9 @@ QVariant ChatListModel::data(const QModelIndex &index, int role) const
 
 QHash<int, QByteArray> ChatListModel::roleNames() const
 {
-    return {{PathRole, "path"},       {TitleRole, "title"},   {DateRole, "date"},          {DateLabelRole, "dateLabel"},
-            {PreviewRole, "preview"}, {FromAiRole, "fromAi"}, {MessagesRole, "messages"}, {RunningRole, "running"},
-            {QueuedRole, "queued"}};
+    return {{PathRole, "path"},           {TitleRole, "title"},     {DateRole, "date"},
+            {DateLabelRole, "dateLabel"}, {PreviewRole, "preview"}, {FromAiRole, "fromAi"},
+            {MessagesRole, "messages"},   {RunningRole, "running"}, {QueuedRole, "queued"}};
 }
 
 int ChatListModel::rowOf(const QString &path) const

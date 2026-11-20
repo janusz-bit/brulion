@@ -155,11 +155,10 @@ bool Settings::unencrypted() const
 bool showsThinking(const QString &model)
 {
     // (By family: "claude-opus-5" covers claude-opus-5 and claude-opus-5-5, and so on.)
-    static const QStringList families{u"claude-opus-5"_s,  u"claude-sonnet-5"_s, u"claude-haiku-5"_s,
+    static const QStringList families{u"claude-opus-5"_s, u"claude-sonnet-5"_s, u"claude-haiku-5"_s,
                                       u"claude-fable-5"_s, u"claude-mythos-5"_s};
-    return std::ranges::any_of(families, [&model](const QString &family) {
-        return model == family || model.startsWith(family + u'-');
-    });
+    return std::ranges::any_of(
+            families, [&model](const QString &family) { return model == family || model.startsWith(family + u'-'); });
 }
 
 QVariantMap Reply::toVariant() const

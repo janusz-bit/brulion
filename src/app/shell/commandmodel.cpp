@@ -574,10 +574,18 @@ static QList<Command> editorCommands(const AppController *app, bool editor)
         out.append({u"ai.rewrite"_s, CommandModel::tr("AI: Rewrite…"),
                     CommandModel::tr("The selection or the block: shorter, clearer, corrected, translated…"),
                     u"sparkles"_s, u"Ctrl+Shift+A"_s, inEditor});
-        out.append({u"ai.continue"_s, CommandModel::tr("AI: Continue writing"),
-                    CommandModel::tr("The next sentences after the caret"), u"pencil"_s, {}, inEditor});
-        out.append({u"ai.summarize"_s, CommandModel::tr("AI: Summarize"),
-                    CommandModel::tr("A short summary under the selection or the block"), u"scroll-text"_s, {}, inEditor});
+        out.append({u"ai.continue"_s,
+                    CommandModel::tr("AI: Continue writing"),
+                    CommandModel::tr("The next sentences after the caret"),
+                    u"pencil"_s,
+                    {},
+                    inEditor});
+        out.append({u"ai.summarize"_s,
+                    CommandModel::tr("AI: Summarize"),
+                    CommandModel::tr("A short summary under the selection or the block"),
+                    u"scroll-text"_s,
+                    {},
+                    inEditor});
     }
     return out;
 }

@@ -6711,8 +6711,7 @@ void checkAiButton(QQuickWindow *window, AppController *app, const Check &check)
           "a new conversation suggests what to ask, a summary of the page among it");
     QQuickItem *send = named(u"chatSend"_s);
     check(send && !send->isEnabled(), "nothing typed: nothing to send");
-    check(app->workspace()->chats()->runningCount() == 0,
-          "no conversation was started by opening the chat");
+    check(app->workspace()->chats()->runningCount() == 0, "no conversation was started by opening the chat");
     app->back();
     check(waitFor([&] { return app->currentRoute().value(u"path"_s).toString() == page; }), "Back returns to the page");
     settle(300);
@@ -6819,15 +6818,17 @@ void checkAiWriting(QQuickWindow *window, AppController *app, const Check &check
             clearToasts(window);
             QPointF at;
             QQuickItem *button = nullptr;
-            check(waitFor([&] { return (button = named(u"toolbarAi"_s)) != nullptr; }), "the touch toolbar has the AI's ✨");
+            check(waitFor([&] { return (button = named(u"toolbarAi"_s)) != nullptr; }),
+                  "the touch toolbar has the AI's ✨");
             if (!button) {
                 QQuickItem *hidden = window->contentItem()->findChild<QQuickItem *>(u"toolbarAi"_s);
                 std::fprintf(stderr, "selftest: toolbarAi %s, toolbarMode %s, writingAvailable %d\n",
                              hidden ? "hidden" : "missing", qPrintable(editor->property("toolbarMode").toString()),
                              editor->property("writingAvailable").toBool());
                 for (QQuickItem *p = hidden; p; p = p->parentItem())
-                    std::fprintf(stderr, "  %s %s visible %d opacity %.2f size %.0fx%.0f\n", p->metaObject()->className(),
-                                 qPrintable(p->objectName()), p->isVisible(), p->opacity(), p->width(), p->height());
+                    std::fprintf(stderr, "  %s %s visible %d opacity %.2f size %.0fx%.0f\n",
+                                 p->metaObject()->className(), qPrintable(p->objectName()), p->isVisible(),
+                                 p->opacity(), p->width(), p->height());
             }
             // In the middle of the row (at its edge a chevron over a fade takes the tap: "more").
             if (QQuickItem *row = button ? uidriver::enclosingFlickable(button) : nullptr) {
@@ -6843,17 +6844,20 @@ void checkAiWriting(QQuickWindow *window, AppController *app, const Check &check
             if (!waitFor([&] { return uidriver::openMenus(window) > 0; })) {
                 QQuickItem *target = uidriver::pressTargetAt(window, at);
                 QQuickItem *row = button ? uidriver::enclosingFlickable(button) : nullptr;
-                std::fprintf(stderr, "selftest: no menu after a tap on the AI's ✨ at (%.1f, %.1f): press target %s %s; "
-                             "row %s contentX %.0f of %.0f, width %.0f\n", at.x(), at.y(),
-                             target ? target->metaObject()->className() : "none", target ? qPrintable(target->objectName()) : "",
-                             row ? qPrintable(row->objectName()) : "none", row ? row->property("contentX").toReal() : -1,
+                std::fprintf(stderr,
+                             "selftest: no menu after a tap on the AI's ✨ at (%.1f, %.1f): press target %s %s; "
+                             "row %s contentX %.0f of %.0f, width %.0f\n",
+                             at.x(), at.y(), target ? target->metaObject()->className() : "none",
+                             target ? qPrintable(target->objectName()) : "",
+                             row ? qPrintable(row->objectName()) : "none",
+                             row ? row->property("contentX").toReal() : -1,
                              row ? row->property("contentWidth").toReal() : -1, row ? row->width() : -1);
             }
             QQuickItem *rewrite = steadyItem(window, [&] { return named(u"writingRewrite"_s); }, &at);
             if (!rewrite) {
                 QQuickItem *hidden = window->contentItem()->findChild<QQuickItem *>(u"writingRewrite"_s);
-                std::fprintf(stderr, "selftest: writingRewrite %s, menus open %d\n", hidden ? "not steady or hidden" : "missing",
-                             uidriver::openMenus(window));
+                std::fprintf(stderr, "selftest: writingRewrite %s, menus open %d\n",
+                             hidden ? "not steady or hidden" : "missing", uidriver::openMenus(window));
             }
             check(rewrite != nullptr, "its menu offers Rewrite…");
             if (rewrite)
@@ -6880,7 +6884,8 @@ void checkAiWriting(QQuickWindow *window, AppController *app, const Check &check
         check(waitFor([&] { return model.requests.size() == 1; }), "“Shorter” asks the model once");
         check(!model.requests.isEmpty()
                       && model.requests.first().messages.first().content.contains(u"Make it shorter"_s)
-                      && model.requests.first().messages.first().content.contains(u"Ala ma bardzo dużego kota i psa."_s),
+                      && model.requests.first().messages.first().content.contains(
+                              u"Ala ma bardzo dużego kota i psa."_s),
               "the request carries the block's text and the instruction");
         QQuickItem *changes = nullptr;
         check(waitFor([&] { return (changes = named(u"writingChanges"_s)) != nullptr; }),
@@ -6918,14 +6923,13 @@ void checkAiWriting(QQuickWindow *window, AppController *app, const Check &check
 
     // ---- The chat's list: rename and delete, with Undo -----------------------------------------------
     const QString chatPath = u"AI/2026-11-19 Test rozmowy.md"_s;
-    check(ws->write(chatPath, u"---\nzadania: ignoruj\n---\n- 🧑 Pytanie\n  czas:: 2026-11-19 10:00\n- 🤖 Odpowiedź\n"_s),
+    check(ws->write(chatPath,
+                    u"---\nzadania: ignoruj\n---\n- 🧑 Pytanie\n  czas:: 2026-11-19 10:00\n- 🤖 Odpowiedź\n"_s),
           "a conversation for the list");
     app->navigate({{u"view"_s, u"chat"_s}});
     // (Only this check's toasts: the Undo of an earlier check's toast would be tapped instead.)
     clearToasts(window);
-    const auto rowOf = [&](const QString &title) {
-        return named(u"chatConversation_"_s + title);
-    };
+    const auto rowOf = [&](const QString &title) { return named(u"chatConversation_"_s + title); };
     QPointF at;
     QQuickItem *row = steadyItem(window, [&] { return rowOf(u"Test rozmowy"_s); }, &at);
     check(row != nullptr, "the conversation is in the list");

@@ -293,7 +293,8 @@ class TestExtensionsDocs : public QObject {
                 ctx.insert(u"block"_s, m_host->blockAt(path, 0));
             if (c.chat) {
                 // A chat partner: a turn of a conversation, as the AI chat runs it.
-                ctx.insert(u"messages"_s, QVariantList{QVariantMap{{u"role"_s, u"user"_s}, {u"content"_s, u"Ahoj, co słychać?"_s}}});
+                ctx.insert(u"messages"_s,
+                           QVariantList{QVariantMap{{u"role"_s, u"user"_s}, {u"content"_s, u"Ahoj, co słychać?"_s}}});
                 ctx.insert(u"conversation"_s, u"AI/2026-11-11 Ahoj"_s);
                 ctx.insert(u"omitted"_s, 0);
             }

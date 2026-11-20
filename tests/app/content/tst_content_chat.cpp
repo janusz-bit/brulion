@@ -4,16 +4,15 @@
 // conversation's messages and the page's text in the request, what it says it does, the answer
 // written into the page), the next message with the history, a change asked a yes for in the
 // conversation (questionChat) and written, Stop (nothing written for that turn), a failure and Try
-// again, the extensions loaded again during a turn, the assistant switched off; the messages as the view shows them (ChatMessageModel: roles,
-// rendered text — links, lists, numbers, tasks, headings, code —, the page it is about) and the
-// list of conversations (ChatListModel: only conversations of AI/, newest first, their names
-// without the date, previews); the time of each message written and shown, a day's line above it,
-// pictures sent with a message (attachments of the notebook, the model's images, a model that does
-// not see them), several conversations answering at once (an OpenAI-compatible server played by
-// FakeAiServer) and the model on the device taking them one at a time in line, a conversation too
-// long for the model sent from a later turn (the model told, the view's line), a partner of the
-// user's own (an extension's chat command), renaming and deleting a conversation, and Claude's
-// thinking the turn shows.
+// again, the extensions loaded again during a turn, the assistant switched off; the messages as the view shows them
+// (ChatMessageModel: roles, rendered text — links, lists, numbers, tasks, headings, code —, the page it is about) and
+// the list of conversations (ChatListModel: only conversations of AI/, newest first, their names without the date,
+// previews); the time of each message written and shown, a day's line above it, pictures sent with a message
+// (attachments of the notebook, the model's images, a model that does not see them), several conversations answering at
+// once (an OpenAI-compatible server played by FakeAiServer) and the model on the device taking them one at a time in
+// line, a conversation too long for the model sent from a later turn (the model told, the view's line), a partner of
+// the user's own (an extension's chat command), renaming and deleting a conversation, and Claude's thinking the turn
+// shows.
 #include "chatmodels.h"
 
 #include "workspace.h"
@@ -193,9 +192,10 @@ private Q_SLOTS:
         m_now = m_now.addSecs(60);
         QTRY_VERIFY(!turn->running());
         QCOMPARE(chats->runningCount(), 0);
-        QCOMPARE(ws->read(path), u"---\nzadania: ignoruj\n---\n- 🧑 Co mam jutro do zrobienia? ([[Dom]])\n  czas:: 2026-11-15 10:30\n"
-                                 "- 🤖 Jutro masz jedno zadanie:\n  czas:: 2026-11-15 10:31\n\n"
-                                 "  - zapłacić czynsz — [[Dom]] `⏰ 2026-11-16 09:00`\n"_s);
+        QCOMPARE(ws->read(path),
+                 u"---\nzadania: ignoruj\n---\n- 🧑 Co mam jutro do zrobienia? ([[Dom]])\n  czas:: 2026-11-15 10:30\n"
+                 "- 🤖 Jutro masz jedno zadanie:\n  czas:: 2026-11-15 10:31\n\n"
+                 "  - zapłacić czynsz — [[Dom]] `⏰ 2026-11-16 09:00`\n"_s);
         QCOMPARE(written.size(), 2); // the question, the answer
         QCOMPARE(m_model.requests.size(), 2);
         const ai::Message &first = m_model.requests[0].messages.first();
@@ -218,7 +218,8 @@ private Q_SLOTS:
         QCOMPARE(history[1].role, u"assistant"_s);
         QVERIFY(history[1].content.startsWith(u"Jutro masz jedno zadanie:"_s));
         QCOMPARE(history[2].content, u"A pojutrze?"_s);
-        QVERIFY2(ws->read(path).endsWith(u"- 🧑 A pojutrze?\n  czas:: 2026-11-15 10:31\n- 🤖 Dobrze.\n  czas:: 2026-11-15 10:31\n"_s),
+        QVERIFY2(ws->read(path).endsWith(
+                         u"- 🧑 A pojutrze?\n  czas:: 2026-11-15 10:31\n- 🤖 Dobrze.\n  czas:: 2026-11-15 10:31\n"_s),
                  qPrintable(ws->read(path)));
 
         // A second conversation with the same question: a name of its own.
@@ -266,7 +267,8 @@ private Q_SLOTS:
         chats->showing(path, false);
         QVERIFY(!chats->isShown(path));
         QCOMPARE(ws->read(u"Zakupy.md"_s), u"- chleb\n- mleko\n"_s);
-        QVERIFY2(ws->read(path).endsWith(u"- 🤖 Dopisałem mleko.\n  czas:: 2026-11-15 10:30\n\n  ✏️ Zmienione: [[Zakupy]]\n"_s),
+        QVERIFY2(ws->read(path).endsWith(
+                         u"- 🤖 Dopisałem mleko.\n  czas:: 2026-11-15 10:30\n\n  ✏️ Zmienione: [[Zakupy]]\n"_s),
                  qPrintable(ws->read(path)));
     }
 
@@ -338,7 +340,7 @@ private Q_SLOTS:
         QCOMPARE(turn->thoughts(), u"Użytkownik pyta o jutro."_s);
         QCOMPARE(turn->allThoughts(), u"Użytkownik pyta o jutro."_s);
         QCOMPARE(turn->speed(), QLocale().toString(20.0, 'f', 1) + u" tok/s"_s); // 40 tokens in the last 2 s
-        QCOMPARE(turn->partialSettled(), QString()); // (one block, being written)
+        QCOMPARE(turn->partialSettled(), QString());                             // (one block, being written)
         QCOMPARE(turn->partialTail(), u"Jutro masz"_s);
         QVERIFY(turn->running());
         // Shown in a view: the top bar's ✨ need not spin.
@@ -598,7 +600,8 @@ private Q_SLOTS:
         QTRY_VERIFY(!chats->turn(path)->running());
         const QList<ai::Message> sent = m_model.requests.first().messages;
         // 6 × 2 messages of 2000 and more: 16 000 characters hold the last three turns and the question.
-        QVERIFY2(sent.first().content.contains(u"(Początek tej rozmowy — 6 wcześniejszych wiadomości — nie zmieścił się"_s),
+        QVERIFY2(sent.first().content.contains(
+                         u"(Początek tej rozmowy — 6 wcześniejszych wiadomości — nie zmieścił się"_s),
                  qPrintable(sent.first().content.left(300)));
         QVERIFY(sent.first().content.contains(u"Pytanie 4"_s));
         QVERIFY(!sent.first().content.contains(u"Pytanie 3"_s));
@@ -687,7 +690,7 @@ private Q_SLOTS:
         model.refreshNow();
         QCOMPARE(model.rowCount(), 4);
         QCOMPARE(value(model, 0, "time").toString(), u"22:10"_s);
-        QVERIFY(!value(model, 0, "day").toString().isEmpty()); // (the first day)
+        QVERIFY(!value(model, 0, "day").toString().isEmpty());  // (the first day)
         QCOMPARE(value(model, 1, "day").toString(), QString()); // (the same day)
         QCOMPARE(value(model, 2, "time").toString(), u"08:05"_s);
         QVERIFY(!value(model, 2, "day").toString().isEmpty()); // (a new day)
@@ -729,11 +732,12 @@ private Q_SLOTS:
         shell::WorkspaceChats *chats = ws->chats();
         shell::WorkspaceExtensions *ext = ws->extensions();
         const QString page = u"Rozszerzenia/Echo.md"_s;
-        QVERIFY(ws->write(page, u"---\ntags: [extension]\npermissions: [write]\n---\n```luau\nb.command(\"echo\", function(ctx)\n"
-                                "    local last = ctx.messages[#ctx.messages]\n"
-                                "    b.appendToPage(\"Echo dziennik\", \"- \" .. last.content)\n"
-                                "    return `Echo: {last.content} ({#ctx.messages}, {ctx.omitted})`\n"
-                                "end, { label = \"Echo\", chat = true })\n```\n"_s));
+        QVERIFY(ws->write(
+                page, u"---\ntags: [extension]\npermissions: [write]\n---\n```luau\nb.command(\"echo\", function(ctx)\n"
+                      "    local last = ctx.messages[#ctx.messages]\n"
+                      "    b.appendToPage(\"Echo dziennik\", \"- \" .. last.content)\n"
+                      "    return `Echo: {last.content} ({#ctx.messages}, {ctx.omitted})`\n"
+                      "end, { label = \"Echo\", chat = true })\n```\n"_s));
         // Another extension hears what the partner writes, with its name (docs/EXTENSIONS.md "Hooks").
         const QString listener = u"Rozszerzenia/Słuchacz.md"_s;
         QVERIFY(ws->write(listener, u"---\ntags: [extension]\npermissions: [write]\n---\n```luau\n"
@@ -757,7 +761,8 @@ private Q_SLOTS:
         QCOMPARE(ext->partnerLabel(QString()), ext->chatPartners().at(0).toMap().value(u"label"_s).toString());
         // Not in the palette, a chat command.
         const auto commands = ext->commands();
-        QVERIFY(std::ranges::any_of(commands, [](const extensions::CommandInfo &c) { return c.name == u"echo" && c.chat && !c.palette; }));
+        QVERIFY(std::ranges::any_of(
+                commands, [](const extensions::CommandInfo &c) { return c.name == u"echo" && c.chat && !c.palette; }));
         // A new conversation with it: its page names it, it answers.
         const QString path = chats->send(QString(), u"Ahoj"_s, QString(), {}, id);
         QVERIFY2(ws->read(path).contains(u"partner: "_s + id + u'\n'), qPrintable(ws->read(path)));

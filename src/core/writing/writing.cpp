@@ -74,9 +74,13 @@ qsizetype trailingSpace(QStringView s)
 /// The quotes a whole answer may come in: opening, closing.
 const QList<std::pair<QChar, QChar>> &quotes()
 {
-    static const QList<std::pair<QChar, QChar>> pairs{
-            {u'"', u'"'}, {u'\'', u'\''}, {QChar(0x201E), QChar(0x201D)}, {QChar(0x201C), QChar(0x201D)},
-            {QChar(0x00AB), QChar(0x00BB)}, {QChar(0x201A), QChar(0x2019)}, {QChar(0x2018), QChar(0x2019)}};
+    static const QList<std::pair<QChar, QChar>> pairs{{u'"', u'"'},
+                                                      {u'\'', u'\''},
+                                                      {QChar(0x201E), QChar(0x201D)},
+                                                      {QChar(0x201C), QChar(0x201D)},
+                                                      {QChar(0x00AB), QChar(0x00BB)},
+                                                      {QChar(0x201A), QChar(0x2019)},
+                                                      {QChar(0x2018), QChar(0x2019)}};
     return pairs;
 }
 
@@ -153,9 +157,7 @@ ai::Request request(const Input &input)
     r.effort = u"low"_s;
     QStringList parts;
     switch (input.action) {
-    case Action::Rewrite:
-        parts << u"Rewrite the text below: "_s + input.instruction.trimmed();
-        break;
+    case Action::Rewrite: parts << u"Rewrite the text below: "_s + input.instruction.trimmed(); break;
     case Action::Continue:
         parts << u"Continue the text below where it ends: write what comes next — a sentence or two, or the next "
                  "items when it ends in a list —, in its language, tone and format. Reply with the continuation "
@@ -188,12 +190,8 @@ ai::Request request(const Input &input)
         parts << u"Reply with the rewritten text alone."_s;
         r.maxTokens = std::clamp(int(input.text.size()) + 600, 1000, 16000);
         break;
-    case Action::Continue:
-        r.maxTokens = 800;
-        break;
-    case Action::Summarize:
-        r.maxTokens = 600;
-        break;
+    case Action::Continue: r.maxTokens = 800; break;
+    case Action::Summarize: r.maxTokens = 600; break;
     }
     r.messages << ai::textMessage(u"user"_s, parts.join(u"\n\n"_s));
     return r;
@@ -209,7 +207,8 @@ QString clean(QStringView answer, const Input &input, bool partial)
     if (const auto m = open.match(s); m.hasMatch() && !input.text.trimmed().startsWith(m.captured(1))) {
         const QString fence = m.captured(1);
         QString inner = s.mid(m.capturedLength());
-        if (inner.endsWith(fence) && (inner.size() == fence.size() || inner.at(inner.size() - fence.size() - 1) == u'\n'))
+        if (inner.endsWith(fence)
+            && (inner.size() == fence.size() || inner.at(inner.size() - fence.size() - 1) == u'\n'))
             s = inner.chopped(fence.size()).trimmed();
         else if (partial)
             s = inner.trimmed();
@@ -218,8 +217,8 @@ QString clean(QStringView answer, const Input &input, bool partial)
     static const QRegularExpression preamble(
             u"^(?:here is|here's|here are|sure|certainly|of course|oto|poniżej|proszę|jasne|oczywiście)\\b[^\\n]{0,120}:[ \\t]*\\n+"_s,
             QRegularExpression::CaseInsensitiveOption | QRegularExpression::UseUnicodePropertiesOption);
-    if (const auto m = preamble.match(s); m.hasMatch() && m.capturedLength() < s.size()
-        && !preamble.match(input.text.trimmed() + u'\n').hasMatch())
+    if (const auto m = preamble.match(s);
+        m.hasMatch() && m.capturedLength() < s.size() && !preamble.match(input.text.trimmed() + u'\n').hasMatch())
         s = s.mid(m.capturedLength()).trimmed();
     // Quotes around all of it that the text did not have.
     const QString original = input.text.trimmed();
@@ -365,7 +364,8 @@ QList<Change> diff(QStringView before, QStringView after)
         const auto at = [&](qsizetype i, qsizetype j) -> int & { return lcs[size_t(i * (m + 1) + j)]; };
         for (qsizetype i = n - 1; i >= 0; --i) {
             for (qsizetype j = m - 1; j >= 0; --j)
-                at(i, j) = a.at(head + i) == b.at(head + j) ? at(i + 1, j + 1) + 1 : std::max(at(i + 1, j), at(i, j + 1));
+                at(i, j) =
+                        a.at(head + i) == b.at(head + j) ? at(i + 1, j + 1) + 1 : std::max(at(i + 1, j), at(i, j + 1));
         }
         qsizetype i = 0, j = 0;
         while (i < n || j < m) {

@@ -1014,11 +1014,14 @@ extensions::Result WorkspaceExtensions::resumeCall(int call, const QVariant &val
 
 QVariantList WorkspaceExtensions::chatPartners() const
 {
-    QVariantList out{QVariantMap{{u"id"_s, QString()}, {u"label"_s, title(u"asystent"_s)}, {u"extension"_s, title(u"asystent"_s)}}};
+    QVariantList out{QVariantMap{
+            {u"id"_s, QString()}, {u"label"_s, title(u"asystent"_s)}, {u"extension"_s, title(u"asystent"_s)}}};
     for (const extensions::CommandInfo &c : commands()) {
         if (!c.chat || (c.extension == u"asystent" && c.name == u"chat"))
             continue;
-        out.append(QVariantMap{{u"id"_s, QString(c.extension + u'/' + c.name)}, {u"label"_s, c.label}, {u"extension"_s, title(c.extension)}});
+        out.append(QVariantMap{{u"id"_s, QString(c.extension + u'/' + c.name)},
+                               {u"label"_s, c.label},
+                               {u"extension"_s, title(c.extension)}});
     }
     return out;
 }
@@ -1061,8 +1064,10 @@ bool WorkspaceExtensions::runChat(const QString &path, const QVariantList &messa
         if (extension == u"asystent")
             Q_EMIT chatFailed(path, tr("The AI assistant is off: switch it on in Settings → Extensions → AI."));
         else
-            Q_EMIT chatFailed(path, tr("The chat partner “%1” is not running: switch its extension on, or choose another partner.")
-                                            .arg(partner));
+            Q_EMIT chatFailed(
+                    path,
+                    tr("The chat partner “%1” is not running: switch its extension on, or choose another partner.")
+                            .arg(partner));
         return false;
     }
     // (The conversation's own page by its name, as b.read names pages: its tools leave it out.)
@@ -1156,7 +1161,7 @@ void WorkspaceExtensions::chatResult(const QString &path, const extensions::Resu
 }
 
 ai::Pending WorkspaceExtensions::sendAi(const ai::Request &request, std::function<void(const ai::Reply &)> done,
-                                       ai::PartialCallback partial)
+                                        ai::PartialCallback partial)
 {
     ++m_aiPending;
     Q_EMIT aiPendingChanged();
@@ -2024,7 +2029,8 @@ void WorkspaceExtensions::answerChat(const QString &path, const QString &option)
         const WaitingQuestion q = m_waitingQuestions.at(i);
         if (q.chat != path)
             continue;
-        if (q.request.value(u"kind"_s).toString() == u"choose" && !q.request.value(u"options"_s).toStringList().contains(option))
+        if (q.request.value(u"kind"_s).toString() == u"choose"
+            && !q.request.value(u"options"_s).toStringList().contains(option))
             return;
         m_waitingQuestions.removeAt(i);
         ++m_chatQuestionSerial;

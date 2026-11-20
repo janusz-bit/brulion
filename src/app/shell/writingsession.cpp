@@ -9,8 +9,7 @@ using namespace Qt::StringLiterals;
 
 namespace brulion::shell {
 
-WritingSession::WritingSession(QObject *parent)
-    : QObject(parent)
+WritingSession::WritingSession(QObject *parent) : QObject(parent)
 {
     // The answer as it comes, shown ten times a second at most (as the chat's).
     m_partialTimer.setSingleShot(true);
@@ -59,8 +58,9 @@ QString WritingSession::presetLabel(const QString &preset) const
     return preset;
 }
 
-bool WritingSession::start(const QString &action, const QString &preset, const QString &instruction, const QString &text,
-                           const QString &before, const QString &after, const QString &page, bool inlineText)
+bool WritingSession::start(const QString &action, const QString &preset, const QString &instruction,
+                           const QString &text, const QString &before, const QString &after, const QString &page,
+                           bool inlineText)
 {
     stop();
     m_choosing = false;
@@ -102,8 +102,8 @@ bool WritingSession::begin(const QString &action, const QString &preset, const Q
     return start(action, preset, QString(), text, before, after, page, inlineText);
 }
 
-bool WritingSession::startInline(const QString &action, const QString &preset, int row, const QString &editText, int from,
-                                 int to, const QString &page)
+bool WritingSession::startInline(const QString &action, const QString &preset, int row, const QString &editText,
+                                 int from, int to, const QString &page)
 {
     const qsizetype length = editText.size();
     qsizetype a = std::clamp<qsizetype>(std::min(from, to), 0, length);
@@ -163,13 +163,25 @@ bool WritingSession::startSource(const QString &action, const QString &preset, c
                  source.mid(b), page, false);
 }
 
-QVariantMap WritingSession::change() const { return edit(m_base, int(m_from), int(m_to)); }
+QVariantMap WritingSession::change() const
+{
+    return edit(m_base, int(m_from), int(m_to));
+}
 
-int WritingSession::changeFrom() const { return int(writing::edit(m_base, m_from, m_to, m_result, m_input.action).from); }
+int WritingSession::changeFrom() const
+{
+    return int(writing::edit(m_base, m_from, m_to, m_result, m_input.action).from);
+}
 
-int WritingSession::changeTo() const { return int(writing::edit(m_base, m_from, m_to, m_result, m_input.action).to); }
+int WritingSession::changeTo() const
+{
+    return int(writing::edit(m_base, m_from, m_to, m_result, m_input.action).to);
+}
 
-QString WritingSession::changeText() const { return writing::edit(m_base, m_from, m_to, m_result, m_input.action).text; }
+QString WritingSession::changeText() const
+{
+    return writing::edit(m_base, m_from, m_to, m_result, m_input.action).text;
+}
 
 bool WritingSession::retry()
 {
@@ -202,11 +214,12 @@ bool WritingSession::send()
         return false;
     }
     if (const QString problem = writing::problem(m_input); !problem.isEmpty()) {
-        setState(u"failed"_s, m_input.action == writing::Action::Rewrite && m_input.instruction.trimmed().isEmpty()
-                                      ? tr("Choose how to rewrite it, or say it in your words.")
-                              : m_input.text.size() > writing::MaxText
-                                      ? tr("The text is too long for the AI: at most %1 characters.").arg(writing::MaxText)
-                                      : tr("There is no text to work on: select some, or put the caret in a block."));
+        setState(u"failed"_s,
+                 m_input.action == writing::Action::Rewrite && m_input.instruction.trimmed().isEmpty()
+                         ? tr("Choose how to rewrite it, or say it in your words.")
+                 : m_input.text.size() > writing::MaxText
+                         ? tr("The text is too long for the AI: at most %1 characters.").arg(writing::MaxText)
+                         : tr("There is no text to work on: select some, or put the caret in a block."));
         return false;
     }
     WorkspaceExtensions *extensions = m_workspace->extensions();
@@ -315,12 +328,10 @@ QString WritingSession::changesHtml(const QColor &removedColor, const QColor &ad
     QString html;
     for (const writing::Change &c : writing::diff(m_input.text, m_result)) {
         switch (c.kind) {
-        case writing::Change::Same:
-            html += escaped(c.text);
-            break;
+        case writing::Change::Same: html += escaped(c.text); break;
         case writing::Change::Removed:
             html += u"<span style=\"color:%1; text-decoration:line-through;\">%2</span>"_s.arg(css(removedColor),
-                                                                                                escaped(c.text));
+                                                                                               escaped(c.text));
             break;
         case writing::Change::Added:
             html += u"<span style=\"background-color:%1;\">%2</span>"_s.arg(css(addedBackground), escaped(c.text));

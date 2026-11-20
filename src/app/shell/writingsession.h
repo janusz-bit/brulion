@@ -86,8 +86,8 @@ public:
 
     /// The editor's requests: `action` on `row`'s edit text `editText` — its [from, to), the whole
     /// of it when they meet, up to the caret for a continuation …
-    Q_INVOKABLE bool startInline(const QString &action, const QString &preset, int row, const QString &editText, int from,
-                                 int to, const QString &page);
+    Q_INVOKABLE bool startInline(const QString &action, const QString &preset, int row, const QString &editText,
+                                 int from, int to, const QString &page);
     /// … the selected blocks (`markdown`, from `firstRow` to `lastRow`) …
     Q_INVOKABLE bool startBlocks(const QString &action, const QString &preset, const QString &markdown, int firstRow,
                                  int lastRow, const QString &page);
@@ -105,8 +105,9 @@ public:
     /// `page` its name; `inlineText`: a part of one block's text); a Rewrite after `preset` (one of
     /// presets()) or else `instruction`. False, with `error`, when it cannot be asked (no text, no
     /// instruction, no model set up, no notebook).
-    Q_INVOKABLE bool start(const QString &action, const QString &preset, const QString &instruction, const QString &text,
-                           const QString &before, const QString &after, const QString &page, bool inlineText);
+    Q_INVOKABLE bool start(const QString &action, const QString &preset, const QString &instruction,
+                           const QString &text, const QString &before, const QString &after, const QString &page,
+                           bool inlineText);
     /// The same request again (another answer).
     Q_INVOKABLE bool retry();
     /// A Rewrite of the same text after another preset or instruction (the one `choosing` waits for).

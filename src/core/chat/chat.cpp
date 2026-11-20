@@ -283,9 +283,11 @@ QDateTime timeOfLine(QStringView line)
 QString languageOf(QStringView content)
 {
     static const QRegularExpression polish(u"^(?:[ \\t]+czas::|zadania:)"_s,
-                                           QRegularExpression::MultilineOption | QRegularExpression::CaseInsensitiveOption);
+                                           QRegularExpression::MultilineOption
+                                                   | QRegularExpression::CaseInsensitiveOption);
     static const QRegularExpression english(u"^(?:[ \\t]+time::|tasks:)"_s,
-                                            QRegularExpression::MultilineOption | QRegularExpression::CaseInsensitiveOption);
+                                            QRegularExpression::MultilineOption
+                                                    | QRegularExpression::CaseInsensitiveOption);
     const qsizetype pl = polish.matchView(content).capturedStart();
     const qsizetype en = english.matchView(content).capturedStart();
     if (pl < 0 && en < 0)
@@ -406,7 +408,8 @@ Conversation parse(QStringView content)
             }
             if (const auto m = partner.matchView(lines.at(j)); m.hasMatch()) {
                 named = m.captured(1).trimmed();
-                if (named.size() >= 2 && (named.front() == u'"' || named.front() == u'\'') && named.back() == named.front())
+                if (named.size() >= 2 && (named.front() == u'"' || named.front() == u'\'')
+                    && named.back() == named.front())
                     named = named.mid(1, named.size() - 2).trimmed();
             }
         }
@@ -485,12 +488,15 @@ Conversation parse(QStringView content)
     return conversation;
 }
 
-QString timeKey(QStringView language) { return language == u"pl" ? u"czas"_s : u"time"_s; }
+QString timeKey(QStringView language)
+{
+    return language == u"pl" ? u"czas"_s : u"time"_s;
+}
 
 QString formatMessage(Role role, QStringView markdown, QStringView newline, const QDateTime &time, QStringView language)
 {
-    const QString timeLine = time.isValid() ? u"  "_s + timeKey(language) + u":: "_s + time.toString(kTimeFormat) + newline
-                                            : QString();
+    const QString timeLine =
+            time.isValid() ? u"  "_s + timeKey(language) + u":: "_s + time.toString(kTimeFormat) + newline : QString();
     QList<QStringView> lines = splitLines(markdown);
     while (!lines.isEmpty() && isBlank(lines.first()))
         lines.removeFirst();
@@ -610,7 +616,10 @@ QStringList picturesIn(QStringView markdown)
     return out;
 }
 
-QString withoutPictures(QStringView markdown) { return withoutEmbeds(markdown, picturesIn(markdown)); }
+QString withoutPictures(QStringView markdown)
+{
+    return withoutEmbeds(markdown, picturesIn(markdown));
+}
 
 QString withPictures(QStringView text, const QStringList &pictures)
 {

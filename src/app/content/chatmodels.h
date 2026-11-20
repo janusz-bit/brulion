@@ -52,8 +52,18 @@ class ChatMessageModel : public WorkspaceListModel {
     Q_PROPERTY(int omitted READ omitted NOTIFY loaded FINAL)
 
 public:
-    enum Role { RoleRole = Qt::UserRole + 1, HtmlRole, TextRole, LineRole, TimeRole, DayRole, PicturesRole, SentRole,
-                FirstSentRole, PicturePathsRole };
+    enum Role {
+        RoleRole = Qt::UserRole + 1,
+        HtmlRole,
+        TextRole,
+        LineRole,
+        TimeRole,
+        DayRole,
+        PicturesRole,
+        SentRole,
+        FirstSentRole,
+        PicturePathsRole
+    };
     explicit ChatMessageModel(QObject *parent = nullptr);
 
     QString path() const { return m_path; }
@@ -123,8 +133,17 @@ class ChatListModel : public WorkspaceListModel {
     Q_PROPERTY(QString locale READ locale WRITE setLocale NOTIFY localeChanged FINAL)
 
 public:
-    enum Role { PathRole = Qt::UserRole + 1, TitleRole, DateRole, DateLabelRole, PreviewRole, FromAiRole, MessagesRole,
-                RunningRole, QueuedRole };
+    enum Role {
+        PathRole = Qt::UserRole + 1,
+        TitleRole,
+        DateRole,
+        DateLabelRole,
+        PreviewRole,
+        FromAiRole,
+        MessagesRole,
+        RunningRole,
+        QueuedRole
+    };
     explicit ChatListModel(QObject *parent = nullptr);
 
     QString locale() const { return m_locale; }

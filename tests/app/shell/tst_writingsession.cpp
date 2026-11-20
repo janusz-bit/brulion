@@ -118,7 +118,8 @@ private Q_SLOTS:
         QVERIFY(!session.choosing());
         QCOMPARE(session.instruction(), u"jako wiersz"_s);
         QTRY_COMPARE(session.state(), u"done"_s);
-        QVERIFY(FakeAiServer::lastUserText(server.requests.first()).startsWith(u"Rewrite the text below: jako wiersz"_s));
+        QVERIFY(FakeAiServer::lastUserText(server.requests.first())
+                        .startsWith(u"Rewrite the text below: jako wiersz"_s));
         QCOMPARE(session.changeFrom(), 0);
         QCOMPARE(session.changeTo(), 12);
         // Try again: another answer.
@@ -176,7 +177,8 @@ private Q_SLOTS:
         // The caret inside the second paragraph, nothing selected: that paragraph.
         QVERIFY(session.startSource(u"rewrite"_s, u"shorter"_s, source, 25, 25, u"Tekst"_s));
         QTRY_COMPARE(session.state(), u"done"_s);
-        QVERIFY(FakeAiServer::lastUserText(server.requests.first()).contains(u"<text>\nDrugi akapit, który jest długi.\n</text>"_s));
+        QVERIFY(FakeAiServer::lastUserText(server.requests.first())
+                        .contains(u"<text>\nDrugi akapit, który jest długi.\n</text>"_s));
         QCOMPARE(session.changeFrom(), 18);
         QCOMPARE(session.changeTo(), 49);
         QCOMPARE(QString(source.left(session.changeFrom()) + session.changeText() + source.mid(session.changeTo())),

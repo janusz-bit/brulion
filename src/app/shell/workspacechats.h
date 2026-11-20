@@ -292,12 +292,12 @@ private:
 
     Workspace *m_workspace = nullptr;
     WorkspaceExtensions *m_extensions = nullptr;
-    QHash<QString, ChatTurn *> m_turns; // by path, lower case
+    QHash<QString, ChatTurn *> m_turns;         // by path, lower case
     QHash<QString, QPointer<ChatTurn>> m_byKey; // the running turns by the path they started with
-    QList<QPointer<ChatTurn>> m_waiting; // in line for the model on the device, in order
-    QPointer<ChatTurn> m_onDevice; // the turn the model on the device answers
+    QList<QPointer<ChatTurn>> m_waiting;        // in line for the model on the device, in order
+    QPointer<ChatTurn> m_onDevice;              // the turn the model on the device answers
     QHash<QString, int> m_shown; // by path, lower case: the chat views showing it
-    QStringList m_added; // pictures added and not sent yet (dropPicture deletes only those)
+    QStringList m_added;         // pictures added and not sent yet (dropPicture deletes only those)
     bool m_runningShown = false;
     QPointer<QObject> m_speech; // the recognizer connected to (platform::SpeechRecognizer)
     /// Connects the recognizer of now (it may come later: one of the app's own).

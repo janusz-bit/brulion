@@ -6,11 +6,20 @@
 namespace brulion::platform {
 
 namespace detail {
-SpeechRecognizer *systemSpeechRecognizer() { return nullptr; }
+SpeechRecognizer *systemSpeechRecognizer()
+{
+    return nullptr;
+}
 } // namespace detail
 
-bool cameraAvailable() { return false; }
+bool cameraAvailable()
+{
+    return false;
+}
 
-bool takePhoto(std::function<void(const QString &, const QString &)>) { return false; }
+bool takePhoto(std::function<void(const QString &, const QString &)>)
+{
+    return false;
+}
 
 } // namespace brulion::platform

@@ -19,8 +19,7 @@ constexpr int kSpeech = 1;
 /// The system's recognizer: its dialog listens, the text comes back at once (no partial text).
 class AndroidSpeechRecognizer : public SpeechRecognizer {
 public:
-    explicit AndroidSpeechRecognizer(QObject *parent)
-        : SpeechRecognizer(parent)
+    explicit AndroidSpeechRecognizer(QObject *parent) : SpeechRecognizer(parent)
     {
         connect(AndroidBridge::instance(), &AndroidBridge::captured, this, [this](int kind, const QJsonObject &result) {
             if (kind != kSpeech || !m_listening)
@@ -69,7 +68,10 @@ SpeechRecognizer *systemSpeechRecognizer()
 }
 } // namespace detail
 
-bool cameraAvailable() { return AndroidBridge::instance()->canCapture(kPhoto); }
+bool cameraAvailable()
+{
+    return AndroidBridge::instance()->canCapture(kPhoto);
+}
 
 bool takePhoto(std::function<void(const QString &, const QString &)> done)
 {
@@ -78,14 +80,14 @@ bool takePhoto(std::function<void(const QString &, const QString &)> done)
         return false;
     // One answer for this photo: the connection goes with it.
     auto connection = std::make_shared<QMetaObject::Connection>();
-    *connection = QObject::connect(bridge, &AndroidBridge::captured, bridge,
-                                   [connection, done](int kind, const QJsonObject &result) {
-                                       if (kind != kPhoto)
-                                           return;
-                                       QObject::disconnect(*connection);
-                                       if (done)
-                                           done(result.value(u"file"_s).toString(), result.value(u"error"_s).toString());
-                                   });
+    *connection = QObject::connect(
+            bridge, &AndroidBridge::captured, bridge, [connection, done](int kind, const QJsonObject &result) {
+                if (kind != kPhoto)
+                    return;
+                QObject::disconnect(*connection);
+                if (done)
+                    done(result.value(u"file"_s).toString(), result.value(u"error"_s).toString());
+            });
     if (!bridge->capture(kPhoto, QString())) {
         QObject::disconnect(*connection);
         return false;
