@@ -163,6 +163,56 @@ private Q_SLOTS:
         QCOMPARE(nameAt(doc, 3, 0), QString());
     }
 
+    void luauCodeMode()
+    {
+        // A ```luau block (CodeBlockView: "code" mode, the block's language): Luau's colours, a
+        // long comment carried across lines; another language keeps the plain code colours.
+        QTextDocument doc;
+        doc.setPlainText(u"local n = 0 -- licznik\n--[[ długi\nkomentarz ]] b.command(\"x\", f)\n# not a comment"_s);
+        MarkdownHighlighter h;
+        h.setMode(u"code"_s);
+        h.setLanguage(u"luau"_s);
+        h.setPalette({{u"keyword"_s, QColor(u"#112233"_s)}, {u"string"_s, QColor(u"#445566"_s)}});
+        h.attach(&doc);
+        QCOMPARE(nameAt(doc, 0, 0), u"luau.keyword"_s);
+        QCOMPARE(formatAt(doc, 0, 0).foreground().color(), QColor(u"#112233"_s));
+        QCOMPARE(nameAt(doc, 0, at(doc, 0, u"0"_s)), u"luau.number"_s);
+        QCOMPARE(nameAt(doc, 0, at(doc, 0, u"licznik"_s)), u"luau.comment"_s);
+        QCOMPARE(nameAt(doc, 1, 0), u"luau.comment"_s);
+        QCOMPARE(nameAt(doc, 2, 0), u"luau.comment"_s); // still inside --[[ … ]]
+        QCOMPARE(nameAt(doc, 2, at(doc, 2, u"b.command"_s)), u"luau.builtin"_s);
+        QCOMPARE(nameAt(doc, 2, at(doc, 2, u"command"_s)), u"luau.api"_s);
+        QCOMPARE(nameAt(doc, 2, at(doc, 2, u"\"x\""_s)), u"luau.string"_s);
+        QCOMPARE(formatAt(doc, 2, at(doc, 2, u"\"x\""_s)).foreground().color(), QColor(u"#445566"_s));
+        QCOMPARE(nameAt(doc, 3, 0), QString()); // `#` is no comment in Luau
+        h.setLanguage(u"python"_s);
+        QCOMPARE(nameAt(doc, 0, 0), QString());
+        QCOMPARE(nameAt(doc, 3, 0), u"comment"_s);
+    }
+
+    void luauFenceInSource()
+    {
+        // Source mode: a ```luau fence's lines are Luau, a long string spanning them included; a
+        // ```js fence stays code.
+        QTextDocument doc;
+        doc.setPlainText(u"# Tytuł\n```luau\nlocal s = [[\nif\n]] return s\n```\n```js\nlocal x\n```\nlocal po"_s);
+        MarkdownHighlighter h;
+        h.setMode(u"source"_s);
+        h.attach(&doc);
+        QCOMPARE(nameAt(doc, 1, 0), u"fence"_s);
+        QCOMPARE(nameAt(doc, 2, 0), u"luau.keyword"_s);
+        QCOMPARE(nameAt(doc, 3, 0), u"luau.string"_s); // "if" inside the long string
+        QCOMPARE(nameAt(doc, 4, at(doc, 4, u"return"_s)), u"luau.keyword"_s);
+        QCOMPARE(nameAt(doc, 5, 0), u"fence"_s);
+        QCOMPARE(nameAt(doc, 7, 0), u"code"_s);
+        QCOMPARE(nameAt(doc, 9, 0), QString()); // after the fences: Markdown again
+        // A ```luau fence never closed by a longer marker run: the fence's length still counts.
+        doc.setPlainText(u"````lua\n-- ```\nlocal y\n````"_s);
+        QCOMPARE(nameAt(doc, 1, 0), u"luau.comment"_s);
+        QCOMPARE(nameAt(doc, 2, 0), u"luau.keyword"_s);
+        QCOMPARE(nameAt(doc, 3, 0), u"fence"_s);
+    }
+
     void paletteColours()
     {
         QTextDocument doc;

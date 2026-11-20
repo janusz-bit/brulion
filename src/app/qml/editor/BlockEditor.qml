@@ -567,6 +567,9 @@ FocusScope {
         muted: Theme.fgMuted, faint: Theme.fgFaint, due: Theme.chipDueFg, scheduled: Theme.chipScheduledFg,
         reminder: Theme.chipReminderFg, alarm: Theme.warningText, recurrence: Theme.chipRecurrenceFg,
         done: Theme.fgFaint, priority: Theme.dangerText, text: Theme.fg,
+        // ```luau code (MarkdownHighlighter's "luau.*" formats).
+        keyword: Theme.chipScheduledFg, constant: Theme.warningText, builtin: Theme.link, function: Theme.fg,
+        number: Theme.warningText, string: Theme.chipRecurrenceFg,
         // The edited block's reminder chips (InlineEditor): the rendered chips' colours.
         reminderChip: Theme.chipReminderFg, reminderBackground: Theme.chipReminderBg,
         alarmChip: Theme.chipAlarmFg, alarmBackground: Theme.chipAlarmBg

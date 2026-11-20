@@ -43,6 +43,8 @@ TextEdit {
     /// cursorRectangle, typed for the editor (TextEdit's own cannot be looked into from there).
     final property rect caretRect: cursorRectangle
     property string highlightMode: "inline"
+    /// The code's language in "code" mode (a fence's info string): "luau" / "lua" colour Luau.
+    property string highlightLanguage: ""
     property string placeholderText
     /// Misspelled words are underlined while the block is edited.
     readonly property bool spellChecked: active && highlightMode !== "code" && SpellCheck.active
@@ -80,6 +82,7 @@ TextEdit {
         textDocument: edit.textDocument
         palette: edit.editor ? edit.editor.highlighterPalette : ({})
         mode: edit.highlightMode
+        language: edit.highlightLanguage
         monoFamily: Theme.fontMono
         lineHeight: edit.lineHeightPx
         readonly property NoteFind find: edit.editor ? edit.editor.find : null
