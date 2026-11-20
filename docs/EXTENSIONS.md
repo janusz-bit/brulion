@@ -1705,7 +1705,11 @@ each extension's events of a burst without its own writes, chains cut, daily not
 tasks), the samples' walls and the extension's own corner (`tst_extensions_shared`: pages of one
 name as two paths, shared code with a copy and the permissions of each user, a cycle, a page that
 is no extension or not approved, a module that fails or never ends, settings declared, kept, checked
-and refused, timers with their words, what a question may show, the diff of an approval), block edits, the API added for the habits on a real notebook
+and refused, timers with their words, what a question may show, the diff of an approval), the type
+checker (`tst_extensions_types`: the mistakes it finds with the page's lines, none in code that works
+— every built-in, sample and documentation example —, the declarations naming every function of
+`b`, hostile code that ends the check in time), hostile extensions (`tst_extensions_hostile`, the
+same checks the browser runs: `selftest.h`), block edits, the API added for the habits on a real notebook
 (`tst_extensions_api`: blocks and pages by property, `plain`, `path`, a query's pages, attachments,
 the revision after a write, the date, name and recurrence helpers, `b.appendToPage`, inserting and
 removing blocks — the note's line endings and a last line without a break kept —, a task's status
