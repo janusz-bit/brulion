@@ -179,6 +179,7 @@ type:tasks status:open due:<=+7d sort:due
 - Osadzona sekcja innej strony: ![[Przepisy#Szarlotka babci]]
 - Obraz z folderu załączników: ![[plan-mieszkania.svg]]
 - Osadzony blok: !((budzet1))
+- Tablica z kartami, notatką, obrazem i połączeniami (Obsidian Canvas): [[Plan remontu.canvas]]
 
 ## Ramki (callouty)
 > [!note] Notatka
@@ -411,6 +412,25 @@ const auto kPlanSvg = uR"svg(<svg xmlns="http://www.w3.org/2000/svg" width="480"
 </svg>
 )svg"_s;
 
+
+/// A canvas (docs/SYNTAX.md §2 "Canvases"): the renovation on one board, as Obsidian writes it.
+const auto kCanvas = uR"json({
+	"nodes":[
+		{"id":"5a1c0e7f3b9d2a46","type":"group","x":-480,"y":-300,"width":1000,"height":660,"label":"Remont mieszkania","color":"4"},
+		{"id":"b81f4d2c6e0a9375","type":"text","text":"# Plan\n\n- [x] Wybrać kolor ścian\n- [ ] Zamówić farbę\n- [ ] Zerwać stare panele\n\nBudżet: 12 000 zł #projekt/dom","x":-450,"y":-260,"width":330,"height":260,"color":"4"},
+		{"id":"c4e2a9b7d1f05863","type":"file","file":"Projekty/Remont mieszkania.md","subpath":"#Kosztorys","x":-80,"y":-260,"width":570,"height":320},
+		{"id":"d9b3f6a0c2e74158","type":"file","file":"assets/plan-mieszkania.svg","x":-450,"y":40,"width":330,"height":290},
+		{"id":"e7a5c1d8b4f20396","type":"text","text":"Kolory: **szałwiowa zieleń** w salonie, ciepła biel w kuchni.","x":-80,"y":110,"width":360,"height":110,"color":"3"},
+		{"id":"f2d8b6e4a0c71935","type":"text","text":"Dwukrotne kliknięcie w puste miejsce dodaje kartę. Przeciągnij z kółka na boku karty na inną kartę, żeby je połączyć.","x":600,"y":-260,"width":320,"height":150,"color":"6"},
+		{"id":"a3c9e1f7b5d04682","type":"link","url":"https://jsoncanvas.org","x":600,"y":-40,"width":320,"height":140}
+	],
+	"edges":[
+		{"id":"1b2c3d4e5f607182","fromNode":"b81f4d2c6e0a9375","fromSide":"right","toNode":"c4e2a9b7d1f05863","toSide":"left","label":"koszty"},
+		{"id":"2c3d4e5f60718293","fromNode":"d9b3f6a0c2e74158","fromSide":"right","toNode":"e7a5c1d8b4f20396","toSide":"left"},
+		{"id":"3d4e5f6071829304","fromNode":"f2d8b6e4a0c71935","fromSide":"bottom","toNode":"a3c9e1f7b5d04682","toSide":"top","toEnd":"none","color":"6"}
+	]
+}
+)json"_s;
 } // namespace pl
 
 // ---- Content: English --------------------------------------------------------------------------
@@ -523,6 +543,7 @@ type:tasks status:open due:<=+7d sort:due
 - A section of another page, embedded: ![[Recipes#Grandma's apple pie]]
 - A picture from the attachments folder: ![[floor-plan.svg]]
 - An embedded block: !((budget1))
+- A canvas of cards, a note, a picture and connections (Obsidian Canvas): [[Home renovation plan.canvas]]
 
 ## Callouts
 > [!note] Note
@@ -754,6 +775,25 @@ const auto kPlanSvg = uR"svg(<svg xmlns="http://www.w3.org/2000/svg" width="480"
   <text x="240" y="296" font-family="sans-serif" font-size="12" fill="#e2574c" text-anchor="middle">floor plan — renovation</text>
 </svg>
 )svg"_s;
+
+/// A canvas (docs/SYNTAX.md §2 "Canvases"): the renovation on one board, as Obsidian writes it.
+const auto kCanvas = uR"json({
+	"nodes":[
+		{"id":"5a1c0e7f3b9d2a46","type":"group","x":-480,"y":-300,"width":1000,"height":660,"label":"Home renovation","color":"4"},
+		{"id":"b81f4d2c6e0a9375","type":"text","text":"# Plan\n\n- [x] Choose the wall colour\n- [ ] Order the paint\n- [ ] Rip out the old floor\n\nBudget: $3,000 #project/home","x":-450,"y":-260,"width":330,"height":260,"color":"4"},
+		{"id":"c4e2a9b7d1f05863","type":"file","file":"Projects/Home renovation.md","subpath":"#Cost estimate","x":-80,"y":-260,"width":570,"height":320},
+		{"id":"d9b3f6a0c2e74158","type":"file","file":"assets/floor-plan.svg","x":-450,"y":40,"width":330,"height":290},
+		{"id":"e7a5c1d8b4f20396","type":"text","text":"Colours: **sage green** in the living room, warm white in the kitchen.","x":-80,"y":110,"width":360,"height":110,"color":"3"},
+		{"id":"f2d8b6e4a0c71935","type":"text","text":"Double-click an empty spot to add a card. Drag from the circle on a card's side onto another card to connect them.","x":600,"y":-260,"width":320,"height":150,"color":"6"},
+		{"id":"a3c9e1f7b5d04682","type":"link","url":"https://jsoncanvas.org","x":600,"y":-40,"width":320,"height":140}
+	],
+	"edges":[
+		{"id":"1b2c3d4e5f607182","fromNode":"b81f4d2c6e0a9375","fromSide":"right","toNode":"c4e2a9b7d1f05863","toSide":"left","label":"costs"},
+		{"id":"2c3d4e5f60718293","fromNode":"d9b3f6a0c2e74158","fromSide":"right","toNode":"e7a5c1d8b4f20396","toSide":"left"},
+		{"id":"3d4e5f6071829304","fromNode":"f2d8b6e4a0c71935","fromSide":"bottom","toNode":"a3c9e1f7b5d04682","toSide":"top","toEnd":"none","color":"6"}
+	]
+}
+)json"_s;
 } // namespace en
 
 /// The sample notebook's texts and paths in one language.
@@ -761,6 +801,7 @@ struct SampleTexts {
     QStringView welcome, docsNotebook, today, yesterday, weekAgo;
     QStringView projectPath, project, booksPath, books, recipesPath, recipes;
     QStringView journalTemplate, meetingTemplatePath, meetingTemplate, picturePath, picture;
+    QStringView canvasPath, canvas;
 };
 
 bool isPolish(QStringView language)
@@ -774,11 +815,11 @@ SampleTexts sampleTexts(QStringView language)
         return {pl::kWelcome, pl::kDocsNotebook, pl::kToday, pl::kYesterday, pl::kWeekAgo,
                 u"Projekty/Remont mieszkania.md", pl::kRemont, u"Książki 2026.md", pl::kBooks, u"Przepisy.md",
                 pl::kRecipes, pl::kJournalTemplate, u"templates/Spotkanie.md", pl::kMeetingTemplate,
-                u"assets/plan-mieszkania.svg", pl::kPlanSvg};
+                u"assets/plan-mieszkania.svg", pl::kPlanSvg, u"Projekty/Plan remontu.canvas", pl::kCanvas};
     return {en::kWelcome, en::kDocsNotebook, en::kToday, en::kYesterday, en::kWeekAgo,
             u"Projects/Home renovation.md", en::kRenovation, u"Books 2026.md", en::kBooks, u"Recipes.md",
             en::kRecipes, en::kJournalTemplate, u"templates/Meeting.md", en::kMeetingTemplate,
-            u"assets/floor-plan.svg", en::kPlanSvg};
+            u"assets/floor-plan.svg", en::kPlanSvg, u"Projects/Home renovation plan.canvas", en::kCanvas};
 }
 
 } // namespace
@@ -823,6 +864,7 @@ QList<DemoFile> demoVaultFiles(const QDateTime &now, QStringView language)
             {config.journalTemplate, texts.journalTemplate.toString()},
             {texts.meetingTemplatePath.toString(), texts.meetingTemplate.toString()},
             {texts.picturePath.toString(), texts.picture.toString()},
+            {texts.canvasPath.toString(), texts.canvas.toString()},
     };
 }
 
