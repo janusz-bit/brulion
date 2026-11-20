@@ -4,7 +4,7 @@ project(Brulion
     VERSION 0.24.0
     DESCRIPTION "Offline-first Markdown notes: outliner + journals, calendar, reminders, calculations"
     HOMEPAGE_URL "https://github.com/janusz-bit/brulion"
-    LANGUAGES CXX)
+    LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)

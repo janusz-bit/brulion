@@ -28,8 +28,8 @@ namespace brulion {
 class SearchIndex {
 public:
     /// Bump when tokenize(), the folding or the fields change: the index cache (indexcache.h)
-    /// stores search sections of this format only.
-    static constexpr quint32 FormatVersion = 1;
+    /// stores search sections of this format only. 2: encrypted fragments make no words.
+    static constexpr quint32 FormatVersion = 2;
 
     enum Field { Title = 0, Aliases = 1, Content = 2, FieldCount = 3 };
     /// Per field (title, aliases, content): term frequencies or lengths.

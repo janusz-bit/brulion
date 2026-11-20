@@ -12,6 +12,7 @@ brulion_add_core_module(markdown
         blockdocument.h blockdocument.cpp
         cloze.h cloze.cpp
         edit.h edit.cpp
+        encrypted.h encrypted.cpp
         frontmatter.h frontmatter_p.h frontmatter.cpp
         highlight.h highlight.cpp
         inline.h inline_p.h inline.cpp
