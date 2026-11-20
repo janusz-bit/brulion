@@ -7,6 +7,11 @@ brulion: document
 
 Tu znajdziesz zmiany w każdej wersji Brulionu, od najnowszej. Pełne opisy wydań z plikami do pobrania są na GitHubie: https://github.com/janusz-bit/brulion/releases
 
+## 0.26.0 — 20 listopada 2026
+
+**Nowe**
+- **Agenci AI w czacie (ACP)** — **Ustawienia → Rozszerzenia → Agenci AI → Dodaj** ustawia agenta AI, którego uruchamiasz na komputerze: Claude Code (`npx -y @agentclientprotocol/claude-agent-acp`), Codex, Gemini CLI, OpenCode albo **Inny agent…** z własnym poleceniem; **Sprawdź** uruchamia go w folderze notatnika i mówi, czy odpowiada i jakim modelem. Wybrany jako ten, kto odpowiada w rozmowie, odpowiada przez Agent Client Protocol i loguje się sam, więc działa Twoja subskrypcja Claude Pro/Max albo ChatGPT. Czyta i zmienia pliki notatnika przez Brulion (nigdy poza notatnikiem, nigdy zaszyfrowanej strony), uruchamia polecenia w terminalach, których wynik widać w rozmowie, i dostaje narzędzia Brulionu przez `brulion-cli mcp`. Rozmowa pokazuje jego plan i kroki, zmianę pliku jako porównanie wersji i jego pytania (**Allow**, **Reject** …; komunikat z przyciskiem **Otwórz**, gdy jesteś gdzie indziej); jego model, tryb i wysiłek to chipy nad rozmową, zapamiętywane na kolejne sesje, razem z zajętym kontekstem i kosztem; `/` pokazuje jego polecenia; **Zatrzymaj** przerywa jego turę i polecenia. Rozmowa wraca do swojej sesji po ponownym uruchomieniu, zmieniona w międzyczasie dostaje nową, a usunięta ją zamyka. Tylko na komputerze.
+
 ## 0.25.0 — 20 listopada 2026
 
 **Nowe**
