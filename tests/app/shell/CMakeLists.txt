@@ -226,7 +226,7 @@ if(TARGET brulion AND NOT ANDROID AND NOT EMSCRIPTEN AND EXISTS "${_brulion_qt_q
     if(TARGET brulion-cli AND NOT WIN32)
         brulion_add_test(tst_remote_control_qml SOURCES tst_remote_control.cpp LIBS brulion_ipc)
         target_compile_definitions(tst_remote_control_qml PRIVATE BRULION_APP="$<TARGET_FILE:brulion>"
-            BRULION_CLI="$<TARGET_FILE:brulion-cli>" BRULION_QML_ROOT="${_brulion_qt_qml_root}")
+            BRULION_CLI="$<TARGET_FILE:brulion-cli>" BRULION_QML_ROOT="${BRULION_TEST_QML_IMPORT_PATH}")
         add_dependencies(tst_remote_control_qml brulion brulion-cli)
         math(EXPR _remote_timeout "240 + 30 * ${BRULION_TEST_SLOWDOWN}")
         set_tests_properties(tst_remote_control_qml PROPERTIES TIMEOUT ${_remote_timeout} PROCESSORS 2)

@@ -17,6 +17,14 @@ target_sources(brulion PRIVATE media/mediaqml.h)
 if(BRULION_MULTIMEDIA_ENABLED)
     find_package(Qt6 REQUIRED COMPONENTS Multimedia)
     target_link_libraries(brulion PRIVATE Qt6::Multimedia)
+    # qmlcachegen reads VideoOutput's type from Qt Multimedia's QML folder: where that folder is not
+    # Qt's own (Nix: a store path per Qt module) it joins the module's import path, or
+    # MediaVideoSurface.qml is left to the interpreter (tst_qml_compiled in the Nix sandbox).
+    get_filename_component(_brulion_multimedia_qml "${Qt6Multimedia_DIR}/../../../${QT6_INSTALL_QML}" ABSOLUTE)
+    get_filename_component(_brulion_qt_qml "${Qt6Qml_DIR}/../../../${QT6_INSTALL_QML}" ABSOLUTE)
+    if(EXISTS "${_brulion_multimedia_qml}/QtMultimedia" AND NOT _brulion_multimedia_qml STREQUAL _brulion_qt_qml)
+        set_property(TARGET brulion APPEND PROPERTY QT_QML_IMPORT_PATH "${_brulion_multimedia_qml}")
+    endif()
     set(_brulion_video_surface qml/media/video/MediaVideoSurface.qml)
     # Android: Qt's own Android backend (the system's MediaPlayer and MediaRecorder: every format
     # Android plays) without Qt's FFmpeg backend, whose FFmpeg libraries would add 17 MB to each
