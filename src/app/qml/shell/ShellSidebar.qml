@@ -1114,6 +1114,13 @@ Rectangle {
                 iconName: "share"
                 onTriggered: sidebar.go({ view: "importExport", tab: "export", scope: "folder", folder: contextMenu.path })
             }
+            HidingItem {
+                objectName: "treeMenuPublish"
+                visible: contextMenu.isDir
+                text: qsTr("Publish folder…")
+                iconName: "globe"
+                onTriggered: sidebar.go({ view: "importExport", tab: "publish", add: "folder", folder: contextMenu.path })
+            }
             BMenuItem {
                 objectName: "treeMenuRename"
                 text: qsTr("Rename…")

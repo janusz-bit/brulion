@@ -50,6 +50,10 @@ struct ExportInput {
     /// gives what it computed). A macro not in here — and in the Markdown, Obsidian, Logseq,
     /// JSON and other exports every one — stays as written.
     QHash<QString, QHash<QString, QString>> macroTexts;
+    /// The footer of the HTML exports' pages ("html-site", "html-single"; "" = "Exported from
+    /// Brulion on <now>"). Publishing gives one without the time, so that a page that did not
+    /// change stays the same bytes.
+    QString footer;
 };
 
 /// A produced file: a suggested file name, its MIME type and content.
@@ -100,5 +104,20 @@ QStringList webPictureTargets(const ExportInput &input);
 /// Clean `input` (paths normalised, empty / duplicate paths, ignored folders such as .trash/ and
 /// sync-conflict copies dropped; `.brulion/config.json` kept) and run `exporter`.
 ExportResult runExport(const Exporter &exporter, const ExportInput &input);
+
+/// Options of htmlSiteFiles() (the "html-site" export uses the defaults).
+struct HtmlSiteOptions {
+    /// A search box in every page's header: `search.js` and the pages' text in `search-index.js`,
+    /// loaded when the box is first used — no server needed (file:// pages search too). The site's
+    /// own script, the only one a page then has (note content never becomes markup that runs);
+    /// off for the ZIP export, on for publishing.
+    bool search = false;
+};
+
+/// The static website of the "html-site" export as files with site-relative paths ("index.html",
+/// "style.css", "Projekty/Dom.html", "tags/dom.html", "search.js", the attachments at their
+/// paths) — what its ZIP holds in the notebook's folder. `input` is cleaned (and the macros of
+/// extensions replaced) as runExport() does. Publishing uploads them (publish/publish.h).
+QList<FileEntry> htmlSiteFiles(const ExportInput &input, const HtmlSiteOptions &options = {});
 
 } // namespace brulion::io

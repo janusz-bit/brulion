@@ -23,4 +23,11 @@ std::unique_ptr<Exporter> makeTasksCsvExporter();
 /// runExport()'s cleaning of the input (paths normalised, ignored and duplicate files dropped).
 ExportInput cleanExportInput(const ExportInput &input);
 
+/// cleanExportInput() and, for the documents (`exporterId` "html-site", "html-single", "pdf",
+/// "docx", "pandoc"), the macros of extensions replaced by what they show (ExportInput::macroTexts).
+ExportInput prepareExportInput(const QString &exporterId, const ExportInput &input);
+
+/// The files of the "html-site" export (htmlSiteFiles()) of a prepared input.
+QList<FileEntry> htmlSiteEntries(const ExportInput &input, const HtmlSiteOptions &options);
+
 } // namespace brulion::io::detail

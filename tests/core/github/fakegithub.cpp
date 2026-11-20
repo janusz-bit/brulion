@@ -634,6 +634,45 @@ HttpResponse FakeGitHub::api(const HttpRequest &request, const LoggedRequest &lo
         r.branches.insert(branch, sha);
         return json(201, QJsonObject{{u"ref"_s, ref}, {u"object"_s, QJsonObject{{u"sha"_s, sha}}}});
     }
+    if (tail == u"pages"_s) {
+        const auto site = [&r]() {
+            const QString host = r.owner.toLower() + u".github.io"_s;
+            const QString url = !r.pagesCname.isEmpty()    ? QString(u"https://"_s + r.pagesCname + u'/')
+                                : r.name.toLower() == host ? QString(u"https://"_s + host + u'/')
+                                                           : QString(u"https://"_s + host + u'/' + r.name + u'/');
+            return QJsonObject{{u"url"_s, u"https://api.github.com/repos/%1/%2/pages"_s.arg(r.owner, r.name)},
+                               {u"status"_s, u"built"_s},
+                               {u"html_url"_s, url},
+                               {u"cname"_s, r.pagesCname.isEmpty() ? QJsonValue() : QJsonValue(r.pagesCname)},
+                               {u"source"_s, QJsonObject{{u"branch"_s, r.pagesBranch}, {u"path"_s, r.pagesPath}}}};
+        };
+        if (method == "GET")
+            return r.pages ? json(200, site()) : message(404, u"Not Found"_s);
+        if (method == "POST" || method == "PUT") {
+            if (!mayPush)
+                return message(403, u"Resource not accessible by personal access token"_s);
+            if (method == "POST" && r.pages)
+                return message(409, u"GitHub Pages is already enabled."_s);
+            if (method == "PUT" && !r.pages)
+                return message(404, u"Not Found"_s);
+            const QJsonObject source = body.value(u"source"_s).toObject();
+            const QString branch = source.value(u"branch"_s).toString();
+            const QString path = source.value(u"path"_s).toString(u"/"_s);
+            if (!r.branches.contains(branch))
+                return message(422, u"The %1 branch must exist before GitHub Pages can be built."_s.arg(branch));
+            if (path != u"/"_s && path != u"/docs"_s)
+                return message(422, u"Invalid property /source/path: must be one of \"/\", \"/docs\""_s);
+            r.pages = true;
+            r.pagesBranch = branch;
+            r.pagesPath = path;
+            if (method == "PUT") {
+                HttpResponse response;
+                response.status = 204;
+                return response;
+            }
+            return json(201, site());
+        }
+    }
     if (tail == u"forks"_s && method == "POST") {
         if (!logged.authorized)
             return message(401, u"Requires authentication"_s);

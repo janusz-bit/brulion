@@ -25,7 +25,9 @@
 //                 user, repository (permissions), branch (If-None-Match), branchNames, tree,
 //                 folder (contents API), blob, rawFile, createBlob, createTree, createCommit,
 //                 updateBranch (never forced), createBranch, createFork, createPullRequest,
-//                 pullRequest, putFile (an empty repository's first commit); cancel();
+//                 pullRequest, putFile (an empty repository's first commit), pages / enablePages /
+//                 updatePages (GitHub Pages: PagesSite{htmlUrl, status, branch, path, cname} —
+//                 publishing, publish/publish.h); cancel();
 //                 GitHubError{code Auth | Forbidden | RateLimited | NotFound | EmptyRepository |
 //                 Conflict | NotFastForward | Validation | Server | Network | Timeout | Parse |
 //                 Integrity | TooLarge | Cancelled, status, message, resetAt, retryAfterSeconds},

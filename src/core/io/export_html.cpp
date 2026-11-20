@@ -12,6 +12,10 @@
 #include "io/messages_p.h"
 #include "util/paths.h"
 
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QRegularExpression>
 #include <QSet>
 
 namespace brulion::io::detail {
@@ -112,11 +116,20 @@ li.cancelled{text-decoration:line-through}
 img,video{max-width:100%;height:auto}
 nav.toc ul{columns:2}
 section.note{margin-top:3rem;padding-top:1rem;border-top:1px solid var(--line)}
+header{display:flex;flex-wrap:wrap;gap:.5rem 1rem;align-items:center;justify-content:space-between}
+form.search{position:relative;flex:1 1 12rem;max-width:20rem}
+form.search input{width:100%;font:inherit;padding:.3rem .6rem;border:1px solid var(--line);border-radius:6px;background:var(--card);color:var(--fg)}
+ol.search-results{position:absolute;z-index:10;right:0;left:0;margin:.25rem 0 0;padding:.25rem 0;list-style:none;max-height:70vh;overflow:auto;
+background:var(--card);border:1px solid var(--line);border-radius:6px;box-shadow:0 4px 16px #0002}
+ol.search-results li{padding:.35rem .75rem}
+ol.search-results li.none{color:var(--muted)}
+ol.search-results small{display:block;color:var(--muted)}
+[hidden]{display:none!important}
 )css";
 }
 
 QString pageHtml(const QString &title, const QString &vaultName, const QString &cssHref, const QString &header,
-                 const QString &body, const QString &footer)
+                 const QString &body, const QString &footer, const QString &head = {})
 {
     QString out = u"<!DOCTYPE html>\n<html>\n<head>\n<meta charset=\"utf-8\">\n"
                   u"<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n"
@@ -126,6 +139,7 @@ QString pageHtml(const QString &title, const QString &vaultName, const QString &
         out += u"<style>\n"_s + QString::fromUtf8(styleSheet()) + u"</style>\n"_s;
     else
         out += u"<link rel=\"stylesheet\" href=\""_s + esc(cssHref) + u"\">\n"_s;
+    out += head;
     out += u"</head>\n<body>\n<header>"_s + header + u"</header>\n<main>\n"_s + body + u"\n</main>\n<footer>"_s + footer
            + u"</footer>\n</body>\n</html>\n"_s;
     return out;
@@ -133,6 +147,8 @@ QString pageHtml(const QString &title, const QString &vaultName, const QString &
 
 QString footerText(const ExportInput &input)
 {
+    if (!input.footer.isEmpty())
+        return esc(input.footer);
     return esc(input.now.isValid()
                        ? IoMessages::tr("Exported from Brulion on %1").arg(input.now.toString(u"yyyy-MM-dd HH:mm"_s))
                        : IoMessages::tr("Exported from Brulion"));
@@ -353,6 +369,221 @@ QString tagRelativePath(const QString &tag)
     return u"tags/"_s + safeRelativePath(tag, false) + u".html"_s;
 }
 
+/// The site's search (HtmlSiteOptions::search): the box of every page's header fetches
+/// search-index.js the first time it is used (a <script> element: file:// pages too) and lists
+/// the pages whose title or text holds every word typed, diacritics and letter case ignored.
+/// Results are made with textContent only: a note's title is never markup.
+const char *searchScript()
+{
+    return R"js((function(){
+"use strict";
+var me=document.currentScript,root=(me&&me.getAttribute("data-root"))||"";
+var input=document.getElementById("search"),list=document.getElementById("search-results");
+if(!input||!list)return;
+var asked=false;
+function fold(t){return String(t).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/\u0142/g,"l");}
+function load(){if(asked)return;asked=true;var e=document.createElement("script");e.src=root+"search-index.js";e.onload=run;document.head.appendChild(e);}
+function item(cls,text){var li=document.createElement("li");if(cls)li.className=cls;if(text)li.textContent=text;return li;}
+function run(){
+var data=window.brulionSearch;if(!data)return;
+var q=fold(input.value).trim();list.textContent="";
+if(!q){list.hidden=true;return;}
+var words=q.split(/\s+/),hits=[];
+for(var i=0;i<data.pages.length;i++){
+var p=data.pages[i];if(p.ft===undefined){p.ft=fold(p.t);p.fx=fold(p.x||"");}
+var score=0;
+for(var j=0;j<words.length;j++){var t=p.ft.indexOf(words[j])>=0,x=p.fx.indexOf(words[j])>=0;if(!t&&!x){score=-1;break;}score+=t?10:1;}
+if(score>0)hits.push([score,p]);}
+hits.sort(function(a,b){return b[0]-a[0]||(a[1].t<b[1].t?-1:a[1].t>b[1].t?1:0);});
+for(var k=0;k<hits.length&&k<30;k++){
+var page=hits[k][1],li=item("",""),a=document.createElement("a");
+a.href=root+page.u;a.textContent=page.t;li.appendChild(a);
+var at=page.fx.indexOf(words[0]);
+if(at<0&&page.p){var f=document.createElement("small");f.textContent=page.p;li.appendChild(f);}
+if(at>=0){var from=Math.max(0,at-40),s=document.createElement("small");
+s.textContent=(from>0?"\u2026":"")+page.x.substr(from,160)+(from+160<page.x.length?"\u2026":"");li.appendChild(s);}
+list.appendChild(li);}
+if(!hits.length)list.appendChild(item("none",data.none));
+list.hidden=false;}
+input.addEventListener("focus",load);
+input.addEventListener("input",function(){if(window.brulionSearch)run();else load();});
+input.addEventListener("keydown",function(e){if(e.key==="Escape"){input.value="";run();}});
+if(input.form)input.form.addEventListener("submit",function(e){e.preventDefault();var a=list.querySelector("a");if(a)location.href=a.href;});
+document.addEventListener("click",function(e){if(!list.contains(e.target)&&e.target!==input)list.hidden=true;});
+})();
+)js";
+}
+
+/// A block's text as words for the search index: links as their text, markup characters gone.
+QString searchText(const QString &markdown)
+{
+    static const QRegularExpression wiki(u"!?\\[\\[([^\\]|]*)(?:\\|([^\\]]*))?\\]\\]"_s);
+    static const QRegularExpression link(u"!?\\[([^\\]]*)\\]\\([^)]*\\)"_s);
+    static const QRegularExpression marks(u"[*_~=`<>|]+"_s);
+    static const QRegularExpression spaces(u"\\s+"_s);
+    QString out = markdown;
+    out.replace(wiki, u"\\2 \\1"_s);
+    out.replace(link, u"\\1"_s);
+    out.replace(marks, u" "_s);
+    out.replace(spaces, u" "_s);
+    return out.trimmed();
+}
+
+/// search-index.js: `window.brulionSearch = {none, pages: [{t: title, u: URL from the site's
+/// root, p: folder, x: text}]}` — at most SearchTextLimit characters of a page's text.
+constexpr qsizetype SearchTextLimit = 20000;
+
+QByteArray searchIndex(const ExportVault &vault, const QHash<VaultPath, QString> &htmlFiles)
+{
+    QJsonArray pages;
+    for (const QList<const ExportVault::Note *> notes = orderedNotes(vault); const ExportVault::Note *n : notes) {
+        QString text;
+        for (const Block &b : n->parsed->blocks) {
+            if (text.size() >= SearchTextLimit)
+                break;
+            if (b.kind == BlockKind::Code && b.lang != u"calc"_s)
+                continue;
+            const QString words = searchText(b.text);
+            if (!words.isEmpty())
+                text += (text.isEmpty() ? QString() : u" "_s) + words;
+        }
+        QJsonObject page{{u"t"_s, n->parsed->title}, {u"u"_s, encodeLinkPath(htmlFiles.value(n->path))}};
+        if (const QString folder = paths::dirname(n->path); !folder.isEmpty())
+            page.insert(u"p"_s, folder);
+        if (!text.isEmpty())
+            page.insert(u"x"_s, text.left(SearchTextLimit));
+        pages.append(page);
+    }
+    const QJsonObject data{{u"none"_s, IoMessages::tr("No pages found.")}, {u"pages"_s, pages}};
+    return "window.brulionSearch=" + QJsonDocument(data).toJson(QJsonDocument::Compact) + ";\n";
+}
+
+/// The header's search box (HtmlSiteOptions::search).
+QString searchBox()
+{
+    const QString label = esc(IoMessages::tr("Search"));
+    return u"<form class=\"search\" role=\"search\"><input type=\"search\" id=\"search\" placeholder=\""_s + label
+           + u"\" aria-label=\""_s + label
+           + u"\" autocomplete=\"off\"><ol class=\"search-results\" id=\"search-results\" hidden></ol></form>"_s;
+}
+
+/// The script of the search box for a page in folder `dir` of the site.
+QString searchScriptTag(const QString &dir)
+{
+    QString root = relativePath(dir, u"index.html"_s);
+    root.chop(QStringLiteral("index.html").size());
+    return u"<script src=\""_s + esc(root) + u"search.js\" data-root=\""_s + esc(root) + u"\" defer></script>\n"_s;
+}
+
+/// The site's index page: journals, pages and tags.
+QString siteIndexPage(const ExportVault &vault, const QHash<VaultPath, QString> &htmlFiles, const QList<TagCount> &tags,
+                      const QHash<QString, QString> &tagFiles, const QString &footer, const QString &searchHeader,
+                      const QString &head);
+
+QList<FileEntry> siteEntries(const ExportVault &vault, const HtmlSiteOptions &options)
+{
+    const ExportInput &input = vault.input();
+    PathClaims claims;
+    claims.claim(u"index.html"_s);
+    claims.claim(u"style.css"_s);
+    if (options.search) {
+        claims.claim(u"search.js"_s);
+        claims.claim(u"search-index.js"_s);
+    }
+    // Attachments and made pictures keep their paths, except one the site's own files took.
+    QHash<VaultPath, QString> files;
+    for (const FileEntry &a : vault.attachments())
+        files.insert(a.path, claims.claim(a.path));
+    for (const FileEntry &a : vault.madePictures())
+        files.insert(a.path, claims.claim(a.path));
+    QHash<VaultPath, QString> htmlFiles;
+    for (const ExportVault::Note &n : vault.notes())
+        htmlFiles.insert(n.path, claims.claim(paths::stripMarkdownExtension(n.path) + u".html"_s));
+    const QList<TagCount> tags = vault.index().tags();
+    QHash<QString, QString> tagFiles;
+    for (const TagCount &t : tags)
+        tagFiles.insert(t.tag, claims.claim(tagRelativePath(t.tag)));
+
+    QList<FileEntry> entries;
+    const QString footer = footerText(input);
+    const QString search = options.search ? searchBox() : QString();
+    const auto head = [&](const QString &dir) { return options.search ? searchScriptTag(dir) : QString(); };
+    // Included copies of pictures from the internet: assets/web/<name>, claimed on first use.
+    QHash<QString, QString> webFiles;
+    const auto webFile = [&](const QString &url) -> std::optional<QString> {
+        if (const auto it = webFiles.constFind(url); it != webFiles.constEnd())
+            return *it;
+        const auto copy = input.webPictures.constFind(url);
+        if (copy == input.webPictures.constEnd() || copy->data.isEmpty()
+            || mimeForPictureFormat(copy->format).isEmpty())
+            return std::nullopt;
+        const QString path = claims.claim(u"assets/web/"_s + webPictureFileName(*copy));
+        webFiles.insert(url, path);
+        entries.append(FileEntry{path, copy->data});
+        return path;
+    };
+    for (const QList<const ExportVault::Note *> notes = orderedNotes(vault); const ExportVault::Note *n : notes) {
+        const QString file = htmlFiles.value(n->path);
+        const QString dir = paths::dirname(file);
+        const auto href = [dir](const QString &to) -> QString { return relativeHref(dir, to); };
+        Site site(
+                vault,
+                [&, href](const VaultPath &to, const QString &fragment) -> QString {
+                    return href(htmlFiles.value(to)) + (fragment.isEmpty() ? QString() : u'#' + fragment);
+                },
+                [&, href](const VaultPath &to) -> std::optional<QString> { return href(files.value(to, to)); },
+                [&, href](const QString &tag) -> QString {
+                    const QString f = tagFiles.value(tag.toLower());
+                    return f.isEmpty() ? QString() : href(f);
+                },
+                {});
+        site.setWebPicture([&, href](const QString &url) -> std::optional<QString> {
+            const auto copy = webFile(url);
+            return copy ? std::optional<QString>(href(*copy)) : std::nullopt;
+        });
+        QString header =
+                u"<nav><a href=\""_s + esc(href(u"index.html"_s)) + u"\">"_s + esc(vault.vaultName()) + u"</a>"_s;
+        for (const QString &segment : paths::dirname(n->path).split(u'/', Qt::SkipEmptyParts))
+            header += u" / "_s + esc(segment);
+        header += u"</nav>"_s + search;
+        const QString body = u"<article>\n<h1 class=\"title\">"_s + esc(n->parsed->title) + u"</h1>\n"_s
+                             + site.tagsLine(*n) + site.renderNote(*n) + u"\n</article>\n"_s + site.backlinks(*n);
+        entries.append(FileEntry{file, pageHtml(n->parsed->title, vault.vaultName(), href(u"style.css"_s), header, body,
+                                                footer, head(dir))
+                                               .toUtf8()});
+    }
+    for (const TagCount &t : tags) {
+        const QString file = tagFiles.value(t.tag);
+        const QString dir = paths::dirname(file);
+        QString items;
+        for (const VaultPath &p : t.paths) {
+            if (const ExportVault::Note *n = vault.note(p))
+                items += u"<li><a href=\""_s + esc(relativeHref(dir, htmlFiles.value(p))) + u"\">"_s
+                         + esc(n->parsed->title) + u"</a></li>"_s;
+        }
+        const QString title = u'#' + t.display;
+        const QString header = u"<nav><a href=\""_s + esc(relativeHref(dir, u"index.html"_s)) + u"\">"_s
+                               + esc(vault.vaultName()) + u"</a></nav>"_s + search;
+        const QString body =
+                u"<article><h1 class=\"title\">"_s + esc(title) + u"</h1><ul>"_s + items + u"</ul></article>"_s;
+        entries.append(FileEntry{file, pageHtml(title, vault.vaultName(), relativeHref(dir, u"style.css"_s), header,
+                                                body, footer, head(dir))
+                                               .toUtf8()});
+    }
+    entries.append(FileEntry{u"index.html"_s,
+                             siteIndexPage(vault, htmlFiles, tags, tagFiles, footer, search, head({})).toUtf8()});
+    entries.append(FileEntry{u"style.css"_s, QByteArray(styleSheet())});
+    if (options.search) {
+        entries.append(FileEntry{u"search.js"_s, QByteArray(searchScript())});
+        entries.append(FileEntry{u"search-index.js"_s, searchIndex(vault, htmlFiles)});
+    }
+    for (const FileEntry &a : vault.attachments())
+        entries.append(FileEntry{files.value(a.path), a.data});
+    for (const FileEntry &a : vault.madePictures())
+        entries.append(FileEntry{files.value(a.path), a.data});
+    return entries;
+}
+
 class HtmlSiteExporter final : public Exporter {
 public:
     QString id() const override { return u"html-site"_s; }
@@ -362,127 +593,45 @@ public:
     ExportResult run(const ExportInput &input) const override
     {
         const ExportVault vault(input);
-        PathClaims claims;
-        claims.claim(u"index.html"_s);
-        claims.claim(u"style.css"_s);
-        // Attachments and made pictures keep their paths, except one the site's index.html or style.css took.
-        QHash<VaultPath, QString> files;
-        for (const FileEntry &a : vault.attachments())
-            files.insert(a.path, claims.claim(a.path));
-        for (const FileEntry &a : vault.madePictures())
-            files.insert(a.path, claims.claim(a.path));
-        QHash<VaultPath, QString> htmlFiles;
-        for (const ExportVault::Note &n : vault.notes())
-            htmlFiles.insert(n.path, claims.claim(paths::stripMarkdownExtension(n.path) + u".html"_s));
-        const QList<TagCount> tags = vault.index().tags();
-        QHash<QString, QString> tagFiles;
-        for (const TagCount &t : tags)
-            tagFiles.insert(t.tag, claims.claim(tagRelativePath(t.tag)));
-
-        QList<FileEntry> entries;
+        // The site in a folder named as the notebook.
         const QString root = paths::sanitizeFileName(vault.vaultName()) + u'/';
-        const QString footer = footerText(input);
-        // Included copies of pictures from the internet: assets/web/<name>, claimed on first use.
-        QHash<QString, QString> webFiles;
-        const auto webFile = [&](const QString &url) -> std::optional<QString> {
-            if (const auto it = webFiles.constFind(url); it != webFiles.constEnd())
-                return *it;
-            const auto copy = input.webPictures.constFind(url);
-            if (copy == input.webPictures.constEnd() || copy->data.isEmpty()
-                || mimeForPictureFormat(copy->format).isEmpty())
-                return std::nullopt;
-            const QString path = claims.claim(u"assets/web/"_s + webPictureFileName(*copy));
-            webFiles.insert(url, path);
-            entries.append(FileEntry{root + path, copy->data});
-            return path;
-        };
-        for (const QList<const ExportVault::Note *> notes = orderedNotes(vault); const ExportVault::Note *n : notes) {
-            const QString file = htmlFiles.value(n->path);
-            const QString dir = paths::dirname(file);
-            const auto href = [dir](const QString &to) -> QString { return relativeHref(dir, to); };
-            Site site(
-                    vault,
-                    [&, href](const VaultPath &to, const QString &fragment) -> QString {
-                        return href(htmlFiles.value(to)) + (fragment.isEmpty() ? QString() : u'#' + fragment);
-                    },
-                    [&, href](const VaultPath &to) -> std::optional<QString> { return href(files.value(to, to)); },
-                    [&, href](const QString &tag) -> QString {
-                        const QString f = tagFiles.value(tag.toLower());
-                        return f.isEmpty() ? QString() : href(f);
-                    },
-                    {});
-            site.setWebPicture([&, href](const QString &url) -> std::optional<QString> {
-                const auto copy = webFile(url);
-                return copy ? std::optional<QString>(href(*copy)) : std::nullopt;
-            });
-            QString header =
-                    u"<a href=\""_s + esc(href(u"index.html"_s)) + u"\">"_s + esc(vault.vaultName()) + u"</a>"_s;
-            for (const QString &segment : paths::dirname(n->path).split(u'/', Qt::SkipEmptyParts))
-                header += u" / "_s + esc(segment);
-            const QString body = u"<article>\n<h1 class=\"title\">"_s + esc(n->parsed->title) + u"</h1>\n"_s
-                                 + site.tagsLine(*n) + site.renderNote(*n) + u"\n</article>\n"_s + site.backlinks(*n);
-            entries.append(FileEntry{root + file, pageHtml(n->parsed->title, vault.vaultName(), href(u"style.css"_s),
-                                                           header, body, footer)
-                                                          .toUtf8()});
-        }
-        for (const TagCount &t : tags) {
-            const QString file = tagFiles.value(t.tag);
-            const QString dir = paths::dirname(file);
-            QString items;
-            for (const VaultPath &p : t.paths) {
-                if (const ExportVault::Note *n = vault.note(p))
-                    items += u"<li><a href=\""_s + esc(relativeHref(dir, htmlFiles.value(p))) + u"\">"_s
-                             + esc(n->parsed->title) + u"</a></li>"_s;
-            }
-            const QString title = u'#' + t.display;
-            const QString header = u"<a href=\""_s + esc(relativeHref(dir, u"index.html"_s)) + u"\">"_s
-                                   + esc(vault.vaultName()) + u"</a>"_s;
-            const QString body =
-                    u"<article><h1 class=\"title\">"_s + esc(title) + u"</h1><ul>"_s + items + u"</ul></article>"_s;
-            entries.append(FileEntry{root + file, pageHtml(title, vault.vaultName(), relativeHref(dir, u"style.css"_s),
-                                                           header, body, footer)
-                                                          .toUtf8()});
-        }
-        entries.append(FileEntry{root + u"index.html"_s, indexPage(vault, htmlFiles, tags, tagFiles, footer).toUtf8()});
-        entries.append(FileEntry{root + u"style.css"_s, QByteArray(styleSheet())});
-        for (const FileEntry &a : vault.attachments())
-            entries.append(FileEntry{root + files.value(a.path), a.data});
-        for (const FileEntry &a : vault.madePictures())
-            entries.append(FileEntry{root + files.value(a.path), a.data});
+        QList<FileEntry> entries = siteEntries(vault, {});
+        for (FileEntry &e : entries)
+            e.path.prepend(root);
         ExportResult r;
         r.files.append(ExportedFile{vault.fileName(u"html"_s, u".zip"_s), u"application/zip"_s, vault.zip(entries)});
         return r;
     }
-
-private:
-    static QString indexPage(const ExportVault &vault, const QHash<VaultPath, QString> &htmlFiles,
-                             const QList<TagCount> &tags, const QHash<QString, QString> &tagFiles,
-                             const QString &footer)
-    {
-        QString journals;
-        QString pages;
-        for (const QList<const ExportVault::Note *> notes = orderedNotes(vault); const ExportVault::Note *n : notes) {
-            const QString link = u"<li><a href=\""_s + esc(relativeHref({}, htmlFiles.value(n->path))) + u"\">"_s
-                                 + esc(n->journal ? n->parsed->title : paths::stripMarkdownExtension(n->path))
-                                 + u"</a></li>"_s;
-            (n->journal ? journals : pages) += link;
-        }
-        QString body = u"<article>\n<h1 class=\"title\">"_s + esc(vault.vaultName()) + u"</h1>\n"_s;
-        if (!journals.isEmpty())
-            body += u"<h2>"_s + esc(IoMessages::tr("Journals")) + u"</h2>\n<ul>"_s + journals + u"</ul>\n"_s;
-        if (!pages.isEmpty())
-            body += u"<h2>"_s + esc(IoMessages::tr("Pages")) + u"</h2>\n<ul>"_s + pages + u"</ul>\n"_s;
-        if (!tags.isEmpty()) {
-            QStringList items;
-            for (const TagCount &t : tags)
-                items.append(u"<a class=\"tag\" href=\""_s + esc(relativeHref({}, tagFiles.value(t.tag))) + u"\">#"_s
-                             + esc(t.display) + u"</a> <small>"_s + QString::number(t.count) + u"</small>"_s);
-            body += u"<h2>"_s + esc(IoMessages::tr("Tags")) + u"</h2>\n<p>"_s + items.join(u' ') + u"</p>\n"_s;
-        }
-        body += u"</article>"_s;
-        return pageHtml(vault.vaultName(), vault.vaultName(), u"style.css"_s, esc(vault.vaultName()), body, footer);
-    }
 };
+
+QString siteIndexPage(const ExportVault &vault, const QHash<VaultPath, QString> &htmlFiles, const QList<TagCount> &tags,
+                      const QHash<QString, QString> &tagFiles, const QString &footer, const QString &searchHeader,
+                      const QString &head)
+{
+    QString journals;
+    QString pages;
+    for (const QList<const ExportVault::Note *> notes = orderedNotes(vault); const ExportVault::Note *n : notes) {
+        const QString link = u"<li><a href=\""_s + esc(relativeHref({}, htmlFiles.value(n->path))) + u"\">"_s
+                             + esc(n->journal ? n->parsed->title : paths::stripMarkdownExtension(n->path))
+                             + u"</a></li>"_s;
+        (n->journal ? journals : pages) += link;
+    }
+    QString body = u"<article>\n<h1 class=\"title\">"_s + esc(vault.vaultName()) + u"</h1>\n"_s;
+    if (!journals.isEmpty())
+        body += u"<h2>"_s + esc(IoMessages::tr("Journals")) + u"</h2>\n<ul>"_s + journals + u"</ul>\n"_s;
+    if (!pages.isEmpty())
+        body += u"<h2>"_s + esc(IoMessages::tr("Pages")) + u"</h2>\n<ul>"_s + pages + u"</ul>\n"_s;
+    if (!tags.isEmpty()) {
+        QStringList items;
+        for (const TagCount &t : tags)
+            items.append(u"<a class=\"tag\" href=\""_s + esc(relativeHref({}, tagFiles.value(t.tag))) + u"\">#"_s
+                         + esc(t.display) + u"</a> <small>"_s + QString::number(t.count) + u"</small>"_s);
+        body += u"<h2>"_s + esc(IoMessages::tr("Tags")) + u"</h2>\n<p>"_s + items.join(u' ') + u"</p>\n"_s;
+    }
+    body += u"</article>"_s;
+    return pageHtml(vault.vaultName(), vault.vaultName(), u"style.css"_s,
+                    u"<nav>"_s + esc(vault.vaultName()) + u"</nav>"_s + searchHeader, body, footer, head);
+}
 
 class HtmlSingleExporter final : public Exporter {
 public:
@@ -548,6 +697,12 @@ public:
 };
 
 } // namespace
+
+QList<FileEntry> htmlSiteEntries(const ExportInput &input, const HtmlSiteOptions &options)
+{
+    const ExportVault vault(input);
+    return siteEntries(vault, options);
+}
 
 std::unique_ptr<Exporter> makeHtmlSiteExporter()
 {

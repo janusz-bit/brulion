@@ -7,12 +7,14 @@ import Brulion
 // ImportExportView — route "importExport": bring notes in from other apps (qml/io/ImportPanel:
 // Obsidian, Logseq, Notion, Evernote, Google Keep, Joplin, Simplenote, Roam, Bear, Markdown/TXT,
 // HTML, iCalendar — how to export from each, auto-detection with an override, a preview before
-// anything is written, the report) and take them out (qml/io/ExportPanel: ten formats; the whole
-// notebook, a folder or a page).
+// anything is written, the report), take them out (qml/io/ExportPanel: ten formats; the whole
+// notebook, a folder or a page) and publish them (qml/io/PublishPanel: GitHub Pages, WebDAV,
+// Nextcloud, a folder; docs/UI.md "Publishing").
 //
-// Route parameters: tab ("import" | "export"); import: importer (an importer id), files (local
-// paths or file:// / content:// URLs separated by "|"); export: format, scope, folder, path (the
-// page to export). Ways here: More → "Import notes" / "Import and export", the drawer's
+// Route parameters: tab ("import" | "export" | "publish"); import: importer (an importer id), files
+// (local paths or file:// / content:// URLs separated by "|"); export: format, scope, folder, path
+// (the page to export); publish: add ("page" | "folder" | "tag" | "notebook"), path, folder, tag.
+// Ways here: More → "Import notes" / "Import and export", the drawer's
 // "Import notes" (phones), the empty journal's button, onboarding's import card.
 //
 // Contract with the shell (qml/shell/ShellRouteView.qml): `route`, `title`.
@@ -20,12 +22,13 @@ FocusScope {
     id: root
 
     property var route: ({})
+    readonly property var noRoute: ({})
     readonly property string title: qsTr("Import and export")
 
     function applyRoute(): void {
         const tab = AppController.routeText(route, "tab")
         if (tab !== "")
-            tabs.currentIndex = tab === "export" ? 1 : 0
+            tabs.currentIndex = tab === "publish" ? 2 : tab === "export" ? 1 : 0
         else if (AppController.routeFlag(route, "format") || AppController.routeFlag(route, "scope")
                  || (AppController.routeFlag(route, "path") && !AppController.routeFlag(route, "files")))
             tabs.currentIndex = 1
@@ -69,6 +72,7 @@ FocusScope {
             fadeColor: Theme.bg
             BTabButton { text: qsTr("Import"); iconName: "download" }
             BTabButton { text: qsTr("Export"); iconName: "upload" }
+            BTabButton { objectName: "publishTab"; text: qsTr("Publish"); iconName: "globe" }
         }
         Rectangle {
             Layout.fillWidth: true
@@ -100,8 +104,16 @@ FocusScope {
                 ExportPanel {
                     Layout.fillWidth: true
                     visible: Workspace.isOpen
-                    // format, scope, folder, path
-                    preset: root.route
+                    // format, scope, folder, path (not a publish route's page or folder)
+                    preset: AppController.routeText(root.route, "tab") === "publish" ? root.noRoute : root.route
+                }
+            }
+            Page {
+                PublishPanel {
+                    Layout.fillWidth: true
+                    visible: Workspace.isOpen
+                    // add (page | folder | tag | notebook), path, folder, tag — only on the publish tab
+                    preset: AppController.routeText(root.route, "tab") === "publish" ? root.route : root.noRoute
                 }
             }
         }

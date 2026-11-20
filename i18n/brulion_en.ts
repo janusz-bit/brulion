@@ -1019,6 +1019,17 @@
     </message>
 </context>
 <context>
+    <name>PublishPanel</name>
+    <message numerus="yes">
+        <location filename="../src/app/qml/io/PublishPanel.qml" line="512"/>
+        <source>…and %n more file(s).</source>
+        <translation>
+            <numerusform>…and %n more file.</numerusform>
+            <numerusform>…and %n more files.</numerusform>
+        </translation>
+    </message>
+</context>
+<context>
     <name>QrCodeDialog</name>
     <message numerus="yes">
         <location filename="../src/app/qml/qr/QrCodeDialog.qml" line="44"/>
@@ -2007,6 +2018,74 @@
     </message>
 </context>
 <context>
+    <name>brulion::ioviews::PublishController</name>
+    <message numerus="yes">
+        <location filename="../src/app/io/publishcontroller.cpp" line="563"/>
+        <location filename="../src/app/io/publishcontroller.cpp" line="862"/>
+        <source>%n page(s)</source>
+        <translation>
+            <numerusform>%n page</numerusform>
+            <numerusform>%n pages</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/io/publishcontroller.cpp" line="834"/>
+        <source>%n encrypted fragment(s) are left out of the pages.</source>
+        <translation>
+            <numerusform>%n encrypted fragment is left out of the pages.</numerusform>
+            <numerusform>%n encrypted fragments are left out of the pages.</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/io/publishcontroller.cpp" line="841"/>
+        <source>%n new</source>
+        <translation>
+            <numerusform>%n new</numerusform>
+            <numerusform>%n new</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/io/publishcontroller.cpp" line="843"/>
+        <source>%n changed</source>
+        <translation>
+            <numerusform>%n changed</numerusform>
+            <numerusform>%n changed</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/io/publishcontroller.cpp" line="845"/>
+        <source>%n to remove</source>
+        <translation>
+            <numerusform>%n to remove</numerusform>
+            <numerusform>%n to remove</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/io/publishcontroller.cpp" line="847"/>
+        <source>%n changed there</source>
+        <translation>
+            <numerusform>%n changed there</numerusform>
+            <numerusform>%n changed there</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/io/publishcontroller.cpp" line="849"/>
+        <source>%n unchanged</source>
+        <translation>
+            <numerusform>%n unchanged</numerusform>
+            <numerusform>%n unchanged</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/io/publishcontroller.cpp" line="862"/>
+        <source>%n attachment(s)</source>
+        <translation>
+            <numerusform>%n attachment</numerusform>
+            <numerusform>%n attachments</numerusform>
+        </translation>
+    </message>
+</context>
+<context>
     <name>brulion::notify::DesktopNotifier</name>
     <message numerus="yes">
         <location filename="../src/app/notify/desktopnotifier.cpp" line="43"/>
@@ -2039,7 +2118,7 @@
 <context>
     <name>brulion::shell::CommandModel</name>
     <message numerus="yes">
-        <location filename="../src/app/shell/commandmodel.cpp" line="596"/>
+        <location filename="../src/app/shell/commandmodel.cpp" line="609"/>
         <source>%n card(s) to study now</source>
         <translation>
             <numerusform>%n card to study now</numerusform>

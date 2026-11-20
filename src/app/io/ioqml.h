@@ -5,6 +5,7 @@
 //   ImportController { workspace: Workspace }
 //   MsTodoImport { settings: AppSettings; importer: importController }
 //   ExportController { workspace: Workspace }
+//   PublishController { workspace: Workspace; settings: AppSettings }
 //   NextcloudSetup { settings: AppSettings }
 //   SyncthingSetup { settings: AppSettings; workspace: Workspace }
 //   ConflictResolver { workspace: Workspace; copy: conflict.copy }
@@ -16,6 +17,7 @@
 #include "exportcontroller.h"
 #include "importcontroller.h"
 #include "mstodoimport.h"
+#include "publishcontroller.h"
 #include "syncsetup.h"
 #include "syncviews.h"
 
@@ -39,6 +41,12 @@ struct ExportControllerForeign {
     Q_GADGET
     QML_FOREIGN(brulion::ioviews::ExportController)
     QML_NAMED_ELEMENT(ExportController)
+};
+
+struct PublishControllerForeign {
+    Q_GADGET
+    QML_FOREIGN(brulion::ioviews::PublishController)
+    QML_NAMED_ELEMENT(PublishController)
 };
 
 struct NextcloudSetupForeign {

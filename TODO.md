@@ -263,9 +263,14 @@ done in the repository simply disappears from the list.
 
 ## Sharing and collaboration
 
-* **Publishing** — a page or selected notes at an address, optionally with a password, with a
-  single command: GitHub Pages, your own server or a public Nextcloud link (Obsidian Publish,
-  Logseq Publish, Joplin). Today there is a static HTML export, which is published by hand.
+* **Publishing: what remains** — publishing (docs/UI.md "Publishing", core `publish`,
+  `brulion-cli publish`) is tested against in-memory servers. What remains: password-protected pages
+  on GitHub Pages and a WebDAV server (the pages encrypted with the crypto module of encrypted notes
+  and opened with the password in the browser — no second crypto implementation); checking by hand
+  against github.com (Pages turned on, a custom domain, the secondary rate limit of a first publish
+  with hundreds of pictures), a real Nextcloud (its password policy, older servers' OCS answers) and
+  WebDAV servers (Apache, nginx), on the desktop, Android and in the browser (CORS); the encrypted
+  fragments left out (`publish::stripEncrypted`) follow the format the encrypted notes settle on.
 * **Shared notebooks** — a notebook shared with another person: who changed what, comments; to be
   decided whether Nextcloud is enough or live editing is needed (Logseq RTC, AFFiNE, Obsidian:
   "Multiplayer" planned).

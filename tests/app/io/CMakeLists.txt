@@ -1,5 +1,5 @@
-# Tests of the sync and import/export controllers (library brulion_ioviews, src/app/io): the
-# import collision policy and preview, reading picked folders, export scopes and saving, the
+# Tests of the sync, import/export and publishing controllers (library brulion_ioviews, src/app/io):
+# the import collision policy and preview, reading picked folders, export scopes and saving, the
 # Nextcloud form (validation, connection test against the core's in-memory WebDAV server, saving
 # into AppSettings), the Microsoft To Do sign-in and download (against the core's FakeMicrosoft),
 # the .stignore helpers and conflict resolution with a version-history base (drawings: merged by
@@ -28,6 +28,12 @@ endif()
 if(TARGET brulion_sync_testsupport)
     brulion_add_test(tst_appio_syncsetup SOURCES tst_appio_syncsetup.cpp
         LIBS brulion_ioviews brulion_sync_testsupport brulion_core_vault)
+endif()
+# Publishing (PublishController): targets and their secrets, the dry run, GitHub Pages against the
+# core's in-memory GitHub, conflicts, unpublishing, a folder target.
+if(TARGET brulion_github_testsupport)
+    brulion_add_test(tst_appio_publish SOURCES tst_appio_publish.cpp
+        LIBS brulion_ioviews brulion_github_testsupport brulion_core_publish brulion_core_vault)
 endif()
 
 # The views in the real app (qml-smoke.sh): SyncView (overview, Syncthing, Nextcloud with an

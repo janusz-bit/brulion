@@ -116,6 +116,18 @@ Tree treeOf(const QJsonObject &object)
     return tree;
 }
 
+PagesSite pagesSiteOf(const QJsonObject &object)
+{
+    PagesSite site;
+    site.htmlUrl = QUrl(object.value(u"html_url"_s).toString());
+    site.status = object.value(u"status"_s).toString();
+    const QJsonObject source = object.value(u"source"_s).toObject();
+    site.branch = source.value(u"branch"_s).toString();
+    site.path = source.value(u"path"_s).toString();
+    site.cname = object.value(u"cname"_s).toString();
+    return site;
+}
+
 /// The id of what a call of the Git database API made.
 QString shaOf(const QJsonObject &object)
 {
@@ -147,6 +159,11 @@ bool holdsAnswer(const Tree &tree)
 bool holdsAnswer(const QString &sha)
 {
     return !sha.isEmpty();
+}
+
+bool holdsAnswer(const PagesSite &site)
+{
+    return site.htmlUrl.isValid() || !site.branch.isEmpty();
 }
 
 /// The handler of an API call answering `done` with what `read` takes from GitHub's JSON object:
@@ -606,6 +623,28 @@ void GitHubClient::putFile(const RepoId &repo, const QString &path, const QStrin
         body.insert(u"branch"_s, branch);
     api("PUT", repoPath(repo) + u"/contents/"_s + encodePath(path), QJsonDocument(body),
         answer(std::move(done), &commitShaOf, u"No commit in the answer"_s));
+}
+
+void GitHubClient::pages(const RepoId &repo, Done<PagesSite> done)
+{
+    api("GET", repoPath(repo) + u"/pages"_s, {},
+        answer(std::move(done), &pagesSiteOf, u"No Pages site in the answer"_s));
+}
+
+void GitHubClient::enablePages(const RepoId &repo, const QString &branch, const QString &path, Done<PagesSite> done)
+{
+    const QJsonObject body{{u"source"_s, QJsonObject{{u"branch"_s, branch}, {u"path"_s, path}}}};
+    api("POST", repoPath(repo) + u"/pages"_s, QJsonDocument(body),
+        answer(std::move(done), &pagesSiteOf, u"No Pages site in the answer"_s));
+}
+
+void GitHubClient::updatePages(const RepoId &repo, const QString &branch, const QString &path, Finished done)
+{
+    const QJsonObject body{{u"source"_s, QJsonObject{{u"branch"_s, branch}, {u"path"_s, path}}}};
+    api("PUT", repoPath(repo) + u"/pages"_s, QJsonDocument(body),
+        [done = std::move(done)](const GitHubError &error, const QJsonDocument &, const sync::HttpResponse &) {
+            done(error);
+        });
 }
 
 } // namespace brulion::github

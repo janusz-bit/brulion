@@ -306,16 +306,25 @@ private Q_SLOTS:
         // Offered over MCP by default (no remote control needed for them).
         for (const char *id : {"app.open", "app.today", "app.capture"})
             QVERIFY2(!findCommand(QString::fromLatin1(id))->appControl, id);
-        // Destructive as decided: replacing, renaming, moving, deleting and restoring.
+        // Destructive as decided: replacing, renaming, moving, deleting and restoring — and removing
+        // what a publishing target published, or the target.
         QStringList destructive;
         for (const Command &c : commands()) {
             if (c.destructive)
                 destructive.append(c.id);
         }
         destructive.sort();
-        QCOMPARE(destructive,
-                 (QStringList{u"file.delete"_s, u"folder.delete"_s, u"folder.move"_s, u"folder.rename"_s,
-                              u"history.restore"_s, u"page.delete"_s, u"page.move"_s, u"page.rename"_s, u"page.write"_s}));
+        QCOMPARE(destructive, (QStringList{u"file.delete"_s, u"folder.delete"_s, u"folder.move"_s, u"folder.rename"_s,
+                                           u"history.restore"_s, u"page.delete"_s, u"page.move"_s, u"page.rename"_s,
+                                           u"page.write"_s, u"publish.remove"_s, u"publish.unpublish"_s}));
+        // Publishing: setting targets up is the user's (no MCP tool); a dry run and a publish are tools.
+        for (const char *id :
+             {"publish.add", "publish.set", "publish.include", "publish.exclude", "publish.secret", "publish.remove"})
+            QVERIFY2(!findCommand(QString::fromLatin1(id))->mcp, id);
+        for (const char *id : {"publish.targets", "publish.preview", "publish.run", "publish.unpublish"})
+            QVERIFY2(findCommand(QString::fromLatin1(id))->mcp, id);
+        QVERIFY(findCommand(u"publish.run"_s)->writes);
+        QVERIFY(!findCommand(u"publish.preview"_s)->writes);
     }
 
     void schema()

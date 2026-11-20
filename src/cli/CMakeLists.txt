@@ -25,6 +25,7 @@ qt_add_library(brulion_cli STATIC
     commands_journal.cpp
     commands_meta.cpp
     commands_pages.cpp
+    commands_publish.cpp
     commands_tasks.cpp
     commands_tools.cpp
     commands_uri.cpp
@@ -43,7 +44,7 @@ target_link_libraries(brulion_cli
     PUBLIC Qt6::Core brulion_core_notebook brulion_core_calc brulion_core_reminders brulion_core_index
            brulion_core_markdown brulion_core_dates brulion_core_vault brulion_core_text brulion_core_util
            brulion_core_extensions
-    PRIVATE brulion_core_sync brulion_core_automation brulion_core_clipper brulion_ipc Qt6::Network)
+    PRIVATE brulion_core_sync brulion_core_automation brulion_core_clipper brulion_core_publish brulion_ipc Qt6::Network)
 target_compile_definitions(brulion_cli PRIVATE BRULION_VERSION="${PROJECT_VERSION}")
 brulion_set_warnings(brulion_cli)
 

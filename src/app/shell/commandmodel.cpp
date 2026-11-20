@@ -270,6 +270,13 @@ static QList<Command> buildCommands(const AppController *app)
              onPage},
             {u"page.print"_s, CommandModel::tr("Print page…"), CommandModel::tr("Or save it as PDF"), u"printer"_s,
              u"Ctrl+P"_s, onPage},
+            // The page on screen added to a publishing target (docs/UI.md "Publishing").
+            {u"page.publish"_s,
+             CommandModel::tr("Publish page…"),
+             CommandModel::tr("GitHub Pages, Nextcloud, your own server"),
+             u"globe"_s,
+             {},
+             onPage && !app->inDocsVault()},
             // (The shell's rename dialog; a daily note is named by its date.)
             {u"page.rename"_s, CommandModel::tr("Rename page…"), {}, u"pencil"_s, u"F2"_s, onPage},
             // The editor's Ctrl+E — the only way on a phone to leave source mode once it is on.
@@ -323,6 +330,12 @@ static QList<Command> buildCommands(const AppController *app)
              {},
              ready && !app->workspace()->calendars()->writableCalendars().isEmpty()},
             {u"go.importExport"_s, CommandModel::tr("Import and export"), {}, u"import"_s, {}, ready},
+            {u"publish.open"_s,
+             CommandModel::tr("Publish…"),
+             CommandModel::tr("Pages on the web: the publishing targets"),
+             u"globe"_s,
+             {},
+             ready && !app->inDocsVault()},
             {u"go.trash"_s, CommandModel::tr("Trash"), {}, u"trash-2"_s, {}, ready},
             {u"go.cleanup"_s,
              CommandModel::tr("Clean up"),
@@ -804,6 +817,13 @@ bool CommandModel::run(const QString &id)
         m_app->navigate({{u"view"_s, id.mid(3)}});
     else if (id == u"page.favorite")
         m_app->workspace()->toggleFavorite(m_app->currentRoute().value(u"path"_s).toString());
+    else if (id == u"page.publish")
+        m_app->navigate({{u"view"_s, u"importExport"_s},
+                         {u"tab"_s, u"publish"_s},
+                         {u"add"_s, u"page"_s},
+                         {u"path"_s, m_app->currentRoute().value(u"path"_s)}});
+    else if (id == u"publish.open")
+        m_app->navigate({{u"view"_s, u"importExport"_s}, {u"tab"_s, u"publish"_s}});
     else if (id == u"page.history")
         m_app->navigate({{u"view"_s, u"history"_s}, {u"path"_s, m_app->currentRoute().value(u"path"_s)}});
     else if (id == u"view.focus")

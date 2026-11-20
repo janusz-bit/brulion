@@ -345,6 +345,14 @@ FocusScope {
                                 onClicked: AppController.navigate({ view: "tasks", query: root.tagQuery(root.tag) })
                             }
                             BButton {
+                                // Its pages on the web (docs/UI.md "Publishing").
+                                objectName: "tagPublishButton"
+                                size: "small"
+                                iconName: "globe"
+                                text: qsTr("Publish…")
+                                onClicked: AppController.navigate({ view: "importExport", tab: "publish", add: "tag", tag: root.tag })
+                            }
+                            BButton {
                                 size: "small"
                                 variant: "ghost"
                                 iconName: "tags"
