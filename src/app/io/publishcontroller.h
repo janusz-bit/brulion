@@ -27,6 +27,8 @@
 
 #include "types.h"
 
+#include "appsettings.h"
+
 #include "publish/publish.h"
 
 #include <QHash>
@@ -45,7 +47,6 @@ class NetworkHttpTransport;
 } // namespace brulion::sync
 
 namespace brulion::shell {
-class AppSettings;
 class Workspace;
 } // namespace brulion::shell
 

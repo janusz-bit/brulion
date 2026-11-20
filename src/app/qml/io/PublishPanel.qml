@@ -30,7 +30,12 @@ ColumnLayout {
 
     function applyPreset(): void {
         // The item the route names goes to the chosen target; without one a new target first.
-        if (publisherObject.addFromRoute(panel.preset))
+        if (AppController.routeText(panel.preset, "add") === "")
+            return
+        const needsTarget = publisherObject.addFromRoute(panel.preset)
+        // Once: going back here, or the app opening here again, adds nothing.
+        AppController.replaceRoute({ view: "importExport", tab: "publish" })
+        if (needsTarget)
             targetDialog.openFor("")
     }
     function tagRowsFor(shown: bool, query: string): list<var> {

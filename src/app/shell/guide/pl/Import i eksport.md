@@ -109,6 +109,22 @@ Najszybszy sposób, żeby przekazać notatkę komuś obok: **Kod QR…** w menu 
 
 Jeden kod mieści około trzech tysięcy liter (mniej, gdy są emoji i polskie znaki). Dłuższa notatka dzieli się na kilka kodów podobnej wielkości — **Kod 1 z 3**, ze strzałkami ‹ › albo klawiszami strzałek: zeskanuj je po kolei i połącz teksty. Najwyżej dwadzieścia kodów; z dłuższej notatki zaznacz fragment, który chcesz przekazać.
 
+## Publikowanie
+**Publikuj** — trzecia karta widoku Import i eksport — jednym kliknięciem wystawia strony w sieci: jako darmową stronę **GitHub Pages**, folder Twojego **Nextclouda** z publicznym linkiem (jeśli chcesz, z hasłem i datą ważności), folder na **własnym serwerze** (WebDAV) albo **folder na tym komputerze**, który bierze serwer WWW lub program do synchronizacji. Trafisz tu też przez **Opublikuj…** w menu strony (⋮), **Opublikuj folder…** w menu folderu na pasku bocznym, **Opublikuj…** w przeglądzie tagu i z palety poleceń.
+
+1. **Nowe miejsce…**: wybierz, dokąd, nadaj nazwę i podaj, czego trzeba — repozytorium (`właściciel/nazwa`) dla GitHuba; serwer, nazwę użytkownika, hasło aplikacji i folder dla Nextclouda; adres WebDAV folderu dla własnego serwera. GitHub używa tokenu zapisanego na karcie GitHub w centrum synchronizacji (potrzebny zakres „repo”).
+2. **Co jest publikowane**: dodaj stronę, folder, tag albo cały notatnik (**Dodaj…**). Wybierz, czy idą też **strony, do których prowadzą linki**, czy **tylko strony oznaczone `publish: true`** i czy mogą iść **strony rozszerzeń** i **rozmowy z AI** (domyślnie nie). **Strony WWW** tworzą małą witrynę — stronę dla każdej notatki, spis, strony tagów, odnośniki zwrotne i wyszukiwarkę; **Jeden dokument** to jeden plik ze wszystkim.
+3. **Podgląd** pokazuje, co zrobiłaby publikacja — które pliki są nowe, zmienione, bez zmian albo do usunięcia — i każdą stronę **pominiętą** z powodem, niczego nie wysyłając.
+4. **Opublikuj**. Wysyłane jest tylko to, co się zmieniło (na GitHubie: jeden commit). Adres pojawia się z przyciskami **Otwórz** i **Kopiuj link**.
+
+Nigdy nie są publikowane: strony z `publikuj: nie` (we frontmatterze, także `publish: false`), ukryte foldery, kopie konfliktów, zaszyfrowane strony i pliki — a zaszyfrowane fragmenty są wycinane z publikowanych stron. Opublikowana strona prowadzi tylko do innych opublikowanych stron; linki do pozostałych są zwykłym tekstem, a odnośniki zwrotne i strony tagów wymieniają tylko opublikowane strony.
+
+Jeśli ktoś w międzyczasie zmienił opublikowany plik w miejscu docelowym, nic nie zostaje zastąpione: Brulion wymienia te pliki, a **Zastąp je** publikuje na nich. **Wycofaj publikację…** (w menu miejsca) usuwa wszystko, co to miejsce opublikowało — także link Nextclouda — i nie rusza Twoich notatek.
+
+Miejsca publikacji i ich hasła zostają na tym urządzeniu (nigdy w notatniku): na innym urządzeniu ustaw miejsce jeszcze raz; na GitHubie pierwsza publikacja stamtąd i tak wyśle tylko to, co nowe. W terminalu to samo robi `brulion-cli publish …` (zobacz [[Wiersz poleceń i agenci AI|Wiersz poleceń i agenci AI]]).
+
+Nextcloud pokazuje udostępniony folder jako listę plików: odbiorcy otwierają tam stronę albo pobierają folder; jeśli ma to być jeden plik do czytania w przeglądarce, wybierz **Jeden dokument**. Strony chronione hasłem na GitHub Pages lub własnym serwerze nie są jeszcze możliwe.
+
 Ponieważ notatki to zwykłe pliki, najprostszą kopią zapasową jest skopiowanie folderu notatnika.
 
 Wróć do [[Spis treści|spisu treści]]. Jeśli chcesz zrozumieć, co leży w plikach, zobacz [[Format plików|Format plików]].

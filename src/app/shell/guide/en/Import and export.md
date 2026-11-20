@@ -109,6 +109,22 @@ The quickest way to hand a note to someone in the same room: **QR code…** in t
 
 One code holds about three thousand letters (fewer with emoji and accented letters). A longer note is cut into a few codes of about the same size — **Code 1 of 3**, with ‹ › or the arrow keys: scan them in turn and join the texts. Twenty codes at most; for a longer note select the part you want to share.
 
+## Publishing
+**Publish** — the third tab of Import and export — puts pages on the web with one click: as a free **GitHub Pages** site, a folder of your **Nextcloud** with a public link (with a password and an expiry date if you like), a folder on **your own server** (WebDAV), or a **folder on this computer** that a web server or a sync app takes. You also get there with **Publish…** in a page's menu (⋮), **Publish folder…** in a folder's menu in the sidebar, **Publish…** on a tag's overview and from the command palette.
+
+1. **New target…**: choose where, give it a name and what it needs — the repository (`owner/name`) for GitHub, the server, user name, app password and folder for Nextcloud, the folder's WebDAV address for your own server. GitHub uses the token you saved in the sync center's GitHub tab (it needs the “repo” scope).
+2. **What is published**: add a page, a folder, a tag or the whole notebook (**Add…**). Choose whether **the pages they link to** go along, whether **only pages marked `publish: true`** go, and whether **extension pages** and **conversations with AI** may go (they don't by default). **Web pages** make a small site — a page per note, an index, tag pages, backlinks and a search box; **One document** makes a single file with everything.
+3. **Preview** shows what a publish would do — which files are new, changed, unchanged or to be removed — and every page **left out** with the reason, without sending anything.
+4. **Publish**. Only what changed is sent (on GitHub: one commit). The address is shown with **Open** and **Copy link**.
+
+Never published: pages with `publish: false` (in the frontmatter, also `publikuj: nie`), hidden folders, conflict copies, encrypted pages and files — and encrypted fragments are cut out of the pages that are published. A published page links only to other published pages; links to the rest are plain text, and backlinks and tag pages list only published pages.
+
+If someone changed a published file at the target in the meantime, nothing is replaced: Brulion lists those files, and **Replace them** publishes over them. **Unpublish…** (in the target's menu) removes everything the target published — also the Nextcloud link — and leaves your notes alone.
+
+Targets and their passwords stay on this device (never in the notebook): on another device set the target up again; on GitHub its first publish there still sends only what is new. In a terminal the same is `brulion-cli publish …` (see [[Command line and AI agents|Command line and AI agents]]).
+
+Nextcloud shows a shared folder as a list of files: people open a page there or download the folder; for one file to read online choose **One document**. Pages protected with a password on GitHub Pages or your own server are not possible yet.
+
 Because your notes are ordinary files, the simplest backup is copying the notebook folder.
 
 Back to the [[Contents|contents]]. If you want to understand what's in the files, see [[File format|File format]].

@@ -1665,6 +1665,99 @@ tables with header rows (at most 63 columns, Word's limit) and the pictures as e
 Tests: `tst_io_paper` (also through LibreOffice when installed), `tst_appio_pageexport` (printing
 into a PDF read back), the import self-test's step 8 (the dialog, the save dialog's name, printing).
 
+## Publishing (`qml/io/PublishPanel.qml`, `src/app/io/publishcontroller.h`, core `publish`)
+
+A page, folders, tags or the whole notebook as a website, with one click: the **Publish** tab of
+Import and export (`PublishPanel`; also "Publish…" in a page's menu, "Publish folder…" in a
+folder's menu in the sidebar, "Publish…" on a tag's overview, the palette's "Publish…" and "Publish
+page…" — `{view: "importExport", tab: "publish", add: "page" | "folder" | "tag" | "notebook", path,
+folder, tag}`: the item is added to the chosen target and previewed; with no target yet the new
+target's dialog comes first and the item follows it). The same targets and the same rules in
+`brulion-cli publish …` (docs/CLI.md "Publishing").
+
+* **Targets** (`PublishTargetDialog`): where the site goes —
+  * **GitHub Pages**: a repository (`owner/name`, a github.com address is understood), a branch
+    (default `gh-pages`: made without history when missing; an empty repository gets its first
+    file through the contents API), a folder in it (its root or `docs/`, which Pages serves; another
+    folder is published but Pages is not turned on for it). One commit per publish with only the
+    changed files (text inline in the tree, pictures as blobs); the branch is only fast-forwarded —
+    when someone pushed meanwhile the plan is made again on the new head, once. Pages is turned on
+    when it is off (a token without the admin right: the site is published and the user told to turn
+    Pages on); a Pages site served from another branch is left alone (said). The address: Pages'
+    own (a custom domain too), else `https://<owner>.github.io/<name>/`. The token is the one the
+    notebooks from GitHub use (the sync center's GitHub tab; "Add a token…" leads there).
+  * **Nextcloud**: the server, the user name and an app password, a folder of the account (never
+    its root: a public link to everything is never made); the files go up by WebDAV, then a
+    read-only **public link** to the folder through the OCS Share API — optionally with a
+    **password** (Nextcloud's own share password; its policy may refuse a short one: its words are
+    shown, the files stay published) and an **expiry date**. The link is kept and changed in place
+    (its password set again when it changed here — the manifest keeps the password's SHA-256,
+    never the password —, its expiry), made again when it was removed on the server, removed when
+    "A public link" is turned off or the target unpublished. Nextcloud shows a shared folder as a
+    list of files: viewers open a page there or download the folder; "One document" gives one file.
+  * **WebDAV server**: a folder's WebDAV address, user name and password, and the address people
+    open (optional).
+  * **Folder on this device** (desktop only): a folder a web server serves or a sync app takes to
+    a server; its hidden files (`.git/`, `.htaccess`) are never looked at.
+  Every kind: a name, the site's title (default: the notebook's name), the site's address (a custom
+  domain; Nextcloud: the link). Targets are this device's (in the notebook's device state folder,
+  `publish/targets.json`, shared with brulion-cli; never in the notebook, so a synced or imported
+  notebook cannot send notes anywhere): another device sets up its own — on GitHub its first publish
+  is still incremental (the branch's blob ids say what is there already). Passwords live in
+  owner-only files next to the Nextcloud app password (`<app data>/secrets/publish-<id>`,
+  `…-share`), masked in every log line; removing a target forgets them.
+* **What is published** — the chosen target's card: its items (a page, a folder with its
+  subfolders, a tag with its sub-tags, the whole notebook; "Add…" with the pickers, × removes one)
+  and switches: **Also the pages they link to** (one step), **Only pages marked publish: true**
+  (Obsidian Publish's way; a page added by itself is published anyway), **Extension pages** and
+  **Conversations with AI** (off: left out); the content: **Web pages** (the HTML site export: a
+  page per note, the index of journals, pages and tags, tag pages, backlinks, the pictures and
+  files the pages link to, a search box — `search.js` and `search-index.js`, loaded when the box is
+  first used, diacritics ignored; no server needed) or **One document** (`index.html` with every
+  page and the pictures inside). Never published: hidden folders and files, conflict copies,
+  encrypted pages and files (`*.mdenc`, `*.age`, `*.gpg`, …; `encrypted: true`), encrypted
+  fragments inside a page (cut out: Meld Encrypt's markers, ```` ```encrypted ```` / `secret` /
+  `age` / `pgp` blocks, armoured messages — docs/SYNTAX.md §4 "Publishing"), pages marked
+  `publish: false`; the templates folder only when a page of it is added by itself. A published
+  page shows only published pages: its links to others are plain text, its backlinks and the tag
+  pages list published pages, its queries and charts count published pages; macros of extensions
+  stay as written (they are computed over the whole notebook). Pictures from the internet keep
+  their addresses. Pages have no time in them ("Published with Brulion"): an unchanged page is the
+  same bytes, never sent again.
+* **Preview** (the dry run, `PublishController.preview()`): the chosen pages read in chunks, the
+  site built off the GUI thread, the target looked at — "What a publish would do": the counts
+  ("3 new · 1 changed · 2 to remove · 20 unchanged"), pages, attachments and size, every file with
+  what happens to it (what changes first, at most 300 rows), every file **left out** with its
+  reason ("Marked publish: false", "In a hidden folder", "Encrypted", "An extension's code", "A
+  conversation with AI", "A template", "Not marked publish: true"), warnings (an item no longer in
+  the notebook, encrypted fragments left out). A target that cannot be reached: the plan from the
+  manifest of the last publish, said so. Nothing is written.
+* **Publish**: only what changed is sent (WebDAV: `If-None-Match: *` for new files, `If-Match` with
+  the ETag the last publish left for changed ones; up to three at a time; removed pages deleted with
+  `If-Match`, the folders they emptied removed; ETags a server did not give with a PUT read from a
+  listing). **Conflicts**: a file changed at the target since the last publish — or there without
+  having been published from here, with other bytes — stops the publish before anything is written
+  ("Changed at the target", the files listed); **Replace them** (confirmed) publishes over them. A
+  file that changes between the look and the upload is caught by the server (412) and never
+  overwritten. The result: "Published", the address with **Open** and **Copy link**, a toast; the
+  target's tile says "Published today 18:30" (or what failed). The manifest
+  (`publish/<target id>.json`: every file's SHA-256, size and the target's version of it) and the
+  last status are kept.
+* **Unpublish…** (the card's menu, confirmed): every file the target published is removed (GitHub: in
+  one commit; files changed there since stay, listed), a Nextcloud link too; the site's other files
+  (a `CNAME`, a server's own) are never touched. **Remove the target…**: forgets it and its passwords
+  (what it published stays).
+* Errors in words (`publish/messages.h`): a sign-in refused, a token that may not push or is
+  missing, not found, offline, the rate limit, the branch that kept moving, Nextcloud's refusal
+  quoted, a password missing on this device.
+* Password-protected pages on GitHub Pages or a WebDAV server (the pages encrypted, opened with a
+  password in the browser) wait for the crypto module of encrypted notes (TODO.md).
+
+Tests: `tst_publish_selection`, `tst_publish_github`, `tst_publish_webdav` (core: the in-memory
+GitHub with Pages, WebDAV and Nextcloud with the OCS Share API, a folder), `tst_appio_publish`
+(the controller), `tst_cli_process` (`publishing`: a folder target end to end), the import self-test's
+step 9 (the page's "Publish…" → a new folder target → the dry run → "Publish").
+
 ## QR code (`qml/qr/QrCodeDialog.qml`, `src/app/qr`, core `qr`)
 
 A note shown as QR codes that another phone's camera reads as text — the quickest way to hand it

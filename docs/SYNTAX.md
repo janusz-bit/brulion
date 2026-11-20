@@ -1012,6 +1012,25 @@ a single value, or plain text between a first `---` and a later one used as hori
 left unchanged — a second `brulion` entry is never added, because other YAML readers refuse
 duplicate keys. Obsidian and Logseq show `brulion` as an ordinary page property.
 
+### Publishing
+
+Publishing (docs/UI.md "Publishing") reads one page property: **`publish`** (also `publikuj`, any
+letter case; frontmatter `publish: false` or a `publish:: false` line) — `true` / `yes` / `tak` /
+`1` / `on` or `false` / `no` / `nie` / `0` / `off`; anything else is no mark
+(`publish::publishFlag`). `publish: false` keeps a page off every target, also when it is named by
+itself; a target set to "Only pages marked publish: true" publishes only pages marked `true` (and
+pages added by themselves). Obsidian Publish reads the same key.
+
+Encrypted text is never published: a page whose frontmatter says `encrypted: true` (or
+`zaszyfrowana: tak`), files named `*.mdenc`, `*.encrypted`, `*.enc`, `*.age`, `*.gpg`, `*.pgp`,
+`*.asc`, `*.aes`, and inside a published page every encrypted fragment is cut out
+(`publish::stripEncrypted`; the text around stays byte for byte): Meld Encrypt's markers (the
+lock-with-key emoji U+1F510 with its variant letter, the text, the emoji again, often wrapped in
+`%%…%%`), fenced blocks whose language is `encrypted`, `encrypt`, `crypt`, `secret`, `age`, `pgp` or
+`brulion-encrypted` (also inside a list item), and armoured `-----BEGIN PGP MESSAGE-----` /
+`-----BEGIN AGE ENCRYPTED FILE-----` blocks. A page with nothing but such fragments (and its
+frontmatter) is left out as a whole.
+
 ## 5. Tasks (Obsidian Tasks compatible)
 
 A list item starting with a checkbox:
