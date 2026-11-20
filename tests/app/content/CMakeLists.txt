@@ -1,11 +1,12 @@
 # Content views' C++ (library brulion_content, src/app/content): the pure helpers (mention ->
 # link edits, highlight positions, tags, sizes, Polish order) and the models against a real
 # Workspace on a temporary vault — journals, backlinks grouped by page, unlinked mentions turned
-# into links, tags, all pages, search, version history, the outline and the page tools.
+# into links, tags, all pages, search (also of the attachments: a PDF of tests/data), version
+# history, the outline and the page tools.
 brulion_add_test(tst_content_util SOURCES tst_content_util.cpp
     LIBS brulion_content brulion_core_markdown brulion_core_dates brulion_core_index)
 brulion_add_test(tst_content_models SOURCES tst_content_models.cpp
-    LIBS brulion_content brulion_shell brulion_core_vault Qt6::Gui)
+    LIBS brulion_content brulion_shell brulion_core_vault Qt6::Gui brulion_platform brulion_attachments)
 # The AI chat on a real Workspace, the model on the device played (tst_content_chat.cpp): a
 # conversation's page, its turns, a change asked in it, Stop, a failure, the messages and the list.
 brulion_add_test(tst_content_chat SOURCES tst_content_chat.cpp

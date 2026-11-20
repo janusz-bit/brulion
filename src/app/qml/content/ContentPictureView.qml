@@ -32,6 +32,10 @@ import Brulion
 // first bytes; never a program, a script, a page or an archive).
 // The text view reads at most `textLimit` bytes of the file (Workspace.readTextStart: a photo is
 // never read whole for it), again whenever the file changes (sync, another program).
+// Text OCR read in the picture (the whole-notebook search, docs/UI.md "Searching attachments";
+// Workspace.attachments): opened from a search result (route.search) the places of its words are
+// framed on the picture, "2 places" in the bar with × to hide them; "Recognized text" shows what OCR
+// read, read-only and selectable (copied from a whiteboard's photo).
 //
 //   ContentPictureView { path: routePath; asText: pictureAsText
 //                        rendererPalette: editor.rendererPalette
@@ -52,6 +56,8 @@ Item {
     objectName: "pictureView" // (the shell's self-test)
 
     property string path
+    /// The route (PageView's): `search` — the words a search result found here.
+    property var route: ({})
     /// The file read as text (read-only) instead of the picture.
     property bool asText: false
     /// Not a picture at all (PageView.fileRoute): only its text, read-only (asText with it).
@@ -125,6 +131,25 @@ Item {
         return Qt.size(Math.max(1, Math.round(root.headerSize.width * k)),
                        Math.max(1, Math.round(root.headerSize.height * k)))
     }
+    /// The words the search found here (route.search) and their places on the picture (fractions of
+    /// its own pixels, Workspace.attachments.matchRects: OCR's words), again when the file changes or
+    /// OCR reads more; × in the bar hides them.
+    readonly property string searchText: AppController.routeText(root.route, "search")
+    property bool matchesHidden: false
+    onSearchTextChanged: root.matchesHidden = false
+    readonly property list<var> matches: {
+        // (Both used for real: qmlcachegen compiles a bare `void x` away, and the dependency with it.)
+        const revision = root.fileRevision + Workspace.attachments.indexedPages
+        return revision >= 0 && root.searchText !== "" && !root.textOnly && !root.matchesHidden
+               ? Workspace.attachments.matchRects(root.path, 1, root.searchText) : []
+    }
+    /// What OCR read in the picture ("" — not read, OCR off, no words).
+    readonly property string recognized: {
+        const revision = root.fileRevision + Workspace.attachments.indexedPages
+        return revision >= 0 && !root.textOnly && root.path !== "" ? Workspace.attachments.recognizedText(root.path, 1) : ""
+    }
+    /// The recognized text shown instead of the picture.
+    property bool showRecognized: false
     /// The fitted picture's scale: at most 1 for a raster picture (fitting only shrinks), any
     /// for an SVG.
     readonly property real fitScale: {
@@ -147,6 +172,7 @@ Item {
     onPathChanged: {
         root.readHeaderSize()
         root.actualSize = false
+        root.showRecognized = false
         flick.contentX = 0
         flick.contentY = 0
     }
@@ -224,6 +250,36 @@ Item {
                 Layout.alignment: Qt.AlignVCenter
                 onClicked: root.toggleSize()
             }
+            // The search's words on the picture: how many places, × hides them.
+            BText {
+                objectName: "pictureMatches"
+                // (A narrow bar keeps its room for the buttons: the frames say it.)
+                visible: root.matches.length > 0 && !root.asText && !root.showRecognized && !root.iconSizeToggle
+                text: qsTr("%n place(s)", "", root.matches.length)
+                variant: "caption"
+                color: Theme.accentText
+                Layout.alignment: Qt.AlignVCenter
+            }
+            BIconButton {
+                objectName: "pictureMatchesClear"
+                visible: root.matches.length > 0 && !root.asText && !root.showRecognized
+                size: "small"
+                iconName: "x"
+                label: qsTr("Hide the places found")
+                Layout.alignment: Qt.AlignVCenter
+                onClicked: root.matchesHidden = true
+            }
+            BButton {
+                objectName: "pictureRecognizedButton"
+                visible: root.recognized !== "" && !root.asText
+                size: "small"
+                variant: root.showRecognized ? "secondary" : "ghost"
+                iconName: root.showRecognized ? "image" : "scan-text"
+                text: root.iconSizeToggle ? "" : root.showRecognized ? qsTr("Show picture") : qsTr("Recognized text")
+                Accessible.name: root.showRecognized ? qsTr("Show picture") : qsTr("Recognized text")
+                Layout.alignment: Qt.AlignVCenter
+                onClicked: root.showRecognized = !root.showRecognized
+            }
             BButton {
                 objectName: "pictureDrawingButton"
                 visible: root.drawing && !root.asText
@@ -258,11 +314,21 @@ Item {
             }
             BButton {
                 objectName: "pictureTextButton"
-                visible: !root.textOnly
+                visible: !root.textOnly && !root.iconSizeToggle
                 size: "small"
                 variant: "ghost"
                 iconName: root.asText ? "image" : "code"
                 text: root.asText ? qsTr("Show picture") : qsTr("Show as text")
+                Layout.alignment: Qt.AlignVCenter
+                onClicked: root.textToggleRequested()
+            }
+            // (Narrow: an icon, its text in the tooltip.)
+            BIconButton {
+                objectName: "pictureTextButton"
+                visible: !root.textOnly && root.iconSizeToggle
+                size: "small"
+                iconName: root.asText ? "image" : "code"
+                label: root.asText ? qsTr("Show picture") : qsTr("Show as text")
                 Layout.alignment: Qt.AlignVCenter
                 onClicked: root.textToggleRequested()
             }
@@ -274,7 +340,7 @@ Item {
 
         anchors.fill: parent
         anchors.topMargin: bar.height
-        visible: !root.asText
+        visible: !root.asText && !root.showRecognized
         clip: true
         // Fitted: the picture fits into the view, its references follow under it.
         contentWidth: root.actualSize ? Math.max(width, picture.width) : width
@@ -308,6 +374,25 @@ Item {
             HoverHandler {
                 cursorShape: root.canZoom || root.actualSize ? Qt.PointingHandCursor : Qt.ArrowCursor
                 enabled: !Theme.touchUi
+            }
+        }
+
+        // The places of the search's words (OCR's boxes on the file's own pixels): framed in the
+        // accent, over the picture at any size.
+        Repeater {
+            model: root.matches
+            delegate: Rectangle {
+                required property rect box
+                objectName: "pictureMatch"
+                x: picture.x + box.x * picture.width - 2
+                y: picture.y + box.y * picture.height - 2
+                width: box.width * picture.width + 4
+                height: box.height * picture.height + 4
+                radius: 2
+                color: Theme.accent.alpha(0.22)
+                border.color: Theme.accent
+                border.width: 2
+                visible: root.pictureLoaded
             }
         }
 
@@ -354,6 +439,54 @@ Item {
                 width: parent.width
                 height: 1
                 color: Theme.borderSubtle
+            }
+        }
+    }
+
+    // What OCR read in the picture: read-only, selectable.
+    Loader {
+        anchors.fill: parent
+        anchors.topMargin: bar.height
+        active: root.showRecognized && !root.asText
+        sourceComponent: Flickable {
+            id: recognizedFlick
+            objectName: "pictureRecognized"
+            clip: true
+            contentWidth: width
+            contentHeight: recognizedColumn.height + 2 * Theme.space6
+            boundsBehavior: Flickable.StopAtBounds
+            TouchFlick.enabled: true
+            T.ScrollBar.vertical: BScrollBar {}
+
+            Column {
+                id: recognizedColumn
+                x: Theme.compact ? Theme.space4 : Theme.space8
+                y: Theme.space6
+                width: Math.min(recognizedFlick.width - 2 * x, 760)
+                spacing: Theme.space3
+
+                BText {
+                    width: parent.width
+                    text: qsTr("Text recognized in the picture (OCR, %1). It may hold mistakes.").arg(Workspace.attachments.ocrLanguages)
+                    variant: "muted"
+                    wrapMode: Text.Wrap
+                }
+                TextEdit {
+                    objectName: "pictureRecognizedText"
+                    width: parent.width
+                    readOnly: true
+                    selectByMouse: !Theme.touchUi
+                    textFormat: TextEdit.PlainText
+                    wrapMode: TextEdit.Wrap
+                    text: root.recognized
+                    font.family: Theme.fontEditor
+                    font.pixelSize: Theme.textBase
+                    color: Theme.fg
+                    selectionColor: Theme.selection
+                    selectedTextColor: Theme.selectionFg
+                    Accessible.role: Accessible.StaticText
+                    Accessible.name: qsTr("Recognized text")
+                }
             }
         }
     }

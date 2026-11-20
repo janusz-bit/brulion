@@ -47,6 +47,7 @@
 // Everything is synchronous on the GUI thread; dates are local "YYYY-MM-DD" strings.
 #pragma once
 
+#include "attachmentindexer.h"
 #include "drawing/excalidrawmd.h"
 #include "editorhost.h"
 #include "notebook/indexcachekeeper.h"
@@ -138,6 +139,9 @@ class Workspace : public EditorHost, public QueryHost {
     Q_PROPERTY(brulion::shell::WorkspaceBackups *backups READ backups CONSTANT FINAL)
     /// The extensions of the open notebook (the gym; docs/EXTENSIONS.md).
     Q_PROPERTY(brulion::shell::WorkspaceExtensions *extensions READ extensions CONSTANT FINAL)
+    /// The text of the notebook's PDFs and pictures for the search (src/app/attachments; docs/UI.md
+    /// "Searching attachments"): progress, pause, OCR's state, the picture view's highlights.
+    Q_PROPERTY(brulion::attachsearch::AttachmentIndexer *attachments READ attachments CONSTANT FINAL)
     /// The conversations with the AI assistant (pages in AI/; docs/UI.md "AI chat").
     Q_PROPERTY(brulion::shell::WorkspaceChats *chats READ chats CONSTANT FINAL)
     /// Find and replace in the whole notebook (replacesession.h).
@@ -228,6 +232,9 @@ public:
     WorkspaceCalendars *calendars() const { return m_calendars; }
     WorkspaceBackups *backups() const { return m_backups; }
     WorkspaceExtensions *extensions() const { return m_extensions; }
+    attachsearch::AttachmentIndexer *attachments() const { return m_attachments; }
+    /// The attachments' text cache (tests; default: <app cache>/attachment-text).
+    void setAttachmentCacheDir(const QString &dir) { m_attachmentCacheDir = dir; }
     WorkspaceChats *chats() const { return m_chats; }
     ReplaceSession *replacing() const { return m_replacing; }
     /// The threads for looking through notes (indexworkers.h); none on WebAssembly.
@@ -920,6 +927,10 @@ private:
     mutable pdfview::PdfThumbnails *m_pdfThumbnails = nullptr;
     mutable QHash<QString, QString> m_pdfAsked;
     QString m_pdfThumbnailDir;
+    /// The attachments' text for the search (a child; workspacepdf.cpp wires it).
+    attachsearch::AttachmentIndexer *m_attachments = nullptr;
+    QString m_attachmentCacheDir;
+    void attachAttachments();
     /// A PDF changed or went: its open readers are closed, its thumbnails drawn again on the next ask.
     void pdfFileChanged(const QString &path, const QString &oldPath = QString());
     /// Before Brulion itself writes, moves or deletes `path` (a file or a folder): the idle readers

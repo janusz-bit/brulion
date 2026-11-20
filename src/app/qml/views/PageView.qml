@@ -1037,6 +1037,7 @@ FocusScope {
         active: root.pictureRoute || root.fileRoute
         sourceComponent: ContentPictureView {
             path: root.routePath
+            route: root.route
             // Another file than a picture: only its text, read-only.
             textOnly: root.fileRoute
             asText: root.pictureAsText || root.fileRoute

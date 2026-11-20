@@ -1,17 +1,25 @@
 // SearchResultModel — full-text search for SearchView (VaultIndex::search: folded words, prefix
-// for the last word, fuzzy, title x3, aliases x2), best first, with the positions of the matched
-// words for highlighting (TextHelper.markMatches) and simple filters.
+// for the last word, fuzzy, title x3, aliases x2) and of the notebook's PDFs and pictures
+// (Workspace.attachments: their text layers and OCR, one row per file at its best page — docs/UI.md
+// "Searching attachments"), best first — what was typed before typo-tolerant matches, then by score,
+// notes and attachments merged —, with the positions of the matched words for highlighting
+// (TextHelper.markMatches) and simple filters.
 //
 //   SearchResultModel { workspace: Workspace; query: field.text; scope: "pages" }
 //
-// scope: "all" (default) | "pages" (no daily notes) | "journals" (only daily notes);
-// folder: only results inside this folder (and below). Results follow vault changes (re-run
-// 300 ms after the index changed while a query is set).
+// scope: "all" (default) | "pages" (no daily notes) | "journals" (only daily notes) |
+// "attachments" (PDFs and pictures); the query's own filters narrow it further (core
+// attachments/searchfilters.h: in:pdf, in:pictures, in:attachments, in:notes, in:pages, in:journals,
+// also type: and the Polish w: / typ:); folder: only results inside this folder (and below).
+// Results follow vault changes (re-run 300 ms after the index or the attachments' text changed
+// while a query is set).
 //
 // Roles: path, title, folder, line (0-based first matching body line; -1 when only the title or
 // an alias matched), excerpt (plain text around the match), excerptMatches / titleMatches
 // (UTF-16 positions of matched characters), journalDate ("YYYY-MM-DD" for daily notes, else ""),
-// score.
+// score; kind ("note" | "pdf" | "picture"), page (an attachment's best page, 1-based; 0 for a note),
+// pageCount, matchedPages (an attachment's pages that match; 0: only its name), ocr (that page's
+// text came from OCR), find (what the PDF viewer or the picture view searches for to show the hit).
 #pragma once
 
 #include "workspacemodel.h"
@@ -34,6 +42,10 @@ class SearchResultModel : public WorkspaceListModel {
     Q_PROPERTY(QStringList terms READ terms NOTIFY resultsChanged FINAL)
     /// [{ folder, count }] of the results' top-level folders ("" = the vault root), most first.
     Q_PROPERTY(QVariantList folders READ folders NOTIFY resultsChanged FINAL)
+    /// The query has filters of its own (in:pdf …): the view says what they keep.
+    Q_PROPERTY(bool queryFiltered READ queryFiltered NOTIFY resultsChanged FINAL)
+    /// Attachments among the results before the filters (the scope's "Attachments" count).
+    Q_PROPERTY(int attachmentCount READ attachmentCount NOTIFY resultsChanged FINAL)
 
 public:
     enum Role {
@@ -46,6 +58,12 @@ public:
         TitleMatchesRole,
         JournalDateRole,
         ScoreRole,
+        KindRole,
+        PageRole,
+        PageCountRole,
+        MatchedPagesRole,
+        OcrRole,
+        FindRole,
     };
     Q_ENUM(Role)
 
@@ -62,6 +80,8 @@ public:
     int totalCount() const { return m_total; }
     QStringList terms() const { return m_terms; }
     QVariantList folders() const { return m_folders; }
+    bool queryFiltered() const { return m_queryFiltered; }
+    int attachmentCount() const { return m_attachmentCount; }
 
     QVariant data(const QModelIndex &index, int role) const override;
     QHash<int, QByteArray> roleNames() const override;
@@ -89,9 +109,18 @@ private:
         QVariantList titleMatches;
         QString journalDate;
         double score = 0;
+        QString kind = QStringLiteral("note");
+        int page = 0;
+        int pageCount = 0;
+        int matchedPages = 0;
+        bool ocr = false;
+        QString find;
+        /// (Merging notes and attachments: SearchIndex::Hit::literal.)
+        int literal = 0;
 
         friend bool operator==(const Hit &, const Hit &) = default;
     };
+    void connectAttachments();
     QList<Hit> m_rows;
     QString m_query;
     QString m_scope = QStringLiteral("all");
@@ -100,6 +129,9 @@ private:
     int m_total = 0;
     QStringList m_terms;
     QVariantList m_folders;
+    bool m_queryFiltered = false;
+    int m_attachmentCount = 0;
+    QMetaObject::Connection m_attachmentsConnection;
 };
 
 } // namespace brulion::content

@@ -12,6 +12,8 @@
 // tools/call, errors, a request line over the 16 MiB limit, the warm index seeing a file written
 // meanwhile).
 #include "appmessage.h"
+#include "attachments/manifest.h"
+#include "attachments/record.h"
 #include "automation/policy.h"
 #include "controlprotocol.h"
 #include "controlserver.h"
@@ -33,7 +35,6 @@
 #include <QNetworkReply>
 #include <QProcess>
 #include <QRegularExpression>
-#include <QUrlQuery>
 #include <QSaveFile>
 #include <QScopeGuard>
 #include <QSettings>
@@ -42,7 +43,9 @@
 #include <QTcpServer>
 #include <QTemporaryDir>
 #include <QTest>
+#include <QTimeZone>
 #include <QTimer>
+#include <QUrlQuery>
 
 using namespace Qt::StringLiterals;
 
@@ -896,6 +899,72 @@ private Q_SLOTS:
         r = run(dir, {u"--allow-destructive"_s, u"folder"_s, u"delete"_s, u"Archiwum"_s});
         QCOMPARE(r.code, 0);
         QVERIFY(!QFileInfo::exists(dir + u"/Archiwum"_s));
+    }
+
+    // search --attachments (docs/CLI.md): the text of PDFs and pictures the app read on this device
+    // — its cache's manifest of the notebook and the records —, searched read-only: a PDF's page with
+    // an excerpt, the filters (in:pdf alone, in:notes without them), a file changed since it was read
+    // left out.
+    void searchAttachments()
+    {
+        using namespace brulion::attachments;
+        const QString dir = vault({{u"Notatka.md"_s, "- żółw w notatce\n"},
+                                   {u"assets/Wykład 3.pdf"_s, "%PDF-1.4 (bytes the app read)"},
+                                   {u"assets/Stary.pdf"_s, "%PDF-1.4 (changed since)"}});
+        const QString cache = m_home + u"/cache/Brulion/Brulion/attachment-text"_s;
+        QVERIFY(QDir().mkpath(cache + u"/notebooks"_s));
+        Record lecture;
+        lecture.pageCount = 3;
+        lecture.pages = {Page{PageSource::TextLayer, u"Wstęp do kursu"_s, {}, {}},
+                         Page{PageSource::NeedsOcr, {}, {}, {}},
+                         Page{PageSource::TextLayer, u"Strona trzecia: żółw idzie powoli"_s, {}, {}}};
+        Manifest manifest;
+        const auto stamp = [&dir](const QString &path) {
+            const QFileInfo fi(dir + u'/' + path);
+            return std::pair(
+                    fi.size(),
+                    fi.fileTime(QFileDevice::FileModificationTime, QTimeZone(QTimeZone::UTC)).toMSecsSinceEpoch());
+        };
+        for (const QString &path : {u"assets/Wykład 3.pdf"_s, u"assets/Stary.pdf"_s}) {
+            const QByteArray hash = QCryptographicHash::hash(path.toUtf8(), QCryptographicHash::Sha256);
+            const auto [size, mtime] = stamp(path);
+            // (Stary.pdf: read when it was one byte shorter.)
+            manifest.insert(path, ManifestEntry{path.contains(u"Stary"_s) ? size - 1 : size, mtime, hash});
+            QFile record(cache + u'/' + recordFileName(hash));
+            QVERIFY(record.open(QIODevice::WriteOnly));
+            record.write(encodeRecord(lecture));
+        }
+        QFile manifestFile(cache + u'/' + manifestFileName(brulion::Vault::idForPath(dir)));
+        QVERIFY(manifestFile.open(QIODevice::WriteOnly));
+        manifestFile.write(encodeManifest(manifest));
+        manifestFile.close();
+
+        Run r = run(dir, {u"search"_s, u"zolw"_s});
+        QCOMPARE(r.code, 0);
+        QCOMPARE(r.result().value(u"hits"_s).toArray().size(), 1);
+        QVERIFY(!r.result().contains(u"attachments"_s));
+        r = run(dir, {u"search"_s, u"--attachments"_s, u"zolw"_s});
+        QCOMPARE(r.code, 0);
+        QCOMPARE(r.result().value(u"hits"_s).toArray().size(), 1);
+        const QJsonArray found = r.result().value(u"attachments"_s).toArray();
+        QCOMPARE(found.size(), 1); // (not Stary.pdf: changed since)
+        const QJsonObject hit = found.first().toObject();
+        QCOMPARE(hit.value(u"path"_s).toString(), u"assets/Wykład 3.pdf"_s);
+        QCOMPARE(hit.value(u"kind"_s).toString(), u"pdf"_s);
+        QCOMPARE(hit.value(u"page"_s).toInt(), 3);
+        QCOMPARE(hit.value(u"pageCount"_s).toInt(), 3);
+        QVERIFY(hit.value(u"excerpt"_s).toString().contains(u"żółw idzie"_s));
+        QCOMPARE(hit.value(u"find"_s).toString(), u"żółw"_s);
+        // Filters: in:pdf searches the attachments alone; in:notes never them.
+        r = run(dir, {u"search"_s, u"in:pdf"_s, u"zolw"_s});
+        QCOMPARE(r.code, 0);
+        QVERIFY(r.result().value(u"hits"_s).toArray().isEmpty());
+        QCOMPARE(r.result().value(u"attachments"_s).toArray().size(), 1);
+        r = run(dir, {u"search"_s, u"--attachments"_s, u"w:notatki zolw"_s});
+        QCOMPARE(r.result().value(u"hits"_s).toArray().size(), 1);
+        QVERIFY(!r.result().contains(u"attachments"_s));
+        r = run(dir, {u"search"_s, u"in:pdf"_s});
+        QVERIFY(r.code != 0);
     }
 
     void indexCommands()

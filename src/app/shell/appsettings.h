@@ -145,6 +145,17 @@ class AppSettings : public QObject {
     /// The personal dictionary: words spell checking takes as right, sorted (a device setting:
     /// every notebook of this device; docs/UI.md "Spell checking" says why not in the notebook).
     Q_PROPERTY(QStringList spellingWords READ spellingWords WRITE setSpellingWords NOTIFY spellingWordsChanged FINAL)
+    /// The whole-notebook search reads the text of PDFs and pictures (Workspace.attachments; docs/UI.md
+    /// "Searching attachments"). Default on: a PDF's own text costs little.
+    Q_PROPERTY(
+            bool attachmentSearch READ attachmentSearch WRITE setAttachmentSearch NOTIFY attachmentSearchChanged FINAL)
+    /// …and recognises text in pictures and scanned pages (OCR, where Tesseract is). Default off:
+    /// a page takes a core about a second.
+    Q_PROPERTY(bool attachmentOcr READ attachmentOcr WRITE setAttachmentOcr NOTIFY attachmentSearchChanged FINAL)
+    /// OCR's languages: "auto" (default: the UI language and English) or Tesseract's codes
+    /// separated by '+' ("pol+eng").
+    Q_PROPERTY(QString attachmentOcrLanguages READ attachmentOcrLanguages WRITE setAttachmentOcrLanguages NOTIFY
+                       attachmentSearchChanged FINAL)
     /// The word and character count in the corner of a page (wide windows; the page's More menu
     /// always has it). Default on.
     Q_PROPERTY(bool wordCountShown READ wordCountShown WRITE setWordCountShown NOTIFY wordCountShownChanged FINAL)
@@ -343,6 +354,12 @@ public:
     void setSpellLanguages(const QString &languages);
     QStringList spellingWords() const;
     void setSpellingWords(const QStringList &words);
+    bool attachmentSearch() const;
+    void setAttachmentSearch(bool on);
+    bool attachmentOcr() const;
+    void setAttachmentOcr(bool on);
+    QString attachmentOcrLanguages() const;
+    void setAttachmentOcrLanguages(const QString &languages);
     bool wordCountShown() const;
     void setWordCountShown(bool on);
     bool focusMode() const;
@@ -511,6 +528,7 @@ Q_SIGNALS:
     void taskStatusHistoryChanged();
     void spellLanguagesChanged();
     void spellingWordsChanged();
+    void attachmentSearchChanged();
     void wordCountShownChanged();
     void focusModeChanged();
     void readingModeChanged();

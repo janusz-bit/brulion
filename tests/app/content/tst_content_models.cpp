@@ -15,7 +15,9 @@
 #include "searchmodel.h"
 #include "taglistmodel.h"
 
+#include "attachmentindexer.h"
 #include "contentutil.h"
+#include "pdfpages.h"
 #include "workspace.h"
 
 #include "markdown/inlinerenderer.h"
@@ -959,6 +961,100 @@ private Q_SLOTS:
         QCOMPARE(column(model, "path"), (QStringList{ u"journals/2026-10-14.md"_s, u"journals/2026-10-07.md"_s }));
         QCOMPARE(markedText(value(model, 0, "excerpt").toString(), value(model, 0, "excerptMatches").toList()), u"żółw"_s);
         QVERIFY(value(model, 1, "excerptMatches").toList().isEmpty()); // the typo-tolerant hit, last
+    }
+
+    // Attachments in the search (docs/UI.md "Searching attachments"): a PDF of tests/data found at
+    // its page with the viewer's search text, merged with the notes by what was typed; the scope
+    // "attachments" and the query's own filters (in:pdf, in:notes, w:dziennik); the rows follow the
+    // attachments' text as it is read.
+    void searchAttachments()
+    {
+        if (!brulion::platform::pdfTextAvailable())
+            QSKIP("this build reads no PDF text");
+        const QString root = m_tmp.filePath(u"vault-%1"_s.arg(++m_n));
+        QVERIFY(writeRaw(root + u"/Notatka o żółwiach.md"_s, "- żółw w notatce\n"));
+        QVERIFY(writeRaw(root + u"/journals/2026-10-13.md"_s, "- widziałem żółwia\n"));
+        QFile pdf(QStringLiteral(BRULION_TEST_DATA) + u"/pdf/wyklad.pdf"_s);
+        QVERIFY(pdf.open(QIODevice::ReadOnly));
+        QVERIFY(writeRaw(root + u"/assets/Wykład 3.pdf"_s, pdf.readAll()));
+        auto ws = std::make_unique<Workspace>();
+        ws->setClock([this] { return m_now; });
+        ws->setAttachmentCacheDir(root + u"-cache"_s);
+        QVERIFY(ws->open(root, root + u"-state"_s));
+        ws->finishIndexing();
+        SearchResultModel model;
+        model.setWorkspace(ws.get());
+        model.setQuery(u"zolw"_s);
+        model.refreshNow();
+        QCOMPARE(model.rowCount(), 2); // (the PDF is not read yet)
+        QSignalSpy refreshed(&model, &SearchResultModel::refreshed);
+        ws->attachments()->start(0);
+        // The rows follow the attachments' text once it is read.
+        QVERIFY(QTest::qWaitFor([&] { return model.rowCount() == 3; }, 60000 * BRULION_TEST_SLOWDOWN));
+        QVERIFY(refreshed.count() > 0);
+        const int row = column(model, "path").indexOf(u"assets/Wykład 3.pdf"_s);
+        QVERIFY(row >= 0);
+        const QVariantMap hit = model.get(row);
+        QCOMPARE(hit.value(u"kind"_s).toString(), u"pdf"_s);
+        QCOMPARE(hit.value(u"page"_s).toInt(), 3);
+        QCOMPARE(hit.value(u"pageCount"_s).toInt(), 3);
+        QCOMPARE(hit.value(u"matchedPages"_s).toInt(), 1);
+        QCOMPARE(hit.value(u"title"_s).toString(), u"Wykład 3.pdf"_s);
+        QCOMPARE(hit.value(u"folder"_s).toString(), u"assets"_s);
+        QCOMPARE(hit.value(u"find"_s).toString(), u"żółw"_s);
+        QCOMPARE(hit.value(u"ocr"_s).toBool(), false);
+        QCOMPARE(markedText(hit.value(u"excerpt"_s).toString(), hit.value(u"excerptMatches"_s).toList()), u"żółw"_s);
+        QCOMPARE(value(model, column(model, "kind").indexOf(u"note"_s), "page").toInt(), 0);
+        QCOMPARE(model.attachmentCount(), 1);
+        QVERIFY(!model.queryFiltered());
+
+        // The scope.
+        model.setScope(u"attachments"_s);
+        model.refreshNow();
+        QCOMPARE(column(model, "path"), QStringList{u"assets/Wykład 3.pdf"_s});
+        QCOMPARE(model.totalCount(), 3);
+        model.setScope(u"pages"_s);
+        model.refreshNow();
+        QCOMPARE(column(model, "path"), QStringList{u"Notatka o żółwiach.md"_s});
+        model.setScope(u"all"_s);
+
+        // The query's filters (its words only highlighted).
+        model.setQuery(u"in:pdf zolw"_s);
+        model.refreshNow();
+        QCOMPARE(column(model, "path"), QStringList{u"assets/Wykład 3.pdf"_s});
+        QVERIFY(model.queryFiltered());
+        QCOMPARE(model.terms(), QStringList{u"zolw"_s});
+        model.setQuery(u"zolw in:notes"_s);
+        model.refreshNow();
+        QCOMPARE(model.rowCount(), 2);
+        QVERIFY(!column(model, "kind").contains(u"pdf"_s));
+        model.setQuery(u"w:dziennik zolw"_s);
+        model.refreshNow();
+        QCOMPARE(column(model, "path"), QStringList{u"journals/2026-10-13.md"_s});
+        model.setQuery(u"in:pictures zolw"_s);
+        model.refreshNow();
+        QCOMPARE(model.rowCount(), 0);
+        QCOMPARE(model.totalCount(), 0);
+        // Only filters: nothing searched.
+        model.setQuery(u"in:pdf"_s);
+        model.refreshNow();
+        QCOMPARE(model.rowCount(), 0);
+
+        // The file's name; a phrase on page 1.
+        model.setQuery(u"wyklad"_s);
+        model.refreshNow();
+        QVERIFY(column(model, "path").contains(u"assets/Wykład 3.pdf"_s));
+        model.setQuery(u"gesla jazn"_s);
+        model.refreshNow();
+        QCOMPARE(value(model, 0, "page").toInt(), 1);
+        QCOMPARE(value(model, 0, "find").toString(), u"gesla jazn"_s);
+
+        // Turned off: notes only.
+        ws->attachments()->setEnabled(false);
+        model.setQuery(u"zolw"_s);
+        model.refreshNow();
+        QCOMPARE(model.rowCount(), 2);
+        ws->close();
     }
 
     // ---- History ---------------------------------------------------------------------------------

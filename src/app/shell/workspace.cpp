@@ -165,6 +165,7 @@ Workspace::Workspace(QObject *parent) : EditorHost(parent)
             [this](const QVariantMap &route) { navigate(route); });
     connect(m_reminders, &WorkspaceReminders::errorOccurred, this, &Workspace::errorOccurred);
     m_backups = new WorkspaceBackups([this] { return now(); }, this);
+    m_attachments = new attachsearch::AttachmentIndexer(this);
     m_extensions = new WorkspaceExtensions([this] { return now(); }, this);
     m_extensions->setNotifier([this](const QString &title, const QString &body) {
         m_reminders->showNotification(u"brulion-rest-timer"_s, title, body);
@@ -207,6 +208,7 @@ Workspace::~Workspace()
     m_calendars->blockSignals(true);
     m_reminders->blockSignals(true);
     m_backups->blockSignals(true);
+    m_attachments->blockSignals(true);
     m_extensions->blockSignals(true);
     m_chats->blockSignals(true);
     blockSignals(true);
@@ -317,6 +319,7 @@ bool Workspace::open(const QString &rootPath, const QString &deviceStatePath, QS
 #endif
         m_backups->attach(m_vault.get(), backups);
     }
+    attachAttachments();
     if (!m_loader->isDone())
         m_indexTimer.start();
 
@@ -349,6 +352,7 @@ void Workspace::close()
     m_extensions->detach();
     m_chats->reset();
     m_backups->detach(); // before sync: it releases its hold there
+    m_attachments->detach(); // (its worker reads the vault's files)
     m_sync->detach();
     m_github->detach();
     m_calendars->detach();
@@ -610,6 +614,9 @@ void Workspace::setReady(bool wasReady)
 {
     if (wasReady != ready())
         Q_EMIT readyChanged();
+    // The attachments' text is read once the notes are indexed (a few seconds later).
+    if (ready())
+        m_attachments->start();
 }
 
 void Workspace::bumpRevisions(bool names, bool properties)

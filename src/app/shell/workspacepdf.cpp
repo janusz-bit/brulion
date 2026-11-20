@@ -12,6 +12,7 @@
 #include "pdfpages.h"
 #include "pdfrenderpool.h"
 #include "pdfthumbnails.h"
+#include "pdfviewmodel.h"
 
 #include "drawing/backdrop.h"
 #include "drawing/drawing.h"
@@ -65,6 +66,43 @@ std::optional<FileStat> fileStat(const Vault *vault, const QString &path)
 }
 
 } // namespace
+
+void Workspace::attachAttachments()
+{
+    if (!m_vault)
+        return;
+    // The records are the device's, shared by its notebooks (one per content); the manifest is this
+    // notebook's, named after its id. Never inside the notebook.
+    QString dir = m_attachmentCacheDir;
+    if (dir.isEmpty()) {
+        const QString base = QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
+        dir = base.isEmpty() ? QString() : QDir(base).filePath(u"attachment-text"_s);
+    }
+    m_attachments->attach(m_vault.get(), dir,
+                          dir.isEmpty() ? QString() : QDir(dir).filePath(attachments::manifestFileName(m_vault->id())));
+    // The PDF viewer's search reads the OCR text of scanned pages (its jobs keep the lookup, which
+    // finds nothing once the indexer is gone; the notebook opened last sets it).
+    {
+        pdfview::PdfViewModel::setOcrLookup(
+                [lookup = m_attachments->pageLookup()](const QString &file, const QString &version,
+                                                       int page) -> std::optional<pdfview::PdfViewModel::OcrText> {
+                    // version: "<mtime ms>-<size>" (fileVersion()).
+                    const qsizetype dash = version.lastIndexOf(u'-');
+                    if (dash <= 0)
+                        return std::nullopt;
+                    bool okTime = false;
+                    bool okSize = false;
+                    const qint64 mtime = QStringView(version).first(dash).toLongLong(&okTime);
+                    const qint64 size = QStringView(version).sliced(dash + 1).toLongLong(&okSize);
+                    if (!okTime || !okSize)
+                        return std::nullopt;
+                    const std::optional<attachments::Page> read = lookup(file, size, mtime, page);
+                    if (!read || read->source != attachments::PageSource::Ocr)
+                        return std::nullopt;
+                    return pdfview::PdfViewModel::OcrText{read->text, attachments::ocrCharBoxes(*read)};
+                });
+    }
+}
 
 bool Workspace::pdfViewable() const
 {

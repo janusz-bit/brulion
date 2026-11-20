@@ -110,6 +110,9 @@ target_link_libraries(brulion_shell
 # WasmStorage + WasmNotifier; PDFs (workspacepdf.cpp: the thumbnails' cache of brulion_pdfview,
 # src/app/pdf — its area is included before this one — and openexternal.h).
 target_link_libraries(brulion_shell PRIVATE brulion_platform brulion_pdfview)
+# The text of PDFs and pictures for the search (src/app/attachments — its area is included before this
+# one): Workspace.attachments, its type in workspace.h.
+target_link_libraries(brulion_shell PUBLIC brulion_attachments)
 target_compile_definitions(brulion_shell PRIVATE BRULION_VERSION="${PROJECT_VERSION}"
     BRULION_UPDATE_CHECK=$<BOOL:${BRULION_UPDATE_CHECK}>)
 # The model on the device (localai.h): where the app looks for the model runner's plugin — next

@@ -31,8 +31,10 @@ import Brulion
 // click: the gesture the browser wants); a PDF that cannot be shown (a broken file, a password where
 // the renderer opens none) says why, with the same button; the notes that embed or link it follow in
 // both cases.
-//   route.open (screenshots, tests): "search" (with route.search typed), "jump", "draw" (its menu or
-//   the drawing); route.pdfScale: a zoom in percent.
+//   route.open: "search" (with route.search typed: the whole-notebook search's result opens here at
+//   route.pdfPage, its hit highlighted — the first one at or after that page), "jump", "draw" (its
+//   menu or the drawing; screenshots, tests); route.pdfScale: a zoom in percent. A scanned page is
+//   searched in the text OCR read on it (PdfViewModel.setOcrLookup: the attachments' search).
 Item {
     id: root
 
@@ -79,12 +81,20 @@ Item {
         if (pdf.searching)
             return pdf.searchedPages > 0 ? qsTr("Searching… page %1 of %2").arg(pdf.searchedPages).arg(pdf.pageCount)
                                          : ""
-        return pdf.textless ? qsTr("This PDF has no text to search (it may be a scan).") : qsTr("No results")
+        if (!pdf.textless)
+            return qsTr("No results")
+        // A scan: OCR reads it when turned on (Settings → Search).
+        return root.ocrHint
+               ? qsTr("This PDF has no text to search (it may be a scan). Turn on text recognition in Settings → Search to search it.")
+               : qsTr("This PDF has no text to search (it may be a scan).")
     }
+    /// A PDF without text where OCR could read it but is off: the search's sentence says where to turn it on.
+    readonly property bool ocrHint: pdf.textless && Workspace.attachments.ocrAvailable && !Workspace.attachments.ocrEnabled
     /// A long state in the narrow bar (a phone, the side panel) goes on a line of its own under the
     /// search row, full width: in the row it was cut ("Ten PDF nie ma tekstu do pr…"), squeezed the
-    /// field and pushed × off the screen. The counters stay in the row.
-    readonly property bool searchStatusBelow: !root.wide && root.searchStatus !== "" && pdf.hitCount === 0
+    /// field and pushed × off the screen. The counters stay in the row. The sentence with the OCR
+    /// hint is too long for the wide bar's row as well.
+    readonly property bool searchStatusBelow: (!root.wide || root.ocrHint) && root.searchStatus !== "" && pdf.hitCount === 0
                                               && (pdf.searching || pdf.textless)
     /// "Draw on this page" being prepared (DrawingBackdrops' job) and its page.
     property int drawJob: 0
@@ -240,6 +250,8 @@ Item {
     function applyRouteFromOutside(): void {
         root.applyRouteScale()
         root.applyRoutePage()
+        // (Another search result in the same PDF: its page, then its words.)
+        root.openRequested()
     }
     /// route.pdfScale (a zoom in percent): once per path and value, before the page is jumped to.
     function applyRouteScale(): void {
@@ -278,12 +290,14 @@ Item {
         root._routePage = page
         AppController.replaceRoute(Js.withKey(Js.withoutKey(AppController.currentRoute, "heading"), "pdfPage", page))
     }
-    /// route.open: once per path and value.
+    /// route.open: once per path and value (a search: and its words and page).
     function openRequested(): void {
         const open = AppController.routeText(root.route, "open")
         if (open === "" || !root.ready || root._readyPath !== root.path)
             return
         const key = root.path + "\n" + open
+                    + (open === "search" ? "\n" + AppController.routeText(root.route, "search") + "\n"
+                                           + AppController.routeInt(root.route, "pdfPage", 0) : "")
         if (key === root._opened)
             return
         root._opened = key
@@ -293,6 +307,10 @@ Item {
             const search = AppController.routeText(root.route, "search")
             if (search !== "") {
                 searchField.text = search
+                // The same words from another page (the next search result): searched again from
+                // there, so its hit becomes the current one.
+                if (pdf.searchText === search)
+                    pdf.searchText = ""
                 pdf.searchText = search
             }
             break

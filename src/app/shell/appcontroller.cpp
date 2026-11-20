@@ -220,6 +220,16 @@ AppController::AppController(const Options &options, QObject *parent)
     m_localAi = std::make_unique<LocalAi>(localAi);
     m_workspace = std::make_unique<Workspace>();
     m_workspace->setUiLanguage(m_settings->language());
+    // The attachments' text for the search (Settings → Search): the device's settings.
+    const auto applyAttachmentSettings = [this] {
+        attachsearch::AttachmentIndexer *a = m_workspace->attachments();
+        a->setOcrLanguagesSetting(m_settings->attachmentOcrLanguages());
+        a->setOcrEnabled(m_settings->attachmentOcr());
+        a->setEnabled(m_settings->attachmentSearch());
+    };
+    m_workspace->attachments()->setUiLanguage(m_settings->language());
+    applyAttachmentSettings();
+    connect(m_settings.get(), &AppSettings::attachmentSearchChanged, this, applyAttachmentSettings);
     m_shortcuts = std::make_unique<ShortcutMap>(m_settings.get());
     m_commands = std::make_unique<CommandModel>(this);
     m_tabsSaveTimer = new QTimer(this);
@@ -234,6 +244,7 @@ AppController::AppController(const Options &options, QObject *parent)
         // workspace, whose texts (sync status, reminders) are rebuilt with tr() in the new language.
         Q_EMIT languageChanged(m_settings->language());
         m_workspace->setUiLanguage(m_settings->language());
+        m_workspace->attachments()->setUiLanguage(m_settings->language());
         m_recentNotebooks->setLanguage(m_settings->language());
         // The sample and documentation notebooks of the new language (their own folders); a
         // --locale of this run no longer counts, as for the translation.

@@ -15,7 +15,8 @@ brulion_add_test(tst_cli_http SOURCES tst_cli_http.cpp LIBS brulion_cli Qt6::Net
 brulion_add_test(tst_cli_remote_mcp SOURCES tst_cli_remote_mcp.cpp LIBS brulion_cli Qt6::Network Qt6::Core)
 math(EXPR _remote_timeout "300 * ${BRULION_TEST_SLOWDOWN}")
 set_tests_properties(tst_cli_remote_mcp PROPERTIES TIMEOUT ${_remote_timeout})
-brulion_add_test(tst_cli_process SOURCES tst_cli_process.cpp LIBS brulion_ipc brulion_core_notebook brulion_core_automation Qt6::Network)
+brulion_add_test(tst_cli_process SOURCES tst_cli_process.cpp LIBS brulion_ipc brulion_core_notebook brulion_core_automation
+    brulion_core_attachments Qt6::Network)
 target_compile_definitions(tst_cli_process PRIVATE BRULION_CLI="$<TARGET_FILE:brulion-cli>")
 add_dependencies(tst_cli_process brulion-cli)
 if(TARGET brulion)

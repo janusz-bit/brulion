@@ -3,6 +3,7 @@
 #include "pdfrenderpool.h"
 
 #include "pdfpages.h"
+#include "pdfsearch.h"
 #include "pdftext.h"
 
 #include <QClipboard>
@@ -16,6 +17,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <mutex>
 #include <utility>
 
 using namespace Qt::StringLiterals;
@@ -37,6 +39,35 @@ QString number(qreal value)
 }
 
 constexpr qreal NaN = std::numeric_limits<qreal>::quiet_NaN();
+
+/// PdfViewModel::setOcrLookup()'s function (shared: a search job keeps the one it started with).
+std::mutex &ocrLookupLock()
+{
+    static std::mutex lock;
+    return lock;
+}
+
+std::shared_ptr<const PdfViewModel::OcrLookup> &ocrLookupSlot()
+{
+    static std::shared_ptr<const PdfViewModel::OcrLookup> slot;
+    return slot;
+}
+
+std::shared_ptr<const PdfViewModel::OcrLookup> currentOcrLookup()
+{
+    const std::lock_guard lock(ocrLookupLock());
+    return ocrLookupSlot();
+}
+
+int lettersIn(QStringView text)
+{
+    int n = 0;
+    for (const QChar c : text) {
+        if (c.isLetterOrNumber())
+            ++n;
+    }
+    return n;
+}
 
 /// What a job on the pool reads: the file at its version, with the viewer's password ("" none).
 struct Source {
@@ -803,6 +834,12 @@ void PdfViewModel::setSearchAvailable(bool available)
         clearSearch();
 }
 
+void PdfViewModel::setOcrLookup(OcrLookup lookup)
+{
+    const std::lock_guard lock(ocrLookupLock());
+    ocrLookupSlot() = lookup ? std::make_shared<const OcrLookup>(std::move(lookup)) : nullptr;
+}
+
 void PdfViewModel::setSearchText(const QString &text)
 {
     if (text == m_searchText)
@@ -867,6 +904,7 @@ void PdfViewModel::startSearch()
     const Source source{m_file, m_version, m_password};
     const int count = m_layout.count();
     const int start = std::clamp(m_currentPage, 1, count);
+    const std::shared_ptr<const OcrLookup> ocr = currentOcrLookup();
     Q_EMIT searchChanged();
     PdfRenderPool::start(
             [=] {
@@ -894,7 +932,8 @@ void PdfViewModel::startSearch()
                     if (cancel->load())
                         return;
                     const int page = (start - 1 + k) % count + 1;
-                    if (!lease->pageText(page).trimmed().isEmpty())
+                    const QString own = lease->pageText(page);
+                    if (!own.trimmed().isEmpty())
                         sawText = true;
                     const QSizeF points = lease->pageSize(page);
                     const bool sized = points.width() > 0 && points.height() > 0;
@@ -910,6 +949,21 @@ void PdfViewModel::startSearch()
                         }
                         batch.append(std::move(hit));
                         ++total;
+                    }
+                    // A scan: the words OCR read there, placed by their boxes (already fractions).
+                    if (found.isEmpty() && ocr && *ocr && lettersIn(own) < OcrMaxLetters) {
+                        if (const std::optional<OcrText> read = (*ocr)(source.file, source.version, page)) {
+                            if (!read->text.trimmed().isEmpty())
+                                sawText = true;
+                            for (const platform::PdfTextRange &range : platform::findPdfText(read->text, query, room)) {
+                                Hit hit;
+                                hit.page = page;
+                                hit.start = int(range.start);
+                                hit.rects = platform::pdfRangeRects(read->boxes, range);
+                                batch.append(std::move(hit));
+                                ++total;
+                            }
+                        }
                     }
                     ++searched;
                     ++sinceSent;
