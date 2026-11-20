@@ -18,6 +18,10 @@ brulion_add_test(tst_shell_share SOURCES tst_share.cpp LIBS brulion_shell brulio
 # QGuiApplication for the screen lookup).
 brulion_add_test(tst_shell_traypopup SOURCES tst_traypopup.cpp LIBS brulion_shell Qt6::Gui)
 brulion_add_test(tst_shell_settings SOURCES tst_settings.cpp LIBS brulion_shell brulion_core_text)
+# The start screen's recent notebooks (recentnotebooks.h): rows, "~" paths, last-opened texts in
+# both languages, the folders checked off the GUI thread (missing, a share that hangs), temporary
+# folders dropped, "Remove from list", malformed stored entries.
+brulion_add_test(tst_shell_recentnotebooks SOURCES tst_recentnotebooks.cpp LIBS brulion_shell)
 # The C++ behind the views (qml/views): route parameters read from a QVariantMap, SearchView's
 # recent searches, CleanupView's selection (CleanupSelection).
 brulion_add_test(tst_shell_views SOURCES tst_views.cpp LIBS brulion_shell)
@@ -152,6 +156,36 @@ if(TARGET brulion AND NOT ANDROID AND NOT EMSCRIPTEN AND EXISTS "${_brulion_qt_q
             ENVIRONMENT "BRULION_TEST_SLOWDOWN=${BRULION_TEST_SLOWDOWN};QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_FORCE_STDERR_LOGGING=1;QML_IMPORT_PATH=${_brulion_qt_qml_root};HOME=${_home};XDG_DATA_HOME=${_home}/data;XDG_CONFIG_HOME=${_home}/config;XDG_CACHE_HOME=${_home}/cache;XDG_STATE_HOME=${_home}/state${_profile}"
             FIXTURES_REQUIRED shell_journey_homes TIMEOUT ${_journey_timeout} PROCESSORS 2 LABELS slow
             FAIL_REGULAR_EXPRESSION "Binding loop detected")
+    endforeach()
+
+    # The start screen (`brulion --onboarding --selftest-onboarding`, src/app/shell/onboardingselftest.h)
+    # with real clicks, keys and taps: the recent notebooks (a missing one marked and removed from
+    # the list, a vanished temporary one dropped, "Show all" on phones), the two-column layout that
+    # fits 1280×800, the one primary action creating and opening a notebook, the keyboard on the
+    # list. Desktop and phone, each in its own private home.
+    set(_onboarding_homes ${CMAKE_CURRENT_BINARY_DIR}/onboarding-home-phone ${CMAKE_CURRENT_BINARY_DIR}/onboarding-home-desktop)
+    foreach(_kind phone desktop)
+        brulion_test_profile(_profile onboarding-${_kind})
+        list(APPEND _onboarding_homes ${_profile_DIRS})
+    endforeach()
+    add_test(NAME tst_shell_onboarding_qml_homes COMMAND ${CMAKE_COMMAND} -E rm -rf ${_onboarding_homes})
+    set_tests_properties(tst_shell_onboarding_qml_homes PROPERTIES FIXTURES_SETUP shell_onboarding_homes)
+    add_test(NAME tst_shell_onboarding_qml
+        COMMAND brulion --onboarding --selftest-onboarding --no-single-instance
+            --size 412x915 --touch --now "2026-11-20 18:30" --locale pl)
+    add_test(NAME tst_shell_onboarding_qml_desktop
+        COMMAND brulion --onboarding --selftest-onboarding --no-single-instance
+            --size 1280x800 --now "2026-11-20 18:30" --locale en)
+    math(EXPR _onboarding_timeout "120 + 10 * ${BRULION_TEST_SLOWDOWN}")
+    foreach(_pair "tst_shell_onboarding_qml;phone" "tst_shell_onboarding_qml_desktop;desktop")
+        list(GET _pair 0 _test)
+        list(GET _pair 1 _kind)
+        set(_home ${CMAKE_CURRENT_BINARY_DIR}/onboarding-home-${_kind})
+        brulion_test_profile(_profile onboarding-${_kind})
+        set_tests_properties(${_test} PROPERTIES
+            ENVIRONMENT "BRULION_TEST_SLOWDOWN=${BRULION_TEST_SLOWDOWN};QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_FORCE_STDERR_LOGGING=1;QML_IMPORT_PATH=${_brulion_qt_qml_root};XDG_DATA_HOME=${_home}/data;XDG_CONFIG_HOME=${_home}/config;XDG_CACHE_HOME=${_home}/cache;XDG_STATE_HOME=${_home}/state${_profile}"
+            FIXTURES_REQUIRED shell_onboarding_homes TIMEOUT ${_onboarding_timeout} PROCESSORS 2
+            FAIL_REGULAR_EXPRESSION "Binding loop detected;TypeError;ReferenceError")
     endforeach()
 
     # Remote control of the running app (src/app/shell/remotecontrol.h), end to end: the app

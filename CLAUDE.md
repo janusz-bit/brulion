@@ -38,7 +38,9 @@ Read before changing code:
   `BUILD_DIR=build-foo scripts/dev-build.sh` uses another build dir.
   The script holds a machine-wide lock: only one compilation at a time on this machine.
 * Run the app from the build dir: `./build/src/app/brulion` (`QT_QPA_PLATFORM=offscreen` for
-  headless smoke runs; screenshots via the app's `--screenshot` option once it exists).
+  headless smoke runs; screenshots via the app's `--screenshot` option once it exists). Runs of
+  your own use `--profile <name>` (or fresh XDG dirs), so their notebooks never land among the
+  user's recent notebooks (`brulion-cli --profile <name> app …` reaches them; docs/CLI.md "Profiles").
 * `nix build .#brulion` — the Nix package (no tests: `doCheck = false`, so installing never runs them).
 * `nix flake check -L` — also runs the whole ctest suite in the Nix sandbox (`checks.<system>.tests`);
   on the laptop only, never on this Pi (`flock <lock> laptop-run …`).

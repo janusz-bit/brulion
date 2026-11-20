@@ -50,6 +50,7 @@
 #include "desktop/desktoptray.h"
 #include "ioselftest.h"
 #include "notifyselftest.h"
+#include "onboardingselftest.h"
 #include "profile.h"
 #include "remotecontrol.h" // --remote-control: AI agents drive the running app (brulion-cli app …)
 #include "shelljourney.h"
@@ -145,6 +146,17 @@ int main(int argc, char *argv[])
     QGuiApplication app(argc, argv);
 #endif
 #ifdef BRULION_DESKTOP_INTEGRATION
+    // The profile: --profile <name>, else BRULION_PROFILE, else "test" for a test run without a
+    // home of its own (--selftest-*, --journey, --screenshot: never the user's own settings and
+    // recent notebooks; src/ipc/profile.h).
+    if (const brulion::ipc::ProfileChoice profile = brulion::ipc::applyProfile(QCoreApplication::arguments());
+        !profile.error.isEmpty()) {
+        std::fprintf(stderr, "brulion: %s\n", qPrintable(profile.error));
+        return 2;
+    } else if (profile.implied) {
+        std::fprintf(stderr, "brulion: a test run without a profile of its own uses the profile \"test\" "
+                             "(--profile <name> or BRULION_PROFILE choose another)\n");
+    }
     // "Brulion", or a separate profile for BRULION_PROFILE (src/ipc/profile.h): the same names as
     // brulion-cli's.
     brulion::ipc::applyAppNames();
@@ -516,6 +528,10 @@ int main(int argc, char *argv[])
         // Key routing and focus of the real shell, headless (tests/app/shell: tst_shell_qml).
         if (mainUi && args.contains(u"--selftest-shell"_s))
             brulion::shell::startShellSelfTest(&engine, controller.get());
+        // The start screen: recent notebooks (missing, removed), layout, the primary action
+        // (tests/app/shell: tst_shell_onboarding_qml).
+        if (mainUi && args.contains(u"--selftest-onboarding"_s))
+            brulion::shell::startOnboardingSelfTest(&engine, controller.get());
         // The ways to the import screen and an import (tests/app/io: tst_appio_import_qml).
         if (mainUi && args.contains(u"--selftest-import"_s))
             brulion::ioviews::startImportSelfTest(&engine, controller.get());

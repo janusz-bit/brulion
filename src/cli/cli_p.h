@@ -163,6 +163,7 @@ struct Globals {
     bool stdinText = false;
     QString now;
     QString lang;
+    QString profile; ///< --profile: the app's separate profile (BRULION_PROFILE, src/ipc/profile.h)
     bool help = false;
 };
 

@@ -968,14 +968,15 @@ QVariantList AppSettings::recentVaults() const
     return out;
 }
 
-void AppSettings::addRecentVault(const QString &rawPath)
+void AppSettings::addRecentVault(const QString &rawPath, const QDateTime &when)
 {
     const QString path = cleanPath(rawPath);
     if (path.isEmpty())
         return;
     QVariantList list = recentVaults();
     removeRecent(list, path);
-    list.prepend(recentEntry(path, {}, QDateTime::currentDateTime().toString(Qt::ISODate)));
+    const QDateTime opened = when.isValid() ? when : QDateTime::currentDateTime();
+    list.prepend(recentEntry(path, {}, opened.toString(Qt::ISODate)));
     m_settings->setValue(kRecentVaults, list.mid(0, MaxRecentVaults));
     Q_EMIT recentVaultsChanged();
     setCurrentVault(path);

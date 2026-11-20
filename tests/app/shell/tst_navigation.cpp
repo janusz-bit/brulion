@@ -1245,6 +1245,55 @@ private Q_SLOTS:
         QCOMPARE(other->workspace()->rootPath(), kept);
     }
 
+    void missingRecentNotebookStaysMarked()
+    {
+        // A notebook on a drive that is not plugged in (no temporary folder): opening it says so
+        // and creates nothing; it stays on the list, marked, until it is removed from it.
+        auto app = makeApp();
+        const QString usb = u"/brulion-test-missing-%1/PENDRIVE/Zeszyt na wyjazd"_s.arg(QCoreApplication::applicationPid());
+        const QString kept = QDir(m_tmp.filePath(u"zeszyt domowy"_s)).absolutePath();
+        QVERIFY(QDir().mkpath(kept));
+        app->settings()->addRecentVault(kept);
+        app->settings()->addRecentVault(usb);
+        RecentNotebooks *recent = app->recentNotebooks();
+        QCOMPARE(recent->count(), 2);
+        QSignalSpy toasts(app.get(), &AppController::toastRequested);
+        QVERIFY(!app->openRecentVault(usb));
+        QCOMPARE(toasts.size(), 1);
+        QVERIFY(toasts.first().first().toString().contains(QDir::toNativeSeparators(usb)));
+        QVERIFY(!QFileInfo::exists(usb));
+        QCOMPARE(app->settings()->recentVaults().size(), 2);
+        QCOMPARE(recent->availability(usb), u"missing"_s);
+        QCOMPARE(recent->unavailableCount(), 1);
+        // The start keeps it too (it is no temporary folder), and shows the start screen.
+        app->start();
+        QCOMPARE(app->status(), u"onboarding"_s);
+        QCOMPARE(recent->count(), 2);
+        recent->remove(usb);
+        QCOMPARE(app->settings()->recentVaults().size(), 1);
+        QCOMPARE(recent->indexOf(kept), 0);
+    }
+
+    void startDropsVanishedTemporaryNotebooks()
+    {
+        // A test run's notebook in the temporary folder, long gone: the start drops it from the
+        // list (not marked); another one that exists stays.
+        auto app = makeApp();
+        const QString gone = QDir(m_tmp.filePath(u"scratchpad/vault"_s)).absolutePath();
+        const QString kept = QDir(m_tmp.filePath(u"notatki"_s)).absolutePath();
+        QVERIFY(QDir().mkpath(kept));
+        app->settings()->addRecentVault(gone);
+        app->settings()->addRecentVault(kept);
+        QVERIFY(app->recentNotebooks()->isTemporary(gone));
+        QCOMPARE(app->recentNotebooks()->count(), 2);
+        app->start();
+        QTRY_COMPARE(app->status(), u"ready"_s);
+        QCOMPARE(app->workspace()->rootPath(), kept);
+        QCOMPARE(app->settings()->recentVaults().size(), 1);
+        QCOMPARE(app->recentNotebooks()->indexOf(gone), -1);
+        QVERIFY(!QFileInfo::exists(gone));
+    }
+
     void reminderTapLeavesTheDocumentation()
     {
         // Android rings the user's alarms while the documentation is open: tapping one opens its

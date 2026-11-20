@@ -102,6 +102,10 @@ private Q_SLOTS:
                                     << u"bad_format"_s;
         QTest::newRow("bad now") << QStringList{u"--now"_s, u"2026"_s, u"version"_s} << QString() << u"bad_now"_s;
         QTest::newRow("bad lang") << QStringList{u"--lang"_s, u"de"_s, u"version"_s} << QString() << u"bad_lang"_s;
+        QTest::newRow("bad profile") << QStringList{u"--profile"_s, u"../Brulion"_s, u"version"_s} << QString()
+                                     << u"bad_profile"_s;
+        QTest::newRow("profile without a value") << QStringList{u"version"_s, u"--profile"_s} << QString()
+                                                 << u"missing_value"_s;
         QTest::newRow("vault without value") << QStringList{u"--vault"_s} << QString() << u"missing_value"_s;
     }
     void parse()
@@ -126,8 +130,9 @@ private Q_SLOTS:
     {
         const Invocation inv = parseArguments({u"--vault=~/Notatki"_s, u"--dry-run"_s, u"capture"_s, u"x"_s,
                                                u"--allow-destructive"_s, u"--now"_s, u"2026-10-14 10:30"_s, u"--lang"_s,
-                                               u"en"_s, u"--stdin"_s, u"-v"_s, u"--read-only"_s});
+                                               u"en"_s, u"--stdin"_s, u"-v"_s, u"--read-only"_s, u"--profile=zrzuty"_s});
         QVERIFY(!inv.error);
+        QCOMPARE(inv.globals.profile, u"zrzuty"_s);
         QCOMPARE(inv.globals.vault, u"~/Notatki"_s);
         QVERIFY(inv.globals.dryRun);
         QVERIFY(inv.globals.allowDestructive);

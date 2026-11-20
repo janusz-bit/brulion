@@ -365,7 +365,9 @@ QML smoke tests and screenshot scripts that run the real app headless).
   (`controlprotocol.h`: JSON-line requests and responses, the methods and their parameters;
   `controlserver.h`: a second socket, `<key>-control`, owner-only, other users' connections
   refused; `controlclient.h` for `brulion-cli app …`); `profile.h`: the app's names shared by the
-  app and brulion-cli, `BRULION_PROFILE=<name>` for a separate profile (test runs on Windows). Off unless `--remote-control` or the device
+  app and brulion-cli, `--profile <name>` / `BRULION_PROFILE=<name>` for a separate profile (test runs on Windows;
+  a self-test, journey or screenshot run without a home of its own gets "test": `chooseProfile()`,
+  docs/CLI.md "Profiles"). The remote control is off unless `--remote-control` or the device
   setting `devtools/remoteControl`; the app's side is `src/app/shell/remotecontrol.h`, its input
   and item finding the UI driver `src/app/shell/uidriver.h` (library `brulion_uidriver`), shared
   with the shell self-test and the journey. Nothing nested: gestures play from timers, waits

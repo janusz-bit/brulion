@@ -182,6 +182,19 @@ AppController::AppController(const Options &options, QObject *parent)
         g_instance = this;
 
     m_settings = std::make_unique<AppSettings>(options.settingsFile, m_dataDir);
+    // The start screen's list: its folders checked off the GUI thread, a vanished temporary one
+    // dropped. "~" for the home folder only where people know it (Linux; not Android's private
+    // home, not Windows).
+    m_recentNotebooks = std::make_unique<RecentNotebooks>(m_settings.get());
+    m_recentNotebooks->setClock([this] { return now(); });
+    if (isDesktop() && QDir::separator() == u'/')
+        m_recentNotebooks->setHome(QDir::homePath());
+#ifdef Q_OS_ANDROID
+    // A folder on shared storage without "All files access" only looks missing: opening it asks.
+    m_recentNotebooks->setAssumeAvailable([this](const QString &path) {
+        return needsStoragePermission(path) && !platform::AndroidBridge::instance()->hasAllFilesAccess();
+    });
+#endif
     // The Nextcloud switch and folder of 0.3.0 and older (one for all notebooks) belong to the
     // notebook that was open then — not the documentation: then the last notebook before it.
     const QString current = m_settings->currentVault();
@@ -221,6 +234,7 @@ AppController::AppController(const Options &options, QObject *parent)
         // workspace, whose texts (sync status, reminders) are rebuilt with tr() in the new language.
         Q_EMIT languageChanged(m_settings->language());
         m_workspace->setUiLanguage(m_settings->language());
+        m_recentNotebooks->setLanguage(m_settings->language());
         // The sample and documentation notebooks of the new language (their own folders); a
         // --locale of this run no longer counts, as for the translation.
         m_localeOverride.clear();
@@ -299,6 +313,8 @@ AppController::AppController(const Options &options, QObject *parent)
         if (const QString language = argValue(args, option); language == u"pl" || language == u"en")
             *value = language;
     }
+    // The last-opened texts of the start screen in the UI language (--locale of this run too).
+    m_recentNotebooks->setLanguage(m_localeOverride.isEmpty() ? m_settings->language() : m_localeOverride);
     m_devOnboarding = args.contains(u"--onboarding"_s);
     m_devIntro = args.contains(u"--intro"_s);
     connect(m_settings.get(), &AppSettings::introDoneChanged, this, &AppController::introPendingChanged);
@@ -405,6 +421,8 @@ void AppController::start()
     // it there: the start screen and the switcher would offer it until it was opened again.
     for (const QString &language : {u"en"_s, u"pl"_s})
         m_settings->forgetRecentVault(docsNotebookPath(m_dataDir, language));
+    // A notebook of a temporary folder that is gone (a test run's, an archive's) never comes back.
+    m_recentNotebooks->dropVanishedTemporary();
 #ifdef Q_OS_WASM
     platform::WasmNotifier::Activation activation;
     if (platform::WasmNotifier::takeLaunchActivation(&activation) && !activation.path.isEmpty())
@@ -1247,7 +1265,11 @@ bool AppController::openRecentVault(const QString &rawPath)
     }
 #endif
     if (!path.isEmpty() && !isWasm() && !QFileInfo(path).isDir()) {
-        m_settings->forgetRecentVault(path);
+        // Marked on the list (a drive plugged in again brings it back); a temporary folder leaves it.
+        if (m_recentNotebooks->isTemporary(path))
+            m_settings->forgetRecentVault(path);
+        else
+            m_recentNotebooks->markMissing(path);
         toast(tr("The notebook folder %1 is not available.").arg(QDir::toNativeSeparators(path)), u"warning"_s);
         return false;
     }
@@ -1428,7 +1450,7 @@ void AppController::finishOpening(const QString &path, bool seedDemo)
     if (const QString language = docs ? docsLanguage(path) : docsLanguage(m_workspace->rootPath()); !language.isEmpty())
         m_settings->forgetRecentVault(docsNotebookPath(m_dataDir, language)); // listed by 0.3.0–0.3.5
     else
-        m_settings->addRecentVault(m_workspace->rootPath());
+        m_settings->addRecentVault(m_workspace->rootPath(), now()); // (the app's clock: --now too)
     // The notebook's tabs as they were left on this device (not for --route: screenshots and
     // tests start from one tab showing it, and leave the saved tabs alone).
     const TabsSnapshot tabsBefore = beginTabs();
@@ -1867,6 +1889,7 @@ void AppController::setClock(std::function<QDateTime()> clock)
 {
     m_clock = clock;
     m_workspace->setClock(std::move(clock));
+    m_recentNotebooks->setClock([this] { return now(); }); // (the texts again: another "today")
 }
 
 QDateTime AppController::now() const

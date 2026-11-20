@@ -67,6 +67,7 @@
 #include "appupdates.h"
 #include "localai.h"
 #include "navigation.h"
+#include "recentnotebooks.h"
 #include "tabs.h"
 #include "workspace.h"
 
@@ -198,6 +199,9 @@ class AppController : public QObject {
     Q_PROPERTY(QString failedVaultPath READ failedVaultPath NOTIFY statusChanged FINAL)
     /// The documentation notebook is the open one.
     Q_PROPERTY(bool inDocsVault READ inDocsVault NOTIFY inDocsVaultChanged FINAL)
+    /// The recent notebooks with their folders' state and when they were last opened (the start
+    /// screen, OnboardingView; recentnotebooks.h).
+    Q_PROPERTY(brulion::shell::RecentNotebooks *recentNotebooks READ recentNotebooks CONSTANT FINAL)
 
     // ---- Permissions --------------------------------------------------------------------
     /// { allFilesAccess, notifications, exactAlarms, fullScreenAlarms } (true when granted or
@@ -259,6 +263,7 @@ public:
     static AppController *instance();
 
     AppSettings *settings() const { return m_settings.get(); }
+    RecentNotebooks *recentNotebooks() const { return m_recentNotebooks.get(); }
     Workspace *workspace() const { return m_workspace.get(); }
     AppUpdates *updates() const { return m_updates.get(); }
     LocalAi *localAi() const { return m_localAi.get(); }
@@ -421,7 +426,8 @@ public:
     Q_INVOKABLE void openVault(const QString &path);
     /// Open a notebook known from before (the recent list, "back" from the documentation). Like
     /// start(), never creates its folder when it is gone (deleted, moved, an unmounted card):
-    /// says so, drops it from the recent list and returns false.
+    /// says so and returns false. The notebook stays on the recent list, marked missing (a card
+    /// put back brings it back) — one in a temporary folder leaves it (RecentNotebooks).
     Q_INVOKABLE bool openRecentVault(const QString &path);
     /// openVault(), then show `route` instead of the home view (onboarding's "Import notes":
     /// the import screen of the new notebook). Kept while Android asks for "All files access".
@@ -741,6 +747,7 @@ private:
     void refuseOtherNotebookRoute(const QString &vault);
 
     std::unique_ptr<AppSettings> m_settings;
+    std::unique_ptr<RecentNotebooks> m_recentNotebooks;
     /// Before the workspace (its extensions hand it their requests): destroyed after it.
     std::unique_ptr<LocalAi> m_localAi;
     std::unique_ptr<Workspace> m_workspace;

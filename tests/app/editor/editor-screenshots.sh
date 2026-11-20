@@ -46,7 +46,7 @@ for state in "${states[@]}"; do
     esac
     for theme in "${themes[@]}"; do
       file="$out/editor-${state}-${size}-${theme}.png"
-      args=(--editor --size "$geometry" --theme "$theme" --locale "$locale" --now "$now" --delay "$delay" "${extra[@]}" --screenshot "$file")
+      args=(--profile test --editor --size "$geometry" --theme "$theme" --locale "$locale" --now "$now" --delay "$delay" "${extra[@]}" --screenshot "$file")
       [[ -n "$script" ]] && args+=(--editor-script "$script")
       if QML_DISABLE_DISK_CACHE=1 QT_FORCE_STDERR_LOGGING=1 QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software \
         "$bin" "${args[@]}" 2> >(grep -v "^brulion: screenshot" >&2); then

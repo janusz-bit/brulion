@@ -207,6 +207,8 @@ Global options:
                          move/rename/delete, history restore (deletes go to .trash/)
   --now "YYYY-MM-DD HH:mm"   a fixed clock (local time)
   --lang pl|en           language of written dates and templates (default: the app's)
+  --profile <name>       the app's separate profile (as $BRULION_PROFILE): its settings,
+                         notebook and running app
   --stdin                read the text argument from standard input
   -v, --verbose          diagnostics on standard error
   -h, --help             help (also: help <command>, help --json)
@@ -226,7 +228,7 @@ QString completionScript(const QString &shell, const QString &program)
     QStringList options{
             u"--vault"_s,   u"--state-dir"_s, u"--no-history"_s,        u"--format"_s, u"--compact"_s, u"--dry-run"_s,
             u"--diff"_s,    u"--read-only"_s, u"--allow-destructive"_s, u"--now"_s,    u"--lang"_s,    u"--stdin"_s,
-            u"--verbose"_s, u"--help"_s};
+            u"--verbose"_s, u"--help"_s,      u"--profile"_s};
     for (const Command &c : commands()) {
         const QStringList w = c.words();
         if (!tops.contains(w.first()))
@@ -252,7 +254,7 @@ QString completionScript(const QString &shell, const QString &program)
     local i word=""
     for ((i = 1; i < COMP_CWORD; i++)); do
         [[ ${COMP_WORDS[i]} == -* ]] && continue
-        case ${COMP_WORDS[i-1]} in --vault|--state-dir|--format|--now|--lang) continue;; esac
+        case ${COMP_WORDS[i-1]} in --vault|--state-dir|--format|--now|--lang|--profile) continue;; esac
         word=${COMP_WORDS[i]}; break
     done
     if [[ -z $word ]]; then COMPREPLY=($(compgen -W "%4" -- "$cur")); return; fi

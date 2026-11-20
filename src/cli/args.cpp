@@ -1,5 +1,6 @@
 // The command line: global options, the command's words, its arguments (docs/CLI.md "Usage").
 #include "cli_p.h"
+#include "profile.h" // --profile: a valid profile name
 
 #include <QHash>
 
@@ -24,6 +25,8 @@ QString *globalValue(Globals &g, const QString &name)
         return &g.now;
     if (name == u"--lang")
         return &g.lang;
+    if (name == u"--profile")
+        return &g.profile;
     return nullptr;
 }
 
@@ -105,7 +108,7 @@ std::pair<const Command *, qsizetype> commandOf(const QStringList &words)
     return {nullptr, 0};
 }
 
-/// The values of --format, --lang and --now.
+/// The values of --format, --lang, --now and --profile.
 std::optional<Error> checkGlobals(const Globals &g)
 {
     if (g.format != u"json" && g.format != u"text")
@@ -114,6 +117,9 @@ std::optional<Error> checkGlobals(const Globals &g)
         return usage(u"bad_lang"_s, tr("--lang is pl or en"), {{u"lang"_s, g.lang}});
     if (!g.now.isEmpty() && !QDateTime::fromString(g.now, u"yyyy-MM-dd HH:mm"_s).isValid())
         return usage(u"bad_now"_s, tr("--now takes \"YYYY-MM-DD HH:mm\" (local time)"), {{u"now"_s, g.now}});
+    if (!g.profile.isEmpty() && !ipc::isValidProfileName(g.profile))
+        return usage(u"bad_profile"_s, tr("--profile takes a name of letters, digits, “-” and “_” (at most 32)"),
+                     {{u"profile"_s, g.profile}});
     return std::nullopt;
 }
 

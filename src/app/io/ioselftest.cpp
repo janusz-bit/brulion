@@ -288,14 +288,16 @@ private:
             check(false, "onboarding: the keyboard and the folder field's Flickable exist");
             return;
         }
-        const qreal keyboard = 336;
-        const qreal top = m_window->height() - keyboard;
         const auto bottom = [field] { return field->mapToScene(QPointF(0, field->height())).y(); };
         // Low on the screen, where the keyboard comes (as on a phone in portrait).
         const qreal low = m_window->height() - 120;
         flick->setProperty("contentY", std::max<qreal>(0, flick->property("contentY").toReal() + bottom() - low));
         settle(100);
         const qreal before = bottom();
+        // A keyboard that covers it: 336 px, or taller where the start screen shows the field high
+        // up (its first card) — as a bigger keyboard or a smaller phone would.
+        const qreal keyboard = std::max<qreal>(336, m_window->height() - before + 40);
+        const qreal top = m_window->height() - keyboard;
         insets->setProperty("simulated", keyboard);
         field->forceActiveFocus();
         check(before > top && waitFor([&] {
