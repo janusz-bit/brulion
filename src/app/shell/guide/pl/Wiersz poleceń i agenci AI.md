@@ -25,6 +25,7 @@ brulion-cli --format text month "zeszły miesiąc"   # przeczytaj notatkę poprz
 brulion-cli --format text habit list                # nawyki: dzisiejsze odhaczenia, serie
 brulion-cli habit tick Medytacja                   # odhacz nawyk na dziś
 brulion-cli search zolw                            # znajdzie „żółw”
+brulion-cli clip install                           # połącz Web Clipper przeglądarek (zob. Import i eksport)
 brulion-cli help                                   # wszystkie polecenia
 ```
 

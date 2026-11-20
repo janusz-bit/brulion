@@ -25,6 +25,7 @@ brulion-cli --format text month "last month"       # read last month's note
 brulion-cli --format text habit list               # habits: today's check-offs, streaks
 brulion-cli habit tick Meditation                  # check a habit off for today
 brulion-cli search cafe                            # also finds “café”
+brulion-cli clip install                           # connect the browsers' Web Clipper (see Import and export)
 brulion-cli help                                   # all commands
 ```
 
