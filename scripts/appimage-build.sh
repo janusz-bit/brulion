@@ -101,6 +101,9 @@ install_deps() {
     libsm6 libice6 libwayland-client0 libwayland-cursor0 libwayland-egl1 libegl1 libgl1
     # printing (Qt's CUPS print support plugin: "Print…" lists the system's printers)
     libcups2
+    # sound: libQt6Multimedia links PulseAudio's client library (audio out and in on Linux; Qt's
+    # FFmpeg backend plays through it, PipeWire's pulse server included)
+    libpulse0
     # spell checking: Hunspell (bundled by linuxdeploy; CMake finds it through pkg-config, which
     # minimal containers lack) and the dictionaries copied into the AppDir
     pkg-config libhunspell-dev hunspell-pl hunspell-en-us
