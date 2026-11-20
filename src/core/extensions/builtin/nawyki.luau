@@ -119,6 +119,11 @@ local INTERFACE = {
         noSuchHabit = "Nie ma nawyku „%s”",
         badName = "Tej nazwy nie da się zapisać jako odhaczenia",
         badDate = "Niepoprawna data: %s",
+        macroStreak = "Seria nawyku, najdłuższa i wykonanie",
+        macroHabit = "nawyk",
+        macroExample = "Czytanie",
+        macroUnknown = "nie ma nawyku „%s”",
+        panelToday = "Nawyki dnia",
     },
     en = {
         title = "Habits",
@@ -179,6 +184,11 @@ local INTERFACE = {
         noSuchHabit = "No habit named %s",
         badName = "The habit's name cannot be written as a check",
         badDate = "Not a date: %s",
+        macroStreak = "A habit's streak, its longest and how often it was done",
+        macroHabit = "habit",
+        macroExample = "Reading",
+        macroUnknown = "no habit “%s”",
+        panelToday = "The day's habits",
     },
 }
 
@@ -1236,25 +1246,67 @@ local function monthView(params: { [string]: any }): Node
     return b.ui.column(nodes)
 end
 
-b.view("month", monthView, {
-    set = function(args)
-        local name = if type(args.name) == "string" then args.name else ""
-        local date = if type(args.date) == "string" then args.date else b.today()
-        local state = stateOf(args.state) or "done"
-        local isPage = args.page == true
-        local ok, result, problem = pcall(setCheck, name, isPage, date, state)
-        if not ok or result == nil then
-            if not ok then
-                b.log(tostring(result))
-            end
-            return { message = ui().notSaved, tone = "error" }
+-- Macros (docs/EXTENSIONS.md "Macros"): {{ext:nawyki/seria Czytanie}} — a habit's streak in any note.
+b.macro("seria", function(ctx)
+    local T = ui()
+    local name = simplify(ctx.args[1] or "")
+    local nb = notebook()
+    local h = nb.byKey[keyOf(name)]
+    if h == nil or not valid(h) then
+        return b.ui.text(string.format(T.macroUnknown, name), { muted = true })
+    end
+    local st = statsOf(h, marksOf(nb, h), dayOf(b.today()) :: number, b.weekStart())
+    return b.ui.text(streakLine(h, st), { tone = if st.current > 0 then "success" else nil })
+end, { description = ui().macroStreak, args = { ui().macroHabit }, example = ui().macroExample })
+
+-- A tap on a check or a day: that day's check written (and its toast with Undo).
+local function setAction(args)
+    local name = if type(args.name) == "string" then args.name else ""
+    local date = if type(args.date) == "string" then args.date else b.today()
+    local state = stateOf(args.state) or "done"
+    local isPage = args.page == true
+    local ok, result, problem = pcall(setCheck, name, isPage, date, state)
+    if not ok or result == nil then
+        if not ok then
+            b.log(tostring(result))
         end
-        if not result.changed then
-            return nil
+        return { message = ui().notSaved, tone = "error" }
+    end
+    if not result.changed then
+        return nil
+    end
+    return checkMessage(name, isPage, date, state, result.before)
+end
+
+b.view("month", monthView, { set = setAction }, { icon = "flame" })
+
+-- The side panel beside a day of the journal (docs/EXTENSIONS.md "Panels"): that day's checks.
+local function dayPanel(params: { [string]: any }): Node
+    local T = ui()
+    local nb = notebook()
+    local date = if type(params.date) == "string" and dayOf(params.date) then params.date else b.today()
+    local day = dayOf(date) :: number
+    local today = dayOf(b.today()) :: number
+    local weekStart = b.weekStart()
+    local rows: { Node } = {}
+    for _, h in nb.habits do
+        if valid(h) then
+            local m = marksOf(nb, h)
+            local mark = m.days[day] or "open"
+            local checked: any = if mark == "done" then true elseif mark == "skipped" then "skipped" else false
+            local st = statsOf(h, m, today, weekStart)
+            table.insert(rows, b.ui.row({
+                b.ui.check(checked, "set", setArgs(h, date, nextState(mark)), { menu = dayMenu(h, date), label = h.name }),
+                b.ui.text(h.name),
+                b.ui.text(plural(st.current, T.units[st.unit]), { icon = "flame", muted = true }),
+            }))
         end
-        return checkMessage(name, isPage, date, state, result.before)
-    end,
-}, { icon = "flame" })
+    end
+    -- No habits: nothing to show, and the side panel leaves the section out.
+    return b.ui.column(rows)
+end
+
+b.view("dzien", dayPanel, { set = setAction }, { label = ui().panelToday, icon = "flame", panel = "journal" })
 
 -- ---- commands ---------------------------------------------------------------------------------
 

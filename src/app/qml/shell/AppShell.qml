@@ -894,6 +894,23 @@ FocusScope {
         }
     }
 
+    // A macro's placeholder clicked in the editor (Workspace.extensions.showMacro): run, switch on or
+    // open its extension.
+    property ShellMacroDialog macroDialog: null
+    Component {
+        id: macroDialogComponent
+        ShellMacroDialog {}
+    }
+    Connections {
+        target: Workspace.extensions
+        function onMacroHelpRequested(extension: string, macro: string) {
+            if (!shell.macroDialog)
+                shell.macroDialog = macroDialogComponent.createObject(shell) as ShellMacroDialog
+            if (shell.macroDialog)
+                shell.macroDialog.show(extension, macro)
+        }
+    }
+
     property ShellNewPageDialog newPage: null
     function newPageNow(): ShellNewPageDialog {
         if (!shell.newPage)

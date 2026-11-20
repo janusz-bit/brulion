@@ -311,6 +311,13 @@ public:
     QString linkedBlockText(const QString &path, const QString &blockId) const override;
     Q_INVOKABLE QString ensureBlockId(const QString &path, int line) override;
     Q_INVOKABLE QVariantList templates() const override;
+    /// Macros of extensions (docs/SYNTAX.md §13 "Macros"): computed by WorkspaceExtensions.
+    bool rendersMacros() const override { return true; }
+    markdown::MacroView macroView(const markdown::MacroSpan &macro, const QString &path) const override;
+    QVariantList suggestMacros(const QString &prefix, int limit = 20) const override;
+    QVariantList embeddableViews() const override;
+    std::optional<QString> templateVariable(const QString &extension, const QString &name, const QString &arguments,
+                                            const QVariantMap &context) override;
     Q_INVOKABLE QUrl assetUrl(const QString &path) const override;
     /// image://drawing/<the file's absolute path, percent-encoded>?v=<mtime>-<size>&dark=0|1: the
     /// preview of a drawing in the light or the dark theme (DrawingImageProvider); empty without

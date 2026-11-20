@@ -4,6 +4,7 @@
 #include "extensions/host.h"
 #include "dates/names.h"
 #include "dates/recurrence.h"
+#include "markdown/macros.h"
 #include "text/text.h"
 #include "util/unicode.h"
 
@@ -98,9 +99,6 @@ function ui.markdown(text, options)
     end
     return node
 end
-function ui.progress(value, max, label)
-    return { type = "progress", value = value, max = max, label = label }
-end
 -- Numbers side by side: { { label = "Due", value = 12, tone = "accent" }, … }
 function ui.stats(items) return { type = "stats", items = present(items) } end
 function ui.divider() return { type = "divider" } end
@@ -154,6 +152,53 @@ function ui.open(label, view, params, options)
     return node
 end
 function ui.run(label, command) return { type = "run", label = label, command = command } end
+-- The controls that take what is typed or chosen (docs/EXTENSIONS.md "Views"): each calls its action
+-- with its args and the new `value`.
+local function spec(value, name)
+    if type(value) ~= "table" then
+        error(name .. ": argument 1 must be a table", 3)
+    end
+    return value
+end
+-- A text field: Enter (Ctrl+Enter when multiline) or its button gives the text to the action.
+function ui.input(s)
+    s = spec(s, "b.ui.input")
+    return { type = "input", value = s.value, placeholder = s.placeholder, label = s.label, action = s.action,
+             args = s.args, multiline = s.multiline == true, submit = s.submit, keep = s.keep == true }
+end
+-- A list to choose from: options are texts or { label = …, value = … }.
+function ui.select(s)
+    s = spec(s, "b.ui.select")
+    return { type = "select", options = present(s.options), value = s.value, label = s.label, action = s.action,
+             args = s.args }
+end
+function ui.slider(s)
+    s = spec(s, "b.ui.slider")
+    return { type = "slider", value = s.value, min = s.min, max = s.max, step = s.step, unit = s.unit,
+             label = s.label, action = s.action, args = s.args }
+end
+-- A day ("YYYY-MM-DD"; "" or nil: none), picked from a calendar.
+function ui.date(s)
+    s = spec(s, "b.ui.date")
+    return { type = "date", value = s.value, label = s.label, action = s.action, args = s.args }
+end
+-- A switch; its action gets value = true or false.
+function ui.toggle(on, action, args, options)
+    local node = { type = "toggle", on = on == true, action = action, args = args }
+    if type(options) == "table" then
+        node.label = options.label
+    end
+    return node
+end
+-- A bar filled to value / max (max 1 by default), its label above it, a tone: written
+-- b.ui.progress(3, 10, "3 of 10") or b.ui.progress({ value = 3, max = 10, label = …, tone = … }).
+function ui.progress(value, max, label)
+    if type(value) == "table" then
+        local s = value
+        return { type = "progress", value = s.value, max = s.max, label = s.label, tone = s.tone }
+    end
+    return { type = "progress", value = value, max = max, label = label }
+end
 return table.freeze(ui)
 )luau";
 
@@ -655,6 +700,10 @@ void Engine::stop()
     m_commands.clear();
     m_views.clear();
     m_hooks.clear();
+    m_macros.clear();
+    m_variables.clear();
+    m_reads = nullptr;
+    m_noWrites = false;
     m_running = nullptr;
     m_runningRef = 0;
     m_runningExtension.clear();
@@ -746,6 +795,8 @@ void Engine::pushEnvironment(const QString &extension)
     set("replaceLine", &Engine::apiReplaceLine);
     set("insertLine", &Engine::apiInsertLine);
     set("removeLine", &Engine::apiRemoveLine);
+    set("macro", &Engine::apiMacro);
+    set("variable", &Engine::apiVariable);
     // b.ai = factory(raw): the raw C function yields; the Luau wrapper raises its errors.
     lua_getref(L, m_aiFactoryRef);
     lua_pushlstring(L, id.constData(), size_t(id.size()));
@@ -790,6 +841,7 @@ void Engine::dropExtension(const QString &extension)
             ++it;
         }
     }
+    dropContributions(extension);
     dropWaiting(extension);
     if (const auto it = m_loaded.constFind(extension); it != m_loaded.constEnd()) {
         lua_unref(m_L, it->envRef);
@@ -879,7 +931,7 @@ QList<ViewInfo> Engine::views() const
 {
     QList<ViewInfo> out;
     for (auto it = m_views.cbegin(); it != m_views.cend(); ++it) {
-        ViewInfo info{it->extension, it.key().mid(it->extension.size() + 1), {}, it->label, it->icon};
+        ViewInfo info{it->extension, it.key().mid(it->extension.size() + 1), {}, it->label, it->icon, it->panel};
         if (it->actionsRef) {
             lua_getref(m_L, it->actionsRef);
             lua_pushnil(m_L);
@@ -1200,6 +1252,7 @@ int Engine::apiRemoveLine(lua_State *L) { return finishApi(L, self(L)->removeLin
 
 int Engine::apiRevision(lua_State *L)
 {
+    self(L)->noteReadAll();
     lua_pushnumber(L, double(self(L)->m_host->revision()));
     return 1;
 }
@@ -1275,7 +1328,7 @@ int Engine::commandImpl(lua_State *L)
         lua_pop(L, 1);
     }
     lua_pushvalue(L, 2);
-    Handler h{extension, lua_ref(L, -1), 0, label, needsBlock, {}, palette};
+    Handler h{extension, lua_ref(L, -1), 0, label, needsBlock, {}, palette, {}};
     lua_pop(L, 1);
     const QString key = extension + u'/' + name;
     if (const auto it = m_commands.constFind(key); it != m_commands.constEnd())
@@ -1296,7 +1349,7 @@ int Engine::viewImpl(lua_State *L)
         return failWith(L, u"b.view: argument 3 must be a table of actions"_s);
     if (!lua_isnoneornil(L, 4) && lua_type(L, 4) != LUA_TTABLE)
         return failWith(L, u"b.view: argument 4 must be a table ({label = …, icon = …})"_s);
-    Handler h{extension, 0, 0, {}, false, {}, true};
+    Handler h{extension, 0, 0, {}, false, {}, true, {}};
     if (lua_type(L, 4) == LUA_TTABLE) {
         lua_rawgetfield(L, 4, "label");
         if (lua_type(L, -1) == LUA_TSTRING)
@@ -1305,6 +1358,19 @@ int Engine::viewImpl(lua_State *L)
         lua_rawgetfield(L, 4, "icon");
         if (lua_type(L, -1) == LUA_TSTRING)
             h.icon = toQString(L, -1).left(64);
+        lua_pop(L, 1);
+        // panel = true (beside pages and days), "page" or "journal": a section of the side panel.
+        lua_rawgetfield(L, 4, "panel");
+        if (lua_type(L, -1) == LUA_TBOOLEAN && lua_toboolean(L, -1)) {
+            h.panel = u"all"_s;
+        } else if (lua_type(L, -1) == LUA_TSTRING) {
+            const QString where = toQString(L, -1);
+            if (where != u"page" && where != u"journal" && where != u"all" && where != u"sidebar") {
+                lua_pop(L, 1);
+                return failWith(L, u"b.view: panel is true, \"page\", \"journal\" or \"sidebar\""_s);
+            }
+            h.panel = where;
+        }
         lua_pop(L, 1);
     }
     lua_pushvalue(L, 2);
@@ -1354,6 +1420,7 @@ int Engine::pagesImpl(lua_State *L)
         return failWith(L, u"b.pages: argument 1 must be a table ({ tag = … }), not %1"_s.arg(
                                    QString::fromUtf8(luaL_typename(L, 1))));
     }
+    noteReadAll();
     const QStringList pages = query.props.isEmpty() ? m_host->pages(query.tag) : m_host->findPages(query);
     Unlimited unlimited(&m_unlimited);
     pushVariant(L, pages);
@@ -1365,6 +1432,7 @@ int Engine::readImpl(lua_State *L)
     QString name;
     if (!argString(L, 1, "b.read", &name))
         return kRaise;
+    noteRead(name);
     const auto content = m_host->read(name);
     Unlimited unlimited(&m_unlimited);
     if (content)
@@ -1379,6 +1447,7 @@ int Engine::pageImpl(lua_State *L)
     QString name;
     if (!argString(L, 1, "b.page", &name))
         return kRaise;
+    noteRead(name);
     const QVariantMap page = m_host->page(name);
     Unlimited unlimited(&m_unlimited);
     if (page.isEmpty())
@@ -1411,6 +1480,10 @@ int Engine::blocksImpl(lua_State *L)
     for (const QString &day : {query.from, query.to})
         if (!day.isEmpty() && !QDate::fromString(day, Qt::ISODate).isValid())
             return failWith(L, u"b.blocks: invalid date: "_s + day);
+    if (!query.page.isEmpty())
+        noteRead(query.page);
+    else
+        noteReadAll();
     const QVariantList blocks = m_host->blocks(query);
     Unlimited unlimited(&m_unlimited);
     pushVariant(L, blocks);
@@ -1423,6 +1496,7 @@ int Engine::searchImpl(lua_State *L)
     double limit = 20;
     if (!argString(L, 1, "b.search", &text) || (!lua_isnoneornil(L, 2) && !argNumber(L, 2, "b.search", &limit)))
         return kRaise;
+    noteReadAll();
     const QVariantList hits = m_host->search(text, countFrom(limit, 1, 200, 20));
     Unlimited unlimited(&m_unlimited);
     pushVariant(L, hits);
@@ -1438,6 +1512,7 @@ int Engine::queryImpl(lua_State *L)
         || (!lua_isnoneornil(L, 3) && !argNumber(L, 3, "b.query", &offset)))
         return kRaise;
     QString error;
+    noteReadAll();
     const int first = countFrom(offset, 0, 1000000, 0);
     const QVariantMap result = first > 0 ? m_host->queryPage(source, countFrom(limit, 1, 1000, 50), first, &error)
                                          : m_host->query(source, countFrom(limit, 1, 1000, 50), &error);
@@ -1450,6 +1525,10 @@ int Engine::queryImpl(lua_State *L)
 
 bool Engine::mayWrite(lua_State *L, const QString &extension, const char *function)
 {
+    if (m_noWrites) {
+        failWith(L, QString::fromLatin1(function) + u": a macro or a template variable cannot change notes"_s);
+        return false;
+    }
     if (m_loaded.value(extension).permissions.contains(u"write"_s))
         return true;
     failWith(L, QString::fromLatin1(function) + u": permission denied: write"_s);
@@ -1801,6 +1880,7 @@ int Engine::aiImpl(lua_State *L)
 
 int Engine::attachmentsImpl(lua_State *L)
 {
+    noteReadAll();
     const QStringList files = m_host->attachments();
     Unlimited unlimited(&m_unlimited);
     pushVariant(L, files);
@@ -2040,6 +2120,7 @@ int Engine::linesImpl(lua_State *L)
     QString name;
     if (!argString(L, 1, "b.lines", &name))
         return kRaise;
+    noteRead(name);
     const std::optional<QVariantList> lines = m_host->lines(name);
     Unlimited unlimited(&m_unlimited);
     if (lines)
@@ -2182,6 +2263,178 @@ int Engine::fromUtcImpl(lua_State *L)
     else
         pushString(L, at.toLocalTime().toString(u"yyyy-MM-dd HH:mm"_s));
     return 1;
+}
+
+// ---- Macros and template variables (docs/EXTENSIONS.md "Macros", docs/TEMPLATES.md) -------------
+
+namespace {
+constexpr int kMaxContributions = 256; // macros (and, apart, variables) of one extension
+}
+
+int Engine::apiMacro(lua_State *L) { return finishApi(L, self(L)->contributionImpl(L, false)); }
+int Engine::apiVariable(lua_State *L) { return finishApi(L, self(L)->contributionImpl(L, true)); }
+
+int Engine::contributionImpl(lua_State *L, bool variable)
+{
+    const QString extension = extensionOf(L);
+    const char *function = variable ? "b.variable" : "b.macro";
+    const QString fn = QString::fromLatin1(function);
+    QString name;
+    if (!argString(L, 1, function, &name))
+        return kRaise;
+    if (!markdown::isMacroName(name))
+        return failWith(L, fn + u": the name \""_s + name.left(80)
+                                   + u"\" is not one (letters, digits, -, _ and ., at most 64, the first a letter or a digit)"_s);
+    if (lua_type(L, 2) != LUA_TFUNCTION)
+        return failWith(L, fn + u": argument 2 must be a function"_s);
+    if (!lua_isnoneornil(L, 3) && lua_type(L, 3) != LUA_TTABLE)
+        return failWith(L, fn + u": argument 3 must be a table ({ description = …, args = … })"_s);
+    Contribution c;
+    c.extension = extension;
+    if (lua_type(L, 3) == LUA_TTABLE) {
+        Unlimited unlimited(&m_unlimited);
+        lua_rawgetfield(L, 3, "description");
+        if (lua_type(L, -1) == LUA_TSTRING)
+            c.description = toQString(L, -1).simplified().left(300);
+        lua_pop(L, 1);
+        lua_rawgetfield(L, 3, "example");
+        if (lua_type(L, -1) == LUA_TSTRING)
+            c.example = toQString(L, -1).simplified().left(200);
+        lua_pop(L, 1);
+        // args = "exercise" or { "habit", "days" }: the arguments' names, for the suggestions.
+        lua_rawgetfield(L, 3, "args");
+        if (lua_type(L, -1) == LUA_TSTRING) {
+            c.arguments << toQString(L, -1).simplified().left(40);
+        } else if (lua_type(L, -1) == LUA_TTABLE) {
+            const int count = std::min(lua_objlen(L, -1), 8);
+            for (int i = 1; i <= count; ++i) {
+                lua_rawgeti(L, -1, i);
+                if (lua_type(L, -1) == LUA_TSTRING)
+                    c.arguments << toQString(L, -1).simplified().left(40);
+                lua_pop(L, 1);
+            }
+        }
+        lua_pop(L, 1);
+    }
+    QHash<QString, Contribution> &map = variable ? m_variables : m_macros;
+    const QString key = extension + u'/' + name;
+    const auto it = map.constFind(key);
+    if (it == map.constEnd()) {
+        qsizetype own = 0;
+        for (const Contribution &other : std::as_const(map))
+            own += other.extension == extension ? 1 : 0;
+        if (own >= kMaxContributions)
+            return failWith(L, fn + u": at most %1 per extension"_s.arg(kMaxContributions));
+    }
+    {
+        Unlimited unlimited(&m_unlimited);
+        lua_pushvalue(L, 2);
+        c.ref = lua_ref(L, -1);
+        lua_pop(L, 1);
+    }
+    if (it != map.constEnd())
+        lua_unref(L, it->ref);
+    map.insert(key, c);
+    return 0;
+}
+
+void Engine::dropContributions(const QString &extension)
+{
+    for (auto *map : {&m_macros, &m_variables}) {
+        for (auto it = map->begin(); it != map->end();) {
+            if (it->extension == extension) {
+                if (m_L)
+                    lua_unref(m_L, it->ref);
+                it = map->erase(it);
+            } else {
+                ++it;
+            }
+        }
+    }
+}
+
+QList<MacroInfo> Engine::macros() const
+{
+    QList<MacroInfo> out;
+    for (auto it = m_macros.cbegin(); it != m_macros.cend(); ++it)
+        out.append({it->extension, it.key().mid(it->extension.size() + 1), it->description, it->arguments, it->example});
+    std::sort(out.begin(), out.end(), [](const MacroInfo &a, const MacroInfo &b) {
+        return a.extension != b.extension ? a.extension < b.extension : a.name < b.name;
+    });
+    return out;
+}
+
+QList<VariableInfo> Engine::variables() const
+{
+    QList<VariableInfo> out;
+    for (auto it = m_variables.cbegin(); it != m_variables.cend(); ++it)
+        out.append({it->extension, it.key().mid(it->extension.size() + 1), it->description, it->arguments});
+    std::sort(out.begin(), out.end(), [](const VariableInfo &a, const VariableInfo &b) {
+        return a.extension != b.extension ? a.extension < b.extension : a.name < b.name;
+    });
+    return out;
+}
+
+Result Engine::runMacro(const QString &extension, const QString &name, const QVariantMap &ctx, int timeoutMs)
+{
+    return runContribution(false, extension, name, ctx, timeoutMs);
+}
+
+Result Engine::runVariable(const QString &extension, const QString &name, const QVariantMap &ctx, int timeoutMs)
+{
+    return runContribution(true, extension, name, ctx, timeoutMs);
+}
+
+Result Engine::runContribution(bool variable, const QString &extension, const QString &name, const QVariantMap &ctx,
+                               int timeoutMs)
+{
+    if (!m_L)
+        return {Status::Error, {}, u"the extension engine is not started"_s};
+    const QHash<QString, Contribution> &map = variable ? m_variables : m_macros;
+    const auto it = map.constFind(extension + u'/' + name);
+    if (it == map.constEnd())
+        return {Status::NotFound, {}, (variable ? u"no template variable %1/%2"_s : u"no macro %1/%2"_s).arg(extension, name)};
+    if (m_running)
+        return {Status::Error, {}, QString::fromLatin1(kBusy)};
+    // A macro is drawn as part of a page: a shorter time limit than a command's, no waiting, no
+    // writes (what it shows must not change the notes it is drawn from).
+    const int ownLimit = m_limits.timeoutMs;
+    m_limits.timeoutMs = std::clamp(timeoutMs, 1, std::max(1, ownLimit));
+    m_noWrites = true;
+    Result r = call(extension, it->ref, {ctx});
+    m_noWrites = false;
+    m_limits.timeoutMs = ownLimit;
+    if (r.status == Status::Suspended) {
+        cancel(r.call);
+        r = {Status::Error, {},
+             u"%1: a macro or a template variable cannot wait for a question or for AI"_s.arg(m_loaded.value(extension).name),
+             r.call};
+    }
+    return r;
+}
+
+void Engine::startRecording()
+{
+    m_recorded = Reads();
+    m_reads = &m_recorded;
+}
+
+Reads Engine::stopRecording()
+{
+    m_reads = nullptr;
+    return std::exchange(m_recorded, Reads());
+}
+
+void Engine::noteRead(const QString &page)
+{
+    if (!m_reads)
+        return;
+    // By its file: a change names the file (a link's name, an alias or a day all read the same).
+    const QString path = m_host->page(page).value(u"path"_s).toString();
+    if (path.isEmpty())
+        m_reads->names.insert(text::foldKey(page).simplified());
+    else
+        m_reads->paths.insert(path);
 }
 
 } // namespace brulion::extensions

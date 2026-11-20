@@ -214,6 +214,14 @@ WorkspaceExtensions::WorkspaceExtensions(Clock clock, QObject *parent)
     connect(&m_dueTimer, &QTimer::timeout, this, &WorkspaceExtensions::refreshFlashcardsDue);
     m_dueClock.setInterval(5min);
     connect(&m_dueClock, &QTimer::timeout, this, &WorkspaceExtensions::refreshFlashcardsDue);
+    // Macros are computed after the frame that asked for them, a slice at a time (workspacemacros.cpp).
+    m_macroTimer.setSingleShot(true);
+    m_macroTimer.setInterval(0);
+    connect(&m_macroTimer, &QTimer::timeout, this, &WorkspaceExtensions::runMacros);
+    m_macrosChangedTimer.setSingleShot(true);
+    m_macrosChangedTimer.setInterval(30ms);
+    connect(&m_macrosChangedTimer, &QTimer::timeout, this, &WorkspaceExtensions::macrosChanged);
+    m_macroClock.start();
 }
 
 QVariantMap WorkspaceExtensions::withSettings(const QString &extension, const QVariantMap &values) const
@@ -316,6 +324,8 @@ void WorkspaceExtensions::detach()
     m_loadErrors.clear();
     m_hookFailures.clear();
     m_changedPages.clear();
+    m_macros.clear();
+    m_macroTimer.stop();
     refreshList();
     Q_EMIT commandsChanged();
     bumpRevision();
@@ -522,6 +532,9 @@ void WorkspaceExtensions::notesChanged(const QStringList &changedPaths)
 {
     if (!m_index)
         return;
+    // Macros that read a changed note are computed again (their old value shows meanwhile).
+    if (!m_macros.notesChanged(changedPaths).isEmpty())
+        scheduleMacros();
     if (m_scanned) {
         for (const QString &path : changedPaths)
             if (!m_pendingPaths.contains(path))
@@ -993,6 +1006,7 @@ void WorkspaceExtensions::reconcile()
         Q_EMIT commandsChanged();
         Q_EMIT changed();
     }
+    macrosReset(); // a page approved, switched or changed: what its macros show
     bumpRevision();
 }
 

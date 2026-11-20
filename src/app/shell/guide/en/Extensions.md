@@ -5,7 +5,7 @@ brulion: document
 ---
 # Extensions
 
-Brulion can run code that lives in your notebook, as Emacs runs your init file and TiddlyWiki keeps its own code in tiddlers. An **extension** is a page tagged `extension` (or `rozszerzenie`): the code in its `luau` blocks adds commands to the palette, views of its own and reactions to saves and changes. The language is Luau, a small, fast Lua with types; the code reads and writes only the open notebook, with time and memory limits, and never reaches files, the network or other apps.
+Brulion can run code that lives in your notebook, as Emacs runs your init file and TiddlyWiki keeps its own code in tiddlers. An **extension** is a page tagged `extension` (or `rozszerzenie`): the code in its `luau` blocks adds commands to the palette, views of its own — on their own, inside a page or in the side panel —, macros that show a value in the text of any note, variables for templates and reactions to saves and changes. The code blocks are shown in Luau's colours. The language is Luau, a small, fast Lua with types; the code reads and writes only the open notebook, with time and memory limits, and never reaches files, the network or other apps.
 
 Brulion's own [[Habits]] and [[Gym]] are extensions too, written with the same `b` (and so is the [[AI|AI assistant]]): **Settings → Extensions** switches each on or off, and their code can be opened and changed like yours (below).
 
@@ -109,6 +109,13 @@ end, nil, { label = "Projects" })
 ```
 
 A reaction runs when something happens: `b.on("save", function(e) … end)` after this device saved a page (`e.page`), `b.on("change", function(e) … end)` after notes changed anywhere (`e.pages`). One that keeps failing is switched off until the extension loads again.
+
+## In your notes: macros, views and panels
+- A **macro** shows what an extension computes right in the text of any note, always current: `{{ext:silownia/rekord Squat}}` shows your best squat, `{{ext:nawyki/seria Reading}}` a habit's streak. Type `{{` to pick one. A macro of an extension that has not run on this device shows a lock; a click asks to run it.
+- A **view inside a page**: a `view` code block whose first line names a view — `nawyki/month`, `silownia/today` — draws it in the page, working as it does on its own. The slash menu's **View: …** writes one.
+- A **panel**: a view can be a section of the side panel beside pages or days of the journal — the [[Habits]] show the day's checks there.
+- A **template variable** fills a template when it is used: `{{silownia/plan Legs}}` writes a plan's workout.
+[[Extension API]] shows how to write them.
 
 ## Written by AI
 Ask the [[AI|AI assistant]] for one — in a new conversation of the AI chat (✨ → **New conversation**), "a command that counts the words of today's note". It reads how extensions are written, tries its code on your notes without changing anything, and with your yes writes the page into **Extensions/**. An agent such as Claude Code does the same through [[Command line and AI agents|the command line]]: it reads the API (`brulion-cli extension docs`), tries its code (`extension eval`, `extension run` — what the code would write comes back as a diff) and writes the page (`extension write`). Either way the code waits for you like code from another device: read the page, and press **Run** when you agree with what it does. Every later change by the AI waits again.

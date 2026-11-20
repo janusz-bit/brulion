@@ -44,6 +44,12 @@ struct ExportInput {
     /// Paper of the PDF and DOCX exports: "a4" | "letter" (io/paper.h: paperSizeFor() of the
     /// device's locale); anything else is A4.
     QString paperSize;
+    /// What the macros of extensions show (docs/SYNTAX.md §13 "Macros"), by a note's path and the
+    /// macro as written (`{{ext:silownia/rekord Przysiad}}`): Markdown text the documents read
+    /// ("html-site", "html-single", "pdf", "docx", "pandoc" put it in place of the macro: the app
+    /// gives what it computed). A macro not in here — and in the Markdown, Obsidian, Logseq,
+    /// JSON and other exports every one — stays as written.
+    QHash<QString, QHash<QString, QString>> macroTexts;
 };
 
 /// A produced file: a suggested file name, its MIME type and content.

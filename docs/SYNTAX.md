@@ -1925,7 +1925,13 @@ Files in `templatesFolder`. Variables: `{{date}}` (yyyy-MM-dd), `{{date:FORMAT}}
 `{{month}}` (the month's name in the nominative, localised: "listopad" — Qt's `MMMM` writes the
 genitive "listopada"), `{{week}}` (the ISO week number of the date), `{{end}}` / `{{end:FORMAT}}`
 (the last day of a weekly or monthly note's period; elsewhere the date itself), `{{cursor}}`
-(removed; `applyTemplate` returns its offset, the editor does not place the caret there yet).
+(removed; `applyTemplate` returns its offset, the editor does not place the caret there yet),
+`{{<extension>/<name> arguments}}` — a variable an extension offers (`b.variable`, docs/EXTENSIONS.md
+"Template variables"; an id of letters, digits, `-` and `_`, a name as a macro's, arguments up to
+the `}}` of the line), filled when the app's editor inserts the template or starts a page or a day
+from it, left as written where no extension runs (`brulion-cli`, quick capture, the widgets) and
+when its extension has none or it fails. A macro (`{{ext:…}}`, §13) is no template variable: it
+stays as written, and the note made from the template shows it.
 `weeklyTemplate` / `monthlyTemplate` are applied to new weekly / monthly notes as the journal
 template to days, `{{date}}` being the period's first day (§1 "Weekly and monthly notes").
 `journalTemplate` is applied to new daily notes:
@@ -1983,6 +1989,55 @@ end, { label = "Policz słowa" })
   so); a `#rozszerzenie` inside a block does not make a page an extension.
 * What the code may call (the `b` API), when it runs and how a device approves it:
   docs/EXTENSIONS.md.
+
+### Macros
+
+`{{ext:<extension>/<macro> arguments}}` anywhere in a note's text shows what an extension's macro
+computes (`b.macro`, docs/EXTENSIONS.md "Macros"); the file keeps the macro as written, and every
+other app shows it as text.
+
+```markdown
+- Przysiad: {{ext:silownia/rekord Przysiad}} ({{ext:silownia/sesje Przysiad, 30}} w miesiąc)
+- Czytanie: {{ext:nawyki/seria Czytanie}}
+```
+
+* **The form**: `{{`, optional blanks, `ext:` (any case), the extension's id (ASCII letters,
+  digits, `-`, `_`; read in lower case: a page's title folded, "Licznik słów" → `licznik-slow`),
+  `/`, the macro's name (letters of any script, digits, `-`, `_`, `.`), then `}}` — or blanks and
+  the arguments up to the first `}}` of the same line; at most 2000 characters. The arguments are
+  split at commas outside double quotes (`{{ext:a/b x, "y, z"}}`: `x` and `y, z`), each trimmed.
+* **Not a macro**: across lines; with `{{` among its arguments (the inner one may be a macro); a
+  name followed by anything but a blank or `}}`; inside a code span, fenced code, a comment or a
+  formula; after a backslash (`\{{ext:a/b}}` is text). Logseq's macros (`{{query …}}`,
+  `{{embed …}}`, `{{cloze …}}`, `{{renderer …}}`), a template's variables (`{{date}}`,
+  `{{silownia/plan}}`) and Obsidian's Templater (`<% … %>`) are none: they stay text.
+* **What the text shows**: the macro's value, pieces of plain text, bold text, links to pages and
+  code, escaped as any text of a note; "…" while it is computed; a chip naming it when its
+  extension waits for approval on this device (`🔒 silownia/rekord · run?`), is off, unknown or
+  failed — a click on it offers what can be done. The index reads a macro's arguments as text: a
+  `[[link]]` or a `#tag` there links and tags the note.
+* **Exports**: HTML, PDF, DOCX and Pandoc show the value the app computed; Markdown, Obsidian,
+  Logseq and the data exports keep the macro.
+
+### View blocks
+
+A fenced block with the language `view` draws an extension's view in the page (docs/EXTENSIONS.md
+"View blocks and panels"): its first line names it, `<extension>/<view>` (`view:` may come
+before), the following lines are its params, `key: value` (a key of letters, digits, `-`, `_`; the
+value as written, trimmed; the last of a key wins); blank lines and lines starting with `#` or `//`
+are skipped. The view also gets the page's `page`, `path` and `date` unless the block sets them.
+Every other app shows the block as code.
+
+````markdown
+- Dzisiejszy trening:
+  ```view
+  silownia/today
+  ```
+- ```view
+  nawyki/month
+  month: 2026-11
+  ```
+````
 
 ## 14. Conversations with AI
 

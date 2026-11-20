@@ -36,11 +36,13 @@
 
 #include "ai/ai.h"
 #include "extensions/engine.h"
+#include "extensions/macros.h"
 #include "extensions/pageextension.h"
 
 #include <QAbstractListModel>
 #include <QSet>
 #include <QDateTime>
+#include <QElapsedTimer>
 #include <QObject>
 #include <QStringList>
 #include <QTimer>
@@ -59,6 +61,9 @@ class NotebookHost;
 }
 namespace sync {
 class NetworkHttpTransport;
+}
+namespace io {
+struct FileEntry;
 }
 } // namespace brulion
 
@@ -288,6 +293,45 @@ public:
     Q_INVOKABLE void startRest(int seconds, const QString &label);
     Q_INVOKABLE void stopRest();
 
+    // ---- macros, template variables, panels (workspacemacros.cpp; docs/EXTENSIONS.md "Macros") ---
+    /// What the macro `macro` written in the note `path` shows now: its last value (computed again
+    /// in the background when what it read changed: macrosChanged() then), "…" while it is computed
+    /// first, its extension's state (waiting for approval, off, unknown) or its error. Never runs
+    /// Luau itself: rendering never waits for an extension.
+    markdown::MacroView macroView(const markdown::MacroSpan &macro, const QString &path);
+    /// The macros the extensions offer that match `filter` (the `{{` completion): rows {title
+    /// "ext/name", subtitle (its description · the extension's title), insertText "ext:ext/name
+    /// example", hint (its arguments' names), icon}.
+    QVariantList macroSuggestions(const QString &filter, int limit) const;
+    /// A template's variable `{{extension/name arguments}}` filled now for `context` ({page, path,
+    /// date, template}): its text, or nullopt — left as written (no such variable; a failure goes
+    /// to the console).
+    std::optional<QString> templateVariable(const QString &extension, const QString &name, const QString &arguments,
+                                            const QVariantMap &context);
+    /// A macro's placeholder was clicked: what can be done about its extension — {state ("approval"
+    /// | "off" | "error" | "unknown" | "running"), title, path (its page, "" for a built-in), line
+    /// (an error's, 0-based; -1), message, builtin}.
+    Q_INVOKABLE QVariantMap macroExtension(const QString &extension) const;
+    /// What the macros of `files` show, for the documents of an export (io::ExportInput::
+    /// macroTexts): the values computed, those not computed yet computed now — a few seconds for
+    /// the whole export at most.
+    QHash<QString, QHash<QString, QString>> macroTexts(const QList<io::FileEntry> &files);
+    /// A macro's placeholder was clicked in the editor: macroHelpRequested() for the dialog that
+    /// offers to run, switch on or open its extension.
+    Q_INVOKABLE void showMacro(const QString &extension, const QString &name, const QString &arguments);
+    /// The same for a ```view block's view whose extension does not run.
+    Q_INVOKABLE void showView(const QString &extension, const QString &view);
+    /// What a view drawn beside or in the note `path` gets of it (a ```view block's, a panel's):
+    /// {page, path, date (a daily note's)}.
+    Q_INVOKABLE QVariantMap noteParams(const QString &path) const;
+    /// The views the extensions offer as sections of the side panel (b.view's meta.panel) beside
+    /// a `kind` of note ("page" | "journal"), or of the pages panel ("sidebar"): rows {extension,
+    /// view, title, icon}, by title.
+    Q_INVOKABLE QVariantList panels(const QString &kind) const;
+    /// The views an extension offers by `extension/name` for a ```view block (the editor's slash
+    /// command): rows {extension, view, title, icon, source}, labelled views only, by title.
+    Q_INVOKABLE QVariantList embeddableViews() const;
+
 Q_SIGNALS:
     void enabledChanged();
     void commandsChanged();
@@ -315,6 +359,11 @@ Q_SIGNALS:
     /// turn (each of its requests starts with ""), as it writes; `tokens` written in `writingMs`
     /// (0: not known).
     void chatPartial(const QString &path, const QString &text, const QString &thoughts, int tokens, qint64 writingMs);
+    /// What macros show changed (values computed, extensions loaded, approved, switched off).
+    void macrosChanged();
+    /// showMacro(), showView(): the extension and what of it was clicked (the macro as written,
+    /// "```view extension/view"), for ShellMacroDialog.
+    void macroHelpRequested(const QString &extension, const QString &macro);
 
 private:
     /// An extension page of the notebook as read from the index.
@@ -392,6 +441,18 @@ private:
     void consoleResult(const extensions::Result &result, bool toast);
     void hookResult(const CallContext &ctx, const extensions::Result &result);
 
+    // Macros (workspacemacros.cpp).
+    /// Computes the stale macros asked for lately, a slice of time at a time.
+    void runMacros();
+    void scheduleMacros();
+    /// Extensions loaded, unloaded, approved or switched: every macro asks again.
+    void macrosReset();
+    void noteMacrosChanged();
+    /// Computes one macro now and keeps its value (runMacros(), macroTexts()).
+    markdown::MacroView computeMacro(const QString &key, const extensions::MacroRequest &request, qint64 now);
+    /// The ctx a macro or a variable of the note `path` gets.
+    QVariantMap macroContext(const QString &arguments, const QString &path) const;
+
     Clock m_clock;
     Vault *m_vault = nullptr;
     VaultIndex *m_index = nullptr;
@@ -454,6 +515,13 @@ private:
     int m_restTotal = 0;
     QString m_restLabel;
     std::function<void(const QString &, const QString &)> m_notify;
+    extensions::MacroCache m_macros;
+    QTimer m_macroTimer; // runMacros()
+    QTimer m_macrosChangedTimer; // macrosChanged(), coalesced
+    QElapsedTimer m_macroClock; // the cache's time
+    QHash<QString, qint64> m_macroSpentMs; // per note, in the current round of changes
+    QString m_macroSignature; // what ran and the pages' states when macros were last reset
+    QSet<QString> m_macroNames; // "extension/name" of the macros registered
 };
 
 } // namespace brulion::shell

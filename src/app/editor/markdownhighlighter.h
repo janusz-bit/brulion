@@ -10,11 +10,16 @@
 //
 // mode: "inline" — one block body as edited inline (no frontmatter/fences across lines);
 //       "source" — a whole file (fenced code, frontmatter and %% comments span lines);
-//       "code"   — code/calc/query content: only comments (# and //) are dimmed.
+//       "code"   — code/calc/query content: only comments (# and //) are dimmed — unless
+//                  `language` is Luau ("luau", "lua": a ```luau block, syntax/luau.h), whose
+//                  keywords, names of the library and of `b`, numbers, strings and comments
+//                  are coloured; "source" colours the ```luau fences of a file the same way.
 // palette (QML colors or colour strings): heading, marker (list/quote/heading marks, brackets),
 // link, url, tag, code, codeBackground, highlightBackground, muted (properties, block ids),
 // faint (comments, fences), due, scheduled, reminder, alarm, recurrence, done, priority, text (the
-// plain text's colour: misspelled words take it with their underline, see spellCheck).
+// plain text's colour: misspelled words take it with their underline, see spellCheck); Luau's
+// keyword, constant, builtin (also `b`'s fields), function, number, string (also the braces of an
+// interpolation).
 // monoFamily: font family of inline code. lineHeight (px, > 0): every paragraph of the document
 // gets this fixed line height (QTextBlockFormat::FixedHeight) — the same layout QML `Text` uses
 // with `lineHeightMode: Text.FixedHeight`, so a block does not move when it switches between
@@ -59,6 +64,8 @@ class MarkdownHighlighter : public QSyntaxHighlighter {
     Q_PROPERTY(QString mode READ mode WRITE setMode NOTIFY modeChanged FINAL)
     Q_PROPERTY(QString monoFamily READ monoFamily WRITE setMonoFamily NOTIFY monoFamilyChanged FINAL)
     Q_PROPERTY(qreal lineHeight READ lineHeight WRITE setLineHeight NOTIFY lineHeightChanged FINAL)
+    /// The language of "code" mode (a fenced block's info string): "luau" / "lua" colour Luau.
+    Q_PROPERTY(QString language READ language WRITE setLanguage NOTIFY languageChanged FINAL)
     /// The find bar's matches in this text (docs/UI.md "Find and replace"): tinted on top of the
     /// syntax with `findColor`. "": none.
     Q_PROPERTY(QString findQuery READ findQuery WRITE setFindQuery NOTIFY findChanged FINAL)
@@ -99,6 +106,8 @@ public:
     void setMonoFamily(const QString &family);
     qreal lineHeight() const { return m_lineHeight; }
     void setLineHeight(qreal px);
+    QString language() const { return m_language; }
+    void setLanguage(const QString &language);
     QString findQuery() const { return m_findQuery; }
     void setFindQuery(const QString &query) { findChangedTo(query, m_findOptions); }
     bool findMatchCase() const { return m_findOptions.matchCase; }
@@ -138,6 +147,7 @@ Q_SIGNALS:
     void modeChanged();
     void monoFamilyChanged();
     void lineHeightChanged();
+    void languageChanged();
     void findChanged();
     void spellCheckChanged();
     void spellCaretChanged();
@@ -157,6 +167,9 @@ private:
     void applyLineHeight(int from = 0, int charsAdded = -1);
     void highlightInline(const QString &text, int offset, int length);
     void highlightLine(const QString &line);
+    /// Luau's colours over `line` (syntax/luau.h), starting in the packed lexer state `state`;
+    /// returns the state the next line starts in.
+    int highlightLuau(const QString &line, int state);
     /// One find option set (`option`: &text::FindOptions::matchCase, …).
     void setFindOption(bool text::FindOptions::*option, bool on);
     void findChangedTo(const QString &query, text::FindOptions options);
@@ -180,6 +193,7 @@ private:
     QString m_mode = QStringLiteral("inline");
     QString m_monoFamily;
     qreal m_lineHeight = 0;
+    QString m_language;
     bool m_applyingFormat = false;
     QMetaObject::Connection m_contentsConnection;
     /// By name ("heading", "marker", … "spelling": rebuildFormats()); each format carries its name

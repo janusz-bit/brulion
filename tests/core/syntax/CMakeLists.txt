@@ -1,0 +1,1 @@
+brulion_add_test(tst_syntax_luau SOURCES tst_syntax_luau.cpp LIBS brulion_core_syntax)

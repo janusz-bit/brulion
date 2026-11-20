@@ -1148,6 +1148,12 @@ private:
     void onWebPictureChanged(const QString &url);
     /// EditorHost::indexChanged: followed now while active, else when active again.
     void onIndexChanged();
+    /// EditorHost::macrosChanged: the rows that show a macro ask what it shows now (when shown).
+    void onMacrosChanged();
+    /// TemplateVars::variable for a template filled on this page: the host's templateVariable()
+    /// with {page, path, date, template}.
+    std::function<std::optional<QString>(const QString &, const QString &, const QString &)>
+    templateVariables(const QString &templatePath, QDate date) const;
     /// Tell the hosts which file this editor shows (EditorHost::editorOpened/editorClosed).
     void showFile(EditorHost *host, const QString &path);
     /// Compare the text to save with the file's (dirty or not) and start or stop the autosave.
@@ -1406,6 +1412,7 @@ private:
     bool m_readOnly = false;
     bool m_active = true;
     bool m_indexStale = false; ///< an index change not followed yet (inactive)
+    bool m_macrosStale = false; ///< macrosChanged() while hidden: followed when shown
     QVariantMap m_pageProperties;
     QString m_pagePropertiesText; ///< the text pageProperties was read from
     Properties m_lookProperties;  ///< the page properties `look` is read from (keys lower case)

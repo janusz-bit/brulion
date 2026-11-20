@@ -9,6 +9,7 @@
 // Errors name the documentation's own lines ("EXTENSIONS.md:412: …").
 
 #include "extensions/engine.h"
+#include "extensions/macros.h"
 #include "extensions/notebookhost.h"
 #include "index/vaultindex.h"
 #include "vault/vault.h"
@@ -189,6 +190,7 @@ class TestExtensionsDocs : public QObject {
     /// What the examples made this test do, all of them together.
     struct Totals {
         int pages = 0, console = 0, commands = 0, views = 0, actions = 0, hooks = 0, questions = 0, modelRequests = 0;
+        int macros = 0, variables = 0;
     } m_totals;
 
     /// A fresh notebook and engine, `source` loaded as the extension "docs" (every permission).
@@ -291,8 +293,20 @@ class TestExtensionsDocs : public QObject {
                     continue; // nothing on screen calls it with this notebook
                 const QVariantMap node = actions.value(action);
                 QVariantMap args = node.value(u"args"_s).toMap();
-                if (node.value(u"type"_s) == u"stepper"_s)
+                // What the control gives its action, as a user's change would (docs/EXTENSIONS.md "Views").
+                const QString type = node.value(u"type"_s).toString();
+                if (type == u"stepper")
                     args.insert(u"value"_s, node.value(u"value"_s).toDouble() + node.value(u"step"_s, 1).toDouble());
+                else if (type == u"input")
+                    args.insert(u"value"_s, u"Mleko i chleb"_s);
+                else if (type == u"select")
+                    args.insert(u"value"_s, node.value(u"options"_s).toList().value(0));
+                else if (type == u"slider")
+                    args.insert(u"value"_s, node.value(u"max"_s, 10).toDouble());
+                else if (type == u"date")
+                    args.insert(u"value"_s, u"2026-11-20"_s);
+                else if (type == u"toggle")
+                    args.insert(u"value"_s, !node.value(u"on"_s).toBool());
                 r = drive(m_engine->act(kExtension, v.name, action, args), true);
                 if (!r.ok())
                     return u"view %1, action %2: %3"_s.arg(v.name, action, r.error);
@@ -313,6 +327,31 @@ class TestExtensionsDocs : public QObject {
             if (!r.ok())
                 return u"hook %1: %2"_s.arg(h.event, r.error);
             ++m_totals.hooks;
+        }
+        // Macros and template variables, with the arguments their meta suggests, in a note.
+        const auto ctxOf = [&](const QString &arguments) {
+            QVariantList args;
+            for (const QString &a : markdown::macroArguments(arguments))
+                args << a;
+            return QVariantMap{{u"args"_s, args}, {u"text"_s, arguments}, {u"page"_s, page}, {u"path"_s, path},
+                               {u"date"_s, u"2026-11-20"_s}, {u"template"_s, u"templates/Dzień.md"_s}};
+        };
+        for (const MacroInfo &m : m_engine->macros()) {
+            const Result r = m_engine->runMacro(kExtension, m.name, ctxOf(m.example), 2000 * BRULION_TEST_SLOWDOWN);
+            if (!r.ok())
+                return u"macro %1: %2"_s.arg(m.name, r.error);
+            QString why;
+            if (macroViewFrom(r.value, true, &why).state != markdown::MacroView::State::Ok)
+                return u"macro %1: %2"_s.arg(m.name, why);
+            ++m_totals.macros;
+        }
+        for (const VariableInfo &v : m_engine->variables()) {
+            const Result r = m_engine->runVariable(kExtension, v.name, ctxOf(QString()), 2000 * BRULION_TEST_SLOWDOWN);
+            if (!r.ok())
+                return u"template variable %1: %2"_s.arg(v.name, r.error);
+            if (!variableTextFrom(r.value, true))
+                return u"template variable %1 returns no text"_s.arg(v.name);
+            ++m_totals.variables;
         }
         return {};
     }
@@ -394,13 +433,14 @@ private Q_SLOTS:
                 {t.pages, u"examples as pages"_s}, {t.console, u"in the console"_s},
                 {t.commands, u"commands"_s},       {t.views, u"views"_s},
                 {t.actions, u"actions"_s},         {t.hooks, u"hooks"_s},
-                {t.questions, u"questions"_s},     {t.modelRequests, u"requests to a model"_s}};
+                {t.questions, u"questions"_s},     {t.modelRequests, u"requests to a model"_s},
+                {t.macros, u"macros"_s},           {t.variables, u"template variables"_s}};
         for (const auto &[count, what] : counts)
             parts << u"%1 %2"_s.arg(count).arg(what);
         const QString summary = parts.join(u", "_s);
         qInfo().noquote() << summary;
         QVERIFY2(t.commands >= 15 && t.views >= 5 && t.actions >= 3 && t.hooks >= 2 && t.questions >= 6
-                         && t.modelRequests >= 4,
+                         && t.modelRequests >= 4 && t.macros >= 3 && t.variables >= 1,
                  qPrintable(summary));
     }
 

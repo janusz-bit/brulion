@@ -67,6 +67,9 @@ Szablony to zwykłe notatki w folderze `templates/`. Wstawiasz je poleceniem `/S
 | `{{end}}` | ostatni dzień tygodnia lub miesiąca w ich notatkach (gdzie indziej — data); `{{end:d MMMM}}` — własny format |
 | `{{title}}` | tytuł strony |
 | `{{cursor}}` | gdzie ustawić kursor po wstawieniu |
+| `{{rozszerzenie/nazwa}}` | to, co wpisze tam [[Rozszerzenia|rozszerzenie]], np. `{{silownia/plan Nogi}}` — trening z planu |
+
+Makro, `{{ext:silownia/rekord Przysiad}}`, nie jest zastępowane: notatka zrobiona z szablonu pokazuje jego wartość, zawsze aktualną ([[API rozszerzeń]]).
 
 Plik `templates/journal.md` jest szablonem **nowego dnia dziennika**: pusty dzień pokazuje go jako tekst startowy, a notatka powstaje razem z pierwszą zmianą. Tak samo działają `templates/weekly.md` i `templates/monthly.md` dla notatek tygodniowych i miesięcznych. Przykładowy brulion ma gotowe szablony `journal` i `Spotkanie`.
 

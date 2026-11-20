@@ -100,6 +100,21 @@ public:
     QString linkedBlockText(const QString &path, const QString &blockId) const override;
     QString ensureBlockId(const QString &path, int line) override;
     QVariantList templates() const override;
+    /// Macros (tests): on once a view is set (setMacroView); the views by "ext/name arguments",
+    /// "…" (Pending) for one not set; the macros offered and the views a block can show.
+    bool rendersMacros() const override { return m_macrosOn; }
+    markdown::MacroView macroView(const markdown::MacroSpan &macro, const QString &path) const override;
+    QVariantList suggestMacros(const QString &prefix, int limit = 20) const override;
+    QVariantList embeddableViews() const override { return m_embeddableViews; }
+    std::optional<QString> templateVariable(const QString &extension, const QString &name, const QString &arguments,
+                                            const QVariantMap &context) override;
+    /// What the macro `extension/name arguments` shows from now on; emits macrosChanged().
+    void setMacroView(const QString &macro, const markdown::MacroView &view);
+    /// How many times macroView() was asked (tests: rows rendered again).
+    int macroAsks() const { return m_macroAsks; }
+    void setEmbeddableViews(const QVariantList &views) { m_embeddableViews = views; }
+    /// The template variables (tests): "ext/name" → its text with "{args}" and "{date}" filled.
+    void setTemplateVariable(const QString &variable, const QString &text) { m_variables.insert(variable, text); }
     QUrl assetUrl(const QString &path) const override;
     bool canDecodePicture(const QString &path) const override;
     QString saveAttachment(const QString &fileName, const QByteArray &data) override;
@@ -218,6 +233,11 @@ Q_SIGNALS:
 private:
     QHash<QString, QString> m_files;
     QHash<QString, QByteArray> m_assets;
+    bool m_macrosOn = false;
+    QHash<QString, markdown::MacroView> m_macroViews;
+    mutable int m_macroAsks = 0;
+    QVariantList m_embeddableViews;
+    QHash<QString, QString> m_variables;
     QStringList m_discarded;
     mutable QHash<QString, QUrl> m_assetUrls;
     mutable std::unique_ptr<QTemporaryDir> m_assetDir;

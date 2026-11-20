@@ -59,6 +59,11 @@ Rectangle {
     readonly property int pagesSectionAt: AppSettings.sidebarSections.indexOf("pages")
     readonly property list<string> sectionsBefore: AppSettings.sidebarSections.slice(0, Math.max(0, pagesSectionAt))
     readonly property list<string> sectionsAfter: AppSettings.sidebarSections.slice(pagesSectionAt + 1)
+    /// The extensions' sections of this panel (b.view's meta.panel = "sidebar", docs/EXTENSIONS.md
+    /// "View blocks and panels"), after the others: {extension, view, title, icon}.
+    readonly property list<var> extensionPanels: Workspace.extensions.revision < 0 ? sidebar.noPanels
+                                                 : Workspace.extensions.panels("sidebar")
+    readonly property list<var> noPanels: []
     /// "Recent": up to 5 recent pages, without the one shown (the tree highlights it). Set once
     /// per change — a route change updates the recent pages and then the current path — and only
     /// when the list differs, so the header above the tree is not rebuilt (and resized) twice while
@@ -723,7 +728,7 @@ Rectangle {
 
             footer: Column {
                 width: list.width - list.leftMargin - list.rightMargin
-                topPadding: sidebar.sectionsAfter.length > 0 ? Theme.space2 : 0
+                topPadding: sidebar.sectionsAfter.length > 0 || sidebar.extensionPanels.length > 0 ? Theme.space2 : 0
                 bottomPadding: Theme.space4
                 // ---- The sections after the tree -----------------------------------------
                 Repeater {
@@ -732,6 +737,62 @@ Rectangle {
                         required property string modelData
                         width: parent.width
                         sourceComponent: modelData === "favorites" ? favoritesSection : recentSection
+                    }
+                }
+                // ---- The extensions' sections (a view each, for the page on screen) --------
+                Repeater {
+                    model: sidebar.extensionPanels
+                    delegate: Column {
+                        id: extensionSection
+                        required property var modelData
+                        readonly property string extensionId: AppController.routeText(extensionSection.modelData, "extension")
+                        readonly property string viewName: AppController.routeText(extensionSection.modelData, "view")
+                        readonly property string settingKey: "ui/sidebar/extension/" + extensionSection.extensionId + "/" + extensionSection.viewName
+                        property bool open: sidebar.flag(AppSettings.value(extensionSection.settingKey, true))
+                        width: parent.width
+                        // A view that shows nothing for this page (an empty column) leaves its section out.
+                        visible: sidebarModel.count > 0 || sidebarModel.error !== ""
+                        ExtensionView {
+                            id: sidebarModel
+                            extensions: Workspace.extensions
+                            extension: extensionSection.extensionId
+                            view: extensionSection.viewName
+                            notePath: sidebar.currentPath
+                            live: sidebar.visible
+                            onPageRequested: (page, line) => AppController.openNamedPage(page, line)
+                            onJournalRequested: (date) => AppController.openJournal(date)
+                            onViewRequested: (view, params) => AppController.navigate(sidebarModel.routeFor(view, params))
+                            Component.onCompleted: sidebarModel.refresh()
+                        }
+                        BSectionHeader {
+                            objectName: "sidebarExtension_" + extensionSection.extensionId + "_" + extensionSection.viewName
+                            width: parent.width
+                            text: AppController.routeText(extensionSection.modelData, "title")
+                            collapsible: true
+                            expanded: extensionSection.open
+                            onExpandedToggled: (open) => {
+                                extensionSection.open = open
+                                AppSettings.setValue(extensionSection.settingKey, open)
+                            }
+                        }
+                        Loader {
+                            active: extensionSection.open
+                            visible: active
+                            width: parent.width
+                            sourceComponent: Item {
+                                id: sidebarPanel
+                                implicitHeight: sidebarLines.height + Theme.space2
+                                ShellExtensionView {
+                                    id: sidebarLines
+                                    objectName: "sidebarExtensionLines"
+                                    x: Theme.space2
+                                    width: parent.width - 2 * Theme.space2
+                                    embedded: true
+                                    lines: sidebarModel
+                                    Accessible.name: AppController.routeText(extensionSection.modelData, "title")
+                                }
+                            }
+                        }
                     }
                 }
             }

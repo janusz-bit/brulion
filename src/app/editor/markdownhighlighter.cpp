@@ -7,6 +7,7 @@
 #include "markdown/inline.h"
 #include "markdown/tokens.h"
 #include "spell/spellwords.h"
+#include "syntax/luau.h"
 #include "text/text.h"
 
 #include <QAbstractTextDocumentLayout>
@@ -33,10 +34,27 @@ namespace {
 constexpr int NameProperty = QTextFormat::UserProperty + 1;
 
 constexpr int StateMask = 0x7;
+/// A fence of Luau code (source mode): its lines are coloured as Luau, the lexer's state above it.
+constexpr int LuauFence = 1 << 12;
+constexpr int LuauShift = 13;
 
 int encodeFence(QChar ch, int length)
 {
     return 1 | (ch == u'~' ? 0x8 : 0) | (std::min(length, 255) << 4);
+}
+
+/// The language of a fence line's info string ("```luau title" → "luau").
+QStringView fenceLanguage(QStringView line, qsizetype markerEnd)
+{
+    QStringView info = line.sliced(markerEnd).trimmed();
+    if (info.startsWith(u'{'))
+        info = info.sliced(1);
+    if (info.startsWith(u'.'))
+        info = info.sliced(1);
+    qsizetype end = 0;
+    while (end < info.size() && !info[end].isSpace() && info[end] != u'}')
+        ++end;
+    return info.first(end);
 }
 
 /// A line's reminder tokens (MarkdownHighlighter::reminderChips), kept on its QTextBlock: they
@@ -218,6 +236,15 @@ void MarkdownHighlighter::setMode(const QString &mode)
     Q_EMIT modeChanged();
 }
 
+void MarkdownHighlighter::setLanguage(const QString &language)
+{
+    if (m_language == language)
+        return;
+    m_language = language;
+    rehighlight();
+    Q_EMIT languageChanged();
+}
+
 void MarkdownHighlighter::setMonoFamily(const QString &family)
 {
     if (m_monoFamily == family)
@@ -321,6 +348,23 @@ void MarkdownHighlighter::rebuildFormats()
     make(u"recurrence"_s).setForeground(color("recurrence", QColor(u"#2a6e44"_s)));
     make(u"done"_s).setForeground(color("done", muted));
     make(u"priority"_s).setForeground(color("priority", QColor(u"#a8382d"_s)));
+    // Luau (syntax/luau.h): one format per kind of span, named "luau.<kind>".
+    const QColor keyword = color("keyword", scheduled);
+    QTextCharFormat &luauKeyword = make(u"luau.keyword"_s);
+    luauKeyword.setForeground(keyword);
+    luauKeyword.setFontWeight(QFont::DemiBold);
+    make(u"luau.constant"_s).setForeground(color("constant", QColor(u"#9a5b00"_s)));
+    make(u"luau.builtin"_s).setForeground(color("builtin", link));
+    make(u"luau.api"_s).setForeground(color("builtin", link));
+    QTextCharFormat &luauFunction = make(u"luau.function"_s);
+    luauFunction.setForeground(color("function", color("heading", QColor(u"#1f2430"_s))));
+    luauFunction.setFontWeight(QFont::DemiBold);
+    make(u"luau.number"_s).setForeground(color("number", QColor(u"#9a5b00"_s)));
+    make(u"luau.string"_s).setForeground(color("string", QColor(u"#2a6e44"_s)));
+    make(u"luau.interpolation"_s).setForeground(keyword);
+    QTextCharFormat &luauComment = make(u"luau.comment"_s);
+    luauComment.setForeground(faint);
+    luauComment.setFontItalic(true);
     // A plain underline in the colour: Qt Quick 6.11 draws no wavy SpellCheckUnderline.
     QTextCharFormat &spelling = make(u"spelling"_s);
     spelling.setUnderlineStyle(QTextCharFormat::SingleUnderline);
@@ -555,6 +599,10 @@ void MarkdownHighlighter::highlightLine(const QString &line)
     const int size = int(line.size());
 
     if (m_mode == u"code") {
+        if (syntax::isLuauLanguage(m_language)) {
+            setCurrentBlockState(highlightLuau(line, prev));
+            return;
+        }
         static const QRegularExpression commentRe(u"^\\s*(#|//).*$"_s);
         if (commentRe.match(line).hasMatch())
             setRange(0, size, m_formats[u"comment"_s]);
@@ -569,13 +617,18 @@ void MarkdownHighlighter::highlightLine(const QString &line)
         const auto fm = fenceRe.match(line);
         if (kind == Fence) {
             const QChar ch = (prev & 0x8) ? u'~' : u'`';
-            const int len = prev >> 4;
+            const int len = (prev >> 4) & 0xff;
             if (fm.hasMatch() && fm.capturedView(1).front() == ch && fm.capturedLength(1) >= len
                 && trimmed.size() == fm.capturedLength(1)) {
                 setRange(0, size, m_formats[u"fence"_s]);
                 return;
             }
             setRange(0, size, m_formats[u"code"_s]);
+            if (prev & LuauFence) {
+                const int luau = highlightLuau(line, prev >> LuauShift);
+                setCurrentBlockState((prev & ((1 << LuauShift) - 1)) | (luau << LuauShift));
+                return;
+            }
             setCurrentBlockState(prev);
             return;
         }
@@ -597,7 +650,9 @@ void MarkdownHighlighter::highlightLine(const QString &line)
         }
         if (fm.hasMatch()) {
             setRange(0, size, m_formats[u"fence"_s]);
-            setCurrentBlockState(encodeFence(fm.capturedView(1).front(), int(fm.capturedLength(1))));
+            const bool luau = syntax::isLuauLanguage(fenceLanguage(line, fm.capturedEnd(1)));
+            setCurrentBlockState(encodeFence(fm.capturedView(1).front(), int(fm.capturedLength(1)))
+                                 | (luau ? LuauFence : 0));
             return;
         }
         if (kind == Comment) {
@@ -624,6 +679,14 @@ void MarkdownHighlighter::highlightLine(const QString &line)
             setCurrentBlockState(Comment);
         }
     }
+}
+
+int MarkdownHighlighter::highlightLuau(const QString &line, int state)
+{
+    syntax::LuauState lexer = syntax::LuauState::unpack(state);
+    for (const syntax::LuauSpan &span : syntax::lexLuauLine(line, &lexer))
+        setRange(span.from, span.length, m_formats[u"luau."_s + syntax::luauTokenName(span.kind)]);
+    return lexer.pack();
 }
 
 void MarkdownHighlighter::highlightInline(const QString &full, int offset, int length)
