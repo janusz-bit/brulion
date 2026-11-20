@@ -1621,6 +1621,11 @@ QString Workspace::newPagePath(const QString &target) const
 
 void Workspace::openUrl(const QUrl &url)
 {
+    // brulion:// links (docs/UI.md "Automation") go to the app's own checks.
+    if (const QString scheme = url.scheme().toLower(); scheme == u"brulion" || scheme == u"web+brulion") {
+        Q_EMIT automationUriRequested(url.toString(QUrl::FullyEncoded));
+        return;
+    }
     // Only links meant for the browser / mail client; never file:, javascript: or app schemes
     // from note content.
     static const QStringList allowed{u"http"_s, u"https"_s, u"mailto"_s};

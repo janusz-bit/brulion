@@ -491,6 +491,36 @@
         }
         var shareQuery = takeShareQuery();
 
+        // brulion:// links in the browser version (docs/WEB.md "brulion:// links"): a web+brulion:
+        // address the browser's protocol handler hands over (navigator.registerProtocolHandler,
+        // Settings → Automation: "?uri=%s") — or ?uri=brulion://… typed by hand. It leaves the
+        // address bar at once (a reload does not run it again) and goes to the app as --uri, or to
+        // the tab where Brulion already runs (over the share channel: "brulion-uri=<address>",
+        // main.cpp tells it from a share). The app checks it as any link's.
+        function takeUri() {
+          var params;
+          try {
+            params = new URLSearchParams(location.search);
+          } catch (e) {
+            return '';
+          }
+          var value = params.get('uri') || '';
+          if (!params.has('uri')) return '';
+          params.delete('uri');
+          try {
+            var rest = params.toString();
+            history.replaceState(history.state, '', location.pathname + (rest ? '?' + rest : '') + location.hash);
+          } catch (e) {
+            // the address bar keeps it
+          }
+          var lower = value.trim().toLowerCase();
+          if (value.length > 100000 || (lower.indexOf('web+brulion:') !== 0 && lower.indexOf('brulion:') !== 0)) return '';
+          return value.trim();
+        }
+        var uriParam = takeUri();
+        // Handed over like a share (one channel): the other tab's app reads the prefix.
+        if (uriParam && !shareQuery) shareQuery = 'brulion-uri=' + encodeURIComponent(uriParam);
+
         // Brulion runs in another tab of this browser — it holds the storage's Web Lock
         // "brulion-storage:…" (src/platform/wasm/wasmstorage.cpp) —: hand it the share over the
         // channel src/platform/wasm/wasmshare.cpp listens on (keep the name and the messages in
@@ -594,7 +624,8 @@
             var now = params.get('now');
             if (now && /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(now)) args.push('--now=' + now);
           }
-          if (shareQuery) args.push('--share-query', shareQuery);
+          if (uriParam) args.push('--uri', uriParam);
+          if (shareQuery && shareQuery.indexOf('brulion-uri=') !== 0) args.push('--share-query', shareQuery);
 
           // Start the big download first; the small scripts load in parallel.
           var wasmModule = compileWasm('brulion.wasm' + assetQuery);

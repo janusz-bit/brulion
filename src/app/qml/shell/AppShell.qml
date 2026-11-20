@@ -237,6 +237,15 @@ FocusScope {
         else
             dialog.open()
     }
+    /// The confirmation of a brulion:// address that asks to write without the notebook's key
+    /// (AppController.pendingAutomation; docs/UI.md "Automation").
+    function openAutomation(): void {
+        if (AppController.routeText(AppController.pendingAutomation, "action") === "")
+            return
+        const dialog = shell.automationDialogNow()
+        if (!dialog.opened)
+            dialog.open()
+    }
     /// A new page: in `folder`, or — Ctrl+N, the top bar, the sidebar's pencil pass "" — in the
     /// folder of the page shown, the root too (a removable chip in the dialog); else the
     /// notebook's folder for new pages.
@@ -324,6 +333,7 @@ FocusScope {
         case "switcher": shell.openSwitcher(""); break
         case "capture": shell.openCapture(); break
         case "share": shell.openShare(); break
+        case "automation": shell.openAutomation(); break
         case "newPage": shell.openNewPage(""); break
         case "newFolder": shell.openNewFolder(""); break
         case "movePage": if (shell.currentView === "page") shell.openMove(shell.routePath, false); break
@@ -840,6 +850,17 @@ FocusScope {
                     shell._captureToast = AppController.toastWithAction(qsTr("Added to today's journal"), "success", qsTr("Open"))
             }
         }
+    }
+
+    property ShellAutomationDialog automationDialog: null
+    function automationDialogNow(): ShellAutomationDialog {
+        if (!shell.automationDialog)
+            shell.automationDialog = automationComponent.createObject(shell) as ShellAutomationDialog
+        return shell.automationDialog
+    }
+    Component {
+        id: automationComponent
+        ShellAutomationDialog { objectName: "shellAutomation" }
     }
 
     property ShellShareDialog shareDialog: null

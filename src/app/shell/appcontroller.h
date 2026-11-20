@@ -71,6 +71,7 @@
 #include "tabs.h"
 #include "workspace.h"
 
+#include "automation/plan.h"
 #include "notebook/share.h"
 
 #include <QDateTime>
@@ -232,6 +233,18 @@ class AppController : public QObject {
     /// file), title (the new page's suggested title), source ("open": files opened with Brulion
     /// on a desktop — copies are saved, the files stay as they are; "" another app's share) }.
     Q_PROPERTY(QVariantMap pendingShare READ pendingShare NOTIFY pendingShareChanged FINAL)
+    /// A brulion:// address waiting for the user's "Write" (appautomation.cpp; docs/UI.md
+    /// "Automation"): { action, access ("write" | "run"), kind, notebook, target (the page's title,
+    /// "" for today's journal), path, heading, block (the text written, plain), journal, day
+    /// ("YYYY-MM-DD"), newPage, title, extension, command, when (a reminder, "YYYY-MM-DD HH:mm"),
+    /// source (the caller's own name: never verified), origin ("link" | "note" | "android" | "web" |
+    /// "launch") }; {} when none.
+    Q_PROPERTY(QVariantMap pendingAutomation READ pendingAutomation NOTIFY pendingAutomationChanged FINAL)
+    /// What brulion:// addresses without the key may do on this device: "ask" (writing asks
+    /// first, the default), "key" (writing only with the key), "off" (addresses do nothing).
+    Q_PROPERTY(QString automationPolicy READ automationPolicy WRITE setAutomationPolicy NOTIFY automationChanged FINAL)
+    /// The open notebook's automation key on this device ("" none, or no notebook open).
+    Q_PROPERTY(QString automationKey READ automationKey NOTIFY automationChanged FINAL)
 
 public:
     struct Options {
@@ -573,6 +586,43 @@ public:
     /// ShareActivity: files/share-in/<stamp>). Only a share's folder inside it is ever removed.
     QString shareInboxPath() const;
 
+    // ---- brulion:// addresses (appautomation.cpp; docs/UI.md "Automation") ----------------------
+    /// A brulion:// or web+brulion: address from `origin` ("link": the system handed it over —
+    /// a launch, a second launch, Android's VIEW intent; "note": a link clicked in a note; "web": the
+    /// browser's protocol handler; "android": an automation intent): read (automation::parseUri),
+    /// sent to the notebook it names (another known one is opened first; a request waits while a
+    /// notebook opens, the documentation goes back to the user's notebook), worked out
+    /// (automation::plan) and checked (automation::decide with automationPolicy and the
+    /// notebook's key): opening runs at once, writing and extension commands with the key too —
+    /// without it the window comes up with the confirmation dialog (uiActionRequested
+    /// "automation", pendingAutomation). Errors are toasts; a request with the valid key gets its
+    /// x-success / x-error address opened (never brulion:, file:, data: or javascript:).
+    Q_INVOKABLE void receiveUri(const QString &uri, const QString &origin = QStringLiteral("link"));
+    QVariantMap pendingAutomation() const;
+    /// "Write" (or "Run") in the confirmation dialog: carries out the waiting request: { ok, error }.
+    Q_INVOKABLE QVariantMap confirmAutomation();
+    /// "Cancel": nothing is written.
+    Q_INVOKABLE void dismissAutomation();
+    QString automationPolicy() const;
+    void setAutomationPolicy(const QString &policy);
+    QString automationKey() const;
+    /// The open notebook's key, made now when it has none ("" when it cannot be saved: a toast).
+    Q_INVOKABLE QString createAutomationKey();
+    /// A new key for the open notebook: links and automations with the old one stop working.
+    Q_INVOKABLE QString renewAutomationKey();
+    /// The open notebook has no key any more (writing through links asks again).
+    Q_INVOKABLE void removeAutomationKey();
+    /// A brulion:// address of `action` with `params` for the open notebook (`vault` its name),
+    /// with its key when `withKey` (and it has one): Settings → Automation's builder.
+    Q_INVOKABLE QString automationLink(const QString &action, const QVariantMap &params, bool withKey) const;
+    /// The address that opens `path` (at `heading` or the block `blockId` when given) in this
+    /// notebook: the page menu's "Copy Brulion link".
+    Q_INVOKABLE QString pageAutomationLink(const QString &path, const QString &heading = QString(),
+                                           const QString &blockId = QString()) const;
+    /// The browser: ask it to open web+brulion: links with this Brulion
+    /// (navigator.registerProtocolHandler; the browser asks the user). Nothing elsewhere.
+    Q_INVOKABLE void registerWebLinks();
+
     // ---- Sync seam ----------------------------------------------------------------------
     bool syncAvailable() const { return m_syncAvailable; }
     QVariantMap syncStatus() const { return m_syncStatus; }
@@ -677,6 +727,8 @@ Q_SIGNALS:
     void syncStatusChanged();
     void remoteControlChanged();
     void pendingShareChanged();
+    void pendingAutomationChanged();
+    void automationChanged();
     /// The UI language setting changed ("pl" | "en"); main() swaps the translation.
     void languageChanged(const QString &language);
     void toastRequested(const QString &text, const QString &kind);
@@ -738,6 +790,21 @@ private:
     /// there is no text. A link shared with a preview image, or with an attachment that cannot
     /// be read, is still that link.
     bool shareSavesFiles() const;
+    /// brulion:// (appautomation.cpp): the connections of the automation toasts (constructor).
+    void initAutomation();
+    /// The waiting addresses once a user notebook is ready (finishOpening()).
+    void applyPendingUris();
+    /// A read request for the open notebook: worked out, checked, done or asked.
+    void handleAutomation(const automation::Request &request, const QString &origin);
+    /// Carry out an allowed request: show it, write it (a toast with "Open"), or run the command.
+    automation::Outcome carryOutAutomation(const automation::Request &request, const automation::Plan &plan);
+    /// The x-success / x-error address of a keyed request, opened with the outcome's parameters.
+    void callBack(const automation::Request &request, const automation::Outcome &outcome);
+    /// The translated message of an automation error code.
+    QString automationErrorText(const QString &error, const QString &detail) const;
+    /// Android: what its background run of automation intents writes into (the open notebook,
+    /// the policy, the language); cleared without a user notebook.
+    void publishAutomationTarget();
     QVariantMap initialRoute() const;
     /// `path` is the folder of a documentation notebook (either language's).
     bool isDocsPath(const QString &path) const;
@@ -798,6 +865,17 @@ private:
     };
     std::optional<notebook::SharedContent> m_share; ///< waiting for saveShare() / dismissShare()
     QList<ShareFile> m_shareFiles;
+    /// A brulion:// request waiting for the confirmation dialog (appautomation.cpp).
+    struct PendingAutomation {
+        automation::Request request;
+        automation::Plan plan;
+        QString origin;
+    };
+    std::optional<PendingAutomation> m_automation;
+    /// Addresses received while no user notebook was ready: (address, origin), at most a few.
+    QList<std::pair<QString, QString>> m_waitingUris;
+    /// The automation toasts' "Open": toastWithAction() ids → the route.
+    QHash<int, QVariantMap> m_automationToasts;
     bool m_syncAvailable = false;
     QVariantMap m_syncStatus;
     QVariantMap m_remoteControl{{QStringLiteral("available"), false}};

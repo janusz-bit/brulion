@@ -367,10 +367,11 @@ GenericName=Markdown notes
 GenericName[pl]=Notatki w Markdown
 Comment=Offline-first Markdown notes: outliner, journals, calendar, reminders, calculations
 Comment[pl]=Notatki w Markdown offline: konspekty, dziennik, kalendarz, przypomnienia, obliczenia
-Exec=brulion --open %F
+Exec=brulion --open %U
 Icon=io.github.januszbit.brulion
 Terminal=false
 Categories=Office;Utility;
+MimeType=x-scheme-handler/brulion;
 StartupNotify=true
 Keywords=notes;markdown;outliner;journal;calendar;reminders;notatki;dziennik;kalendarz;przypomnienia;
 StartupWMClass=brulion
@@ -483,14 +484,16 @@ done
 for f in pl_PL.aff pl_PL.dic en_US.aff en_US.dic; do
   [[ -s $check_dir/squashfs-root/usr/share/hunspell/$f ]] || die "usr/share/hunspell/$f missing from the AppImage (spell checking)"
 done
-# "Open with → Other application → Brulion": the desktop entry AppImage integration tools (Gear
-# Lever, AppImageLauncher, appimaged) install keeps --open %F, declares no file types (a desktop
-# without a default program would make Brulion the default for every text file: docs/NIXOS.md) and
-# has StartupNotify (the launcher's activation token: the running Brulion comes to the front).
+# "Open with → Other application → Brulion" and brulion:// links: the desktop entry AppImage
+# integration tools (Gear Lever, AppImageLauncher, appimaged) install keeps --open %U, declares no
+# file types (a desktop without a default program would make Brulion the default for every text
+# file: docs/NIXOS.md) but the brulion:// scheme (docs/UI.md "Automation"), and has StartupNotify
+# (the launcher's activation token: the running Brulion comes to the front).
 entry=$(find "$check_dir/squashfs-root" -maxdepth 1 -name '*.desktop' -print -quit)
 [[ -n $entry ]] || die "no desktop entry at the top of the AppImage"
-grep -q -- '^Exec=.* --open %F$' "$entry" || die "the AppImage's desktop entry does not open files (Exec … --open %F)"
-! grep -q '^MimeType=' "$entry" || die "the AppImage's desktop entry declares file types (it would become the default program on desktops without one)"
+grep -q -- '^Exec=.* --open %U$' "$entry" || die "the AppImage's desktop entry does not open files and links (Exec … --open %U)"
+grep -qx 'MimeType=x-scheme-handler/brulion;' "$entry" || die "the AppImage's desktop entry does not take brulion:// links"
+[[ $(grep -c '^MimeType=' "$entry") == 1 ]] || die "the AppImage's desktop entry declares file types (it would become the default program on desktops without one)"
 grep -qx 'StartupNotify=true' "$entry" || die "the AppImage's desktop entry has no StartupNotify=true"
 (cd "$check_dir/squashfs-root/usr/plugins" && printf 'plugins: %s\n' "$(echo *)")
 # Start it headless: it must still be running after 10 s, without QML or plugin errors.

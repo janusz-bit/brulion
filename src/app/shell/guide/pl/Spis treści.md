@@ -40,6 +40,7 @@ Brulion aktualizuje dokumentację razem z aplikacją: dochodzą nowe strony, a t
 - [[Kopie zapasowe|Kopie zapasowe]] — kopie notatnika według harmonogramu i ich przywracanie.
 - [[Format plików|Format plików]] — jak notatki wyglądają na dysku.
 - [[Wiersz poleceń i agenci AI|Wiersz poleceń i agenci AI]] — `brulion-cli`, skrypty i agenci AI (MCP).
+- [[Automatyzacja|Automatyzacja]] — linki brulion://, Tasker i inne aplikacje do automatyzacji, kafelki Szybkich ustawień i skróty aplikacji na telefonie.
 - [[Rozszerzenia|Rozszerzenia]] — własne polecenia, widoki i reakcje w Luau, pisane w notatniku; konsola Luau.
 - [[API rozszerzeń|API rozszerzeń]] — każda funkcja, którą może wywołać Twój kod: czytanie i zmienianie notatek, widoki, pytania, limity i komunikaty błędów.
 - [[Przepisy na rozszerzenia|Przepisy na rozszerzenia]] — gotowe polecenia, widoki i reakcje do skopiowania.

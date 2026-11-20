@@ -32,6 +32,8 @@ class BrulionActivity : QtActivity() {
     if (!createdBefore) BrulionAndroid.restoreAfterRestart(this, restarts)
     BrulionAndroid.onActivityCreated(this)
     ImeInsets.install(this)
+    // The launcher's shortcuts: quick note, new task, today's journal, search (QuickTiles.kt).
+    QuickEntry.publishShortcuts(this)
   }
 
   /**

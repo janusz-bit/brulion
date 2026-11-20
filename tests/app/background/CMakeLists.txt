@@ -8,3 +8,9 @@ if(TARGET brulion_background AND TARGET brulion_sync_testsupport)
     brulion_add_test(tst_background SOURCES tst_background.cpp
         LIBS brulion_background brulion_sync_testsupport brulion_core_index brulion_core_vault brulion_core_notebook)
 endif()
+# Android's background run of automation requests (automationrun.h): a write with the notebook's
+# key, and every refusal without writing.
+if(TARGET brulion_background)
+    brulion_add_test(tst_automation_run SOURCES tst_automation_run.cpp
+        LIBS brulion_background brulion_core_automation brulion_core_vault)
+endif()

@@ -8,7 +8,9 @@
   (BrulionActivity, a QtActivity that forwards notification taps to C++), the permissions of
   reminders/alarms and of a vault on shared storage, the alarm receivers and AlarmActivity
   (android/src/io/github/januszbit/brulion/android/), ShareActivity (the share sheet's
-  "Brulion": text and text files from other apps), the home-screen widgets (TasksWidget,
+  "Brulion": text and text files from other apps), automation (AutomationActivity for brulion://
+  links and Tasker's intents, AutomationReceiver, AutomationService in the process ":automation",
+  the Quick Settings tiles), the home-screen widgets (TasksWidget,
   CalendarWidget, NotesWidget, their list service and receiver, QuickAddActivity), the background
   check of the notes (BackgroundCheckJob, BackgroundCheckService in the process ":background"), the
   launcher icons.
@@ -160,6 +162,93 @@
                 <data android:mimeType="text/*" />
             </intent-filter>
         </activity>
+
+        <!-- Automation (docs/ANDROID.md "Automation"): brulion:// links (VIEW: a browser's link, an
+             app, `am start -d`) and the explicit RUN intents of Tasker, Automate, MacroDroid. No UI of
+             its own, like ShareActivity: what needs the window goes to C++ in this process and
+             Brulion comes to the front; a write with the notebook's key runs in the background
+             (AutomationService). Everything in the intent is untrusted: C++ checks it. -->
+        <activity
+            android:name="io.github.januszbit.brulion.android.AutomationActivity"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:label="@string/brulion_automation_label"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:theme="@style/Theme.BrulionShare">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="brulion" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="io.github.januszbit.brulion.action.RUN" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="io.github.januszbit.brulion.action.RUN" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="brulion" />
+            </intent-filter>
+        </activity>
+
+        <!-- The broadcast form of RUN (sent to this component: implicit broadcasts never reach
+             a manifest receiver): only writes with the notebook's key, never a window. -->
+        <receiver
+            android:name="io.github.januszbit.brulion.android.AutomationReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="io.github.januszbit.brulion.action.RUN" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="io.github.januszbit.brulion.action.RUN" />
+                <data android:scheme="brulion" />
+            </intent-filter>
+        </receiver>
+
+        <!-- The automation requests' own process (a Qt service, as the background check's: Qt
+             cannot start a second time in the activity's process). -->
+        <service
+            android:name="io.github.januszbit.brulion.android.AutomationService"
+            android:exported="false"
+            android:process=":automation">
+            <meta-data
+                android:name="android.app.lib_name"
+                android:value="-- %%INSERT_APP_LIB_NAME%% --" />
+            <meta-data
+                android:name="android.app.arguments"
+                android:value="--automation" />
+        </service>
+
+        <!-- Quick Settings tiles (docs/ANDROID.md "Quick Settings tiles and app shortcuts"): quick
+             add's window for a note or a task, without starting Qt. Only the system binds them. -->
+        <service
+            android:name="io.github.januszbit.brulion.android.QuickNoteTileService"
+            android:exported="true"
+            android:icon="@drawable/ic_tile_note"
+            android:label="@string/brulion_tile_note"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.service.quicksettings.TOGGLEABLE_TILE"
+                android:value="false" />
+        </service>
+        <service
+            android:name="io.github.januszbit.brulion.android.QuickTaskTileService"
+            android:exported="true"
+            android:icon="@drawable/ic_tile_task"
+            android:label="@string/brulion_tile_task"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.service.quicksettings.TOGGLEABLE_TILE"
+                android:value="false" />
+        </service>
 
         <!-- Home-screen widgets (docs/ANDROID.md "Widgets"): they draw the snapshot the app
              publishes, without starting Qt. The system's APPWIDGET_UPDATE reaches the

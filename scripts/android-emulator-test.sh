@@ -51,6 +51,15 @@
 # selected in the system's file manager and shared (two text files and a picture: the picture
 # listed as not a text file, or left out when the share sheet does not offer Brulion for it; a
 # block per text file in today's journal), and the copies in files/share-in removed. Screenshots of each step (sh-*.png); the same debuggable APK.
+# With --automation instead: brulion:// links and Tasker's intents (docs/ANDROID.md "Automation") —
+# a VIEW link opens a view and a day; a write without the key asks "Zapisać z linku?" and writes
+# after "Zapisz"; the notebook's key made in Settings → Automatyzacja; a write with the key sent as a
+# broadcast to AutomationReceiver while the app is killed lands in the notebook through the
+# ":automation" process without the app's own process (Polish text, under a heading), a task with a
+# reminder through the activity arms a provisional reminder, a wrong key and a request without the
+# key sent as a broadcast write nothing (the result broadcast says why in the log); the Quick
+# Settings tiles (`cmd statusbar`) open quick add's window, and the launcher's shortcuts are
+# published. Screenshots of each step (au-*.png); the same debuggable APK.
 # With --widgets instead: the home-screen widgets (docs/ANDROID.md "Widgets") — the sample
 # notebook publishes their snapshot when the app leaves the front; the three widgets are placed
 # through the launcher's widget picker (tap a preview, "Add"); quick add with the app killed writes
@@ -181,6 +190,7 @@
 #        scripts/android-emulator-test.sh --selection [DEBUG_APP_APK]
 #        scripts/android-emulator-test.sh --folders [DEBUG_APP_APK]
 #        scripts/android-emulator-test.sh --share [DEBUG_APP_APK]
+#        scripts/android-emulator-test.sh --automation [DEBUG_APP_APK]
 #        scripts/android-emulator-test.sh --widgets [DEBUG_APP_APK]
 #        scripts/android-emulator-test.sh --web-pictures [DEBUG_APP_APK]
 #        scripts/android-emulator-test.sh --done [DEBUG_APP_APK]
@@ -201,6 +211,8 @@
 #   BRULION_EMULATOR_PORT    console port (default 5584; adb serial emulator-<port>; 5554-5584:
 #                            the emulator warns that adb may not work with others)
 #   BRULION_EMULATOR_OUT     logs and screenshots (default dist-android/emulator-test)
+#   BRULION_EMULATOR_BOOT_SECONDS  how long the emulator may take to come up (default 120; a busy
+#                            machine's cold boot takes longer)
 #   BRULION_EMULATOR_GPU     the emulator's -gpu mode (default swangle_indirect)
 #   BRULION_EMULATOR_VULKAN  1: the guest has Vulkan (default 1, but 0 for --web-keyboard: Chrome's
 #                            Vulkan on the host's SwiftShader crashed the emulator in half the runs)
@@ -247,6 +259,7 @@ KEYBOARD=0
 SELECTION=0
 FOLDERS=0
 SHARE=0
+AUTOMATION=0
 WIDGETS=0
 WEBPICTURES=0
 DONE=0
@@ -269,6 +282,9 @@ elif [[ ${1:-} == --folders ]]; then
   shift
 elif [[ ${1:-} == --share ]]; then
   SHARE=1
+  shift
+elif [[ ${1:-} == --automation ]]; then
+  AUTOMATION=1
   shift
 elif [[ ${1:-} == --widgets ]]; then
   WIDGETS=1
@@ -312,7 +328,7 @@ else
   APP_APK=${1:-dist-android/brulion-$VERSION-x86_64.apk}
   SELFTEST_APK=${2:-dist-android/brulion-selftest-$VERSION-x86_64.apk}
   [[ -f $APP_APK ]] || die "$APP_APK not found (build it: BRULION_ANDROID_ABIS=x86_64 BRULION_ANDROID_SELFTEST=1 scripts/android-build.sh)"
-  ((KEYBOARD || SELECTION || FOLDERS || SHARE || WIDGETS || WEBPICTURES || DONE || BACKGROUND || DRAWING || STYLUS || PICKERS || PDF || RELAUNCH || LOCALAI)) ||
+  ((KEYBOARD || SELECTION || FOLDERS || SHARE || AUTOMATION || WIDGETS || WEBPICTURES || DONE || BACKGROUND || DRAWING || STYLUS || PICKERS || PDF || RELAUNCH || LOCALAI)) ||
     [[ -f $SELFTEST_APK ]] ||
     die "$SELFTEST_APK not found"
 fi
@@ -326,6 +342,7 @@ fi
 SDK=${ANDROID_SDK_ROOT:-${ANDROID_HOME:-$HOME/.cache/brulion-android-sdk}}
 IMAGE=${BRULION_EMULATOR_IMAGE:-system-images;android-36;google_apis;x86_64}
 PORT=${BRULION_EMULATOR_PORT:-5584}
+BOOT_SECONDS=${BRULION_EMULATOR_BOOT_SECONDS:-120}
 SERIAL=emulator-$PORT
 OUT=${BRULION_EMULATOR_OUT:-dist-android/emulator-test}
 PKG=io.github.januszbit.brulion
@@ -444,9 +461,9 @@ start_emulator() {
   "${emulator[@]}" -avd "$AVD" -port "$PORT" -no-window -no-audio -no-boot-anim -no-snapshot -wipe-data \
     "${emulator_args[@]}" >"$OUT/emulator.log" 2>&1 &
   emulator_pid=$!
-  timeout 120 "$SDK/platform-tools/adb" -s "$SERIAL" wait-for-device || die "the emulator did not come up (see $OUT/emulator.log)"
+  timeout "$BOOT_SECONDS" "$SDK/platform-tools/adb" -s "$SERIAL" wait-for-device || die "the emulator did not come up (see $OUT/emulator.log)"
   local _
-  for _ in $(seq 1 120); do
+  for _ in $(seq 1 "$BOOT_SECONDS"); do
     [[ $(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r') == 1 ]] && break
     emulator_alive || die "the emulator stopped while booting (see $OUT/emulator.log)"
     sleep 2
@@ -1575,6 +1592,134 @@ if ((SHARE)); then
   adb logcat -d >"$OUT/share-logcat.txt"
   check "no crash" bash -c "! grep -E 'FATAL EXCEPTION|Fatal signal' '$OUT/share-logcat.txt'"
   check "no QML errors" bash -c "! grep -E 'TypeError|ReferenceError|Binding loop detected' '$OUT/share-logcat.txt'"
+  info "Result"
+  echo "logs and screenshots: $(cd "$OUT" && pwd)"
+  ((failures == 0)) || die "$failures check(s) failed"
+  echo "all checks passed"
+  exit 0
+fi
+
+# --- brulion:// links and automation intents (--automation) ---------------------------------------
+
+AUTOMATION_ACTIVITY=$PKG/$PKG.android.AutomationActivity
+AUTOMATION_RECEIVER=$PKG/$PKG.android.AutomationReceiver
+RUN_ACTION=$PKG.action.RUN
+# The process of the automation requests (a Qt service of its own) and the app's main process.
+# Qt is not loaded in the app's own process (the receiver and the activity are Kotlin only; Qt runs in
+# ":automation"); a process that is gone loaded nothing either.
+qt_not_in_main() {
+  local pid
+  pid=$(adb shell pidof "$PKG" | tr -d '\r')
+  # (Its own maps, read as the app: the shell may not read another user's without adb root.)
+  [[ -z $pid ]] || [[ $(adb shell run-as "$PKG" grep -c libbrulion "/proc/$pid/maps" | tr -d '\r') == 0 ]]
+}
+automation_prefs_has() { adb shell run-as "$PKG" cat "$1" 2>/dev/null | grep -q -- "$2"; } # <file> <text>
+# The notebook's automation key (Settings → Automatyzacja made it): the only entry of the key file.
+automation_key() {
+  adb shell run-as "$PKG" cat files/secrets/automation-keys.json 2>/dev/null | grep -oE '"[a-z2-7]{32}"' | head -n 1 | tr -d '"'
+}
+# The result broadcast's line in the log (Automation.broadcastResult).
+result_logged() { adb logcat -d -s BrulionAutomation:I | grep -q -- "result: $1"; } # <ERE>
+
+if ((AUTOMATION)); then
+  info "Automation: $APP_APK on ${SCREEN_W}x$SCREEN_H, density $DENSITY, API $android_api"
+  adb install -r -g "$APP_APK" >/dev/null
+  adb shell run-as "$PKG" true 2>/dev/null || die "$APP_APK is not debuggable (BRULION_ANDROID_BUILD_TYPE=Debug)"
+  today=$(adb shell date +%Y-%m-%d | tr -d '\r')
+  today_journal="journals/$today.md"
+  start_app '--demo --locale pl --route journals'
+  check "the app is running" running
+
+  # A busy host makes the launcher stop answering: its dialog covers the app (and the dump of the
+  # screen), so the checks of what is shown wait it away first.
+  dismiss_anr() { if ui_has "isn't responding|nie odpowiada"; then ui_tap 'Wait|Czekaj' first 1 || true; fi; }
+  au_ui_has() { dismiss_anr; ui_has "$1"; } # <ERE>
+  adb shell settings put global hide_error_dialogs 1 >/dev/null 2>&1 || true
+  dismiss_anr
+
+  # 1. Links that only open: at once, nothing asked (the app logs where the address came from).
+  adb shell am start -a android.intent.action.VIEW -d "'brulion://view?name=calendar'" >/dev/null
+  check "brulion://view reaches the app" wait_for 20 log_has 'brulion:// address from android: view'
+  check "… which opens the calendar" wait_for 15 au_ui_has 'Kalendarz'
+  app_shot au-1-calendar
+  adb shell am start -a android.intent.action.VIEW -d "'brulion://view?name=settings&section=automation'" >/dev/null
+  check "… and Settings → Automatyzacja" wait_for 15 au_ui_has 'Utwórz klucz'
+  app_shot au-2-settings
+
+  # 2. A write without the key: the confirmation, written only after "Zapisz".
+  adb shell am start -a android.intent.action.VIEW \
+    -d "'brulion://append?text=Z%20linku%20%C5%BC%C3%B3%C5%82w&x-source=Test'" >/dev/null
+  check "a write without the key asks first" wait_for 15 au_ui_has 'Zapisać z linku\?'
+  check "… saying where" au_ui_has 'Dzisiejszy dziennik'
+  check "… nothing written before Zapisz" bash -c "! grep -q 'Z linku żółw' <<<\"\$1\"" _ "$(vault_cat "$today_journal")"
+  app_shot au-3-confirm
+  check "Zapisz writes it" ui_tap 'Zapisz' last
+  check "the block is in today's journal" wait_for 10 vault_grep "$today_journal" '^- Z linku żółw$'
+
+  # 3. The notebook's key, made in the settings.
+  adb shell am start -a android.intent.action.VIEW -d "'brulion://view?name=settings&section=automation'" >/dev/null
+  wait_for 15 au_ui_has 'Utwórz klucz' || true
+  check "Utwórz klucz makes the key" ui_tap 'Utwórz klucz'
+  key=""
+  for _ in 1 2 3 4 5; do
+    key=$(automation_key)
+    [[ -n $key ]] && break
+    sleep 1
+  done
+  check "the key file holds a key" test -n "$key"
+  app_shot au-4-key
+
+  # 4. A write with the key as a broadcast, the app's process killed (not force-stopped: a stopped
+  # package gets no broadcasts until it is opened again, docs/ANDROID.md): only ":automation" runs Qt.
+  adb shell input keyevent 3
+  sleep 2
+  automation_kill_app() { adb shell am kill "$PKG" && sleep 2 && not_running; } # Android may need a second try
+  check "the app's process is gone (am kill)" wait_for 30 automation_kill_app
+  adb logcat -c
+  adb shell am broadcast -n "$AUTOMATION_RECEIVER" -a "$RUN_ACTION" \
+    -d "'brulion://append?page=$today&text=Z%20Taskera%20%C4%85%C4%99'" --es key "$key" >/dev/null
+  check "the background write lands in the notebook" wait_for 40 vault_grep "$today_journal" '^- Z Taskera ąę$'
+  check "… answered with the result broadcast" wait_for 10 result_logged 'ok=true'
+  check "… without Qt in the app's own process" qt_not_in_main
+  adb logcat -d >"$OUT/automation-logcat-1.txt"
+  check "… by the :automation process" grep -q "$PKG:automation" "$OUT/automation-logcat-1.txt"
+
+  # 5. A task with a reminder through the activity (Tasker's "Activity" target): no window.
+  adb logcat -c
+  adb shell am start -n "$AUTOMATION_ACTIVITY" -a "$RUN_ACTION" --es action task \
+    --es text "'Zadzwonic do mamy'" --es remind "'jutro o 18'" --es key "$key" >/dev/null
+  check "the task with its reminder is written" wait_for 40 vault_grep "$today_journal" '^- \[ \] Zadzwonic do mamy ⏰ [0-9-]+ 18:00$'
+  check "… a provisional reminder armed" wait_for 10 automation_prefs_has "shared_prefs/$PKG.android.reminders.xml" '&quot;provisional&quot;:true'
+  check "… without the app's window (Qt not loaded in its process)" qt_not_in_main
+  adb logcat -d >"$OUT/automation-logcat-2.txt"
+
+  # 6. Refusals of the broadcast: a wrong key, no key — nothing written.
+  before=$(vault_cat "$today_journal")
+  adb logcat -c
+  adb shell am broadcast -n "$AUTOMATION_RECEIVER" -a "$RUN_ACTION" \
+    -d "'brulion://append?text=Obcy'" --es key wrongkeywrongkeywrongkeywrongkey >/dev/null
+  check "a wrong key is refused" wait_for 40 result_logged 'ok=false error=wrong_key'
+  adb shell am broadcast -n "$AUTOMATION_RECEIVER" -a "$RUN_ACTION" -d "'brulion://append?text=Obcy'" >/dev/null
+  check "a request without the key is refused" wait_for 10 result_logged 'ok=false error=key_required'
+  check "… nothing written" bash -c "[[ \"\$1\" == \"\$2\" ]]" _ "$before" "$(vault_cat "$today_journal")"
+
+  # 7. The Quick Settings tiles and the launcher's shortcuts.
+  if adb shell cmd statusbar add-tile "$PKG/$PKG.android.QuickNoteTileService" >/dev/null 2>&1; then
+    adb shell cmd statusbar click-tile "$PKG/$PKG.android.QuickNoteTileService" >/dev/null 2>&1 || true
+    check "the Quick note tile opens quick add's window" wait_for 15 au_ui_has 'Dodaj|Add|ADD'
+    app_shot au-5-tile
+    adb shell input keyevent 4
+    sleep 1
+  else
+    echo "    (no cmd statusbar add-tile on this image)"
+  fi
+  start_app '--locale pl --route journals'
+  adb shell dumpsys shortcut >"$OUT/automation-shortcuts.txt" 2>/dev/null || true
+  check "the launcher's shortcuts are published" grep -q 'quick-note' "$OUT/automation-shortcuts.txt"
+
+  adb logcat -d >"$OUT/automation-logcat.txt"
+  check "no crash" bash -c "! grep -E 'FATAL EXCEPTION|Fatal signal' '$OUT/automation-logcat.txt' '$OUT/automation-logcat-1.txt' '$OUT/automation-logcat-2.txt'"
+  check "no QML errors" bash -c "! grep -E 'TypeError|ReferenceError|Binding loop detected' '$OUT/automation-logcat.txt'"
   info "Result"
   echo "logs and screenshots: $(cd "$OUT" && pwd)"
   ((failures == 0)) || die "$failures check(s) failed"

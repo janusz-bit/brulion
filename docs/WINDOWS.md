@@ -104,6 +104,24 @@ in `HKLM\Software\Classes`; uninstalling removes exactly this):
 `--open` on the command line: `brulion.exe --open "C:\ścieżka\notatka.md" …` — everything after `--open`
 is files (also a name starting with `-`); relative paths are resolved from the current folder.
 
+## brulion:// links
+
+The installer registers the URL protocol **`brulion`**: a brulion:// link in a browser, in an
+e-mail or in another app, `start brulion://daily` in a terminal or the Run dialog (Win+R), a
+shortcut on the desktop whose target is `brulion://capture` — each opens Brulion (or hands the
+address to the one already running, which comes to the front) and does what the address asks
+(docs/UI.md "Automation": open a page, add a note or a task, search, …). A browser asks once
+whether to open Brulion. Writing without the notebook's automation key asks "Write from a link?"
+first; scripts and automation tools put the key from Settings → Automation into the address.
+
+| Key | Contents |
+|---|---|
+| `brulion` | `URL:Brulion`, the empty value `URL Protocol`, the icon and the command `"…\brulion.exe" --open "%1"` (the address comes as the file after `--open`; Brulion tells it from a file) |
+
+Uninstalling removes the key whole (nothing else opens brulion://). The portable ZIP registers
+nothing: there `brulion.exe "brulion://…"` works from a terminal, and `brulion-cli uri open
+"brulion://…"` hands an address to the running Brulion (docs/CLI.md "brulion:// addresses").
+
 ## Notifications
 
 Reminders ⏰ and alarms ⏰! are Windows notifications (toasts; `src/app/notify/windowstoastbus.h`,

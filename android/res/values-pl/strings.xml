@@ -28,4 +28,16 @@
     <string name="brulion_share_label">Brulion</string>
     <!-- A share with no text and no file -->
     <string name="brulion_share_nothing">Nic do zapisania</string>
+    <!-- Automation (Automation*.kt, docs/ANDROID.md "Automation") -->
+    <string name="brulion_automation_label">Brulion</string>
+    <string name="brulion_automation_unusable">To nie jest polecenie dla Brulionu</string>
+    <!-- %1$s: the error code of the request (key_required, page_not_found, …) -->
+    <string name="brulion_automation_failed">Brulion nie mógł tego zrobić: %1$s</string>
+    <!-- Quick Settings tiles and the launcher's shortcuts (QuickTiles.kt) -->
+    <string name="brulion_tile_note">Szybka notatka</string>
+    <string name="brulion_tile_task">Nowe zadanie</string>
+    <string name="brulion_shortcut_note">Szybka notatka</string>
+    <string name="brulion_shortcut_task">Nowe zadanie</string>
+    <string name="brulion_shortcut_today">Dzisiejszy dziennik</string>
+    <string name="brulion_shortcut_search">Szukaj</string>
 </resources>

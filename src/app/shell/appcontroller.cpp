@@ -343,12 +343,28 @@ AppController::AppController(const Options &options, QObject *parent)
     if (!devUpdate.isEmpty())
         m_updates->setLatestForThisRun(devUpdate);
     // Files opened with Brulion (--open: a file manager's "Open with"), else --share.
-    if (const notebook::SharedContent opened = notebook::openedFilesShare(options.openFiles, options.workingDirectory);
+    // (A brulion:// address among them is no file: received below.)
+    QStringList openFiles = options.openFiles;
+    openFiles.removeIf([](const QString &file) { return automation::isAutomationUri(file); });
+    if (const notebook::SharedContent opened = notebook::openedFilesShare(openFiles, options.workingDirectory);
         !opened.files.isEmpty())
         m_startShare = QJsonDocument(notebook::sharedContentToJson(opened)).toJson(QJsonDocument::Compact);
     else
         m_startShare = argValue(args, u"--share"_s).toUtf8();
     m_startShareQuery = argValue(args, u"--share-query"_s);
+    // brulion:// addresses of the launch (--uri <address>, a bare address, one among the --open
+    // files: the desktop entry's %U), received by start() — appautomation.cpp.
+    for (qsizetype i = 1; i < args.size(); ++i) {
+        if (args.at(i) == u"--uri" && i + 1 < args.size())
+            m_waitingUris.append({args.at(++i), u"link"_s});
+        else if (automation::isAutomationUri(args.at(i)))
+            m_waitingUris.append({args.at(i), u"link"_s});
+    }
+    for (const QString &file : options.openFiles) {
+        if (automation::isAutomationUri(file))
+            m_waitingUris.append({file, u"link"_s});
+    }
+    initAutomation();
     const QString route = argValue(args, u"--route"_s);
     if (route.startsWith(u'{'))
         m_devRoute = normalizeRoute(QJsonDocument::fromJson(route.toUtf8()).object().toVariantMap());
@@ -439,6 +455,8 @@ void AppController::start()
         receiveShareJson(std::exchange(m_startShare, {}));
     if (!m_startShareQuery.isEmpty())
         receiveShareQuery(std::exchange(m_startShareQuery, {}));
+    for (const auto &[uri, origin] : std::exchange(m_waitingUris, {}))
+        receiveUri(uri, origin);
     if (m_devDemo && m_devVault.isEmpty()) {
         openDemoVault();
         return;
@@ -1500,6 +1518,10 @@ void AppController::finishOpening(const QString &path, bool seedDemo)
         QTimer::singleShot(0, this, &AppController::applyPendingShare);
     if (std::exchange(m_startCapture, false))
         QTimer::singleShot(0, this, &AppController::quickCapture);
+    // brulion:// addresses that came while the notebook opened (appautomation.cpp).
+    if (!m_waitingUris.isEmpty())
+        QTimer::singleShot(0, this, &AppController::applyPendingUris);
+    publishAutomationTarget();
 }
 
 void AppController::applyIntroNotebookConfig(bool special)
@@ -1768,7 +1790,7 @@ bool AppController::trayPopupShouldReopen()
 bool AppController::handleInstanceMessage(const QByteArray &verb, const QJsonObject &payload)
 {
     if (verb != "activate" && verb != "capture" && verb != "today" && verb != "open" && verb != "hidden"
-        && verb != "share") {
+        && verb != "share" && verb != "uri") {
         qCInfo(lcApp) << "Ignoring an instance message with an unknown verb" << verb;
         return false;
     }
@@ -1785,6 +1807,12 @@ bool AppController::handleInstanceMessage(const QByteArray &verb, const QJsonObj
         QJsonObject share = payload.value(u"share"_s).toObject();
         share.remove(u"dir"_s);
         receiveShare(share.toVariantMap()); // shows the window (or says there is nothing to save)
+        return true;
+    }
+    if (verb == "uri") {
+        // A brulion:// address a second launch or brulion-cli handed over: as a link's (the
+        // window comes up for what it shows or asks; a keyed write may leave it where it is).
+        receiveUri(payload.value(u"uri"_s).toString(), u"link"_s);
         return true;
     }
     showWindow();

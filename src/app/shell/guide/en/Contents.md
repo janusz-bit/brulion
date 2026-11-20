@@ -40,6 +40,7 @@ Brulion updates the documentation together with the app: new pages are added, an
 - [[Backups|Backups]] — scheduled notebook backups and restoring them.
 - [[File format|File format]] — what your notes look like on disk.
 - [[Command line and AI agents|Command line and AI agents]] — `brulion-cli`, scripts and AI agents (MCP).
+- [[Automation|Automation]] — brulion:// links, Tasker and other automation apps, the phone's Quick Settings tiles and app shortcuts.
 - [[Extensions|Extensions]] — your own commands, views and reactions in Luau, written in the notebook; the Luau console.
 - [[Extension API|Extension API]] — every function your code can call: reading and changing notes, views, questions, limits and error messages.
 - [[Extension recipes|Extension recipes]] — ready commands, views and reactions to copy.

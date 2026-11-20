@@ -226,8 +226,13 @@ done in the repository simply disappears from the list.
   files open only read-only as text.
 * **Photo and scan from the camera** — `/Photo` on the phone, straightening and cropping a
   document, scanning to PDF.
-* **On-device automation** — `brulion://` addresses (open a page, append under a heading), intents
-  for Tasker on Android, a quick settings tile (Obsidian: URI, Siri and Shortcuts).
+* **On-device automation: checks on real devices** — brulion:// links, Tasker's intents, the Quick
+  Settings tiles and the launcher's shortcuts are there (docs/UI.md "Automation", docs/ANDROID.md
+  "Automation"; the emulator: `scripts/android-emulator-test.sh --automation`); to be checked by
+  hand: Tasker, Automate and MacroDroid on a real phone (the result broadcast in Tasker's "Intent
+  Received", the provisional reminder ringing), the tiles and shortcuts in a real launcher, a
+  brulion:// link from Firefox and Chrome on Linux (the desktop entry's handler) and on Windows (the
+  installer's URL protocol), `registerProtocolHandler` in Chrome, Edge and Firefox.
 * **More import sources** — Apple Notes, OneNote (Obsidian Importer), Todoist, Airtable and CSV as
   pages with properties (Obsidian).
 

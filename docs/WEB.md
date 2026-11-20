@@ -699,6 +699,28 @@ startup, before it asks for the lock) — `{type: "taken", id}` — and passes t
 `receiveShareQuery`. No `launch_handler`: Chrome with `focus-existing` loses the share data.
 Test: `scripts/wasm-smoke.mjs --share` (above); manually on a phone — TODO.md.
 
+## brulion:// links
+
+The browser version takes links too (docs/UI.md "Automation"), as **`web+brulion:`** — the
+prefix browsers allow a web page to handle (`web+brulion://daily`,
+`web+brulion://append?page=Zakupy&text=Mleko`; the actions and parameters are those of
+`brulion://`).
+
+* **Settings → Automation → Links in this browser → Allow** asks the browser
+  (`navigator.registerProtocolHandler("web+brulion", "<this page>?uri=%s")`): Chrome, Edge and
+  Firefox ask once whether this site may open such links. The browser version **installed as an
+  app** declares it in its manifest (`protocol_handlers`) as well.
+* A link then opens `…/?uri=web%2Bbrulion%3A…`: `index.html` takes the address out of the address
+  bar (a reload does not run it again) and passes it as `--uri`; when Brulion already runs in
+  another tab, it goes there over the share channel (`{type: "share", query:
+  "brulion-uri=<address>"}`, main.cpp tells it from a share) and this tab says "Sent to Brulion
+  open in another tab.". `?uri=brulion://…` typed by hand works the same.
+* The app checks it as any link: opening at once; writing with the notebook's key from Settings →
+  Automation, or after "Write from a link?". The key lives in this browser's storage, as the
+  notebook does.
+* Safari (also on the iPhone) has no `registerProtocolHandler`: there the **Allow** button says the
+  browser cannot do it.
+
 ## Notifications (reminders)
 
 `WasmNotifier` (`src/platform/wasm/wasmnotifier.h`) uses the Notification API:
