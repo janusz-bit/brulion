@@ -69,6 +69,10 @@ bool isValidEncryptedHint(QStringView hint);
 /// full-text index reads, so ciphertext makes no words.
 QString maskEncryptedFragments(QStringView text);
 
+/// `text` with every fragment replaced by `replacement` (plain-text views: "🔒" where the
+/// ciphertext was — notifications, copied plain text, link previews).
+QString replaceEncryptedFragments(QStringView text, QStringView replacement);
+
 /// A whole encrypted note of Meld Encrypt: `.mdenc` (also its older `.encrypted`), any letter case.
 bool isEncryptedNotePath(QStringView path);
 /// The extension Brulion gives a new encrypted note ("mdenc").

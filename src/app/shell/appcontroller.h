@@ -63,6 +63,7 @@
 // file of the open notebook opens as its page.
 #pragma once
 
+#include "applockcontroller.h"
 #include "appsettings.h"
 #include "appupdates.h"
 #include "localai.h"
@@ -121,6 +122,8 @@ class AppController : public QObject {
     Q_PROPERTY(brulion::shell::AppUpdates *updates READ updates CONSTANT FINAL)
     /// The model on the device: downloads, and whether this build runs one (localai.h).
     Q_PROPERTY(brulion::shell::LocalAi *localAi READ localAi CONSTANT FINAL)
+    /// The app lock (applockcontroller.h; QML: the singleton AppLock).
+    Q_PROPERTY(brulion::shell::AppLockController *appLock READ appLock CONSTANT FINAL)
 
     // ---- Navigation ---------------------------------------------------------------------
     Q_PROPERTY(QVariantMap currentRoute READ currentRoute NOTIFY currentRouteChanged FINAL)
@@ -280,6 +283,7 @@ public:
     Workspace *workspace() const { return m_workspace.get(); }
     AppUpdates *updates() const { return m_updates.get(); }
     LocalAi *localAi() const { return m_localAi.get(); }
+    AppLockController *appLock() const { return m_appLock.get(); }
     CommandModel *commands() const { return m_commands.get(); }
     /// The commands' keyboard shortcuts, custom ones included (Settings → Keyboard shortcuts).
     ShortcutMap *shortcuts() const { return m_shortcuts.get(); }
@@ -826,6 +830,7 @@ private:
     /// Before the workspace (its extensions hand it their requests): destroyed after it.
     std::unique_ptr<LocalAi> m_localAi;
     std::unique_ptr<Workspace> m_workspace;
+    std::unique_ptr<AppLockController> m_appLock;
     std::unique_ptr<AppUpdates> m_updates;
     std::unique_ptr<ShortcutMap> m_shortcuts;
     std::unique_ptr<CommandModel> m_commands;

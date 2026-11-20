@@ -25,6 +25,27 @@ QString deviceDescription();
 /// it. Nothing elsewhere: a computer goes on working behind a dark screen.
 void keepScreenOn(bool on);
 
+/// The app lock's hold on the window (docs/UI.md "App lock") — Android: `secure` sets FLAG_SECURE
+/// (nothing of the window on screenshots, screen recordings, a cast screen or the recent apps'
+/// preview), `hideRecents` only leaves the recent apps' preview out (Android 13+:
+/// setRecentsScreenshotEnabled(false); older Android needs `secure` for that). Kept for an activity
+/// made anew. Nothing elsewhere.
+void setSecureWindow(bool secure, bool hideRecents);
+
+/// Android: the phone has a screen lock (PIN, pattern, password) or biometrics the app lock can ask
+/// for (KeyguardManager.isDeviceSecure()). False elsewhere.
+bool deviceAuthAvailable();
+
+/// Android: asks for the phone's biometrics or screen lock (BiometricPrompt with `title`, `subtitle`
+/// and the cancel button's `cancel`); the answer comes as AndroidBridge::deviceAuthFinished(). False
+/// when it cannot be asked (not Android, no screen lock).
+bool requestDeviceAuth(const QString &title, const QString &subtitle, const QString &cancel);
+
+/// Copies decrypted text as sensitive (Android 13+: ClipDescription.EXTRA_IS_SENSITIVE — no preview
+/// of the clipboard, no keyboard suggestion of it). False where the platform has no such copy: the
+/// caller copies through QClipboard with its own hints.
+bool copySensitiveText(const QString &text);
+
 /// A second launch is about to hand its request to the running Brulion (main.cpp): on Windows
 /// that process may then take the foreground this one was given (AllowSetForegroundWindow:
 /// Explorer's "Open with" brings the running window to the front, not just flashes it).

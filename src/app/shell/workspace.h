@@ -58,6 +58,7 @@
 #include "workspacebackups.h"
 #include "workspacecalendars.h"
 #include "workspacechats.h"
+#include "workspaceencryption.h"
 #include "workspaceextensions.h"
 #include "workspacegithub.h"
 #include "workspacereminders.h"
@@ -108,6 +109,8 @@ bool writeBytesKeepingHistory(Vault &vault, const QString &path, const QByteArra
 
 class Workspace : public EditorHost, public QueryHost {
     Q_OBJECT
+    // (Encrypting a page renames it with every link following: relocate().)
+    friend class WorkspaceEncryption;
     Q_INTERFACES(brulion::QueryHost)
 
     /// A vault is open.
@@ -142,6 +145,8 @@ class Workspace : public EditorHost, public QueryHost {
     Q_PROPERTY(brulion::shell::WorkspaceChats *chats READ chats CONSTANT FINAL)
     /// Find and replace in the whole notebook (replacesession.h).
     Q_PROPERTY(brulion::shell::ReplaceSession *replacing READ replacing CONSTANT FINAL)
+    /// Encrypted notes: fragments, `.mdenc` pages and the session's passwords (workspaceencryption.h).
+    Q_PROPERTY(brulion::shell::WorkspaceEncryption *encryption READ encryption CONSTANT FINAL)
     /// Number of daily notes (grows while the index is built).
     Q_PROPERTY(int journalCount READ journalCount NOTIFY indexChanged FINAL)
     /// Number of items in the trash (a deleted folder counts once).
@@ -230,6 +235,7 @@ public:
     WorkspaceExtensions *extensions() const { return m_extensions; }
     WorkspaceChats *chats() const { return m_chats; }
     ReplaceSession *replacing() const { return m_replacing; }
+    WorkspaceEncryption *encryption() const { return m_encryption; }
     /// The threads for looking through notes (indexworkers.h); none on WebAssembly.
     notebook::WorkerPool workerPool();
     int journalCount() const;
@@ -825,6 +831,9 @@ private:
     void storeImpact(const QString &from, const QString &to, const QVariantMap &impact);
     /// One event-loop turn of requestMoveImpact().
     void moveImpactStep();
+    /// `content` is no encrypted note's file but `path` is one (`.mdenc`): refused with an error
+    /// (write(), writeIfUnchanged(), writeIfUnchangedAsync()).
+    bool refusesPlaintext(const QString &path, const QString &content);
     /// Move or rename `from` to `to` keeping every link and tag (renamePage, renameFolder,
     /// movePath: notebook::relocate()); returns `to` or "" (an error was emitted). Settings naming
     /// `from` or a path in it follow it (a notice says so).
@@ -896,6 +905,7 @@ private:
     WorkspaceExtensions *m_extensions = nullptr;
     WorkspaceChats *m_chats = nullptr;
     ReplaceSession *m_replacing = nullptr;
+    WorkspaceEncryption *m_encryption = nullptr;
     std::function<QDateTime()> m_clock;
     QString m_language = QStringLiteral("pl");
     bool m_dataUrlAssets = false;

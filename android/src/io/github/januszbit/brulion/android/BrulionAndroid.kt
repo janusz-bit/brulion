@@ -135,6 +135,9 @@ object BrulionAndroid {
    */
   @JvmStatic external fun nativeGestureInsetsChanged(left: Int, right: Int)
 
+  /** The phone's biometrics or screen lock answered [requestDeviceAuth] ([error] "": cancelled). */
+  @JvmStatic external fun nativeDeviceAuth(ok: Boolean, error: String)
+
   // -----------------------------------------------------------------------------------------
   // Lifecycle (C++)
   // -----------------------------------------------------------------------------------------
@@ -178,6 +181,52 @@ object BrulionAndroid {
   fun setKeepScreenOn(on: Boolean) {
     keepScreenOn = on
     onMain { applyKeepScreenOn() }
+  }
+
+  /**
+   * The app lock's flags on the window (docs/UI.md "App lock"): FLAG_SECURE while [secure], the
+   * recent apps' preview left out while [hideRecents] (Android 13+) — [AppLock].
+   */
+  @JvmStatic
+  fun setSecureWindow(secure: Boolean, hideRecents: Boolean) {
+    AppLock.secure = secure
+    AppLock.hideRecents = hideRecents
+    onMain { AppLock.apply(currentActivity()) }
+  }
+
+  /** The phone has a screen lock the app lock may ask for (Android 10+). */
+  @JvmStatic fun deviceAuthAvailable(context: Context): Boolean = AppLock.deviceSecure(context)
+
+  /**
+   * The phone's biometrics or screen lock over the running activity; the answer goes to C++ as
+   * [nativeDeviceAuth]. False when there is no activity or no screen lock.
+   */
+  @JvmStatic
+  fun requestDeviceAuth(context: Context, title: String, subtitle: String, cancel: String): Boolean {
+    if (!AppLock.deviceSecure(context)) return false
+    onMain {
+      val activity = currentActivity()
+      val shown =
+        activity != null &&
+          AppLock.authenticate(activity, title, subtitle, cancel) { ok, error -> deviceAuthDone(ok, error) }
+      if (!shown) deviceAuthDone(false, "")
+    }
+    return true
+  }
+
+  /** Copies decrypted text as sensitive ([AppLock.copySensitive]). */
+  @JvmStatic fun copySensitive(context: Context, text: String): Boolean = AppLock.copySensitive(context, text)
+
+  /** Hands the prompt's answer to C++ (it listens while attached; else it is dropped). */
+  private fun deviceAuthDone(ok: Boolean, error: String) {
+    synchronized(lock) {
+      if (!nativeAttached) return
+      try {
+        nativeDeviceAuth(ok, error)
+      } catch (e: UnsatisfiedLinkError) {
+        Log.w(TAG, "native device-auth callback not registered", e)
+      }
+    }
   }
 
   /** The window's flag as C++ asked ([setKeepScreenOn]) — again for an activity made anew. */
@@ -835,6 +884,7 @@ object BrulionAndroid {
     applySystemBars()
     applyGestureExclusion()
     applyKeepScreenOn()
+    AppLock.apply(activity)
     ReminderNotifier.ensureChannels(activity)
     onActivityIntent(activity, activity.intent)
   }

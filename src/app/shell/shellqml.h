@@ -4,12 +4,15 @@
 //
 //   AppController    singleton — main()'s instance (AppController::instance())
 //   AppSettings      singleton — AppController.settings
+//   AppLock          singleton — AppController.appLock (the app lock: applockcontroller.h)
 //   LocalAi          uncreatable — AppController.localAi (the model on the device)
 //   RecentNotebooks  uncreatable — AppController.recentNotebooks (the start screen's list)
 //   Workspace        singleton — AppController.workspace (the EditorHost for the editor)
 //   WorkspaceReminders, WorkspaceSync, WorkspaceGitHub, WorkspaceCalendars, WorkspaceBackups, WorkspaceExtensions,
 //   WorkspaceChats   uncreatable —      Workspace.reminders / .sync / .github / .backups / .extensions
 //                                       / .chats
+//   WorkspaceEncryption uncreatable — Workspace.encryption (encrypted notes)
+//   EncryptedPageHost creatable — PageView's EditorHost (encryptedpagehost.h)
 //   ExtensionFormModel, ExtensionControlsModel   uncreatable — a question's fields, a row's controls
 //   ExtensionListModel, ExtensionConsoleModel    uncreatable — Workspace.extensions.list / .console
 //   ExtensionView    creatable — ExtensionView { extensions: Workspace.extensions; extension; view }
@@ -23,10 +26,12 @@
 #pragma once
 
 #include "appcontroller.h"
+#include "applockcontroller.h"
 #include "appsettings.h"
 #include "appupdates.h"
 #include "cleanupselection.h"
 #include "commandmodel.h"
+#include "encryptedpagehost.h"
 #include "extensionviewmodel.h"
 #include "foldertreemodel.h"
 #include "recentnotebooks.h"
@@ -37,6 +42,7 @@
 #include "workspace.h"
 #include "workspacebackups.h"
 #include "workspacecalendars.h"
+#include "workspaceencryption.h"
 #include "workspaceextensions.h"
 #include "workspacegithub.h"
 #include "workspacereminders.h"
@@ -101,6 +107,18 @@ public:
     static AppSettings *create(QQmlEngine *, QJSEngine *)
     {
         return detail::cppOwned(detail::controllerForQml()->settings());
+    }
+};
+
+struct AppLockForeign {
+    Q_GADGET
+    QML_FOREIGN(brulion::shell::AppLockController)
+    QML_NAMED_ELEMENT(AppLock)
+    QML_SINGLETON
+public:
+    static AppLockController *create(QQmlEngine *, QJSEngine *)
+    {
+        return detail::cppOwned(detail::controllerForQml()->appLock());
     }
 };
 
@@ -215,6 +233,19 @@ struct WorkspaceChatsForeign {
     QML_FOREIGN(brulion::shell::WorkspaceChats)
     QML_NAMED_ELEMENT(WorkspaceChats)
     QML_UNCREATABLE("Use Workspace.chats")
+};
+
+struct WorkspaceEncryptionForeign {
+    Q_GADGET
+    QML_FOREIGN(brulion::shell::WorkspaceEncryption)
+    QML_NAMED_ELEMENT(WorkspaceEncryption)
+    QML_UNCREATABLE("Use Workspace.encryption")
+};
+
+struct EncryptedPageHostForeign {
+    Q_GADGET
+    QML_FOREIGN(brulion::shell::EncryptedPageHost)
+    QML_NAMED_ELEMENT(EncryptedPageHost)
 };
 
 struct ExtensionFormModelForeign {

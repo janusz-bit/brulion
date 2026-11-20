@@ -78,6 +78,47 @@ void keepScreenOn(bool on)
 #endif
 }
 
+void setSecureWindow(bool secure, bool hideRecents)
+{
+#ifdef Q_OS_ANDROID
+    AndroidBridge::setSecureWindow(secure, hideRecents);
+#else
+    Q_UNUSED(secure);
+    Q_UNUSED(hideRecents);
+#endif
+}
+
+bool deviceAuthAvailable()
+{
+#ifdef Q_OS_ANDROID
+    return AndroidBridge::deviceAuthAvailable();
+#else
+    return false;
+#endif
+}
+
+bool requestDeviceAuth(const QString &title, const QString &subtitle, const QString &cancel)
+{
+#ifdef Q_OS_ANDROID
+    return AndroidBridge::instance()->requestDeviceAuth(title, subtitle, cancel);
+#else
+    Q_UNUSED(title);
+    Q_UNUSED(subtitle);
+    Q_UNUSED(cancel);
+    return false;
+#endif
+}
+
+bool copySensitiveText(const QString &text)
+{
+#ifdef Q_OS_ANDROID
+    return AndroidBridge::copySensitiveText(text);
+#else
+    Q_UNUSED(text);
+    return false;
+#endif
+}
+
 void allowForegroundActivation()
 {
 #ifdef Q_OS_WIN

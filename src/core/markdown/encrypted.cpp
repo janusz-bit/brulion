@@ -195,6 +195,23 @@ QString maskEncryptedFragments(QStringView text)
     return out;
 }
 
+QString replaceEncryptedFragments(QStringView text, QStringView replacement)
+{
+    const QList<EncryptedSpan> spans = findEncryptedFragments(text);
+    if (spans.isEmpty())
+        return text.toString();
+    QString out;
+    out.reserve(text.size());
+    qsizetype at = 0;
+    for (const EncryptedSpan &span : spans) {
+        out.append(text.sliced(at, span.from - at));
+        out.append(replacement);
+        at = span.to;
+    }
+    out.append(text.sliced(at));
+    return out;
+}
+
 bool isEncryptedNotePath(QStringView path)
 {
     return path.endsWith(u".mdenc", Qt::CaseInsensitive) || path.endsWith(u".encrypted", Qt::CaseInsensitive);

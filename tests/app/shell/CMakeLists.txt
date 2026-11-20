@@ -75,6 +75,10 @@ brulion_add_test(tst_shell_demovault SOURCES tst_demovault.cpp
 # The block editor's compare-and-swap saves on the real Workspace (an external append during a
 # debounced save is merged, never overwritten).
 brulion_add_test(tst_shell_workspace_editor SOURCES tst_workspace_editor.cpp LIBS brulion_shell brulion_editor)
+# Encrypted notes on the real Workspace (workspaceencryption.h, encryptedpagehost.h) with the editor:
+# a Meld Encrypt note opened, edited and saved encrypted, locks, page conversions, fragments, and no
+# plaintext anywhere on disk (the notebook, History, the index cache, the device state).
+brulion_add_test(tst_shell_workspace_encryption SOURCES tst_workspace_encryption.cpp LIBS brulion_shell brulion_editor)
 # Pictures from the internet on the real Workspace with the editor (a local HTTP server): fetched
 # only when allowed, cached on the device, stored in the vault on "Pobierz do notatnika"; drawings
 # saved again and shown again (their versioned URL).

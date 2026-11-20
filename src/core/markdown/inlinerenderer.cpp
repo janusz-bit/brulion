@@ -6,6 +6,7 @@
 #include "dates/format.h"
 #include "dates/recurrence.h"
 #include "markdown/blockclipboard.h"
+#include "markdown/encrypted.h"
 #include "markdown/highlight.h"
 #include "markdown/inline_p.h"
 #include "markdown/journal.h"
@@ -851,6 +852,22 @@ QString InlineRenderer::renderInline(QStringView text, bool topLevel, int depth,
     const Palette &pal = m_ctx.palette;
     QList<Atom> atoms;
 
+    // Encrypted text (docs/SYNTAX.md §11 "Encrypted text"): a locked chip, never its ciphertext — at
+    // the top level an `encrypted:<from>-<to>` link naming its range in the body (the editor unlocks
+    // it), in a link's label plain. Its hint, if any, is the chip's label.
+    const bool english = m_ctx.locale == dates::UiLocale::English;
+    const auto encryptedChip = [&](const EncryptedSpan &e) {
+        const QString label =
+                u"\U0001F512 "_s
+                + (e.hint.isEmpty() ? (english ? u"Encrypted"_s : u"Zaszyfrowane"_s) : elided(e.hint, 40));
+        if (!topLevel)
+            return chip(pal.neutral, label);
+        return linkChip(u"encrypted:"_s + QString::number(toBody(runs, e.from)) + u'-'
+                                + QString::number(toBody(runs, e.to)),
+                        pal.neutral, label);
+    };
+    const bool mayEncrypt = mayContainEncrypted(text);
+
     // Code spans and comments.
     const QList<InlineSpan> spans = inlineSpans(text);
     QString masked = text.toString();
@@ -860,7 +877,11 @@ QString InlineRenderer::renderInline(QStringView text, bool topLevel, int depth,
                 masked[i] = u' ';
         }
         if (span.kind != InlineSpan::Kind::Code) {
-            atoms.append({span.from, span.to, QString()});
+            // A hidden encrypted fragment is a `%%…%%` comment: shown as its chip.
+            const auto fragment = mayEncrypt && span.kind == InlineSpan::Kind::Comment
+                                          ? encryptedFragmentAt(text, span.from, span.to)
+                                          : std::nullopt;
+            atoms.append({span.from, span.to, fragment ? encryptedChip(*fragment) : QString()});
             continue;
         }
         QString content = text.sliced(span.from + span.fence, span.to - span.from - 2 * span.fence).toString();
@@ -879,6 +900,16 @@ QString InlineRenderer::renderInline(QStringView text, bool topLevel, int depth,
         atoms.append({span.from, span.to,
                       u"<code style=\"background-color:"_s + safeColor(pal.codeBackground) + u"\">"_s + esc(content)
                               + u"</code>"_s});
+    }
+
+    // Visible encrypted fragments (`🔐γ … 🔐`), outside code and comments: their chips, and nothing
+    // of them (a hint's #tag or link) read by the scanners below.
+    if (mayEncrypt && mayContainEncrypted(masked)) {
+        for (const EncryptedSpan &e : findEncryptedFragments(masked)) {
+            atoms.append({e.from, e.to, encryptedChip(e)});
+            for (qsizetype i = e.from; i < e.to; ++i)
+                masked[i] = u' ';
+        }
     }
 
     // Coloured highlights: `<mark …>` … `</mark>` pairs (docs/SYNTAX.md §11, markdown/highlight.h).

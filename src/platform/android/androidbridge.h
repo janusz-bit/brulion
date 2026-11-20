@@ -260,6 +260,18 @@ public:
     /// The screen does not turn off by itself while `on` (the activity's window keeps it on).
     static void setKeepScreenOn(bool on);
 
+    /// The app lock's flags on the activity's window (platform::setSecureWindow): FLAG_SECURE while
+    /// `secure`; the recent apps' preview left out while `hideRecents` (Android 13+). Set again for
+    /// an activity made anew (AppLock.kt).
+    static void setSecureWindow(bool secure, bool hideRecents);
+    /// The phone has a screen lock or biometrics the app lock may ask for (AppLock.kt).
+    static bool deviceAuthAvailable();
+    /// BiometricPrompt: the phone's biometrics or its screen lock (AppLock.kt); deviceAuthFinished()
+    /// follows. False when it could not be shown.
+    bool requestDeviceAuth(const QString &title, const QString &subtitle, const QString &cancel);
+    /// Copies `text` as sensitive (Android 13+: no clipboard preview, no keyboard suggestion).
+    static bool copySensitiveText(const QString &text);
+
 Q_SIGNALS:
     /// A reminder notification (or "Open note" on the alarm screen) was tapped.
     void activated(const QString &path, int line);
@@ -288,6 +300,9 @@ Q_SIGNALS:
     /// window was resized above it); `shown` while it is up or coming up; `animating` for every
     /// frame of its slide (Android 11+), then once more settled (ImeInsets.kt; KeyboardInsets).
     void imeChanged(int overlap, bool shown, bool animating);
+    /// The phone's biometrics or screen lock answered requestDeviceAuth(): `ok`, else `error` (the
+    /// system's message; "" when the user cancelled).
+    void deviceAuthFinished(bool ok, const QString &error);
     /// The system keeps `left` and `right` physical pixels of Qt's view at its edges for its own
     /// swipes (gesture navigation's "back"; 0 with buttons) (ImeInsets.kt; GestureInsets).
     void systemGesturesChanged(int left, int right);

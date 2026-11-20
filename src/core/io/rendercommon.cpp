@@ -1,5 +1,6 @@
 #include "io/rendercommon_p.h"
 
+#include "markdown/encrypted.h"
 #include "util/paths.h"
 
 #include <QHash>
@@ -240,6 +241,12 @@ void codeAndCommentAtoms(QStringView text, QStringView masked, QList<InlineAtom>
         } else {
             ++i;
         }
+    }
+    // Visible encrypted fragments (docs/SYNTAX.md §11 "Encrypted text"): a lock, never their
+    // ciphertext (hidden ones are `%%` comments, above). What a hint holds is not rendered either.
+    if (markdown::mayContainEncrypted(masked)) {
+        for (const markdown::EncryptedSpan &e : markdown::findEncryptedFragments(masked))
+            atoms.append(InlineAtom{e.from, e.to, u"\U0001F512"_s});
     }
 }
 
