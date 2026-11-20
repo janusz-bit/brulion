@@ -10437,6 +10437,305 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
         <source>Word document (DOCX)</source>
         <translation>Dokument Worda (DOCX)</translation>
     </message>
+    <message>
+        <location filename="../src/core/io/csvimport.cpp" line="593"/>
+        <location filename="../src/core/io/csvimport.cpp" line="929"/>
+        <source>Column %1</source>
+        <translation>Kolumna %1</translation>
+    </message>
+    <message>
+        <location filename="../src/core/io/csvimport.cpp" line="898"/>
+        <source>“%1” holds no rows and was skipped.</source>
+        <translation>„%1” nie ma wierszy i został pominięty.</translation>
+    </message>
+    <message>
+        <location filename="../src/core/io/csvimport.cpp" line="902"/>
+        <source>“%1” is larger than Brulion imports (%2 rows, %3 columns, %4 characters a cell); the rest was left out.</source>
+        <translation>„%1” jest większy, niż Brulion importuje (%2 wierszy, %3 kolumn, %4 znaków w komórce); resztę pominięto.</translation>
+    </message>
+    <message>
+        <location filename="../src/core/io/csvimport.cpp" line="959"/>
+        <source>“%1” has no column “%2”; Brulion chose the column that names the pages.</source>
+        <translation>„%1” nie ma kolumny „%2”; Brulion sam wybrał kolumnę z tytułami stron.</translation>
+    </message>
+    <message>
+        <location filename="../src/core/io/csvimport.cpp" line="1252"/>
+        <source>“%1” has more than %2 rows; the table page holds the first %2. Import it as one page per row to keep all of them.</source>
+        <translation>„%1” ma więcej niż %2 wierszy; strona z tabelą zawiera pierwsze %2. Zaimportuj go jako stronę na wiersz, by zachować wszystkie.</translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/core/io/csvimport.cpp" line="1344"/>
+        <source>%n row(s) had no title; their pages are named after the file and the row number.</source>
+        <translation>
+            <numerusform>%n wiersz nie miał tytułu; jego strona ma nazwę pliku i numer wiersza.</numerusform>
+            <numerusform>%n wiersze nie miały tytułu; ich strony mają nazwę pliku i numer wiersza.</numerusform>
+            <numerusform>%n wierszy nie miało tytułu; ich strony mają nazwę pliku i numer wiersza.</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/core/io/csvimport.cpp" line="1347"/>
+        <source>%n row(s) have the same title as an earlier row; their pages got a number (“… 2”).</source>
+        <translation>
+            <numerusform>%n wiersz ma ten sam tytuł co wcześniejszy; jego strona dostała numer („… 2”).</numerusform>
+            <numerusform>%n wiersze mają ten sam tytuł co wcześniejsze; ich strony dostały numer („… 2”).</numerusform>
+            <numerusform>%n wierszy ma ten sam tytuł co wcześniejsze; ich strony dostały numer („… 2”).</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/core/io/csvimport.cpp" line="1350"/>
+        <source>%n value(s) did not fit their column&apos;s type and were kept as text.</source>
+        <translation>
+            <numerusform>%n wartość nie pasowała do typu kolumny i została tekstem.</numerusform>
+            <numerusform>%n wartości nie pasowały do typu kolumny i zostały tekstem.</numerusform>
+            <numerusform>%n wartości nie pasowało do typu kolumny i zostało tekstem.</numerusform>
+        </translation>
+    </message>
+    <message>
+        <location filename="../src/core/io/import_csv.cpp" line="104"/>
+        <source>No CSV file with rows was found.</source>
+        <translation>Nie znaleziono pliku CSV z wierszami.</translation>
+    </message>
+    <message>
+        <location filename="../src/core/io/import_csv.cpp" line="252"/>
+        <source>“%1” is not an Airtable download and was skipped.</source>
+        <translation>„%1” nie jest pobraniem z Airtable i został pominięty.</translation>
+    </message>
+    <message>
+        <location filename="../src/core/io/import_csv.cpp" line="260"/>
+        <source>No Airtable table with records was found.</source>
+        <translation>Nie znaleziono tabeli Airtable z rekordami.</translation>
+    </message>
+    <message>
+        <location filename="../src/core/io/import_todoist.cpp" line="457"/>
+        <source>“%1” is not a Todoist template and was skipped.</source>
+        <translation>„%1” nie jest szablonem Todoist i został pominięty.</translation>
+    </message>
+    <message>
+        <location filename="../src/core/io/import_todoist.cpp" line="465"/>
+        <source>“%1” is not a Todoist export and was skipped.</source>
+        <translation>„%1” nie jest eksportem Todoist i został pominięty.</translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/core/io/import_todoist.cpp" line="473"/>
+        <source>%n due date(s) could not be read and were left out.</source>
+        <translation>
+            <numerusform>Nie udało się odczytać %n terminu; pominięto go.</numerusform>
+            <numerusform>Nie udało się odczytać %n terminów; pominięto je.</numerusform>
+            <numerusform>Nie udało się odczytać %n terminów; pominięto je.</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/core/io/import_todoist.cpp" line="475"/>
+        <source>%n recurring date(s) cannot be written as a 🔁 rule; only their next date was kept.</source>
+        <translation>
+            <numerusform>%n powtarzającego się terminu nie da się zapisać jako reguły 🔁; zachowano tylko jego najbliższą datę.</numerusform>
+            <numerusform>%n powtarzających się terminów nie da się zapisać jako reguł 🔁; zachowano tylko ich najbliższe daty.</numerusform>
+            <numerusform>%n powtarzających się terminów nie da się zapisać jako reguł 🔁; zachowano tylko ich najbliższe daty.</numerusform>
+        </translation>
+    </message>
+    <message>
+        <location filename="../src/core/io/import_todoist.cpp" line="479"/>
+        <source>Relative dates (“tomorrow”, “every monday”) could not be resolved.</source>
+        <translation>Nie udało się ustalić dat względnych („jutro”, „every monday”).</translation>
+    </message>
+    <message>
+        <location filename="../src/core/io/import_todoist.cpp" line="481"/>
+        <source>Task durations are not imported.</source>
+        <translation>Czas trwania zadań nie jest importowany.</translation>
+    </message>
+    <message>
+        <location filename="../src/core/io/import_todoist.cpp" line="483"/>
+        <source>Assignments to people are not imported.</source>
+        <translation>Przypisania do osób nie są importowane.</translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/core/io/import_todoist.cpp" line="485"/>
+        <source>%n comment file(s) are not in the import and were linked to Todoist.</source>
+        <translation>
+            <numerusform>%n pliku z komentarza nie ma w imporcie; dodano link do Todoist.</numerusform>
+            <numerusform>%n plików z komentarzy nie ma w imporcie; dodano linki do Todoist.</numerusform>
+            <numerusform>%n plików z komentarzy nie ma w imporcie; dodano linki do Todoist.</numerusform>
+        </translation>
+    </message>
+    <message>
+        <location filename="../src/core/io/import_todoist.cpp" line="488"/>
+        <source>No Todoist project was found.</source>
+        <translation>Nie znaleziono żadnego projektu Todoist.</translation>
+    </message>
+    <message>
+        <location filename="../src/core/io/import_onenote.cpp" line="110"/>
+        <source>“%1” is not a OneNote download and was skipped.</source>
+        <translation>„%1” nie jest pobraniem z OneNote i został pominięty.</translation>
+    </message>
+    <message>
+        <location filename="../src/core/io/import_onenote.cpp" line="117"/>
+        <source>No OneNote download was found: sign in to Microsoft to download the notebooks.</source>
+        <translation>Nie znaleziono pobrania z OneNote: zaloguj się w Microsoft, by pobrać notesy.</translation>
+    </message>
+    <message>
+        <location filename="../src/core/io/import_onenote.cpp" line="145"/>
+        <source>Notebook</source>
+        <translation>Notes</translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/core/io/import_onenote.cpp" line="155"/>
+        <source>%n picture(s) or file(s) were not downloaded and were left out.</source>
+        <translation>
+            <numerusform>%n obrazka albo pliku nie pobrano; pominięto go.</numerusform>
+            <numerusform>%n obrazków albo plików nie pobrano; pominięto je.</numerusform>
+            <numerusform>%n obrazków albo plików nie pobrano; pominięto je.</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/core/io/import_onenote.cpp" line="158"/>
+        <source>%n link(s) lead to OneNote pages outside the import; their text was kept.</source>
+        <translation>
+            <numerusform>%n link prowadzi do strony OneNote spoza importu; zachowano jego tekst.</numerusform>
+            <numerusform>%n linki prowadzą do stron OneNote spoza importu; zachowano ich tekst.</numerusform>
+            <numerusform>%n linków prowadzi do stron OneNote spoza importu; zachowano ich tekst.</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/core/io/import_onenote.cpp" line="161"/>
+        <source>%n page(s) are too large to convert; they were saved as HTML files.</source>
+        <translation>
+            <numerusform>%n strona jest za duża do przekształcenia; zapisano ją jako plik HTML.</numerusform>
+            <numerusform>%n strony są za duże do przekształcenia; zapisano je jako pliki HTML.</numerusform>
+            <numerusform>%n stron jest za dużych do przekształcenia; zapisano je jako pliki HTML.</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/core/io/import_onenote.cpp" line="164"/>
+        <source>%n page(s) were not downloaded and were left out.</source>
+        <translation>
+            <numerusform>%n strony nie pobrano; pominięto ją.</numerusform>
+            <numerusform>%n stron nie pobrano; pominięto je.</numerusform>
+            <numerusform>%n stron nie pobrano; pominięto je.</numerusform>
+        </translation>
+    </message>
+    <message>
+        <location filename="../src/core/io/import_onenote.cpp" line="175"/>
+        <source>Section</source>
+        <translation>Sekcja</translation>
+    </message>
+    <message>
+        <location filename="../src/core/io/import_onenote.cpp" line="200"/>
+        <source>Section group</source>
+        <translation>Grupa sekcji</translation>
+    </message>
+    <message>
+        <location filename="../src/core/io/import_onenote.cpp" line="211"/>
+        <source>Untitled page</source>
+        <translation>Strona bez tytułu</translation>
+    </message>
+    <message>
+        <location filename="../src/core/io/import_applenotes.cpp" line="205"/>
+        <source>No NoteStore.sqlite was found: choose the group.com.apple.notes folder copied from the Mac.</source>
+        <translation>Nie znaleziono NoteStore.sqlite: wybierz folder group.com.apple.notes skopiowany z Maca.</translation>
+    </message>
+    <message>
+        <location filename="../src/core/io/import_applenotes.cpp" line="244"/>
+        <source>NoteStore.sqlite cannot be read: %1</source>
+        <translation>Nie można odczytać NoteStore.sqlite: %1</translation>
+    </message>
+    <message>
+        <location filename="../src/core/io/import_applenotes.cpp" line="252"/>
+        <source>This NoteStore.sqlite has no notes Brulion can read (it may come from a macOS version before 10.11).</source>
+        <translation>Ten plik NoteStore.sqlite nie ma notatek, które Brulion umie odczytać (może pochodzić z macOS starszego niż 10.11).</translation>
+    </message>
+    <message>
+        <location filename="../src/core/io/import_applenotes.cpp" line="336"/>
+        <source>NoteStore.sqlite is damaged; the notes Brulion could read were imported.</source>
+        <translation>NoteStore.sqlite jest uszkodzony; zaimportowano notatki, które Brulion zdołał odczytać.</translation>
+    </message>
+    <message>
+        <location filename="../src/core/io/import_applenotes.cpp" line="374"/>
+        <source>Untitled note</source>
+        <translation>Notatka bez tytułu</translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/core/io/import_applenotes.cpp" line="388"/>
+        <source>%n locked note(s) were left out: unlock them in Apple Notes (on the Mac) and copy the folder again.</source>
+        <translation>
+            <numerusform>Pominięto %n zablokowaną notatkę: odblokuj ją w Notatkach (na Macu) i skopiuj folder ponownie.</numerusform>
+            <numerusform>Pominięto %n zablokowane notatki: odblokuj je w Notatkach (na Macu) i skopiuj folder ponownie.</numerusform>
+            <numerusform>Pominięto %n zablokowanych notatek: odblokuj je w Notatkach (na Macu) i skopiuj folder ponownie.</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/core/io/import_applenotes.cpp" line="392"/>
+        <source>%n recently deleted note(s) were left out.</source>
+        <translation>
+            <numerusform>Pominięto %n ostatnio usuniętą notatkę.</numerusform>
+            <numerusform>Pominięto %n ostatnio usunięte notatki.</numerusform>
+            <numerusform>Pominięto %n ostatnio usuniętych notatek.</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/core/io/import_applenotes.cpp" line="394"/>
+        <source>%n note(s) could not be read and were left out.</source>
+        <translation>
+            <numerusform>Nie udało się odczytać %n notatki; pominięto ją.</numerusform>
+            <numerusform>Nie udało się odczytać %n notatek; pominięto je.</numerusform>
+            <numerusform>Nie udało się odczytać %n notatek; pominięto je.</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/core/io/import_applenotes.cpp" line="396"/>
+        <source>%n attachment(s) are not in the copied folder (still in iCloud, or the folder was copied without them) and were left out.</source>
+        <translation>
+            <numerusform>%n załącznika nie ma w skopiowanym folderze (jest tylko w iCloud albo folder skopiowano bez niego); pominięto go.</numerusform>
+            <numerusform>%n załączników nie ma w skopiowanym folderze (są tylko w iCloud albo folder skopiowano bez nich); pominięto je.</numerusform>
+            <numerusform>%n załączników nie ma w skopiowanym folderze (są tylko w iCloud albo folder skopiowano bez nich); pominięto je.</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/core/io/import_applenotes.cpp" line="400"/>
+        <source>%n attachment(s) of a kind Brulion does not know were left out.</source>
+        <translation>
+            <numerusform>Pominięto %n załącznik nieznanego Brulionowi rodzaju.</numerusform>
+            <numerusform>Pominięto %n załączniki nieznanego Brulionowi rodzaju.</numerusform>
+            <numerusform>Pominięto %n załączników nieznanego Brulionowi rodzaju.</numerusform>
+        </translation>
+    </message>
+    <message>
+        <location filename="../src/core/io/import_applenotes.cpp" line="403"/>
+        <source>No notes were found in NoteStore.sqlite.</source>
+        <translation>W NoteStore.sqlite nie znaleziono notatek.</translation>
+    </message>
+    <message>
+        <location filename="../src/core/io/import_applenotes.cpp" line="761"/>
+        <location filename="../src/core/io/import_applenotes.cpp" line="764"/>
+        <source>Drawing</source>
+        <translation>Rysunek</translation>
+    </message>
+    <message>
+        <location filename="../src/core/io/import_applenotes.cpp" line="792"/>
+        <source>Scan page</source>
+        <translation>Strona skanu</translation>
+    </message>
+    <message>
+        <location filename="../src/core/io/import_applenotes.cpp" line="836"/>
+        <location filename="../src/core/io/import_applenotes.cpp" line="837"/>
+        <source>Scan</source>
+        <translation>Skan</translation>
+    </message>
+    <message>
+        <location filename="../src/core/io/sqlitereader.cpp" line="221"/>
+        <source>The file is no SQLite database.</source>
+        <translation>Ten plik nie jest bazą danych SQLite.</translation>
+    </message>
+    <message>
+        <location filename="../src/core/io/sqlitereader.cpp" line="228"/>
+        <location filename="../src/core/io/sqlitereader.cpp" line="233"/>
+        <source>The database is damaged (page size).</source>
+        <translation>Baza danych jest uszkodzona (rozmiar strony).</translation>
+    </message>
+    <message>
+        <location filename="../src/core/io/sqlitereader.cpp" line="407"/>
+        <source>The database is damaged (schema).</source>
+        <translation>Baza danych jest uszkodzona (schemat).</translation>
+    </message>
 </context>
 <context>
     <name>IoPathPickerDialog</name>
@@ -11212,6 +11511,11 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
         <source>Some attachments were left out: together they are too large to import at once.</source>
         <translation>Pominięto niektóre pliki: razem są za duże, by zaimportować je naraz.</translation>
     </message>
+    <message>
+        <location filename="../src/core/mstodo/deviceauth.cpp" line="134"/>
+        <source>Permission to read your notebooks was not granted. Add the delegated permission Notes.Read to the app registration; at work an administrator may have to approve it.</source>
+        <translation>Nie udzielono zgody na odczyt notesów. Dodaj do rejestracji aplikacji uprawnienie delegowane Notes.Read; w firmie może je musieć zatwierdzić administrator.</translation>
+    </message>
 </context>
 <context>
     <name>MsTodoSignIn</name>
@@ -11305,6 +11609,40 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
         <location filename="../src/app/qml/io/MsTodoSignIn.qml" line="217"/>
         <source>Or choose a JSON file saved from Graph Explorer:</source>
         <translation>Albo wybierz plik JSON zapisany z Graph Explorera:</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/MsTodoSignIn.qml" line="77"/>
+        <source>The same app registration as for Microsoft To Do, with the delegated permission Notes.Read (the guide “Import and export” explains it). Brulion remembers it on this device; nothing is stored about your account.</source>
+        <translation>Ta sama rejestracja aplikacji co dla Microsoft To Do, z uprawnieniem delegowanym Notes.Read (przewodnik „Import i eksport” to wyjaśnia). Brulion zapamięta go na tym urządzeniu; o Twoim koncie nic nie zapisuje.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/MsTodoSignIn.qml" line="130"/>
+        <source>Which notebooks?</source>
+        <translation>Które notesy?</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/MsTodoSignIn.qml" line="146"/>
+        <source>Large notebooks take a while: OneNote lets apps download only a few pages a minute, and pictures and files come one by one.</source>
+        <translation>Duże notesy chwilę trwają: OneNote pozwala aplikacjom pobierać tylko kilka stron na minutę, a obrazki i pliki przychodzą po kolei.</translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/io/MsTodoSignIn.qml" line="152"/>
+        <source>Download %n notebook(s)</source>
+        <translation>
+            <numerusform>Pobierz %n notes</numerusform>
+            <numerusform>Pobierz %n notesy</numerusform>
+            <numerusform>Pobierz %n notesów</numerusform>
+        </translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/MsTodoSignIn.qml" line="184"/>
+        <source>Open %1 on this or any other device, enter the code and sign in with the account that has your notebooks:</source>
+        <translation>Otwórz %1 na tym albo innym urządzeniu, wpisz kod i zaloguj się kontem, na którym masz notesy:</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/MsTodoSignIn.qml" line="49"/>
+        <source>In the browser version OneNote cannot be imported: Microsoft does not let web pages use this sign-in. Use the app for Linux, Windows or Android.</source>
+        <translation>W wersji przeglądarkowej nie da się zaimportować OneNote: Microsoft nie pozwala stronom WWW na to logowanie. Użyj aplikacji na Linuksa, Windowsa albo Androida.</translation>
     </message>
 </context>
 <context>
@@ -25228,6 +25566,200 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         <source>More Chromium extension ids, separated by commas</source>
         <translation>Dodatkowe identyfikatory rozszerzenia w Chromium, po przecinku</translation>
     </message>
+    <message>
+        <location filename="../src/cli/commands_import.cpp" line="45"/>
+        <source>No such file or folder: %1</source>
+        <translation>Nie ma takiego pliku ani folderu: %1</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_import.cpp" line="53"/>
+        <source>“%1” is larger than 1 GB and was skipped.</source>
+        <translation>„%1” jest większy niż 1 GB i został pominięty.</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_import.cpp" line="58"/>
+        <source>The input is larger than Brulion imports at once; the rest was left out.</source>
+        <translation>Dane wejściowe są większe, niż Brulion importuje naraz; resztę pominięto.</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_import.cpp" line="62"/>
+        <source>“%1” cannot be read.</source>
+        <translation>Nie można odczytać „%1”.</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_import.cpp" line="92"/>
+        <source>“%1” is no column=type[:property]; it was ignored.</source>
+        <translation>„%1” to nie kolumna=typ[:właściwość]; pominięto.</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_import.cpp" line="104"/>
+        <source>“%1” is no column type; types: %2.</source>
+        <translation>„%1” to nie typ kolumny; typy: %2.</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_import.cpp" line="175"/>
+        <source>The token file cannot be read: %1</source>
+        <translation>Nie można odczytać pliku z tokenem: %1</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_import.cpp" line="190"/>
+        <source>Give the token with --token-file FILE (or - for standard input) or BRULION_IMPORT_TOKEN.</source>
+        <translation>Podaj token w --token-file PLIK (albo - dla standardowego wejścia) albo w BRULION_IMPORT_TOKEN.</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_import.cpp" line="228"/>
+        <source>Choose the base with --base (its name or id): %1</source>
+        <translation>Wybierz bazę opcją --base (nazwa albo id): %1</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_import.cpp" line="246"/>
+        <source>No importer “%1” (brulion-cli import formats lists them).</source>
+        <translation>Nie ma importera „%1” (brulion-cli import formats je wypisuje).</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_import.cpp" line="254"/>
+        <source>A token downloads from Todoist or Airtable: --from todoist or airtable.</source>
+        <translation>Token pobiera dane z Todoist albo Airtable: --from todoist albo airtable.</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_import.cpp" line="262"/>
+        <source>Give the file, folder or ZIP to import.</source>
+        <translation>Podaj plik, folder albo ZIP do zaimportowania.</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_import.cpp" line="270"/>
+        <source>Nothing was read from “%1”.</source>
+        <translation>Z „%1” nic nie odczytano.</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_import.cpp" line="274"/>
+        <source>Brulion does not recognise these files; choose the app with --from (brulion-cli import formats).</source>
+        <translation>Brulion nie rozpoznaje tych plików; wybierz aplikację opcją --from (brulion-cli import formats).</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_import.cpp" line="410"/>
+        <source>%1: would write %2 page(s), %3 daily note(s), %4 attachment(s) into %5</source>
+        <translation>%1: do zapisania – strony: %2, notatki dzienne: %3, załączniki: %4 (w %5)</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_import.cpp" line="411"/>
+        <source>%1: wrote %2 page(s), %3 daily note(s), %4 attachment(s) into %5</source>
+        <translation>%1: zapisano – strony: %2, notatki dzienne: %3, załączniki: %4 (w %5)</translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/cli/commands_import.cpp" line="415"/>
+        <source>%n file(s) could not be written.</source>
+        <translation>
+            <numerusform>Nie udało się zapisać %n pliku.</numerusform>
+            <numerusform>Nie udało się zapisać %n plików.</numerusform>
+            <numerusform>Nie udało się zapisać %n plików.</numerusform>
+        </translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_import.cpp" line="443"/>
+        <source>Import notes from another app: a file, a folder or a ZIP (Obsidian, Notion, Evernote, Apple Notes, OneNote downloads, Todoist, Airtable, CSV …)</source>
+        <translation>Importuj notatki z innej aplikacji: plik, folder albo ZIP (Obsidian, Notion, Evernote, Apple Notes, pobrania OneNote, Todoist, Airtable, CSV …)</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_import.cpp" line="446"/>
+        <source>As the app&apos;s import screen (docs/IMPORT.md): the format is recognised or chosen with --from, pages go under --folder (default Import/&lt;app&gt;), daily notes to the journal (appended under &quot;## Import (&lt;app&gt;)&quot; when the day exists), attachments to the attachments folder; nothing is overwritten (a taken name gets &quot; 2&quot;). --dry-run shows the plan. CSV and Airtable: --csv-mode, --title-column, --title-template, --folder-template, --body-column, --columns &quot;Rok=text; Cena=number:Cena brutto; Uwagi=skip&quot;, --encoding, --separator, --header, --list-separator, --no-base, --download-attachments. Todoist and Airtable through their APIs: --from todoist|airtable --token-file FILE (or - for standard input, or BRULION_IMPORT_TOKEN), Airtable also --base and --tables.</source>
+        <translation>Jak ekran importu w aplikacji (docs/IMPORT.md): format jest rozpoznawany albo wybierany opcją --from, strony trafiają do --folder (domyślnie Import/&lt;aplikacja&gt;), notatki dzienne do dziennika (dopisane pod &quot;## Import (&lt;aplikacja&gt;)&quot;, gdy dzień już istnieje), załączniki do folderu załączników; nic nie jest nadpisywane (zajęta nazwa dostaje &quot; 2&quot;). --dry-run pokazuje plan. CSV i Airtable: --csv-mode, --title-column, --title-template, --folder-template, --body-column, --columns &quot;Rok=text; Cena=number:Cena brutto; Uwagi=skip&quot;, --encoding, --separator, --header, --list-separator, --no-base, --download-attachments. Todoist i Airtable przez ich API: --from todoist|airtable --token-file PLIK (albo - dla standardowego wejścia, albo BRULION_IMPORT_TOKEN), Airtable także --base i --tables.</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_import.cpp" line="461"/>
+        <source>The file, folder or ZIP to import</source>
+        <translation>Plik, folder albo ZIP do zaimportowania</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_import.cpp" line="463"/>
+        <source>The app the files come from (default: recognised)</source>
+        <translation>Aplikacja, z której pochodzą pliki (domyślnie rozpoznawana)</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_import.cpp" line="465"/>
+        <source>Folder for the pages (default: Import/&lt;app&gt;; . = the top)</source>
+        <translation>Folder na strony (domyślnie Import/&lt;aplikacja&gt;; . = najwyższy poziom)</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_import.cpp" line="467"/>
+        <source>CSV: a page per row (default) or one page with the table</source>
+        <translation>CSV: strona na wiersz (domyślnie) albo jedna strona z tabelą</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_import.cpp" line="469"/>
+        <source>CSV: the column naming the pages</source>
+        <translation>CSV: kolumna z tytułami stron</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_import.cpp" line="471"/>
+        <source>CSV: the pages&apos; titles, e.g. &quot;{{Name}} – {{Date}}&quot;</source>
+        <translation>CSV: tytuły stron, np. &quot;{{Nazwa}} – {{Data}}&quot;</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_import.cpp" line="473"/>
+        <source>CSV: subfolders, e.g. &quot;{{Category}}&quot;</source>
+        <translation>CSV: podfoldery, np. &quot;{{Kategoria}}&quot;</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_import.cpp" line="475"/>
+        <source>CSV: the column that becomes the page&apos;s text (- = none)</source>
+        <translation>CSV: kolumna, która staje się treścią strony (- = żadna)</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_import.cpp" line="477"/>
+        <source>CSV: column=type[:property]; … (types: auto, text, number, date, datetime, checkbox, list, tags, links, attachments, skip)</source>
+        <translation>CSV: kolumna=typ[:właściwość]; … (typy: auto, text, number, date, datetime, checkbox, list, tags, links, attachments, skip)</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_import.cpp" line="480"/>
+        <source>CSV: utf-8, utf-16le, windows-1250, iso-8859-2, windows-1252 (default: detected)</source>
+        <translation>CSV: utf-8, utf-16le, windows-1250, iso-8859-2, windows-1252 (domyślnie wykrywane)</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_import.cpp" line="483"/>
+        <source>CSV: , ; | or tab (default: detected)</source>
+        <translation>CSV: , ; | albo tab (domyślnie wykrywany)</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_import.cpp" line="485"/>
+        <source>CSV: whether the first row names the columns (default: detected)</source>
+        <translation>CSV: czy pierwszy wiersz to nazwy kolumn (domyślnie wykrywane)</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_import.cpp" line="488"/>
+        <source>CSV: what separates list items (default: detected)</source>
+        <translation>CSV: co rozdziela elementy listy (domyślnie wykrywane)</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_import.cpp" line="489"/>
+        <source>CSV: no Obsidian base next to the pages</source>
+        <translation>CSV: bez bazy Obsidiana obok stron</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_import.cpp" line="491"/>
+        <source>CSV, Airtable: download the files of attachment cells first</source>
+        <translation>CSV, Airtable: najpierw pobierz pliki z komórek z załącznikami</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_import.cpp" line="493"/>
+        <source>Todoist, Airtable: a file with the personal token (- = standard input)</source>
+        <translation>Todoist, Airtable: plik z osobistym tokenem (- = standardowe wejście)</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_import.cpp" line="495"/>
+        <source>Airtable: the base (name or id)</source>
+        <translation>Airtable: baza (nazwa albo id)</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_import.cpp" line="497"/>
+        <source>Airtable: table ids, separated by commas (default: all)</source>
+        <translation>Airtable: id tabel rozdzielone przecinkami (domyślnie wszystkie)</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_import.cpp" line="503"/>
+        <source>The apps and formats `import` reads</source>
+        <translation>Aplikacje i formaty, które czyta `import`</translation>
+    </message>
 </context>
 <context>
     <name>brulion::content::HistoryModel</name>
@@ -26457,6 +26989,166 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         <source>Pick the .ics file with “Choose files…”, e.g. from Downloads or Google Drive (a calendar&apos;s export or an e-mail attachment saved on the phone).</source>
         <translation>Wskaż plik .ics przez „Wybierz pliki…”, np. z Pobranych albo z Dysku Google (eksport z kalendarza albo załącznik e-maila zapisany na telefonie).</translation>
     </message>
+    <message>
+        <location filename="../src/app/io/importtexts.cpp" line="55"/>
+        <source>Sign in to Microsoft and choose the notebooks: Brulion downloads their sections, section groups and pages with pictures and attached files; to-do tags become tasks, subpages folders. Signing in needs your own free app registration in Microsoft Entra (the same one as for Microsoft To Do, with the permission Notes.Read) – the guide explains it step by step.</source>
+        <translation>Zaloguj się w Microsoft i wybierz notesy: Brulion pobierze ich sekcje, grupy sekcji i strony z obrazkami i załączonymi plikami; tagi „Do zrobienia” staną się zadaniami, podstrony folderami. Logowanie wymaga własnej, bezpłatnej rejestracji aplikacji w Microsoft Entra (tej samej co dla Microsoft To Do, z uprawnieniem Notes.Read) – przewodnik wyjaśnia ją krok po kroku.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/io/importtexts.cpp" line="62"/>
+        <source>Signing in works on the phone too: tap “Sign in to Microsoft”, open the address in the browser, enter the code, come back and choose the notebooks.</source>
+        <translation>Logowanie działa także na telefonie: dotknij „Zaloguj się w Microsoft”, otwórz adres w przeglądarce, wpisz kod, wróć i wybierz notesy.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/io/importtexts.cpp" line="65"/>
+        <source>Apple Notes keeps its notes in a database on the Mac. In Finder choose Go → Go to Folder…, enter ~/Library/Group Containers/group.com.apple.notes, copy that whole folder (or a ZIP of it) to this device and choose it. Folders, checklists, tables, pictures, scans and drawings come along; locked notes stay out. Notes only in iCloud: open them on the Mac first.</source>
+        <translation>Notatki Apple trzymają notatki w bazie danych na Macu. W Finderze wybierz Idź → Idź do folderu…, wpisz ~/Library/Group Containers/group.com.apple.notes, skopiuj cały ten folder (albo jego ZIP) na to urządzenie i wybierz go. Foldery, listy kontrolne, tabele, obrazki, skany i rysunki przechodzą; zablokowane notatki zostają. Notatki tylko w iCloud: najpierw otwórz je na Macu.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/io/importtexts.cpp" line="70"/>
+        <source>Copy the group.com.apple.notes folder from the Mac (zipped is easiest: right-click → Compress), put the ZIP on the phone (Downloads, Google Drive…) and pick it with “Choose files…”.</source>
+        <translation>Skopiuj folder group.com.apple.notes z Maca (najprościej spakowany: prawy przycisk → Kompresuj), przenieś ZIP na telefon (Pobrane, Dysk Google…) i wybierz go przyciskiem „Wybierz pliki…”.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/io/importtexts.cpp" line="74"/>
+        <source>Paste your Todoist API token and Brulion downloads every project: sections, tasks with priorities, due dates, repeats, labels, subtasks, descriptions and comments. Without a token, export a project as a template (••• → Export as a template, CSV) or download a backup (Settings → Backups) and choose the files.</source>
+        <translation>Wklej token API Todoist, a Brulion pobierze wszystkie projekty: sekcje, zadania z priorytetami, terminami, powtórzeniami, etykietami, podzadaniami, opisami i komentarzami. Bez tokenu wyeksportuj projekt jako szablon (••• → Eksportuj jako szablon, CSV) albo pobierz kopię zapasową (Ustawienia → Kopie zapasowe) i wybierz pliki.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/io/importtexts.cpp" line="79"/>
+        <source>The token works on the phone too: copy it from Todoist&apos;s settings (Integrations → Developer) and paste it here. A template&apos;s CSV or a backup ZIP can be picked with “Choose files…”.</source>
+        <translation>Token działa także na telefonie: skopiuj go z ustawień Todoist (Integracje → Programista) i wklej tutaj. Plik CSV szablonu albo ZIP kopii zapasowej wybierzesz przyciskiem „Wybierz pliki…”.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/io/importtexts.cpp" line="82"/>
+        <source>Connect with a personal access token and choose the base and its tables, or download a view as CSV in Airtable (••• → Download CSV) and choose the files. Each record becomes a page with its fields as properties, linked records become links, attachments files of the notebook.</source>
+        <translation>Połącz się osobistym tokenem dostępu i wybierz bazę z tabelami albo pobierz widok jako CSV w Airtable (••• → Download CSV) i wybierz pliki. Każdy rekord staje się stroną z polami jako właściwościami, powiązane rekordy linkami, załączniki plikami notatnika.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/io/importtexts.cpp" line="86"/>
+        <source>Paste the token from airtable.com/create/tokens, or pick a CSV downloaded from Airtable with “Choose files…”.</source>
+        <translation>Wklej token z airtable.com/create/tokens albo wybierz plik CSV pobrany z Airtable przyciskiem „Wybierz pliki…”.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/io/importtexts.cpp" line="89"/>
+        <source>Any spreadsheet saved as CSV (Excel, LibreOffice, Google Sheets, Numbers, an export of another app): each row becomes a page with the columns as properties – you choose the title, the types and what is left out, and see the first pages before importing. Or the whole sheet as one table page.</source>
+        <translation>Dowolny arkusz zapisany jako CSV (Excel, LibreOffice, Arkusze Google, Numbers, eksport innej aplikacji): każdy wiersz staje się stroną z kolumnami jako właściwościami – wybierasz tytuł, typy i to, co pominąć, i widzisz pierwsze strony przed importem. Albo cały arkusz jako jedna strona z tabelą.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/io/importtexts.cpp" line="94"/>
+        <source>Pick the .csv file with “Choose files…”, e.g. from Downloads or Google Drive (Sheets: File → Download → CSV).</source>
+        <translation>Wybierz plik .csv przyciskiem „Wybierz pliki…”, np. z Pobranych albo Dysku Google (Arkusze: Plik → Pobierz → CSV).</translation>
+    </message>
+    <message>
+        <location filename="../src/app/io/ioselftest.cpp" line="591"/>
+        <location filename="../src/app/io/importcsv.cpp" line="130"/>
+        <source>Text</source>
+        <translation>Tekst</translation>
+    </message>
+    <message>
+        <location filename="../src/app/io/importcsv.cpp" line="129"/>
+        <location filename="../src/app/io/importcsv.cpp" line="145"/>
+        <location filename="../src/app/io/importcsv.cpp" line="163"/>
+        <location filename="../src/app/io/importcsv.cpp" line="177"/>
+        <source>Detect</source>
+        <translation>Wykryj</translation>
+    </message>
+    <message>
+        <location filename="../src/app/io/importcsv.cpp" line="131"/>
+        <source>Number</source>
+        <translation>Liczba</translation>
+    </message>
+    <message>
+        <location filename="../src/app/io/importcsv.cpp" line="132"/>
+        <source>Date</source>
+        <translation>Data</translation>
+    </message>
+    <message>
+        <location filename="../src/app/io/importcsv.cpp" line="133"/>
+        <source>Date and time</source>
+        <translation>Data i godzina</translation>
+    </message>
+    <message>
+        <location filename="../src/app/io/importcsv.cpp" line="134"/>
+        <source>Checkbox</source>
+        <translation>Pole wyboru</translation>
+    </message>
+    <message>
+        <location filename="../src/app/io/importcsv.cpp" line="135"/>
+        <source>List</source>
+        <translation>Lista</translation>
+    </message>
+    <message>
+        <location filename="../src/app/io/importcsv.cpp" line="136"/>
+        <source>Tags</source>
+        <translation>Tagi</translation>
+    </message>
+    <message>
+        <location filename="../src/app/io/importcsv.cpp" line="137"/>
+        <source>Links to pages</source>
+        <translation>Linki do stron</translation>
+    </message>
+    <message>
+        <location filename="../src/app/io/importcsv.cpp" line="138"/>
+        <source>Attachments</source>
+        <translation>Załączniki</translation>
+    </message>
+    <message>
+        <location filename="../src/app/io/importcsv.cpp" line="139"/>
+        <source>Leave out</source>
+        <translation>Pomiń</translation>
+    </message>
+    <message>
+        <location filename="../src/app/io/importcsv.cpp" line="150"/>
+        <source>Windows-1250 (Polish Windows)</source>
+        <translation>Windows-1250 (polski Windows)</translation>
+    </message>
+    <message>
+        <location filename="../src/app/io/importcsv.cpp" line="152"/>
+        <source>ISO-8859-2 (Latin-2)</source>
+        <translation>ISO-8859-2 (Latin-2)</translation>
+    </message>
+    <message>
+        <location filename="../src/app/io/importcsv.cpp" line="154"/>
+        <source>Windows-1252 (Western)</source>
+        <translation>Windows-1252 (zachodni)</translation>
+    </message>
+    <message>
+        <location filename="../src/app/io/importcsv.cpp" line="164"/>
+        <source>Comma ,</source>
+        <translation>Przecinek ,</translation>
+    </message>
+    <message>
+        <location filename="../src/app/io/importcsv.cpp" line="165"/>
+        <source>Semicolon ;</source>
+        <translation>Średnik ;</translation>
+    </message>
+    <message>
+        <location filename="../src/app/io/importcsv.cpp" line="166"/>
+        <source>Tab</source>
+        <translation>Tabulator</translation>
+    </message>
+    <message>
+        <location filename="../src/app/io/importcsv.cpp" line="167"/>
+        <source>Vertical bar |</source>
+        <translation>Kreska pionowa |</translation>
+    </message>
+    <message>
+        <location filename="../src/app/io/importcsv.cpp" line="177"/>
+        <location filename="../src/app/io/importcsv.cpp" line="191"/>
+        <source>Detect (%1)</source>
+        <translation>Wykryj (%1)</translation>
+    </message>
+    <message>
+        <location filename="../src/app/io/importcsv.cpp" line="191"/>
+        <source>Detect (none)</source>
+        <translation>Wykryj (brak)</translation>
+    </message>
+    <message>
+        <location filename="../src/app/io/importcsv.cpp" line="192"/>
+        <source>None: every column is a property</source>
+        <translation>Żadna: każda kolumna jest właściwością</translation>
+    </message>
 </context>
 <context>
     <name>brulion::ioviews::MsTodoImport</name>
@@ -26488,6 +27180,26 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         <location filename="../src/app/io/mstodoimport.cpp" line="238"/>
         <source>Asking Microsoft for a sign-in code…</source>
         <translation>Proszę Microsoft o kod logowania…</translation>
+    </message>
+    <message>
+        <location filename="../src/app/io/mstodoimport.cpp" line="184"/>
+        <source>Downloading the notebooks…</source>
+        <translation>Pobieranie notesów…</translation>
+    </message>
+    <message>
+        <location filename="../src/app/io/mstodoimport.cpp" line="249"/>
+        <source>Signed in. Listing the notebooks…</source>
+        <translation>Zalogowano. Pobieranie listy notesów…</translation>
+    </message>
+    <message>
+        <location filename="../src/app/io/mstodoimport.cpp" line="300"/>
+        <source>This account has no OneNote notebooks.</source>
+        <translation>To konto nie ma notesów OneNote.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/io/mstodoimport.cpp" line="307"/>
+        <source>Downloading the notebooks… %1 of %2</source>
+        <translation>Pobieranie notesów… %1 z %2</translation>
     </message>
 </context>
 <context>
@@ -30848,6 +31560,570 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         <location filename="../src/app/main.cpp" line="666"/>
         <source>This browser does not let Brulion store data, so notes last only until this tab is closed. Allow site data (or leave private mode), or export your notes before closing.</source>
         <translation>Ta przeglądarka nie pozwala Brulionowi przechowywać danych, więc notatki przetrwają tylko do zamknięcia tej karty. Zezwól na dane witryny (albo wyjdź z trybu prywatnego) lub wyeksportuj notatki przed zamknięciem.</translation>
+    </message>
+</context>
+<context>
+    <name>CloudMessages</name>
+    <message>
+        <location filename="../src/core/cloudimport/downloads.cpp" line="105"/>
+        <source>%1 did not answer in time. Try again.</source>
+        <translation>%1 nie odpowiedział na czas. Spróbuj ponownie.</translation>
+    </message>
+    <message>
+        <location filename="../src/core/cloudimport/downloads.cpp" line="106"/>
+        <source>%1 cannot be reached. Check the internet connection.</source>
+        <translation>Nie można połączyć się z %1. Sprawdź połączenie z internetem.</translation>
+    </message>
+    <message>
+        <location filename="../src/core/cloudimport/downloads.cpp" line="108"/>
+        <source>%1 did not accept the sign-in or the token (it may be wrong or expired).</source>
+        <translation>%1 nie przyjął logowania ani tokenu (może być błędny albo wygasł).</translation>
+    </message>
+    <message>
+        <location filename="../src/core/cloudimport/downloads.cpp" line="112"/>
+        <source>%1 does not let Brulion read this data: check the token&apos;s or the app&apos;s permissions.</source>
+        <translation>%1 nie pozwala Brulionowi czytać tych danych: sprawdź uprawnienia tokenu albo aplikacji.</translation>
+    </message>
+    <message>
+        <location filename="../src/core/cloudimport/downloads.cpp" line="116"/>
+        <source>%1 does not know what Brulion asked for (HTTP 404).</source>
+        <translation>%1 nie zna tego, o co prosił Brulion (HTTP 404).</translation>
+    </message>
+    <message>
+        <location filename="../src/core/cloudimport/downloads.cpp" line="119"/>
+        <source>%1 is limiting requests right now. Try again in a few minutes.</source>
+        <translation>%1 ogranicza teraz liczbę zapytań. Spróbuj ponownie za kilka minut.</translation>
+    </message>
+    <message>
+        <location filename="../src/core/cloudimport/downloads.cpp" line="121"/>
+        <source>%1 answered with an error (HTTP %2).</source>
+        <translation>%1 odpowiedział błędem (HTTP %2).</translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/core/cloudimport/downloads.cpp" line="136"/>
+        <source>Files larger than %n MB were left out.</source>
+        <translation>
+            <numerusform>Pominięto pliki większe niż %n MB.</numerusform>
+            <numerusform>Pominięto pliki większe niż %n MB.</numerusform>
+            <numerusform>Pominięto pliki większe niż %n MB.</numerusform>
+        </translation>
+    </message>
+    <message>
+        <location filename="../src/core/cloudimport/downloads.cpp" line="140"/>
+        <source>Some files were left out: together they are too large to import at once.</source>
+        <translation>Część plików pominięto: razem są za duże, by zaimportować je naraz.</translation>
+    </message>
+    <message>
+        <location filename="../src/core/cloudimport/downloads.cpp" line="167"/>
+        <location filename="../src/core/cloudimport/downloads.cpp" line="523"/>
+        <source>%1 sent an answer Brulion does not understand.</source>
+        <translation>%1 przysłał odpowiedź, której Brulion nie rozumie.</translation>
+    </message>
+    <message>
+        <location filename="../src/core/cloudimport/downloads.cpp" line="197"/>
+        <source>Not everything could be downloaded.</source>
+        <translation>Nie udało się pobrać wszystkiego.</translation>
+    </message>
+    <message>
+        <location filename="../src/core/cloudimport/downloads.cpp" line="243"/>
+        <source>No OneNote notebook was found in this account.</source>
+        <translation>Na tym koncie nie ma żadnego notesu OneNote.</translation>
+    </message>
+    <message>
+        <location filename="../src/core/cloudimport/downloads.cpp" line="377"/>
+        <source>Some pages could not be downloaded.</source>
+        <translation>Części stron nie udało się pobrać.</translation>
+    </message>
+    <message>
+        <location filename="../src/core/cloudimport/downloads.cpp" line="445"/>
+        <source>Some pictures or files could not be downloaded.</source>
+        <translation>Części obrazków albo plików nie udało się pobrać.</translation>
+    </message>
+    <message>
+        <location filename="../src/core/cloudimport/downloads.cpp" line="499"/>
+        <source>Enter the Todoist API token first.</source>
+        <translation>Najpierw wpisz token API Todoist.</translation>
+    </message>
+    <message>
+        <location filename="../src/core/cloudimport/downloads.cpp" line="548"/>
+        <source>Files stored outside Todoist were linked, not downloaded.</source>
+        <translation>Pliki przechowywane poza Todoist dodano jako linki, bez pobierania.</translation>
+    </message>
+    <message>
+        <location filename="../src/core/cloudimport/downloads.cpp" line="560"/>
+        <source>Some files of comments could not be downloaded.</source>
+        <translation>Części plików z komentarzy nie udało się pobrać.</translation>
+    </message>
+    <message>
+        <location filename="../src/core/cloudimport/downloads.cpp" line="587"/>
+        <source>Airtable did not accept the token. Create a personal access token with the scopes data.records:read and schema.bases:read.</source>
+        <translation>Airtable nie przyjął tokenu. Utwórz osobisty token dostępu z zakresami data.records:read i schema.bases:read.</translation>
+    </message>
+    <message>
+        <location filename="../src/core/cloudimport/downloads.cpp" line="592"/>
+        <source>The token may not read this base: add the base to the token&apos;s access and the scopes data.records:read and schema.bases:read.</source>
+        <translation>Ten token nie może czytać tej bazy: dodaj bazę do jego dostępu i zakresy data.records:read i schema.bases:read.</translation>
+    </message>
+    <message>
+        <location filename="../src/core/cloudimport/downloads.cpp" line="672"/>
+        <source>The base has no table Brulion could read.</source>
+        <translation>Baza nie ma tabeli, którą Brulion mógłby odczytać.</translation>
+    </message>
+    <message>
+        <location filename="../src/core/cloudimport/downloads.cpp" line="754"/>
+        <source>Some attachments could not be downloaded; their addresses were kept.</source>
+        <translation>Części załączników nie udało się pobrać; zostały ich adresy.</translation>
+    </message>
+    <message>
+        <location filename="../src/core/cloudimport/downloads.cpp" line="766"/>
+        <source>The server</source>
+        <translation>Serwer</translation>
+    </message>
+    <message>
+        <location filename="../src/core/cloudimport/downloads.cpp" line="790"/>
+        <source>Addresses that are not https were not downloaded.</source>
+        <translation>Adresów innych niż https nie pobrano.</translation>
+    </message>
+    <message>
+        <location filename="../src/core/cloudimport/downloads.cpp" line="802"/>
+        <source>Some attachments could not be downloaded (the links may have expired); their addresses were kept.</source>
+        <translation>Części załączników nie udało się pobrać (linki mogły wygasnąć); zostały ich adresy.</translation>
+    </message>
+</context>
+<context>
+    <name>ImportCsvMapping</name>
+    <message>
+        <location filename="../src/app/qml/io/ImportCsvMapping.qml" line="38"/>
+        <source>tab</source>
+        <translation>tabulator</translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/io/ImportCsvMapping.qml" line="42"/>
+        <source>%n row(s)</source>
+        <translation>
+            <numerusform>%n wiersz</numerusform>
+            <numerusform>%n wiersze</numerusform>
+            <numerusform>%n wierszy</numerusform>
+        </translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/ImportCsvMapping.qml" line="44"/>
+        <source>separator %1</source>
+        <translation>separator %1</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/ImportCsvMapping.qml" line="45"/>
+        <source>first row: column names</source>
+        <translation>pierwszy wiersz: nazwy kolumn</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/ImportCsvMapping.qml" line="45"/>
+        <source>no header row</source>
+        <translation>bez wiersza nagłówka</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/ImportCsvMapping.qml" line="50"/>
+        <source>Detect</source>
+        <translation>Wykryj</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/ImportCsvMapping.qml" line="51"/>
+        <source>The first row names the columns</source>
+        <translation>Pierwszy wiersz to nazwy kolumn</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/ImportCsvMapping.qml" line="52"/>
+        <source>The first row is data</source>
+        <translation>Pierwszy wiersz to dane</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/ImportCsvMapping.qml" line="57"/>
+        <location filename="../src/app/io/ioselftest.cpp" line="609"/>
+        <source>A page per row</source>
+        <translation>Strona na wiersz</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/ImportCsvMapping.qml" line="58"/>
+        <location filename="../src/app/io/ioselftest.cpp" line="601"/>
+        <source>One page with the table</source>
+        <translation>Jedna strona z tabelą</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/ImportCsvMapping.qml" line="77"/>
+        <source>Columns and properties</source>
+        <translation>Kolumny i właściwości</translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/io/ImportCsvMapping.qml" line="84"/>
+        <source>%n attachment(s) downloaded.</source>
+        <translation>
+            <numerusform>Pobrano %n załącznik.</numerusform>
+            <numerusform>Pobrano %n załączniki.</numerusform>
+            <numerusform>Pobrano %n załączników.</numerusform>
+        </translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/ImportCsvMapping.qml" line="92"/>
+        <location filename="../src/app/qml/io/ImportCsvMapping.qml" line="97"/>
+        <source>File</source>
+        <translation>Plik</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/ImportCsvMapping.qml" line="100"/>
+        <source>Each file becomes a folder of its own; the mapping applies to columns of the same name in all of them.</source>
+        <translation>Każdy plik staje się osobnym folderem; mapowanie dotyczy kolumn o tej samej nazwie we wszystkich plikach.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/ImportCsvMapping.qml" line="107"/>
+        <source>How the rows are imported</source>
+        <translation>Jak zaimportować wiersze</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/ImportCsvMapping.qml" line="114"/>
+        <source>The whole spreadsheet becomes one page with a Markdown table (the first 5000 rows).</source>
+        <translation>Cały arkusz staje się jedną stroną z tabelą Markdown (pierwsze 5000 wierszy).</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/ImportCsvMapping.qml" line="115"/>
+        <source>Every row becomes a page; its cells become properties in the page&apos;s header, which bases, queries and the page&apos;s properties show.</source>
+        <translation>Każdy wiersz staje się stroną; jego komórki trafiają do właściwości w nagłówku strony, które pokazują bazy, zapytania i właściwości strony.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/ImportCsvMapping.qml" line="126"/>
+        <location filename="../src/app/qml/io/ImportCsvMapping.qml" line="132"/>
+        <source>Page titles from</source>
+        <translation>Tytuły stron z</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/ImportCsvMapping.qml" line="135"/>
+        <source>Or a title template</source>
+        <translation>Albo szablon tytułu</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/ImportCsvMapping.qml" line="141"/>
+        <source>e.g. {{Name}} – {{Date}}</source>
+        <translation>np. {{Nazwa}} – {{Data}}</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/ImportCsvMapping.qml" line="142"/>
+        <source>Title template</source>
+        <translation>Szablon tytułu</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/ImportCsvMapping.qml" line="146"/>
+        <location filename="../src/app/qml/io/ImportCsvMapping.qml" line="153"/>
+        <source>Subfolders</source>
+        <translation>Podfoldery</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/ImportCsvMapping.qml" line="152"/>
+        <source>none, or e.g. {{Category}}</source>
+        <translation>brak albo np. {{Kategoria}}</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/ImportCsvMapping.qml" line="157"/>
+        <location filename="../src/app/qml/io/ImportCsvMapping.qml" line="162"/>
+        <source>Page text from</source>
+        <translation>Treść strony z</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/ImportCsvMapping.qml" line="168"/>
+        <source>{{Column}} is a cell of the row (a column&apos;s name in any letter case), {{row}} its number. Rows without a title are named after the file and their row; a title that repeats gets a number.</source>
+        <translation>{{Kolumna}} to komórka wiersza (nazwa kolumny w dowolnej wielkości liter), {{row}} jego numer. Wiersze bez tytułu dostają nazwę pliku i numer wiersza; powtarzający się tytuł dostaje numer.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/ImportCsvMapping.qml" line="174"/>
+        <source>Columns of the table</source>
+        <translation>Kolumny tabeli</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/ImportCsvMapping.qml" line="174"/>
+        <source>Properties</source>
+        <translation>Właściwości</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/ImportCsvMapping.qml" line="218"/>
+        <source>title</source>
+        <translation>tytuł</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/ImportCsvMapping.qml" line="218"/>
+        <source>page text</source>
+        <translation>treść strony</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/ImportCsvMapping.qml" line="229"/>
+        <location filename="../src/app/qml/io/ImportCsvMapping.qml" line="252"/>
+        <source>Property name of “%1”</source>
+        <translation>Nazwa właściwości kolumny „%1”</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/ImportCsvMapping.qml" line="240"/>
+        <source>Detect: %1</source>
+        <translation>Wykryj: %1</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/ImportCsvMapping.qml" line="241"/>
+        <source>Type of “%1”</source>
+        <translation>Typ kolumny „%1”</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/ImportCsvMapping.qml" line="251"/>
+        <source>Property: %1</source>
+        <translation>Właściwość: %1</translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/io/ImportCsvMapping.qml" line="274"/>
+        <source>All %n attachment(s) are downloaded: the pages embed them.</source>
+        <translation>
+            <numerusform>%n załącznik jest pobrany: strony go osadzają.</numerusform>
+            <numerusform>Wszystkie %n załączniki są pobrane: strony je osadzają.</numerusform>
+            <numerusform>Wszystkie %n załączników jest pobranych: strony je osadzają.</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/io/ImportCsvMapping.qml" line="275"/>
+        <source>The cells name %n attachment file(s) on the web. Download them to keep them in the notebook; otherwise the pages link to their addresses (Airtable&apos;s links expire after a few hours).</source>
+        <translation>
+            <numerusform>Komórki wskazują %n plik załącznika w internecie. Pobierz go, by został w notatniku; inaczej strony linkują do jego adresu (linki Airtable wygasają po kilku godzinach).</numerusform>
+            <numerusform>Komórki wskazują %n pliki załączników w internecie. Pobierz je, by zostały w notatniku; inaczej strony linkują do ich adresów (linki Airtable wygasają po kilku godzinach).</numerusform>
+            <numerusform>Komórki wskazują %n plików załączników w internecie. Pobierz je, by zostały w notatniku; inaczej strony linkują do ich adresów (linki Airtable wygasają po kilku godzinach).</numerusform>
+        </translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/ImportCsvMapping.qml" line="283"/>
+        <source>Download the attachments</source>
+        <translation>Pobierz załączniki</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/ImportCsvMapping.qml" line="292"/>
+        <source>Cancel</source>
+        <translation>Anuluj</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/ImportCsvMapping.qml" line="304"/>
+        <source>Less</source>
+        <translation>Mniej</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/ImportCsvMapping.qml" line="304"/>
+        <source>Encoding, separator, header row…</source>
+        <translation>Kodowanie, separator, wiersz nagłówka…</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/ImportCsvMapping.qml" line="316"/>
+        <location filename="../src/app/qml/io/ImportCsvMapping.qml" line="321"/>
+        <source>Encoding</source>
+        <translation>Kodowanie</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/ImportCsvMapping.qml" line="324"/>
+        <location filename="../src/app/qml/io/ImportCsvMapping.qml" line="328"/>
+        <source>Separator</source>
+        <translation>Separator</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/ImportCsvMapping.qml" line="331"/>
+        <location filename="../src/app/qml/io/ImportCsvMapping.qml" line="335"/>
+        <source>Header row</source>
+        <translation>Wiersz nagłówka</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/ImportCsvMapping.qml" line="338"/>
+        <location filename="../src/app/qml/io/ImportCsvMapping.qml" line="344"/>
+        <source>List items separated by</source>
+        <translation>Elementy listy rozdziela</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/ImportCsvMapping.qml" line="343"/>
+        <source>detected</source>
+        <translation>wykrywany</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/ImportCsvMapping.qml" line="351"/>
+        <source>A base with all the pages</source>
+        <translation>Baza ze wszystkimi stronami</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/ImportCsvMapping.qml" line="352"/>
+        <source>An Obsidian base file next to the pages shows them as a table with these properties.</source>
+        <translation>Plik bazy Obsidiana obok stron pokazuje je jako tabelę z tymi właściwościami.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/ImportCsvMapping.qml" line="359"/>
+        <source>Hide the first rows</source>
+        <translation>Ukryj pierwsze wiersze</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/ImportCsvMapping.qml" line="359"/>
+        <source>Show the first rows</source>
+        <translation>Pokaż pierwsze wiersze</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/ImportCsvMapping.qml" line="413"/>
+        <source>The table page as it will be written.</source>
+        <translation>Strona z tabelą tak, jak zostanie zapisana.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/ImportCsvMapping.qml" line="413"/>
+        <source>The first row&apos;s page as it will be written.</source>
+        <translation>Strona pierwszego wiersza tak, jak zostanie zapisana.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/ImportCsvMapping.qml" line="418"/>
+        <source>Back to what Brulion detected</source>
+        <translation>Wróć do tego, co wykrył Brulion</translation>
+    </message>
+</context>
+<context>
+    <name>TokenSignIn</name>
+    <message>
+        <location filename="../src/app/qml/io/TokenSignIn.qml" line="43"/>
+        <source>In the browser version choose a CSV file downloaded from Airtable – connecting with a token works in the app for Linux, Windows and Android.</source>
+        <translation>W wersji przeglądarkowej wybierz plik CSV pobrany z Airtable – połączenie tokenem działa w aplikacji na Linuksa, Windowsa i Androida.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/TokenSignIn.qml" line="44"/>
+        <source>In the browser version choose a CSV file exported from Todoist – connecting with a token works in the app for Linux, Windows and Android.</source>
+        <translation>W wersji przeglądarkowej wybierz plik CSV wyeksportowany z Todoist – połączenie tokenem działa w aplikacji na Linuksa, Windowsa i Androida.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/TokenSignIn.qml" line="55"/>
+        <location filename="../src/app/qml/io/TokenSignIn.qml" line="64"/>
+        <source>Personal access token</source>
+        <translation>Osobisty token dostępu</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/TokenSignIn.qml" line="55"/>
+        <location filename="../src/app/qml/io/TokenSignIn.qml" line="64"/>
+        <source>API token</source>
+        <translation>Token API</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/TokenSignIn.qml" line="63"/>
+        <source>pat… (from airtable.com/create/tokens)</source>
+        <translation>pat… (z airtable.com/create/tokens)</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/TokenSignIn.qml" line="63"/>
+        <source>40 characters from Todoist&apos;s settings</source>
+        <translation>40 znaków z ustawień Todoist</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/TokenSignIn.qml" line="71"/>
+        <source>Create it at airtable.com/create/tokens with the scopes data.records:read and schema.bases:read and access to the bases to import. Brulion keeps it only until the download ends; it is not saved anywhere.</source>
+        <translation>Utwórz go na airtable.com/create/tokens z zakresami data.records:read i schema.bases:read i dostępem do baz do zaimportowania. Brulion trzyma go tylko do końca pobierania; nigdzie go nie zapisuje.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/TokenSignIn.qml" line="72"/>
+        <source>In Todoist open Settings → Integrations → Developer and copy the API token. Brulion keeps it only until the download ends; it is not saved anywhere.</source>
+        <translation>W Todoist otwórz Ustawienia → Integracje → Programista i skopiuj token API. Brulion trzyma go tylko do końca pobierania; nigdzie go nie zapisuje.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/TokenSignIn.qml" line="79"/>
+        <source>Connect to Airtable</source>
+        <translation>Połącz z Airtable</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/TokenSignIn.qml" line="79"/>
+        <source>Download from Todoist</source>
+        <translation>Pobierz z Todoist</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/TokenSignIn.qml" line="98"/>
+        <location filename="../src/app/qml/io/TokenSignIn.qml" line="104"/>
+        <source>Base</source>
+        <translation>Baza</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/TokenSignIn.qml" line="103"/>
+        <source>Choose a base</source>
+        <translation>Wybierz bazę</translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/io/TokenSignIn.qml" line="117"/>
+        <source>%n field(s)</source>
+        <translation>
+            <numerusform>%n pole</numerusform>
+            <numerusform>%n pola</numerusform>
+            <numerusform>%n pól</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/io/TokenSignIn.qml" line="128"/>
+        <source>Download %n table(s)</source>
+        <translation>
+            <numerusform>Pobierz %n tabelę</numerusform>
+            <numerusform>Pobierz %n tabele</numerusform>
+            <numerusform>Pobierz %n tabel</numerusform>
+        </translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/TokenSignIn.qml" line="135"/>
+        <location filename="../src/app/qml/io/TokenSignIn.qml" line="153"/>
+        <source>Cancel</source>
+        <translation>Anuluj</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/TokenSignIn.qml" line="184"/>
+        <source>Or choose a CSV file downloaded from Airtable (a view&apos;s ••• → Download CSV):</source>
+        <translation>Albo wybierz plik CSV pobrany z Airtable (••• widoku → Download CSV):</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/TokenSignIn.qml" line="185"/>
+        <source>Or choose a project&apos;s CSV file (••• → Export as a template) or a backup ZIP:</source>
+        <translation>Albo wybierz plik CSV projektu (••• → Eksportuj jako szablon) albo ZIP kopii zapasowej:</translation>
+    </message>
+</context>
+<context>
+    <name>brulion::ioviews::ImportAttachments</name>
+    <message>
+        <location filename="../src/app/io/tokenimport.cpp" line="324"/>
+        <source>Downloading the attachments… %1 of %2</source>
+        <translation>Pobieranie załączników… %1 z %2</translation>
+    </message>
+    <message>
+        <location filename="../src/app/io/tokenimport.cpp" line="340"/>
+        <source>Downloading the attachments…</source>
+        <translation>Pobieranie załączników…</translation>
+    </message>
+</context>
+<context>
+    <name>brulion::ioviews::TokenImport</name>
+    <message>
+        <location filename="../src/app/io/tokenimport.cpp" line="108"/>
+        <source>Downloading… %1 of %2</source>
+        <translation>Pobieranie… %1 z %2</translation>
+    </message>
+    <message>
+        <location filename="../src/app/io/tokenimport.cpp" line="138"/>
+        <source>The token sees no base: add the bases to its access in Airtable&apos;s builder hub.</source>
+        <translation>Token nie widzi żadnej bazy: dodaj bazy do jego dostępu w Builder Hub Airtable.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/io/tokenimport.cpp" line="171"/>
+        <source>Paste the token first.</source>
+        <translation>Najpierw wklej token.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/io/tokenimport.cpp" line="176"/>
+        <source>Downloading the projects…</source>
+        <translation>Pobieranie projektów…</translation>
+    </message>
+    <message>
+        <location filename="../src/app/io/tokenimport.cpp" line="181"/>
+        <source>Listing the bases…</source>
+        <translation>Pobieranie listy baz…</translation>
+    </message>
+    <message>
+        <location filename="../src/app/io/tokenimport.cpp" line="193"/>
+        <source>Listing the tables…</source>
+        <translation>Pobieranie listy tabel…</translation>
+    </message>
+    <message>
+        <location filename="../src/app/io/tokenimport.cpp" line="227"/>
+        <source>Downloading the tables…</source>
+        <translation>Pobieranie tabel…</translation>
     </message>
 </context>
 </TS>

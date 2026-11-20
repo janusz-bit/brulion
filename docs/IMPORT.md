@@ -11,8 +11,11 @@ adjusted. Details for the phone:
 [ANDROID.md](ANDROID.md#importing-notes-obsidian-logseq-notion).
 
 Supported apps and formats: Obsidian, Logseq, Notion, Evernote, Google Keep,
-**[Microsoft To Do](#microsoft-to-do)** (tasks), Joplin, Simplenote, Roam Research,
-**Trilium Notes**, Bear, Markdown/TXT files, HTML and iCalendar calendars.
+**[OneNote](#onenote)**, **[Apple Notes](#apple-notes)**, **[Microsoft To Do](#microsoft-to-do)**
+(tasks), **[Todoist](#todoist)**, Joplin, Simplenote, Roam Research, **Trilium Notes**, Bear,
+**[Airtable](#csv-and-airtable)**, Markdown/TXT files, HTML, **[spreadsheets (CSV)](#csv-and-airtable)**
+and iCalendar calendars. The same importers run on the command line: `brulion-cli import <path>`
+(docs/CLI.md).
 
 Text from apps that do not write Markdown (HTML, Evernote, Google Keep, Notion databases,
 Trilium, calendars) stays text: characters that mean something in Brulion get a `\`. This also
@@ -316,6 +319,178 @@ has only the first tasks of the list, **Sign in to Microsoft** downloads all of 
 
 In the browser version signing in to Microsoft does not work (Microsoft does not let web pages
 sign in with a device code) — use a file from Graph Explorer there.
+
+## CSV and Airtable
+
+A spreadsheet saved as CSV (Excel, LibreOffice, Google Sheets, Numbers, an export of another app)
+becomes **a page per row** with the columns as frontmatter properties, plus an Obsidian base next to
+the pages that shows them as a table — or, chosen in the mapping, **one page with the whole
+table**. After Obsidian Importer's CSV import, with Brulion's own reading and type detection.
+
+### Reading the file
+
+| What | How |
+|---|---|
+| encoding | a BOM decides (UTF-8, UTF-16 LE/BE); UTF-16 without a BOM by its zero bytes; valid UTF-8; else 8-bit text: ISO-8859-2 when its Polish letters (`ą ś ź` = 0xB1 0xB6 0xBC) outnumber Windows-1250's and no byte 0x80–0x9F occurs, Windows-1250 when the text looks Polish (old Excel on Polish Windows), else Windows-1252. Can be chosen. |
+| separator | `,` `;` tab `|` — the one that splits the first 100 records into the same number of fields most often; Excel's first line `sep=;` decides; `.tsv` is tab. Can be chosen. |
+| header row | detected as Python's `csv.Sniffer` does: a column of numbers, dates or booleans under a text name votes for a header; repeated or mostly empty names in the first row mean data (columns are then "Column 1", "Column 2" …). Can be chosen. |
+| quoting | RFC 4180: `"…"` fields with separators, `""` and line breaks; CRLF / LF / CR; a stray quote stays text; ragged rows are padded; trailing empty rows (`;;;`) dropped |
+| bounds | 100 000 rows, 200 columns, 100 000 characters a cell — more is left out with a warning; repeated column names get a number |
+
+### What becomes what
+
+| Column type (detected or chosen) | In the page |
+|---|---|
+| title | the page's name (`Pan Tadeusz.md`); characters file names cannot hold are dropped and the real title goes to `aliases`; a title that repeats gets " 2"; a row without a title is named after the file and its row ("Książki 7"). Detected: a column named Name, Title, Nazwa, Tytuł, Temat, Imię i nazwisko …, else the first column with distinct short values. A **title template** `{{Autor}} – {{Tytuł}}` (`{{row}}` the row's number, Obsidian Importer's `{{source["Column"]}}` too) overrides it. |
+| page text | the page's body (a long "Notes", "Opis", "Description", "Treść" … column is detected; HTML is converted to Markdown) |
+| subfolders | a **folder template** `{{Kategoria}}/{{Podkategoria}}` |
+| text | `Autor: Adam Mickiewicz` (several lines: a YAML block) |
+| number | `Cena: 29.99` — also `29,99`, `1 234,5`, `1.234,56`, `1,234,567.25`; a leading zero (`007`, `00-950`) or `+48 …` stays text |
+| date | `Data zakupu: 2026-04-15` — from `2026-04-15`, `15.04.2026`, `15.04.26`, `04/15/2026` (day or month first: decided per column by the values over 12; `/` alone means month first), `15 kwietnia 2026`, `Apr 15, 2026` |
+| date and time | `2026-11-20T14:30` (wall-clock; `…Z` and offsets are converted to the device's zone), also `11/20/2026 2:30pm` |
+| checkbox | `true` / `false` from tak/nie, yes/no, true/false, prawda/fałsz, checked (Airtable), ✓ ✗; an empty cell of a checkbox column is `false` |
+| list | `Gatunki: [powieść, klasyka]` — items separated by `,` `;` `|` or line breaks (detected per column; detected as a list when short items repeat across rows) |
+| tags | added to `tags` (a column named Tags, Tagi, Labels, Etykiety, Kategorie … is detected) |
+| links | `Osoby: ["[[Jan Kowalski]]", "[[Anna Nowak]]"]` — detected when most of a column's items are titles of rows of the import (Airtable's linked records, a "Related" column); links to renamed pages follow |
+| attachments | `photo.jpg (https://…)` cells (Airtable): links to the files in the notebook when they were downloaded (**Download the attachments**; pictures and PDFs also embedded below the text), else their addresses |
+| left out | nothing |
+
+Empty cells are left out (but a checkbox's). Property names keep the header's text, without the
+characters YAML keys would need quotes for; `tags`, `aliases`, `source` and `brulion` (Brulion's own
+keys) get " (CSV)". The base (`Książki.base` next to the pages: `file.inFolder("…")` and `file.ext ==
+"md"`, a table view of `file.name` and the properties in column order) can be turned off; pages at
+the notebook's top get none (it would show every note). Several CSV files of one import: each
+becomes a folder of its own (with its base), and the mapping applies to columns of the same name in
+all of them. The table page (**One page with the table**) holds the first 5000 rows: cells escaped
+(`|`, a leading `=` stays text), line breaks as `<br>`.
+
+### Airtable
+
+Choose **Airtable** or let Brulion recognise its CSV (a file named "<table>-Grid view.csv", or
+attachment cells on `*.airtableusercontent.com` / `dl.airtable.com`): "checked" checkboxes, the
+table's name without "-Grid view", attachments, linked records as links (when the linked table's
+CSV is imported too, to its rows' pages). The attachment links of a CSV expire after a few hours:
+download them right after exporting.
+
+**With a personal access token** (the API): create one at airtable.com/create/tokens with the scopes
+`data.records:read` and `schema.bases:read` and access to the bases, paste it, choose the base (the
+only one is chosen by itself) and its tables. Brulion reads the schema and every record (100 a
+request, at most 5 requests a second), and the fields' types decide the properties' types:
+number, currency, percent, rating, duration → number; checkbox; date; date and time, created and
+modified times → date-time; multiple select, collaborators, lookups → list; linked records → links
+to the linked records' pages (by their primary field); attachments → downloaded into the notebook;
+buttons left out; formulas and rollups by their values. The token goes only to api.airtable.com and
+lives in memory until the download ends; the attachment files come without it.
+
+## Todoist
+
+Every project becomes a page of tasks (Obsidian Tasks syntax, docs/SYNTAX.md §5):
+`Import/Todoist/<project>.md`, sub-projects `<project>/<sub-project>.md`.
+
+| In Todoist | In Brulion |
+|---|---|
+| section | a heading `## Section` |
+| task, subtask | `- [ ] …`, indented under its parent |
+| completed task | `- [x] … ✅ 2026-11-19` |
+| priority p1 / p2 / p3 / p4 | `🔺` / `⏫` / `🔼` / none |
+| due date (and time) | `📅 2026-11-24 09:00` (fixed times in UTC converted to the device's zone) |
+| due date and deadline | `⏳ due` and `📅 deadline` |
+| recurring due date | `🔁 every week on Saturday` where Brulion's rules can say it ("every monday", "every 2 weeks", "every weekday", "co tydzień"; `every!` / "after" → `when done`; "at 9am" stays the due time); else only the next date (a warning) |
+| reminder (Pro) | `⏰ 2026-11-24 08:30` (relative ones from the due time) |
+| labels, `@label` in a template | tags `#label` |
+| description | lines under the task |
+| comments | items under the task, their files as attachments (downloaded with the token; a file stored elsewhere stays a link) |
+| project comments, the template's notes before the first task | the page's first lines |
+| duration, assignee | left out (a warning) |
+
+`#word` in a task's text gets `\#` (it would be a tag), `[[` likewise; Todoist's own Markdown (links,
+bold) stays.
+
+Three ways in:
+
+* **API token** (Todoist: Settings → Integrations → Developer): Brulion asks the Sync API
+  (`POST https://api.todoist.com/api/v1/sync`, every active project, section, task, label, comment
+  and reminder) and downloads the comments' files. Completed tasks are not part of it. The token
+  lives in memory until the download ends.
+* **A project's template** (••• → Export as a template → CSV): `TYPE,CONTENT,DESCRIPTION,PRIORITY,
+  INDENT,…,DATE,DATE_LANG,…,DEADLINE`. Dates are Todoist's words in DATE_LANG ("every monday",
+  "jutro o 9", "Nov 25"): Brulion reads them relative to the import's day and time.
+* **A backup** (Settings → Backups): a ZIP of such CSV files, one per project (the project's id in
+  the file name is dropped).
+
+## OneNote
+
+OneNote has no export file Brulion could read (its `.one` files are a binary format of its own),
+so Brulion downloads the notebooks from Microsoft Graph, like Microsoft To Do: **Sign in to
+Microsoft** with your own app registration (the steps under [Microsoft To Do](#signing-in-to-microsoft);
+one registration serves both — add the delegated permission **`Notes.Read`** to it), then choose
+the notebooks.
+
+Brulion lists `/me/onenote/notebooks`, then per notebook its sections and section groups (nested
+ones too, eight levels), each section's pages (`pagelevel=true`: their order and level), each page's
+content (Graph's HTML) and the resources it shows — pictures in full resolution
+(`data-fullres-src`), attached files (`<object data-attachment>`). Requests go one after another,
+only to graph.microsoft.com; `Retry-After` is honoured (OneNote allows apps only a few requests a
+minute: a large notebook takes a while); files over 50 MB or more than 300 MB together are left out
+with a warning.
+
+| In OneNote | In Brulion |
+|---|---|
+| notebook, section group, section | folders `Import/OneNote/<notebook>/<group>/<section>/` |
+| page | a page with `created`, `updated`, `source: OneNote`; an untitled page "Untitled page" |
+| subpage (page level 1, 2) | a folder named after the page above it: `Plan.md` and `Plan/Details.md` |
+| to-do tag (checked) | `- [ ]` / `- [x]` |
+| other tags (Important, Question …) | `#important`, `#question` … |
+| picture | an attachment (full resolution), embedded; OneNote's OCR text of it dropped |
+| attached file | an attachment, linked |
+| link to another page | `[[path\|text]]` (by the page's id, else its title); to a page outside the import: the text (a warning) |
+| embedded video | a link |
+| text, lists, tables, headings | Markdown (the HTML converter) |
+
+Not offered in the browser (Microsoft refuses the device-code sign-in from web pages). The access
+token lives in memory between listing the notebooks and downloading them, never on disk.
+
+## Apple Notes
+
+Apple Notes stores its notes on a Mac in a Core Data database:
+`~/Library/Group Containers/group.com.apple.notes/NoteStore.sqlite` (with `NoteStore.sqlite-wal`,
+the changes not yet written into it), the attachments under `Accounts/<account>/` (`Media`,
+`FallbackImages` — drawings —, `FallbackPDFs` — scans —, `Previews`). Brulion reads that folder
+without a Mac: copy it (or a ZIP of it) from the Mac and choose it. Notes that are only in iCloud
+must have been opened on the Mac; a ZIP keeps the folder's names, so it is the easiest way to a
+phone.
+
+**How it is read.** Obsidian Importer reads the database with SQLite and the notes' protocol
+buffers on a Mac. Brulion does it on any device with its own small readers in the io module (no
+SQLite library, no protobuf library): a read-only reader of the SQLite file format (the schema, table
+B-trees with their interior, leaf and overflow pages, records, and the write-ahead log: its committed
+frames — salts and checksums checked — replace pages of the file) and a schema-less protocol buffers
+decoder; the note data is gzip (miniz). Both are bounded for hostile input: page numbers, offsets,
+lengths, the tree's depth (40), cycles, a record (64 MB) and an unpacked note (64 MB); a damaged
+file gives the notes that could be read and a warning. Exports of other apps (Exporter, HTML or PDF
+from Notes) can be imported as HTML or Markdown files as before.
+
+| In Apple Notes | In Brulion |
+|---|---|
+| account, folder, subfolder | folders (the default "Notes" folder is the import folder itself; several accounts: a folder each) |
+| note | a page named after its first line (which is left out of the text), with `created`, `updated`, `pinned`, `source: Apple Notes` |
+| title, heading, subheading | `#`, `##`, `###` |
+| bold, italic, strikethrough, highlight (any colour) | `**…**`, `*…*`, `~~…~~`, `==…==` |
+| underline, superscript, colours, alignment | the text alone |
+| bulleted, dashed, numbered list, levels | `- `, `1. `, tab-indented |
+| checklist | `- [ ]` / `- [x]` |
+| monospaced | a code block |
+| block quote | `> ` |
+| link | `[text](url)`; a link to another note `[[path\|text]]` |
+| #tag, @mention | `#tag`, the name |
+| table | a Markdown table (from the table's CRDT: rows and columns in their order) |
+| picture, file | an attachment, embedded / linked |
+| drawing | its picture (`FallbackImage.png`) |
+| scanned document | its PDF, else the pages' images |
+| web link card | `[**title**](url)` |
+| locked note | left out (a warning: unlock it on the Mac) |
+| Recently Deleted | left out (a warning) |
+| attachment not in the folder | left out (a warning) |
 
 ## Trilium Notes
 

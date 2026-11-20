@@ -65,7 +65,7 @@ IoCard {
         color: Theme.fgMuted
         wrapMode: Text.Wrap
     }
-    component Label: BText {
+    component FieldLabel: BText {
         Layout.fillWidth: Theme.compact
         Layout.preferredWidth: Theme.compact ? -1 : 180
         variant: "label"
@@ -123,7 +123,7 @@ IoCard {
         columnSpacing: Theme.space3
         rowSpacing: Theme.space2
 
-        Label { text: qsTr("Page titles from") }
+        FieldLabel { text: qsTr("Page titles from") }
         IoChoiceButton {
             objectName: "importCsvTitle"
             enabled: card.option("titleTemplate") === ""
@@ -132,7 +132,7 @@ IoCard {
             accessibleName: qsTr("Page titles from")
             onActivated: (value) => card.importer.setCsvOption("titleColumn", value)
         }
-        Label { text: qsTr("Or a title template") }
+        FieldLabel { text: qsTr("Or a title template") }
         BTextField {
             objectName: "importCsvTitleTemplate"
             Layout.fillWidth: true
@@ -143,7 +143,7 @@ IoCard {
             inputMethodHints: Qt.ImhNoAutoUppercase | Qt.ImhNoPredictiveText
             onTextEdited: card.importer.setCsvOption("titleTemplate", text)
         }
-        Label { text: qsTr("Subfolders") }
+        FieldLabel { text: qsTr("Subfolders") }
         BTextField {
             objectName: "importCsvFolderTemplate"
             Layout.fillWidth: true
@@ -154,7 +154,7 @@ IoCard {
             inputMethodHints: Qt.ImhNoAutoUppercase | Qt.ImhNoPredictiveText
             onTextEdited: card.importer.setCsvOption("folderTemplate", text)
         }
-        Label { text: qsTr("Page text from") }
+        FieldLabel { text: qsTr("Page text from") }
         IoChoiceButton {
             objectName: "importCsvBody"
             model: card.importer.csvBodyChoices
@@ -313,7 +313,7 @@ IoCard {
         columns: Theme.compact ? 1 : 2
         columnSpacing: Theme.space3
         rowSpacing: Theme.space2
-        Label { text: qsTr("Encoding") }
+        FieldLabel { text: qsTr("Encoding") }
         IoChoiceButton {
             objectName: "importCsvEncoding"
             model: card.importer.csvEncodingChoices
@@ -321,21 +321,21 @@ IoCard {
             accessibleName: qsTr("Encoding")
             onActivated: (value) => card.importer.setCsvOption("encoding", value)
         }
-        Label { text: qsTr("Separator") }
+        FieldLabel { text: qsTr("Separator") }
         IoChoiceButton {
             model: card.importer.csvSeparatorChoices
             currentValue: card.option("separator")
             accessibleName: qsTr("Separator")
             onActivated: (value) => card.importer.setCsvOption("separator", value)
         }
-        Label { text: qsTr("Header row") }
+        FieldLabel { text: qsTr("Header row") }
         IoChoiceButton {
             model: card.headerChoices()
             currentValue: card.option("header")
             accessibleName: qsTr("Header row")
             onActivated: (value) => card.importer.setCsvOption("header", value)
         }
-        Label { text: qsTr("List items separated by") }
+        FieldLabel { text: qsTr("List items separated by") }
         BTextField {
             Layout.maximumWidth: 160
             size: "small"

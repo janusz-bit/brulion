@@ -4,6 +4,7 @@
 
 #include <QRegularExpression>
 #include <QStringDecoder>
+#include <QtEndian>
 
 #include <algorithm>
 #include <bit>

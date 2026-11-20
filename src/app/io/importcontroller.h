@@ -12,7 +12,8 @@
 //
 //   importers   [{ id, name, howTo (translated steps: where to export in that app), phoneHowTo
 //                 (the same on an Android phone: where the files are, what to pick in the
-//                 system's picker), pick: "files" | "folder" | "both", fileTypes ["*.zip", …],
+//                 system's picker), pick: "files" | "folder" | "both" | "none" (OneNote: only the
+//                 sign-in), fileTypes ["*.zip", …],
 //                 icon }] in the order of io::importers()
 //   importerId  the user's choice ("" = recognise the files: detectedId); effectiveId is what runs
 //   targetFolder  pages go there (default "Import/<App>"; daily notes always go to the journal)
@@ -91,7 +92,7 @@ std::optional<QString> cleanTargetFolder(const QString &folder);
 /// How-to texts and pick modes of the importers (translated; importtexts.cpp).
 struct ImporterInfo {
     QString howTo;
-    QString pick; ///< "files" | "folder" | "both"
+    QString pick; ///< "files" | "folder" | "both" | "none" (no file to pick: a sign-in only)
     QString icon;
     /// On a phone (Android): where that app's notes or export are and what to pick in the
     /// system's picker.

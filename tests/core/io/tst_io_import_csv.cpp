@@ -370,11 +370,12 @@ private Q_SLOTS:
         QVERIFY(iotest::fileAt(plain, u"Import/Airtable/Kampanie.base"_s));
         const CsvAnalysis a = analyzeCsv(files, {}, CsvFlavor::Airtable);
         QCOMPARE(a.files[0].name, u"Kampanie"_s);
-        QCOMPARE(a.files[0].attachmentUrls.size(), 2);
+        QCOMPARE(a.files[0].attachments.size(), 2);
+        QCOMPARE(a.files[0].attachments[1].name, u"brief (wersja 2).pdf"_s);
         // Downloaded: attachments embedded.
-        files.append(iotest::bytes(csvAttachmentInputPath(a.files[0].attachmentUrls[0], u"plakat.png"_s), "PNG"));
-        files.append(
-                iotest::bytes(csvAttachmentInputPath(a.files[0].attachmentUrls[1], u"brief (wersja 2).pdf"_s), "%PDF"));
+        files.append(iotest::bytes(csvAttachmentInputPath(a.files[0].attachments[0].url, u"plakat.png"_s), "PNG"));
+        files.append(iotest::bytes(csvAttachmentInputPath(a.files[0].attachments[1].url, u"brief (wersja 2).pdf"_s),
+                                   "%PDF"));
         const ImportResult r = importAs(u"airtable"_s, files, csvOptions(u"Import/Airtable"_s));
         QCOMPARE(textAt(r, u"Import/Airtable/Kampania jesienna.md"_s),
                  u"---\nZdjęcia:\n  - \"[[assets/Airtable/plakat.png]]\"\n  - \"[[assets/Airtable/brief (wersja "
