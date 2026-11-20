@@ -56,6 +56,9 @@ Templates are ordinary notes in the `templates/` folder. You insert them with th
 | `{{end}}` | the last day of the week or month in their notes (elsewhere — the date); `{{end:d MMMM}}` — your own format |
 | `{{title}}` | the page's title |
 | `{{cursor}}` | where to put the cursor after inserting |
+| `{{extension/name}}` | what an [[Extensions|extension]] writes there, e.g. `{{silownia/plan Legs}}` — a plan's workout |
+
+A macro, `{{ext:silownia/rekord Squat}}`, is not replaced: the note made from the template shows its value, always current ([[Extension API]]).
 
 The file `templates/journal.md` is the template of a **new journal day**: an empty day shows it as starting text, and the note is created with your first change. `templates/weekly.md` and `templates/monthly.md` work the same way for weekly and monthly notes. The Sample notebook has ready-made templates `journal` and `Meeting`.
 

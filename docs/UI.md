@@ -387,6 +387,14 @@ no setting: every panel starts with the defaults below, a drawer opened again is
   29 February: the 28th —, its date as a link, its first six blocks rendered like a link preview,
   or "No journal on that day."), **Backlinks**, **Calendar** (folded: the month with its journal
   days, `ContentMiniCalendar`).
+* **The extensions' panels** (both, after the app's own sections): every loaded view with
+  `meta.panel` (docs/EXTENSIONS.md "View blocks and panels") — `"page"`, `"journal"` or `true` —
+  is a section titled with its label (else its extension's title), the view drawn by
+  `ShellExtensionView { embedded: true }` over an `ExtensionView` whose `notePath` is the note on
+  screen (its `page`, `path` and `date` among the params) and `live` while the section is shown;
+  `Workspace.extensions.panels(kind)` lists them (followed through `revision`: an approval or a
+  reload adds or takes sections). The habits' `dzien` (the day's checks) is one beside days. On a
+  phone they are in the drawer like every section.
 
 **The drawer of narrow windows** (`ShellContextDrawer`, phones and windows under 900 px): about
 85 % of the width (at most 420 px), sliding in from the right over the page, which the scrim
@@ -824,6 +832,28 @@ day with a 1-px ring and today with a 2-px one; a tap is the day's action (`acti
 right-click or a long press its menu. Menus — of a menu line, of a check, of a day — are one
 `BMenu` (`menuLabels` / `menuIcons` / `activateMenuItem`): a view's action, a page at its line
 (`file-text`) or a day's journal (`book-open`; `journalRequested`).
+
+**Controls that take what is typed or chosen** (in a row, or a line of their own: a row of one
+control, `lineBare`, without the row's card and as wide as the line): a text field (`input`: a
+`BTextField`, or a `BTextArea` with `multiline`, its label above it and a primary button beside it;
+Enter — Ctrl+Enter in a text area —, Done or the button call `ExtensionView.submitText()`, the field
+is emptied unless `keep`, and it keeps what is typed while the view is drawn again in place); a
+select (`select`: a small button with the chosen option and a chevron whose menu — the view's one
+`BMenu` — lists the options, the chosen one ticked: its items are the select's action with each
+option's value); a slider (`slider`: `BSlider`, the value with its unit beside the track; its
+action once a drag ends or a key moved it — `ExtensionView.snapped()` puts the value on the step's
+grid); a date (`date`: a button with the day as `DatesHelper.formatShort` writes it, else "No
+date", that opens one `BDialog` with a `BDatePicker`, "No date" and "Choose"); a switch (`toggle`:
+`BSwitch` with `checkable: false` — a tap asks for the other state and the next drawing shows what
+the script says); a progress bar (`progress`: `BProgressBar` 6 px thick under its label, in the
+node's tone). Keyboard: Tab reaches every one; Space toggles and opens; arrows, Page Up / Page Down,
+Home / End move a slider; touch targets are `Theme.touchTarget` high on touch UIs.
+
+**Embedded** (`ShellExtensionView { embedded: true }`: a ```` ```view ```` block's, a side panel
+section's): no scrolling of its own (`interactive: false`, the wheel and flicks go to the page), no
+scroll bar, no margins, as tall as its lines (`height: contentHeight`, every line made at once —
+a view of up to 2000 lines). Its `ExtensionView` is `live` only while it is on screen: a change
+meanwhile marks it stale and it draws when it is live again.
 
 A view renders again after every command and action of the extension and when the index changes (coalesced), never while a question waits; after an action
 of its own controls at once. The same view drawn again with lines of the same kinds changes them in
@@ -2038,9 +2068,38 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   with MermaidView's painter in Theme's colours, light and dark; its `description` — the type,
   title and every value — is the accessible description; editing as for Mermaid, the chart under
   the source following every keystroke; a chart that cannot be drawn shows the source with the
-  reason in `dangerText`; `/Chart` inserts `type: bar` / `table: above` (in Polish notes `typ: słupkowy` / `tabela: powyżej`)), callout, embeds/transclusions
+  reason in `dangerText`; `/Chart` inserts `type: bar` / `table: above` (in Polish notes `typ: słupkowy` / `tabela: powyżej`)), extension views (`view` fences, docs/SYNTAX.md §13 "View blocks":
+  `ViewBlockView` — a frame on the page's paper with the view's title and a puzzle icon, the view
+  drawn by `ShellExtensionView { embedded: true }` over an `ExtensionView` given the block's source,
+  the page's path and `live: block.shown && controller.active`, drawn at once when the block is
+  made so the row has its height in its first frame; its controls take their own taps, a tap
+  elsewhere (Shift / Ctrl+click: block selection; a finger held: the block's selection) edits the
+  source in place with the view under it; a source that names no view, a view that cannot be drawn
+  or an extension that does not run here show why, the last with a button that opens
+  `ShellMacroDialog`; the slash menu's "View: …" rows — one per labelled view,
+  `EditorHost::embeddableViews` — insert one), callout, embeds/transclusions
   (`![[…]]`, `!((…))`), images, headings, horizontal rule, properties / frontmatter
   ("Properties" panel: typed fields, "Page properties" below).
+* **Macros of extensions** (`{{ext:silownia/rekord Przysiad}}`, docs/SYNTAX.md §13 "Macros"): the
+  renderer asks `EditorHost::macroView` (Workspace → `WorkspaceExtensions::macroView`: never runs
+  Luau, a cached value or "…") and shows the value's pieces — text in a tone, bold, a page link,
+  code — escaped in the text; a placeholder of an extension waiting for approval, off, unknown or
+  failed is a chip that is a `macro:<from>-<to>` link (its range in the rendered body): a click
+  opens `ShellMacroDialog` (run the extension, read its code, switch it on, open its error).
+  A value is recorded as the row's `RenderRead::Macro`: on `EditorHost::macrosChanged` (values
+  computed, extensions approved or loaded again; coalesced, 30 ms) `BlockListModel::followMacros()`
+  asks again only for those rows and renders again the ones whose macro shows something else; an
+  editor not shown follows when shown again (`PageController.active`). Typing `{{` completes the
+  extensions' macros (`SuggestionModel` mode "macros", `EditorHost::suggestMacros`): their
+  `ext/name`, description and arguments; the completion writes `ext:<ext>/<name> <example>` and
+  closes the braces when they are not there, the caret before them.
+* **Luau code** (```` ```luau ````, ```` ```lua ````: an extension page's code) is shown in Luau's
+  colours, read and edited — `CodeBlockView` gives its `InlineEditor` the block's language
+  (`highlightLanguage`), whose `MarkdownHighlighter` (`language`) colours keywords, constants, the
+  library and `b`, function names, numbers, strings and comments (core `syntax/luau.h`; a long
+  string or comment carried across lines in the block's state); the source mode colours such a
+  fence's lines the same way. The colours are the editor palette's `keyword`, `constant`,
+  `builtin`, `function`, `number`, `string` (`BlockEditor.highlighterPalette`), light and dark.
 * Chips inside rendered text: 📅 due (red when overdue), ⏳ scheduled, ⏰ reminders (amber,
   bell for alarms), 🔁 recurrence in words of the UI language. Clicking a ⏰ chip opens the reminder dialog
   (edit / snooze / delete), a date chip the date dialog on that date (with "+": "Date, reminder or
@@ -4401,7 +4460,7 @@ folder does that on the desktop).
 
 ## Shared components (`qml/components/`)
 
-`BButton`, `BIconButton`, `BTextField`, `BSuggestField` (a field with a suggestion list: key and value suggestions of the properties panel), `BTextArea`, `BSearchField`, `BSwitch`, `BCheckBox`,
+`BButton`, `BIconButton`, `BTextField`, `BSuggestField` (a field with a suggestion list: key and value suggestions of the properties panel), `BTextArea`, `BSearchField`, `BSwitch`, `BSlider` (a number on a track: `committed(value)` once a drag or a key ends — extension views' sliders), `BCheckBox`,
 `BChip`, `BBadge`, `BTabBar`/`BTabButton` (`picked(index)`: the user's choice of a tab — a tap, a click, Space, the arrow keys —, for tabs that stand for a route; not every change of `currentIndex`, which also comes as tabs are added or removed), `BSegmented`, `BBreadcrumb`, `BCard` (`elevation`,
 `tone`, `clickable`; `flat`: no surface, border, shadow or padding — settings groups on phones),
 `BListItem` (`subtitleInline`: the subtitle after the title on the title's baseline, the row one

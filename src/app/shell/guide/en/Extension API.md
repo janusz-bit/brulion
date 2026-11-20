@@ -185,6 +185,14 @@ end, { label = "Archive the done tasks" })
 | `b.ui.empty(title, text, icon)` | what to show when there is nothing to show, with an icon of your choice |
 | `b.ui.open(label, view, params)` | opens another view of the extension, with `params` for its function |
 | `b.ui.run(label, command)` | a button that runs one of the extension's commands |
+| `b.ui.input({ placeholder = "…", label = "…", action = "add", submit = "Add" })` | a text field with a button: Enter or the button gives the action what was typed as `args.value`, then the field empties (`keep = true` keeps it). `multiline = true` makes it several lines: Ctrl+Enter or the button |
+| `b.ui.select({ options = { "A", { label = "B", value = "b" } }, value = "b", action = "pick" })` | a button with the chosen option; its menu lists them all, and a choice gives the action the option's `value` |
+| `b.ui.slider({ value = 3, min = 1, max = 5, step = 1, unit = "", action = "set" })` | a number picked on a line, shown beside it; the action gets it as `args.value` when you let go (or press an arrow key) |
+| `b.ui.date({ value = "2026-11-21", action = "move" })` | a day on a button that opens a calendar; the action gets the day picked — or `""` for "No date" |
+| `b.ui.toggle(on, action, args, { label = "…" })` | a switch; a tap gives the action `args.value`, `true` or `false` |
+| `b.ui.progress({ value = 3, max = 4, label = "3 of 4", tone = "success" })` | a bar filled to `value` of `max` |
+
+The last six can stand in a row or on a line of their own, which they then fill.
 
 A **menu** is a list of items: `{ label = "…", action = "…", args = { … } }` calls one of the view's actions, `{ label = "…", page = "…", line = 5 }` opens a page, `{ label = "…", journal = "2026-11-03" }` opens that day of the journal.
 
@@ -260,6 +268,86 @@ end, {
 
 When the function has much to work out, it can keep the result in a variable together with `b.revision()`, and work it out again only when that number changed — the [[Habits]] do so.
 
+The view below takes what you type and choose: a slider, a choice, a note, a day and a switch. With `panel = "journal"` it is also a section of the side panel beside every day of the journal.
+
+```luau
+local mood = { level = 3, weather = "sun", walked = false }
+
+b.view("mood", function(params)
+    return b.ui.column({
+        b.ui.heading(`How is {params.date or b.today()}?`),
+        b.ui.slider({ value = mood.level, min = 1, max = 5, step = 1, label = "Mood", action = "level" }),
+        b.ui.select({
+            options = { { label = "Sun", value = "sun" }, { label = "Rain", value = "rain" }, "Snow" },
+            value = mood.weather, label = "Weather", action = "weather",
+        }),
+        b.ui.input({ placeholder = "What made it so?", action = "note", submit = "Write it down" }),
+        b.ui.row({
+            b.ui.date({ value = params.date or b.today(), label = "Day", action = "day" }),
+            b.ui.toggle(mood.walked, "walked", nil, { label = "A walk" }),
+        }),
+        b.ui.progress({ value = mood.level, max = 5, label = `{mood.level} of 5`, tone = "accent" }),
+    })
+end, {
+    level = function(args) mood.level = args.value end,
+    weather = function(args) mood.weather = args.value end,
+    walked = function(args) mood.walked = args.value end,
+    day = function(args) mood.day = args.value end,
+    note = function(args)
+        local walk = if mood.walked then ", a walk" else ""
+        b.appendToJournal(mood.day or b.today(), `- Mood {mood.level}/5, {mood.weather}{walk}: {args.value}`)
+        return "Noted"
+    end,
+}, { label = "Mood", icon = "heart", panel = "journal" })
+```
+
+## Views in a page and in the side panel
+A view can be drawn **inside a page**: write a `view` code block whose first line names it — the extension's id, a slash, the view's name — and whose next lines are its params, `name: value`. The slash menu offers every view with a label as **View: …**, which writes the block for you. The view works there as on its own: its buttons, checks and fields act, and it follows your notes. It also gets the page's `page`, `path` and `date` among its params. A click beside its controls edits the block's text.
+
+````markdown
+```view
+docs/mood
+```
+````
+
+`panel = true` in a view's last argument makes it a section of the **side panel** beside every page and day; `panel = "page"` beside pages only, `panel = "journal"` beside days of the journal only. On a phone the side panel is the drawer from the right edge.
+
+## Macros
+`b.macro(name, function(ctx) … end, { description = "…", args = { "…" }, example = "…" })` gives your notes a **macro**: writing `{{ext:<extension>/<name> arguments}}` anywhere in a note shows what the function returns, in the text, always up to date. The extension is named by its id (its page's title in small letters, without Polish letters, with `-` for spaces: "Word count" is `word-count`). Typing `{{` in a note offers the macros with their descriptions.
+
+- `ctx.args` is the list of arguments, separated by commas: `{{ext:a/b Squat, 30}}` gives `{ "Squat", "30" }`; `ctx.text` is them as written.
+- `ctx.page` and `ctx.path` name the note the macro is in, `ctx.date` its day when it is a day of the journal.
+- Return a text, a number, `b.ui.text` (muted, or in a colour), `b.ui.link`, `b.ui.heading` (bold) — or a list of them. It is always shown as text, never as HTML.
+- A macro is computed again by itself when a note it read changes. It may not ask a question nor write, and it has a quarter of a second.
+- A macro of an extension that has not run on this device shows a lock: a click asks to run it.
+
+```luau
+b.macro("words", function(ctx)
+    local name = ctx.args[1] or ctx.page
+    local n = 0
+    for _ in (b.read(name) or ""):gmatch("%S+") do
+        n += 1
+    end
+    return { b.ui.heading(tostring(n)), " words in ", b.ui.link(name) }
+end, { description = "How many words a page has", args = { "page" }, example = "Dom" })
+```
+
+## Template variables
+`b.variable(name, function(ctx) … end, { description = "…" })` gives your [[Journal, calendar and templates|templates]] a variable: `{{<extension>/<name>}}` in a template is replaced by what the function returns when the template is used — Markdown, as many lines as you like. `ctx.date` is the day the template is filled for. Unlike a macro the value is written into the note once.
+
+```luau
+b.variable("agenda", function(ctx)
+    local day = ctx.date or b.today()
+    local lines = {}
+    for _, task in b.query("type:tasks status:open sort:due", 50).items do
+        if task.due and task.due <= day then
+            table.insert(lines, `- [ ] {task.plain} ([[{task.page}]])`)
+        end
+    end
+    return if #lines > 0 then table.concat(lines, "\n") else "- Nothing due"
+end, { description = "Open tasks due by the note's day" })
+```
+
 ## Reactions
 `b.on("save", function(e) … end)` runs right after this device saved a page: `e.page` is its name. `b.on("change", function(e) … end)` runs after notes changed anywhere — your typing, a sync, another program — once the changes have settled: `e.pages` is the list of their names (a deleted page is in it too). What extensions write themselves does not come back as a change. A reaction cannot ask a question, and one that fails three times in a row is switched off until the extension is loaded again.
 
@@ -302,7 +390,7 @@ end, { label = "Log a walk" })
 - There are no files, no network and no other programs: only `b`.
 
 ## Limits
-One call may take 2 seconds (the time you spend answering a question does not count), and all extensions together 64 MB of memory; past either, the call is stopped and the rest keeps working. A view shows up to 2000 lines, a row up to 24 controls; `b.blocks` gives up to 20 000 blocks; one request to a model has up to 200 000 characters.
+One call may take 2 seconds (the time you spend answering a question does not count) — a macro a quarter of a second, a template variable one second —, and all extensions together 64 MB of memory; past either, the call is stopped and the rest keeps working. A macro shows at most 400 characters; the macros of one page have 2 seconds together. A view shows up to 2000 lines, a row up to 24 controls; `b.blocks` gives up to 20 000 blocks; one request to a model has up to 200 000 characters.
 
 ## Errors
 
@@ -326,5 +414,7 @@ One call may take 2 seconds (the time you spend answering a question does not co
 | `cannot wait for an answer here` | a question or `b.ai` inside a function that `table.sort` or `string.gsub` calls |
 | `an extension cannot ask a question while it loads` | a question outside a function: ask inside a command |
 | `timeout: the extension ran too long` | one call took more than 2 seconds |
+| `a macro or a template variable cannot change notes` | a macro or a variable wrote: write in a command or an action |
+| `a macro returns a text, a number, b.ui.text, b.ui.link or a list of them` | a macro returned something it cannot show |
 
 `pcall` catches an error, so the code can go on: `local ok, message = pcall(b.write, name, text)`. `error("…", 0)` stops the command with a message of your own.

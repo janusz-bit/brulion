@@ -4,6 +4,7 @@
 // shows (macroViewFrom: escaped pieces, bounded), the cache that computes a macro again only when
 // what it read changed, hostile extensions; the new nodes of b.ui and views as side panels.
 
+#include "extensions/builtin.h"
 #include "extensions/engine.h"
 #include "extensions/macros.h"
 #include "extensions/notebookhost.h"
@@ -348,6 +349,58 @@ private Q_SLOTS:
         QCOMPARE(toggle.value(u"on"_s).toBool(), true);
         QCOMPARE(toggle.value(u"label"_s).toString(), u"Rozgrzewka"_s);
         QCOMPARE(children[5].toMap().value(u"tone"_s).toString(), u"success"_s);
+    }
+
+    void builtins()
+    {
+        // The gym's and the habits' own macros, the gym's plan variable and the habits' day panel.
+        writeNote(u"journals/2026-11-17.md"_s,
+                  u"- Trening #trening\n  - [x] [[Przysiad]] 100 kg 5×5\n  - [x] [[Martwy ciąg]] 140 kg 3×3\n"_s);
+        writeNote(u"journals/2026-11-19.md"_s, u"- Trening #trening\n  - [x] [[Przysiad]] 105 kg 3×5\n"
+                                               u"- [x] Czytanie #nawyk\n"_s);
+        writeNote(u"journals/2026-11-20.md"_s, u"- [x] Czytanie #nawyk\n"_s);
+        writeNote(u"Nogi.md"_s, u"tags:: plan-treningowy\n\n- [[Przysiad]] 3×5\n- [[Martwy ciąg]] 1×5\n"_s);
+        writeNote(u"Nawyki.md"_s, u"- Czytanie\n  habit:: codziennie\n- Bieganie\n  habit:: pn, śr, pt\n"_s);
+        for (const QString &id : {u"silownia"_s, u"nawyki"_s}) {
+            const Result loaded = m_engine->load(builtinExtension(id));
+            QVERIFY2(loaded.ok(), qPrintable(loaded.error));
+        }
+        const auto run = [&](const QString &extension, const QString &name, const QString &arguments) {
+            const Result r = m_engine->runMacro(extension, name, ctx(arguments), 2000 * BRULION_TEST_SLOWDOWN);
+            return r.ok() ? markdown::macroViewText(macroViewFrom(r.value, true)) : u"<error: %1>"_s.arg(r.error);
+        };
+        // The best squat by its estimated 1RM: 105 × 5 rather than 100 × 5.
+        const QString record = run(u"silownia"_s, u"rekord"_s, u"Przysiad"_s);
+        QVERIFY2(record.startsWith(u"105 kg × 5"_s), qPrintable(record));
+        QVERIFY2(record.contains(u"2026-11-19"_s), qPrintable(record));
+        QCOMPARE(run(u"silownia"_s, u"rekord"_s, u"przysiad"_s), record); // any case
+        QVERIFY(run(u"silownia"_s, u"rekord"_s, u"Wiosłowanie"_s).contains(u"brak"_s));
+        QCOMPARE(run(u"silownia"_s, u"sesje"_s, u"Przysiad"_s), u"2 sesje"_s);
+        QCOMPARE(run(u"silownia"_s, u"sesje"_s, u"Przysiad, 2"_s), u"1 sesja"_s); // 19–20 November
+        QVERIFY2(run(u"nawyki"_s, u"seria"_s, u"Czytanie"_s).startsWith(u"Seria: 2 dni · "_s), qPrintable(run(u"nawyki"_s, u"seria"_s, u"Czytanie"_s)));
+        QVERIFY(run(u"nawyki"_s, u"seria"_s, u"Medytacja"_s).contains(u"Medytacja"_s));
+        // {{silownia/plan Nogi}}: the plan's workout, as "Start a workout" writes it.
+        const Result plan = m_engine->runVariable(u"silownia"_s, u"plan"_s, ctx(u"nogi"_s), 2000 * BRULION_TEST_SLOWDOWN);
+        QVERIFY2(plan.ok(), qPrintable(plan.error));
+        const QString workout = variableTextFrom(plan.value, true).value_or(QString());
+        QVERIFY2(workout.startsWith(u"- Nogi #trening\n  plan:: [[Nogi]]\n  - [ ] [[Przysiad]]"_s), qPrintable(workout));
+        QCOMPARE(variableTextFrom(m_engine->runVariable(u"silownia"_s, u"plan"_s, ctx(u"Brak"_s), 250).value, true),
+                 std::optional<QString>(QString()));
+        // The habits' panel beside a day: a row per habit with that day's check.
+        bool panel = false;
+        for (const ViewInfo &v : m_engine->views())
+            panel = panel || (v.extension == u"nawyki" && v.name == u"dzien" && v.panel == u"journal");
+        QVERIFY(panel);
+        const Result day = m_engine->render(u"nawyki"_s, u"dzien"_s, {{u"date"_s, u"2026-11-20"_s}});
+        QVERIFY2(day.ok(), qPrintable(day.error));
+        const QVariantList rows = day.value.toMap().value(u"children"_s).toList();
+        QCOMPARE(rows.size(), 2);
+        // In the notes' order: Czytanie done that day, Bieganie not.
+        const QVariantMap reading = rows[0].toMap().value(u"children"_s).toList().value(0).toMap();
+        QCOMPARE(reading.value(u"type"_s).toString(), u"check"_s);
+        QCOMPARE(reading.value(u"label"_s).toString(), u"Czytanie"_s);
+        QCOMPARE(reading.value(u"checked"_s).toBool(), true);
+        QCOMPARE(rows[1].toMap().value(u"children"_s).toList().value(0).toMap().value(u"checked"_s).toBool(), false);
     }
 
     void hostileExtensions()

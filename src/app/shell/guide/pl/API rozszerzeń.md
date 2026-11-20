@@ -185,6 +185,14 @@ end, { label = "Przenieś zrobione zadania do archiwum" })
 | `b.ui.empty(tytuł, tekst, ikona)` | co pokazać, gdy nie ma czego pokazać, z wybraną ikoną |
 | `b.ui.open(etykieta, widok, params)` | otwiera inny widok rozszerzenia, z `params` dla jego funkcji |
 | `b.ui.run(etykieta, polecenie)` | przycisk, który uruchamia jedno z poleceń rozszerzenia |
+| `b.ui.input({ placeholder = "…", label = "…", action = "dodaj", submit = "Dodaj" })` | pole tekstowe z przyciskiem: Enter albo przycisk daje akcji wpisany tekst jako `args.value`, potem pole się czyści (`keep = true` go zostawia). Z `multiline = true` ma kilka wierszy: Ctrl+Enter albo przycisk |
+| `b.ui.select({ options = { "A", { label = "B", value = "b" } }, value = "b", action = "wybierz" })` | przycisk z wybraną opcją; jego menu pokazuje wszystkie, a wybór daje akcji `value` opcji |
+| `b.ui.slider({ value = 3, min = 1, max = 5, step = 1, unit = "", action = "ustaw" })` | liczba wybierana na pasku, pokazana obok; akcja dostaje ją jako `args.value`, gdy puścisz suwak (albo naciśniesz strzałkę) |
+| `b.ui.date({ value = "2026-11-21", action = "przesun" })` | dzień na przycisku, który otwiera kalendarz; akcja dostaje wybrany dzień — albo `""` dla „Bez daty” |
+| `b.ui.toggle(włączony, akcja, args, { label = "…" })` | przełącznik; stuknięcie daje akcji `args.value`, `true` albo `false` |
+| `b.ui.progress({ value = 3, max = 4, label = "3 z 4", tone = "success" })` | pasek wypełniony do `value` z `max` |
+
+Sześć ostatnich może stać w wierszu `row` albo w osobnej linii, którą wtedy wypełniają.
 
 **Menu** to lista pozycji: `{ label = "…", action = "…", args = { … } }` wywołuje jedną z akcji widoku, `{ label = "…", page = "…", line = 5 }` otwiera stronę, `{ label = "…", journal = "2026-11-03" }` otwiera ten dzień dziennika.
 
@@ -260,6 +268,86 @@ end, {
 
 Gdy funkcja ma dużo do wyliczenia, może trzymać wynik w zmiennej razem z `b.revision()` i liczyć od nowa tylko wtedy, gdy ta liczba się zmieni — tak robią [[Nawyki]].
 
+Widok poniżej przyjmuje to, co wpiszesz i wybierzesz: suwak, wybór, notatkę, dzień i przełącznik. Z `panel = "journal"` jest też sekcją panelu bocznego przy każdym dniu dziennika.
+
+```luau
+local nastroj = { poziom = 3, pogoda = "słońce", spacer = false }
+
+b.view("nastroj", function(params)
+    return b.ui.column({
+        b.ui.heading(`Jaki jest {params.date or b.today()}?`),
+        b.ui.slider({ value = nastroj.poziom, min = 1, max = 5, step = 1, label = "Nastrój", action = "poziom" }),
+        b.ui.select({
+            options = { { label = "Słońce", value = "słońce" }, { label = "Deszcz", value = "deszcz" }, "Śnieg" },
+            value = nastroj.pogoda, label = "Pogoda", action = "pogoda",
+        }),
+        b.ui.input({ placeholder = "Co na to wpłynęło?", action = "notatka", submit = "Zapisz" }),
+        b.ui.row({
+            b.ui.date({ value = params.date or b.today(), label = "Dzień", action = "dzien" }),
+            b.ui.toggle(nastroj.spacer, "spacer", nil, { label = "Spacer" }),
+        }),
+        b.ui.progress({ value = nastroj.poziom, max = 5, label = `{nastroj.poziom} z 5`, tone = "accent" }),
+    })
+end, {
+    poziom = function(args) nastroj.poziom = args.value end,
+    pogoda = function(args) nastroj.pogoda = args.value end,
+    spacer = function(args) nastroj.spacer = args.value end,
+    dzien = function(args) nastroj.dzien = args.value end,
+    notatka = function(args)
+        local spacer = if nastroj.spacer then ", spacer" else ""
+        b.appendToJournal(nastroj.dzien or b.today(), `- Nastrój {nastroj.poziom}/5, {nastroj.pogoda}{spacer}: {args.value}`)
+        return "Zapisane"
+    end,
+}, { label = "Nastrój", icon = "heart", panel = "journal" })
+```
+
+## Widoki na stronie i w panelu bocznym
+Widok można narysować **na stronie**: napisz blok kodu `view`, którego pierwszy wiersz go wskazuje — identyfikator rozszerzenia, ukośnik, nazwa widoku — a kolejne wiersze to jego parametry, `nazwa: wartość`. Menu ukośnika podsuwa każdy widok z etykietą jako **Widok: …** i samo pisze taki blok. Widok działa tam tak samo jak osobno: jego przyciski, pola wyboru i pola tekstowe działają, a on sam nadąża za notatkami. Dostaje też `page`, `path` i `date` strony wśród parametrów. Kliknięcie obok kontrolek edytuje tekst bloku.
+
+````markdown
+```view
+docs/nastroj
+```
+````
+
+`panel = true` w ostatnim argumencie widoku robi z niego sekcję **panelu bocznego** przy każdej stronie i każdym dniu; `panel = "page"` tylko przy stronach, `panel = "journal"` tylko przy dniach dziennika. Na telefonie panel boczny to szuflada wysuwana z prawej krawędzi.
+
+## Makra
+`b.macro(nazwa, function(ctx) … end, { description = "…", args = { "…" }, example = "…" })` daje notatkom **makro**: wpisanie `{{ext:<rozszerzenie>/<nazwa> argumenty}}` w dowolnym miejscu notatki pokazuje w tekście to, co zwraca funkcja, zawsze aktualne. Rozszerzenie wskazuje jego identyfikator (tytuł strony małymi literami, bez polskich znaków, z `-` zamiast spacji: „Licznik słów” to `licznik-slow`). Wpisanie `{{` w notatce podsuwa makra z ich opisami.
+
+- `ctx.args` to lista argumentów rozdzielonych przecinkami: `{{ext:a/b Przysiad, 30}}` daje `{ "Przysiad", "30" }`; `ctx.text` to one tak, jak je zapisano.
+- `ctx.page` i `ctx.path` wskazują notatkę z makrem, `ctx.date` jej dzień, gdy to dzień dziennika.
+- Zwróć tekst, liczbę, `b.ui.text` (przygaszony albo w kolorze), `b.ui.link`, `b.ui.heading` (pogrubiony) — albo ich listę. Zawsze pokazuje się jako tekst, nigdy jako HTML.
+- Makro liczy się od nowa samo, gdy zmieni się notatka, którą czytało. Nie może pytać ani zapisywać i ma ćwierć sekundy.
+- Makro rozszerzenia, które jeszcze nie działało na tym urządzeniu, pokazuje kłódkę: kliknięcie pyta, czy je uruchomić.
+
+```luau
+b.macro("slowa", function(ctx)
+    local nazwa = ctx.args[1] or ctx.page
+    local n = 0
+    for _ in (b.read(nazwa) or ""):gmatch("%S+") do
+        n += 1
+    end
+    return { b.ui.heading(tostring(n)), " słów w ", b.ui.link(nazwa) }
+end, { description = "Ile słów ma strona", args = { "strona" }, example = "Dom" })
+```
+
+## Zmienne szablonów
+`b.variable(nazwa, function(ctx) … end, { description = "…" })` daje [[Dziennik, kalendarz i szablony|szablonom]] zmienną: `{{<rozszerzenie>/<nazwa>}}` w szablonie zastępuje to, co zwraca funkcja, gdy szablon zostaje użyty — Markdown, dowolnie wiele wierszy. `ctx.date` to dzień, dla którego szablon jest wypełniany. W odróżnieniu od makra wartość zostaje wpisana do notatki raz.
+
+```luau
+b.variable("agenda", function(ctx)
+    local dzien = ctx.date or b.today()
+    local wiersze = {}
+    for _, zadanie in b.query("type:tasks status:open sort:due", 50).items do
+        if zadanie.due and zadanie.due <= dzien then
+            table.insert(wiersze, `- [ ] {zadanie.plain} ([[{zadanie.page}]])`)
+        end
+    end
+    return if #wiersze > 0 then table.concat(wiersze, "\n") else "- Nic na dziś"
+end, { description = "Otwarte zadania z terminem do dnia notatki" })
+```
+
 ## Reakcje
 `b.on("save", function(e) … end)` działa zaraz po tym, jak to urządzenie zapisało stronę: `e.page` to jej nazwa. `b.on("change", function(e) … end)` działa po zmianach w notatkach, skądkolwiek przyszły — z Twojego pisania, synchronizacji, innego programu — gdy zmiany ucichną: `e.pages` to lista nazw zmienionych stron (jest w niej także strona usunięta). To, co rozszerzenia zapisują same, nie wraca jako zmiana. Reakcja nie może zadać pytania, a taka, która zawiedzie trzy razy z rzędu, zostaje wyłączona do ponownego wczytania rozszerzenia.
 
@@ -303,7 +391,7 @@ end, { label = "Zapisz spacer" })
 - Nie ma plików, sieci ani innych programów: jest tylko `b`.
 
 ## Limity
-Jedno wywołanie może trwać 2 sekundy (czas, w którym odpowiadasz na pytanie, się nie liczy), a wszystkie rozszerzenia razem mają 64 MB pamięci; po przekroczeniu wywołanie zostaje zatrzymane, a reszta działa dalej. Widok pokazuje do 2000 wierszy, wiersz `row` do 24 kontrolek; `b.blocks` daje do 20 000 bloków; jedno pytanie do modelu ma do 200 000 znaków.
+Jedno wywołanie może trwać 2 sekundy (czas, w którym odpowiadasz na pytanie, się nie liczy) — makro ćwierć sekundy, zmienna szablonu sekundę —, a wszystkie rozszerzenia razem mają 64 MB pamięci; po przekroczeniu wywołanie zostaje zatrzymane, a reszta działa dalej. Widok pokazuje do 2000 wierszy, wiersz `row` do 24 kontrolek; `b.blocks` daje do 20 000 bloków; jedno pytanie do modelu ma do 200 000 znaków. Makro pokazuje najwyżej 400 znaków; makra jednej strony mają razem 2 sekundy.
 
 ## Błędy
 Komunikaty silnika są po angielsku:
@@ -328,5 +416,7 @@ Komunikaty silnika są po angielsku:
 | `cannot wait for an answer here` | pytanie albo `b.ai` wewnątrz funkcji, którą wywołuje `table.sort` albo `string.gsub` |
 | `an extension cannot ask a question while it loads` | pytanie poza funkcją: pytaj wewnątrz polecenia |
 | `timeout: the extension ran too long` | jedno wywołanie trwało dłużej niż 2 sekundy |
+| `a macro or a template variable cannot change notes` | makro albo zmienna szablonu zapisywały: zapisuj w poleceniu albo akcji |
+| `a macro returns a text, a number, b.ui.text, b.ui.link or a list of them` | makro zwróciło coś, czego nie da się pokazać |
 
 `pcall` łapie błąd, więc kod może działać dalej: `local ok, komunikat = pcall(b.write, nazwa, tekst)`. `error("…", 0)` zatrzymuje polecenie z Twoim własnym komunikatem.

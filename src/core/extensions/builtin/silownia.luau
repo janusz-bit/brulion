@@ -114,6 +114,14 @@ local INTERFACE = {
         sessions = { "%d sesja", "%d sesje", "%d sesji" }, -- 1, 2–4 (not 12–14), the rest
         openPage = "Strona ćwiczenia",
         allExercises = "Wszystkie ćwiczenia",
+        macroRecord = "Rekord ćwiczenia: najlepsza seria i szacowane 1RM",
+        macroExercise = "ćwiczenie",
+        macroExample = "Przysiad",
+        macroNoExercise = "podaj ćwiczenie",
+        macroSessions = "Liczba sesji ćwiczenia (ostatnie dni: drugi argument)",
+        macroDays = "dni",
+        variablePlan = "Trening z planu (z ciężarami z ostatniej sesji)",
+        variablePlanArg = "plan",
     },
     en = {
         start = "Gym: start a workout",
@@ -152,6 +160,14 @@ local INTERFACE = {
         sessions = { "%d session", "%d sessions", "%d sessions" },
         openPage = "Exercise page",
         allExercises = "All exercises",
+        macroRecord = "An exercise's record: the best set and the estimated 1RM",
+        macroExercise = "exercise",
+        macroExample = "Squat",
+        macroNoExercise = "name an exercise",
+        macroSessions = "How many sessions of an exercise (the last days: a second argument)",
+        macroDays = "days",
+        variablePlan = "A plan's workout (with the weights of the last session)",
+        variablePlanArg = "plan",
     },
 }
 
@@ -891,6 +907,70 @@ b.command("from-catalog", function(ctx)
     b.write(chosen, table.concat(lines, "\n") .. "\n")
     return string.format(T.created, chosen)
 end, { label = T.newExercise })
+
+-- Macros (docs/EXTENSIONS.md "Macros"): {{ext:silownia/rekord Przysiad}} in any note -------------
+
+-- The history read once per change of the notebook: a page of many macros reads it once.
+local sessionsCache = { revision = -1, sessions = {} :: { Session } }
+local function cachedSessionsOf(exercise: string): { Session }
+    local revision = b.revision()
+    if sessionsCache.revision ~= revision then
+        sessionsCache = { revision = revision, sessions = allSessions() }
+    end
+    local key = b.fold(exercise)
+    local out: { Session } = {}
+    for _, s in sessionsCache.sessions do
+        if b.fold(s.entry.exercise) == key then
+            table.insert(out, s)
+        end
+    end
+    return out
+end
+
+b.macro("rekord", function(ctx)
+    local exercise = trim(ctx.args[1] or "")
+    if exercise == "" then
+        return b.ui.text(T.macroNoExercise, { muted = true })
+    end
+    local best = bestOf(daysFrom(cachedSessionsOf(exercise)))
+    if best == nil then
+        return b.ui.text(T.noHistory, { muted = true })
+    end
+    return {
+        b.ui.heading(`{formatLoad(best.set)} × {best.set.reps}`),
+        b.ui.text(` (1RM ≈ {b.formatNumber(best.estimate, 1)} kg, {best.date})`, { muted = true }),
+    }
+end, { description = T.macroRecord, args = { T.macroExercise }, example = T.macroExample })
+
+-- {{ext:silownia/sesje Przysiad, 30}}: the sessions of an exercise, of the last 30 days or all.
+b.macro("sesje", function(ctx)
+    local exercise = trim(ctx.args[1] or "")
+    if exercise == "" then
+        return b.ui.text(T.macroNoExercise, { muted = true })
+    end
+    local days = tonumber(ctx.args[2] or "")
+    local from = if days and days > 0 then b.addDays(b.today(), -math.floor(days) + 1) else ""
+    local count = 0
+    for _, day in daysFrom(cachedSessionsOf(exercise)) do
+        if day.date >= from then
+            count += 1
+        end
+    end
+    return counted(T.sessions, count)
+end, { description = T.macroSessions, args = { T.macroExercise, T.macroDays }, example = T.macroExample .. ", 30" })
+
+-- Template variables (docs/TEMPLATES.md "Variables of extensions"): {{silownia/plan Nogi}} writes a
+-- plan's workout where the template puts it, as "Start a workout" adds it (the first plan by name
+-- without an argument; nothing without plans).
+b.variable("plan", function(ctx)
+    local wanted = b.fold(ctx.args[1] or "")
+    for _, plan in planPages() do
+        if wanted == "" or b.fold(plan) == wanted then
+            return workoutText(plan)
+        end
+    end
+    return ""
+end, { description = T.variablePlan, args = { T.variablePlanArg } })
 
 -- Views -----------------------------------------------------------------------------------------
 

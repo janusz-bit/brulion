@@ -57,6 +57,7 @@ template into an empty block.
 | `{{end}}` | last day of the period in a [weekly or monthly note](#weekly-and-monthly-note-templates), elsewhere the same as `{{date}}` | `2026-10-18` |
 | `{{end:FORMAT}}` | the same in your own format | `{{end:d MMMM yyyy}}` → `18 October 2026` (Polish: `18 października 2026`) |
 | `{{cursor}}` | nothing — see below | |
+| `{{extension/name}}` | what an extension writes there — see [below](#variables-of-extensions) | `{{silownia/plan}}` |
 
 * Case does not matter, and spaces are allowed inside the braces: `{{ Title }}` works like
   `{{title}}`.
@@ -72,6 +73,31 @@ template into an empty block.
 **`{{cursor}}` does not set the cursor yet.** The variable is removed from the text, and the
 cursor lands where described under [inserting](#inserting-a-template) and under the
 [journal template](#journal-template).
+
+### Variables of extensions
+
+An [extension](EXTENSIONS.md#template-variables) can offer variables of its own: `{{silownia/plan}}`
+is the variable `plan` of the extension `silownia` (the extension's id, a slash, the variable's
+name), and anything after a space is its arguments: `{{trening/plan Przysiad, 3}}`.
+
+* **Filled once, when the template is.** The value is Markdown, any number of lines — a list of
+  tasks, a table —, written into the note when you insert the template or start a page, a day, a
+  week or a month from it in Brulion. Like `{{date}}`, it is computed for the note's own day.
+* **As written** when the extension has no such variable, does not run on this device (not
+  approved, switched off), fails (a message says why) or takes longer than a second, and where no
+  extension runs: `brulion-cli`, quick capture, the Android widgets.
+* **A macro is different.** `{{ext:silownia/rekord Przysiad}}` (with `ext:`) is no template
+  variable: the template leaves it as it is, and the note made from it shows the extension's
+  value, always current (docs/SYNTAX.md §13 "Macros"). Use a variable for what should stay as it
+  was on the day (the plan you started with), a macro for what should follow your notes (your best
+  set so far).
+
+```markdown
+## Trening {{date:d MMMM}}
+{{silownia/plan}}
+
+Rekord: {{ext:silownia/rekord Przysiad}}
+```
 
 ### Date and time format
 
