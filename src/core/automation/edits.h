@@ -13,8 +13,12 @@
 #include "dates/names.h"
 #include "types.h"
 
+#include <QDate>
 #include <QDateTime>
 #include <QString>
+#include <QTime>
+
+#include <optional>
 
 namespace brulion::automation {
 

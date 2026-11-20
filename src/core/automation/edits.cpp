@@ -12,6 +12,7 @@
 #include "text/text.h"
 
 #include <QRegularExpression>
+#include <QStringList>
 
 #include <algorithm>
 

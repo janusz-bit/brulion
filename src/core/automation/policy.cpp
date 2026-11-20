@@ -8,6 +8,8 @@
 #include <QRandomGenerator>
 #include <QSaveFile>
 
+#include <utility>
+
 using namespace Qt::StringLiterals;
 
 namespace brulion::automation {

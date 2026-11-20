@@ -10,6 +10,8 @@
 #include <QFileInfo>
 #include <QLoggingCategory>
 
+#include <utility>
+
 using namespace Qt::StringLiterals;
 
 namespace brulion::background {
