@@ -8,9 +8,10 @@ done in the repository simply disappears from the list.
 * **AI: what is still missing** — extensions can ask a model (`b.ai` with tools and pictures,
   Claude, any OpenAI-compatible API, a server of one's own, or a model on the device itself) and
   the built-in AI assistant is an agent over the whole notebook — full-text search, queries,
-  reading, pictures, changes the user confirms (docs/EXTENSIONS.md "AI"); missing: the providers'
-  own apps reaching the notes from a phone (a remote MCP server: `brulion-cli mcp` over HTTPS with
-  sign-in, for claude.ai's and ChatGPT's connectors), an assistant in the editor (rewrite the
+  reading, pictures, changes the user confirms (docs/EXTENSIONS.md "AI"); missing: a try of the
+  remote MCP server (`brulion-cli mcp serve`, docs/CLI.md "Remote MCP server") from claude.ai and
+  ChatGPT themselves (it passes the official MCP Python SDK and reads their published client
+  documents) and the desktop app starting it from Settings, an assistant in the editor (rewrite the
   selection, continue a paragraph), Claude's thoughts in the chat (they are streamed, but the
   current models send none unless asked with `thinking.display`, which older models refuse) and
   search by meaning rather than words (docs/SEMANTIC.md).

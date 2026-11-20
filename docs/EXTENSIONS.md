@@ -946,8 +946,8 @@ end, { label = "Ask my notes (AI)" })
 * **Subscriptions** (Claude Pro/Max, ChatGPT Plus) cannot be used by other apps: the providers bill
   their APIs separately, by use. On a phone that leaves an API key (a question about a note costs
   fractions of a cent), a server of one's own (free, private; reachable through Tailscale or the
-  home network), or the providers' own apps with a connector to the notes (a remote MCP server —
-  `brulion-cli mcp` speaks stdio only so far: TODO.md).
+  home network), or the providers' own apps with a connector to the notes (the remote MCP server
+  `brulion-cli mcp serve`: docs/CLI.md "Remote MCP server").
 * **Limits**: at most 200 000 characters and 8 pictures per request (a script cannot send the
   notebook by accident), 5 minutes per answer; only extensions approved with `ai` send anything,
   and what they send goes to the chosen provider — or, on the device, nowhere.

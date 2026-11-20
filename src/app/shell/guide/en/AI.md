@@ -17,7 +17,7 @@ Open **Settings → Extensions → AI** and choose:
 Press **Check**: the model answers "OK", or you see what is wrong.
 
 > [!note] Subscriptions
-> A Claude Pro/Max or ChatGPT Plus subscription works only in those companies' own apps; other apps use an API key, billed separately by use. A question about one note costs a fraction of a cent.
+> A Claude Pro/Max or ChatGPT Plus subscription works only in those companies' own apps; other apps use an API key, billed separately by use. A question about one note costs a fraction of a cent. With a subscription, let those apps reach your notes instead: [[Command line and AI agents#Your notes in claude.ai and ChatGPT]].
 
 The key stays **only on this device** (not in the notebook, not in sync, not in the logs). Notes go to the provider only when you ask, or when an extension you approved with the `ai` permission does.
 

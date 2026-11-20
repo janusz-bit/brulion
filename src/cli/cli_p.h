@@ -149,6 +149,9 @@ void addAppCommands(QList<Command> &out);
 void addUriCommands(QList<Command> &out);
 void addExtensionCommands(QList<Command> &out);
 void addMetaCommands(QList<Command> &out);
+/// `mcp serve`, `mcp password`, `mcp clients`, `mcp revoke` (mcpremote.cpp; addMetaCommands adds
+/// them after `mcp`).
+void addRemoteMcpCommands(QList<Command> &out);
 
 /// Options for the whole run (docs/CLI.md "Global options").
 struct Globals {
@@ -326,8 +329,14 @@ int exitCode(const Result &result);
 /// The MCP server on standard input / output (`brulion-cli mcp`); `appControl`: also the tools
 /// that drive the running app.
 int serveMcp(Context &context, bool readOnly, bool allowDestructive, bool appControl = false);
-/// The MCP protocol version this server speaks (initialize).
+/// The newest MCP protocol version these servers speak.
 QString mcpProtocolVersion();
+/// Every MCP protocol version they speak, newest first.
+QStringList mcpProtocolVersions();
+/// `mcp serve` over HTTPS (mcpremote.cpp): serves until stopped; a problem on the way is printed
+/// with `output` (the envelope) and its exit code returned.
+int serveRemoteMcp(Context &context, const Command &command, const QJsonObject &args,
+                   const std::function<int(const Command *, const Result &)> &output);
 
 /// Shell completion script for bash, fish or zsh ("" for another shell).
 QString completionScript(const QString &shell, const QString &program);

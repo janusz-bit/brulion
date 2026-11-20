@@ -5,7 +5,7 @@ The repository is a Nix flake. It provides:
 | Output | What it is |
 |---|---|
 | `packages.<system>.brulion` (= `default`) | the desktop app (C++/Qt 6.12 from nixpkgs, built with Clang): `bin/brulion`, menu entry, icons, AppStream metadata |
-| `nixosModules.default` | NixOS module: `programs.brulion` (the app, autostart in the tray) and `services.brulion-web` (the browser version through nginx) |
+| `nixosModules.default` | NixOS module: `programs.brulion` (the app, autostart in the tray), `services.brulion-web` (the browser version through nginx) and `services.brulion-mcp` (the remote MCP server for claude.ai and ChatGPT) |
 | `overlays.default` | adds `pkgs.brulion` (built with the nixpkgs of whoever uses the overlay) |
 | `devShells.<system>.default` | developer environment (Qt 6.12, Clang, CMake, Ninja, ccache, clang-tools, gdb…) |
 | `checks.<system>.*` | package with tests, NixOS module, formatting of `.nix` files, test in a virtual machine |
@@ -294,6 +294,90 @@ format) is in the package: `share/brulion/agent-skills/brulion/SKILL.md`.
 **Reminders** added by the agent ring where the app runs: on the computer (in the
 tray, `autostart = true`) and on the phone, once the app sees the change. `brulion-cli` itself
 never starts reminders or sync and does not change the app's settings.
+
+## Remote MCP server (`services.brulion-mcp`)
+
+`brulion-cli mcp serve` ([CLI.md](CLI.md#remote-mcp-server)) as a hardened system service: the
+notebook on this machine — typically the copy Syncthing keeps — becomes a custom connector for
+claude.ai, the Claude apps on the phone and the desktop, and ChatGPT. You sign in once per app with
+your own password and decide on a consent page whether the app may only read or also write.
+
+```nix
+{
+  services.brulion-mcp = {
+    enable = true;
+    vault = "/var/lib/syncthing/Notatki";
+    publicUrl = "https://notes.example.com";     # what the apps reach; paste …/mcp into them
+    # readOnly = false;                          # let the owner allow writing, app by app
+    # user = config.services.syncthing.user;     # to write the files Syncthing keeps
+    # passwordFile = config.age.secrets.brulion-mcp.path;   # else: sudo brulion-mcp password
+  };
+
+  # HTTPS in front of 127.0.0.1:8780 — Caddy gets the certificate by itself:
+  services.caddy = {
+    enable = true;
+    virtualHosts."notes.example.com".extraConfig = "reverse_proxy 127.0.0.1:8780";
+  };
+  networking.firewall.allowedTCPPorts = [ 80 443 ];
+}
+```
+
+Then, once (unless `passwordFile` is set):
+
+```sh
+sudo brulion-mcp password        # typed twice; kept as a salted hash in /var/lib/brulion-mcp
+sudo brulion-mcp clients         # the apps connected, later
+sudo brulion-mcp revoke --all    # end connections (also: revoke <bgr_…>)
+```
+
+and add `https://notes.example.com/mcp` in claude.ai (Settings → Connectors → Add custom
+connector) or in ChatGPT (developer mode: a new MCP app with OAuth); the step-by-step guide for
+both is in [CLI.md](CLI.md#setting-it-up).
+
+**A home machine without a public address**: let a tunnel give it one, the server stays on
+`127.0.0.1` — Tailscale Funnel (`services.tailscale.enable = true;`, then once
+`sudo tailscale funnel --bg 8780` and `publicUrl = "https://<machine>.<tailnet>.ts.net";`) or a
+Cloudflare Tunnel (`services.cloudflared`, ingress `http://127.0.0.1:8780`). With nginx instead of
+Caddy: `locations."/".proxyPass = "http://127.0.0.1:8780";` with `proxy_buffering off;` in its
+`extraConfig`, on a virtual host with `enableACME` and `forceSSL`.
+
+**HTTPS without a proxy**: `tls = { certFile = …; keyFile = …; };` with `listenAddress =
+"0.0.0.0"` and `openFirewall = true` (a port below 1024 gets `CAP_NET_BIND_SERVICE`). With ACME let
+the service read the certificate (`security.acme.certs."notes.example.com".group =
+"brulion-mcp";`); renewed certificates are taken without a restart.
+
+The service: user `brulion-mcp` (or `user`), its state in `/var/lib/brulion-mcp` (the server's
+state file `mcp-remote.json` — the password hash, the registered apps, the connections with
+hashes of their tokens — and the notebook's device state: version history, index cache), the
+password file handed over as a systemd credential, and hardening: `ProtectSystem=strict`, home
+directories hidden (`ProtectHome=tmpfs`) except the notebook bound in (read-only unless `readOnly =
+false`), `NoNewPrivileges`, `PrivateTmp`, `PrivateDevices`, `MemoryDenyWriteExecute`, a system
+call filter, only IP and local sockets, no capabilities. `brulion-mcp` (the admin command) runs
+`brulion-cli mcp password | clients | revoke` as the service's user on its notebook and state file.
+
+### `services.brulion-mcp` options
+
+| Option | Default | Description |
+|---|---|---|
+| `enable` | `false` | runs `brulion-cli mcp serve` as `brulion-mcp.service` |
+| `package` | the flake's `brulion-cli` | a package with `bin/brulion-cli` (the app's package has it too) |
+| `vault` | — | the notebook folder; the service user must read it (and write it unless `readOnly`) |
+| `listenAddress` | `"127.0.0.1"` | the address it listens on; another one needs `publicUrl` |
+| `port` | `8780` | the port |
+| `publicUrl` | `null` | the address the apps reach (`https://…`; the endpoint is this + `/mcp`); `null`: this machine only |
+| `passwordFile` | `null` | a file with the password or its hash (`brulion-cli mcp password --print-hash`), outside the Nix store; `null`: `sudo brulion-mcp password` |
+| `readOnly` | `true` | no app may change notes |
+| `allowDestructive` | `false` | the destructive tools (replace, move, delete pages) for apps allowed to write |
+| `tls` | `null` | `{ certFile; keyFile; }` — HTTPS without a proxy |
+| `allowedOrigins` | `[ ]` | origins of browser-based MCP clients (CORS), e.g. the MCP Inspector |
+| `allowedHosts` | `[ ]` | more `Host` names, for a proxy that rewrites it |
+| `user`, `group` | `"brulion-mcp"` | who it runs as (the default user and group are created) |
+| `openFirewall` | `false` | open `port` |
+| `extraArgs` | `[ ]` | more options of `mcp serve` |
+
+The flake's check `checks.<system>.nixos-module` evaluates the module with the server and builds
+its unit and admin command; `checks.x86_64-linux.web-vm` runs it in a virtual machine: sign-in,
+consent, tokens, a tool call and `brulion-mcp revoke` against the hardened service.
 
 ## The browser version on your own server (`services.brulion-web`)
 

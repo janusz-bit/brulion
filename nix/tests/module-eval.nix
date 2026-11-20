@@ -5,6 +5,10 @@
 #   (desktop-file-validate) build and contain what they should.
 # * A release-based configuration under a sub-path evaluates, and a missing web package is
 #   reported by an assertion.
+# * services.brulion-mcp: its unit (ExecStart with the options, the password as a credential, the
+#   hardening) and the `brulion-mcp` admin command (shellcheck) build; a public address without
+#   publicUrl, a password file in the store and destructive tools on a read-only server are
+#   refused by assertions.
 {
   pkgs,
   lib,
@@ -75,7 +79,49 @@ let
 
   withoutPackage = evalSystem { };
   failedAssertions = lib.filter (a: !a.assertion) withoutPackage.config.assertions;
+
+  # The remote MCP server, with a stand-in package (evaluation only: nothing is compiled).
+  fakeCli = pkgs.writeShellScriptBin "brulion-cli" "exit 0";
+  mcpSystem =
+    extra:
+    evalSystem {
+      services.brulion-web.package = fakeWebBuild;
+      services.brulion-mcp = lib.mkMerge [
+        {
+          enable = true;
+          package = fakeCli;
+          vault = "/home/ala/Notatki";
+          publicUrl = "https://notes.example.com";
+          passwordFile = "/run/secrets/brulion-mcp";
+          readOnly = false;
+          allowedOrigins = [ "http://localhost:6274" ];
+        }
+        extra
+      ];
+    };
+  mcp = mcpSystem { };
+  mcpFailed =
+    extra: map (a: a.message) (lib.filter (a: !a.assertion) (mcpSystem extra).config.assertions);
+  mcpRefused =
+    extra: text:
+    lib.assertMsg (lib.any (m: lib.hasInfix text m) (
+      mcpFailed extra
+    )) "services.brulion-mcp: expected '${text}'";
 in
+assert mcpRefused {
+  listenAddress = "0.0.0.0";
+  publicUrl = lib.mkForce null;
+} "needs publicUrl";
+assert mcpRefused {
+  passwordFile = lib.mkForce "${pkgs.writeText "password" "x"}";
+} "must not be in the Nix store";
+assert mcpRefused {
+  readOnly = lib.mkForce true;
+  allowDestructive = true;
+} "allowDestructive needs readOnly = false";
+assert lib.assertMsg (
+  mcpFailed { } == [ ]
+) "services.brulion-mcp: the example must pass its assertions";
 assert lib.assertMsg (lib.any (
   a: lib.hasInfix "services.brulion-web" a.message
 ) failedAssertions) "services.brulion-web without package/release must fail an assertion";
@@ -95,6 +141,12 @@ pkgs.runCommand "brulion-nixos-module"
     hasPackage = lib.boolToString (
       lib.elem main.config.programs.brulion.package main.config.environment.systemPackages
     );
+    mcpToplevel = builtins.unsafeDiscardStringContext mcp.config.system.build.toplevel.drvPath;
+    mcpUnit = mcp.config.systemd.units."brulion-mcp.service".unit;
+    mcpAdmin = lib.findFirst (
+      p: (p.name or "") == "brulion-mcp"
+    ) (throw "no brulion-mcp command") mcp.config.environment.systemPackages;
+    mcpUser = lib.boolToString (mcp.config.users.users ? brulion-mcp);
   }
   ''
     echo "system: $toplevel"
@@ -126,5 +178,27 @@ pkgs.runCommand "brulion-nixos-module"
       fail "X-Frame-Options: SAMEORIGIN would refuse the origin frameAncestors allows"
     ! grep -qE -- 'frame-ancestors|X-Frame-Options' "$anyFrameConf" ||
       fail "frameAncestors = null must send no frame header"
+
+    echo "system with the remote MCP server: $mcpToplevel"
+    unit="$mcpUnit/brulion-mcp.service"
+    expectUnit() { grep -qF -- "$1" "$unit" || fail "brulion-mcp.service has no '$1'"; }
+    expectUnit '/bin/brulion-cli" "--vault" "/home/ala/Notatki" "--state-dir" "/var/lib/brulion-mcp/device" "mcp" "serve"'
+    expectUnit '"--listen" "127.0.0.1" "--port" "8780" "--auth-file" "/var/lib/brulion-mcp/mcp-remote.json"'
+    expectUnit '"--public-url" "https://notes.example.com"'
+    expectUnit '"--allowed-origin" "http://localhost:6274"'
+    expectUnit ' --password-file %d/password'
+    expectUnit 'LoadCredential=password:/run/secrets/brulion-mcp'
+    expectUnit 'User=brulion-mcp'
+    expectUnit 'StateDirectory=brulion-mcp'
+    expectUnit 'ProtectSystem=strict'
+    expectUnit 'ProtectHome=tmpfs'
+    expectUnit 'BindPaths=/home/ala/Notatki'
+    expectUnit 'NoNewPrivileges=true'
+    expectUnit 'MemoryDenyWriteExecute=true'
+    expectUnit 'CapabilityBoundingSet='
+    ! grep -qF -- '--read-only' "$unit" || fail "readOnly = false must not pass --read-only"
+    [ "$mcpUser" = true ] || fail "the brulion-mcp user is not created"
+    test -x "$mcpAdmin/bin/brulion-mcp" || fail "no brulion-mcp admin command"
+    grep -qF -- 'runuser -u brulion-mcp' "$mcpAdmin/bin/brulion-mcp" || fail "the admin command does not switch user"
     touch $out
   ''

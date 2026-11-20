@@ -53,6 +53,19 @@ Agent działający na innym komputerze (np. na Raspberry Pi) pracuje na kopii fo
 
 **Przypomnienia** dodane przez agenta dzwonią tam, gdzie działa aplikacja: na komputerze (w zasobniku) i na telefonie, gdy aplikacja zobaczy zmianę — zobacz [[Przypomnienia i alarmy|Przypomnienia i alarmy]].
 
+## Twoje notatki w claude.ai i ChatGPT
+Same aplikacje AI — claude.ai, aplikacja Claude na telefonie, ChatGPT — też mogą korzystać z Twoich notatek, przez **zdalny serwer MCP**: `brulion-cli mcp serve` na Twoim komputerze, który ma notatki (np. domowy serwer z folderem synchronizowanym przez Syncthing). Dodajesz go raz w aplikacji jako własny łącznik i logujesz się własnym hasłem; na stronie logowania decydujesz, czy aplikacja może notatki tylko czytać, czy także w nich pisać.
+
+1. Ustaw hasło: `brulion-cli mcp password` (zapisywany jest tylko jego skrót).
+2. Uruchom serwer: `brulion-cli mcp serve --public-url https://notatki.example.com`. Aplikacje łączą się z nim przez internet, więc potrzebuje adresu HTTPS: odwrotnego proxy (Caddy, nginx) albo — dla komputera w domu — tunelu, np. Tailscale Funnel lub Cloudflare Tunnel. Na NixOS to jedna opcja: `services.brulion-mcp`.
+3. W **claude.ai**: Ustawienia → Łączniki → dodaj własny łącznik (Settings → Connectors → Add custom connector), adres `https://notatki.example.com/mcp`, potem Połącz. Otworzy się strona Brulionu: wpisz hasło i wybierz **Zezwól**. Łącznik działa potem także w aplikacji Claude na telefonie. W **ChatGPT**: włącz tryb dewelopera i dodaj aplikację MCP z tym samym adresem i OAuth.
+4. `brulion-cli mcp clients` pokazuje połączone aplikacje, `brulion-cli mcp revoke` od razu je odłącza.
+
+> [!warning] Wybierz długie hasło
+> Kto zna hasło, może połączyć aplikację z Twoimi notatkami. Na zapis pozwalaj tylko zaufanym aplikacjom: każda zmiana trafia do historii wersji, a usuwanie stron pozostaje wyłączone, dopóki nie uruchomisz serwera z `--allow-destructive`.
+
+Szczegóły oraz konfiguracja proxy albo tunelu: „Remote MCP server” w `docs/CLI.md` w repozytorium; usługa NixOS w `docs/NIXOS.md`.
+
 ## Rozszerzenia pisane przez agenta
 Agent może też pisać [[Rozszerzenia|rozszerzenia]] — polecenia, widoki i reakcje w Luau — i wypróbować je, zanim je zobaczysz:
 

@@ -1,5 +1,6 @@
-# NixOS module: the Brulion desktop app (programs.brulion) and a self-hosted browser version
-# (services.brulion-web, served by nginx). docs/NIXOS.md describes both.
+# NixOS module: the Brulion desktop app (programs.brulion), a self-hosted browser version
+# (services.brulion-web, served by nginx) and the remote MCP server for claude.ai's and ChatGPT's
+# connectors (services.brulion-mcp, `brulion-cli mcp serve`). docs/NIXOS.md describes them.
 #
 # The flake exports it as nixosModules.default = import ./nix/module.nix { inherit self; }, so
 # the package defaults to the flake's own package. Without a flake (`import ./module.nix { }`)
@@ -11,6 +12,7 @@
   config,
   lib,
   pkgs,
+  utils,
   ...
 }:
 
@@ -29,6 +31,7 @@ let
 
   appCfg = config.programs.brulion;
   webCfg = config.services.brulion-web;
+  mcpCfg = config.services.brulion-mcp;
 
   system = pkgs.stdenv.hostPlatform.system;
   defaultPackage =
@@ -36,6 +39,11 @@ let
       self.packages.${system}.default
     else
       pkgs.callPackage ./package.nix { };
+  defaultCliPackage =
+    if self != null && self.packages ? ${system} then
+      self.packages.${system}.brulion-cli
+    else
+      pkgs.callPackage ./cli.nix { brulion = defaultPackage; };
 
   # XDG autostart entry: the app starts hidden in the system tray (`--hidden`).
   autostartEntry =
@@ -223,6 +231,84 @@ let
     else
       lib.optional (!vhost.onlySSL) nginxCfg.defaultHTTPListenPort
       ++ lib.optional vhostHasTls nginxCfg.defaultSSLListenPort;
+
+  # --- services.brulion-mcp -------------------------------------------------------------------
+
+  mcpStateDir = "/var/lib/brulion-mcp";
+  mcpAuthFile = "${mcpStateDir}/mcp-remote.json";
+  mcpLoopback = lib.elem mcpCfg.listenAddress [
+    "127.0.0.1"
+    "::1"
+    "localhost"
+  ];
+  # The notebook's device state (history, lock, index cache) and the server's state file live in
+  # the state directory, whoever's notebook it serves.
+  mcpCommonArgs = [
+    (lib.getExe' mcpCfg.package "brulion-cli")
+    "--vault"
+    mcpCfg.vault
+    "--state-dir"
+    "${mcpStateDir}/device"
+  ];
+  mcpServeArgs =
+    mcpCommonArgs
+    ++ [
+      "mcp"
+      "serve"
+      "--listen"
+      mcpCfg.listenAddress
+      "--port"
+      (toString mcpCfg.port)
+      "--auth-file"
+      mcpAuthFile
+    ]
+    ++ lib.optionals (mcpCfg.publicUrl != null) [
+      "--public-url"
+      mcpCfg.publicUrl
+    ]
+    ++ lib.optionals (mcpCfg.tls != null) [
+      "--tls-cert"
+      mcpCfg.tls.certFile
+      "--tls-key"
+      mcpCfg.tls.keyFile
+    ]
+    ++ lib.optionals (mcpCfg.allowedOrigins != [ ]) [
+      "--allowed-origin"
+      (lib.concatStringsSep "," mcpCfg.allowedOrigins)
+    ]
+    ++ lib.optionals (mcpCfg.allowedHosts != [ ]) [
+      "--allowed-host"
+      (lib.concatStringsSep "," mcpCfg.allowedHosts)
+    ]
+    ++ lib.optional mcpCfg.readOnly "--read-only"
+    ++ lib.optional mcpCfg.allowDestructive "--allow-destructive"
+    ++ mcpCfg.extraArgs;
+
+  # `sudo brulion-mcp password | clients | revoke …`: the server's commands as its user, on its
+  # notebook and state file.
+  mcpAdmin = pkgs.writeShellApplication {
+    name = "brulion-mcp";
+    runtimeInputs = [ pkgs.util-linux ];
+    text = ''
+      case "''${1:-}" in
+        password | clients | revoke) ;;
+        *)
+          echo "usage: brulion-mcp password [--print-hash] | clients | revoke <connection> | revoke --all" >&2
+          echo "(the remote MCP server's commands, run as its user; docs/NIXOS.md \"Remote MCP server\")" >&2
+          exit 2
+          ;;
+      esac
+      if [ "$(id -u)" != 0 ]; then
+        echo "brulion-mcp: run it as root: sudo brulion-mcp $*" >&2
+        exit 1
+      fi
+      command=$1
+      shift
+      cd ${mcpStateDir}
+      exec runuser -u ${lib.escapeShellArg mcpCfg.user} -- env HOME=${mcpStateDir} \
+        ${lib.escapeShellArgs mcpCommonArgs} mcp "$command" --auth-file ${mcpAuthFile} "$@"
+    '';
+  };
 in
 {
   _file = ./module.nix;
@@ -422,6 +508,163 @@ in
     };
   };
 
+  options.services.brulion-mcp = {
+    enable = mkEnableOption ''
+      the remote MCP server of a Brulion notebook (`brulion-cli mcp serve`): the notebook's tools
+      for claude.ai, the Claude apps and ChatGPT, added there as a custom connector, with OAuth
+      sign-in by the owner's password'';
+
+    package = mkOption {
+      type = types.package;
+      default = defaultCliPackage;
+      defaultText = literalExpression "brulion.packages.\${pkgs.stdenv.hostPlatform.system}.brulion-cli";
+      description = ''
+        The package with `bin/brulion-cli`: the small command-line package by default (Qt's base
+        only); the app's package has it too.
+      '';
+    };
+
+    vault = mkOption {
+      type = types.str;
+      example = "/var/lib/syncthing/Notatki";
+      description = ''
+        The notebook folder, e.g. the copy Syncthing keeps on this machine. The service user
+        ({option}`services.brulion-mcp.user`) must be able to read it, and to write it unless
+        {option}`services.brulion-mcp.readOnly`.
+      '';
+    };
+
+    listenAddress = mkOption {
+      type = types.str;
+      default = "127.0.0.1";
+      example = "0.0.0.0";
+      description = ''
+        The address to listen on. Keep the default behind a reverse proxy or a tunnel (Caddy,
+        nginx, Tailscale Funnel, Cloudflare Tunnel) that adds HTTPS; another address needs
+        {option}`services.brulion-mcp.publicUrl`, and HTTPS of its own
+        ({option}`services.brulion-mcp.tls`) or a proxy in a trusted network.
+      '';
+    };
+
+    port = mkOption {
+      type = types.port;
+      default = 8780;
+      description = "The port to listen on.";
+    };
+
+    publicUrl = mkOption {
+      type = types.nullOr (types.strMatching "https?://[^ ]+");
+      default = null;
+      example = "https://notes.example.com";
+      description = ''
+        The address the apps reach the server at (the proxy's or tunnel's): the OAuth issuer and,
+        with `/mcp` added, the URL to paste into claude.ai or ChatGPT. It must be `https://`
+        (`http://` only for this machine). `null`: `http://<listenAddress>:<port>`, which only
+        works on this machine.
+      '';
+    };
+
+    passwordFile = mkOption {
+      type = types.nullOr types.str;
+      default = null;
+      example = "/run/secrets/brulion-mcp-password";
+      description = ''
+        A file with the owner's password, or its hash from `brulion-cli mcp password
+        --print-hash` (a secret manager's file such as agenix's or sops-nix's; not a path in the
+        Nix store, which everybody can read). systemd hands it to the service as a credential.
+        `null`: the password set with `sudo brulion-mcp password`, kept as a salted hash in the
+        state file.
+      '';
+    };
+
+    readOnly = mkOption {
+      type = types.bool;
+      default = true;
+      description = ''
+        No app may change notes: the consent page offers reading only. Turn it off to let the
+        owner allow writing (journal, tasks, reminders, edits) app by app.
+      '';
+    };
+
+    allowDestructive = mkOption {
+      type = types.bool;
+      default = false;
+      description = ''
+        Also offer the destructive tools (replace, move and delete pages; deleted pages go to the
+        trash) to apps allowed to write. Needs {option}`services.brulion-mcp.readOnly` off.
+      '';
+    };
+
+    tls = mkOption {
+      type = types.nullOr (
+        types.submodule {
+          options = {
+            certFile = mkOption {
+              type = types.str;
+              example = "/var/lib/acme/notes.example.com/fullchain.pem";
+              description = "The certificate chain (PEM), reloaded when it changes.";
+            };
+            keyFile = mkOption {
+              type = types.str;
+              example = "/var/lib/acme/notes.example.com/key.pem";
+              description = "Its private key (PEM, RSA or EC, without a passphrase).";
+            };
+          };
+        }
+      );
+      default = null;
+      description = ''
+        Serve HTTPS itself (no proxy). The service user must be able to read both files: with
+        ACME, e.g. `security.acme.certs."notes.example.com".group = "brulion-mcp";`. Renewed
+        certificates are taken without a restart.
+      '';
+    };
+
+    allowedOrigins = mkOption {
+      type = types.listOf types.str;
+      default = [ ];
+      example = [ "http://localhost:6274" ];
+      description = "Origins of browser-based MCP clients (e.g. the MCP Inspector) allowed to call it (CORS).";
+    };
+
+    allowedHosts = mkOption {
+      type = types.listOf types.str;
+      default = [ ];
+      description = ''
+        More `Host` values it answers to, for a proxy that rewrites `Host` to something else than
+        the public name or `127.0.0.1:<port>` (requests for other names are refused: DNS rebinding).
+      '';
+    };
+
+    user = mkOption {
+      type = types.str;
+      default = "brulion-mcp";
+      example = "syncthing";
+      description = ''
+        The user the server runs as. The default system user is created; to write notes that
+        Syncthing keeps, name Syncthing's user ({option}`services.syncthing.user`).
+      '';
+    };
+
+    group = mkOption {
+      type = types.str;
+      default = "brulion-mcp";
+      description = "The service's group (created when it is the default).";
+    };
+
+    openFirewall = mkOption {
+      type = types.bool;
+      default = false;
+      description = "Open the port in the firewall (only when it listens on another address than loopback).";
+    };
+
+    extraArgs = mkOption {
+      type = types.listOf types.str;
+      default = [ ];
+      description = "More options of `brulion-cli mcp serve`.";
+    };
+  };
+
   config = mkMerge [
     (mkIf appCfg.enable {
       environment.systemPackages = [ appCfg.package ];
@@ -455,6 +698,113 @@ in
       };
 
       networking.firewall.allowedTCPPorts = mkIf webCfg.openFirewall (lib.unique vhostPorts);
+    })
+
+    (mkIf mcpCfg.enable {
+      assertions = [
+        {
+          assertion = mcpLoopback || mcpCfg.publicUrl != null;
+          message = "services.brulion-mcp: listening on ${mcpCfg.listenAddress} needs publicUrl (the address the apps reach).";
+        }
+        {
+          assertion = !(mcpCfg.allowDestructive && mcpCfg.readOnly);
+          message = "services.brulion-mcp: allowDestructive needs readOnly = false.";
+        }
+        {
+          assertion = mcpCfg.passwordFile == null || !lib.hasPrefix builtins.storeDir mcpCfg.passwordFile;
+          message = "services.brulion-mcp: passwordFile must not be in the Nix store (everybody can read it).";
+        }
+      ];
+
+      environment.systemPackages = [ mcpAdmin ];
+
+      users.users = mkIf (mcpCfg.user == "brulion-mcp") {
+        brulion-mcp = {
+          isSystemUser = true;
+          group = mcpCfg.group;
+          home = mcpStateDir;
+          description = "Brulion remote MCP server";
+        };
+      };
+      users.groups = mkIf (mcpCfg.group == "brulion-mcp") { brulion-mcp = { }; };
+
+      systemd.services.brulion-mcp = {
+        description = "Brulion remote MCP server (claude.ai and ChatGPT connectors)";
+        documentation = [ "https://github.com/janusz-bit/brulion/blob/main/docs/NIXOS.md" ];
+        wantedBy = [ "multi-user.target" ];
+        # Client ID metadata documents are fetched over the network after a sign-in.
+        wants = [ "network-online.target" ];
+        after = [ "network-online.target" ];
+        environment = {
+          HOME = mcpStateDir;
+          XDG_CONFIG_HOME = "${mcpStateDir}/config";
+          XDG_DATA_HOME = "${mcpStateDir}/data";
+          XDG_CACHE_HOME = "/var/cache/brulion-mcp";
+          LANG = "C.UTF-8";
+        };
+        serviceConfig = {
+          ExecStart =
+            utils.escapeSystemdExecArgs mcpServeArgs
+            + optionalString (mcpCfg.passwordFile != null) " --password-file %d/password";
+          LoadCredential = lib.optional (mcpCfg.passwordFile != null) "password:${mcpCfg.passwordFile}";
+          User = mcpCfg.user;
+          Group = mcpCfg.group;
+          StateDirectory = "brulion-mcp";
+          StateDirectoryMode = "0700";
+          CacheDirectory = "brulion-mcp";
+          WorkingDirectory = mcpStateDir;
+          Restart = "on-failure";
+          RestartSec = 5;
+          UMask = "0027";
+
+          # Hardening: the notebook is the only path it sees outside its own directories (read
+          # only unless readOnly is off), no privileges, network sockets only.
+          ProtectSystem = "strict";
+          ProtectHome = "tmpfs";
+          BindPaths = lib.optional (!mcpCfg.readOnly) mcpCfg.vault;
+          BindReadOnlyPaths =
+            lib.optional mcpCfg.readOnly mcpCfg.vault
+            ++ lib.optionals (mcpCfg.tls != null) [
+              (dirOf mcpCfg.tls.certFile)
+              (dirOf mcpCfg.tls.keyFile)
+            ];
+          ReadWritePaths = lib.optional (!mcpCfg.readOnly) mcpCfg.vault;
+          PrivateTmp = true;
+          PrivateDevices = true;
+          NoNewPrivileges = true;
+          ProtectKernelTunables = true;
+          ProtectKernelModules = true;
+          ProtectKernelLogs = true;
+          ProtectControlGroups = true;
+          ProtectClock = true;
+          ProtectHostname = true;
+          ProtectProc = "invisible";
+          ProcSubset = "pid";
+          RestrictAddressFamilies = [
+            "AF_INET"
+            "AF_INET6"
+            "AF_UNIX"
+            "AF_NETLINK"
+          ];
+          RestrictNamespaces = true;
+          RestrictRealtime = true;
+          RestrictSUIDSGID = true;
+          LockPersonality = true;
+          MemoryDenyWriteExecute = true;
+          RemoveIPC = true;
+          KeyringMode = "private";
+          SystemCallArchitectures = "native";
+          SystemCallFilter = [
+            "@system-service"
+            "~@privileged"
+          ];
+          SystemCallErrorNumber = "EPERM";
+          CapabilityBoundingSet = if mcpCfg.port < 1024 then [ "CAP_NET_BIND_SERVICE" ] else [ "" ];
+          AmbientCapabilities = lib.optional (mcpCfg.port < 1024) "CAP_NET_BIND_SERVICE";
+        };
+      };
+
+      networking.firewall.allowedTCPPorts = mkIf mcpCfg.openFirewall [ mcpCfg.port ];
     })
   ];
 }
