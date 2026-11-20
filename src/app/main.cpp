@@ -26,7 +26,8 @@
 #include "log/categories.h"
 #include "log/logger.h"
 #include "log/slowscope.h"
-#include "notebook/share.h" // --open: files opened with Brulion
+#include "automation/uri.h" // brulion:// addresses of a launch
+#include "notebook/share.h"   // --open: files opened with Brulion
 
 #include <QDir>
 #include <QElapsedTimer>
@@ -37,6 +38,7 @@
 #include <QQuickStyle>
 #include <QStandardPaths>
 #include <QTranslator>
+#include <QUrl>
 
 #include <cstdio>
 #include <memory>
@@ -173,6 +175,26 @@ int main(int argc, char *argv[])
     const brulion::notebook::OpenArguments launch =
             brulion::notebook::splitOpenArguments(QCoreApplication::arguments());
     const QStringList args = launch.options;
+    // brulion:// addresses (docs/UI.md "Automation"): the desktop entry's `--open %U` puts them
+    // among the files, Windows' URL protocol and a launcher's `brulion <address>` among the options.
+    QStringList launchUris;
+    for (qsizetype i = 1; i < args.size(); ++i) {
+        if (args.at(i) == u"--uri" && i + 1 < args.size())
+            launchUris.append(args.at(++i));
+        else if (brulion::automation::isAutomationUri(args.at(i)))
+            launchUris.append(args.at(i));
+    }
+    QStringList launchFiles;
+    QStringList fileUris; // the addresses among the files (the options' own: AppController reads them)
+    for (const QString &file : launch.files) {
+        if (brulion::automation::isAutomationUri(file))
+            fileUris.append(file);
+        else if (file.startsWith(u"file:", Qt::CaseInsensitive))
+            launchFiles.append(QUrl(file).toLocalFile()); // %U: a file manager's file:// address
+        else
+            launchFiles.append(file);
+    }
+    launchUris += fileUris;
     // Dev/test options from the command line (component gallery, screenshots, forced theme
     // and language): src/app/ui/devtools.h. Without options it changes nothing.
     brulion::ui::DevTools devTools(args);
@@ -189,9 +211,10 @@ int main(int argc, char *argv[])
         // --hidden (Windows' start at sign-in, the running one already there): no window. Files
         // to open go as a share, their paths made absolute here (this launch's working folder).
         const brulion::notebook::SharedContent opened =
-                brulion::notebook::openedFilesShare(launch.files, QDir::currentPath());
+                brulion::notebook::openedFilesShare(launchFiles, QDir::currentPath());
         const QByteArray message =
-                !opened.files.isEmpty()
+                !launchUris.isEmpty() ? brulion::ipc::uriMessage(launchUris.first(), launchToken)
+                : !opened.files.isEmpty()
                         ? brulion::ipc::shareMessage(brulion::notebook::sharedContentToJson(opened), launchToken)
                         : brulion::ipc::launchMessage(args.contains(u"--capture"_s)  ? "capture"
                                                       : args.contains(u"--today"_s)  ? "today"
@@ -201,6 +224,12 @@ int main(int argc, char *argv[])
         // Windows: the running Brulion may take the foreground this launch was given.
         brulion::platform::allowForegroundActivation();
         if (singleInstance->sendToPrimary(message)) {
+            // The other addresses and files of this launch follow (one message each).
+            for (qsizetype i = 1; i < launchUris.size(); ++i)
+                singleInstance->sendToPrimary(brulion::ipc::uriMessage(launchUris.at(i), launchToken));
+            if (!launchUris.isEmpty() && !opened.files.isEmpty())
+                singleInstance->sendToPrimary(
+                        brulion::ipc::shareMessage(brulion::notebook::sharedContentToJson(opened), launchToken));
             // The running app keeps its own setting: a second launch cannot switch it on.
             if (args.contains(u"--remote-control"_s))
                 std::fprintf(stderr, "Brulion is already running: --remote-control applies to a new run only. Turn "
@@ -387,7 +416,7 @@ int main(int argc, char *argv[])
         AppController::Options options;
         options.settingsFile = settingsFile;
         options.arguments = args;
-        options.openFiles = launch.files;
+        options.openFiles = launchFiles + fileUris;
         options.workingDirectory = QDir::currentPath();
         options.checkForUpdates = !args.contains(u"--selftest-shell"_s);
         controller = std::make_unique<AppController>(options);
@@ -462,8 +491,15 @@ int main(int argc, char *argv[])
         // The share target launched in another tab while Brulion runs here (wasm/index.html hands
         // the share over): the share dialog, as for a share that started this tab (--share-query).
         auto *shares = new brulion::platform::WasmShare(controller.get());
+        // A web+brulion: address another tab was opened with comes the same way
+        // ("brulion-uri=<address>", wasm/index.html): checked as any link's.
         QObject::connect(shares, &brulion::platform::WasmShare::received, controller.get(),
-                         &AppController::receiveShareQuery);
+                         [ctl = controller.get()](const QString &query) {
+                             if (query.startsWith(u"brulion-uri="_s))
+                                 ctl->receiveUri(QUrl::fromPercentEncoding(query.mid(12).toUtf8()), u"web"_s);
+                             else
+                                 ctl->receiveShareQuery(query);
+                         });
         // ?selftest=share (scripts/wasm-smoke.mjs --share): what the share dialog shows, and
         // whether it was asked to open.
         if (args.contains(u"--selftest-share"_s)) {

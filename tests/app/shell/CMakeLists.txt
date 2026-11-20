@@ -14,6 +14,10 @@ brulion_add_test(tst_shell_viewtraits SOURCES tst_viewtraits.cpp LIBS brulion_sh
 # opened with Brulion (--open, a second launch's `share` message: copies, the files untouched, a
 # page of the notebook opened), the browser's share target (--share-query).
 brulion_add_test(tst_shell_share SOURCES tst_share.cpp LIBS brulion_shell brulion_platform)
+# brulion:// addresses on AppController (appautomation.cpp): opening, writing after the
+# confirmation or with the notebook's key, the policies, waiting for a notebook, another notebook,
+# the documentation, a second launch's `uri` message, links in notes, building addresses.
+brulion_add_test(tst_shell_automation SOURCES tst_automation.cpp LIBS brulion_shell brulion_platform)
 # The tray calendar's placement next to the tray icon and its reopen guard (traypopup.h; offscreen
 # QGuiApplication for the screen lookup).
 brulion_add_test(tst_shell_traypopup SOURCES tst_traypopup.cpp LIBS brulion_shell Qt6::Gui)

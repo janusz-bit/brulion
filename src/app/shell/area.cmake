@@ -3,7 +3,7 @@
 # relative paths below are relative to src/app.
 #
 # C++: the static library brulion_shell (QtCore, QtGui, QtNetwork + core modules; unit-tested by
-# tests/app/shell without the app): AppController (appshare.cpp: shares from other apps), AppSettings, Workspace (implements the
+# tests/app/shell without the app): AppController (appshare.cpp: shares from other apps; appautomation.cpp: brulion:// addresses), AppSettings, Workspace (implements the
 # editor's EditorHost and QueryHost; workspace*.cpp: index queries, history and trash, folders and
 # moves, quick capture — the last three through the core module notebook, shared with brulion-cli —,
 # the clipboard's HTML of copied blocks and pasted HTML (core io), PDFs (workspacepdf.cpp: thumbnails,
@@ -46,6 +46,7 @@ endif()
 qt_add_library(brulion_shell STATIC
     ${_brulion_shell_dir}/appcontroller.h ${_brulion_shell_dir}/appcontroller.cpp
     ${_brulion_shell_dir}/appshare.cpp
+    ${_brulion_shell_dir}/appautomation.cpp
     ${_brulion_shell_dir}/appsettings.h ${_brulion_shell_dir}/appsettings.cpp
     ${_brulion_shell_dir}/appupdates.h ${_brulion_shell_dir}/appupdates.cpp
     ${_brulion_shell_dir}/localai.h ${_brulion_shell_dir}/localai.cpp
@@ -96,7 +97,7 @@ target_include_directories(brulion_shell PUBLIC ${_brulion_shell_dir})
 target_link_libraries(brulion_shell
     PUBLIC Qt6::Core Qt6::Gui Qt6::Qml brulion_editorhost brulion_core_vault brulion_core_index brulion_core_markdown
            brulion_core_reminders brulion_core_dates brulion_core_log brulion_core_notebook brulion_core_backup
-           brulion_core_extensions brulion_core_ai brulion_core_chat
+           brulion_core_extensions brulion_core_ai brulion_core_chat brulion_core_automation
     PRIVATE Qt6::Network brulion_core_appupdate brulion_core_util brulion_core_text brulion_core_sync brulion_core_io brulion_core_webpicture
             brulion_core_github
             brulion_core_drawing brulion_notify brulion_background
@@ -151,6 +152,8 @@ endif()
 qt_target_qml_sources(brulion QML_FILES
     qml/shell/AppShell.qml
     qml/shell/ShellAboutDialog.qml
+    qml/shell/ShellAutomationDialog.qml
+    qml/shell/ShellAutomationSettings.qml
     qml/shell/ShellBackupSettings.qml
     qml/shell/ShellBottomNav.qml
     qml/shell/ShellContextDrawer.qml

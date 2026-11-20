@@ -764,6 +764,9 @@ Q_SIGNALS:
     void pathRemoved(const QString &path);
     /// navigate() from the editor or a view; AppController handles it.
     void navigationRequested(const QVariantMap &route, bool newPane);
+    /// A brulion:// link clicked in a note (openUrl()): AppController::receiveUri() checks it as any
+    /// link's — a note may come from anywhere, so writing still needs the key or the user's "Write".
+    void automationUriRequested(const QString &uri);
     /// Something failed that the user should know about (translated message).
     void errorOccurred(const QString &message);
     /// Something the user should know that is not an error (translated; an info toast).

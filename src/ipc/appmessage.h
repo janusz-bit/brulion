@@ -13,6 +13,11 @@
 //                                     {"view": "journal", "date": …}) once the notebook is ready;
 //                                     a route for another notebook than the one open is refused
 //                                     with a notice (brulion-cli app open)
+//   uri {"uri": "brulion://…"}        a brulion:// address (docs/UI.md "Automation"): a second
+//                                     launch with the address (the desktop entry's %U, Windows'
+//                                     URL protocol), brulion-cli uri open; the app checks it as any
+//                                     link's (AppController::receiveUri) — a Brulion older than 0.25
+//                                     ignores it
 //   share {"share": {...}}            show the window and offer files opened with Brulion (a
 //                                     second launch with `--open <file>…`: "Otwórz za pomocą") in
 //                                     the share dialog; a file of the open notebook opens as its
@@ -57,6 +62,8 @@ QByteArray openMessage(const QJsonObject &route, const QString &vaultRoot);
 /// (notebook::sharedContentToJson), `activationToken` the launcher's XDG_ACTIVATION_TOKEN (empty:
 /// none).
 QByteArray shareMessage(const QJsonObject &share, const QByteArray &activationToken = {});
+/// The `uri` message of a brulion:// address (`activationToken`: the launcher's, "" none).
+QByteArray uriMessage(const QString &uri, const QByteArray &activationToken = {});
 /// `verb` of a second launch (activate, capture, today, hidden) with {"activationToken": …} when
 /// there is one; the bare verb otherwise.
 QByteArray launchMessage(const QByteArray &verb, const QByteArray &activationToken = {});

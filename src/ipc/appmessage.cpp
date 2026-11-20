@@ -56,6 +56,11 @@ QByteArray shareMessage(const QJsonObject &share, const QByteArray &activationTo
     return encodeMessage("share", withToken(QJsonObject{{u"share"_s, share}}, activationToken));
 }
 
+QByteArray uriMessage(const QString &uri, const QByteArray &activationToken)
+{
+    return encodeMessage("uri", withToken(QJsonObject{{u"uri"_s, uri}}, activationToken));
+}
+
 QByteArray launchMessage(const QByteArray &verb, const QByteArray &activationToken)
 {
     return encodeMessage(verb, withToken({}, activationToken));

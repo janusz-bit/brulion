@@ -68,4 +68,9 @@ void rememberShellLanguage(const QString &language);
 /// page opened over https cannot fetch anything over http (mixed content).
 QString pageScheme();
 
+/// Ask the browser to open web+brulion: links with this page (navigator.registerProtocolHandler
+/// with "?uri=%s": wasm/index.html hands the address to the app as --uri, docs/WEB.md
+/// "brulion:// links"); the browser asks the user. False when it has no such API or refused.
+bool registerProtocolHandler();
+
 } // namespace brulion::platform

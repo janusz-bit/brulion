@@ -45,6 +45,20 @@ EM_JS(void, brulion_shell_language, (int polish), {
     }
 });
 
+EM_JS(int, brulion_shell_register_protocol, (), {
+    try {
+        var nav = globalThis["navigator"];
+        var location = globalThis["location"];
+        if (!nav || !nav.registerProtocolHandler || !location) return 0;
+        var url = new URL(".", location.href);
+        nav.registerProtocolHandler("web+brulion", url.href + "?uri=%s");
+        return 1;
+    } catch (e) {
+        console.warn("Brulion: no handler for web+brulion links", e);
+        return 0;
+    }
+});
+
 EM_JS(int, brulion_shell_page_scheme, (), {
     var location = globalThis["location"];
     var protocol = location ? String(location.protocol) : "";
@@ -230,6 +244,11 @@ void reportIndexCacheSaved()
 void rememberShellLanguage(const QString &language)
 {
     brulion_shell_language(language == QLatin1String("pl") ? 1 : 0);
+}
+
+bool registerProtocolHandler()
+{
+    return brulion_shell_register_protocol() != 0;
 }
 
 QString pageScheme()
