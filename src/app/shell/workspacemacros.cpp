@@ -7,6 +7,7 @@
 #include "workspaceextensions.h"
 
 #include "extensions/builtin.h"
+#include "io/files.h"
 #include "index/vaultindex.h"
 #include "log/categories.h"
 #include "markdown/journal.h"
@@ -112,7 +113,6 @@ void WorkspaceExtensions::runMacros()
     }
     const qint64 now = m_macroClock.elapsed();
     const QStringList keys = m_macros.pending(now - kMacroKeepMs);
-    const bool comma = m_language == u"pl";
     QElapsedTimer slice;
     slice.start();
     for (const QString &key : keys) {
@@ -123,51 +123,90 @@ void WorkspaceExtensions::runMacros()
         const std::optional<extensions::MacroRequest> request = m_macros.request(key);
         if (!request || !m_engine->isLoaded(request->extension))
             continue;
-        markdown::MacroView view;
-        extensions::Reads reads;
-        bool failed = false;
-        qint64 &spent = m_macroSpentMs[request->path];
-        if (spent >= extensions::MacroBudgetMs) {
-            // The note's macros had their time in this round: the rest wait for a change.
-            view.state = markdown::MacroView::State::TooMany;
-            view.message = tr("the page's macros took too long");
-            reads.everything = true;
-            failed = true;
-        } else {
-            QElapsedTimer clock;
-            clock.start();
-            m_engine->startRecording();
-            const extensions::Result r = m_engine->runMacro(request->extension, request->name,
-                                                            macroContext(request->arguments, request->path),
-                                                            extensions::MacroTimeoutMs);
-            reads = m_engine->stopRecording();
-            spent += clock.elapsed();
-            if (r.ok()) {
-                view = extensions::macroViewFrom(r.value, comma);
-                failed = view.state != markdown::MacroView::State::Ok;
-            } else {
-                failed = true;
-                view.state = markdown::MacroView::State::Error;
-                view.message = r.error.section(u'\n', 0, 0);
-                if (r.status == extensions::Status::Timeout) {
-                    m_macros.countTimeout(key);
-                    view.message = tr("took longer than %1 ms").arg(extensions::MacroTimeoutMs);
-                    reads.everything = true;
-                }
-            }
-        }
-        const bool changed = m_macros.store(key, view, reads, failed, now);
-        if (changed && view.state == markdown::MacroView::State::Error) {
-            const QString macro = markdown::macroSource(request->extension, request->name, request->arguments);
-            m_console->append(u"error"_s, macro + u": "_s + view.message, title(request->extension));
-            qCInfo(lcApp, "macro %s failed: %s", qUtf8Printable(macro), qUtf8Printable(view.message));
-        }
-        if (changed)
-            noteMacrosChanged();
+        computeMacro(key, *request, now);
     }
     // The round is over: the notes' budgets start again, macros nobody looked at lately go.
     m_macroSpentMs.clear();
     m_macros.prune(now - kMacroKeepMs);
+}
+
+markdown::MacroView WorkspaceExtensions::computeMacro(const QString &key, const extensions::MacroRequest &request,
+                                                      qint64 now)
+{
+    const bool comma = m_language == u"pl";
+    markdown::MacroView view;
+    extensions::Reads reads;
+    bool failed = false;
+    qint64 &spent = m_macroSpentMs[request.path];
+    if (spent >= extensions::MacroBudgetMs) {
+        // The note's macros had their time in this round: the rest wait for a change.
+        view.state = markdown::MacroView::State::TooMany;
+        view.message = tr("the page's macros took too long");
+        reads.everything = true;
+        failed = true;
+    } else {
+        QElapsedTimer clock;
+        clock.start();
+        m_engine->startRecording();
+        const extensions::Result r = m_engine->runMacro(request.extension, request.name,
+                                                        macroContext(request.arguments, request.path),
+                                                        extensions::MacroTimeoutMs);
+        reads = m_engine->stopRecording();
+        spent += clock.elapsed();
+        if (r.ok()) {
+            view = extensions::macroViewFrom(r.value, comma);
+            failed = view.state != markdown::MacroView::State::Ok;
+        } else {
+            failed = true;
+            view.state = markdown::MacroView::State::Error;
+            view.message = r.error.section(u'\n', 0, 0);
+            if (r.status == extensions::Status::Timeout) {
+                m_macros.countTimeout(key);
+                view.message = tr("took longer than %1 ms").arg(extensions::MacroTimeoutMs);
+                reads.everything = true;
+            }
+        }
+    }
+    const bool changed = m_macros.store(key, view, reads, failed, now);
+    if (changed && view.state == markdown::MacroView::State::Error) {
+        const QString macro = markdown::macroSource(request.extension, request.name, request.arguments);
+        m_console->append(u"error"_s, macro + u": "_s + view.message, title(request.extension));
+        qCInfo(lcApp, "macro %s failed: %s", qUtf8Printable(macro), qUtf8Printable(view.message));
+    }
+    if (changed)
+        noteMacrosChanged();
+    return view;
+}
+
+QHash<QString, QHash<QString, QString>> WorkspaceExtensions::macroTexts(const QList<io::FileEntry> &files)
+{
+    // What the documents of an export show for the notes' macros: what the app computed, and
+    // what it did not yet computed now, within a few seconds for the whole export.
+    QHash<QString, QHash<QString, QString>> out;
+    if (!m_engine || m_engine->isRunning())
+        return out;
+    QElapsedTimer budget;
+    budget.start();
+    const qint64 now = m_macroClock.elapsed();
+    for (const io::FileEntry &file : files) {
+        if (!paths::isMarkdown(file.path) || !file.data.contains("{{"))
+            continue;
+        const QString content = QString::fromUtf8(file.data);
+        for (const markdown::MacroSpan &m : markdown::findMacrosInNote(content)) {
+            if (!m_engine->isLoaded(m.extension) || !m_macroNames.contains(m.extension + u'/' + m.name))
+                continue;
+            const extensions::MacroRequest request{m.extension, m.name, m.arguments, file.path};
+            const QString key = extensions::MacroCache::keyOf(request);
+            if (!m_macros.ask(key, request, now))
+                continue;
+            std::optional<markdown::MacroView> view = m_macros.view(key);
+            if ((!view || m_macros.isStale(key)) && budget.elapsed() < 3000)
+                view = computeMacro(key, request, now);
+            if (view && view->state == markdown::MacroView::State::Ok)
+                out[file.path].insert(content.sliced(m.from, m.to - m.from), markdown::macroMarkdown(*view));
+        }
+    }
+    return out;
 }
 
 void WorkspaceExtensions::noteMacrosChanged()

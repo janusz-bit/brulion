@@ -62,6 +62,9 @@ class NotebookHost;
 namespace sync {
 class NetworkHttpTransport;
 }
+namespace io {
+struct FileEntry;
+}
 } // namespace brulion
 
 namespace brulion::shell {
@@ -294,6 +297,10 @@ public:
     /// | "off" | "error" | "unknown" | "running"), title, path (its page, "" for a built-in), line
     /// (an error's, 0-based; -1), message, builtin}.
     Q_INVOKABLE QVariantMap macroExtension(const QString &extension) const;
+    /// What the macros of `files` show, for the documents of an export (io::ExportInput::
+    /// macroTexts): the values computed, those not computed yet computed now — a few seconds for
+    /// the whole export at most.
+    QHash<QString, QHash<QString, QString>> macroTexts(const QList<io::FileEntry> &files);
     /// A macro's placeholder was clicked in the editor: macroHelpRequested() for the dialog that
     /// offers to run, switch on or open its extension.
     Q_INVOKABLE void showMacro(const QString &extension, const QString &name, const QString &arguments);
@@ -424,6 +431,8 @@ private:
     /// Extensions loaded, unloaded, approved or switched: every macro asks again.
     void macrosReset();
     void noteMacrosChanged();
+    /// Computes one macro now and keeps its value (runMacros(), macroTexts()).
+    markdown::MacroView computeMacro(const QString &key, const extensions::MacroRequest &request, qint64 now);
     /// The ctx a macro or a variable of the note `path` gets.
     QVariantMap macroContext(const QString &arguments, const QString &path) const;
 

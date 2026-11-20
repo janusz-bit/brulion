@@ -1,5 +1,7 @@
 #include "markdown/macros.h"
 
+#include "markdown/inline.h"
+
 using namespace Qt::StringLiterals;
 
 namespace brulion::markdown {
@@ -176,6 +178,102 @@ ViewBlock parseViewBlock(QStringView source)
     }
     if (out.extension.isEmpty() && out.problem.isEmpty())
         out.problem = u"the first line names the view, <extension>/<view>"_s;
+    return out;
+}
+
+QList<MacroSpan> findMacrosInNote(QStringView content)
+{
+    QList<MacroSpan> out;
+    QChar fence;
+    qsizetype fenceLength = 0;
+    qsizetype start = 0;
+    while (start <= content.size()) {
+        qsizetype end = content.indexOf(u'\n', start);
+        if (end < 0)
+            end = content.size();
+        const QStringView line = content.sliced(start, end - start);
+        // Fenced code: from a line of three or more backticks or tildes to one of the same
+        // character at least as long (a list item's indented fence too).
+        const QStringView trimmed = line.trimmed();
+        const QStringView marker = trimmed.startsWith(u"- ") || trimmed.startsWith(u"* ") ? trimmed.sliced(2).trimmed() : trimmed;
+        qsizetype run = 0;
+        const QChar first = marker.isEmpty() ? QChar() : marker.front();
+        if (first == u'`' || first == u'~') {
+            while (run < marker.size() && marker[run] == first)
+                ++run;
+        }
+        if (fenceLength > 0) {
+            if (first == fence && run >= fenceLength && marker.sliced(run).trimmed().isEmpty())
+                fenceLength = 0;
+        } else if (run >= 3) {
+            fence = first;
+            fenceLength = run;
+        } else if (line.contains(u"{{")) {
+            for (MacroSpan m : findMacros(maskInlineCode(line))) {
+                m.from += start;
+                m.to += start;
+                out.append(m);
+            }
+        }
+        if (end >= content.size())
+            break;
+        start = end + 1;
+    }
+    return out;
+}
+
+QString replaceMacros(QStringView content, const std::function<std::optional<QString>(const MacroSpan &)> &value)
+{
+    QString out;
+    qsizetype last = 0;
+    for (const MacroSpan &m : findMacrosInNote(content)) {
+        const std::optional<QString> text = value ? value(m) : std::nullopt;
+        if (!text)
+            continue;
+        out += content.sliced(last, m.from - last);
+        out += *text;
+        last = m.to;
+    }
+    out += content.sliced(last);
+    return out;
+}
+
+QString macroMarkdown(const MacroView &view)
+{
+    if (view.state != MacroView::State::Ok)
+        return {};
+    const auto escaped = [](const QString &text) {
+        QString out;
+        out.reserve(text.size());
+        for (const QChar c : text) {
+            if (QStringView(u"\\`*_[]#<>~=|$!{}").contains(c))
+                out.append(u'\\');
+            out.append(c == u'\n' || c == u'\r' ? u' ' : c);
+        }
+        return out;
+    };
+    QString out;
+    for (const MacroPiece &p : view.pieces) {
+        QString piece;
+        switch (p.kind) {
+        case MacroPiece::Kind::Text: piece = escaped(p.text); break;
+        case MacroPiece::Kind::Link: {
+            QString page = p.page;
+            page.remove(u'[').remove(u']').remove(u'|');
+            QString label = p.text;
+            label.remove(u'[').remove(u']').remove(u'|');
+            piece = u"[["_s + page + (label.isEmpty() || label == page ? QString() : u'|' + label) + u"]]"_s;
+            break;
+        }
+        case MacroPiece::Kind::Code: {
+            QString code = p.text;
+            code.replace(u'`', u'\'');
+            piece = u'`' + code + u'`';
+            break;
+        }
+        }
+        out += p.bold && p.kind != MacroPiece::Kind::Link ? u"**"_s + piece + u"**"_s : piece;
+    }
     return out;
 }
 

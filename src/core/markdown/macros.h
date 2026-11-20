@@ -26,6 +26,9 @@
 #include <QStringView>
 #include <QVariantMap>
 
+#include <functional>
+#include <optional>
+
 namespace brulion::markdown {
 
 /// A macro found in a text.
@@ -109,6 +112,19 @@ struct ViewBlock {
     /// Why it names no view, or a line it could not read ("line 3: not key: value"); "" fine.
     QString problem;
 };
+/// The macros of a whole note's text, outside fenced code, code spans and %%comments%% (a macro
+/// there is text): positions in `content`.
+QList<MacroSpan> findMacrosInNote(QStringView content);
+
+/// `content` with every macro findMacrosInNote() finds replaced by `value(macro)` — or kept as
+/// written when it gives nullopt. Everything else stays byte for byte (the rendered exports:
+/// docs/SYNTAX.md §13 "Macros").
+QString replaceMacros(QStringView content, const std::function<std::optional<QString>(const MacroSpan &)> &value);
+
+/// A macro's view as Markdown text, for a document made from the note (an export): text escaped
+/// (`\*`, `\[` …), bold `**…**`, a link `[[page|label]]`, code in backticks; "" for a placeholder.
+QString macroMarkdown(const MacroView &view);
+
 /// The fence language of view blocks: "view".
 inline constexpr QStringView ViewBlockLanguage = u"view";
 /// The block's inner text (between its fences) read: at most 64 params, 64 KB of text.

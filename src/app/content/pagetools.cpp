@@ -734,6 +734,7 @@ QByteArray PageTools::exportData(const QString &rawPath, const QString &format) 
     input.config = vault->config();
     input.vaultName = paths::pageTitle(path);
     input.now = m_workspace->now();
+    input.macroTexts = m_workspace->extensions()->macroTexts(input.files);
     const io::ExportResult result = io::runExport(*exporter, input);
     return result.files.isEmpty() ? QByteArray() : result.files.first().data;
 }

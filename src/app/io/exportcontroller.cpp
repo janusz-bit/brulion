@@ -667,6 +667,8 @@ io::ExportInput ExportController::exportInput()
     input.now = m_clock ? m_clock() : m_workspace->now();
     input.webPictures = std::exchange(m_webCopies, {});
     input.paperSize = m_paperSize;
+    // What the macros of extensions show goes into the documents (docs/SYNTAX.md §13 "Macros").
+    input.macroTexts = m_workspace->extensions()->macroTexts(input.files);
     m_readQueue.clear();
     return input;
 }

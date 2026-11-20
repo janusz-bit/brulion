@@ -104,6 +104,8 @@ private Q_SLOTS:
     void hostileInput();
     void viewBlock_data();
     void viewBlock();
+    void inNote();
+    void markdownOfView();
 };
 
 void TestMarkdownMacros::find_data()
@@ -342,6 +344,40 @@ void TestMarkdownMacros::viewBlock()
     QCOMPARE(block.view, view);
     QCOMPARE(block.params, params);
     QCOMPARE(block.problem, problem);
+}
+
+void TestMarkdownMacros::inNote()
+{
+    // A whole note: macros in fenced code (a list item's too), code spans and comments are text.
+    const QString note = u"# Trening\r\n- Rekord: {{ext:a/rekord Przysiad}}\r\n- ```\r\n  {{ext:a/w-kodzie}}\r\n  ```\r\n"
+                         u"`{{ext:a/span}}` %%{{ext:a/komentarz}}%% {{ext:a/b}}\r\n~~~~\r\n{{ext:a/x}}\r\n```\r\n"
+                         u"~~~~\r\nPo {{ext:a/po}}"_s;
+    QStringList names;
+    for (const MacroSpan &m : findMacrosInNote(note))
+        names << m.name + u'@' + QString::number(m.from);
+    QCOMPARE(names, (QStringList{u"rekord@21"_s, u"b@125"_s, u"po@171"_s}));
+    QCOMPARE(note.sliced(21, 25), u"{{ext:a/rekord Przysiad}}"_s);
+    // Replaced where a value is given; everything else byte for byte (\r\n, the other macros).
+    const QString replaced = replaceMacros(note, [](const MacroSpan &m) -> std::optional<QString> {
+        if (m.name == u"rekord")
+            return u"**120 kg**"_s;
+        return std::nullopt;
+    });
+    QCOMPARE(replaced, QString(note).replace(u"{{ext:a/rekord Przysiad}}"_s, u"**120 kg**"_s));
+    QCOMPARE(replaceMacros(note, nullptr), note);
+    QVERIFY(findMacrosInNote(QString()).isEmpty());
+}
+
+void TestMarkdownMacros::markdownOfView()
+{
+    MacroView v;
+    v.pieces = {{MacroPiece::Kind::Text, u"120 kg × 3 *"_s, {}, {}, true},
+                {MacroPiece::Kind::Text, u" [x] #tag"_s, {}, u"muted"_s, false},
+                {MacroPiece::Kind::Link, u"Wyc|iskanie"_s, u"Ćwiczenia/Wyciskanie [leżąc]"_s, {}, true},
+                {MacroPiece::Kind::Code, u"a`b"_s, {}, {}, false}};
+    QCOMPARE(macroMarkdown(v), u"**120 kg × 3 \\*** \\[x\\] \\#tag[[Ćwiczenia/Wyciskanie leżąc|Wyciskanie]]`a'b`"_s);
+    v.state = MacroView::State::Pending;
+    QCOMPARE(macroMarkdown(v), QString());
 }
 
 QTEST_GUILESS_MAIN(TestMarkdownMacros)
