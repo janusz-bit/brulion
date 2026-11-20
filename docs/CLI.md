@@ -248,6 +248,12 @@ Never compute a hash yourself.
 | `habit set <name> <state>` | done, skipped, open (zrobione, pominięte, brak); `[--date D]` | the day's check in its daily note: ticks the existing one, else writes `- [x] Name #habit ✅ today` (`#nawyk` with `--lang pl`) next to the day's other checks (the note created from the journal template); open sets them back to `[ ]` | yes |
 | `habit tick <name>` | `[--date D]` | `habit set <name> done` | yes |
 | `habit skip <name>` | `[--date D]` | `habit set <name> skipped`: an excused day (the streak goes on) | yes |
+| `card list` | `[--deck D] [--limit N] [--tags T] [--new-per-day N] [--retention P]` | the flashcards (docs/SYNTAX.md §15): `{cards: [{id, kind, sibling, siblings, page, path, line, decks, folder, question, answer, context, ref, memory: {state, due?, interval?, stability?, difficulty?, lastReview?, retrievability?, reps, lapses}}], counts: {due, review, learningDue, new, newTotal, learning, total}, now}`; `--deck tag:flashcards/hiszpański`, `page:Name`, `folder:Path` | |
+| `card due` | `card list`'s options | what a session asks now, in its order: learning cards whose step is over, reviews due today, new cards up to the day's limit | |
+| `card show <id>` | `card list`'s options | one card, and `next`: what each grade would schedule `{Again: {due, interval}, …}` | |
+| `card review <id> <grade>` | again, hard, good, easy (1–4, znowu, trudne, dobrze, łatwe); `card list`'s options | schedules the card with FSRS-6 and writes its state next to it (the plugin's `<!--SR:…-->` comment, Logseq's `card-*` properties) and a line into the review log: `{id, grade, before, after, interval, question, page, path, line, writes}` | yes |
+| `card grade <id> <grade>` | as `card review` | `card review` | yes |
+| `card stats` | `[--deck D]`, `card list`'s options | `{total, new, learning, young, mature, due, reviewedToday, retention, reviews, perDay: [{date, correct, again}], forecast: [{date, count}]}` (30 days back and ahead) | |
 | `remind add <text>` | `--at D [--alarm] [--every R] [--task] [--page P \| --date D]` | a reminder ⏰ / alarm ⏰! | yes |
 | `remind list` | `[--upcoming DAYS] [--from D --to D] [--limit N]` | reminders due, recurring ones expanded; no state kept | |
 | `remind snooze <ref>` | `--minutes N \| --to D` | move a reminder (a recurring one gets a one-off child) | yes |
@@ -312,6 +318,15 @@ tick` and `habit skip` take the rest of the line): a name no habit has is exit 3
 with the `habits` there are; a name that cannot be written as a check (it would read back as
 another) is exit 2 `bad_name`. Example: `brulion-cli habit tick Medytacja`, `brulion-cli habit set
 "Czytanie książek" skipped --date wczoraj`.
+
+The `card` commands are run by the built-in flashcards extension (`fiszki.luau`, its commands
+`list`, `show`, `grade` and `stats` with the options as `ctx.args`) as the app's Flashcards view
+runs them: a grade's two writes — the card's note and the month's review log (made when missing) —
+go each through the command line's edit (the lock, `--dry-run`, `--diff`, hashes; a note that
+changed while it was computed is exit 4 `concurrent_change`). An id that is no card is exit 3
+`card_not_found`, a grade that is none exit 2 `bad_argument`. `--now` sets the review's time. An
+agent quizzes the user so: `card due` → ask the `question` → show the `answer` → `card review <id>
+good` (the MCP tools `brulion_card_due`, `brulion_card_review`).
 
 `week` and `month` take a period phrase (docs/SYNTAX.md §1 "Weekly and monthly notes"): "ten
 tydzień", "next week", "zeszły miesiąc", `2026-W45`, `tydzień 45`, `2026-11`, `listopad 2026`, or a

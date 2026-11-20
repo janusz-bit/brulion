@@ -31,6 +31,7 @@ Rectangle {
         case "tasks": return qsTr("Tasks")
         case "habits": return qsTr("Habits")
         case "gym": return qsTr("Gym")
+        case "flashcards": return qsTr("Flashcards")
         case "allPages": return qsTr("Pages")
         case "tags": return qsTr("Tags")
         case "graph": return qsTr("Graph")
@@ -46,6 +47,7 @@ Rectangle {
         case "tasks": return "list-todo"
         case "habits": return "flame"
         case "gym": return "dumbbell"
+        case "flashcards": return "layers"
         case "allPages": return "files"
         case "tags": return "tags"
         case "graph": return "waypoints"
@@ -167,6 +169,8 @@ Rectangle {
         hoverEnabled: !Theme.touchUi
         Accessible.role: Accessible.PageTab
         Accessible.name: title
+        Accessible.description: itemId === "flashcards" && Workspace.extensions.flashcardsDue > 0
+                                ? qsTr("%n to study now", "", Workspace.extensions.flashcardsDue) : ""
         Accessible.selected: current
 
         contentItem: Column {
@@ -188,6 +192,17 @@ Rectangle {
                     name: nav.iconOf(tab.itemId)
                     size: Theme.iconSize
                     color: tab.current ? Theme.fg : Theme.fgMuted
+                }
+                // The flashcards to study now, at the icon's corner.
+                BBadge {
+                    objectName: "bottomNavBadge"
+                    readonly property int due: tab.itemId === "flashcards" ? Workspace.extensions.flashcardsDue : 0
+                    visible: due > 0
+                    x: parent.width / 2 + 4
+                    y: -2
+                    count: due
+                    variant: "accent"
+                    Accessible.ignored: true
                 }
             }
             NavLabel {

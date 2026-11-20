@@ -801,6 +801,55 @@ docs/SYNTAX.md §5 "Gym") through its two views, drawn by `ShellExtensionView`.
 * **Start a workout** (the header's button, the palette's "Siłownia: zacznij trening"): asks which
   plan (a page tagged `#plan-treningowy`) and appends it to today's note with progression.
 
+## Flashcards
+
+`qml/views/FlashcardsView.qml` (route `flashcards` {tab?: "decks" | "review" | "stats", deck?,
+group?: "tag" | "page" | "folder", ahead?, more?}; the sidebar's **Flashcards** under Gym and a
+bottom-bar tab to choose — both with the number of cards to study now on the icon's corner
+(`WorkspaceExtensions.flashcardsDue`, an accent `BBadge`) —, the palette's "Flashcards"
+`go.flashcards` with that number under it, "Review this page's cards" `flashcards.reviewPage` on a
+page; the icon `layers`): cards written in notes and scheduled with FSRS (docs/SYNTAX.md §15).
+
+* **The built-in extension `fiszki`** (`src/core/extensions/builtin/fiszki.luau`) finds the cards,
+  schedules and writes everything; the view is its views `decks`, `review` and `stats` in an
+  `ExtensionView` (the route's keys as params through `setParam`) drawn by `ShellExtensionView`. On by
+  default (`AppSettings.flashcardsEnabled`, `extensions/fiszki`; off: an empty state with **Switch
+  on**). Settings → Extensions → Flashcards: new cards a day (5–50, 20), the desired retention
+  (80–95 %, 90), the tags of decks ("flashcards, fiszki"), the code as a page ("Edit the code") —
+  device settings `WorkspaceExtensions::setFlashcardSettings` gives the extension with every view,
+  action and command (`withSettings`).
+* **Header** (QML): the title, "N cards to study now" (else what flashcards are), **Study**
+  (primary; an icon alone on narrow windows) — all cards, or the deck of the statistics —, the tabs
+  Decks · Review · Statistics (`BSegmented`), on Decks the grouping By tag · By page · By folder, on
+  Review and Statistics the deck as an accent chip with an × back to every card; the view's error
+  under it. Escape goes back to the decks.
+* **Decks**: four tiles (`b.ui.stats`: due, new left today, learning, reviewed today), **Study all**
+  (Enter) and **Statistics** (`b.ui.open` drawn as buttons), then a row per deck — sub-decks of a tag
+  indented under it — with its counts (accent while something is due) and a "⋯" menu (Study, Study
+  ahead, Statistics, Open the page); a tap on a deck's name starts its review. No cards: an empty
+  state explaining the syntax.
+* **Review**: a progress bar ("3 reviewed · left: 12 due, 5 new, 1 learning"), the card as a card —
+  its page and headings muted, the question as Markdown in a large size (`b.ui.markdown`: rich text
+  through `InlineRenderer`, links open their pages), after **Show answer** (Space; a primary button
+  that takes the row) a line and the answer —, then the four grades, Again (danger) · Hard (warning)
+  · Good (success) · Easy (info), each with the interval it would schedule under its label ("10
+  min", "4 dni") and its key 1–4 beside it, sharing the row evenly; under them **Undo** (U: the
+  last grade's lines written back, the card shown again with its answer), **Edit** (the note at the
+  card's line), the card's state and when it is due, and a menu (Start over, Open the page, Decks).
+  Done: "All done for today" with the next due day, Study ahead (the next day's reviews), N more new
+  cards, back to the decks.
+* **Statistics**: tiles (due, reviewed today, retention of the last 30 days — success when within 5
+  points of the desired one —, all; new, learning, young, mature), a bar chart of the grades per day
+  (recalled, forgotten) and one of the cards due in the next 30 days, Study and Decks.
+* **Keys** are the view's buttons' own (`b.ui.button`'s `key`): `ShellExtensionView` turns a key
+  press into a name ("space", "enter", "1", "u", "ctrl+z") and `ExtensionView.activateKey` taps the
+  first button that has it, unless a field took the key; the keys show as captions beside the
+  labels where there is a keyboard.
+* **Writing**: a grade writes the card's line (or Logseq's properties) and the month's review log
+  through the extension (docs/SYNTAX.md §15); a line changed meanwhile is not overwritten ("The line
+  changed in the meantime", the card shown again). The view is drawn again when notes change, so a
+  grade made on another device (a sync) shows.
+
 ## Extension views
 
 `ShellExtensionView.qml` over `ExtensionView` (`src/app/shell/extensionviewmodel.h`), a list model of
@@ -822,7 +871,15 @@ tappable, menu) is cells of 26 px (34 on touch UIs) with a gap of 4, under the w
 names from the notebook's first day (`DatesHelper.weekStart`); done in `successBg`, missed in
 `dangerBg`, skipped in `chipDoneBg` with its number struck out, future and outside faint, a due
 day with a 1-px ring and today with a 2-px one; a tap is the day's action (`activateDay`), a
-right-click or a long press its menu. Menus — of a menu line, of a check, of a day — are one
+right-click or a long press its menu. **Markdown** lines (`lineHtml`: the text's blocks rendered by
+`InlineRenderer` with the model's `palette`, which ShellExtensionView binds to the theme's colours,
+links opened through `PageTools`; `lineTitle` its plain
+text for screen readers) in `BRichText`, larger or smaller by `lineSize`; **progress** a
+`BProgressBar` with its caption; **stats** tiles (`lineItems`: label, value, tone; four to a line,
+two on a phone); a **divider** a hairline. **Buttons** with a key, a tone, a second line (`hint`)
+or `primary` — and `open`s drawn as buttons (`lineStyled`) — are `ViewButton`s: tinted by their
+tone, the key's caption beside the label (not on touch screens), a primary one alone in a row
+taking the row, buttons with a second line sharing it evenly (four to a line). Menus — of a menu line, of a check, of a day — are one
 `BMenu` (`menuLabels` / `menuIcons` / `activateMenuItem`): a view's action, a page at its line
 (`file-text`) or a day's journal (`book-open`; `journalRequested`).
 

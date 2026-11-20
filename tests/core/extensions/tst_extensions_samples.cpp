@@ -11,7 +11,7 @@
 //   Indeks projektów  hooks ("change", "save") that keep a page written
 //   Pomodoro          the timer, a block command, the journal
 //   Quick entries     an extension that writes extensions (b.checkExtension, b.write)
-//   Fiszki            a review that moves through view params and b.replaceBlock
+//   Fiszki proste     a review that moves through view params and b.replaceBlock
 //   Link check        every page read in one call, the search, a time budget
 //   Action items      b.ai with a tool, questions inside the conversation
 //
@@ -622,7 +622,7 @@ private Q_SLOTS:
                                   << none << none;
         QTest::newRow("quick-entries") << u"quick-entries"_s << u"Quick entries"_s << write << QStringList{u"new"_s}
                                        << QStringList{u"list"_s} << none << none;
-        QTest::newRow("fiszki") << u"fiszki"_s << u"Fiszki"_s << write << QStringList{u"dodaj"_s}
+        QTest::newRow("fiszki-proste") << u"fiszki-proste"_s << u"Fiszki proste"_s << write << QStringList{u"dodaj"_s}
                                 << QStringList{u"powtorka"_s} << QStringList{u"ocen"_s} << none;
         QTest::newRow("link-check") << u"link-check"_s << u"Link check"_s << none << QStringList{u"report"_s}
                                     << QStringList{u"broken"_s} << none << none;
@@ -1337,7 +1337,7 @@ private Q_SLOTS:
 
     void flashcards()
     {
-        const QString id = u"fiszki"_s, name = u"powtorka"_s, page = u"Geografia.md"_s;
+        const QString id = u"fiszki-proste"_s, name = u"powtorka"_s, page = u"Geografia.md"_s;
         Result r = view(id, name);
         QVERIFY2(r.ok(), qPrintable(r.error));
         QVERIFY2(m_viewProblems.isEmpty(), qPrintable(m_viewProblems.join(u"; "_s)));
@@ -1721,8 +1721,8 @@ private Q_SLOTS:
         QCOMPARE(seriesValues(chart, 0).value(8), QVariant(5));
         QCOMPARE(seriesValues(chart, 1).value(8), QVariant(1));
         // Cards: a line of 60 000 characters is none, an interval of twenty digits is ten years.
-        QCOMPARE(textsOf(trees[u"fiszki"_s], u"text"_s).value(0), u"Wszystkich: 5, opanowanych: 1."_s);
-        QCOMPARE(textsOf(trees[u"fiszki"_s], u"heading"_s).value(0), u"Fiszki: 3 do powtórki"_s);
+        QCOMPARE(textsOf(trees[u"fiszki-proste"_s], u"text"_s).value(0), u"Wszystkich: 5, opanowanych: 1."_s);
+        QCOMPARE(textsOf(trees[u"fiszki-proste"_s], u"heading"_s).value(0), u"Fiszki: 3 do powtórki"_s);
         // Links: brackets by the thousand are no link; an alias with more bars, empty targets.
         QCOMPARE(textsOf(trees[u"link-check"_s], u"heading"_s), QStringList{u"Broken links: 6"_s});
         const QList<QVariantMap> rows = nodesOf(trees[u"link-check"_s], u"row"_s);

@@ -35,9 +35,10 @@
 //     encodePath, joinUrl, urlPathname, hrefPathname, relativeTo, normalizeEtag, quoteEtag,
 //     basicAuth; propfindBody(), parseMultistatus(xml), parseStatusLine, parseHttpDate.
 //
-//   Merging                                                         sync/merge.h, sync/diff.h
+//   Merging                                    sync/merge.h, sync/diff.h, sync/cardmerge.h
 //     merge3(base, local, remote) -> MergeResult{text, clean, hunks}: diff3 with a union of
-//     concurrent insertions (journal appends on two devices merge cleanly), local EOL style and
+//     concurrent insertions (journal appends on two devices merge cleanly), flashcards reviewed on
+//     both devices merged by their later review (mergeCardState), local EOL style and
 //     a three-way merged final newline; mergeJson3() key-wise for .brulion/config.json;
 //     diffLines/diffComm/diff3Regions (Myers with a work budget). Drawings (an SVG with an
 //     Excalidraw scene, `*.excalidraw.md`) are merged element by element against their base
@@ -106,6 +107,7 @@
 #include "sync/diff.h"
 #include "sync/errors.h"
 #include "sync/http.h"
+#include "sync/cardmerge.h"
 #include "sync/merge.h"
 #include "sync/scheduler.h"
 #include "sync/syncengine.h"

@@ -119,12 +119,13 @@ private Q_SLOTS:
         {
             AppSettings s(file, m_tmp.path());
             QVERIFY(!s.gymEnabled());
-            QCOMPARE(s.enabledExtensions(), QStringList{u"nawyki"_s}); // habits are on by default
+            // Habits and flashcards are on by default.
+            QCOMPARE(s.enabledExtensions(), (QStringList{u"nawyki"_s, u"fiszki"_s}));
             QSignalSpy changed(&s, &AppSettings::gymEnabledChanged);
             s.setGymEnabled(true);
             s.setGymEnabled(true);
             QCOMPARE(changed.count(), 1);
-            QCOMPARE(s.enabledExtensions(), (QStringList{u"silownia"_s, u"nawyki"_s}));
+            QCOMPARE(s.enabledExtensions(), (QStringList{u"silownia"_s, u"nawyki"_s, u"fiszki"_s}));
             QVERIFY(AppSettings::sidebarItems().contains(u"gym"_s));
             QVERIFY(AppSettings::bottomNavViews().contains(u"gym"_s));
         }
@@ -143,13 +144,47 @@ private Q_SLOTS:
             s.setHabitsEnabled(false);
             s.setHabitsEnabled(false);
             QCOMPARE(changed.count(), 1);
-            QVERIFY(s.enabledExtensions().isEmpty());
+            QCOMPARE(s.enabledExtensions(), QStringList{u"fiszki"_s});
             QVERIFY(AppSettings::sidebarItems().contains(u"habits"_s));
         }
         AppSettings again(file, m_tmp.path());
         QVERIFY(!again.habitsEnabled());
         again.setHabitsEnabled(true);
-        QCOMPARE(again.enabledExtensions(), QStringList{u"nawyki"_s});
+        QCOMPARE(again.enabledExtensions(), (QStringList{u"nawyki"_s, u"fiszki"_s}));
+    }
+
+    void flashcards()
+    {
+        // Flashcards (the built-in extension `fiszki`, docs/UI.md "Flashcards"): on until switched
+        // off; new cards a day, the retention and the tags of decks kept, out of range clamped, and
+        // given to the extension as it takes them.
+        const QString file = nextFile();
+        {
+            AppSettings s(file, m_tmp.path());
+            QVERIFY(s.flashcardsEnabled());
+            QCOMPARE(s.flashcardsNewPerDay(), 20);
+            QCOMPARE(s.flashcardsRetention(), 90);
+            QCOMPARE(s.flashcardsTags(), u"flashcards, fiszki"_s);
+            QSignalSpy changed(&s, &AppSettings::flashcardsSettingsChanged);
+            s.setFlashcardsNewPerDay(50);
+            s.setFlashcardsNewPerDay(50);
+            s.setFlashcardsRetention(120);
+            s.setFlashcardsTags(u"  fiszki,   słówka "_s);
+            QCOMPARE(changed.count(), 3);
+            QCOMPARE(s.flashcardsRetention(), 99);
+            QCOMPARE(s.flashcardsSettings(), (QVariantMap{{u"tags"_s, u"fiszki, słówka"_s},
+                                                          {u"newPerDay"_s, 50},
+                                                          {u"retention"_s, 0.99}}));
+            s.setFlashcardsTags(u"   "_s); // nothing: the defaults
+            QCOMPARE(s.flashcardsTags(), u"flashcards, fiszki"_s);
+            s.setFlashcardsEnabled(false);
+            QVERIFY(!s.enabledExtensions().contains(u"fiszki"_s));
+            QVERIFY(AppSettings::sidebarItems().contains(u"flashcards"_s));
+            QVERIFY(AppSettings::bottomNavViews().contains(u"flashcards"_s));
+        }
+        AppSettings again(file, m_tmp.path());
+        QVERIFY(!again.flashcardsEnabled());
+        QCOMPARE(again.flashcardsNewPerDay(), 50);
     }
 
     void theModelOnTheDevice()

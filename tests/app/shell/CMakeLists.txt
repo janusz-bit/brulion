@@ -50,6 +50,11 @@ target_compile_definitions(tst_shell_extensions PRIVATE BRULION_SOURCE_DIR="${PR
 # extension `nawyki` — cards, problems, months, checks and days ticked, Undo, "Add habit"'s form.
 brulion_add_test(tst_shell_habits SOURCES tst_habits.cpp
     LIBS brulion_shell brulion_core_extensions brulion_core_index brulion_core_vault)
+# The Flashcards view as the app draws it (docs/UI.md "Flashcards"): ExtensionViewModel over the
+# built-in extension `fiszki` — decks, a review session by its keys with Undo, Markdown as rich text,
+# the app's settings and the sidebar's due count.
+brulion_add_test(tst_shell_flashcards SOURCES tst_flashcards.cpp
+    LIBS brulion_shell brulion_core_extensions brulion_core_index brulion_core_vault)
 brulion_add_test(tst_shell_demovault SOURCES tst_demovault.cpp
     LIBS brulion_shell brulion_core_vault brulion_core_markdown brulion_core_index brulion_core_calc
          brulion_core_dates brulion_core_diagram brulion_core_chart)

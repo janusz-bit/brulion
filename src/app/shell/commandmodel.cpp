@@ -518,8 +518,24 @@ static QList<Command> extensionCommands(const AppController *app, bool blocks)
     if (extensions->gymEnabled())
         out.append({u"go.gym"_s, CommandModel::tr("Gym"), CommandModel::tr("Today's workout, plans, progress"), u"dumbbell"_s,
                     {}, ready});
+    // Flashcards (the built-in `fiszki`, docs/UI.md "Flashcards") while they are on: the view with
+    // what is to study now, the cards of the page on screen.
+    if (extensions->flashcardsEnabled()) {
+        const int due = extensions->flashcardsDue();
+        out.append({u"go.flashcards"_s, CommandModel::tr("Flashcards"),
+                    due > 0 ? CommandModel::tr("%n card(s) to study now", nullptr, due)
+                            : CommandModel::tr("Decks, a review session, statistics"),
+                    u"layers"_s, {}, ready});
+        const QVariantMap route = app->currentRoute();
+        out.append({u"flashcards.reviewPage"_s, CommandModel::tr("Review this page's cards"),
+                    CommandModel::tr("Flashcards: a session of the cards on this page"), u"layers"_s, {},
+                    ready && route.value(u"view"_s).toString() == u"page" && !route.value(u"path"_s).toString().isEmpty()});
+    }
     const auto iconOf = [](const QString &extension) {
-        return extension == u"silownia" ? u"dumbbell"_s : extension == u"nawyki" ? u"flame"_s : u"puzzle"_s;
+        return extension == u"silownia" ? u"dumbbell"_s
+               : extension == u"nawyki" ? u"flame"_s
+               : extension == u"fiszki" ? u"layers"_s
+                                        : u"puzzle"_s;
     };
     for (const extensions::CommandInfo &c : extensions->commands()) {
         if (c.palette) // (else only the app or a view's button runs it: the assistant's chat turn)
@@ -527,7 +543,8 @@ static QList<Command> extensionCommands(const AppController *app, bool blocks)
                         iconOf(c.extension), {}, ready && (!c.needsBlock || blocks)});
     }
     for (const extensions::ViewInfo &v : extensions->views()) {
-        if (!v.label.isEmpty() && v.extension != u"silownia" && v.extension != u"nawyki") // (their own views)
+        if (!v.label.isEmpty() && v.extension != u"silownia" && v.extension != u"nawyki"
+            && v.extension != u"fiszki") // (their own views)
             out.append({u"extview."_s + v.extension + u'.' + v.name, v.label, extensions->title(v.extension),
                         v.icon.isEmpty() ? iconOf(v.extension) : v.icon, {}, ready});
     }
@@ -649,6 +666,10 @@ bool CommandModel::run(const QString &id)
         m_app->navigate({{u"view"_s, u"chat"_s},
                          {u"new"_s, true},
                          {u"page"_s, path.isEmpty() ? QString() : m_app->workspace()->pageTitle(path)}});
+    } else if (id == u"flashcards.reviewPage") {
+        const QString path = m_app->currentRoute().value(u"path"_s).toString();
+        const QString deck = u"page:"_s + m_app->workspace()->pageTitle(path);
+        m_app->navigate({{u"view"_s, u"flashcards"_s}, {u"tab"_s, u"review"_s}, {u"deck"_s, deck}});
     } else if (id == u"extensions.reload")
         m_app->workspace()->extensions()->reloadAll();
     else if (id == u"extensions.settings")

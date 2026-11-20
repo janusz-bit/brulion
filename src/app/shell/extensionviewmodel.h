@@ -14,14 +14,19 @@
 //   today.activate(row) / today.activateControl(row, control, value) / today.enterValue(row, control, "82,5")
 //
 // Lines (role lineType): heading, text (lineIcon, lineTone), empty (lineTitle + lineText, lineIcon),
-// link, open, run, button, menu (a "⋯": menuLabels() / activateMenuItem()), row (controls), month
+// markdown (lineHtml: the text rendered as a note's blocks — InlineRenderer's escaped rich text —,
+// lineSize "large" | "small" | "", lineAlign "center" | "", lineMuted), progress (lineValue of
+// lineMax, lineText its label), stats (lineItems: { label, value, tone } each), divider,
+// link, open, run, button (lineKey, linePrimary, lineTone, lineHint, lineIcon), menu (a "⋯":
+// menuLabels() / activateMenuItem()), row (controls), month
 // (lineMonth "2026-11", lineDays — a map per day of the month { date, day, state, tappable, menu } —
 // and lineTitle its label; activateDay(), a day's menu), chart (chartData + chartSource for
 // ChartView), tableHead / tableRow (cells).
 //
 // Menus (a menu node's items, a check's menu, a day's menu) are lists of { label, action, args } (a
-// view action), { label, page, line? } (a page at its 1-based line) or { label, journal = date } (a
-// day's journal), each with an optional icon.
+// view action), { label, page, line? } (a page at its 1-based line), { label, view, params? }
+// (another view of the extension: viewRequested) or { label, journal = date } (a day's journal),
+// each with an optional icon.
 
 #include <QAbstractListModel>
 #include <QPointer>
@@ -44,7 +49,9 @@ class ExtensionViewModel;
 /// controlValue, controlStep, controlUnit, controlIndex, controlMuted, controlDisplay — a stepper's
 /// number with its unit, "82,5 kg" —, controlNumber — the number alone, "82,5" —, controlState — a
 /// check's "done" | "open" | "skipped" —, controlLabel — a check's or a menu's name —, controlIcon,
-/// controlTone — a text's —, controlHasMenu — a check with a menu, a menu with items).
+/// controlTone — a text's or a button's —, controlHasMenu — a check with a menu, a menu with items —,
+/// controlKey — a button's keyboard shortcut ("1", "space") —, controlPrimary, controlHint — a
+/// button's second line) —, controlStyled — an "open" drawn as a button.
 class ExtensionControlsModel : public QAbstractListModel {
     Q_OBJECT
 public:
@@ -65,6 +72,10 @@ public:
         IconRole,
         ToneRole,
         HasMenuRole,
+        KeyRole,
+        PrimaryRole,
+        HintRole,
+        StyledRole,
     };
     /// `comma`: numbers shown with a decimal comma (Polish).
     ExtensionControlsModel(QList<QVariantMap> controls, bool comma, QObject *parent);
@@ -108,6 +119,8 @@ class ExtensionViewModel : public QAbstractListModel {
     /// The view could not be drawn: the first line of the extension's error ("" = fine).
     Q_PROPERTY(QString error READ error NOTIFY renderedChanged FINAL)
     Q_PROPERTY(int revision READ revision NOTIFY renderedChanged FINAL)
+    /// The colours of rendered Markdown (b.ui.markdown; BlockEditor.rendererPalette's keys).
+    Q_PROPERTY(QVariantMap palette READ palette WRITE setPalette NOTIFY paletteChanged FINAL)
 
 public:
     enum Role {
@@ -126,6 +139,16 @@ public:
         CardRole,
         MonthRole,
         DaysRole,
+        HtmlRole,
+        SizeRole,
+        AlignRole,
+        ValueRole,
+        MaxRole,
+        ItemsRole,
+        KeyRole,
+        PrimaryRole,
+        HintRole,
+        StyledRole,
     };
 
     explicit ExtensionViewModel(QObject *parent = nullptr);
@@ -148,6 +171,8 @@ public:
     void setParams(const QVariantMap &params);
     QString error() const { return m_error; }
     int revision() const { return m_revision; }
+    QVariantMap palette() const { return m_palette; }
+    void setPalette(const QVariantMap &palette);
 
     /// Renders now (also what the model does by itself after a change).
     Q_INVOKABLE void refresh();
@@ -158,6 +183,9 @@ public:
     Q_INVOKABLE void setRouteParams(const QVariantMap &route);
     /// The route that shows `view` of this extension with `params` (an "open" node's request).
     Q_INVOKABLE QVariantMap routeFor(const QString &view, const QVariantMap &params) const;
+    /// The route of a built-in's own view (`routeView`: "flashcards") that shows the extension's
+    /// view `view` as its `tab`, with `params` as the route's other keys.
+    Q_INVOKABLE QVariantMap tabRoute(const QString &routeView, const QString &view, const QVariantMap &params) const;
     /// A line's own action: open (another view of the extension), run (a command), link (the page).
     Q_INVOKABLE void activate(int row);
     /// A control of a row: a button, a check, a stepper (`value`: the stepper's new value), open,
@@ -172,6 +200,10 @@ public:
     /// that is no stepper, and while the lines are being changed (a field that loses the focus
     /// because its delegate goes says nothing to another line).
     Q_INVOKABLE bool enterValue(int row, int control, const QString &text);
+    /// The keyboard shortcut `key` ("space", "enter", "1" … "9", a letter, "ctrl+z" — what a node's
+    /// `key` says, lower case): the first line or row control with it is activated as a tap would;
+    /// false when none has it (the key goes on to whatever else handles it).
+    Q_INVOKABLE bool activateKey(const QString &key);
     /// A day of a month line tapped: its action with its args (nothing for a day without one).
     Q_INVOKABLE void activateDay(int row, const QString &date);
     /// The labels of a menu: of the control `control` of a row (a menu, a check's menu), else of the
@@ -189,6 +221,7 @@ Q_SIGNALS:
     void viewChanged();
     void paramsChanged();
     void renderedChanged();
+    void paletteChanged();
     /// A link of the view, a menu's page: the page to open (its name, a [[link]] target), at the
     /// 0-based `line` when ≥ 0 (the node's 1-based line).
     void pageRequested(const QString &page, int line);
@@ -200,6 +233,11 @@ Q_SIGNALS:
 private:
     struct Line {
         QString type, text, title, page, chartSource, icon, tone, card, month;
+        QString html, size, align, key, hint;
+        double value = 0, max = 0;
+        bool primary = false;
+        bool styled = false; // an "open" drawn as a button (b.ui.open's options)
+        QVariantList items; // a stats line's numbers
         bool muted = false;
         QStringList cells;
         QVariantMap chartData;
@@ -235,6 +273,7 @@ private:
     bool m_updating = false;
     QString m_error;
     int m_revision = 0;
+    QVariantMap m_palette;
     QList<Line> m_lines;
     QTimer m_refreshTimer;
 };

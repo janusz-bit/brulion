@@ -15,6 +15,7 @@ qt_target_qml_sources(brulion QML_FILES
     qml/views/ExtensionRouteView.qml
     qml/views/GraphView.qml
     qml/views/GymView.qml
+    qml/views/FlashcardsView.qml
     qml/views/HabitsView.qml
     qml/views/HistoryView.qml
     qml/views/ImportExportView.qml

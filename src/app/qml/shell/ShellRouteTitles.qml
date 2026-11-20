@@ -45,6 +45,7 @@ QtObject {
         case "tasks": return qsTranslate("AppShell", "Tasks")
         case "habits": return qsTranslate("AppShell", "Habits")
         case "gym": return qsTranslate("AppShell", "Gym")
+        case "flashcards": return qsTranslate("AppShell", "Flashcards")
         case "console": return qsTranslate("AppShell", "Luau console")
         case "chat": return path !== "" ? chatTitle(path) : qsTranslate("AppShell", "AI chat")
         case "extension": return title !== "" ? title : qsTranslate("AppShell", "Extension")
@@ -76,6 +77,7 @@ QtObject {
         case "tasks": return "list-todo"
         case "habits": return "flame"
         case "gym": return "dumbbell"
+        case "flashcards": return "layers"
         case "console": return "terminal"
         case "chat": return "message-square"
         case "extension": return "puzzle"

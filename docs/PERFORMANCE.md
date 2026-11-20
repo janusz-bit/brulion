@@ -788,6 +788,16 @@ every ```query block of the open pages, the Android widgets. Now:
   `tst_extensions_habits` bigNotebook (2000 daily notes × 8 habits and 1000 other pages, a Debug
   build): the first draw ≈ 0.3 s, a draw from the cache ≈ 10 ms; the test holds the first draw and
   the one after a tick under 1.5 s, the cached one under 0.2 s.
+* **Flashcards** (the built-in Luau extension `fiszki`, docs/SYNTAX.md §15) read the deck pages
+  (`b.query("type:pages tag:…")`, then `b.lines` of each) and parse their cards once per
+  `b.revision()`; a deck page whose text (`b.read`) is the one parsed before keeps its cards, so a
+  change elsewhere reads only the pages' texts again. The decks view counts every deck in one pass
+  over the cards. The sidebar's due count (`WorkspaceExtensions::refreshFlashcardsDue`, the
+  extension's command `count`) runs 1.5 s after notes stop changing and every five minutes.
+  Measured in `tst_extensions_flashcards` manyCards (100 deck pages, 5000 cards, a Debug build):
+  counted at first in ≈ 0.6 s, again after another note changed in ≈ 0.13 s. Before the page cache,
+  the single deck count per deck and a cheaper FNV-1a (its prime as a shift and a small product),
+  5000 cards went past the 2 s a call has.
 * **Full syncs stay as cheap as the old full computation.** A first view, another range or the
   date picker's marks compute everything: a `NoteCache` then fills its values from the index's own
   task and reminder lists (contiguous, kept up to date by the index) rather than visiting 10 000

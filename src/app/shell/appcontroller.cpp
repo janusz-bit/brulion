@@ -249,6 +249,12 @@ AppController::AppController(const Options &options, QObject *parent)
             [this] { m_workspace->extensions()->setEnabled(m_settings->enabledExtensions()); });
     connect(m_settings.get(), &AppSettings::assistantEnabledChanged, this,
             [this] { m_workspace->extensions()->setEnabled(m_settings->enabledExtensions()); });
+    connect(m_settings.get(), &AppSettings::flashcardsEnabledChanged, this,
+            [this] { m_workspace->extensions()->setEnabled(m_settings->enabledExtensions()); });
+    // The flashcards' settings go with their views and their due count (WorkspaceExtensions).
+    m_workspace->extensions()->setFlashcardSettings(m_settings->flashcardsSettings());
+    connect(m_settings.get(), &AppSettings::flashcardsSettingsChanged, this,
+            [this] { m_workspace->extensions()->setFlashcardSettings(m_settings->flashcardsSettings()); });
     // A device that never chose a model and has the former default's files keeps that model: the
     // default changed (the assistant's own came first), and an update must not swap the model it
     // uses for one still to download.

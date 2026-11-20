@@ -694,6 +694,108 @@ QString NotebookHost::setProperty(const QString &extension, const QString &ref, 
     return {};
 }
 
+QString NotebookHost::setProperties(const QString &extension, const QString &ref,
+                                    const QList<std::pair<QString, QString>> &props, QString *newRef)
+{
+    VaultPath path;
+    QString content;
+    int line = -1;
+    if (const QString error = resolveRef(ref, &path, &content, &line); !error.isEmpty())
+        return error;
+    QString edited = content;
+    for (const auto &[key, value] : props) {
+        // The block again after each property: a line added moves the end of its own lines.
+        const std::optional<Block> block = blockOfLine(path, edited, m_vault.config(), line);
+        if (!block)
+            return u"stale: the block changed since it was read ("_s + ref + u")"_s;
+        const std::optional<QString> next = setBlockProperty(edited, line, block->ownEndLine, key, value);
+        if (!next)
+            return u"cannot set the property \"%1\""_s.arg(key);
+        edited = *next;
+    }
+    if (edited != content) {
+        if (const QString error = writeFile(extension, path, edited); !error.isEmpty())
+            return error;
+    }
+    if (newRef)
+        *newRef = notebook::formatLineRef(path, line, rawLine(edited, line));
+    return {};
+}
+
+std::optional<QVariantList> NotebookHost::lines(const QString &page)
+{
+    const VaultPath path = pathOf(page);
+    if (path.isEmpty())
+        return std::nullopt;
+    const std::optional<QString> content = read(page);
+    if (!content)
+        return std::nullopt;
+    QList<text::Line> split = text::splitLines(*content);
+    // A note ending with a line break has no line after it.
+    if (split.size() > 1 && split.last().text.isEmpty() && split.last().eol.isEmpty())
+        split.removeLast();
+    QVariantList out;
+    out.reserve(split.size());
+    for (qsizetype i = 0; i < split.size(); ++i) {
+        QString text = split[i].text;
+        if (i == 0 && text.startsWith(QChar(0xFEFF)))
+            text.remove(0, 1); // the file's BOM, no character of the line
+        out << QVariantMap{{u"text"_s, text}, {u"ref"_s, notebook::formatLineRef(path, int(i), split[i].text)}};
+    }
+    return out;
+}
+
+QString NotebookHost::replaceLine(const QString &extension, const QString &ref, const QString &text, QString *newRef)
+{
+    VaultPath path;
+    QString content;
+    int line = -1;
+    if (const QString error = resolveRef(ref, &path, &content, &line); !error.isEmpty())
+        return error;
+    const std::optional<QString> edited = replaceLineText(content, line, text);
+    if (!edited)
+        return u"cannot replace the line of "_s + ref;
+    if (*edited != content) {
+        if (const QString error = writeFile(extension, path, *edited); !error.isEmpty())
+            return error;
+    }
+    if (newRef)
+        *newRef = notebook::formatLineRef(path, line, rawLine(*edited, line));
+    return {};
+}
+
+QString NotebookHost::insertLines(const QString &extension, const QString &ref, const QString &text, bool before,
+                                  QString *newRef)
+{
+    VaultPath path;
+    QString content;
+    int line = -1;
+    if (const QString error = resolveRef(ref, &path, &content, &line); !error.isEmpty())
+        return error;
+    int first = -1;
+    const std::optional<QString> edited = insertLinesAt(content, line, text, before, &first);
+    if (!edited)
+        return u"cannot insert at the line of "_s + ref;
+    if (const QString error = writeFile(extension, path, *edited); !error.isEmpty())
+        return error;
+    if (newRef)
+        *newRef = notebook::formatLineRef(path, first, rawLine(*edited, first));
+    return {};
+}
+
+QString NotebookHost::removeLine(const QString &extension, const QString &ref)
+{
+    VaultPath path;
+    QString content;
+    int line = -1;
+    if (const QString error = resolveRef(ref, &path, &content, &line); !error.isEmpty())
+        return error;
+    const std::optional<QString> edited = removeLineAt(content, line);
+    if (!edited)
+        return u"cannot remove the line of "_s + ref;
+    return writeFile(extension, path, *edited);
+}
+
 void NotebookHost::timer(const QString &extension, int seconds, const QString &label)
 {
     if (onTimer)

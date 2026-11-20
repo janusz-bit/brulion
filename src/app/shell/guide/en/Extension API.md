@@ -28,6 +28,7 @@ Reading needs no permission.
 | `b.blocks({ prop = "habit" })` | every block with that property under it (`habit:: every day`); with a `tag` the blocks that have both, with a `page` only that page's (also blocks deeper down) |
 | `b.search(text, limit)` | what the search view finds: one hit per page, the best first (20 without a `limit`, 200 at most) |
 | `b.query(text, limit, offset)` | a query in the language of [[Queries]]: `{ total, items }` (50 items without a `limit`, 1000 at most; `offset` skips that many first, so you can go through any number of them — `total` counts them all). Weeks start on your notebook's first day of the week |
+| `b.lines(name)` | the page's lines exactly as written, each `{ text, ref }` — also lines that are no block of their own (a paragraph's second line, a comment): their `ref` goes to `b.replaceLine`, `b.insertLine` and `b.removeLine`; `nil` when there is no such page |
 | `b.attachments()` | the notebook's files that are no notes — pictures, PDFs — as paths: `assets/receipt.jpg` |
 | `b.revision()` | a number that changes whenever a note changes: what your code worked out from the notes is still right while it stays the same |
 | `b.checkExtension(name, text)` | tries `text` as the extension page `name` without saving it or asking you: `{ ok, commands, views, hooks, … }`, or `ok = false` with the `error` and the page's `line`. It writes nothing; this is how the AI assistant checks an extension before it writes one |
@@ -86,6 +87,10 @@ To change notes, the extension's page needs `permissions: [write]` in its proper
 | `b.removeBlock(ref)` | removes the block, and the blocks under it |
 | `b.setTask(ref, status)` | only the checkbox, as a click sets it: `"x"` done (with today's date), `" "` open, `"/"` in progress, `"-"` cancelled. Returns the block's `ref` |
 | `b.setProperty(ref, key, value)` | the block's property `key:: value`: changed when it is there, added under the block otherwise; `nil` or `""` removes it. Returns the block's `ref` |
+| `b.setProperties(ref, { { key, value }, … })` | several properties of the block in one write (new ones in this order). Returns the block's `ref` |
+| `b.replaceLine(ref, text)` | the whole line becomes `text`, exactly as given — indentation and all. Returns the line's new `ref` |
+| `b.insertLine(ref, text, where)` | puts the lines of `text`, as written, after that line (`"before"`: before it). Returns the first new line's `ref` |
+| `b.removeLine(ref)` | removes that one line |
 
 `b.replaceBlock` keeps the bullet, the indentation and the task's dates (wherever they stand on the line) unless the new text has dates of its own. It and the other functions that take a `ref` **refuse** when the line has changed since your code read it — a sync arrived, you typed there — so nothing is ever written over a change the code did not see. The error has `stale` in it; read the block again. Lines added or removed above a block do not matter.
 
@@ -149,6 +154,7 @@ end, { label = "Archive the done tasks" })
 | `b.parseWeekdays(text)` | a list of weekdays, `"mon, wed and fri"` gives `{ 1, 3, 5 }`; `nil` when it is not one |
 | `b.formatRecurrence(rule, lang)` | such a repeat in words, in `"en"` or `"pl"`: `every week on Monday, Friday` |
 | `b.formatNumber(n, decimals)` | a number as text, with the decimal comma in a Polish notebook: `82,5` |
+| `b.toUtc(datetime)`, `b.fromUtc(text)` | a local date and time as the UTC moment other apps write (`2026-11-20 18:30` gives `2026-11-20T17:30:00.000Z` in Poland in November), and back; `b.fromUtc` gives `nil` for anything that is not such a moment |
 | `b.lang()`, `b.uiLang()` | the language of the notes and of the interface: `"pl"` or `"en"` |
 | `b.log(text)`, `print(…)` | a line in the Luau console |
 | `b.status(text)` | says what a command waiting for an answer is doing now ("Reading “Home”…"); the AI chat shows it under the AI's dots, `b.status("")` clears it |
@@ -174,7 +180,11 @@ end, { label = "Archive the done tasks" })
 | `b.ui.heading(text)` | a heading |
 | `b.ui.text(text, muted)` | a paragraph; with `true` as the second argument in a quieter colour, with `{ muted = true, icon = "flame", tone = "success" }` also with an icon before it and in a colour (`"success"`, `"danger"`, `"accent"`) |
 | `b.ui.link(page, label, line)` | a link to a page; with a `line` (counted from 1) it opens the page there |
-| `b.ui.button(label, action, args)` | a button that calls one of the view's actions |
+| `b.ui.button(label, action, args, options)` | a button that calls one of the view's actions; `options` may give it a keyboard shortcut (`key = "space"`, `"1"`, `"u"`), make it the main one (`primary = true`), colour it (`tone = "success"`, `"danger"`, `"warning"`, `"info"`), add a second line under its label (`hint = "4 days"`) or an `icon` |
+| `b.ui.markdown(text, options)` | Markdown as a note shows it — bold, links that open their pages, highlights, lists; `{ size = "large" }` makes it bigger, `{ muted = true }` quieter |
+| `b.ui.progress(value, max, label)` | a progress bar with a caption above it |
+| `b.ui.stats({ { label = "Due", value = 12, tone = "accent" }, … })` | numbers side by side, each with its label under it |
+| `b.ui.divider()` | a thin line across |
 | `b.ui.menu(items, label)` | a "⋯" button with a menu (the items below) |
 | `b.ui.row({ … })` | a card with controls side by side: checks, steppers, texts, links, buttons, menus |
 | `b.ui.check(checked, action, args, { menu = …, label = … })` | a task's checkbox: `checked` is `true`, `false` or `"skipped"` (crossed out); `menu` opens with a right click or a long press. Only inside a row |
@@ -183,10 +193,10 @@ end, { label = "Archive the done tasks" })
 | `b.ui.chart({ kind = "line", labels = { … }, series = { { name = "…", values = { … } } } })` | a chart, `"line"` or `"bar"`, a number per label |
 | `b.ui.month({ month = "2026-11", days = { ["2026-11-03"] = { state = "done", action = "…", args = { … }, menu = { … } } } })` | a month as a calendar, a square for each day: `"done"` green, `"missed"` red, `"skipped"` crossed out, `"due"` outlined, `"future"` faint, `"rest"` plain; a tap on a day with an `action` calls it, a right click or a long press opens its `menu`. The weeks start on your notebook's first day of the week, today has a ring |
 | `b.ui.empty(title, text, icon)` | what to show when there is nothing to show, with an icon of your choice |
-| `b.ui.open(label, view, params)` | opens another view of the extension, with `params` for its function |
+| `b.ui.open(label, view, params, options)` | opens another view of the extension, with `params` for its function; with `options` as a button's (`{ primary = true, icon = "play" }`) it looks like a button |
 | `b.ui.run(label, command)` | a button that runs one of the extension's commands |
 
-A **menu** is a list of items: `{ label = "…", action = "…", args = { … } }` calls one of the view's actions, `{ label = "…", page = "…", line = 5 }` opens a page, `{ label = "…", journal = "2026-11-03" }` opens that day of the journal.
+A **menu** is a list of items: `{ label = "…", action = "…", args = { … } }` calls one of the view's actions, `{ label = "…", page = "…", line = 5 }` opens a page, `{ label = "…", view = "…", params = { … } }` opens another view of the extension, `{ label = "…", journal = "2026-11-03" }` opens that day of the journal.
 
 The view's function has to return a piece (a list of pieces is shown as a column): a view that returns nothing says so instead of staying empty. A piece that is not always there can be written `condition and b.ui.text("…") or nil` — a `nil` inside a column or a row is skipped, and a `nil` cell of a table shows empty.
 

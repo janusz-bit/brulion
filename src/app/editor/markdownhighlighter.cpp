@@ -2,6 +2,7 @@
 
 #include "richtext_p.h"
 
+#include "markdown/cloze.h"
 #include "markdown/highlight.h"
 #include "markdown/inline.h"
 #include "markdown/tokens.h"
@@ -642,11 +643,21 @@ void MarkdownHighlighter::highlightInline(const QString &full, int offset, int l
         setRange(at(m.capturedEnd() - m.capturedLength(1)), int(m.capturedLength(1)), m_formats[u"fence"_s]);
         std::fill_n(masked.begin() + m.capturedStart(), m.capturedLength(), u' ');
     }
-    static const QRegularExpression commentRe(u"%%.*?%%"_s);
+    // (HTML comments too: a flashcard's scheduling, `<!--SR:!2026-11-20,3,250-->`.)
+    static const QRegularExpression commentRe(u"%%.*?%%|<!--.*?-->"_s);
     for (auto it = commentRe.globalMatch(masked); it.hasNext();) {
         const auto m = it.next();
         setRange(at(m.capturedStart()), int(m.capturedLength()), m_formats[u"comment"_s]);
         std::fill_n(masked.begin() + m.capturedStart(), m.capturedLength(), u' ');
+    }
+    // Clozes of flashcards (`{{c1::answer::hint}}`, `{{cloze answer}}`): the answer highlighted,
+    // the braces, the number and the hint as markers (markdown/cloze.h).
+    if (masked.contains(u"{{")) {
+        for (const markdown::ClozeSpan &c : markdown::findClozes(masked)) {
+            setRange(at(c.from), int(c.textFrom - c.from), m_formats[u"marker"_s]);
+            setRange(at(c.textFrom), int(c.textTo - c.textFrom), m_formats[u"highlight"_s]);
+            setRange(at(c.textTo), int(c.to - c.textTo), m_formats[u"marker"_s]);
+        }
     }
 
     // Line-level syntax.

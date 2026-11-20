@@ -29,6 +29,7 @@ const QList<Command> &commands()
         addJournalCommands(out);
         addTaskCommands(out);
         addHabitCommands(out);
+        addCardCommands(out);
         addIndexCommands(out);
         addToolCommands(out);
         addExtensionCommands(out);

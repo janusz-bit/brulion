@@ -99,6 +99,13 @@ public:
     QString setTask(const QString &extension, const QString &ref, const QString &status, QString *newRef) override;
     QString setProperty(const QString &extension, const QString &ref, const QString &key, const QString &value,
                         QString *newRef) override;
+    QString setProperties(const QString &extension, const QString &ref, const QList<std::pair<QString, QString>> &props,
+                          QString *newRef) override;
+    std::optional<QVariantList> lines(const QString &page) override;
+    QString replaceLine(const QString &extension, const QString &ref, const QString &text, QString *newRef) override;
+    QString insertLines(const QString &extension, const QString &ref, const QString &text, bool before,
+                        QString *newRef) override;
+    QString removeLine(const QString &extension, const QString &ref) override;
     QString today() override;
     QString now() override;
     int weekStart() override;

@@ -99,6 +99,7 @@ Item {
         { key: "tasks", title: qsTr("Tasks") },
         { key: "habits", title: qsTr("Habits") },
         { key: "gym", title: qsTr("Gym") },
+        { key: "flashcards", title: qsTr("Flashcards") },
         { key: "allPages", title: qsTr("All pages") },
         { key: "tags", title: qsTr("Tags") },
         { key: "graph", title: qsTr("Graph") },
@@ -132,6 +133,7 @@ Item {
         { value: "tasks", text: qsTr("Tasks"), iconName: "list-todo" },
         { value: "habits", text: qsTr("Habits"), iconName: "flame" },
         { value: "gym", text: qsTr("Gym"), iconName: "dumbbell" },
+        { value: "flashcards", text: qsTr("Flashcards"), iconName: "layers" },
         { value: "allPages", text: qsTr("All pages"), iconName: "files" },
         { value: "tags", text: qsTr("Tags"), iconName: "tags" },
         { value: "graph", text: qsTr("Graph"), iconName: "waypoints" }
@@ -1409,6 +1411,63 @@ Item {
                     title: qsTr("The gym's code")
                     pageText: qsTr("The gym runs from its page in this notebook (%1): change the code there. Restore puts the page in the trash, and the built-in code runs again.")
                     restoredText: qsTr("The built-in gym runs again; its page is in the trash.")
+                }
+                SettingSwitch {
+                    objectName: "flashcardsSetting"
+                    text: qsTr("Flashcards")
+                    description: qsTr("Cards written in your notes — “Question::Answer”, a question with “?” and its answer, clozes ==like this== in a note tagged #flashcards, Logseq's #card blocks — repeated with FSRS just before you would forget them (Flashcards in the sidebar).")
+                    iconName: "layers"
+                    checked: AppSettings.flashcardsEnabled
+                    onToggled: AppSettings.flashcardsEnabled = checked
+                }
+                ShellSettingRow {
+                    visible: AppSettings.flashcardsEnabled
+                    title: qsTr("New cards a day")
+                    description: qsTr("How many cards never studied a session brings each day (at the end of a session you can learn more).")
+                    BSegmented {
+                        objectName: "flashcardsNewSetting"
+                        accessibleName: qsTr("New cards a day")
+                        model: [{ value: 5, text: "5" }, { value: 10, text: "10" }, { value: 20, text: "20" },
+                                { value: 30, text: "30" }, { value: 50, text: "50" }]
+                        currentValue: AppSettings.flashcardsNewPerDay
+                        onActivated: (value) => AppSettings.flashcardsNewPerDay = value
+                    }
+                }
+                ShellSettingRow {
+                    visible: AppSettings.flashcardsEnabled
+                    title: qsTr("Desired retention")
+                    description: qsTr("The chance of remembering a card when it comes back: higher means more reviews.")
+                    BSegmented {
+                        objectName: "flashcardsRetentionSetting"
+                        accessibleName: qsTr("Desired retention")
+                        model: [{ value: 80, text: "80 %" }, { value: 85, text: "85 %" }, { value: 90, text: "90 %" },
+                                { value: 95, text: "95 %" }]
+                        currentValue: AppSettings.flashcardsRetention
+                        onActivated: (value) => AppSettings.flashcardsRetention = value
+                    }
+                }
+                ShellSettingRow {
+                    visible: AppSettings.flashcardsEnabled
+                    title: qsTr("Tags of decks")
+                    description: qsTr("A note with one of these tags (or a tag under one, #flashcards/spanish) is a deck. Blocks tagged #card are cards wherever they are.")
+                    BTextField {
+                        objectName: "flashcardsTagsSetting"
+                        Layout.preferredWidth: Theme.compact ? -1 : 260
+                        Layout.fillWidth: Theme.compact
+                        text: AppSettings.flashcardsTags
+                        placeholderText: "flashcards, fiszki"
+                        accessibleName: qsTr("Tags of decks")
+                        inputMethodHints: Qt.ImhNoAutoUppercase | Qt.ImhNoPredictiveText
+                        onEditingFinished: AppSettings.flashcardsTags = text
+                    }
+                }
+                BuiltinSourceRow {
+                    objectName: "flashcardsSourceSetting"
+                    visible: AppSettings.flashcardsEnabled
+                    builtin: "fiszki"
+                    title: qsTr("The flashcards' code")
+                    pageText: qsTr("Flashcards run from their page in this notebook (%1): change the code there. Restore puts the page in the trash, and the built-in code runs again.")
+                    restoredText: qsTr("The built-in flashcards run again; their page is in the trash.")
                 }
             }
 

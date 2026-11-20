@@ -1974,3 +1974,142 @@ zadania: ignoruj
   side in a row joined, the AI's lines before the user's first left out.
 * Pure functions: `src/core/chat/chat.h` (`parse`, `appendMessage`, `newConversation`,
   `pageTitle`, `journalEntry`, `history`, `preview`), tested in `tests/core/chat`.
+
+## 15. Flashcards
+
+Cards for spaced repetition, written in notes as the Obsidian **Spaced Repetition** plugin
+(st3v3nmw/obsidian-spaced-repetition, read at 1.15.4) and **Logseq** write them, read and reviewed by
+the built-in extension `src/core/extensions/builtin/fiszki.luau` (docs/EXTENSIONS.md, docs/UI.md
+"Flashcards"; on by default). The text of a card is never changed by a review: its state goes into
+a comment or properties next to it, in those apps' own formats, so the plugin and Logseq go on
+from where Brulion left — and the other way round.
+
+### Which notes, which decks
+
+* **A deck note** has one of the **flashcard tags** — `#flashcards` and `#fiszki` (Settings →
+  Extensions → Flashcards: "Tags of decks"), or a tag under one, `#flashcards/hiszpański` — anywhere:
+  the frontmatter's `tags`, a `tags::` line, a block (the `type:pages tag:…` query of §10, sub-tags
+  included). Tags compare in any letter case (the plugin's are case-sensitive). Only in a deck note
+  are its lines cards: `key:: value` elsewhere is never one.
+* **A card's deck** is the plugin's: a flashcard tag at the start of the card's text is its own
+  (`#flashcards/liczby uno::jeden`, the tag left out of the question); else every flashcard tag of
+  the last line above the card that holds such tags outside any card (`#flashcards/czasowniki` on a
+  line of its own); else the frontmatter's; else the note's first. A deck's cards include its
+  sub-decks'. A Logseq card's decks are `card` and the other tags of its block.
+* Decks are also listed **by page** and **by folder** (the folder's sub-folders included).
+
+### Card formats (deck notes)
+
+The plugin's parser: a **paragraph** is a run of lines up to a blank line; a fenced code block
+(```` ``` ```` or `~~~` at the line's start) is skipped whole; a line starting with `<!--` (not
+`<!--SR:`) is skipped to its `-->`; the frontmatter is none of them.
+
+| Written | Cards |
+|---|---|
+| `Stolica Peru::Lima` | one: the question before the first `::`, the answer after it (a single-line card is its line alone: lines above it in its paragraph are no part of it) |
+| `żółw:::turtle` | two, both ways (`:::` looked for first: `a::b:::c` is `a::b` both ways with `c`) |
+| `Jaka rzeka płynie przez Kraków?` / `?` / `Wisła` | one: the paragraph's lines before a line that is `?` alone (trimmed) are the question, the lines after it up to a blank line the answer |
+| … / `??` / … | two, both ways |
+| `Najwyższe są ==Rysy== w ==Tatrach==.` | one per deletion (`==…==`), the paragraph as its text: the asked deletion shown as `[…]`, the others as their words |
+| `==1;;Kopernik;;astronom== … ==2;;Toruń==` | numbered deletions: one card per number, the deletions of one number asked together; `;;hint` shows instead of `[…]` |
+| `{{c1::żółw::zwierzę}}`, `{{1::żółw}}` | Anki's numbered clozes (the plugin reads them with the pattern `{{c[123::]answer[::hint]}}` added to its settings); their `::` is no card separator |
+
+* `::` counts where its first occurrence is not in inline code (the plugin's test: an odd number of
+  backticks before it and after it). A list item, a quote or a task is a card as any line
+  (`- dom::house`: the marker is left out of the question shown).
+* **A property line is no card** (unlike the plugin): a line `key:: value` with a one-word key that
+  is not a list item — `Stolica:: Warszawa`, `id:: 64a1`, `tags:: fiszki` — is a property as Brulion
+  and Logseq read it, and it ends a paragraph like a blank line. `Stolica :: Warszawa` and
+  `- Stolica:: Warszawa` are cards.
+* A paragraph that numbers some deletions asks only those: `==plain==` deletions then stay text
+  (the plugin's rule). A card with an empty question, an unclosed `==`, a `?` line without a question
+  above it are no cards.
+* Shown: the question and the answer as Markdown, without the scheduling comment, a block id at the
+  end (`^abc123`) and the flashcard tags; a breadcrumb of the page and the headings above the card.
+
+### Logseq cards
+
+A block (list item) tagged `#card` (`#[[card]]`, any letter case; the tags ending its first line are
+its decks, not words of the question) in any note: the block's own lines are the question, its
+children the answer (a lone child without its bullet). `{{cloze answer}}` in the block is hidden on
+the question's side — every cloze of the block at once (one card), `{{cloze answer \\ cue}}` showing
+`(cue)` — and highlighted on the answer's. Its `key:: value` properties are no part of either side.
+The lines of a `#card` block are never also read as cards of a deck note.
+
+### The state, next to each card
+
+**The plugin's scheduling comment** — `<!--SR:!segment!segment…-->`, one segment per card of the
+line or paragraph in their order (the two sides of `:::`, a cloze's deletions):
+
+| Segment | Means |
+|---|---|
+| `fsrs,2026-11-23T08:00:00.000Z,3,3.1704,5.28,2,4,0,0,2026-11-20T08:00:00.000Z` | the plugin's FSRS card (1.14.2+, ts-fsrs's fields): due (UTC), interval (days), stability, difficulty, state (0 new, 1 learning, 2 review, 3 relearning), reps, lapses, learning step, last review (UTC, or `-`) — **what Brulion writes** |
+| `2026-11-25,10,250` | an SM-2 card (the plugin's default algorithm): due (a local day), interval in days, ease × 100 (a legacy comment without `!` too). Read as FSRS memory by fsrs-rs's `memory_state_from_sm2` (the stability that gives 90 % at the interval, the difficulty that makes a Good there multiply it by the ease), reviewed on its due minus its interval |
+| `2000-01-01,1,250` | a card never reviewed, keeping its place |
+
+* **Where**: Brulion writes a new comment at the end of the card's last line, one space before it
+  — before a block id that ends the line — as the plugin's "Save scheduling comment on the same
+  line" does (a list stays a list, and a review changes one line: two devices' reviews merge line
+  by line). A comment already there — on that line or on a line of its own after the card, the
+  plugin's default — is updated in place. A card ending with a code fence gets its comment on a new
+  line after it. Only the card's own segment changes; segments beyond the card's siblings go (as
+  the plugin drops them); a card started over writes the placeholder, and a line whose segments are
+  all placeholders loses its comment.
+* The plugin set to FSRS goes on from Brulion's segments; set to SM-2, it reads an FSRS segment's
+  interval and an ease from its difficulty (its own conversion). Brulion reads both.
+
+**Logseq's properties** (a `#card` block): Brulion reads `card-last-interval`, `card-repeats`,
+`card-ease-factor`, `card-next-schedule`, `card-last-reviewed` (UTC, `…Z`) and `card-fsrs` — the
+plugin's FSRS fields without `fsrs,` — and writes all seven after each review, in one write and
+Logseq's order (`card-fsrs` last): the interval, reps, an ease from the difficulty (1.3 … 3.0), the
+next schedule, now, a score (Again 1, Hard 3, Good and Easy 5). When `card-last-reviewed` is later
+than `card-fsrs`'s last review, Logseq reviewed the card since: it goes on from Logseq's interval and
+ease (as an SM-2 segment), else from `card-fsrs`.
+
+**Merging** (Nextcloud's three-way merge, Syncthing conflict copies merged in the sync center:
+`sync/cardmerge.h`): a region in which both devices changed only cards' state — lines equal but for
+their comment, `card-*::` lines equal but for their values — merges by itself, line by line: one
+side's change taken, a card both reviewed keeping the later review — segment by segment (a cloze's
+deletions reviewed on different devices both stay; an SM-2 segment's review is its due minus its
+interval), Logseq's properties as a whole run (the side of the later `card-last-reviewed`). The
+same new card reviewed on both devices — two comments or property runs added at one place — keeps
+the later one.
+
+### Scheduling (FSRS-6)
+
+FSRS-6 with its published default parameters (21 weights; py-fsrs 6.3.3's scheduler, ported and
+tested against py-fsrs's, ts-fsrs's and fsrs-rs's vectors): grades **Again, Hard, Good, Easy**;
+learning steps 1 and 10 minutes, a relearning step of 10 minutes; the desired retention 90 %
+(Settings: 80–95 %); intervals of at least a day, at most 36 500, rounded half to even; a review on
+the same day by FSRS-6's short-term formula. The **fuzz** (intervals from 2,5 days on, ±5–15 %)
+is drawn from FNV-1a and Mulberry32 seeded with the card's id and its review count, so two devices
+schedule a review alike. Time is local wall-clock time to the minute; due dates of review cards
+count by day.
+
+A session asks: learning cards whose step is over, review cards due today (most overdue first),
+then new cards in their notes' order up to the day's limit (Settings: 20; the new cards started
+today counted from the log, both devices'), and, when nothing else is left, a learning card due
+within 20 minutes. "Study ahead" adds the reviews of the next days, "more new cards" ten beyond the
+limit.
+
+### The review log
+
+Every grade is a line of a page per month, `Fiszki/Powtórki 2026-11` (`Flashcards/Reviews 2026-11`
+in an English notebook), appended at its end (two devices' lines merge as additions):
+
+```markdown
+- 2026-11-20 18:30 dobrze · nowa · Stolica Peru
+- 2026-11-20 18:31 again · review · żółw
+```
+
+The date and time, the grade (`znowu`, `trudne`, `dobrze`, `łatwe` or `again`, `hard`, `good`,
+`easy`), the card's state before it (`nowa`, `nauka`, `powtórka`, `ponowna` / `new`, `learning`,
+`review`, `relearning`) and its question's first 80 characters. Read for the statistics (reviews
+per day, the retention of review cards over 30 days) and the day's new cards; a line that is none
+is skipped. The page can be deleted: only those numbers start again.
+
+### In the editor
+
+A cloze's answer is shown highlighted without its braces, number and hint (`markdown/cloze.h`: the
+renderer and the editor's syntax colours); a block that holds only HTML comments — a scheduling
+comment on its own line — shows nothing, as a comment inside a line does.

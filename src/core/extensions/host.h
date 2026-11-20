@@ -17,6 +17,7 @@
 #include <QVariantMap>
 
 #include <optional>
+#include <utility>
 
 namespace brulion::extensions {
 
@@ -144,6 +145,61 @@ public:
         Q_UNUSED(key);
         Q_UNUSED(value);
         Q_UNUSED(newRef);
+        return QStringLiteral("not available here");
+    }
+
+    /// Sets several properties of the block `ref` names at once — in one write — in their order
+    /// (`props`: {key, value} pairs; an empty value removes). The default sets them one by one.
+    virtual QString setProperties(const QString &extension, const QString &ref, const QList<std::pair<QString, QString>> &props,
+                                  QString *newRef)
+    {
+        QString current = ref;
+        for (const auto &[key, value] : props) {
+            QString next;
+            if (const QString error = setProperty(extension, current, key, value, &next); !error.isEmpty())
+                return error;
+            current = next;
+        }
+        if (newRef)
+            *newRef = current;
+        return {};
+    }
+
+    // Lines as written (b.lines, b.replaceLine, b.insertLine, b.removeLine: flashcards' scheduling
+    // comments, any line that is no block's first line)
+    /// The page's lines as written, without their line endings: {text, ref} each, ref naming that
+    /// line as a block's ref does (stale after a change). nullopt for a page that does not exist.
+    virtual std::optional<QVariantList> lines(const QString &page)
+    {
+        Q_UNUSED(page);
+        return std::nullopt;
+    }
+    /// Replaces the whole line `ref` names by `text` (one line), its line ending kept.
+    virtual QString replaceLine(const QString &extension, const QString &ref, const QString &text, QString *newRef)
+    {
+        Q_UNUSED(extension);
+        Q_UNUSED(ref);
+        Q_UNUSED(text);
+        Q_UNUSED(newRef);
+        return QStringLiteral("not available here");
+    }
+    /// Inserts the lines of `text` as written before or after the line `ref` names; `newRef`: the
+    /// first new line's reference.
+    virtual QString insertLines(const QString &extension, const QString &ref, const QString &text, bool before,
+                                QString *newRef)
+    {
+        Q_UNUSED(extension);
+        Q_UNUSED(ref);
+        Q_UNUSED(text);
+        Q_UNUSED(before);
+        Q_UNUSED(newRef);
+        return QStringLiteral("not available here");
+    }
+    /// Removes the line `ref` names (only that line).
+    virtual QString removeLine(const QString &extension, const QString &ref)
+    {
+        Q_UNUSED(extension);
+        Q_UNUSED(ref);
         return QStringLiteral("not available here");
     }
 

@@ -64,7 +64,7 @@ done in the repository simply disappears from the list.
   Settings → Keyboard shortcuts is made when the app starts, before extensions load), a timer of
   an extension's own (`b.timer` is the gym's rest timer: its banner shows in the Gym view only and
   its notification speaks of the next set), "Edit the code" for the AI assistant (Settings has the
-  button for the gym and the habits only).
+  button for the gym, the habits and the flashcards only).
 * **Extensions: what ten sample extensions had to work around** — the samples of
   `tests/core/extensions/samples` (a task review, a mood log, expenses, flashcards, a project index
   kept by hooks …) run, but each met a wall of the API: the hooks hear nothing of what another
@@ -195,9 +195,14 @@ done in the repository simply disappears from the list.
 * **Whiteboard (infinite canvas)** — notes, pictures, PDFs and drawings laid out on a canvas, with
   connections; preferably in the JSON Canvas format (Obsidian Canvas, AFFiNE). The drawing editor
   covers sketches, but does not embed notes in them.
-* **Flashcards with spaced repetition** — cards from blocks (`question :: answer`, hidden parts),
-  spaced repetition (e.g. FSRS), cards due for review today, state saved in files and merged by
-  sync (Logseq, SiYuan).
+* **Flashcards: what is still missing** — cards of the Spaced Repetition plugin and of Logseq, FSRS-6,
+  the state next to each card, decks, sessions and statistics are there (docs/SYNTAX.md §15,
+  docs/UI.md "Flashcards"); missing: FSRS parameters fitted to one's own reviews (an optimizer; the
+  review log names no card yet), the settings per notebook rather than per device, the plugin's
+  other settings (separators of one's own, bold and curly clozes, an end-of-card marker, folders as
+  decks) and its whole-note reviews (`sr-due:` in the frontmatter), the recall fork's FSRS state
+  kept outside the notes (`tracked_files.json`), SiYuan's cards (their state is no Markdown), picture
+  occlusion, typing the answer, and a session checked by hand on a real phone and tablet.
 
 ## Tasks and calendar
 

@@ -10,7 +10,11 @@ import Brulion
 // commands, links, menus (a "⋯" button), rows of controls (a check — done, open or skipped, with a
 // menu on a right-click or a long press —, a link, a text, steppers — − number +, the number typed
 // in as well —, buttons, menus), month grids (a cell per day, tinted by its state; a tap is the
-// day's action, a right-click or a long press its menu), a chart (ChartView) and tables. The lines
+// day's action, a right-click or a long press its menu), a chart (ChartView), tables, Markdown
+// rendered as a note shows it (links open their pages), a progress bar, numbers side by side
+// (stats) and dividers. A button may have a keyboard shortcut (`key`: a key pressed while the view
+// has the focus taps it — the flashcards' Space and 1–4), be the primary one, have a tone and a
+// second line (`hint`: a grade's next interval). The lines
 // of a card stay lines of the list: each draws its part of the card (LineFrame). Nothing of the
 // extension is QML: it returns data (b.ui nodes), this file draws it. The model changes lines in
 // place when the view is drawn again with lines of the same kinds, so a field keeps its focus (and
@@ -39,6 +43,8 @@ ListView {
         case "success": return Theme.successText
         case "danger": return Theme.dangerText
         case "accent": return Theme.accent
+        case "warning": return Theme.warningText
+        case "info": return Theme.infoText
         }
         return muted ? Theme.fgMuted : Theme.fg
     }
@@ -110,6 +116,71 @@ ListView {
         }
     }
 
+    /// The name of a key as a view's button names its shortcut: "space", "enter", "escape",
+    /// "backspace", "0" … "9", a letter ("a" … "z", from the text typed), "ctrl+z"; "" for others.
+    function keyName(key: int, modifiers: int, text: string): string {
+        if ((modifiers & (Qt.AltModifier | Qt.MetaModifier)) !== 0)
+            return ""
+        const ctrl = (modifiers & Qt.ControlModifier) !== 0
+        if (ctrl)
+            return key === Qt.Key_Z ? "ctrl+z" : ""
+        if (key === Qt.Key_Space)
+            return "space"
+        if (key === Qt.Key_Return || key === Qt.Key_Enter)
+            return "enter"
+        if (key === Qt.Key_Escape)
+            return "escape"
+        if (key === Qt.Key_Backspace)
+            return "backspace"
+        if (key >= Qt.Key_0 && key <= Qt.Key_9)
+            return Js.numberToString(key - Qt.Key_0)
+        if (key >= Qt.Key_A && key <= Qt.Key_Z && text.length === 1)
+            return Js.toLowerCase(text)
+        return ""
+    }
+    /// A key's caption beside a button's label ("Space", "1"); "" on touch screens.
+    function keyCaption(key: string): string {
+        if (Theme.touchUi || key === "")
+            return ""
+        switch (key) {
+        case "space": return qsTr("Space")
+        case "enter": return qsTr("Enter")
+        case "escape": return qsTr("Esc")
+        case "backspace": return qsTr("Backspace")
+        case "ctrl+z": return qsTr("Ctrl+Z")
+        }
+        return Js.toUpperCase(key)
+    }
+    Keys.onPressed: (event) => {
+        const name = list.keyName(event.key, event.modifiers, event.text)
+        if (name !== "" && list.lines.activateKey(name))
+            event.accepted = true
+    }
+
+    // Links of rendered Markdown open their pages (and journals) as the notes' do; its colours are
+    // the theme's (b.ui.markdown in every extension's view).
+    PageTools {
+        id: linkTools
+        workspace: Workspace
+    }
+    Binding {
+        target: list.lines
+        property: "palette"
+        value: ({
+            link: Theme.link, unresolved: Theme.linkMissing, muted: Theme.fgMuted,
+            codeBackground: Theme.bgSunken, highlightBackground: Theme.mark,
+            tagFg: Theme.tagFg, tagBg: Theme.tagBg,
+            dueFg: Theme.chipDueFg, dueBg: Theme.chipDueBg,
+            overdueFg: Theme.chipOverdueFg, overdueBg: Theme.chipOverdueBg,
+            scheduledFg: Theme.chipScheduledFg, scheduledBg: Theme.chipScheduledBg,
+            reminderFg: Theme.chipReminderFg, reminderBg: Theme.chipReminderBg,
+            alarmFg: Theme.chipAlarmFg, alarmBg: Theme.chipAlarmBg,
+            recurrenceFg: Theme.chipRecurrenceFg, recurrenceBg: Theme.chipRecurrenceBg,
+            doneFg: Theme.chipDoneFg, doneBg: Theme.chipDoneBg,
+            neutralFg: Theme.chipNeutralFg, neutralBg: Theme.chipNeutralBg
+        })
+    }
+
     model: lines
     TouchFlick.enabled: true
     clip: true
@@ -133,6 +204,110 @@ ListView {
             anchors.fill: parent
             cursorShape: Qt.PointingHandCursor
             onClicked: link.activated()
+        }
+    }
+
+    /// A button of the view (b.ui.button): framed, `primary` in the accent's ink; with a `hint` two
+    /// lines — the label and the hint under it, tinted by its tone (a grade: Again, Hard, Good,
+    /// Easy and the next interval); its keyboard shortcut beside the label where there is a
+    /// keyboard.
+    component ViewButton: Rectangle {
+        id: viewButton
+        property string label: ""
+        property string hint: ""
+        property string tone: ""
+        property string key: ""
+        property bool primary: false
+        property string icon: ""
+        signal activated()
+        readonly property string caption: list.keyCaption(viewButton.key)
+        readonly property color ink: viewButton.primary ? Theme.fgOnAccent
+                                   : viewButton.tone === "danger" ? Theme.dangerText
+                                   : viewButton.tone === "success" ? Theme.successText
+                                   : viewButton.tone === "warning" ? Theme.warningText
+                                   : viewButton.tone === "info" ? Theme.infoText
+                                   : viewButton.tone === "accent" ? Theme.accent : Theme.fg
+        readonly property color tint: viewButton.primary ? Theme.accentSolid
+                                    : viewButton.tone === "danger" ? Theme.dangerBg
+                                    : viewButton.tone === "success" ? Theme.successBg
+                                    : viewButton.tone === "warning" ? Theme.warningBg
+                                    : viewButton.tone === "info" ? Theme.infoBg
+                                    : viewButton.tone === "accent" ? Theme.accentBg : Theme.bgElevated
+        implicitWidth: Math.max(Theme.touchUi ? Theme.touchTarget : Theme.controlHeight,
+                                Math.max(buttonLabel.implicitWidth + (buttonIcon.visible ? buttonIcon.width + Theme.space2 : 0)
+                                                 + (keyText.visible ? keyText.implicitWidth + Theme.space2 : 0),
+                                         buttonHint.visible ? buttonHint.implicitWidth : 0) + 2 * Theme.space3)
+        implicitHeight: Math.max(Theme.touchUi ? Theme.touchTarget : Theme.controlHeight,
+                                 buttonLabel.implicitHeight + (buttonHint.visible ? buttonHint.implicitHeight : 0) + 2 * Theme.space2)
+        radius: Theme.radius
+        color: viewButton.tint
+        border.width: viewButton.primary ? 0 : 1
+        border.color: viewButton.activeFocus ? Theme.focusRing : viewButton.tone !== "" ? viewButton.ink.alpha(0.35) : Theme.border
+        activeFocusOnTab: true
+        Accessible.role: Accessible.Button
+        Accessible.name: viewButton.hint !== "" ? qsTr("%1, %2").arg(viewButton.label).arg(viewButton.hint) : viewButton.label
+        Accessible.description: viewButton.caption !== "" ? qsTr("Shortcut: %1").arg(viewButton.caption) : ""
+        Accessible.onPressAction: viewButton.activated()
+        Keys.onSpacePressed: viewButton.activated()
+        Keys.onReturnPressed: viewButton.activated()
+
+        // Hover and press: the usual translucent tints over the button's own colour.
+        Rectangle {
+            anchors.fill: parent
+            radius: viewButton.radius
+            color: buttonTap.pressed ? Theme.bgPressed : Theme.bgHover
+            visible: buttonTap.pressed || buttonHover.hovered
+        }
+        Item {
+            id: buttonContent
+            anchors.centerIn: parent
+            width: Math.max(labelRow.width, buttonHint.visible ? buttonHint.implicitWidth : 0)
+            height: buttonLabel.implicitHeight + (buttonHint.visible ? buttonHint.implicitHeight : 0)
+            Row {
+                id: labelRow
+                anchors.horizontalCenter: parent.horizontalCenter
+                spacing: Theme.space2
+                BIcon {
+                    id: buttonIcon
+                    visible: viewButton.icon !== ""
+                    anchors.verticalCenter: parent.verticalCenter
+                    name: viewButton.icon
+                    size: Theme.iconSizeSm
+                    color: viewButton.ink
+                }
+                BText {
+                    id: buttonLabel
+                    text: viewButton.label
+                    color: viewButton.ink
+                    font.weight: Font.DemiBold
+                }
+                BText {
+                    id: keyText
+                    visible: viewButton.caption !== ""
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: viewButton.caption
+                    variant: "caption"
+                    color: viewButton.primary ? Theme.fgOnAccent.alpha(0.75) : Theme.fgFaint
+                }
+            }
+            BText {
+                id: buttonHint
+                visible: viewButton.hint !== ""
+                anchors.horizontalCenter: parent.horizontalCenter
+                y: buttonLabel.implicitHeight
+                text: viewButton.hint
+                variant: "small"
+                color: viewButton.primary ? Theme.fgOnAccent.alpha(0.85) : viewButton.ink.alpha(0.8)
+            }
+        }
+        HoverHandler {
+            id: buttonHover
+            cursorShape: Qt.PointingHandCursor
+        }
+        TapHandler {
+            id: buttonTap
+            gesturePolicy: TapHandler.ReleaseWithinBounds
+            onTapped: viewButton.activated()
         }
     }
 
@@ -283,9 +458,15 @@ ListView {
                 id: openLine
                 required property int index
                 required property string lineText
-                contentHeight: openButton.implicitHeight
+                required property bool lineStyled
+                required property string lineKey
+                required property string lineTone
+                required property string lineIcon
+                required property bool linePrimary
+                contentHeight: openLine.lineStyled ? openStyled.implicitHeight : openButton.implicitHeight
                 BButton {
                     id: openButton
+                    visible: !openLine.lineStyled
                     x: openLine.contentX - Theme.space2
                     y: openLine.topPad
                     text: openLine.lineText
@@ -293,6 +474,22 @@ ListView {
                     size: "small"
                     iconName: "chevron-left"
                     onClicked: list.lines.activate(openLine.index)
+                }
+                // With b.ui.open's options: a button like b.ui.button's (the flashcards' "Study").
+                ViewButton {
+                    id: openStyled
+                    objectName: "extensionOpenButton"
+                    visible: openLine.lineStyled
+                    x: openLine.contentX
+                    y: openLine.topPad
+                    width: Math.min(implicitWidth, openLine.contentWidth)
+                    height: implicitHeight
+                    label: openLine.lineText
+                    key: openLine.lineKey
+                    tone: openLine.lineTone
+                    icon: openLine.lineIcon
+                    primary: openLine.linePrimary
+                    onActivated: list.lines.activate(openLine.index)
                 }
             }
         }
@@ -320,13 +517,175 @@ ListView {
                 id: buttonLine
                 required property int index
                 required property string lineText
+                required property string lineKey
+                required property string lineTone
+                required property string lineHint
+                required property string lineIcon
+                required property bool linePrimary
                 contentHeight: lineButton.implicitHeight
-                BButton {
+                ViewButton {
                     id: lineButton
+                    objectName: "extensionButton"
                     x: buttonLine.contentX
                     y: buttonLine.topPad
-                    text: buttonLine.lineText
-                    onClicked: list.lines.activate(buttonLine.index)
+                    width: Math.min(implicitWidth, buttonLine.contentWidth)
+                    height: implicitHeight
+                    label: buttonLine.lineText
+                    key: buttonLine.lineKey
+                    tone: buttonLine.lineTone
+                    hint: buttonLine.lineHint
+                    icon: buttonLine.lineIcon
+                    primary: buttonLine.linePrimary
+                    onActivated: list.lines.activate(buttonLine.index)
+                }
+            }
+        }
+        DelegateChoice {
+            roleValue: "markdown"
+            LineFrame {
+                id: markdownLine
+                required property string lineHtml
+                required property string lineTitle
+                required property string lineSize
+                required property string lineAlign
+                required property bool lineMuted
+                property string hoveredLink: ""
+                contentHeight: markdownText.height
+                BRichText {
+                    id: markdownText
+                    objectName: "extensionMarkdown"
+                    x: markdownLine.contentX
+                    y: markdownLine.topPad
+                    width: markdownLine.contentWidth
+                    html: markdownLine.lineHtml
+                    hoveredLink: markdownLine.hoveredLink
+                    horizontalAlignment: markdownLine.lineAlign === "center" ? Text.AlignHCenter : Text.AlignLeft
+                    font.family: Theme.fontEditor
+                    font.pixelSize: markdownLine.lineSize === "large" ? Theme.textXl
+                                    : markdownLine.lineSize === "small" ? Theme.textSm : Theme.textBase
+                    color: markdownLine.lineMuted ? Theme.fgMuted : Theme.fg
+                    accessibleName: markdownLine.lineTitle
+                }
+                HoverHandler {
+                    id: markdownHover
+                    enabled: !Theme.touchUi
+                    cursorShape: markdownLine.hoveredLink !== "" ? Qt.PointingHandCursor : Qt.ArrowCursor
+                    onPointChanged: {
+                        const at = markdownText.mapFromItem(markdownLine, markdownHover.point.position.x, markdownHover.point.position.y)
+                        const link = markdownText.linkAt(at.x, at.y)
+                        markdownLine.hoveredLink = Js.startsWith(link, "task:") ? "" : link
+                    }
+                    onHoveredChanged: if (!hovered) markdownLine.hoveredLink = ""
+                }
+                TapHandler {
+                    gesturePolicy: TapHandler.ReleaseWithinBounds
+                    onTapped: (eventPoint, button) => {
+                        const at = markdownText.mapFromItem(markdownLine, eventPoint.position.x, eventPoint.position.y)
+                        const link = markdownText.linkAt(at.x, at.y)
+                        if (link !== "" && !Js.startsWith(link, "task:"))
+                            linkTools.openLink(link, "", false)
+                    }
+                }
+            }
+        }
+        DelegateChoice {
+            roleValue: "progress"
+            LineFrame {
+                id: progressLine
+                required property string lineText
+                required property real lineValue
+                required property real lineMax
+                contentHeight: (progressLine.lineText !== "" ? progressLabel.implicitHeight + Theme.space1 : 0) + progressBar.height
+                BText {
+                    id: progressLabel
+                    visible: progressLine.lineText !== ""
+                    x: progressLine.contentX
+                    y: progressLine.topPad
+                    width: progressLine.contentWidth
+                    text: progressLine.lineText
+                    variant: "caption"
+                    elide: Text.ElideRight
+                }
+                BProgressBar {
+                    id: progressBar
+                    objectName: "extensionProgress"
+                    x: progressLine.contentX
+                    y: progressLine.topPad + (progressLine.lineText !== "" ? progressLabel.implicitHeight + Theme.space1 : 0)
+                    width: progressLine.contentWidth
+                    thickness: 6
+                    from: 0
+                    to: progressLine.lineMax
+                    value: progressLine.lineValue
+                    tone: "accent"
+                    Accessible.name: progressLine.lineText
+                }
+            }
+        }
+        DelegateChoice {
+            roleValue: "stats"
+            LineFrame {
+                id: statsLine
+                required property list<var> lineItems
+                contentHeight: statsFlow.implicitHeight
+                Flow {
+                    id: statsFlow
+                    x: statsLine.contentX
+                    y: statsLine.topPad
+                    width: statsLine.contentWidth
+                    spacing: Theme.space2
+                    Repeater {
+                        model: statsLine.lineItems
+                        delegate: Rectangle {
+                            id: stat
+                            required property var modelData
+                            readonly property string statTone: AppController.routeText(stat.modelData, "tone")
+                            readonly property string statValue: AppController.routeText(stat.modelData, "value")
+                            readonly property string statLabel: AppController.routeText(stat.modelData, "label")
+                            objectName: "extensionStat"
+                            // Two side by side on a phone, four on a desktop's line.
+                            width: Math.floor((statsFlow.width - (Theme.narrow ? 1 : 3) * statsFlow.spacing) / (Theme.narrow ? 2 : 4))
+                            height: statValueText.implicitHeight + statLabelText.implicitHeight + 2 * Theme.space2
+                            radius: Theme.radiusLg
+                            color: Theme.bgSunken
+                            border.color: Theme.borderSubtle
+                            Accessible.role: Accessible.StaticText
+                            Accessible.name: qsTr("%1: %2").arg(stat.statLabel).arg(stat.statValue)
+                            BText {
+                                id: statValueText
+                                x: Theme.space3
+                                y: Theme.space2
+                                width: parent.width - 2 * Theme.space3
+                                text: stat.statValue
+                                variant: "heading"
+                                font.weight: Font.DemiBold
+                                color: list.toneColor(stat.statTone, false)
+                                elide: Text.ElideRight
+                            }
+                            BText {
+                                id: statLabelText
+                                x: Theme.space3
+                                y: statValueText.y + statValueText.implicitHeight
+                                width: parent.width - 2 * Theme.space3
+                                text: stat.statLabel
+                                variant: "caption"
+                                elide: Text.ElideRight
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        DelegateChoice {
+            roleValue: "divider"
+            LineFrame {
+                id: dividerLine
+                contentHeight: Theme.space3
+                Rectangle {
+                    x: dividerLine.contentX
+                    y: dividerLine.topPad + Theme.space3 / 2
+                    width: dividerLine.contentWidth
+                    height: 1
+                    color: Theme.borderSubtle
                 }
             }
         }
@@ -529,6 +888,7 @@ ListView {
                     width: row.contentWidth - 2 * row.rowPad
                     spacing: Theme.space2
                     Repeater {
+                        id: controlsRepeater
                         model: row.lineControls
                         delegate: DelegateChooser {
                             role: "controlType"
@@ -606,16 +966,38 @@ ListView {
                                     id: openControl
                                     required property int controlIndex
                                     required property string controlText
+                                    required property bool controlStyled
+                                    required property string controlKey
+                                    required property string controlTone
+                                    required property string controlIcon
+                                    required property bool controlPrimary
                                     objectName: "extensionOpen"
-                                    implicitWidth: Math.min(openControlText.implicitWidth, flow.width)
-                                    implicitHeight: Math.max(openControlText.implicitHeight, list.controlHeight)
+                                    implicitWidth: openControl.controlStyled ? openControlButton.implicitWidth
+                                                                             : Math.min(openControlText.implicitWidth, flow.width)
+                                    implicitHeight: Math.max(openControl.controlStyled ? openControlButton.implicitHeight
+                                                                                       : openControlText.implicitHeight, list.controlHeight)
                                     width: implicitWidth
                                     height: implicitHeight
                                     LinkText {
                                         id: openControlText
+                                        visible: !openControl.controlStyled
                                         anchors.verticalCenter: parent.verticalCenter
                                         width: parent.width
                                         text: openControl.controlText
+                                        onActivated: list.lines.activateControl(row.index, openControl.controlIndex, 0)
+                                    }
+                                    ViewButton {
+                                        id: openControlButton
+                                        objectName: "extensionOpenButton"
+                                        visible: openControl.controlStyled
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        width: implicitWidth
+                                        height: implicitHeight
+                                        label: openControl.controlText
+                                        key: openControl.controlKey
+                                        tone: openControl.controlTone
+                                        icon: openControl.controlIcon
+                                        primary: openControl.controlPrimary
                                         onActivated: list.lines.activateControl(row.index, openControl.controlIndex, 0)
                                     }
                                 }
@@ -786,15 +1168,47 @@ ListView {
                                     id: controlButton
                                     required property int controlIndex
                                     required property string controlText
-                                    width: buttonItem.width
-                                    height: Math.max(buttonItem.height, list.controlHeight)
+                                    required property string controlKey
+                                    required property string controlTone
+                                    required property string controlHint
+                                    required property string controlIcon
+                                    required property bool controlPrimary
+                                    /// A button with a second line or a tone is a view button (a
+                                    /// grade's); a plain one the small BButton it always was.
+                                    readonly property bool styled: controlButton.controlHint !== "" || controlButton.controlTone !== ""
+                                                                   || controlButton.controlPrimary || controlButton.controlKey !== ""
+                                    width: controlButton.styled ? styledButton.width : buttonItem.width
+                                    height: Math.max(controlButton.styled ? styledButton.height : buttonItem.height, list.controlHeight)
                                     BButton {
                                         id: buttonItem
                                         objectName: "extensionButton"
+                                        visible: !controlButton.styled
                                         anchors.verticalCenter: parent.verticalCenter
                                         text: controlButton.controlText
+                                        iconName: controlButton.controlIcon
                                         size: "small"
                                         onClicked: list.lines.activateControl(row.index, controlButton.controlIndex, 0)
+                                    }
+                                    ViewButton {
+                                        id: styledButton
+                                        objectName: "extensionViewButton"
+                                        visible: controlButton.styled
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        // A row's only button, a primary one, takes the row (the
+                                        // flashcards' "Show answer"); buttons with a second line
+                                        // share it evenly, four to a line (the grades).
+                                        width: controlButton.controlPrimary && controlsRepeater.count === 1 ? flow.width
+                                               : controlButton.controlHint !== ""
+                                                 ? Math.max(implicitWidth, Math.floor((flow.width - 3 * flow.spacing) / 4))
+                                                 : implicitWidth
+                                        height: implicitHeight
+                                        label: controlButton.controlText
+                                        key: controlButton.controlKey
+                                        tone: controlButton.controlTone
+                                        hint: controlButton.controlHint
+                                        icon: controlButton.controlIcon
+                                        primary: controlButton.controlPrimary
+                                        onActivated: list.lines.activateControl(row.index, controlButton.controlIndex, 0)
                                     }
                                 }
                             }

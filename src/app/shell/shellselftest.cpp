@@ -5325,6 +5325,131 @@ QQuickItem *enclosingOfType(QQuickItem *item, const char *type)
     return item;
 }
 
+/// Flashcards (docs/UI.md "Flashcards", the built-in extension `fiszki`): the view from the palette's
+/// command and the sidebar's count of cards to study, a deck of two cards written for it, its review
+/// session by real input — Space shows the answer (a tap on touch screens), 3 grades it (a tap on
+/// "Good"): the card's line gets its scheduling comment and the month's review log a line —, the
+/// next card asked, U (a tap on Undo) puts both notes back; the notebook and the setting are left as
+/// they were.
+void checkFlashcards(QQuickWindow *window, AppController *app, const Check &check)
+{
+    const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
+    Workspace *ws = app->workspace();
+    AppSettings *settings = app->settings();
+    const bool wasOn = settings->flashcardsEnabled();
+    const QString title = u"Fiszki samotestu"_s;
+    const QString deck = ws->newPagePath(title);
+    const QString deckText = u"---\ntags: [fiszki]\n---\nStolica Peru samotestu::Lima\nStolica Chile samotestu::Santiago\n"_s;
+    // The month's review log, in both languages' folders.
+    const QString month = app->today().left(7);
+    QHash<QString, QString> oldLogs;
+    for (const QString &log : QStringList{u"Fiszki/Powtórki "_s + month, u"Flashcards/Reviews "_s + month}) {
+        const QString path = ws->newPagePath(log);
+        oldLogs.insert(path, ws->exists(path) ? ws->readFile(path) : QString());
+    }
+    const auto restore = [&] {
+        if (ws->exists(deck))
+            ws->deletePage(deck);
+        for (auto [path, content] : std::as_const(oldLogs).asKeyValueRange()) {
+            if (!content.isEmpty())
+                ws->writeFile(path, content);
+            else if (ws->exists(path))
+                ws->deletePage(path);
+        }
+        settings->setFlashcardsEnabled(wasOn);
+        closeMenus(window);
+        app->goHome();
+        settle(300);
+    };
+    if (ws->exists(deck)) {
+        check(false, "the self-test's deck page is not there before");
+        return;
+    }
+    settings->setFlashcardsEnabled(true);
+    check(waitFor([&] { return ws->extensions()->flashcardsEnabled(); }, 3000), "the flashcards extension is on");
+    ws->writeFile(deck, deckText);
+    check(waitFor([&] {
+              ws->extensions()->refreshFlashcardsDue();
+              return ws->extensions()->flashcardsDue() >= 2;
+          }, 5000),
+          "the cards to study are counted for the sidebar");
+    check(app->commands() && app->commands()->run(u"go.flashcards"_s), "the palette's command opens Flashcards");
+    check(waitFor([&] { return app->currentView() == u"flashcards"; }, 3000), "the Flashcards view shows");
+    app->navigate({{u"view"_s, u"flashcards"_s}, {u"tab"_s, u"review"_s}, {u"deck"_s, QString(u"page:"_s + title)}});
+    QQuickItem *list = nullptr;
+    ExtensionViewModel *model = nullptr;
+    check(waitFor([&] {
+              list = shownNamed(window->contentItem(), u"flashcardsList"_s);
+              QQuickItem *view = list ? enclosingOfType(list, "FlashcardsView") : nullptr;
+              model = view ? view->findChild<ExtensionViewModel *>(u"flashcardsModel"_s) : nullptr;
+              return model && model->view() == u"review";
+          }, 3000),
+          "the review of the page's deck shows");
+    if (!list || !model) {
+        restore();
+        return;
+    }
+    const auto question = [&] {
+        for (int i = 0; i < model->rowCount(); ++i)
+            if (model->data(model->index(i), ExtensionViewModel::TypeRole).toString() == u"markdown")
+                return model->data(model->index(i), ExtensionViewModel::TitleRole).toString();
+        return QString();
+    };
+    // The shown button of the view labelled `label` (a styled one: the grades, "Show answer").
+    const auto button = [&](const QString &label) -> QQuickItem * {
+        QQuickItem *found = nullptr;
+        findShown(list, [&](QQuickItem *item) {
+            if (item->objectName() == u"extensionViewButton" && item->property("label").toString() == label)
+                found = item;
+            return found != nullptr;
+        });
+        return found;
+    };
+    check(waitFor([&] { return question() == u"Stolica Peru samotestu"; }, 3000), "the first card's question shows");
+    const bool english = ws->extensions()->language() == u"en";
+    const QString show = english ? u"Show answer"_s : u"Pokaż odpowiedź"_s;
+    const QString good = english ? u"Good"_s : u"Dobrze"_s;
+    const QString undo = english ? u"Undo"_s : u"Cofnij"_s;
+    QPointF at;
+    // Show the answer: Space (a tap on touch screens).
+    check(steadyItem(window, [&] { return button(show); }, &at) != nullptr, "“Show answer” shows");
+    if (touch) {
+        tapOrClick(window, at, touch);
+    } else {
+        list->forceActiveFocus();
+        sendKey(window, Qt::Key_Space, Qt::NoModifier, u" "_s);
+    }
+    check(steadyItem(window, [&] { return button(good); }, &at) != nullptr, "the answer shows with the four grades");
+    // Good: 3 (a tap on touch screens).
+    if (touch) {
+        tapOrClick(window, at, touch);
+    } else {
+        list->forceActiveFocus();
+        sendKey(window, Qt::Key_3, Qt::NoModifier, u"3"_s);
+    }
+    check(waitFor([&] { return ws->readFile(deck).contains(u"Stolica Peru samotestu::Lima <!--SR:!fsrs,"_s); }, 3000),
+          "the grade is written next to the card");
+    check(waitFor([&] {
+              bool logged = false;
+              for (const QString &path : oldLogs.keys())
+                  logged |= ws->exists(path) && ws->readFile(path).contains(u"Stolica Peru samotestu"_s);
+              return logged;
+          }, 3000),
+          "and into the month's review log");
+    check(waitFor([&] { return question() == u"Stolica Chile samotestu"; }, 3000), "the next card is asked");
+    // Undo: U (a tap on touch screens).
+    if (touch) {
+        if (steadyItem(window, [&] { return button(undo); }, &at))
+            tapOrClick(window, at, touch);
+    } else {
+        list->forceActiveFocus();
+        sendKey(window, Qt::Key_U, Qt::NoModifier, u"u"_s);
+    }
+    check(waitFor([&] { return ws->readFile(deck) == deckText; }, 3000), "Undo puts the card's line back");
+    check(waitFor([&] { return question() == u"Stolica Peru samotestu"; }, 3000), "and asks the card again");
+    restore();
+}
+
 /// Habits (docs/UI.md "Habits", the built-in extension `nawyki`): the view from the palette's
 /// command, a habit added through "Add habit"'s form (ShellExtensionQuestion: typed into its text
 /// fields, Enter; a schedule not understood is asked again), written as a `habit::` block; today's
@@ -9564,6 +9689,9 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
     closeMenus(window);
     // 3h''. The gym: switched on, a plan written into today's note, a set added in its view.
     checkGym(window, app, check);
+    closeMenus(window);
+    // 3h'''. Flashcards: a deck's review session by its keys (taps on touch screens), Undo.
+    checkFlashcards(window, app, check);
     closeMenus(window);
     // 3h-ext. Extensions written in the notebook: approval, live reload, an error on its line, the console.
     checkExtensionPages(window, app, check);

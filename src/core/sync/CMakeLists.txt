@@ -6,6 +6,7 @@
 brulion_add_core_module(sync
     SOURCES
         sync.h
+        cardmerge.h cardmerge.cpp
         conflicts.h conflicts.cpp
         davxml.h davxml.cpp
         diff.h diff.cpp
