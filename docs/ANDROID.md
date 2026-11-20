@@ -571,7 +571,9 @@ A running Brulion reads the note again when it comes back to the front.
   **inside the process** (`BrulionAndroid.deliverUri` → native `nativeUri`, or `takeUris` on a cold
   start; never as an extra of the exported `BrulionActivity`, which any app could forge) and
   `AppController::receiveUri` checks it as any link's.
-* A write with the key: `Automation.runInBackground` binds `AutomationService` — a `QtService` in
+* A write with the key (the activity hands it to `AutomationReceiver`, whose broadcast keeps the
+  process alive until the answer — a finished activity's process may be killed first):
+  `Automation.runInBackground` binds `AutomationService` — a `QtService` in
   the process `:automation` (Qt cannot start a second time in the activity's process, as for the
   background check) — and sends the job `{uri, id, target}` over a `Messenger`. Qt starts Brulion's
   library there with `--automation`: `main()` → `runAutomationService()`

@@ -17,8 +17,8 @@ import io.github.januszbit.brulion.R
  * process ([BrulionAndroid.deliverUri]; never as an extra of the exported [BrulionActivity], which
  * any app could forge) and Brulion comes to the front, where the app checks it as any link's (a
  * write without the key asks first). A write with a key runs in the background
- * ([Automation.runInBackground]) and Brulion stays where it is; its answer is the result broadcast
- * and, on failure, a toast.
+ * ([Automation.runInBackground], through [AutomationReceiver]) and Brulion stays where it is; its
+ * answer is the result broadcast and, on failure, a toast.
  *
  *   adb shell am start -a android.intent.action.VIEW -d 'brulion://open?page=Zakupy'
  *   adb shell am start -a io.github.januszbit.brulion.action.RUN -d 'brulion://append?page=Zakupy' \
@@ -57,15 +57,18 @@ class AutomationActivity : Activity() {
       finish()
       return
     }
-    val app = applicationContext
-    val requestId = Automation.requestId(intent, uri)
-    Automation.runInBackground(app, uri, requestId) { result ->
-      val answer = result ?: org.json.JSONObject().put("ok", false).put("error", "no_answer").put("id", requestId)
-      Automation.afterWrite(app, answer)
-      Automation.broadcastResult(app, answer, requestId, resultPackage)
-      if (!answer.optBoolean("ok", false) && !quiet) {
-        Toast.makeText(app, app.getString(R.string.brulion_automation_failed, answer.optString("error")), Toast.LENGTH_LONG).show()
-      }
+    // A write with a key: through AutomationReceiver, whose broadcast keeps this process alive until
+    // the background run answers (a finished activity's process may be killed first).
+    val forward = Intent(Automation.ACTION_RUN)
+      .setClass(applicationContext, AutomationReceiver::class.java)
+      .putExtra(Automation.EXTRA_URI, uri)
+      .putExtra("id", Automation.requestId(intent, uri))
+      .putExtra(AutomationReceiver.EXTRA_TOAST_FAILURE, !quiet)
+    if (!resultPackage.isNullOrBlank()) forward.putExtra(Automation.EXTRA_RESULT_PACKAGE, resultPackage)
+    try {
+      sendBroadcast(forward)
+    } catch (e: RuntimeException) {
+      Log.w(TAG, "cannot hand the request to the receiver", e)
     }
     finish()
   }

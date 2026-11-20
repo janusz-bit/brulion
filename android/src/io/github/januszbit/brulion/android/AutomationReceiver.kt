@@ -6,6 +6,8 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.util.Log
+import android.widget.Toast
+import io.github.januszbit.brulion.R
 import org.json.JSONObject
 
 /**
@@ -38,6 +40,9 @@ class AutomationReceiver : BroadcastReceiver() {
       )
       return
     }
+    // A request AutomationActivity handed over: a failure is said on the screen too (another app
+    // setting this extra gets nothing more than that toast).
+    val toast = Automation.safely { intent.getBooleanExtra(EXTRA_TOAST_FAILURE, false) } ?: false
     // The answer comes after onReceive returns: keep the broadcast (and the process) alive.
     val pending = goAsync()
     Automation.runInBackground(app, uri, requestId) { result ->
@@ -45,13 +50,18 @@ class AutomationReceiver : BroadcastReceiver() {
       try {
         Automation.afterWrite(app, answer)
         Automation.broadcastResult(app, answer, requestId, resultPackage)
+        if (toast && !answer.optBoolean("ok", false)) {
+          Toast.makeText(app, app.getString(R.string.brulion_automation_failed, answer.optString("error")), Toast.LENGTH_LONG).show()
+        }
       } finally {
         pending.finish()
       }
     }
   }
 
-  private companion object {
+  internal companion object {
     const val TAG = Automation.TAG
+    /** Show a failure as a toast (the activity's requests). */
+    const val EXTRA_TOAST_FAILURE = "io.github.januszbit.brulion.android.extra.TOAST_FAILURE"
   }
 }
