@@ -1,0 +1,18 @@
+Nowości w 0.25.0:
+• Fiszki
+• Tablice (canvas)
+• Widoki zapytań
+• Inne kalendarze
+• Zaszyfrowane notatki i blokada aplikacji
+• Szukanie w PDF-ach i obrazach
+• Dźwięk, wideo i notatki głosowe
+• AI, które pisze z Tobą
+• Obrazki dla własnego modelu
+• Twoje notatki w claude.ai i ChatGPT
+• Publikowanie
+• Brulion Web Clipper
+• Nowe źródła importu
+• Automatyzacja
+• …
+
+Pełny opis: https://github.com/janusz-bit/brulion/releases/tag/v0.25.0

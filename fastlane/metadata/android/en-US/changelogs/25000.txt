@@ -1,0 +1,19 @@
+What's new in 0.25.0:
+• Flashcards
+• Canvases
+• Database views
+• Other calendars
+• Encrypted notes and an app lock
+• Search in PDFs and pictures
+• Audio, video and voice notes
+• AI that writes with you
+• Pictures for Brulion's own model
+• Your notes in claude.ai and ChatGPT
+• Publishing
+• Brulion Web Clipper
+• More to import
+• Automation
+• Extensions in your notes
+• …
+
+Full release notes: https://github.com/janusz-bit/brulion/releases/tag/v0.25.0
