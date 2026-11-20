@@ -17,7 +17,9 @@ import Brulion
 // source in place; while editing, the results follow the typed query. Without a host that runs
 // queries (QueryHost) only the filters show. A ```dataview block (docs/SYNTAX.md §10 "Dataview
 // queries") is shown the same way with Dataview's results: LIST rows, TABLE rows under their
-// column headers (equal columns, each cell at most 4 lines), TASK results grouped by page.
+// column headers (equal columns, each cell at most 4 lines), TASK results grouped by page. A query
+// with `view:` and a ```base block (docs/SYNTAX.md §10 "Views", "Obsidian Bases") show a
+// DatabaseView — a table, board, gallery, calendar or list with editable cells — instead.
 Rectangle {
     id: root
 
@@ -33,6 +35,9 @@ Rectangle {
     readonly property bool emptySource: Js.trim(root.block.rowData.editText) === ""
     /// A ```dataview block (else a ```query block).
     readonly property bool dataview: root.block.rowData.lang === "dataview"
+    /// A database view: a ```query block with `view:` ("query") or a ```base block ("base"); "" none.
+    readonly property string viewLanguage: root.block.rowData.query.view
+    readonly property bool viewBlock: root.viewLanguage !== ""
     /// Dataview TABLE results: rows of cells under column headers.
     readonly property bool table: results.type === "table"
     readonly property int columnCount: Math.max(1, results.columns.length)
@@ -48,7 +53,7 @@ Rectangle {
     border.color: root.block.editing ? Theme.alpha(Theme.focusRing, 0.5) : Theme.border
 
     Accessible.role: Accessible.Grouping
-    Accessible.name: root.dataview ? qsTr("Dataview query") : qsTr("Query")
+    Accessible.name: root.viewLanguage === "base" ? qsTr("Base") : root.dataview ? qsTr("Dataview query") : qsTr("Query")
 
     /// The live results (tests, the playground's self test).
     readonly property alias results: results
@@ -56,7 +61,8 @@ Rectangle {
     QueryResultModel {
         id: results
         controller: root.block.controller
-        source: root.block.rowData.editText
+        // (A database view runs its own model: DatabaseView.)
+        source: root.viewBlock ? "" : root.block.rowData.editText
         language: root.dataview ? "dataview" : "query"
         // The block is created with its rows (while the page scrolls): on a phone 20 of them are
         // about a screenful and take less than half the time of 50 ("Show more" adds the rest).
@@ -165,6 +171,10 @@ Rectangle {
             root.followAnswer()
         }
     }
+    /// A toast of the database view: another file's edit gets an Undo (DatabaseView.results.undoLast()).
+    function viewToast(text: string, kind: string, undo: bool, view: DatabaseView): void {
+        root.editor.notice(text, kind, undo ? root.editor.viewUndoAction(view.results) : null)
+    }
     function activateResultLink(index: int, link: string): void {
         if (link === "open:") {
             openResult(index)
@@ -187,7 +197,8 @@ Rectangle {
         readonly property real sourceBottom: sourceLoader.visible ? sourceLoader.y + sourceLoader.height : filtersBottom
         readonly property real separatorBottom: resultsSeparator.visible ? resultsSeparator.y + resultsSeparator.height : sourceBottom
         readonly property real headersBottom: columnHeaders.visible ? columnHeaders.y + columnHeaders.height : separatorBottom
-        readonly property real resultsBottom: resultList.visible ? resultList.y + resultList.height : separatorBottom
+        readonly property real resultsBottom: databaseLoader.visible ? databaseLoader.y + databaseLoader.height
+                                              : resultList.visible ? resultList.y + resultList.height : separatorBottom
         readonly property real moreBottom: moreButton.visible ? moreButton.y + moreButton.implicitHeight : resultsBottom
         x: Theme.space4
         y: Theme.space3
@@ -209,7 +220,7 @@ Rectangle {
                 Text {
                     id: queryLabel
                     textFormat: Text.PlainText
-                    text: root.dataview ? qsTr("Dataview") : qsTr("Query")
+                    text: root.viewLanguage === "base" ? qsTr("Base") : root.dataview ? qsTr("Dataview") : qsTr("Query")
                     font.family: Theme.fontUi
                     font.pixelSize: Theme.textSm
                     font.weight: Theme.weightSemiBold
@@ -347,7 +358,7 @@ Rectangle {
             id: resultsSeparator
             y: column.sourceBottom + column.spacing + Theme.space1
             width: parent.width
-            visible: root.live && results.ready && !root.emptySource && (results.itemCount > 0 || !results.ok)
+            visible: root.live && !root.viewBlock && results.ready && !root.emptySource && (results.itemCount > 0 || !results.ok)
             height: 1
             color: Theme.borderSubtle
         }
@@ -371,12 +382,33 @@ Rectangle {
             }
         }
 
+        // A database view (a query with `view:`, a base).
+        Loader {
+            id: databaseLoader
+            objectName: "queryDatabaseView" // (the editor's self-tests)
+            y: column.sourceBottom + column.spacing
+            width: parent.width
+            active: root.viewBlock && root.live
+            visible: active
+            height: databaseLoader.implicitHeight
+            sourceComponent: DatabaseView {
+                id: databaseView
+                width: databaseLoader.width
+                controller: root.block.controller
+                source: root.block.rowData.editText
+                language: root.viewLanguage
+                blockRow: root.block.index
+                editor: root.editor
+                onToastRequested: (text, kind, undo) => root.viewToast(text, kind, undo, databaseView)
+            }
+        }
+
         Column {
             id: resultList
             objectName: "queryResultList" // (the editor's self-tests)
             y: column.headersBottom + column.spacing
             width: parent.width
-            visible: root.live && results.ok && !root.emptySource
+            visible: root.live && !root.viewBlock && results.ok && !root.emptySource
             spacing: Theme.touchUi ? 0 : 2
             // (`revision`: itemAt() notifies nothing, items may come after the count, and new results
             // with as many rows replace them without a count change; read for real — qmlcachegen
@@ -691,6 +723,8 @@ Rectangle {
                 text: {
                     if (!root.live)
                         return qsTr("Query results are shown when a notebook is open.")
+                    if (root.viewBlock)
+                        return "" // (DatabaseView says it)
                     if (!results.ready)
                         return ""
                     if (!results.ok)

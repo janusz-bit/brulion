@@ -945,6 +945,26 @@ bool touchHoldNow(QQuickWindow *window, QPointF scenePos, const std::function<bo
     return reached;
 }
 
+bool touchHoldDragNow(QQuickWindow *window, QPointF from, QPointF to, const std::function<bool()> &until,
+                      int timeoutMs)
+{
+    TouchSequence sequence(window, touchDevice());
+    sequence.press(0, from.toPoint(), window).commit(false);
+    QCoreApplication::processEvents();
+    const bool reached = waitFor(until, timeoutMs);
+    const int steps = 16;
+    for (int step = 1; step <= steps; ++step) {
+        sequence.move(0, (from + (to - from) * step / double(steps)).toPoint(), window).commit(false);
+        QCoreApplication::processEvents();
+        settle(16);
+    }
+    settle(120);
+    sequence.release(0, to.toPoint(), window).commit(false);
+    QCoreApplication::processEvents();
+    settle(200);
+    return reached;
+}
+
 void touchDragNow(QQuickWindow *window, QPointF from, QPointF delta)
 {
     run(touchDrag(window, from, delta, 12, 16, 0, 300));

@@ -188,15 +188,16 @@ done in the repository simply disappears from the list.
 
 ## Views and data
 
-* **Database views from properties** — a block or a file showing pages as an editable table, a
-  kanban board (also tasks by status), a gallery, a calendar; filters, groups, columns, formulas.
-  Obsidian has Bases (table, list, map, kanban), Logseq a table and a gallery, Anytype and AFFiNE
-  boards and galleries. `query` blocks today show only a list and do not filter by page properties
-  (`status:: in progress`, `cost > 100`).
-* **Obsidian compatibility: `.base`, `.canvas`** — `.base` and `.canvas` files from a shared vault
-  are today a file in Brulion (docs/IMPORT.md); to be decided what to read and what to edit as
-  well. Dataview's `CALENDAR` views, inline `= …` queries and `dataviewjs` stay code
-  (docs/SYNTAX.md §10 "Dataview queries").
+* **Database views: what remains** — dragging cards on a board and a calendar was tested with the
+  mouse and the offscreen self-test, not yet with a finger on a real phone nor in the browser
+  build; a base embedded in a note (`![[Books.base]]`, `![[Books.base#View]]`) still shows as a
+  file link (a ```` ```base ```` block shows it); Bases' map view (Obsidian's Maps plugin) is a table;
+  a table's cells have no keyboard navigation (Tab / arrows between cells) and no multi-cell
+  selection or paste, as Obsidian's tables have.
+* **Obsidian compatibility: `.canvas`** — `.canvas` files from a shared vault are today a file in
+  Brulion (docs/IMPORT.md); to be decided what to read and what to edit as well. Dataview's
+  `CALENDAR` views, inline `= …` queries and `dataviewjs` stay code (docs/SYNTAX.md §10 "Dataview
+  queries").
 * **Whiteboard (infinite canvas)** — notes, pictures, PDFs and drawings laid out on a canvas, with
   connections; preferably in the JSON Canvas format (Obsidian Canvas, AFFiNE). The drawing editor
   covers sketches, but does not embed notes in them.

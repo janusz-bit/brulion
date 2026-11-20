@@ -842,7 +842,8 @@ bool TaskListModel::applyQuery(const QString &query)
         case QueryFilterKind::Text: words << f.values; break;
         case QueryFilterKind::Ref:
         case QueryFilterKind::Date:
-        case QueryFilterKind::Is: break;
+        case QueryFilterKind::Is:
+        case QueryFilterKind::Property: break;
         }
     }
     QString sort = m_sort;

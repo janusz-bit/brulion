@@ -26,6 +26,10 @@
 // item { path ("" for a group of a grouped TABLE), title, folder, line 0, cells: [Markdown] }
 // (notebook::dataviewResultJson). Grouped LIST and TASK results come in groups (TASK without
 // GROUP BY: one group per page, keyed by its path).
+// runView(language, source, currentPath, state) runs a database view (docs/SYNTAX.md §10 "Views",
+// "Obsidian Bases"): a ```query block with `view:` ("query"), a ```base block or a .base file's text
+// ("base"); state: { view (a base's view, 0-based), viewName, month ("YYYY-MM-DD": a calendar's
+// month) } — the result is notebook::runView()'s JSON as a map (notebook/views.h) with `complete`.
 // setTaskStatus(path, line, status) writes the task's new status ("todo", "doing", "done",
 // "cancelled", "deferred"; completing a recurring task writes its next instance; "" = no status:
 // markdown::removeTaskMarker) into the file and returns whether it changed.
@@ -46,6 +50,10 @@ public:
     virtual QVariantMap runQuery(const QString &source, const QString &currentPath) = 0;
     /// Run the Dataview query `source` (the body of a ```dataview block) written in `currentPath`.
     virtual QVariantMap runDataview(const QString &source, const QString &currentPath) = 0;
+    /// Run the database view `source` (`language` "query" or "base") shown on `currentPath`; see the
+    /// file comment.
+    virtual QVariantMap runView(const QString &language, const QString &source, const QString &currentPath,
+                                const QVariantMap &state) = 0;
     /// Set the status of the task on `line` (0-based) of `path` ("" removes the task marker);
     /// false when nothing changed.
     virtual bool setTaskStatus(const QString &path, int line, const QString &status) = 0;

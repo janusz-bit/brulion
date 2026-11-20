@@ -279,12 +279,16 @@ FocusScope {
     property bool pictureAsText: false
     /// A PDF opens in the PDF viewer (its bytes never reach the editor).
     readonly property bool pdfRoute: root.routePath !== "" && Workspace.isPdf(root.routePath)
+    /// An Obsidian base (`.base`, docs/SYNTAX.md §10 "Obsidian Bases"): its views (ContentBaseView);
+    /// "Show as text" (Ctrl+E) shows its YAML, read-only.
+    readonly property bool baseRoute: root.routePath !== "" && Js.test(root.routePath, "\\.base$", "i")
     /// Any other file that is no note (DOCX, ZIP, MP3…): read-only as text — a typed character
     /// would have been saved over its bytes.
     readonly property bool fileRoute: root.routePath !== "" && !root.pictureRoute && !root.pdfRoute
+                                      && (!root.baseRoute || root.pictureAsText)
                                       && !Js.test(root.routePath, "\\.(md|markdown)$", "i")
-    /// A note (Markdown) in the block editor: not a picture, a PDF or another file.
-    readonly property bool noteRoute: !root.pictureRoute && !root.pdfRoute && !root.fileRoute
+    /// A note (Markdown) in the block editor: not a picture, a PDF, a base or another file.
+    readonly property bool noteRoute: !root.pictureRoute && !root.pdfRoute && !root.fileRoute && !root.baseRoute
     /// The view swipes sideways from the left edge itself: a PDF zoomed past the view's width pans
     /// (the drawer's edge strip yields to it, ShellRouteView.viewEdgeSwipe).
     readonly property bool edgeSwipe: root.pdfRoute && pdfLoader.item !== null && (pdfLoader.item as ContentPdfView).pannedSideways
@@ -407,10 +411,11 @@ FocusScope {
             root.showPictureAsText()
     }
 
-    /// Ctrl+E, "Markdown source": a picture ⇄ its text (read-only); a PDF, another file: nothing.
+    /// Ctrl+E, "Markdown source": a picture ⇄ its text (read-only), a base ⇄ its YAML; a PDF,
+    /// another file: nothing.
     function toggleSource(): void {
-        if (root.pictureRoute)
-            root.togglePictureText()
+        if (root.pictureRoute || root.baseRoute)
+            root.pictureAsText = !root.pictureAsText
         else if (root.noteRoute)
             editor.toggleSourceMode()
     }
@@ -1014,6 +1019,19 @@ FocusScope {
             asText: root.pictureAsText || root.fileRoute
             rendererPalette: editor.rendererPalette
             onTextToggleRequested: root.togglePictureText()
+        }
+    }
+
+    // A base: its views (the editor behind it stays unloaded and hidden). Created for bases only.
+    Loader {
+        objectName: "baseLoader"
+        anchors.fill: parent
+        active: root.baseRoute && !root.pictureAsText
+        sourceComponent: ContentBaseView {
+            path: root.routePath
+            controller: page
+            viewName: AppController.routeText(root.route, "view") !== "" ? AppController.routeText(root.route, "view")
+                                                                          : AppController.routeText(root.route, "heading")
         }
     }
 

@@ -59,6 +59,9 @@ Keyboard in the panel: the ↑ and ↓ arrows move between properties, → or En
 
 Brulion changes only that one property — the rest of the header (comments, order, quotes, line endings) stays as it was. This works the same in a YAML header as in `key:: value` lines; in the latter a key can contain only the letters a–z, digits, `-` and `_`. A header that can't be safely changed in fields (for example an indented one) is shown read-only — you change it with the **Edit as text** button. The menu of a property the fields can't handle (for example a nested map) has the same command. A value opened in a field and left unchanged is saved exactly as it was.
 
+### Properties in queries and tables
+[[Queries|Queries]] filter by properties with two colons: `status::"in progress"`, `cost::>100`, `due::this-week`, `owner::[[John Smith]]`, `due::none`. A block's own `key:: value` lines count for it and the blocks under it, so `type:tasks stage::shopping` finds the tasks of a page or a list with `stage:: shopping`. A query with `view:table` shows properties as columns you can edit right there — Brulion writes them the same way as the Properties panel: only that property changes, with its type kept — and `view:board` lets you move a page from one `status` to another by dragging its card.
+
 ### Tags and aliases in the page header
 A page's tags and aliases are also shown below its title. A right click on a chip (on a phone, a long press) opens a menu: you can open a tag or remove it from this page, and copy or remove an alias. The “+” button at the end adds a tag or alias without opening the panel. While the **Properties** panel is expanded, these chips below the title aren't shown — the same tags and aliases (with “+”, on a computer also with ×, on a phone with the same chip menu) are in the panel right below; once you collapse the panel, they come back.
 

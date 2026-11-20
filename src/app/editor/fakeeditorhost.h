@@ -135,6 +135,8 @@ public:
     // QueryHost (also invokable, like the shell's Workspace)
     Q_INVOKABLE QVariantMap runQuery(const QString &source, const QString &currentPath) override;
     Q_INVOKABLE QVariantMap runDataview(const QString &source, const QString &currentPath) override;
+    Q_INVOKABLE QVariantMap runView(const QString &language, const QString &source, const QString &currentPath,
+                                    const QVariantMap &state = {}) override;
     Q_INVOKABLE bool setTaskStatus(const QString &path, int line, const QString &status) override;
     /// Make runQuery() and runDataview() fail like a host without an index (tests).
     Q_INVOKABLE void setQueriesFail(bool fail) { m_queriesFail = fail; }

@@ -2133,7 +2133,10 @@ QVariant BlockListModel::data(const QModelIndex &idx, int role) const
             return QVariantMap();
         // A Dataview query has no filters to show as chips: its results say it all.
         if (shape.lang == u"dataview")
-            return QVariantMap{{u"filters"_s, QVariantList()}, {u"terms"_s, QStringList()}};
+            return QVariantMap{{u"filters"_s, QVariantList()}, {u"terms"_s, QStringList()}, {u"view"_s, QString()}};
+        // A base is a database view; its YAML has no filters to show as chips.
+        if (shape.lang == u"base")
+            return QVariantMap{{u"filters"_s, QVariantList()}, {u"terms"_s, QStringList()}, {u"view"_s, u"base"_s}};
         return queryInfo(shape.editText);
     }
     case CalloutTypeRole: return cachedShape(row).calloutType;

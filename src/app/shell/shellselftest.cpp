@@ -5798,6 +5798,84 @@ void checkIgnoreTasks(QQuickWindow *window, AppController *app, const Check &che
     settle(300);
 }
 
+/// Database views (docs/SYNTAX.md §10 "Views", docs/UI.md "Database views"): a ```query with
+/// view:tabela over pages with properties — a cell tapped, typed into and committed with Enter
+/// writes that page's property, only that line —, and a view:tablica of the page's own tasks —
+/// a card dragged from "To do" to "Done" (the mouse; on the phone run a finger held on it first)
+/// ticks the task in the page, one undo step.
+void checkDatabaseViews(QQuickWindow *window, AppController *app, const Check &check)
+{
+    Workspace *ws = app->workspace();
+    const bool touch = QCoreApplication::arguments().contains(u"--touch"_s); // (touchRun(), defined below)
+    const QString folder = u"Samotest widoków"_s;
+    const QString pageA = folder + u"/Alfa.md"_s;
+    const QString pageB = folder + u"/Beta.md"_s;
+    check(ws->write(pageA, u"---\nstatus: planowany\nkoszt: 10\n---\nTreść alfy.\n"_s)
+                  && ws->write(pageB, u"---\nstatus: zrobione\nkoszt: 20\n---\nTreść bety.\n"_s),
+          "the pages a view lists are written");
+    const QString host = ws->newPagePath(u"Samotest widoków (zapytania)"_s);
+    check(ws->write(host, u"```query\ntype:pages path:\"Samotest widoków/\" widok:tabela kolumny:tytuł,status,koszt "
+                          u"sortuj:page\n```\n\n```query\ntype:tasks page:this widok:tablica\n```\n\n"
+                          u"- [ ] Karta do przeniesienia\n"_s),
+          "the page with the views is written");
+    const auto listed = [ws] {
+        return ws->runQuery(u"type:pages path:\"Samotest widoków/\""_s).value(u"total"_s).toInt();
+    };
+    check(waitFor([&] { return listed() == 2; }, 10000), "the pages are indexed");
+    app->openPage(host);
+    check(waitFor([&] { return shownNamed(window->contentItem(), u"pageEditor"_s) != nullptr; }, 10000),
+          "the page is open");
+    mouseMove(window, {1, 1});
+    // The table: Alfa's status cell (row 0, column 1).
+    QPointF at;
+    QQuickItem *cell = steadyItem(window, [&] { return shownNamed(window->contentItem(), u"viewCell0_1"_s); }, &at,
+                                  10000);
+    check(cell != nullptr, "the table shows its cells");
+    if (cell) {
+        tapOrClick(window, at, touch);
+        QQuickItem *field = nullptr;
+        check(waitFor([&] {
+                  field = shownNamed(window->contentItem(), u"viewCellEditor"_s);
+                  return field && field->hasActiveFocus();
+              }),
+              "a tap on an editable cell opens its field, focused");
+        if (field) {
+            QMetaObject::invokeMethod(field, "selectAll");
+            typeChars(window, u"gotowy"_s);
+            sendKey(window, Qt::Key_Return);
+            check(waitFor([&] { return ws->readFile(pageA).contains(u"status: gotowy"_s); }, 5000),
+                  "Enter writes the cell into its page");
+            check(ws->readFile(pageA) == u"---\nstatus: gotowy\nkoszt: 10\n---\nTreść alfy.\n"_s,
+                  "only that property's line changed");
+            check(ws->readFile(pageB).contains(u"status: zrobione"_s), "the other row's page is as it was");
+        }
+    }
+    // The board: the card from "To do" (column 0) to "Done" (column 2).
+    mouseMove(window, {1, 1});
+    QPointF from;
+    QPointF to;
+    QQuickItem *card = steadyItem(window, [&] { return shownNamed(window->contentItem(), u"viewCard0"_s); }, &from,
+                                  10000);
+    QQuickItem *done = steadyItem(window, [&] { return shownNamed(window->contentItem(), u"viewBoardColumn2"_s); }, &to,
+                                  10000);
+    check(card != nullptr && done != nullptr, "the board shows its card and the Done column");
+    if (card && done) {
+        const auto ghost = [window] { return shownNamed(window->contentItem(), u"viewDragGhost"_s) != nullptr; };
+        if (touch)
+            uidriver::touchHoldDragNow(window, from, to, ghost, 3000);
+        else
+            mouseDrag(window, from, to, 150);
+        check(waitFor([&] { return ws->readFile(host).contains(u"- [x] Karta do przeniesienia"_s); }, 5000),
+              "a card dropped on Done ticks its task");
+        check(waitFor([&] { return !ghost(); }), "the dragged copy is gone");
+    }
+    ws->deletePage(host);
+    ws->deletePage(pageA);
+    ws->deletePage(pageB);
+    app->goHome();
+    settle(300);
+}
+
 /// "QR code…" (docs/UI.md "QR code"): the top bar's More and the palette (uiAction "qrCode") open
 /// the dialog on the page shown — its code drawn (QrCodeView), the note's Markdown with the title
 /// first —; "Plain text" and the title's box change what the code holds; a note longer than one
@@ -9560,6 +9638,9 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
     closeMenus(window);
     // 3h-qr. A note as QR codes: one code, the formats, a long note walked code by code.
     checkQrCode(window, app, check);
+    closeMenus(window);
+    // 3h-db. Database views: a table's cell edited, a board's card dragged to another column.
+    checkDatabaseViews(window, app, check);
     closeMenus(window);
     // 3i. Focus mode, the word count, typewriter scrolling and a custom shortcut.
     checkFocusAndShortcuts(window, app, check);

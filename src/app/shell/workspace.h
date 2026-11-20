@@ -645,6 +645,11 @@ public:
     /// the minute turns: Dataview's `date(now)`).
     Q_INVOKABLE QVariantMap runDataview(const QString &source, const QString &currentPath = QString()) override;
     Q_INVOKABLE bool setTaskStatus(const QString &path, int line, const QString &status) override;
+    /// A database view (QueryHost::runView: a ```query block with `view:`, a ```base block, a
+    /// .base file); query views keep a QueryCache like query blocks, bases their last result per
+    /// index version and minute.
+    Q_INVOKABLE QVariantMap runView(const QString &language, const QString &source, const QString &currentPath,
+                                    const QVariantMap &state = {}) override;
 
     // ---- Journals ---------------------------------------------------------------------------
     /// Path of the daily note for "YYYY-MM-DD" (whether it exists or not).

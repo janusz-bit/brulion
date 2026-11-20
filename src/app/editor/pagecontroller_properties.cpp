@@ -362,6 +362,18 @@ PageController::applyPropertyEdit(const std::function<markdown::PropertyEditResu
     return r.status;
 }
 
+bool PageController::applyContentEdit(const std::function<QString(const QString &)> &edit)
+{
+    if (refusesEdit())
+        return false;
+    const PropertyEditStatus status = applyPropertyEdit([&](const QString &content) {
+        const QString edited = edit(content);
+        return markdown::PropertyEditResult{edited, edited == content ? PropertyEditStatus::Unchanged
+                                                                      : PropertyEditStatus::Changed};
+    });
+    return status == PropertyEditStatus::Changed;
+}
+
 QVariantMap PageController::setPageProperty(const QString &source, const QString &key, const QVariant &value,
                                             const QString &type)
 {

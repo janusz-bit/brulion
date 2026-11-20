@@ -108,8 +108,19 @@ instead of a path) is skipped with a warning, and Brulion keeps its own.
   `SORT`, `GROUP BY`, `FLATTEN`, `LIMIT` and Dataview's fields and functions, read-only (tasks can
   be checked off; docs/SYNTAX.md §10 "Dataview queries"); `dataviewjs` blocks, inline `= …` queries,
   regular-expression functions and `CALENDAR` stay code or say they are not supported. Files of
-  other plugins are plain text or a page (exception: Excalidraw drawings, below); `.base` and
+  other plugins are plain text or a page (exceptions: Excalidraw drawings, below, and bases);
   `.canvas` files are not pages.
+* **Bases** (Obsidian's core plugin): a `.base` file opens in Brulion as a page of its views — a
+  table, cards (a gallery), a list or a Kanban board — with its filters, formulas, display names,
+  sort, groups, limits and summaries, and a ```` ```base ```` block shows its views in the note
+  (docs/SYNTAX.md §10 "Obsidian Bases"). Editing a cell writes the note's property as Obsidian
+  would; dragging a card on a board writes the property it groups by; sorting by a column and
+  hiding, adding or moving columns write the view's `sort:` / `order:` into the YAML — those lines
+  only, the rest of the file (comments, other views, a plugin's keys) as it was. A map view and a
+  plugin's view type are shown as a table with a note; regular expressions and plugins' functions
+  say they are not supported instead of failing. Brulion's own ```` ```query ```` blocks have
+  views too (`view:table`, `view:board`, …; docs/SYNTAX.md §10 "Views"), which Obsidian shows as
+  code.
 * Brulion **drawings** (`/Drawing`) are SVG files with an embedded Excalidraw scene: Obsidian
   shows them as pictures, and excalidraw.com opens them for editing. A drawing from Excalidraw
   saved as SVG with the *Embed scene* option opens in Brulion's drawing editor — Brulion edits

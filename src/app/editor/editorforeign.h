@@ -2,7 +2,7 @@
 // the classes know nothing about QML; these wrappers make them types of the app's QML module
 // "Brulion" (PageController, BlockListModel, BlockRowData, MarkdownHighlighter, SourceTextSync, MermaidView, ChartView,
 // RichTextPills, RichTextLinks, RenderedTextItem (+ the value type renderedText), LinkPreview, SuggestionModel,
-// QueryResultModel, StreamSelection, FakeEditorHost, the EditorInput and SpellCheck singletons; EditorHost as an
+// QueryResultModel, ViewResultModel, StreamSelection, FakeEditorHost, the EditorInput and SpellCheck singletons; EditorHost as an
 // uncreatable interface type), so qmllint/qmlcachegen see their full API from the library's extracted metatypes.
 // Also PageItem (one item per page, Z10 stage C).
 #pragma once
@@ -22,6 +22,7 @@
 #include "pagecontroller.h"
 #include "pageitem.h"
 #include "queryresultmodel.h"
+#include "viewresultmodel.h"
 #include "renderedtextitem.h"
 #include "richtextlinks.h"
 #include "richtextpills.h"
@@ -157,6 +158,12 @@ struct SuggestionModelForeign {
     Q_GADGET
     QML_FOREIGN(brulion::editor::SuggestionModel)
     QML_NAMED_ELEMENT(SuggestionModel)
+};
+
+struct ViewResultModelForeign {
+    Q_GADGET
+    QML_FOREIGN(brulion::editor::ViewResultModel)
+    QML_NAMED_ELEMENT(ViewResultModel)
 };
 
 struct QueryResultModelForeign {

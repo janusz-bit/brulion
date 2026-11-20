@@ -59,6 +59,9 @@ Klawiatura w panelu: strzałki ↑ i ↓ przechodzą między właściwościami, 
 
 Brulion zmienia tylko tę jedną właściwość — reszta nagłówka (komentarze, kolejność, cudzysłowy, zakończenia linii) zostaje bez zmian. Działa to tak samo w nagłówku YAML, jak w liniach `klucz:: wartość`; w tych drugich klucz może mieć tylko litery a–z, cyfry, `-` i `_`. Nagłówek, którego nie da się bezpiecznie zmienić w polach (na przykład wcięty), panel pokazuje tylko do odczytu — zmienisz go przyciskiem **Edytuj jako tekst**. To samo polecenie ma menu właściwości, której pola nie obsłużą (na przykład zagnieżdżonej mapy). Wartość otwarta w polu i zostawiona bez zmian zostaje zapisana tak jak była.
 
+### Właściwości w zapytaniach i tabelach
+[[Zapytania|Zapytania]] filtrują po właściwościach z dwoma dwukropkami: `status::"w toku"`, `koszt::>100`, `termin::ten-tydzień`, `właściciel::[[Jan Kowalski]]`, `termin::brak`. Własne linie `klucz:: wartość` bloku liczą się dla niego i bloków pod nim, więc `type:tasks etap::zakupy` znajdzie zadania strony albo listy z `etap:: zakupy`. Zapytanie z `widok:tabela` pokazuje właściwości jako kolumny, które zmieniasz na miejscu — Brulion zapisuje je tak samo jak panel Właściwości: zmienia się tylko ta właściwość, z zachowanym typem — a `widok:tablica` pozwala przenieść stronę z jednego `status` do innego, przeciągając jej kartę.
+
 ### Tagi i aliasy w nagłówku strony
 Tagi i aliasy strony stoją też pod jej tytułem. Prawy przycisk na etykiecie (na telefonie przytrzymanie) otwiera menu: tag możesz otworzyć albo usunąć z tej strony, alias skopiować albo usunąć. Przycisk „+” na końcu dodaje tag albo alias bez otwierania panelu. Gdy panel **Właściwości** jest rozwinięty, tych etykiet pod tytułem nie ma — te same tagi i aliasy (z „+”, na komputerze także z ×, na telefonie z tym samym menu etykiety) są w panelu tuż pod nimi; po zwinięciu panelu wracają.
 

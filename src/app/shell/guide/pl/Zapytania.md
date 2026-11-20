@@ -34,9 +34,12 @@ Wstaw zapytanie poleceniem `/Zapytanie` albo przyciskiem „Pokaż jako zapytani
 | `remind:` (`przypomnienie:`) | warunek na datę przypomnienia |
 | `date:` (`data:`) | warunek na datę dziennika |
 | `is:` (`jest:`) | `blocked`/`zablokowane` — zadanie czeka na niezrobione zadanie (`⛔`), `blocking`/`blokujące` — inne zadanie czeka na nie, `running`/`mierzone` — licznik czasu działa, `tracked`/`z-czasem` — ma zapisany czas; `-is:blocked` to zadania niezablokowane |
-| `sort:` (`sortuj:`) | np. `sort:due,-priority`; minus odwraca |
-| `group:` (`grupuj:`) | `page`, `due`, `tag`, `status`, `priority`… |
+| `sort:` (`sortuj:`) | np. `sort:due,-priority`; minus odwraca; także właściwość: `sort:-koszt` |
+| `group:` (`grupuj:`) | `page`, `due`, `tag`, `status`, `priority`… albo właściwość: `group:etap` |
 | `limit:` | maksymalna liczba wyników |
+| `klucz::wartość` | właściwość — niżej |
+| `view:` (`widok:`) | `table` / `tabela`, `board` / `tablica`, `gallery` / `galeria`, `calendar` / `kalendarz`, `list` / `lista` — niżej |
+| `columns:` (`kolumny:`), `summary:` (`podsumowanie:`) | kolumny widoku i ich sumy, średnie… — niżej |
 
 ## Daty w warunkach
 Operatory `<`, `<=`, `>`, `>=` poprzedzają wyrażenie; bez operatora data musi mieścić się w danym dniu lub okresie.
@@ -58,6 +61,55 @@ Przykład: `due:<=+7d` oznacza „termin w ciągu tygodnia, łącznie z zaległy
 - `status:open -is:blocked sort:due` — to, co można zrobić już teraz (bez zadań, które na coś czekają).
 
 Zobacz też [[Przypomnienia i alarmy|Przypomnienia i alarmy]]. Jeśli w zapytaniu jest błąd, w miejscu wyników pojawia się opis, co poprawić.
+
+## Właściwości
+Dwa dwukropki filtrują po właściwości — strony (jej nagłówka YAML albo linii `klucz:: wartość` na początku) albo bloku (jego własnych linii `klucz:: wartość`, a gdy ich nie ma — rodzica, a potem strony):
+
+- `status::zrobione`, `status::"w toku"` — tekst (wielkość liter i polskie znaki bez znaczenia); lista pasuje, gdy pasuje któryś jej element,
+- `koszt::>100`, `koszt::<=1200`, `koszt::100..200` — liczby jak liczby,
+- `termin::<dziś`, `termin::ten-tydzień`, `termin::dziś..+7d` — daty, jak w warunkach na daty wyżej,
+- `właściciel::[[Jan Kowalski]]` — link do tej strony (działa też alias),
+- `pilne::tak` — pole wyboru,
+- `nazwa::*dom*` — wzorzec,
+- `termin::brak` — nie ma takiej właściwości (albo jest pusta), `ocena::dowolna` — jest,
+- `-status::zrobione` — wszystko poza tym; wartości po przecinku to „lub”: `status::planowany,"w toku"`.
+
+Klucz nie zależy od wielkości liter ani polskich znaków (`budzet::` znajdzie `Budżet`); klucz ze spacjami bierzesz w cudzysłów: `"termin oddania"::2026-11-01`. Dla stron `sort:` i `group:` przyjmują też nazwy właściwości (`type:pages sort:-koszt group:status`); `status::` z dwoma dwukropkami zawsze oznacza właściwość, także przy zadaniach.
+
+```text
+type:pages tag:projekt status::"w toku",planowany koszt::>100 sort:-koszt
+type:tasks etap::zakupy status:open
+```
+
+## Widoki: tabele, tablice, galerie, kalendarze
+`widok:` pokazuje wyniki inaczej — i pozwala je zmieniać na miejscu:
+
+- `widok:tabela` — tabela: `kolumny:` wybiera kolumny (`tytuł`, `status`, `termin`, `tagi`, `ścieżka`, `zmieniono`… albo dowolna właściwość), a kolumna `"Brutto = koszt * 1.23"` to formuła (funkcje Dataview: `round`, `dateformat`, `length`…). `podsumowanie:koszt=suma,ocena=średnia` dodaje wyniki pod kolumnami (także `min`, `maks`, `mediana`, `liczba`, `unikalne`, `najwcześniej`, `najpóźniej`…). Kliknij komórkę, żeby ją zmienić: Brulion zapisuje tę jedną właściwość w stronie (albo linię `klucz::` zadania) i nie rusza reszty; na tej stronie cofa to Ctrl+Z, a zmiana innej strony ma **Cofnij** w komunikacie. Kliknięcie nagłówka kolumny sortuje po niej; jej menu (prawy przycisk, długie przytrzymanie) przesuwa ją albo ukrywa; **Kolumny** dodaje nową. To zmienia `sort:` i `kolumny:` samego zapytania.
+- `widok:tablica` — tablica (kanban): kolumny według `grupuj:` (zadania domyślnie według stanu), karty przeciągasz myszą do innej kolumny — na telefonie po przytrzymaniu palca na karcie. Upuszczenie karty zapisuje wartość kolumny: stan zadania albo właściwość (`grupuj:etap`). **+** w kolumnie dodaje stronę (albo zadanie) z tą wartością.
+- `widok:galeria` — karty z okładką strony albo jej pierwszym obrazkiem.
+- `widok:kalendarz` — miesiąc z wierszami w ich datach (zadania według terminu, strony według właściwości z datą albo `grupuj:właściwość`); przeciągnij wpis na inny dzień, żeby go przenieść; strzałki zmieniają miesiąc.
+- `widok:lista` — jeden wiersz w linii.
+
+**+** u góry tworzy nowy wiersz: stronę w folderze z `ścieżka:` zapytania, z jego `tag:` i wartościami filtrów `klucz::wartość` — albo, dla zadań, zadanie na tej stronie.
+
+Spróbuj: tablica niżej pokazuje zadania tej strony według stanu — przeciągnij kartę do „Zrobione”:
+
+```query
+type:tasks page:this widok:tablica
+```
+
+- [ ] Przeczytać o widokach
+- [/] Wypróbować tablicę
+- [ ] Zrobić tabelę moich projektów
+
+```text
+type:pages tag:projekt widok:tabela sortuj:-koszt
+kolumny:tytuł,status,koszt,termin,"Brutto = koszt * 1.23"
+podsumowanie:koszt=suma
+```
+
+## Bazy z Obsidiana (Bases)
+Plik `.base` z Obsidiana otwiera się w Brulionie jako strona z widokami (tabela, karty, lista, tablica kanban; mapa pokazuje się jako tabela). Filtry (`file.hasTag("książka")`, `file.inFolder("Książki")`, `status != "przeczytana"`), formuły (`cena.toFixed(2)`, `if(…)`), nazwy wyświetlane, sortowanie, grupy, limity i podsumowania działają jak w Obsidianie. Blok kodu z językiem `base` pokazuje YAML bazy wprost w notatce. Zmiana komórki albo przeciągnięcie karty zapisuje właściwość notatki, a zmiana sortowania lub kolumn zapisuje je z powrotem w bazie — zmieniają się tylko te linie. Wyrażenia regularne i funkcje wtyczek mówią, że nie są obsługiwane, zamiast się psuć.
 
 ## Zapytania Dataview z Obsidiana
 Skarbiec współdzielony z Obsidianem często ma zapytania wtyczki Dataview. Brulion pokazuje także ich wyniki: blok kodu z językiem `dataview` wypisuje strony, tabelę albo zadania, tylko do odczytu — odhaczyć można jedynie zadania.
