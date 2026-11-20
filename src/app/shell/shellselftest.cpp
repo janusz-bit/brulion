@@ -5815,27 +5815,34 @@ void checkExtensionMacros(QQuickWindow *window, AppController *app, const Check 
     check(waitFor([&] { return renderedRow(controller, 0).contains(u"href=\"macro:"_s); }, 10000),
           "the macro is a placeholder to run its extension");
     QPointF at;
-    QQuickItem *run = steadyItem(window, [&] { return named(u"viewBlockExtension"_s); }, &at);
-    check(run != nullptr, "the view block offers to run its extension");
+    // (Waits are upper bounds: on a loaded machine the block's view comes a while after the text.)
+    // A control inside a block is reached by the press, though the editor's own item for pointer
+    // gestures is found above it (uidriver::pressTargetAt): tapped once it stays put.
+    QQuickItem *run = nullptr;
+    check(waitFor([&] { return (run = named(u"viewBlockExtension"_s)) != nullptr; }, 10000),
+          "the view block offers to run its extension");
+    settle(300);
     if (run)
-        tapOrClick(window, at, touch);
+        tapOrClick(window, pointIn(run), touch);
     const QString accept = QCoreApplication::translate("ShellMacroDialog", "Run");
     const auto findAccept = [&] {
         return uidriver::findShown(window->contentItem(), [&](QQuickItem *item) {
             return isA(item, "BButton") && item->property("text").toString() == accept && item != run;
         });
     };
-    QQuickItem *acceptButton = steadyItem(window, findAccept, &at);
+    QQuickItem *acceptButton = steadyItem(window, findAccept, &at, 10000);
     check(acceptButton != nullptr, "the dialog asks to run it");
     if (acceptButton)
         tapOrClick(window, at, touch);
     check(waitFor([&] { return ext->pageState(path) == u"running"; }, 10000), "Run approves the extension");
     check(waitFor([&] { return renderedRow(controller, 0).contains(u"<b>1 wpisów</b>"_s); }, 10000),
           "the macro shows its value");
-    QQuickItem *field = steadyItem(window, [&] { return named(u"extensionInputField"_s); }, &at, 10000);
-    check(field != nullptr, "the view block draws its view's text field");
+    QQuickItem *field = nullptr;
+    check(waitFor([&] { return (field = named(u"extensionInputField"_s)) != nullptr; }, 10000),
+          "the view block draws its view's text field");
+    settle(300);
     if (field) {
-        tapOrClick(window, at, touch);
+        tapOrClick(window, pointIn(field), touch);
         field->forceActiveFocus();
         field->setProperty("text", u"drugi"_s);
         sendKey(window, Qt::Key_Return);

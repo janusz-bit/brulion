@@ -1640,4 +1640,10 @@ text fields (a schedule not understood asked again), ticks today's check and ope
 real taps, presses the toast's Undo and ticks a past day of the grid; `checkExtensionPages` writes an extension page as a sync would (it waits),
 approves it, opens its view from the palette, saves a change in the editor (it runs at once, still
 approved), saves a broken one (the error on its line, the previous version runs) and evaluates in
-the console.
+the console; `checkExtensionMacros` opens a note with a macro and a ```` ```view ```` block of an
+extension that arrived as a sync would (the macro a placeholder), runs it from the block's button
+and the dialog with real taps, sees the macro's value, types into the view's text field and sees
+the macro follow the note the view's action wrote. `tests/app/shell/tst_macros.cpp`
+(`tst_shell_macros`) runs macros, template variables, view blocks, panels and the new controls in
+the app's classes, `tst_editor_controller` the editor's side (rendering, the rows drawn again, the
+`{{` completion, "View: …", a template's variables).
