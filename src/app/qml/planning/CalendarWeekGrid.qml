@@ -234,14 +234,17 @@ FocusScope {
                             readonly property string variant: more ? "neutral" : AppController.routeText(entry, "variant")
                             readonly property bool closed: AppController.routeFlag(entry, "closed")
                             readonly property string status: AppController.routeText(entry, "status")
-                            readonly property color fgColor: Theme.chipFg(variant)
+                            readonly property bool isEvent: variant === "event"
+                            readonly property string eventColorText: isEvent ? AppController.routeText(entry, "color") : "transparent"
+                            readonly property color eventColor: eventColorText
+                            readonly property color fgColor: isEvent ? Theme.fg : Theme.chipFg(variant)
                             width: parent ? parent.width : 0 // (null while the Repeater drops it: a new week)
                             height: root.pillHeight
                             radius: Theme.radiusSm
                             // (Done and cancelled: the "done" chip's colours at full opacity, AA,
                             // with a check, or struck out with an x when cancelled — as in the
                             // month and in Tasks: the state never by colour alone.)
-                            color: Theme.chipBg(variant)
+                            color: isEvent ? eventColor.alpha(Theme.dark ? 0.32 : 0.2) : Theme.chipBg(variant)
                             Accessible.role: Accessible.Button
                             Accessible.name: allDayPill.more ? allDayText.text : root.entryName(allDayPill.closed, allDayPill.status, AppController.routeText(allDayPill.entry, "title"), "")
                             Row {
@@ -422,7 +425,13 @@ FocusScope {
                             readonly property string status: AppController.routeText(entry, "status")
                             readonly property bool closed: AppController.routeFlag(entry, "closed")
                             readonly property real minutes: Js.toNumber(AppController.routeText(entry, "minutes"))
-                            readonly property color fgColor: Theme.chipFg(variant)
+                            // An event of another calendar: its calendar's colour, as long as it lasts.
+                            readonly property bool isEvent: variant === "event"
+                            readonly property string eventColorText: isEvent ? AppController.routeText(entry, "color") : "transparent"
+                            readonly property color eventColor: eventColorText
+                            readonly property real endMinutes: Js.toNumber(AppController.routeText(entry, "endMinutes"))
+                            readonly property real duration: isEvent ? (endMinutes > minutes ? endMinutes - minutes : 24 * 60 - minutes) : 0
+                            readonly property color fgColor: isEvent ? Theme.fg : Theme.chipFg(variant)
                             // Wide columns: side by side; narrow ones (phones): cascaded, so
                             // every time stays readable.
                             readonly property real laneWidth: (dayColumn.width - 4) / lanes
@@ -430,11 +439,12 @@ FocusScope {
                             y: minutes / 60 * root.hourHeight + 1 + (root.narrowColumns ? lane * 10 : 0)
                             width: root.narrowColumns ? dayColumn.width - 4 - lane * 6 : laneWidth - 2
                             z: lane
-                            height: Math.max(2 * root.pillHeight - 2, root.hourHeight * 0.75 - 2)
+                            height: Math.max(2 * root.pillHeight - 2,
+                                             event.isEvent ? event.duration / 60 * root.hourHeight - 2 : root.hourHeight * 0.75 - 2)
                             radius: Theme.radiusSm
-                            color: Theme.chipBg(variant)
+                            color: event.isEvent ? event.eventColor.alpha(Theme.dark ? 0.32 : 0.2) : Theme.chipBg(variant)
                             border.width: 1
-                            border.color: fgColor.alpha(0.25)
+                            border.color: event.isEvent ? event.eventColor.alpha(0.6) : fgColor.alpha(0.25)
                             clip: true
                             Accessible.role: Accessible.Button
                             Accessible.name: root.entryName(closed, status, AppController.routeText(entry, "title"), time)

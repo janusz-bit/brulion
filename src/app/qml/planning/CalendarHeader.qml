@@ -6,7 +6,8 @@ import Brulion
 // CalendarHeader — the bar above the calendar: previous / next period, "Today", the period title
 // ("October 2026", "October 12–18, 2026"; a click opens the month's / week's note:
 // titleClicked(), a small book when it has one) and the Month / Week / Agenda switch. On narrow
-// views the switch moves to a second row and stretches.
+// views the switch moves to a second row and stretches. The calendars button (calendarsRequested())
+// opens the menu of other calendars shown (docs/UI.md "Calendars").
 //
 //   CalendarHeader { title: cal.title; mode: cal.mode; showingToday: cal.showingToday
 //                    onPrevious: cal.previous(); onNext: cal.next(); onToday: cal.goToday()
@@ -35,6 +36,8 @@ Item {
     signal modeRequested(string mode)
     signal overdueRequested()
     signal titleClicked()
+    /// The calendars button (other calendars shown, new event, manage): its menu at `button`.
+    signal calendarsRequested(Item button)
 
     readonly property string previousLabel: mode === "week" ? qsTr("Previous week")
                                           : mode === "agenda" ? qsTr("Earlier") : qsTr("Previous month")
@@ -138,6 +141,13 @@ Item {
                 text: root.stacked ? "" + root.overdueCount : qsTr("%n overdue", "", root.overdueCount)
                 Accessible.name: qsTr("%n overdue", "", root.overdueCount)
                 onClicked: root.overdueRequested()
+            }
+            BIconButton {
+                id: calendarsButton
+                objectName: "calendarSources"
+                iconName: "calendar-range"
+                label: qsTr("Calendars")
+                onClicked: root.calendarsRequested(calendarsButton)
             }
             BButton {
                 size: "small"

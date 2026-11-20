@@ -771,6 +771,23 @@ WebDAV by default, so sync from the browser version will not "just work". Option
 
 Use a Nextcloud app password (Settings → Security), not your main password.
 
+## Calendars in the browser
+
+Subscriptions and CalDAV accounts (docs/UI.md "Calendars") work in the browser only with servers
+that let the page read them: the browser sends the requests itself, and a server without CORS
+headers for the page's origin (`Access-Control-Allow-Origin`; for CalDAV also the answers to the
+`OPTIONS` preflights of `PROPFIND` and `REPORT` with the `Authorization`, `Depth`, `If-Match`,
+`If-None-Match` and `Content-Type` headers allowed, and `ETag` exposed) is refused before Brulion
+sees an answer. Brulion cannot tell a refusal from a network failure, so in the browser such a
+failure is explained as CORS ("The server does not let other websites read the calendar (CORS)…").
+Most public calendar feeds (Google Calendar's, iCloud's published calendars, school and holiday
+calendars) send no CORS headers; a feed or a CalDAV server of one's own can (Nextcloud behind the
+same origin as Brulion, as in "Nextcloud (WebDAV) and CORS" above; Radicale and Baïkal behind a
+reverse proxy that adds the headers). The page sends no `User-Agent` of its own. Qt for WebAssembly
+has no time zone database: a feed's times in another zone are converted with the feed's own
+`VTIMEZONE` (most feeds have one), floating and UTC times always work. The apps for Linux, Windows
+and Android have none of these limits.
+
 ## Notebooks from GitHub in the browser
 
 A notebook kept in a GitHub repository (docs/UI.md "Notebooks from GitHub") works in the browser as

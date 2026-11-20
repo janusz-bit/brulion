@@ -12,6 +12,7 @@
 # area.cmake), which needs the metatypes extracted below. Models take a VaultIndex directly.
 qt_add_library(brulion_planning STATIC
     planningutil.h planningutil.cpp
+    eventsource.h
     calendarmodel.h calendarmodel.cpp
     tasklistmodel.h tasklistmodel.cpp
     forcelayout.h forcelayout.cpp

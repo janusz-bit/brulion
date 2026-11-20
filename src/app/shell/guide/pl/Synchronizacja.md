@@ -52,8 +52,18 @@ Notatki trzymane w **repozytorium na GitHubie** — w całym repozytorium albo w
 > [!tip] Poprawki w tej dokumentacji
 > Ta dokumentacja mieszka w repozytorium Brulionu na GitHubie. W notatniku z dokumentacją *Centrum synchronizacji → GitHub → Otwórz dokumentację z GitHuba…* otwiera ją jako osobny notatnik, w którym poprawiasz stronę i proponujesz poprawkę jako pull request.
 
+## Kalendarze (CalDAV i subskrypcje)
+Karta *Centrum synchronizacji → Kalendarze* synchronizuje z tym notatnikiem **inne kalendarze**: subskrypcje kalendarzy po adresie (wydarzenia tylko do odczytu) i konta CalDAV — Nextcloud, Fastmail, iCloud, Radicale, Baïkal — których wydarzenia widać w kalendarzu, a zadania stają się liniami zadań w notatkach, synchronizowanymi w obie strony. Zobacz [[Dziennik, kalendarz i szablony#Inne kalendarze: subskrypcje i CalDAV|Inne kalendarze]].
+
+- Kalendarze synchronizują się przy otwarciu notatnika, co kilka minut (5, 15 albo 60 — ustawienie konta), około 20 sekund po zmianie zsynchronizowanego zadania, gdy wraca sieć i gdy wracasz do Brulionu; subskrypcje są pobierane co 1, 6 albo 24 godziny. **Odśwież wszystkie** robi to od razu.
+- Na Androidzie sprawdzanie notatek w tle synchronizuje też zadania kalendarzy, gdy Brulion jest zamknięty, więc przypomnienie ustawione przy zadaniu w innej aplikacji zadzwoni na telefonie.
+- Gdy naraz miałoby zniknąć wiele zsynchronizowanych zadań (wyczyszczona strona, zepsuty serwer), nic nie zostanie usunięte, dopóki nie potwierdzisz tego przyciskiem **Usuń je**.
+- **Co się działo** pokazuje, co zrobiła każda synchronizacja: nowe i zmienione zadania i wydarzenia, zadania zmienione po obu stronach i co zostało zachowane, a także błędy opisane słowami (złe hasło, serwer, który nie odpowiada…).
+- Hasła są zapisane tak jak hasło aplikacji Nextcloud, w pliku, który może odczytać tylko Brulion. Używaj hasła aplikacji, nie hasła do konta.
+- W wersji przeglądarkowej serwer musi pozwolić stronie Brulionu na odczyt (CORS); wiele serwerów i kanałów kalendarzy na to nie pozwala. Aplikacje na Linuksa, Windows i Androida nie mają tego ograniczenia.
+
 ## Centrum synchronizacji
-Menu **Więcej** → **Notatnik** → *Centrum synchronizacji*, albo kliknięcie ikony stanu synchronizacji na dole paska ikon po lewej (dymek mówi, jaki to stan). Zakładki: Przegląd, Syncthing, Nextcloud, GitHub, Konflikty.
+Menu **Więcej** → **Notatnik** → *Centrum synchronizacji*, albo kliknięcie ikony stanu synchronizacji na dole paska ikon po lewej (dymek mówi, jaki to stan). Zakładki: Przegląd, Syncthing, Nextcloud, GitHub, Kalendarze, Konflikty.
 
 - Na bieżąco widać, co się dzieje: etap, liczbę plików, czas trwania i pliki w drodze.
 - Jeśli serwer długo nie odpowiada, pojawia się ostrzeżenie, a po 180 s próba jest przerywana i ponawiana — panel nie „synchronizuje” w nieskończoność.

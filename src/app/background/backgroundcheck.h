@@ -7,9 +7,12 @@
 //      reminders start, kept by the Kotlin side) as brulion-cli does (notebook::Notebook);
 //   2. with Nextcloud sync set up for it, syncs it once (the same SyncEngine and sync bookkeeping as
 //      the app; the engine's lock keeps the app and this process from syncing at the same time);
-//   3. reads the notes (the index cache makes that quick) and computes the reminders exactly as the
+//   3. with CalDAV calendars syncing tasks into it (docs/UI.md "Calendars"), syncs them once (the
+//      core's CalendarSync over the notebook's device state; a lock keeps the app and this process
+//      apart) — a task's ⏰ set on another device rings here too;
+//   4. reads the notes (the index cache makes that quick) and computes the reminders exactly as the
 //      app's ReminderScheduler would hand them to Android (upcomingFor());
-//   4. answers with the JSON of AndroidBridge::scheduleReminders() — the Kotlin side arms it in
+//   5. answers with the JSON of AndroidBridge::scheduleReminders() — the Kotlin side arms it in
 //      the app's main process, which owns the armed set.
 //
 // Nothing here writes notes except the sync (as the app's sync would); a check that cannot read the
@@ -38,6 +41,10 @@ class VaultIndex;
 namespace notebook {
 class Notebook;
 }
+namespace caldav {
+class CalendarStore;
+class CalendarSync;
+} // namespace caldav
 namespace sync {
 class HttpTransport;
 class SyncEngine;
@@ -101,6 +108,7 @@ QList<ScheduledNotification> upcomingFor(const VaultIndex &index, const QDateTim
 ///
 /// Result: { ok, vault, notes (files read), reminders: [AndroidBridge::scheduleReminders() items],
 ///           sync: "off" | "ok" | "failed" | "busy" | "skipped", syncError (code, if any),
+///           calendars: "off" | "ok" | "failed" | "busy", calendarsDownloaded, calendarsUploaded,
 ///           uploaded, downloaded, error (ok false: "missing" | "not-a-folder" | "failed" |
 ///           "empty" | "invalid"), message (technical, redacted), elapsedMs }
 class Check : public QObject {
@@ -114,6 +122,12 @@ public:
 
     /// The sync gives up after this long (the reminders are computed all the same).
     void setSyncTimeout(int msec) { m_syncTimeoutMs = msec; }
+    /// The passwords of the notebook's CalDAV accounts (from the app's secrets folder); none: the
+    /// calendars are not synced here.
+    void setCalendarPasswords(std::function<QString(const QString &accountId)> passwords)
+    {
+        m_calendarPasswords = std::move(passwords);
+    }
     void start();
     bool isFinished() const { return m_finished; }
     QJsonObject result() const { return m_result; }
@@ -124,6 +138,7 @@ Q_SIGNALS:
 private:
     void syncThenRead();
     void syncDone(const sync::SyncReport &report);
+    void syncCalendars();
     void readReminders();
     void fail(const QString &error, const QString &message);
     void finish();
@@ -137,6 +152,9 @@ private:
     std::unique_ptr<notebook::Notebook> m_notebook;
     std::unique_ptr<sync::WebDavClient> m_client;
     std::unique_ptr<sync::SyncEngine> m_engine;
+    std::function<QString(const QString &)> m_calendarPasswords;
+    std::unique_ptr<caldav::CalendarStore> m_calendarStore;
+    std::unique_ptr<caldav::CalendarSync> m_calendars;
     QTimer m_syncTimer;
     QElapsedTimer m_elapsed;
     QJsonObject m_result;

@@ -101,6 +101,19 @@ Godziny są lokalne (tak jak na zegarze). Zadanie pokazuje łączny czas, np. �
 
 **Import z Logseqa** zachowuje szufladki `:LOGBOOK:` zadań, więc ich czas i historia statusów przechodzą razem z nimi. **Eksport do Obsidiana** pomija szufladki (Obsidian pokazałby je jako tekst).
 
+## Zadania z kalendarzy CalDAV
+Zadania kalendarza CalDAV (Zadania w Nextcloud, Thunderbird, Tasks.org przez DAVx⁵, Przypomnienia Apple…) mogą żyć w notatkach jako zwykłe linie zadań — zobacz [[Dziennik, kalendarz i szablony#Inne kalendarze: subskrypcje i CalDAV|Inne kalendarze]]. Trafiają na stronę kalendarza (`Kalendarze/Praca.md`), a podzadanie pod swoje zadanie:
+
+```markdown
+- [ ] Kupić mleko #zakupy ⏫ 📅 2026-11-21 ⏰ 2026-11-21 17:30 ^c8ox0d31vdpib
+  Pełnotłuste, dwa kartony
+```
+
+- Status, tekst, termin 📅, data zaplanowania ⏳, priorytet, data wykonania ✅, powtarzanie 🔁, przypomnienia ⏰, **tagi na końcu** tekstu (kategorie w drugiej aplikacji) i linie pod zadaniem (jego opis) przechodzą w obie strony.
+- `^…` na końcu wiąże linię z jej zadaniem w kalendarzu. Nie usuwaj go; linię możesz przenieść w dowolne miejsce notatnika.
+- Nowe otwarte zadanie zapisane na stronie kalendarza trafia do kalendarza. Zadanie usunięte w drugiej aplikacji znika ze strony, a linia usunięta tutaj jest usuwana tam — chyba że druga strona w międzyczasie je zmieniła: wtedy wraca.
+- Wykonanie zadania cyklicznego jak zawsze dopisuje nad nim jego następne wystąpienie; zadanie w kalendarzu przechodzi na następny termin.
+
 ## Widok Zadania
 Widok **Zadania** zbiera zadania z całego notatnika: pole szybkiego dodawania, filtry i sekcje Zaległe, Dziś, Jutro, W tym tygodniu, Później, Bez daty, Zrobione. „Pokaż jako zapytanie” zamienia bieżące filtry w blok [[Zapytania|zapytania]], który możesz wkleić do notatki. Kliknięcie tagu w zadaniu filtruje listę po tym tagu; Ctrl+kliknięcie otwiera stronę tagu, a prawy przycisk (na telefonie przytrzymanie) — menu tagu: „Filtruj po tagu”, „Otwórz stronę tagu”, „Widok tagu”, „Otwórz w panelu bocznym”, „Kopiuj tag”. Prawy przycisk albo przytrzymanie znacznika pod zadaniem (termin, zaplanowanie, początek, przypomnienie, powtarzanie, priorytet) otwiera jego menu; zmianę cofniesz przyciskiem **Cofnij** w powiadomieniu. Pod zadaniem widać też, na co czeka („Czeka na: …” — kliknięcie otwiera to zadanie), ile zadań czeka na nie, postęp podzadań i zapisany czas.
 

@@ -56,6 +56,7 @@
 #include "replacesession.h"
 #include "types.h"
 #include "workspacebackups.h"
+#include "workspacecalendars.h"
 #include "workspacechats.h"
 #include "workspaceextensions.h"
 #include "workspacegithub.h"
@@ -131,6 +132,8 @@ class Workspace : public EditorHost, public QueryHost {
     Q_PROPERTY(brulion::shell::WorkspaceSync *sync READ sync CONSTANT FINAL)
     /// The notebook kept in a GitHub repository (pull, commit, propose): workspacegithub.h.
     Q_PROPERTY(brulion::shell::WorkspaceGitHub *github READ github CONSTANT FINAL)
+    /// ICS subscriptions and CalDAV calendars of the notebook (events, synced tasks): workspacecalendars.h.
+    Q_PROPERTY(brulion::shell::WorkspaceCalendars *calendars READ calendars CONSTANT FINAL)
     /// Automatic backups of the open notebook: workspacebackups.h.
     Q_PROPERTY(brulion::shell::WorkspaceBackups *backups READ backups CONSTANT FINAL)
     /// The extensions of the open notebook (the gym; docs/EXTENSIONS.md).
@@ -222,6 +225,7 @@ public:
     bool remindersPaused() const { return m_remindersPaused; }
     WorkspaceSync *sync() const { return m_sync; }
     WorkspaceGitHub *github() const { return m_github; }
+    WorkspaceCalendars *calendars() const { return m_calendars; }
     WorkspaceBackups *backups() const { return m_backups; }
     WorkspaceExtensions *extensions() const { return m_extensions; }
     WorkspaceChats *chats() const { return m_chats; }
@@ -872,6 +876,7 @@ private:
     WorkspaceReminders *m_reminders = nullptr;
     WorkspaceSync *m_sync = nullptr;
     WorkspaceGitHub *m_github = nullptr;
+    WorkspaceCalendars *m_calendars = nullptr;
     WorkspaceBackups *m_backups = nullptr;
     WorkspaceExtensions *m_extensions = nullptr;
     WorkspaceChats *m_chats = nullptr;

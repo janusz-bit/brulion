@@ -52,8 +52,18 @@ Notes kept in a **GitHub repository** — the whole repository or one of its fol
 > [!tip] Corrections to this documentation
 > This documentation lives in Brulion's repository on GitHub. In the documentation notebook, *Sync center → GitHub → Open the documentation from GitHub…* opens it as a notebook of its own, where you correct a page and propose the correction as a pull request.
 
+## Calendars (CalDAV and subscriptions)
+The *Sync center → Calendars* tab keeps **other calendars** in sync with this notebook: subscriptions to calendars by address (read-only events) and CalDAV accounts — Nextcloud, Fastmail, iCloud, Radicale, Baïkal — whose events show in the calendar and whose tasks become task lines of the notes, synced both ways. See [[Journal, calendar and templates#Other calendars: subscriptions and CalDAV|Other calendars]].
+
+- Calendars sync when the notebook opens, every few minutes (5, 15 or 60 — the account's setting), about 20 seconds after you change a synced task, when the network comes back and when you come back to Brulion; subscriptions are fetched every 1, 6 or 24 hours. **Refresh all** does it at once.
+- On Android, the background check of the notes also syncs the calendars' tasks while Brulion is closed, so a reminder set on a task in another app rings on the phone.
+- When many synced tasks would be deleted at once (an emptied page, a broken server), nothing is deleted until you confirm it with **Delete them**.
+- **What happened** lists what each run did: new and changed tasks and events, tasks changed on both sides and what was kept, and errors in words (a wrong password, a server that does not answer…).
+- The passwords are stored like the Nextcloud app password, in a file only Brulion may read. Use an app password, not your account's password.
+- In the browser version, a server must allow the Brulion website to read it (CORS); many calendar servers and feeds do not. The apps for Linux, Windows and Android have no such limit.
+
 ## Sync center
-The **More** menu → **Notebook** → *Sync center*, or a click on the sync status icon at the bottom of the icon bar on the left (its tooltip tells you the status). Tabs: Overview, Syncthing, Nextcloud, GitHub, Conflicts.
+The **More** menu → **Notebook** → *Sync center*, or a click on the sync status icon at the bottom of the icon bar on the left (its tooltip tells you the status). Tabs: Overview, Syncthing, Nextcloud, GitHub, Calendars, Conflicts.
 
 - You see what is going on as it happens: the stage, the number of files, how long it has been running and the files on their way.
 - If the server doesn't answer for a long time, a warning appears, and after 180 s the attempt is stopped and retried — the panel doesn't “sync” forever.

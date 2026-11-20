@@ -36,6 +36,17 @@ Na telefonie miesiąc pokazuje małą ikonę dla każdego rodzaju otwartego wpis
 
 Kliknięcie dnia — w agendzie jego nagłówka — otwiera jego plan, z którego możesz dodać zadanie lub przypomnienie bez wychodzenia z kalendarza. Prawy przycisk myszy na wpisie (na telefonie przytrzymanie) otwiera menu jego daty albo przypomnienia — zmiana trafia do notatki, a powiadomienie ma przycisk **Cofnij**. W panelu bocznym strony dziennika jest też mały kalendarz miesiąca.
 
+### Inne kalendarze: subskrypcje i CalDAV
+Kalendarz pokazuje też wydarzenia **innych kalendarzy**, każdy w swoim kolorze: święta, kalendarz szkoły albo zespołu, Twój kalendarz w Nextcloud, Fastmail albo iCloud. Dodajesz je w *Centrum synchronizacji → Kalendarze* (albo przyciskiem kalendarzy u góry kalendarza → **Zarządzaj kalendarzami…**):
+
+- **Zasubskrybuj** kalendarz po adresie (`https://…` albo `webcal://…`): jego wydarzenia pojawią się w kalendarzu tylko do odczytu, a Brulion co kilka godzin pobierze go znowu. Tak działa „tajny adres w formacie iCal” Kalendarza Google (Ustawienia → kalendarz → Integracja kalendarza).
+- **Dodaj konto CalDAV** (Nextcloud, Fastmail, iCloud z hasłem do aplikacji, Radicale, Baïkal…): serwer, nazwa użytkownika i hasło aplikacji; **Znajdź kalendarze** wyświetli ich listę. Przy każdym kalendarzu wybierasz **Wydarzenia w kalendarzu** i **Zadania w notatkach**. CalDAV Google wymaga logowania przez Google, którego Brulion nie ma — zasubskrybuj wtedy jego tajny adres iCal.
+- Przycisk kalendarzy u góry pokazuje lub ukrywa każdy kalendarz, a **Nowe wydarzenie…** dodaje wydarzenie do kalendarza CalDAV. Kliknięcie wydarzenia pokazuje, kiedy i gdzie się odbywa, jego kalendarz i opis; **Zapisz w dzienniku** dopisuje o nim linię do dziennika tego dnia, a w kalendarzu CalDAV możesz je **Edytować** (wydarzenie cykliczne — tylko to albo wszystkie) i **Usunąć**. Zmiany trafiają na serwer od razu albo gdy tylko będzie sieć.
+- **Zadania** kalendarza CalDAV stają się zwykłymi liniami zadań na jego stronie (domyślnie `Kalendarze/<nazwa>.md`) i są synchronizowane w obie strony: odhacz zadanie, zmień jego termin, priorytet albo przypomnienie, a druga aplikacja to zobaczy — i odwrotnie. Nowe otwarte zadanie zapisane na tej stronie trafia na serwer. Każda zsynchronizowana linia kończy się krótkim identyfikatorem, np. `^c8ox0d31vdpib` (w Brulionie ukrytym): wiąże linię z jej zadaniem, nawet gdy przeniesiesz ją na inną stronę. Więcej w [[Zadania|Zadania]].
+- Gdy zadanie zmieniło się i tutaj, i na serwerze, decyduje ustawienie konta: **zachowaj nowsze** albo **zachowaj oba**. Każdy taki przypadek widać w *Centrum synchronizacji → Kalendarze → Co się działo*.
+
+Wszystko o innych kalendarzach jest zapisane na tym urządzeniu: inne urządzenie z tym samym notatnikiem dodaje własne subskrypcje i konta.
+
 ### Kalendarz z ikony w zasobniku
 Na komputerze (Windows i Linux) mały kalendarz otworzysz bez wyciągania okna Brulionu: z ikony Brulionu w zasobniku systemowym, obok zegara. Wystarczy kliknąć ikonę (albo wybrać **Kalendarz** z jej menu, prawy przycisk myszy). Okienko pokazuje dzisiejszą datę, miesiąc z kropkami w dniach z wpisami i listę zadań i przypomnień wybranego dnia. Kliknięcie zadania albo **Otwórz dziennik** pokazuje ten dzień w oknie Brulionu, a na dole są **Otwórz Brulion** i **Szybka notatka…**. Kalendarz znika po kliknięciu obok, po Escape albo po ponownym kliknięciu ikony.
 

@@ -136,6 +136,8 @@ QStringList openKinds(const QStringList &kinds)
         out.append(u"due"_s);
     if (kinds.contains(u"scheduled"_s))
         out.append(u"scheduled"_s);
+    if (kinds.contains(u"event"_s))
+        out.append(u"event"_s);
     return out;
 }
 
@@ -611,6 +613,17 @@ QVariantList CalendarModel::dayItems(const QString &date) const
         }
         out.append(itemMap(item, today));
     }
+    if (m_events) {
+        for (const ExternalEvent &e : m_events->eventsBetween(on, on))
+            out.append(eventMap(e, today));
+        std::ranges::stable_sort(out, {}, [](const QVariant &v) {
+            const QVariantMap m = v.toMap();
+            if (m.value(u"kind"_s).toString() == u"journal")
+                return -1;
+            const int minutes = m.value(u"minutes"_s).toInt();
+            return minutes >= 0 ? minutes : 24 * 60;
+        });
+    }
     return out;
 }
 
@@ -732,8 +745,72 @@ void CalendarModel::refreshFromIndex()
 {
     m_refreshTimer.stop();
     m_stale = false;
-    if (!unaffectedByIndexChanges())
+    if (m_eventsDirty || !unaffectedByIndexChanges())
         rebuild(false);
+}
+
+QObject *CalendarModel::eventsObject() const
+{
+    return m_events.data();
+}
+
+void CalendarModel::setEventsObject(QObject *source)
+{
+    auto *events = qobject_cast<EventSource *>(source);
+    if (m_events == events)
+        return;
+    disconnect(m_eventsConnection);
+    m_events = events;
+    if (events)
+        m_eventsConnection = connect(events, &EventSource::eventsChanged, this, [this] {
+            m_eventsDirty = true;
+            scheduleRefresh();
+        });
+    Q_EMIT eventsSourceChanged();
+    requestRebuild(false);
+}
+
+QVariantMap CalendarModel::eventMap(const ExternalEvent &e, QDate today) const
+{
+    const bool first = e.date == e.firstDay;
+    const bool timed = !e.allDay && first && e.start.isValid();
+    const QString time = timed ? e.start.toString(u"HH:mm"_s) : QString();
+    const QString endTime = !e.allDay && e.date == e.lastDay && e.end.isValid() ? e.end.toString(u"HH:mm"_s) : QString();
+    return QVariantMap{
+            {u"key"_s, QString(u"event:"_s + e.key + u':' + isoDate(e.date))},
+            {u"kind"_s, u"event"_s},
+            {u"variant"_s, u"event"_s},
+            {u"icon"_s, e.recurring ? u"repeat"_s : u"calendar-clock"_s},
+            {u"time"_s, time},
+            {u"minutes"_s, timed ? e.start.hour() * 60 + e.start.minute() : -1},
+            {u"title"_s, e.title},
+            {u"path"_s, QString()},
+            {u"line"_s, 0},
+            {u"pageTitle"_s, e.calendarName},
+            {u"isJournalPage"_s, false},
+            {u"isTask"_s, false},
+            {u"status"_s, QString()},
+            {u"closed"_s, false},
+            {u"overdue"_s, false},
+            {u"recurring"_s, e.recurring},
+            {u"alarm"_s, false},
+            {u"date"_s, isoDate(e.date)},
+            {u"spec"_s, QString()},
+            {u"occurrence"_s, false},
+            {u"rule"_s, QString()},
+            {u"priority"_s, QString()},
+            {u"color"_s, e.color},
+            {u"calendarName"_s, e.calendarName},
+            {u"location"_s, e.location},
+            {u"endTime"_s, endTime},
+            {u"endMinutes"_s, endTime.isEmpty() ? -1 : e.end.hour() * 60 + e.end.minute()},
+            {u"eventKey"_s, e.key},
+            {u"allDay"_s, e.allDay || !timed},
+            {u"multiDay"_s, e.firstDay != e.lastDay},
+            {u"continued"_s, !first},
+            {u"readOnly"_s, e.readOnly},
+            {u"past"_s, e.lastDay < today},
+    };
 }
 
 namespace {
@@ -810,6 +887,17 @@ QVariantMap CalendarModel::itemMap(const CalendarItem &item, QDate today) const
             {u"occurrence"_s, item.written && (item.written->date != item.date || item.written->time != item.time)},
             {u"rule"_s, item.rule},
             {u"priority"_s, priorityName(item.priority)},
+            {u"color"_s, QString()},
+            {u"calendarName"_s, QString()},
+            {u"location"_s, QString()},
+            {u"endTime"_s, QString()},
+            {u"endMinutes"_s, -1},
+            {u"eventKey"_s, QString()},
+            {u"allDay"_s, !item.time.has_value()},
+            {u"multiDay"_s, false},
+            {u"continued"_s, false},
+            {u"readOnly"_s, false},
+            {u"past"_s, false},
     };
 }
 
@@ -860,6 +948,35 @@ void CalendarModel::rebuild(bool forceReset)
                 mark = u"scheduled"_s;
             if (!day.kinds.contains(mark))
                 day.kinds.append(mark);
+        }
+    }
+
+    // Events of other calendars: merged into the days, timed ones by time, all-day ones last.
+    m_eventsDirty = false;
+    if (m_events) {
+        const QList<ExternalEvent> events = m_events->eventsBetween(from, to);
+        QSet<QDate> touched;
+        for (const ExternalEvent &e : events) {
+            Day &day = byDate[e.date];
+            day.date = e.date;
+            const QVariantMap map = eventMap(e, today);
+            day.items.append(map);
+            touched.insert(e.date);
+            ++itemCount;
+            if (const int minutes = map.value(u"minutes"_s).toInt(); minutes >= 0) {
+                ++day.timed;
+                firstHour = std::min(firstHour, minutes / 60);
+                lastHour = std::max(lastHour, minutes / 60);
+            }
+            if (!day.kinds.contains(u"event"_s))
+                day.kinds.append(u"event"_s);
+        }
+        for (const QDate &date : std::as_const(touched)) {
+            QVariantList &items = byDate[date].items;
+            std::ranges::stable_sort(items, {}, [](const QVariant &v) {
+                const int minutes = v.toMap().value(u"minutes"_s).toInt();
+                return minutes >= 0 ? minutes : 24 * 60;
+            });
         }
     }
 

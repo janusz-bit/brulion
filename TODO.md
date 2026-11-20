@@ -207,9 +207,17 @@ done in the repository simply disappears from the list.
 
 ## Tasks and calendar
 
-* **CalDAV calendars** — two-way sync of tasks and events (Nextcloud, Google, Thunderbird, DAVx⁵)
-  and read-only subscription to ICS calendars in the calendar view. Today there is a one-time
-  iCalendar import and export.
+* **CalDAV calendars: what is still missing** — ICS subscriptions and CalDAV accounts (events shown,
+  created and edited in the calendar, tasks synced both ways with task lines: docs/UI.md
+  "Calendars", docs/SYNTAX.md §5 "Tasks synced with CalDAV") are tested against an in-memory server
+  and a real Radicale (`scripts/caldav-radicale-test.sh`). Missing: checks against real Nextcloud,
+  Fastmail, iCloud and Baïkal (Digest), with Thunderbird and DAVx⁵ / Tasks.org on the other side and
+  on a real phone (Android's background check); reminders of events (their VALARMs) ringing in
+  Brulion; invitations (attendees, iTIP) and free/busy; `RANGE=THISANDFUTURE` exceptions of a
+  series (taken as one occurrence); a subtask moved under another task after it was synced
+  (RELATED-TO is sent only when a task is created); calendar commands of `brulion-cli` and the MCP
+  server; Google's own CalDAV (it needs an OAuth sign-in — its secret iCal address works as a
+  subscription).
 * **Reminders and alarms in an edited block** — they stay amber chips that open the date and time
   dialog when clicked (docs/UI.md), but still show the raw text (`2026-11-20 18:00`, not "tomorrow
   18:00") and are plain text to the keyboard. Missing: the chip's menu (snooze, remove) on a

@@ -4,7 +4,7 @@ import QtQuick.Layouts
 import QtQuick.Templates as T
 import Brulion
 
-// SyncView — route "sync" ({tab?: "overview" | "syncthing" | "nextcloud" | "github" | "conflicts",
+// SyncView — route "sync" ({tab?: "overview" | "syncthing" | "nextcloud" | "github" | "calendars" | "conflicts",
 // copy?: a conflict copy to open, run?: a sync run whose details to open}): the sync center.
 //   Overview   the two ways explained in plain words (Syncthing: a folder kept the same by
 //              Syncthing on every device; Nextcloud: your own server over WebDAV, also in the
@@ -18,6 +18,8 @@ import Brulion
 //   GitHub     a notebook kept in a folder of a GitHub repository: get the newest version, commit,
 //              propose changes as a pull request, the notes not on GitHub yet, the token
 //              (qml/io/GitHubPanel; docs/UI.md "Notebooks from GitHub")
+//   Calendars  ICS subscriptions and CalDAV accounts: their state, colours, what each shows and
+//              syncs, what the runs did (qml/io/CalendarsPanel; docs/UI.md "Calendars")
 //   Conflicts  conflict copies (list) and the resolver (qml/io/SyncConflictResolver): side by side
 //              on wide windows, one after the other on narrow ones — there a conflict opens
 //              through the route ({tab: "conflicts", copy}), so Back (the top bar's ←, Android's)
@@ -29,7 +31,7 @@ FocusScope {
 
     property var route: ({})
     readonly property string title: qsTr("Sync")
-    readonly property list<string> tabIds: ["overview", "syncthing", "nextcloud", "github", "conflicts"]
+    readonly property list<string> tabIds: ["overview", "syncthing", "nextcloud", "github", "calendars", "conflicts"]
     readonly property WorkspaceGitHub github: Workspace.github
     readonly property WorkspaceSync sync: Workspace.sync
     readonly property int conflictCount: sync ? sync.conflictCount : 0
@@ -169,6 +171,7 @@ FocusScope {
             Tab { text: "Syncthing"; symbol: "laptop" }
             Tab { text: "Nextcloud"; symbol: "cloud" }
             Tab { objectName: "syncTabGitHub"; text: "GitHub"; symbol: "git-branch" }
+            Tab { objectName: "syncTabCalendars"; text: qsTr("Calendars"); symbol: "calendar-range" }
             Tab { text: qsTr("Conflicts"); symbol: "git-merge"; count: root.conflictCount }
         }
         Rectangle {
@@ -400,6 +403,11 @@ FocusScope {
                 GitHubPanel {
                     onShowConflicts: root.showTab("conflicts")
                 }
+            }
+
+            // ---- Calendars ----------------------------------------------------------------------
+            Page {
+                CalendarsPanel {}
             }
 
             // ---- Conflicts --------------------------------------------------------------------

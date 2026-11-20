@@ -101,6 +101,19 @@ The times are local (as on the clock). A task shows its total time, e.g. “⏱ 
 
 An **import from Logseq** keeps the tasks' `:LOGBOOK:` drawers, so their time and status history come along. An **export to Obsidian** leaves the drawers out (Obsidian would show them as text).
 
+## Tasks from CalDAV calendars
+The tasks of a CalDAV calendar (Nextcloud Tasks, Thunderbird, Tasks.org through DAVx⁵, Apple Reminders…) can live in the notes as ordinary task lines — see [[Journal, calendar and templates#Other calendars: subscriptions and CalDAV|Other calendars]]. They land on the calendar's page (`Calendars/Work.md`), a subtask under its task:
+
+```markdown
+- [ ] Buy milk #shopping ⏫ 📅 2026-11-21 ⏰ 2026-11-21 17:30 ^c8ox0d31vdpib
+  Full-fat, two cartons
+```
+
+- The status, the text, the due date 📅, the scheduled date ⏳, the priority, the done date ✅, the repetition 🔁, the reminders ⏰, the **tags at the end** of the text (the other app's categories) and the lines under the task (its description) go both ways.
+- The `^…` at the end keeps the line linked to its task in the calendar. Don't remove it; you can move the line anywhere in the notebook.
+- A new open task written on the calendar's page goes to the calendar. A task deleted in the other app disappears from the page, and a line you delete is deleted there — unless the other side changed it meanwhile: then it comes back.
+- Completing a repeating task writes its next occurrence above it, as always; the calendar's task moves on to the next date.
+
 ## The Tasks view
 The **Tasks** view gathers tasks from the whole notebook: a quick add field, filters and the sections Overdue, Today, Tomorrow, This week, Later, No date, Done. “Show as query” turns the current filters into a [[Queries|query]] block that you can paste into a note. Clicking a tag in a task filters the list by that tag; Ctrl+click opens the tag's page, and a right click (on a phone, a long press) the tag menu: “Filter by tag”, “Open tag page”, “Tag overview”, “Open in side panel”, “Copy tag”. A right click or a long press on a marker below a task (due, scheduled, start, reminder, recurrence, priority) opens its menu; you undo the change with the **Undo** button in the notification. Below a task you also see what it waits for (“Waiting for: …” — a click opens that task), how many tasks wait for it, the progress of its subtasks and the logged time.
 

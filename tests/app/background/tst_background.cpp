@@ -3,6 +3,8 @@
 // empty, with reminders, with a Nextcloud sync first (in-memory WebDAV server), with the app syncing
 // at that moment (the store's sync lock held).
 #include "backgroundcheck.h"
+#include "caldav/calendarsync.h"
+#include "fakecaldav.h"
 
 #include "fakewebdavserver.h"
 #include "synctest.h"
@@ -328,6 +330,55 @@ private Q_SLOTS:
         QCOMPARE(result.value(u"sync"_s).toString(), u"failed"_s);
         QCOMPARE(result.value(u"syncError"_s).toString(), u"auth"_s);
         QVERIFY(titles(result).contains(u"Pobudka — pociąg do Łodzi"_s));
+    }
+
+    void aCheckSyncsCalDavTasks()
+    {
+        // A task with a reminder set on another device (a CalDAV calendar syncing tasks into the
+        // notebook): the check syncs it and arms its reminder.
+        caldavtest::FakeCalDav server;
+        caldavtest::FakeCalDav::Calendar praca;
+        praca.name = u"Praca"_s;
+        server.addCalendar(u"praca"_s, praca);
+        server.putMember(u"praca"_s, u"lekarz.ics"_s,
+                         "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VTODO\r\nUID:lekarz\r\nSUMMARY:Zadzwonić do lekarza\r\n"
+                         "DUE;VALUE=DATE:20261015\r\nBEGIN:VALARM\r\nACTION:DISPLAY\r\n"
+                         "TRIGGER;VALUE=DATE-TIME:20261014T150000Z\r\nEND:VALARM\r\nEND:VTODO\r\nEND:VCALENDAR\r\n");
+        QTemporaryDir dir;
+        const Target target = notebookIn(dir);
+        caldav::CalendarStore store(target.stateDir + u"/calendars"_s);
+        caldav::CalendarSettings settings;
+        caldav::Account account;
+        account.id = u"a-1"_s;
+        account.server = server.url(server.options().root);
+        account.user = server.options().user;
+        account.homeUrl = server.url(server.homePath());
+        settings.accounts.append(account);
+        caldav::CalendarEntry entry;
+        entry.id = u"c-1"_s;
+        entry.account = account.id;
+        entry.url = server.calendarUrl(u"praca"_s);
+        entry.name = u"Praca"_s;
+        entry.syncTasks = true;
+        entry.taskPage = u"Kalendarze/Praca.md"_s;
+        settings.calendars.append(entry);
+        QVERIFY(store.saveSettings(settings));
+        Check check(target, {}, &server, [] { return kNow; });
+        const QString password = server.options().password;
+        check.setCalendarPasswords([password](const QString &) { return password; });
+        const QJsonObject result = run(check);
+        QVERIFY(result.value(u"ok"_s).toBool());
+        QCOMPARE(result.value(u"calendars"_s).toString(), u"ok"_s);
+        QCOMPARE(result.value(u"calendarsDownloaded"_s).toInt(), 1);
+        QVERIFY(titles(result).contains(u"Zadzwonić do lekarza"_s));
+        QFile page(target.root + u"/Kalendarze/Praca.md"_s);
+        QVERIFY(page.open(QIODevice::ReadOnly));
+        QVERIFY(QString::fromUtf8(page.readAll()).startsWith(u"- [ ] Zadzwonić do lekarza 📅 2026-10-15 ⏰ 2026-10-14 17:00 ^c"_s));
+        // Without the passwords nothing is asked.
+        server.clearLog();
+        Check quiet(target, {}, &server, [] { return kNow; });
+        QCOMPARE(run(quiet).value(u"calendars"_s).toString(), u"off"_s);
+        QVERIFY(server.requests.isEmpty());
     }
 };
 

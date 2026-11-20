@@ -3,10 +3,12 @@
 # the reminders it computes — the very set the app's ReminderScheduler hands Android —, a check of a
 # notebook folder that is missing, empty or full of reminders, and one with a Nextcloud sync against
 # the in-memory WebDAV server of the sync tests (a reminder written on another device arrives; the
-# app syncing at that moment only skips the sync).
-if(TARGET brulion_background AND TARGET brulion_sync_testsupport)
+# app syncing at that moment only skips the sync), and one syncing a CalDAV calendar's tasks against
+# the in-memory CalDAV server of the caldav tests (a task's reminder set elsewhere is armed).
+if(TARGET brulion_background AND TARGET brulion_sync_testsupport AND TARGET brulion_caldav_testsupport)
     brulion_add_test(tst_background SOURCES tst_background.cpp
-        LIBS brulion_background brulion_sync_testsupport brulion_core_index brulion_core_vault brulion_core_notebook)
+        LIBS brulion_background brulion_sync_testsupport brulion_caldav_testsupport brulion_core_index brulion_core_vault
+             brulion_core_notebook)
 endif()
 # Android's background run of automation requests (automationrun.h): a write with the notebook's
 # key, and every refusal without writing.

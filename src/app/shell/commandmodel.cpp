@@ -265,6 +265,24 @@ static QList<Command> buildCommands(const AppController *app)
              {},
              ready && app->syncAvailable()},
             {u"go.sync"_s, CommandModel::tr("Sync center"), {}, u"folder-sync"_s, {}, ready},
+            {u"calendars.open"_s,
+             CommandModel::tr("Calendars"),
+             CommandModel::tr("Subscriptions and CalDAV accounts"),
+             u"calendar-range"_s,
+             {},
+             ready},
+            {u"calendars.refresh"_s,
+             CommandModel::tr("Refresh calendars"),
+             CommandModel::tr("Subscriptions and CalDAV accounts"),
+             u"refresh-cw"_s,
+             {},
+             ready && app->workspace()->calendars()->hasCalendars()},
+            {u"calendars.newEvent"_s,
+             CommandModel::tr("New event…"),
+             CommandModel::tr("In a CalDAV calendar"),
+             u"calendar-plus"_s,
+             {},
+             ready && !app->workspace()->calendars()->writableCalendars().isEmpty()},
             {u"go.importExport"_s, CommandModel::tr("Import and export"), {}, u"import"_s, {}, ready},
             {u"go.trash"_s, CommandModel::tr("Trash"), {}, u"trash-2"_s, {}, ready},
             {u"go.cleanup"_s,
@@ -719,6 +737,12 @@ bool CommandModel::run(const QString &id)
         m_app->setSidePanelVisible(!m_app->sidePanelVisible());
     else if (id == u"sync.now")
         m_app->requestSync();
+    else if (id == u"calendars.open")
+        m_app->navigate({{u"view"_s, u"sync"_s}, {u"tab"_s, u"calendars"_s}});
+    else if (id == u"calendars.refresh")
+        m_app->workspace()->calendars()->refresh({});
+    else if (id == u"calendars.newEvent")
+        m_app->navigate({{u"view"_s, u"calendar"_s}, {u"open"_s, u"event"_s}});
     else if (id == u"backup.open")
         m_app->navigate({{u"view"_s, u"settings"_s}, {u"section"_s, u"backups"_s}});
     else if (id == u"backup.now")
