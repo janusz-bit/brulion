@@ -9,9 +9,9 @@ endif()
 
 brulion_add_core_module(extensions
     SOURCES
-        engine.h host.h builtin.h notebookhost.h blockedit.h pageextension.h sandbox.h
-        engine.cpp builtin.cpp notebookhost.cpp blockedit.cpp pageextension.cpp sandbox.cpp
-    DEPS util text dates markdown vault index notebook)
+        engine.h host.h builtin.h notebookhost.h blockedit.h pageextension.h sandbox.h events.h share.h
+        engine.cpp builtin.cpp notebookhost.cpp blockedit.cpp pageextension.cpp sandbox.cpp events.cpp share.cpp
+    DEPS util text dates markdown vault index notebook sync)
 target_link_libraries(brulion_core_extensions PRIVATE brulion_luau)
 file(GLOB _brulion_builtin_extensions CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/builtin/*)
 qt_add_resources(brulion_core_extensions brulion_builtin_extensions

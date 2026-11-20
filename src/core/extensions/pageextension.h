@@ -108,9 +108,30 @@ int errorLine(const QString &title, const QString &error);
 
 /// The keys of the extensions' state in the notebook's device state (LocalStore, never synced),
 /// written by the app only: `approved` the SHA-256 hashes (PageExtension::hash) approved on this
-/// device, oldest first; `off` the ids of the extensions switched off here.
+/// device, oldest first; `off` the ids of the extensions switched off here; `approvedCode/<id>` the
+/// code last approved of each extension ({hash, code, permissions, title}: what a new version is
+/// compared with before it is approved), `settings/<id>` its settings (notebookhost.h).
 inline QString approvedStoreKey() { return QStringLiteral("extensions/approved"); }
 inline QString offStoreKey() { return QStringLiteral("extensions/off"); }
+inline QString approvedCodeStoreKey(const QString &id) { return QStringLiteral("extensions/approvedCode/") + id; }
+/// The code an approval keeps to compare with (approvedCodeStoreKey): longer code keeps its hash only.
+constexpr int kMaxApprovedCode = 512 * 1024;
+
+/// One line of what an approval shows: the code as it is now against the code approved before.
+struct CodeDiffLine
+{
+    enum Kind { Same, Added, Removed, Skipped };
+    Kind kind = Same;
+    QString text; ///< the line (Skipped: empty)
+    int line = 0; ///< the line in the new code (Same, Added) or in the old (Removed), from 1
+    int count = 1; ///< Skipped: how many unchanged lines are left out
+};
+
+/// The lines of `code` against `approved` (both as PageExtension::code): what was added and
+/// removed, with `context` unchanged lines around each change and the rest skipped. `approved`
+/// empty: every line is added. Bounded work (sync::diffLines' budget): a huge, completely
+/// different code is shown as all of it removed and added.
+QList<CodeDiffLine> codeDiff(const QString &approved, const QString &code, int context = 3);
 
 /// A built-in extension's source as a page of the notebook (its override: `zastępuje:: <id>`): the
 /// properties, a few words on what the page is, then the code in ```luau blocks, one per section

@@ -319,6 +319,20 @@ FocusScope {
     }
     /// AppController.uiActionRequested: the shell's popups.
     function handleUiAction(action: string): void {
+        // An extension page's approval, an extension's settings, a copy to another notebook
+        // (docs/UI.md "Extensions"): the action names the page or the extension.
+        if (Js.startsWith(action, "approveExtension:")) {
+            shell.openExtensionApproval(Js.sliceFrom(action, 17))
+            return
+        }
+        if (Js.startsWith(action, "extensionSettings:")) {
+            shell.openExtensionSettings(Js.sliceFrom(action, 18))
+            return
+        }
+        if (Js.startsWith(action, "copyExtension:")) {
+            shell.openExtensionCopy(Js.sliceFrom(action, 14))
+            return
+        }
         switch (action) {
         case "palette": shell.openPalette(""); break
         case "switcher": shell.openSwitcher(""); break
@@ -493,6 +507,21 @@ FocusScope {
                 Layout.rightMargin: Theme.space2
                 Layout.topMargin: Theme.space2
                 sourceComponent: ShellUpdateBanner {}
+            }
+            // The extensions' timers (b.timer): every view but the one that shows its own (the
+            // gym's rest in the Gym view).
+            Loader {
+                id: timerBanner
+                readonly property string hiddenExtension: shell.currentView === "gym" ? "silownia" : ""
+                readonly property int shown: Workspace.extensions.timers.length
+                                             - (hiddenExtension !== "" && Workspace.extensions.restRemaining > 0 ? 1 : 0)
+                active: shown > 0
+                visible: active && !shell.keyboardUp && !shell.focusMode
+                Layout.fillWidth: true
+                Layout.leftMargin: Theme.space2
+                Layout.rightMargin: Theme.space2
+                Layout.topMargin: Theme.space2
+                sourceComponent: ShellTimerBanner { hiddenExtension: timerBanner.hiddenExtension }
             }
             ShellTabBar {
                 id: tabBar
@@ -871,6 +900,40 @@ FocusScope {
             if (shell.extensionQuestion)
                 shell.extensionQuestion.questionChanged()
         }
+    }
+
+    property ShellExtensionApproval extensionApproval: null
+    function openExtensionApproval(path: string): void {
+        if (!shell.extensionApproval)
+            shell.extensionApproval = extensionApprovalComponent.createObject(shell) as ShellExtensionApproval
+        if (shell.extensionApproval)
+            shell.extensionApproval.show(path)
+    }
+    Component {
+        id: extensionApprovalComponent
+        ShellExtensionApproval {}
+    }
+    property ShellExtensionSettings extensionSettings: null
+    function openExtensionSettings(extension: string): void {
+        if (!shell.extensionSettings)
+            shell.extensionSettings = extensionSettingsComponent.createObject(shell) as ShellExtensionSettings
+        if (shell.extensionSettings)
+            shell.extensionSettings.show(extension)
+    }
+    Component {
+        id: extensionSettingsComponent
+        ShellExtensionSettings {}
+    }
+    property ShellExtensionCopy extensionCopy: null
+    function openExtensionCopy(path: string): void {
+        if (!shell.extensionCopy)
+            shell.extensionCopy = extensionCopyComponent.createObject(shell) as ShellExtensionCopy
+        if (shell.extensionCopy)
+            shell.extensionCopy.show(path)
+    }
+    Component {
+        id: extensionCopyComponent
+        ShellExtensionCopy {}
     }
 
     property ShellNewPageDialog newPage: null

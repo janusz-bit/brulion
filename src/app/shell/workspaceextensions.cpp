@@ -4,6 +4,7 @@
 
 #include "extensions/builtin.h"
 #include "extensions/notebookhost.h"
+#include "extensions/share.h"
 #include "index/vaultindex.h"
 #include "log/categories.h"
 #include "markdown/parse.h"
@@ -14,6 +15,7 @@
 #include "vault/vault.h"
 
 #include <QCryptographicHash>
+#include <QDir>
 #include <QJsonArray>
 #include <QRegularExpression>
 
@@ -207,6 +209,9 @@ WorkspaceExtensions::WorkspaceExtensions(Clock clock, QObject *parent)
     m_pagesTimer.setSingleShot(true);
     m_pagesTimer.setInterval(0);
     connect(&m_pagesTimer, &QTimer::timeout, this, &WorkspaceExtensions::processPages);
+    // "day" hooks: midnight passed while the app ran (or the device woke up on a later day).
+    m_dayTimer.setInterval(10s);
+    connect(&m_dayTimer, &QTimer::timeout, this, &WorkspaceExtensions::checkDay);
 }
 
 WorkspaceExtensions::~WorkspaceExtensions() = default;
@@ -219,6 +224,9 @@ void WorkspaceExtensions::attach(Vault *vault, VaultIndex *index)
     connect(m_index, &VaultIndex::changed, this, &WorkspaceExtensions::changed);
     m_pages.clear();
     m_scanned = false;
+    m_opened = false;
+    m_day = m_clock ? m_clock().date() : QDate::currentDate();
+    m_dayTimer.start();
     loadTrust();
     reload();
 }
@@ -249,7 +257,18 @@ void WorkspaceExtensions::detach()
     m_lastGood.clear();
     m_loadErrors.clear();
     m_hookFailures.clear();
-    m_changedPages.clear();
+    m_batch.clear();
+    m_changing.clear();
+    m_dayTimer.stop();
+    m_opened = false;
+    clearSelection();
+    if (!m_timers.isEmpty()) {
+        m_timers.clear();
+        m_restTimer.stop();
+        m_restRemaining = 0;
+        Q_EMIT restChanged();
+        Q_EMIT timersChanged();
+    }
     refreshList();
     Q_EMIT commandsChanged();
     bumpRevision();
@@ -322,8 +341,22 @@ bool WorkspaceExtensions::ensureEngine()
     options.now = m_clock;
     options.language = m_language;
     options.uiLanguage = m_language;
+    // b.require takes the code of a page only as this device runs pages: approved, not off.
+    options.moduleAllowed = [this](const QString &path, const QString &hash) -> QString {
+        if (!isApproved(hash))
+            return u"waits for approval on this device (Settings → Extensions, or Run on its page)"_s;
+        const PageEntry *e = pageAt(path);
+        if (e && m_off.contains(e->runId))
+            return u"is switched off on this device"_s;
+        return {};
+    };
     m_host = std::make_unique<extensions::NotebookHost>(*m_vault, *m_index, options);
-    m_host->onTimer = [this](const QString &, int seconds, const QString &label) { startRest(seconds, label); };
+    m_host->onExtensionTimer = [this](const QString &extension, const extensions::TimerSpec &spec) {
+        if (spec.seconds > 0)
+            startTimerFor(extension, spec);
+        else
+            stopTimer(extension);
+    };
     m_host->onLog = [this](const QString &extension, const QString &text) {
         qCInfo(lcApp, "extension %s: %s", qUtf8Printable(extension), qUtf8Printable(text));
         m_console->append(u"print"_s, text, extension == kConsole ? QString() : title(extension));
@@ -397,6 +430,14 @@ void WorkspaceExtensions::indexReady()
     m_scanned = true;
     scanPages();
     reconcile();
+    // "open": once per notebook opened, after every extension that runs here has loaded.
+    if (!m_opened) {
+        m_opened = true;
+        QTimer::singleShot(0, this, [this] {
+            if (m_vault)
+                runHooks(u"open"_s, {{u"date"_s, (m_clock ? m_clock().date() : QDate::currentDate()).toString(Qt::ISODate)}});
+        });
+    }
 }
 
 void WorkspaceExtensions::scanPages()
@@ -439,8 +480,10 @@ bool WorkspaceExtensions::updatePage(const QString &path)
         if (old->page.hash != entry.page.hash && isApproved(old->page.hash) && saved != m_editorSaves.constEnd()
             && saved->text == contentKey(content) && saved->baseHash == old->page.hash
             && std::ranges::all_of(entry.page.permissions,
-                                   [&](const QString &p) { return old->page.permissions.contains(p); }))
+                                   [&](const QString &p) { return old->page.permissions.contains(p); })) {
             addApproved(entry.page.hash);
+            rememberApproved(entry);
+        }
         if (old->page.hash == entry.page.hash && old->page.source == entry.page.source && old->page.title == entry.page.title
             && old->page.description == entry.page.description && old->page.problems == entry.page.problems
             && old->runId == entry.runId)
@@ -449,6 +492,45 @@ bool WorkspaceExtensions::updatePage(const QString &path)
     }
     m_pages.insert(path, entry);
     return true;
+}
+
+void WorkspaceExtensions::notesChanging(const QList<VaultChange> &changes)
+{
+    if (!m_index || !m_engine)
+        return;
+    const QList<extensions::HookInfo> hooks = m_engine->hooks();
+    const bool listening = std::ranges::any_of(hooks, [](const extensions::HookInfo &h) {
+        return h.event == u"change" || h.event == u"task" || h.event == u"journal";
+    });
+    if (!listening)
+        return;
+    const bool tasks = std::ranges::any_of(hooks, [](const extensions::HookInfo &h) { return h.event == u"task"; });
+    // A change that arrives while a call executes is that call's write (the vault reports a write
+    // while it is made; a sync, the editor and other programs change notes from the event loop).
+    const QString writer = m_engine->runningExtension();
+    for (const VaultChange &c : changes) {
+        for (const QString &path : {c.path, c.oldPath}) {
+            if (path.isEmpty() || !paths::isMarkdown(path) || m_changing.contains(path))
+                continue;
+            Changing changing;
+            if (!writer.isEmpty()) {
+                changing.origin = extensions::Origin::Extension;
+                changing.by = writer;
+                changing.depth = m_runningDepth + 1;
+            } else {
+                changing.origin = c.source == ChangeSource::Sync   ? extensions::Origin::Sync
+                                  : c.source == ChangeSource::User ? extensions::Origin::App
+                                                                   : extensions::Origin::Other;
+            }
+            const ParsedNote *note = m_index->note(path);
+            changing.existed = note != nullptr;
+            if (tasks && note) {
+                changing.tasks = extensions::taskStates(*note, m_index->content(path));
+                changing.tasksKnown = true;
+            }
+            m_changing.insert(path, changing);
+        }
+    }
 }
 
 void WorkspaceExtensions::notesChanged(const QStringList &changedPaths)
@@ -461,20 +543,38 @@ void WorkspaceExtensions::notesChanged(const QStringList &changedPaths)
                 m_pendingPaths << path;
         m_pagesTimer.start();
     }
-    // "change" hooks: what changed, except what extensions wrote themselves (no echoes, no loops).
-    // The vault reports a write while it is made, so a change that arrives while a call of an
-    // extension executes is that call's own write (a sync, the editor and other programs change
-    // notes from the event loop, never inside a call).
-    const bool hooked = m_engine && !m_engine->isRunning() && !m_engine->hooks(u"change"_s).isEmpty();
+    // The hooks hear of it once the burst is over (events.h): every change but what an extension
+    // wrote itself, which only its own hooks never hear — no echoes; a chain of hooks answering
+    // hooks ends after ChangeBatch::kMaxDepth rounds.
+    const bool hooked = m_engine && !m_engine->hooks().isEmpty();
+    const QString writer = m_engine ? m_engine->runningExtension() : QString();
     for (const QString &path : changedPaths) {
+        const Changing changing = m_changing.take(path);
         if (!hooked || !paths::isMarkdown(path))
             continue;
         const ParsedNote *note = m_index->note(path);
-        const QString name = note ? note->title : paths::pageTitle(path);
-        if (!m_changedPages.contains(name))
-            m_changedPages << name;
+        extensions::NoteChange change;
+        change.path = path;
+        change.page = note ? note->title : paths::pageTitle(path);
+        change.origin = changing.origin;
+        change.by = changing.by;
+        change.depth = changing.depth;
+        if (change.by.isEmpty() && !writer.isEmpty()) { // (told without notesChanging(): a test's vault)
+            change.origin = extensions::Origin::Extension;
+            change.by = writer;
+            change.depth = m_runningDepth + 1;
+        }
+        change.created = !changing.existed && note;
+        change.deleted = !note;
+        if (note && note->journalDate)
+            change.date = note->journalDate->toString(Qt::ISODate);
+        if (!m_batch.add(change))
+            continue;
+        if (changing.tasksKnown && note)
+            m_batch.addTasks(change, extensions::changedTasks(changing.tasks,
+                                                              extensions::taskStates(*note, m_index->content(path))));
     }
-    if (!m_changedPages.isEmpty())
+    if (!m_batch.isEmpty() || m_batch.dropped() > 0)
         m_changeTimer.start();
 }
 
@@ -521,29 +621,73 @@ void WorkspaceExtensions::savedByEditor(const QString &path, const QString &cont
 
 void WorkspaceExtensions::flushChanged()
 {
-    const QStringList pages = std::exchange(m_changedPages, {});
-    if (!pages.isEmpty())
-        runHooks(u"change"_s, {{u"pages"_s, pages}});
+    if (m_engine && m_engine->isRunning()) { // never inside another call
+        m_changeTimer.start();
+        return;
+    }
+    const extensions::ChangeBatch batch = std::exchange(m_batch, {});
+    if (batch.dropped() > 0)
+        m_console->append(u"info"_s, tr("Extensions answering each other's changes stopped after %1 rounds: %n change(s) not passed on.",
+                                        "", batch.dropped())
+                                             .arg(extensions::ChangeBatch::kMaxDepth));
+    if (!m_engine || batch.isEmpty())
+        return;
+    // In the order of registration; each extension's hooks hear what the others changed.
+    for (const extensions::HookInfo &h : m_engine->hooks()) {
+        QList<QVariantMap> events;
+        if (h.event == u"change") {
+            if (const QVariantMap e = batch.changeEvent(h.extension); !e.isEmpty())
+                events << e;
+        } else if (h.event == u"task") {
+            events = batch.taskEvents(h.extension);
+        } else if (h.event == u"journal") {
+            events = batch.journalEvents(h.extension);
+        }
+        for (const QVariantMap &e : std::as_const(events)) {
+            if (!m_engine || m_engine->hooks(h.event).isEmpty())
+                break;
+            runHook(h, e, batch.depthFor(h.extension));
+        }
+    }
 }
 
-void WorkspaceExtensions::runHooks(const QString &event, const QVariantMap &arg)
+void WorkspaceExtensions::runHooks(const QString &event, const QVariantMap &arg, const QString &onlyExtension)
 {
     if (!m_engine)
         return;
     if (m_engine->isRunning()) { // never inside another call
-        QTimer::singleShot(0, this, [this, event, arg] { runHooks(event, arg); });
+        QTimer::singleShot(0, this, [this, event, arg, onlyExtension] { runHooks(event, arg, onlyExtension); });
         return;
     }
     const QList<extensions::HookInfo> hooks = m_engine->hooks(event);
-    for (const extensions::HookInfo &h : hooks) {
-        m_current = CallContext{};
-        m_current.hook = true;
-        m_current.hookId = h.id;
-        m_current.hookEvent = event;
-        m_current.extension = h.extension;
-        handleResult(m_engine->runHook(h.id, arg));
-    }
+    for (const extensions::HookInfo &h : hooks)
+        if (onlyExtension.isEmpty() || h.extension == onlyExtension)
+            runHook(h, arg, 0);
+}
+
+void WorkspaceExtensions::runHook(const extensions::HookInfo &h, const QVariantMap &arg, int depth)
+{
+    if (!m_engine)
+        return;
     m_current = CallContext{};
+    m_current.hook = true;
+    m_current.hookId = h.id;
+    m_current.hookEvent = h.event;
+    m_current.extension = h.extension;
+    m_current.depth = depth;
+    const int before = std::exchange(m_runningDepth, depth);
+    handleResult(m_engine->runHook(h.id, arg));
+    m_runningDepth = before;
+    m_current = CallContext{};
+}
+
+void WorkspaceExtensions::checkDay()
+{
+    const QDate today = m_clock ? m_clock().date() : QDate::currentDate();
+    if (!today.isValid() || today == m_day)
+        return;
+    const QDate previous = std::exchange(m_day, today);
+    runHooks(u"day"_s, {{u"date"_s, today.toString(Qt::ISODate)}, {u"previous"_s, previous.toString(Qt::ISODate)}});
 }
 
 void WorkspaceExtensions::hookResult(const CallContext &ctx, const extensions::Result &r)
@@ -708,8 +852,11 @@ void WorkspaceExtensions::finishAi(int call, const QVariantMap &reply, quint64 g
 
 extensions::Result WorkspaceExtensions::resumeCall(int call, const QVariant &value)
 {
-    const QString before = std::exchange(m_statusChat, m_calls.value(call).chat);
+    const CallContext ctx = m_calls.value(call);
+    const QString before = std::exchange(m_statusChat, ctx.chat);
+    const int depth = std::exchange(m_runningDepth, ctx.depth);
     const extensions::Result r = m_engine->resume(call, value);
+    m_runningDepth = depth;
     m_statusChat = before;
     return r;
 }
@@ -882,13 +1029,16 @@ void WorkspaceExtensions::reconcile()
             }
         }
         for (auto it = want.cbegin(); it != want.cend(); ++it) {
-            const QString key = loadKey(it.value());
-            if (m_loadedKeys.value(it.key()) == key)
+            // Loaded again when its code changed, or a page it requires (b.require) did; one that
+            // failed to load is tried again whenever extension pages changed (a page it requires
+            // may be there now).
+            const QString key = loadKey(it.value()) + u'#' + moduleKey(it.key());
+            if (m_loadedKeys.value(it.key()) == key && !m_loadErrors.contains(it.key()))
                 continue;
             loaded = true;
-            m_loadedKeys.insert(it.key(), key);
             m_hookFailures.clear();
             const extensions::Result r = m_engine->load(it.value());
+            m_loadedKeys.insert(it.key(), loadKey(it.value()) + u'#' + moduleKey(it.key()));
             if (r.ok()) {
                 m_lastGood.insert(it.key(), it.value());
                 m_loadErrors.remove(it.key());
@@ -929,11 +1079,33 @@ void WorkspaceExtensions::reconcile()
     bumpRevision();
 }
 
+QString WorkspaceExtensions::moduleKey(const QString &id) const
+{
+    if (!m_engine)
+        return {};
+    QStringList parts;
+    for (const QString &path : m_engine->modulesOf(id)) {
+        const PageEntry *e = pageAt(path);
+        if (!e) {
+            parts << path + u"=gone"_s;
+            continue;
+        }
+        parts << path + u'=' + e->page.hash + (isApproved(e->page.hash) ? u"+"_s : u"-"_s)
+                         + (m_off.contains(e->runId) ? u"off"_s : QString());
+    }
+    return parts.join(u'|');
+}
+
 void WorkspaceExtensions::refreshList()
 {
     const auto counts = [&](const QString &id, ExtensionRow &row) {
         if (!m_engine || !m_engine->isLoaded(id))
             return;
+        row.settings = int(m_engine->settingsOf(id).size());
+        for (const QString &module : m_engine->modulesOf(id)) {
+            const PageEntry *e = pageAt(module);
+            row.modules << (e ? e->page.title : paths::pageTitle(module));
+        }
         for (const extensions::CommandInfo &c : m_engine->commands())
             row.commands += c.extension == id;
         for (const extensions::ViewInfo &v : m_engine->views())
@@ -1032,11 +1204,93 @@ void WorkspaceExtensions::approve(const QString &path)
     const PageEntry *e = pageAt(path);
     if (!e)
         return;
+    approveVersion(path, e->page.hash);
+}
+
+QString WorkspaceExtensions::approveVersion(const QString &path, const QString &hash)
+{
+    const PageEntry *e = pageAt(path);
+    if (!e)
+        return u"gone"_s;
+    // The version shown, or none: code a sync replaced while it was read is not approved unread.
+    if (e->page.hash != hash)
+        return u"changed"_s;
     addApproved(e->page.hash);
+    rememberApproved(*e);
     m_off.remove(e->runId);
     storeTrust();
     m_console->append(u"info"_s, tr("Approved on this device: %1").arg(e->page.title));
     reconcile();
+    return {};
+}
+
+void WorkspaceExtensions::rememberApproved(const PageEntry &entry)
+{
+    LocalStore *store = m_vault ? m_vault->store() : nullptr;
+    if (!store)
+        return;
+    QJsonObject code{{u"hash"_s, entry.page.hash},
+                     {u"permissions"_s, QJsonArray::fromStringList(entry.page.permissions)},
+                     {u"title"_s, entry.page.title}};
+    if (entry.page.code.size() <= extensions::kMaxApprovedCode)
+        code.insert(u"code"_s, entry.page.code);
+    store->set(extensions::approvedCodeStoreKey(entry.runId), code);
+}
+
+QVariantMap WorkspaceExtensions::approvalReview(const QString &path) const
+{
+    const PageEntry *e = pageAt(path);
+    if (!e)
+        return {};
+    const QVariantMap before = extensions::approvedCode(m_vault ? m_vault->store() : nullptr, e->runId);
+    const QStringList earlier = before.value(u"permissions"_s).toStringList();
+    const auto permissionText = [](const QString &p) {
+        return p == u"write" ? tr("change notes") : p == u"ai" ? tr("use AI") : p;
+    };
+    QStringList permissions, added;
+    for (const QString &p : e->page.permissions) {
+        permissions << permissionText(p);
+        if (!before.isEmpty() && !earlier.contains(p))
+            added << permissionText(p);
+    }
+    // Against the code approved before (a built-in's own code when the page overrides one and was
+    // never approved here); all of it when there is none.
+    QString old = before.value(u"code"_s).toString();
+    bool compared = before.contains(u"code"_s);
+    if (!compared && !e->builtin.isEmpty() && before.isEmpty()) {
+        // (The built-in's source as "Edit the code" writes it: only what was changed shows.)
+        const QString page = extensions::builtinSourcePage(extensions::builtinExtension(e->builtin), m_language);
+        old = extensions::readPageExtension(e->page.path, markdown::parseNote(e->page.path, page), page).code;
+        compared = true;
+    }
+    QVariantList lines;
+    int addedLines = 0, removedLines = 0;
+    for (const extensions::CodeDiffLine &l : extensions::codeDiff(compared ? old : QString(), e->page.code)) {
+        static const QStringList kinds{u"same"_s, u"added"_s, u"removed"_s, u"skipped"_s};
+        addedLines += l.kind == extensions::CodeDiffLine::Added;
+        removedLines += l.kind == extensions::CodeDiffLine::Removed;
+        lines << QVariantMap{{u"kind"_s, kinds.value(int(l.kind))}, {u"text"_s, l.text}, {u"line"_s, l.line}, {u"count"_s, l.count}};
+    }
+    return {{u"path"_s, e->page.path},
+            {u"title"_s, e->page.title},
+            {u"hash"_s, e->page.hash},
+            {u"approved"_s, isApproved(e->page.hash)},
+            {u"permissions"_s, permissions},
+            {u"newPermissions"_s, added},
+            {u"before"_s, compared},
+            {u"builtin"_s, !e->builtin.isEmpty() && before.isEmpty() ? title(e->builtin) : QString()},
+            {u"lines"_s, lines},
+            {u"added"_s, addedLines},
+            {u"removed"_s, removedLines},
+            {u"oldCode"_s, compared ? old : QString()},
+            {u"code"_s, e->page.code},
+            {u"description"_s, e->page.description}};
+}
+
+QString WorkspaceExtensions::pageHash(const QString &path) const
+{
+    const PageEntry *e = pageAt(path);
+    return e ? e->page.hash : QString();
 }
 
 void WorkspaceExtensions::setPageOn(const QString &path, bool on)
@@ -1066,7 +1320,11 @@ QString WorkspaceExtensions::createExtension()
     if (!created.existing) {
         // Written here, by Brulion: approved on this device.
         const ParsedNote note = markdown::parseNote(created.path, content, m_vault->config());
-        addApproved(extensions::readPageExtension(created.path, note, content).hash);
+        PageEntry entry;
+        entry.page = extensions::readPageExtension(created.path, note, content);
+        entry.runId = extensions::runIdOf(entry.page);
+        addApproved(entry.page.hash);
+        rememberApproved(entry);
         reconcile();
     }
     return created.path;
@@ -1094,7 +1352,11 @@ QString WorkspaceExtensions::editBuiltinSource(const QString &builtin)
     if (!created.existing) {
         // The built-in code, written by Brulion: approved on this device.
         const ParsedNote note = markdown::parseNote(created.path, content, m_vault->config());
-        addApproved(extensions::readPageExtension(created.path, note, content).hash);
+        PageEntry entry;
+        entry.page = extensions::readPageExtension(created.path, note, content);
+        entry.runId = extensions::runIdOf(entry.page);
+        addApproved(entry.page.hash);
+        rememberApproved(entry);
         reconcile();
     }
     return created.path;
@@ -1161,8 +1423,15 @@ void WorkspaceExtensions::runCommand(const QString &extension, const QString &na
 {
     if (!m_engine)
         return;
+    // The editor's selection, when it offered one for this page (offerSelection()).
+    // (The journal's stream is no page on screen: the day the editor is in offers it.)
+    const QString selection =
+            !m_selection.isEmpty() && (path.isEmpty() || paths::normalize(m_selectionPath) == paths::normalize(path))
+                    ? m_selection
+                    : QString();
+    clearSelection();
     QVariantMap ctx{{u"page"_s, path.isEmpty() ? QString() : paths::pageTitle(path)},
-                    {u"selection"_s, QString()},
+                    {u"selection"_s, selection},
                     {u"args"_s, args}};
     if (!path.isEmpty() && line >= 0) {
         const QVariantMap block = m_host->blockAt(path, line);
@@ -1176,15 +1445,34 @@ void WorkspaceExtensions::runCommand(const QString &extension, const QString &na
     m_current = CallContext{};
 }
 
-void WorkspaceExtensions::runBlockCommand(const QString &command, const QString &path, int line)
+void WorkspaceExtensions::runBlockCommand(const QString &command, const QString &path, int line, const QString &selection)
 {
     if (command == u"*/run") {
         runCodeAt(path, line);
         return;
     }
     const qsizetype slash = command.indexOf(u'/');
-    if (slash > 0)
-        runCommand(command.left(slash), command.mid(slash + 1), path, line);
+    if (slash <= 0)
+        return;
+    offerSelection(path, selection);
+    runCommand(command.left(slash), command.mid(slash + 1), path, line);
+}
+
+void WorkspaceExtensions::offerSelection(const QString &path, const QString &text)
+{
+    // (What a command gets of a selection of a whole book: its beginning.)
+    constexpr qsizetype kMaxSelection = 200000;
+    m_selectionPath = path;
+    qsizetype end = std::min(text.size(), kMaxSelection);
+    if (end < text.size() && end > 0 && text[end - 1].isHighSurrogate())
+        --end; // (never half a letter)
+    m_selection = text.left(end);
+}
+
+void WorkspaceExtensions::clearSelection()
+{
+    m_selectionPath.clear();
+    m_selection.clear();
 }
 
 QVariantMap WorkspaceExtensions::render(const QString &extension, const QString &view, const QVariantMap &params, QString *error)
@@ -1431,12 +1719,28 @@ void WorkspaceExtensions::cancelQuestion()
 
 void WorkspaceExtensions::startRest(int seconds, const QString &label)
 {
-    m_restTotal = std::max(1, seconds);
-    m_restRemaining = m_restTotal;
-    m_restLabel = label.isEmpty() ? tr("Rest") : label;
-    m_restEnd = QDateTime::currentDateTimeUtc().addSecs(m_restTotal);
+    extensions::TimerSpec spec;
+    spec.seconds = seconds;
+    spec.label = label;
+    startTimerFor(u"silownia"_s, spec);
+}
+
+void WorkspaceExtensions::startTimerFor(const QString &extension, const extensions::TimerSpec &spec)
+{
+    RunningTimer t;
+    t.spec = spec;
+    t.spec.seconds = std::max(1, spec.seconds);
+    t.remaining = t.spec.seconds;
+    t.end = QDateTime::currentDateTimeUtc().addSecs(t.spec.seconds);
+    m_timers.insert(extension, t); // (one per extension: a new one replaces it)
+    if (extension == u"silownia") {
+        m_restTotal = t.spec.seconds;
+        m_restRemaining = m_restTotal;
+        m_restLabel = spec.label.isEmpty() ? tr("Rest") : spec.label;
+        Q_EMIT restChanged();
+    }
     m_restTimer.start();
-    Q_EMIT restChanged();
+    Q_EMIT timersChanged();
 }
 
 QString WorkspaceExtensions::restText() const
@@ -1444,31 +1748,216 @@ QString WorkspaceExtensions::restText() const
     return u"%1:%2"_s.arg(m_restRemaining / 60).arg(m_restRemaining % 60, 2, 10, QChar(u'0'));
 }
 
-void WorkspaceExtensions::stopRest()
+void WorkspaceExtensions::stopRest() { stopTimer(u"silownia"_s); }
+
+void WorkspaceExtensions::stopTimer(const QString &extension)
 {
-    if (!m_restRemaining && !m_restTimer.isActive())
+    if (!m_timers.remove(extension))
         return;
-    m_restTimer.stop();
-    m_restRemaining = 0;
-    Q_EMIT restChanged();
+    if (extension == u"silownia") {
+        m_restRemaining = 0;
+        Q_EMIT restChanged();
+    }
+    if (m_timers.isEmpty())
+        m_restTimer.stop();
+    Q_EMIT timersChanged();
+}
+
+QVariantList WorkspaceExtensions::timers() const
+{
+    QList<std::pair<QString, const RunningTimer *>> running;
+    for (auto it = m_timers.cbegin(); it != m_timers.cend(); ++it)
+        running.append({it.key(), &it.value()});
+    std::ranges::sort(running, [](const auto &a, const auto &b) {
+        return a.second->end != b.second->end ? a.second->end < b.second->end : a.first < b.first;
+    });
+    QVariantList out;
+    for (const auto &[extension, t] : std::as_const(running)) {
+        const QString name = title(extension);
+        out << QVariantMap{{u"extension"_s, extension},
+                           {u"title"_s, name},
+                           {u"label"_s, t->spec.label.isEmpty() ? name : t->spec.label},
+                           {u"remaining"_s, t->remaining},
+                           {u"total"_s, t->spec.seconds},
+                           {u"text"_s, u"%1:%2"_s.arg(t->remaining / 60).arg(t->remaining % 60, 2, 10, QChar(u'0'))}};
+    }
+    return out;
 }
 
 void WorkspaceExtensions::tickRest()
 {
-    const qint64 left = (QDateTime::currentDateTimeUtc().msecsTo(m_restEnd) + 999) / 1000;
-    if (left > 0) {
-        if (left != m_restRemaining) {
-            m_restRemaining = int(left);
-            Q_EMIT restChanged();
+    const QDateTime now = QDateTime::currentDateTimeUtc();
+    bool changedAny = false;
+    QStringList ended;
+    for (auto it = m_timers.begin(); it != m_timers.end(); ++it) {
+        const qint64 left = (now.msecsTo(it->end) + 999) / 1000;
+        if (left <= 0) {
+            ended << it.key();
+            continue;
         }
-        return;
+        if (left != it->remaining) {
+            it->remaining = int(left);
+            changedAny = true;
+            if (it.key() == u"silownia") {
+                m_restRemaining = int(left);
+                Q_EMIT restChanged();
+            }
+        }
     }
-    m_restTimer.stop();
-    m_restRemaining = 0;
-    Q_EMIT restChanged();
+    ended.sort();
+    for (const QString &extension : std::as_const(ended))
+        timerEnded(extension);
+    if (m_timers.isEmpty())
+        m_restTimer.stop();
+    if (changedAny && ended.isEmpty())
+        Q_EMIT timersChanged();
+}
+
+void WorkspaceExtensions::timerEnded(const QString &extension)
+{
+    const RunningTimer t = m_timers.take(extension);
+    if (extension == u"silownia") {
+        m_restRemaining = 0;
+        Q_EMIT restChanged();
+    }
+    Q_EMIT timersChanged();
+    // Its own words: the label and the message the extension gave, else the app's.
+    const QString label = t.spec.label.isEmpty() ? title(extension) : t.spec.label;
+    const QString body = !t.spec.message.isEmpty() ? t.spec.message
+                         : extension == u"silownia" ? tr("Time for the next set.")
+                                                    : tr("The timer of %1 has ended.").arg(title(extension));
     if (m_notify)
-        m_notify(tr("%1 is over").arg(m_restLabel), tr("Time for the next set."));
-    Q_EMIT message(tr("%1 is over: time for the next set.").arg(m_restLabel), u"info"_s);
+        m_notify(tr("%1 is over").arg(label), body);
+    Q_EMIT message(!t.spec.message.isEmpty() ? t.spec.message : tr("%1 is over: %2").arg(label, body), u"info"_s);
+    runHooks(u"timer"_s, {{u"label"_s, t.spec.label}, {u"seconds"_s, t.spec.seconds}}, extension);
+}
+
+// ---- an extension's own settings ----------------------------------------------------------------
+
+QVariantList WorkspaceExtensions::settingsOf(const QString &extension) const
+{
+    if (!m_engine)
+        return {};
+    const QVariantMap values = m_engine->settingValues(extension);
+    QVariantList out;
+    for (const QVariant &f : m_engine->settingsOf(extension)) {
+        const QVariantMap field = f.toMap();
+        const QVariant current = values.value(field.value(u"key"_s).toString());
+        // Every key on every row (the dialog's delegates take each as a typed property).
+        out << QVariantMap{{u"key"_s, field.value(u"key"_s).toString()},
+                           {u"label"_s, field.value(u"label"_s).toString()},
+                           {u"kind"_s, field.value(u"kind"_s).toString()},
+                           {u"description"_s, field.value(u"description"_s).toString()},
+                           {u"step"_s, field.value(u"step"_s, 1).toDouble()},
+                           {u"unit"_s, field.value(u"unit"_s).toString()},
+                           {u"options"_s, field.value(u"options"_s).toStringList()},
+                           {u"placeholder"_s, field.value(u"placeholder"_s).toString()},
+                           {u"currentText"_s, current.toString()},
+                           {u"currentNumber"_s, current.toDouble()},
+                           {u"currentOn"_s, current.toBool()},
+                           {u"display"_s, formatExtensionNumber(current.toDouble(), m_language == u"pl")}};
+    }
+    return out;
+}
+
+int WorkspaceExtensions::settingsCount(const QString &extension) const
+{
+    return m_engine ? int(m_engine->settingsOf(extension).size()) : 0;
+}
+
+QString WorkspaceExtensions::pageExtension(const QString &path) const
+{
+    const PageEntry *e = pageAt(path);
+    return e ? e->runId : QString();
+}
+
+bool WorkspaceExtensions::setSetting(const QString &extension, const QString &key, const QVariant &value)
+{
+    if (!m_engine || !m_host)
+        return false;
+    for (const QVariant &f : m_engine->settingsOf(extension)) {
+        const QVariantMap field = f.toMap();
+        if (field.value(u"key"_s).toString() != key)
+            continue;
+        const QString kind = field.value(u"kind"_s).toString();
+        QVariant stored;
+        if (kind == u"number") {
+            bool ok = value.metaType().id() != QMetaType::QString;
+            double number = ok ? value.toDouble(&ok) : 0;
+            if (value.metaType().id() == QMetaType::QString) { // typed: "82,5", "82.5 kg"
+                const std::optional<double> typed = parseExtensionNumber(value.toString(), field.value(u"unit"_s).toString());
+                ok = typed.has_value();
+                number = typed.value_or(0);
+            }
+            if (!ok || !std::isfinite(number))
+                return false;
+            stored = number == std::floor(number) && std::fabs(number) < 1e15 ? QVariant(qint64(number)) : QVariant(number);
+        } else if (kind == u"toggle") {
+            stored = value.toBool();
+        } else if (kind == u"choice") {
+            if (!field.value(u"options"_s).toStringList().contains(value.toString()))
+                return false;
+            stored = value.toString();
+        } else {
+            if (value.toString().size() > extensions::QuestionLimits::settingText)
+                return false;
+            stored = value.toString();
+        }
+        if (!m_host->setSetting(extension, key, stored).isEmpty())
+            return false;
+        Q_EMIT changed(); // (views show what follows from it)
+        bumpRevision();
+        return true;
+    }
+    return false;
+}
+
+void WorkspaceExtensions::resetSettings(const QString &extension)
+{
+    if (!m_engine || !m_host)
+        return;
+    for (const QVariant &f : m_engine->settingsOf(extension))
+        m_host->setSetting(extension, f.toMap().value(u"key"_s).toString(), QVariant());
+    Q_EMIT changed();
+    bumpRevision();
+}
+
+// ---- sharing between notebooks ------------------------------------------------------------------
+
+void WorkspaceExtensions::setDeviceStates(std::function<QString(const QString &)> stateOf)
+{
+    m_stateOf = std::move(stateOf);
+}
+
+QString WorkspaceExtensions::copyToNotebook(const QString &path, const QString &root, bool replace)
+{
+    const PageEntry *e = pageAt(path);
+    if (!e || !m_index || !m_vault)
+        return tr("This page is no extension.");
+    if (root.isEmpty() || QDir::cleanPath(root) == QDir::cleanPath(m_vault->rootPath()))
+        return tr("Choose another notebook.");
+    if (!m_stateOf)
+        return tr("Extensions cannot be copied here.");
+    const QString title = e->page.title;
+    Vault target(root, m_stateOf(root));
+    QString error;
+    if (!target.open(&error))
+        return error.isEmpty() ? tr("The notebook cannot be opened.") : error;
+    const extensions::CopyReport report = extensions::copyExtension(*m_index, e->page.path, target, replace);
+    if (!report.error.isEmpty())
+        return report.error;
+    if (!report.conflicts.isEmpty())
+        return u"conflict"_s;
+    // The user chose to run this code there too: approved on this device, as here.
+    for (const extensions::PageExtension &page : report.pages)
+        if (isApproved(page.hash))
+            extensions::approveInStore(target.store(), page);
+    target.store()->flush();
+    Q_EMIT message(report.written.isEmpty()
+                           ? tr("%1 is in %2 already.").arg(title, QDir(root).dirName())
+                           : tr("%1 copied to %2 (%n page(s)).", "", int(report.written.size())).arg(title, QDir(root).dirName()),
+                   u"success"_s);
+    return {};
 }
 
 } // namespace brulion::shell

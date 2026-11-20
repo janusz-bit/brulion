@@ -21,6 +21,7 @@ Czytanie nie wymaga uprawnień.
 | `b.pages()` | nazwy wszystkich stron, także dni dziennika, alfabetycznie |
 | `b.pages({ tag = "projekt" })` | tylko strony, które mają ten tag wśród własnych tagów (`tags: [projekt]` we właściwościach strony) |
 | `b.pages({ prop = "nawyk" })` | tylko strony, które mają tę właściwość wśród własnych (`nawyk: codziennie` we właściwościach strony); `prop = { "habit", "nawyk" }` przyjmuje którąkolwiek, można też dodać `tag` |
+| `b.pages({ paths = true })` | te same strony jako ich pliki w notatniku (`Projekty/Dom.md`): dwie strony „Dom” w różnych folderach to na liście nazw jedna nazwa, tu dwie ścieżki. Każda funkcja, która przyjmuje stronę, przyjmuje też taką ścieżkę |
 | `b.page(nazwa)` | `{ name, path, tags, props, date }`: plik strony w notatniku (`Projekty/Dom.md`), jej własne tagi i właściwości oraz jej dzień, gdy to strona dziennika; `nil`, gdy takiej strony nie ma |
 | `b.read(nazwa)` | cały tekst strony albo `nil` |
 | `b.blocks({ page = nazwa })` | bloki strony od góry, każdy z blokami pod nim |
@@ -152,7 +153,8 @@ end, { label = "Przenieś zrobione zadania do archiwum" })
 | `b.lang()`, `b.uiLang()` | język notatek i język interfejsu: `"pl"` albo `"en"` |
 | `b.log(tekst)`, `print(…)` | wiersz w konsoli Luau |
 | `b.status(tekst)` | mówi, co robi teraz polecenie czekające na odpowiedź („Czytam „Dom”…”); czat z AI pokazuje to pod kropkami AI, `b.status("")` to czyści |
-| `b.timer(sekundy, etykieta)` | uruchamia timer przerwy (ten ze strony [[Siłownia]]): powiadomienie, gdy czas minie |
+| `b.timer(sekundy, { label = "Herbata", message = "Herbata gotowa." })` | uruchamia własny timer rozszerzenia (niżej, Timery) |
+| `b.stopTimer()` | zatrzymuje go |
 | `b.data(nazwa)` | dane dołączone do wbudowanego rozszerzenia (lista ćwiczeń Siłowni, opis pisania rozszerzeń dla Asystenta AI); we własnym `nil` |
 
 ## Polecenia
@@ -161,6 +163,8 @@ end, { label = "Przenieś zrobione zadania do archiwum" })
 - `ctx.page` to nazwa strony na ekranie; pusty tekst, gdy żadnej nie ma.
 - Z `block = true` polecenie działa na bloku pod kursorem, `ctx.block`, a paleta pokazuje je tylko w notatce. Sprawdź, czy `ctx.block` jest.
 - Z `palette = false` paleta go nie pokazuje: uruchamia je przycisk widoku (`b.ui.run`) albo sama aplikacja — tak czat z AI uruchamia polecenie `chat` asystenta AI.
+- `ctx.selection` to to, co zaznaczyłeś w notatce przed wybraniem polecenia: tekst zaznaczony w edytowanym bloku albo zaznaczone bloki jako Markdown; pusty tekst, gdy nic nie jest zaznaczone.
+- Z `key = "Ctrl+Alt+W"` polecenie proponuje skrót klawiszowy; dostaje go tylko wtedy, gdy nie ma go żadne polecenie samego Brulionu. Każde polecenie rozszerzenia jest w **Ustawieniach → Skróty klawiszowe**, gdzie możesz mu nadać dowolny skrót.
 - `ctx.args` to to, co polecenie dostało od wywołującego: od przycisku komunikatu (niżej) albo z `brulion-cli extension run … --args '{"page": "Dom"}'`; `{}`, gdy nic nie dostało (pisz `ctx.args or {}`: tura czatu z AI nie ma go wcale).
 - Tekst, który funkcja zwróci, pojawia się jako komunikat. Można nie zwracać niczego. Tabela `{ message = "…", tone = "success", button = { label = "Otwórz", page = "Dom" } }` też jest komunikatem: `tone` to `"success"`, `"warning"` albo `"error"`, a przycisk otwiera stronę, uruchamia jedno z poleceń rozszerzenia (`command = "…"`, jego `args` jako `ctx.args`) albo — w tym, co zwraca akcja widoku — jeszcze raz akcję tego widoku (`action = "…"`, `args`): tak działa **Cofnij**.
 
@@ -261,7 +265,35 @@ end, {
 Gdy funkcja ma dużo do wyliczenia, może trzymać wynik w zmiennej razem z `b.revision()` i liczyć od nowa tylko wtedy, gdy ta liczba się zmieni — tak robią [[Nawyki]].
 
 ## Reakcje
-`b.on("save", function(e) … end)` działa zaraz po tym, jak to urządzenie zapisało stronę: `e.page` to jej nazwa. `b.on("change", function(e) … end)` działa po zmianach w notatkach, skądkolwiek przyszły — z Twojego pisania, synchronizacji, innego programu — gdy zmiany ucichną: `e.pages` to lista nazw zmienionych stron (jest w niej także strona usunięta). To, co rozszerzenia zapisują same, nie wraca jako zmiana. Reakcja nie może zadać pytania, a taka, która zawiedzie trzy razy z rzędu, zostaje wyłączona do ponownego wczytania rozszerzenia.
+`b.on(zdarzenie, function(e) … end)` uruchamia funkcję, gdy coś się wydarzy:
+
+| Zdarzenie | Kiedy | `e` |
+|---|---|---|
+| `"save"` | zaraz po tym, jak to urządzenie zapisało stronę | `page`, `path` |
+| `"change"` | po zmianach w notatkach, skądkolwiek przyszły — z Twojego pisania, synchronizacji, innego programu, **innego rozszerzenia** — gdy zmiany ucichną | `pages` (nazwy; także strona usunięta), `paths`, `by` (inne rozszerzenia, które pisały), `sources` (`"app"`, `"extension"`, `"sync"`, `"other"`) |
+| `"task"` | zadanie zostało odhaczone, otwarte z powrotem, anulowane albo zaczęte | zadanie jako blok, z `task` (jego stan teraz), `previous`, `source` i `by` |
+| `"journal"` | powstała notatka dnia | `date`, `page`, `path`, `source`, `by` |
+| `"open"` | notatnik został otwarty (raz, po wczytaniu rozszerzeń) | `date` |
+| `"day"` | zaczął się nowy dzień, gdy Brulion działa | `date`, `previous` |
+| `"timer"` | skończył się własny timer rozszerzenia | `label`, `seconds` |
+
+Reakcja nigdy nie słyszy tego, co zapisało jej własne rozszerzenie — więc nie odpowiada sama sobie — ale słyszy każde inne: zadanie odhaczone w widoku jednego rozszerzenia dociera do strony, którą prowadzi inne. Rozszerzenia odpowiadające sobie nawzajem zatrzymują się po czterech rundach. Synchronizacja przynosi to, co zapisały rozszerzenia na innym urządzeniu, z `source = "sync"`: reakcja, która coś dopisuje przy każdym zdarzeniu, powinna je pomijać, inaczej wpis pojawi się raz z każdego urządzenia. Reakcja nie może zadać pytania, a taka, która zawiedzie trzy razy z rzędu, zostaje wyłączona do ponownego wczytania rozszerzenia.
+
+```luau
+-- Wpis w dzisiejszym dzienniku przy każdym zadaniu zrobionym na tym urządzeniu.
+b.on("task", function(e)
+    if e.task == "x" and e.source ~= "sync" then
+        b.appendToJournal(b.today(), `- Zrobione: {e.plain} ([[{e.page}]])`)
+    end
+end)
+
+-- Nowa notatka dnia dostaje wiersz na początek.
+b.on("journal", function(e)
+    if e.source ~= "sync" then
+        b.appendToPage(e.path, "- Trzy rzeczy na dziś:")
+    end
+end)
+```
 
 ## Pytania
 
@@ -271,7 +303,7 @@ Gdy funkcja ma dużo do wyliczenia, może trzymać wynik w zmiennej razem z `b.r
 | `b.choose(pytanie, { "A", "B" })` | opcję, którą wybrałeś; `nil`, gdy zamknąłeś okno |
 | `b.form(tytuł, pola)` | liczby, każda z − i +, i wiersze tekstu: `{ klucz = liczba albo tekst }`; `nil`, gdy zamknąłeś okno |
 
-Pole liczbowe formularza to `{ key = "powt", label = "Powtórzenia", value = 8, step = 1, unit = "" }`, pole tekstowe `{ key = "nazwa", label = "Nazwa", kind = "text", value = "", placeholder = "np. Medytacja" }` — `placeholder` to szary przykład w pustym polu. Pytania działają w poleceniach i akcjach; nie działają w widokach, w reakcjach ani podczas wczytywania strony.
+Pole liczbowe formularza to `{ key = "powt", label = "Powtórzenia", value = 8, step = 1, unit = "" }`, pole tekstowe `{ key = "nazwa", label = "Nazwa", kind = "text", value = "", placeholder = "np. Medytacja" }` — `placeholder` to szary przykład w pustym polu. Pytania działają w poleceniach i akcjach; nie działają w widokach, w reakcjach ani podczas wczytywania strony. Okno pokazuje najwyżej pierwsze 10 000 znaków tekstu pytania; `b.choose` przyjmuje do 500 opcji, a `b.form` do 50 pól.
 
 ```luau
 b.command("spacer", function(ctx)
@@ -290,6 +322,61 @@ b.command("spacer", function(ctx)
 end, { label = "Zapisz spacer" })
 ```
 
+## Ustawienia
+`b.settings({ … })` daje rozszerzeniu własne ustawienia: w **Ustawieniach → Rozszerzenia** (i w rogu jego strony) pojawia się dla niego przycisk **Ustawienia**, gdzie je zmieniasz. `b.setting(klucz)` odczytuje jedno; `b.setSetting(klucz, wartość)` zmienia je z kodu. Są zapisane na tym urządzeniu, nie w notatniku: telefon i komputer mogą mieć każdy swoje.
+
+| Ustawienie | Co to jest |
+|---|---|
+| `{ key = "budzet", label = "Budżet miesięczny", value = 2000, step = 100, unit = "zł" }` | liczba z − i +, którą można też wpisać |
+| `{ key = "waluta", label = "Waluta", value = "zł" }` | wiersz tekstu |
+| `{ key = "grosze", label = "Pokazuj grosze", value = false }` | przełącznik |
+| `{ key = "okres", label = "Okres", options = { "miesiąc", "tydzień" } }` | jedna z opcji |
+
+`value` to wartość, dopóki jej nie zmienisz, `description = "…"` to zdanie pod nim. [[Siłownia]] też ma jedno: przerwę między seriami.
+
+```luau
+b.settings({
+    { key = "szklanka", label = "Szklanka", value = 250, step = 50, unit = "ml" },
+    { key = "cel", label = "Cel na dzień", value = 2000, step = 250, unit = "ml" },
+})
+
+b.command("woda", function(ctx)
+    local szklanka, cel = b.setting("szklanka"), b.setting("cel")
+    b.appendToJournal(b.today(), `- Woda: {szklanka} ml`)
+    local wypite = 0
+    for _, block in b.blocks({ page = b.today() }) do
+        wypite += tonumber(block.text:match("^Woda: (%d+) ml")) or 0
+    end
+    return `Dziś {wypite} z {cel} ml`
+end, { label = "Szklanka wody" })
+```
+
+## Timery
+`b.timer(sekundy, { label = "Herbata", message = "Herbata gotowa." })` uruchamia własny timer rozszerzenia: jego odliczanie widać pod górnym paskiem w każdym widoku (z × do zatrzymania), a gdy czas minie, powiadomienie mówi „Herbata: koniec” z Twoją wiadomością. Każde rozszerzenie ma jeden timer — nowy zastępuje poprzedni —, `b.stopTimer()` go zatrzymuje, a `b.on("timer", function(e) … end)` działa, gdy się skończy (`e.label`, `e.seconds`). Timer działa, dopóki działa Brulion.
+
+```luau
+b.command("herbata", function(ctx)
+    b.timer(4 * 60, { label = "Herbata", message = "Herbata gotowa: wyjmij torebkę." })
+    return "Cztery minuty"
+end, { label = "Timer herbaty" })
+
+b.on("timer", function(e)
+    b.appendToJournal(b.today(), `- {os.date("%H:%M")} {e.label} ({e.seconds // 60} min)`)
+end)
+```
+
+## Wspólny kod
+`b.require("Wspólne funkcje")` daje to, co zwraca kod innej strony rozszerzenia — zwykle tabelę funkcji, których używa kilka rozszerzeń, żeby każde nie nosiło własnej kopii. Taka strona to rozszerzenie jak każde inne (z tagiem `rozszerzenie`, kodem w blokach `luau`, zakończonym przez `return`) i działa dopiero, gdy zatwierdzisz ją na tym urządzeniu. Każde rozszerzenie, które jej używa, dostaje własną kopię, z własnymi uprawnieniami: wspólny kod nigdy nie zrobi więcej, niż wolno rozszerzeniu, które go używa. Gdy wspólna strona się zmieni, rozszerzenia, które jej używają, wczytują się od nowa.
+
+```luau
+-- Strona „Wspólne funkcje” kończy się przez `return M`: tabelę funkcji.
+local wspolne = b.require("Wspólne funkcje")
+
+b.command("otwarte-zadania", function(ctx)
+    return wspolne.count(b.query("type:tasks status:open", 1).total, "otwarte zadanie", "otwartych zadań")
+end, { label = "Ile otwartych zadań" })
+```
+
 ## AI
 `b.ai("pytanie")` pyta model wybrany w **Ustawieniach → Rozszerzenia → AI** i zwraca jego odpowiedź jako tekst; tabela dodaje `system`, `model`, `maxTokens`, `effort`, `images` (obrazki z notatnika dla modelu, który widzi: `b.ai({ prompt = "Co tu jest napisane?", images = { "paragon.jpg" } })`), `messages` dla rozmowy i `tools`, które model może wywołać. Strona potrzebuje uprawnienia `ai`. Więcej na stronie [[AI]].
 
@@ -303,7 +390,7 @@ end, { label = "Zapisz spacer" })
 - Nie ma plików, sieci ani innych programów: jest tylko `b`.
 
 ## Limity
-Jedno wywołanie może trwać 2 sekundy (czas, w którym odpowiadasz na pytanie, się nie liczy), a wszystkie rozszerzenia razem mają 64 MB pamięci; po przekroczeniu wywołanie zostaje zatrzymane, a reszta działa dalej. Widok pokazuje do 2000 wierszy, wiersz `row` do 24 kontrolek; `b.blocks` daje do 20 000 bloków; jedno pytanie do modelu ma do 200 000 znaków.
+Jedno wywołanie może trwać 2 sekundy (czas, w którym odpowiadasz na pytanie, się nie liczy), a wszystkie rozszerzenia razem mają 64 MB pamięci; po przekroczeniu wywołanie zostaje zatrzymane, a reszta działa dalej. Widok pokazuje do 2000 wierszy, wiersz `row` do 24 kontrolek; `b.blocks` daje do 20 000 bloków; jedno pytanie do modelu ma do 200 000 znaków. Tekst pytania pokazuje do 10 000 znaków, `b.choose` do 500 opcji, `b.form` do 50 pól; etykieta timera 100 znaków; ustawienia rozszerzenia 64 KB; `b.require` sięga do 16 stron w głąb.
 
 ## Błędy
 Komunikaty silnika są po angielsku:
@@ -327,6 +414,11 @@ Komunikaty silnika są po angielsku:
 | `a hook cannot ask a question` | zapytała reakcja |
 | `cannot wait for an answer here` | pytanie albo `b.ai` wewnątrz funkcji, którą wywołuje `table.sort` albo `string.gsub` |
 | `an extension cannot ask a question while it loads` | pytanie poza funkcją: pytaj wewnątrz polecenia |
+| `b.require: … waits for approval on this device` | wspólny kod zmienił się gdzie indziej albo jest nowy: zatwierdź jego stronę |
+| `b.require: no page named …`, `… is no extension page` | strony, której kod ma być użyty, nie ma albo nie ma tagu `rozszerzenie` |
+| `b.require: a cycle` | dwie strony wymagają siebie nawzajem |
+| `b.setSetting: "…" is a number` | wartość innego rodzaju niż jej ustawienie |
+| `b.choose: at most 500 options` | za dużo opcji na jedno pytanie: pytaj po kawałku |
 | `timeout: the extension ran too long` | jedno wywołanie trwało dłużej niż 2 sekundy |
 
 `pcall` łapie błąd, więc kod może działać dalej: `local ok, komunikat = pcall(b.write, nazwa, tekst)`. `error("…", 0)` zatrzymuje polecenie z Twoim własnym komunikatem.

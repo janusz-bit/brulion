@@ -18,6 +18,7 @@
 #include "extensionviewmodel.h"
 #include "index/vaultindex.h"
 #include "util/paths.h"
+#include "vault/localstore.h"
 #include "vault/vault.h"
 
 #include "testtiming.h"
@@ -25,6 +26,8 @@
 #include <QDir>
 #include <QDirIterator>
 #include <QFile>
+#include <QJsonArray>
+#include <QJsonObject>
 #include <QRegularExpression>
 #include <QSignalSpy>
 #include <QTemporaryDir>
@@ -216,6 +219,7 @@ class TestShellExtensions : public QObject {
     std::unique_ptr<VaultIndex> m_index;
     std::unique_ptr<WorkspaceExtensions> m_ext;
     QStringList m_messages; ///< the toasts, "kind: text"
+    QDateTime m_now; ///< the app's clock
 
     QString disk(const QString &path) const { return readFile(m_dir + u'/' + path); }
     QString page(const QString &title) const { return kFolder + u'/' + title + u".md"_s; }
@@ -275,7 +279,8 @@ class TestShellExtensions : public QObject {
         m_index = std::make_unique<VaultIndex>(m_vault->config());
         for (auto it = files.cbegin(); it != files.cend(); ++it)
             m_index->update(it.key(), it.value());
-        m_ext = std::make_unique<WorkspaceExtensions>([] { return QDateTime(QDate(2026, 11, 14), QTime(10, 30)); });
+        m_now = QDateTime(QDate(2026, 11, 14), QTime(10, 30));
+        m_ext = std::make_unique<WorkspaceExtensions>([this] { return m_now; });
         // The time limit is a wall clock that a stalled runner runs out in a call of a millisecond:
         // roomy here, as none of these tests is about it.
         m_ext->setLimits(extensions::Limits{brulion::test::kRoomyMs, extensions::Limits{}.memoryBytes});
@@ -284,6 +289,7 @@ class TestShellExtensions : public QObject {
         // Workspace::onVaultChanged: the index first, then the extensions are told — inside the
         // vault's write.
         connect(m_vault.get(), &Vault::changed, this, [this](const QList<VaultChange> &changes) {
+            m_ext->notesChanging(changes); // (before the index follows: where they come from)
             QStringList changed;
             for (const VaultChange &c : changes) {
                 if (c.type == ChangeType::Deleted) {
@@ -414,11 +420,16 @@ private Q_SLOTS:
         m_ext->answerText(u"kebab"_s);
         QCOMPARE(m_messages, QStringList{u"info: Dopisano: 12,5 zł, jedzenie"_s});
         QVERIFY(disk(kJournal).endsWith(u"- 12,5 zł jedzenie: kebab #wydatek\n"_s));
-        // The app's timer.
+        // A timer of its own (not the gym's rest: that stays as it is).
         m_ext->runCommand(u"pomodoro"_s, u"break"_s);
-        QCOMPARE(m_ext->restLabel(), u"Break"_s);
-        QVERIFY(m_ext->restRemaining() > 290 && m_ext->restRemaining() <= 300);
-        m_ext->stopRest();
+        QCOMPARE(m_ext->timers().size(), 1);
+        const QVariantMap timer = m_ext->timers().first().toMap();
+        QCOMPARE(timer.value(u"extension"_s).toString(), u"pomodoro"_s);
+        QCOMPARE(timer.value(u"label"_s).toString(), u"Break"_s);
+        QVERIFY(timer.value(u"remaining"_s).toInt() > 290 && timer.value(u"remaining"_s).toInt() <= 300);
+        QCOMPARE(m_ext->restRemaining(), 0);
+        m_ext->stopTimer(u"pomodoro"_s);
+        QVERIFY(m_ext->timers().isEmpty());
         // A model without a key (nothing leaves the device): the command says so.
         m_messages.clear();
         m_ext->runCommand(u"action-items"_s, u"extract"_s, u"Podróże/Peru.md"_s);
@@ -1142,6 +1153,294 @@ private Q_SLOTS:
         QCOMPARE(line(0, ExtensionViewModel::IconRole).toString(), u"flame"_s);
         QCOMPARE(line(0, ExtensionViewModel::TitleRole).toString(), u"Pusto"_s);
         QCOMPARE(line(0, ExtensionViewModel::CardRole).toString(), QString());
+    }
+
+    // ---- what the samples met as walls, and the extension's own corner ----------------------------
+
+    /// An extension page `title` with `code` (its permissions `permissions`), written as this
+    /// device's user writes and approved: running.
+    void addExtension(const QString &title, const QString &code, const QString &permissions = u"write"_s)
+    {
+        const QString text = u"---\ntags: [extension]\npermissions: [%1]\n---\n```luau\n%2\n```\n"_s.arg(permissions, code);
+        QVERIFY(m_vault->writeText(page(title), text, ChangeSource::User));
+        QTRY_VERIFY(!m_ext->pageState(page(title)).isEmpty());
+        m_ext->approve(page(title));
+        QVERIFY2(m_ext->pageState(page(title)) == u"running", qPrintable(m_ext->pageMessage(page(title))));
+    }
+
+    void hooksHearOtherExtensions()
+    {
+        // A task ticked in the review's view reaches the page the project index keeps, and the
+        // counter hears both writes — never its own.
+        m_ext->approve(page(u"Przegląd zadań"_s));
+        m_ext->approve(page(u"Indeks projektów"_s));
+        m_ext->approve(page(u"Licznik zmian"_s));
+        QString error;
+        const QVariantMap tree = m_ext->render(u"przeglad-zadan"_s, u"przeglad"_s, {}, &error);
+        QList<QVariantMap> checks;
+        collect(tree, u"check"_s, &checks);
+        QVERIFY(!checks.isEmpty());
+        QVERIFY(m_ext->act(u"przeglad-zadan"_s, u"przeglad"_s, u"zrobione"_s, checks[0].value(u"args"_s).toMap()));
+        QTRY_VERIFY2(disk(u"Projekty.md"_s).contains(u"- [[Dom]] — otwarte zadania: 2"_s), qPrintable(disk(u"Projekty.md"_s)));
+        QTRY_VERIFY2(disk(u"Licznik.md"_s).startsWith(u"zmiany: "_s), qPrintable(disk(u"Licznik.md"_s)));
+        QTRY_VERIFY2(disk(u"Licznik.md"_s).contains(u"Projekty"_s), qPrintable(disk(u"Licznik.md"_s)));
+        QTest::qWait(1500);
+        // The counter's own page is no change for it: it settled.
+        const QString settled = disk(u"Licznik.md"_s);
+        QTest::qWait(1500);
+        QCOMPARE(disk(u"Licznik.md"_s), settled);
+        QCOMPARE(consoleLines(u"error"_s), 0);
+    }
+
+    void chainsOfHooksEnd()
+    {
+        // Two extensions that write whenever the other one wrote: some rounds, then the chain ends
+        // (ChangeBatch::kMaxDepth) and the console says so.
+        addExtension(u"Ping"_s, u"local n = 0\nb.on(\"change\", function(e)\n    n += 1\n    b.write(\"Ping wynik\", \"ping \" .. n .. \"\\n\")\nend)"_s);
+        addExtension(u"Pong"_s, u"local n = 0\nb.on(\"change\", function(e)\n    n += 1\n    b.write(\"Pong wynik\", \"pong \" .. n .. \"\\n\")\nend)"_s);
+        QVERIFY(editorSaves(u"Zakupy.md"_s, disk(u"Zakupy.md"_s) + u"- [ ] chleb\n"_s));
+        QTRY_VERIFY_WITH_TIMEOUT(consoleLines(u"stopped after"_s) == 1, 20000);
+        const QString ping = disk(u"Ping wynik.md"_s), pong = disk(u"Pong wynik.md"_s);
+        QTest::qWait(2000);
+        QCOMPARE(disk(u"Ping wynik.md"_s), ping);
+        QCOMPARE(disk(u"Pong wynik.md"_s), pong);
+        // Each wrote a few times, not forever.
+        QVERIFY2(ping.mid(5).trimmed().toInt() <= extensions::ChangeBatch::kMaxDepth + 1, qPrintable(ping));
+        QVERIFY2(pong.mid(5).trimmed().toInt() >= 2, qPrintable(pong));
+    }
+
+    void taskJournalOpenDayAndTimerEvents()
+    {
+        addExtension(u"Zdarzenia"_s,
+                     u"b.on(\"task\", function(e) b.appendToPage(\"Dziennik zdarzeń\", `- task {e.plain} [{e.previous}]→[{e.task}] {e.source} {e.by}`) end)\n"
+                     "b.on(\"journal\", function(e) b.appendToPage(\"Dziennik zdarzeń\", `- journal {e.date} {e.source}`) end)\n"
+                     "b.on(\"day\", function(e) b.appendToPage(\"Dziennik zdarzeń\", `- day {e.previous}→{e.date}`) end)\n"
+                     "b.on(\"timer\", function(e) b.appendToPage(\"Dziennik zdarzeń\", `- timer {e.label} {e.seconds}`) end)\n"
+                     "b.on(\"open\", function(e) b.appendToPage(\"Dziennik zdarzeń\", `- open {e.date}`) end)\n"
+                     "b.command(\"herbata\", function() b.timer(1, { label = \"Herbata\", message = \"Herbata gotowa.\" }) end)"_s);
+        // The editor ticks a task: one "task" event with its statuses.
+        QString dom = disk(u"Dom.md"_s);
+        dom.replace(u"- [ ] Wymienić żarówkę w łazience"_s, u"- [x] Wymienić żarówkę w łazience"_s);
+        QVERIFY(editorSaves(u"Dom.md"_s, dom));
+        QTRY_VERIFY2(disk(u"Dziennik zdarzeń.md"_s).contains(u"- task Wymienić żarówkę w łazience [ ]→[x] app"_s),
+                     qPrintable(disk(u"Dziennik zdarzeń.md"_s)));
+        // Another extension's tick is heard too, with its name.
+        m_ext->approve(page(u"Przegląd zadań"_s));
+        QString error;
+        const QVariantMap tree = m_ext->render(u"przeglad-zadan"_s, u"przeglad"_s, {}, &error);
+        QList<QVariantMap> checks;
+        collect(tree, u"check"_s, &checks);
+        QVERIFY(m_ext->act(u"przeglad-zadan"_s, u"przeglad"_s, u"zrobione"_s, checks[0].value(u"args"_s).toMap()));
+        QTRY_VERIFY2(disk(u"Dziennik zdarzeń.md"_s).contains(u"→[x] extension przeglad-zadan"_s),
+                     qPrintable(disk(u"Dziennik zdarzeń.md"_s)));
+        // A daily note made (here by a sync).
+        QVERIFY(m_vault->writeText(u"journals/2026-11-15.md"_s, u"- jutro\n"_s, ChangeSource::Sync));
+        QTRY_VERIFY(disk(u"Dziennik zdarzeń.md"_s).contains(u"- journal 2026-11-15 sync"_s));
+        // A new day while the app runs.
+        m_now = m_now.addDays(1);
+        QTRY_VERIFY_WITH_TIMEOUT(disk(u"Dziennik zdarzeń.md"_s).contains(u"- day 2026-11-14→2026-11-15"_s), 20000);
+        // Its own timer: its words in the notification and the message, then its "timer" hook.
+        QStringList notified;
+        m_ext->setNotifier([&](const QString &title, const QString &body) { notified << title + u" | "_s + body; });
+        m_messages.clear();
+        m_ext->runCommand(u"zdarzenia"_s, u"herbata"_s);
+        QCOMPARE(m_ext->timers().size(), 1);
+        QTRY_COMPARE_WITH_TIMEOUT(notified, QStringList{u"Herbata is over | Herbata gotowa."_s}, 10000);
+        QVERIFY(m_messages.contains(u"info: Herbata gotowa."_s));
+        QTRY_VERIFY(disk(u"Dziennik zdarzeń.md"_s).contains(u"- timer Herbata 1"_s));
+        QVERIFY(m_ext->timers().isEmpty());
+        QCOMPARE(m_ext->restRemaining(), 0); // (the gym's rest is another timer)
+        m_ext->setNotifier({});
+        // "open": once, when the notebook opens with the extension approved.
+        QVERIFY(!disk(u"Dziennik zdarzeń.md"_s).contains(u"- open"_s));
+        m_ext->detach();
+        m_ext->attach(m_vault.get(), m_index.get());
+        m_ext->indexReady();
+        QTRY_COMPARE(disk(u"Dziennik zdarzeń.md"_s).count(u"- open 2026-11-15"_s), 1);
+        QCOMPARE(consoleLines(u"error"_s), 0);
+    }
+
+    void settingsOfAnExtension()
+    {
+        addExtension(u"Waluta"_s,
+                     u"b.settings({\n"
+                     "    { key = \"waluta\", label = \"Waluta\", value = \"zł\" },\n"
+                     "    { key = \"limit\", label = \"Limit miesięczny\", value = 1000, step = 50, unit = \"zł\" },\n"
+                     "    { key = \"grosze\", label = \"Z groszami\", value = false },\n"
+                     "    { key = \"widok\", label = \"Widok\", options = { \"lista\", \"tabela\" } },\n"
+                     "})\n"
+                     "b.command(\"pokaz\", function() return `{b.setting(\"limit\")} {b.setting(\"waluta\")} {tostring(b.setting(\"grosze\"))} {b.setting(\"widok\")}` end)"_s);
+        const QVariantList fields = m_ext->settingsOf(u"waluta"_s);
+        QCOMPARE(fields.size(), 4);
+        QCOMPARE(m_ext->settingsCount(u"waluta"_s), 4);
+        QCOMPARE(fields[1].toMap().value(u"display"_s).toString(), u"1000"_s);
+        QCOMPARE(fields[3].toMap().value(u"options"_s).toStringList(), (QStringList{u"lista"_s, u"tabela"_s}));
+        // As the settings dialog sets them: a number typed with a comma and its unit, a switch, a choice.
+        QVERIFY(m_ext->setSetting(u"waluta"_s, u"limit"_s, u"1 250,5 zł"_s) || m_ext->setSetting(u"waluta"_s, u"limit"_s, u"1250,5 zł"_s));
+        QVERIFY(m_ext->setSetting(u"waluta"_s, u"grosze"_s, true));
+        QVERIFY(m_ext->setSetting(u"waluta"_s, u"widok"_s, u"tabela"_s));
+        QVERIFY(!m_ext->setSetting(u"waluta"_s, u"widok"_s, u"wykres"_s));
+        QVERIFY(!m_ext->setSetting(u"waluta"_s, u"limit"_s, u"dużo"_s));
+        QVERIFY(!m_ext->setSetting(u"waluta"_s, u"nie-ma"_s, 1));
+        m_messages.clear();
+        m_ext->runCommand(u"waluta"_s, u"pokaz"_s);
+        QCOMPARE(m_messages, QStringList{u"info: 1250.5 zł true tabela"_s});
+        // Kept on this device: a new start reads them.
+        m_ext->detach();
+        m_ext->attach(m_vault.get(), m_index.get());
+        m_ext->indexReady();
+        m_messages.clear();
+        m_ext->runCommand(u"waluta"_s, u"pokaz"_s);
+        QCOMPARE(m_messages, QStringList{u"info: 1250.5 zł true tabela"_s});
+        m_ext->resetSettings(u"waluta"_s);
+        m_messages.clear();
+        m_ext->runCommand(u"waluta"_s, u"pokaz"_s);
+        QCOMPARE(m_messages, QStringList{u"info: 1000 zł false lista"_s});
+        QCOMPARE(m_ext->list()->rows().size() > 0, true);
+    }
+
+    void approvingTheVersionRead()
+    {
+        const QString path = page(u"Licznik słów"_s);
+        // New on this device: the review shows all of the code, nothing to compare with.
+        QVariantMap review = m_ext->approvalReview(path);
+        QCOMPARE(review.value(u"title"_s).toString(), u"Licznik słów"_s);
+        QCOMPARE(review.value(u"before"_s).toBool(), false);
+        QVERIFY(review.value(u"added"_s).toInt() > 10);
+        QCOMPARE(review.value(u"removed"_s).toInt(), 0);
+        QVERIFY(review.value(u"oldCode"_s).toString().isEmpty());
+        const QString first = review.value(u"hash"_s).toString();
+        QCOMPARE(m_ext->approveVersion(path, first), QString());
+        QCOMPARE(m_ext->pageState(path), u"running"_s);
+        // A sync changes a line of its code and asks to write: it waits, and the review shows what
+        // changed against the version approved here, and the permission it asks for anew.
+        QString text = disk(path);
+        QVERIFY(text.contains(u"uprawnienia"_s) || text.contains(u"permissions"_s) || true);
+        text.replace(u"---\ntags: [rozszerzenie]\n"_s, u"---\ntags: [rozszerzenie]\nuprawnienia: [zapis]\n"_s);
+        const qsizetype code = text.indexOf(u"```luau\n"_s);
+        QVERIFY(code > 0);
+        text.insert(code + 8, u"local ZMIENIONE_PRZEZ_SYNC = true\n"_s);
+        QVERIFY(syncBrings(path, text));
+        QTRY_COMPARE(m_ext->pageState(path), u"approval"_s);
+        review = m_ext->approvalReview(path);
+        QCOMPARE(review.value(u"before"_s).toBool(), true);
+        QCOMPARE(review.value(u"added"_s).toInt(), 1);
+        QCOMPARE(review.value(u"removed"_s).toInt(), 0);
+        QVERIFY(review.value(u"code"_s).toString().contains(u"ZMIENIONE_PRZEZ_SYNC"_s));
+        QVERIFY(!review.value(u"oldCode"_s).toString().contains(u"ZMIENIONE_PRZEZ_SYNC"_s));
+        QCOMPARE(review.value(u"newPermissions"_s).toStringList(), QStringList{u"change notes"_s});
+        bool added = false;
+        for (const QVariant &l : review.value(u"lines"_s).toList())
+            added = added || (l.toMap().value(u"kind"_s) == u"added"_s && l.toMap().value(u"text"_s).toString().contains(u"ZMIENIONE"_s));
+        QVERIFY(added);
+        const QString shown = review.value(u"hash"_s).toString();
+        // While it is read, another sync replaces the code again: the version shown is not approved.
+        text.replace(u"local ZMIENIONE_PRZEZ_SYNC = true\n"_s, u"local ZMIENIONE_ZNOWU = true\n"_s);
+        QVERIFY(syncBrings(path, text));
+        QTRY_VERIFY(m_ext->pageHash(path) != shown);
+        QCOMPARE(m_ext->approveVersion(path, shown), u"changed"_s);
+        QCOMPARE(m_ext->pageState(path), u"approval"_s);
+        QCOMPARE(m_ext->approveVersion(page(u"Nie ma"_s), shown), u"gone"_s);
+        // The version read now: approved, it runs.
+        QCOMPARE(m_ext->approveVersion(path, m_ext->approvalReview(path).value(u"hash"_s).toString()), QString());
+        QCOMPARE(m_ext->pageState(path), u"running"_s);
+        // What was approved is kept for the next review (the device state, not the notebook).
+        QVERIFY(m_vault->store()->get(extensions::approvedCodeStoreKey(u"licznik-slow"_s)).toObject().value(u"code"_s)
+                        .toString().contains(u"ZMIENIONE_ZNOWU"_s));
+    }
+
+    void sharedCode()
+    {
+        const QString library = u"local M = {}\nfunction M.powitanie(imie) return \"Cześć, \" .. imie .. \"!\" end\nreturn M"_s;
+        addExtension(u"Wspólne"_s, library, QString());
+        addExtension(u"Powitanie"_s, u"local w = b.require(\"Wspólne\")\nb.command(\"witaj\", function() return w.powitanie(\"Żaneta\") end)"_s,
+                     QString());
+        m_messages.clear();
+        m_ext->runCommand(u"powitanie"_s, u"witaj"_s);
+        QCOMPARE(m_messages, QStringList{u"info: Cześć, Żaneta!"_s});
+        // The library changes on another device: it waits, and its user cannot run its code meanwhile.
+        QString text = disk(page(u"Wspólne"_s));
+        text.replace(u"Cześć, "_s, u"Dzień dobry, "_s);
+        QVERIFY(syncBrings(page(u"Wspólne"_s), text));
+        QTRY_COMPARE(m_ext->pageState(page(u"Wspólne"_s)), u"approval"_s);
+        QTRY_COMPARE(m_ext->pageState(page(u"Powitanie"_s)), u"error"_s);
+        QVERIFY2(m_ext->pageMessage(page(u"Powitanie"_s)).contains(u"waits for approval"_s),
+                 qPrintable(m_ext->pageMessage(page(u"Powitanie"_s))));
+        // Approved: its user loads again with the new code.
+        m_ext->approve(page(u"Wspólne"_s));
+        QTRY_COMPARE(m_ext->pageState(page(u"Powitanie"_s)), u"running"_s);
+        m_messages.clear();
+        m_ext->runCommand(u"powitanie"_s, u"witaj"_s);
+        QCOMPARE(m_messages, QStringList{u"info: Dzień dobry, Żaneta!"_s});
+        // Settings → Extensions names what it uses.
+        bool listed = false;
+        for (const ExtensionRow &row : m_ext->list()->rows())
+            listed = listed || (row.id == u"powitanie" && row.modules == QStringList{u"Wspólne"_s});
+        QVERIFY(listed);
+    }
+
+    void selectionOfTheEditor()
+    {
+        addExtension(u"Zaznaczenie"_s, u"b.command(\"pokaz\", function(ctx) return `[{ctx.selection}]` end)"_s, QString());
+        m_messages.clear();
+        m_ext->offerSelection(u"Dom.md"_s, u"Zapłacić czynsz"_s);
+        m_ext->runCommand(u"zaznaczenie"_s, u"pokaz"_s, u"Dom.md"_s);
+        QCOMPARE(m_messages, QStringList{u"info: [Zapłacić czynsz]"_s});
+        // Offered for another page, or not at all: none; an offer is used once.
+        m_messages.clear();
+        m_ext->offerSelection(u"Zakupy.md"_s, u"mleko"_s);
+        m_ext->runCommand(u"zaznaczenie"_s, u"pokaz"_s, u"Dom.md"_s);
+        m_ext->runCommand(u"zaznaczenie"_s, u"pokaz"_s, u"Dom.md"_s);
+        QCOMPARE(m_messages, (QStringList{u"info: []"_s, u"info: []"_s}));
+        // On a block (the editor's command with block = true): the selection comes with it.
+        m_messages.clear();
+        m_ext->runBlockCommand(u"zaznaczenie/pokaz"_s, u"Dom.md"_s, 5, u"żarówkę"_s);
+        QCOMPARE(m_messages, QStringList{u"info: [żarówkę]"_s});
+        // A selection of a whole book: its beginning.
+        m_messages.clear();
+        m_ext->offerSelection(u"Dom.md"_s, QString(300000, u'ż'));
+        m_ext->runCommand(u"zaznaczenie"_s, u"pokaz"_s, u"Dom.md"_s);
+        QCOMPARE(m_messages.size(), 1);
+        QCOMPARE(m_messages[0].size(), 200000 + 8);
+    }
+
+    void copiedToAnotherNotebook()
+    {
+        // The word count and the library it requires go to another notebook, approved there.
+        addExtension(u"Wspólne"_s, u"return { zero = 0 }"_s, QString());
+        QString counter = disk(page(u"Licznik słów"_s));
+        counter.replace(u"```luau\n"_s, u"```luau\nlocal wspolne = b.require(\"Wspólne\")\n"_s);
+        QVERIFY(m_vault->writeText(page(u"Licznik słów"_s), counter, ChangeSource::User));
+        QTRY_VERIFY(m_ext->approvalReview(page(u"Licznik słów"_s)).value(u"code"_s).toString().contains(u"wspolne"_s));
+        m_ext->approve(page(u"Licznik słów"_s));
+        QCOMPARE(m_ext->pageState(page(u"Licznik słów"_s)), u"running"_s);
+        const QString other = m_tmp.filePath(u"inny%1"_s.arg(m_n));
+        QDir().mkpath(other);
+        const QString otherState = m_tmp.filePath(u"inny-stan%1"_s.arg(m_n));
+        QCOMPARE(m_ext->copyToNotebook(page(u"Licznik słów"_s), other), tr("Extensions cannot be copied here."));
+        m_ext->setDeviceStates([&](const QString &) { return otherState; });
+        QCOMPARE(m_ext->copyToNotebook(page(u"Licznik słów"_s), m_dir), tr("Choose another notebook."));
+        m_messages.clear();
+        QCOMPARE(m_ext->copyToNotebook(page(u"Licznik słów"_s), other), QString());
+        QCOMPARE(readFile(other + u'/' + page(u"Licznik słów"_s)), counter);
+        QCOMPARE(readFile(other + u'/' + page(u"Wspólne"_s)), disk(page(u"Wspólne"_s)));
+        QCOMPARE(m_messages.size(), 1);
+        {
+            LocalStore store(otherState + u"/store.json"_s);
+            QCOMPARE(store.get(extensions::approvedStoreKey()).toArray().size(), 2);
+            QVERIFY(!store.get(extensions::approvedCodeStoreKey(u"licznik-slow"_s)).toObject().isEmpty());
+        }
+        // Again: nothing to do. Changed there: a conflict, replaced only when asked.
+        QCOMPARE(m_ext->copyToNotebook(page(u"Licznik słów"_s), other), QString());
+        QFile changed(other + u'/' + page(u"Wspólne"_s));
+        QVERIFY(changed.open(QIODevice::WriteOnly));
+        changed.write("zmieniona tam\n");
+        changed.close();
+        QCOMPARE(m_ext->copyToNotebook(page(u"Licznik słów"_s), other), u"conflict"_s);
+        QCOMPARE(readFile(other + u'/' + page(u"Wspólne"_s)), u"zmieniona tam\n"_s);
+        QCOMPARE(m_ext->copyToNotebook(page(u"Licznik słów"_s), other, true), QString());
+        QCOMPARE(readFile(other + u'/' + page(u"Wspólne"_s)), disk(page(u"Wspólne"_s)));
+        QCOMPARE(m_ext->copyToNotebook(u"Dom.md"_s, other), tr("This page is no extension."));
     }
 };
 

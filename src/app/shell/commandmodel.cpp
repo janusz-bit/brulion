@@ -9,6 +9,7 @@
 
 #include <QCoreApplication>
 #include <QEvent>
+#include <QSet>
 
 #include <algorithm>
 
@@ -124,6 +125,24 @@ CommandModel::CommandModel(AppController *app) : QObject(nullptr), m_app(app)
         shortcuts->setActions(shortcutActions());
         connect(shortcuts, &ShortcutMap::changed, this, &CommandModel::commandsChanged);
     }
+    // The extensions' commands load after the app started (the notebook's pages): Settings →
+    // Keyboard shortcuts lists them once they are there.
+    connect(app->workspace()->extensions(), &WorkspaceExtensions::commandsChanged, this,
+            &CommandModel::refreshShortcutActions);
+}
+
+void CommandModel::refreshShortcutActions()
+{
+    ShortcutMap *shortcuts = m_app->shortcuts();
+    if (!shortcuts)
+        return;
+    const QList<ShortcutMap::Action> actions = shortcutActions();
+    const QList<ShortcutMap::Action> &now = shortcuts->actions();
+    const bool same = actions.size() == now.size() && std::ranges::equal(actions, now, [](const auto &a, const auto &b) {
+        return a.id == b.id && a.title == b.title && a.defaultSequence == b.defaultSequence;
+    });
+    if (!same)
+        shortcuts->setActions(actions);
 }
 
 CommandModel::~CommandModel()
@@ -524,7 +543,7 @@ static QList<Command> extensionCommands(const AppController *app, bool blocks)
     for (const extensions::CommandInfo &c : extensions->commands()) {
         if (c.palette) // (else only the app or a view's button runs it: the assistant's chat turn)
             out.append({u"ext."_s + c.extension + u'.' + c.name, c.label, extensions->title(c.extension),
-                        iconOf(c.extension), {}, ready && (!c.needsBlock || blocks)});
+                        iconOf(c.extension), c.key, ready && (!c.needsBlock || blocks)});
     }
     for (const extensions::ViewInfo &v : extensions->views()) {
         if (!v.label.isEmpty() && v.extension != u"silownia" && v.extension != u"nawyki") // (their own views)
@@ -593,7 +612,15 @@ QList<ShortcutMap::Action> CommandModel::shortcutActions() const
     // The palette itself first; titles that follow the state ("Add to favorites" / "Remove…")
     // by what the command does.
     QList<ShortcutMap::Action> out{{u"palette"_s, tr("Command palette"), u"Ctrl+K"_s}};
-    for (const QList<Command> all = allCommands(m_app); const Command &c : all) {
+    const QList<Command> commands = allCommands(m_app);
+    // What an extension suggests is its default only while the app has no use for it: no command
+    // of the app's own has it by default, no key that types text or that the editor takes, not
+    // one an earlier extension's command took.
+    QSet<QString> taken{u"Ctrl+K"_s};
+    for (const Command &c : commands)
+        if (!c.id.startsWith(u"ext.") && !c.shortcut.isEmpty())
+            taken.insert(ShortcutMap::normalize(c.shortcut));
+    for (const Command &c : commands) {
         QString title = c.title;
         if (c.id == u"page.favorite")
             title = tr("Add to or remove from favorites");
@@ -603,7 +630,17 @@ QList<ShortcutMap::Action> CommandModel::shortcutActions() const
             title = tr("Focus mode");
         else if (c.id == u"view.typewriter")
             title = tr("Typewriter scrolling");
-        out.append({c.id, title, c.shortcut});
+        QString shortcut = c.shortcut;
+        if (c.id.startsWith(u"ext.")) {
+            title = c.subtitle + u": "_s + c.title; // ("Licznik słów: Policz słowa")
+            const QString n = ShortcutMap::normalize(shortcut);
+            shortcut = n.isEmpty() || ShortcutMap::typesText(n) || !ShortcutMap::reservedUse(n).isEmpty() || taken.contains(n)
+                               ? QString()
+                               : n;
+            if (!shortcut.isEmpty())
+                taken.insert(shortcut);
+        }
+        out.append({c.id, title, shortcut});
     }
     return out;
 }
@@ -667,11 +704,16 @@ bool CommandModel::run(const QString &id)
         });
         if (c == commands.cend())
             return false;
-        if (c->needsBlock)
+        if (c->needsBlock) {
             m_app->requestUiAction(u"extension:"_s + extension + u'/' + name);
-        else // ctx.page: the page on screen (a command about "this page")
-            m_app->workspace()->extensions()->runCommand(extension, name,
-                                                         m_app->currentRoute().value(u"path"_s).toString());
+        } else {
+            // ctx.page: the page on screen (a command about "this page"); ctx.selection: what the
+            // editor on screen has selected — it offers it now, before the command runs.
+            WorkspaceExtensions *ext = m_app->workspace()->extensions();
+            ext->clearSelection();
+            m_app->requestUiAction(u"offerSelection"_s);
+            ext->runCommand(extension, name, m_app->currentRoute().value(u"path"_s).toString());
+        }
     } else if (id.startsWith(u"go."))
         m_app->navigate({{u"view"_s, id.mid(3)}});
     else if (id == u"page.favorite")

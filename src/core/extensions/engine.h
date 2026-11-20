@@ -91,6 +91,9 @@ struct CommandInfo
     QString label; ///< the palette's label (b.command's meta.label), else the name
     bool needsBlock = false; ///< meta.block: it works on the block under the caret (ctx.block)
     bool palette = true; ///< meta.palette ~= false: the palette offers it (else only the app or a view runs it)
+    /// meta.key: the keyboard shortcut it suggests ("Ctrl+Alt+W"; the app takes it only while no
+    /// command of its own and no other binding has it), "" = none.
+    QString key;
 };
 
 struct ViewInfo
@@ -107,7 +110,27 @@ struct HookInfo
 {
     int id = 0; ///< in the order of registration
     QString extension;
-    QString event; ///< "save" | "change"
+    QString event; ///< one of Engine::hookEvents(): "save", "change", "task", "journal", "open", "day", "timer"
+};
+
+/// What the questions and the settings may show (docs/EXTENSIONS.md "Sandbox and limits"): a
+/// question's text is cut to fit — a megabyte of prompt never reaches a dialog —, a list or a form
+/// that is too long is an error.
+struct QuestionLimits
+{
+    static constexpr int title = 300; ///< characters of a prompt's first line (the dialog's title)
+    static constexpr int text = 10000; ///< characters of the lines under it …
+    static constexpr int lines = 200; ///< … and lines
+    static constexpr int options = 500; ///< b.choose: options
+    static constexpr int option = 500; ///< characters of one option
+    static constexpr int fields = 50; ///< b.form: fields
+    static constexpr int label = 200; ///< characters of a field's label, a setting's label
+    static constexpr int value = 10000; ///< characters of a text field's value
+    static constexpr int timerLabel = 100; ///< b.timer's label
+    static constexpr int timerMessage = 300; ///< b.timer's message
+    static constexpr int settings = 32; ///< b.settings: fields
+    static constexpr int settingText = 4000; ///< characters of a setting's text
+    static constexpr int requireDepth = 16; ///< b.require inside b.require
 };
 
 class Engine
@@ -136,6 +159,19 @@ public:
     bool isLoaded(const QString &id) const { return m_loaded.contains(id); }
     /// The events b.on accepts.
     static QStringList hookEvents();
+    /// The extension whose call executes now ("" when none): a host function knows whose call
+    /// asks (the app: whose write a note's change is).
+    QString runningExtension() const { return m_running ? m_runningExtension : QString(); }
+    /// The settings `extension` declared with b.settings, normalized: [{key, label, kind ("number" |
+    /// "text" | "toggle" | "choice"), value (the default), step, unit, options, placeholder,
+    /// description}]; [] when none.
+    QVariantList settingsOf(const QString &extension) const;
+    /// Its settings as b.setting reads them: each declared one's stored value when it fits its
+    /// kind, else its default; values stored without a declaration as they are.
+    QVariantMap settingValues(const QString &extension) const;
+    /// The extension pages b.require loaded for `extension` (their paths), in the order first
+    /// required: when one of them changes, the extension has to load again.
+    QStringList modulesOf(const QString &extension) const;
     /// The hooks of `event` ("" = all), in the order of registration.
     QList<HookInfo> hooks(const QString &event = QString()) const;
     /// Calls a hook with `event` (its one argument); NotFound when it is gone.
@@ -173,6 +209,7 @@ private:
         bool needsBlock = false;
         QString icon;
         bool palette = true;
+        QString key;
     };
     struct Hook
     {
@@ -186,6 +223,10 @@ private:
         QStringList permissions;
         QVariantMap data;
         QString name; // as errors name it: Extension::name, else the id
+        QVariantList settings; // declared with b.settings (settingsOf())
+        QStringList modules; // the pages b.require loaded, by path, in order
+        QHash<QString, int> moduleRefs; // path → registry ref of the module's value
+        QStringList requiring; // the modules whose code runs now (a cycle is an error)
     };
 
     static void *alloc(void *ud, void *ptr, size_t osize, size_t nsize);
@@ -243,6 +284,12 @@ private:
     static int apiRemoveBlock(lua_State *L);
     static int apiSetTask(lua_State *L);
     static int apiSetProperty(lua_State *L);
+    static int apiRequire(lua_State *L);
+    static int apiRequireDone(lua_State *L);
+    static int apiSettings(lua_State *L);
+    static int apiSetting(lua_State *L);
+    static int apiSetSetting(lua_State *L);
+    static int apiStopTimer(lua_State *L);
 
     int commandImpl(lua_State *L);
     int viewImpl(lua_State *L);
@@ -282,6 +329,11 @@ private:
     int removeBlockImpl(lua_State *L);
     int setTaskImpl(lua_State *L);
     int setPropertyImpl(lua_State *L);
+    int requireImpl(lua_State *L);
+    int requireDoneImpl(lua_State *L);
+    int settingsImpl(lua_State *L);
+    int settingImpl(lua_State *L);
+    int setSettingImpl(lua_State *L);
 
     bool mayWrite(lua_State *L, const QString &extension, const char *function);
     void pushEnvironment(const QString &extension);
@@ -327,6 +379,9 @@ private:
     QMap<int, Waiting> m_waiting; // by call id
     int m_nextCall = 1;
     int m_aiFactoryRef = 0; // the b.ai wrapper's factory (a prelude)
+    int m_requireFactoryRef = 0; // the b.require wrapper's factory (a prelude)
+    bool m_loading = false; // load(): what the top level returns is no result (a library's table)
+    QHash<QString, QByteArray> m_moduleCode; // a module's bytecode by its hash (compiled once)
 };
 
 } // namespace brulion::extensions

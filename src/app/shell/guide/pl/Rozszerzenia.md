@@ -77,7 +77,7 @@ end, { label = "Notatka z godziną" })
 Błąd wskazuje **wiersz strony**: w rogu strony pojawia się „Błąd w wierszu 14: …” z przyciskiem do tego wiersza, to samo pokazują **Ustawienia → Rozszerzenia** i **konsola Luau**. Dopóki piszesz, działa wersja sprzed błędu — niedokończony kod nigdy nie zabiera działającego rozszerzenia. `print(…)` pisze do konsoli Luau: to najszybszy sposób, żeby zobaczyć, co kod ma w ręku. Komunikaty, które możesz spotkać, objaśnia [[API rozszerzeń#Błędy]].
 
 ## Kod z innych urządzeń
-Strony przychodzą zewsząd: z synchronizacji, importu, wspólnego folderu. Dlatego kod strony działa na urządzeniu dopiero wtedy, gdy go tam **zatwierdzisz**: róg strony mówi „nowe albo zmienione gdzie indziej — przeczytaj i uruchom” z przyciskiem **Uruchom**, tak samo **Ustawienia → Rozszerzenia**. To, co napiszesz w Brulionie na tym urządzeniu, zostaje zatwierdzone; zmiana, która przyszła inną drogą, znowu czeka na Ciebie. Słowa wokół kodu nigdy nie wymagają ponownego zatwierdzenia.
+Strony przychodzą zewsząd: z synchronizacji, importu, wspólnego folderu. Dlatego kod strony działa na urządzeniu dopiero wtedy, gdy go tam **zatwierdzisz**: róg strony mówi „nowe albo zmienione gdzie indziej — przeczytaj i uruchom” z przyciskiem **Przeczytaj i uruchom**, tak samo **Ustawienia → Rozszerzenia**. Ten przycisk najpierw pokazuje kod: co się zmieniło, odkąd zatwierdziłeś go na tym urządzeniu — wiersze dodane na zielono, usunięte na czerwono —, albo cały, gdy jest tu nowy, co może robić i o co prosi, czego wcześniej nie miał. **Uruchom tę wersję** zatwierdza dokładnie to, co przeczytałeś: jeśli synchronizacja zmieni kod w trakcie czytania, nic nie zostaje zatwierdzone, a okno o tym mówi i na Twoją prośbę pokazuje nową wersję. To, co napiszesz w Brulionie na tym urządzeniu, zostaje zatwierdzone; zmiana, która przyszła inną drogą, znowu czeka na Ciebie. Słowa wokół kodu nigdy nie wymagają ponownego zatwierdzenia.
 
 Co rozszerzenie może robić poza czytaniem, jest zapisane na jego stronie:
 
@@ -108,13 +108,19 @@ b.view("projekty", function(params)
 end, nil, { label = "Projekty" })
 ```
 
-Reakcja działa, gdy coś się dzieje: `b.on("save", function(e) … end)` po zapisaniu strony na tym urządzeniu (`e.page`), `b.on("change", function(e) … end)` po zmianach w notatkach, skądkolwiek przyszły (`e.pages`). Reakcja, która ciągle się wywraca, zostaje wyłączona do ponownego wczytania rozszerzenia.
+Reakcja działa, gdy coś się dzieje: `b.on("save", function(e) … end)` po zapisaniu strony na tym urządzeniu (`e.page`), `b.on("change", function(e) … end)` po zmianach w notatkach, skądkolwiek przyszły — także od innego rozszerzenia (`e.pages`) —, `"task"`, gdy zadanie zostanie odhaczone, `"journal"`, gdy powstanie notatka dnia, `"open"`, `"day"` i `"timer"` (wszystko w [[API rozszerzeń#Reakcje]]). Reakcja, która ciągle się wywraca, zostaje wyłączona do ponownego wczytania rozszerzenia.
+
+## Ustawienia, skróty i timery
+Rozszerzenie może mieć własne **ustawienia** (`b.settings`): **Ustawienia → Rozszerzenia** pokazują dla niego przycisk **Ustawienia**, a ustawienia są zapisane na tym urządzeniu. Każde jego polecenie jest w **Ustawieniach → Skróty klawiszowe**, gdzie możesz nadać mu klawisz. A `b.timer` uruchamia jego własny timer, który odlicza pod górnym paskiem w każdym widoku i na koniec mówi to, co chce rozszerzenie. Szczegóły są na stronie [[API rozszerzeń]].
+
+## W innym notatniku
+Rozszerzenie to strona swojego notatnika. Żeby używać go w innym, **Ustawienia → Rozszerzenia** mają przy nim przycisk kopiowania: wybierz notatnik, a strona trafi tam — razem ze stronami wspólnego kodu, których używa (`b.require`) —, zatwierdzona tam na tym urządzeniu. Strona o innej treści zostaje tam zastąpiona dopiero za Twoją zgodą.
 
 ## Napisane przez AI
-Poproś o nie [[AI|Asystenta AI]] — w nowej rozmowie czatu z AI (✨ → **Nowa rozmowa**): „polecenie, które policzy słowa dzisiejszej notatki”. Asystent przeczyta, jak się pisze rozszerzenia, wypróbuje kod na Twoich notatkach, niczego nie zmieniając, i za Twoją zgodą zapisze stronę w **Rozszerzenia/**. Agent, np. Claude Code, zrobi to samo przez [[Wiersz poleceń i agenci AI|wiersz poleceń]]: przeczyta API (`brulion-cli extension docs`), wypróbuje kod (`extension eval`, `extension run` — to, co kod by zapisał, wraca jako różnica) i zapisze stronę (`extension write`). W obu przypadkach kod czeka na Ciebie jak kod z innego urządzenia: przeczytaj stronę i naciśnij **Uruchom**, gdy zgadzasz się z tym, co robi. Każda późniejsza zmiana AI znowu czeka.
+Poproś o nie [[AI|Asystenta AI]] — w nowej rozmowie czatu z AI (✨ → **Nowa rozmowa**): „polecenie, które policzy słowa dzisiejszej notatki”. Asystent przeczyta, jak się pisze rozszerzenia, wypróbuje kod na Twoich notatkach, niczego nie zmieniając, i za Twoją zgodą zapisze stronę w **Rozszerzenia/**. Agent, np. Claude Code, zrobi to samo przez [[Wiersz poleceń i agenci AI|wiersz poleceń]]: przeczyta API (`brulion-cli extension docs`), wypróbuje kod (`extension eval`, `extension run` — to, co kod by zapisał, wraca jako różnica) i zapisze stronę (`extension write`). W obu przypadkach kod czeka na Ciebie jak kod z innego urządzenia: przeczytaj stronę i naciśnij **Przeczytaj i uruchom**, gdy zgadzasz się z tym, co robi. Każda późniejsza zmiana AI znowu czeka.
 
-## Kod Siłowni i Nawyków
-[[Siłownia]] i [[Nawyki]] też są rozszerzeniami. **Ustawienia → Rozszerzenia → Kod Siłowni** (albo **Kod nawyków**) **→ Edytuj kod** zapisuje źródło na stronie Twojego notatnika (`Rozszerzenia/Siłownia`, `Rozszerzenia/Nawyki`), sekcja pod nagłówkiem, i odtąd rozszerzenie działa **z tej strony**: zmień, zapisz i zmiana działa. **Przywróć** przenosi stronę do kosza i znowu działa kod wbudowany.
+## Kod Siłowni, Nawyków i Asystenta
+[[Siłownia]], [[Nawyki]] i [[AI|Asystent AI]] też są rozszerzeniami. **Ustawienia → Rozszerzenia → Kod Siłowni** (albo **Kod nawyków**, albo pod AI **Kod asystenta**) **→ Edytuj kod** zapisuje źródło na stronie Twojego notatnika (`Rozszerzenia/Siłownia`, `Rozszerzenia/Nawyki`, `Rozszerzenia/Asystent AI`), sekcja pod nagłówkiem, i odtąd rozszerzenie działa **z tej strony**: zmień, zapisz i zmiana działa. **Przywróć** przenosi stronę do kosza i znowu działa kod wbudowany.
 
 ## Więcej
 - [[API rozszerzeń]] — każda funkcja `b`, jak wygląda blok, limity i komunikaty błędów.

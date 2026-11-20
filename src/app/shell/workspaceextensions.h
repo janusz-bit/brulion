@@ -36,7 +36,10 @@
 
 #include "ai/ai.h"
 #include "extensions/engine.h"
+#include "extensions/events.h"
+#include "extensions/host.h"
 #include "extensions/pageextension.h"
+#include "types.h"
 
 #include <QAbstractListModel>
 #include <QSet>
@@ -143,6 +146,9 @@ class WorkspaceExtensions : public QObject {
     Q_PROPERTY(int aiPending READ aiPending NOTIFY aiPendingChanged FINAL)
     /// The conversation (its path) whose turn asks the waiting question, "" for any other's.
     Q_PROPERTY(QString questionChat READ questionChat NOTIFY questionChanged FINAL)
+    /// The extensions' timers running (b.timer): [{extension, title, label, remaining, total,
+    /// text}], the one ending first first — the app's banner shows them (the gym's in its view).
+    Q_PROPERTY(QVariantList timers READ timers NOTIFY timersChanged FINAL)
 
 public:
     using Clock = std::function<QDateTime()>;
@@ -193,6 +199,11 @@ public:
     /// without a base, or over other code that arrived meanwhile and was merged in, waits like
     /// any code from elsewhere.
     void savedByEditor(const QString &path, const QString &content, const std::optional<QString> &base = std::nullopt);
+    /// The vault is about to tell the index of `changes` (Workspace::onVaultChanged, before the
+    /// index follows): where each comes from — this device's app, an extension's call running now
+    /// (its write), a sync, another program — and, while hooks listen for "task", the tasks of the
+    /// notes as they were. notesChanged() follows with the same paths.
+    void notesChanging(const QList<VaultChange> &changes);
 
     // ---- extension pages (Settings → Extensions, the page's state line) -------------------------
     /// The state of the extension page `path` (ExtensionRow::state), "" when it is none.
@@ -201,8 +212,20 @@ public:
     Q_INVOKABLE QString pageMessage(const QString &path) const;
     /// The 0-based line its error names, -1 none.
     Q_INVOKABLE int pageErrorLine(const QString &path) const;
-    /// Approves the page's code as it is now on this device and runs it.
-    Q_INVOKABLE void approve(const QString &path);
+    /// Approves the page's code as it is now on this device and runs it (tests, the self-test: the
+    /// app's "Run" approves the version it showed, approveVersion()).
+    void approve(const QString &path);
+    /// What "Run" shows before it approves the page `path` (ShellExtensionApproval.qml): {path,
+    /// title, hash, permissions (texts), newPermissions (texts not approved before), before (an
+    /// approved version is kept to compare with), lines [{kind ("same" | "added" | "removed" |
+    /// "skipped"), text, line, count}], added, removed}; {} when it is no extension page.
+    Q_INVOKABLE QVariantMap approvalReview(const QString &path) const;
+    /// Approves the page's code if it is still the version `hash` that was shown, and runs it:
+    /// "" when done, "changed" when the code is another one now (a sync replaced it meanwhile:
+    /// show it again), "gone" when the page is no extension page any more.
+    Q_INVOKABLE QString approveVersion(const QString &path, const QString &hash);
+    /// The hash of the page's code now ("" for no extension page): the review sees a new version.
+    Q_INVOKABLE QString pageHash(const QString &path) const;
     /// Switches an extension page on or off on this device.
     Q_INVOKABLE void setPageOn(const QString &path, bool on);
     /// A new extension page (an example to start from, approved here); its path, "" on failure.
@@ -219,6 +242,31 @@ public:
     /// The label of a view (b.view's meta.label), else its name.
     Q_INVOKABLE QString viewTitle(const QString &extension, const QString &view) const;
 
+    // ---- an extension's own settings (b.settings; Settings → Extensions → its Settings) ----------
+    /// The settings `extension` declared, each with every key (key, label, kind, description, step,
+    /// unit, options, placeholder) and its value on this device as currentText, currentNumber,
+    /// currentOn and display (a number as shown).
+    Q_INVOKABLE QVariantList settingsOf(const QString &extension) const;
+    /// How many settings `extension` declared (0: none, or it does not run).
+    Q_INVOKABLE int settingsCount(const QString &extension) const;
+    /// The engine's id of the extension page `path` (its own, or the built-in's it overrides), "".
+    Q_INVOKABLE QString pageExtension(const QString &path) const;
+    /// Sets one (a number, a text, true / false, one of a choice's options); false when it does not
+    /// fit the setting. Views draw again.
+    Q_INVOKABLE bool setSetting(const QString &extension, const QString &key, const QVariant &value);
+    /// Every setting of `extension` back to its default.
+    Q_INVOKABLE void resetSettings(const QString &extension);
+
+    // ---- sharing between notebooks ----------------------------------------------------------------
+    /// Where each notebook keeps this device's state (AppController: notebook::deviceStatePath of
+    /// the app's data folder); unset, nothing can be copied.
+    void setDeviceStates(std::function<QString(const QString &root)> stateOf);
+    /// Copies the extension page `path` (with the extension pages its code requires) into the
+    /// notebook at `root`, at the same path, approved there on this device: "" when done (a
+    /// message says so), "conflict" when a page there has other text (call again with `replace`),
+    /// else the error.
+    Q_INVOKABLE QString copyToNotebook(const QString &path, const QString &root, bool replace = false);
+
     // ---- the console ----------------------------------------------------------------------------
     /// Evaluates Luau typed in the console: an expression's value, statements' output.
     Q_INVOKABLE void evaluate(const QString &code);
@@ -230,8 +278,16 @@ public:
     Q_INVOKABLE void runCommand(const QString &extension, const QString &name, const QString &path = QString(), int line = -1,
                                 const QVariantMap &args = QVariantMap());
     /// runCommand() of `command` "<extension>/<name>" on the block at `line` of `path` (the editor);
-    /// "*/run" runs the ```luau block there in the console (runCodeAt()).
-    Q_INVOKABLE void runBlockCommand(const QString &command, const QString &path, int line);
+    /// "*/run" runs the ```luau block there in the console (runCodeAt()). `selection`: the
+    /// editor's selection (ctx.selection).
+    Q_INVOKABLE void runBlockCommand(const QString &command, const QString &path, int line,
+                                     const QString &selection = QString());
+    /// The editor on screen answers the uiAction "offerSelection" with its selection (the text
+    /// selected in a block, else the blocks selected, as Markdown): the command run next from the
+    /// palette gets it as ctx.selection — when it runs on the page `path`.
+    Q_INVOKABLE void offerSelection(const QString &path, const QString &text);
+    /// Forgets an offered selection (the palette asks again for each command).
+    void clearSelection();
     /// A view's node tree ({} and `error` when it failed). Never while a question waits (the waiting
     /// call would be abandoned): {} then, and the view renders again after changed().
     QVariantMap render(const QString &extension, const QString &view, const QVariantMap &params, QString *error);
@@ -270,14 +326,19 @@ public:
     int restTotal() const { return m_restTotal; }
     QString restLabel() const { return m_restLabel; }
     QString restText() const;
+    /// The gym's timer (silownia's b.timer: GymView's banner).
     Q_INVOKABLE void startRest(int seconds, const QString &label);
     Q_INVOKABLE void stopRest();
+    QVariantList timers() const;
+    /// Ends the timer of `extension` without a word (the banner's ×).
+    Q_INVOKABLE void stopTimer(const QString &extension);
 
 Q_SIGNALS:
     void enabledChanged();
     void commandsChanged();
     void questionChanged();
     void restChanged();
+    void timersChanged();
     void revisionChanged();
     void aiPendingChanged();
     /// A command's result or an error, for a toast (kind "info" | "success" | "error").
@@ -342,6 +403,7 @@ private:
         bool hook = false; // a hook: errors to the console, never a question
         bool askedAi = false; // "Asking AI…" said once per call (an agent's loop asks many times)
         QString chat; // a turn of the AI chat: the conversation's path
+        int depth = 0; // hooks answering hooks (events.h): what this call writes is one deeper
         int hookId = 0;
         QString hookEvent;
         QString extension;
@@ -367,8 +429,16 @@ private:
     void setQuestion(const QVariantMap &question);
     void answer(const QVariant &value);
     void tickRest();
-    void runHooks(const QString &event, const QVariantMap &arg);
+    void runHooks(const QString &event, const QVariantMap &arg, const QString &onlyExtension = QString());
+    void runHook(const extensions::HookInfo &hook, const QVariantMap &arg, int depth);
     void flushChanged();
+    void checkDay();
+    /// The modules `id` required (engine's modulesOf) as they are now: loading again when it changes.
+    QString moduleKey(const QString &id) const;
+    /// Keeps the code of `entry` as approved (approvedCode: the next approval's diff).
+    void rememberApproved(const PageEntry &entry);
+    void startTimerFor(const QString &extension, const extensions::TimerSpec &spec);
+    void timerEnded(const QString &extension);
     bool ensureConsole();
     /// Evaluates `code` in the console's environment (`name` in errors); `toast`: the result as a
     /// message too ("Run Luau block": the console may not be on screen).
@@ -398,7 +468,6 @@ private:
     QHash<QString, extensions::Extension> m_lastGood; // engine id → the last version that loaded
     QHash<QString, QString> m_loadErrors; // engine id → why the last load failed
     QHash<int, int> m_hookFailures;
-    QStringList m_changedPages;
     QTimer m_changeTimer;
     CallContext m_current; // the context of the call starting now
     QHash<int, Button> m_buttons; // the buttons of messages shown, by id
@@ -424,12 +493,37 @@ private:
     int m_revision = 0;
     ExtensionListModel *m_list = nullptr;
     ExtensionConsoleModel *m_console = nullptr;
-    QTimer m_restTimer;
-    QDateTime m_restEnd;
+    QTimer m_restTimer; // ticks every timer of m_timers
+    struct RunningTimer
+    {
+        extensions::TimerSpec spec;
+        QDateTime end; // UTC
+        int remaining = 0;
+    };
+    QHash<QString, RunningTimer> m_timers; // by extension (one each)
     int m_restRemaining = 0;
     int m_restTotal = 0;
     QString m_restLabel;
     std::function<void(const QString &, const QString &)> m_notify;
+    // Events (events.h): the burst of changes the hooks hear after 0.6 s, where each change came
+    // from (notesChanging()), the tasks of the notes as they were, the depth of the call running.
+    extensions::ChangeBatch m_batch;
+    struct Changing
+    {
+        extensions::Origin origin = extensions::Origin::App;
+        QString by;
+        int depth = 0;
+        bool existed = false;
+        bool tasksKnown = false;
+        QList<extensions::TaskState> tasks;
+    };
+    QHash<QString, Changing> m_changing; // by path, until notesChanged()
+    int m_runningDepth = 0;
+    bool m_opened = false; // "open" hooks ran for this notebook
+    QDate m_day; // "day" hooks: the day they last heard of
+    QTimer m_dayTimer;
+    QString m_selectionPath, m_selection; // offerSelection()
+    std::function<QString(const QString &)> m_stateOf; // setDeviceStates()
 };
 
 } // namespace brulion::shell

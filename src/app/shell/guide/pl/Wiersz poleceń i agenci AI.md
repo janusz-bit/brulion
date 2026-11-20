@@ -62,7 +62,7 @@ brulion-cli extension run "Licznik słów" policz --page Dom  # zmiany wracają 
 brulion-cli extension list                           # „approval”: czeka na Ciebie
 ```
 
-Kod nie uruchomi się w aplikacji, dopóki go tam nie zatwierdzisz (**Uruchom** na stronie albo **Ustawienia → Rozszerzenia**), a każda zmiana agenta znowu na Ciebie czeka.
+Kod nie uruchomi się w aplikacji, dopóki go tam nie zatwierdzisz (**Przeczytaj i uruchom** na stronie albo **Ustawienia → Rozszerzenia**), a każda zmiana agenta znowu na Ciebie czeka.
 
 ## Otwórz w aplikacji
 `brulion-cli app open <strona>` pokazuje stronę w działającej aplikacji (na tym samym komputerze), `app today` — dzisiejszy dziennik, a `app capture` otwiera szybką notatkę.

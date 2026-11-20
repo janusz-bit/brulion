@@ -5,6 +5,7 @@
 #include "dates/names.h"
 #include "dates/recurrence.h"
 #include "text/text.h"
+#include "util/paths.h"
 #include "util/unicode.h"
 
 #include "lua.h"
@@ -13,6 +14,7 @@
 
 #include <QDate>
 #include <QRandomGenerator>
+#include <QRegularExpression>
 
 #include <algorithm>
 #include <climits>
@@ -130,6 +132,71 @@ return function(raw)
     end
 end
 )luau";
+
+// b.require: the raw function resolves the page and gives back either the module's value (it was
+// required before), or its chunk — loaded in an environment of its own whose `b` is the
+// requester's — which the wrapper runs here, in Luau: a long module is stopped by the time limit
+// as any code is, and its errors reach the script. `done` keeps the value for the next require.
+const char kRequirePrelude[] = R"luau(
+return function(raw, done)
+    return function(name)
+        local state, value, key = raw(name)
+        if state == nil then
+            error(value, 2)
+        end
+        if state == true then
+            return value
+        end
+        local ok, result = pcall(value)
+        done(key, ok, result)
+        if not ok then
+            error(result, 0)
+        end
+        if result == nil then
+            return true
+        end
+        return result
+    end
+end
+)luau";
+
+// `s` cut to at most `max` UTF-16 units — never inside a surrogate pair —, "…" where it was cut.
+QString cutText(const QString &s, qsizetype max)
+{
+    if (s.size() <= max)
+        return s;
+    qsizetype end = std::max<qsizetype>(0, max - 1);
+    if (end > 0 && s[end - 1].isHighSurrogate())
+        --end;
+    return s.left(end) + u'…';
+}
+
+// A question's prompt as a dialog may show it: its first line (the title) and at most so many
+// characters and lines under it, "…" where it was cut.
+QString questionText(const QString &prompt)
+{
+    const qsizetype newline = prompt.indexOf(u'\n');
+    const QString title = cutText(newline < 0 ? prompt : prompt.left(newline), QuestionLimits::title);
+    if (newline < 0)
+        return title;
+    QString body = prompt.mid(newline + 1);
+    qsizetype at = -1;
+    for (int lines = 0; lines < QuestionLimits::lines; ++lines) {
+        at = body.indexOf(u'\n', at + 1);
+        if (at < 0)
+            break;
+    }
+    bool cut = false;
+    if (at >= 0) {
+        body.truncate(at);
+        cut = true;
+    }
+    if (body.size() > QuestionLimits::text) {
+        body = cutText(body, QuestionLimits::text);
+        cut = false; // (cutText marked it)
+    }
+    return title + u'\n' + body + (cut ? u"\n…"_s : QString());
+}
 
 void pushString(lua_State *L, QStringView s)
 {
@@ -594,6 +661,18 @@ bool Engine::start(Host *host, const Limits &limits, QString *error)
     }
     m_aiFactoryRef = lua_ref(m_L, -1);
     lua_pop(m_L, 1);
+
+    bytecode = luau_compile(kRequirePrelude, sizeof(kRequirePrelude) - 1, &options, &size);
+    const int requireRc = luau_load(m_L, "=b.require", bytecode, size, 0);
+    std::free(bytecode);
+    if (requireRc != 0 || lua_pcall(m_L, 0, 1, 0) != 0) {
+        if (error)
+            *error = u"b.require: "_s + toQString(m_L, -1);
+        stop();
+        return false;
+    }
+    m_requireFactoryRef = lua_ref(m_L, -1);
+    lua_pop(m_L, 1);
     return true;
 }
 
@@ -619,6 +698,8 @@ void Engine::stop()
     m_waiting.clear();
     m_uiRef = 0;
     m_aiFactoryRef = 0;
+    m_requireFactoryRef = 0;
+    m_moduleCode.clear();
     m_asking = false;
 }
 
@@ -696,6 +777,18 @@ void Engine::pushEnvironment(const QString &extension)
     set("removeBlock", &Engine::apiRemoveBlock);
     set("setTask", &Engine::apiSetTask);
     set("setProperty", &Engine::apiSetProperty);
+    set("settings", &Engine::apiSettings);
+    set("setting", &Engine::apiSetting);
+    set("setSetting", &Engine::apiSetSetting);
+    set("stopTimer", &Engine::apiStopTimer);
+    // b.require = factory(raw, done): the module's chunk runs in the Luau wrapper (prelude).
+    lua_getref(L, m_requireFactoryRef);
+    lua_pushlstring(L, id.constData(), size_t(id.size()));
+    lua_pushcclosure(L, &Engine::apiRequire, "require", 1);
+    lua_pushlstring(L, id.constData(), size_t(id.size()));
+    lua_pushcclosure(L, &Engine::apiRequireDone, "require", 1);
+    lua_call(L, 2, 1);
+    lua_setfield(L, -2, "require");
     // b.ai = factory(raw): the raw C function yields; the Luau wrapper raises its errors.
     lua_getref(L, m_aiFactoryRef);
     lua_pushlstring(L, id.constData(), size_t(id.size()));
@@ -743,6 +836,8 @@ void Engine::dropExtension(const QString &extension)
     dropWaiting(extension);
     if (const auto it = m_loaded.constFind(extension); it != m_loaded.constEnd()) {
         lua_unref(m_L, it->envRef);
+        for (const int ref : it->moduleRefs)
+            lua_unref(m_L, ref);
         m_loaded.erase(it);
     }
 }
@@ -787,7 +882,10 @@ Result Engine::load(const Extension &extension)
         return {Status::Error, {}, message};
     }
     lua_remove(m_L, -2); // the environment (the chunk keeps it)
+    // (Its top level may return what b.require gives others — functions too —: nothing to convert.)
+    m_loading = true;
     Result r = run(extension.id, {});
+    m_loading = false;
     if (r.status == Status::Suspended) {
         cancel(r.call);
         r = {Status::Error, {}, extension.id + u": an extension cannot ask a question while it loads"_s};
@@ -817,7 +915,7 @@ QList<CommandInfo> Engine::commands() const
     QList<CommandInfo> out;
     for (auto it = m_commands.cbegin(); it != m_commands.cend(); ++it) {
         const QString name = it.key().mid(it->extension.size() + 1);
-        out.append({it->extension, name, it->label.isEmpty() ? name : it->label, it->needsBlock, it->palette});
+        out.append({it->extension, name, it->label.isEmpty() ? name : it->label, it->needsBlock, it->palette, it->key});
     }
     std::sort(out.begin(), out.end(), [](const CommandInfo &a, const CommandInfo &b) {
         return a.extension != b.extension ? a.extension < b.extension : a.name < b.name;
@@ -934,6 +1032,12 @@ Result Engine::finish(int status)
 {
     lua_State *co = m_running;
     disarm();
+    // A call that ends (not one that waits for an answer) leaves no module half-required: the
+    // next b.require of a module it was running when it stopped is no cycle.
+    if (!(status == LUA_YIELD && m_asking && !m_timedOut && !m_outOfMemory)) {
+        if (const auto it = m_loaded.find(m_runningExtension); it != m_loaded.end())
+            it->requiring.clear();
+    }
     // The call is over: the limits' sticky flags end with it (host-side Luau — the environment's
     // b.ai wrapper — must run before the next call is armed).
     const bool timedOut = std::exchange(m_timedOut, false);
@@ -976,7 +1080,7 @@ Result Engine::finish(int status)
     r.call = m_runningCall;
     Unlimited unlimited(&m_unlimited);
     if (status == LUA_OK) {
-        if (lua_gettop(co) > 0) {
+        if (lua_gettop(co) > 0 && !m_loading) {
             QString error;
             if (!toVariant(co, 1, &r.value, &error))
                 r = {Status::Error, {}, error};
@@ -1140,6 +1244,11 @@ int Engine::apiInsertBlock(lua_State *L) { return finishApi(L, self(L)->insertBl
 int Engine::apiRemoveBlock(lua_State *L) { return finishApi(L, self(L)->removeBlockImpl(L)); }
 int Engine::apiSetTask(lua_State *L) { return finishApi(L, self(L)->setTaskImpl(L)); }
 int Engine::apiSetProperty(lua_State *L) { return finishApi(L, self(L)->setPropertyImpl(L)); }
+int Engine::apiRequire(lua_State *L) { return finishApi(L, self(L)->requireImpl(L)); }
+int Engine::apiRequireDone(lua_State *L) { return finishApi(L, self(L)->requireDoneImpl(L)); }
+int Engine::apiSettings(lua_State *L) { return finishApi(L, self(L)->settingsImpl(L)); }
+int Engine::apiSetting(lua_State *L) { return finishApi(L, self(L)->settingImpl(L)); }
+int Engine::apiSetSetting(lua_State *L) { return finishApi(L, self(L)->setSettingImpl(L)); }
 
 int Engine::apiRevision(lua_State *L)
 {
@@ -1202,7 +1311,7 @@ int Engine::commandImpl(lua_State *L)
         return kRaise;
     if (lua_type(L, 2) != LUA_TFUNCTION)
         return failWith(L, u"b.command: argument 2 must be a function"_s);
-    QString label;
+    QString label, shortcut;
     bool needsBlock = false;
     bool palette = true;
     if (lua_type(L, 3) == LUA_TTABLE) {
@@ -1216,9 +1325,13 @@ int Engine::commandImpl(lua_State *L)
         lua_rawgetfield(L, 3, "palette");
         palette = lua_type(L, -1) != LUA_TBOOLEAN || lua_toboolean(L, -1);
         lua_pop(L, 1);
+        lua_rawgetfield(L, 3, "key");
+        if (lua_type(L, -1) == LUA_TSTRING)
+            shortcut = toQString(L, -1).trimmed().left(64);
+        lua_pop(L, 1);
     }
     lua_pushvalue(L, 2);
-    Handler h{extension, lua_ref(L, -1), 0, label, needsBlock, {}, palette};
+    Handler h{extension, lua_ref(L, -1), 0, label, needsBlock, {}, palette, shortcut};
     lua_pop(L, 1);
     const QString key = extension + u'/' + name;
     if (const auto it = m_commands.constFind(key); it != m_commands.constEnd())
@@ -1239,7 +1352,7 @@ int Engine::viewImpl(lua_State *L)
         return failWith(L, u"b.view: argument 3 must be a table of actions"_s);
     if (!lua_isnoneornil(L, 4) && lua_type(L, 4) != LUA_TTABLE)
         return failWith(L, u"b.view: argument 4 must be a table ({label = …, icon = …})"_s);
-    Handler h{extension, 0, 0, {}, false, {}, true};
+    Handler h{extension, 0, 0, {}, false, {}, true, {}};
     if (lua_type(L, 4) == LUA_TTABLE) {
         lua_rawgetfield(L, 4, "label");
         if (lua_type(L, -1) == LUA_TSTRING)
@@ -1293,11 +1406,16 @@ int Engine::pagesImpl(lua_State *L)
         query.tag = tagName(tag.toString());
         if (!propsFrom(map.value(u"prop"_s), &query.props))
             return failWith(L, u"b.pages: prop must be a text or a list of texts"_s);
+        const QVariant paths = map.value(u"paths"_s);
+        if (paths.isValid() && paths.metaType().id() != QMetaType::Bool)
+            return failWith(L, u"b.pages: paths must be true or false"_s);
+        query.paths = paths.toBool();
     } else if (!lua_isnoneornil(L, 1)) {
         return failWith(L, u"b.pages: argument 1 must be a table ({ tag = … }), not %1"_s.arg(
                                    QString::fromUtf8(luaL_typename(L, 1))));
     }
-    const QStringList pages = query.props.isEmpty() ? m_host->pages(query.tag) : m_host->findPages(query);
+    const QStringList pages =
+            query.props.isEmpty() && !query.paths ? m_host->pages(query.tag) : m_host->findPages(query);
     Unlimited unlimited(&m_unlimited);
     pushVariant(L, pages);
     return 1;
@@ -1563,12 +1681,44 @@ int Engine::printImpl(lua_State *L)
 int Engine::timerImpl(lua_State *L)
 {
     double seconds = 0;
-    QString label;
-    if (!argNumber(L, 1, "b.timer", &seconds) || !argOptString(L, 2, "b.timer", &label))
+    TimerSpec spec;
+    if (!argNumber(L, 1, "b.timer", &seconds))
         return kRaise;
+    if (lua_type(L, 2) == LUA_TTABLE) {
+        // b.timer(seconds, { label = …, message = … })
+        QVariant options;
+        if (!argValue(L, 2, "b.timer", &options))
+            return kRaise;
+        const QVariantMap map = options.toMap();
+        for (const QString &key : {u"label"_s, u"message"_s}) {
+            const QVariant v = map.value(key);
+            if (v.isValid() && v.metaType().id() != QMetaType::QString)
+                return failWith(L, u"b.timer: %1 must be a text"_s.arg(key));
+        }
+        spec.label = map.value(u"label"_s).toString();
+        spec.message = map.value(u"message"_s).toString();
+    } else if (!argOptString(L, 2, "b.timer", &spec.label)) {
+        return kRaise;
+    }
     if (!std::isfinite(seconds) || seconds < 1 || seconds > 24 * 3600)
         return failWith(L, u"b.timer: seconds must be between 1 and 86400"_s);
-    m_host->timer(extensionOf(L), int(std::lround(seconds)), label);
+    spec.seconds = int(std::lround(seconds));
+    // What a notification and a banner show: one line each, of a length they have room for.
+    spec.label = cutText(spec.label.simplified(), QuestionLimits::timerLabel);
+    spec.message = cutText(spec.message.simplified(), QuestionLimits::timerMessage);
+    m_host->startTimer(extensionOf(L), spec);
+    return 0;
+}
+
+int Engine::apiStopTimer(lua_State *L)
+{
+    Engine *e = self(L);
+    QString extension;
+    {
+        Unlimited unlimited(&e->m_unlimited);
+        extension = extensionOf(L);
+    }
+    e->m_host->stopTimer(extension);
     return 0;
 }
 
@@ -1583,7 +1733,10 @@ int Engine::dataImpl(lua_State *L)
     return 1;
 }
 
-QStringList Engine::hookEvents() { return {u"save"_s, u"change"_s}; }
+QStringList Engine::hookEvents()
+{
+    return {u"save"_s, u"change"_s, u"task"_s, u"journal"_s, u"open"_s, u"day"_s, u"timer"_s};
+}
 
 int Engine::onImpl(lua_State *L)
 {
@@ -1682,22 +1835,53 @@ int Engine::questionImpl(lua_State *L, const char *kind)
         QVariant fields;
         if (!argString(L, 1, fn.constData(), &title) || !argValue(L, 2, fn.constData(), &fields))
             return kRaise;
-        if (fields.metaType().id() != QMetaType::QVariantList)
+        if (fields.metaType().id() != QMetaType::QVariantList && !(fields.toMap().isEmpty() && lua_type(L, 2) == LUA_TTABLE))
             return failWith(L, function + u": argument 2 must be a list of fields"_s);
-        question.insert(u"title"_s, title);
-        question.insert(u"fields"_s, fields);
+        const QVariantList list = fields.toList();
+        if (list.size() > QuestionLimits::fields)
+            return failWith(L, function + u": at most %1 fields"_s.arg(QuestionLimits::fields));
+        // What the dialog shows of each field, cut to the room it has.
+        QVariantList shown;
+        for (const QVariant &f : list) {
+            QVariantMap field = f.toMap();
+            for (const auto &[key, max] : {std::pair{u"label"_s, QuestionLimits::label}, std::pair{u"unit"_s, 20},
+                                           std::pair{u"placeholder"_s, QuestionLimits::label}}) {
+                if (field.contains(key))
+                    field.insert(key, cutText(field.value(key).toString().simplified(), max));
+            }
+            if (field.value(u"value"_s).metaType().id() == QMetaType::QString)
+                field.insert(u"value"_s, cutText(field.value(u"value"_s).toString(), QuestionLimits::value));
+            shown << field;
+        }
+        question.insert(u"title"_s, questionText(title));
+        question.insert(u"fields"_s, shown);
     } else {
         QString prompt;
         if (!argString(L, 1, fn.constData(), &prompt))
             return kRaise;
-        question.insert(u"prompt"_s, prompt);
+        question.insert(u"prompt"_s, questionText(prompt));
         if (qstrcmp(kind, "choose") == 0) {
             QVariant options;
             if (!argValue(L, 2, fn.constData(), &options))
                 return kRaise;
             if (options.metaType().id() != QMetaType::QVariantList && !(options.toMap().isEmpty() && lua_type(L, 2) == LUA_TTABLE))
                 return failWith(L, function + u": argument 2 must be a list of strings"_s);
-            question.insert(u"options"_s, options.toList());
+            const QVariantList list = options.toList();
+            // A list a dialog can show, of options a tap can give back as they are (never cut).
+            if (list.size() > QuestionLimits::options)
+                return failWith(L, function + u": at most %1 options"_s.arg(QuestionLimits::options));
+            QStringList texts;
+            for (qsizetype i = 0; i < list.size(); ++i) {
+                const int type = list[i].metaType().id();
+                if (type != QMetaType::QString && type != QMetaType::LongLong && type != QMetaType::Double)
+                    return failWith(L, function + u": option %1 is not a string"_s.arg(i + 1));
+                const QString text = list[i].toString();
+                if (text.size() > QuestionLimits::option)
+                    return failWith(L, function + u": option %1 is longer than %2 characters"_s.arg(i + 1).arg(
+                                                       QuestionLimits::option));
+                texts << text;
+            }
+            question.insert(u"options"_s, texts);
         }
     }
     if (L != m_running || !lua_isyieldable(L))
@@ -1976,6 +2160,309 @@ int Engine::setPropertyImpl(lua_State *L)
     Unlimited unlimited(&m_unlimited);
     pushString(L, newRef);
     return 1;
+}
+
+// ---- shared code and settings (docs/EXTENSIONS.md "Shared code", "Settings") --------------------
+
+namespace {
+
+// What b.require's raw function gives back when it cannot: nil and the message (the wrapper raises
+// it at the script's line).
+int requireFailed(lua_State *L, const QString &message)
+{
+    lua_pushnil(L);
+    pushString(L, QString(u"b.require: "_s + message));
+    return 2;
+}
+
+bool isSettingKey(const QString &key)
+{
+    static const QRegularExpression valid(u"^[A-Za-z0-9_-]{1,64}$"_s);
+    return valid.match(key).hasMatch();
+}
+
+bool isNumber(const QVariant &v)
+{
+    const int type = v.metaType().id();
+    return type == QMetaType::LongLong || type == QMetaType::Double || type == QMetaType::Int;
+}
+
+// Whether `value` is one a declared setting can hold.
+bool fitsSetting(const QVariantMap &field, const QVariant &value)
+{
+    const QString kind = field.value(u"kind"_s).toString();
+    if (kind == u"number")
+        return isNumber(value) && std::isfinite(value.toDouble());
+    if (kind == u"toggle")
+        return value.metaType().id() == QMetaType::Bool;
+    if (kind == u"choice")
+        return value.metaType().id() == QMetaType::QString && field.value(u"options"_s).toStringList().contains(value.toString());
+    return value.metaType().id() == QMetaType::QString && value.toString().size() <= QuestionLimits::settingText;
+}
+
+// A setting as b.settings declares it, checked and normalized; "" or the error.
+QString settingField(const QVariant &value, int index, QVariantMap *out)
+{
+    if (value.metaType().id() != QMetaType::QVariantMap)
+        return u"setting %1 must be a table { key = …, label = …, value = … }"_s.arg(index);
+    const QVariantMap map = value.toMap();
+    const QString key = map.value(u"key"_s).toString();
+    if (map.value(u"key"_s).metaType().id() != QMetaType::QString || !isSettingKey(key))
+        return u"setting %1 needs a key of letters, digits, - and _ (at most 64)"_s.arg(index);
+    const QVariant initial = map.value(u"value"_s);
+    QString kind = map.value(u"kind"_s).toString();
+    if (kind.isEmpty())
+        kind = map.contains(u"options"_s)                      ? u"choice"_s
+               : initial.metaType().id() == QMetaType::Bool ? u"toggle"_s
+               : isNumber(initial)                          ? u"number"_s
+                                                            : u"text"_s;
+    if (kind != u"number" && kind != u"text" && kind != u"toggle" && kind != u"choice")
+        return u"the setting \"%1\": kind is \"number\", \"text\", \"toggle\" or \"choice\""_s.arg(key);
+    QVariantMap field{{u"key"_s, key}, {u"kind"_s, kind}};
+    const QString label = map.value(u"label"_s).toString().simplified();
+    field.insert(u"label"_s, cutText(label.isEmpty() ? key : label, QuestionLimits::label));
+    field.insert(u"description"_s, cutText(map.value(u"description"_s).toString().simplified(), 300));
+    if (kind == u"number") {
+        if (initial.isValid() && !isNumber(initial))
+            return u"the setting \"%1\": its value must be a number"_s.arg(key);
+        double step = map.value(u"step"_s, 1).toDouble();
+        if (!std::isfinite(step) || step <= 0)
+            step = 1;
+        field.insert(u"value"_s, initial.isValid() ? initial : QVariant(qint64(0)));
+        field.insert(u"step"_s, step);
+        field.insert(u"unit"_s, cutText(map.value(u"unit"_s).toString().simplified(), 20));
+    } else if (kind == u"toggle") {
+        if (initial.isValid() && initial.metaType().id() != QMetaType::Bool)
+            return u"the setting \"%1\": its value must be true or false"_s.arg(key);
+        field.insert(u"value"_s, initial.toBool());
+    } else if (kind == u"choice") {
+        QStringList options;
+        for (const QVariant &o : map.value(u"options"_s).toList()) {
+            if (o.metaType().id() != QMetaType::QString || o.toString().size() > QuestionLimits::label)
+                return u"the setting \"%1\": its options are texts of at most %2 characters"_s.arg(key).arg(
+                        QuestionLimits::label);
+            if (!options.contains(o.toString()))
+                options << o.toString();
+        }
+        if (options.isEmpty() || options.size() > 50)
+            return u"the setting \"%1\" needs 1 to 50 options"_s.arg(key);
+        if (initial.isValid() && !options.contains(initial.toString()))
+            return u"the setting \"%1\": its value must be one of its options"_s.arg(key);
+        field.insert(u"options"_s, options);
+        field.insert(u"value"_s, initial.isValid() ? initial.toString() : options.first());
+    } else {
+        if (initial.isValid() && initial.metaType().id() != QMetaType::QString)
+            return u"the setting \"%1\": its value must be a text"_s.arg(key);
+        field.insert(u"value"_s, cutText(initial.toString(), QuestionLimits::settingText));
+        field.insert(u"placeholder"_s, cutText(map.value(u"placeholder"_s).toString().simplified(), QuestionLimits::label));
+    }
+    *out = field;
+    return {};
+}
+
+} // namespace
+
+int Engine::requireImpl(lua_State *L)
+{
+    Unlimited unlimited(&m_unlimited); // (host-side: nothing of it may fail half-way)
+    lua_rawcheckstack(L, 8);
+    const QString extension = extensionOf(L);
+    if (lua_type(L, 1) != LUA_TSTRING)
+        return requireFailed(L, u"argument 1 must be a page's name, not %1"_s.arg(QString::fromUtf8(luaL_typename(L, 1))));
+    const QString name = toQString(L, 1).trimmed();
+    const auto loaded = m_loaded.find(extension);
+    if (loaded == m_loaded.end() || name.isEmpty())
+        return requireFailed(L, u"the page's name is empty"_s);
+    const ModuleSource module = m_host->module(extension, name);
+    if (!module.error.isEmpty())
+        return requireFailed(L, module.error);
+    if (const auto known = loaded->moduleRefs.constFind(module.path); known != loaded->moduleRefs.constEnd()) {
+        lua_pushboolean(L, 1);
+        lua_getref(L, *known);
+        return 2;
+    }
+    if (loaded->requiring.contains(module.path)) {
+        QStringList chain;
+        for (const QString &path : std::as_const(loaded->requiring))
+            chain << paths::pageTitle(path);
+        chain << module.title;
+        return requireFailed(L, u"a cycle: "_s + chain.join(u" → "_s));
+    }
+    if (loaded->requiring.size() >= QuestionLimits::requireDepth)
+        return requireFailed(L, u"modules nested more than %1 deep"_s.arg(QuestionLimits::requireDepth));
+    // Brulion compiles the page's code itself (never bytecode from elsewhere), once per version.
+    QByteArray code = m_moduleCode.value(module.hash);
+    if (code.isEmpty() || module.hash.isEmpty()) {
+        lua_CompileOptions options = {};
+        options.optimizationLevel = 1;
+        options.debugLevel = 1;
+        const QByteArray src = module.source.toUtf8();
+        size_t size = 0;
+        char *bytecode = luau_compile(src.constData(), size_t(src.size()), &options, &size);
+        code = QByteArray(bytecode, qsizetype(size));
+        std::free(bytecode);
+        if (m_moduleCode.size() >= 64)
+            m_moduleCode.clear();
+        if (!module.hash.isEmpty())
+            m_moduleCode.insert(module.hash, code);
+    }
+    // Its own globals, the requester's `b` and print: its code does what the requester may.
+    lua_createtable(L, 0, 4);
+    lua_createtable(L, 0, 2);
+    lua_pushvalue(L, LUA_GLOBALSINDEX);
+    lua_setfield(L, -2, "__index");
+    lua_pushliteral(L, "locked");
+    lua_setfield(L, -2, "__metatable");
+    lua_setreadonly(L, -1, true);
+    lua_setmetatable(L, -2);
+    lua_getref(L, loaded->envRef);
+    lua_rawgetfield(L, -1, "b");
+    lua_setfield(L, -3, "b");
+    lua_rawgetfield(L, -1, "print");
+    lua_setfield(L, -3, "print");
+    lua_pop(L, 1);
+    lua_pushvalue(L, -1);
+    lua_setfield(L, -2, "_G");
+    lua_setsafeenv(L, -1, true);
+    const QByteArray chunk = "=" + module.title.toUtf8();
+    if (luau_load(L, chunk.constData(), code.constData(), size_t(code.size()), -1) != 0) {
+        const QString message = toQString(L, -1);
+        lua_pop(L, 2);
+        lua_pushnil(L);
+        pushString(L, message); // (the module's own line: "Wspólne:3: …")
+        return 2;
+    }
+    lua_remove(L, -2); // the environment (the chunk keeps it)
+    loaded->requiring << module.path;
+    lua_pushboolean(L, 0);
+    lua_insert(L, -2);
+    pushString(L, module.path);
+    return 3;
+}
+
+int Engine::requireDoneImpl(lua_State *L)
+{
+    Unlimited unlimited(&m_unlimited);
+    lua_rawcheckstack(L, 2);
+    const auto loaded = m_loaded.find(extensionOf(L));
+    if (loaded == m_loaded.end() || lua_type(L, 1) != LUA_TSTRING)
+        return 0;
+    const QString path = toQString(L, 1);
+    loaded->requiring.removeAll(path);
+    if (!loaded->modules.contains(path))
+        loaded->modules << path; // (a module that failed too: fixing its page loads this again)
+    if (!lua_toboolean(L, 2))
+        return 0;
+    if (lua_isnil(L, 3))
+        lua_pushboolean(L, 1);
+    else
+        lua_pushvalue(L, 3);
+    const int ref = lua_ref(L, -1);
+    lua_pop(L, 1);
+    if (const auto old = loaded->moduleRefs.constFind(path); old != loaded->moduleRefs.constEnd())
+        lua_unref(L, *old);
+    loaded->moduleRefs.insert(path, ref);
+    return 0;
+}
+
+QStringList Engine::modulesOf(const QString &extension) const { return m_loaded.value(extension).modules; }
+
+QVariantList Engine::settingsOf(const QString &extension) const { return m_loaded.value(extension).settings; }
+
+QVariantMap Engine::settingValues(const QString &extension) const
+{
+    QVariantMap values = m_host ? m_host->settings(extension) : QVariantMap();
+    for (const QVariant &f : m_loaded.value(extension).settings) {
+        const QVariantMap field = f.toMap();
+        const QString key = field.value(u"key"_s).toString();
+        if (!fitsSetting(field, values.value(key)))
+            values.insert(key, field.value(u"value"_s));
+    }
+    return values;
+}
+
+int Engine::settingsImpl(lua_State *L)
+{
+    const QString extension = extensionOf(L);
+    const auto loaded = m_loaded.find(extension);
+    if (loaded == m_loaded.end())
+        return failWith(L, u"b.settings: no such extension"_s);
+    if (!lua_isnoneornil(L, 1)) {
+        if (lua_type(L, 1) != LUA_TTABLE)
+            return failWith(L, u"b.settings: argument 1 must be a list of settings"_s);
+        QVariant value;
+        if (!argValue(L, 1, "b.settings", &value))
+            return kRaise;
+        if (value.metaType().id() != QMetaType::QVariantList && !value.toMap().isEmpty())
+            return failWith(L, u"b.settings: argument 1 must be a list of settings"_s);
+        const QVariantList list = value.toList();
+        if (list.size() > QuestionLimits::settings)
+            return failWith(L, u"b.settings: at most %1 settings"_s.arg(QuestionLimits::settings));
+        QVariantList fields;
+        QStringList keys;
+        for (qsizetype i = 0; i < list.size(); ++i) {
+            QVariantMap field;
+            if (const QString error = settingField(list[i], int(i + 1), &field); !error.isEmpty())
+                return failWith(L, u"b.settings: "_s + error);
+            const QString key = field.value(u"key"_s).toString();
+            if (keys.contains(key))
+                return failWith(L, u"b.settings: the key \"%1\" is there twice"_s.arg(key));
+            keys << key;
+            fields << field;
+        }
+        loaded->settings = fields;
+    }
+    const QVariantMap values = settingValues(extension);
+    Unlimited unlimited(&m_unlimited);
+    pushVariant(L, values);
+    return 1;
+}
+
+int Engine::settingImpl(lua_State *L)
+{
+    QString key;
+    if (!argString(L, 1, "b.setting", &key))
+        return kRaise;
+    const QVariant value = settingValues(extensionOf(L)).value(key);
+    Unlimited unlimited(&m_unlimited);
+    pushVariant(L, value);
+    return 1;
+}
+
+int Engine::setSettingImpl(lua_State *L)
+{
+    const QString extension = extensionOf(L);
+    QString key;
+    if (!argString(L, 1, "b.setSetting", &key))
+        return kRaise;
+    if (!isSettingKey(key))
+        return failWith(L, u"b.setSetting: a key is letters, digits, - and _ (at most 64)"_s);
+    const int type = lua_type(L, 2);
+    if (type != LUA_TNIL && type != LUA_TNONE && type != LUA_TBOOLEAN && type != LUA_TNUMBER && type != LUA_TSTRING)
+        return failWith(L, u"b.setSetting: a setting is a text, a number or true / false, not %1"_s.arg(
+                                   QString::fromUtf8(luaL_typename(L, 2))));
+    QVariant value;
+    if (type != LUA_TNONE && !argValue(L, 2, "b.setSetting", &value))
+        return kRaise;
+    if (value.metaType().id() == QMetaType::QString && value.toString().size() > QuestionLimits::settingText)
+        return failWith(L, u"b.setSetting: a text of at most %1 characters"_s.arg(QuestionLimits::settingText));
+    if (value.isValid() && value.metaType().id() == QMetaType::Double && !std::isfinite(value.toDouble()))
+        return failWith(L, u"b.setSetting: the number is none"_s);
+    for (const QVariant &f : m_loaded.value(extension).settings) {
+        const QVariantMap field = f.toMap();
+        if (field.value(u"key"_s).toString() != key || !value.isValid() || fitsSetting(field, value))
+            continue;
+        const QString kind = field.value(u"kind"_s).toString();
+        const QString what = kind == u"number" ? u"a number"_s
+                             : kind == u"toggle" ? u"true or false"_s
+                             : kind == u"choice" ? u"one of its options"_s
+                                                 : u"a text"_s;
+        return failWith(L, u"b.setSetting: \"%1\" is %2"_s.arg(key, what));
+    }
+    const QString error = m_host->setSetting(extension, key, value);
+    if (!error.isEmpty())
+        return failWith(L, u"b.setSetting: "_s + error);
+    return 0;
 }
 
 } // namespace brulion::extensions

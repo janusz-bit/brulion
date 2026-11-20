@@ -27,6 +27,8 @@ struct ExtensionRow
     QString description;
     int commands = 0, views = 0, hooks = 0;
     int errorLine = -1; ///< 0-based line of the page the error names, -1 none
+    int settings = 0; ///< the settings it declared (b.settings): Settings → Extensions shows them
+    QStringList modules; ///< the extension pages it requires (b.require), their titles
 
     friend bool operator==(const ExtensionRow &, const ExtensionRow &) = default;
 };
@@ -48,6 +50,8 @@ public:
         ViewsRole,
         HooksRole,
         ErrorLineRole,
+        SettingsRole,
+        ModulesRole,
     };
     using QAbstractListModel::QAbstractListModel;
 

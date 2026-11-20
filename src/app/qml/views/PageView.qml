@@ -940,8 +940,17 @@ FocusScope {
                     visible: extensionState.state === "approval"
                     size: "small"
                     variant: "primary"
-                    text: qsTr("Run")
-                    onClicked: Workspace.extensions.approve(root.routePath)
+                    text: qsTr("Read and run")
+                    onClicked: AppController.requestUiAction("approveExtension:" + root.routePath)
+                }
+                BIconButton {
+                    objectName: "pageExtensionSettings"
+                    visible: extensionState.state === "running" && Workspace.extensions.revision >= 0
+                             && Workspace.extensions.settingsCount(Workspace.extensions.pageExtension(root.routePath)) > 0
+                    label: qsTr("Settings of the extension")
+                    iconName: "settings"
+                    size: "small"
+                    onClicked: AppController.requestUiAction("extensionSettings:" + Workspace.extensions.pageExtension(root.routePath))
                 }
                 BButton {
                     visible: extensionState.state === "error" && extensionState.errorLine >= 0
@@ -1350,6 +1359,8 @@ FocusScope {
                 editor.copyCurrentLink(Js.sliceFrom(action, 9))
             else if (Js.startsWith(action, "extension:") && editor.visible)
                 editor.runExtensionCommand(Js.sliceFrom(action, 10))
+            else if (action === "offerSelection" && editor.visible)
+                Workspace.extensions.offerSelection(root.routePath, editor.selectionForExtensions())
             else if (action === "saveWebPictures" && editor.visible)
                 editor.downloadWebPictures("")
             else if (action === "addProperty" && editor.visible)

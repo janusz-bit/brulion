@@ -1,6 +1,7 @@
 #include "extensions/notebookhost.h"
 
 #include "extensions/blockedit.h"
+#include "extensions/pageextension.h"
 #include "extensions/sandbox.h"
 #include "index/query.h"
 #include "index/vaultindex.h"
@@ -13,7 +14,11 @@
 #include "text/text.h"
 #include "util/paths.h"
 #include "util/unicode.h"
+#include "vault/localstore.h"
 #include "vault/vault.h"
+
+#include <QJsonDocument>
+#include <QJsonObject>
 
 #include <algorithm>
 
@@ -288,12 +293,13 @@ QStringList NotebookHost::findPages(const PageQuery &query)
         if (const QString k = key.trimmed().toLower(); !k.isEmpty())
             props << k;
     QStringList out;
-    m_index.forEachNote([&](const VaultPath &, const ParsedNote &note) {
+    m_index.forEachNote([&](const VaultPath &path, const ParsedNote &note) {
         if (!wanted.isEmpty() && !(note.tags.contains(wanted) && pageTags(note).contains(wanted)))
             return;
         if (!props.isEmpty() && std::ranges::none_of(props, [&](const QString &k) { return note.properties.contains(k); }))
             return;
-        out << note.title;
+        // (A path is one page: two pages of one name in different folders are two paths.)
+        out << (query.paths ? QString(path) : note.title);
     });
     std::stable_sort(out.begin(), out.end(), [](const QString &a, const QString &b) { return text::compareNames(a, b) < 0; });
     out.erase(std::unique(out.begin(), out.end()), out.end());
@@ -698,6 +704,92 @@ void NotebookHost::timer(const QString &extension, int seconds, const QString &l
 {
     if (onTimer)
         onTimer(extension, seconds, label);
+}
+
+void NotebookHost::startTimer(const QString &extension, const TimerSpec &spec)
+{
+    if (onExtensionTimer)
+        onExtensionTimer(extension, spec);
+    else
+        timer(extension, spec.seconds, spec.label);
+}
+
+void NotebookHost::stopTimer(const QString &extension)
+{
+    if (onExtensionTimer)
+        onExtensionTimer(extension, TimerSpec{});
+}
+
+ModuleSource NotebookHost::module(const QString &requester, const QString &name)
+{
+    ModuleSource out;
+    const VaultPath path = pathOf(name);
+    if (path.isEmpty()) {
+        out.error = u"no page named “%1”"_s.arg(name);
+        return out;
+    }
+    // A page the dry run wrote is read as it wrote it (an extension writing its library first).
+    bool ok = false;
+    const QString content = currentText(path, &ok);
+    const ParsedNote *indexed = dryWrite(path) ? nullptr : m_index.note(path);
+    const ParsedNote parsed = indexed ? ParsedNote() : markdown::parseNote(path, content, m_vault.config());
+    const ParsedNote &note = indexed ? *indexed : parsed;
+    if (!ok || !isExtensionPage(note)) {
+        out.error = u"“%1” is no extension page (tags: [extension])"_s.arg(note.title.isEmpty() ? name : note.title);
+        return out;
+    }
+    const PageExtension page = readPageExtension(path, note, content);
+    if (page.blocks == 0) {
+        out.error = u"“%1” has no ```luau block"_s.arg(page.title);
+        return out;
+    }
+    if (page.id == requester) {
+        out.error = u"“%1” is the extension's own page"_s.arg(page.title);
+        return out;
+    }
+    if (m_options.moduleAllowed) {
+        if (const QString why = m_options.moduleAllowed(path, page.hash); !why.isEmpty()) {
+            out.error = u"“%1” %2"_s.arg(page.title, why);
+            return out;
+        }
+    }
+    out.id = page.id;
+    out.title = page.title;
+    out.path = path;
+    out.source = page.source;
+    out.hash = page.hash;
+    return out;
+}
+
+QVariantMap NotebookHost::settings(const QString &extension)
+{
+    if (const auto dry = m_drySettings.constFind(extension); dry != m_drySettings.constEnd())
+        return *dry;
+    LocalStore *store = m_vault.store();
+    if (!store)
+        return {};
+    return store->get(settingsStoreKey(extension)).toObject().toVariantMap();
+}
+
+QString NotebookHost::setSetting(const QString &extension, const QString &key, const QVariant &value)
+{
+    QVariantMap values = settings(extension);
+    if (!value.isValid() || value.isNull())
+        values.remove(key);
+    else
+        values.insert(key, value);
+    const QJsonObject object = QJsonObject::fromVariantMap(values);
+    if (QJsonDocument(object).toJson(QJsonDocument::Compact).size() > kMaxSettingsBytes)
+        return u"the extension's settings are full (%1 KB)"_s.arg(kMaxSettingsBytes / 1024);
+    if (m_options.dryRun) {
+        m_drySettings.insert(extension, values);
+        return {};
+    }
+    LocalStore *store = m_vault.store();
+    if (!store)
+        return u"this notebook keeps no settings"_s;
+    store->set(settingsStoreKey(extension), values.isEmpty() ? QJsonValue(QJsonValue::Undefined) : QJsonValue(object));
+    return {};
 }
 
 void NotebookHost::log(const QString &extension, const QString &message)
