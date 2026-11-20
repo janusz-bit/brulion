@@ -1,6 +1,7 @@
 #include "workspacechats.h"
 
 #include "workspace.h"
+#include "workspaceagents.h"
 #include "workspaceextensions.h"
 
 #include "capture.h"
@@ -59,6 +60,15 @@ void ChatTurn::setPartial(const QString &text, const QString &thoughts, const QS
     Q_EMIT partialChanged();
 }
 
+void ChatTurn::setActivity(const QVariantList &tools, const QVariantList &plan)
+{
+    if (tools == m_tools && plan == m_plan)
+        return;
+    m_tools = tools;
+    m_plan = plan;
+    Q_EMIT activityChanged();
+}
+
 void ChatTurn::clearPartial()
 {
     m_partialTimer.stop();
@@ -71,36 +81,41 @@ void ChatTurn::clearPartial()
 // ---- WorkspaceChats -------------------------------------------------------------------------------
 
 WorkspaceChats::WorkspaceChats(Workspace *workspace, WorkspaceExtensions *extensions, QObject *parent)
-    : QObject(parent), m_workspace(workspace), m_extensions(extensions)
+    : QObject(parent), m_workspace(workspace), m_extensions(extensions), m_agents(new WorkspaceAgents(workspace, this))
 {
     connect(m_extensions, &WorkspaceExtensions::chatAnswered, this, &WorkspaceChats::answered);
     connect(m_extensions, &WorkspaceExtensions::chatFailed, this, &WorkspaceChats::failed);
-    connect(m_extensions, &WorkspaceExtensions::chatStatus, this, [this](const QString &key, const QString &text) {
-        ChatTurn *t = m_byKey.value(key);
-        if (!t || text == t->m_status)
-            return;
-        t->m_status = text;
-        Q_EMIT t->stateChanged();
+    connect(m_extensions, &WorkspaceExtensions::chatStatus, this, &WorkspaceChats::setStatus);
+    connect(m_extensions, &WorkspaceExtensions::chatPartial, this, &WorkspaceChats::setWriting);
+    connect(m_extensions, &WorkspaceExtensions::commandsChanged, this, &WorkspaceChats::partnersChanged);
+    connect(m_extensions, &WorkspaceExtensions::questionChanged, this, &WorkspaceChats::questionsMoved);
+    connect(m_extensions, &WorkspaceExtensions::chatQuestionsChanged, this, &WorkspaceChats::questionsMoved);
+    // An AI agent's turns (WorkspaceAgents) end, say and ask the same way.
+    connect(m_agents, &WorkspaceAgents::answered, this, &WorkspaceChats::answered);
+    connect(m_agents, &WorkspaceAgents::failed, this, &WorkspaceChats::failed);
+    connect(m_agents, &WorkspaceAgents::status, this, &WorkspaceChats::setStatus);
+    connect(m_agents, &WorkspaceAgents::partial, this, [this](const QString &key, const QString &text, const QString &thoughts) {
+        setWriting(key, text, thoughts, 0, 0);
     });
-    connect(m_extensions, &WorkspaceExtensions::chatPartial, this,
-            [this](const QString &key, const QString &text, const QString &thoughts, int tokens, qint64 writingMs) {
-                ChatTurn *t = m_byKey.value(key);
-                if (!t)
-                    return;
-                t->m_nextPartial = text;
-                t->m_nextThoughts = thoughts;
-                if (text.isEmpty() && thoughts.isEmpty() && tokens == 0) {
-                    t->clearPartial(); // (a new request: at once)
-                    return;
-                }
-                if (tokens > 0) {
-                    t->m_samples.append({writingMs, tokens});
-                    while (t->m_samples.size() > 200)
-                        t->m_samples.removeFirst();
-                }
-                if (!t->m_partialTimer.isActive())
-                    t->m_partialTimer.start();
-            });
+    connect(m_agents, &WorkspaceAgents::questionChanged, this, [this](const QString &key) {
+        questionsMoved();
+        // A question nobody sees: said where the user is (a toast that opens the conversation).
+        if (ChatTurn *t = m_byKey.value(key); t && !isShown(t->m_path)) {
+            const QString text = m_agents->questionText(key).section(u'\n', 0, 0);
+            if (!text.isEmpty())
+                Q_EMIT questionWaiting(t->m_path, text);
+        }
+    });
+    connect(m_agents, &WorkspaceAgents::activityChanged, this, [this](const QString &key) {
+        if (ChatTurn *t = m_byKey.value(key))
+            t->setActivity(m_agents->tools(key), m_agents->plan(key));
+    });
+    connect(m_agents, &WorkspaceAgents::sessionChanged, this, [this] {
+        ++m_agentSerial;
+        Q_EMIT agentsChanged();
+    });
+    connect(m_agents, &WorkspaceAgents::checked, this, &WorkspaceChats::agentChecked);
+    connect(m_agents, &WorkspaceAgents::remembered, this, &WorkspaceChats::agentRemembered);
     connect(m_extensions, &WorkspaceExtensions::aiSettingsChanged, this, [this] {
         Q_EMIT settingsChanged();
         startWaiting(); // (a provider on the network answers every conversation at once)
@@ -124,6 +139,151 @@ WorkspaceChats::WorkspaceChats(Workspace *workspace, WorkspaceExtensions *extens
     });
     connect(this, &WorkspaceChats::stateChanged, this, &WorkspaceChats::updateRunningShown);
     connect(this, &WorkspaceChats::shownChanged, this, &WorkspaceChats::updateRunningShown);
+}
+
+void WorkspaceChats::setStatus(const QString &key, const QString &text)
+{
+    ChatTurn *t = m_byKey.value(key);
+    if (!t || text == t->m_status)
+        return;
+    t->m_status = text;
+    Q_EMIT t->stateChanged();
+}
+
+void WorkspaceChats::setWriting(const QString &key, const QString &text, const QString &thoughts, int tokens,
+                                qint64 writingMs)
+{
+    ChatTurn *t = m_byKey.value(key);
+    if (!t)
+        return;
+    t->m_nextPartial = text;
+    t->m_nextThoughts = thoughts;
+    if (text.isEmpty() && thoughts.isEmpty() && tokens == 0) {
+        t->clearPartial(); // (a new request: at once)
+        return;
+    }
+    if (tokens > 0) {
+        t->m_samples.append({writingMs, tokens});
+        while (t->m_samples.size() > 200)
+            t->m_samples.removeFirst();
+    }
+    if (!t->m_partialTimer.isActive())
+        t->m_partialTimer.start();
+}
+
+void WorkspaceChats::questionsMoved()
+{
+    ++m_questionSerial;
+    Q_EMIT questionsChanged();
+}
+
+QVariantList WorkspaceChats::partners() const
+{
+    return m_extensions->chatPartners() + m_agents->partners();
+}
+
+QString WorkspaceChats::partnerLabel(const QString &partner) const
+{
+    return WorkspaceAgents::isAgent(partner) ? m_agents->label(partner) : m_extensions->partnerLabel(partner);
+}
+
+void WorkspaceChats::setAgents(const QList<AgentConfig> &agents)
+{
+    if (agents == m_agents->agents())
+        return;
+    m_agents->setAgents(agents);
+    Q_EMIT partnersChanged();
+}
+
+bool WorkspaceChats::agentsAvailable() const
+{
+    return WorkspaceAgents::available();
+}
+
+bool WorkspaceChats::isAgent(const QString &partner) const
+{
+    return WorkspaceAgents::isAgent(partner);
+}
+
+QVariantList WorkspaceChats::agentOptions(const QString &path, const QString &partner, int) const
+{
+    return isAgent(partner) ? m_agents->options(path, partner) : QVariantList();
+}
+
+QVariantList WorkspaceChats::agentChoices(const QString &path, const QString &partner, const QString &option, int) const
+{
+    for (const QVariant &row : agentOptions(path, partner)) {
+        const QVariantMap o = row.toMap();
+        if (o.value(u"id"_s).toString() == option)
+            return o.value(u"choices"_s).toList();
+    }
+    return {};
+}
+
+void WorkspaceChats::setAgentOption(const QString &path, const QString &partner, const QString &option,
+                                    const QString &value)
+{
+    if (isAgent(partner))
+        m_agents->setOption(path, partner, option, value);
+}
+
+QVariantList WorkspaceChats::agentCommands(const QString &path, const QString &partner, const QString &typed, int) const
+{
+    // A command being written: "/" and its name, nothing after it yet.
+    if (!isAgent(partner) || !typed.startsWith(u'/') || typed.contains(u' ') || typed.contains(u'\n'))
+        return {};
+    const QString prefix = typed.mid(1);
+    QVariantList out;
+    for (const QVariant &row : m_agents->commands(path, partner)) {
+        if (row.toMap().value(u"name"_s).toString().startsWith(prefix, Qt::CaseInsensitive))
+            out.append(row);
+        if (out.size() == 12)
+            break;
+    }
+    return out;
+}
+
+QString WorkspaceChats::agentUsage(const QString &path, int) const
+{
+    return m_agents->usage(path);
+}
+
+void WorkspaceChats::checkAgent(const QString &id)
+{
+    m_agents->check(id);
+}
+
+bool WorkspaceChats::asking(const QString &path, int) const
+{
+    return !path.isEmpty()
+           && (!m_agents->questionOptions(path).isEmpty() || m_extensions->chatQuestionKind(path) == u"choose");
+}
+
+QString WorkspaceChats::questionText(const QString &path, int) const
+{
+    if (!m_agents->questionOptions(path).isEmpty())
+        return m_agents->questionText(path);
+    return m_extensions->chatQuestionKind(path) == u"choose" ? m_extensions->chatQuestionTitle(path) : QString();
+}
+
+QStringList WorkspaceChats::questionOptions(const QString &path, int) const
+{
+    if (const QStringList agent = m_agents->questionOptions(path); !agent.isEmpty())
+        return agent;
+    return m_extensions->chatQuestionKind(path) == u"choose" ? m_extensions->chatQuestionOptions(path) : QStringList();
+}
+
+QVariantMap WorkspaceChats::questionDiff(const QString &path, int) const
+{
+    return m_agents->questionOptions(path).isEmpty() ? QVariantMap() : m_agents->questionDiff(path);
+}
+
+void WorkspaceChats::answer(const QString &path, const QString &option)
+{
+    if (!m_agents->questionOptions(path).isEmpty())
+        m_agents->answer(path, option);
+    else
+        m_extensions->answerChat(path, option);
 }
 
 double WorkspaceChats::tokensPerSecond(const QList<std::pair<qint64, int>> &samples, qint64 windowMs)
@@ -358,7 +518,8 @@ bool WorkspaceChats::runTurn(ChatTurn *t)
         setFailure(t, tr("There is no question to answer: write one."));
         return false;
     }
-    if (onDevice() && m_onDevice && m_onDevice != t) {
+    // (An AI agent of the user's own is no model on the device: it never waits in line.)
+    if (onDevice() && m_onDevice && m_onDevice != t && !WorkspaceAgents::isAgent(conversation.partner)) {
         // The model on the device answers another conversation: this one waits in line.
         t->m_running = true;
         t->m_queued = true;
@@ -379,9 +540,12 @@ bool WorkspaceChats::startTurn(ChatTurn *t)
     bool ok = false;
     const QString content = m_workspace->read(t->m_path, &ok);
     const chat::Conversation conversation = chat::parse(content);
-    // Whole turns from the oldest left out when the conversation does not fit the model.
-    const int from = chat::firstSent(conversation, historyBudget());
-    const QVariantList history = chat::history(conversation, from, seesPictures());
+    // Whole turns from the oldest left out when the conversation does not fit the model. (An AI
+    // agent gets them only when its session is new: as much as a model on the network, pictures
+    // as files it reads.)
+    const bool agent = WorkspaceAgents::isAgent(conversation.partner);
+    const int from = chat::firstSent(conversation, agent ? NetworkBudget : historyBudget());
+    const QVariantList history = chat::history(conversation, from, agent || seesPictures());
     if (!ok || history.isEmpty() || history.last().toMap().value(u"role"_s) != u"user"_s) {
         t->m_running = false;
         t->m_queued = false;
@@ -398,12 +562,15 @@ bool WorkspaceChats::startTurn(ChatTurn *t)
     t->m_status.clear();
     t->m_failure.clear();
     t->clearPartial();
-    if (onDevice())
+    if (onDevice() && !agent)
         m_onDevice = t;
     Q_EMIT t->stateChanged();
     Q_EMIT stateChanged();
     // (A missing partner fails at once, through failed().)
-    m_extensions->runChat(t->m_key, history, conversation.page, conversation.partner, from);
+    if (agent)
+        m_agents->run(t->m_key, conversation.partner, history, conversation.page);
+    else
+        m_extensions->runChat(t->m_key, history, conversation.page, conversation.partner, from);
     return true;
 }
 
@@ -477,6 +644,7 @@ void WorkspaceChats::stop(const QString &path)
     const QString key = t->m_key;
     endTurn(t);
     m_extensions->stopChat(key);
+    m_agents->stop(key);
 }
 
 void WorkspaceChats::stopAll()
@@ -494,6 +662,7 @@ void WorkspaceChats::dismissFailure(const QString &path)
 
 void WorkspaceChats::reset()
 {
+    m_agents->reset();
     m_waiting.clear();
     m_byKey.clear();
     m_onDevice = nullptr;
@@ -525,6 +694,7 @@ void WorkspaceChats::endTurn(ChatTurn *t)
     t->m_place = 0;
     t->m_status.clear();
     t->clearPartial();
+    t->setActivity({}, {});
     Q_EMIT t->stateChanged();
     const bool freed = m_onDevice == t;
     if (freed)

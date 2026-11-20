@@ -31,9 +31,13 @@
 #include <memory>
 #include <optional>
 
+class QJsonArray;
+class QJsonObject;
 class QSettings;
 
 namespace brulion::shell {
+
+struct AgentConfig;
 
 class AppSettings : public QObject {
     Q_OBJECT
@@ -105,6 +109,12 @@ class AppSettings : public QObject {
     /// The address is plain http to another machine (ai::Settings::unencrypted()): the settings
     /// say that notes and the key can be read on the way.
     Q_PROPERTY(bool aiUnencrypted READ aiUnencrypted NOTIFY aiChanged FINAL)
+    /// AI agents of the user's own that answer in the AI chat (the Agent Client Protocol:
+    /// workspaceagents.h): rows {id, name, command, tools} — the programs this device may start,
+    /// so they live here and never in the notebook. Empty in the browser and on Android.
+    Q_PROPERTY(QVariantList acpAgents READ acpAgentRows NOTIFY acpAgentsChanged FINAL)
+    /// Agents can run in this app (the desktop app).
+    Q_PROPERTY(bool acpAvailable READ acpAvailable CONSTANT FINAL)
 
     // ---- Editor -------------------------------------------------------------------------
     /// "sans" (default, Inter) | "serif" (Literata) (Theme.editorFont).
@@ -323,6 +333,22 @@ public:
     /// Stores the AI key ("" forgets it); false when it could not be written.
     Q_INVOKABLE bool setAiKey(const QString &key);
     QString aiKey() const;
+    QList<AgentConfig> acpAgents() const;
+    QVariantList acpAgentRows() const;
+    bool acpAvailable() const;
+    /// Adds an agent: one of WorkspaceAgents::presets() by its id ("claude", "codex", "gemini"),
+    /// or "" for one of the user's own (no command yet). Its id ("claude-2" when one is there).
+    Q_INVOKABLE QString addAcpAgent(const QString &preset);
+    /// Changes the agent `id`'s name or command (empty: left as it is) / Brulion's tools.
+    Q_INVOKABLE void setAcpAgentName(const QString &id, const QString &name);
+    Q_INVOKABLE void setAcpAgentCommand(const QString &id, const QString &command);
+    Q_INVOKABLE void setAcpAgentTools(const QString &id, bool on);
+    Q_INVOKABLE void removeAcpAgent(const QString &id);
+    /// What the chat learnt of agent `id`: the options chosen for its sessions and the options its
+    /// last session offered (AgentConfig::options, ::known).
+    void setAcpAgentMemory(const QString &id, const QJsonObject &options, const QJsonArray &known);
+    /// The agents a preset offers ({id, name, command}), for the settings' menu.
+    Q_INVOKABLE QVariantList acpPresets() const;
     void setCaptureButtonShown(bool on);
     /// Back to the default look: accent, backgrounds, fonts, density, line spacing, sizes (the
     /// visibility of elements stays).
@@ -520,6 +546,7 @@ Q_SIGNALS:
     void flashcardsEnabledChanged();
     void flashcardsSettingsChanged();
     void aiChanged();
+    void acpAgentsChanged();
     void editorLineSpacingChanged();
     void editorFontChanged();
     void editorFontSizeChanged();
@@ -552,6 +579,7 @@ Q_SIGNALS:
     void valueChanged(const QString &key);
 
 private:
+    void storeAcpAgents(const QList<AgentConfig> &agents);
     template<typename T>
     bool store(QAnyStringView key, const T &value, const T &current);
 

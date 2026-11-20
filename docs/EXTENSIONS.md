@@ -1594,7 +1594,10 @@ of several conversations run side by side, each its own call. A partner is an ex
 other: its page runs on this device only as the version approved here ("Extensions in the
 notebook"), and what a turn writes is its extension's write — other extensions' hooks hear it with
 its name (`by`), its own hooks do not ("Hooks"). A partner that is not running (its extension off,
-its page not approved) fails the turn with "The chat partner “…” is not running".
+its page not approved) fails the turn with "The chat partner “…” is not running". Besides the
+extensions, an AI agent the user runs on the computer (Claude Code, Codex, Gemini CLI …) can be a
+partner — `partner: acp:<id>`, set up in Settings → Extensions → AI agents, no extension involved
+(docs/UI.md "AI agents (ACP)").
 
 ```luau
 -- A partner of one's own in the AI chat: it answers as a pirate, with the model of the settings.

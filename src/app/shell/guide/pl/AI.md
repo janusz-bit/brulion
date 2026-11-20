@@ -17,7 +17,7 @@ Otwórz **Ustawienia → Rozszerzenia → AI** i wybierz:
 Naciśnij **Sprawdź**: model odpowie „OK” albo zobaczysz, co jest nie tak.
 
 > [!note] Subskrypcje
-> Subskrypcja Claude Pro/Max albo ChatGPT Plus działa tylko w aplikacjach tych firm; inne programy używają klucza API, rozliczanego osobno, za użycie. Pytanie o jedną notatkę kosztuje ułamek grosza. Z subskrypcją możesz zamiast tego dać tym aplikacjom dostęp do notatek: [[Wiersz poleceń i agenci AI#Twoje notatki w claude.ai i ChatGPT]].
+> Subskrypcja Claude Pro/Max albo ChatGPT Plus działa tylko w aplikacjach tych firm; inne programy używają klucza API, rozliczanego osobno, za użycie. Pytanie o jedną notatkę kosztuje ułamek grosza. Z subskrypcją możesz zamiast tego dać tym aplikacjom dostęp do notatek: [[Wiersz poleceń i agenci AI#Twoje notatki w claude.ai i ChatGPT]] — albo, na komputerze, pozwolić ich własnemu agentowi odpowiadać w czacie z AI: [[#Własny agent AI (ACP)]].
 
 Klucz zostaje **tylko na tym urządzeniu** (nie w notatniku, nie w synchronizacji, nie w dziennikach zdarzeń). Notatki trafiają do dostawcy tylko wtedy, gdy o to poprosisz, albo gdy zrobi to rozszerzenie zatwierdzone przez Ciebie z uprawnieniem `ai`.
 
@@ -90,6 +90,19 @@ b.command("pirat", function(ctx)
     })
 end, { label = "Pirat", chat = true })
 ```
+
+## Własny agent AI (ACP)
+Na komputerze w czacie z AI może też odpowiadać agent AI, którego uruchamiasz sam — **Claude Code**, **Codex**, **Gemini CLI**, **OpenCode** albo dowolny program mówiący protokołem **Agent Client Protocol** (ACP), tym samym, przez który łączą się z nimi edytory takie jak Zed. Agent loguje się sam, więc **działa Twoja subskrypcja**: Claude Code korzysta z logowania do Claude Pro/Max, Codex — do ChatGPT.
+
+1. **Ustawienia → Rozszerzenia → Agenci AI → Dodaj**: Claude Code, Codex, Gemini CLI albo OpenCode — uruchamiane przez `npx`, więc potrzebny jest Node.js — albo **Inny agent…** z własnym poleceniem. **Sprawdź** uruchamia go w folderze notatnika i mówi, czy odpowiada i jakim modelem.
+2. W czacie z AI wybierz go jako tego, **kto odpowiada** w rozmowie.
+
+Agent pracuje w folderze notatnika: czyta i zmienia notatki przez Brulion — zmienioną stronę od razu widać w edytorze i w **historii** strony — i uruchamia polecenia, których wynik widać w rozmowie, razem z jego planem i każdym krokiem. Z włączonymi **Narzędziami Brulionu** (domyślnie) dostaje też `brulion-cli mcp` — szukanie, zapytania, zadania, dzienniki ([[Wiersz poleceń i agenci AI]]). Zanim zmieni plik albo uruchomi polecenie, pyta — tak, jak każą jego własne ustawienia — a pytanie pojawia się w rozmowie, zmiana pliku jako porównanie wersji, z odpowiedziami (**Allow**, **Reject** …); gdy jesteś gdzie indziej w Brulionie, mówi o tym komunikat z przyciskiem **Otwórz**. Gdy agent prosi o zalogowanie, też pyta w rozmowie; logowanie w terminalu jest nazwane w komunikacie (np. uruchom `claude` i wpisz `/login`). **Zatrzymaj** przerywa jego turę.
+
+Nad rozmową jego **model**, **tryb** (ile może zrobić bez pytania), **wysiłek** i reszta to chipy: stuknij, żeby wybrać — agent zapamięta wybór na kolejne rozmowy, także przed ich pierwszą wiadomością. Obok widać, ile jego pamięci zajmuje rozmowa i ile kosztowała. Wpisz `/` w polu, żeby zobaczyć polecenia agenta (`/review`, `/compact` …). Rozmowa toczy się dalej w tej samej sesji agenta także po ponownym uruchomieniu Brulionu; rozmowa zmieniona w międzyczasie (pisana na telefonie, z odpowiedzią asystenta) zaczyna nową sesję, która dostaje całą jej treść.
+
+> [!warning] Agent to Twój program
+> Działa z Twoimi uprawnieniami na tym komputerze, a to, co może zrobić bez pytania, jest jego własnym ustawieniem (jego trybem). Agentów uruchamia tylko aplikacja na komputer; na telefonie i w przeglądarce rozmowa z agentem mówi, że nie da się go tam uruchomić.
 
 ## We własnych rozszerzeniach
 Strona rozszerzenia z `ai` wśród uprawnień może pytać model:

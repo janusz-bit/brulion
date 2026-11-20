@@ -4,7 +4,8 @@
 // `- 🤖 …` messages, each with its time). Sending a message writes it into its page — a new
 // conversation first gets its page, named after the question, and a line in today's journal that
 // links to it — and then runs the turn of its partner (WorkspaceExtensions::runChat: the built-in
-// assistant's command "chat", or an extension's chat command the page's `partner:` names) with the
+// assistant's command "chat", or an extension's chat command the page's `partner:` names; an AI
+// agent of the user's own, `partner: acp:<id>`, through WorkspaceAgents) with the
 // conversation's messages — whole turns from the oldest left out when they do not fit the model
 // (chat::firstSent, historyBudget) — and the page it is about; the answer is written into the page
 // as the AI's message. Pictures go with a message as attachments of the notebook embedded in it
@@ -21,10 +22,13 @@
 //   Workspace.chats.turn(path).running / queued / status / partial / thoughts / failure
 //   Workspace.chats.stop(path) / retry(path) / dismissFailure(path)
 //   Workspace.chats.rename(path, "Nowa nazwa") / remove(path)        // the list's menu
+//   Workspace.chats.partners() / asking(path, questionSerial) / answer(path, option)
 //
 // Single-threaded (the GUI thread).
 
 #include <QHash>
+#include <QJsonArray>
+#include <QJsonObject>
 #include <QList>
 #include <QObject>
 #include <QPointer>
@@ -39,7 +43,9 @@
 namespace brulion::shell {
 
 class Workspace;
+class WorkspaceAgents;
 class WorkspaceExtensions;
+struct AgentConfig;
 class WorkspaceChats;
 
 /// The turn of one conversation (WorkspaceChats::turn): whether it runs or waits for the model
@@ -73,6 +79,10 @@ class ChatTurn : public QObject {
     Q_PROPERTY(QString allThoughts READ allThoughts NOTIFY partialChanged FINAL)
     /// How fast the model writes now ("16,7 tok/s"); "" when not known.
     Q_PROPERTY(QString speed READ speed NOTIFY partialChanged FINAL)
+    /// An AI agent's turn: its tool calls ({title, status, kind, output}) and its plan ({content,
+    /// status}) as they go; [] otherwise.
+    Q_PROPERTY(QVariantList tools READ tools NOTIFY activityChanged FINAL)
+    Q_PROPERTY(QVariantList plan READ plan NOTIFY activityChanged FINAL)
 
 public:
     explicit ChatTurn(const QString &path, QObject *parent = nullptr);
@@ -90,9 +100,12 @@ public:
     QString thoughts() const { return m_thoughts; }
     QString allThoughts() const { return m_allThoughts; }
     QString speed() const { return m_speed; }
+    QVariantList tools() const { return m_tools; }
+    QVariantList plan() const { return m_plan; }
 
 Q_SIGNALS:
     void stateChanged();
+    void activityChanged();
     /// partial or thoughts changed (at most ten times a second).
     void partialChanged();
     /// partialSettled changed: a block of the answer was finished.
@@ -102,6 +115,7 @@ private:
     friend class WorkspaceChats;
     void setPartial(const QString &text, const QString &thoughts, const QString &speed);
     void clearPartial();
+    void setActivity(const QVariantList &tools, const QVariantList &plan);
 
     QString m_path;
     QString m_key; // the path the running turn was started with (its answer comes with it)
@@ -117,6 +131,8 @@ private:
     QString m_thoughts;
     QString m_allThoughts;
     QString m_speed;
+    QVariantList m_tools;
+    QVariantList m_plan;
     QString m_nextPartial; // what comes, said by m_partialTimer
     QString m_nextThoughts;
     QList<std::pair<qint64, int>> m_samples; // the request's {writing ms, tokens}, for its speed
@@ -143,6 +159,13 @@ class WorkspaceChats : public QObject {
     Q_PROPERTY(bool dictationAvailable READ dictationAvailable NOTIFY dictationChanged FINAL)
     /// Dictation listens now.
     Q_PROPERTY(bool listening READ listening NOTIFY dictationChanged FINAL)
+    /// Changes whenever a question of a turn comes or goes (asking() and the rest ask again).
+    Q_PROPERTY(int questionSerial READ questionSerial NOTIFY questionsChanged FINAL)
+    /// Changes whenever an AI agent's session options, commands or usage change (agentOptions()
+    /// and the rest ask again).
+    Q_PROPERTY(int agentSerial READ agentSerial NOTIFY agentsChanged FINAL)
+    /// AI agents run here (the desktop app).
+    Q_PROPERTY(bool agentsAvailable READ agentsAvailable CONSTANT FINAL)
 
 public:
     WorkspaceChats(Workspace *workspace, WorkspaceExtensions *extensions, QObject *parent = nullptr);
@@ -217,10 +240,53 @@ public:
     Q_INVOKABLE QString remove(const QString &path);
 
     // ---- who answers ----------------------------------------------------------------------------
+    /// Who may answer: the built-in assistant, the extensions' chat commands
+    /// (WorkspaceExtensions::chatPartners()) and the AI agents set up on this device
+    /// (WorkspaceAgents::partners()): {id, label, extension}.
+    Q_INVOKABLE QVariantList partners() const;
+    /// A partner's name as the chat shows it ("" for one not running or not set up here).
+    Q_INVOKABLE QString partnerLabel(const QString &partner) const;
+    /// The AI agents of this device (AppSettings::acpAgents).
+    void setAgents(const QList<AgentConfig> &agents);
+    WorkspaceAgents *agents() const { return m_agents; }
+    int agentSerial() const { return m_agentSerial; }
+    bool agentsAvailable() const;
+    /// The partner is an AI agent ("acp:…").
+    Q_INVOKABLE bool isAgent(const QString &partner) const;
+    /// An AI agent's options for the conversation `path` ("" a new one) answered by `partner`
+    /// (WorkspaceAgents::options(): {id, name, description, boolean, current, currentName,
+    /// choices}); `serial`: agentSerial.
+    Q_INVOKABLE QVariantList agentOptions(const QString &path, const QString &partner, int serial = 0) const;
+    /// The choices of one of them ({value, name, description, group}).
+    Q_INVOKABLE QVariantList agentChoices(const QString &path, const QString &partner, const QString &option,
+                                          int serial = 0) const;
+    Q_INVOKABLE void setAgentOption(const QString &path, const QString &partner, const QString &option,
+                                    const QString &value);
+    /// The agent's slash commands matching what is typed (`typed` starts with "/"; {name,
+    /// description, hint}, at most 12); [] when `typed` is no command being written.
+    Q_INVOKABLE QVariantList agentCommands(const QString &path, const QString &partner, const QString &typed,
+                                           int serial = 0) const;
+    /// How much of the agent's context the conversation uses and what it cost ("" nothing known).
+    Q_INVOKABLE QString agentUsage(const QString &path, int serial = 0) const;
+    /// Settings → AI agents → Check: agentChecked(id, ok, text) follows.
+    Q_INVOKABLE void checkAgent(const QString &id);
     /// The conversation's partner (its page's `partner:`, "" the built-in assistant).
     Q_INVOKABLE QString partnerOf(const QString &path) const;
     /// Sets who answers the conversation from now on (its page's frontmatter; "" the assistant).
     Q_INVOKABLE bool setPartner(const QString &path, const QString &partner);
+
+    // ---- what a turn asks (a change to allow, an agent's permission or sign-in) ----------------
+    int questionSerial() const { return m_questionSerial; }
+    /// The turn of `path` waits for the user's choice (`serial`: questionSerial, so a binding asks
+    /// again).
+    Q_INVOKABLE bool asking(const QString &path, int serial = 0) const;
+    /// Its text — a line of title, then the details (plain text: it quotes notes) — and options.
+    Q_INVOKABLE QString questionText(const QString &path, int serial = 0) const;
+    Q_INVOKABLE QStringList questionOptions(const QString &path, int serial = 0) const;
+    /// The change of a file an AI agent's question is about ({path, oldText, newText}; {} none).
+    Q_INVOKABLE QVariantMap questionDiff(const QString &path, int serial = 0) const;
+    /// Answers it with `option` (one of questionOptions()).
+    Q_INVOKABLE void answer(const QString &path, const QString &option);
 
     // ---- pictures sent with a message -----------------------------------------------------------
     /// A picture picked from a file (a file dialog, a drop, a photo the camera took) stored as an
@@ -267,6 +333,16 @@ Q_SIGNALS:
     void runningShownChanged();
     /// The model's settings changed (historyBudget, seesPictures, onDevice).
     void settingsChanged();
+    /// Who may answer changed (partners()).
+    void partnersChanged();
+    void questionsChanged();
+    void agentsChanged();
+    /// An AI agent asks something in the conversation `path`, which no chat view shows: `text`
+    /// says who asks what (AppController shows it as a toast with Open).
+    void questionWaiting(const QString &path, const QString &text);
+    void agentChecked(const QString &id, bool ok, const QString &text);
+    /// The options of agent `id` were chosen or learnt (AppSettings keeps them).
+    void agentRemembered(const QString &id, const QJsonObject &options, const QJsonArray &known);
     /// addPictures() got files that are no pictures (or could not be stored).
     void picturesRefused();
     void photoTaken(const QString &path);
@@ -286,12 +362,18 @@ private:
     void updatePlaces();
     void answered(const QString &key, const QString &text);
     void failed(const QString &key, const QString &error);
+    void setStatus(const QString &key, const QString &text);
+    void setWriting(const QString &key, const QString &text, const QString &thoughts, int tokens, qint64 writingMs);
+    void questionsMoved();
     void setFailure(ChatTurn *turn, const QString &failure);
     void endTurn(ChatTurn *turn);
     void updateRunningShown();
 
     Workspace *m_workspace = nullptr;
     WorkspaceExtensions *m_extensions = nullptr;
+    WorkspaceAgents *m_agents = nullptr;
+    int m_questionSerial = 0;
+    int m_agentSerial = 0;
     QHash<QString, ChatTurn *> m_turns;         // by path, lower case
     QHash<QString, QPointer<ChatTurn>> m_byKey; // the running turns by the path they started with
     QList<QPointer<ChatTurn>> m_waiting;        // in line for the model on the device, in order

@@ -16,6 +16,8 @@
 #include "demovault.h"
 #include "traypopup.h"
 #include "workspace.h"
+#include "workspaceagents.h"
+#include "workspacechats.h"
 #include "workspaceintegration.h"
 
 #include "autostart.h"  // src/platform
@@ -317,6 +319,21 @@ AppController::AppController(const Options &options, QObject *parent)
     aiSettings();
     connect(m_settings.get(), &AppSettings::aiChanged, this, aiSettings);
     m_workspace->extensions()->setLocalAi(m_localAi.get());
+    // The AI agents of this device answer in the AI chat (workspaceagents.h).
+    const auto agents = [this] { m_workspace->chats()->setAgents(m_settings->acpAgents()); };
+    agents();
+    connect(m_settings.get(), &AppSettings::acpAgentsChanged, this, agents);
+    connect(m_workspace->chats(), &WorkspaceChats::agentRemembered, this,
+            [this](const QString &id, const QJsonObject &options, const QJsonArray &known) {
+                m_settings->setAcpAgentMemory(id, options, known);
+            });
+    connect(m_workspace->chats(), &WorkspaceChats::agentChecked, this,
+            [this](const QString &, bool ok, const QString &text) { toast(text, ok ? u"success"_s : u"error"_s); });
+    // An agent's question in a conversation no chat view shows: a toast whose Open shows it.
+    connect(m_workspace->chats(), &WorkspaceChats::questionWaiting, this, [this](const QString &path, const QString &text) {
+        const int id = toastWithAction(text, u"info"_s, tr("Open"));
+        m_chatToasts.insert(id, path);
+    });
     // The model chosen in the settings is the one Settings → Extensions → AI downloads and removes.
     m_localAi->setChosen(m_settings->aiLocalModel());
     connect(m_settings.get(), &AppSettings::aiChanged, this,
@@ -2156,6 +2173,10 @@ void AppController::hostToastActionTriggered(int hostId)
         m_workspace->extensions()->pressButton(m_extensionToasts.take(id));
         return;
     }
+    if (m_chatToasts.contains(id)) {
+        navigate(QVariantMap{{u"view"_s, u"chat"_s}, {u"path"_s, m_chatToasts.take(id)}});
+        return;
+    }
     Q_EMIT toastActionTriggered(id);
 }
 
@@ -2165,6 +2186,7 @@ void AppController::hostToastRemoved(int hostId)
     m_restoreToasts.remove(id);
     m_renameToasts.remove(id);
     m_functionToasts.remove(id);
+    m_chatToasts.remove(id);
     if (m_extensionToasts.contains(id))
         m_workspace->extensions()->forgetButton(m_extensionToasts.take(id));
 }

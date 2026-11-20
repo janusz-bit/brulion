@@ -1504,7 +1504,7 @@ Item {
                 id: aiGroup
                 objectName: "aiSettings"
                 heading: qsTr("AI")
-                note: qsTr("Extensions with the “ai” permission can ask a model about your notes — also on the phone. Claude and ChatGPT subscriptions cannot be used by other apps: an API key is billed separately, by use (a few notes cost fractions of a cent). A server of your own (Ollama, LM Studio) needs no key, and neither does a model on this device, which sends nothing anywhere. What an extension sends goes to the provider chosen; the key stays on this device.")
+                note: qsTr("Extensions with the “ai” permission can ask a model about your notes — also on the phone. Claude and ChatGPT subscriptions cannot be used by other apps: an API key is billed separately, by use (a few notes cost fractions of a cent). A server of your own (Ollama, LM Studio) needs no key, and neither does a model on this device, which sends nothing anywhere. What an extension sends goes to the provider chosen; the key stays on this device.") + (AppSettings.acpAvailable ? " " + qsTr("A subscription works with an AI agent on this computer: see “AI agents” below.") : "")
 
                 readonly property bool local: AppSettings.aiProvider === "local"
                 readonly property list<var> providers: [{ value: "anthropic", text: "Claude" }, { value: "openai", text: qsTr("OpenAI-compatible") }]
@@ -1728,6 +1728,155 @@ Item {
                         busy: Workspace.extensions.aiPending > 0
                         text: qsTr("Check")
                         onClicked: Workspace.extensions.testAi()
+                    }
+                }
+            }
+
+            // AI agents of the user's own (the Agent Client Protocol: shell/workspaceagents.h) that
+            // answer in the AI chat: the programs this device may start, kept in its settings.
+            SettingsGroup {
+                id: agentsGroup
+                objectName: "acpAgentsSettings"
+                visible: AppSettings.acpAvailable
+                heading: qsTr("AI agents")
+                note: qsTr("An AI agent on this computer (Claude Code, Codex, Gemini CLI, or any program that speaks the Agent Client Protocol) can answer in the AI chat: choose it as who answers a conversation. It runs in the notebook's folder and signs in by itself, so a Claude or ChatGPT subscription its own program uses works here too. Each change it makes to a file and each command it runs is shown in the conversation for your yes, as the agent asks for it. The presets start the agents with npx (Node.js); a command of your own may be any program.")
+
+                Repeater {
+                    model: AppSettings.acpAgents
+                    delegate: ShellSettingRow {
+                        id: agentRow
+                        required property var modelData
+                        readonly property string agentId: AppController.routeText(agentRow.modelData, "id")
+                        readonly property string command: AppController.routeText(agentRow.modelData, "command")
+                        objectName: "acpAgentRow"
+                        Layout.fillWidth: true
+                        title: AppController.routeText(agentRow.modelData, "name")
+                        description: AppController.routeText(agentRow.modelData, "summary")
+                        BButton {
+                            objectName: "acpAgentCheck"
+                            size: "small"
+                            variant: "secondary"
+                            iconName: "sparkles"
+                            text: qsTr("Check")
+                            enabled: agentRow.command !== ""
+                            onClicked: Workspace.chats.checkAgent(agentRow.agentId)
+                        }
+                        BButton {
+                            objectName: "acpAgentEdit"
+                            size: "small"
+                            variant: "ghost"
+                            iconName: "pencil"
+                            text: qsTr("Edit…")
+                            onClicked: agentDialog.edit(agentRow.agentId, agentRow.title, agentRow.command,
+                                                        AppController.routeFlag(agentRow.modelData, "tools"))
+                        }
+                        BIconButton {
+                            objectName: "acpAgentRemove"
+                            label: qsTr("Remove")
+                            iconName: "trash-2"
+                            onClicked: AppSettings.removeAcpAgent(agentRow.agentId)
+                        }
+                    }
+                }
+                ShellSettingRow {
+                    title: qsTr("Add an agent")
+                    description: qsTr("Who answers is chosen in each conversation of the AI chat.")
+                    BButton {
+                        id: addAgentButton
+                        objectName: "acpAgentAdd"
+                        size: "small"
+                        iconName: "plus"
+                        text: qsTr("Add")
+                        onClicked: addAgentMenu.popup(addAgentButton, 0, addAgentButton.height)
+                    }
+                }
+                BMenu {
+                    id: addAgentMenu
+                    objectName: "acpAgentAddMenu"
+                    Instantiator {
+                        model: AppSettings.acpPresets()
+                        delegate: BMenuItem {
+                            id: presetItem
+                            required property var modelData
+                            objectName: "acpAgentPreset"
+                            text: AppController.routeText(presetItem.modelData, "name")
+                            hint: AppController.routeText(presetItem.modelData, "command")
+                            onTriggered: AppSettings.addAcpAgent(AppController.routeText(presetItem.modelData, "id"))
+                        }
+                        onObjectAdded: (index, object) => addAgentMenu.insertItem(index, object as Item)
+                        onObjectRemoved: (index, object) => addAgentMenu.removeItem(object as Item)
+                    }
+                    BMenuSeparator {}
+                    BMenuItem {
+                        objectName: "acpAgentOwn"
+                        text: qsTr("Another agent…")
+                        hint: qsTr("Your own command")
+                        onTriggered: {
+                            const id = AppSettings.addAcpAgent("")
+                            if (id !== "")
+                                agentDialog.edit(id, qsTr("My agent"), "", true)
+                        }
+                    }
+                }
+                BDialog {
+                    id: agentDialog
+                    objectName: "acpAgentDialog"
+                    property string agentId
+                    title: qsTr("AI agent")
+                    subtitle: qsTr("A program that speaks the Agent Client Protocol: it runs in the notebook's folder and signs in by itself.")
+                    iconName: "sparkles"
+                    acceptText: qsTr("Save")
+                    acceptEnabled: Js.trim(agentNameField.text) !== ""
+                    initialFocusItem: agentCommandField
+                    function edit(id: string, name: string, command: string, tools: bool): void {
+                        agentDialog.agentId = id
+                        agentNameField.text = name
+                        agentCommandField.text = command
+                        agentToolsSwitch.checked = tools
+                        agentDialog.open()
+                    }
+                    onAccepted: {
+                        AppSettings.setAcpAgentName(agentDialog.agentId, agentNameField.text)
+                        AppSettings.setAcpAgentCommand(agentDialog.agentId, agentCommandField.text)
+                        AppSettings.setAcpAgentTools(agentDialog.agentId, agentToolsSwitch.checked)
+                    }
+                    BText {
+                        Layout.fillWidth: true
+                        text: qsTr("Name")
+                        variant: "label"
+                    }
+                    BTextField {
+                        id: agentNameField
+                        objectName: "acpAgentName"
+                        Layout.fillWidth: true
+                        accessibleName: qsTr("Name")
+                    }
+                    BText {
+                        Layout.fillWidth: true
+                        Layout.topMargin: Theme.space2
+                        text: qsTr("Command")
+                        variant: "label"
+                    }
+                    BTextField {
+                        id: agentCommandField
+                        objectName: "acpAgentCommand"
+                        Layout.fillWidth: true
+                        placeholderText: "npx -y @agentclientprotocol/claude-agent-acp"
+                        accessibleName: qsTr("Command")
+                        inputMethodHints: Qt.ImhNoAutoUppercase | Qt.ImhNoPredictiveText
+                    }
+                    BText {
+                        Layout.fillWidth: true
+                        text: qsTr("The program and its arguments, as in a terminal: npx -y @agentclientprotocol/claude-agent-acp, npx -y @agentclientprotocol/codex-acp, gemini --acp, opencode acp.")
+                        variant: "caption"
+                        wrapMode: Text.Wrap
+                    }
+                    SettingSwitch {
+                        id: agentToolsSwitch
+                        objectName: "acpAgentTools"
+                        Layout.topMargin: Theme.space2
+                        text: qsTr("Brulion's tools")
+                        description: qsTr("Its sessions get Brulion's MCP server (brulion-cli mcp): search, queries, tasks and journals of this notebook.")
                     }
                 }
             }

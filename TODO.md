@@ -13,6 +13,11 @@ done in the repository simply disappears from the list.
   ChatGPT themselves (it passes the official MCP Python SDK and reads their published client
   documents) and the desktop app starting it from Settings, and search by meaning rather than
   words (docs/SEMANTIC.md).
+* **AI agents (ACP): what is still missing** — an agent the user runs answers in the AI chat over
+  the Agent Client Protocol (docs/UI.md "AI agents (ACP)"; tried with Claude Code, Codex and
+  OpenCode). Missing: a try with Gemini CLI (it needs a Google sign-in) and on Windows (a preset's
+  `npx.cmd` through `cmd.exe /c`) and macOS; and the other direction — Brulion's assistant as an
+  ACP agent for Zed and JetBrains (`brulion-cli acp`, which needs `b.ai` in brulion-cli).
 * **The AI chat and the writing assistant: what is still to check** — on a real phone: a photo
   from the camera app for a message (the activity recreated while the camera is in front loses the
   photo's path, kept only in memory) and dictation with Google's recognizer and with none

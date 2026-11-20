@@ -17,7 +17,7 @@ Open **Settings → Extensions → AI** and choose:
 Press **Check**: the model answers "OK", or you see what is wrong.
 
 > [!note] Subscriptions
-> A Claude Pro/Max or ChatGPT Plus subscription works only in those companies' own apps; other apps use an API key, billed separately by use. A question about one note costs a fraction of a cent. With a subscription, let those apps reach your notes instead: [[Command line and AI agents#Your notes in claude.ai and ChatGPT]].
+> A Claude Pro/Max or ChatGPT Plus subscription works only in those companies' own apps; other apps use an API key, billed separately by use. A question about one note costs a fraction of a cent. With a subscription, let those apps reach your notes instead: [[Command line and AI agents#Your notes in claude.ai and ChatGPT]] — or, on the computer, let their own agent answer in the AI chat: [[#An AI agent of your own (ACP)]].
 
 The key stays **only on this device** (not in the notebook, not in sync, not in the logs). Notes go to the provider only when you ask, or when an extension you approved with the `ai` permission does.
 
@@ -90,6 +90,19 @@ b.command("pirate", function(ctx)
     })
 end, { label = "Pirate", chat = true })
 ```
+
+## An AI agent of your own (ACP)
+On the computer, the AI chat can also be answered by an AI agent you run yourself — **Claude Code**, **Codex**, **Gemini CLI**, **OpenCode** or any program that speaks the **Agent Client Protocol** (ACP), the protocol editors such as Zed use for them. The agent signs in by itself, so **your subscription works**: Claude Code uses your Claude Pro/Max login, Codex your ChatGPT login.
+
+1. **Settings → Extensions → AI agents → Add**: Claude Code, Codex, Gemini CLI or OpenCode — started with `npx`, so Node.js must be installed — or **Another agent…** with a command of your own. **Check** starts it in the notebook's folder and tells you whether it answers, and with which model.
+2. In the AI chat choose it as **who answers** a conversation.
+
+The agent works in the notebook's folder: it reads and changes your notes through Brulion — a page it changes is in the editor at once and in the page's **history** — and runs commands whose output you see in the conversation, with its plan and each step it takes. With **Brulion's tools** on (the default) it also gets `brulion-cli mcp` — search, queries, tasks, journals ([[Command line and AI agents]]). Before it changes a file or runs a command it asks — as its own settings say — and the question shows in the conversation, a file's change as a diff, with its answers (**Allow**, **Reject** …); when you are elsewhere in Brulion, a message says so, with **Open**. When it wants you to sign in, the conversation asks too; a sign-in in a terminal is named in the message (e.g. run `claude` and type `/login`). **Stop** cancels its turn.
+
+Above the conversation, its **model**, **mode** (how much it may do without asking), **effort** and the rest are chips: tap one to choose — the agent remembers it for its next conversations, also before their first message. Next to them, how much of its memory the conversation uses and what it cost. Type `/` in the field for the agent's own commands (`/review`, `/compact` …). A conversation goes on in the same session of the agent even after Brulion is started again; one that changed meanwhile (written on the phone, answered by the assistant) starts a new session that gets all of it.
+
+> [!warning] An agent is a program of yours
+> It runs with your rights on this computer, and what it may do without asking is its own setting (its mode). Agents run only in the desktop app; on the phone and in the browser a conversation with one says that it cannot be started there.
 
 ## In your own extensions
 An extension page with `ai` among its permissions can ask a model:

@@ -1059,7 +1059,9 @@ the AI assistant's switch (`AppSettings.assistantEnabled`), the provider (Claude
 with the model runner), the API key (a password field; saved when editing finishes, then emptied:
 "Saved on this device", "Forget"), the model and the address (`aiModel`, `aiBaseUrl`; placeholders
 show the defaults), "Check" (`Workspace.extensions.testAi()`: the model's "OK" or the error as a
-toast; busy while `aiPending`). The group's note says what it costs and where the notes go.
+toast; busy while `aiPending`). The group's note says what it costs and where the notes go (and,
+where AI agents run, that a subscription works with one). Under it the group **AI agents**
+(`acpAgentsSettings`, docs "AI agents (ACP)" below).
 With **On this device** the key, model and address rows give way to the model's own
 (`AppController.localAi`, `src/app/shell/localai.h` — typed `FINAL` properties about the chosen
 model, so the bindings compile): **Model** (`aiLocalModelSetting`: Brulion / LFM3 1.7B /
@@ -1108,7 +1110,8 @@ not as `extview.…`.
 `message-square`): conversations with the AI, as in a messenger. Each one is a page in `AI/`
 (docs/SYNTAX.md §14), named after its first question and linked from that day's journal; the
 assistant's agent answers (docs/EXTENSIONS.md "AI") — or an extension's chat command chosen for the
-conversation (docs/EXTENSIONS.md "Chat partners").
+conversation (docs/EXTENSIONS.md "Chat partners"), or an AI agent of the user's own ("AI agents
+(ACP)" below).
 
 * **Routes**: `{view: "chat"}` the conversations; `{view: "chat", path}` one; `{view: "chat", new:
   true, page?, prompt?}` a new one about `page` (a page name as a link names it), `prompt` sent at
@@ -1251,6 +1254,104 @@ coalesced to ten a second; `thoughtsTail()`: the last 240 characters from a word
 on the device hands on its tokens) and is stopped (`ai::Pending::stop`) with the turn, or when the
 extensions load again. The model on the device's line is kept here (`m_waiting`, one turn on it at a
 time); a change of the provider (`WorkspaceExtensions::aiSettingsChanged`) starts the waiting ones.
+Who may answer (`partners()`, `partnerLabel()`, `partnersChanged`: the extensions' and the agents')
+and what a turn asks (`asking(path, questionSerial)`, `questionText()`, `questionOptions()`,
+`answer()`: a change the assistant asks a yes for, an agent's permission or sign-in) are the
+chat's, whoever answers.
+
+### AI agents (ACP)
+
+An AI agent the user runs on this computer answers a conversation like a partner: Claude Code
+(through `@agentclientprotocol/claude-agent-acp`), Codex (`@agentclientprotocol/codex-acp`), Gemini
+CLI (`--acp`), OpenCode (`opencode acp`) or any program that speaks the
+[Agent Client Protocol](https://agentclientprotocol.com) (version 1: JSON-RPC 2.0, a message a line
+on its standard input and output). The agent signs in by itself — the subscription its own program
+knows how to use, or a key of its own — so the app holds none of its credentials. Desktop only
+(`WorkspaceAgents::available()`): Android and the browser start no programs; there a conversation
+with an agent fails its turn and says so. Tried with Claude Code 0.109, Codex 2.8 and OpenCode 1.19
+(the opt-in test `tst_shell_agents realAgent`, `BRULION_REAL_ACP_AGENT="<command>"`).
+
+* **Settings → Extensions → AI agents** (`acpAgentsSettings`, shown where agents run): a row per
+  agent (`acpAgentRow`: its name, its command — the middle of a long one left out — and whether it
+  gets Brulion's tools) with **Check** (`acpAgentCheck`: the agent started in the notebook's folder,
+  a session made without a question — a toast says "Claude Code works (Claude Agent 0.109.0). Model:
+  Sonnet 5.5 · Mode: Auto" or why not, and the chat learns its options), **Edit…** (`acpAgentEdit` →
+  `acpAgentDialog`: `acpAgentName`, `acpAgentCommand`, `acpAgentTools`) and Remove
+  (`acpAgentRemove`); **Add** (`acpAgentAdd` → `acpAgentAddMenu`: the presets Claude Code, Codex,
+  Gemini CLI and OpenCode started with `npx -y …`, or "Another agent…", `acpAgentOwn`, which opens the
+  dialog). Kept in the device's settings (`AppSettings::acpAgents`, key `ai/agents`: rows {id, name,
+  command, tools, options, known}; at most 20, malformed rows left out) — never in the notebook,
+  which comes from anywhere: a page may only name an agent set up here.
+* **Who answers**: an agent is offered among the partners (`acp:<id>`, its name, "AI agent") and the
+  conversation's page keeps it (`partner: acp:claude`, docs/SYNTAX.md §14); an agent not set up on
+  this device fails the turn with what to do.
+* **Its options** (`chatAgentOptions` under the conversation's row, `chatNewAgentOptions` before a
+  new one's first message; `ChatAgentOptions.qml`): a chip per option of the session — its model,
+  mode, effort … (`configOptions`; an agent's older `modes` and `models` as options of their own) —
+  showing its choice, whose menu (`chatAgentChoices`, `chatAgentChoice`: name, description or group,
+  ✓) sets another (`session/set_config_option`, `session/set_mode`, `session/set_model`); a bool a
+  chip that toggles. A choice is remembered for the agent (`AgentConfig::options`, with the options
+  its last session offered, `known`) and set on every new session before its first prompt — so a
+  model the account cannot use is chosen once (Codex on a ChatGPT Free plan). After them the
+  session's usage (`chatAgentUsage`: "4.3 % of the context · 0.21 USD", the agent's `usage_update`).
+* **Slash commands**: while the field holds "/" and a name being typed, the agent's commands that
+  match are chips above it (`chatCommands`, `chatCommand`: `available_commands_update` of the
+  session, or of the agent's last one); a tap writes "/name " — the agent reads it as it is.
+* **Its program** (`shell/workspaceagents.h`, the protocol `src/core/acp/acp.h`): one process per
+  agent, started for its first turn in the notebook's folder (the command split as a shell would,
+  the app's environment; on Windows a batch file — `npx` is `npx.cmd` — through `cmd.exe /c`) and
+  kept while the notebook is open; several conversations answer at once, a session each. With
+  Brulion's tools on, each session gets `brulion-cli mcp --vault <folder>` as an MCP server
+  (`brulion-cli` next to the app, else on PATH; none found: no tools). What it writes to its
+  standard error goes to the log; when it ends, its turns fail with its last line ("stopped: it
+  ended with code 1: …") and the next turn starts it again. A changed program or a removed agent
+  stops; a notebook closed stops them all.
+* **What the app serves it**: the notebook's files (`fs/read_text_file` — its lines, `line` and
+  `limit` — and `fs/write_text_file`) through the Workspace, so a page it changes is seen by the
+  editor at once and kept in the page's history — only files of the notebook's folder (a path
+  outside it or a link out of it is refused), never an encrypted page written; and terminals
+  (`terminal/create`, `output`, `wait_for_exit`, `kill`, `release`): the command runs as a program of
+  the app in the folder it names (the notebook's by default), its output kept to the agent's limit
+  (1 MiB by default, cut at a character), at most 32 at once; they end with the agent.
+* **A turn**: a new session's first prompt says what the agent needs to know (English, the agent
+  reads it: `WorkspaceAgents::context()` — the notebook's folder, the conversation's page it must not
+  change, the page it is about, Brulion's MCP server), then the page it is about — its text as an
+  embedded resource where the agent takes one, else a `resource_link` —, the conversation so far as
+  one text (`transcript()`: 🧑 and 🤖 messages, from `chat::firstSent()` with the network's budget)
+  and the newest message; a session that goes on gets only the newest message. Pictures go as
+  pictures where the agent takes them (`Workspace::aiPicture()`, scaled and written again), else as
+  links to their files. The answer as it is written is the agent's message chunks (another message
+  or a tool call between them starts a new paragraph), its thoughts the thought chunks
+  (`chatThoughts`), what it does the title of its tool call in progress (`chatStatus`: "Read
+  Dom.md"; "Claude Code is working…" before). Under the answer what the turn does (`chatActivity`,
+  `ChatActivity.qml`: `ChatTurn.tools` and `ChatTurn.plan` — the plan, a step a line with its state
+  (`chatPlanEntry`); the newest four tool calls (`chatToolCall`, "N earlier steps" opens them all)
+  with an icon of their state and, under the one running or the last, its output's last lines —
+  a terminal's as it comes (`chatToolOutput`, plain monospace text) —, a file's change behind "Show
+  the change" as a diff (`chatToolDiffToggle`, `chatToolDiff`: BDiffView, unified); the first change
+  at once, those after it ten times a second at most). The turn's answer is written as the AI's message with its
+  time, as any partner's; a turn of tool calls without words writes "Done:" and their titles.
+* **Sessions after a restart**: the session's id is kept in the notebook's device state (LocalStore
+  `acp/sessions`: {conversation → agent, session, how many messages it has seen}); the
+  conversation's next turn after the app started again resumes it (`session/resume`, else
+  `session/load` — its replayed history not heard — where the agent offers them; a new session with
+  the conversation so far when that fails). A conversation that changed meanwhile — another
+  partner answered, a message written on another device — gets a new session with all of it; one
+  renamed takes its session along; one deleted stops its turn and closes its session
+  (`session/close` where the agent offers it).
+* **Questions**: `session/request_permission` is the conversation's question (`chatQuestion`): its
+  title "Claude Code asks: Write Dom.md", what it would do under it — a file's change as a diff
+  (`chatQuestionDiff`: BDiffView, unified; `WorkspaceChats.questionDiff()`), else the tool's input as
+  JSON (plain text, at most 4 000 characters) — and the agent's options as buttons, in the agent's
+  words ("Allow", "Always allow", "Reject"). When no chat view shows the conversation, a
+  toast says it with **Open** (`WorkspaceChats.questionWaiting`, AppController). A sign-in the agent
+  asks for (`auth_required`) is a question too: its methods as options and Cancel; a method run in a
+  terminal only is named in the failure ("run claude /login in a terminal, then try again").
+* **Stop** (`WorkspaceChats.stop`): `session/cancel`, a question waiting answered "cancelled", the
+  turn's commands ended, nothing more of that turn; a message sent meanwhile waits for the agent to
+  end the cancelled turn.
+* Tests: `tst_acp` (the protocol, the agent played), `tst_shell_agents` (a real Workspace and a real
+  program that speaks ACP: `tests/app/shell/fakeacpagent.cpp`; `realAgent` with a real one).
 
 ## AI in the editor
 

@@ -329,9 +329,20 @@
     </message>
 </context>
 <context>
+    <name>ChatActivity</name>
+    <message numerus="yes">
+        <location filename="../src/app/qml/views/ChatActivity.qml" line="67"/>
+        <source>%n earlier step(s)</source>
+        <translation>
+            <numerusform>%n earlier step</numerusform>
+            <numerusform>%n earlier steps</numerusform>
+        </translation>
+    </message>
+</context>
+<context>
     <name>ChatView</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/ChatView.qml" line="711"/>
+        <location filename="../src/app/qml/views/ChatView.qml" line="727"/>
         <source>The model on this device does not get the %n message(s) above: too long for it</source>
         <translation>
             <numerusform>The model on this device does not get the %n message above: too long for it</numerusform>
@@ -339,7 +350,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/ChatView.qml" line="712"/>
+        <location filename="../src/app/qml/views/ChatView.qml" line="728"/>
         <source>The AI does not get the %n message(s) above: too long</source>
         <translation>
             <numerusform>The AI does not get the %n message above: too long</numerusform>
@@ -1421,7 +1432,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="2082"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2231"/>
         <source>%n warning(s) or error(s)</source>
         <translation>
             <numerusform>%n warning or error</numerusform>
@@ -1429,7 +1440,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1952"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2101"/>
         <source>Last check %1: %n reminder(s), the sync failed.</source>
         <translation>
             <numerusform>Last check %1: %n reminder, the sync failed.</numerusform>
@@ -1461,7 +1472,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1794"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1943"/>
         <source>Type check: %n warning(s), %1</source>
         <translation>
             <numerusform>Type check: %n warning, %1</numerusform>
@@ -1469,7 +1480,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1954"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2103"/>
         <source>Last check %1: %n reminder(s).</source>
         <translation>
             <numerusform>Last check %1: %n reminder.</numerusform>

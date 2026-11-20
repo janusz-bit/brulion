@@ -2581,7 +2581,8 @@ zadania: ignoruj
   `([[Dom]])` — its text goes to the AI with every turn.
 * **Who answers**: the frontmatter's `partner:` — an extension and its chat command,
   `partner: pirat/rozmowa` (`pirat` alone: its first chat command; docs/EXTENSIONS.md "Chat
-  partners"); without it the built-in AI assistant. The chat writes it when another partner is
+  partners"); `partner: acp:claude` an AI agent set up on the device (docs/UI.md "AI agents
+  (ACP)"); without it the built-in AI assistant. The chat writes it when another partner is
   chosen and takes it out for the assistant.
 * **Written by the chat**: the frontmatter `zadania: ignoruj` (`tasks: ignore` in an English
   notebook: the checkboxes of answers stay out of the task lists, §5 "Ignoring a page's tasks"),

@@ -11,12 +11,12 @@ import Brulion
 // thinks, collapsed — opened, all of it —; under it how fast it writes) and what the AI does now
 // ("Czytam „Dom”…", turn.status; in line for the model on the device: its place) with Stop, a
 // change it asks a yes for as a card with the question's options (the question of its turn —
-// shown or waiting behind another conversation's: Workspace.extensions.chatQuestion*), a failed
+// shown or waiting behind another conversation's, or an AI agent's: Workspace.chats.asking), a failed
 // turn with Try again; at the bottom the field (Enter sends with a keyboard, Shift+Enter is a new
 // line; on touch the send button), the pictures going with the message (a file, the clipboard, a
 // drop, the camera), dictation, and — before a new conversation's first message — the page it is
-// about as a chip that can be taken away and who answers (the built-in assistant, or an
-// extension's chat command).
+// about as a chip that can be taken away and who answers (the built-in assistant, an extension's
+// chat command, or an AI agent of this device: Workspace.chats.partners()).
 //
 //   {view: "chat"}                          the conversations (a wide window: beside a new one)
 //   {view: "chat", path: "AI/….md"}         one conversation
@@ -58,12 +58,17 @@ FocusScope {
     readonly property bool queuedHere: root.busyHere && root.turn.queued
     /// The change the AI asks a yes for, in this conversation (shown here, or waiting behind
     /// another conversation's question).
-    readonly property int questionSerial: Workspace.extensions.questionSerial + Workspace.extensions.chatQuestionSerial
-    readonly property bool asking: root.path !== "" && Workspace.extensions.chatQuestionKind(root.path, root.questionSerial) === "choose"
-    readonly property string questionText: root.asking ? Workspace.extensions.chatQuestionTitle(root.path, root.questionSerial) : ""
-    readonly property list<string> questionOptions: root.asking ? Workspace.extensions.chatQuestionOptions(root.path, root.questionSerial) : root.noStrings
+    readonly property int questionSerial: root.chats.questionSerial
+    readonly property bool asking: root.chats.asking(root.path, root.questionSerial)
+    readonly property string questionText: root.asking ? root.chats.questionText(root.path, root.questionSerial) : ""
+    readonly property list<string> questionOptions: root.asking ? root.chats.questionOptions(root.path, root.questionSerial) : root.noStrings
     readonly property int questionTitleEnd: Js.indexOf(root.questionText, "\n")
+    /// The change of a file an AI agent asks a yes for ({path, oldText, newText}; {} none).
+    readonly property var questionDiff: root.asking ? root.chats.questionDiff(root.path, root.questionSerial) : root.noDiff
+    readonly property var noDiff: ({})
+    readonly property bool questionHasDiff: AppController.routeText(root.questionDiff, "path") !== ""
     readonly property list<string> noStrings: []
+    readonly property list<var> noVars: []
     readonly property string failure: root.turn !== null ? root.turn.failure : ""
     readonly property bool failedHere: root.failure !== ""
 
@@ -74,7 +79,8 @@ FocusScope {
                                       && (root.turn.partial !== "" || root.turn.thoughts !== "")
     /// The model's thoughts are opened (all of them), else one line of their end.
     property bool thoughtsOpen: false
-    /// Who may answer: the assistant and the extensions' chat commands ({id, label, extension}).
+    /// Who may answer: the assistant, the extensions' chat commands and the AI agents ({id, label,
+    /// extension}).
     property list<var> partners
     readonly property bool choosesPartner: root.partners.length > 1
     /// The field waits for dictation's text / a photo from the camera (this view asked for it).
@@ -123,15 +129,15 @@ FocusScope {
         root.refreshPartners()
     }
     function refreshPartners(): void {
-        root.partners = Workspace.extensions.chatPartners()
+        root.partners = root.chats.partners()
     }
     Connections {
-        target: Workspace.extensions
-        function onCommandsChanged() { root.refreshPartners() }
+        target: root.chats
+        function onPartnersChanged() { root.refreshPartners() }
     }
     /// A partner's name as the chat shows it (one not running: its id).
     function partnerName(id: string): string {
-        const label = Workspace.extensions.partnerLabel(id)
+        const label = root.chats.partnerLabel(id)
         return label !== "" ? label : id
     }
 
@@ -597,6 +603,16 @@ FocusScope {
                     onClicked: root.open("", true)
                 }
             }
+            // An AI agent's options (its model, mode …) and how much of its context is used.
+            ChatAgentOptions {
+                objectName: "chatAgentOptions"
+                Layout.fillWidth: true
+                Layout.leftMargin: Theme.space3
+                Layout.rightMargin: Theme.space2
+                Layout.topMargin: Theme.space1
+                path: root.path
+                partner: root.partnerHere
+            }
             BMenu {
                 id: partnerMenu
                 objectName: "chatPartnerMenu"
@@ -984,6 +1000,15 @@ FocusScope {
                                 Accessible.name: qsTr("The AI writes %1").arg(text)
                             }
 
+                            // What an AI agent does: its plan, its tool calls with their output.
+                            ChatActivity {
+                                objectName: "chatActivity"
+                                Layout.fillWidth: true
+                                Layout.maximumWidth: 640
+                                tools: root.busyHere && !root.queuedHere ? root.turn.tools : root.noVars
+                                plan: root.busyHere && !root.queuedHere ? root.turn.plan : root.noVars
+                            }
+
                             // What the AI does now (not while its words come: they show it, and a
                             // spinner's frames would take the processor from a model on the
                             // device), or its place in line for the model on the device.
@@ -1054,9 +1079,24 @@ FocusScope {
                                         font.weight: Font.DemiBold
                                         wrapMode: Text.Wrap
                                     }
+                                    // A file's change: as a diff (an AI agent's question).
+                                    BDiffView {
+                                        id: questionDiffView
+                                        objectName: "chatQuestionDiff"
+                                        Layout.fillWidth: true
+                                        // (As tall as its lines, a few dozen at most: it scrolls.)
+                                        Layout.preferredHeight: Math.min(260, questionDiffView.rows.length * 24 + 8)
+                                        visible: root.questionHasDiff
+                                        mode: "unified"
+                                        showToolbar: false
+                                        oldText: root.questionHasDiff ? AppController.routeText(root.questionDiff, "oldText") : ""
+                                        newText: root.questionHasDiff ? AppController.routeText(root.questionDiff, "newText") : ""
+                                        oldLabel: AppController.routeText(root.questionDiff, "path")
+                                        newLabel: AppController.routeText(root.questionDiff, "path")
+                                    }
                                     Rectangle {
                                         Layout.fillWidth: true
-                                        visible: root.questionTitleEnd >= 0
+                                        visible: root.questionTitleEnd >= 0 && !root.questionHasDiff
                                         implicitHeight: questionDetails.implicitHeight + 2 * Theme.space2
                                         radius: Theme.radius
                                         color: Theme.bgSunken
@@ -1088,7 +1128,7 @@ FocusScope {
                                                 objectName: "chatQuestionOption"
                                                 text: option.modelData
                                                 variant: option.index === 0 ? "primary" : option.index === 1 ? "secondary" : "ghost"
-                                                onClicked: Workspace.extensions.answerChat(root.path, option.modelData)
+                                                onClicked: root.chats.answer(root.path, option.modelData)
                                             }
                                         }
                                     }
@@ -1261,6 +1301,44 @@ FocusScope {
                         interactive: true
                         Accessible.name: qsTr("Who answers: %1").arg(root.partnerName(root.newPartner))
                         onClicked: partnerMenu.popup(newPartnerChip, 0, newPartnerChip.height)
+                    }
+                }
+                ChatAgentOptions {
+                    objectName: "chatNewAgentOptions"
+                    Layout.fillWidth: true
+                    visible: root.path === "" && root.chats.isAgent(root.newPartner)
+                    path: ""
+                    partner: root.newPartner
+                }
+
+                // An AI agent's slash commands: those that match what is typed ("/", "/rev").
+                Flow {
+                    id: commandList
+                    objectName: "chatCommands"
+                    readonly property list<var> commands: root.chats.agentCommands(root.path, root.path !== "" ? root.partnerHere : root.newPartner,
+                                                                                  input.text, root.chats.agentSerial)
+                    Layout.fillWidth: true
+                    visible: commandList.commands.length > 0
+                    spacing: Theme.space1
+                    Repeater {
+                        model: commandList.commands
+                        delegate: BChip {
+                            id: commandChip
+                            required property var modelData
+                            readonly property string command: AppController.routeText(commandChip.modelData, "name")
+                            readonly property string about: AppController.routeText(commandChip.modelData, "description")
+                            objectName: "chatCommand"
+                            size: "small"
+                            interactive: true
+                            showIcon: false
+                            text: "/" + commandChip.command
+                            Accessible.name: commandChip.about !== "" ? qsTr("%1: %2").arg(commandChip.text).arg(commandChip.about) : commandChip.text
+                            onClicked: {
+                                input.text = "/" + commandChip.command + " "
+                                input.cursorPosition = input.length
+                                input.forceActiveFocus()
+                            }
+                        }
                     }
                 }
 

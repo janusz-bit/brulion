@@ -1,5 +1,7 @@
 #include "appsettings.h"
 
+#include "workspaceagents.h"
+
 #include "workspacegithub.h"
 #include "workspacesync.h"
 
@@ -16,6 +18,9 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QHash>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QSettings>
 #include <QStandardPaths>
 #include <QTime>
@@ -56,6 +61,7 @@ constexpr auto kAiProvider = "ai/provider"_L1;
 constexpr auto kAiModel = "ai/model"_L1;
 constexpr auto kAiLocalModel = "ai/localModel"_L1;
 constexpr auto kAiBaseUrl = "ai/baseUrl"_L1;
+constexpr auto kAcpAgents = "ai/agents"_L1;
 constexpr auto kEditorFont = "editor/font"_L1;
 constexpr auto kEditorFontFamily = "editor/fontFamily"_L1;
 constexpr auto kEditorMonoFamily = "editor/monoFamily"_L1;
@@ -722,6 +728,190 @@ bool AppSettings::setAiKey(const QString &key)
     if (trimmed.isEmpty() ? had : ok)
         Q_EMIT aiChanged();
     return ok;
+}
+
+// ---- AI agents (the Agent Client Protocol) ---------------------------------------------------
+
+namespace {
+
+constexpr int MaxAcpAgents = 20;
+
+bool validAgentId(const QString &id)
+{
+    if (id.isEmpty() || id.size() > 40)
+        return false;
+    return std::ranges::all_of(id, [](QChar c) {
+        return (c >= u'a' && c <= u'z') || (c >= u'0' && c <= u'9') || c == u'-';
+    });
+}
+
+/// `base`, or `base-2`, `base-3` … — the first that none of `agents` has.
+QString freeAgentId(const QString &base, const QList<AgentConfig> &agents)
+{
+    const auto taken = [&agents](const QString &id) {
+        return std::ranges::any_of(agents, [&id](const AgentConfig &a) { return a.id == id; });
+    };
+    if (!taken(base))
+        return base;
+    for (int n = 2;; ++n) {
+        const QString id = base + u'-' + QString::number(n);
+        if (!taken(id))
+            return id;
+    }
+}
+
+} // namespace
+
+QList<AgentConfig> AppSettings::acpAgents() const
+{
+    QList<AgentConfig> out;
+    if (!WorkspaceAgents::available())
+        return out;
+    const QJsonArray rows = QJsonDocument::fromJson(m_settings->value(kAcpAgents).toString().toUtf8()).array();
+    for (const QJsonValue &v : rows) {
+        const QJsonObject o = v.toObject();
+        AgentConfig a;
+        a.id = o.value(u"id"_s).toString();
+        a.name = o.value(u"name"_s).toString().simplified().left(80);
+        a.command = o.value(u"command"_s).toString().trimmed().left(2000);
+        a.tools = o.value(u"tools"_s).toBool(true);
+        a.options = o.value(u"options"_s).toObject();
+        a.known = o.value(u"known"_s).toArray();
+        if (!validAgentId(a.id) || std::ranges::any_of(out, [&a](const AgentConfig &b) { return b.id == a.id; }))
+            continue; // (malformed, or the same id twice: the first one)
+        if (a.name.isEmpty())
+            a.name = a.id;
+        out << a;
+        if (out.size() == MaxAcpAgents)
+            break;
+    }
+    return out;
+}
+
+namespace {
+QJsonArray agentRows(const QList<AgentConfig> &agents)
+{
+    QJsonArray rows;
+    for (const AgentConfig &a : agents)
+    {
+        QJsonObject row{{u"id"_s, a.id}, {u"name"_s, a.name}, {u"command"_s, a.command}, {u"tools"_s, a.tools}};
+        if (!a.options.isEmpty())
+            row.insert(u"options"_s, a.options);
+        if (!a.known.isEmpty())
+            row.insert(u"known"_s, a.known);
+        rows.append(row);
+    }
+    return rows;
+}
+} // namespace
+
+QVariantList AppSettings::acpAgentRows() const
+{
+    QVariantList rows;
+    for (const AgentConfig &a : acpAgents()) {
+        // What the settings' row says of it: its command (the middle left out of a long one) and
+        // whether it gets Brulion's tools.
+        QString command = a.command;
+        if (command.size() > 56)
+            command = command.left(24) + u'…' + command.right(31);
+        const QString tools = a.tools ? tr("with Brulion's tools") : tr("without Brulion's tools");
+        rows.append(QVariantMap{{u"id"_s, a.id},
+                                {u"name"_s, a.name},
+                                {u"command"_s, a.command},
+                                {u"tools"_s, a.tools},
+                                {u"summary"_s, command.isEmpty() ? tr("No command yet: Edit… sets it.")
+                                                                 : command + u" · "_s + tools}});
+    }
+    return rows;
+}
+
+bool AppSettings::acpAvailable() const
+{
+    return WorkspaceAgents::available();
+}
+
+void AppSettings::storeAcpAgents(const QList<AgentConfig> &agents)
+{
+    const QString value = QString::fromUtf8(QJsonDocument(agentRows(agents)).toJson(QJsonDocument::Compact));
+    if (store(kAcpAgents, value, m_settings->value(kAcpAgents).toString()))
+        Q_EMIT acpAgentsChanged();
+}
+
+QString AppSettings::addAcpAgent(const QString &preset)
+{
+    QList<AgentConfig> agents = acpAgents();
+    if (!WorkspaceAgents::available() || agents.size() >= MaxAcpAgents)
+        return {};
+    AgentConfig a;
+    const QList<AgentConfig> presets = WorkspaceAgents::presets();
+    const auto known = std::ranges::find_if(presets, [&preset](const AgentConfig &p) { return p.id == preset; });
+    if (known != presets.end()) {
+        a = *known;
+    } else {
+        a.id = u"agent"_s;
+        a.name = tr("My agent");
+    }
+    a.id = freeAgentId(a.id, agents);
+    agents << a;
+    storeAcpAgents(agents);
+    return a.id;
+}
+
+void AppSettings::setAcpAgentName(const QString &id, const QString &name)
+{
+    QList<AgentConfig> agents = acpAgents();
+    for (AgentConfig &a : agents) {
+        if (a.id == id && !name.simplified().isEmpty())
+            a.name = name.simplified().left(80);
+    }
+    storeAcpAgents(agents);
+}
+
+void AppSettings::setAcpAgentCommand(const QString &id, const QString &command)
+{
+    QList<AgentConfig> agents = acpAgents();
+    for (AgentConfig &a : agents) {
+        if (a.id == id)
+            a.command = command.trimmed().left(2000);
+    }
+    storeAcpAgents(agents);
+}
+
+void AppSettings::setAcpAgentTools(const QString &id, bool on)
+{
+    QList<AgentConfig> agents = acpAgents();
+    for (AgentConfig &a : agents) {
+        if (a.id == id)
+            a.tools = on;
+    }
+    storeAcpAgents(agents);
+}
+
+void AppSettings::setAcpAgentMemory(const QString &id, const QJsonObject &options, const QJsonArray &known)
+{
+    QList<AgentConfig> agents = acpAgents();
+    for (AgentConfig &a : agents) {
+        if (a.id == id) {
+            a.options = options;
+            a.known = known;
+        }
+    }
+    storeAcpAgents(agents);
+}
+
+void AppSettings::removeAcpAgent(const QString &id)
+{
+    QList<AgentConfig> agents = acpAgents();
+    agents.removeIf([&id](const AgentConfig &a) { return a.id == id; });
+    storeAcpAgents(agents);
+}
+
+QVariantList AppSettings::acpPresets() const
+{
+    QVariantList out;
+    for (const AgentConfig &p : WorkspaceAgents::presets())
+        out.append(QVariantMap{{u"id"_s, p.id}, {u"name"_s, p.name}, {u"command"_s, p.command}});
+    return out;
 }
 
 QString AppSettings::aiKey() const

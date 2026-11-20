@@ -11,6 +11,8 @@ qt_target_qml_sources(brulion QML_FILES
     qml/views/CalendarView.qml
     qml/views/CleanupView.qml
     qml/views/ChatView.qml
+    qml/views/ChatActivity.qml
+    qml/views/ChatAgentOptions.qml
     qml/views/ConsoleView.qml
     qml/views/ExtensionRouteView.qml
     qml/views/GraphView.qml

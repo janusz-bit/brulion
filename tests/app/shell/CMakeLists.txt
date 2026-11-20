@@ -285,3 +285,14 @@ endif()
 brulion_add_test(tst_shell_workspace_perf SOURCES tst_workspace_perf.cpp
     LIBS brulion_shell brulion_core_reminders)
 set_tests_properties(tst_shell_workspace_perf PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)
+# AI agents of the user's own in the AI chat (workspaceagents.h) on a real Workspace, the agent a
+# real program that speaks the Agent Client Protocol (fakeacpagent.cpp): a conversation answered,
+# the same session for the next message, the agent's question allowed, rejected and stopped, Stop,
+# an agent that dies and starts again with the conversation so far, signing in, an agent not set
+# up or not starting, the chat's partners, the settings' agents (malformed entries left out).
+qt_add_executable(fake_acp_agent fakeacpagent.cpp)
+target_link_libraries(fake_acp_agent PRIVATE Qt6::Core)
+brulion_set_warnings(fake_acp_agent)
+brulion_add_test(tst_shell_agents SOURCES tst_agents.cpp LIBS brulion_shell)
+target_compile_definitions(tst_shell_agents PRIVATE FAKE_ACP_AGENT="$<TARGET_FILE:fake_acp_agent>")
+add_dependencies(tst_shell_agents fake_acp_agent)
