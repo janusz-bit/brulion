@@ -133,6 +133,9 @@ Tryb jest zapisany w samej notatce (właściwość `brulion: document` albo `bru
 - Daty wpisuj po polsku: „jutro o 9”, „w piątek 18:00”, „za 2 godziny” — w pliku zostaje zawsze `RRRR-MM-DD GG:MM`.
 - Na telefonie przypomnienia działają nawet przy zamkniętej aplikacji.
 
+## Fiszki
+Strona [[Hiszpański]] to talia fiszek: wiersz `el perro::pies` to pytanie i odpowiedź, a ==zakreślenie== w akapicie to luka do uzupełnienia. Otwórz **Fiszki** na pasku bocznym, odsłoń odpowiedź spacją i oceń klawiszami 1–4, jak dobrze ją znasz — Brulion zapyta znowu tuż przed tym, zanim byś ją zapomniał, a powtórkę zapisze obok fiszki.
+
 ## Obliczenia
 Blok `calc` liczy linia po linii, z jednostkami, procentami i przecinkiem dziesiętnym:
 
@@ -411,6 +414,36 @@ const auto kPlanSvg = uR"svg(<svg xmlns="http://www.w3.org/2000/svg" width="480"
 </svg>
 )svg"_s;
 
+// A deck of flashcards (docs/SYNTAX.md §15): a few cards reviewed already (the Spaced Repetition
+// plugin's SM-2 comments: one due today, one tomorrow), the others new.
+const auto kDeck = uR"md(---
+tags: [fiszki/hiszpański]
+---
+# Hiszpański
+
+Słówka na pierwszy tydzień. Każdy wiersz z `::` to fiszka — otwórz **Fiszki** na pasku bocznym, żeby się ich uczyć. Wiersz `:::` działa w obie strony, a pytanie z wierszem `?` i odpowiedzią pod nim to fiszka z kilku wierszy.
+
+## Zwierzęta
+el perro::pies <!--SR:!{today},4,250-->
+el gato::kot <!--SR:!{tomorrow},6,260-->
+la tortuga:::żółw
+el caballo::koń
+
+## Zwroty
+¿Cómo estás?
+?
+Jak się masz? — odpowiedz: *Estoy bien, gracias.*
+
+Hiszpańskie ==ser== to „być” na stałe, a ==estar== — „być” chwilowo.
+
+## Liczby
+#fiszki/hiszpański/liczby
+
+uno::jeden
+dos::dwa
+tres::trzy
+)md"_s;
+
 } // namespace pl
 
 // ---- Content: English --------------------------------------------------------------------------
@@ -476,6 +509,9 @@ The mode is stored in the note itself (the property `brulion: document` or `brul
   - It goes off at the default time from the notebook's settings.
 - Type dates in plain English: “tomorrow at 9”, “friday at 6pm”, “in 2 hours” — the file always keeps `YYYY-MM-DD HH:MM`.
 - On a phone, reminders work even when the app is closed.
+
+## Flashcards
+The page [[Spanish]] is a deck of flashcards: the line `el perro::dog` is a question and its answer, and a ==highlight== in a paragraph is a gap to fill. Open **Flashcards** in the sidebar, show the answer with Space and grade with 1–4 how well you knew it — Brulion asks again just before you would forget it, and saves the review next to the card.
 
 ## Calculations
 A `calc` block calculates line by line, with units, percentages and variables:
@@ -754,6 +790,34 @@ const auto kPlanSvg = uR"svg(<svg xmlns="http://www.w3.org/2000/svg" width="480"
   <text x="240" y="296" font-family="sans-serif" font-size="12" fill="#e2574c" text-anchor="middle">floor plan — renovation</text>
 </svg>
 )svg"_s;
+const auto kDeck = uR"md(---
+tags: [flashcards/spanish]
+---
+# Spanish
+
+Words for the first week. Every line with `::` is a flashcard — open **Flashcards** in the sidebar to study them. A line with `:::` works both ways, and a question with a line `?` and the answer under it is a card of several lines.
+
+## Animals
+el perro::dog <!--SR:!{today},4,250-->
+el gato::cat <!--SR:!{tomorrow},6,260-->
+la tortuga:::turtle
+el caballo::horse
+
+## Phrases
+¿Cómo estás?
+?
+How are you? — answer: *Estoy bien, gracias.*
+
+Spanish ==ser== is "to be" for good, and ==estar== — "to be" for now.
+
+## Numbers
+#flashcards/spanish/numbers
+
+uno::one
+dos::two
+tres::three
+)md"_s;
+
 } // namespace en
 
 /// The sample notebook's texts and paths in one language.
@@ -761,6 +825,7 @@ struct SampleTexts {
     QStringView welcome, docsNotebook, today, yesterday, weekAgo;
     QStringView projectPath, project, booksPath, books, recipesPath, recipes;
     QStringView journalTemplate, meetingTemplatePath, meetingTemplate, picturePath, picture;
+    QStringView deckPath, deck;
 };
 
 bool isPolish(QStringView language)
@@ -774,11 +839,11 @@ SampleTexts sampleTexts(QStringView language)
         return {pl::kWelcome, pl::kDocsNotebook, pl::kToday, pl::kYesterday, pl::kWeekAgo,
                 u"Projekty/Remont mieszkania.md", pl::kRemont, u"Książki 2026.md", pl::kBooks, u"Przepisy.md",
                 pl::kRecipes, pl::kJournalTemplate, u"templates/Spotkanie.md", pl::kMeetingTemplate,
-                u"assets/plan-mieszkania.svg", pl::kPlanSvg};
+                u"assets/plan-mieszkania.svg", pl::kPlanSvg, u"Nauka/Hiszpański.md", pl::kDeck};
     return {en::kWelcome, en::kDocsNotebook, en::kToday, en::kYesterday, en::kWeekAgo,
             u"Projects/Home renovation.md", en::kRenovation, u"Books 2026.md", en::kBooks, u"Recipes.md",
             en::kRecipes, en::kJournalTemplate, u"templates/Meeting.md", en::kMeetingTemplate,
-            u"assets/floor-plan.svg", en::kPlanSvg};
+            u"assets/floor-plan.svg", en::kPlanSvg, u"Learning/Spanish.md", en::kDeck};
 }
 
 } // namespace
@@ -823,6 +888,7 @@ QList<DemoFile> demoVaultFiles(const QDateTime &now, QStringView language)
             {config.journalTemplate, texts.journalTemplate.toString()},
             {texts.meetingTemplatePath.toString(), texts.meetingTemplate.toString()},
             {texts.picturePath.toString(), texts.picture.toString()},
+            {texts.deckPath.toString(), fill(texts.deck, vars)},
     };
 }
 

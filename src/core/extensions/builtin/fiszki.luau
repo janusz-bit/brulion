@@ -833,53 +833,66 @@ end
 -- its hint.
 type Deletion = { from: number, to: number, answer: string, number: number, hint: string?, pattern: number }
 
+-- What a deletion's inside holds: its answer, its number (0: none) and its hint.
+local function deletionInside(inner: string, pattern: number): (string, number, string?)
+    local sep = if pattern == 1 then ";;" else "::"
+    local number, rest
+    if pattern == 1 then
+        number, rest = string.match(inner, "^(%d+);;(.+)$")
+    else
+        number, rest = string.match(inner, "^[cC]?(%d+)::(.+)$")
+    end
+    local answer, hint = rest or inner, nil
+    local h = string.find(answer, sep, 1, true)
+    if h then
+        answer, hint = answer:sub(1, h - 1), answer:sub(h + #sep)
+    end
+    return answer, tonumber(number) or 0, hint
+end
+
 -- The deletions of a line: the plugin's `==answer==`, `==1;;answer;;hint==` (pattern 1) and Anki's
 -- `{{c1::answer::hint}}` / `{{1::answer::hint}}` (pattern 2; the plugin reads them with a pattern
--- of its own). Linear in the line.
+-- of its own). Not in inline code (the plugin would take them there too). Linear in the line.
 local function deletionsOf(line: string): { Deletion }
     local out: { Deletion } = {}
+    -- Inline code blanked (the same length): its `==` and `{{` are code.
+    local scan = line
+    if string.find(line, "`", 1, true) then
+        scan = line:gsub("(`+)(.-)%1", function(fence: string, inner: string)
+            return string.rep(" ", #fence * 2 + #inner)
+        end)
+    end
     local at = 1
     while true do
-        local a = string.find(line, "==", at, true)
+        local a = string.find(scan, "==", at, true)
         if not a then
             break
         end
-        local z = string.find(line, "==", a + 3, true)
+        local z = string.find(scan, "==", a + 3, true)
         if not z then
             break
         end
-        local inner = line:sub(a + 2, z - 1)
-        local number, rest = string.match(inner, "^(%d+);;(.+)$")
-        local answer, hint = rest or inner, nil
-        local h = string.find(answer, ";;", 1, true)
-        if h then
-            answer, hint = answer:sub(1, h - 1), answer:sub(h + 2)
-        end
+        local answer, number, hint = deletionInside(line:sub(a + 2, z - 1), 1)
         if trim(answer) ~= "" then
-            table.insert(out, { from = a, to = z + 1, answer = answer, number = tonumber(number) or 0, hint = hint, pattern = 1 })
+            table.insert(out, { from = a, to = z + 1, answer = answer, number = number, hint = hint, pattern = 1 })
         end
         at = z + 2
     end
     at = 1
     while true do
-        local a = string.find(line, "{{", at, true)
+        local a = string.find(scan, "{{", at, true)
         if not a then
             break
         end
-        local z = string.find(line, "}}", a + 2, true)
+        local z = string.find(scan, "}}", a + 2, true)
         if not z then
             break
         end
         local inner = line:sub(a + 2, z - 1)
-        local number, rest = string.match(inner, "^[cC]?(%d+)::(.+)$")
-        if number then
-            local answer, hint = rest :: string, nil
-            local h = string.find(answer, "::", 1, true)
-            if h then
-                answer, hint = answer:sub(1, h - 1), answer:sub(h + 2)
-            end
+        if string.match(inner, "^[cC]?%d+::.") then
+            local answer, number, hint = deletionInside(inner, 2)
             if trim(answer) ~= "" then
-                table.insert(out, { from = a, to = z + 1, answer = answer, number = tonumber(number) :: number, hint = hint, pattern = 2 })
+                table.insert(out, { from = a, to = z + 1, answer = answer, number = number, hint = hint, pattern = 2 })
             end
         end
         at = z + 2

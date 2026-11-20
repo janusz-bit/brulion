@@ -24,6 +24,8 @@ brulion-cli week append "Review goals"             # append to this week's note
 brulion-cli --format text month "last month"       # read last month's note
 brulion-cli --format text habit list               # habits: today's check-offs, streaks
 brulion-cli habit tick Meditation                  # check a habit off for today
+brulion-cli --format text card due                 # flashcards to study now
+brulion-cli card review 1a2b3c4d good              # grade one (again, hard, good, easy)
 brulion-cli search cafe                            # also finds “café”
 brulion-cli help                                   # all commands
 ```

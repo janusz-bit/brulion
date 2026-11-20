@@ -24,6 +24,8 @@ brulion-cli week append "Przegląd celów"           # dopisz do notatki tego ty
 brulion-cli --format text month "zeszły miesiąc"   # przeczytaj notatkę poprzedniego miesiąca
 brulion-cli --format text habit list                # nawyki: dzisiejsze odhaczenia, serie
 brulion-cli habit tick Medytacja                   # odhacz nawyk na dziś
+brulion-cli --format text card due                 # fiszki do nauki teraz
+brulion-cli card review 1a2b3c4d dobrze            # oceń jedną (znowu, trudne, dobrze, łatwe)
 brulion-cli search zolw                            # znajdzie „żółw”
 brulion-cli help                                   # wszystkie polecenia
 ```

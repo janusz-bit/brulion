@@ -27,6 +27,7 @@ Brulion updates the documentation together with the app: new pages are added, an
 - [[Reminders and alarms|Reminders and alarms]] — notifications and wake-up alarms.
 - [[Habits|Habits]] — daily items to check off, streaks and a month calendar.
 - [[Gym|Gym]] — workouts in the journal, plans with progression, a rest timer and progress charts.
+- [[Flashcards|Flashcards]] — questions and answers in your notes, repeated just before you would forget them.
 - [[Queries|Queries]] — lists of tasks and blocks gathered from the whole notebook.
 
 ## Calculating

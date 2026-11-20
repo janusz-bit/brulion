@@ -68,7 +68,7 @@ Sample sample(const QString &language)
                 u"„Dokumentacja Brulionu”"_s, u"„Przełącz notatnik”"_s,
                 u"pierwsza litera nazwy notatnika na górze paska ikon po lewej"_s, u"Data: 2026-10-14 10:00"_s,
                 {u"Dokument i konspekt"_s, u"Konspekt"_s, u"Linki i odwołania"_s, u"Tagi"_s, u"Zadania"_s,
-                 u"Przypomnienia i alarmy"_s, u"Obliczenia"_s, u"Tabele z formułami"_s, u"Zapytania"_s,
+                 u"Przypomnienia i alarmy"_s, u"Fiszki"_s, u"Obliczenia"_s, u"Tabele z formułami"_s, u"Zapytania"_s,
                  u"Osadzenia"_s, u"Ramki (callouty)"_s, u"Szablony"_s, u"Kalendarz i dziennik"_s,
                  u"Synchronizacja"_s, u"Import i eksport"_s, u"Dokumentacja"_s, u"Skróty klawiszowe"_s}};
     return {u"Sample notebook"_s, u"Projects/Home renovation.md"_s, u"Books 2026.md"_s, u"Recipes.md"_s,
@@ -79,7 +79,7 @@ Sample sample(const QString &language)
             u"the first letter of the notebook's name at the top of the icon bar on the left"_s,
             u"Date: 2026-10-14 10:00"_s,
             {u"Documents and outlines"_s, u"Outliner"_s, u"Links and references"_s, u"Tags"_s, u"Tasks"_s,
-             u"Reminders and alarms"_s, u"Calculations"_s, u"Tables with formulas"_s, u"Queries"_s,
+             u"Reminders and alarms"_s, u"Flashcards"_s, u"Calculations"_s, u"Tables with formulas"_s, u"Queries"_s,
              u"Embeds"_s, u"Callouts"_s, u"Templates"_s, u"Calendar and journal"_s, u"Sync"_s,
              u"Import and export"_s, u"Documentation"_s, u"Keyboard shortcuts"_s}};
 }
@@ -125,7 +125,12 @@ private Q_SLOTS:
         QVERIFY(files.contains(u"templates/journal.md"_s));
         QVERIFY(files.contains(names.meetingTemplate));
         QVERIFY(files.contains(names.picture));
-        QCOMPARE(files.size(), 10);
+        // A deck of flashcards (docs/SYNTAX.md §15), with cards reviewed and new.
+        const QString deck = language == u"pl" ? u"Nauka/Hiszpański.md"_s : u"Learning/Spanish.md"_s;
+        QVERIFY(files.contains(deck));
+        QVERIFY(files.value(deck).contains(u"el perro::"_s));
+        QVERIFY(files.value(deck).contains(u"<!--SR:!2026-10-14,4,250-->"_s));
+        QCOMPARE(files.size(), 11);
         for (auto it = files.cbegin(); it != files.cend(); ++it) {
             QVERIFY2(!it.value().contains(u"{today}"_s) && !it.value().contains(u"{in2}"_s), qPrintable(it.key()));
             QVERIFY2(it.value().endsWith(u'\n'), qPrintable(it.key()));
