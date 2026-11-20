@@ -128,9 +128,6 @@ int run(int argc, char **argv)
     static int qtArgc = 1;
     static char *qtArgv[] = {argc > 0 ? argv[0] : fallbackName, nullptr};
     QCoreApplication app(qtArgc, qtArgv);
-    // The app's names: the same settings file, app data (History, LocalStore) and socket — also
-    // for a separate profile (BRULION_PROFILE, src/ipc/profile.h).
-    brulion::ipc::applyAppNames();
     QCoreApplication::setApplicationVersion(QStringLiteral(BRULION_VERSION));
     // Messages for people in the system's language (docs/CLI.md "Language"): the app's catalogue
     // (:/i18n/brulion_<lang>.qm, in brulion-cli and in the app's binary alike; English loads the
@@ -144,6 +141,11 @@ int run(int argc, char **argv)
     useLanguage(messageLanguage());
 
     const Invocation inv = parseArguments(arguments);
+    // The app's names: the same settings file, app data (History, LocalStore) and socket — also
+    // for a separate profile (--profile, else BRULION_PROFILE: src/ipc/profile.h).
+    if (!inv.error && !inv.globals.profile.isEmpty())
+        qputenv("BRULION_PROFILE", inv.globals.profile.toUtf8());
+    brulion::ipc::applyAppNames();
     g_verbose = inv.globals.verbose;
     Context ctx;
     ctx.globals = inv.globals;

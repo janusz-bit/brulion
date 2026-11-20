@@ -1218,14 +1218,20 @@ private Q_SLOTS:
         QCOMPARE(list.at(1).toMap().value(u"name"_s).toString(), u"Żółta teczka"_s);
         QVERIFY(!list.at(0).toMap().value(u"lastOpened"_s).toString().isEmpty());
         QCOMPARE(s.currentVault(), u"/home/ala/Notatki"_s);
+        // When it was opened by the app's clock (--now).
+        s.addRecentVault(u"/home/ala/Żółta teczka"_s, QDateTime(QDate(2026, 10, 14), QTime(10, 0)));
+        QCOMPARE(s.recentVaults().first().toMap().value(u"lastOpened"_s).toString(), u"2026-10-14T10:00:00"_s);
 
-        for (int i = 0; i < 12; ++i)
+        // Twelve are kept, the oldest go.
+        QCOMPARE(AppSettings::MaxRecentVaults, 12);
+        for (int i = 0; i < 15; ++i)
             s.addRecentVault(u"/v/%1"_s.arg(i));
         QCOMPARE(s.recentVaults().size(), AppSettings::MaxRecentVaults);
-        QCOMPARE(s.recentVaults().first().toMap().value(u"path"_s).toString(), u"/v/11"_s);
+        QCOMPARE(s.recentVaults().first().toMap().value(u"path"_s).toString(), u"/v/14"_s);
+        QCOMPARE(s.recentVaults().last().toMap().value(u"path"_s).toString(), u"/v/3"_s);
 
-        s.forgetRecentVault(u"/v/11"_s);
-        QCOMPARE(s.recentVaults().first().toMap().value(u"path"_s).toString(), u"/v/10"_s);
+        s.forgetRecentVault(u"/v/14"_s);
+        QCOMPARE(s.recentVaults().first().toMap().value(u"path"_s).toString(), u"/v/13"_s);
         const auto before = recent.size();
         s.forgetRecentVault(u"/not/there"_s);
         QCOMPARE(recent.size(), before);

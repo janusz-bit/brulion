@@ -65,7 +65,9 @@ Paths from `QStandardPaths` and `QSettings` (organization and application "Bruli
 **Separate profile:** the environment variable `BRULION_PROFILE=<name>` (letters, digits, `-`, `_`, up to 32
 characters) replaces the organization "Brulion" with "Brulion-<name>" — settings, data, the log and the
 single-instance socket are then separate (`%APPDATA%\Brulion-<name>\…`). The same for `brulion.exe`
-and `brulion-cli.exe`. It is meant for tests (on Windows the `XDG_*` variables from the Linux tests change
+and `brulion-cli.exe`, and `--profile <name>` on their command line does the same (docs/CLI.md
+"Profiles"). A test run by hand (`--selftest-*`, `--journey`, `--screenshot`) without a profile gets
+the profile `test` by itself. It is meant for tests (on Windows the `XDG_*` variables from the Linux tests change
 nothing) and for trying something out without touching your own profile; it also works on Linux.
 
 ## Open with

@@ -12,7 +12,8 @@
 #   BRULION_BIN=build-ui/src/app/brulion scripts/screenshots.sh
 #
 # Files: tests/screenshots/<section>-<size>-<theme>[-<locale>][@<scale>x].png
-# Run inside `nix develop` (Qt plugin and QML paths). One app instance at a time (lock).
+# Run inside `nix develop` (Qt plugin and QML paths). One app instance at a time (lock). The runs
+# use their own profile "test" (--profile: never the user's settings or recent notebooks).
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
@@ -60,7 +61,7 @@ for section in "${sections[@]}"; do
     for theme in "${themes[@]}"; do
       file="$out/${section}-${size}-${theme}${suffix}.png"
       if QML_DISABLE_DISK_CACHE=1 QT_FORCE_STDERR_LOGGING=1 QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software \
-        "$bin" --gallery --section "$section" --size "$geometry" --theme "$theme" \
+        "$bin" --profile test --gallery --section "$section" --size "$geometry" --theme "$theme" \
         --locale "$locale" --scale "$scale" --now "$now" --delay "$delay" \
         "${extra[@]}" --screenshot "$file" 2> >(grep -v "^brulion: screenshot" >&2); then
         echo "$file"

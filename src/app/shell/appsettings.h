@@ -20,6 +20,7 @@
 
 #include "log/redact.h"
 
+#include <QDateTime>
 #include <QObject>
 #include <QString>
 #include <QStringList>
@@ -170,7 +171,8 @@ class AppSettings : public QObject {
     // ---- Vaults -------------------------------------------------------------------------
     /// Absolute path of the vault opened last ("" before the first one).
     Q_PROPERTY(QString currentVault READ currentVault NOTIFY currentVaultChanged FINAL)
-    /// [{ path, name, lastOpened (ISO date-time) }], most recent first, at most 8.
+    /// [{ path, name, lastOpened (ISO date-time) }], most recent first, at most MaxRecentVaults
+    /// (the start screen and the notebook switcher list them: AppController.recentNotebooks).
     Q_PROPERTY(QVariantList recentVaults READ recentVaults NOTIFY recentVaultsChanged FINAL)
     /// Follow symlinked folders that point outside the notebook, in every notebook opened on this
     /// device (Vault::setFollowsOutsideLinks through the Workspace; default off). Device-local,
@@ -217,7 +219,7 @@ public:
     explicit AppSettings(const QString &settingsFile = {}, const QString &dataDir = {}, QObject *parent = nullptr);
     ~AppSettings() override;
 
-    static constexpr int MaxRecentVaults = 8;
+    static constexpr int MaxRecentVaults = 12;
     /// The server folder proposed for the first notebook set up with an account on this device.
     static constexpr auto NewAccountFolder = "Notatki";
 
@@ -359,7 +361,8 @@ public:
     /// Checked for good either way: a link planted later, or a notebook new here, never turns it on.
     void checkOutsideLinksOnce(const QString &notebook, bool knownBefore, bool outsideLinks);
     /// Put `path` first in the recent list (and make it current).
-    void addRecentVault(const QString &path);
+    /// `when`: when it was opened (the app's clock, `--now`; invalid: now).
+    void addRecentVault(const QString &path, const QDateTime &when = {});
     Q_INVOKABLE void forgetRecentVault(const QString &path);
 
     bool closeToTray() const;

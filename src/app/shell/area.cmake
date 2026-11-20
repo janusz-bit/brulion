@@ -55,6 +55,7 @@ qt_add_library(brulion_shell STATIC
     ${_brulion_shell_dir}/foldertreemodel.h ${_brulion_shell_dir}/foldertreemodel.cpp
     ${_brulion_shell_dir}/indexworkers.h
     ${_brulion_shell_dir}/navigation.h ${_brulion_shell_dir}/navigation.cpp
+    ${_brulion_shell_dir}/recentnotebooks.h ${_brulion_shell_dir}/recentnotebooks.cpp
     ${_brulion_shell_dir}/tabs.h ${_brulion_shell_dir}/tabs.cpp
     ${_brulion_shell_dir}/replacesession.h ${_brulion_shell_dir}/replacesession.cpp
     ${_brulion_shell_dir}/shortcutmap.h ${_brulion_shell_dir}/shortcutmap.cpp
@@ -140,6 +141,7 @@ if(BRULION_DESKTOP)
     brulion_set_warnings(brulion_uidriver)
     target_sources(brulion PRIVATE shell/desktop/desktoptray.h shell/desktop/desktoptray.cpp
         shell/shellselftest.h shell/shellselftest.cpp shell/shelljourney.h shell/shelljourney.cpp
+        shell/onboardingselftest.h shell/onboardingselftest.cpp
         shell/remotecontrol.h shell/remotecontrol.cpp)
     # One Brulion per session, the messages of brulion-cli and the remote control's socket
     # (src/ipc); `brulion cli …` runs the command line (src/cli) inside the app's binary (the

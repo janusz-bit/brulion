@@ -7,7 +7,11 @@ brulion: document
 ## Notebooks and folders
 Brulion keeps your notes as plain `.md` files in a folder you choose — that folder is your **notebook**. There is no account and no database; you back it up by copying the folder, and you can open the same folder in Obsidian or Logseq.
 
-On first start you pick a folder, create a new notebook or open the “Sample notebook” with notes to try things out. You switch between notebooks with the “Switch notebook” button — the first letter of the notebook's name at the very top of the icon bar on the left. Its menu lists your recent notebooks plus “Brulion Documentation” and “Open another notebook…”. Ctrl+Shift+B takes you to the documentation and back.
+On first start the **start screen** asks for a notebook: under **Open or create a notebook** you pick a folder — a new one, one you sync with Syncthing, or an Obsidian vault, which opens as it is — and click **Open notebook** (a folder that does not exist yet is created). **Other ways to start** below it: **Import notes** from another app, **Open from GitHub…** and **Try the sample notebook** — the “Sample notebook” with notes to try things out.
+
+When you come back to the start screen (no notebook open, or “Open another notebook…”), **Recent notebooks** come first: each with its folder and when you last opened it; a click or Enter opens it. A notebook whose folder is gone — deleted, moved, on a drive that is not plugged in — is marked “Folder not found” (or “Not available” when a network folder does not answer); nothing is created there, and **Remove from list** (the × of the row, or Delete) takes it off the list — the folder itself is never touched. Plug the drive in again and the notebook is back. A notebook from a temporary folder that has been cleaned up leaves the list by itself.
+
+You switch between notebooks with the “Switch notebook” button — the first letter of the notebook's name at the very top of the icon bar on the left. Its menu lists your recent notebooks plus “Brulion Documentation” and “Open another notebook…”. Ctrl+Shift+B takes you to the documentation and back.
 
 ## Your first entry
 1. Open the **Journal** (Ctrl+J) — that is today's page.

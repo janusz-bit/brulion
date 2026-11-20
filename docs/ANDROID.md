@@ -279,8 +279,8 @@ phones: <https://dontkillmyapp.com>.
 ## Importing notes (Obsidian, Logseq, Notion…)
 
 Where: **More (⋮) → Import notes**, **Menu → Import notes** (drawer), the **Import notes** button
-under the empty journal of a new notebook, and the "Notes in another app?" card on the welcome
-screen (it opens the chosen notebook straight on the import screen). On the import screen choose
+under the empty journal of a new notebook, and the **Import notes** row of the start screen's
+"Other ways to start" (it opens the chosen notebook straight on the import screen). On the import screen choose
 the app the notes come from — under its description are the steps **on the phone** (where the
 files are, what to pick) — or pick the files right away: Brulion recognises the format itself.
 

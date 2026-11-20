@@ -55,6 +55,9 @@ fi
 
 declare -A shot_args=(
   [onboarding]="--onboarding"
+  # The start screen of someone coming back: three notebooks opened before (each by a run of its
+  # own in the shot's home), the most recent first.
+  [onboarding-recent]="--onboarding"
   [journals]="--demo --route journals"
   [page]="--demo"
   [settings]="--demo --route settings"
@@ -173,7 +176,7 @@ declare -A shot_notemode=(
   [doc-journal-mixed]=journal-mixed
   [pdf-embed]=pdf [pdf-viewer]=pdf [pdf-zoom]=pdf [pdf-search]=pdf [pdf-jump]=pdf [pdf-locked]=pdf
 )
-all_shots=(onboarding journals page page-editing page-editing-keyboard journals-editing-keyboard capture-keyboard
+all_shots=(onboarding onboarding-recent journals page page-editing page-editing-keyboard journals-editing-keyboard capture-keyboard
   page-editing-toast page-toolbar-menu page-tag-new page-suggest page-tags page-slash page-date page-reminder
   page-source page-sidepanel page-context journals-sidepanel context context-journal context-handle page-new page-empty page-doc-paragraph page-doc-list page-doc-heading page-doc-outline
   page-menu page-project page-selection page-picture page-picture-text page-picture-links
@@ -248,6 +251,14 @@ for shot in "${shots[@]}"; do
             > "$vault/journals/${now%% *}.md"
         fi
         vault_args=(--vault "$vault")
+      fi
+      if [[ "$shot" == onboarding-recent ]]; then
+        for notebook in "Dokumenty/Studia" "Praca/Notatki zespołu" "Dokumenty/Brulion"; do
+          XDG_CONFIG_HOME="$home/config" XDG_DATA_HOME="$home/data" XDG_CACHE_HOME="$home/cache" XDG_STATE_HOME="$home/state" \
+            QML_DISABLE_DISK_CACHE=1 QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software \
+            "$bin" --vault "$home/$notebook" --size "$geometry" --locale "$locale" --now "$now" \
+            --delay 300 --screenshot "$home/prep.png" >/dev/null 2>&1 || true
+        done
       fi
       if XDG_CONFIG_HOME="$home/config" XDG_DATA_HOME="$home/data" XDG_CACHE_HOME="$home/cache" XDG_STATE_HOME="$home/state" \
         QML_DISABLE_DISK_CACHE=1 QT_FORCE_STDERR_LOGGING=1 QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software \

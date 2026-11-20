@@ -85,9 +85,35 @@ clamp(cores − 1, 1, 4)).
 | `--allow-destructive` | allow the destructive commands (see the table) |
 | `--now "YYYY-MM-DD HH:mm"` | a fixed clock, local time (tests, reproducible runs) |
 | `--lang pl\|en` | language of written dates and templates (`{{weekday}}`, quick capture); default: the app's language (English when it was never chosen) |
+| `--profile <name>` | the app's separate profile (as `BRULION_PROFILE`; "Profiles" below): its settings (the current notebook), device state and the running app of that profile |
 | `--stdin` | the command's text argument from standard input |
 | `-v`, `--verbose` | diagnostics on standard error (standard output stays JSON) |
 | `-h`, `--help` | help; `help --json` describes every command for programs |
+
+### Profiles
+
+The app and `brulion-cli` share their names — the settings file, the app data (device state,
+history) and the sockets of the running app (single instance, remote control) — through the
+organisation name: "Brulion", or "Brulion-<name>" for a separate profile, chosen with
+`--profile <name>` (both programs; it wins) or the environment variable `BRULION_PROFILE=<name>`
+(letters, digits, `-`, `_`, at most 32; another `--profile` is a usage error, exit 2 `bad_profile`,
+and the app refuses to start). A profile keeps everything of its own: on Linux
+`~/.config/Brulion-<name>/Brulion.ini`, `~/.local/share/Brulion-<name>/…`; on Windows
+`%APPDATA%\Brulion-<name>\…` (docs/WINDOWS.md). For anything that should not touch the user's own
+Brulion — trying things out, screenshots, an agent driving its own app run:
+
+```sh
+brulion --profile shots --vault /tmp/zeszyt --remote-control &
+brulion-cli --profile shots app screenshot /tmp/zeszyt.png
+```
+
+Test runs keep out of the user's profile by themselves: a run of the app with `--selftest-*`,
+`--journey` or `--screenshot` that has no home of its own — no `--profile`, no `BRULION_PROFILE`,
+and `XDG_CONFIG_HOME` unset or `~/.config` — uses the profile "test" (and says so on stderr), so
+its notebooks never land among the user's recent notebooks. ctest's GUI tests and the screenshot
+scripts run in private homes (XDG folders on Linux, `BRULION_PROFILE=test-<name>` on Windows).
+A notebook of the system's temporary folder that is gone leaves the recent notebooks anyway
+(docs/UI.md "The start screen").
 
 ## Output
 

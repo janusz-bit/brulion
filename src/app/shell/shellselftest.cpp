@@ -9648,9 +9648,23 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
     checkViewsLetGo(window, app, check);
 
     // 6. Closing the notebook from the UI (as a click would: from inside an event).
+    const QString closedNotebook = app->workspace()->rootPath();
     QTimer::singleShot(0, app, [app] { app->closeVault(); });
     check(waitFor([app] { return app->status() == u"onboarding" && !app->workspace()->isOpen(); }),
           "closing the notebook shows onboarding and closes the vault");
+    // 6a. The start screen lists it first among the recent notebooks, beside its one primary
+    // action (the start screen's own self-test: onboardingselftest.h).
+    {
+        QQuickItem *first = nullptr;
+        check(waitFor([&] {
+                  first = shownNamed(window->contentItem(), u"onboardingRecent"_s);
+                  return first != nullptr;
+              }) && QDir(first->property("path").toString()) == QDir(closedNotebook),
+              "the start screen lists the notebook just closed first");
+        QQuickItem *open = shownNamed(window->contentItem(), u"onboardingOpen"_s);
+        check(open && open->property("variant").toString() == u"primary"_s,
+              "the start screen's primary action is “Open notebook”");
+    }
 
     // 6b. The tray calendar without a notebook: the month and a hint, no entries.
     if (!touchRun()) {

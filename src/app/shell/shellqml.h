@@ -5,6 +5,7 @@
 //   AppController    singleton — main()'s instance (AppController::instance())
 //   AppSettings      singleton — AppController.settings
 //   LocalAi          uncreatable — AppController.localAi (the model on the device)
+//   RecentNotebooks  uncreatable — AppController.recentNotebooks (the start screen's list)
 //   Workspace        singleton — AppController.workspace (the EditorHost for the editor)
 //   WorkspaceReminders, WorkspaceSync, WorkspaceGitHub, WorkspaceBackups, WorkspaceExtensions,
 //   WorkspaceChats   uncreatable —      Workspace.reminders / .sync / .github / .backups / .extensions
@@ -27,6 +28,7 @@
 #include "commandmodel.h"
 #include "extensionviewmodel.h"
 #include "foldertreemodel.h"
+#include "recentnotebooks.h"
 #include "replacesession.h"
 #include "shortcutmap.h"
 #include "viewtraits.h"
@@ -110,6 +112,13 @@ struct LocalAiForeign {
     QML_FOREIGN(brulion::shell::LocalAi)
     QML_NAMED_ELEMENT(LocalAi)
     QML_UNCREATABLE("Use AppController.localAi")
+};
+
+struct RecentNotebooksForeign {
+    Q_GADGET
+    QML_FOREIGN(brulion::shell::RecentNotebooks)
+    QML_NAMED_ELEMENT(RecentNotebooks)
+    QML_UNCREATABLE("Use AppController.recentNotebooks")
 };
 
 struct WorkspaceRemindersForeign {

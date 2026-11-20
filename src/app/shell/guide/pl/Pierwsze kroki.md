@@ -7,7 +7,11 @@ brulion: document
 ## Notatniki i foldery
 Brulion przechowuje notatki jako zwykłe pliki `.md` w wybranym folderze — ten folder to Twój **notatnik**. Nie ma konta ani bazy danych; kopię zapasową zrobisz, kopiując folder, a ten sam folder otworzysz w Obsidianie czy Logsequ.
 
-Przy pierwszym uruchomieniu wybierasz folder, tworzysz nowy notatnik albo otwierasz „Przykładowy brulion” z notatkami do wypróbowania. Między notatnikami przełączasz się przyciskiem „Przełącz notatnik” — pierwszą literą nazwy notatnika na samej górze paska ikon po lewej. Jego menu ma listę ostatnich notatników oraz pozycje „Dokumentacja Brulionu” i „Otwórz inny notatnik…”. Ctrl+Shift+B przenosi do dokumentacji i z powrotem.
+Przy pierwszym uruchomieniu **ekran startowy** prosi o notatnik: w części **Otwórz albo utwórz notatnik** wybierasz folder — nowy, synchronizowany przez Syncthing albo skarbiec Obsidiana, który otworzy się taki, jaki jest — i klikasz **Otwórz notatnik** (folder, którego jeszcze nie ma, zostanie utworzony). Niżej **Inne sposoby na start**: **Importuj notatki** z innej aplikacji, **Otwórz z GitHuba…** i **Wypróbuj przykładowy notatnik** — „Przykładowy brulion” z notatkami do wypróbowania.
+
+Gdy wracasz na ekran startowy (żaden notatnik nie jest otwarty albo wybierasz „Otwórz inny notatnik…”), na pierwszym miejscu są **Ostatnie notatniki**: każdy z folderem i datą ostatniego otwarcia; kliknięcie albo Enter go otwiera. Notatnik, którego folderu nie ma — usuniętego, przeniesionego, na niepodłączonym dysku — jest oznaczony „Brak folderu” (albo „Niedostępny”, gdy folder sieciowy nie odpowiada); nic nie zostanie tam utworzone, a **Usuń z listy** (× w wierszu albo Delete) zdejmuje go z listy — sam folder zostaje nietknięty. Po podłączeniu dysku notatnik wraca. Notatnik z folderu tymczasowego, który został już wyczyszczony, sam znika z listy.
+
+Między notatnikami przełączasz się przyciskiem „Przełącz notatnik” — pierwszą literą nazwy notatnika na samej górze paska ikon po lewej. Jego menu ma listę ostatnich notatników oraz pozycje „Dokumentacja Brulionu” i „Otwórz inny notatnik…”. Ctrl+Shift+B przenosi do dokumentacji i z powrotem.
 
 ## Pierwszy wpis
 1. Otwórz **Dziennik** (Ctrl+J) — to strona na dziś.
