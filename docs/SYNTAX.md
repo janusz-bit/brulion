@@ -1251,7 +1251,57 @@ are **exercise lines**. A tagged line without children is a workout of one exerc
   session's top weight — one step heavier when every planned set was done there with the planned
   reps.
 * **Numbers**: the estimated one-rep max is Epley's (1–12 reps, kg; lb converted), volume Σ weight ×
-  reps; bodyweight sets have neither.
+  reps; a bodyweight set's volume is the logged body weight (below) of its day — the last weigh-in
+  on or before it, else the first after it — plus or minus its added weight, none without
+  weigh-ins; it has no one-rep max. Shown in the gym's **Weight unit** setting (kg or lb, per
+  device); a line without a unit is in it too.
+* **Muscles** (the weekly volume): an exercise's page's `miesnie::` (`muscles::`: the primary
+  muscles) and `miesnie-pomocnicze::` (`secondary-muscles::`), names in either language or the
+  catalog's (`klatka piersiowa`, `chest`, `przednie aktony barków` → shoulders); else the catalog's
+  exercise the page's `katalog::` (`catalog::`, its id) or the exercise's name or alias means
+  ("Przysiad" is `back-squat`). A name the catalog does not know is a muscle group of its own.
+  (Property keys are ASCII, §4: an older page's `mięśnie::` line is read as well.) Every primary
+  muscle gets the set's whole volume and the set, every secondary muscle half of both; a timed set
+  or a distance is a set without volume. Weeks start on the notebook's first day of the week.
+* **The catalog**: Brulion's 51 exercises (their ids stay) and free-exercise-db's (the Unlicense,
+  `scripts/gym-catalog.py`), with Polish names for the common ones — 879 exercises, about 220
+  translated. Its data are resources of the app: `exercises.json` (239 KB, 33 KB compressed) and
+  `exercise-instructions.json` (607 KB, 130 KB compressed; read one exercise at a time), so the app,
+  the APK and the browser's download grow by about 165 KB (rcc's zlib; measured 2026-11-20); the
+  exercises' pictures (about 70 MB) are not bundled. "Exercise from the catalog" writes a page:
+
+  ```markdown
+  katalog:: back-squat
+  miesnie:: czworogłowe uda
+  miesnie-pomocnicze:: łydki, pośladki, dwugłowe uda, dolna część pleców
+  sprzet:: sztanga
+  kategoria:: siłowe
+  poziom:: początkujący
+
+  ## Wykonanie
+
+  1. This exercise is best performed inside a squat rack …
+  ```
+
+  (In English `catalog::`, `muscles::`, `secondary-muscles::`, `equipment::`, `category::`,
+  `level::`, `## Instructions`; the instructions are free-exercise-db's English.)
+* **Weigh-ins** (the body weight log): a block tagged `#waga` (`#weight`) in a daily note — its
+  weight with `kg`, `lb` or `lbs` (a number alone: the setting's unit), optionally the body fat
+  `18 %`, any other words and tags as notes, in any order:
+
+  | Written | Read |
+  |---|---|
+  | `- 82,5 kg #waga` | 82,5 kg |
+  | `- 82,5 kg 18 % rano #waga` | 82,5 kg, 18 % body fat, the note "rano" |
+  | `- Waga: 82.5kg 18,5% #Waga` | 82,5 kg, 18,5 %, the note "Waga:" |
+  | `- 181 lb #weight` | 181 lb (82,1 kg) |
+  | `- #waga 80` | 80 in the setting's unit |
+  | `- 18 % #waga`, `- 0 kg #waga` | no weigh-in |
+
+  Brulion writes `- 82,5 kg 18 % rano #waga` (`- 82.5 kg 18% morning #weight` in English) at the end
+  of the day's note; a day's last weigh-in counts for that day. The **trend** is an average smoothed
+  by 10 % a day (the Hacker's Diet's): over a gap of n days the next weigh-in moves it by 1 − 0,9ⁿ
+  of the difference. A line over 2000 bytes is no weigh-in.
 
 ### Dependencies (Obsidian Tasks `🆔` / `⛔`)
 

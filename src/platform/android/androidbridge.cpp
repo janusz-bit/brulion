@@ -407,6 +407,33 @@ ScheduleResult AndroidBridge::scheduleReminders(const QJsonArray &items)
     return result;
 }
 
+ScheduleResult AndroidBridge::scheduleTimer(const QJsonObject &item)
+{
+    ScheduleResult result;
+    if (!appContext().isValid()) {
+        result.error = u"no Android context"_s;
+        return result;
+    }
+    const QJsonDocument answer = callJson("scheduleTimer", compactJson(item));
+    const QJsonObject object = answer.object();
+    if (!answer.isObject() || answeredError("scheduleTimer", object)) {
+        result.error = object.value("error"_L1).toString(u"scheduleTimer failed"_s);
+        return result;
+    }
+    result.ok = true;
+    result.scheduled = object.value("armed"_L1).toBool() ? 1 : 0;
+    result.exact = object.value("exact"_L1).toBool();
+    return result;
+}
+
+bool AndroidBridge::cancelTimer(int id)
+{
+    if (!appContext().isValid())
+        return false;
+    const QJsonDocument answer = callJson("cancelTimer", compactJson(QJsonObject{{u"id"_s, id}}));
+    return answer.isObject() && !answeredError("cancelTimer", answer.object());
+}
+
 Activation AndroidBridge::takeActivation()
 {
     const QJsonObject object = callJson("takeActivation").object();

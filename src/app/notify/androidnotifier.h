@@ -45,6 +45,9 @@ public:
     bool firesWhenClosed() const override { return true; }
     void schedule(const QList<ScheduledNotification> &notifications) override;
     void showNow(const ScheduledNotification &notification) override;
+    /// AlarmManager through TimerAlarms.kt (androidTimerItem()): true when exact.
+    bool armTimer(const ScheduledNotification &notification) override;
+    void cancelTimer(const QString &id) override;
 
     QList<SoundChoice::Mode> soundModes() const override;
     bool hasSystemSoundPicker() const override { return true; }

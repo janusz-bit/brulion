@@ -781,6 +781,63 @@ private Q_SLOTS:
         QCOMPARE(androidReminderItem(task).value(u"vault"_s).toString(), u"/home/ewa/Notatki-źródła"_s);
     }
 
+    void androidTimerPayload()
+    {
+        // The end of an extension's timer (b.timer): a reminder item marked `timer` — no "Done",
+        // no alarm —, its moment to the millisecond (a rest of 90 s ends at 18:01:30.250).
+        ScheduledNotification rest;
+        rest.id = u"brulion-timer:/home/ewa/Notatki-źródła:silownia"_s;
+        rest.nativeId = brulion::nativeIdFor(rest.id);
+        rest.title = u"Przerwa is over"_s;
+        rest.body = u"Czas na kolejną serię."_s;
+        rest.at = QDateTime(QDate(2026, 11, 20), QTime(18, 1, 30, 250));
+        rest.taskLine = 4; // (never "Done")
+        rest.alarm = true; // (never an alarm)
+        rest.vault = u"/home/ewa/Notatki-źródła"_s;
+        const QJsonObject item = androidTimerItem(rest);
+        QCOMPARE(item.value(u"timer"_s).toBool(), true);
+        QCOMPARE(item.value(u"id"_s).toInt(), rest.nativeId);
+        QCOMPARE(item.value(u"at"_s).toInteger(), rest.at.toMSecsSinceEpoch());
+        QCOMPARE(item.value(u"task"_s).toBool(), false);
+        QCOMPARE(item.value(u"alarm"_s).toBool(), false);
+        QCOMPARE(item.value(u"title"_s).toString(), u"Przerwa is over"_s);
+        QCOMPARE(item.value(u"body"_s).toString(), u"Czas na kolejną serię."_s);
+        QCOMPARE(item.value(u"path"_s).toString(), QString());
+        QCOMPARE(item.value(u"vault"_s).toString(), rest.vault);
+        // A reminder's item is no timer.
+        QVERIFY(!androidReminderItem(reminder()).contains(u"timer"_s));
+    }
+
+    void timersArmedApart()
+    {
+        // The base notifier (the desktop's) arms nothing — the app shows the end itself — but
+        // keeps what it was given, apart from the reminders: schedule() never touches it.
+        QObject parent;
+        Notifier *notifier = createPlatformNotifier(&parent);
+        ScheduledNotification rest;
+        rest.id = u"brulion-timer:a:silownia"_s;
+        rest.title = u"Przerwa is over"_s;
+        rest.at = QDateTime::currentDateTime().addSecs(120);
+        ScheduledNotification focus = rest;
+        focus.id = u"brulion-timer:a:skupienie"_s;
+        focus.at = rest.at.addSecs(-60);
+        QVERIFY(!notifier->armTimer(rest));
+        QVERIFY(!notifier->armTimer(focus));
+        QCOMPARE(notifier->timers().size(), 2);
+        QCOMPARE(notifier->timers().first().id, focus.id); // the soonest first
+        notifier->schedule({reminder()});
+        notifier->schedule({});
+        QCOMPARE(notifier->timers().size(), 2);
+        rest.at = rest.at.addSecs(-100); // a new timer of the extension: the same id moves
+        QVERIFY(!notifier->armTimer(rest));
+        QCOMPARE(notifier->timers().size(), 2);
+        QCOMPARE(notifier->timers().first().id, rest.id);
+        notifier->cancelTimer(rest.id);
+        QCOMPARE(notifier->timers().size(), 1);
+        notifier->cancelTimer(u"brulion-timer:a:nic"_s); // unknown: nothing
+        QCOMPARE(notifier->timers().size(), 1);
+    }
+
     void androidDoneRequestsParsed()
     {
         const QJsonArray array{

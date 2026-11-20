@@ -28,7 +28,7 @@ Brulion aktualizuje dokumentację razem z aplikacją: dochodzą nowe strony, a t
 - [[Zadania|Zadania]] — terminy, priorytety, powtarzanie.
 - [[Przypomnienia i alarmy|Przypomnienia i alarmy]] — powiadomienia i budziki.
 - [[Nawyki|Nawyki]] — codzienne punkty do odhaczania, serie i kalendarz miesiąca.
-- [[Siłownia|Siłownia]] — treningi w dzienniku, plany z progresją, timer przerwy i wykresy postępu.
+- [[Siłownia|Siłownia]] — treningi w dzienniku, plany z progresją, timer przerwy, wykresy postępu, objętość tygodniowa, masa ciała i katalog ćwiczeń.
 - [[Fiszki|Fiszki]] — pytania i odpowiedzi w notatkach, powtarzane tuż przed tym, zanim byś je zapomniał.
 - [[Zapytania|Zapytania]] — listy zadań i bloków zbierane z całego notatnika.
 

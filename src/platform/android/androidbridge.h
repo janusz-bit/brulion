@@ -104,6 +104,16 @@ public:
      */
     ScheduleResult scheduleReminders(const QJsonArray &items);
 
+    /**
+     * Arms the end of an extension's timer (TimerAlarms.kt): @p item is one reminder object as
+     * scheduleReminders() takes them, its id the timer's. Kept apart from the reminders — a
+     * scheduleReminders() never drops it — until it comes due or cancelTimer(). `scheduled` is 1
+     * when it was armed (0: its time has passed).
+     */
+    ScheduleResult scheduleTimer(const QJsonObject &item);
+    /// Cancels the timer @p id armed by scheduleTimer(): its alarm and its notification.
+    bool cancelTimer(int id);
+
     /// The notification tap not delivered through activated() yet (cold start); empty if none.
     /// Each tap is handed out once.
     Activation takeActivation();

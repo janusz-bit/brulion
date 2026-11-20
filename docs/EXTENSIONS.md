@@ -452,7 +452,7 @@ end, { label = "Mark the first TODO as seen" })
 | `b.status(text?)` | what the running command is doing now, for the user to see while it waits (a question, a model): "Reading “Home”…". The AI chat shows it under the AI's dots (the assistant says what each tool does); elsewhere nothing shows it yet. Whitespace made single, at most 300 characters; `""` or nothing clears it. Not a text: an error |
 | `b.timer(seconds, label?)`, `b.timer(seconds, { label, message })` | starts the extension's own timer (1 … 86 400 s): its countdown shows in a banner under the top bar in every view; at the end a notification "`label` is over" with `message` (else the app's words), the message as a toast, and the extension's `"timer"` hooks ("Timers") |
 | `b.stopTimer()` | ends the extension's timer without a word |
-| `b.data(name)` | read-only data bundled with a built-in extension (the gym's `b.data("exercises")`, the AI assistant's `b.data("reference")` — this document's text); `nil` for extension pages — unless the page overrides a built-in, which keeps the built-in's data |
+| `b.data(name)`, `b.data(name, key)` | read-only data bundled with a built-in extension (the gym's catalog `b.data("exercises")`, the AI assistant's `b.data("reference")` — this document's text); with `key` one entry of a record without the rest crossing into the script (the gym's `b.data("instructions", "back-squat")`: one exercise's of 600 KB); `nil` for extension pages — unless the page overrides a built-in, which keeps the built-in's data. A `key` that is no text is an error |
 
 ```luau
 -- This week from the notebook's first day of the week, and a schedule in words.
@@ -566,6 +566,7 @@ of one of the app's icons (`assets/icons/`: `folder`, `calendar-check`, `chart-c
 | `b.ui.stepper({ value, step, unit?, action, args? })` | `− value +`: a tap calls the action with `args` and the new `value` (never below 0; `step` 1 by default; shown with at most two decimals and the unit). The number can be typed in as well (`82,5` or `82.5`, the unit may follow; Enter or leaving the field): the action gets it the same way, only a number of at least 0 that differs from the one shown. − / + from a number between two steps go to the next step's value (`31` with a step of 2,5: 30 or 32,5). **Only inside a row** |
 | `b.ui.table(columns, rows)` | a table: `columns` a list of headings, `rows` a list of lists of cells (text; format numbers yourself). Made for up to four columns: the second is the widest, from the third on they are right-aligned |
 | `b.ui.chart({ kind, title?, labels, series })` | a chart drawn like the notes' charts: `kind` `"line"` (the default) or `"bar"`, `labels` a list of texts, `series = { { name = …, values = { … } } }` with a value per label (`nil` leaves a gap) |
+| `b.ui.heatmap({ columns, rows, scale?, label? })` | a grid of tinted cells, a row per thing and a column per period (the gym's volume per muscle and week): `columns` the periods' names, `rows = { { label, values, texts?, note? } }` — `values` a number per column (`nil` or 0: an empty cell), each cell in one of four strengths of the accent by its value against its row's largest (`scale = "all"`: the whole grid's); `texts` what each cell says (a tooltip on hover or a tap, its name for a screen reader; else its number), `note` a short text after the row (this week's value). A row's label column, the cells as wide as the line allows (22 px at most, 26 on touch screens), the columns' names every so many when they are narrow, the last always. At most 104 columns |
 | `b.ui.month({ month, days, label? })` | a month as a grid, a cell per day under the weekdays' heads (from the notebook's first day of the week), today ringed: `month` `"2026-11"`, `days = { ["2026-11-03"] = { state, action?, args?, menu? } }` — `state` `"done"` (the success tint), `"missed"` (the danger tint), `"skipped"` (struck out), `"due"` (a thin ring), `"rest"` (nothing due: the default), `"future"` or `"outside"` (faint); a day with an `action` is a button that calls it with its `args`, its `menu` opens on a right-click or a long press. `label` is a title above it |
 | `b.ui.empty(title, text, icon?)` | an empty state: an icon (`icon`, one of the app's; else the gym's dumbbell), a title and a sentence |
 | `b.ui.open(label, view, params?, options?)` | opens another view of the extension (`""`: this one) with `params` — a link in a row, a "back"-like button on its own; with `options` as `b.ui.button`'s (`{ primary = true, icon = "play", key = "enter" }`) a button |
@@ -915,7 +916,7 @@ end, { description = "Open tasks due by the note's day" })
 | `b.on("journal", fn)` | a daily note was made — by this device (opening the day, a capture, an extension) or by a sync | `{ date, page, path, source, by }` |
 | `b.on("open", fn)` | the notebook was opened: once, after every extension that runs there loaded (not for one approved later) | `{ date }` |
 | `b.on("day", fn)` | a new day began while the app runs (midnight passed, the device woke up on a later day) | `{ date, previous }` |
-| `b.on("timer", fn)` | the extension's own timer ended ("Timers"); only its own hooks hear it | `{ label, seconds }` |
+| `b.on("timer", fn)` | the extension's own timer ended ("Timers"); only its own hooks hear it — one that ended while the app was closed when the notebook opens next (`late`) | `{ label, seconds, late }` |
 
 **Who hears what.** A hook never hears what its own extension wrote — no echoes, no loop of one
 extension —, and every other change it hears: one extension's tick in its view reaches the page
@@ -1068,7 +1069,7 @@ values stay.
 * A stored value that does not fit its setting (another kind, an option no longer there, a hand
   edit) reads as the default.
 * The built-ins use them too: the gym's **Rest between sets** (used where no `rest::` says
-  otherwise).
+  otherwise) and **Weight unit** (kg or lb: body weight and volume shown in it).
 * `brulion-cli extension settings <extension>` lists them, `--set key=value` changes one.
 
 ```luau
@@ -1107,8 +1108,24 @@ message as a toast, and the extension's `b.on("timer", fn)` hooks with `{ label,
 write the session into the journal, to start the next one. `b.timer(seconds, label)` is the short
 form. A label is cut to 100 characters, a message to 300, both one line.
 
-The timer runs while the app does: a notification of a closed app is in TODO.md ("Gym: next
-steps").
+**With the app closed.** The end is armed on the platform when the timer starts — moved when a new
+timer replaces it, cancelled when it stops (× or `b.stopTimer()`) — through the reminders' notifier
+(`notify::Notifier::armTimer`, `WorkspaceExtensions::setTimerAlarms`):
+
+* **Android** sets an exact alarm (`TimerAlarms.kt`: apart from the reminders, so their refreshes
+  and the background check never drop it; kept over a reboot), and the notification — "OK" alone,
+  no Snooze, no Done — comes when Brulion is closed or its process is gone. The app, running at the
+  end, shows only its toast then (no second notification). Without the exact-alarm permission the
+  alarm is inexact: the running app shows the end on time itself and takes the late one back.
+* **The desktop** shows it while Brulion runs, also in the tray with its window closed ("Close to
+  the tray"); quit, nothing can show it (a desktop's notifications cannot be scheduled).
+* **The browser** shows it while the tab is open (browsers schedule no notifications; a hidden
+  tab's timers may come up to a minute late).
+
+The running timers are kept in the notebook's device state (`LocalStore`, `extensions/timers`): the
+app started again during a timer shows it counting on, armed again; a timer that ended while it was
+closed (within a day) runs the extension's `"timer"` hooks when the notebook opens, after `"open"`,
+with `late = true` — the focus session below is written into the journal even so.
 
 ```luau
 local SESSION = 25 * 60

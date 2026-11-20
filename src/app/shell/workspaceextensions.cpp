@@ -22,10 +22,13 @@
 #include <QThreadPool>
 #endif
 #include <QJsonArray>
+#include <QJsonObject>
 #include <QRegularExpression>
+#include <QTimeZone>
 
 #include <algorithm>
 #include <cmath>
+#include <utility>
 
 using namespace Qt::StringLiterals;
 using namespace std::chrono_literals;
@@ -301,6 +304,7 @@ void WorkspaceExtensions::attach(Vault *vault, VaultIndex *index)
     m_day = m_clock ? m_clock().date() : QDate::currentDate();
     m_dayTimer.start();
     loadTrust();
+    loadTimers();
     reload();
 }
 
@@ -344,6 +348,9 @@ void WorkspaceExtensions::detach()
     m_dayTimer.stop();
     m_opened = false;
     clearSelection();
+    // (The timers stay in the notebook's device state and their platform alarms armed: their
+    // ends still come, and the notebook opened again shows them — loadTimers().)
+    m_lateTimers.clear();
     if (!m_timers.isEmpty()) {
         m_timers.clear();
         m_restTimer.stop();
@@ -379,6 +386,13 @@ void WorkspaceExtensions::setEnabled(const QStringList &ids)
 void WorkspaceExtensions::setNotifier(std::function<void(const QString &, const QString &)> notify)
 {
     m_notify = std::move(notify);
+}
+
+void WorkspaceExtensions::setTimerAlarms(std::function<bool(const ScheduledNotification &)> arm,
+                                         std::function<void(const QString &)> cancel)
+{
+    m_timerArm = std::move(arm);
+    m_timerCancel = std::move(cancel);
 }
 
 void WorkspaceExtensions::reload()
@@ -527,9 +541,15 @@ void WorkspaceExtensions::indexReady()
     if (!m_opened) {
         m_opened = true;
         QTimer::singleShot(0, this, [this] {
-            if (m_vault)
-                runHooks(u"open"_s,
-                         {{u"date"_s, (m_clock ? m_clock().date() : QDate::currentDate()).toString(Qt::ISODate)}});
+            if (!m_vault)
+                return;
+            runHooks(u"open"_s,
+                     {{u"date"_s, (m_clock ? m_clock().date() : QDate::currentDate()).toString(Qt::ISODate)}});
+            // Timers that ended while the app was closed: their extensions' "timer" hooks, late.
+            const auto late = std::exchange(m_lateTimers, {});
+            for (const auto &[extension, spec] : late)
+                runHooks(u"timer"_s, {{u"label"_s, spec.label}, {u"seconds"_s, spec.seconds}, {u"late"_s, true}},
+                         extension);
         });
     }
 }
@@ -2095,7 +2115,11 @@ void WorkspaceExtensions::startTimerFor(const QString &extension, const extensio
     t.spec.seconds = std::max(1, spec.seconds);
     t.remaining = t.spec.seconds;
     t.end = QDateTime::currentDateTimeUtc().addSecs(t.spec.seconds);
+    // Its end armed on the platform now (the same id: a running one's moves): with the app closed
+    // it still comes where the platform can (Android).
+    t.native = m_timerArm && m_vault ? m_timerArm(timerNotification(extension, t)) : false;
     m_timers.insert(extension, t); // (one per extension: a new one replaces it)
+    storeTimers();
     if (extension == u"silownia") {
         m_restTotal = t.spec.seconds;
         m_restRemaining = m_restTotal;
@@ -2120,6 +2144,9 @@ void WorkspaceExtensions::stopTimer(const QString &extension)
 {
     if (!m_timers.remove(extension))
         return;
+    if (m_timerCancel && m_vault)
+        m_timerCancel(timerNotificationId(extension));
+    storeTimers();
     if (extension == u"silownia") {
         m_restRemaining = 0;
         Q_EMIT restChanged();
@@ -2182,6 +2209,7 @@ void WorkspaceExtensions::tickRest()
 void WorkspaceExtensions::timerEnded(const QString &extension)
 {
     const RunningTimer t = m_timers.take(extension);
+    storeTimers();
     if (extension == u"silownia") {
         m_restRemaining = 0;
         Q_EMIT restChanged();
@@ -2189,13 +2217,113 @@ void WorkspaceExtensions::timerEnded(const QString &extension)
     Q_EMIT timersChanged();
     // Its own words: the label and the message the extension gave, else the app's.
     const QString label = t.spec.label.isEmpty() ? title(extension) : t.spec.label;
-    const QString body = !t.spec.message.isEmpty()  ? t.spec.message
+    const auto [heading, body] = timerWords(extension, t.spec);
+    // The platform shows an end it armed exactly by itself (Android); else the app shows it now
+    // — and takes back what was armed late (an inexact alarm without the permission).
+    if (!t.native) {
+        if (m_timerCancel && m_vault)
+            m_timerCancel(timerNotificationId(extension));
+        if (m_notify)
+            m_notify(heading, body);
+    }
+    Q_EMIT message(!t.spec.message.isEmpty() ? t.spec.message : tr("%1 is over: %2").arg(label, body), u"info"_s);
+    runHooks(u"timer"_s, {{u"label"_s, t.spec.label}, {u"seconds"_s, t.spec.seconds}, {u"late"_s, false}}, extension);
+}
+
+QString WorkspaceExtensions::timerNotificationId(const QString &extension) const
+{
+    return u"brulion-timer:"_s + (m_vault ? m_vault->id() : QString()) + u':' + extension;
+}
+
+std::pair<QString, QString> WorkspaceExtensions::timerWords(const QString &extension,
+                                                            const extensions::TimerSpec &spec) const
+{
+    const QString label = spec.label.isEmpty() ? title(extension) : spec.label;
+    const QString body = !spec.message.isEmpty()    ? spec.message
                          : extension == u"silownia" ? tr("Time for the next set.")
                                                     : tr("The timer of %1 has ended.").arg(title(extension));
-    if (m_notify)
-        m_notify(tr("%1 is over").arg(label), body);
-    Q_EMIT message(!t.spec.message.isEmpty() ? t.spec.message : tr("%1 is over: %2").arg(label, body), u"info"_s);
-    runHooks(u"timer"_s, {{u"label"_s, t.spec.label}, {u"seconds"_s, t.spec.seconds}}, extension);
+    return {tr("%1 is over").arg(label), body};
+}
+
+ScheduledNotification WorkspaceExtensions::timerNotification(const QString &extension, const RunningTimer &timer) const
+{
+    ScheduledNotification n;
+    n.id = timerNotificationId(extension);
+    n.nativeId = nativeIdFor(n.id);
+    const auto [heading, body] = timerWords(extension, timer.spec);
+    n.title = heading.left(ScheduledNotification::MaxTitleLength);
+    n.body = body;
+    n.at = timer.end.toLocalTime(); // a moment (seconds and all), not a reminder's minute
+    n.vault = m_vault ? m_vault->id() : QString();
+    return n;
+}
+
+namespace {
+const QString kTimersKey = u"extensions/timers"_s;
+constexpr qint64 kLateTimerMs = 24ll * 60 * 60 * 1000; // older ends run no hooks
+} // namespace
+
+void WorkspaceExtensions::storeTimers()
+{
+    LocalStore *store = m_vault ? m_vault->store() : nullptr;
+    if (!store)
+        return;
+    QJsonObject timers;
+    for (auto it = m_timers.cbegin(); it != m_timers.cend(); ++it) {
+        timers.insert(it.key(), QJsonObject{{u"label"_s, it->spec.label},
+                                            {u"message"_s, it->spec.message},
+                                            {u"seconds"_s, it->spec.seconds},
+                                            {u"end"_s, it->end.toMSecsSinceEpoch()},
+                                            {u"native"_s, it->native}});
+    }
+    if (timers.isEmpty())
+        store->remove(kTimersKey);
+    else
+        store->set(kTimersKey, timers);
+}
+
+void WorkspaceExtensions::loadTimers()
+{
+    m_lateTimers.clear();
+    LocalStore *store = m_vault ? m_vault->store() : nullptr;
+    if (!store)
+        return;
+    const QJsonObject stored = store->get(kTimersKey).toObject();
+    if (stored.isEmpty())
+        return;
+    const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    for (auto it = stored.constBegin(); it != stored.constEnd(); ++it) {
+        const QJsonObject o = it.value().toObject();
+        RunningTimer t;
+        t.spec.label = o.value(u"label"_s).toString().left(100);
+        t.spec.message = o.value(u"message"_s).toString().left(300);
+        t.spec.seconds = std::clamp(o.value(u"seconds"_s).toInt(), 1, 86400);
+        const qint64 end = o.value(u"end"_s).toInteger();
+        // (A hand-edited state: an end further away than a timer can last is no timer.)
+        if (end <= 0 || end > now + 86'400'000ll + 60'000)
+            continue;
+        if (end <= now) {
+            if (now - end <= kLateTimerMs)
+                m_lateTimers.append({it.key(), t.spec});
+            continue;
+        }
+        t.end = QDateTime::fromMSecsSinceEpoch(end, QTimeZone::UTC);
+        t.remaining = int((end - now + 999) / 1000);
+        // Armed again (the same id): what the platform kept stays, a lost one comes back.
+        t.native = m_timerArm ? m_timerArm(timerNotification(it.key(), t)) : o.value(u"native"_s).toBool();
+        m_timers.insert(it.key(), t);
+        if (it.key() == u"silownia") {
+            m_restTotal = t.spec.seconds;
+            m_restRemaining = t.remaining;
+            m_restLabel = t.spec.label.isEmpty() ? tr("Rest") : t.spec.label;
+            Q_EMIT restChanged();
+        }
+    }
+    storeTimers(); // without the ended ones
+    if (!m_timers.isEmpty()) {
+        m_restTimer.start();
+        Q_EMIT timersChanged();
+    }
 }
 
 // ---- an extension's own settings ----------------------------------------------------------------

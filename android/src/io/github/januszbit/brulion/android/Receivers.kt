@@ -7,12 +7,16 @@ import android.content.Context
 import android.content.Intent
 import java.time.LocalDate
 
-/** A reminder came due (AlarmManager): forget it and show the notification. */
+/** A reminder (or a timer's end) came due (AlarmManager): forget it and show the notification. */
 class ReminderReceiver : BroadcastReceiver() {
   override fun onReceive(context: Context, intent: Intent) {
     if (intent.action != Actions.FIRE) return
     val reminder = Reminder.fromIntent(intent) ?: return
-    ReminderStore(context).removeFired(reminder.id, System.currentTimeMillis())
+    if (reminder.timer) {
+      TimerAlarms.fired(context, reminder.id, System.currentTimeMillis())
+    } else {
+      ReminderStore(context).removeFired(reminder.id, System.currentTimeMillis())
+    }
     ReminderNotifier.show(context, reminder)
   }
 }
@@ -45,7 +49,10 @@ class BootReceiver : BroadcastReceiver() {
       Intent.ACTION_MY_PACKAGE_REPLACED,
       Intent.ACTION_TIME_CHANGED,
       Intent.ACTION_TIMEZONE_CHANGED,
-      ACTION_EXACT_ALARM_PERMISSION_CHANGED -> AlarmScheduler.rearmFromStore(context)
+      ACTION_EXACT_ALARM_PERMISSION_CHANGED -> {
+        AlarmScheduler.rearmFromStore(context)
+        TimerAlarms.rearm(context)
+      }
     }
     // The widgets' "today" (and their midnight alarm, gone after a reboot) follow the clock.
     when (intent.action) {

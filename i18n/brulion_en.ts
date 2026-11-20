@@ -1634,7 +1634,7 @@
     <name>ShellShareDialog</name>
     <message numerus="yes">
         <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="32"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="7889"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="8005"/>
         <source>%n file(s) to save in the notebook</source>
         <translation>
             <numerusform>%n file to save in the notebook</numerusform>
@@ -2384,7 +2384,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspaceintegration.cpp" line="331"/>
+        <location filename="../src/app/shell/workspaceintegration.cpp" line="339"/>
         <source>%n task(s) changed both here and on the server — see the sync center</source>
         <translation>
             <numerusform>%n task changed both here and on the server — see the sync center</numerusform>
@@ -2392,7 +2392,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspaceintegration.cpp" line="337"/>
+        <location filename="../src/app/shell/workspaceintegration.cpp" line="345"/>
         <source>%n deletion(s) of synced tasks wait for a confirmation in the sync center</source>
         <translation>
             <numerusform>%n deletion of a synced task waits for a confirmation in the sync center</numerusform>
@@ -2403,7 +2403,7 @@
 <context>
     <name>brulion::shell::WorkspaceExtensions</name>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspaceextensions.cpp" line="775"/>
+        <location filename="../src/app/shell/workspaceextensions.cpp" line="795"/>
         <source>Extensions answering each other&apos;s changes stopped after %1 rounds: %n change(s) not passed on.</source>
         <translation>
             <numerusform>Extensions answering each other&apos;s changes stopped after %1 rounds: %n change not passed on.</numerusform>
@@ -2411,7 +2411,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspaceextensions.cpp" line="2325"/>
+        <location filename="../src/app/shell/workspaceextensions.cpp" line="2453"/>
         <source>%1 copied to %2 (%n page(s)).</source>
         <translation>
             <numerusform>%1 copied to %2 (%n page).</numerusform>
@@ -2529,7 +2529,7 @@
 <context>
     <name>brulion::shell::WorkspaceIntegration</name>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspaceintegration.cpp" line="292"/>
+        <location filename="../src/app/shell/workspaceintegration.cpp" line="300"/>
         <source>%n note(s) changed on two devices at once. Both versions are kept: merge them in the sync center.</source>
         <translation>
             <numerusform>%n note changed on two devices at once. Both versions are kept: merge them in the sync center.</numerusform>

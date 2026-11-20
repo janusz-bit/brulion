@@ -46,6 +46,9 @@ ListView {
     /// A month grid's day cell and the gap between cells (as the habits' cards had them).
     readonly property int dayCell: Theme.touchUi ? 34 : 26
     readonly property int dayGap: 4
+    /// A heat map's largest cell (smaller when its columns need it) and the gap between cells.
+    readonly property int heatCell: Theme.touchUi ? 26 : 22
+    readonly property int heatGap: 3
 
     /// A text's colour by its tone ("success" | "danger" | "accent"), else by `muted`.
     function toneColor(tone: string, muted: bool): color {
@@ -887,6 +890,14 @@ ListView {
             }
         }
         DelegateChoice {
+            roleValue: "heatmapHead"
+            HeatLine { header: true }
+        }
+        DelegateChoice {
+            roleValue: "heatmapRow"
+            HeatLine { header: false }
+        }
+        DelegateChoice {
             roleValue: "tableHead"
             TableLine { header: true }
         }
@@ -1596,6 +1607,127 @@ ListView {
             width: tableLine.contentWidth
             height: 1
             color: Theme.borderSubtle
+        }
+    }
+    /// A heat map's line (b.ui.heatmap: the model's heatmapHead and heatmapRow): the label column,
+    /// a cell per column tinted by its level (0 nothing … 4 the most: the accent ever stronger), the
+    /// note column when the rows have notes. The head writes the columns' names — every so many
+    /// when the cells are narrow, the last (this week) always. A cell's text shows as a tooltip on
+    /// hover or a tap and is its name for screen readers.
+    component HeatLine: LineFrame {
+        id: heatLine
+        required property list<string> lineCells
+        required property list<var> lineItems
+        required property string lineTitle
+        required property string lineHint
+        required property string lineSize
+        property bool header: false
+        readonly property int columns: heatLine.header ? heatLine.lineCells.length : heatLine.lineItems.length
+        readonly property real noteWidth: heatLine.lineSize === "note" ? Math.min(Math.round(heatLine.contentWidth * 0.18), 88) : 0
+        readonly property real labelWidth: Math.min(Math.round(heatLine.contentWidth * (Theme.narrow ? 0.36 : 0.3)), 168)
+        readonly property real gridX: heatLine.labelWidth + Theme.space2
+        readonly property real gridWidth: heatLine.contentWidth - heatLine.gridX
+                                          - (heatLine.noteWidth > 0 ? heatLine.noteWidth + Theme.space2 : 0)
+        readonly property real step: heatLine.columns > 0
+                                     ? Math.max(5, Math.min(list.heatCell + list.heatGap, Math.floor(heatLine.gridWidth / heatLine.columns)))
+                                     : 0
+        readonly property real cell: heatLine.step - list.heatGap
+        /// A name is written every `labelEvery` columns (about 34 px each).
+        readonly property int labelEvery: heatLine.step > 0 ? Math.max(1, Math.ceil(34 / heatLine.step)) : 1
+        /// The cell whose tooltip shows (hovered or tapped), -1: none.
+        property int tip: heatHover.hovered && heatLine.step > 0
+                          ? Math.min(heatLine.columns - 1, Math.floor(heatHover.point.position.x / heatLine.step)) : heatLine.tapped
+        property int tapped: -1
+        readonly property string tipText: heatLine.tip >= 0 && !heatLine.header
+                                          ? AppController.routeText(heatLine.lineItems[heatLine.tip], "text") : ""
+        contentHeight: heatLine.header ? Theme.textXs + Theme.space3 : Math.max(heatLine.cell, heatLabel.implicitHeight) + list.heatGap
+        Accessible.role: heatLine.header ? Accessible.StaticText : Accessible.Row
+        Accessible.name: heatLine.header ? heatLine.lineTitle
+                                         : heatLine.lineHint !== "" ? qsTr("%1: %2").arg(heatLine.lineTitle).arg(heatLine.lineHint)
+                                                                    : heatLine.lineTitle
+
+        BText {
+            id: heatLabel
+            x: heatLine.contentX
+            y: heatLine.topPad + (heatLine.header ? 0 : Math.max(0, (heatLine.cell - implicitHeight) / 2))
+            width: heatLine.labelWidth
+            text: heatLine.lineTitle
+            variant: heatLine.header ? "caption" : "small"
+            color: heatLine.header ? Theme.fgMuted : Theme.fg
+            elide: Text.ElideRight
+        }
+        Item {
+            id: heatGrid
+            objectName: heatLine.header ? "extensionHeatHead" : "extensionHeatRow"
+            x: heatLine.contentX + heatLine.gridX
+            y: heatLine.topPad
+            width: heatLine.columns * heatLine.step
+            height: heatLine.header ? heatLine.contentHeight : heatLine.cell
+            Repeater {
+                model: heatLine.lineCells // (a row's are empty)
+                delegate: BText {
+                    id: heatHead
+                    required property int index
+                    required property string modelData
+                    visible: (heatLine.columns - 1 - heatHead.index) % heatLine.labelEvery === 0
+                    x: heatHead.index * heatLine.step + heatLine.cell / 2 - implicitWidth / 2
+                    text: heatHead.modelData
+                    variant: "caption"
+                    color: Theme.fgMuted
+                }
+            }
+            Repeater {
+                model: heatLine.lineItems // (the head's are empty)
+                delegate: Rectangle {
+                    id: heatCellItem
+                    required property int index
+                    required property var modelData
+                    readonly property string level: AppController.routeText(heatCellItem.modelData, "level")
+                    objectName: "extensionHeatCell"
+                    x: heatCellItem.index * heatLine.step
+                    width: heatLine.cell
+                    height: heatLine.cell
+                    radius: Math.min(4, heatLine.cell / 4)
+                    color: heatCellItem.level === "4" ? Theme.accent
+                           : heatCellItem.level === "3" ? Theme.accent.alpha(0.7)
+                           : heatCellItem.level === "2" ? Theme.accent.alpha(0.45)
+                           : heatCellItem.level === "1" ? Theme.accent.alpha(0.22) : Theme.bgSunken
+                    border.width: heatCellItem.level === "0" || heatLine.tip === heatCellItem.index ? 1 : 0
+                    border.color: heatLine.tip === heatCellItem.index ? Theme.fg : Theme.borderSubtle
+                    Accessible.role: Accessible.Cell
+                    Accessible.name: AppController.routeText(heatCellItem.modelData, "text")
+                }
+            }
+            HoverHandler {
+                id: heatHover
+                enabled: !heatLine.header
+            }
+            TapHandler {
+                enabled: !heatLine.header
+                onTapped: (eventPoint, button) => {
+                    const column = Math.floor(eventPoint.position.x / Math.max(1, heatLine.step))
+                    heatLine.tapped = heatLine.tapped === column ? -1 : column
+                }
+            }
+            BToolTip {
+                parent: heatGrid
+                visible: heatLine.tipText !== ""
+                text: heatLine.tipText
+                x: Math.max(-heatGrid.x, heatLine.tip * heatLine.step + heatLine.cell / 2 - implicitWidth / 2)
+                onVisibleChanged: if (!visible) heatLine.tapped = -1
+            }
+        }
+        BText {
+            // right after the cells (they need not fill the line), numbers aligned at its right
+            visible: heatLine.noteWidth > 0 && !heatLine.header
+            x: heatGrid.x + heatGrid.width + Theme.space2
+            y: heatLabel.y
+            width: heatLine.noteWidth
+            text: heatLine.lineHint
+            variant: "small"
+            color: Theme.fgMuted
+            horizontalAlignment: Text.AlignRight
+            elide: Text.ElideRight
         }
     }
 }

@@ -20,6 +20,7 @@ qt_add_library(brulion_cli STATIC
     commands_extensions.cpp
     commands_clip.cpp
     commands_habits.cpp
+    commands_gym.cpp
     commands_import.cpp
     commands_cards.cpp
     commands_index.cpp

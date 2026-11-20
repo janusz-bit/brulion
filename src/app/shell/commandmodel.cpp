@@ -799,6 +799,11 @@ bool CommandModel::run(const QString &id)
         m_app->navigate({{u"view"_s, u"settings"_s}, {u"section"_s, u"extensions"_s}});
     else if (id.startsWith(u"extview.")) {
         const QString extension = id.section(u'.', 1, 1), name = id.section(u'.', 2);
+        // The gym's views are tabs of its own view (GymView: its header, the rest timer).
+        if (extension == u"silownia") {
+            m_app->navigate({{u"view"_s, u"gym"_s}, {u"tab"_s, name}});
+            return true;
+        }
         m_app->navigate({{u"view"_s, u"extension"_s},
                          {u"extension"_s, extension},
                          {u"name"_s, name},

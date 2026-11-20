@@ -125,6 +125,17 @@ rings like an alarm clock. Syntax: `docs/SYNTAX.md`.
   to 24 hours back) appear at once as "Missed".
 * **Time zone change**: reminders stick to local time — "09:00" stays at 09:00 in the new zone
   (snoozes are not moved).
+* **Timers of extensions** (`b.timer`: the gym's rest between sets, a focus timer;
+  docs/EXTENSIONS.md "Timers"): the end is set as an exact alarm when the timer starts
+  (`AndroidBridge::scheduleTimer` → `TimerAlarms.kt`), moved when the extension starts another,
+  taken back when it stops (`cancelTimer`). They are kept apart from the reminders (their own
+  preferences, `io.github.januszbit.brulion.android.timers`): the app's reminder set and the
+  background check replace only reminders. So "Rest is over" comes with Brulion closed or its
+  process gone; its notification has "OK" alone (no Snooze, no Done) and opens the app. After a
+  reboot the timers still to come are set again; one whose moment passed while the phone was off is
+  dropped. A timer's moment is an instant (no wall-clock time): a time-zone change does not move
+  it. Without the exact-alarm permission the alarm is inexact — the app, while it runs, shows the
+  end on time itself and takes the late alarm back.
 
 ### Reminder and alarm sounds
 
@@ -2014,6 +2025,7 @@ loading QML (so that the tap that started the app reaches the UI); as long as no
 | `bool canScheduleExact()` / `void requestExactAlarms()` | `canScheduleExact(Context)` / `requestExactAlarms(Context)` |
 | `bool canUseFullScreenIntent()` / `void requestFullScreenIntent()` | `canUseFullScreenIntent(Context)` / `requestFullScreenIntent(Context)` |
 | `ScheduleResult scheduleReminders(const QJsonArray &)` | `scheduleReminders(Context, String): String` — `{"scheduled":n,"exact":b}` or `{"error":…}` |
+| `ScheduleResult scheduleTimer(const QJsonObject &)` / `bool cancelTimer(int id)` | `scheduleTimer(Context, String): String` — a timer's end (`TimerAlarms.kt`, a reminder element with `timer: true`): `{"armed":b,"exact":b}` or `{"error":…}` / `cancelTimer(Context, String)` — `{"id":n}`: its alarm and its notification |
 | `Activation takeActivation()` | `takeActivation(Context): String` — `{"path":…,"line":n}` or `{}` |
 | `QByteArray takeShare()` | `takeShare(Context): String` — the share JSON (`notebook/share.h`) or `{}` |
 | `QJsonArray takeDoneRequests(vault)` | `takeDoneRequests(Context, String): String` — the "Done" queue (`DoneQueue.kt`): `[{key, local, path, line, title, day, vault}, …]` of notebook `vault` (and entries without a notebook), entries handed out leave the queue, the rest wait; an empty `vault` — all |
@@ -2158,7 +2170,10 @@ loading QML (so that the tap that started the app reaches the UI); as long as no
   the request reaches C++ at once with the day of the tap, the notification disappears; after the
   process is killed (`am kill`, not `force-stop` — the alarms stay) the second reminder comes to a
   new process without Qt, the tap waits in the queue (`shared_prefs/…done.xml`, debuggable APK)
-  and C++ gets it at the next start. Verified 2026-10-28 (Android 16, Pixel 6; 24 checks). The
+  and C++ gets it at the next start; the ends of extensions' timers (`scheduleTimer`, in 60 s and
+  240 s, one cancelled, one in the past refused) armed before the reminders' two rounds, which keep
+  them, ringing with "OK" alone — the second with the app closed. Verified 2026-10-28 (Android 16,
+  Pixel 6; 24 checks), with the timers 2026-11-20 (the Android 16 emulator, 33 checks). The
   test APK has the same package as the app (it replaces it) — only on an emulator/test phone. A
   freshly started emulator still applies system overlays for a few seconds (a
   `CONFIG_ASSETS_PATHS` configuration change the app does not handle itself): Android then

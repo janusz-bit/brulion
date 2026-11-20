@@ -7,7 +7,8 @@
 // changes; their palette commands, views and hooks (b.on "save" / "change"); the question a
 // command or an action waits on (b.ask / b.choose / b.form, shown by ShellExtensionQuestion.qml);
 // the Luau console (evaluate(), "Run Luau block"); messages (toasts) and the rest timer
-// (b.timer: a countdown in the app and a notification when it ends).
+// (b.timer: a countdown in the app and a notification when it ends — armed on the platform when it
+// starts, so it comes with the app closed where the platform can: Android's alarms).
 //
 //   extensions->runCommand(u"silownia"_s, u"start"_s);                 // the palette
 //   extensions->runCommand(u"silownia"_s, u"add-set"_s, path, line);   // on the block under the caret
@@ -48,6 +49,7 @@
 #include "extensions/macros.h"
 #include "extensions/pageextension.h"
 #include "extensions/typecheck.h"
+#include "reminders/notifications.h"
 #include "types.h"
 
 #include <QAbstractListModel>
@@ -63,6 +65,7 @@
 #include <functional>
 #include <memory>
 #include <optional>
+#include <utility>
 
 namespace brulion {
 class Vault;
@@ -180,6 +183,15 @@ public:
     void setEnabled(const QStringList &ids);
     /// Shows a notification now (the rest timer's end): Workspace connects its reminders' sink.
     void setNotifier(std::function<void(const QString &title, const QString &body)> notify);
+    /// Arms a timer's end on the platform when it starts (notify::Notifier::armTimer(): true when
+    /// the platform shows it by itself, also while the app is closed) and cancels it when the timer
+    /// stops or is replaced (cancelTimer()). The shell's integration connects the notifier; without
+    /// them the app shows the end itself while it runs (setNotifier()).
+    void setTimerAlarms(std::function<bool(const ScheduledNotification &)> arm,
+                        std::function<void(const QString &id)> cancel);
+    /// The id of the notification of the timer of `extension` in this notebook
+    /// ("brulion-timer:<notebook>:<extension>").
+    QString timerNotificationId(const QString &extension) const;
     /// The model b.ai asks on this device (AppSettings: provider, key, model, address).
     void setAi(const ai::Settings &settings);
     /// What answers the provider "local" (the app's LocalAi; not owned, nullptr: none).
@@ -653,7 +665,22 @@ private:
         extensions::TimerSpec spec;
         QDateTime end; // UTC
         int remaining = 0;
+        bool native = false; // the platform shows its end by itself (setTimerAlarms())
     };
+    /// The notification of a timer's end (the platform arms it): its words, its moment.
+    ScheduledNotification timerNotification(const QString &extension, const RunningTimer &timer) const;
+    /// The title and the body of a timer's end: the extension's words, else the app's.
+    std::pair<QString, QString> timerWords(const QString &extension, const extensions::TimerSpec &spec) const;
+    /// The running timers in the notebook's device state ("extensions/timers"): a restart of the
+    /// app — Android ends a process in the background — finds them again (loadTimers()).
+    void storeTimers();
+    /// The stored timers: those still running count on, those that ended while the app was closed
+    /// (within a day) run their "timer" hooks with `late` once the notebook is open.
+    void loadTimers();
+    std::function<bool(const ScheduledNotification &)> m_timerArm;
+    std::function<void(const QString &)> m_timerCancel;
+    /// Timers that ended while the app was closed: their hooks wait for "open".
+    QList<std::pair<QString, extensions::TimerSpec>> m_lateTimers;
     QHash<QString, RunningTimer> m_timers; // by extension (one each)
     int m_restRemaining = 0;
     int m_restTotal = 0;

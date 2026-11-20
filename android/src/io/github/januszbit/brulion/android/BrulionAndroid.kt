@@ -371,6 +371,40 @@ object BrulionAndroid {
     }
 
   /**
+   * Arms the end of an extension's timer ([TimerAlarms]: apart from the reminders, kept until it
+   * comes due or is cancelled). [json] is one reminder object as `scheduleReminders` takes them,
+   * its id the timer's. Answers `{"armed": bool, "exact": bool}` — not armed: its time has passed
+   * — or `{"error": "..."}`.
+   */
+  @JvmStatic
+  fun scheduleTimer(context: Context, json: String): String =
+    try {
+      val timer = Reminder.fromJson(JSONObject(json)) ?: return errorJson("scheduleTimer: no id or time", null)
+      val app = context.applicationContext
+      val exact = TimerAlarms.arm(app, timer)
+      val armed = TimerStore(app).load().any { it.id == timer.id }
+      JSONObject().put("armed", armed).put("exact", exact && armed).toString()
+    } catch (e: JSONException) {
+      errorJson("scheduleTimer: not a JSON object", e)
+    } catch (e: RuntimeException) {
+      errorJson("scheduleTimer failed: $e", e)
+    }
+
+  /** Cancels the timer whose id is [json] (`{"id": n}`): its alarm and its notification. */
+  @JvmStatic
+  fun cancelTimer(context: Context, json: String): String =
+    try {
+      val id = JSONObject(json).getInt("id")
+      TimerAlarms.cancel(context.applicationContext, id)
+      ReminderNotifier.cancel(context.applicationContext, id)
+      JSONObject().put("cancelled", id).toString()
+    } catch (e: JSONException) {
+      errorJson("cancelTimer: no id", e)
+    } catch (e: RuntimeException) {
+      errorJson("cancelTimer failed: $e", e)
+    }
+
+  /**
    * The notification tap not delivered yet (cold start), as `{"path": "...", "line": n}`, or
    * `{}`. Forgets it: each tap is handed out once.
    */
@@ -1051,7 +1085,7 @@ object BrulionAndroid {
     }
   }
 
-  private fun errorJson(message: String, e: Exception): String {
+  private fun errorJson(message: String, e: Exception?): String {
     Log.e(TAG, message, e)
     return JSONObject().put("error", message).toString()
   }

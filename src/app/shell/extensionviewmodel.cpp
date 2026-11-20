@@ -14,6 +14,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <optional>
 #include <utility>
 
 using namespace Qt::StringLiterals;
@@ -25,6 +26,7 @@ namespace {
 
 constexpr int kMaxLines = 2000; // a view showing more is cut (notes come from sync)
 constexpr int kMaxControls = 24;
+constexpr int kMaxHeatColumns = 104; // a heat map's columns (two years of weeks)
 
 /// A select's options as { label, value } (texts, or tables with a label and a value), at most 200.
 QList<std::pair<QString, QVariant>> optionsOf(const QVariantMap &node)
@@ -964,6 +966,72 @@ void ExtensionViewModel::addLine(const QVariantMap &node, QList<Line> *lines)
             Line cells;
             cells.type = u"tableRow"_s;
             cells.cells = row.toStringList();
+            lines->append(cells);
+        }
+        return;
+    } else if (type == u"heatmap") {
+        // As a table: a head line (the columns, the label) and a line per row, each cell a level
+        // 0 (nothing) … 4 (the most) against its row's largest value or the whole map's, and its
+        // text (a tooltip, a screen reader's). `size` "note": the rows have a note at their end,
+        // every line keeps its column.
+        const QStringList columns = node.value(u"columns"_s).toStringList().mid(0, kMaxHeatColumns);
+        const int n = int(columns.size());
+        if (n == 0)
+            return;
+        struct HeatRow {
+            QString label, note;
+            QList<std::optional<double>> values;
+            QStringList texts;
+        };
+        QList<HeatRow> rows;
+        bool notes = false;
+        double largest = 0;
+        for (const QVariant &r : itemsOfList(node.value(u"rows"_s))) {
+            const QVariantMap map = r.toMap();
+            HeatRow row;
+            row.label = map.value(u"label"_s).toString();
+            row.note = map.value(u"note"_s).toString();
+            const QVariantList values = listOf(map.value(u"values"_s), n);
+            const QVariantList texts = listOf(map.value(u"texts"_s), n);
+            for (int i = 0; i < n; ++i) {
+                const QVariant v = values.value(i);
+                bool ok = false;
+                const double d = v.isValid() && !v.isNull() ? v.toDouble(&ok) : 0;
+                row.values << (ok && std::isfinite(d) && d > 0 ? std::optional<double>(d) : std::nullopt);
+                if (row.values.last())
+                    largest = std::max(largest, d);
+                const QString text = texts.value(i).toString();
+                row.texts << (text.isEmpty() && row.values.last() ? formatExtensionNumber(d, false) : text);
+            }
+            notes = notes || !row.note.isEmpty();
+            rows << row;
+            if (lines->size() + rows.size() >= kMaxLines)
+                break;
+        }
+        const bool perRow = node.value(u"scale"_s).toString() != u"all";
+        Line head = line;
+        head.type = u"heatmapHead"_s;
+        head.cells = columns;
+        head.title = node.value(u"label"_s).toString();
+        head.size = notes ? u"note"_s : QString();
+        lines->append(head);
+        for (const HeatRow &row : std::as_const(rows)) {
+            double top = largest;
+            if (perRow) {
+                top = 0;
+                for (const std::optional<double> &v : row.values)
+                    top = std::max(top, v.value_or(0));
+            }
+            Line cells;
+            cells.type = u"heatmapRow"_s;
+            cells.title = row.label;
+            cells.hint = row.note;
+            cells.size = head.size;
+            for (int i = 0; i < n; ++i) {
+                const std::optional<double> v = row.values.value(i);
+                const int level = v && top > 0 ? std::clamp(1 + int(std::floor(3.999 * *v / top)), 1, 4) : 0;
+                cells.items << QVariantMap{{u"level"_s, QString::number(level)}, {u"text"_s, row.texts.value(i)}};
+            }
             lines->append(cells);
         }
         return;

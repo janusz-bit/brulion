@@ -788,11 +788,15 @@ and their month grids need the width.
 
 ## Gym
 
-`qml/views/GymView.qml` (route `gym` {tab?: "today" | "progress", exercise?, open?: "start"}; the
-sidebar's **Gym** while it is on — Settings → **Extensions** (`AppSettings.gymEnabled`, off by
-default; the view says so with a "Switch on" button) —, a bottom-bar tab to choose, the palette's
-"Gym" `go.gym`, the icon `dumbbell`): the built-in gym extension (docs/EXTENSIONS.md,
-docs/SYNTAX.md §5 "Gym") through its two views, drawn by `ShellExtensionView`.
+`qml/views/GymView.qml` (route `gym` {tab?: "today" | "progress" | "volume" | "weight" | "catalog" |
+"exercise", exercise?, id?, weeks?, range?, open?: "start"}; the sidebar's **Gym** while it is on —
+Settings → **Extensions** (`AppSettings.gymEnabled`, off by default; the view says so with a "Switch
+on" button) —, a bottom-bar tab to choose, the palette's "Gym" `go.gym`, the icon `dumbbell`): the
+built-in gym extension (docs/EXTENSIONS.md, docs/SYNTAX.md §5 "Gym") through its views, drawn by
+`ShellExtensionView`; the route's other keys are the view's params (`ExtensionView.setRouteParams`),
+and a view the extension opens is a route of the gym (`tabRoute`). The header: the title, **Start a
+workout**, the tabs **Today · Progress · Volume · Weight** (`BSegmented`, objectName `gymTabs`: on a
+phone they keep their labels, their icons go first), the rest timer's banner.
 
 * **Today** (view `today`): every exercise line of today's `#trening` blocks as a card
   (`b.ui.card`) of the same three lines in every card, however long its texts — the tasks'
@@ -802,13 +806,45 @@ docs/SYNTAX.md §5 "Gym") through its two views, drawn by `ShellExtensionView`.
   only); **+ set** / **− set**.
   Each control rewrites that one line of the note (`b.replaceBlock`); a line changed elsewhere
   meanwhile is not overwritten (a toast says so and the view shows it again). Adding a set starts
-  the **rest timer**: a banner with the time left, a bar and **Skip**; at the end a notification
-  (`WorkspaceReminders::showNotification`, while the app runs) and a toast. Without a workout
-  today: an empty state and **Start a workout**.
+  the **rest timer**: a banner with the time left, a bar and **Skip**; at the end a notification —
+  armed on the platform when it starts, so on Android it comes with the app closed too
+  (docs/EXTENSIONS.md "Timers") — and a toast. Under the cards the **Exercise catalog**. Without a
+  workout today: an empty state, **Start a workout** and the catalog.
 * **Progress** (view `progress`): every exercise of the history with its record (estimated
   one-rep max) and its number of sessions; one exercise (`exercise`): its record, a line chart of
   the estimated one-rep max and the heaviest set per session (`ChartView` fed directly), its
-  sessions newest first (date, sets, volume, estimate) and a link to its page.
+  sessions newest first (date, sets, volume, estimate) and a link to its page. Weights in the
+  gym's unit (kg or lb, its setting).
+* **Volume** (view `volume`; the palette's "Gym: weekly volume" `extview.silownia.volume` opens this
+  tab): sets × reps × weight per muscle and week (docs/SYNTAX.md §5 "Gym": primary muscles whole,
+  secondary half, bodyweight sets with the logged body weight). The period (4, 8, 12, 26, 52 weeks:
+  a select); tiles of this week's volume, the average of the weeks before it (from the first week
+  with a workout), this week's sets and the difference in per cent (success when above); a bar
+  chart of every week's volume; a **heat map** (`b.ui.heatmap`) — a row per muscle, the busiest
+  first, a column per week, each cell tinted against the row's own largest week, this week's volume
+  at the row's end (its sets for a muscle trained only with timed sets), a cell's words ("czworogłowe
+  uda, tydzień od 16.11: 2500 kg, 5 serii") on hover or a tap —; a table of sets, muscle, this
+  week and the average; the exercises whose muscles nobody knows, as links to their pages (to add
+  `miesnie::`). No workout in the period: an empty state.
+* **Weight** (view `weight`, "Gym: body weight"): the body weight log. A field takes a weigh-in as
+  typed — `82,5`, `82,5 kg 18 % rano`, `181 lb` — and writes `- 82,5 kg 18 % rano #waga` at the end
+  of today's note (a toast with **Undo**; "Not understood" for anything else). Tiles of the latest
+  weigh-in (with its day), the trend, the trend's change over 7 and 30 days, the latest body fat;
+  the range (30 days, 90 days, a year, all: a select); a line chart of the weigh-ins with the trend
+  line, one of the body fat when there are two; the last 14 weigh-ins as rows with a menu (Open the
+  day, Remove).
+* **Catalog** (view `catalog`, "Gym: exercise catalog"; no tab: Today's button, the palette): a
+  search field (any words of a name in either language, any case, without diacritics; Enter or
+  **Search**), selects of a primary muscle, an equipment and a kind, the number found and **Clear
+  the filters**; a card per exercise — its name (opens it) with a "⋯" menu (To today's workout,
+  Create the exercise's page, Details) and its muscles and equipment under it —, 30 at a time
+  (**Show more**). Brulion's own 51 come first, then names translated to the interface's language.
+* **Exercise** (view `exercise`, `id`): its name in the notes' language and the other one, its
+  primary and secondary muscles, equipment, kind and level; **To today's workout** (an open line
+  under today's workout, else a new one: `- [ ] [[Wiosłowanie sztangą]] 3×10`, cardio `20 min`,
+  stretching `2×30 s`), **Create the exercise's page** (the catalog's properties and instructions:
+  docs/SYNTAX.md §5) or the link to it, its sessions (to Progress), the instructions (English: "Opis
+  po angielsku" in a Polish interface) as a numbered list.
 * **Start a workout** (the header's button, the palette's "Siłownia: zacznij trening"): asks which
   plan (a page tagged `#plan-treningowy`) and appends it to today's note with progression.
 
@@ -873,7 +909,12 @@ or run one of its commands (`run`); links — a link's `line` opens its page the
 rows as cards of wrapping controls (all centred on one control height: the touch target on touch
 UIs) — a check is the tasks' `TaskBox` (done, open, or skipped in a cancelled task's look), its
 menu on a right-click or a long press (`controlHasMenu`; its label is its accessible name, "Reading:
-done") —; month grids; charts and tables (the second column widest, numbers right-aligned).
+done") —; month grids; charts and tables (the second column widest, numbers right-aligned); heat maps
+(`HeatLine`: the model's `heatmapHead` and `heatmapRow` lines, as a table's — the label column, a
+cell per column of at most 22 px (26 on touch UIs) with a gap of 3, tinted by its level 0–4 in
+`bgSunken` or the accent at 22, 45, 70 and 100 %, the note column right after the cells; the head
+writes every so many columns' names when the cells are narrow, the last always; a cell's text in
+a `BToolTip` on hover or a tap, its accessible name).
 **Cards** are no item of their own: the lines of a `card` node stay lines of the flat list (a
 delegate each, recycled as any), each drawing its part — `lineCard` "first", "middle", "last" or
 "only": the top with its corners, the sides, the bottom — so a card of a hundred lines scrolls like
