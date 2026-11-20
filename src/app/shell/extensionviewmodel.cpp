@@ -2,6 +2,8 @@
 
 #include "workspaceextensions.h"
 
+#include "markdown/macros.h"
+
 #include <QDate>
 
 #include <algorithm>
@@ -18,9 +20,76 @@ namespace {
 constexpr int kMaxLines = 2000; // a view showing more is cut (notes come from sync)
 constexpr int kMaxControls = 24;
 
+/// A select's options as { label, value } (texts, or tables with a label and a value), at most 200.
+QList<std::pair<QString, QVariant>> optionsOf(const QVariantMap &node)
+{
+    QList<std::pair<QString, QVariant>> out;
+    for (const QVariant &v : node.value(u"options"_s).toList()) {
+        if (out.size() >= 200)
+            break;
+        if (v.metaType().id() == QMetaType::QVariantMap) {
+            const QVariantMap option = v.toMap();
+            const QVariant value = option.contains(u"value"_s) ? option.value(u"value"_s) : option.value(u"label"_s);
+            const QString label = option.value(u"label"_s, value).toString();
+            if (!label.isEmpty())
+                out.append({label, value});
+        } else if (!v.toString().isEmpty()) {
+            out.append({v.toString(), v});
+        }
+    }
+    return out;
+}
+
+/// The index of the select's chosen option (its value as text), -1 none.
+int selectedOf(const QVariantMap &node)
+{
+    const QString value = node.value(u"value"_s).toString();
+    const auto options = optionsOf(node);
+    for (qsizetype i = 0; i < options.size(); ++i) {
+        if (options[i].second.toString() == value)
+            return int(i);
+    }
+    return -1;
+}
+
+/// A number of a node, `fallback` when it has none (or it is not finite).
+double numberOf(const QVariantMap &node, const QString &key, double fallback)
+{
+    bool ok = false;
+    const double v = node.value(key).toDouble(&ok);
+    return ok && std::isfinite(v) ? v : fallback;
+}
+
+/// A slider's value on its step's grid from its min, within min and max.
+double snapValue(const QVariantMap &node, double value)
+{
+    const double min = numberOf(node, u"min"_s, 0);
+    const double max = std::max(min, numberOf(node, u"max"_s, 10));
+    double step = numberOf(node, u"step"_s, 1);
+    if (step <= 0)
+        step = 1;
+    if (!std::isfinite(value))
+        value = min;
+    const double snappedValue = min + std::round((std::clamp(value, min, max) - min) / step) * step;
+    return std::clamp(snappedValue, min, max);
+}
+
+/// The controls a view may show on a line of their own (a row of one, without a card).
+bool isLoneControl(const QString &type)
+{
+    return type == u"input" || type == u"select" || type == u"slider" || type == u"date" || type == u"toggle"
+           || type == u"progress";
+}
+
 QString textOf(const QVariantMap &node)
 {
     const QString type = node.value(u"type"_s).toString();
+    if (type == u"input" || type == u"date")
+        return node.value(u"value"_s).toString();
+    if (type == u"select") {
+        const int chosen = selectedOf(node);
+        return chosen >= 0 ? optionsOf(node).value(chosen).first : QString();
+    }
     if (type == u"link")
         return node.value(u"label"_s).toString().isEmpty() ? node.value(u"page"_s).toString() : node.value(u"label"_s).toString();
     if (type == u"button" || type == u"open" || type == u"run" || type == u"menu" || type == u"check")
@@ -76,6 +145,22 @@ QVariantList itemsOf(const QVariant &value)
 
 QVariantList menuOfNode(const QVariantMap &node)
 {
+    if (node.value(u"type"_s).toString() == u"select") {
+        // A select's options are its menu: each calls the action with the option's value.
+        QVariantList out;
+        const QString action = node.value(u"action"_s).toString();
+        const int chosen = selectedOf(node);
+        const auto options = optionsOf(node);
+        for (qsizetype i = 0; i < options.size(); ++i) {
+            QVariantMap args = node.value(u"args"_s).toMap();
+            args.insert(u"value"_s, options[i].second);
+            out << QVariantMap{{u"label"_s, options[i].first},
+                               {u"action"_s, action},
+                               {u"args"_s, args},
+                               {u"icon"_s, i == chosen ? u"check"_s : QString()}};
+        }
+        return action.isEmpty() ? QVariantList() : out;
+    }
     return itemsOf(node.value(node.value(u"type"_s).toString() == u"menu" ? u"items"_s : u"menu"_s));
 }
 
@@ -191,9 +276,21 @@ QVariant ExtensionControlsModel::value(int row, int role) const
     case TypeRole: return c.value(u"type"_s).toString();
     case TextRole: return textOf(c);
     case PageRole: return c.value(u"page"_s).toString();
-    case CheckedRole: return c.value(u"checked"_s).toBool();
-    case ValueRole: return c.value(u"value"_s).toDouble();
-    case StepRole: return c.value(u"step"_s, 1).toDouble();
+    case CheckedRole:
+        return c.value(u"type"_s).toString() == u"toggle" ? c.value(u"on"_s).toBool() : c.value(u"checked"_s).toBool();
+    case ValueRole: return numberOf(c, u"value"_s, 0);
+    case StepRole: return numberOf(c, u"step"_s, 1) > 0 ? numberOf(c, u"step"_s, 1) : 1.0;
+    case MinRole: return numberOf(c, u"min"_s, 0);
+    case MaxRole: {
+        // A progress bar is full at 1 by default, a slider goes to 10; never below its minimum.
+        const QString type = c.value(u"type"_s).toString();
+        const double max = numberOf(c, u"max"_s, type == u"progress" ? 1 : 10);
+        return std::max(max, type == u"slider" ? numberOf(c, u"min"_s, 0) : 0.0);
+    }
+    case PlaceholderRole: return c.value(u"placeholder"_s).toString();
+    case MultilineRole: return c.value(u"multiline"_s).toBool();
+    case SubmitRole: return c.value(u"submit"_s).toString();
+    case KeepRole: return c.value(u"keep"_s).toBool();
     case UnitRole: return c.value(u"unit"_s).toString();
     case IndexRole: return row;
     case MutedRole: return c.value(u"muted"_s).toBool();
@@ -219,7 +316,9 @@ QHash<int, QByteArray> ExtensionControlsModel::roleNames() const
             {UnitRole, "controlUnit"},       {IndexRole, "controlIndex"}, {MutedRole, "controlMuted"},
             {DisplayRole, "controlDisplay"}, {NumberRole, "controlNumber"}, {StateRole, "controlState"},
             {LabelRole, "controlLabel"},     {IconRole, "controlIcon"},   {ToneRole, "controlTone"},
-            {HasMenuRole, "controlHasMenu"}};
+            {HasMenuRole, "controlHasMenu"}, {PlaceholderRole, "controlPlaceholder"},
+            {MultilineRole, "controlMultiline"}, {SubmitRole, "controlSubmit"}, {KeepRole, "controlKeep"},
+            {MinRole, "controlMin"},         {MaxRole, "controlMax"}};
 }
 
 bool ExtensionControlsModel::sameKinds(const QList<QVariantMap> &controls) const
@@ -296,6 +395,7 @@ QVariant ExtensionViewModel::data(const QModelIndex &index, int role) const
     case CardRole: return l.card;
     case MonthRole: return l.month;
     case DaysRole: return l.days;
+    case BareRole: return l.bare;
     }
     return {};
 }
@@ -306,7 +406,8 @@ QHash<int, QByteArray> ExtensionViewModel::roleNames() const
             {MutedRole, "lineMuted"},        {PageRole, "linePage"},       {CellsRole, "lineCells"},
             {ChartDataRole, "lineChartData"}, {ChartSourceRole, "lineChartSource"}, {ControlsRole, "lineControls"},
             {HasControlsRole, "lineHasControls"}, {IconRole, "lineIcon"}, {ToneRole, "lineTone"},
-            {CardRole, "lineCard"},          {MonthRole, "lineMonth"},     {DaysRole, "lineDays"}};
+            {CardRole, "lineCard"},          {MonthRole, "lineMonth"},     {DaysRole, "lineDays"},
+            {BareRole, "lineBare"}};
 }
 
 void ExtensionViewModel::setExtensions(WorkspaceExtensions *extensions)
@@ -352,6 +453,38 @@ void ExtensionViewModel::setParams(const QVariantMap &params)
 }
 
 void ExtensionViewModel::scheduleRefresh() { m_refreshTimer.start(); }
+
+void ExtensionViewModel::setSource(const QString &source)
+{
+    if (m_source == source)
+        return;
+    m_source = source;
+    const markdown::ViewBlock block = markdown::parseViewBlock(source);
+    m_sourceProblem = block.problem;
+    Q_EMIT sourceChanged();
+    setExtension(block.extension);
+    setView(block.view);
+    setParams(block.params);
+}
+
+void ExtensionViewModel::setNotePath(const QString &path)
+{
+    if (m_notePath == path)
+        return;
+    m_notePath = path;
+    Q_EMIT notePathChanged();
+    scheduleRefresh();
+}
+
+void ExtensionViewModel::setLive(bool live)
+{
+    if (m_live == live)
+        return;
+    m_live = live;
+    Q_EMIT liveChanged();
+    if (m_live && m_stale)
+        scheduleRefresh();
+}
 
 void ExtensionViewModel::setParamKey(const QString &key)
 {
@@ -404,12 +537,34 @@ void ExtensionViewModel::render(bool reshape)
         return;
     }
     m_refreshTimer.stop();
+    if (!m_live) {
+        m_stale = true; // drawn when it is live again
+        return;
+    }
+    m_stale = false;
     if (m_extensions && m_extensions->isWaiting())
         return; // after the question (questionChanged)
     QString error;
+    // A block's or a panel's note joins the params (its own keys win).
+    QVariantMap params = m_params;
+    if (m_extensions && !m_notePath.isEmpty()) {
+        const QVariantMap note = m_extensions->noteParams(m_notePath);
+        for (auto it = note.cbegin(); it != note.cend(); ++it) {
+            if (!params.contains(it.key()))
+                params.insert(it.key(), it.value());
+        }
+    }
     const QVariantMap root = m_extensions && !m_extension.isEmpty() && !m_view.isEmpty()
-                                     ? m_extensions->render(m_extension, m_view, m_params, &error)
+                                     ? m_extensions->render(m_extension, m_view, params, &error)
                                      : QVariantMap();
+    // Why nothing is drawn: the extension waits for approval here, is off, unknown, failed.
+    QString state;
+    if (root.isEmpty() && m_extensions && !m_extension.isEmpty()) {
+        state = m_extensions->macroExtension(m_extension).value(u"state"_s).toString();
+        if (state == u"running")
+            state.clear();
+    }
+    m_extensionState = state;
     QList<Line> lines;
     flatten(root, 0, &lines);
     const bool comma = m_extensions && m_extensions->language() == u"pl";
@@ -489,6 +644,8 @@ QList<int> ExtensionViewModel::changedRoles(const Line &before, const Line &afte
         roles << MonthRole;
     if (before.days != after.days)
         roles << DaysRole;
+    if (before.bare != after.bare)
+        roles << BareRole;
     return roles;
 }
 
@@ -585,6 +742,12 @@ void ExtensionViewModel::addLine(const QVariantMap &node, QList<Line> *lines)
             lines->append(cells);
         }
         return;
+    } else if (isLoneControl(type)) {
+        // An input, a select, a slider, a date, a toggle or a progress bar on a line of its own:
+        // a row of one control, without a card.
+        line.type = u"row"_s;
+        line.bare = true;
+        line.controlNodes << node;
     } else if (type != u"heading" && type != u"text" && type != u"link" && type != u"open" && type != u"run"
                && type != u"button" && type != u"menu") {
         return; // unknown nodes are left out
@@ -709,6 +872,36 @@ bool ExtensionViewModel::enterValue(int row, int control, const QString &text)
     return run(c, *value);
 }
 
+bool ExtensionViewModel::submitText(int row, int control, const QString &text)
+{
+    if (m_updating || row < 0 || row >= m_lines.size() || !m_lines[row].controls)
+        return false;
+    const QVariantMap c = m_lines[row].controls->control(control);
+    const QString type = c.value(u"type"_s).toString();
+    if (type == u"date") {
+        // A day, or "" for none (a date's "Clear").
+        if (!text.isEmpty() && !QDate::fromString(text, Qt::ISODate).isValid())
+            return false;
+    } else if (type != u"input") {
+        return false;
+    }
+    QVariantMap args = c.value(u"args"_s).toMap();
+    args.insert(u"value"_s, type == u"input" ? text.left(20000) : text);
+    return runAction(c.value(u"action"_s).toString(), args);
+}
+
+double ExtensionViewModel::snapped(int row, int control, double value) const
+{
+    if (row < 0 || row >= m_lines.size() || !m_lines[row].controls)
+        return value;
+    return snapValue(m_lines[row].controls->control(control), value);
+}
+
+QString ExtensionViewModel::formatNumber(double value) const
+{
+    return formatExtensionNumber(value, m_extensions && m_extensions->language() == u"pl");
+}
+
 bool ExtensionViewModel::run(const QVariantMap &node, double value)
 {
     const QString type = node.value(u"type"_s).toString();
@@ -722,10 +915,14 @@ bool ExtensionViewModel::run(const QVariantMap &node, double value)
         if (!m_extensions)
             return false;
         m_extensions->runCommand(m_extension, node.value(u"command"_s).toString());
-    } else if (type == u"button" || type == u"check" || type == u"stepper") {
+    } else if (type == u"button" || type == u"check" || type == u"stepper" || type == u"slider" || type == u"toggle") {
         QVariantMap args = node.value(u"args"_s).toMap();
         if (type == u"stepper")
             args.insert(u"value"_s, value);
+        else if (type == u"slider")
+            args.insert(u"value"_s, snapValue(node, value));
+        else if (type == u"toggle")
+            args.insert(u"value"_s, value != 0);
         return runAction(node.value(u"action"_s).toString(), args);
     } else {
         return false;

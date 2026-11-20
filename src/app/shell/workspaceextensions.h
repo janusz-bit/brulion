@@ -297,6 +297,11 @@ public:
     /// A macro's placeholder was clicked in the editor: macroHelpRequested() for the dialog that
     /// offers to run, switch on or open its extension.
     Q_INVOKABLE void showMacro(const QString &extension, const QString &name, const QString &arguments);
+    /// The same for a ```view block's view whose extension does not run.
+    Q_INVOKABLE void showView(const QString &extension, const QString &view);
+    /// What a view drawn beside or in the note `path` gets of it (a ```view block's, a panel's):
+    /// {page, path, date (a daily note's)}.
+    Q_INVOKABLE QVariantMap noteParams(const QString &path) const;
     /// The views the extensions offer as sections of the side panel (b.view's meta.panel) beside
     /// a `kind` of note ("page" | "journal"): rows {extension, view, title, icon}, by title.
     Q_INVOKABLE QVariantList panels(const QString &kind) const;
@@ -332,7 +337,8 @@ Q_SIGNALS:
     void chatPartial(const QString &path, const QString &text, const QString &thoughts, int tokens, qint64 writingMs);
     /// What macros show changed (values computed, extensions loaded, approved, switched off).
     void macrosChanged();
-    /// showMacro(): the extension and the macro as written, for ShellMacroDialog.
+    /// showMacro(), showView(): the extension and what of it was clicked (the macro as written,
+    /// "```view extension/view"), for ShellMacroDialog.
     void macroHelpRequested(const QString &extension, const QString &macro);
 
 private:

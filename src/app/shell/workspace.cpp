@@ -1058,6 +1058,8 @@ QVariantList Workspace::suggestMacros(const QString &prefix, int limit) const
     return m_extensions->macroSuggestions(prefix, limit);
 }
 
+QVariantList Workspace::embeddableViews() const { return m_extensions->embeddableViews(); }
+
 std::optional<QString> Workspace::templateVariable(const QString &extension, const QString &name,
                                                    const QString &arguments, const QVariantMap &context)
 {

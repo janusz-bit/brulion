@@ -24,6 +24,7 @@
 #include <QString>
 #include <QStringList>
 #include <QStringView>
+#include <QVariantMap>
 
 namespace brulion::markdown {
 
@@ -91,5 +92,26 @@ struct MacroView {
 /// A view as one line of text (a test's, a log's): the pieces' texts, a link as [[page|label]],
 /// code in backticks; a placeholder as "<state>: message".
 QString macroViewText(const MacroView &view);
+
+/// A ```view block (docs/SYNTAX.md §13 "View blocks"): an extension's view drawn in the page —
+/// its first line names it, `<extension>/<view>` (`view:` before it may be written), the lines
+/// after it are the view's params, `key: value` (keys of letters, digits, `-`, `_`; values as
+/// written, trimmed; a key again replaces it); blank lines and `#` / `//` comments are skipped.
+///
+///   ```view
+///   silownia/dzis
+///   cwiczenie: Przysiad
+///   ```
+struct ViewBlock {
+    QString extension; ///< lower case ("silownia"); "" when the block names no view
+    QString view; ///< as written ("dzis")
+    QVariantMap params; ///< key → text
+    /// Why it names no view, or a line it could not read ("line 3: not key: value"); "" fine.
+    QString problem;
+};
+/// The fence language of view blocks: "view".
+inline constexpr QStringView ViewBlockLanguage = u"view";
+/// The block's inner text (between its fences) read: at most 64 params, 64 KB of text.
+ViewBlock parseViewBlock(QStringView source);
 
 } // namespace brulion::markdown

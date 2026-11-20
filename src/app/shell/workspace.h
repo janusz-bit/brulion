@@ -311,6 +311,7 @@ public:
     bool rendersMacros() const override { return true; }
     markdown::MacroView macroView(const markdown::MacroSpan &macro, const QString &path) const override;
     QVariantList suggestMacros(const QString &prefix, int limit = 20) const override;
+    QVariantList embeddableViews() const override;
     std::optional<QString> templateVariable(const QString &extension, const QString &name, const QString &arguments,
                                             const QVariantMap &context) override;
     Q_INVOKABLE QUrl assetUrl(const QString &path) const override;

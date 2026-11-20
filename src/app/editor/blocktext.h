@@ -43,11 +43,12 @@ enum class BlockView {
     Callout,
     Rule,
     Frontmatter,
-    Html
+    Html,
+    View ///< a ```view block: an extension's view in the page (docs/SYNTAX.md §13 "View blocks")
 };
 
 /// "text", "heading", "code", "calc", "query", "math", "mermaid", "chart", "table", "quote", "callout", "rule",
-/// "frontmatter", "html" (the `view` role of BlockListModel).
+/// "frontmatter", "html", "view" (the `view` role of BlockListModel).
 QString viewName(BlockView view);
 /// "listItem", "paragraph", "heading", "code", "table", "quote", "callout", "rule", "html",
 /// "frontmatter" (the `kind` role).

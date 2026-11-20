@@ -3625,8 +3625,10 @@ QVariantMap PageController::applySlashCommand(int row, int from, int to, const Q
         // Quote/callout views edit the raw body.
         focus.cursor = std::clamp(focus.cursor, 0, int(m_model->editTextAt(focus.row).size()));
     } else if (cmd == u"table" || cmd == u"calc" || cmd == u"math" || cmd == u"mermaid" || cmd == u"chart"
-               || cmd == u"query" || cmd == u"code" || cmd == u"rule") {
-        const QString tpl = slashTemplate(cmd, m_english, nullptr);
+               || cmd == u"query" || cmd == u"code" || cmd == u"rule" || cmd.startsWith(u"view:")) {
+        // "view:<extension>/<view>": a ```view block of an extension's view (the slash menu's "View: …").
+        const QString tpl = cmd.startsWith(u"view:") ? u"```view\n"_s + cmd.mid(5) + u"\n```"_s
+                                                     : slashTemplate(cmd, m_english, nullptr);
         const int r = currentRow();
         if (cmd == u"rule") {
             const int nr = insertMarkdown(r, tpl); // nested: part of this undo step
@@ -4141,6 +4143,7 @@ QString PageController::linkAtCursor(int row, int position) const
     case BlockView::Math:
     case BlockView::Mermaid:
     case BlockView::Chart:
+    case BlockView::View:
     case BlockView::Table:
     case BlockView::Frontmatter:
     case BlockView::Html:

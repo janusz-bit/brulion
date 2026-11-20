@@ -102,6 +102,8 @@ private Q_SLOTS:
     void unsetShowsSource();
     void viewText();
     void hostileInput();
+    void viewBlock_data();
+    void viewBlock();
 };
 
 void TestMarkdownMacros::find_data()
@@ -294,6 +296,52 @@ void TestMarkdownMacros::hostileInput()
     const qint64 ms = brulion::test::medianOf(samples);
     QVERIFY2(ms < 1000 * BRULION_TEST_SLOWDOWN, qPrintable(QString::number(ms)));
     QVERIFY(!::render(text).isEmpty());
+}
+
+void TestMarkdownMacros::viewBlock_data()
+{
+    QTest::addColumn<QString>("source");
+    QTest::addColumn<QString>("extension");
+    QTest::addColumn<QString>("view");
+    QTest::addColumn<QVariantMap>("params");
+    QTest::addColumn<QString>("problem");
+
+    QTest::newRow("a view") << u"silownia/dzis"_s << u"silownia"_s << u"dzis"_s << QVariantMap() << QString();
+    QTest::newRow("params") << u"\n# komentarz\nSilownia/dzis\nćwiczenie: Wyciskanie leżąc\n// też\nseria:3\n"_s
+                            << u"silownia"_s << u"dzis"_s
+                            << QVariantMap{{u"ćwiczenie"_s, u"Wyciskanie leżąc"_s}, {u"seria"_s, u"3"_s}} << QString();
+    QTest::newRow("view: prefix") << u"view: nawyki/miesiac"_s << u"nawyki"_s << u"miesiac"_s << QVariantMap()
+                                  << QString();
+    QTest::newRow("a key again") << u"a/b\nk: 1\nk: 2"_s << u"a"_s << u"b"_s << QVariantMap{{u"k"_s, u"2"_s}}
+                                 << QString();
+    QTest::newRow("a value with a colon") << u"a/b\nczas: 10:30"_s << u"a"_s << u"b"_s
+                                          << QVariantMap{{u"czas"_s, u"10:30"_s}} << QString();
+    QTest::newRow("a bad line") << u"a/b\nto nie jest para\nk: v"_s << u"a"_s << u"b"_s
+                                << QVariantMap{{u"k"_s, u"v"_s}} << u"line 2: not key: value"_s;
+    QTest::newRow("empty") << QString() << QString() << QString() << QVariantMap()
+                           << u"the first line names the view, <extension>/<view>"_s;
+    QTest::newRow("no slash") << u"silownia"_s << QString() << QString() << QVariantMap()
+                              << u"line 1: the first line names the view, <extension>/<view>"_s;
+    QTest::newRow("bad id") << u"sił ownia/dzis"_s << QString() << QString() << QVariantMap()
+                            << u"line 1: the first line names the view, <extension>/<view>"_s;
+    QTest::newRow("bad view") << u"a/b c"_s << QString() << QString() << QVariantMap()
+                              << u"line 1: the first line names the view, <extension>/<view>"_s;
+    QTest::newRow("windows line ends") << u"a/b\r\nk: v\r\n"_s << u"a"_s << u"b"_s << QVariantMap{{u"k"_s, u"v"_s}}
+                                       << QString();
+}
+
+void TestMarkdownMacros::viewBlock()
+{
+    QFETCH(QString, source);
+    QFETCH(QString, extension);
+    QFETCH(QString, view);
+    QFETCH(QVariantMap, params);
+    QFETCH(QString, problem);
+    const ViewBlock block = parseViewBlock(source);
+    QCOMPARE(block.extension, extension);
+    QCOMPARE(block.view, view);
+    QCOMPARE(block.params, params);
+    QCOMPARE(block.problem, problem);
 }
 
 QTEST_GUILESS_MAIN(TestMarkdownMacros)

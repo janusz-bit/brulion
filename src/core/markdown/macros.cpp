@@ -124,6 +124,61 @@ bool isMacroName(QStringView name)
     return true;
 }
 
+ViewBlock parseViewBlock(QStringView source)
+{
+    ViewBlock out;
+    constexpr qsizetype MaxSource = 64 * 1024;
+    constexpr int MaxParams = 64;
+    if (source.size() > MaxSource) {
+        out.problem = u"the block is longer than 64 KB"_s;
+        return out;
+    }
+    const QList<QStringView> lines = source.split(u'\n');
+    int number = 0;
+    for (QStringView raw : lines) {
+        ++number;
+        QStringView line = raw.trimmed();
+        if (line.isEmpty() || line.startsWith(u'#') || line.startsWith(u"//"))
+            continue;
+        if (out.extension.isEmpty()) {
+            if (line.startsWith(u"view:", Qt::CaseInsensitive))
+                line = line.sliced(5).trimmed();
+            const qsizetype slash = line.indexOf(u'/');
+            const QStringView id = slash > 0 ? line.first(slash) : QStringView();
+            const QStringView view = slash > 0 ? line.sliced(slash + 1).trimmed() : QStringView();
+            bool idOk = !id.isEmpty() && id.size() <= 64;
+            for (const QChar c : id)
+                idOk = idOk && (c.isLetterOrNumber() && c.unicode() < 128 ? true : c == u'-' || c == u'_');
+            if (!idOk || !isMacroName(view)) {
+                out.problem = u"line %1: the first line names the view, <extension>/<view>"_s.arg(number);
+                return out;
+            }
+            out.extension = id.toString().toLower();
+            out.view = view.toString();
+            continue;
+        }
+        const qsizetype colon = line.indexOf(u':');
+        QStringView key = colon > 0 ? line.first(colon).trimmed() : QStringView();
+        bool keyOk = !key.isEmpty() && key.size() <= 64;
+        for (const QChar c : key)
+            keyOk = keyOk && (c.isLetterOrNumber() || c == u'-' || c == u'_');
+        if (!keyOk) {
+            if (out.problem.isEmpty())
+                out.problem = u"line %1: not key: value"_s.arg(number);
+            continue;
+        }
+        if (out.params.size() >= MaxParams && !out.params.contains(key.toString())) {
+            if (out.problem.isEmpty())
+                out.problem = u"more than %1 params"_s.arg(MaxParams);
+            continue;
+        }
+        out.params.insert(key.toString(), line.sliced(colon + 1).trimmed().toString());
+    }
+    if (out.extension.isEmpty() && out.problem.isEmpty())
+        out.problem = u"the first line names the view, <extension>/<view>"_s;
+    return out;
+}
+
 QString macroViewText(const MacroView &view)
 {
     switch (view.state) {

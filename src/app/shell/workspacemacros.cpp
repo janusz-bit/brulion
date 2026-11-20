@@ -292,9 +292,22 @@ QVariantMap WorkspaceExtensions::macroExtension(const QString &extension) const
     return out;
 }
 
+QVariantMap WorkspaceExtensions::noteParams(const QString &path) const
+{
+    QVariantMap params = macroContext(QString(), path);
+    params.remove(u"args"_s);
+    params.remove(u"text"_s);
+    return params;
+}
+
 void WorkspaceExtensions::showMacro(const QString &extension, const QString &name, const QString &arguments)
 {
     Q_EMIT macroHelpRequested(extension, markdown::macroSource(extension, name, arguments));
+}
+
+void WorkspaceExtensions::showView(const QString &extension, const QString &view)
+{
+    Q_EMIT macroHelpRequested(extension, u"```view "_s + extension + u'/' + view);
 }
 
 QVariantList WorkspaceExtensions::panels(const QString &kind) const

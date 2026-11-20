@@ -338,6 +338,9 @@ public:
     /// descriptions) match `prefix`: rows {title (`ext/name`), subtitle (the description, the
     /// extension's title), insertText (`ext:ext/name example`), hint (its arguments' names)}.
     virtual QVariantList suggestMacros(const QString & /*prefix*/, int /*limit*/ = 20) const { return {}; }
+    /// The views of extensions a ```view block can show (the slash menu's "View: …"): rows
+    /// {source (`extension/view`), title, icon}.
+    virtual QVariantList embeddableViews() const { return {}; }
     /// A template's variable `{{<extension>/<name> arguments}}` (docs/TEMPLATES.md "Variables of
     /// extensions") filled for `context` ({page, path, date, template}): its text, or nullopt to
     /// leave it as written (no such variable, it failed).

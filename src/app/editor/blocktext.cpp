@@ -133,6 +133,7 @@ QString viewName(BlockView view)
     case BlockView::Rule: return u"rule"_s;
     case BlockView::Frontmatter: return u"frontmatter"_s;
     case BlockView::Html: return u"html"_s;
+    case BlockView::View: return u"view"_s;
     }
     return u"text"_s;
 }
@@ -366,7 +367,7 @@ namespace {
 bool isFencedView(BlockView view)
 {
     return view == BlockView::Code || view == BlockView::Calc || view == BlockView::Query || view == BlockView::Math
-           || view == BlockView::Mermaid || view == BlockView::Chart;
+           || view == BlockView::Mermaid || view == BlockView::Chart || view == BlockView::View;
 }
 
 /// A fence line rewritten to `length` markers, keeping its indentation and info string.
@@ -434,6 +435,7 @@ BlockShape shapeOf(const markdown::BlockEntry &e)
                  : f.lang == u"query" || f.lang == u"dataview" ? BlockView::Query
                  : f.lang == u"mermaid" ? BlockView::Mermaid
                  : f.lang == u"chart"   ? BlockView::Chart
+                 : f.lang == u"view"    ? BlockView::View
                                         : BlockView::Code;
         s.editOffset = f.innerOffset;
         if (f.closed && !f.onlyMetadataAfter) {

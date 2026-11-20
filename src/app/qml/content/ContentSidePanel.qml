@@ -14,7 +14,10 @@ import Brulion
 //                 Local graph (the pages around it);
 //   a journal day Day plan (its timed reminders and dates, Workspace.dayPlan), Tasks (open tasks
 //                 due by that day, overdue in red), A year ago (that day's journal a year before),
-//                 Backlinks, Calendar (folded: the month with its journal days).
+//                 Backlinks, Calendar (folded: the month with its journal days);
+//   both          the extensions' panels (b.view with meta.panel, docs/EXTENSIONS.md "Panels"):
+//                 each a section with the view drawn by ShellExtensionView for the note on screen
+//                 (its `page`, `path`, `date` among the view's params), after the app's own.
 //
 // What is folded is no setting: every panel starts with the defaults above (a drawer opened again
 // is a new panel). `initialTab` names a section to unfold and scroll to ("links", "unlinked",
@@ -35,6 +38,11 @@ Item {
 
     readonly property string journalDate: path !== "" ? Workspace.journalDate(path) : ""
     readonly property bool journal: journalDate !== "" && !attachment
+    /// The extensions' panels beside this note: {extension, view, title, icon} (followed while
+    /// extensions load, are approved or switched).
+    readonly property list<var> extensionPanels: panel.attachment || Workspace.extensions.revision < 0 ? panel.noPanels
+                                                 : Workspace.extensions.panels(panel.journal ? "journal" : "page")
+    readonly property list<var> noPanels: []
     /// "links" while the linked references are listed here (the page leaves out its own section
     /// under the blocks then: PageView.refsInSidePanel), else "outline".
     readonly property string currentTab: backlinksSection.expanded ? "links" : "outline"
@@ -199,6 +207,57 @@ Item {
                 count: contentItem ? (contentItem as ContentLocalGraph).count : -1
                 content: Component { ContentLocalGraph { path: panel.path } }
             }
+            // ---- The extensions' panels (b.view's meta.panel) ---------------------------------------
+            Repeater {
+                model: panel.extensionPanels
+                delegate: ContentPanelSection {
+                    id: extensionSection
+                    required property var modelData
+                    readonly property string extensionId: AppController.routeText(extensionSection.modelData, "extension")
+                    readonly property string viewName: AppController.routeText(extensionSection.modelData, "view")
+                    objectName: "sectionExtension_" + extensionSection.extensionId + "_" + extensionSection.viewName
+                    Layout.fillWidth: true
+                    title: AppController.routeText(extensionSection.modelData, "title")
+                    content: Component {
+                        Item {
+                            id: extensionPanel
+                            implicitHeight: panelLines.height + Theme.space2
+                            ExtensionView {
+                                id: panelModel
+                                objectName: "sidePanelExtensionModel"
+                                extensions: Workspace.extensions
+                                extension: extensionSection.extensionId
+                                view: extensionSection.viewName
+                                notePath: panel.path
+                                live: extensionPanel.visible
+                                onPageRequested: (page, line) => AppController.openNamedPage(page, line)
+                                onJournalRequested: (date) => AppController.openJournal(date)
+                                onViewRequested: (view, params) => AppController.navigate(panelModel.routeFor(view, params))
+                                Component.onCompleted: panelModel.refresh()
+                            }
+                            ShellExtensionView {
+                                id: panelLines
+                                objectName: "sidePanelExtensionLines"
+                                x: Theme.space3
+                                width: parent.width - 2 * Theme.space3
+                                embedded: true
+                                lines: panelModel
+                                Accessible.name: extensionSection.title
+                            }
+                            BText {
+                                visible: panelModel.error !== ""
+                                x: Theme.space3
+                                width: parent.width - 2 * Theme.space3
+                                text: qsTr("The view could not be drawn: %1").arg(panelModel.error)
+                                variant: "small"
+                                color: Theme.dangerText
+                                wrapMode: Text.Wrap
+                            }
+                        }
+                    }
+                }
+            }
+
             ContentPanelSection {
                 id: calendarSection
                 objectName: "sectionCalendar"
