@@ -1313,7 +1313,8 @@ private Q_SLOTS:
         QCOMPARE(page.value(u"id"_s).toString(), u"licznik"_s);
         QCOMPARE(page.value(u"state"_s).toString(), u"approval"_s); // never approved on this device
         QCOMPARE(page.value(u"permissions"_s).toArray(), QJsonArray{u"write"_s});
-        QCOMPARE(r.result().value(u"builtins"_s).toArray().size(), 3); // the gym, the AI assistant, the habits
+        // The gym, the AI assistant, the habits, the flashcards.
+        QCOMPARE(r.result().value(u"builtins"_s).toArray().size(), 4);
         // Approved in the app (its device state): approved here too.
         writeFile(stateDirOf(dir) + u"/store.json"_s,
                   QJsonDocument(QJsonObject{{u"extensions/approved"_s,

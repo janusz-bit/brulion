@@ -14,7 +14,7 @@ prose and ```` ```luau ```` blocks (docs/EXTENSIONS.md) — and the notebook the
 | Indeks projektów | Polish | write | `change` and `save` hooks that keep a page written, only when it differs |
 | Pomodoro | English | write | `b.timer`, the journal, a bar chart, a node that is not always there |
 | Quick entries | English | write | an extension that writes extension pages: `b.checkExtension`, then `b.write` |
-| Fiszki | Polish | write | a review that moves through a view's params; the schedule kept in the note's own line |
+| Fiszki proste | Polish | write | a review that moves through a view's params; the schedule kept in the note's own line |
 | Link check | English | — | every page read in one call with a time budget of its own, `b.search` |
 | Action items | English | write, ai | `b.ai` with a tool, a question for every proposal, `pcall` around the model |
 

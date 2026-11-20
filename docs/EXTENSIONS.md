@@ -1083,8 +1083,8 @@ the journal's stream today's note —, one beside it in the side panel, the conv
 of the page as a new conversation; a spinner while `aiPending`, none while a chat view shows the turn — `WorkspaceChats.runningShown`). Like the gym, its source can run
 from a page of the notebook and be changed there: a page tagged as an extension, with
 `permissions: [write, ai]`, that holds the source and is titled "Asystent AI" / "AI assistant" (or
-has `overrides: asystent`) — copied by hand so far: Settings has "Edit the code" for the gym and the
-habits only. How
+has `overrides: asystent`) — copied by hand so far: Settings has "Edit the code" for the gym, the
+habits and the flashcards only. How
 well a model does its work is measured by the assistant's bench (docs/FINETUNE.md): tasks with a
 known outcome on notebooks of their own, run by this script — a change of its tools or instructions
 shows there.
@@ -1292,14 +1292,15 @@ Emacs `config.org`). The page's properties (docs/SYNTAX.md §13), in English or 
   off on this device, another page has the same name, the built-in one it replaces is off, no
   ```` ```luau ```` block yet.
 * **Switched off** on this device in Settings → Extensions (`extensions/off`).
-* **Built-ins as pages.** "Edit the code" of the gym or of the habits (Settings → Extensions)
-  writes its source into `Rozszerzenia/Siłownia.md` / `Rozszerzenia/Nawyki.md` (`Extensions/Gym.md`,
-  `Extensions/Habits.md` in an English notebook): `zastępuje: silownia` (`nawyki`), one
+* **Built-ins as pages.** "Edit the code" of the gym, the habits or the flashcards (Settings →
+  Extensions) writes its source into `Rozszerzenia/Siłownia.md` / `Rozszerzenia/Nawyki.md` /
+  `Rozszerzenia/Fiszki.md` (`Extensions/Gym.md`, `Extensions/Habits.md`, `Extensions/Flashcards.md` in
+  an English notebook): `zastępuje: silownia` (`nawyki`, `fiszki`), one
   ```` ```luau ```` block per section of the source under its heading. While that page exists and
   is approved, the built-in runs from it — with its bundled data (`b.data`) — and a change there
   works at once; "Restore" puts the page in the trash and the built-in code runs again. An
-  extension page titled like a built-in ("Siłownia", "Gym", "Nawyki", "Habits", "Asystent AI", "AI
-  assistant") overrides it too, as TiddlyWiki's shadow tiddlers. The built-in's switch still
+  extension page titled like a built-in ("Siłownia", "Gym", "Nawyki", "Habits", "Fiszki",
+  "Flashcards", "Asystent AI", "AI assistant") overrides it too, as TiddlyWiki's shadow tiddlers. The built-in's switch still
   decides whether it runs at all.
 
 ## Written by an AI agent

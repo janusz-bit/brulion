@@ -27,6 +27,7 @@
 #include <QDir>
 #include <QElapsedTimer>
 #include <QFile>
+#include <QSet>
 #include <QTemporaryDir>
 #include <QTest>
 #include <QTimeZone>

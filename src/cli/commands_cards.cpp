@@ -11,8 +11,7 @@
 #include "index/vaultindex.h"
 #include "vault/vault.h"
 
-#include <QFileInfo>
-
+#include <algorithm>
 #include <memory>
 
 using namespace Qt::StringLiterals;

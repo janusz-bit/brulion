@@ -64,7 +64,7 @@ done in the repository simply disappears from the list.
   Settings → Keyboard shortcuts is made when the app starts, before extensions load), a timer of
   an extension's own (`b.timer` is the gym's rest timer: its banner shows in the Gym view only and
   its notification speaks of the next set), "Edit the code" for the AI assistant (Settings has the
-  button for the gym and the habits only).
+  button for the gym, the habits and the flashcards only).
 * **Extensions: what ten sample extensions had to work around** — the samples of
   `tests/core/extensions/samples` (a task review, a mood log, expenses, flashcards, a project index
   kept by hooks …) run, but each met a wall of the API: the hooks hear nothing of what another

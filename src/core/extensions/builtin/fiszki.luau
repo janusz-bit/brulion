@@ -1,6 +1,6 @@
 --!strict
 -- Fiszki (flashcards): cards written in notes as plain Markdown, scheduled with FSRS-6, their state
--- kept next to each card in the note itself (docs/SYNTAX.md "Flashcards") — written with the
+-- kept next to each card in the note itself (docs/SYNTAX.md §15 "Flashcards") — written with the
 -- extensions' public API only (docs/EXTENSIONS.md), like the gym and the habits.
 --
 --   Stolica Peru::Lima <!--SR:!fsrs,2026-11-23T08:00:00.000Z,3,3.17,5.28,2,2,0,0,2026-11-20T08:00:00.000Z-->
