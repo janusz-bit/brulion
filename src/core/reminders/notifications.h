@@ -93,6 +93,13 @@ int nativeIdFor(QStringView id);
 /// order, so equal ids get consecutive values.
 void assignNativeIds(QList<ScheduledNotification> &notifications);
 
+/// A notification that tells nothing of the note (the app lock's "Hide the note's text in
+/// notifications", docs/UI.md "App lock"): the title "Reminder" ("Alarm" for an alarm; in Polish
+/// "Przypomnienie", "Alarm"), the body "Brulion"; the id, time, place and kind are kept (tapping it
+/// still opens the note — behind the lock).
+ScheduledNotification withoutNoteText(const ScheduledNotification &notification,
+                                      dates::UiLocale locale = dates::UiLocale::Polish);
+
 /// All reminder occurrences of the vault whose time lies within [from, to] (inclusive; any time
 /// spec), sorted by time then id, with nativeIds assigned. Same rules as
 /// upcomingNotifications(), without the limit.

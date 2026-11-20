@@ -55,6 +55,7 @@ QJsonObject Target::toJson() const
             {u"language"_s, language},
             {u"intervalMinutes"_s, intervalMinutes},
             {u"followOutsideLinks"_s, followOutsideLinks},
+            {u"hideText"_s, hideText},
     };
     if (nextcloud) {
         json.insert(u"nextcloud"_s, QJsonObject{{u"davUrl"_s, nextcloud->davUrl},
@@ -76,6 +77,7 @@ std::optional<Target> Target::fromJson(const QJsonObject &json)
     t.language = json.value(u"language"_s).toString() == u"en" ? u"en"_s : u"pl"_s;
     t.intervalMinutes = normalizedInterval(json.value(u"intervalMinutes"_s).toInt(DefaultIntervalMinutes));
     t.followOutsideLinks = json.value(u"followOutsideLinks"_s).toBool(true); // absent: an earlier version's
+    t.hideText = json.value(u"hideText"_s).toBool(false);
     const QJsonObject nc = json.value(u"nextcloud"_s).toObject();
     const QString davUrl = nc.value(u"davUrl"_s).toString();
     const QString user = nc.value(u"user"_s).toString();
@@ -92,7 +94,10 @@ QList<ScheduledNotification> upcomingFor(const VaultIndex &index, const QDateTim
     QList<ScheduledNotification> list = upcomingNotifications(
             index, now, ReminderScheduler::DefaultHorizonDays, ReminderScheduler::DefaultMaxScheduled, nullptr,
             target.language == u"en" ? dates::UiLocale::English : dates::UiLocale::Polish);
+    const dates::UiLocale locale = target.language == u"en" ? dates::UiLocale::English : dates::UiLocale::Polish;
     for (ScheduledNotification &n : list) {
+        if (target.hideText)
+            n = withoutNoteText(n, locale);
         n.ringMinutes = target.ringMinutes;
         n.vault = target.vault;
     }

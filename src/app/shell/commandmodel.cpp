@@ -6,6 +6,7 @@
 #include "workspace.h"
 
 #include "notebook/tasktools.h"
+#include "util/paths.h"
 
 #include <QCoreApplication>
 #include <QEvent>
@@ -77,6 +78,11 @@ constexpr UiAction kUiActions[] = {
         {u"page.move", u"movePage"},
         {u"page.reveal", u"revealInTree"},
         {u"page.trash", u"trashPage"},
+        {u"encrypt.selection", u"encryptSelection"},
+        {u"encrypt.page", u"encryptPage"},
+        {u"encrypt.password", u"changePagePassword"},
+        {u"encrypt.decrypt", u"decryptPage"},
+        {u"encrypt.newPage", u"newEncryptedPage"},
         {u"theme.toggle", u"toggleTheme"},
         {u"about", u"about"},
 };
@@ -118,6 +124,10 @@ CommandModel::CommandModel(AppController *app) : QObject(nullptr), m_app(app)
     connect(app->workspace()->extensions(), &WorkspaceExtensions::commandsChanged, this, &CommandModel::commandsChanged);
     connect(app->settings(), &AppSettings::focusModeChanged, this, &CommandModel::commandsChanged);
     connect(app->settings(), &AppSettings::readingModeChanged, this, &CommandModel::commandsChanged);
+    connect(app->workspace()->encryption(), &WorkspaceEncryption::unlockedChanged, this,
+            &CommandModel::commandsChanged);
+    connect(app->appLock(), &AppLockController::changed, this, &CommandModel::commandsChanged);
+    connect(app->appLock(), &AppLockController::lockedChanged, this, &CommandModel::commandsChanged);
     connect(app->settings(), &AppSettings::typewriterScrollingChanged, this, &CommandModel::commandsChanged);
     // The shortcuts' list: these commands with their default shortcuts (titles in the language:
     // again after a language switch, eventFilter()).
@@ -608,6 +618,52 @@ static QList<Command> extensionCommands(const AppController *app, bool blocks)
     return out;
 }
 
+/// Encrypted notes (docs/UI.md "Encrypted notes") and the app lock (docs/UI.md "App lock"): the
+/// page on screen's (`editor`) — a selection or the caret's new fragment, the Markdown page
+/// encrypted, an encrypted page under a new password or decrypted (uiActions: PageView) —, then
+/// locking what is unlocked and the app itself.
+static QList<Command> encryptionCommands(const AppController *app, bool editor)
+{
+    const QVariantMap route = app->currentRoute();
+    const QString path = route.value(u"view"_s).toString() == u"page" ? route.value(u"path"_s).toString() : QString();
+    const WorkspaceEncryption *encryption = app->workspace()->encryption();
+    const bool encryptedPage = encryption->isEncryptedPath(path);
+    const bool unlockedPage = encryptedPage && encryption->isPageUnlocked(path);
+    const bool blocks = editor && !app->sourceModeShown();
+    return {
+            {u"encrypt.selection"_s,
+             CommandModel::tr("Encrypt selection…"),
+             CommandModel::tr("The selected text under a password, readable in Obsidian with Meld Encrypt"),
+             u"lock"_s,
+             {},
+             blocks},
+            {u"encrypt.page"_s,
+             CommandModel::tr("Encrypt page…"),
+             CommandModel::tr("The whole page under a password (a .mdenc file, as Meld Encrypt writes it)"),
+             u"lock"_s,
+             {},
+             editor && paths::isMarkdown(path) && app->workspace()->journalDate(path).isEmpty()},
+            {u"encrypt.password"_s,
+             CommandModel::tr("Change page password…"),
+             CommandModel::tr("The encrypted page under a new password"),
+             u"key-round"_s,
+             {},
+             unlockedPage},
+            {u"encrypt.decrypt"_s,
+             CommandModel::tr("Decrypt page permanently…"),
+             CommandModel::tr("The encrypted page becomes an ordinary Markdown page"),
+             u"lock-open"_s,
+             {},
+             unlockedPage},
+            {u"encrypt.lockAll"_s,
+             CommandModel::tr("Lock encrypted notes"),
+             CommandModel::tr("Forget the passwords typed, lock the open encrypted pages"),
+             u"lock"_s,
+             {},
+             encryption->unlocked()},
+    };
+}
+
 static QList<Command> allCommands(const AppController *app)
 {
     QList<Command> out = buildCommands(app);
@@ -635,6 +691,20 @@ static QList<Command> allCommands(const AppController *app)
                   u"layout-dashboard"_s,
                   {},
                   app->status() == u"ready"}});
+    insertAfter(out, u"page.qrCode"_s, encryptionCommands(app, editor));
+    insertAfter(out, u"canvas.new"_s,
+                {{u"encrypt.newPage"_s,
+                  CommandModel::tr("New encrypted page…"),
+                  CommandModel::tr("A page readable only with its password (Meld Encrypt's format)"),
+                  u"lock"_s,
+                  {},
+                  app->status() == u"ready"},
+                 {u"app.lock"_s,
+                  CommandModel::tr("Lock Brulion"),
+                  CommandModel::tr("The lock screen until the PIN or the phone's lock"),
+                  u"lock-keyhole"_s,
+                  {},
+                  app->appLock()->enabled() && !app->appLock()->locked()}});
     insertAfter(out, u"nav.forward"_s, tabCommands(app));
     out += backupCommands(app);
     return out;
@@ -719,6 +789,10 @@ bool CommandModel::run(const QString &id)
         m_app->openPeriodicNote(u"month"_s, QString(), periodOffset(id));
     else if (id == u"capture")
         m_app->quickCapture();
+    else if (id == u"encrypt.lockAll")
+        m_app->workspace()->encryption()->lockAll();
+    else if (id == u"app.lock")
+        m_app->appLock()->lockNow();
     else if (id == u"canvas.new") {
         const QString path = m_app->workspace()->createCanvas(QString());
         if (path.isEmpty())

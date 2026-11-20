@@ -171,11 +171,13 @@ qt_target_qml_sources(brulion QML_FILES
     qml/shell/ShellExtensionQuestion.qml
     qml/shell/ShellExtensionSettings.qml
     qml/shell/ShellExtensionView.qml
+    qml/shell/ShellLockScreen.qml
     qml/shell/ShellMacroDialog.qml
     qml/shell/ShellMoveDialog.qml
     qml/shell/ShellMoveWords.qml
     qml/shell/ShellNewPageDialog.qml
     qml/shell/ShellPageWindow.qml
+    qml/shell/ShellPrivacySettings.qml
     qml/shell/ShellQuickCapture.qml
     qml/shell/ShellRail.qml
     qml/shell/ShellRenameDialog.qml

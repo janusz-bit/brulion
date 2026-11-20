@@ -19,7 +19,8 @@ import Brulion
 // names, attachments, templates, default reminder time, first day of the week), Reminders (on/off, permissions on Android and in the
 // browser, the sounds of reminders and alarms — qml/notify/ReminderSoundSetting —, snooze, alarm
 // length, Android's background check of the notes, test notification), Sync (qml/io/SyncSettings: status,
-// the sync center, the Nextcloud account), Backups (qml/shell/ShellBackupSettings), Automation
+// the sync center, the Nextcloud account), Backups (qml/shell/ShellBackupSettings), Privacy
+// (qml/shell/ShellPrivacySettings: the app lock, the encrypted notes' session), Automation
 // (qml/shell/ShellAutomationSettings: brulion:// links, the notebook's key), Application (close to tray, the event log and its
 // detailed mode, version, licence, source code; on the desktop "For developers": the switch
 // that lets AI agents drive the running app, AppController.remoteControl).
@@ -61,6 +62,7 @@ Item {
         { key: "extensions", title: qsTr("Extensions"), iconName: "puzzle" },
         { key: "sync", title: qsTr("Sync"), iconName: "folder-sync" },
         { key: "backups", title: qsTr("Backups"), iconName: "hard-drive" },
+        { key: "privacy", title: qsTr("Privacy"), iconName: "shield-check" },
         { key: "automation", title: qsTr("Automation"), iconName: "zap" },
         { key: "app", title: qsTr("Application"), iconName: "info" }
     ]
@@ -75,6 +77,7 @@ Item {
         case "extensions": return extensionsSection
         case "sync": return syncSection
         case "backups": return backupsSection
+        case "privacy": return privacySection
         case "automation": return automationSection
         case "app": return appSection
         default: return generalSection
@@ -1976,6 +1979,11 @@ Item {
     Component {
         id: backupsSection
         ShellBackupSettings {}
+    }
+
+    Component {
+        id: privacySection
+        ShellPrivacySettings {}
     }
 
     Component {

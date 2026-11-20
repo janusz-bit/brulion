@@ -199,6 +199,15 @@ int nativeIdFor(QStringView id)
     return value == 0 ? 1 : value;
 }
 
+ScheduledNotification withoutNoteText(const ScheduledNotification &notification, dates::UiLocale locale)
+{
+    ScheduledNotification out = notification;
+    const bool english = locale == dates::UiLocale::English;
+    out.title = notification.alarm ? u"Alarm"_s : (english ? u"Reminder"_s : u"Przypomnienie"_s);
+    out.body = u"Brulion"_s;
+    return out;
+}
+
 void assignNativeIds(QList<ScheduledNotification> &notifications)
 {
     QSet<int> used;

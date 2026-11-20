@@ -1249,6 +1249,11 @@ const QList<SlashCommand> &slashCommands()
             {u"csvTable"_s, u"Tabela z CSV…"_s, u"Table from CSV…"_s, u"table"_s, u"CSV"_s,
              u"tabela z pliku CSV (Excel, arkusz)"_s, u"table from a CSV file (Excel, spreadsheet)"_s,
              {u"csv"_s, u"import"_s, u"excel"_s, u"arkusz"_s, u"tabela"_s, u"spreadsheet"_s, u"table"_s}},
+            // Encrypted text (docs/UI.md "Encrypted notes"): the dialog asks for it and a password.
+            {u"encrypt"_s, u"Tekst zaszyfrowany…"_s, u"Encrypted text…"_s, u"lock"_s, u"%%\U0001F510γ … \U0001F510%%"_s,
+             u"pod hasłem, widoczny dopiero po odblokowaniu"_s, u"under a password, shown only once unlocked"_s,
+             {u"szyfr"_s, u"zaszyfruj"_s, u"hasło"_s, u"sekret"_s, u"tajne"_s, u"prywatne"_s, u"encrypt"_s, u"password"_s,
+              u"secret"_s, u"private"_s, u"meld"_s}},
             // Data.
             {u"calc"_s, u"Obliczenia"_s, u"Calculation"_s, u"calculator"_s, u"```calc"_s,
              u"blok ```calc"_s, u"```calc block"_s,

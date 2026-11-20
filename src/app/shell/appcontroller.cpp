@@ -231,6 +231,10 @@ AppController::AppController(const Options &options, QObject *parent)
         if (m_appLock->locked())
             m_workspace->encryption()->lockAll();
     });
+    // Notifications without the note's text while the lock is on and asks for it.
+    const auto hideNoteText = [this] { m_workspace->reminders()->setHideNoteText(m_appLock->hidesNotificationText()); };
+    hideNoteText();
+    connect(m_appLock.get(), &AppLockController::changed, this, hideNoteText);
     m_shortcuts = std::make_unique<ShortcutMap>(m_settings.get());
     m_commands = std::make_unique<CommandModel>(this);
     m_tabsSaveTimer = new QTimer(this);

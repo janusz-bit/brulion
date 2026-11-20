@@ -15,6 +15,7 @@
     <string name="brulion_widget_overdue_count">overdue: %1$d</string>
     <string name="brulion_widget_empty_today">Nothing for today — add a task with +</string>
     <string name="brulion_widget_open_app">Open Brulion to show your notebook here</string>
+    <string name="brulion_widget_locked">Brulion is locked. Open it to see your notebook.</string>
     <string name="brulion_widget_add_task">Add a task</string>
     <string name="brulion_widget_quick_note">Quick note</string>
     <string name="brulion_widget_journal_today">Today\'s journal</string>

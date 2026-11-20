@@ -43,6 +43,7 @@ qt_target_qml_sources(brulion
         qml/editor/TransclusionView.qml
         qml/editor/SuggestionPopup.qml
         qml/editor/EditorDialogs.qml
+        qml/editor/EncryptedTextDialog.qml
         qml/editor/MobileEditToolbar.qml
         qml/editor/SourceEditor.qml
         qml/editor/FindBar.qml

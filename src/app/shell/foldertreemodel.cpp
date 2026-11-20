@@ -2,6 +2,7 @@
 
 #include "workspace.h"
 
+#include "markdown/encrypted.h"
 #include "markdown/journal.h"
 #include "text/text.h"
 #include "util/paths.h"
@@ -80,6 +81,9 @@ QVariant FolderTreeModel::data(const QModelIndex &index, int role) const
         return e.name;
     case TitleRole:
     case Qt::DisplayRole:
+        // (An encrypted page by its name: "Sejf", its lock icon below says the rest.)
+        if (!e.isDir && markdown::isEncryptedNotePath(e.path))
+            return e.name.left(e.name.lastIndexOf(u'.'));
         return e.isDir || !paths::isMarkdown(e.path) ? e.name : paths::pageTitle(e.path);
     case PathRole:
         return e.path;
@@ -98,6 +102,9 @@ QVariant FolderTreeModel::data(const QModelIndex &index, int role) const
             return m_expanded.contains(e.path) ? u"folder-open"_s : u"folder"_s;
         if (!e.journalDate.isEmpty())
             return u"calendar"_s;
+        // An encrypted page (docs/UI.md "Encrypted notes"): a page behind a lock.
+        if (markdown::isEncryptedNotePath(e.path))
+            return u"lock"_s;
         // (A PDF opens in the PDF viewer: the page icon, as in its embeds and its viewer's bar.)
         if (paths::isMarkdown(e.path) || paths::isPdfPath(e.path))
             return u"file-text"_s;
@@ -142,7 +149,8 @@ void FolderTreeModel::rebuildChildren()
     QSet<QString> withAttachments;
     if (!m_showAttachments) {
         for (const FileStat &f : files) {
-            QSet<QString> &set = paths::isMarkdown(f.path) ? withPages : withAttachments;
+            QSet<QString> &set =
+                    paths::isMarkdown(f.path) || markdown::isEncryptedNotePath(f.path) ? withPages : withAttachments;
             for (QString dir = paths::dirname(f.path); !dir.isEmpty(); dir = paths::dirname(dir))
                 set.insert(dir);
         }
@@ -154,7 +162,8 @@ void FolderTreeModel::rebuildChildren()
     }
     for (const FileStat &f : files) {
         const bool page = paths::isMarkdown(f.path);
-        if ((!m_showAttachments && !page) || paths::isConflictCopy(f.path))
+        // Encrypted pages are pages of the tree too (not attachments).
+        if ((!m_showAttachments && !page && !markdown::isEncryptedNotePath(f.path)) || paths::isConflictCopy(f.path))
             continue; // conflict copies: surfaced in the sync center, not as pages
         Entry e{paths::basename(f.path), f.path, false, {}};
         // Daily notes only in the journals folder (no date parsing for other pages).

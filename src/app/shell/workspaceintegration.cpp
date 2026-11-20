@@ -194,6 +194,7 @@ void wireBackgroundCheck(AppController *app, notify::Notifier *notifier)
         target.language = settings->language();
         target.intervalMinutes = interval;
         target.followOutsideLinks = settings->followsOutsideLinks();
+        target.hideText = app->appLock()->hidesNotificationText();
         if (sync->active()) {
             target.nextcloud = background::Target::Nextcloud{sync->currentDavUrl(), settings->nextcloudUser().trimmed(),
                                                              sync->deviceName()};
@@ -205,6 +206,7 @@ void wireBackgroundCheck(AppController *app, notify::Notifier *notifier)
     QObject::connect(settings, &AppSettings::alarmRingMinutesChanged, notifier, push);
     QObject::connect(settings, &AppSettings::languageChanged, notifier, push);
     QObject::connect(settings, &AppSettings::followsOutsideLinksChanged, notifier, push);
+    QObject::connect(app->appLock(), &AppLockController::changed, notifier, push);
     QObject::connect(settings, &AppSettings::valueChanged, notifier, [push](const QString &key) {
         if (key == QLatin1String(background::IntervalSettingKey))
             push();

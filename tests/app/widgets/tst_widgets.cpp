@@ -373,6 +373,29 @@ private Q_SLOTS:
         QCOMPARE(emptySnapshot(kNow, u"de"_s).value(u"locale"_s).toString(), u"pl"_s);
     }
 
+    // The app lock hides the notebook (docs/UI.md "App lock"): no task, entry, page or name of it in
+    // what the widgets are handed — quick add's days stay.
+    void snapshotLocked()
+    {
+        const auto index = makeIndex({{u"journals/2026-10-27.md"_s, u"- [ ] Tajne zadanie 📅 2026-10-27\n"_s}});
+        SnapshotOptions options = fixtureOptions();
+        options.favorites = {{u"Sejf.md"_s, u"Sejf"_s}};
+        const QJsonObject full = buildSnapshot(*index, options);
+        QVERIFY(QJsonDocument(full).toJson().contains("Tajne zadanie"));
+        const QJsonObject locked = lockedSnapshot(full);
+        const QByteArray json = QJsonDocument(locked).toJson();
+        QVERIFY(locked.value(u"locked"_s).toBool());
+        QVERIFY(!json.contains("Tajne zadanie"));
+        QVERIFY(!json.contains("Sejf"));
+        QVERIFY(locked.value(u"tasks"_s).isUndefined());
+        QVERIFY(locked.value(u"notes"_s).isUndefined());
+        QCOMPARE(locked.value(u"taskCounts"_s).toObject().value(u"overdue"_s).toInt(), 0);
+        QVERIFY(locked.value(u"vault"_s).toObject().value(u"name"_s).toString().isEmpty());
+        QCOMPARE(locked.value(u"capture"_s), full.value(u"capture"_s));
+        QCOMPARE(locked.value(u"version"_s).toInt(), SnapshotVersion);
+        QVERIFY(!full.value(u"locked"_s).toBool());
+    }
+
     // Where quick add writes: today's note under another accepted name, a missing one with the
     // template filled for its day.
     void captureDaysOfVault()

@@ -101,6 +101,8 @@ public:
     // ---- Pages -----------------------------------------------------------------------------------
     /// A `.mdenc` / `.encrypted` path.
     Q_INVOKABLE bool isEncryptedPath(const QString &path) const;
+    /// The page's name as the views show it: "Sejf" for "Sekrety/Sejf.mdenc" (any page: its title).
+    Q_INVOKABLE QString pageName(const QString &path) const;
     /// The encrypted page's file read (not decrypted): { ok, blank (no password chosen yet), hint,
     /// version, error (translated: a damaged or unknown file) }.
     Q_INVOKABLE QVariantMap pageInfo(const QString &path) const;

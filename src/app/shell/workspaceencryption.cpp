@@ -398,6 +398,14 @@ bool WorkspaceEncryption::isEncryptedPath(const QString &path) const
     return markdown::isEncryptedNotePath(path);
 }
 
+QString WorkspaceEncryption::pageName(const QString &path) const
+{
+    const QString name = paths::pageTitle(path);
+    if (!isEncryptedPath(name))
+        return name;
+    return name.left(name.lastIndexOf(u'.'));
+}
+
 QVariantMap WorkspaceEncryption::pageInfo(const QString &path) const
 {
     bool exists = false;

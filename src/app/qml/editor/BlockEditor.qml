@@ -1592,6 +1592,9 @@ FocusScope {
         } else if (action === "macro") {
             // A macro's placeholder: what can be done about its extension (ShellMacroDialog).
             Workspace.extensions.showMacro(activated.text("extension"), activated.text("name"), activated.text("arguments"))
+        } else if (action === "encrypted") {
+            // An encrypted fragment's lock (docs/UI.md "Encrypted notes"): unlocked in its dialog.
+            editor.openActivatedEncrypted(row)
         }
     }
     /// PageController.activateLink's result.
@@ -1629,6 +1632,7 @@ FocusScope {
         case "image": dialogs.pickImage(row, cursor); break
         case "fileLink": dialogs.pickFileLink(row, cursor); break
         case "csvTable": dialogs.pickCsvTable(row); break
+        case "encrypt": insertEncrypted(row, cursor); break
         case "webImage": dialogs.pickWebImage(row, cursor); break
         case "drawing": insertDrawing(row, cursor); break
         case "drawingOn": dialogs.pickDrawingBackdrop(row, cursor); break
@@ -4155,6 +4159,14 @@ FocusScope {
                 onTriggered: editor.openAfterTextMenu(menu.edit, true)
             }
             HidingMenuItem {
+                objectName: "editTextEncrypt"
+                visible: menu.textItems && !editor.readOnly
+                enabled: menu.hasSelection
+                text: qsTr("Encrypt selection…")
+                iconName: "lock"
+                onTriggered: editor.encryptSelection(menu.edit)
+            }
+            HidingMenuItem {
                 objectName: "editTextSelectAll"
                 visible: menu.textItems
                 text: qsTr("Select all")
@@ -4171,6 +4183,110 @@ FocusScope {
             // The keyboard goes back to the edited text (its selection stayed: persistentSelection).
             onClosed: if (edit && edit.active) edit.ensureFocus()
         }
+    }
+
+    // ---- Encrypted text (docs/UI.md "Encrypted notes") -----------------------------------------
+    /// The fragment dialog (EncryptedTextDialog), made when first opened. The block it is about is
+    /// tracked while it is open (PageController.trackBlock): the page may change meanwhile.
+    property EncryptedTextDialog encryptedDialog: null
+    property int encryptedHandle: -1
+    /// The fragment's range in the block's body ("unlock"), or the selection's in its edit text ("new").
+    property int encryptedFrom: 0
+    property int encryptedTo: 0
+    function ensureEncryptedDialog(): void {
+        if (!encryptedDialog)
+            encryptedDialog = encryptedDialogComponent.createObject(editor) as EncryptedTextDialog
+    }
+    function trackEncrypted(row: int): void {
+        if (encryptedHandle >= 0)
+            controller.untrack(encryptedHandle)
+        encryptedHandle = controller.trackBlock(row)
+    }
+    /// activateLink()'s "encrypted" answer (held in `activated`): its fragment's dialog.
+    function openActivatedEncrypted(row: int): void {
+        // (Typed copies: passed on after other calls.)
+        const from = 0 + AppController.routeInt(activated.map, "from", 0)
+        const to = 0 + AppController.routeInt(activated.map, "to", 0)
+        const fragment = "" + activated.text("fragment")
+        openEncrypted(row, fragment, from, to)
+    }
+    /// The lock of fragment `fragment` at [from, to) of block `row`'s body: unlocked in the dialog.
+    function openEncrypted(row: int, fragment: string, from: int, to: int): void {
+        if (!controller || fragment === "")
+            return
+        closeSuggestions()
+        trackEncrypted(row)
+        encryptedFrom = from
+        encryptedTo = to
+        ensureEncryptedDialog()
+        encryptedDialog.openFragment(controller.path, fragment)
+    }
+    /// "Encrypt selection…": the selection of the edited text `edit` becomes a fragment.
+    function encryptSelection(edit: InlineEditor): void {
+        if (!controller || !edit || !edit.active || readOnlyRefuses())
+            return
+        EditorInput.commitPreedit(edit)
+        const from = 0 + edit.selectionStart
+        const to = 0 + edit.selectionEnd
+        if (from === to) {
+            notice(qsTr("Select the text to encrypt"), "info", null)
+            return
+        }
+        trackEncrypted(edit.row)
+        encryptedFrom = from
+        encryptedTo = to
+        ensureEncryptedDialog()
+        encryptedDialog.openNew(controller.path, "" + edit.selectedText, true)
+    }
+    /// "Insert encrypted text" (the slash command, the palette): a new fragment at `cursor` of `row`.
+    function insertEncrypted(row: int, cursor: int): void {
+        if (!controller || row < 0 || readOnlyRefuses())
+            return
+        trackEncrypted(row)
+        encryptedFrom = cursor
+        encryptedTo = cursor
+        ensureEncryptedDialog()
+        encryptedDialog.openNew(controller.path, "", false)
+    }
+    /// The palette's "Encrypt selection": the edited text's selection, else the caret's new fragment.
+    function encryptAtCursor(): void {
+        const edit = activeEditor
+        const selected = edit !== null && (0 + edit.selectionStart) !== (0 + edit.selectionEnd)
+        if (edit && edit.active && selected)
+            encryptSelection(edit)
+        else if (edit && edit.active)
+            insertEncrypted(edit.row, edit.cursorPosition)
+        else
+            notice(qsTr("Place the cursor in a block first"), "info", null)
+    }
+    Component {
+        id: encryptedDialogComponent
+        EncryptedTextDialog {
+            onFragmentSaved: (fragment, text, decrypted) => editor.saveEncrypted(fragment, text, decrypted)
+            onFragmentCreated: (text) => editor.insertEncryptedText(text)
+            onClosed: {
+                if (editor.encryptedHandle >= 0 && editor.controller)
+                    editor.controller.untrack(editor.encryptedHandle)
+                editor.encryptedHandle = -1
+            }
+        }
+    }
+    function saveEncrypted(fragment: string, text: string, decrypted: bool): void {
+        const row = encryptedHandle >= 0 && controller ? controller.trackedRow(encryptedHandle) + 0 : -1
+        if (row < 0 || !controller.replaceEncryptedFragment(row, encryptedFrom, encryptedTo, fragment, text)) {
+            AppController.toast(qsTr("The encrypted text changed in the page meanwhile: nothing was written."), "error")
+            return
+        }
+        AppController.toast(decrypted ? qsTr("Decrypted into the page") : qsTr("Saved encrypted"), "success")
+    }
+    function insertEncryptedText(text: string): void {
+        const row = encryptedHandle >= 0 && controller ? controller.trackedRow(encryptedHandle) + 0 : -1
+        if (row < 0) {
+            AppController.toast(qsTr("The block changed meanwhile: nothing was written."), "error")
+            return
+        }
+        controller.replaceRange(row, encryptedFrom, encryptedTo, text)
+        AppController.toast(qsTr("Encrypted"), "success")
     }
 
     // ---- Coloured highlights (docs/UI.md "Coloured highlights") ---------------------------------

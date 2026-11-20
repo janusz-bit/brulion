@@ -2088,10 +2088,12 @@ QVariantList Workspace::switcherPages(const QString &query, int limit) const
         const bool journal = !journalDate(path).isEmpty();
         // The page's own icon (docs/UI.md "Page icon and cover") in place of the file's.
         const markdown::PageIcon icon = pageIcon(path);
-        out.append(QVariantMap{{u"title"_s, paths::pageTitle(path)},
+        const bool encrypted = markdown::isEncryptedNotePath(path);
+        out.append(QVariantMap{{u"title"_s, encrypted ? m_encryption->pageName(path) : paths::pageTitle(path)},
                                {u"subtitle"_s, subtitle},
                                {u"icon"_s, icon.kind == markdown::PageIcon::Kind::App ? icon.name
                                            : journal                                  ? u"calendar"_s
+                                           : encrypted                                ? u"lock"_s
                                                                                       : u"file-text"_s},
                                {u"emoji"_s, icon.kind == markdown::PageIcon::Kind::Emoji ? icon.name : QString()},
                                {u"path"_s, path}});
@@ -2106,6 +2108,17 @@ QVariantList Workspace::switcherPages(const QString &query, int limit) const
     if (m_index) {
         for (const PageSuggestion &s : m_index->suggestPages(q, limit))
             add(s.path, s.alias);
+        // Encrypted pages (attachments to the index: their names only, docs/UI.md "Encrypted notes").
+        if (!q.isEmpty() && out.size() < limit) {
+            const QString key = text::foldKey(q);
+            const QList<VaultPath> files = m_index->attachments();
+            for (const VaultPath &path : files) {
+                if (out.size() >= limit)
+                    break;
+                if (markdown::isEncryptedNotePath(path) && text::foldKey(paths::basename(path)).contains(key))
+                    add(path, {});
+            }
+        }
     }
     return out;
 }

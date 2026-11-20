@@ -63,23 +63,32 @@ public:
         const NotificationSink *t = live();
         return t && t->firesWhenClosed();
     }
+    /// The app lock hides the note's text (docs/UI.md "App lock"): every notification says only
+    /// "Reminder" (WorkspaceReminders::setHideNoteText()).
+    bool hideText = false;
+    dates::UiLocale locale = dates::UiLocale::Polish;
+
+    ScheduledNotification shown(const ScheduledNotification &n) const
+    {
+        ScheduledNotification out = hideText ? withoutNoteText(n, locale) : n;
+        out.vault = vault;
+        return out;
+    }
     void schedule(const QList<ScheduledNotification> &notifications) override
     {
         NotificationSink *t = live();
         if (!t)
             return;
-        QList<ScheduledNotification> stamped = notifications;
-        for (ScheduledNotification &n : stamped)
-            n.vault = vault;
+        QList<ScheduledNotification> stamped;
+        stamped.reserve(notifications.size());
+        for (const ScheduledNotification &n : notifications)
+            stamped.append(shown(n));
         t->schedule(stamped);
     }
     void showNow(const ScheduledNotification &notification) override
     {
-        if (NotificationSink *t = live()) {
-            ScheduledNotification stamped = notification;
-            stamped.vault = vault;
-            t->showNow(stamped);
-        }
+        if (NotificationSink *t = live())
+            t->showNow(shown(notification));
     }
 };
 
@@ -310,10 +319,20 @@ void WorkspaceReminders::setLanguage(const QString &language)
     if (l == m_language)
         return;
     m_language = l;
+    m_proxy->locale = uiLocale(l);
     if (m_scheduler)
         m_scheduler->setLocale(uiLocale(l));
     Q_EMIT upcomingChanged();
     Q_EMIT missedChanged();
+}
+
+void WorkspaceReminders::setHideNoteText(bool hide)
+{
+    if (m_proxy->hideText == hide)
+        return;
+    m_proxy->hideText = hide;
+    // The platform's armed set again, with or without the text.
+    resendUpcoming();
 }
 
 void WorkspaceReminders::setTestIntervals(int heartbeatMs, int debounceMs)

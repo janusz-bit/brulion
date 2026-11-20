@@ -19,7 +19,8 @@
 //                   "line", "isTask", "closed", "alarm", "recurring" } ] } } },
 //     "notes": { "favorites": [ { "path", "title" } ], "recent": [ … ] },
 //     "capture": { "days": [ { "date", "path", "exists", "newText" } ] },
-//     "reminders": true (the app's reminders are on; off: quick add arms no reminder) }
+//     "reminders": true (the app's reminders are on; off: quick add arms no reminder),
+//     "locked": true (the app lock hides the notebook: lockedSnapshot()) }
 //
 // tasks: the open tasks of TasksView (same sections and "due" order, TaskListModel) that are
 // overdue or filed at most taskDays ahead; their raw dates let the widget file them again for a
@@ -108,6 +109,11 @@ QJsonObject buildSnapshot(const VaultIndex &index, const SnapshotOptions &option
 
 /// The snapshot without a notebook ("vault": null): the widgets ask to open Brulion.
 QJsonObject emptySnapshot(const QDateTime &now, const QString &locale);
+
+/// `snapshot` as the widgets show it while the app lock hides them (docs/UI.md "App lock"):
+/// "locked": true, no tasks, calendar entries or pages, the notebook unnamed — quick add's
+/// "capture" days and "reminders" kept (it still writes into the journal).
+QJsonObject lockedSnapshot(const QJsonObject &snapshot);
 
 /// The daily notes of `days` days from `today` (notebook::journalFileFor: also a note under
 /// another name the journal folder accepts), each with notebook::newJournalText (what quick add

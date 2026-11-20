@@ -259,4 +259,20 @@ QList<CaptureDay> captureDays(Vault &vault, QDate today, int days, const QDateTi
     return out;
 }
 
+QJsonObject lockedSnapshot(const QJsonObject &snapshot)
+{
+    QJsonObject out = snapshot;
+    out.remove(u"tasks"_s);
+    out.remove(u"calendar"_s);
+    out.remove(u"notes"_s);
+    out.insert(u"taskCounts"_s, QJsonObject{{u"overdue"_s, 0}, {u"today"_s, 0}, {u"tomorrow"_s, 0}});
+    if (out.value(u"vault"_s).isObject()) {
+        QJsonObject vault = out.value(u"vault"_s).toObject();
+        vault.insert(u"name"_s, QString());
+        out.insert(u"vault"_s, vault);
+    }
+    out.insert(u"locked"_s, true);
+    return out;
+}
+
 } // namespace brulion::widgets

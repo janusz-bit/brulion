@@ -83,6 +83,9 @@ struct Target {
     /// followsOutsideLinks); a target of a version before that setting (no key) still does — its sync
     /// must not take their files for deleted before the app's first open settles the setting.
     bool followOutsideLinks = false;
+    /// The reminders armed say nothing of the note (the app lock's "Hide the note's text in
+    /// notifications": withoutNoteText()).
+    bool hideText = false;
 
     struct Nextcloud {
         QString davUrl; ///< WebDAV address of the notebook's server folder

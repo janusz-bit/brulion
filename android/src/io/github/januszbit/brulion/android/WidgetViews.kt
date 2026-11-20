@@ -76,7 +76,13 @@ internal object WidgetViews {
     views.setTextViewText(R.id.widget_subtitle, subtitle)
     views.setTextViewText(
       R.id.widget_empty,
-      text.getString(if (snapshot.hasVault) R.string.brulion_widget_empty_today else R.string.brulion_widget_open_app)
+      text.getString(
+        when {
+          snapshot.locked -> R.string.brulion_widget_locked
+          snapshot.hasVault -> R.string.brulion_widget_empty_today
+          else -> R.string.brulion_widget_open_app
+        }
+      )
     )
     views.setOnClickPendingIntent(R.id.widget_header, openApp(context))
     views.setOnClickPendingIntent(R.id.widget_add, quickAdd(context, WidgetAction.KIND_TASK))
@@ -167,7 +173,13 @@ internal object WidgetViews {
     views.setTextViewText(R.id.widget_note, text.getString(R.string.brulion_widget_quick_note))
     views.setTextViewText(
       R.id.widget_empty,
-      text.getString(if (snapshot.hasVault) R.string.brulion_widget_notes_empty else R.string.brulion_widget_open_app)
+      text.getString(
+        when {
+          snapshot.locked -> R.string.brulion_widget_locked
+          snapshot.hasVault -> R.string.brulion_widget_notes_empty
+          else -> R.string.brulion_widget_open_app
+        }
+      )
     )
     views.setOnClickPendingIntent(R.id.widget_header, openApp(context))
     val journal = todaysJournal(snapshot, today)
@@ -197,6 +209,7 @@ internal object WidgetViews {
   private fun emptyCalendarText(text: Context, snapshot: WidgetSnapshot, day: LocalDate): String =
     text.getString(
       when {
+        snapshot.locked -> R.string.brulion_widget_locked
         !snapshot.hasVault -> R.string.brulion_widget_open_app
         !snapshot.covers(day) -> R.string.brulion_widget_calendar_outside
         else -> R.string.brulion_widget_calendar_empty
