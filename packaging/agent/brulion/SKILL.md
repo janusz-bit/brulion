@@ -61,6 +61,7 @@ MCP: `brulion-cli mcp --vault <folder>` serves the same commands as tools (`brul
 | Search | `search "zolw"` (diacritic-insensitive) |
 | Read a page | `page read "Projekty/Dom"` (`--blocks` gives a ref per block) |
 | Add to a page under a heading | `page append Dom "pędzel" --under "## Zakupy"` |
+| Save a web page's HTML you have as a note (pictures saved) | `clip save --url <url> --stdin --folder Czytelnia` (`--place journal`, `--page P --heading H`; `--preview` first) |
 | Pages linking to a page (links and tags) | `backlinks Dom` |
 | A query | `query "type:tasks status:open due:<=+7d sort:due"` (keys also Polish) |
 | Check a date phrase | `date parse "w przyszły piątek o 18"` |

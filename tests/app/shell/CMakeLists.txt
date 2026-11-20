@@ -26,6 +26,8 @@ brulion_add_test(tst_shell_settings SOURCES tst_settings.cpp LIBS brulion_shell 
 # both languages, the folders checked off the GUI thread (missing, a share that hangs), temporary
 # folders dropped, "Remove from list", malformed stored entries.
 brulion_add_test(tst_shell_recentnotebooks SOURCES tst_recentnotebooks.cpp LIBS brulion_shell)
+# Settings' "Browser extension (Web Clipper)" (webclippersetup.h): the host manifests in a private home.
+brulion_add_test(tst_shell_webclippersetup SOURCES tst_webclippersetup.cpp LIBS brulion_shell brulion_core_clipper)
 # The C++ behind the views (qml/views): route parameters read from a QVariantMap, SearchView's
 # recent searches, CleanupView's selection (CleanupSelection).
 brulion_add_test(tst_shell_views SOURCES tst_views.cpp LIBS brulion_shell)

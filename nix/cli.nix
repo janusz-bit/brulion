@@ -44,6 +44,16 @@ stdenv.mkDerivation (finalAttrs: {
     patchShebangs tests
   '';
 
+  # The Web Clipper's host manifests, as in nix/package.nix (docs/CLIPPER.md).
+  postInstall = ''
+    export HOME=$TMPDIR
+    mkdir -p $out/lib/mozilla/native-messaging-hosts $out/share/brulion/native-messaging-hosts
+    $out/bin/brulion-cli clip manifest firefox --program $out/bin/brulion-cli \
+      >$out/lib/mozilla/native-messaging-hosts/io.github.januszbit.brulion.json
+    $out/bin/brulion-cli clip manifest chromium --program $out/bin/brulion-cli \
+      >$out/share/brulion/native-messaging-hosts/io.github.januszbit.brulion.json
+  '';
+
   # The core and command-line tests (`brulion-cli.overrideAttrs { doCheck = true; }`).
   doCheck = false;
   preCheck = ''
@@ -68,6 +78,7 @@ stdenv.mkDerivation (finalAttrs: {
     LANG=pl_PL.UTF-8 $out/bin/brulion-cli help >"$TMPDIR/help.txt"
     grep -q "Opcje globalne:" "$TMPDIR/help.txt"
     test -f $out/share/brulion/agent-skills/brulion/SKILL.md
+    grep -qF "\"path\": \"$out/bin/brulion-cli\"" $out/lib/mozilla/native-messaging-hosts/io.github.januszbit.brulion.json
     runHook postInstallCheck
   '';
 

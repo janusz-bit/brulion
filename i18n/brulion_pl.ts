@@ -14211,31 +14211,71 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
     </message>
     <message>
         <location filename="../src/app/qml/views/SettingsView.qml" line="2083"/>
+        <source>Browser extension (Web Clipper)</source>
+        <translation>Rozszerzenie przeglądarki (Web Clipper)</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2090"/>
+        <source>Save articles, selections, whole pages and screenshots from Chrome, Chromium, Brave, Edge and Firefox into this notebook, with their pictures. Install the extension in the browser, then connect the browsers here — once.</source>
+        <translation>Zapisuj artykuły, zaznaczenia, całe strony i zrzuty ekranu z Chrome, Chromium, Brave, Edge i Firefoksa w tym notatniku, razem z obrazkami. Zainstaluj rozszerzenie w przeglądarce, a potem raz połącz tutaj przeglądarki.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2113"/>
+        <source>Broken</source>
+        <translation>Zepsuta</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2113"/>
+        <source>Connected</source>
+        <translation>Połączona</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2125"/>
+        <source>Connect again</source>
+        <translation>Połącz ponownie</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2125"/>
+        <source>Connect browsers</source>
+        <translation>Połącz przeglądarki</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2134"/>
+        <source>Disconnect</source>
+        <translation>Rozłącz</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2140"/>
+        <source>How to install the extension</source>
+        <translation>Jak zainstalować rozszerzenie</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2164"/>
         <source>For developers</source>
         <translation>Dla programistów</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="2087"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2168"/>
         <source>Allow agents to control the app (local socket)</source>
         <translation>Pozwól agentom sterować aplikacją (gniazdo lokalne)</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="2088"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2169"/>
         <source>AI agents and scripts of your user account can then see what Brulion shows, click, type and take screenshots (brulion-cli app …). Any program you run can then read your notes too — turn it on only while you need it.</source>
         <translation>Agenci AI i skrypty Twojego konta mogą wtedy widzieć, co pokazuje Brulion, klikać, pisać i robić zrzuty ekranu (brulion-cli app …). Każdy uruchomiony przez Ciebie program może wtedy też czytać Twoje notatki — włączaj tylko na czas, gdy jest potrzebne.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="2103"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2184"/>
         <source>The socket could not be opened: %1</source>
         <translation>Nie udało się otworzyć gniazda: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="2106"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2187"/>
         <source>On for this run (started with --remote-control).</source>
         <translation>Włączone na to uruchomienie (opcja --remote-control).</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="2107"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2188"/>
         <source>Listening at %1</source>
         <translation>Nasłuchuje na %1</translation>
     </message>
@@ -20209,9 +20249,10 @@ Kliknij, aby zsynchronizować teraz · prawy przycisk: centrum synchronizacji</t
     </message>
     <message>
         <location filename="../src/cli/commands_app.cpp" line="214"/>
+        <location filename="../src/cli/commands_clip.cpp" line="348"/>
         <location filename="../src/cli/commands_pages.cpp" line="210"/>
-        <location filename="../src/cli/context.cpp" line="543"/>
-        <location filename="../src/cli/context.cpp" line="579"/>
+        <location filename="../src/cli/context.cpp" line="548"/>
+        <location filename="../src/cli/context.cpp" line="584"/>
         <source>No page %1</source>
         <translation>Nie ma strony %1</translation>
     </message>
@@ -20613,7 +20654,7 @@ Kliknij, aby zsynchronizować teraz · prawy przycisk: centrum synchronizacji</t
     </message>
     <message>
         <location filename="../src/cli/commands_common.cpp" line="75"/>
-        <location filename="../src/cli/context.cpp" line="308"/>
+        <location filename="../src/cli/context.cpp" line="313"/>
         <source>Something went wrong</source>
         <translation>Coś poszło nie tak</translation>
     </message>
@@ -21902,136 +21943,136 @@ Kliknij, aby zsynchronizować teraz · prawy przycisk: centrum synchronizacji</t
         <translation>Przywróć wersję (obecny tekst najpierw zostaje zachowany jako wersja)</translation>
     </message>
     <message>
-        <location filename="../src/cli/context.cpp" line="130"/>
+        <location filename="../src/cli/context.cpp" line="135"/>
         <source>The app shows its documentation, not a notebook of yours: give --vault &lt;folder&gt; or set BRULION_VAULT</source>
         <translation>Aplikacja pokazuje swoją dokumentację, nie Twój notatnik: podaj --vault &lt;folder&gt; albo ustaw BRULION_VAULT</translation>
     </message>
     <message>
-        <location filename="../src/cli/context.cpp" line="137"/>
+        <location filename="../src/cli/context.cpp" line="142"/>
         <source>No notebook: give --vault &lt;folder&gt;, set BRULION_VAULT, or open a notebook in the app</source>
         <translation>Brak notatnika: podaj --vault &lt;folder&gt;, ustaw BRULION_VAULT albo otwórz notatnik w aplikacji</translation>
     </message>
     <message>
-        <location filename="../src/cli/context.cpp" line="143"/>
+        <location filename="../src/cli/context.cpp" line="148"/>
         <source>The notebook folder %1 does not exist (brulion-cli init &lt;folder&gt; creates one)</source>
         <translation>Folder notatnika %1 nie istnieje (utworzy go brulion-cli init &lt;folder&gt;)</translation>
     </message>
     <message>
-        <location filename="../src/cli/context.cpp" line="148"/>
+        <location filename="../src/cli/context.cpp" line="153"/>
         <source>%1 is not a folder</source>
         <translation>%1 nie jest folderem</translation>
     </message>
     <message>
-        <location filename="../src/cli/context.cpp" line="281"/>
+        <location filename="../src/cli/context.cpp" line="286"/>
         <source>Standard input was not valid UTF-8: invalid bytes were replaced</source>
         <translation>Standardowe wejście nie było poprawnym UTF-8: błędne bajty zostały zastąpione</translation>
     </message>
     <message>
-        <location filename="../src/cli/context.cpp" line="347"/>
+        <location filename="../src/cli/context.cpp" line="352"/>
         <source>A path is needed</source>
         <translation>Potrzebna jest ścieżka</translation>
     </message>
     <message>
-        <location filename="../src/cli/context.cpp" line="351"/>
+        <location filename="../src/cli/context.cpp" line="356"/>
         <source>The path contains a NUL character</source>
         <translation>Ścieżka zawiera znak NUL</translation>
     </message>
     <message>
-        <location filename="../src/cli/context.cpp" line="360"/>
-        <location filename="../src/cli/context.cpp" line="367"/>
+        <location filename="../src/cli/context.cpp" line="365"/>
+        <location filename="../src/cli/context.cpp" line="372"/>
         <source>%1 is outside the notebook</source>
         <translation>%1 leży poza notatnikiem</translation>
     </message>
     <message>
-        <location filename="../src/cli/context.cpp" line="377"/>
+        <location filename="../src/cli/context.cpp" line="382"/>
         <source>%1 is not a note: .brulion/, .trash/ and other hidden folders are off limits</source>
         <translation>%1 nie jest notatką: .brulion/, .trash/ i inne ukryte foldery są niedostępne</translation>
     </message>
     <message>
-        <location filename="../src/cli/context.cpp" line="394"/>
-        <location filename="../src/cli/context.cpp" line="407"/>
+        <location filename="../src/cli/context.cpp" line="399"/>
+        <location filename="../src/cli/context.cpp" line="412"/>
         <source>Not a date: %1</source>
         <translation>To nie jest data: %1</translation>
     </message>
     <message>
-        <location filename="../src/cli/context.cpp" line="416"/>
+        <location filename="../src/cli/context.cpp" line="421"/>
         <source>Words that are no date were ignored in %1: %2</source>
         <translation>W %1 pominięto słowa, które nie są datą: %2</translation>
     </message>
     <message>
-        <location filename="../src/cli/context.cpp" line="429"/>
+        <location filename="../src/cli/context.cpp" line="434"/>
         <source>A page is needed: a path, a page name, a date or an item ref</source>
         <translation>Potrzebna jest strona: ścieżka, nazwa strony, data albo odwołanie do elementu</translation>
     </message>
     <message>
-        <location filename="../src/cli/context.cpp" line="434"/>
+        <location filename="../src/cli/context.cpp" line="439"/>
         <source>Not a valid reference: %1</source>
         <translation>Niepoprawne odwołanie: %1</translation>
     </message>
     <message>
-        <location filename="../src/cli/context.cpp" line="453"/>
+        <location filename="../src/cli/context.cpp" line="458"/>
         <source>No block with the id %1</source>
         <translation>Nie ma bloku o id %1</translation>
     </message>
     <message>
-        <location filename="../src/cli/context.cpp" line="465"/>
+        <location filename="../src/cli/context.cpp" line="470"/>
         <source>The notebook folder is not a page</source>
         <translation>Folder notatnika nie jest stroną</translation>
     </message>
     <message>
-        <location filename="../src/cli/context.cpp" line="475"/>
+        <location filename="../src/cli/context.cpp" line="480"/>
         <source>%1 is an attachment, not a page</source>
         <translation>%1 to załącznik, nie strona</translation>
     </message>
     <message>
-        <location filename="../src/cli/context.cpp" line="503"/>
+        <location filename="../src/cli/context.cpp" line="508"/>
         <source>%1 is the page %2; for the daily note of %3 give the date</source>
         <translation>%1 to strona %2; po notatkę dzienną z %3 podaj datę</translation>
     </message>
     <message>
-        <location filename="../src/cli/context.cpp" line="524"/>
+        <location filename="../src/cli/context.cpp" line="529"/>
         <source>Several pages are called %1: give the path</source>
         <translation>Kilka stron nazywa się %1: podaj ścieżkę</translation>
     </message>
     <message>
-        <location filename="../src/cli/context.cpp" line="558"/>
+        <location filename="../src/cli/context.cpp" line="563"/>
         <source>The notebook is busy: %1</source>
         <translation>Notatnik jest zajęty: %1</translation>
     </message>
     <message>
-        <location filename="../src/cli/context.cpp" line="576"/>
+        <location filename="../src/cli/context.cpp" line="581"/>
         <source>The change cannot be made</source>
         <translation>Nie można wprowadzić zmiany</translation>
     </message>
     <message>
-        <location filename="../src/cli/context.cpp" line="583"/>
+        <location filename="../src/cli/context.cpp" line="588"/>
         <source>%1 changed since it was read (its hash is not the one expected): read it again</source>
         <translation>Plik %1 zmienił się od odczytu (ma inny hash niż oczekiwany): odczytaj go ponownie</translation>
     </message>
     <message>
         <location filename="../src/cli/commands_habits.cpp" line="229"/>
         <location filename="../src/cli/commands_cards.cpp" line="178"/>
-        <location filename="../src/cli/context.cpp" line="588"/>
+        <location filename="../src/cli/context.cpp" line="593"/>
         <source>%1 kept changing while it was written (another program writes it): try again</source>
         <translation>Plik %1 zmieniał się podczas zapisu (zapisuje go inny program): spróbuj ponownie</translation>
     </message>
     <message>
-        <location filename="../src/cli/context.cpp" line="593"/>
+        <location filename="../src/cli/context.cpp" line="598"/>
         <source>%1 is not UTF-8: it is not changed, so no byte of it gets lost</source>
         <translation>Plik %1 nie jest w UTF-8: pozostaje bez zmian, żeby żaden jego bajt nie przepadł</translation>
     </message>
     <message>
-        <location filename="../src/cli/context.cpp" line="597"/>
+        <location filename="../src/cli/context.cpp" line="602"/>
         <source>Could not write %1: %2</source>
         <translation>Nie udało się zapisać %1: %2</translation>
     </message>
     <message>
-        <location filename="../src/cli/context.cpp" line="632"/>
+        <location filename="../src/cli/context.cpp" line="637"/>
         <source>%1 writes notes: refused in read-only mode</source>
         <translation>Polecenie %1 zapisuje notatki: odmowa w trybie tylko do odczytu</translation>
     </message>
     <message>
-        <location filename="../src/cli/context.cpp" line="635"/>
+        <location filename="../src/cli/context.cpp" line="640"/>
         <source>%1 replaces, moves or removes existing notes: run it with --allow-destructive</source>
         <translation>Polecenie %1 zastępuje, przenosi albo usuwa istniejące notatki: uruchom je z --allow-destructive</translation>
     </message>
@@ -22083,52 +22124,52 @@ Kliknij, aby zsynchronizować teraz · prawy przycisk: centrum synchronizacji</t
         <translation>arguments musi być obiektem</translation>
     </message>
     <message>
-        <location filename="../src/cli/registry.cpp" line="172"/>
+        <location filename="../src/cli/registry.cpp" line="173"/>
         <source>Arguments:</source>
         <translation>Argumenty:</translation>
     </message>
     <message>
-        <location filename="../src/cli/registry.cpp" line="179"/>
+        <location filename="../src/cli/registry.cpp" line="180"/>
         <source>(required, or --stdin)</source>
         <translation>(wymagany albo --stdin)</translation>
     </message>
     <message>
-        <location filename="../src/cli/registry.cpp" line="181"/>
+        <location filename="../src/cli/registry.cpp" line="182"/>
         <source>(required)</source>
         <translation>(wymagany)</translation>
     </message>
     <message>
-        <location filename="../src/cli/registry.cpp" line="183"/>
+        <location filename="../src/cli/registry.cpp" line="184"/>
         <source>(or --stdin)</source>
         <translation>(albo --stdin)</translation>
     </message>
     <message>
-        <location filename="../src/cli/registry.cpp" line="188"/>
+        <location filename="../src/cli/registry.cpp" line="189"/>
         <source>Destructive: needs --allow-destructive.</source>
         <translation>Niszczące: wymaga --allow-destructive.</translation>
     </message>
     <message>
-        <location filename="../src/cli/registry.cpp" line="190"/>
+        <location filename="../src/cli/registry.cpp" line="191"/>
         <source>Writes notes (refused with --read-only; --dry-run shows the change).</source>
         <translation>Zapisuje notatki (odmowa przy --read-only; --dry-run pokazuje zmianę).</translation>
     </message>
     <message>
-        <location filename="../src/cli/registry.cpp" line="193"/>
+        <location filename="../src/cli/registry.cpp" line="194"/>
         <source>Brulion&apos;s command line: read and change the notes of a notebook folder.</source>
         <translation>Wiersz poleceń Brulionu: czytaj i zmieniaj notatki w folderze notatnika.</translation>
     </message>
     <message>
-        <location filename="../src/cli/registry.cpp" line="194"/>
+        <location filename="../src/cli/registry.cpp" line="195"/>
         <source>Usage: %1 [global options] &lt;command&gt; [arguments]</source>
         <translation>Użycie: %1 [opcje globalne] &lt;polecenie&gt; [argumenty]</translation>
     </message>
     <message>
-        <location filename="../src/cli/registry.cpp" line="195"/>
+        <location filename="../src/cli/registry.cpp" line="196"/>
         <source>Commands:</source>
         <translation>Polecenia:</translation>
     </message>
     <message>
-        <location filename="../src/cli/registry.cpp" line="198"/>
+        <location filename="../src/cli/registry.cpp" line="199"/>
         <source>
 Global options:
   --vault &lt;dir&gt;          the notebook folder (else $BRULION_VAULT, else the app&apos;s current notebook)
@@ -23112,6 +23153,322 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         <location filename="../src/cli/mcpremote.cpp" line="926"/>
         <source>--port takes 0 … 65535</source>
         <translation>--port przyjmuje 0 … 65535</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/clipinstall.cpp" line="38"/>
+        <location filename="../src/cli/clipinstall.cpp" line="238"/>
+        <source>Unknown browser: %1</source>
+        <translation>Nieznana przeglądarka: %1</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/clipinstall.cpp" line="84"/>
+        <source>Only these browsers: chrome, chromium, brave, edge, firefox (commas)</source>
+        <translation>Tylko te przeglądarki: chrome, chromium, brave, edge, firefox (po przecinku)</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/clipinstall.cpp" line="87"/>
+        <source>For every user of the computer (system folders; administrator)</source>
+        <translation>Dla wszystkich użytkowników komputera (foldery systemowe; administrator)</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/clipinstall.cpp" line="91"/>
+        <source>The program the browsers start (default: this one)</source>
+        <translation>Program, który uruchamiają przeglądarki (domyślnie ten)</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/clipinstall.cpp" line="93"/>
+        <source>More Chromium extension ids, separated by commas (a store&apos;s copy)</source>
+        <translation>Dodatkowe identyfikatory rozszerzenia w Chromium, po przecinku (kopia ze sklepu)</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/clipinstall.cpp" line="95"/>
+        <source>Also the browsers not found for this user</source>
+        <translation>Także przeglądarki, których ten użytkownik nie ma</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/clipinstall.cpp" line="108"/>
+        <source>On NixOS the system&apos;s browsers find the host through the module: programs.brulion (docs/NIXOS.md); for yourself run clip install without --system</source>
+        <translation>Na NixOS przeglądarki systemu znajdują hosta przez moduł: programs.brulion (docs/NIXOS.md); dla siebie uruchom clip install bez --system</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/clipinstall.cpp" line="111"/>
+        <source>%1 is not a program that can be run</source>
+        <translation>%1 nie jest programem, który można uruchomić</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/clipinstall.cpp" line="115"/>
+        <source>The manifests name a program in the Nix store, which an upgrade replaces: run clip install again after one, or install Brulion with the NixOS module</source>
+        <translation>Manifesty wskazują program w magazynie Nix, który aktualizacja podmieni: po niej uruchom clip install ponownie albo zainstaluj Brulion modułem NixOS</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/clipinstall.cpp" line="152"/>
+        <source>No browser could be connected: %1</source>
+        <translation>Nie udało się połączyć żadnej przeglądarki: %1</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/clipinstall.cpp" line="155"/>
+        <source>No browser found for this user: name one with --browser, or use --all</source>
+        <translation>Ten użytkownik nie ma żadnej znanej przeglądarki: wskaż ją przez --browser albo użyj --all</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/clipinstall.cpp" line="216"/>
+        <source>not connected</source>
+        <translation>niepołączona</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/clipinstall.cpp" line="222"/>
+        <source>connected: %1</source>
+        <translation>połączona: %1</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/clipinstall.cpp" line="222"/>
+        <source>broken: %1 is missing</source>
+        <translation>zepsuta: brak %1</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/cliphost.cpp" line="378"/>
+        <source>Brulion&apos;s app is not installed next to brulion-cli</source>
+        <translation>Aplikacja Brulion nie jest zainstalowana obok brulion-cli</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/cliphost.cpp" line="401"/>
+        <source>Could not start %1</source>
+        <translation>Nie udało się uruchomić %1</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_clip.cpp" line="106"/>
+        <source>No template page %1</source>
+        <translation>Nie ma strony szablonu %1</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_clip.cpp" line="120"/>
+        <source>No built-in template %1</source>
+        <translation>Nie ma wbudowanego szablonu %1</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_clip.cpp" line="266"/>
+        <source>more pictures than one clip saves</source>
+        <translation>więcej obrazków, niż zapisuje jeden wycinek</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_clip.cpp" line="268"/>
+        <source>the clip&apos;s pictures are too large together</source>
+        <translation>obrazki wycinka są razem za duże</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_clip.cpp" line="270"/>
+        <source>on this computer or its network, while the page is on the internet</source>
+        <translation>na tym komputerze albo w jego sieci, a strona jest w internecie</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_clip.cpp" line="272"/>
+        <source>too large</source>
+        <translation>za duży</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_clip.cpp" line="274"/>
+        <source>not a picture</source>
+        <translation>to nie obrazek</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_clip.cpp" line="276"/>
+        <source>no answer in time</source>
+        <translation>brak odpowiedzi na czas</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_clip.cpp" line="278"/>
+        <source>the server refused it</source>
+        <translation>serwer odmówił</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_clip.cpp" line="280"/>
+        <source>a redirect that is not allowed</source>
+        <translation>niedozwolone przekierowanie</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_clip.cpp" line="282"/>
+        <source>malformed data</source>
+        <translation>uszkodzone dane</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_clip.cpp" line="284"/>
+        <source>cancelled</source>
+        <translation>anulowano</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_clip.cpp" line="285"/>
+        <source>network error</source>
+        <translation>błąd sieci</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_clip.cpp" line="494"/>
+        <source>The template left nothing to write</source>
+        <translation>Szablon nie zostawił nic do zapisania</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_clip.cpp" line="590"/>
+        <source>clip host speaks native messaging: a browser starts it</source>
+        <translation>clip host mówi protokołem native messaging: uruchamia go przeglądarka</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_clip.cpp" line="606"/>
+        <source>Save a web page&apos;s HTML, a link or a picture as a clip (a page, a block of today&apos;s journal or of a heading&apos;s section)</source>
+        <translation>Zapisz HTML strony WWW, link albo obrazek jako wycinek (stronę, blok dzisiejszego dziennika albo sekcji nagłówka)</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_clip.cpp" line="609"/>
+        <source>What the Web Clipper does (docs/CLIPPER.md): the HTML (--html or --stdin) becomes Markdown, its relative links and pictures resolved against --url (or --base-url), its pictures saved into the attachments folder (http(s) only, within limits; --no-pictures leaves them on the internet), all filled into a template (--template: brulion, obsidian, joplin, link, or a template page).</source>
+        <translation>To, co robi Web Clipper (docs/CLIPPER.md): HTML (--html albo --stdin) staje się Markdownem, jego względne linki i obrazki są rozwiązywane względem --url (albo --base-url), obrazki trafiają do folderu załączników (tylko http(s), w limitach; --no-pictures zostawia je w internecie), a całość wypełnia szablon (--template: brulion, obsidian, joplin, link albo strona szablonu).</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_clip.cpp" line="618"/>
+        <source>The page&apos;s address</source>
+        <translation>Adres strony</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_clip.cpp" line="619"/>
+        <source>The title (the new page&apos;s name)</source>
+        <translation>Tytuł (nazwa nowej strony)</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_clip.cpp" line="621"/>
+        <source>The HTML of the article or the page</source>
+        <translation>HTML artykułu albo strony</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_clip.cpp" line="623"/>
+        <source>The HTML of the selection ({{selection}})</source>
+        <translation>HTML zaznaczenia ({{selection}})</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_clip.cpp" line="625"/>
+        <source>What was clipped (default: from the arguments)</source>
+        <translation>Co wycięto (domyślnie: z argumentów)</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_clip.cpp" line="627"/>
+        <source>Where it goes (default: a new page)</source>
+        <translation>Dokąd trafia (domyślnie: nowa strona)</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_clip.cpp" line="629"/>
+        <source>The new page&apos;s folder (default: the folder for new pages; . = root)</source>
+        <translation>Folder nowej strony (domyślnie: folder nowych stron; . = główny)</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_clip.cpp" line="632"/>
+        <source>The page with the heading (--place heading)</source>
+        <translation>Strona z nagłówkiem (--place heading)</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_clip.cpp" line="634"/>
+        <source>The heading whose section gets the clip (&quot;## Do przeczytania&quot;)</source>
+        <translation>Nagłówek, którego sekcja dostanie wycinek („## Do przeczytania”)</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_clip.cpp" line="637"/>
+        <source>brulion, obsidian, joplin, link, or a template page</source>
+        <translation>brulion, obsidian, joplin, link albo strona szablonu</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_clip.cpp" line="638"/>
+        <source>Tags, separated by commas</source>
+        <translation>Tagi, po przecinku</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_clip.cpp" line="639"/>
+        <source>The author ({{author}})</source>
+        <translation>Autor ({{author}})</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_clip.cpp" line="640"/>
+        <source>The site&apos;s name ({{site}})</source>
+        <translation>Nazwa witryny ({{site}})</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_clip.cpp" line="642"/>
+        <source>The publication date ({{published}})</source>
+        <translation>Data publikacji ({{published}})</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_clip.cpp" line="644"/>
+        <source>The description ({{description}})</source>
+        <translation>Opis ({{description}})</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_clip.cpp" line="646"/>
+        <source>The address relative links are resolved against (default: --url)</source>
+        <translation>Adres, względem którego rozwiązywane są względne linki (domyślnie: --url)</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_clip.cpp" line="648"/>
+        <source>A link&apos;s address (--kind link)</source>
+        <translation>Adres linku (--kind link)</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_clip.cpp" line="649"/>
+        <source>A link&apos;s text (--kind link)</source>
+        <translation>Tekst linku (--kind link)</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_clip.cpp" line="651"/>
+        <source>A picture&apos;s address (--kind picture)</source>
+        <translation>Adres obrazka (--kind picture)</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_clip.cpp" line="652"/>
+        <source>Leave the pictures on the internet</source>
+        <translation>Zostaw obrazki w internecie</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_clip.cpp" line="653"/>
+        <source>Also a link to the new page in today&apos;s journal</source>
+        <translation>Także link do nowej strony w dzisiejszym dzienniku</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_clip.cpp" line="655"/>
+        <source>Only show the Markdown (nothing downloaded or written)</source>
+        <translation>Tylko pokaż Markdown (nic nie jest pobierane ani zapisywane)</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_clip.cpp" line="662"/>
+        <source>The Web Clipper&apos;s native messaging host (the browser starts it)</source>
+        <translation>Host native messaging Web Clippera (uruchamia go przeglądarka)</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_clip.cpp" line="670"/>
+        <source>Connect the browsers&apos; Web Clipper to brulion-cli (the native messaging host manifests)</source>
+        <translation>Połącz Web Clipper przeglądarek z brulion-cli (manifesty hosta native messaging)</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_clip.cpp" line="681"/>
+        <source>Remove the Web Clipper&apos;s host manifests</source>
+        <translation>Usuń manifesty hosta Web Clippera</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_clip.cpp" line="691"/>
+        <source>Which browsers can reach brulion-cli (the host manifests and their program)</source>
+        <translation>Które przeglądarki mogą się połączyć z brulion-cli (manifesty hosta i ich program)</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_clip.cpp" line="701"/>
+        <source>Print a host manifest (for packages)</source>
+        <translation>Wypisz manifest hosta (dla pakietów)</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_clip.cpp" line="704"/>
+        <source>The browser (chrome, chromium, brave and edge share one)</source>
+        <translation>Przeglądarka (chrome, chromium, brave i edge mają wspólny)</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_clip.cpp" line="707"/>
+        <source>The program the browser starts (default: this one)</source>
+        <translation>Program, który uruchamia przeglądarka (domyślnie ten)</translation>
+    </message>
+    <message>
+        <location filename="../src/cli/commands_clip.cpp" line="709"/>
+        <source>More Chromium extension ids, separated by commas</source>
+        <translation>Dodatkowe identyfikatory rozszerzenia w Chromium, po przecinku</translation>
     </message>
 </context>
 <context>
@@ -26186,6 +26543,59 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
     </message>
 </context>
 <context>
+    <name>brulion::shell::WebClipperSetup</name>
+    <message>
+        <location filename="../src/app/shell/webclippersetup.cpp" line="65"/>
+        <source>Connected to a program that is gone: %1</source>
+        <translation>Połączona z programem, którego już nie ma: %1</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/webclippersetup.cpp" line="67"/>
+        <source>Its clips come to Brulion.</source>
+        <translation>Jej wycinki trafiają do Brulionu.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/webclippersetup.cpp" line="69"/>
+        <source>Its clips come to Brulion (set up for every user of the computer).</source>
+        <translation>Jej wycinki trafiają do Brulionu (ustawione dla wszystkich użytkowników komputera).</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/webclippersetup.cpp" line="71"/>
+        <source>Not connected</source>
+        <translation>Niepołączona</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/webclippersetup.cpp" line="73"/>
+        <source>Not installed for you</source>
+        <translation>Niezainstalowana dla Ciebie</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/webclippersetup.cpp" line="109"/>
+        <source>Could not connect %1</source>
+        <translation>Nie udało się połączyć: %1</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/webclippersetup.cpp" line="112"/>
+        <source>No browser found for you. Install the extension in Chrome, Chromium, Brave, Edge or Firefox, or connect one with brulion-cli clip install --browser.</source>
+        <translation>Nie znaleziono żadnej Twojej przeglądarki. Zainstaluj rozszerzenie w Chrome, Chromium, Brave, Edge albo Firefoksie albo połącz przeglądarkę przez brulion-cli clip install --browser.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/webclippersetup.cpp" line="116"/>
+        <source>Connected: %1. Clips from the extension now come to the notebook open in Brulion.</source>
+        <translation>Połączono: %1. Wycinki z rozszerzenia trafiają teraz do notatnika otwartego w Brulionie.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/webclippersetup.cpp" line="137"/>
+        <source>The browsers are no longer connected to Brulion.</source>
+        <translation>Przeglądarki nie są już połączone z Brulionem.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/webclippersetup.cpp" line="138"/>
+        <source>Could not disconnect %1</source>
+        <translation>Nie udało się rozłączyć: %1</translation>
+    </message>
+</context>
+<context>
     <name>brulion::shell::Workspace</name>
     <message>
         <location filename="../src/app/shell/workspace.cpp" line="754"/>
@@ -28554,12 +28964,12 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
 <context>
     <name>main</name>
     <message>
-        <location filename="../src/app/main.cpp" line="615"/>
+        <location filename="../src/app/main.cpp" line="619"/>
         <source>Saving to the browser&apos;s storage failed: %1</source>
         <translation>Nie udało się zapisać w pamięci przeglądarki: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/main.cpp" line="657"/>
+        <location filename="../src/app/main.cpp" line="661"/>
         <source>This browser does not let Brulion store data, so notes last only until this tab is closed. Allow site data (or leave private mode), or export your notes before closing.</source>
         <translation>Ta przeglądarka nie pozwala Brulionowi przechowywać danych, więc notatki przetrwają tylko do zamknięcia tej karty. Zezwól na dane witryny (albo wyjdź z trybu prywatnego) lub wyeksportuj notatki przed zamknięciem.</translation>
     </message>

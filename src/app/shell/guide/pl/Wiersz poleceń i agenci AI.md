@@ -27,6 +27,7 @@ brulion-cli habit tick Medytacja                   # odhacz nawyk na dziś
 brulion-cli --format text card due                 # fiszki do nauki teraz
 brulion-cli card review 1a2b3c4d dobrze            # oceń jedną (znowu, trudne, dobrze, łatwe)
 brulion-cli search zolw                            # znajdzie „żółw”
+brulion-cli clip install                           # połącz Web Clipper przeglądarek (zob. Import i eksport)
 brulion-cli help                                   # wszystkie polecenia
 ```
 

@@ -109,6 +109,10 @@ int main(int argc, char *argv[])
     // log file, no single-instance claim, no settings.
     if (argc > 1 && qstrcmp(argv[1], "cli") == 0)
         return brulion::cli::run(argc - 1, argv + 1);
+    // A browser starting the Web Clipper's host through the app's binary (an AppImage's manifest names
+    // it, docs/CLIPPER.md): the command line's native messaging host, before anything of the app.
+    if (brulion::cli::isNativeMessagingLaunch(argc, argv))
+        return brulion::cli::run(argc, argv);
 #endif
 #ifdef Q_OS_ANDROID
     // The background check's own process (BackgroundCheckService.kt, docs/ANDROID.md "Checking

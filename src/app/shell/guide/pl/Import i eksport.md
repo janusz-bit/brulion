@@ -45,6 +45,17 @@ Folder Obsidiana — także synchronizowany Syncthingiem — otwórz po prostu j
 - Nie edytuj tej samej notatki w obu aplikacjach w tej samej chwili; zmiany z dysku Brulion przejmuje na bieżąco, a poprzednie wersje zostają w historii.
 - *Centrum synchronizacji → Syncthing → Utwórz .stignore* dodaje reguły pomijające układ okien Obsidiana (`.obsidian/workspace*.json`) i kosz `.trash`, więc te pliki nie robią konfliktów. Skopiuj `.stignore` na każde urządzenie — Syncthing go nie przesyła.
 
+### Strony z przeglądarki (Web Clipper)
+Rozszerzenie **Brulion Web Clipper** dla Chrome, Chromium, Brave, Edge i Firefoksa zapisuje to, co czytasz: **artykuł** ze strony (sam tekst, bez menu i reklam), **zaznaczenie**, **całą stronę**, **zrzut ekranu** widocznej części albo sam **link** — jako Markdown, z obrazkami zapisanymi w załącznikach notatnika.
+
+1. Zainstaluj rozszerzenie (z jego paczki: w przeglądarkach Chromium *Rozszerzenia → Tryb dewelopera → Załaduj rozpakowane*, w Firefoksie *about:debugging → Wczytaj tymczasowy dodatek*).
+2. Raz połącz je z Brulionem: **Ustawienia → Aplikacja → Rozszerzenie przeglądarki (Web Clipper) → Połącz przeglądarki** (wiersz każdej przeglądarki pokazuje, czy jest połączona) albo w terminalu `brulion-cli clip install` (sprawdzi to `brulion-cli clip status`; na NixOS robi to moduł).
+3. Na stronie kliknij przycisk rozszerzenia (**Alt+Shift+B**): wybierz, co wyciąć, tytuł, **dokąd** — nowa strona w folderze (domyślnie `Wycinki`; do wyboru także link w dzisiejszym dzienniku), dzisiejszy [[Dziennik, kalendarz i szablony|dziennik]] albo koniec sekcji nagłówka strony („## Do przeczytania”) —, szablon, tagi i **Wytnij**. **Otwórz w Brulionie** pokaże wynik.
+
+Prawy klik na stronie, zaznaczeniu, linku albo obrazku wycina go z domyślnymi ustawieniami z opcji, a **Alt+Shift+K** od razu wycina zaznaczenie albo artykuł. Szablony: Brulionu (frontmatter ze źródłem, autorem, datami i tagami), w stylu Web Clippera Obsidiana i Joplina, krótki „link i zaznaczenie” do dziennika, strona z folderu szablonów albo własny tekst w opcjach rozszerzenia — ze zmiennymi [[Dziennik, kalendarz i szablony|szablonów]] oraz `{{url}}`, `{{site}}`, `{{author}}`, `{{published}}`, `{{content}}`, `{{selection}}`, `{{tags}}`.
+
+Nie ma żadnego serwera: przeglądarka przekazuje wycinek do `brulion-cli` na tym samym komputerze, a jedyne zapytania idą po obrazki wycinka, do ich własnych stron — strona z internetu nigdy nie sprawi, że komputer sięgnie do Twojej sieci domowej. Bez tego połączenia — na telefonie, w wersji przeglądarkowej — rozszerzenie kopiuje stronę **z formatowaniem**: wklej ją do notatki, a stanie się Markdownem; na Androidzie **Udostępnij → Brulion** zapisze tytuł i adres strony. Dokumentacja dla programistów: docs/CLIPPER.md w repozytorium.
+
 ## Eksport
 - archiwum **ZIP** z Markdownem, także w układzie Obsidiana lub Logseqa,
 - statyczna **strona HTML** albo jeden plik HTML (diagramy Mermaid i wykresy jako obrazy, zobacz [[Diagramy#Eksport|Diagramy]] i [[Tabele i wykresy|Tabele i wykresy]]),

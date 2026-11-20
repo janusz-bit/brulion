@@ -24,6 +24,11 @@ struct HtmlToMarkdownOptions {
     /// `labelMarkdown`; nullopt for the default (`[label](href)`, a bare URL when the label is
     /// the URL; javascript:/data:/vbscript: links keep only their label).
     std::function<std::optional<QString>(const QString &href, const QString &labelMarkdown)> link;
+    /// Embedded players and frames — `<iframe>`, `<video>`, `<audio>` with an http(s) source (also
+    /// a `<source>` inside), a YouTube or Vimeo player — become a paragraph with a link to them
+    /// (its label: the element's `title`, else the address); off: they are dropped with their
+    /// content (the Web Clipper turns it on).
+    bool embedsAsLinks = false;
 };
 
 struct HtmlMarkdown {
@@ -36,8 +41,14 @@ struct HtmlMarkdown {
 /// document model: headings, paragraphs (`<div>` lines stay lines), bullet / numbered / nested
 /// lists, checkboxes (`<input type="checkbox">` -> `- [ ]` / `- [x]`), **bold**, *italic*,
 /// ~~strike~~, ==highlight== (`<mark>`, background colour), `code`, fenced code (`<pre>`, with
-/// the language of `class="language-x"`), blockquotes, rules, GFM tables (`|` escaped), links
-/// and images. Text is escaped so it is not read as Markdown syntax, also where its dollars
+/// the language of `class="language-x"` / `lang-x` on the `<code>` or the `<pre>`, `data-lang`,
+/// `data-language`, `lang`, GitHub's `highlight-source-x` around it), blockquotes, rules, GFM
+/// tables (`|` escaped), links and images (a lazily loaded picture by its `data-src`,
+/// `data-lazy-src`, `data-original` or the largest `srcset` candidate when `src` is empty or a
+/// data: placeholder). The HTML5 elements QTextDocument does not know — `article`, `section`,
+/// `header`, `footer`, `nav`, `aside`, `main`, `figure`, `details`, `address`, `hgroup`, `search`
+/// — are blocks, so their texts never run together; a `<figcaption>` is a paragraph of its own in
+/// italics, a `<summary>` one in bold. Text is escaped so it is not read as Markdown syntax, also where its dollars
 /// would pair into a formula across styles and lines ("Cena $10, <b>Netflix</b> 15$"; nothing in
 /// code, link destinations or what the callbacks return as a formula — see escapeTextFormulas()
 /// in htmlutil_p.h). Lines are never wrapped; code blocks keep their lines exactly (blank-line

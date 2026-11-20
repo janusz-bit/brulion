@@ -72,6 +72,7 @@ Updating to the latest version from GitHub: `nix flake update brulion` in `/etc/
 | `enable` | `false` | installs Brulion (`environment.systemPackages`: program, menu entry, icons) |
 | `package` | the package from this flake | another package, e.g. `pkgs.brulion` from the overlay or your own build |
 | `autostart` | `false` | an entry `/etc/xdg/autostart/io.github.januszbit.brulion.desktop` that runs `brulion --hidden` at login: the app starts hidden in the system tray |
+| `webClipper` | `true` | connects Chromium, Chrome, Edge, Brave and `programs.firefox` to the Web Clipper extension (the native messaging host manifests, [below](#web-clipper-browser-extension)) |
 
 ### Without the module
 
@@ -222,6 +223,23 @@ starts or the running one gets the address and does what it asks (docs/UI.md "Au
 AppImage's entry declares it too (once a tool integrated the AppImage). Writing without the
 notebook's automation key asks first; a script can also write without the app:
 `brulion-cli uri run 'brulion://append?…'` (docs/CLI.md "brulion:// addresses").
+
+### Web Clipper (browser extension)
+
+The Brulion Web Clipper ([CLIPPER.md](CLIPPER.md)) saves web pages into the notebook through
+`brulion-cli`, which the browser starts as a native messaging host. With `programs.brulion.enable`
+the module connects the browsers (`programs.brulion.webClipper`, `true` by default): the host
+manifest naming the package's `brulion-cli` in `/etc/chromium/native-messaging-hosts`,
+`/etc/opt/chrome/native-messaging-hosts`, `/etc/opt/edge/native-messaging-hosts` and
+`/etc/opt/brave/native-messaging-hosts`, and the package in `programs.firefox.nativeMessagingHosts.packages`
+(the Firefox of `programs.firefox`). The packages carry the manifests themselves:
+`lib/mozilla/native-messaging-hosts/io.github.januszbit.brulion.json` (for a Firefox wrapped with
+`nativeMessagingHosts`, also in Home Manager) and
+`share/brulion/native-messaging-hosts/io.github.januszbit.brulion.json` (Chromium's). A Firefox
+installed otherwise is connected for one user with `brulion-cli clip install --browser firefox`
+(the manifest then names `/run/current-system/sw/bin/brulion-cli`, which survives upgrades);
+`clip install --system` is refused on NixOS — the module does it. The extension itself is loaded from
+its package ([CLIPPER.md](CLIPPER.md#installing)).
 
 ### Notes and Syncthing
 

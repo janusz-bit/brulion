@@ -1,0 +1,53 @@
+{
+  "manifest_version": 3,
+  "name": "__MSG_extensionName__",
+  "short_name": "Brulion Clipper",
+  "description": "__MSG_extensionDescription__",
+  "version": "0.24.0",
+  "default_locale": "en",
+  "homepage_url": "https://github.com/janusz-bit/brulion",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAyYpRShrjapPGhkXr8Tew2EcXeKsXy9AxReYrG2iw9xLlbtBpgfYwF2iJzARl2qMxni5RadEEwDkm7udb7su5SiFsW3IIILTud+tkfpWGpHjXCitCRqIyXP/jP2y6VKk3GA2BfBy116JKAoSqHQPZkOTZIrJP7Nfst5VcE/w7QMGDrrQ+Nrh9HYr7nOaJROV9Mu6oUB25+AByB/Ed3B6ydOK5WU+EqWymuAp8NdXxJaVn56CrOq28m7iBR4aaw/ntNDuFLPLVRDQVCjrwYaHVMaMMC0MTYeRtoIUAc6qbP9WM7TBXEOO5E1vle6qvRzL9iVRLpEpF8yQzN4vH7dcUwwIDAQAB",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "brulion-clipper@januszbit.github.io",
+      "strict_min_version": "140.0",
+      "data_collection_permissions": { "required": ["none"] }
+    },
+    "gecko_android": { "strict_min_version": "142.0" }
+  },
+  "icons": {
+    "16": "icons/brulion-16.png",
+    "32": "icons/brulion-32.png",
+    "48": "icons/brulion-48.png",
+    "128": "icons/brulion-128.png"
+  },
+  "action": {
+    "default_title": "__MSG_actionTitle__",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/brulion-16.png",
+      "32": "icons/brulion-32.png"
+    }
+  },
+  "background": {
+    "service_worker": "background.js",
+    "scripts": ["background.js"],
+    "type": "module"
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  },
+  "permissions": ["activeTab", "scripting", "contextMenus", "nativeMessaging", "storage", "notifications"],
+  "commands": {
+    "_execute_action": {
+      "suggested_key": { "default": "Alt+Shift+B" },
+      "description": "__MSG_commandOpen__"
+    },
+    "quick-clip": {
+      "suggested_key": { "default": "Alt+Shift+K" },
+      "description": "__MSG_commandQuickClip__"
+    }
+  },
+  "minimum_chrome_version": "121"
+}

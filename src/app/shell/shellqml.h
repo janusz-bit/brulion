@@ -19,6 +19,7 @@
 //   FolderTreeModel  creatable — FolderTreeModel { workspace: Workspace }
 //   ViewTraits       creatable — ViewTraits { view: loader.item } (ShellRouteView)
 //   CleanupSelection creatable — CleanupView's shown and ticked files
+//   WebClipperSetup  singleton — Settings' "Browser extension (Web Clipper)" (the host manifests)
 #pragma once
 
 #include "appcontroller.h"
@@ -32,6 +33,7 @@
 #include "replacesession.h"
 #include "shortcutmap.h"
 #include "viewtraits.h"
+#include "webclippersetup.h"
 #include "workspace.h"
 #include "workspacebackups.h"
 #include "workspacecalendars.h"
@@ -75,6 +77,19 @@ struct AppControllerForeign {
     QML_SINGLETON
 public:
     static AppController *create(QQmlEngine *, QJSEngine *) { return detail::controllerForQml(); }
+};
+
+struct WebClipperSetupForeign {
+    Q_GADGET
+    QML_FOREIGN(brulion::shell::WebClipperSetup)
+    QML_NAMED_ELEMENT(WebClipperSetup)
+    QML_SINGLETON
+public:
+    static WebClipperSetup *create(QQmlEngine *, QJSEngine *)
+    {
+        static WebClipperSetup *setup = new WebClipperSetup(detail::controllerForQml());
+        return detail::cppOwned(setup);
+    }
 };
 
 struct AppSettingsForeign {

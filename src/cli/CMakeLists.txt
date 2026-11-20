@@ -12,9 +12,13 @@ qt_add_library(brulion_cli STATIC
     cli.h cli_p.h commands_p.h mcp_p.h
     args.cpp
     authserver.h authserver.cpp
+    clip_p.h
+    clipinstall.cpp
+    cliphost.cpp
     commands_app.cpp
     commands_common.cpp
     commands_extensions.cpp
+    commands_clip.cpp
     commands_habits.cpp
     commands_cards.cpp
     commands_index.cpp
@@ -39,7 +43,7 @@ target_link_libraries(brulion_cli
     PUBLIC Qt6::Core brulion_core_notebook brulion_core_calc brulion_core_reminders brulion_core_index
            brulion_core_markdown brulion_core_dates brulion_core_vault brulion_core_text brulion_core_util
            brulion_core_extensions
-    PRIVATE brulion_core_sync brulion_core_automation brulion_ipc Qt6::Network)
+    PRIVATE brulion_core_sync brulion_core_automation brulion_core_clipper brulion_ipc Qt6::Network)
 target_compile_definitions(brulion_cli PRIVATE BRULION_VERSION="${PROJECT_VERSION}")
 brulion_set_warnings(brulion_cli)
 

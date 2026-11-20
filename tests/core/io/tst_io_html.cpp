@@ -296,6 +296,36 @@ private Q_SLOTS:
         QTest::newRow("embed in object") << u"<p>a</p><object><embed src=x></object><p>b</p>"_s << u"a\n\nb\n"_s;
         QTest::newRow("unclosed script") << u"<p>a</p><script>evil()<p>b</p>"_s << u"a\n"_s;
         QTest::newRow("code span with backticks") << u"<p><code>a``b</code></p>"_s << u"``` a``b ```\n"_s;
+        // Articles of the web (the Web Clipper, HTML imports): HTML5's sections are blocks, a
+        // figure's caption a paragraph of its own, lazily loaded pictures show what the page loads,
+        // code blocks name their language in the ways sites write it, the line break before
+        // </code></pre> ends the last line; players are dropped unless embedsAsLinks.
+        QTest::newRow("html5 sections") << u"<article><header>Nagłówek</header><section>Treść</section>"
+                                           u"<footer>Stopka</footer></article><nav>Menu</nav>"_s
+                                        << u"Nagłówek\nTreść\nStopka\nMenu\n"_s;
+        QTest::newRow("figure and caption")
+                << u"<figure><img src=\"https://x.org/a.png\" alt=\"Wykres\"><figcaption>Rys. 1</figcaption></figure>"_s
+                << u"![Wykres](https://x.org/a.png)\n\n*Rys. 1*\n"_s;
+        QTest::newRow("summary") << u"<details><summary>Więcej</summary><p>Ukryte</p></details>"_s
+                                 << u"**Więcej**\n\nUkryte\n"_s;
+        QTest::newRow("lazy picture")
+                << u"<img src=\"data:image/gif;base64,R0lGOD\" data-src=\"https://x.org/żółw.jpg\" alt=\"Żółw\">"_s
+                << u"![Żółw](https://x.org/żółw.jpg)\n"_s;
+        QTest::newRow("srcset picture") << u"<img srcset=\"https://x.org/a.jpg 1x, https://x.org/b.jpg 2x\">"_s
+                                        << u"![](https://x.org/b.jpg)\n"_s;
+        QTest::newRow("src wins over srcset")
+                << u"<img src=\"https://x.org/a.jpg\" srcset=\"https://x.org/b.jpg 2x\">"_s
+                << u"![](https://x.org/a.jpg)\n"_s;
+        QTest::newRow("github code") << u"<div class=\"highlight highlight-source-js\"><pre>let a = 1;\n</pre></div>"_s
+                                     << u"```js\nlet a = 1;\n```\n"_s;
+        QTest::newRow("language on pre") << u"<pre class=\"language-rust\"><code>fn x() {}</code></pre>"_s
+                                         << u"```rust\nfn x() {}\n```\n"_s;
+        QTest::newRow("data-lang") << u"<pre data-lang=\"sql\">SELECT 1;</pre>"_s << u"```sql\nSELECT 1;\n```\n"_s;
+        QTest::newRow("human lang is no code language") << u"<pre lang=\"pl\">tekst</pre>"_s << u"```\ntekst\n```\n"_s;
+        QTest::newRow("line break before the end tag")
+                << u"<pre><code>a\n\nb\n</code></pre>"_s << u"```\na\n\nb\n```\n"_s;
+        QTest::newRow("player dropped")
+                << u"<p>a</p><iframe src=\"https://www.youtube.com/embed/AbCdEf12345\"></iframe>"_s << u"a\n"_s;
         // Dollars of the text never make a formula (SYNTAX §11), also across styles, lines and the
         // pieces of a paragraph; prices that pair with nothing, list items, table cells and
         // separate paragraphs stay as written; code and link destinations are never changed.
@@ -429,6 +459,24 @@ private Q_SLOTS:
         QCOMPARE(seen[1].alt, u"zero"_s);
         QCOMPARE(seen[2].alt, u"Wykres & dane"_s);
         QCOMPARE(r.markdown, u"![[assets/x.png]]\n\n[[Inna]] [x](https://x.org)\n"_s);
+    }
+
+    void embedsAsLinks()
+    {
+        HtmlToMarkdownOptions o;
+        o.embedsAsLinks = true;
+        const QString html =
+                u"<iframe src=\"https://www.youtube.com/embed/AbCdEf12345?rel=0\" title=\"Żółw je\"></iframe>"
+                u"<iframe src=\"//player.vimeo.com/video/123456\"></iframe>"
+                u"<video controls><source src=\"https://x.org/film.mp4\"></video>"
+                u"<audio src=\"https://x.org/podkast.mp3\" title=\"Odcinek 1\"></audio>"
+                u"<iframe src=\"javascript:alert(1)\"><p>ukryte</p></iframe><p>koniec</p>"_s;
+        QCOMPARE(htmlToMarkdown(html, o).markdown,
+                 u"[Żółw je](https://www.youtube.com/watch?v=AbCdEf12345)\n\n<https://vimeo.com/123456>\n\n"
+                 u"[film.mp4](https://x.org/film.mp4)\n\n[Odcinek 1](https://x.org/podkast.mp3)\n\nkoniec\n"_s);
+        QCOMPARE(htmlToMarkdown(html).markdown, u"koniec\n"_s);
+        // A code block's language is no text of it.
+        QCOMPARE(htmlToPlainText(u"<pre><code class=\"language-js\">let a;</code></pre>"_s).trimmed(), u"let a;"_s);
     }
 
     void neverLoadsResources()

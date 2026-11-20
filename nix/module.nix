@@ -338,6 +338,20 @@ in
         a system tray (StatusNotifierItem); on GNOME install the AppIndicator extension.
       '';
     };
+
+    webClipper = mkOption {
+      type = types.bool;
+      default = true;
+      description = ''
+        Connect the browsers to the Brulion Web Clipper extension (docs/CLIPPER.md): the native
+        messaging host manifest naming the package's brulion-cli in
+        {file}`/etc/chromium/native-messaging-hosts`, {file}`/etc/opt/chrome/native-messaging-hosts`,
+        {file}`/etc/opt/edge/native-messaging-hosts` and {file}`/etc/opt/brave/native-messaging-hosts`,
+        and the package in `programs.firefox.nativeMessagingHosts.packages` (Firefox of
+        `programs.firefox`). A Firefox installed otherwise is connected per user with
+        `brulion-cli clip install --browser firefox`.
+      '';
+    };
   };
 
   options.services.brulion-web = {
@@ -671,6 +685,21 @@ in
       environment.etc."xdg/autostart/${appId}.desktop" = mkIf appCfg.autostart {
         source = autostartEntry;
       };
+    })
+
+    (mkIf (appCfg.enable && appCfg.webClipper) {
+      environment.etc =
+        lib.genAttrs
+          (map (dir: "${dir}/native-messaging-hosts/${appId}.json") [
+            "chromium"
+            "opt/chrome"
+            "opt/edge"
+            "opt/brave"
+          ])
+          (_: {
+            source = "${appCfg.package}/share/brulion/native-messaging-hosts/${appId}.json";
+          });
+      programs.firefox.nativeMessagingHosts.packages = [ appCfg.package ];
     })
 
     (mkIf webCfg.enable {

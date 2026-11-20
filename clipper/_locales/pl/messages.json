@@ -1,0 +1,383 @@
+{
+  "extensionName": {
+    "message": "Brulion Web Clipper"
+  },
+  "extensionDescription": {
+    "message": "Zapisuj artykuł, zaznaczenie, całą stronę albo zrzut ekranu w notatniku Brulionu jako Markdown, z obrazkami."
+  },
+  "actionTitle": {
+    "message": "Wytnij do Brulionu"
+  },
+  "commandOpen": {
+    "message": "Otwórz wycinanie"
+  },
+  "commandQuickClip": {
+    "message": "Od razu wytnij zaznaczenie albo artykuł"
+  },
+  "menuArticle": {
+    "message": "Wytnij artykuł do Brulionu"
+  },
+  "menuSelection": {
+    "message": "Wytnij zaznaczenie do Brulionu"
+  },
+  "menuPage": {
+    "message": "Wytnij całą stronę do Brulionu"
+  },
+  "menuScreenshot": {
+    "message": "Wytnij zrzut ekranu do Brulionu"
+  },
+  "menuLink": {
+    "message": "Wytnij link do Brulionu"
+  },
+  "menuPicture": {
+    "message": "Wytnij obrazek do Brulionu"
+  },
+  "popupHeading": {
+    "message": "Wytnij do Brulionu"
+  },
+  "notebookLabel": {
+    "message": "Notatnik"
+  },
+  "currentNotebook": {
+    "message": "Notatnik otwarty w Brulionie"
+  },
+  "loading": {
+    "message": "Łączenie z Brulionem…"
+  },
+  "notConnectedTitle": {
+    "message": "Brulion nie jest połączony"
+  },
+  "notConnectedText": {
+    "message": "Zainstaluj wiersz poleceń Brulionu i raz połącz go z przeglądarkami:"
+  },
+  "notConnectedDetail": {
+    "message": "Przeglądarka nie znalazła hosta native messaging Brulionu."
+  },
+  "connectHelpMore": {
+    "message": "Potem sprawdź jeszcze raz. Na NixOS przeglądarki łączy moduł (programs.brulion); w Windows uruchom brulion-cli.exe clip install."
+  },
+  "helpLink": {
+    "message": "Jak połączyć"
+  },
+  "fallbackTitle": {
+    "message": "Bez połączenia"
+  },
+  "fallbackText": {
+    "message": "Skopiuj stronę i wklej ją do notatki w Brulionie — na komputerze, telefonie albo w wersji przeglądarkowej."
+  },
+  "copyRich": {
+    "message": "Kopiuj z formatowaniem"
+  },
+  "copyLink": {
+    "message": "Kopiuj tytuł i link"
+  },
+  "copied": {
+    "message": "Skopiowano. Wklej w Brulionie."
+  },
+  "kindLabel": {
+    "message": "Co wyciąć"
+  },
+  "kindArticle": {
+    "message": "Artykuł"
+  },
+  "kindSelection": {
+    "message": "Zaznaczenie"
+  },
+  "kindPage": {
+    "message": "Cała strona"
+  },
+  "kindScreenshot": {
+    "message": "Zrzut ekranu"
+  },
+  "kindBookmark": {
+    "message": "Sam link"
+  },
+  "titleLabel": {
+    "message": "Tytuł"
+  },
+  "placeLabel": {
+    "message": "Zapisz w"
+  },
+  "placePage": {
+    "message": "Nowej stronie"
+  },
+  "placeJournal": {
+    "message": "Dzisiejszym dzienniku"
+  },
+  "placeHeading": {
+    "message": "Pod nagłówkiem strony"
+  },
+  "folderLabel": {
+    "message": "Folder"
+  },
+  "folderPlaceholder": {
+    "message": "Puste: główny folder notatnika"
+  },
+  "defaultFolder": {
+    "message": "Wycinki"
+  },
+  "journalLinkLabel": {
+    "message": "Dodaj też link w dzisiejszym dzienniku"
+  },
+  "pageLabel": {
+    "message": "Strona"
+  },
+  "pagePlaceholder": {
+    "message": "Wpisz, aby znaleźć stronę"
+  },
+  "headingLabel": {
+    "message": "Nagłówek"
+  },
+  "templateLabel": {
+    "message": "Szablon"
+  },
+  "templateGroup_builtin": {
+    "message": "Wbudowane"
+  },
+  "templateGroup_notebook": {
+    "message": "Z notatnika"
+  },
+  "templateGroup_custom": {
+    "message": "Twoje"
+  },
+  "template_brulion": {
+    "message": "Strona Brulionu"
+  },
+  "template_obsidian": {
+    "message": "Obsidian Web Clipper"
+  },
+  "template_joplin": {
+    "message": "Joplin"
+  },
+  "template_link": {
+    "message": "Link i zaznaczenie"
+  },
+  "tagsLabel": {
+    "message": "Tagi"
+  },
+  "tagsPlaceholder": {
+    "message": "do-przeczytania, przepisy"
+  },
+  "picturesLabel": {
+    "message": "Zapisz obrazki w notatniku"
+  },
+  "previewLabel": {
+    "message": "Podgląd"
+  },
+  "previewScreenshot": {
+    "message": "Zrzut ekranu powstanie przy wycinaniu."
+  },
+  "clipButton": {
+    "message": "Wytnij"
+  },
+  "closeButton": {
+    "message": "Zamknij"
+  },
+  "openInBrulion": {
+    "message": "Otwórz w Brulionie"
+  },
+  "optionsLink": {
+    "message": "Opcje"
+  },
+  "shortcutHint": {
+    "message": "Szybkie wycinanie:"
+  },
+  "saving": {
+    "message": "Zapisywanie…"
+  },
+  "savingPictures": {
+    "message": "Zapisywanie obrazków: $1 z $2…"
+  },
+  "savedNewPage": {
+    "message": "Zapisano jako nową stronę:"
+  },
+  "savedBlock": {
+    "message": "Dodano do:"
+  },
+  "picturesSaved": {
+    "message": "zapisane obrazki: $1"
+  },
+  "picturesFailed": {
+    "message": "obrazki zostawione w internecie: $1"
+  },
+  "picturesKept": {
+    "message": "obrazki z internetu: $1"
+  },
+  "savedTitle": {
+    "message": "Zapisano w Brulionie"
+  },
+  "savedTo": {
+    "message": "$1"
+  },
+  "savedWithFailedPictures": {
+    "message": "$1 — obrazki zostawione w internecie: $2"
+  },
+  "failedTitle": {
+    "message": "Brulion nie zapisał wycinka"
+  },
+  "cannotRead": {
+    "message": "Przeglądarka nie pozwala rozszerzeniom czytać tej strony: można wyciąć tylko link albo zrzut ekranu."
+  },
+  "errorFolder": {
+    "message": "Tego folderu nie można użyć: bez „..”, bez „/” albo „.” na początku, bez ukośnika wstecznego."
+  },
+  "errorNoPage": {
+    "message": "Wybierz stronę z nagłówkiem."
+  },
+  "errorNoHeading": {
+    "message": "Wybierz nagłówek."
+  },
+  "hostError_not_connected": {
+    "message": "Brulion nie jest połączony: uruchom brulion-cli clip install."
+  },
+  "hostError_disconnected": {
+    "message": "Połączenie z Brulionem urwało się przed zapisaniem wycinka."
+  },
+  "hostError_no_answer": {
+    "message": "Brulion nie odpowiedział."
+  },
+  "hostError_no_vault": {
+    "message": "Nie ma jeszcze notatnika: najpierw otwórz go w Brulionie."
+  },
+  "hostError_vault_missing": {
+    "message": "Folder notatnika nie istnieje."
+  },
+  "hostError_unknown_notebook": {
+    "message": "Tego notatnika nie ma wśród notatników Brulionu."
+  },
+  "hostError_page_not_found": {
+    "message": "Tej strony nie ma w notatniku."
+  },
+  "hostError_under_not_found": {
+    "message": "Strona nie ma takiego nagłówka."
+  },
+  "hostError_lock_timeout": {
+    "message": "Notatnik jest zajęty: spróbuj za chwilę."
+  },
+  "hostError_template_not_found": {
+    "message": "Strony szablonu nie ma w notatniku."
+  },
+  "hostError_unknown_template": {
+    "message": "Brulion nie zna tego szablonu."
+  },
+  "hostError_too_large": {
+    "message": "Strona jest za duża, żeby ją wyciąć."
+  },
+  "hostError_bad_folder": {
+    "message": "Tego folderu nie można użyć."
+  },
+  "hostError_bad_page": {
+    "message": "Tej strony nie można użyć."
+  },
+  "hostError_no_heading": {
+    "message": "Wybierz nagłówek."
+  },
+  "hostError_empty_clip": {
+    "message": "Szablon nie zostawił nic do zapisania."
+  },
+  "hostError_no_app": {
+    "message": "Aplikacja Brulion nie jest zainstalowana obok brulion-cli."
+  },
+  "hostError_app_not_started": {
+    "message": "Nie udało się uruchomić aplikacji Brulion."
+  },
+  "hostError_app_not_reached": {
+    "message": "Uruchomiony Brulion nie odpowiedział."
+  },
+  "hostError_invalid_utf8": {
+    "message": "Strona nie jest poprawnym tekstem UTF-8: Brulion zostawia ją bez zmian."
+  },
+  "optionsTitle": {
+    "message": "Brulion Web Clipper — opcje"
+  },
+  "connectionHeading": {
+    "message": "Połączenie"
+  },
+  "connectedTo": {
+    "message": "Połączono z brulion-cli $1, notatnik „$2”."
+  },
+  "testConnection": {
+    "message": "Sprawdź ponownie"
+  },
+  "whereHeading": {
+    "message": "Dokąd trafiają wycinki"
+  },
+  "contentHeading": {
+    "message": "Co zawiera wycinek"
+  },
+  "templatePageLabel": {
+    "message": "Szablon nowej strony"
+  },
+  "templateBlockLabel": {
+    "message": "Szablon w dzienniku albo pod nagłówkiem"
+  },
+  "tagsDefaultLabel": {
+    "message": "Tagi każdego wycinka"
+  },
+  "customHeading": {
+    "message": "Twoje szablony"
+  },
+  "customHelp": {
+    "message": "Szablony zapisane w tej przeglądarce. Strony z folderu szablonów notatnika też są do wyboru."
+  },
+  "templateNameLabel": {
+    "message": "Nazwa"
+  },
+  "templateTextLabel": {
+    "message": "Szablon"
+  },
+  "templateNew": {
+    "message": "Nowy"
+  },
+  "templateSave": {
+    "message": "Zapisz szablon"
+  },
+  "templateEdit": {
+    "message": "Edytuj"
+  },
+  "templateDelete": {
+    "message": "Usuń"
+  },
+  "variablesHeading": {
+    "message": "Zmienne"
+  },
+  "varTitle": {
+    "message": "tytuł (wycinka i nowej strony)"
+  },
+  "varUrl": {
+    "message": "adres strony"
+  },
+  "varSite": {
+    "message": "nazwa witryny, host adresu"
+  },
+  "varAuthor": {
+    "message": "autor"
+  },
+  "varPublished": {
+    "message": "data publikacji (yyyy-MM-dd albo własny format)"
+  },
+  "varDescription": {
+    "message": "opis strony"
+  },
+  "varContent": {
+    "message": "wycięta treść jako Markdown; jako cytat; jako zwykły tekst"
+  },
+  "varSelection": {
+    "message": "zaznaczenie (także przy artykule)"
+  },
+  "varTags": {
+    "message": "tagi: #a #b w tekście, lista we frontmatterze"
+  },
+  "varImage": {
+    "message": "obrazek strony; zrzut ekranu"
+  },
+  "varDate": {
+    "message": "data i godzina wycinka, jak w szablonach Brulionu"
+  },
+  "settingsSaved": {
+    "message": "Zapisano."
+  },
+  "saveButton": {
+    "message": "Zapisz"
+  }
+}

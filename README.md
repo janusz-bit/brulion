@@ -103,6 +103,11 @@ Pandoc Markdown document for Word, LibreOffice, PDF or EPUB).
   or page renamed in the app is moved on the server in one WebDAV MOVE (also when you keep
   typing in it right away), never mistaken for a mass deletion; one renamed on another device or in the Nextcloud web UI is renamed here too,
   recognised by its `oc:fileid` or ETag, so its version history, favourites and folds follow).
+* **Web Clipper**: a Chrome / Chromium / Brave / Edge / Firefox extension saves an article, a
+  selection, a whole page, a screenshot or a link into the notebook as Markdown with its pictures —
+  a new page in a folder, today's journal or a heading's section, through a template (Brulion's,
+  Obsidian's or Joplin's style, or your own) — with no server: the browser hands the clip to
+  `brulion-cli` on the same computer ([docs/CLIPPER.md](docs/CLIPPER.md)).
 * **Notebooks from GitHub**: Markdown notes in a GitHub repository — all of it or one folder of a
   branch (`https://github.com/owner/name/tree/main/notes`) — open as a notebook on every platform,
   the browser included, through GitHub's REST API (no git needed): the newest version pulled when
@@ -419,6 +424,12 @@ przykładowym notatnikiem.
   [docs/WINDOWS.md](docs/WINDOWS.md#open-with), [docs/NIXOS.md](docs/NIXOS.md#open-with)),
   a w wersji w przeglądarce zainstalowanej jako aplikacja — tekst i odnośniki
   ([docs/WEB.md](docs/WEB.md#sharing-to-brulion)).
+* **Web Clipper.** Rozszerzenie Chrome, Chromium, Brave, Edge i Firefoksa zapisze w notatniku
+  artykuł, zaznaczenie, całą stronę, zrzut ekranu albo link — jako Markdown z obrazkami, na nowej
+  stronie w folderze, w dzisiejszym dzienniku albo pod nagłówkiem strony, według szablonu (Brulionu,
+  w stylu Obsidiana albo Joplina, albo własnego). Bez serwera: przeglądarka przekazuje wycinek
+  `brulion-cli` na tym samym komputerze (`brulion-cli clip install` raz łączy przeglądarki;
+  [docs/CLIPPER.md](docs/CLIPPER.md)).
 * **Widżety Androida.** Zadania na dziś („Mój dzień”: zaległe i dzisiejsze) z szybkim dodawaniem
   — dzień, godzina i alarm przyciskami, zapis do dziennika od razu, także przy zamkniętej
   aplikacji —, kalendarz z kropkami i agendą (najpierw zadania z godziną) oraz notatki

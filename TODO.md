@@ -226,9 +226,12 @@ done in the repository simply disappears from the list.
 
 ## Capture
 
-* **Web Clipper** — a Chrome and Firefox extension saving an article, a selection or a screenshot
-  as Markdown with pictures, with a choice of place and a template (Obsidian, Joplin). Today:
-  "Share" with the title and address, without the article's content.
+* **Web Clipper in the stores** — the extension (clipper/, docs/CLIPPER.md) is loaded by hand today:
+  publishing it in the Chrome Web Store, Edge Add-ons and on addons.mozilla.org (Firefox needs it
+  signed; a store's Chromium id joins the host manifest's allowed origins), the release workflow
+  attaching scripts/clipper-pack.sh's ZIP and XPI, a test of the extension in Firefox (Playwright
+  cannot load it there; web-ext lint only), checks on real systems (Brave's system folder, macOS,
+  Windows' registry, Flatpak browsers) and articles' math formulas (MathML, KaTeX) as `$…$`.
 * **Voice notes** — a recording in the app as an attachment and on-device transcription, also in
   Polish, without sending audio to the cloud (Joplin, Obsidian for iOS in preparation).
 * **Audio and video in notes** — a player for `![[recording.mp3]]` and `![[video.mp4]]`; today such

@@ -89,6 +89,11 @@ QString Context::settingsValue(const QString &key) const
     return appSettingsValue(key).toString();
 }
 
+QVariant Context::settingsVariant(const QString &key) const
+{
+    return appSettingsValue(key);
+}
+
 QString Context::appDataDir() const
 {
     return QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);

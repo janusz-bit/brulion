@@ -173,6 +173,14 @@ details: [SYNTAX.md](SYNTAX.md#weekly-and-monthly-notes).
 * **Graph and Clean up.** The graph hides templates by default (the **Templates** toggle), and
   Clean up never suggests deleting them — nor weekly and monthly notes.
 
+## Templates of web clips
+
+The Web Clipper browser extension fills a template for every web page it saves: Brulion's own, in the
+style of Obsidian's Web Clipper or of Joplin, a short one for the journal, or a page of this
+templates folder (the journal's, week's and month's templates are not offered). It adds variables of
+its own — `{{url}}`, `{{site}}`, `{{author}}`, `{{published}}`, `{{content}}`, `{{selection}}`,
+`{{tags}}` and more — and leaves out the lines whose variables are empty: [CLIPPER.md](CLIPPER.md#templates).
+
 ## Another folder or file
 
 **Settings → Notebook** has the fields **Templates folder**, **Journal template**, **Weekly note

@@ -182,32 +182,234 @@ struct Prepared {
     QList<HtmlImage> images;
 };
 
-Prepared prepare(const QString &html)
+/// The address of the largest candidate of a `srcset` — by its width (`800w`), else its density
+/// (`2x`) — or "". Parsed as the HTML standard does: a URL runs to whitespace (commas at its end
+/// end the candidate), its descriptors to the next comma, so URLs with commas inside stay whole.
+QString largestSrcsetCandidate(QStringView srcset)
+{
+    QString bestWidth;
+    QString bestDensity;
+    double width = -1;
+    double density = -1;
+    const qsizetype n = srcset.size();
+    qsizetype i = 0;
+    while (i < n) {
+        while (i < n && (srcset.at(i).isSpace() || srcset.at(i) == u','))
+            ++i;
+        const qsizetype start = i;
+        while (i < n && !srcset.at(i).isSpace())
+            ++i;
+        QStringView url = srcset.sliced(start, i - start);
+        bool ended = false;
+        while (url.endsWith(u',')) {
+            url.chop(1);
+            ended = true;
+        }
+        if (url.isEmpty())
+            continue;
+        double w = -1;
+        double x = 1;
+        if (!ended) {
+            const qsizetype descriptors = i;
+            while (i < n && srcset.at(i) != u',')
+                ++i;
+            const QStringView text = srcset.sliced(descriptors, i - descriptors).trimmed();
+            for (const QStringView d : text.tokenize(u' ', Qt::SkipEmptyParts)) {
+                bool ok = false;
+                const double value = d.chopped(d.isEmpty() ? 0 : 1).toDouble(&ok);
+                if (ok && d.endsWith(u'w'))
+                    w = value;
+                else if (ok && d.endsWith(u'x'))
+                    x = value;
+            }
+        }
+        if (w >= 0 && w > width) {
+            width = w;
+            bestWidth = url.toString();
+        } else if (w < 0 && x > density) {
+            density = x;
+            bestDensity = url.toString();
+        }
+    }
+    return bestWidth.isEmpty() ? bestDensity : bestWidth;
+}
+
+/// The picture an `<img>` shows: its `src`, or — when that is empty or a small data: placeholder of
+/// a lazily loaded picture — what a script would put there (data-src, …), else the largest
+/// `srcset` candidate.
+QString pictureSource(QStringView attrs)
+{
+    QString src = attribute(attrs, u"src"_s).value_or(QString()).trimmed();
+    if (!src.isEmpty() && !(src.startsWith(u"data:"_s, Qt::CaseInsensitive) && src.size() < 512))
+        return src;
+    for (const QStringView lazy :
+         {u"data-src", u"data-lazy-src", u"data-original", u"data-actualsrc", u"data-hi-res-src", u"data-full-src"}) {
+        const QString value = attribute(attrs, lazy).value_or(QString()).trimmed();
+        if (!value.isEmpty() && !value.startsWith(u"data:"_s, Qt::CaseInsensitive))
+            return value;
+    }
+    for (const QStringView set : {u"srcset", u"data-srcset", u"data-lazy-srcset"}) {
+        const QString best = largestSrcsetCandidate(attribute(attrs, set).value_or(QString()));
+        if (!best.isEmpty())
+            return best;
+    }
+    return src;
+}
+
+/// The language of a code block named by the attributes of its `<pre>` or `<code>`: a class
+/// `language-x` / `lang-x` / `highlight-source-x`, `data-lang`, `data-language`; "" when none.
+QString codeLanguage(QStringView attrs)
+{
+    static const QRegularExpression language(u"(?:^|\\s)(?:language|lang|highlight-source)-([A-Za-z0-9_+#.-]+)"_s);
+    static const QRegularExpression safe(u"^[A-Za-z0-9_+#.-]{1,40}$"_s);
+    const auto m = language.match(attribute(attrs, u"class"_s).value_or(QString()));
+    if (m.hasMatch())
+        return m.captured(1);
+    for (const QStringView name : {u"data-lang", u"data-language"}) {
+        const QString value = attribute(attrs, name).value_or(QString()).trimmed();
+        if (safe.match(value).hasMatch())
+            return value;
+    }
+    return {};
+}
+
+QString htmlEscaped(const QString &text)
+{
+    return QString(text).toHtmlEscaped();
+}
+
+/// The address an embedded player is watched at: a YouTube or Vimeo player's page, a
+/// protocol-relative address with https:; "" for anything but http(s) or a relative address.
+QString embedAddress(const QString &raw)
+{
+    QString src = raw.trimmed();
+    src.removeIf([](QChar c) { return c == u'\t' || c == u'\n' || c == u'\r'; });
+    if (src.startsWith(u"//"))
+        src.prepend(u"https:"_s);
+    const QUrl url(src);
+    const QString scheme = url.scheme().toLower();
+    if (src.isEmpty() || (!scheme.isEmpty() && scheme != u"http" && scheme != u"https"))
+        return {};
+    static const QRegularExpression youtube(
+            u"^https?://(?:www\\.)?youtube(?:-nocookie)?\\.com/embed/([A-Za-z0-9_-]{6,20})"_s,
+            QRegularExpression::CaseInsensitiveOption);
+    static const QRegularExpression vimeo(u"^https?://player\\.vimeo\\.com/video/(\\d{1,20})"_s,
+                                          QRegularExpression::CaseInsensitiveOption);
+    if (const auto m = youtube.match(src); m.hasMatch())
+        return u"https://www.youtube.com/watch?v="_s + m.captured(1);
+    if (const auto m = vimeo.match(src); m.hasMatch())
+        return u"https://vimeo.com/"_s + m.captured(1);
+    return src;
+}
+
+/// A paragraph linking to an embedded player ("" when it has no usable address).
+QString embedLink(const QString &src, const QString &title)
+{
+    const QString address = embedAddress(src);
+    if (address.isEmpty())
+        return {};
+    // Its title, else the file it plays ("zolw.mp4"), else the address.
+    const QString file = QUrl(address).fileName();
+    const QString label = !title.trimmed().isEmpty() ? title.simplified() : file.contains(u'.') ? file : address;
+    return u"<p><a href=\""_s + htmlEscaped(address) + u"\">"_s + htmlEscaped(label) + u"</a></p>"_s;
+}
+
+/// `<iframe>`, `<video>` and `<audio>` with a source as links to it, in front of the element
+/// (removeElements() then drops the element with its content).
+QString embedsAsLinks(const QString &html)
+{
+    QString s = replaceTags(html, u"iframe", [](QStringView attrs) -> QString {
+        const QString title = attribute(attrs, u"title"_s).value_or(QString());
+        return embedLink(attribute(attrs, u"src"_s).value_or(QString()), title) + u"<iframe>"_s;
+    });
+    // A video's or a sound's address: its own src, else the first <source src> inside it.
+    for (const QStringView tag : {u"video", u"audio"}) {
+        QString out;
+        qsizetype last = 0;
+        bool changed = false;
+        const QString open = u'<' + tag.toString();
+        const QString close = u"</"_s + tag.toString();
+        for (qsizetype at = s.indexOf(open, 0, Qt::CaseInsensitive); at >= 0;
+             at = s.indexOf(open, at + 1, Qt::CaseInsensitive)) {
+            const qsizetype attrs = at + open.size();
+            if (attrs < s.size() && isTagNameChar(s.at(attrs)))
+                continue;
+            const qsizetype end = startTagEnd(s, attrs);
+            if (end < 0)
+                break;
+            const QStringView attrText = QStringView(s).sliced(attrs, end - attrs);
+            QString src = attribute(attrText, u"src"_s).value_or(QString());
+            if (src.trimmed().isEmpty()) {
+                const qsizetype stop = s.indexOf(close, end, Qt::CaseInsensitive);
+                const QStringView inside = QStringView(s).sliced(end + 1, (stop < 0 ? s.size() : stop) - end - 1);
+                const qsizetype source = inside.indexOf(u"<source", 0, Qt::CaseInsensitive);
+                if (source >= 0) {
+                    const qsizetype sourceEnd = inside.indexOf(u'>', source);
+                    if (sourceEnd > source)
+                        src = attribute(inside.sliced(source + 7, sourceEnd - source - 7), u"src"_s)
+                                      .value_or(QString());
+                }
+            }
+            const QString link = embedLink(src, attribute(attrText, u"title"_s).value_or(QString()));
+            if (link.isEmpty())
+                continue;
+            out += QStringView(s).sliced(last, at - last);
+            out += link;
+            last = at;
+            changed = true;
+        }
+        if (changed) {
+            out += QStringView(s).sliced(last);
+            s = std::move(out);
+        }
+    }
+    return s;
+}
+
+Prepared prepare(const QString &html, const HtmlToMarkdownOptions &options)
 {
     Prepared p;
     static const QRegularExpression markClose(u"</mark\\s*>"_s, QRegularExpression::CaseInsensitiveOption);
-    static const QRegularExpression preCode(u"<pre\\b[^>]*>\\s*<code\\b([^>]*)>"_s,
+    static const QRegularExpression preCode(u"<pre\\b([^>]*)>\\s*<code\\b([^>]*)>"_s,
                                             QRegularExpression::CaseInsensitiveOption);
-    static const QRegularExpression language(u"\\b(?:language|lang)-([A-Za-z0-9_+#.-]+)"_s);
+    static const QRegularExpression githubPre(
+            u"<div\\b([^>]*\\bhighlight-source-[A-Za-z0-9_+#.-]+[^>]*)>\\s*<pre\\b[^>]*>"_s,
+            QRegularExpression::CaseInsensitiveOption);
+    static const QRegularExpression blockClose(
+            u"</(?:article|section|header|footer|nav|aside|main|figure|details|address|hgroup|search)\\s*>"_s,
+            QRegularExpression::CaseInsensitiveOption);
+    static const QRegularExpression figcaptionClose(u"</figcaption\\s*>"_s, QRegularExpression::CaseInsensitiveOption);
+    static const QRegularExpression summaryClose(u"</summary\\s*>"_s, QRegularExpression::CaseInsensitiveOption);
 
     QString s = html;
     // The marker characters must only ever come from us (icon fonts use private-use code points).
     static_assert(CheckedBox == UncheckedBox + 1 && LangOpen == UncheckedBox + 2 && LangClose == UncheckedBox + 3);
     s.removeIf([](QChar c) { return c.unicode() >= UncheckedBox && c.unicode() <= LangClose; });
+    if (options.embedsAsLinks)
+        s = embedsAsLinks(s);
     s = detail::removeElements(s, {u"script"_s, u"style"_s, u"noscript"_s, u"template"_s, u"iframe"_s, u"object"_s,
                                    u"embed"_s, u"svg"_s, u"math"_s, u"canvas"_s, u"video"_s, u"audio"_s});
     s = detail::limitNesting(s);
     for (const QStringView dropped : {u"link", u"meta", u"base", u"script", u"style", u"iframe", u"object", u"embed",
                                       u"source", u"track", u"param"})
         s = replaceTags(s, dropped, [](QStringView) { return QString(); });
+    // HTML5's sections and groups are unknown to QTextDocument, which would run their texts
+    // together: blocks. A figure's caption is a paragraph of its own, in italics.
+    for (const QStringView block : {u"article", u"section", u"header", u"footer", u"nav", u"aside", u"main", u"figure",
+                                    u"details", u"address", u"hgroup", u"search"})
+        s = replaceTags(s, block, [](QStringView) { return u"<div>"_s; });
+    s.replace(blockClose, u"</div>"_s);
+    s = replaceTags(s, u"figcaption", [](QStringView) { return u"<p><em>"_s; });
+    s.replace(figcaptionClose, u"</em></p>"_s);
+    s = replaceTags(s, u"summary", [](QStringView) { return u"<p><b>"_s; });
+    s.replace(summaryClose, u"</b></p>"_s);
     s = replaceTags(s, u"input", [](QStringView attrs) -> QString {
         if (attribute(attrs, u"type"_s).value_or(QString()).compare(u"checkbox"_s, Qt::CaseInsensitive) != 0)
             return QString();
         return QString(QChar(attribute(attrs, u"checked"_s) ? CheckedBox : UncheckedBox)) + u' ';
     });
     s = replaceTags(s, u"img", [&](QStringView attrs) -> QString {
-        p.images.append(HtmlImage{attribute(attrs, u"src"_s).value_or(QString()).trimmed(),
-                                  attribute(attrs, u"alt"_s).value_or(QString()).trimmed()});
+        p.images.append(HtmlImage{pictureSource(attrs), attribute(attrs, u"alt"_s).value_or(QString()).trimmed()});
         return u"<img src=\""_s + ImageScheme + QString::number(p.images.size() - 1) + u"\">"_s;
     });
     // Quote levels are read back from the accumulated right margin (see quoteLevel()).
@@ -215,13 +417,24 @@ Prepared prepare(const QString &html)
     s = replaceTags(s, u"blockquote", [&](QStringView) { return quoteTag; });
     s = replaceTags(s, u"mark", [](QStringView) { return u"<span style=\"background-color:#fff59d\">"_s; });
     s.replace(markClose, u"</span>"_s);
+    // GitHub: <div class="highlight highlight-source-python"><pre>…
+    s = replaceAll(s, githubPre, [](const QRegularExpressionMatch &m) -> QString {
+        const QString lang = codeLanguage(m.capturedView(1));
+        return u"<div><pre>"_s + (lang.isEmpty() ? QString() : QChar(LangOpen) + lang + QChar(LangClose));
+    });
     s = replaceAll(s, preCode, [](const QRegularExpressionMatch &m) -> QString {
-        const QString cls = attribute(m.capturedView(1), u"class"_s).value_or(QString());
-        const auto lm = language.match(cls);
+        QString lang = codeLanguage(m.capturedView(2));
+        if (lang.isEmpty())
+            lang = codeLanguage(m.capturedView(1));
         QString out = u"<pre><code>"_s;
-        if (lm.hasMatch())
-            out += QChar(LangOpen) + lm.captured(1) + QChar(LangClose);
+        if (!lang.isEmpty())
+            out += QChar(LangOpen) + lang + QChar(LangClose);
         return out;
+    });
+    // A <pre> without <code> that names its language itself.
+    s = replaceTags(s, u"pre", [](QStringView attrs) -> QString {
+        const QString lang = codeLanguage(attrs);
+        return lang.isEmpty() ? u"<pre>"_s : u"<pre>"_s + QChar(LangOpen) + lang + QChar(LangClose);
     });
     p.html = std::move(s);
     return p;
@@ -1037,6 +1250,10 @@ public:
             const bool code = b.kind == Kind::Code;
             QStringList blockLines = b.lines;
             if (code) {
+                // The line break before `</code></pre>` ends the last line (a browser shows no
+                // empty line there); a blank line before it is kept.
+                if (blockLines.size() > 1 && blockLines.last().isEmpty())
+                    blockLines.removeLast();
                 const QString f = detail::codeFenceFor(blockLines.join(u'\n'));
                 blockLines.prepend(f + b.lang);
                 blockLines.append(f);
@@ -1786,18 +2003,22 @@ QString detail::splitLongLists(const QString &html, int maxItems, int *parts)
 QString detail::htmlToPlainTextWithListLimit(const QString &html, int maxListItems)
 {
     SafeDocument doc;
-    doc.setHtml(splitLongLists(prepare(html).html, maxListItems));
+    doc.setHtml(splitLongLists(prepare(html, {}).html, maxListItems));
     QString text = doc.toPlainText();
     text.replace(QChar::Nbsp, u' ').replace(QChar::LineSeparator, u'\n').replace(QChar::ParagraphSeparator, u'\n');
     text.remove(QChar::ObjectReplacementCharacter);
     text.replace(QChar(UncheckedBox), u"[ ]"_s).replace(QChar(CheckedBox), u"[x]"_s);
+    // A code block's language is no text of it.
+    static const QRegularExpression language(QString(QChar(LangOpen)) + u"[^"_s + QChar(LangClose) + u"]*"_s
+                                             + QChar(LangClose));
+    text.remove(language);
     return text;
 }
 
 HtmlMarkdown detail::htmlToMarkdownWithListLimit(const QString &html, const HtmlToMarkdownOptions &options,
                                                  int maxListItems)
 {
-    const Prepared prepared = prepare(html);
+    const Prepared prepared = prepare(html, options);
     const ListSplitter::Result split = ListSplitter(prepared.html).split(maxListItems);
     SafeDocument doc;
     doc.setHtml(split.html);
