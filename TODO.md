@@ -52,30 +52,17 @@ done in the repository simply disappears from the list.
   * stores: F-Droid's and Google Play's rules for an app that downloads model weights under a
     licence that is not free software (a store build without it: `BRULION_LOCAL_AI=OFF`).
 * **Extensibility as in Emacs and TiddlyWiki: what is still missing** — extension pages, approval
-  per device, live reload, hooks (`save`, `change`), the Luau console, Luau's syntax colours,
-  macros in the text (`{{ext:…}}`), template variables, ```` ```view ```` blocks, side panel
-  sections and the views' input controls are there (docs/EXTENSIONS.md); missing: Luau's type
-  checker on save (`b` as a definition file; the Analysis library is not vendored), more events
-  (a task done, a daily note created, the app opened), an extension's own settings, sharing
-  extensions between notebooks, the browser build checked against hostile extensions. Macros show
-  their source in the rows of the Tasks view, the linked references, query results and the
-  clipboard's HTML (only the editor and the document exports compute them); a view block in a page
-  drawn by `PageItem` (`BRULION_PAGE_ITEM=1`) and the new view controls (date dialog, slider,
-  text area) are not yet checked on a real phone. Smaller gaps the
-  documentation has to mention (docs/EXTENSIONS.md): the editor's selection for a command
-  (`ctx.selection` is always empty), keyboard shortcuts for extension commands (the list of
-  Settings → Keyboard shortcuts is made when the app starts, before extensions load), a timer of
-  an extension's own (`b.timer` is the gym's rest timer: its banner shows in the Gym view only and
-  its notification speaks of the next set), "Edit the code" for the AI assistant (Settings has the
-  button for the gym, the habits and the flashcards only).
-* **Extensions: what ten sample extensions had to work around** — the samples of
-  `tests/core/extensions/samples` (a task review, a mood log, expenses, flashcards, a project index
-  kept by hooks …) run, but each met a wall of the API: the hooks hear nothing of what another
-  extension wrote (a task ticked in one extension's view does not refresh the page another one
-  keeps); pages of one name in different folders are one name to `b.pages` (names only: `b.page`
-  gives the `path` of the one a name finds); code cannot be shared between extensions (each page
-  carries its helpers); what a question shows has no limit (`b.ask` with a megabyte of prompt,
-  `b.choose` with thousands of options), nor has `b.timer`'s label.
+  per device (of the version read), live reload, hooks (`save`, `change`, `task`, `journal`,
+  `open`, `day`, `timer`), shared code, settings, timers, copies between notebooks, the type check
+  on save, the Luau console and its syntax colours, macros in the text (`{{ext:…}}`), template
+  variables, ```` ```view ```` blocks, side panel sections and the views' input controls are there
+  (docs/EXTENSIONS.md). What remains: macros show their source in the rows of the Tasks view, the
+  linked references, query results and the clipboard's HTML (only the editor and the document
+  exports compute them); and checks on real devices — a view block in a page drawn by `PageItem`
+  (`BRULION_PAGE_ITEM=1`) and the new view controls (date dialog, slider, text area) on a phone,
+  the type checker on an Android phone (built in, measured, not run on one yet), the browser's
+  hostile-extension self-test in a real browser beside CI's headless Chrome
+  (`scripts/wasm-smoke.mjs --extensions`).
 * **Gym: next steps** — the rest timer's notification while the app is closed (Android: a scheduled
   alarm), a catalog beyond the 51 built-in exercises (free-exercise-db, Unlicense, English names),
   sample workouts in the sample notebook, weekly volume per muscle group, a body weight log.
@@ -269,10 +256,6 @@ done in the repository simply disappears from the list.
   keeps the file being written in memory), an Android folder chosen through a cloud document,
   splitting the compression of a large file into chunks in the browser (today a file over 4 MB is
   saved uncompressed).
-* **Approving the extension that was read** — "Run" approves a page's code as it is at the click:
-  code a sync replaced a moment earlier is approved unread. To be decided: approving the version
-  that was shown (its hash) and saying when it changed meanwhile, or a diff against the version
-  approved before.
 * **Sync and import in bounded memory** — a download is kept in memory before it is written (up
   to the largest file synced, 200 MB, several at a time), and an imported ZIP is unpacked into
   memory (up to 1.5 GiB): streaming to the file, as backups do, would bound both on a phone.

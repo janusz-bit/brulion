@@ -76,9 +76,12 @@ brulion-cli extension eval 'b.query("type:tasks status:open").total'
 brulion-cli extension write "Word count" --code "$(cat wc.luau)" --description "Counts words"
 brulion-cli extension run "Word count" count --page Home    # changes come back as a diff, nothing is written
 brulion-cli extension list                           # "approval": waiting for you
+brulion-cli extension diff "Word count"               # what changed since you approved it here
+brulion-cli extension settings Gym --set rest=90      # an extension's settings on this device
+brulion-cli extension copy "Word count" --to ~/Notes/Work   # into another notebook, waiting there too
 ```
 
-The code never runs in the app until you approve it there (**Run** on the page, or **Settings → Extensions**), and each change by the agent waits for you again.
+The code never runs in the app until you approve it there (**Read and run** on the page, or **Settings → Extensions**), and each change by the agent waits for you again.
 
 ## Open in the app
 `brulion-cli app open <page>` shows a page in the running app (on the same computer), `app today` — today's journal, and `app capture` opens a quick capture.

@@ -21,6 +21,7 @@ Reading needs no permission.
 | `b.pages()` | the names of all pages, the journal's days too, in alphabetical order |
 | `b.pages({ tag = "project" })` | only the pages with that tag among their own tags (`tags: [project]` in the page's properties) |
 | `b.pages({ prop = "habit" })` | only the pages with that property among their own (`habit: every day` in the page's properties); `prop = { "habit", "nawyk" }` takes either, and a `tag` may be added |
+| `b.pages({ paths = true })` | the same pages as their files in the notebook (`Projects/Home.md`): two pages called "Home" in different folders are one name in the list of names, two paths here. Every function that takes a page takes such a path too |
 | `b.page(name)` | `{ name, path, tags, props, date }`: the page's file in the notebook (`Projects/Home.md`), its own tags and properties, and its day when it is a journal page; `nil` when there is no such page |
 | `b.read(name)` | the page's whole text, or `nil` |
 | `b.blocks({ page = name })` | the page's blocks from the top, each with the blocks under it |
@@ -158,7 +159,8 @@ end, { label = "Archive the done tasks" })
 | `b.lang()`, `b.uiLang()` | the language of the notes and of the interface: `"pl"` or `"en"` |
 | `b.log(text)`, `print(…)` | a line in the Luau console |
 | `b.status(text)` | says what a command waiting for an answer is doing now ("Reading “Home”…"); the AI chat shows it under the AI's dots, `b.status("")` clears it |
-| `b.timer(seconds, label)` | starts the rest timer of the [[Gym]]: a notification when the time is up |
+| `b.timer(seconds, { label = "Tea", message = "The tea is ready." })` | starts the extension's own timer (below, Timers) |
+| `b.stopTimer()` | stops it |
 | `b.data(name)` | data that comes with a built-in extension (the gym's list of exercises, the AI assistant's reference for writing extensions); `nil` in your own |
 
 ## Commands
@@ -167,6 +169,8 @@ end, { label = "Archive the done tasks" })
 - `ctx.page` is the name of the page on screen, an empty text when there is none.
 - With `block = true` the command works on the block under the cursor, `ctx.block`, and the palette offers it only in a note. Check that `ctx.block` is there.
 - With `palette = false` the palette does not offer it: a view's button (`b.ui.run`) or the app runs it — the AI chat runs the AI assistant's `chat` this way.
+- `ctx.selection` is what you selected in the note before choosing the command: the text selected in the block you are editing, or the selected blocks as Markdown; an empty text when nothing is.
+- With `key = "Ctrl+Alt+W"` the command suggests a keyboard shortcut; it gets it only while none of Brulion's own commands has it. Every command of an extension is in **Settings → Keyboard shortcuts**, where you can give it any shortcut.
 - `ctx.args` is what the caller gave the command: a message's button (below), or `brulion-cli extension run … --args '{"page": "Home"}'`; `{}` when nothing was given (write `ctx.args or {}`: a turn of the AI chat has none).
 - A text the function returns is shown as a message. Returning nothing is fine. A table `{ message = "…", tone = "success", button = { label = "Open", page = "Home" } }` is a message too: `tone` is `"success"`, `"warning"` or `"error"`, and the button opens a page, runs one of the extension's commands (`command = "…"`, its `args` as `ctx.args`) or — in what a view's action returns — that view's action again (`action = "…"`, `args`): an **Undo**.
 
@@ -327,8 +331,8 @@ docs/mood
 - `ctx.args` is the list of arguments, separated by commas: `{{ext:a/b Squat, 30}}` gives `{ "Squat", "30" }`; `ctx.text` is them as written.
 - `ctx.page` and `ctx.path` name the note the macro is in, `ctx.date` its day when it is a day of the journal.
 - Return a text, a number, `b.ui.text` (muted, or in a colour), `b.ui.link`, `b.ui.heading` (bold) — or a list of them. It is always shown as text, never as HTML.
-- A macro is computed again by itself when a note it read changes. It may not ask a question nor write, and it has a quarter of a second.
-- A macro of an extension that has not run on this device shows a lock: a click asks to run it.
+- A macro is computed again by itself when a note it read changes, and when one of its extension's settings does. It may not ask a question nor change anything — no writes, no settings set, no timers —, and it has a quarter of a second.
+- A macro of an extension that has not run on this device shows a lock: a click shows the extension's code, to read before you run it.
 
 ```luau
 b.macro("words", function(ctx)
@@ -358,7 +362,35 @@ end, { description = "Open tasks due by the note's day" })
 ```
 
 ## Reactions
-`b.on("save", function(e) … end)` runs right after this device saved a page: `e.page` is its name. `b.on("change", function(e) … end)` runs after notes changed anywhere — your typing, a sync, another program — once the changes have settled: `e.pages` is the list of their names (a deleted page is in it too). What extensions write themselves does not come back as a change. A reaction cannot ask a question, and one that fails three times in a row is switched off until the extension is loaded again.
+`b.on(event, function(e) … end)` runs the function when something happens:
+
+| Event | When | `e` |
+|---|---|---|
+| `"save"` | right after this device saved a page | `page`, `path` |
+| `"change"` | after notes changed anywhere — your typing, a sync, another program, **another extension** — once the changes have settled | `pages` (their names; a deleted page too), `paths`, `by` (the other extensions that wrote), `sources` (`"app"`, `"extension"`, `"sync"`, `"other"`) |
+| `"task"` | a task was ticked off, opened again, cancelled or put in progress | the task as a block, with `task` (its status now), `previous`, `source` and `by` |
+| `"journal"` | a day's note was made | `date`, `page`, `path`, `source`, `by` |
+| `"open"` | the notebook was opened (once, after the extensions loaded) | `date` |
+| `"day"` | a new day began while Brulion runs | `date`, `previous` |
+| `"timer"` | the extension's own timer ended | `label`, `seconds` |
+
+A reaction never hears what its own extension wrote — so it never answers itself — but it hears every other extension: a task ticked in one extension's view reaches the page another one keeps. Extensions answering each other stop after four rounds. A sync brings what another device's extensions wrote, with `source = "sync"`: a reaction that adds something for every event should skip those, or the line comes once from each device. A reaction cannot ask a question, and one that fails three times in a row is switched off until the extension is loaded again.
+
+```luau
+-- A line in today's journal for every task done on this device.
+b.on("task", function(e)
+    if e.task == "x" and e.source ~= "sync" then
+        b.appendToJournal(b.today(), `- Done: {e.plain} ([[{e.page}]])`)
+    end
+end)
+
+-- A new day's note gets a line to start from.
+b.on("journal", function(e)
+    if e.source ~= "sync" then
+        b.appendToPage(e.path, "- Three things for today:")
+    end
+end)
+```
 
 ## Questions
 
@@ -368,7 +400,7 @@ end, { description = "Open tasks due by the note's day" })
 | `b.choose(question, { "A", "B" })` | the option you tapped; `nil` when you closed the window |
 | `b.form(title, fields)` | numbers, each with − and +, and lines of text: `{ key = number or text }`; `nil` when you closed the window |
 
-A number field of a form is `{ key = "reps", label = "Reps", value = 8, step = 1, unit = "" }`, a text field `{ key = "name", label = "Name", kind = "text", value = "", placeholder = "e.g. Meditation" }` — the placeholder is the grey example in the empty field. Questions work in commands and in actions, not in views or reactions and not while the page is loading.
+A number field of a form is `{ key = "reps", label = "Reps", value = 8, step = 1, unit = "" }`, a text field `{ key = "name", label = "Name", kind = "text", value = "", placeholder = "e.g. Meditation" }` — the placeholder is the grey example in the empty field. Questions work in commands and in actions, not in views or reactions and not while the page is loading. A dialog shows at most the first 10 000 characters of a question's text; `b.choose` takes up to 500 options and `b.form` up to 50 fields.
 
 ```luau
 b.command("walk", function(ctx)
@@ -387,6 +419,61 @@ b.command("walk", function(ctx)
 end, { label = "Log a walk" })
 ```
 
+## Settings
+`b.settings({ … })` gives the extension settings of its own: **Settings → Extensions** (and the corner of its page) then has **Settings** for it, where you change them. `b.setting(key)` reads one; `b.setSetting(key, value)` changes one from the code. They are kept on this device, not in the notebook: a phone and a computer may each have their own.
+
+| A setting | What it is |
+|---|---|
+| `{ key = "budget", label = "Monthly budget", value = 2000, step = 100, unit = "zł" }` | a number with − and +, which can also be typed in |
+| `{ key = "currency", label = "Currency", value = "zł" }` | a line of text |
+| `{ key = "cents", label = "Show the cents", value = false }` | a switch |
+| `{ key = "period", label = "Period", options = { "month", "week" } }` | one of the options |
+
+`value` is what it is until you change it, `description = "…"` a sentence under it. The [[Gym]] has one too: the rest between sets.
+
+```luau
+b.settings({
+    { key = "glass", label = "A glass", value = 250, step = 50, unit = "ml" },
+    { key = "goal", label = "A day's goal", value = 2000, step = 250, unit = "ml" },
+})
+
+b.command("water", function(ctx)
+    local glass, goal = b.setting("glass"), b.setting("goal")
+    b.appendToJournal(b.today(), `- Water: {glass} ml`)
+    local drunk = 0
+    for _, block in b.blocks({ page = b.today() }) do
+        drunk += tonumber(block.text:match("^Water: (%d+) ml")) or 0
+    end
+    return `{drunk} of {goal} ml today`
+end, { label = "A glass of water" })
+```
+
+## Timers
+`b.timer(seconds, { label = "Tea", message = "The tea is ready." })` starts the extension's own timer: its countdown shows under the top bar in every view (with × to stop it), and when the time is up a notification says "Tea is over" with your message. Each extension has one timer — a new one replaces it —, `b.stopTimer()` stops it, and `b.on("timer", function(e) … end)` runs when it ends (`e.label`, `e.seconds`). The timer runs while Brulion does.
+
+```luau
+b.command("tea", function(ctx)
+    b.timer(4 * 60, { label = "Tea", message = "The tea is ready: take the bag out." })
+    return "Four minutes"
+end, { label = "Tea timer" })
+
+b.on("timer", function(e)
+    b.appendToJournal(b.today(), `- {os.date("%H:%M")} {e.label} ({e.seconds // 60} min)`)
+end)
+```
+
+## Shared code
+`b.require("Shared helpers")` gives what the code of another extension page returns — usually a table of functions that several extensions use, so each of them does not carry its own copy. That page is an extension like any other (tagged `extension`, its code in `luau` blocks, ending with `return`), and it runs only once you approved it on this device. Each extension that uses it gets a copy of its own, with its own permissions: shared code can never do more than the extension using it may. When the shared page changes, the extensions using it load again.
+
+```luau
+-- The page "Shared helpers" ends with `return M`: a table of functions.
+local shared = b.require("Shared helpers")
+
+b.command("open-tasks", function(ctx)
+    return shared.count(b.query("type:tasks status:open", 1).total, "open task", "open tasks")
+end, { label = "How many open tasks" })
+```
+
 ## AI
 `b.ai("question")` asks the model chosen in **Settings → Extensions → AI** and returns its answer as text; a table adds `system`, `model`, `maxTokens`, `effort`, `images` (pictures of the notebook for a model that sees: `b.ai({ prompt = "What does it say?", images = { "receipt.jpg" } })`), `messages` for a conversation and `tools` the model may call. The page needs the permission `ai`. More in [[AI]].
 
@@ -399,7 +486,7 @@ end, { label = "Log a walk" })
 - There are no files, no network and no other programs: only `b`.
 
 ## Limits
-One call may take 2 seconds (the time you spend answering a question does not count) — a macro a quarter of a second, a template variable one second —, and all extensions together 64 MB of memory; past either, the call is stopped and the rest keeps working. A macro shows at most 400 characters; the macros of one page have 2 seconds together. A view shows up to 2000 lines, a row up to 24 controls; `b.blocks` gives up to 20 000 blocks; one request to a model has up to 200 000 characters.
+One call may take 2 seconds (the time you spend answering a question does not count) — a macro a quarter of a second, a template variable one second —, and all extensions together 64 MB of memory; past either, the call is stopped and the rest keeps working. A macro shows at most 400 characters; the macros of one page have 2 seconds together. A view shows up to 2000 lines, a row up to 24 controls; `b.blocks` gives up to 20 000 blocks; one request to a model has up to 200 000 characters. A question's text shows up to 10 000 characters, `b.choose` up to 500 options, `b.form` up to 50 fields; a timer's label 100 characters; an extension's settings 64 KB; `b.require` goes up to 16 pages deep.
 
 ## Errors
 
@@ -422,8 +509,13 @@ One call may take 2 seconds (the time you spend answering a question does not co
 | `a hook cannot ask a question` | a reaction asked |
 | `cannot wait for an answer here` | a question or `b.ai` inside a function that `table.sort` or `string.gsub` calls |
 | `an extension cannot ask a question while it loads` | a question outside a function: ask inside a command |
+| `b.require: … waits for approval on this device` | the shared code changed elsewhere, or is new: approve its page |
+| `b.require: no page named …`, `… is no extension page` | the page to use is not there, or not tagged `extension` |
+| `b.require: a cycle` | two pages require each other |
+| `b.setSetting: "…" is a number` | a value of another kind than its setting |
+| `b.choose: at most 500 options` | too many options for one question: ask in steps |
 | `timeout: the extension ran too long` | one call took more than 2 seconds |
-| `a macro or a template variable cannot change notes` | a macro or a variable wrote: write in a command or an action |
+| `a macro or a template variable cannot change notes` (or `… settings or timers`) | a macro or a variable wrote, set a setting or a timer: do that in a command or an action |
 | `a macro returns a text, a number, b.ui.text, b.ui.link or a list of them` | a macro returned something it cannot show |
 
 `pcall` catches an error, so the code can go on: `local ok, message = pcall(b.write, name, text)`. `error("…", 0)` stops the command with a message of your own.

@@ -6,7 +6,8 @@ import Brulion
 // ShellMacroDialog — what a macro's placeholder (or a ```view block of an extension that does not
 // run) offers (docs/EXTENSIONS.md "Macros"): a click on
 // `🔒 ext/name · run?` in the editor asks to run its extension on this device (its code came from
-// elsewhere or changed: "Read the code" opens its page first), a macro of an extension that is
+// elsewhere or changed: AppShell shows the approval with the code instead, ShellExtensionApproval;
+// this dialog only when the extension has no page to read), a macro of an extension that is
 // off offers to switch it on, one whose extension failed opens the code at its error, and one no
 // running extension offers says so. Made by AppShell for Workspace.extensions.macroHelpRequested.
 //
@@ -73,8 +74,8 @@ BConfirmDialog {
 
     onAccepted: {
         switch (dialog.extState) {
-        case "approval":
-            Workspace.extensions.approve(dialog.path)
+        case "approval": // (its code first: the approval of the version read)
+            AppController.requestUiAction("approveExtension:" + dialog.path)
             break
         case "off":
             if (dialog.builtin || dialog.path === "")

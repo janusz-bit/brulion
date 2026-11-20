@@ -18,9 +18,7 @@ The line goes into the generated code as a Luau string (`%q` escapes it), never 
 local FOLDER = b.lang() == "pl" and "Rozszerzenia" or "Extensions"
 local PREFIX = "Quick entry "
 
-local function trim(s: string): string
-    return (s:match("^%s*(.-)%s*$"))
-end
+local trim = b.require("Wspólne funkcje").trim
 
 -- A name as a page's title: without what file names, links and code fences cannot hold.
 local function titleFrom(name: string): string

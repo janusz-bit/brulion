@@ -955,10 +955,24 @@ FocusScope {
             notice(qsTr("Put the cursor in a block first"), "info", null)
             return false
         }
+        const name = command + "" // (read before the calls below)
+        const selection = selectionForExtensions()
         const line = controller.savedLineAt(row)
         const path = controller.path
-        Workspace.extensions.runBlockCommand(command, path, line)
+        Workspace.extensions.runBlockCommand(name, path, line, selection)
         return true
+    }
+    /// What an extension's command gets as ctx.selection (docs/EXTENSIONS.md "Commands"): the text
+    /// selected in the block being edited, else the selected blocks as Markdown, else "".
+    function selectionForExtensions(): string {
+        if (!controller)
+            return ""
+        const edit = activeEditor
+        if (edit && differs(edit.selectionStart, edit.selectionEnd))
+            return edit.getText(Math.min(edit.selectionStart, edit.selectionEnd), Math.max(edit.selectionStart, edit.selectionEnd))
+        if (!inSpan && controller.selectionCount > 0)
+            return controller.selectionMarkdown()
+        return ""
     }
 
     /// The command palette and Ctrl+Shift+C: a link to the page ("page"), to the current block

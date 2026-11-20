@@ -32,7 +32,9 @@ public:
     Q_INVOKABLE bool run(const QString &id);
     /// Ids of all commands (tests).
     QStringList ids() const;
-    /// The actions ShortcutMap offers: the palette, then every command with its default shortcut.
+    /// The actions ShortcutMap offers: the palette, then every command with its default shortcut —
+    /// the extensions' commands too ("ext.<extension>.<name>", the shortcut a command suggests,
+    /// b.command's meta.key, only while no command of the app has it).
     QList<ShortcutMap::Action> shortcutActions() const;
 
 Q_SIGNALS:
@@ -42,6 +44,9 @@ protected:
     bool eventFilter(QObject *watched, QEvent *event) override;
 
 private:
+    /// ShortcutMap's actions again when they changed (an extension loaded or went).
+    void refreshShortcutActions();
+
     AppController *m_app;
 };
 

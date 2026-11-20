@@ -215,6 +215,11 @@ FocusScope {
                 root.activeEditor.runExtensionCommand(Js.sliceFrom(action, 10))
                 return
             }
+            if (action === "offerSelection") {
+                Workspace.extensions.offerSelection(root.activeEditor.controller ? root.activeEditor.controller.path : "",
+                                                    root.activeEditor.selectionForExtensions())
+                return
+            }
             if (action === "saveWebPictures") {
                 root.activeEditor.downloadWebPictures("")
                 return

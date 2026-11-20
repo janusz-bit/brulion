@@ -720,7 +720,7 @@ private Q_SLOTS:
         // Unknown events and non-functions are refused at once, with the line.
         Result bad = engine->load(ext(u"zle"_s, u"\nb.on(\"zamknięcie\", function() end)"_s));
         QCOMPARE(bad.status, Status::Error);
-        QVERIFY2(bad.error.startsWith(u"zle:2: b.on: unknown event \"zamknięcie\" (save, change)"_s), qPrintable(bad.error));
+        QVERIFY2(bad.error.startsWith(u"zle:2: b.on: unknown event \"zamknięcie\" (save, change, task, journal, open, day, timer)"_s), qPrintable(bad.error));
         bad = engine->load(ext(u"zle"_s, u"b.on(\"save\", 42)"_s));
         QVERIFY2(bad.error.contains(u"b.on: argument 2 must be a function"_s), qPrintable(bad.error));
     }

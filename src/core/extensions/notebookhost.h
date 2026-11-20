@@ -48,6 +48,10 @@ public:
         bool updateIndex = false;
         int maxBlocks = 20000; ///< blocks() returns at most this many (each with its subtree)
         bool dryRun = false; ///< write nothing: dryWrites() has what would have been written
+        /// b.require: whether this device lets the extension page `path` with the code `hash` run
+        /// — "" when it does, else why not ("waits for approval on this device"). Unset: every
+        /// extension page may (a sandbox: `brulion-cli extension …`, b.checkExtension).
+        std::function<QString(const QString &path, const QString &hash)> moduleAllowed;
     };
 
     /// A page a dry run would have written: its text before (`existed` false: a new page) and after.
@@ -62,10 +66,15 @@ public:
     NotebookHost(Vault &vault, VaultIndex &index, Options options);
 
     std::function<void(const QString &extension, int seconds, const QString &label)> onTimer;
+    /// b.timer with its message, b.stopTimer (a spec with 0 seconds); unset: onTimer.
+    std::function<void(const QString &extension, const TimerSpec &spec)> onExtensionTimer;
     std::function<void(const QString &extension, const QString &message)> onLog;
     std::function<void(const QString &extension, const QString &text)> onStatus;
     /// Called after every write the host made (the path written).
     std::function<void(const QString &extension, const QString &path)> onWritten;
+    /// Called after b.setSetting stored (or removed) a value of `extension`'s (never in a dry run):
+    /// what follows from its settings is out of date (the app's macros of it).
+    std::function<void(const QString &extension)> onSettingChanged;
 
     void setLanguages(const QString &language, const QString &uiLanguage);
     /// The pages a dry run would have written, in the order first written.
@@ -112,6 +121,14 @@ public:
     QString language() override { return m_options.language; }
     QString uiLanguage() override { return m_options.uiLanguage; }
     void timer(const QString &extension, int seconds, const QString &label) override;
+    void startTimer(const QString &extension, const TimerSpec &spec) override;
+    void stopTimer(const QString &extension) override;
+    /// The extension page `name` as b.require takes it (Options::moduleAllowed decides whether).
+    ModuleSource module(const QString &requester, const QString &name) override;
+    /// The extension's settings on this device: the notebook's device state (LocalStore
+    /// `extensions/settings/<id>`, settingsStoreKey()); a dry run keeps its changes to itself.
+    QVariantMap settings(const QString &extension) override;
+    QString setSetting(const QString &extension, const QString &key, const QVariant &value) override;
     void log(const QString &extension, const QString &message) override;
     void status(const QString &extension, const QString &text) override;
 
@@ -130,10 +147,19 @@ private:
     Options m_options;
     QList<DryWrite> m_dryWrites;
     QHash<QString, VaultPath> m_dryPages; // a dry run's new pages by the name b.write was given
+    QHash<QString, QVariantMap> m_drySettings; // a dry run's settings by extension
     qint64 m_writes = 0; // writes made (revision(): the index may follow them later)
 };
 
 /// A page's tags from its properties (frontmatter `tags:`, a `tags::` line): lower-case, without '#'.
 QStringList pageTags(const ParsedNote &note);
+
+/// The key of an extension's settings in the notebook's device state (LocalStore): a JSON object.
+inline QString settingsStoreKey(const QString &extension)
+{
+    return QStringLiteral("extensions/settings/") + extension;
+}
+/// What an extension's settings may take in the device state, as compact JSON.
+constexpr int kMaxSettingsBytes = 64 * 1024;
 
 } // namespace brulion::extensions

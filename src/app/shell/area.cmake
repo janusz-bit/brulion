@@ -162,9 +162,12 @@ qt_target_qml_sources(brulion QML_FILES
     qml/shell/ShellBackupSettings.qml
     qml/shell/ShellBottomNav.qml
     qml/shell/ShellContextDrawer.qml
+    qml/shell/ShellExtensionApproval.qml
+    qml/shell/ShellExtensionCopy.qml
     qml/shell/ShellExtensionQuestion.qml
-    qml/shell/ShellMacroDialog.qml
+    qml/shell/ShellExtensionSettings.qml
     qml/shell/ShellExtensionView.qml
+    qml/shell/ShellMacroDialog.qml
     qml/shell/ShellMoveDialog.qml
     qml/shell/ShellMoveWords.qml
     qml/shell/ShellNewPageDialog.qml
@@ -172,6 +175,7 @@ qt_target_qml_sources(brulion QML_FILES
     qml/shell/ShellQuickCapture.qml
     qml/shell/ShellRail.qml
     qml/shell/ShellRenameDialog.qml
+    qml/shell/ShellTimerBanner.qml
     qml/shell/ShellRouteTitles.qml
     qml/shell/ShellRouteView.qml
     qml/shell/ShellSettingDividers.qml

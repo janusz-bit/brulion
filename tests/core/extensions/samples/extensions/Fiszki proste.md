@@ -24,15 +24,7 @@ local SCHEDULE = "%s*%(powtórka (%d%d%d%d%-%d%d%-%d%d), co (%d+) dni%)"
 local LEARNED = 16 -- days: a card repeated this rarely counts as known
 local LONGEST = 3650 -- days: no interval grows past ten years, whatever a line says
 
-local function addDays(date: string, n: number): string
-    local y, m, d = date:match("^(%d+)-(%d+)-(%d+)$")
-    local noon = os.time({ year = tonumber(y), month = tonumber(m), day = tonumber(d) + n })
-    return os.date("!%Y-%m-%d", noon)
-end
-
-local function trim(s: string): string
-    return (s:match("^%s*(.-)%s*$"))
-end
+local trim = b.require("Wspólne funkcje").trim -- (dni dodaje b.addDays)
 
 -- A card from a block, or nil when the block only mentions the tag.
 local function cardOf(block)
@@ -144,7 +136,7 @@ end, {
         end
         local _, interval = args.text:match(SCHEDULE)
         local days = math.min(step(math.min(tonumber(interval) or 0, LONGEST)), LONGEST)
-        local due = addDays(b.today(), days)
+        local due = b.addDays(b.today(), days)
         local body = trim((args.text:gsub(SCHEDULE, "")))
         b.replaceBlock(args.ref, `{body} (powtórka {due}, co {days} dni)`)
         return `Następna powtórka: {due}`

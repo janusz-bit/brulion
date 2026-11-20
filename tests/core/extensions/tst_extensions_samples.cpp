@@ -19,6 +19,7 @@
 // sample that draws nothing in the app fails here.
 
 #include "extensions/engine.h"
+#include "extensions/events.h"
 #include "extensions/notebookhost.h"
 #include "extensions/pageextension.h"
 #include "index/vaultindex.h"
@@ -57,6 +58,7 @@ struct Timer {
     QString extension;
     int seconds = 0;
     QString label;
+    QString message;
 };
 
 struct HookRun {
@@ -399,7 +401,7 @@ class TestExtensionsSamples : public QObject {
         for (const QString &file : filesUnder(kSamples + u"/extensions"_s))
             files.insert(kFolder + u'/' + file, readFile(kSamples + u"/extensions/"_s + file));
         // Link check's scan stops after a second of os.clock(), a wall clock as well: one a
-        // stalled runner can run out on these 27 pages too. Its tests of that budget set their own
+        // stalled runner can run out on these 28 pages too. Its tests of that budget set their own
         // (linkCheckStopsInTime).
         QString &linkCheck = files[kFolder + u"/Link check.md"_s];
         if (!linkCheck.contains(kLinkCheckBudget))
@@ -423,8 +425,8 @@ class TestExtensionsSamples : public QObject {
         m_host->onLog = [this](const QString &extension, const QString &text) {
             m_printed << extension + u": "_s + text;
         };
-        m_host->onTimer = [this](const QString &extension, int seconds, const QString &label) {
-            m_timers.append({extension, seconds, label});
+        m_host->onExtensionTimer = [this](const QString &extension, const TimerSpec &spec) {
+            m_timers.append({extension, spec.seconds, spec.label, spec.message});
         };
         m_host->onWritten = [this](const QString &, const QString &path) { m_written << path; };
         m_engine = std::make_unique<Engine>();
@@ -619,7 +621,7 @@ private Q_SLOTS:
                 << QStringList{u"change"_s, u"save"_s};
         QTest::newRow("pomodoro") << u"pomodoro"_s << u"Pomodoro"_s << write
                                   << QStringList{u"break"_s, u"start"_s, u"start-here"_s} << QStringList{u"today"_s}
-                                  << none << none;
+                                  << none << QStringList{u"timer"_s};
         QTest::newRow("quick-entries") << u"quick-entries"_s << u"Quick entries"_s << write << QStringList{u"new"_s}
                                        << QStringList{u"list"_s} << none << none;
         QTest::newRow("fiszki-proste") << u"fiszki-proste"_s << u"Fiszki proste"_s << write << QStringList{u"dodaj"_s}
@@ -628,6 +630,9 @@ private Q_SLOTS:
                                     << QStringList{u"broken"_s} << none << none;
         QTest::newRow("action-items") << u"action-items"_s << u"Action items"_s << QStringList{u"ai"_s, u"write"_s}
                                       << QStringList{u"extract"_s} << none << none << none;
+        // The code the others share (b.require): an extension with nothing of its own to offer.
+        QTest::newRow("wspolne-funkcje") << u"wspolne-funkcje"_s << u"Wspólne funkcje"_s << none << none << none << none
+                                         << none;
     }
     void theyLoadAsPages()
     {
@@ -817,7 +822,7 @@ private Q_SLOTS:
         }
         // (The words of every page are counted, these extensions' own pages too: whatever the sum.)
         static const QRegularExpression summary(
-                u"^27 stron, razem \\d+ (słowo|słowa|słów)\\. Ranking jest w konsoli Luau\\.$"_s);
+                u"^28 stron, razem \\d+ (słowo|słowa|słów)\\. Ranking jest w konsoli Luau\\.$"_s);
         QVERIFY2(summary.match(out.message()).hasMatch(), qPrintable(out.message()));
 
         // The view: the same ranking as a table of four columns, a link to the longest page.
@@ -1244,6 +1249,23 @@ private Q_SLOTS:
         QVERIFY(command(id, u"start"_s, u"Praca"_s).result.value.isNull());
         QCOMPARE(m_timers.size(), 3);
         QCOMPARE(disk(kJournal), journal);
+        // A timer of its own, with its own words: a break's end says so, not "the next set".
+        QCOMPARE(m_timers[0].message, u"The session is over: take a break."_s);
+        QCOMPARE(m_timers[2].message, u"The break is over: back to work."_s);
+        // Its end (the app runs the extension's "timer" hooks): the session's end in the journal;
+        // a break's end writes nothing.
+        fire(u"timer"_s, {{u"label"_s, u"Raport kwartalny"_s}, {u"seconds"_s, 1500}});
+        const QString endLine = disk(kJournal).trimmed().section(u'\n', -1);
+        QVERIFY2(endLine.contains(u"✓"_s) && endLine.endsWith(u" Raport kwartalny #pomodoro-end"_s), qPrintable(endLine));
+        const QString ended = disk(kJournal);
+        fire(u"timer"_s, {{u"label"_s, u"Break"_s}, {u"seconds"_s, 300}});
+        QCOMPARE(disk(kJournal), ended);
+        // The length of a session is a setting of the device.
+        QVERIFY(m_host->setSetting(id, u"focus"_s, 50).isEmpty());
+        QCOMPARE(command(id, u"start"_s, u"Praca"_s, -1, {u"Długie"_s}).message(), u"Focus for 50 minutes: Długie"_s);
+        QCOMPARE(m_timers.last().seconds, 50 * 60);
+        QVERIFY(m_host->setSetting(id, u"focus"_s, QVariant()).isEmpty());
+        QVERIFY(syncBrings(kJournal, journal)); // (as before the session above)
 
         r = view(id, u"today"_s);
         QCOMPARE(textsOf(r.value, u"heading"_s), QStringList{u"Pomodoro: 3 today"_s});
@@ -1428,7 +1450,7 @@ private Q_SLOTS:
         QCOMPARE(links(1), (QStringList{u"Projekty"_s, u"Indeks projektów"_s}));
         QCOMPARE(links(2), (QStringList{u"Solaris"_s, u"Książki"_s}));
         QCOMPARE(links(3), (QStringList{u"Żółw"_s, u"Ogród"_s}));
-        static const QRegularExpression counted(u"^\\d+ links on 27 pages\\.$"_s);
+        static const QRegularExpression counted(u"^\\d+ links on 28 pages\\.$"_s);
         QVERIFY2(counted.match(textsOf(r.value, u"text"_s).value(0)).hasMatch(),
                  qPrintable(textsOf(r.value, u"text"_s).join(u'|')));
 
@@ -1436,7 +1458,7 @@ private Q_SLOTS:
         m_printed.clear();
         Outcome out = command(id, u"report"_s);
         QVERIFY2(out.result.ok(), qPrintable(out.result.error));
-        QCOMPARE(out.message(), u"4 broken links on 27 pages; the list is in the Luau console"_s);
+        QCOMPARE(out.message(), u"4 broken links on 28 pages; the list is in the Luau console"_s);
         QCOMPARE(m_printed,
                  (QStringList{u"link-check: [[Lima]] ← Peru"_s, u"link-check: [[Projekty]] ← Indeks projektów"_s,
                               u"link-check: [[Solaris]] ← Książki"_s, u"link-check: [[Żółw]] ← Ogród"_s}));
@@ -1470,10 +1492,10 @@ private Q_SLOTS:
         QVERIFY2(r.ok(), qPrintable(r.error));
         QVERIFY2(m_viewProblems.isEmpty(), qPrintable(m_viewProblems.join(u"; "_s)));
         QCOMPARE(textsOf(r.value, u"heading"_s), QStringList{u"Broken links: 0"_s});
-        // (28 pages: the save was a change, and the project index wrote its page.)
+        // (29 pages: the save was a change, and the project index wrote its page.)
         QCOMPARE(textsOf(r.value, u"text"_s),
-                 QStringList{u"Checked 0 of 28 pages: the notebook is too big for one pass."_s});
-        QCOMPARE(command(u"link-check"_s, u"report"_s).message(), u"0 broken links on the first 0 of 28 pages"_s);
+                 QStringList{u"Checked 0 of 29 pages: the notebook is too big for one pass."_s});
+        QCOMPARE(command(u"link-check"_s, u"report"_s).message(), u"0 broken links on the first 0 of 29 pages"_s);
     }
 
     // ---- Action items: a model with a tool ----------------------------------------------------------------
@@ -1740,6 +1762,105 @@ private Q_SLOTS:
         // The session with a time that is none still counts for its day.
         QCOMPARE(seriesValues(nodesOf(trees[u"pomodoro"_s], u"chart"_s).value(0), 0),
                  (QVariantList{0, 1, 0, 0, 2, 3, 1}));
+    }
+
+    // ---- the walls the samples met, gone --------------------------------------------------------------
+
+    /// The hooks of every other extension hear what `writer` wrote since `since` (m_written), as the
+    /// app gives them a burst's changes (extensions/events.h): its own hooks never do.
+    void othersHear(const QString &writer, qsizetype since)
+    {
+        ChangeBatch batch;
+        for (qsizetype i = since; i < m_written.size(); ++i) {
+            NoteChange change;
+            change.path = m_written[i];
+            change.page = paths::pageTitle(m_written[i]);
+            change.origin = Origin::Extension;
+            change.by = writer;
+            change.depth = 1;
+            batch.add(change);
+        }
+        for (const HookInfo &h : m_engine->hooks(u"change"_s)) {
+            const QVariantMap e = batch.changeEvent(h.extension);
+            if (e.isEmpty())
+                continue;
+            const Outcome out = drive(m_engine->runHook(h.id, e), {}, anyModel);
+            m_hooks.append({h.extension, u"change"_s, out.result});
+        }
+    }
+
+    void aTickInOneViewReachesAnotherPage()
+    {
+        // The review ticks a task off in its view; the project index hears that write and
+        // rewrites its page — the index's own write never comes back to it.
+        QVERIFY(command(u"indeks-projektow"_s, u"odswiez"_s).result.ok());
+        QVERIFY2(disk(u"Projekty.md"_s).contains(u"- [[Dom]] — otwarte zadania: 3"_s), qPrintable(disk(u"Projekty.md"_s)));
+        const Result r = view(u"przeglad-zadan"_s, u"przeglad"_s);
+        QVERIFY2(r.ok(), qPrintable(r.error));
+        QVariantMap tick;
+        for (const QVariantMap &node : nodesOf(r.value, u"check"_s))
+            if (node.value(u"args"_s).toMap().value(u"text"_s).toString().contains(u"czynsz"_s))
+                tick = node;
+        QVERIFY(!tick.isEmpty());
+        const qsizetype since = m_written.size();
+        QVERIFY(tap(u"przeglad-zadan"_s, u"przeglad"_s, tick).result.ok());
+        QCOMPARE(m_written.mid(since), QStringList{u"Dom.md"_s});
+        othersHear(u"przeglad-zadan"_s, since);
+        QVERIFY2(disk(u"Projekty.md"_s).contains(u"- [[Dom]] — otwarte zadania: 2"_s), qPrintable(disk(u"Projekty.md"_s)));
+        // The index wrote its page: the others hear that one, the index itself never does.
+        const qsizetype indexWrote = m_written.size() - 1;
+        QCOMPARE(m_written.value(indexWrote), u"Projekty.md"_s);
+        const qsizetype hooksBefore = m_hooks.size();
+        othersHear(u"indeks-projektow"_s, indexWrote);
+        for (qsizetype i = hooksBefore; i < m_hooks.size(); ++i)
+            QVERIFY(m_hooks[i].extension != u"indeks-projektow");
+    }
+
+    void twoPagesOfOneName()
+    {
+        // A second "Dom", a project in another folder: two lines in the index, each linked by its
+        // path; the link check reads both and names each source by its path.
+        QVERIFY(syncBrings(u"Archiwum/Dom.md"_s, u"---\ntags: [projekt]\nstatus: zakończony\n---\n# Dom\n\n"
+                                                  "- [ ] Oddać klucze [[Nigdzie]]\n"_s));
+        QVERIFY(command(u"indeks-projektow"_s, u"odswiez"_s).result.ok());
+        const QString index = disk(u"Projekty.md"_s);
+        QVERIFY2(index.contains(u"- [[Dom.md]] — otwarte zadania: 3"_s), qPrintable(index));
+        QVERIFY2(index.contains(u"- [[Archiwum/Dom.md]] — otwarte zadania: 1"_s), qPrintable(index));
+        const Result r = view(u"link-check"_s, u"broken"_s);
+        QVERIFY2(r.ok(), qPrintable(r.error));
+        bool found = false;
+        for (const QVariantMap &row : nodesOf(r.value, u"row"_s))
+            found = found || textsOf(row, u"link"_s).mid(0, 2) == QStringList{u"Nigdzie"_s, u"Archiwum/Dom.md"_s};
+        QVERIFY2(found, qPrintable(textsOf(r.value, u"link"_s).join(u", "_s)));
+    }
+
+    void codeSharedByMany()
+    {
+        // Seven extensions use "Wspólne funkcje": each its own copy, required once.
+        QStringList users;
+        for (const QString &id : m_engine->extensions())
+            if (m_engine->modulesOf(id) == QStringList{kFolder + u"/Wspólne funkcje.md"_s})
+                users << id;
+        QCOMPARE(users, (QStringList{u"fiszki-proste"_s, u"indeks-projektow"_s, u"licznik-slow"_s, u"pomodoro"_s,
+                                     u"przeglad-zadan"_s, u"quick-entries"_s, u"wydatki"_s}));
+        // A change of the shared page reaches its users once they load again (the app does it).
+        QString shared = disk(kFolder + u"/Wspólne funkcje.md"_s);
+        shared.replace(u"return `{n} {word}`"_s, u"return `{n} {word}!`"_s);
+        QVERIFY(userSaves(kFolder + u"/Wspólne funkcje.md"_s, shared));
+        QVERIFY(loadPage(kFolder + u"/Licznik słów.md"_s).ok());
+        const QString counted = command(u"licznik-slow"_s, u"policz"_s, u"Dom"_s).message();
+        QVERIFY2(counted.contains(u"!"_s), qPrintable(counted));
+    }
+
+    void expensesInTheCurrencyOfTheDevice()
+    {
+        // The page's property is the notebook's currency; a device's setting wins over it.
+        const QString id = u"wydatki"_s;
+        QCOMPARE(m_engine->settingsOf(id).value(0).toMap().value(u"placeholder"_s).toString(), u"zł"_s);
+        QVERIFY(m_host->setSetting(id, u"waluta"_s, u"€"_s).isEmpty());
+        const Outcome out = command(id, u"dodaj"_s, {}, -1, {QVariantMap{{u"amount"_s, 4}}, u"jedzenie"_s, u"kawa"_s});
+        QVERIFY2(out.result.ok(), qPrintable(out.result.error));
+        QVERIFY2(disk(kJournal).endsWith(u"- 4 € jedzenie: kawa #wydatek\n"_s), qPrintable(disk(kJournal)));
     }
 };
 

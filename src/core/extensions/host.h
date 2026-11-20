@@ -38,6 +38,29 @@ struct PageQuery
 {
     QString tag;
     QStringList props;
+    /// Their paths in the notebook ("Projekty/Dom.md"), sorted, instead of their names: two pages of
+    /// one name in different folders are two paths (every function that takes a page takes one).
+    bool paths = false;
+};
+
+/// b.require: the code of an extension page another extension uses (docs/EXTENSIONS.md "Shared
+/// code"), or why there is none (`error`).
+struct ModuleSource
+{
+    QString id; ///< the page's extension id ("wspolne-funkcje")
+    QString title; ///< as errors name it ("Wspólne funkcje")
+    QString path; ///< the page in the notebook
+    QString source; ///< its code with the page's line numbers (ExtensionCode::source)
+    QString hash; ///< PageExtension::hash: what was approved
+    QString error; ///< "" or why it cannot be used ("waits for approval on this device")
+};
+
+/// b.timer: an extension's own timer (one per extension: a new one replaces it).
+struct TimerSpec
+{
+    int seconds = 0; ///< 1 … 86 400
+    QString label; ///< what it times ("Herbata"), at most 100 characters; "" = the app's word
+    QString message; ///< what its end says ("Herbata gotowa."), at most 300 characters; "" = the app's
 };
 
 /// Where b.insertBlock puts new lines (blockedit.h Placement).
@@ -90,6 +113,32 @@ public:
         Q_UNUSED(page);
         Q_UNUSED(content);
         return {{QStringLiteral("ok"), false}, {QStringLiteral("error"), QStringLiteral("extensions cannot be checked here")}};
+    }
+    /// b.require: the extension page `name` (a page name as in a link) whose code `requester` runs
+    /// in an environment of its own, with the requester's `b` — its permissions, never the page's.
+    /// Only an extension page, and only one this device lets run (approved, not switched off).
+    virtual ModuleSource module(const QString &requester, const QString &name)
+    {
+        Q_UNUSED(requester);
+        ModuleSource none;
+        none.error = QStringLiteral("no extension page named “%1”").arg(name);
+        return none;
+    }
+
+    // An extension's own settings (b.settings, b.setting, b.setSetting): its values on this
+    // device, by key — booleans, numbers, texts. The default keeps nothing.
+    virtual QVariantMap settings(const QString &extension)
+    {
+        Q_UNUSED(extension);
+        return {};
+    }
+    /// Stores `value` (a null QVariant removes the key); an error message, "" = done.
+    virtual QString setSetting(const QString &extension, const QString &key, const QVariant &value)
+    {
+        Q_UNUSED(extension);
+        Q_UNUSED(key);
+        Q_UNUSED(value);
+        return QStringLiteral("settings are not kept here");
     }
 
     // Writing (permission "write"; the engine checks it before calling)
@@ -212,6 +261,13 @@ public:
     virtual QString language() = 0; ///< the notebook's language for written text: "pl" | "en"
     virtual QString uiLanguage() = 0; ///< the app's interface language: "pl" | "en"
     virtual void timer(const QString &extension, int seconds, const QString &label) = 0;
+    /// b.timer with what its end says; the default is timer() (a host that shows no message).
+    virtual void startTimer(const QString &extension, const TimerSpec &spec)
+    {
+        timer(extension, spec.seconds, spec.label);
+    }
+    /// b.stopTimer: the extension's timer ends without a word.
+    virtual void stopTimer(const QString &extension) { Q_UNUSED(extension); }
     virtual void log(const QString &extension, const QString &message) = 0;
     /// b.status: what the running call does now ("" = nothing to say), for the user to see while
     /// it waits (the chat shows it under the AI's dots). A host that shows nothing ignores it.

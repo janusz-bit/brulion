@@ -1,9 +1,13 @@
 #include "extensions/sandbox.h"
 
+#include "extensions/typecheck.h"
+
 #include "extensions/builtin.h"
 #include "extensions/pageextension.h"
 #include "markdown/parse.h"
 #include "vault/vault.h"
+
+#include <algorithm>
 
 using namespace Qt::StringLiterals;
 
@@ -139,6 +143,15 @@ QVariantMap checkExtensionPage(Vault &vault, VaultIndex &index, const VaultPath 
     out.insert(u"problems"_s, page.problems);
     out.insert(u"blocks"_s, page.blocks);
     out.insert(u"codeHash"_s, page.hash);
+    // What Luau's type checker finds (typecheck.h; nothing in a build without it): warnings with
+    // the page's lines, the code runs all the same.
+    if (tagged && page.blocks > 0) {
+        QVariantList types;
+        for (const TypeProblem &p : typeCheck(page.source, std::max(100, limits.timeoutMs)))
+            types << QVariantMap{{u"line"_s, p.line}, {u"column"_s, p.column}, {u"message"_s, p.message}, {u"kind"_s, p.kind}};
+        out.insert(u"types"_s, types);
+        out.insert(u"typesChecked"_s, typeCheckerAvailable());
+    }
     return out;
 }
 

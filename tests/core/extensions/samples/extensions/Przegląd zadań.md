@@ -11,18 +11,12 @@ najbliższych dni. Zadanie można w nim odhaczyć albo przesunąć na jutro lub 
 
 ## Daty
 
-Daty to tekst `RRRR-MM-DD`; dni dodaje `os.time` (w południe czasu UTC, więc zmiana czasu niczego
-nie przesuwa).
+Daty to tekst `RRRR-MM-DD`; dni dodaje `b.addDays` (kalendarzowe dni: zmiana czasu niczego nie
+przesuwa). Tekst zadania bez dat daje strona [[Wspólne funkcje]].
 
 ```luau
 local DUE = "📅 %d%d%d%d%-%d%d%-%d%d"
-local FIELDS = { "📅", "⏳", "🛫", "➕", "✅" }
-
-local function addDays(date: string, n: number): string
-    local y, m, d = date:match("^(%d+)-(%d+)-(%d+)$")
-    local noon = os.time({ year = tonumber(y), month = tonumber(m), day = tonumber(d) + n })
-    return os.date("!%Y-%m-%d", noon)
-end
+local w = b.require("Wspólne funkcje")
 
 -- The task's text with the due date `due`: its 📅 replaced, or added at the end.
 local function withDue(text: string, due: string): string
@@ -33,25 +27,17 @@ local function withDue(text: string, due: string): string
     return changed
 end
 
--- The task's text without its dates, for showing.
-local function label(text: string): string
-    for _, field in FIELDS do
-        text = text:gsub("%s*" .. field .. " %d%d%d%d%-%d%d%-%d%d", "")
-    end
-    return text
-end
-
 -- "jutro", "dziś", "3" or "+3" (days from today), or a date.
 local function parseDue(answer: string): string?
     local s = b.fold(answer)
     if s == "dzis" or s == "dzisiaj" then
         return b.today()
     elseif s == "jutro" then
-        return addDays(b.today(), 1)
+        return b.addDays(b.today(), 1)
     end
     local days = s:match("^%+?(%d%d?%d?)$")
     if days then
-        return addDays(b.today(), tonumber(days))
+        return b.addDays(b.today(), tonumber(days))
     end
     if s:match("^%d%d%d%d%-%d%d%-%d%d$") and pcall(b.daysBetween, b.today(), s) then
         return s
@@ -77,7 +63,7 @@ local function section(lines, title: string, query: string): number
     for _, task in result.items do
         table.insert(lines, b.ui.row({
             b.ui.check(false, "zrobione", { ref = task.ref, text = task.text }),
-            b.ui.text(label(task.text)),
+            b.ui.text(w.withoutDates(task.text)),
             b.ui.text(task.due, true),
             b.ui.link(task.page),
             b.ui.button("jutro", "przesun", { ref = task.ref, text = task.text, days = 1 }),
@@ -105,7 +91,7 @@ end, {
         b.replaceBlock(args.ref, args.text, "x")
     end,
     przesun = function(args)
-        local due = addDays(b.today(), args.days)
+        local due = b.addDays(b.today(), args.days)
         b.replaceBlock(args.ref, withDue(args.text, due))
         return `Nowy termin: {due}`
     end,

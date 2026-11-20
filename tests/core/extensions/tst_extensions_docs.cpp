@@ -32,6 +32,18 @@ namespace {
 
 const QString kExtension = u"docs"_s;
 
+/// A page of shared code (docs/EXTENSIONS.md "Shared code"): %1 is its tag.
+const QString kSharedHelpers = u"---\ntags: [%1]\n---\n```luau\nlocal M = {}\n"
+                               "-- \"3 open tasks\", \"1 open task\"\n"
+                               "function M.count(n, one, many) return `{n} {if n == 1 then one else many}` end\n"
+                               "-- Names as a Markdown list of links.\n"
+                               "function M.bullets(names)\n"
+                               "    local lines = {}\n"
+                               "    for _, name in names do table.insert(lines, `- [[{name}]]`) end\n"
+                               "    return table.concat(lines, \"\\n\")\n"
+                               "end\n"
+                               "return M\n```\n"_s;
+
 /// A notebook the examples find something in: projects (Polish and English tags), tasks with
 /// dates, a reminder, tagged blocks with children and properties, counters, the pages the
 /// examples name ("Tasks", "Zadania": pages of the documentation notebook), a week of daily notes.
@@ -56,6 +68,9 @@ const QHash<QString, QString> &sampleNotes()
             {u"journals/2026-11-10.md"_s,
              u"- Spotkanie z Anią ⏰ 2026-11-12 18:00\n- Pomysł na prezent #pomysł #idea\n"_s},
             {u"journals/2026-11-11.md"_s, u"- Poranny spacer nad rzeką\n- [ ] Kupić bilety 📅 2026-11-14\n"_s},
+            // The shared code the examples require (b.require), in both languages.
+            {u"Extensions/Shared helpers.md"_s, kSharedHelpers.arg(u"extension"_s)},
+            {u"Rozszerzenia/Wspólne funkcje.md"_s, kSharedHelpers.arg(u"rozszerzenie"_s)},
     };
     return notes;
 }
@@ -321,8 +336,31 @@ class TestExtensionsDocs : public QObject {
             ++m_totals.views;
         }
         for (const HookInfo &h : m_engine->hooks()) {
-            const QVariantMap event = h.event == u"save" ? QVariantMap{{u"page"_s, page}, {u"path"_s, path}}
-                                                         : QVariantMap{{u"pages"_s, QStringList{page, u"Dom"_s}}};
+            // Each event as the app gives it (docs/EXTENSIONS.md "Hooks").
+            QVariantMap event;
+            if (h.event == u"save") {
+                event = {{u"page"_s, page}, {u"path"_s, path}};
+            } else if (h.event == u"change") {
+                event = {{u"pages"_s, QStringList{page, u"Dom"_s}},
+                         {u"paths"_s, QStringList{path, u"Dom.md"_s}},
+                         {u"by"_s, QStringList{u"inne"_s}},
+                         {u"sources"_s, QStringList{u"app"_s, u"extension"_s}}};
+            } else if (h.event == u"task") {
+                event = m_host->blockAt(path, 0);
+                event.insert(u"task"_s, u"x"_s);
+                event.insert(u"previous"_s, u" "_s);
+                event.insert(u"source"_s, u"app"_s);
+                event.insert(u"by"_s, QString());
+            } else if (h.event == u"journal") {
+                event = {{u"date"_s, u"2026-11-11"_s}, {u"page"_s, u"2026-11-11"_s}, {u"path"_s, u"journals/2026-11-11.md"_s},
+                         {u"source"_s, u"app"_s}, {u"by"_s, QString()}};
+            } else if (h.event == u"open") {
+                event = {{u"date"_s, u"2026-11-11"_s}};
+            } else if (h.event == u"day") {
+                event = {{u"date"_s, u"2026-11-11"_s}, {u"previous"_s, u"2026-11-10"_s}};
+            } else if (h.event == u"timer") {
+                event = {{u"label"_s, u"Focus"_s}, {u"seconds"_s, 1500}};
+            }
             const Result r = drive(m_engine->runHook(h.id, event), false);
             if (!r.ok())
                 return u"hook %1: %2"_s.arg(h.event, r.error);

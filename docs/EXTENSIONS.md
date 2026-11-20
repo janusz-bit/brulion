@@ -36,11 +36,12 @@ pages name every function of `b`.
 | To … | read |
 |---|---|
 | write a first extension | [Quick start](#quick-start), [How the code runs](#how-the-code-runs) |
-| look a function up | [The API (`b`)](#the-api-b), [Commands](#commands), [Views](#views), [Macros](#macros), [Hooks](#hooks), [Questions](#questions), [AI](#ai-bai) |
+| look a function up | [The API (`b`)](#the-api-b), [Commands](#commands), [Views](#views), [Macros](#macros), [Hooks](#hooks), [Questions](#questions), [Settings](#settings), [Timers](#timers), [Shared code](#shared-code), [AI](#ai-bai) |
 | show a value in a note, a view in a page or the side panel | [Macros](#macros), [Template variables](#template-variables), [View blocks and panels](#view-blocks-and-panels) |
 | copy something that works | [Recipes](#recipes) |
 | find out why it does not work | [Errors](#errors), [Troubleshooting](#troubleshooting), [The Luau console](#the-luau-console) |
 | know what a page may do and when it runs | [Extensions in the notebook](#extensions-in-the-notebook), [Sandbox and limits](#sandbox-and-limits) |
+| use an extension in another notebook | [Sharing between notebooks](#sharing-between-notebooks) |
 | write one as an AI agent, from the command line | [Written by an AI agent](#written-by-an-ai-agent) |
 
 ## Quick start
@@ -91,7 +92,10 @@ notes, `ai` to ask a model ("Extensions in the notebook" below).
 * **One at a time.** One call executes at a time; a call that waits for an answer (a question, a
   model) lets others run meanwhile, and a hook never interrupts a call.
 * **Apart.** Every extension has its own global variables and its own `b`; one extension cannot
-  see or change another's, the standard library or `b` itself.
+  see or change another's, the standard library or `b` itself. Code shared between extensions
+  ("Shared code") runs in each of them as a copy of its own.
+* **What the top level returns** is no result: a page of shared code returns its table there,
+  which its own load ignores and `b.require` gives the extensions that use it.
 
 ```luau
 local runs = 0                          -- kept until this code is loaded again
@@ -109,9 +113,10 @@ as an expression, string interpolation `` `Today: {b.today()}` `` (a literal bra
 `for i, v in list do` without `ipairs` / `pairs`, `//` (floor division) and optional type
 annotations (`local n: number = 0`).
 
-* **Types are not checked.** Brulion ships Luau's compiler and virtual machine only: annotations
-  and `--!strict` are accepted and ignored (a type checker on save is in TODO.md). Mistakes show
-  when the line runs.
+* **Types are checked on save** (desktop and Android: "Types" below): a function of `b` that is
+  not there, an unknown global, a wrong count of arguments show as warnings with their line before
+  the code runs; `--!strict` checks the annotations too. The code runs whatever they say; in the
+  browser nothing checks them.
 * **Colours.** A ```` ```luau ```` (or ```` ```lua ````) block of any page — an extension page's
   code — is shown in Luau's colours, as edited and as read, and so is such a fence in the source
   mode: keywords, `nil` / `true` / `false`, the library's globals and `b` with its fields, the name
@@ -137,6 +142,48 @@ annotations (`local n: number = 0`).
 * **Patterns backtrack**: `^(%d+[,.]?%d*)%s*(%a+)` on a line of 20 000 digits is quadratic
   (seconds, then the time limit). Read long input in anchored steps (`silownia.luau`,
   `readNumber`).
+
+## Types
+
+Every time an extension page's code changes, Luau's own type checker (its Analysis library,
+`3rdparty/luau/Analysis`) reads it against the declarations of `b` (`src/core/extensions/builtin/b.d.luau`, the API of this
+document as Luau types) and says what is wrong before the code runs: a **warning** with the page's line, in the page's state line ("runs ·
+2 type warnings, line 14: Unknown global 'prnt'", with a button to that line), in Settings →
+Extensions and in the console. The code loads and runs whatever the warnings say — they point at
+mistakes, they never stop a page.
+
+* **Nonstrict** by default, as Luau checks code without annotations: unknown globals and
+  functions (`b.raed`, `b.ui.colum`), a call with a wrong count of arguments, a `nil` called.
+  `--!strict` as the first line checks every annotation too (`local n: number = b.today()` is a
+  warning there); `--!nocheck` turns it off for a page.
+* **Lints** that point at mistakes: code that cannot be reached, a local used before it has a
+  value, a duplicate key of a table, a format string that does not fit its values, `a and b or c`
+  that can mislead … (not the ones about style: unused locals, shadowing).
+* `b.checkExtension` and `brulion-cli extension check` give them too (`types`: `[{line, column,
+  message, kind}]`; `kind` "type" or the lint's name), so an AI writing an extension sees them.
+* **Bounded**: 2 s per check (then "ran out of time: the rest is not checked"), on a worker thread
+  of its own — never the GUI's —, at most 50 warnings; hostile code (nested thousands of times,
+  fifty thousand lines) ends the check, never the app (`tst_extensions_types`). The checker runs no
+  code: Luau's old solver, the default, has no user-defined type functions, and nothing is required.
+* **Where.** Built with `BRULION_LUAU_CHECK` (on by default, `src/core/extensions/CMakeLists.txt`):
+  in the desktop apps and the command line, and on Android. **Not in the browser**: the checker
+  reports its own trouble with C++ exceptions, which the browser's Qt cannot catch (a hostile page
+  would end the tab), and it would add 2.6 MB to the WebAssembly module (0.8 MB compressed) of a
+  download the browser has to fetch before anything shows. What it adds, measured on 2026-11-20 as
+  a small program with Luau's VM and compiler against the same with the checker linked in (`-O2`,
+  sections collected, stripped; the sizes compressed with `gzip -9`, as a download or an APK
+  stores them):
+
+  | Platform | VM + compiler | with the type checker | added (compressed) |
+  |---|---|---|---|
+  | desktop (x86_64, Clang) | 1.17 MB | 5.22 MB | 4.0 MB (1.7 MB) |
+  | Android (arm64, GCC's code as an estimate of the NDK's Clang) | 1.31 MB | 4.99 MB | 3.7 MB (1.6 MB) |
+  | browser (wasm32, Emscripten, wasm exceptions) | 0.85 MB | 3.42 MB | 2.6 MB (0.8 MB) |
+
+  On the desktop and on Android that is a few per cent of the app, for warnings the code gets on
+  every save; in the browser the cost is a slower first load and a tab a hostile page could end,
+  so `BRULION_LUAU_CHECK` is off there (`typecheck_none.cpp`: no warnings, the code runs as
+  everywhere).
 
 ## The API (`b`)
 
@@ -181,6 +228,7 @@ Reading needs no permission.
 |---|---|
 | `b.pages()`, `b.pages({ tag = "project" })` | the names of all pages (daily notes too), sorted as `b.sorted` sorts; with `tag` only the pages whose own tags — the frontmatter's `tags:` or a `tags::` line — have it (with or without `#`, any case). The filter is a table: `b.pages("project")` is an error, not every page |
 | `b.pages({ prop = "habit" })`, `b.pages({ prop = { "habit", "nawyk" }, tag = … })` | the pages whose page properties (the frontmatter, or `key:: value` lines at the page's top) have one of the keys (any case); with `tag` the pages that have both |
+| `b.pages({ paths = true })`, `b.pages({ tag = "project", paths = true })` | the same pages as their paths in the notebook (`"Projects/Home.md"`), sorted: two pages of one name in different folders are one name in the list of names, two paths here. Every function that takes a page takes such a path (`b.read`, `b.page`, `b.blocks({ page = … })`, `b.write` …). `paths` that is no boolean is an error |
 | `b.page(name)` | `{ name, path, tags, props, date? }` — its file in the notebook (`"Projects/Home.md"`), the page's own tags and properties (as a block's `props`) — or `nil` |
 | `b.read(name)` | the page's whole Markdown text, or `nil` |
 | `b.blocks({ page = name })` | the page's top-level blocks in order, each with its `children`: list items, but also headings (`text` is `# Home`, with its hashes), paragraphs, code blocks (the fence line) and the frontmatter (`---`, its `props` the page's). `{}` for a page that does not exist |
@@ -191,7 +239,7 @@ Reading needs no permission.
 | `b.lines(name)` | the page's lines as written — indentation, markers, comments and all, without line endings (a BOM is no part of the first) —, each `{ text, ref }`: `ref` names that line as a block's `ref` names its first, for `b.replaceLine`, `b.insertLine` and `b.removeLine` (and the block functions when the line is a block's first). `nil` for a page that does not exist. What the flashcards write their scheduling comments with: a card's lines are no blocks of their own |
 | `b.attachments()` | the notebook's files that are no notes — pictures, PDFs, any other file —, as paths in the notebook (`"assets/receipt.jpg"`), sorted; nothing of the hidden and ignored folders |
 | `b.revision()` | a number that changes whenever a note changes — the editor, a sync, any extension's write: what a script computed from the notebook stays true while it is the same (the habits keep their statistics so) |
-| `b.checkExtension(name, text)` | loads `text` as the extension page `name` would load (a new page: where new pages go), in an engine of its own — its top-level code runs with 1 s and 32 MB, writes only computed, nothing stays registered, no approval needed: `{ ok, id, title, path, permissions, problems, commands = { { name, label, block } }, views = { { name, label, icon, actions } }, hooks = { events… }, macros = { { name, description, args, example } }, variables = { { name, description } }, printed, writes? }`, or `ok = false` with `error`, `line` (the page's line, from 1) and `status` (`"timeout"` …). Text that is no extension page (no tag, no code) has `ok = false` too. Inside such a check it reports an error instead of checking again |
+| `b.checkExtension(name, text)` | loads `text` as the extension page `name` would load (a new page: where new pages go), in an engine of its own — its top-level code runs with 1 s and 32 MB, writes only computed, nothing stays registered, no approval needed: `{ ok, id, title, path, permissions, problems, commands = { { name, label, block } }, views = { { name, label, icon, actions } }, hooks = { events… }, macros = { { name, description, args, example } }, variables = { { name, description } }, printed, writes?, types }` — `types` what the type checker finds (`{ { line, column, message, kind } }`, "Types"; empty where there is none), or `ok = false` with `error`, `line` (the page's line, from 1) and `status` (`"timeout"` …). Text that is no extension page (no tag, no code) has `ok = false` too. Inside such a check it reports an error instead of checking again |
 
 `b.blocks({ tag = … })` and `tag:` in `b.query` differ: the first finds the blocks that carry the
 tag themselves, the query also those under a tagged block or on a tagged page, and `tag:project`
@@ -216,6 +264,20 @@ b.command("numbers", function(ctx)
     local tasks = `{open.total} open tasks ({overdue.total} overdue)`
     return `{#b.pages()} pages, {#projects} projects, {tasks}`
 end, { label = "The notebook in numbers" })
+```
+
+```luau
+-- Pages of one name in different folders ("Projects/Home", "Archive/Home") are told apart by path.
+local lines = {}
+for _, path in b.pages({ tag = "project", paths = true }) do
+    local page = b.page(path)
+    local open = 0
+    for _, block in b.blocks({ page = path }) do
+        open += if block.task == " " then 1 else 0
+    end
+    table.insert(lines, `{page.path}: {open} open`)
+end
+return table.concat(lines, "\n")
 ```
 
 ```luau
@@ -388,7 +450,8 @@ end, { label = "Mark the first TODO as seen" })
 | `b.uiLang()` | the interface's language (labels, messages): `"pl"` or `"en"`. The app gives both the interface's language today; ask each for what it means |
 | `b.log(text)`, `print(…)` | a line in the Luau console and in the event log, under the extension's name (at most 4000 characters). `print` joins its values with tabs and writes a table as `table`: build the text yourself |
 | `b.status(text?)` | what the running command is doing now, for the user to see while it waits (a question, a model): "Reading “Home”…". The AI chat shows it under the AI's dots (the assistant says what each tool does); elsewhere nothing shows it yet. Whitespace made single, at most 300 characters; `""` or nothing clears it. Not a text: an error |
-| `b.timer(seconds, label?)` | starts the app's rest timer (1 … 86400 s) — the gym's: its countdown shows in the Gym view, and at the end a notification and a message say "`label` is over" and speak of the next set. One timer at a time: a new one replaces it |
+| `b.timer(seconds, label?)`, `b.timer(seconds, { label, message })` | starts the extension's own timer (1 … 86 400 s): its countdown shows in a banner under the top bar in every view; at the end a notification "`label` is over" with `message` (else the app's words), the message as a toast, and the extension's `"timer"` hooks ("Timers") |
+| `b.stopTimer()` | ends the extension's timer without a word |
 | `b.data(name)` | read-only data bundled with a built-in extension (the gym's `b.data("exercises")`, the AI assistant's `b.data("reference")` — this document's text); `nil` for extension pages — unless the page overrides a built-in, which keeps the built-in's data |
 
 ```luau
@@ -406,10 +469,15 @@ return `{table.concat(days, ", ")}; {b.formatRecurrence(rule, "en")}; {b.lower("
 
 ## Commands
 
-`b.command(name, fn, { label = …, block = …, palette = … })` adds a command to the palette. `name`
-is its id within the extension (the palette's id is `ext.<extension>.<name>`); `label` is what the
-palette shows (else the name), with the extension's title under it. Registering a name again
-replaces it. With **`palette = false`** the palette does not offer it: a view's `b.ui.run` button,
+`b.command(name, fn, { label = …, block = …, palette = …, key = … })` adds a command to the
+palette. `name` is its id within the extension (the palette's id is `ext.<extension>.<name>`);
+`label` is what the palette shows (else the name), with the extension's title under it.
+Registering a name again replaces it. Every command of the palette is in **Settings → Keyboard
+shortcuts** too (as "<extension>: <label>", listed once the extension has loaded), where any key
+chord can be given to it; **`key = "Ctrl+Alt+W"`** suggests one — taken only while no command of
+the app has it by default, it types no text and the editor does not use it (ShortcutMap's rules),
+and no command of an extension listed before took it. A shortcut given in the settings stays while
+the extension is off. With **`palette = false`** the palette does not offer it: a view's `b.ui.run` button,
 `brulion-cli extension run` or the app runs it — the AI chat runs the AI assistant's `chat` so
 ("AI"), `brulion-cli habit …` the habits' `list` and `set`; any other value of `palette` changes
 nothing.
@@ -421,7 +489,7 @@ The function gets one table, `ctx`:
 | `ctx.page` | the name of the page on screen, `""` when the view on screen is no page (the journal's stream, Tasks, a view of an extension) |
 | `ctx.block` | with `block = true`: the block under the caret (above, "Blocks") |
 | `ctx.args` | what the caller passes the command, a record: a toast's button (below), `brulion-cli extension run … --args '{"name": "Reading"}'`, the app's own callers (`brulion-cli habit set` runs the habits' `set` with `{ name, state, date }`); `{}` when nothing is passed. A turn of the AI chat has none: `ctx.args or {}` |
-| `ctx.selection` | always `""` so far |
+| `ctx.selection` | what is selected in the editor on screen when the command runs: the text selected in the block being edited (its Markdown as typed), else the blocks selected, as Markdown with their children; `""` when nothing is (or no editor is on screen, or the Markdown source is). At most 200 000 characters |
 | `ctx.messages` | only in a turn of the AI chat (the AI assistant's `chat`, "AI"): the conversation's messages `{ role = "user" \| "assistant", content }`, the user's last |
 | `ctx.conversation` | only in a turn of the AI chat: the name of the conversation's own page (`"AI/2026-11-16 Co mam jutro"`) |
 
@@ -456,6 +524,18 @@ b.command("remark", function(ctx)
         button = { label = "Open", page = page },
     }
 end, { label = "Note that the page was checked" })
+```
+
+```luau
+-- The selection as a quote in today's journal, with the page it came from.
+b.command("quote", function(ctx)
+    if ctx.selection == "" then
+        return { message = "Select some text first.", tone = "warning" }
+    end
+    local from = if ctx.page ~= "" then ` ([[{ctx.page}]])` else ""
+    b.appendToJournal(b.today(), `- > {ctx.selection:gsub("%s+", " ")}{from}`)
+    return "Quoted in today's journal"
+end, { label = "Quote the selection in the journal", key = "Ctrl+Alt+Q" })
 ```
 
 ## Views
@@ -767,21 +847,25 @@ end, { description = "Open tasks, of a tag or all of them", args = { "tag" }, ex
   (`extensions/macros.h`, `MacroCache`) and shows it — "…" until the first one is there — while it
   computes the macros asked for after the frame that asked, a slice of 25 ms at a time.
 * **Kept current.** A call is recorded with what it read of the notebook (`Reads`: the notes it
-  read by name with `b.read`, `b.page`, `b.lines`, `b.blocks({ page = … })`; a query, a search, a list of pages
-  or blocks, `b.revision()` read everything): when one of those notes changes (or a note of a name
-  it looked for is made), its extension loads again, is approved, switched on or off, the macro is
-  computed again and the text shows its new value — the old one meanwhile. Only the rows whose
+  read by name with `b.read`, `b.page`, `b.lines`, `b.blocks({ page = … })`, a page `b.require`
+  ran; a query, a search, a list of pages (`b.pages`, with paths too) or blocks, `b.revision()`
+  read everything): when one of those notes changes (or a note of a name it looked for is made),
+  its extension loads again, is approved, switched on or off, or one of its settings changes (its
+  dialog, `b.setSetting`), the macro is computed again and the text shows its new value — the old
+  one meanwhile. Only the rows whose
   macro shows something else are drawn again.
 * **Bounded.** A call has 250 ms (a command's 2 s); one that runs out twice in a row is not run
   again until its extension loads again. The macros of one note have 2 s together in a round of
   changes (the rest show "the page's macros took too long" until the next change) and at most 200
   of them are computed ("more than 200 macros on this page"). A macro cannot ask (`b.ask`,
-  `b.choose`, `b.form`, `b.ai` are errors) nor write (`b.write` … are refused: what it shows must
-  not change the notes it is drawn from).
+  `b.choose`, `b.form`, `b.ai` are errors) nor change anything (`b.write` … are refused, so are
+  `b.setSetting`, `b.settings` with fields, `b.timer` and `b.stopTimer`: what it shows must not
+  change what it is drawn from).
 * **Placeholders.** A macro of an extension that waits for approval on this device shows
-  `🔒 extension/name · run?`; off, unknown or failed, a chip saying so. Clicking one asks to run
-  the extension (with "Read the code", which opens its page first), to switch it on, opens the code
-  at its error, or says that no running extension offers it (ShellMacroDialog). An error is in the
+  `🔒 extension/name · run?`; off, unknown or failed, a chip saying so. Clicking one shows the
+  extension's code to approve, as "Read and run" on its page does (ShellExtensionApproval: "Run
+  this version" approves the version read), asks to switch it on, opens the code at its error, or
+  says that no running extension offers it (ShellMacroDialog). An error is in the
   Luau console and the event log too.
 * **Exports** decide per format: HTML (a page, a site), PDF, DOCX and Pandoc show what the macro
   showed in the app (computed then when it was not yet, a few seconds for the whole export), as
@@ -819,25 +903,41 @@ end, { description = "Open tasks due by the note's day" })
 
 ## Hooks
 
-`b.on(event, fn)` calls `fn` with one table when something happens in the notebook (Emacs'
-`add-hook`):
+`b.on(event, fn)` calls `fn` with one table when something happens (Emacs' `add-hook`):
 
 | Event | When | `e` |
 |---|---|---|
 | `b.on("save", fn)` | this device's editor saved a page (right after the save) | `{ page, path }`: the page's name and its file in the notebook |
-| `b.on("change", fn)` | notes changed — the editor, a sync, another program, an import; once a burst of changes is over (0.6 s) | `{ pages = { names… } }`; a deleted page is named too (`b.read` gives `nil`) |
+| `b.on("change", fn)` | notes changed — the editor, a sync, another program, an import, **another extension**; once a burst of changes is over (0.6 s) | `{ pages, paths, by, sources }`: the names and the paths changed (a deleted page too: `b.read` gives `nil`; two pages of one name are one name, two paths), `by` the other extensions among the writers (their ids), `sources` where the changes came from: `"app"` (this device's app: the editor, a capture, a daily note opened), `"extension"`, `"sync"`, `"other"` (another program, an import) |
+| `b.on("task", fn)` | a task's status changed — ticked, opened again, cancelled, in progress — anywhere, as `"change"` | the task as a block (`ref`, `page`, `path`, `line`, `text`, `plain`, `task`, `date?`) with `previous` (its status before), `source` and `by` (the extension that wrote it, else `""`). A task found again by its text without the status and the done date (a recurring task completed: the done one); a task added, removed or rewritten is none. At most 200 of a burst |
+| `b.on("journal", fn)` | a daily note was made — by this device (opening the day, a capture, an extension) or by a sync | `{ date, page, path, source, by }` |
+| `b.on("open", fn)` | the notebook was opened: once, after every extension that runs there loaded (not for one approved later) | `{ date }` |
+| `b.on("day", fn)` | a new day began while the app runs (midnight passed, the device woke up on a later day) | `{ date, previous }` |
+| `b.on("timer", fn)` | the extension's own timer ended ("Timers"); only its own hooks hear it | `{ label, seconds }` |
 
-What extensions write — any of them, in a command, an action or a hook — is no `"change"` (no
-echoes, no loops): the hooks hear the editor, a sync and other programs, so one extension does not
-react to what another wrote. A hook may write and may ask a model, but never asks a question
-(`b.ask` there is an error); it runs under the same limits; what it returns is written to the
-console; and one that fails three times in a row is taken off until its extension loads again
-(Emacs does the same to a failing `post-command-hook` function), its errors in the console and the
-event log. At most 256 hooks in all. A view is not drawn again after a hook: keep what a view shows
-in the notebook, not in variables a hook fills.
+**Who hears what.** A hook never hears what its own extension wrote — no echoes, no loop of one
+extension —, and every other change it hears: one extension's tick in its view reaches the page
+another one keeps. Extensions answering each other end: a write made by a hook that ran for a
+change is one step deeper than that change (the editor, a sync, a command, an action, the console:
+the first step), and a change deeper than four steps reaches no hook — the console says so ("…
+stopped after 4 rounds"). Write only what differs (compare with `b.read`), and a chain never starts.
+
+**Twice in a synced notebook.** A sync brings what another device's extensions wrote, and its
+hooks ran there: `"change"`, `"task"` and `"journal"` say `source = "sync"` then (`sources`
+contains it). A hook that writes something for each event — a line in the journal for each task
+done — should answer this device's events only (`if e.source == "sync" then return end`), or
+the notebook gets the line once per device.
+
+A hook may write and may ask a model, but never asks a question (`b.ask` there is an error); it
+runs under the same limits; what it returns is written to the console; and one that fails three
+times in a row is taken off until its extension loads again (Emacs does the same to a failing
+`post-command-hook` function), its errors in the console and the event log. At most 256 hooks in
+all. A view is not drawn again after a hook: keep what a view shows in the notebook, not in
+variables a hook fills.
 
 ```luau
--- Keeps the page "Project index" in step with the pages tagged #project.
+-- Keeps the page "Project index" in step with the pages tagged #project — also when another
+-- extension ticked a task off on one of them.
 local function rebuild()
     local lines = { "Written by the extension; changes here are replaced.", "" }
     for _, name in b.pages({ tag = "project" }) do
@@ -855,6 +955,30 @@ b.on("change", function(e)
 end)
 ```
 
+```luau
+-- Every task done on this device gets a line in the day's journal; a new daily note a line to
+-- start from; and the first opening of a day says so in the console.
+b.on("task", function(e)
+    if e.task == "x" and e.source ~= "sync" then
+        b.appendToJournal(b.today(), `- Done: {e.plain} ([[{e.page}]])`)
+    end
+end)
+
+b.on("journal", function(e)
+    if e.source ~= "sync" then
+        b.appendToPage(e.path, "- Three things for today:")
+    end
+end)
+
+b.on("open", function(e)
+    print(`Opened on {e.date}: {#b.query("type:tasks due:today", 1).items} task due today`)
+end)
+
+b.on("day", function(e)
+    print(`A new day: {e.date} (yesterday was {e.previous})`)
+end)
+```
+
 ## Questions
 
 | Function | Asks | Answer |
@@ -869,6 +993,12 @@ field, `{ key, label, kind = "text", value?, placeholder? }`: `value` is what it
 focus, and Enter in one answers. A prompt's first line is the dialog's title; further lines show
 under it as plain text (the AI assistant shows there what a change would write; the habits' **Add
 habit** asks again with what was wrong, "Not understood — try …", and with what was typed kept).
+
+What a question shows has a limit: a prompt's first line is cut to 300 characters, the lines under
+it to 200 lines and 10 000 characters ("…" where it was cut); `b.choose` takes at most 500
+options of at most 500 characters each and `b.form` 50 fields (more is an error: a choice cut
+would give back what the script cannot recognize), a field's label 200 characters, a text field's
+value 10 000.
 
 Each of them suspends the call: the engine returns the question, the app shows it
 (ShellExtensionQuestion), and the answer resumes the call where it stopped — no callbacks, no
@@ -906,6 +1036,133 @@ b.command("book", function(ctx)
     b.appendToPage("Books", `- [[{answer.title}]]{by} {string.rep("★", answer.stars)}`)
     return { message = `{answer.title} is in Books`, tone = "success", button = { label = "Open", page = "Books" } }
 end, { label = "Note a book" })
+```
+
+## Settings
+
+`b.settings(fields)` declares the extension's settings: **Settings → Extensions** (and the state
+line of its page) then has **Settings** for it, a dialog of these fields with their values on this
+device. `b.setting(key)` reads one, `b.settings()` (without fields) all of them as a table;
+`b.setSetting(key, value)` changes one from the code (a text, a number, `true` / `false`; `nil`
+puts it back to its default) — no permission needed: they are the extension's own.
+
+| Field | |
+|---|---|
+| `{ key, label, value, step?, unit?, description? }` with a number `value` | a number with − / + and typing (`82,5` too): `kind = "number"` |
+| `{ key, label, value = "", placeholder? }` | a line of text: `kind = "text"` |
+| `{ key, label, value = true }` | a switch: `kind = "toggle"` |
+| `{ key, label, options = { "kg", "lb" }, value? }` | one of the options (the first by default): `kind = "choice"` |
+
+`kind` may be written out; `value` is the default; `description` a sentence under the label. A key is
+letters, digits, `-` and `_`. At most 32 settings; a text of at most 4000 characters; 64 KB for all
+of an extension's values. Calling `b.settings` again (the page saved) declares them anew; the
+values stay.
+
+* **Kept on this device**, in the notebook's device state (`LocalStore` `extensions/settings/<id>`),
+  never synced — as the AI's provider and an extension's switch are: a phone and a computer may want
+  another rest between sets, and a notebook that arrives cannot change them. What every device of
+  the notebook should share belongs on the extension's page (its properties, `b.page(…).props`) or
+  on a page of its own.
+* A stored value that does not fit its setting (another kind, an option no longer there, a hand
+  edit) reads as the default.
+* The built-ins use them too: the gym's **Rest between sets** (used where no `rest::` says
+  otherwise).
+* `brulion-cli extension settings <extension>` lists them, `--set key=value` changes one.
+
+```luau
+local settings = b.settings({
+    { key = "currency", label = "Currency", value = "zł", placeholder = "e.g. €" },
+    { key = "budget", label = "Monthly budget", value = 2000, step = 100, unit = "zł" },
+    { key = "cents", label = "Show the cents", value = false },
+    { key = "period", label = "Period", options = { "month", "week" } },
+})
+
+b.command("spent", function(ctx)
+    local total = 0
+    for _, block in b.blocks({ tag = "expense", from = b.addDays(b.today(), -30) }) do
+        total += tonumber((block.text:match("^(%d+[,.]?%d*)") or "0"):gsub(",", ".")) or 0
+    end
+    local decimals = if b.setting("cents") then 2 else 0
+    local left = b.setting("budget") - total
+    return `{b.formatNumber(total, decimals)} {b.setting("currency")} this {b.setting("period")}, `
+        .. `{b.formatNumber(left, decimals)} left`
+end, { label = "Money spent" })
+
+b.command("last-currency", function(ctx)
+    b.setSetting("currency", if settings.currency == "zł" then "€" else "zł")
+    return `Now in {b.setting("currency")}`
+end, { label = "Switch the currency" })
+```
+
+## Timers
+
+`b.timer(seconds, { label = …, message = … })` starts the extension's own timer — one per
+extension, a new one replaces it; any number of extensions may time something at once. Its
+countdown shows in a banner under the top bar in every view (the gym's rest in the Gym view's own
+banner instead), with × to stop it; `b.stopTimer()` stops it from the code. When it ends: a
+notification "`label` is over" with `message` (without one: "The timer of … has ended"), the
+message as a toast, and the extension's `b.on("timer", fn)` hooks with `{ label, seconds }` — to
+write the session into the journal, to start the next one. `b.timer(seconds, label)` is the short
+form. A label is cut to 100 characters, a message to 300, both one line.
+
+The timer runs while the app does: a notification of a closed app is in TODO.md ("Gym: next
+steps").
+
+```luau
+local SESSION = 25 * 60
+
+b.command("focus", function(ctx)
+    b.timer(SESSION, { label = "Focus", message = "Time for a break — the session is in the journal." })
+    return "25 minutes of focus"
+end, { label = "Focus for 25 minutes" })
+
+b.on("timer", function(e)
+    if e.label == "Focus" then
+        b.appendToJournal(b.today(), `- 🍅 {os.date("%H:%M")} {e.seconds // 60} min of focus`)
+    end
+end)
+
+b.command("stop-focus", function(ctx)
+    b.stopTimer()
+    return "Stopped"
+end, { label = "Stop the focus timer" })
+```
+
+## Shared code
+
+`b.require(name)` runs the code of another extension page — `name` as a link names it — and gives
+what its code returns: a table of functions shared by many extensions, written once (Lua's
+`require`). The page is an extension page like any other (tagged `extension`, its code in
+```` ```luau ```` blocks, ending with `return`), and it runs on this device only once approved here,
+as any code: `b.require` of a page that waits for approval (or is switched off) is an error
+("“Shared helpers” waits for approval on this device").
+
+* **A copy each.** Every extension that requires a page runs its code in an environment of its
+  own, with **its own `b`**: what the shared code does it does with the permissions of the
+  extension that uses it, never with those of its page — a library cannot give anyone more than
+  they have. Its variables are that extension's: two extensions never share a counter.
+* **Once per load.** A page required again in the same extension gives the same table (until the
+  extension loads again). When a page it required changes, the extension loads again with it;
+  Settings → Extensions shows "Uses the code of: …".
+* The page's own load runs its code too, ignoring what it returns: keep its top level to
+  definitions.
+* A cycle (A requires B requires A) is an error naming it; at most 16 pages deep. Its errors name
+  its own lines ("Shared helpers:12: …").
+* `brulion-cli extension copy` and "Copy to another notebook" take the pages an extension
+  requires along (those whose names it writes out: `b.require("Shared helpers")`).
+
+```luau
+-- The page "Shared helpers" (tags: [extension]) ends with `return M`: a table of functions.
+local shared = b.require("Shared helpers")
+
+b.command("open-tasks", function(ctx)
+    local open = b.query("type:tasks status:open", 1).total
+    return shared.count(open, "open task", "open tasks")
+end, { label = "How many open tasks" })
+
+b.command("projects-list", function(ctx)
+    return shared.bullets(b.pages({ tag = "project" }))
+end, { label = "The projects as a list" })
 ```
 
 ## AI (`b.ai`)
@@ -1229,7 +1486,8 @@ of the notebook — a photo, a scan, a screenshot — with a question about it: 
 with the picture, `b.ai`'s `images`, whose answer is the tool's result as text; a model that sees
 is needed), and for writing an extension
 `extension_reference` (this document, `b.data("reference")`: the list of its sections, or the
-sections whose heading has the words asked for), `check_extension` (`b.checkExtension`) and
+sections whose heading has the words asked for), `check_extension` (`b.checkExtension`, with the
+type checker's first five warnings: a misspelt function of `b` is fixed before the user sees it) and
 `write_extension` (checked first and refused while it does not load or when the page is no
 extension; a new page goes to `Rozszerzenia/` / `Extensions/`). A reminder asked for and written as a
 due date with a time goes in as the reminder (docs/SYNTAX.md §6; a due date rings nothing, and a
@@ -1284,8 +1542,8 @@ the journal's stream today's note —, one beside it in the side panel, the conv
 of the page as a new conversation; a spinner while `aiPending`, none while a chat view shows the turn — `WorkspaceChats.runningShown`). Like the gym, its source can run
 from a page of the notebook and be changed there: a page tagged as an extension, with
 `permissions: [write, ai]`, that holds the source and is titled "Asystent AI" / "AI assistant" (or
-has `overrides: asystent`) — copied by hand so far: Settings has "Edit the code" for the gym, the
-habits and the flashcards only. How
+has `overrides: asystent`) — Settings → Extensions → AI → **The assistant's code → Edit the code**
+writes it, as for the gym, the habits and the flashcards. How
 well a model does its work is measured by the assistant's bench (docs/FINETUNE.md): tasks with a
 known outcome on notebooks of their own, run by this script — a change of its tools or instructions
 shows there.
@@ -1339,6 +1597,13 @@ Word count:9: b.replaceBlock: stale: the block changed since it was read (Home.m
 | `…: an extension cannot ask a question while it loads` | `b.ask`, `b.choose`, `b.form` or `b.ai` at the top level |
 | `b.ai: …` | the model's or the provider's: no key, no connection, HTTP errors in words, "the request is too long", a picture the notebook does not have; on the device: "the model … is not on this device yet: download it in Settings → Extensions → AI", "… does not see pictures" (with the model that sees to download too, when there is one), "this device's processor is too old to run a model" |
 | `value nested too deeply (a cycle?)`, `cannot pass a value of type function` | a table that cannot cross to the app (a control's `args`, a returned value) |
+| `b.require: no page named “…”`, `… is no extension page`, `… has no ```luau block`, `… is the extension's own page` | the page to require is not there, not tagged `extension`, without code, or the extension's own |
+| `b.require: “…” waits for approval on this device`, `… is switched off on this device` | the shared code runs here only as any code does: approve its page, switch it on |
+| `b.require: a cycle: A → B → A`, `b.require: modules nested more than 16 deep` | pages that require each other |
+| `b.settings: setting 2 needs a key …`, `… kind is "number", "text", "toggle" or "choice"`, `… its value must be …`, `… at most 32 settings` | a declaration that is none |
+| `b.setSetting: "rest" is a number`, `b.setSetting: the extension's settings are full (64 KB)` | a value of another kind than its setting; too much kept |
+| `b.choose: at most 500 options`, `b.choose: option 3 is longer than 500 characters`, `b.form: at most 50 fields` | a question a dialog cannot show: page through, ask in steps |
+| `b.timer: label must be a text` | `b.timer(60, { label = 5 })` |
 | `timeout: the extension ran too long` | more than 2 s in one call |
 | `not enough memory` | more than 64 MB |
 
@@ -1466,11 +1731,21 @@ Emacs `config.org`). The page's properties (docs/SYNTAX.md §13), in English or 
   the page's own line ("Licznik słów:14: attempt to index nil") — in Settings, in the page's state
   line, in the console and the event log. The page's state line has a button to that line.
 * **Approval, per device.** Code can arrive from anywhere: a sync, an import, a shared folder. A
-  page's code runs on a device only after it was approved there (Settings → Extensions, or "Run" on
-  the page's state line) — like VS Code's workspace trust or Emacs' questions before `eval` of a
-  file's local variables. What is approved is the SHA-256 of the code and the permissions, kept in
-  the notebook's device state (`LocalStore` `extensions/approved`, never synced; the newest 300);
-  prose around the code needs no new approval. Code written on this device stays approved: when
+  page's code runs on a device only after it was approved there (Settings → Extensions, or "Read
+  and run" on the page's state line) — like VS Code's workspace trust or Emacs' questions before
+  `eval` of a file's local variables. What is approved is the SHA-256 of the code and the
+  permissions, kept in the notebook's device state (`LocalStore` `extensions/approved`, never
+  synced; the newest 300); prose around the code needs no new approval.
+* **The version that was read.** "Read and run" first shows the code (ShellExtensionApproval): the
+  lines added and removed against the version approved here before — a sync changed three lines,
+  those three are marked —, all of it when it is new on this device, what a page that overrides a
+  built-in changed against the built-in's code; what it may do, and what it asks for beyond the
+  version before. **Run this version** approves the hash of what was shown
+  (`WorkspaceExtensions::approveVersion(path, hash)`): when the code changed while it was read (a
+  sync arrived), nothing is approved, the dialog says so and shows the new version only on "Show
+  the new version". The code approved last of each extension is kept for that comparison
+  (`extensions/approvedCode/<id>`: its hash, permissions and code, up to 512 KB; longer code keeps
+  its hash and shows whole the next time). Code written on this device stays approved: when
   the app's editor saves an approved page, the new code is approved too — unless it asks for more
   permissions, and only when the save was made over the approved code (`savedByEditor()` is told
   the text the editor writes over, `EditorHost::writeIfUnchanged`'s `expected`). A change that
@@ -1489,20 +1764,41 @@ Emacs `config.org`). The page's properties (docs/SYNTAX.md §13), in English or 
   never takes a working extension away. "Reload extensions" (the palette) starts every extension
   in a fresh VM.
 * **Its state** shows in the page's bottom-left corner and in Settings → Extensions: runs (with its
-  commands, views and reactions counted), an error with its line, new or changed elsewhere ("Run"),
+  commands, views and reactions counted), an error with its line, new or changed elsewhere ("Read and run"),
   off on this device, another page has the same name, the built-in one it replaces is off, no
   ```` ```luau ```` block yet.
 * **Switched off** on this device in Settings → Extensions (`extensions/off`).
-* **Built-ins as pages.** "Edit the code" of the gym, the habits or the flashcards (Settings →
-  Extensions) writes its source into `Rozszerzenia/Siłownia.md` / `Rozszerzenia/Nawyki.md` /
-  `Rozszerzenia/Fiszki.md` (`Extensions/Gym.md`, `Extensions/Habits.md`, `Extensions/Flashcards.md` in
-  an English notebook): `zastępuje: silownia` (`nawyki`, `fiszki`), one
+* **Built-ins as pages.** "Edit the code" of the gym, the habits, the flashcards or the AI assistant
+  (Settings → Extensions, the assistant's under AI) writes its source into `Rozszerzenia/Siłownia.md` /
+  `Rozszerzenia/Nawyki.md` / `Rozszerzenia/Fiszki.md` / `Rozszerzenia/Asystent AI.md` (`Extensions/Gym.md`,
+  `Extensions/Habits.md`, `Extensions/Flashcards.md`, `Extensions/AI assistant.md` in an English notebook):
+  `zastępuje: silownia` (`nawyki`, `fiszki`, `asystent`), one
   ```` ```luau ```` block per section of the source under its heading. While that page exists and
   is approved, the built-in runs from it — with its bundled data (`b.data`) — and a change there
   works at once; "Restore" puts the page in the trash and the built-in code runs again. An
   extension page titled like a built-in ("Siłownia", "Gym", "Nawyki", "Habits", "Fiszki",
   "Flashcards", "Asystent AI", "AI assistant") overrides it too, as TiddlyWiki's shadow tiddlers. The built-in's switch still
   decides whether it runs at all.
+
+## Sharing between notebooks
+
+An extension is a page of its notebook: it syncs, it is versioned and it can be linked with it — and
+to use it in another notebook, it is copied there.
+
+* **Copy to another notebook** (Settings → Extensions, the row's copy button) lists the notebooks
+  this device knows (the recent ones of "Switch notebook", not the documentation) and writes the
+  page into the chosen one at the same path (`Rozszerzenia/Licznik słów.md`), with the extension
+  pages its code requires (`b.require` with the name written out, and theirs). The copy is
+  **approved there on this device** (the user chose to run that code; the hashes and the code go
+  into that notebook's device state, `extensions::approveInStore`): it runs as soon as that
+  notebook is opened here. Other devices of that notebook approve it as code from elsewhere.
+* A page there with the same text is left as it is; one with other text is replaced only after a
+  yes (its text stays in that notebook's history).
+* From then on the copies are two pages: a change of one reaches the other only by copying again.
+* `brulion-cli extension copy <name> --to <notebook> [--replace]` does the same from the command
+  line — and approves nothing (the command line never does).
+* An extension page is a Markdown file: it travels by any way a note does (an export, a file sent
+  by mail, a shared folder) and waits for approval wherever it arrives.
 
 ## Written by an AI agent
 
@@ -1518,6 +1814,9 @@ tools (docs/CLI.md "Extensions"), without the app:
 | try code over the notebook | `extension eval 'b.query("type:tasks status:open").total'` |
 | check a page text before writing it | `extension check "Word count" --stdin` — the error with the page's `line` |
 | write the page | `extension write "Word count" --code … --description … --permissions write` (or `--content`, the whole page); replacing one needs `--expect-hash` |
+| see what changed since it was approved here | `extension diff "Word count"` — the code against the version approved on this device |
+| its settings on this device | `extension settings "Gym"`, `--set rest=90` |
+| copy it to another notebook | `extension copy "Word count" --to ~/Notes/Work` (with the pages it requires; approves nothing) |
 | try a command, view, action or hook | `extension run "Word count" count --page Home`, `--view today --args '{…}'`, `--hook save --page Home`, `--answers '["…"]'` |
 
 Every check and run is a fresh engine with the limits below, over the notebook as it is, and
@@ -1556,7 +1855,7 @@ Home:7
 
 | What happens | Why, and what to do |
 |---|---|
-| The command is not in the palette | The page's state line says why: an error (the version before it still runs, without the new command), "new or changed elsewhere" (press **Run**), off on this device, or another page with the same title. A command with `block = true` shows only while the caret is in an editor |
+| The command is not in the palette | The page's state line says why: an error (the version before it still runs, without the new command), "new or changed elsewhere" (press **Read and run**), off on this device, or another page with the same title. A command with `block = true` shows only while the caret is in an editor |
 | "new or changed elsewhere" after every sync | The code was changed on another device: each device approves what it runs. Text around the code never asks again |
 | It asks for approval after I added `permissions` | More permissions are a new approval, also on the device that wrote them |
 | `permission denied: write` | `permissions: [write]` is missing in the page's properties (frontmatter or a `permissions::` line), or misspelt: Settings → Extensions shows "May: change notes" when it is understood |
@@ -1568,7 +1867,10 @@ Home:7
 | Polish letters sort or match wrongly | `table.sort`, `%a` and `string.lower` are ASCII: `b.sorted`, `b.fold`, `utf8.len` |
 | "The extension took too long" | One call has 2 s. Ask the index for less (`b.query` with filters and a limit instead of reading every page), do not read long text with backtracking patterns |
 | Nothing is printed | `print` writes to the Luau console (the palette), not to a message; a command's message is the text it returns |
-| A variable is gone | Variables live until the code is loaded again — every save of the page. Keep what must stay in a note |
+| A variable is gone | Variables live until the code is loaded again — every save of the page. Keep what must stay in a note (or in a setting: `b.setSetting`) |
+| "waits for approval" from `b.require` | The page of shared code changed on another device (or is new): read it and run it (Settings → Extensions); the extensions using it load again by themselves |
+| A hook writes the same line twice | Both devices' hooks answered: the second heard the first one's write through the sync. Skip `e.source == "sync"` |
+| The command's shortcut does nothing | Settings → Keyboard shortcuts shows whose it is: the app's own commands and earlier ones win; give it another there |
 
 ## Sandbox and limits
 
@@ -1583,9 +1885,13 @@ Home:7
 | `b.search` / `b.query` | 200 hits / 1000 items |
 | `b.sorted` | 100 000 texts |
 | `b.log`, `print` | 4000 characters a line |
-| `b.timer` | 1 … 86 400 s |
+| `b.timer` | 1 … 86 400 s; a label of 100 characters, a message of 300 (cut, one line); one timer per extension |
+| Questions | a prompt's first line 300 characters, under it 200 lines and 10 000 characters (cut, "…"); `b.choose` 500 options of 500 characters, `b.form` 50 fields (more: an error); a label 200 characters, a text field's value 10 000 |
+| `b.settings` | 32 settings, a text of 4000 characters, 64 KB of values per extension (on this device) |
+| `b.require` | 16 pages deep; only extension pages approved and on here; a cycle is an error |
+| `ctx.selection` | 200 000 characters |
 | `b.ai` | 200 000 characters and 8 pictures a request, 64 tools, 5 minutes an answer; on the device also the model's context (a longer request is cut) and 2 048 tokens an answer |
-| Hooks | 256 in all; three failures in a row take one off |
+| Hooks | 256 in all; three failures in a row take one off; hooks answering hooks end after four rounds; 200 `"task"` events of one burst |
 | Values crossing | 64 levels of nesting |
 
 * One VM per notebook (made again when the language changes or on "Reload extensions"; an extension
@@ -1610,6 +1916,14 @@ Home:7
   catchable either). After either limit the VM stays usable.
 * **Errors** name the extension and the line (`silownia:412: …`, a traceback); errors of the host's
   functions too (`b.replaceBlock: stale: …`).
+* **The browser too.** The same hostile extensions — loops for ever, in `pcall`, in an error
+  handler, a coroutine or a sort's comparator, backtracking patterns, a plain search for ever,
+  memory eaten, endless recursion, a module that never ends, modules in a cycle, a megabyte of
+  question, thousands of options or fields, a long timer label, a look for a way out, writes to the
+  library and to `b` — end as these limits say, in time, the engine working afterwards, on the
+  desktop (`tst_extensions_hostile`) and in the browser build, single-threaded with JavaScript's
+  clock (CI's smoke test in Chrome: `scripts/wasm-smoke.mjs --extensions`, `?selftest=extensions`,
+  `extensions::hostileSelfTest`).
 * Luau errors are `setjmp`/`longjmp` (`LUA_USE_LONGJMP=1`; the browser's Qt links without C++
   exception catching): the engine's C functions never keep a C++ object alive when they raise or
   yield — each is a thin wrapper around an implementation that returns first (`engine.cpp`).
@@ -1620,20 +1934,24 @@ Home:7
 
 | Where | What |
 |---|---|
-| `3rdparty/luau` | Luau 0.743, the VM and the compiler only, patched (see its CMakeLists.txt): the plain `string.find` honours the time limit; numbers are read and written with `.` whatever the C locale (Qt sets it from the environment — with a Polish locale Luau's own `strtod` rejected `82.5`) |
+| `3rdparty/luau` | Luau 0.743: the VM and the compiler, and the type checker (Analysis, Config: `brulion_luau_analysis`, with `BRULION_LUAU_CHECK`); patched (see its CMakeLists.txt): the plain `string.find` honours the time limit; numbers are read and written with `.` whatever the C locale (Qt sets it from the environment — with a Polish locale Luau's own `strtod` rejected `82.5`) |
 | `src/core/extensions/engine.h` | `Engine`: one VM; extensions, their commands and views; calls, questions, limits |
 | `src/core/extensions/host.h` | `Host`: what an extension may ask of the app (blocks and pages by tag and property, a query from an offset, attachments, the revision, writes — a page, a journal, a block's line, status and property, blocks inserted and removed —, today and now, the week's first day, languages, the timer, the log) |
 | `src/core/extensions/notebookhost.h` | `NotebookHost`: the Host over a `Vault` and its `VaultIndex` — blocks from the index, content-preserving writes (`blockedit.h`, `notebook/journals.h`, `notebook/pages.h`, `markdown::setTaskStatus`), every ref resolved the same way (`resolveRef`: a note's line, stale when changed); a dry run that only computes them (`brulion-cli extension …`, `brulion-cli habit …`) |
 | `src/core/extensions/blockedit.h` | the pure edits behind the writes: a block's line replaced, lines inserted around a block or under it, a block removed, a property set, a line replaced, inserted or removed as written (`b.replaceLine` …); `plainWords` (a block's `plain`, `b.plain`) |
 | `src/core/extensions/sandbox.h` | `checkExtension()`, `checkExtensionPage()`: an extension loaded in an engine of its own over a dry-run `NotebookHost` — `b.checkExtension`, `brulion-cli extension check / write` |
+| `src/core/extensions/typecheck.h` | Luau's type checker over an extension's code against `builtin/b.d.luau` (`typeCheck`: warnings with the page's lines; `typecheck_none.cpp` in a build without it) |
+| `src/core/extensions/selftest.h` | hostile extensions against the engine where it runs (`hostileSelfTest`: the tests and the browser's `?selftest=extensions`) |
+| `src/core/extensions/events.h` | what the hooks hear of a burst of changes: `ChangeBatch` (each extension's `"change"`, `"task"` and `"journal"` events — never its own writes, a chain of hooks cut after `kMaxDepth` rounds), a note's tasks and the tasks whose status changed (`taskStates`, `changedTasks`), where a change came from (`Origin`) |
+| `src/core/extensions/share.h` | an extension copied into another notebook with the pages it requires (`copyExtension`, `requiredNames`), an approval written into a notebook's device state (`approveInStore`, `approvedCode`) |
 | `src/core/extensions/builtin.h` | the built-in extensions (resources `:/extensions/…`: `silownia.luau` with `exercises.json`, `nawyki.luau`, `fiszki.luau`, `asystent.luau`), `builtinFor()`: which one a page overrides |
 | `src/cli/commands_habits.cpp` | `brulion-cli habit list / set / tick / skip`: `nawyki`'s commands `list` and `set` over a dry-run `NotebookHost`, the write it computed applied through the command line's own edit (its lock, `--dry-run`, `--diff`, hashes, exit codes) |
 | `src/cli/commands_cards.cpp` | `brulion-cli card list / due / show / review / stats`: `fiszki`'s commands the same way — a grade's writes (the card's note, the review log) each through the command line's edit |
 | `src/core/ai/ai.h` | AI for `b.ai`: the request from a script's table (pictures through an `ai::ImageLoader`), the HTTP requests of Anthropic's Messages API and of OpenAI-compatible chat APIs, reading their answers and errors; `ai::Client` over `sync::HttpTransport`, the provider "local" handed to an `ai::LocalBackend` |
 | `src/core/ai/local.h`, `localfiles.h`, `localrunner.h` | the model on the device: the models the app knows, LFM3's chat format (a request as pieces of text and control tokens, the answer read back, a long request cut), the models' files (downloads), what runs a model and the plugin with it (`llamarunner.h`: llama.cpp, only in builds with `BRULION_LOCAL_AI`) |
 | `src/app/shell/localai.h` | `AppController.localAi`: the chosen model, its download and removal, requests answered on a worker thread |
-| `src/core/extensions/pageextension.h` | extension pages: which pages are extensions, their id, their code with the page's line numbers, permissions, the hash an approval covers; the new-extension page and a built-in's source as a page |
-| `src/app/shell/workspaceextensions.h` | `WorkspaceExtensions` (QML `Workspace.extensions`): the engine for the open notebook, the built-ins the settings switch on, the extension pages and their approval on this device, reloading a page's code when it changes, hooks, the console, questions, messages and the rest timer; a turn of the AI chat (`runChat`: the assistant's `chat`, its answer, failure and `b.status` as signals, its question named by `questionChat`) |
+| `src/core/extensions/pageextension.h` | extension pages: which pages are extensions, their id, their code with the page's line numbers, permissions, the hash an approval covers, the diff an approval shows (`codeDiff`, over `sync::diffLines`); the new-extension page and a built-in's source as a page |
+| `src/app/shell/workspaceextensions.h` | `WorkspaceExtensions` (QML `Workspace.extensions`): the engine for the open notebook, the built-ins the settings switch on, the extension pages and their approval on this device (the version read: `approvalReview`, `approveVersion`), reloading a page's code when it or a page it requires changes, hooks and their events (`notesChanging` / `notesChanged` → `ChangeBatch`, "open", "day", "timer"), the console, questions, messages, the extensions' timers, settings, the editor's selection (`offerSelection`), copies to other notebooks; a turn of the AI chat (`runChat`: the assistant's `chat`, its answer, failure and `b.status` as signals, its question named by `questionChat`) |
 | `src/app/shell/workspacechats.h` | `WorkspaceChats` (QML `Workspace.chats`): the AI chat's conversations as pages (core `chat`), one turn at a time, Stop, Try again (docs/UI.md "AI chat") |
 | `src/cli/commands_extensions.cpp` | `brulion-cli extension …` (docs/CLI.md "Extensions"): this reference (bundled), the extension pages and their state on the device, a sandbox for checks and runs, writing a page |
 | `src/app/shell/extensionmodels.h` | `ExtensionListModel` (Settings → Extensions), `ExtensionConsoleModel` (the console's lines) |
@@ -1646,6 +1964,8 @@ Home:7
 | `qml/views/ConsoleView.qml`, `qml/views/ExtensionRouteView.qml` | the Luau console (route `console`), an extension page's view (route `extension`) |
 | `qml/views/GymView.qml`, `qml/views/HabitsView.qml`, `qml/views/FlashcardsView.qml` | the built-ins' own views (routes `gym`, `habits`, `flashcards`): a header of QML — tabs, a month row, buttons — over `ShellExtensionView` |
 | `qml/shell/ShellExtensionQuestion.qml` | the dialog of `b.ask` / `b.choose` / `b.form` (number and text fields) |
+| `qml/shell/ShellExtensionApproval.qml` | "Read and run": the code against the version approved before (`BDiffView`), the permissions, the version shown approved (`approvalReview`, `approveVersion`) |
+| `qml/shell/ShellExtensionSettings.qml`, `ShellExtensionCopy.qml`, `ShellTimerBanner.qml` | an extension's settings (`settingsOf`, `setSetting`), "Copy to another notebook" (`copyToNotebook`), the extensions' timers under the top bar (`timers`) |
 
 A call is **recorded** while `Engine::startRecording()` is on: the read functions of `b` note
 what they read (`noteRead`, `noteReadAll`) into `Reads` — what makes a macro computed again.
@@ -1659,8 +1979,8 @@ languages; `tst_extensions_docs` fails until all three name it.
 **Why Luau**: of eleven languages measured with the same extensions, tests and hostile scripts (the
 extension language experiment, branch `experiment/extension-languages`), it was the only ready-made
 one whose sandbox, time limit and memory limit held without changes — also in the single-threaded
-browser build — and the fastest; its type checker (not vendored yet) finds mistakes with line and
-column.
+browser build — and the fastest; its type checker (Analysis, vendored for the check on save:
+"Types") finds mistakes with line and column.
 
 ## Tests
 
@@ -1683,7 +2003,17 @@ Markdown; `tests/core/syntax/tst_syntax_luau.cpp` the Luau colours; the document
 run their macros and variables too (`tst_extensions_docs`).
 
 `tests/core/extensions`: the engine (sandbox escapes, limits that cannot be caught, questions,
-views, hooks, evaluation, the locale), block edits, the API added for the habits on a real notebook
+views, hooks, evaluation, the locale), what the hooks hear (`tst_extensions_events`: a task found
+again after an edit — ticked, a Logseq keyword, a recurring one, one text twice, a text rewritten —,
+each extension's events of a burst without its own writes, chains cut, daily notes made, a flood of
+tasks), the samples' walls and the extension's own corner (`tst_extensions_shared`: pages of one
+name as two paths, shared code with a copy and the permissions of each user, a cycle, a page that
+is no extension or not approved, a module that fails or never ends, settings declared, kept, checked
+and refused, timers with their words, what a question may show, the diff of an approval), the type
+checker (`tst_extensions_types`: the mistakes it finds with the page's lines, none in code that works
+— every built-in, sample and documentation example —, the declarations naming every function of
+`b`, hostile code that ends the check in time), hostile extensions (`tst_extensions_hostile`, the
+same checks the browser runs: `selftest.h`), block edits, the API added for the habits on a real notebook
 (`tst_extensions_api`: blocks and pages by property, `plain`, `path`, a query's pages, attachments,
 the revision after a write, the date, name and recurrence helpers, `b.appendToPage`, inserting and
 removing blocks — the note's line endings and a last line without a break kept —, a task's status
@@ -1712,8 +2042,13 @@ hooks, both languages, a notebook of two thousand pages, notes with lines of 100
 and numbers that are none).
 
 `tests/app/shell/tst_extensions.cpp` runs the same pages in the app's own class
-(`WorkspaceExtensions`, wired as the Workspace wires it): approval per device, the questions the
+(`WorkspaceExtensions`, wired as the Workspace wires it): approval per device — of the version that
+was read, with the diff against the version before and a sync in between —, the questions the
 app shows, an extension's own writes that are no "change" and the user's edits that always are,
+another extension's writes that are (a tick in the review's view rewriting the project index),
+two extensions answering each other until the chain ends, "task", "journal", "open", "day" and
+"timer" hooks, settings set as the dialog sets them, shared code waiting while its page waits, the
+editor's selection, a copy to another notebook with its library and its conflict,
 code an extension writes waiting for approval, the editor's saves of an approved page;
 `tests/app/shell/tst_flashcards.cpp` (`tst_shell_flashcards`) the Flashcards view as the app draws
 it (decks, a session by its keys with Undo, Markdown as rich text, the due count);

@@ -1236,6 +1236,18 @@ local function checkReport(r: any): (string, boolean)
     if r.printed and #r.printed > 0 then
         text ..= " It printed: " .. cut(table.concat(r.printed, " | "), 400)
     end
+    -- What Luau's type checker found: a misspelt function of b, an unknown name (where the app
+    -- has the checker; warnings: the code runs all the same, but they are mistakes to fix).
+    if r.types and #r.types > 0 then
+        local warnings = {}
+        for i, t in r.types do
+            if i > 5 then
+                break
+            end
+            table.insert(warnings, "line " .. str(t.line) .. ": " .. str(t.message))
+        end
+        text ..= " Type check: " .. table.concat(warnings, "; ") .. (if #r.types > 5 then " …" else "") .. ". Fix them."
+    end
     return text, false
 end
 

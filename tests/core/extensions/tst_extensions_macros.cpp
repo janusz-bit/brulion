@@ -187,6 +187,10 @@ private Q_SLOTS:
         QTest::newRow("a button") << u"przycisk"_s << u"b.ui.button"_s;
         QTest::newRow("a write") << u"pisze"_s << u"b.write: a macro or a template variable cannot change notes"_s;
         QTest::newRow("a question") << u"pyta"_s << u"cannot wait for a question or for AI"_s;
+        QTest::newRow("a setting set") << u"ustawia"_s << u"b.setSetting: a macro or a template variable cannot change settings or timers"_s;
+        QTest::newRow("settings declared") << u"deklaruje"_s << u"b.settings: a macro or a template variable cannot change"_s;
+        QTest::newRow("a timer") << u"timer"_s << u"b.timer: a macro or a template variable cannot change settings or timers"_s;
+        QTest::newRow("a timer stopped") << u"stoper"_s << u"b.stopTimer: a macro or a template variable cannot change"_s;
         QTest::newRow("an error") << u"blad"_s << u"nie tym razem"_s;
         QTest::newRow("unknown") << u"nie-ma"_s << u"no macro g/nie-ma"_s;
     }
@@ -244,6 +248,26 @@ private Q_SLOTS:
         QVERIFY(reads.everything);
         // Nothing is recorded outside a recording.
         QVERIFY(m_engine->stopRecording().paths.isEmpty());
+    }
+
+    void settingsAndSharedCode()
+    {
+        // A macro reads its extension's settings; a setting changed (b.setSetting in a command, the
+        // settings dialog) tells the app (NotebookHost::onSettingChanged), which computes the
+        // extension's macros again.
+        QStringList changedFor;
+        m_host->onSettingChanged = [&](const QString &extension) { changedFor << extension; };
+        QCOMPARE(markdown::macroViewText(macro(u"ustawienie"_s)), u"-"_s);
+        QVERIFY(m_engine->evaluate(u"g"_s, u"b.setSetting(\"ile\", 5)"_s, u"t"_s).ok());
+        QCOMPARE(changedFor, QStringList{u"g"_s});
+        QCOMPARE(markdown::macroViewText(macro(u"ustawienie"_s)), u"5"_s);
+        m_host->onSettingChanged = {};
+        // A page b.require ran is a page the macro read: computed again when it changes.
+        writeNote(u"Biblioteka.md"_s,
+                  u"---\ntags: [rozszerzenie]\n---\n```luau\nreturn { dwa = function(s) return s .. s end }\n```\n"_s);
+        Reads reads;
+        QCOMPARE(markdown::macroViewText(macro(u"biblioteka"_s, QString(), &reads)), u"żż"_s);
+        QVERIFY2(reads.paths.contains(u"Biblioteka.md"_s), qPrintable(QStringList(reads.paths.values()).join(u", "_s)));
     }
 
     void cache()
@@ -482,6 +506,12 @@ b.macro("tabela", function(ctx) return { a = 1 } end)
 b.macro("przycisk", function(ctx) return b.ui.button("x", "y") end)
 b.macro("pisze", function(ctx) b.write("Ukradzione", "x") return "zapisane" end)
 b.macro("pyta", function(ctx) return b.ask("Co?") end)
+b.macro("ustawia", function(ctx) b.setSetting("ile", 3) return "ustawione" end)
+b.macro("deklaruje", function(ctx) b.settings({ { key = "ile", label = "Ile", value = 1 } }) return "zadeklarowane" end)
+b.macro("timer", function(ctx) b.timer(60, "Herbata") return "start" end)
+b.macro("stoper", function(ctx) b.stopTimer() return "stop" end)
+b.macro("ustawienie", function(ctx) return `{b.setting("ile") or "-"}` end)
+b.macro("biblioteka", function(ctx) return b.require("Biblioteka").dwa("ż") end)
 b.macro("petla", function(ctx) while true do end end)
 b.macro("duzo", function(ctx) return string.rep("ż", 5000) end)
 b.macro("kawalki", function(ctx)

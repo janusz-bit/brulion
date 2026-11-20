@@ -48,6 +48,8 @@ const QString kExtension = u"---\ntags: [rozszerzenie]\nuprawnienia: [zapis]\n--
         "end, { description = \"Otwarte zadania\" })\n"
         "b.macro(\"petla\", function(ctx) while true do end end)\n"
         "b.macro(\"echo\", function(ctx) return `{ctx.page}|{ctx.date or \"-\"}|{table.concat(ctx.args, \";\")}` end)\n"
+        "b.settings({ { key = \"jednostka\", label = \"Jednostka\", options = { \"kg\", \"lb\" } } })\n"
+        "b.macro(\"jednostka\", function(ctx) return b.setting(\"jednostka\") end)\n"
         "b.variable(\"dzien\", function(ctx) return `- Pomiar z {ctx.date}\\n- {ctx.page}` end)\n"
         "b.view(\"kontrolki\", function(params)\n"
         "    return b.ui.column({\n"
@@ -209,6 +211,17 @@ private Q_SLOTS:
         QCOMPARE(markdown::macroViewText(settled(span(u"echo"_s), u"Waga.md"_s)), u"Waga|-|"_s);
     }
 
+    void computedAgainWhenASettingChanges()
+    {
+        // A macro that reads its extension's setting follows it (the settings dialog, b.setSetting).
+        m_ext->approve(kPage);
+        QCOMPARE(markdown::macroViewText(settled(span(u"jednostka"_s))), u"kg"_s);
+        QVERIFY(m_ext->setSetting(u"pomiary"_s, u"jednostka"_s, u"lb"_s));
+        QTRY_COMPARE(markdown::macroViewText(m_ext->macroView(span(u"jednostka"_s), kJournal)), u"lb"_s);
+        m_ext->resetSettings(u"pomiary"_s);
+        QTRY_COMPARE(markdown::macroViewText(m_ext->macroView(span(u"jednostka"_s), kJournal)), u"kg"_s);
+    }
+
     void aLoopIsGivenUpOn()
     {
         m_ext->approve(kPage);
@@ -357,7 +370,7 @@ private Q_SLOTS:
         QCOMPARE(sources, QStringList{u"pomiary/kontrolki"_s});
         // The editor's {{ completion.
         const QVariantList all = m_ext->macroSuggestions(QString(), 20);
-        QCOMPARE(all.size(), 4);
+        QCOMPARE(all.size(), 5);
         const QVariantList found = m_ext->macroSuggestions(u"wag"_s, 20);
         QCOMPARE(found.size(), 1);
         QCOMPARE(found[0].toMap().value(u"title"_s).toString(), u"pomiary/waga"_s);

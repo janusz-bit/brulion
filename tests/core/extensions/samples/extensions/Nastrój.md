@@ -22,19 +22,7 @@ Widok „Nastrój” rysuje z tych bloków wykres ostatnich 14 dni i średnie dl
 local TAG = "nastrój"
 local DAYS = 14 -- the chart
 local WEEKS = 8 -- the weekday table
-local WEEKDAYS = { "niedziela", "poniedziałek", "wtorek", "środa", "czwartek", "piątek", "sobota" }
 
-local function addDays(date: string, n: number): string
-    local y, m, d = date:match("^(%d+)-(%d+)-(%d+)$")
-    local noon = os.time({ year = tonumber(y), month = tonumber(m), day = tonumber(d) + n })
-    return os.date("!%Y-%m-%d", noon)
-end
-
--- 1 = Sunday … 7 = Saturday.
-local function weekday(date: string): number
-    local y, m, d = date:match("^(%d+)-(%d+)-(%d+)$")
-    return os.date("!*t", os.time({ year = tonumber(y), month = tonumber(m), day = tonumber(d) })).wday
-end
 
 -- A property's number: "4", "4,5" and "4.5" are numbers; anything else is not, and neither are
 -- "nan" and "inf", which tonumber would take (notes come from anywhere).
@@ -92,11 +80,11 @@ Dzień bez wpisu to `nil` w serii: wykres zostawia w tym miejscu przerwę.
 ```luau
 b.view("wykres", function(params)
     local today = b.today()
-    local byDay = entries(addDays(today, 1 - WEEKS * 7))
+    local byDay = entries(b.addDays(today, 1 - WEEKS * 7))
     local labels, mood, energy = {}, {}, {}
     local days, moodSum, energySum = 0, 0, 0
     for i = 1, DAYS do
-        local date = addDays(today, i - DAYS)
+        local date = b.addDays(today, i - DAYS)
         local entry = byDay[date]
         labels[i] = date:sub(6)
         if entry then
@@ -116,7 +104,7 @@ b.view("wykres", function(params)
     -- Averages by weekday, Monday first.
     local sums = {}
     for date, entry in byDay do
-        local day = weekday(date)
+        local day = b.weekday(date) -- 1 = Monday … 7 = Sunday
         local sum = sums[day] or { mood = 0, energy = 0, n = 0 }
         sum.mood += entry.mood
         sum.energy += entry.energy
@@ -124,12 +112,12 @@ b.view("wykres", function(params)
         sums[day] = sum
     end
     local rows = {}
-    for _, day in { 2, 3, 4, 5, 6, 7, 1 } do
+    for day = 1, 7 do
         local sum = sums[day]
         if sum then
             table.insert(rows, {
                 tostring(sum.n),
-                WEEKDAYS[day],
+                b.weekdayName(day),
                 b.formatNumber(sum.mood / sum.n, 1),
                 b.formatNumber(sum.energy / sum.n, 1),
             })
