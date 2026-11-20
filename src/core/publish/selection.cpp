@@ -2,6 +2,7 @@
 
 #include "chat/chat.h"
 #include "index/vaultindex.h"
+#include "markdown/encrypted.h"
 #include "util/paths.h"
 
 #include <QRegularExpression>
@@ -205,6 +206,8 @@ bool isHiddenPath(const VaultPath &path)
 
 bool isEncryptedFile(const VaultPath &path)
 {
+    if (markdown::isEncryptedNotePath(path))
+        return true;
     static const QStringList extensions{u".mdenc"_s, u".encrypted"_s, u".enc"_s, u".age"_s,
                                         u".gpg"_s,   u".pgp"_s,       u".asc"_s, u".aes"_s};
     return std::ranges::any_of(extensions, [&](const QString &e) { return path.endsWith(e, Qt::CaseInsensitive); });
@@ -241,8 +244,16 @@ StrippedText stripEncrypted(const QString &content)
         if (out.removed > 0)
             text = kept.join(u'\n');
     }
-    // 2. Meld Encrypt's in-place fragments (U+1F510 markers, `%%…%%` hiding them in other apps) and
-    //    armoured PGP / age messages.
+    // 2. Meld Encrypt's in-place fragments as the encrypted notes read them (markdown/encrypted.h:
+    //    every version, hidden or visible), then — for anything that only looks like one, and for
+    //    armoured PGP / age messages — the patterns below.
+    if (markdown::mayContainEncrypted(text)) {
+        const qsizetype fragments = markdown::findEncryptedFragments(text).size();
+        if (fragments > 0) {
+            text = markdown::replaceEncryptedFragments(text, QStringView());
+            out.removed += int(fragments);
+        }
+    }
     static const QRegularExpression meld(u"(?:%%)?\U0001F510[^\\s]*\\s.*?\U0001F510(?:%%)?"_s,
                                          QRegularExpression::DotMatchesEverythingOption);
     static const QRegularExpression armoured(

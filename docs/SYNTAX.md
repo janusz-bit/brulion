@@ -1056,9 +1056,10 @@ pages added by themselves). Obsidian Publish reads the same key.
 Encrypted text is never published: a page whose frontmatter says `encrypted: true` (or
 `zaszyfrowana: tak`), files named `*.mdenc`, `*.encrypted`, `*.enc`, `*.age`, `*.gpg`, `*.pgp`,
 `*.asc`, `*.aes`, and inside a published page every encrypted fragment is cut out
-(`publish::stripEncrypted`; the text around stays byte for byte): Meld Encrypt's markers (the
-lock-with-key emoji U+1F510 with its variant letter, the text, the emoji again, often wrapped in
-`%%…%%`), fenced blocks whose language is `encrypted`, `encrypt`, `crypt`, `secret`, `age`, `pgp` or
+(`publish::stripEncrypted`; the text around stays byte for byte): the encrypted fragments of §11
+"Encrypted text" as the encrypted notes read them (every Meld Encrypt version, hidden in `%%…%%` or
+not), then anything that only looks like one (the lock-with-key emoji U+1F510, text, the emoji
+again), fenced blocks whose language is `encrypted`, `encrypt`, `crypt`, `secret`, `age`, `pgp` or
 `brulion-encrypted` (also inside a list item), and armoured `-----BEGIN PGP MESSAGE-----` /
 `-----BEGIN AGE ENCRYPTED FILE-----` blocks. A page with nothing but such fragments (and its
 frontmatter) is left out as a whole.
