@@ -3095,6 +3095,98 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         QVERIFY(html(2).contains(u"Nowy tekst"_s));
     }
 
+    // --- macros of extensions, view blocks, template variables ---------------------------------------
+
+    void macros()
+    {
+        // A macro shows what the host computed: pieces escaped, a placeholder as a macro: link
+        // naming its range; another view of it renders again only the rows that show it.
+        Fixture f(u"- Rekord: {{ext:silownia/rekord Przysiad}}\n- zwykły tekst\n- `{{ext:silownia/rekord Przysiad}}`\n"
+                  u"- {{ext:nowe/x}}\n"_s);
+        const auto html = [&](int row) { return f.page.blocks()->data(f.page.blocks()->index(row), BlockListModel::HtmlRole).toString(); };
+        // Without a host that computes macros: as written.
+        QVERIFY2(html(0).contains(u"{{ext:silownia/rekord Przysiad}}"_s), qPrintable(html(0)));
+        markdown::MacroView record;
+        record.pieces = {{markdown::MacroPiece::Kind::Text, u"120 kg <b>"_s, {}, {}, true}};
+        f.host.setMacroView(u"silownia/rekord Przysiad"_s, record);
+        markdown::MacroView locked;
+        locked.state = markdown::MacroView::State::Unapproved;
+        f.host.setMacroView(u"nowe/x"_s, locked);
+        f.page.blocks()->invalidateRendering(); // (the host was told only now that it computes them)
+        QVERIFY2(html(0).contains(u"<b>120 kg &lt;b&gt;</b>"_s), qPrintable(html(0)));
+        QVERIFY(html(2).contains(u"<code"_s) && html(2).contains(u"{{ext:silownia/rekord Przysiad}}"_s)); // code is code
+        QVERIFY2(html(3).contains(u"href=\"macro:0-14\""_s), qPrintable(html(3)));
+        // The placeholder's link: the macro it stands for.
+        const QVariantMap clicked = f.page.activateLink(3, u"macro:0-14"_s, false);
+        QCOMPARE(clicked.value(u"action"_s).toString(), u"macro"_s);
+        QCOMPARE(clicked.value(u"extension"_s).toString(), u"nowe"_s);
+        QCOMPARE(clicked.value(u"name"_s).toString(), u"x"_s);
+        QVERIFY(f.page.activateLink(3, u"macro:5-99"_s, false).isEmpty());
+        QVERIFY(f.page.activateLink(3, u"macro:x"_s, false).isEmpty());
+        // A new value: the row showing it renders again, the others are not asked.
+        for (int row = 0; row < 4; ++row)
+            html(row);
+        QSignalSpy changed(f.page.blocks(), &QAbstractItemModel::dataChanged);
+        record.pieces = {{markdown::MacroPiece::Kind::Text, u"125 kg"_s, {}, {}, false}};
+        const int asksBefore = f.host.macroAsks();
+        f.host.setMacroView(u"silownia/rekord Przysiad"_s, record);
+        QVERIFY2(html(0).contains(u"125 kg"_s), qPrintable(html(0)));
+        QCOMPARE(changed.count(), 1);
+        QCOMPARE(changed.first().at(0).value<QModelIndex>().row(), 0);
+        QVERIFY(f.host.macroAsks() - asksBefore <= 4); // the rows that show one, asked again
+        // The same value again: nothing renders.
+        changed.clear();
+        f.host.setMacroView(u"silownia/rekord Przysiad"_s, record);
+        QCOMPARE(changed.count(), 0);
+        // Hidden: followed once shown.
+        f.page.setActive(false);
+        record.pieces = {{markdown::MacroPiece::Kind::Text, u"130 kg"_s, {}, {}, false}};
+        f.host.setMacroView(u"silownia/rekord Przysiad"_s, record);
+        QCOMPARE(changed.count(), 0);
+        f.page.setActive(true);
+        QCOMPARE(changed.count(), 1);
+        QVERIFY(html(0).contains(u"130 kg"_s));
+    }
+
+    void macroCompletion()
+    {
+        Fixture f(u"- Rekord {{ext:sil\n"_s);
+        markdown::MacroView v;
+        f.host.setMacroView(u"silownia/rekord Przysiad"_s, v);
+        f.page.startEditing(0, 16);
+        const QVariantMap trigger = completionTriggerAt(f.edit(0), 16).toMap();
+        QCOMPARE(trigger.value(u"mode"_s).toString(), u"macros"_s);
+        const QVariantMap r = f.page.applyCompletion(0, trigger, {{u"insertText"_s, u"ext:silownia/rekord Przysiad"_s},
+                                                                  {u"kind"_s, u"macro"_s}});
+        QCOMPARE(f.text(), u"- Rekord {{ext:silownia/rekord Przysiad}}\n"_s);
+        QCOMPARE(r.value(u"cursor"_s).toInt(), 37); // before the closing braces
+        // Braces already there are kept.
+        Fixture closed(u"- {{ext:si}} x\n"_s);
+        closed.page.applyCompletion(0, completionTriggerAt(closed.edit(0), 8).toMap(),
+                                    {{u"insertText"_s, u"ext:silownia/sesje"_s}});
+        QCOMPARE(closed.text(), u"- {{ext:silownia/sesje}} x\n"_s);
+    }
+
+    void viewBlocksAndTemplateVariables()
+    {
+        // The slash menu's "View: …": a ```view block of that view, edited at its first line.
+        Fixture f(u"- \n"_s);
+        f.host.setEmbeddableViews({QVariantMap{{u"source"_s, u"nawyki/dzien"_s}, {u"title"_s, u"Nawyki dnia"_s},
+                                               {u"icon"_s, u"flame"_s}}});
+        f.page.startEditing(0, 0);
+        f.page.applySlashCommand(0, 0, 0, u"view:nawyki/dzien"_s);
+        QCOMPARE(f.text(), u"- ```view\n  nawyki/dzien\n  ```\n"_s);
+        QCOMPARE(f.page.blocks()->viewAt(0), u"view"_s);
+        // A template's variables of extensions, filled for the page's day; a macro stays.
+        Fixture t(u"- \n"_s);
+        t.host.setFile(u"templates/Trening.md"_s, u"- Plan: {{silownia/plan Nogi}}\n- {{ext:silownia/rekord Przysiad}}\n- {{nieznane/x}}\n"_s);
+        t.host.setTemplateVariable(u"silownia/plan"_s, u"{args} na {date}"_s);
+        t.page.insertTemplate(0, u"templates/Trening.md"_s);
+        QVERIFY2(t.text().contains(u"- Plan: Nogi na 2026-"_s), qPrintable(t.text()));
+        QVERIFY(t.text().contains(u"- {{ext:silownia/rekord Przysiad}}\n"_s));
+        QVERIFY(t.text().contains(u"- {{nieznane/x}}\n"_s));
+    }
+
     // --- completions and slash commands ------------------------------------------------------------
 
     void completions()
