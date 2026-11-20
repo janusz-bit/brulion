@@ -5962,6 +5962,21 @@ void checkAiButton(QQuickWindow *window, AppController *app, const Check &check)
                      && named(u"chatConversations"_s) != nullptr;
           }),
           "“Conversations” opens the list of conversations");
+    // An answer with a tinted span (inline code) is shown by a TextEdit: its bubble is still as
+    // wide as its text (it was some 50 px, a few letters a line, while only a plain text measured it).
+    const QString talk = u"AI/2026-11-19 Co widać na obrazku.md"_s;
+    app->workspace()->writeFile(talk, u"---\ntasks: ignore\n---\n- 🧑 Co widać na obrazku?\n- 🤖 Na obrazku "
+                                      u"`paragon.png` widać dziennik z dwoma dniami: środą, 14 października, i "
+                                      u"wtorkiem, 13 października — żółte zakładki, zadania i notatki.\n"_s);
+    app->navigate({{u"view"_s, u"chat"_s}, {u"path"_s, talk}});
+    QQuickItem *answer = nullptr;
+    check(waitFor([&] { return (answer = named(u"chatMessageAi"_s)) != nullptr; }), "a conversation shows its answer");
+    check(answer && waitFor([&] { return answer->width() > 200; }),
+          qPrintable(u"an answer with inline code fills its bubble's width (%1 px)"_s.arg(answer ? answer->width() : 0)));
+    app->back();
+    check(waitFor([&] { return app->currentView() == u"chat" && named(u"chatConversations"_s) != nullptr; }),
+          "Back returns to the conversations");
+    app->workspace()->deletePage(talk);
     app->back();
     check(waitFor([&] { return app->currentRoute().value(u"path"_s).toString() == page; }), "Back returns to the page again");
     settle(300);

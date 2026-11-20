@@ -46,6 +46,10 @@ Item {
     /// What a screen reader says for the text ("": the text is ignored by it, the caller's item
     /// speaks for it).
     property string accessibleName
+    /// The implicit width is the text's own (unwrapped) also while the TextEdit shows it — for an
+    /// item as wide as its text (a chat's bubble). Off, a tinted text is not laid out a second time
+    /// to be measured and its implicit width is 0: the callers that set the width need none.
+    property bool measured: false
 
     /// The shown rich text: the hovered link underlined.
     readonly property string shownHtml: TextHelper.hoveredLinkHtml(root.html, root.hoveredLink)
@@ -83,8 +87,9 @@ Item {
         // gives it the rest without another.
         height: Math.max(1, implicitHeight)
         visible: !root.rich
-        // Measured while it overflows (the TextEdit shows it); empty when the TextEdit has a tint.
-        text: root.tinted ? "" : root.shownHtml
+        // Measured while it overflows (the TextEdit shows it); empty when the TextEdit has a tint,
+        // unless the width is wanted (`measured`: its spans' square backgrounds are as wide).
+        text: root.tinted && !root.measured ? "" : root.shownHtml
         textFormat: Text.RichText
         wrapMode: Text.Wrap
         horizontalAlignment: root.horizontalAlignment

@@ -960,7 +960,9 @@ journal; the assistant's agent answers (docs/EXTENSIONS.md "AI").
   (`chatNew`); empty: "No conversations yet" with the folder named.
 * **A conversation** (`chatMessages`, `ChatMessageModel`): the user's messages right-aligned in the
   accent's tint, the AI's left-aligned on a card (at most 82 % / 92 % of the width, 720 px), each a
-  `BRichText` of the message rendered by `InlineRenderer` (`ChatMessageModel::renderMessage`: a
+  `BRichText` (`measured`: the bubble as wide as its text, a tinted one too — its implicit width
+  otherwise 0, which left a bubble a few letters wide) of the message rendered by `InlineRenderer`
+  (`ChatMessageModel::renderMessage`: a
   paragraph per block, lists indented with their bullets or numbers, a task's box, headings bold,
   code and tables preformatted — never a note's own HTML); a click on a link follows it (page:,
   tag:, ext: through `PageTools.openLink`, from the conversation's page), a long press or
@@ -1666,7 +1668,8 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   whole text again and cuts it anew; created from QML it does so once, when it is completed
   (`QQmlParserStatus`), so the row has its final height when the list places it ("Scrolling
   performance": rows of tinted or long texts cost a TextEdit, the others stay a Text). Its height is
-  counted in whole fixed-height lines, its TextEdit takes no input (`enabled: false`): the row's
+  counted in whole fixed-height lines; its implicit width is the plain `Text`'s, which a tinted text
+  leaves empty (not laid out twice) unless `measured` asks for it; its TextEdit takes no input (`enabled: false`): the row's
   handlers ask `BRichText.linkAt`. Limits: linked references 12 lines (6 in the side panel), Tasks
   and query results 4, a table cell 1 (its tooltip shows the whole text when cut), embeds and
   previews none. Tasks' text links take the presses on them through an item whose
