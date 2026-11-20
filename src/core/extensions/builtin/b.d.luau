@@ -156,7 +156,7 @@ declare b: {
     status: (text: string?) -> (),
     timer: (seconds: number?, options: (string | { label: string?, message: string? })?) -> (),
     stopTimer: () -> (),
-    data: (name: string) -> any,
+    data: (name: string, key: string?) -> any,
 
     -- questions and AI (in commands and actions)
     ask: (prompt: string) -> string,
@@ -184,6 +184,7 @@ declare b: {
         table: (columns: { string }, rows: { any }) -> Node,
         chart: (spec: { [string]: any }) -> Node,
         month: (spec: { [string]: any }) -> Node,
+        heatmap: (spec: { [string]: any }) -> Node,
         empty: (title: string, text: string, icon: string?) -> Node,
         open: (label: string, view: string, params: { [string]: any }?, options: { [string]: any }?) -> Node,
         run: (label: string, command: string) -> Node,

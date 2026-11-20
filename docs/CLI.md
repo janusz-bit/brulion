@@ -259,6 +259,11 @@ Never compute a hash yourself.
 | `card review <id> <grade>` | again, hard, good, easy (1–4, znowu, trudne, dobrze, łatwe); `card list`'s options | schedules the card with FSRS-6 and writes its state next to it (the plugin's `<!--SR:…-->` comment, Logseq's `card-*` properties) and a line into the review log: `{id, grade, before, after, interval, question, page, path, line, writes}` | yes |
 | `card grade <id> <grade>` | as `card review` | `card review` | yes |
 | `card stats` | `[--deck D]`, `card list`'s options | `{total, new, learning, young, mature, due, reviewedToday, retention, reviews, perDay: [{date, correct, again}], forecast: [{date, count}]}` (30 days back and ahead) | |
+| `gym volume` | `[--weeks N] [--unit kg\|lb]` | the weekly volume (docs/SYNTAX.md §5 "Gym"): sets × reps × weight of the done sets per muscle and week, the last N weeks (12 by default, at most 104): `{unit, weeks: [first days], totals, sets, current, average, muscles: [{id, name, volume: [...], sets: [...], current, currentSets, average}], unassigned: [exercises whose muscles nobody knows]}` — every primary muscle the volume and the sets, every secondary one half, bodyweight sets with the logged body weight | |
+| `gym weights` | `[--from D] [--to D] [--unit kg\|lb]` | the body weight log: `{unit, entries: [{date, weight, unit, kg, fat?, notes, trend, line, text}], latest, latestDate, trend, change7, change30, fat}` — the trend an average smoothed by 10 % a day | |
+| `gym weigh <weight>` | `82.5`, `82,5 kg`, `181 lb`; `[--fat P] [--note TEXT] [--date D] [--unit kg\|lb]` | writes `- 82,5 kg 18 % rano #waga` (`- 82.5 kg 18% morning #weight` with `--lang en`) at the end of the day's note (made from the journal template when missing): `{date, line, writes}` | yes |
+| `gym exercises [<query>]` | `[--muscle M] [--equipment E] [--kind K] [--limit N]` | the exercise catalog (Brulion's and free-exercise-db's): `{total, exercises: [{id, name, pl, en, aliases, primary, secondary, muscles, secondaryMuscles, equipment, equipmentName, category, categoryName, level, source}]}`, the best first; the filters take an id or a name in either language (`chest`, `klatka piersiowa`) | |
+| `gym exercise <id>` | | one exercise of the catalog with its `instructions` (English) | |
 | `remind add <text>` | `--at D [--alarm] [--every R] [--task] [--page P \| --date D]` | a reminder ⏰ / alarm ⏰! | yes |
 | `remind list` | `[--upcoming DAYS] [--from D --to D] [--limit N]` | reminders due, recurring ones expanded; no state kept | |
 | `remind snooze <ref>` | `--minutes N \| --to D` | move a reminder (a recurring one gets a one-off child) | yes |
@@ -350,6 +355,14 @@ changed while it was computed is exit 4 `concurrent_change`). An id that is no c
 `card_not_found`, a grade that is none exit 2 `bad_argument`. `--now` sets the review's time. An
 agent quizzes the user so: `card due` → ask the `question` → show the `answer` → `card review <id>
 good` (the MCP tools `brulion_card_due`, `brulion_card_review`).
+
+The `gym` commands are run by the built-in gym extension (`silownia.luau`, its commands
+`volume-report`, `weights`, `weight` and `catalog-search` with the options as `ctx.args`) whether the
+gym is on in the app or not: `gym weigh`'s write goes through the command line's edit (the lock,
+`--dry-run`, `--diff`). `--unit` stands for the app's setting (the device's: kg by default). A
+weight that is none is exit 2 `bad_argument`, an id the catalog lacks exit 3 `exercise_not_found`, a
+filter it lacks (`--muscle skrzydła`) exit 2 `bad_argument` with the `option`. Example: `brulion-cli
+gym weigh 82,5 --fat 18`, `brulion-cli gym exercises wiosłowanie --equipment sztanga`.
 
 `week` and `month` take a period phrase (docs/SYNTAX.md §1 "Weekly and monthly notes"): "ten
 tydzień", "next week", "zeszły miesiąc", `2026-W45`, `tydzień 45`, `2026-11`, `listopad 2026`, or a

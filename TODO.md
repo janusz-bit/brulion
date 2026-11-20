@@ -63,9 +63,11 @@ done in the repository simply disappears from the list.
   the type checker on an Android phone (built in, measured, not run on one yet), the browser's
   hostile-extension self-test in a real browser beside CI's headless Chrome
   (`scripts/wasm-smoke.mjs --extensions`).
-* **Gym: next steps** — the rest timer's notification while the app is closed (Android: a scheduled
-  alarm), a catalog beyond the 51 built-in exercises (free-exercise-db, Unlicense, English names),
-  sample workouts in the sample notebook, weekly volume per muscle group, a body weight log.
+* **Gym: next steps** — the exercises' pictures (free-exercise-db's two per exercise, about 70 MB,
+  not bundled): fetched on demand into the cache and shown in the exercise view; Polish
+  instructions for the common exercises (free-exercise-db's are English); the rest timer's
+  notification with the app closed checked on a real phone (the emulator's test passes) and on a
+  desktop that quit (nothing can show it there: a scheduled notification of the system?).
 * **A small language for the interface layout (in the style of Typst)** — a text file describing
   what the icon bar, the pages panel, the "More" menu, tabs and the bottom navigation show and in
   what order (icons, labels, groups). Today this is set only in Settings → Appearance → Layout

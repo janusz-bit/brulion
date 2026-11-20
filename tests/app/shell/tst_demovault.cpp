@@ -132,7 +132,8 @@ private Q_SLOTS:
         QVERIFY(files.contains(deck));
         QVERIFY(files.value(deck).contains(u"el perro::"_s));
         QVERIFY(files.value(deck).contains(u"<!--SR:!2026-10-14,4,250-->"_s));
-        QCOMPARE(files.size(), 12); // … and the canvas of the renovation
+        // … and the canvas of the renovation, a workout plan and two more days of workouts and weigh-ins
+        QCOMPARE(files.size(), 15);
         for (auto it = files.cbegin(); it != files.cend(); ++it) {
             QVERIFY2(!it.value().contains(u"{today}"_s) && !it.value().contains(u"{in2}"_s), qPrintable(it.key()));
             QVERIFY2(it.value().endsWith(u'\n'), qPrintable(it.key()));
@@ -420,7 +421,7 @@ private Q_SLOTS:
         QVERIFY(index.blockById(names.blockId).has_value());
         const QString picture = names.picture.mid(names.picture.indexOf(u'/') + 1);
         QCOMPARE(index.resolveLink(picture).value_or(QString()), names.picture);
-        QCOMPARE(index.journals().size(), 3);
+        QCOMPARE(index.journals().size(), 5);
         QVERIFY(index.backlinks(names.project).size() >= 3);
         // Every heading a link or an embed points at is on its page.
         int headingLinks = 0;

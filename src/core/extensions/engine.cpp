@@ -192,6 +192,13 @@ function ui.toggle(on, action, args, options)
     end
     return node
 end
+-- A grid of tinted cells, a row per thing and a column per period (the gym's volume per muscle
+-- and week): { columns = { "3.11", … }, rows = { { label, values = { n | nil, … }, texts?, note? } },
+-- scale = "row" (every row against its own largest value, the default) | "all", label? }
+function ui.heatmap(s)
+    s = spec(s, "b.ui.heatmap")
+    return { type = "heatmap", columns = s.columns, rows = present(s.rows), scale = s.scale, label = s.label }
+end
 -- A bar filled to value / max (max 1 by default), its label above it, a tone: written
 -- b.ui.progress(3, 10, "3 of 10") or b.ui.progress({ value = 3, max = 10, label = …, tone = … }).
 function ui.progress(value, max, label)
@@ -1892,9 +1899,14 @@ int Engine::stopTimerImpl(lua_State *L)
 int Engine::dataImpl(lua_State *L)
 {
     QString name;
-    if (!argString(L, 1, "b.data", &name))
+    QString key;
+    if (!argString(L, 1, "b.data", &name) || (!lua_isnoneornil(L, 2) && !argString(L, 2, "b.data", &key)))
         return kRaise;
-    const QVariant value = m_loaded.value(extensionOf(L)).data.value(name);
+    QVariant value = m_loaded.value(extensionOf(L)).data.value(name);
+    // b.data(name, key): one entry of a record (the gym's instructions of one exercise), without
+    // crossing the whole record into the script.
+    if (!lua_isnoneornil(L, 2))
+        value = value.toMap().value(key);
     Unlimited unlimited(&m_unlimited);
     pushVariant(L, value);
     return 1;

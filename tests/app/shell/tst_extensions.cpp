@@ -850,13 +850,14 @@ private Q_SLOTS:
         model.refresh();
         QVERIFY2(model.error().isEmpty(), qPrintable(model.error()));
         // Every exercise is a card of the same three lines: the exercise, the last set's steppers
-        // (a bodyweight line: reps only), the set buttons.
+        // (a bodyweight line: reps only), the set buttons; the exercise catalog under them.
         const QString row = u"row"_s;
-        QCOMPARE(lineKinds(model), (QStringList{u"heading"_s, row, row, row, row, row, row}));
+        QCOMPARE(lineKinds(model), (QStringList{u"heading"_s, row, row, row, row, row, row, u"open"_s}));
         QStringList parts;
         for (int i = 0; i < model.rowCount(); ++i)
             parts << model.data(model.index(i), ExtensionViewModel::CardRole).toString();
-        QCOMPARE(parts, (QStringList{QString(), u"first"_s, u"middle"_s, u"last"_s, u"first"_s, u"middle"_s, u"last"_s}));
+        QCOMPARE(parts, (QStringList{QString(), u"first"_s, u"middle"_s, u"last"_s, u"first"_s, u"middle"_s, u"last"_s,
+                                     QString()}));
         const int exercise = 1;
         const int steppers = 2;
         const int buttons = 3;
@@ -1321,6 +1322,121 @@ private Q_SLOTS:
         m_ext->indexReady();
         QTRY_COMPARE(disk(u"Dziennik zdarzeń.md"_s).count(u"- open 2026-11-15"_s), 1);
         QCOMPARE(consoleLines(u"error"_s), 0);
+    }
+
+    void timerEndsArmedOnThePlatform()
+    {
+        // b.timer's end is armed on the platform when it starts (Android: an alarm that rings with
+        // the app closed — notify::Notifier::armTimer), moved by a new timer of the extension,
+        // cancelled when it stops; the timer is kept in the notebook's device state, so the app
+        // started again counts on; one that ended meanwhile runs its "timer" hooks late.
+        addExtension(u"Minutnik"_s, u"b.on(\"timer\", function(e) b.appendToPage(\"Minutnik log\", `- {e.label} "
+                                    u"{e.seconds} {e.late}`) end)\n"
+                                    "b.command(\"start\", function(ctx) b.timer((ctx.args or {}).seconds or 300, "
+                                    "{ label = \"Zielona herbata\", message = \"Gotowa — zażółć.\" }) end)\n"
+                                    "b.command(\"stop\", function() b.stopTimer() end)"_s);
+        QList<ScheduledNotification> armed;
+        QStringList cancelled;
+        bool native = true;
+        m_ext->setTimerAlarms(
+                [&](const ScheduledNotification &n) {
+                    armed << n;
+                    return native;
+                },
+                [&](const QString &id) { cancelled << id; });
+        QStringList notified;
+        m_ext->setNotifier([&](const QString &title, const QString &) { notified << title; });
+        const QString id = m_ext->timerNotificationId(u"minutnik"_s);
+        QCOMPARE(id, u"brulion-timer:"_s + m_vault->id() + u":minutnik"_s);
+
+        const QDateTime before = QDateTime::currentDateTime();
+        m_ext->runCommand(u"minutnik"_s, u"start"_s);
+        QCOMPARE(armed.size(), 1);
+        QCOMPARE(armed[0].id, id);
+        QCOMPARE(armed[0].nativeId, nativeIdFor(id));
+        QCOMPARE(armed[0].title, u"Zielona herbata is over"_s);
+        QCOMPARE(armed[0].body, u"Gotowa — zażółć."_s);
+        QCOMPARE(armed[0].vault, m_vault->id());
+        QCOMPARE(armed[0].path, QString()); // a tap opens the app, no note
+        // a moment to the second (AlarmManager takes it as epoch milliseconds)
+        const qint64 in = before.secsTo(armed[0].at);
+        QVERIFY2(in >= 299 && in <= 302 * BRULION_TEST_SLOWDOWN, qPrintable(QString::number(in)));
+        // kept in the device state
+        const QJsonObject stored = m_vault->store()->get(u"extensions/timers"_s).toObject();
+        QVERIFY(stored.contains(u"minutnik"_s));
+        QCOMPARE(stored.value(u"minutnik"_s).toObject().value(u"native"_s).toBool(), true);
+
+        // A new timer of the extension moves the same notification; stopping cancels it.
+        m_ext->runCommand(u"minutnik"_s, u"start"_s, QString(), -1, {{u"seconds"_s, 600}});
+        QCOMPARE(armed.size(), 2);
+        QCOMPARE(armed[1].id, id);
+        QVERIFY(armed[1].at > armed[0].at.addSecs(250));
+        QVERIFY(cancelled.isEmpty());
+        m_ext->runCommand(u"minutnik"_s, u"stop"_s);
+        QCOMPARE(cancelled, QStringList{id});
+        QVERIFY(m_ext->timers().isEmpty());
+        QVERIFY(!m_vault->store()->contains(u"extensions/timers"_s));
+
+        // The app closed during a timer (the notebook detached; Android ends a process in the
+        // background) and started again: the timer counts on, armed once more.
+        m_ext->runCommand(u"minutnik"_s, u"start"_s);
+        m_ext->detach();
+        QVERIFY(m_ext->timers().isEmpty());
+        QCOMPARE(cancelled.size(), 1); // closing cancels nothing: the platform's alarm still rings
+        armed.clear();
+        m_ext->attach(m_vault.get(), m_index.get());
+        m_ext->indexReady();
+        QCOMPARE(m_ext->timers().size(), 1);
+        const QVariantMap timer = m_ext->timers().first().toMap();
+        QCOMPARE(timer.value(u"label"_s).toString(), u"Zielona herbata"_s);
+        QVERIFY(timer.value(u"remaining"_s).toInt() > 250 && timer.value(u"remaining"_s).toInt() <= 300);
+        QCOMPARE(armed.size(), 1);
+        QCOMPARE(armed[0].id, id);
+
+        // Its end with the app running: the platform shows it (native), the app only its message
+        // and the hook — no second notification.
+        notified.clear();
+        m_messages.clear();
+        m_ext->runCommand(u"minutnik"_s, u"start"_s, QString(), -1, {{u"seconds"_s, 1}});
+        QTRY_VERIFY_WITH_TIMEOUT(m_ext->timers().isEmpty(), 10000);
+        QVERIFY(notified.isEmpty());
+        QVERIFY(m_messages.contains(u"info: Gotowa — zażółć."_s));
+        QTRY_VERIFY(disk(u"Minutnik log.md"_s).contains(u"- Zielona herbata 1 false"_s));
+        // Without the platform's alarm (the desktop, the browser; Android without the exact-alarm
+        // permission) the app shows the end itself and takes back what was armed late.
+        native = false;
+        cancelled.clear();
+        m_ext->runCommand(u"minutnik"_s, u"start"_s, QString(), -1, {{u"seconds"_s, 1}});
+        QTRY_COMPARE_WITH_TIMEOUT(notified, QStringList{u"Zielona herbata is over"_s}, 10000);
+        QCOMPARE(cancelled, QStringList{id});
+
+        // Ended while the app was closed: at the next opening its hook runs, late, once.
+        m_ext->runCommand(u"minutnik"_s, u"start"_s, QString(), -1, {{u"seconds"_s, 2}});
+        m_ext->detach();
+        QTest::qWait(2500);
+        m_ext->attach(m_vault.get(), m_index.get());
+        m_ext->indexReady();
+        QVERIFY(m_ext->timers().isEmpty());
+        QTRY_VERIFY2(disk(u"Minutnik log.md"_s).contains(u"- Zielona herbata 2 true"_s),
+                     qPrintable(disk(u"Minutnik log.md"_s)));
+        QVERIFY(!m_vault->store()->contains(u"extensions/timers"_s));
+        m_ext->detach();
+        m_ext->attach(m_vault.get(), m_index.get());
+        m_ext->indexReady();
+        QTest::qWait(200);
+        QCOMPARE(disk(u"Minutnik log.md"_s).count(u"true"_s), 1);
+
+        // A hand-edited state: nonsense is no timer.
+        m_vault->store()->set(u"extensions/timers"_s,
+                              QJsonObject{{u"minutnik"_s, QJsonObject{{u"end"_s, u"jutro"_s}}},
+                                          {u"inny"_s, QJsonObject{{u"end"_s, QDateTime::currentMSecsSinceEpoch()
+                                                                                     + 10ll * 86'400'000}}}});
+        m_ext->detach();
+        m_ext->attach(m_vault.get(), m_index.get());
+        QVERIFY(m_ext->timers().isEmpty());
+        QCOMPARE(consoleLines(u"error"_s), 0);
+        m_ext->setNotifier({});
+        m_ext->setTimerAlarms({}, {});
     }
 
     void settingsOfAnExtension()

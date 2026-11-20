@@ -5680,7 +5680,9 @@ void checkHabits(QQuickWindow *window, AppController *app, const Check &check)
 /// the palette, "Start a workout" asks which plan (ShellExtensionQuestion) and writes it into today's
 /// note, "+ set" in the view rewrites that one line and starts the rest timer; a weight typed into
 /// its stepper (a tap selects the number, Enter writes it) leaves the field in place with the focus,
-/// reps typed and "+ set" tapped at once write the reps first; switched off again.
+/// reps typed and "+ set" tapped at once write the reps first; the weekly volume's heat map has the
+/// row of the muscle the catalog gives a done exercise, this week's cell the strongest, its words
+/// on a tap; a weigh-in typed into the body weight's field lands in today's note; switched off again.
 void checkGym(QQuickWindow *window, AppController *app, const Check &check)
 {
     const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
@@ -5791,6 +5793,120 @@ void checkGym(QQuickWindow *window, AppController *app, const Check &check)
     }
     check(waitFor([&] { return line() == u"- [ ] [[Przysiad samotestu]] "_s + weight + u" kg × 5, 5, 5, 8, 8"_s; }, 3000),
           "reps typed, then “+ set”: the reps are written first, the new set has them");
+
+    // The weekly volume: a done squat ("Przysiad" is the catalog's back squat: the quadriceps) and
+    // a weigh-in in today's note.
+    QString today = ws->readFile(journal);
+    if (!today.isEmpty() && !today.endsWith(u'\n'))
+        today += u'\n';
+    ws->writeFile(journal, today + u"- Trening samotestu #trening\n  - [x] [[Przysiad]] 100 kg 5×5\n- 80 kg #waga\n"_s);
+    app->navigate({{u"view"_s, u"gym"_s}, {u"tab"_s, u"volume"_s}});
+    QQuickItem *gymView = nullptr;
+    check(waitFor(
+                  [&] {
+                      QQuickItem *header = named(u"gymTabs"_s);
+                      gymView = header ? enclosingOfType(header, "GymView") : nullptr;
+                      return gymView != nullptr && app->currentRoute().value(u"tab"_s).toString() == u"volume";
+                  },
+                  3000),
+          "the Volume tab shows");
+    auto *gymModel = gymView ? gymView->findChild<ExtensionViewModel *>(u"gymModel"_s) : nullptr;
+    QQuickItem *gymList = gymView ? findShownNamed(gymView, u"gymLines"_s) : nullptr;
+    const QString quadriceps = ws->extensions()->language() == u"pl" ? u"czworogłowe uda"_s : u"quadriceps"_s;
+    int heatRow = -1;
+    check(gymModel && gymList
+                  && waitFor(
+                          [&] {
+                              heatRow = -1;
+                              for (int i = 0; i < gymModel->rowCount() && heatRow < 0; ++i)
+                                  if (gymModel->data(gymModel->index(i), ExtensionViewModel::TypeRole).toString()
+                                              == u"heatmapRow"
+                                      && gymModel->data(gymModel->index(i), ExtensionViewModel::TitleRole).toString()
+                                                 == quadriceps)
+                                      heatRow = i;
+                              return heatRow >= 0;
+                          },
+                          3000),
+          "the heat map has a row for the quadriceps");
+    if (heatRow >= 0) {
+        const QVariantList cells = gymModel->data(gymModel->index(heatRow), ExtensionViewModel::ItemsRole).toList();
+        check(!cells.isEmpty() && cells.last().toMap().value(u"level"_s).toString() == u"4",
+              "this week's cell is the row's strongest");
+        // (The sample notebook's own workouts of this week count too: at least the squat's 2500 kg.)
+        const QString words = cells.last().toMap().value(u"text"_s).toString();
+        static const QRegularExpression kilograms(u": (\\d+) kg"_s);
+        const QRegularExpressionMatch volume = kilograms.match(words);
+        check(words.startsWith(quadriceps) && volume.hasMatch() && volume.captured(1).toInt() >= 2500,
+              "its words: the muscle, this week's volume (100 kg × 25 = 2500 kg at least)");
+        QMetaObject::invokeMethod(gymList, "positionViewAtIndex", Q_ARG(int, heatRow),
+                                  Q_ARG(int, 4 /* ListView.Contain */));
+        const auto rowItem = [&]() -> QQuickItem * {
+            QQuickItem *item = nullptr;
+            QMetaObject::invokeMethod(gymList, "itemAtIndex", Q_RETURN_ARG(QQuickItem *, item), Q_ARG(int, heatRow));
+            return item;
+        };
+        const auto heatCell = [&]() -> QQuickItem * {
+            QQuickItem *row = rowItem();
+            QQuickItem *last = nullptr;
+            if (row)
+                findShown(row, [&](QQuickItem *item) {
+                    if (item->objectName() == u"extensionHeatCell")
+                        last = item;
+                    return false;
+                });
+            return last;
+        };
+        // (Its cells take no press themselves — the row's TapHandler does —: steady by place.)
+        QPointer<QQuickItem> cell;
+        QPointF at(-1, -1);
+        check(waitFor(
+                      [&] {
+                          QQuickItem *found = heatCell();
+                          const QPointF now = found ? pointIn(found) : QPointF(-1, -1);
+                          const bool still = found && found == cell && now == at && uidriver::onScreen(window, found);
+                          cell = found;
+                          at = now;
+                          if (!still)
+                              settle(100);
+                          return still;
+                      },
+                      3000),
+              "the row shows its cells");
+        if (cell) {
+            check(cell->property("level").toString() == u"4", "the last cell is drawn the strongest");
+            tapOrClick(window, at, touch);
+            check(waitFor(
+                          [&] {
+                              QQuickItem *row = rowItem();
+                              return row && row->property("tip").toInt() == int(cells.size()) - 1
+                                     && row->property("tipText").toString() == words;
+                          },
+                          2000),
+                  "a tap shows the cell's words");
+        }
+    }
+
+    // The body weight: a weigh-in typed into the field lands at the end of today's note.
+    app->navigate({{u"view"_s, u"gym"_s}, {u"tab"_s, u"weight"_s}});
+    QQuickItem *weighIn = nullptr;
+    check(waitFor(
+                  [&] {
+                      weighIn = findShown(window->contentItem(), [&](QQuickItem *item) {
+                          return item->objectName() == u"extensionInputField";
+                      });
+                      return weighIn != nullptr && app->currentRoute().value(u"tab"_s).toString() == u"weight";
+                  },
+                  3000),
+          "the Weight tab has its field");
+    if (weighIn) {
+        tapOrClick(window, pointIn(weighIn), touch);
+        check(waitFor([&] { return weighIn->hasActiveFocus(); }, 2000), "a tap puts the focus in it");
+        typeChars(window, u"79,6"_s);
+        sendKey(window, Qt::Key_Return);
+    }
+    const QString weighed = ws->extensions()->language() == u"pl" ? u"- 79,6 kg #waga"_s : u"- 79.6 kg #weight"_s;
+    check(waitFor([&] { return ws->readFile(journal).contains(weighed); }, 3000),
+          "Enter writes the weigh-in into today's note");
 
     // Leave the notebook and the settings as they were.
     ws->extensions()->stopRest();

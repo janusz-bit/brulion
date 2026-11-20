@@ -161,7 +161,7 @@ end, { label = "Przenieś zrobione zadania do archiwum" })
 | `b.status(tekst)` | mówi, co robi teraz polecenie czekające na odpowiedź („Czytam „Dom”…”); czat z AI pokazuje to pod kropkami AI, `b.status("")` to czyści |
 | `b.timer(sekundy, { label = "Herbata", message = "Herbata gotowa." })` | uruchamia własny timer rozszerzenia (niżej, Timery) |
 | `b.stopTimer()` | zatrzymuje go |
-| `b.data(nazwa)` | dane dołączone do wbudowanego rozszerzenia (lista ćwiczeń Siłowni, opis pisania rozszerzeń dla Asystenta AI); we własnym `nil` |
+| `b.data(nazwa)`, `b.data(nazwa, klucz)` | dane dołączone do wbudowanego rozszerzenia (katalog ćwiczeń Siłowni, opis pisania rozszerzeń dla Asystenta AI); z `klucz` jeden ich wpis (opis wykonania jednego ćwiczenia Siłowni: `b.data("instructions", "back-squat")`); we własnym `nil` |
 
 ## Polecenia
 `b.command(nazwa, function(ctx) … end, { label = "…", block = true })` dodaje do palety polecenie pod etykietą `label`.
@@ -195,6 +195,7 @@ end, { label = "Przenieś zrobione zadania do archiwum" })
 | `b.ui.table(kolumny, wiersze)` | tabela: lista nagłówków i lista wierszy, każdy jako lista tekstów. Najlepiej do czterech kolumn |
 | `b.ui.chart({ kind = "line", labels = { … }, series = { { name = "…", values = { … } } } })` | wykres, `"line"` (liniowy) albo `"bar"` (słupkowy), liczba na każdą etykietę |
 | `b.ui.month({ month = "2026-11", days = { ["2026-11-03"] = { state = "done", action = "…", args = { … }, menu = { … } } } })` | miesiąc jako kalendarz, kwadrat na każdy dzień: `"done"` zielony, `"missed"` czerwony, `"skipped"` przekreślony, `"due"` z obwódką, `"future"` blady, `"rest"` zwykły; stuknięcie dnia z akcją `action` ją wywołuje, prawy przycisk albo przytrzymanie otwiera jego `menu`. Tygodnie zaczynają się od pierwszego dnia tygodnia z ustawień notatnika, dzisiejszy dzień ma obwódkę |
+| `b.ui.heatmap({ columns = { "3.11", "10.11" }, rows = { { label = "Klatka", values = { 4200, 3900 }, texts = { … }, note = "3900 kg" } } })` | siatka kwadratów, wiersz na rzecz i kolumna na okres (objętość Siłowni na mięsień i tydzień), każdy kwadrat tym mocniejszy, im większa jego wartość wobec największej w wierszu (`scale = "all"`: w całej siatce); `nil` albo 0 to pusty kwadrat. `texts` to to, co kwadrat mówi po wskazaniu albo stuknięciu, `note` krótki tekst na końcu wiersza |
 | `b.ui.empty(tytuł, tekst, ikona)` | co pokazać, gdy nie ma czego pokazać, z wybraną ikoną |
 | `b.ui.open(etykieta, widok, params, opcje)` | otwiera inny widok rozszerzenia, z `params` dla jego funkcji; z `opcje` jak u przycisku (`{ primary = true, icon = "play" }`) wygląda jak przycisk |
 | `b.ui.run(etykieta, polecenie)` | przycisk, który uruchamia jedno z poleceń rozszerzenia |
@@ -449,7 +450,9 @@ end, { label = "Szklanka wody" })
 ```
 
 ## Timery
-`b.timer(sekundy, { label = "Herbata", message = "Herbata gotowa." })` uruchamia własny timer rozszerzenia: jego odliczanie widać pod górnym paskiem w każdym widoku (z × do zatrzymania), a gdy czas minie, powiadomienie mówi „Herbata: koniec” z Twoją wiadomością. Każde rozszerzenie ma jeden timer — nowy zastępuje poprzedni —, `b.stopTimer()` go zatrzymuje, a `b.on("timer", function(e) … end)` działa, gdy się skończy (`e.label`, `e.seconds`). Timer działa, dopóki działa Brulion.
+`b.timer(sekundy, { label = "Herbata", message = "Herbata gotowa." })` uruchamia własny timer rozszerzenia: jego odliczanie widać pod górnym paskiem w każdym widoku (z × do zatrzymania), a gdy czas minie, powiadomienie mówi „Herbata: koniec” z Twoją wiadomością. Każde rozszerzenie ma jeden timer — nowy zastępuje poprzedni —, `b.stopTimer()` go zatrzymuje, a `b.on("timer", function(e) … end)` działa, gdy się skończy (`e.label`, `e.seconds`).
+
+Na Androidzie powiadomienie przychodzi także przy zamkniętym Brulionie: koniec timera jest ustawiany jako alarm, gdy timer startuje (i odwoływany, gdy go zatrzymasz). Na komputerze przychodzi, dopóki Brulion działa — także w zasobniku z zamkniętym oknem —, w przeglądarce, dopóki jego karta jest otwarta. Brulion uruchomiony ponownie w trakcie timera pokazuje, jak odlicza dalej; timer, który skończył się w międzyczasie, uruchamia swoje reakcje `"timer"` przy otwarciu notatnika, z `e.late` równym `true`.
 
 ```luau
 b.command("herbata", function(ctx)

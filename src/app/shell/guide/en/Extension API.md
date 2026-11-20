@@ -161,7 +161,7 @@ end, { label = "Archive the done tasks" })
 | `b.status(text)` | says what a command waiting for an answer is doing now ("Reading “Home”…"); the AI chat shows it under the AI's dots, `b.status("")` clears it |
 | `b.timer(seconds, { label = "Tea", message = "The tea is ready." })` | starts the extension's own timer (below, Timers) |
 | `b.stopTimer()` | stops it |
-| `b.data(name)` | data that comes with a built-in extension (the gym's list of exercises, the AI assistant's reference for writing extensions); `nil` in your own |
+| `b.data(name)`, `b.data(name, key)` | data that comes with a built-in extension (the gym's catalog of exercises, the AI assistant's reference for writing extensions); with `key` one entry of it (the gym's instructions of one exercise: `b.data("instructions", "back-squat")`); `nil` in your own |
 
 ## Commands
 `b.command(name, function(ctx) … end, { label = "…", block = true })` puts a command into the palette under its `label`.
@@ -195,6 +195,7 @@ end, { label = "Archive the done tasks" })
 | `b.ui.table(columns, rows)` | a table: a list of headings and a list of rows, each a list of texts. Best with up to four columns |
 | `b.ui.chart({ kind = "line", labels = { … }, series = { { name = "…", values = { … } } } })` | a chart, `"line"` or `"bar"`, a number per label |
 | `b.ui.month({ month = "2026-11", days = { ["2026-11-03"] = { state = "done", action = "…", args = { … }, menu = { … } } } })` | a month as a calendar, a square for each day: `"done"` green, `"missed"` red, `"skipped"` crossed out, `"due"` outlined, `"future"` faint, `"rest"` plain; a tap on a day with an `action` calls it, a right click or a long press opens its `menu`. The weeks start on your notebook's first day of the week, today has a ring |
+| `b.ui.heatmap({ columns = { "3.11", "10.11" }, rows = { { label = "Chest", values = { 4200, 3900 }, texts = { … }, note = "3900 kg" } } })` | a grid of squares, a row per thing and a column per period (the gym's volume per muscle and week), each square stronger the bigger its value against the row's largest (`scale = "all"`: the whole grid's); `nil` or 0 is an empty square. `texts` are what a square says when you point at it or tap it, `note` a short text at the row's end |
 | `b.ui.empty(title, text, icon)` | what to show when there is nothing to show, with an icon of your choice |
 | `b.ui.open(label, view, params, options)` | opens another view of the extension, with `params` for its function; with `options` as a button's (`{ primary = true, icon = "play" }`) it looks like a button |
 | `b.ui.run(label, command)` | a button that runs one of the extension's commands |
@@ -449,7 +450,9 @@ end, { label = "A glass of water" })
 ```
 
 ## Timers
-`b.timer(seconds, { label = "Tea", message = "The tea is ready." })` starts the extension's own timer: its countdown shows under the top bar in every view (with × to stop it), and when the time is up a notification says "Tea is over" with your message. Each extension has one timer — a new one replaces it —, `b.stopTimer()` stops it, and `b.on("timer", function(e) … end)` runs when it ends (`e.label`, `e.seconds`). The timer runs while Brulion does.
+`b.timer(seconds, { label = "Tea", message = "The tea is ready." })` starts the extension's own timer: its countdown shows under the top bar in every view (with × to stop it), and when the time is up a notification says "Tea is over" with your message. Each extension has one timer — a new one replaces it —, `b.stopTimer()` stops it, and `b.on("timer", function(e) … end)` runs when it ends (`e.label`, `e.seconds`).
+
+On Android the notification comes even when Brulion is closed: the timer's end is set as an alarm when it starts (and taken back when it stops). On a computer it comes while Brulion runs — also in the tray with its window closed —, in the browser while its tab is open. Brulion started again during a timer shows it counting on; one that ended meanwhile runs its `"timer"` reactions when the notebook opens, with `e.late` true.
 
 ```luau
 b.command("tea", function(ctx)

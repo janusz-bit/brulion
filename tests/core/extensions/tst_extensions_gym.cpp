@@ -13,8 +13,11 @@
 
 #include <QDir>
 #include <QFile>
+#include <QJsonDocument>
+#include <QSet>
 #include <QTemporaryDir>
 #include <QTest>
+#include <cmath>
 
 using namespace Qt::StringLiterals;
 using namespace brulion;
@@ -445,11 +448,21 @@ private Q_SLOTS:
         QCOMPARE(r.value.toString(), u"Utworzono stronę „Wyciskanie hantli na ławce skośnej”"_s);
         const QString page = m_host->pathOf(u"Wyciskanie hantli na ławce skośnej"_s);
         QVERIFY(!page.isEmpty());
-        QCOMPARE(file(page), u"kategoria:: klatka piersiowa\nmięśnie:: klatka piersiowa, przednie aktony barków\nsprzęt:: hantle\n"_s);
+        // its catalog id, muscles, equipment, kind and level as properties, the instructions under them
+        const QString text = file(page);
+        QVERIFY2(
+                text.startsWith(
+                        u"katalog:: incline-dumbbell-press\nmiesnie:: klatka piersiowa\n"
+                        "miesnie-pomocnicze:: barki, triceps\nsprzet:: hantle\nkategoria:: siłowe\n"
+                        "poziom:: początkujący\n\n## Wykonanie\n\nOpis po angielsku, z free-exercise-db (Unlicense).\n\n1. "_s),
+                qPrintable(text));
+        QVERIFY(text.contains(u"\n2. "_s) && text.endsWith(u"\n"_s));
         // one match is taken at once; an existing page is kept; English names find it too
         r = command(u"from-catalog"_s);
         r = m_engine->resume(u"deadlift"_s);
-        QCOMPARE(r.status, Status::Suspended); // Martwy ciąg, rumuński, sumo
+        QCOMPARE(r.status, Status::Suspended); // Martwy ciąg, rumuński, sumo, …: the best first
+        QCOMPARE(r.value.toMap().value(u"options"_s).toStringList().value(0), u"Martwy ciąg"_s);
+        QVERIFY(r.value.toMap().value(u"options"_s).toStringList().size() <= 50);
         m_engine->cancel();
         r = command(u"from-catalog"_s);
         r = m_engine->resume(u"kółko"_s);
@@ -459,6 +472,427 @@ private Q_SLOTS:
         QCOMPARE(r.value.toString(), u"Strona „Kółko do brzucha” już istnieje"_s);
         r = command(u"from-catalog"_s);
         QCOMPARE(m_engine->resume(u"xyz"_s).value.toString(), u"Nie ma takiego ćwiczenia w katalogu"_s);
+    }
+
+    // The catalog's command for the command line: { total, exercises } or { error, unknown }.
+    QVariantMap search(const QVariantMap &args)
+    {
+        const Result r = command(u"catalog-search"_s, {{u"page"_s, QString()}, {u"args"_s, args}});
+        if (!r.ok())
+            qWarning("%s", qPrintable(r.error));
+        return r.value.toMap();
+    }
+    static QStringList ids(const QVariantMap &found)
+    {
+        QStringList out;
+        for (const QVariant &e : found.value(u"exercises"_s).toList())
+            out << e.toMap().value(u"id"_s).toString();
+        return out;
+    }
+
+    void catalogKeepsItsIds()
+    {
+        // Brulion's 51 exercises keep their ids and names (pages and notes name them); the rest is
+        // free-exercise-db's, every id once.
+        QVERIFY(open({}));
+        const QVariantMap all = search({{u"limit"_s, 2000}});
+        QVERIFY2(all.value(u"total"_s).toInt() > 850, qPrintable(all.value(u"total"_s).toString()));
+        const QStringList every = ids(all);
+        QCOMPARE(QSet<QString>(every.cbegin(), every.cend()).size(), every.size());
+        const QStringList own{u"back-squat"_s,
+                              u"front-squat"_s,
+                              u"goblet-squat"_s,
+                              u"leg-press"_s,
+                              u"lunge"_s,
+                              u"bulgarian-split-squat"_s,
+                              u"romanian-deadlift"_s,
+                              u"leg-curl"_s,
+                              u"leg-extension"_s,
+                              u"hip-thrust"_s,
+                              u"calf-raise"_s,
+                              u"deadlift"_s,
+                              u"sumo-deadlift"_s,
+                              u"pull-up"_s,
+                              u"chin-up"_s,
+                              u"barbell-row"_s,
+                              u"dumbbell-row"_s,
+                              u"lat-pulldown"_s,
+                              u"seated-cable-row"_s,
+                              u"face-pull"_s,
+                              u"bench-press"_s,
+                              u"incline-bench-press"_s,
+                              u"dumbbell-bench-press"_s,
+                              u"incline-dumbbell-press"_s,
+                              u"dumbbell-fly"_s,
+                              u"dip"_s,
+                              u"push-up"_s,
+                              u"overhead-press"_s,
+                              u"dumbbell-shoulder-press"_s,
+                              u"lateral-raise"_s,
+                              u"rear-delt-fly"_s,
+                              u"shrug"_s,
+                              u"barbell-curl"_s,
+                              u"dumbbell-curl"_s,
+                              u"hammer-curl"_s,
+                              u"triceps-pushdown"_s,
+                              u"skull-crusher"_s,
+                              u"close-grip-bench-press"_s,
+                              u"plank"_s,
+                              u"side-plank"_s,
+                              u"hanging-leg-raise"_s,
+                              u"crunch"_s,
+                              u"russian-twist"_s,
+                              u"ab-wheel"_s,
+                              u"kettlebell-swing"_s,
+                              u"clean"_s,
+                              u"burpee"_s,
+                              u"running"_s,
+                              u"rowing"_s,
+                              u"cycling"_s,
+                              u"jump-rope"_s};
+        QCOMPARE(own.size(), 51);
+        for (const QString &id : own)
+            QVERIFY2(every.contains(id), qPrintable(id));
+        const QVariantMap squat = search({{u"id"_s, u"back-squat"_s}}).value(u"exercises"_s).toList().value(0).toMap();
+        QCOMPARE(squat.value(u"pl"_s).toString(), u"Przysiad ze sztangą"_s);
+        QCOMPARE(squat.value(u"en"_s).toString(), u"Back squat"_s);
+        QCOMPARE(squat.value(u"primary"_s).toStringList(), QStringList{u"quadriceps"_s});
+        QCOMPARE(squat.value(u"muscles"_s).toString(), u"czworogłowe uda"_s);
+        QCOMPARE(squat.value(u"equipmentName"_s).toString(), u"sztanga"_s);
+        QCOMPARE(squat.value(u"source"_s).toString(), u"Barbell_Squat"_s);
+        QVERIFY(squat.value(u"instructions"_s).toList().size() >= 3);
+        QCOMPARE(search({{u"id"_s, u"nie-ma"_s}}).value(u"unknown"_s).toString(), u"id"_s);
+    }
+
+    void catalogSearch_data()
+    {
+        QTest::addColumn<QVariantMap>("args");
+        QTest::addColumn<QString>("first");
+        QTest::addColumn<int>("atLeast");
+        const auto q = [](const QString &query) { return QVariantMap{{u"query"_s, query}}; };
+        // a name people write: Brulion's own exercise first
+        QTest::newRow("przysiad") << q(u"przysiad"_s) << u"back-squat"_s << 10;
+        QTest::newRow("case and diacritics") << q(u"WYCISKANIE LEZAC"_s) << u"bench-press"_s << 1;
+        QTest::newRow("english name") << q(u"bench press"_s) << u"bench-press"_s << 5;
+        QTest::newRow("words in any order") << q(u"skośnej hantli"_s) << u"incline-dumbbell-press"_s << 2;
+        QTest::newRow("polish alias") << q(u"allahy"_s) << u"cable-crunch"_s << 1;
+        QTest::newRow("translated upstream") << q(u"orbitrek"_s) << u"elliptical-trainer"_s << 1;
+        // a name starting with the words first: the untranslated "Zottman Preacher Curl" before
+        // "Uginanie Zottmana" (Zottman Curl) in a Polish interface
+        QTest::newRow("english only") << q(u"zottman"_s) << u"zottman-preacher-curl"_s << 2;
+        QTest::newRow("translated, by its english name") << q(u"zottman curl"_s) << u"zottman-curl"_s << 1;
+        QTest::newRow("nothing") << q(u"zażółć gęślą jaźń"_s) << QString() << 0;
+        QTest::newRow("muscle by Polish name, equipment")
+                << QVariantMap{{u"muscle"_s, u"Klatka piersiowa"_s}, {u"equipment"_s, u"hantle"_s}} << u"dumbbell-fly"_s
+                << 10; // Brulion's own first, by name: "Rozpiętki z hantlami"
+        QTest::newRow("muscle by id, query")
+                << QVariantMap{{u"muscle"_s, u"lats"_s}, {u"query"_s, u"podciąganie"_s}} << u"pull-up"_s << 3;
+        QTest::newRow("muscle by synonym") << QVariantMap{{u"muscle"_s, u"przednie aktony barków"_s}}
+                                           << u"rear-delt-fly"_s << 30; // "Odwrotne rozpiętki"
+        QTest::newRow("kind") << QVariantMap{{u"category"_s, u"rozciąganie"_s}} << QString() << 100;
+    }
+    void catalogSearch()
+    {
+        QFETCH(QVariantMap, args);
+        QFETCH(QString, first);
+        QFETCH(int, atLeast);
+        QVERIFY(open({}));
+        args.insert(u"limit"_s, 2000);
+        const QVariantMap found = search(args);
+        QVERIFY2(!found.contains(u"error"_s), qPrintable(found.value(u"error"_s).toString()));
+        const QStringList list = ids(found);
+        QVERIFY2(list.size() >= atLeast, qPrintable(list.join(u", "_s)));
+        QCOMPARE(found.value(u"total"_s).toInt(), list.size());
+        if (!first.isEmpty())
+            QCOMPARE(list.value(0), first);
+        // every one passes the filters
+        for (const QVariant &e : found.value(u"exercises"_s).toList()) {
+            const QVariantMap x = e.toMap();
+            if (args.value(u"muscle"_s).toString() == u"lats"_s)
+                QVERIFY(x.value(u"primary"_s).toStringList().contains(u"lats"_s));
+            if (args.contains(u"equipment"_s))
+                QCOMPARE(x.value(u"equipment"_s).toString(), u"dumbbell"_s);
+            if (args.contains(u"category"_s))
+                QCOMPARE(x.value(u"category"_s).toString(), u"stretching"_s);
+        }
+    }
+
+    void catalogSearchRefusesWhatItDoesNotKnow()
+    {
+        QVERIFY(open({}));
+        QCOMPARE(search({{u"muscle"_s, u"skrzydła"_s}}).value(u"unknown"_s).toString(), u"muscle"_s);
+        QCOMPARE(search({{u"equipment"_s, u"lina okrętowa"_s}}).value(u"unknown"_s).toString(), u"equipment"_s);
+        QCOMPARE(search({{u"category"_s, u"szachy"_s}}).value(u"unknown"_s).toString(), u"category"_s);
+        // the limit
+        QCOMPARE(search({{u"query"_s, u"curl"_s}, {u"limit"_s, 3}}).value(u"exercises"_s).toList().size(), 3);
+        // hostile queries end, without matches
+        QCOMPARE(search({{u"query"_s, QString(20000, u'a')}}).value(u"total"_s).toInt(), 0);
+        QCOMPARE(search({{u"query"_s, u"%d+.*[]("_s}}).value(u"total"_s).toInt(), 0);
+    }
+
+    void pickerAndExerciseViews()
+    {
+        QVERIFY(open(sampleNotes()));
+        // the picker: a search narrows, a filter too; "+ today" adds the exercise to today's
+        // workout (a new one: there is none today)
+        QVariantMap view = render(u"catalog"_s);
+        QVERIFY(QString::fromUtf8(QJsonDocument::fromVariant(view).toJson()).contains(u"879 ćwiczeń"_s));
+        QVERIFY(m_engine->act(u"silownia"_s, u"catalog"_s, u"search"_s, {{u"value"_s, u"wiosłowanie"_s}}).ok());
+        QVERIFY(m_engine->act(u"silownia"_s, u"catalog"_s, u"filter"_s,
+                              {{u"key"_s, u"equipment"_s}, {u"value"_s, u"barbell"_s}})
+                        .ok());
+        view = render(u"catalog"_s);
+        const QString shown = QString::fromUtf8(QJsonDocument::fromVariant(view).toJson());
+        QVERIFY2(shown.contains(u"Wiosłowanie sztangą"_s), qPrintable(shown.left(3000)));
+        QVERIFY(!shown.contains(u"Wiosłowanie hantlem"_s));
+        Result r = m_engine->act(u"silownia"_s, u"catalog"_s, u"addToToday"_s, {{u"id"_s, u"barbell-row"_s}});
+        QVERIFY2(r.ok(), qPrintable(r.error));
+        QCOMPARE(r.value.toMap().value(u"message"_s).toString(), u"„Wiosłowanie sztangą” w dzisiejszym treningu"_s);
+        QCOMPARE(file(u"journals/2026-11-11.md"_s), u"- Trening #trening\n  - [ ] [[Wiosłowanie sztangą]] 3×10\n"_s);
+        // a second one goes under the same workout; cardio gets a time
+        r = m_engine->act(u"silownia"_s, u"catalog"_s, u"addToToday"_s, {{u"id"_s, u"running"_s}});
+        QVERIFY(r.ok());
+        QCOMPARE(file(u"journals/2026-11-11.md"_s),
+                 u"- Trening #trening\n  - [ ] [[Wiosłowanie sztangą]] 3×10\n  - [ ] [[Bieg]] 20 min\n"_s);
+        QVERIFY(m_engine->act(u"silownia"_s, u"catalog"_s, u"clear"_s, {}).ok());
+        // the exercise: its muscles, its page made from the catalog, its instructions
+        view = render(u"exercise"_s, {{u"id"_s, u"romanian-deadlift"_s}});
+        const QString exercise = QString::fromUtf8(QJsonDocument::fromVariant(view).toJson());
+        QVERIFY(exercise.contains(u"Martwy ciąg rumuński"_s) && exercise.contains(u"Mięśnie główne: dwugłowe uda"_s));
+        QVERIFY(exercise.contains(u"Utwórz stronę ćwiczenia"_s));
+        r = m_engine->act(u"silownia"_s, u"exercise"_s, u"createPage"_s, {{u"id"_s, u"romanian-deadlift"_s}});
+        QCOMPARE(r.value.toMap().value(u"message"_s).toString(), u"Utworzono stronę „Martwy ciąg rumuński”"_s);
+        QVERIFY(file(m_host->pathOf(u"Martwy ciąg rumuński"_s)).startsWith(u"katalog:: romanian-deadlift\n"_s));
+        QVERIFY(!QString::fromUtf8(
+                         QJsonDocument::fromVariant(render(u"exercise"_s, {{u"id"_s, u"romanian-deadlift"_s}}))
+                                 .toJson())
+                         .contains(u"Utwórz stronę ćwiczenia"_s));
+        QCOMPARE(render(u"exercise"_s, {{u"id"_s, u"nie-ma"_s}}).value(u"type"_s).toString(), u"column"_s);
+    }
+
+    // The volume of every muscle and week with Polish names: the catalog's muscles of "Przysiad",
+    // "Wyciskanie leżąc", "Podciąganie" (with the body weight of the log), a page's own muscles,
+    // secondary muscles at half, planned and cancelled sets left out, pounds as kilograms.
+    void weeklyVolume()
+    {
+        QVERIFY(open({
+                {u"journals/2026-11-02.md"_s,
+                 u"- Trening A #trening\n  - [x] [[Przysiad]] 100 kg 5×5\n  - [x] [[Wyciskanie leżąc]] 80 kg 3×5\n"
+                 "  - [x] [[Podciąganie]] MC × 10, 8\n  - [ ] [[Martwy ciąg]] 140 kg 1×5\n"
+                 "  - [-] [[Wiosłowanie sztangą]] 60 kg 3×5\n- 80 kg #waga\n"_s},
+                {u"journals/2026-11-09.md"_s,
+                 u"- Trening B #trening\n  - [x] [[Moje ćwiczenie]] 20 kg 3×10\n  - [x] [[Deska]] 3×60 s\n"
+                 "  - [x] [[Wykroki]] 225 lb 2×10\n  - [x] Rzut oszczepem 10 kg 3×5\n  - [x] [[Stare ćwiczenie]] 50 kg 2×10\n"_s},
+                {u"Moje ćwiczenie.md"_s, u"miesnie:: Klatka, przednie aktony barków\nmiesnie-pomocnicze:: triceps\n"_s},
+                // a page the catalog wrote before 0.24: "mięśnie::" is no property (keys are ASCII)
+                {u"Stare ćwiczenie.md"_s, u"kategoria:: nogi\nmięśnie:: łydki\nsprzęt:: maszyna\n"_s},
+        }));
+        const Result r =
+                command(u"volume-report"_s, {{u"page"_s, QString()}, {u"args"_s, QVariantMap{{u"weeks"_s, 2}}}});
+        QVERIFY2(r.ok(), qPrintable(r.error));
+        const QVariantMap report = r.value.toMap();
+        QCOMPARE(report.value(u"unit"_s).toString(), u"kg"_s);
+        QCOMPARE(report.value(u"weeks"_s).toStringList(), (QStringList{u"2026-11-02"_s, u"2026-11-09"_s}));
+        const QVariantList totals = report.value(u"totals"_s).toList();
+        QCOMPARE(totals.value(0).toDouble(), 5140.0); // 2500 + 1200 + 80 kg × 18
+        QCOMPARE(totals.value(1).toDouble(), 3791.2); // 600 + 0 + 225 lb × 20 + 150 + 1000
+        QCOMPARE(report.value(u"sets"_s).toList().value(0).toDouble(), 10.0);
+        QCOMPARE(report.value(u"unassigned"_s).toStringList(), QStringList{u"Rzut oszczepem"_s});
+        QHash<QString, QVariantMap> muscles;
+        for (const QVariant &m : report.value(u"muscles"_s).toList())
+            muscles.insert(m.toMap().value(u"id"_s).toString(), m.toMap());
+        const auto volume = [&](const QString &id, int week) {
+            return muscles.value(id).value(u"volume"_s).toList().value(week).toDouble();
+        };
+        const auto sets = [&](const QString &id, int week) {
+            return muscles.value(id).value(u"sets"_s).toList().value(week).toDouble();
+        };
+        QCOMPARE(volume(u"quadriceps"_s, 0), 2500.0);
+        QCOMPARE(sets(u"quadriceps"_s, 0), 5.0);
+        QCOMPARE(volume(u"glutes"_s, 0), 1250.0); // the squat's secondary: half
+        QCOMPARE(sets(u"glutes"_s, 0), 2.5);
+        QCOMPARE(volume(u"chest"_s, 0), 1200.0);
+        QCOMPARE(volume(u"triceps"_s, 0), 600.0);
+        QCOMPARE(volume(u"lats"_s, 0), 1440.0); // bodyweight: 80 kg of the log × 18
+        QCOMPARE(volume(u"biceps"_s, 0), 720.0);
+        QCOMPARE(volume(u"hamstrings"_s, 0), 1250.0); // the squat's; the deadlift was only planned
+        // the second week: the page's own muscles ("Klatka" = chest, front delts = shoulders)
+        QCOMPARE(volume(u"chest"_s, 1), 600.0);
+        QCOMPARE(volume(u"shoulders"_s, 1), 600.0);
+        QCOMPARE(volume(u"triceps"_s, 1), 300.0);
+        QCOMPARE(sets(u"triceps"_s, 1), 1.5);
+        QCOMPARE(volume(u"abdominals"_s, 1), 0.0); // a plank: sets, no volume
+        QCOMPARE(sets(u"abdominals"_s, 1), 3.0);
+        QCOMPARE(volume(u"quadriceps"_s, 1), 2041.2);          // 225 lb × 20
+        QCOMPARE(volume(u"calves"_s, 1), 1000.0 + 2041.2 / 2); // the old page's "mięśnie:: łydki", the lunge's half
+        QCOMPARE(muscles.value(u"quadriceps"_s).value(u"current"_s).toDouble(), 2041.2);
+        QCOMPARE(muscles.value(u"quadriceps"_s).value(u"average"_s).toDouble(), 2500.0);
+        QCOMPARE(muscles.value(u"quadriceps"_s).value(u"name"_s).toString(), u"czworogłowe uda"_s);
+        // the busiest first
+        QCOMPARE(report.value(u"muscles"_s).toList().value(0).toMap().value(u"id"_s).toString(), u"quadriceps"_s);
+
+        // In pounds: the same numbers in the setting's unit.
+        QVERIFY(m_engine->evaluate(u"silownia"_s, u"b.setSetting(\"unit\", \"lb\")"_s, u"test"_s).ok());
+        const QVariantMap pounds =
+                command(u"volume-report"_s, {{u"page"_s, QString()}, {u"args"_s, QVariantMap{{u"weeks"_s, 2}}}})
+                        .value.toMap();
+        QCOMPARE(pounds.value(u"unit"_s).toString(), u"lb"_s);
+        QCOMPARE(pounds.value(u"totals"_s).toList().value(0).toDouble(), 11331.8); // 5140 kg
+
+        // The view: this week against the average, the heat map of every muscle, the table.
+        QVERIFY(m_engine->evaluate(u"silownia"_s, u"b.setSetting(\"unit\", \"kg\")"_s, u"test"_s).ok());
+        const QVariantMap view = render(u"volume"_s, {{u"weeks"_s, u"2"_s}});
+        QVariantMap heat;
+        for (const QVariant &c : view.value(u"children"_s).toList())
+            if (c.toMap().value(u"type"_s) == u"heatmap"_s)
+                heat = c.toMap();
+        QCOMPARE(heat.value(u"columns"_s).toStringList(), (QStringList{u"2.11"_s, u"9.11"_s}));
+        const QVariantMap first = heat.value(u"rows"_s).toList().value(0).toMap();
+        QCOMPARE(first.value(u"label"_s).toString(), u"czworogłowe uda"_s);
+        QCOMPARE(first.value(u"note"_s).toString(), u"2041 kg"_s);
+        QCOMPARE(first.value(u"texts"_s).toList().value(0).toString(),
+                 u"czworogłowe uda, tydzień od 2.11: 2500 kg, 5 serii"_s);
+        const QString all = QString::fromUtf8(QJsonDocument::fromVariant(view).toJson());
+        QVERIFY(all.contains(u"Bez przypisanych mięśni: Rzut oszczepem"_s));
+        QVERIFY(all.contains(u"3 serie"_s)); // the plank's abs: sets, without volume
+    }
+
+    void volumeOfNoWorkouts()
+    {
+        QVERIFY(open({{u"Notatka.md"_s, u"- nic\n"_s}}));
+        const QVariantMap report =
+                command(u"volume-report"_s, {{u"page"_s, QString()}, {u"args"_s, QVariantMap{{u"weeks"_s, 500}}}})
+                        .value.toMap();
+        QCOMPARE(report.value(u"weeks"_s).toStringList().size(), 104); // clamped
+        QVERIFY(report.value(u"muscles"_s).toList().isEmpty());
+        const QString view = QString::fromUtf8(QJsonDocument::fromVariant(render(u"volume"_s)).toJson());
+        QVERIFY(view.contains(u"Brak treningów w tym okresie"_s));
+    }
+
+    // The weigh-ins: what is read from a line (any order, comma or point, kg or lb, body fat,
+    // notes), what is not a weigh-in.
+    void weighIns_data()
+    {
+        QTest::addColumn<QString>("line");
+        QTest::addColumn<double>("weight");
+        QTest::addColumn<QString>("unit");
+        QTest::addColumn<double>("fat"); // -1: none
+        QTest::addColumn<QString>("notes");
+        QTest::newRow("plain") << u"- 82,5 kg #waga"_s << 82.5 << u"kg"_s << -1.0 << QString();
+        QTest::newRow("all of it") << u"- 82,5 kg 18 % rano #waga"_s << 82.5 << u"kg"_s << 18.0 << u"rano"_s;
+        QTest::newRow("glued, point") << u"- Waga: 82.5kg 18,5% po treningu #Waga"_s << 82.5 << u"kg"_s << 18.5
+                                      << u"Waga: po treningu"_s;
+        QTest::newRow("pounds, english tag") << u"- 181 lb #weight"_s << 181.0 << u"lb"_s << -1.0 << QString();
+        QTest::newRow("lbs") << u"- 181 lbs morning #weight"_s << 181.0 << u"lb"_s << -1.0 << u"morning"_s;
+        QTest::newRow("no unit: the setting's") << u"- #waga 80"_s << 80.0 << u"kg"_s << -1.0 << QString();
+        QTest::newRow("fat first") << u"- 20 % 79 kg #waga"_s << 79.0 << u"kg"_s << 20.0 << QString();
+        QTest::newRow("a done task, its date")
+                << u"- [x] 79,9 kg #waga ✅ 2026-11-02"_s << 79.9 << u"kg"_s << -1.0 << QString();
+        QTest::newRow("other tags stay notes")
+                << u"- 80 kg #waga #zdrowie"_s << 80.0 << u"kg"_s << -1.0 << u"#zdrowie"_s;
+        QTest::newRow("fat only") << u"- 18 % #waga"_s << 0.0 << QString() << -1.0 << QString();
+        QTest::newRow("no number") << u"- waga bez liczby #waga"_s << 0.0 << QString() << -1.0 << QString();
+        QTest::newRow("zero") << u"- 0 kg #waga"_s << 0.0 << QString() << -1.0 << QString();
+        QTest::newRow("hostile digits") << u"- "_s + QString(100000, u'1') + u" kg #waga"_s << 0.0 << QString() << -1.0
+                                        << QString();
+        QTest::newRow("hostile percents")
+                << u"- 80 kg "_s + u"5 % "_s.repeated(300) + u"#waga"_s << 80.0 << u"kg"_s << 5.0 << u"%"_s;
+    }
+    void weighIns()
+    {
+        QFETCH(QString, line);
+        QFETCH(double, weight);
+        QFETCH(QString, unit);
+        QFETCH(double, fat);
+        QFETCH(QString, notes);
+        QVERIFY(open({{u"journals/2026-11-02.md"_s, line + u'\n'}}));
+        test::CpuTimer clock;
+        clock.start();
+        const Result r = command(u"weights"_s, {{u"page"_s, QString()}, {u"args"_s, QVariantMap{}}});
+        QVERIFY2(r.ok(), qPrintable(r.error));
+        QVERIFY(clock.elapsed() < Limits{}.timeoutMs * BRULION_TEST_SLOWDOWN);
+        const QVariantList entries = r.value.toMap().value(u"entries"_s).toList();
+        if (unit.isEmpty()) {
+            QVERIFY(entries.isEmpty());
+            return;
+        }
+        QCOMPARE(entries.size(), 1);
+        const QVariantMap e = entries.first().toMap();
+        QCOMPARE(e.value(u"weight"_s).toDouble(), weight);
+        QCOMPARE(e.value(u"unit"_s).toString(), unit);
+        QCOMPARE(e.value(u"date"_s).toString(), u"2026-11-02"_s);
+        if (fat < 0)
+            QVERIFY(!e.contains(u"fat"_s));
+        else
+            QCOMPARE(e.value(u"fat"_s).toDouble(), fat);
+        if (!notes.startsWith(u'%'))
+            QCOMPARE(e.value(u"notes"_s).toString(), notes);
+        QCOMPARE(e.value(u"kg"_s).toDouble(), unit == u"lb" ? std::round(weight * 0.45359237 * 100) / 100 : weight);
+    }
+
+    // Writing weigh-ins: the line in Brulion's spelling at the end of the day's note, every other
+    // byte kept (CRLF line endings, no final line break, other blocks); the trend; the view's quick
+    // entry, Undo and removal.
+    void weighInsWrittenByteForByte()
+    {
+        const QString before = u"- Śniadanie: owsianka\r\n- [ ] Zadzwonić do Łukasza\r\n- 80 kg #waga"_s;
+        QVERIFY(open(
+                {{u"journals/2026-11-11.md"_s, before}, {u"journals/2026-11-04.md"_s, u"- 81 kg 20 % #waga\n"_s}}));
+        Result r = command(u"weight"_s,
+                           {{u"page"_s, QString()}, {u"args"_s, QVariantMap{{u"text"_s, u"82,5 kg 18 % rano"_s}}}});
+        QVERIFY2(r.ok(), qPrintable(r.error));
+        QCOMPARE(r.value.toMap().value(u"line"_s).toString(), u"82,5 kg 18 % rano #waga"_s);
+        QCOMPARE(file(u"journals/2026-11-11.md"_s), before + u"\r\n- 82,5 kg 18 % rano #waga\r\n"_s);
+        // with the parts as arguments, another day, pounds
+        r = command(u"weight"_s, {{u"page"_s, QString()},
+                                  {u"args"_s, QVariantMap{{u"weight"_s, 181},
+                                                          {u"unit"_s, u"lb"_s},
+                                                          {u"date"_s, u"2026-11-10"_s},
+                                                          {u"notes"_s, u"po urlopie"_s}}}});
+        QVERIFY(r.ok());
+        QCOMPARE(file(u"journals/2026-11-10.md"_s), u"- 181 lb po urlopie #waga\n"_s);
+        // nonsense is refused, nothing written
+        r = command(u"weight"_s, {{u"page"_s, QString()}, {u"args"_s, QVariantMap{{u"text"_s, u"dużo"_s}}}});
+        QCOMPARE(r.value.toMap().value(u"tone"_s).toString(), u"warning"_s);
+        r = command(u"weight"_s, {{u"page"_s, QString()},
+                                  {u"args"_s, QVariantMap{{u"weight"_s, 80}, {u"date"_s, u"2026-02-30"_s}}}});
+        QCOMPARE(r.value.toMap().value(u"tone"_s).toString(), u"error"_s);
+        QVERIFY(m_host->pathOf(u"2026-02-30"_s).isEmpty());
+
+        // the log: a day's last weigh-in counts, the trend smoothed 10 % a day
+        const QVariantMap log =
+                command(u"weights"_s, {{u"page"_s, QString()}, {u"args"_s, QVariantMap{}}}).value.toMap();
+        QCOMPARE(log.value(u"entries"_s).toList().size(), 4);
+        QCOMPARE(log.value(u"latest"_s).toDouble(), 82.5);
+        QCOMPARE(log.value(u"latestDate"_s).toString(), u"2026-11-11"_s);
+        // 81 → 82,1 (6 days: 1 − 0,9⁶ of the way) → 82,5 (1 day: 10 %)
+        const double t1 = 81 + (1 - std::pow(0.9, 6)) * (181 * 0.45359237 - 81);
+        const double t2 = t1 + 0.1 * (82.5 - t1);
+        QCOMPARE(log.value(u"trend"_s).toDouble(), std::round(t2 * 100) / 100);
+        QCOMPARE(log.value(u"fat"_s).toDouble(), 18.0);
+        QVERIFY(log.contains(u"change7"_s));
+
+        // the view: its field writes today's weigh-in, Undo takes it back, a menu removes one
+        const QString today = file(u"journals/2026-11-11.md"_s);
+        r = m_engine->act(u"silownia"_s, u"weight"_s, u"add"_s, {{u"value"_s, u"82,4"_s}});
+        QVERIFY2(r.ok(), qPrintable(r.error));
+        QCOMPARE(file(u"journals/2026-11-11.md"_s), today + u"- 82,4 kg #waga\r\n"_s);
+        const QVariantMap undo = r.value.toMap().value(u"button"_s).toMap();
+        QCOMPARE(undo.value(u"label"_s).toString(), u"Cofnij"_s);
+        QVERIFY(m_engine->act(u"silownia"_s, u"weight"_s, u"remove"_s, undo.value(u"args"_s).toMap()).ok());
+        QCOMPARE(file(u"journals/2026-11-11.md"_s), today);
+        r = m_engine->act(u"silownia"_s, u"weight"_s, u"add"_s, {{u"value"_s, u"nic"_s}});
+        QCOMPARE(r.value.toMap().value(u"tone"_s).toString(), u"warning"_s);
+        QCOMPARE(file(u"journals/2026-11-11.md"_s), today);
+        const QString shown = QString::fromUtf8(QJsonDocument::fromVariant(render(u"weight"_s)).toJson());
+        QVERIFY(shown.contains(u"82,5 kg"_s) && shown.contains(u"Trend"_s) && shown.contains(u"Tkanka tłuszczowa"_s));
+        // the macro {{ext:silownia/waga}}: the latest weigh-in and the trend
+        const Result macro =
+                m_engine->runMacro(u"silownia"_s, u"waga"_s, {{u"args"_s, QVariantList{}}}, test::kRoomyMs);
+        QVERIFY2(macro.ok(), qPrintable(macro.error));
+        const QString value = QString::fromUtf8(QJsonDocument::fromVariant(macro.value).toJson());
+        QVERIFY2(value.contains(u"82,5 kg"_s) && value.contains(u"trend"_s) && value.contains(u"2026-11-11"_s),
+                 qPrintable(value));
     }
 
     void englishNotes()

@@ -254,6 +254,12 @@ Bilet: 4,40 zł
 Zakupy: 86,30 zł
 suma
 ```
+- Trening A #trening
+  plan:: [[Plan treningowy A]]
+  - [x] Przysiad 82,5 kg 5×5
+  - [x] Wyciskanie leżąc 62,5 kg 5×5
+  - [x] Wiosłowanie sztangą 55 kg × 5, 5, 5, 5, 4 @9
+- 81,4 kg #waga
 )md"_s;
 
 const auto kWeekAgo = uR"md(- Początek remontu! #projekt/dom
@@ -261,6 +267,36 @@ const auto kWeekAgo = uR"md(- Początek remontu! #projekt/dom
 - [x] Wybrać kolor ścian w salonie ✅ {weekAgo}
 - Skończona „Ferdydurke” — [[Książki 2026]]
 - Żółć, ćma, źdźbło, łąka — Brulion lubi polskie znaki.
+- Trening A #trening
+  plan:: [[Plan treningowy A]]
+  - [x] Przysiad 80 kg 5×5
+  - [x] Wyciskanie leżąc 60 kg 5×5
+  - [x] Wiosłowanie sztangą 52,5 kg 5×5
+- 82,1 kg 21 % #waga
+)md"_s;
+
+// The gym (Settings → Extensions → Gym): a plan, its workouts and weigh-ins on more days.
+const auto kThreeDaysAgo = uR"md(- Bieganie w parku #trening
+  - [x] Bieg 5 km 27:30
+  - [x] Podciąganie MC × 8, 7, 6
+  - [x] Deska 3×60 s
+- 81,8 kg rano #waga
+)md"_s;
+
+const auto kTwoWeeksAgo = uR"md(- Trening A #trening
+  plan:: [[Plan treningowy A]]
+  - [x] Przysiad 77,5 kg 5×5
+  - [x] Wyciskanie leżąc 57,5 kg 5×5
+  - [x] Wiosłowanie sztangą 50 kg 5×5
+- 82,6 kg 22 % #waga
+)md"_s;
+
+const auto kGymPlan = uR"md(tags:: plan-treningowy
+przerwa:: 2 min
+
+- Przysiad 5×5
+- Wyciskanie leżąc 5×5
+- Wiosłowanie sztangą 5×5
 )md"_s;
 
 const auto kRemont = uR"md(---
@@ -656,6 +692,12 @@ Bus ticket: $2.75
 Groceries: $38.20
 sum
 ```
+- Workout A #workout
+  plan:: [[Workout plan A]]
+  - [x] Squat 82.5 kg 5×5
+  - [x] Bench press 62.5 kg 5×5
+  - [x] Barbell row 55 kg × 5, 5, 5, 5, 4 @9
+- 81.4 kg #weight
 )md"_s;
 
 const auto kWeekAgo = uR"md(- The renovation starts! #project/home
@@ -663,6 +705,36 @@ const auto kWeekAgo = uR"md(- The renovation starts! #project/home
 - [x] Choose the color of the living room walls ✅ {weekAgo}
 - Finished “Frankenstein” — [[Books 2026]]
 - Café, naïve, Zürich, Łódź, żółć — Brulion is at home with any alphabet.
+- Workout A #workout
+  plan:: [[Workout plan A]]
+  - [x] Squat 80 kg 5×5
+  - [x] Bench press 60 kg 5×5
+  - [x] Barbell row 52.5 kg 5×5
+- 82.1 kg 21% #weight
+)md"_s;
+
+// The gym (Settings → Extensions → Gym): a plan, its workouts and weigh-ins on more days.
+const auto kThreeDaysAgo = uR"md(- A run in the park #workout
+  - [x] Running 5 km 27:30
+  - [x] Pull-up BW × 8, 7, 6
+  - [x] Plank 3×60 s
+- 81.8 kg morning #weight
+)md"_s;
+
+const auto kTwoWeeksAgo = uR"md(- Workout A #workout
+  plan:: [[Workout plan A]]
+  - [x] Squat 77.5 kg 5×5
+  - [x] Bench press 57.5 kg 5×5
+  - [x] Barbell row 50 kg 5×5
+- 82.6 kg 22% #weight
+)md"_s;
+
+const auto kGymPlan = uR"md(tags:: workout-plan
+rest:: 2 min
+
+- Squat 5×5
+- Bench press 5×5
+- Barbell row 5×5
 )md"_s;
 
 const auto kRenovation = uR"md(---
@@ -877,6 +949,7 @@ struct SampleTexts {
     QStringView journalTemplate, meetingTemplatePath, meetingTemplate, picturePath, picture;
     QStringView deckPath, deck;
     QStringView canvasPath, canvas;
+    QStringView threeDaysAgo, twoWeeksAgo, gymPlanPath, gymPlan;
 };
 
 bool isPolish(QStringView language)
@@ -906,7 +979,11 @@ SampleTexts sampleTexts(QStringView language)
                 u"Nauka/Hiszpański.md",
                 pl::kDeck,
                 u"Projekty/Plan remontu.canvas",
-                pl::kCanvas};
+                pl::kCanvas,
+                pl::kThreeDaysAgo,
+                pl::kTwoWeeksAgo,
+                u"Plan treningowy A.md",
+                pl::kGymPlan};
     return {en::kWelcome,
             en::kDocsNotebook,
             en::kToday,
@@ -926,7 +1003,11 @@ SampleTexts sampleTexts(QStringView language)
             u"Learning/Spanish.md",
             en::kDeck,
             u"Projects/Home renovation plan.canvas",
-            en::kCanvas};
+            en::kCanvas,
+            en::kThreeDaysAgo,
+            en::kTwoWeeksAgo,
+            u"Workout plan A.md",
+            en::kGymPlan};
 }
 
 } // namespace
@@ -973,6 +1054,9 @@ QList<DemoFile> demoVaultFiles(const QDateTime &now, QStringView language)
             {texts.picturePath.toString(), texts.picture.toString()},
             {texts.deckPath.toString(), fill(texts.deck, vars)},
             {texts.canvasPath.toString(), texts.canvas.toString()},
+            {journal(today.addDays(-3)), texts.threeDaysAgo.toString()},
+            {journal(today.addDays(-14)), texts.twoWeeksAgo.toString()},
+            {texts.gymPlanPath.toString(), texts.gymPlan.toString()},
     };
 }
 

@@ -491,6 +491,81 @@ private Q_SLOTS:
         QVERIFY(QString::fromUtf8(r.out).contains(u"[x] Medytacja"_s));
     }
 
+    void gym()
+    {
+        // kNow is Wednesday 2026-10-14: the weeks of 2026-10-05 and 2026-10-12.
+        const QString dir =
+                vault({{u"journals/2026-10-05.md"_s,
+                        "- Trening A #trening\n  - [x] [[Przysiad]] 100 kg 5×5\n  - [x] [[Podciąganie]] MC × 10\n"
+                        "- 80 kg #waga\n"},
+                       {u"journals/2026-10-13.md"_s, "- Trening B #trening\r\n  - [x] [[Martwy ciąg]] 140 kg 1×5\r\n"
+                                                     "- 81 kg 20 % #waga\r\n"}});
+        Run r = run(dir, {u"--lang"_s, u"pl"_s, u"gym"_s, u"volume"_s, u"--weeks"_s, u"2"_s});
+        QCOMPARE(r.code, 0);
+        QJsonObject o = r.result();
+        QCOMPARE(o.value(u"weeks"_s).toArray(), (QJsonArray{u"2026-10-05"_s, u"2026-10-12"_s}));
+        QCOMPARE(o.value(u"totals"_s).toArray()[0].toDouble(), 3300.0); // 2500 + 80 kg × 10
+        QCOMPARE(o.value(u"totals"_s).toArray()[1].toDouble(), 700.0);
+        QCOMPARE(o.value(u"muscles"_s).toArray()[0].toObject().value(u"id"_s).toString(), u"quadriceps"_s);
+        QCOMPARE(o.value(u"muscles"_s).toArray()[0].toObject().value(u"name"_s).toString(), u"czworogłowe uda"_s);
+        // in pounds
+        r = run(dir, {u"gym"_s, u"volume"_s, u"--weeks"_s, u"2"_s, u"--unit"_s, u"lb"_s});
+        QCOMPARE(r.result().value(u"unit"_s).toString(), u"lb"_s);
+        QCOMPARE(r.result().value(u"totals"_s).toArray()[1].toDouble(), 1543.2); // 700 kg
+
+        // The log, a weigh-in written at the end of today's note (made: there is none), CRLF kept
+        // in another day's.
+        r = run(dir, {u"gym"_s, u"weights"_s});
+        QCOMPARE(r.code, 0);
+        QCOMPARE(r.result().value(u"entries"_s).toArray().size(), 2);
+        QCOMPARE(r.result().value(u"fat"_s).toDouble(), 20.0);
+        r = run(dir, {u"--lang"_s, u"pl"_s, u"gym"_s, u"weigh"_s, u"82,5"_s, u"--fat"_s, u"18"_s, u"--note"_s,
+                      u"rano, na czczo"_s});
+        QCOMPARE(r.code, 0);
+        QCOMPARE(r.result().value(u"line"_s).toString(), u"82,5 kg 18 % rano, na czczo #waga"_s);
+        QCOMPARE(readFile(dir + u"/journals/2026-10-14.md"_s),
+                 QString(u"- 82,5 kg 18 % rano, na czczo #waga\n"_s).toUtf8());
+        r = run(dir, {u"--lang"_s, u"pl"_s, u"gym"_s, u"weigh"_s, u"181 lb"_s, u"--date"_s, u"wczoraj"_s});
+        QCOMPARE(r.code, 0);
+        QCOMPARE(
+                readFile(dir + u"/journals/2026-10-13.md"_s),
+                QString(u"- Trening B #trening\r\n  - [x] [[Martwy ciąg]] 140 kg 1×5\r\n- 81 kg 20 % #waga\r\n- 181 lb #waga\r\n"_s)
+                        .toUtf8());
+        r = run(dir,
+                {u"--lang"_s, u"en"_s, u"--dry-run"_s, u"gym"_s, u"weigh"_s, u"80.5"_s, u"--date"_s, u"2026-10-01"_s});
+        QCOMPARE(r.code, 0);
+        QVERIFY(!QFileInfo::exists(dir + u"/journals/2026-10-01.md"_s));
+        r = run(dir, {u"gym"_s, u"weights"_s, u"--from"_s, u"2026-10-13"_s});
+        QCOMPARE(r.result().value(u"entries"_s).toArray().size(), 3);
+        QCOMPARE(r.result().value(u"latest"_s).toDouble(), 82.5);
+
+        // The catalog: names in either language, filters, one exercise with its instructions.
+        r = run(dir, {u"--lang"_s, u"pl"_s, u"gym"_s, u"exercises"_s, u"martwy"_s, u"ciąg"_s, u"--limit"_s, u"3"_s});
+        QCOMPARE(r.code, 0);
+        QCOMPARE(r.result().value(u"exercises"_s).toArray().size(), 3);
+        QCOMPARE(r.result().value(u"exercises"_s).toArray()[0].toObject().value(u"id"_s).toString(), u"deadlift"_s);
+        r = run(dir, {u"gym"_s, u"exercises"_s, u"--muscle"_s, u"biceps"_s, u"--equipment"_s, u"cable"_s});
+        QVERIFY(r.result().value(u"total"_s).toInt() >= 5);
+        r = run(dir, {u"gym"_s, u"exercise"_s, u"face-pull"_s});
+        QCOMPARE(r.code, 0);
+        QVERIFY(!r.result().value(u"instructions"_s).toArray().isEmpty());
+
+        // Errors.
+        r = run(dir, {u"gym"_s, u"exercise"_s, u"nie-ma"_s});
+        QCOMPARE(r.code, 3);
+        QCOMPARE(r.errorCode(), u"exercise_not_found"_s);
+        r = run(dir, {u"gym"_s, u"exercises"_s, u"--muscle"_s, u"skrzydła"_s});
+        QCOMPARE(r.code, 2);
+        QCOMPARE(r.errorCode(), u"bad_argument"_s);
+        r = run(dir, {u"gym"_s, u"weigh"_s, u"dużo"_s});
+        QCOMPARE(r.code, 2);
+        r = run(dir, {u"--read-only"_s, u"gym"_s, u"weigh"_s, u"80"_s});
+        QCOMPARE(r.code, 7);
+        r = run(dir, {u"--format"_s, u"text"_s, u"--lang"_s, u"pl"_s, u"gym"_s, u"volume"_s});
+        QCOMPARE(r.code, 0);
+        QVERIFY2(QString::fromUtf8(r.out).contains(u"czworogłowe uda"_s), r.out.constData());
+    }
+
     void obsidianVaultSettings()
     {
         // An Obsidian vault without .brulion/config.json: its daily notes settings are used.

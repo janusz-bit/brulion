@@ -39,9 +39,32 @@ przerwa:: 3 min
 **Zacznij trening** (przycisk w widoku Siłownia albo paleta) pyta o plan i wpisuje go do dzisiejszej notatki jako zadania, każde z ciężarem z ostatniej sesji — o 2,5 kg większym (5 lb albo `progresja::` wiersza), gdy wszystkie zaplanowane serie wyszły tam w pełni. Pola wyboru ćwiczeń to serie, nie sprawy do załatwienia: widok Zadania ich nie pokazuje (zapytanie z `tag:trening` je pokaże).
 
 ## Widok Siłownia
-- **Dziś**: dzisiejsze ćwiczenia jako karty — odhacz ćwiczenie, zmień ciężar i powtórzenia ostatniej serii przyciskami − / + albo je wpisz (stuknij liczbę, wpisz `32,5`, potem Enter albo stuknij obok), dodaj albo usuń serię. Każda zmiana przepisuje tylko ten jeden wiersz notatki. Dodanie serii uruchamia **timer przerwy** (`przerwa::` planu, inaczej 2 minuty) z powiadomieniem na koniec.
+- **Dziś**: dzisiejsze ćwiczenia jako karty — odhacz ćwiczenie, zmień ciężar i powtórzenia ostatniej serii przyciskami − / + albo je wpisz (stuknij liczbę, wpisz `32,5`, potem Enter albo stuknij obok), dodaj albo usuń serię. Każda zmiana przepisuje tylko ten jeden wiersz notatki. Dodanie serii uruchamia **timer przerwy** (`przerwa::` planu, inaczej 2 minuty) z powiadomieniem na koniec — na Androidzie przychodzi ono także przy zamkniętym Brulionie.
 - **Postęp**: każde ćwiczenie z rekordem (szacowanym maksimum na jedno powtórzenie) i liczbą sesji; po kliknięciu wykres postępu ćwiczenia i wszystkie jego sesje.
+- **Objętość**: serie × powtórzenia × ciężar na każdy mięsień w kolejnych tygodniach — ten tydzień wobec średniej poprzednich, wykres tygodni i mapa ciepła: wiersz na mięsień, kwadrat na tydzień, tym mocniejszy, im więcej pracy (stuknij kwadrat, żeby zobaczyć liczby). Mięśnie główne ćwiczenia dostają całą jego objętość, pomocnicze połowę; serie z masą ciała liczą się z masą z dziennika (niżej).
+- **Waga**: dziennik masy ciała. Wpisz pomiar — `82,5`, `82,5 kg 18 % rano` — i Enter: do dzisiejszej notatki trafia `- 82,5 kg 18 % rano #waga`. Wykres pokazuje pomiary i trend (średnią wygładzoną o 10 % na dzień), kafelki ostatni pomiar, trend i jego zmianę w 7 i 30 dni.
 
-**Siłownia: ćwiczenie z katalogu** zakłada stronę ćwiczenia spośród 51 popularnych (mięśnie, sprzęt), po polsku albo po angielsku, w języku Twoich notatek.
+Jednostkę (kg albo lb) wybierasz w **Ustawieniach → Rozszerzenia → Siłownia → Ustawienia**.
+
+## Masa ciała
+Pomiar to zwykły punkt dziennika z tagiem `#waga` (albo `#weight`):
+
+```markdown
+- 82,5 kg 18 % rano #waga
+```
+
+Masa z `kg` albo `lb` (sama liczba: jednostka z ustawień), opcjonalnie tkanka tłuszczowa w procentach, a pozostałe słowa to notatka. Kilka pomiarów jednego dnia: liczy się ostatni. Szybko zapiszesz go też z palety (**Siłownia: zapisz masę ciała**), a `{{ext:silownia/waga}}` w dowolnej notatce pokaże ostatni pomiar i trend.
+
+## Katalog ćwiczeń
+**Katalog ćwiczeń** (przycisk w widoku Dziś albo paleta) to ponad 870 ćwiczeń: 51 Brulionu i cała baza free-exercise-db (domena publiczna), popularne z polskimi nazwami. Szukaj po nazwie w dowolnym języku, bez polskich znaków też (`wioslowanie`), i zawężaj mięśniem, sprzętem albo rodzajem. Ćwiczenie pokazuje swoje mięśnie i opis wykonania (po angielsku); możesz dopisać je do dzisiejszego treningu albo założyć jego stronę:
+
+```markdown
+katalog:: back-squat
+miesnie:: czworogłowe uda
+miesnie-pomocnicze:: łydki, pośladki, dwugłowe uda, dolna część pleców
+sprzet:: sztanga
+```
+
+Mięśnie ze strony ćwiczenia (`miesnie::`, `miesnie-pomocnicze::`) liczą się w objętości przed katalogiem — tak przypiszesz mięśnie własnemu ćwiczeniu. **Siłownia: ćwiczenie z katalogu** w palecie pyta o nazwę i od razu zakłada stronę.
 
 Wszystko zostaje zwykłym Markdownem: Obsidian i Logseq pokażą treningi jako zwykły konspekt z linkami i zadaniami. Siłownia to pierwsze rozszerzenie Brulionu, napisane w Luau: jej kod może stać się stroną Twojego notatnika i być zmieniany tam (zobacz [[Rozszerzenia]]).
