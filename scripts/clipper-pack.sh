@@ -17,7 +17,8 @@
 #
 # One code base: each package gets its browser's manifest — Chromium's without Firefox's settings
 # and background scripts, Firefox's without the key and the service worker. The archives are
-# reproducible (sorted entries, fixed times). The release workflow may attach them (not yet).
+# reproducible (sorted entries, fixed times). A release attaches the Chrome and Firefox packages
+# (release.yml, the source job).
 set -euo pipefail
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 out="$root/dist-clipper"

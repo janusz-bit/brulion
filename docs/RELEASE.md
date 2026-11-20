@@ -25,7 +25,7 @@ Tests in GitHub Actions do not start on their own at every push. They run:
 | `.github/workflows/fdroid.yml` | by hand (from `main` or a `v*` tag), from `release.yml`, a push to `main` changing the site's sources (`packaging/fdroid-repo/`, `scripts/fdroid-repo.sh`, `fastlane/metadata/android/`, `assets/logo.svg`; not a "Release v…" commit) | Brulion's own F-Droid repository on GitHub Pages: `scripts/fdroid-repo.sh` (fdroidserver 2.4.5 from PyPI) with the APKs of the last three releases, the index signed with the repository's key (the `FDROID_*` secrets), a page with the QR code and the newest release's files, and that release's browser version in `app/` (its `brulion-web-<version>.zip` unpacked, opened by the page's **Open in the browser**: docs/WEB.md "On GitHub Pages") → deployed to Pages (docs/ANDROID.md "Brulion's own F-Droid repository") |
 | `.github/workflows/appimage.yml` | by hand, a push to `main` with the `[ci]` marker (changes in `src/`, `tests/`…), from `release.yml` | `scripts/appimage-build.sh` for x86_64 (an Ubuntu 22.04 container) and aarch64 (Ubuntu 24.04): a Release build, tests (not from `release.yml`), the AppImage, a trial run → the artifacts `brulion-appimage-<arch>` |
 | `.github/workflows/windows.yml` | by hand, a push to `main` with the `[ci]` marker (changes in `src/`, `tests/`, `packaging/windows/`…), from `release.yml` | `scripts/windows-build.ps1` on `windows-2022` (Qt 6.11.2 MSVC 2022 from aqt, MSVC, Ninja): a Release build, offscreen tests, `windeployqt`, the portable ZIP and the Inno Setup installer, both checked without Qt in `PATH` (the unpacked ZIP, a silent per-user install, the shell's self-test, a silent uninstall) → the artifact `brulion-windows` (the test version, docs/WINDOWS.md) |
-| `.github/workflows/release.yml` | a `v*` tag or by hand | checks the version, creates a draft release, runs the tests (`ci.yml` without **perf**), the four builds above + `git archive`, attaches the files and `SHA256SUMS.txt`, publishes the release and rebuilds the F-Droid repository on GitHub Pages with its APK, the download page with its files and its browser version in `app/` (`fdroid.yml`; not for a pre-release or an APK signed with a throwaway key) |
+| `.github/workflows/release.yml` | a `v*` tag or by hand | checks the version, creates a draft release, runs the tests (`ci.yml` without **perf**), the four builds above + `git archive` and the Web Clipper's packages (`scripts/clipper-pack.sh`, docs/CLIPPER.md), attaches the files and `SHA256SUMS.txt`, publishes the release and rebuilds the F-Droid repository on GitHub Pages with its APK, the download page with its files and its browser version in `app/` (`fdroid.yml`; not for a pre-release or an APK signed with a throwaway key) |
 
 The tools' versions are pinned in the scripts (Qt 6.12.0, aqtinstall 3.3.0, NDK r27c, Emscripten
 5.0.5, linuxdeploy with SHA-256 sums); `dependabot.yml` updates the GitHub actions once a month in
@@ -193,12 +193,14 @@ Pushing the tag starts `release.yml`:
    sanitizers and `ctest`, lint — without the non-blocking performance measurement, which a
    release does not wait for), **Android** (`android.yml`), **Linux** (`appimage.yml`, without
    `ctest` — **Tests** runs it on Linux; the packed AppImage still starts headless), **Web**
-   (`wasm.yml`: the site and the single HTML file) and the **sources** (`git archive`).
+   (`wasm.yml`: the site and the single HTML file) and the **sources** (`git archive`, and the Web
+   Clipper's packages: `scripts/clipper-pack.sh`).
 3. **publish** — the release's files:
    `brulion-<version>-arm64-v8a.apk`, `Brulion-<version>-x86_64.AppImage`,
    `Brulion-<version>-aarch64.AppImage` (+ `.zsync` for updates through AppImageUpdate),
    `brulion-web-<version>.zip`, `brulion-web-<version>.html` (a single file, opened from disk),
-   `brulion-<version>-source.tar.gz`, `SHA256SUMS.txt`; then the draft becomes the release (a tag
+   `brulion-<version>-source.tar.gz`, `brulion-clipper-<version>-chrome.zip` and
+   `brulion-clipper-<version>-firefox.xpi` (the Web Clipper), `SHA256SUMS.txt`; then the draft becomes the release (a tag
    with a suffix, e.g. `-rc.1`, → a pre-release). Before that,
    `scripts/appimage-update-check.sh` checks that every AppImage has its `.zsync`, which points to
    it, and that the update information embedded in the AppImage

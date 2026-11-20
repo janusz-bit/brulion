@@ -80,7 +80,7 @@ Simply open an Obsidian folder — also one synced with Syncthing — as a noteb
 ### Web pages from the browser (Web Clipper)
 The **Brulion Web Clipper** extension for Chrome, Chromium, Brave, Edge and Firefox saves what you read: the **article** of a page (its text without menus and adverts), the **selection**, the **whole page**, a **screenshot** of the visible part or only the **link** — as Markdown, with the pictures saved into the notebook's attachments.
 
-1. Install the extension (from its package: in Chromium browsers *Extensions → Developer mode → Load unpacked*, in Firefox *about:debugging → Load Temporary Add-on*).
+1. Install the extension from its package among a release's files on GitHub (`brulion-clipper-…-chrome.zip`, unzipped: in Chromium browsers *Extensions → Developer mode → Load unpacked*; `brulion-clipper-…-firefox.xpi`: in Firefox *about:debugging → Load Temporary Add-on*).
 2. Connect it to Brulion once: **Settings → Application → Browser extension (Web Clipper) → Connect browsers** (each browser's row shows whether it is connected), or in a terminal `brulion-cli clip install` (`brulion-cli clip status` checks it; on NixOS the module does it).
 3. On a page click the extension's button (**Alt+Shift+B**): choose what, the title, **where** — a new page in a folder (`Clippings` by default; optionally also linked from today's journal), today's [[Journal, calendar and templates|journal]], or the end of a heading's section of a page (“## To read”) —, the template, tags, and **Clip**. **Open in Brulion** shows the result.
 

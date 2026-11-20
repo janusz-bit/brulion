@@ -80,7 +80,7 @@ Folder Obsidiana — także synchronizowany Syncthingiem — otwórz po prostu j
 ### Strony z przeglądarki (Web Clipper)
 Rozszerzenie **Brulion Web Clipper** dla Chrome, Chromium, Brave, Edge i Firefoksa zapisuje to, co czytasz: **artykuł** ze strony (sam tekst, bez menu i reklam), **zaznaczenie**, **całą stronę**, **zrzut ekranu** widocznej części albo sam **link** — jako Markdown, z obrazkami zapisanymi w załącznikach notatnika.
 
-1. Zainstaluj rozszerzenie (z jego paczki: w przeglądarkach Chromium *Rozszerzenia → Tryb dewelopera → Załaduj rozpakowane*, w Firefoksie *about:debugging → Wczytaj tymczasowy dodatek*).
+1. Zainstaluj rozszerzenie z jego paczki wśród plików wydania na GitHubie (`brulion-clipper-…-chrome.zip` po rozpakowaniu: w przeglądarkach Chromium *Rozszerzenia → Tryb dewelopera → Załaduj rozpakowane*; `brulion-clipper-…-firefox.xpi`: w Firefoksie *about:debugging → Wczytaj tymczasowy dodatek*).
 2. Raz połącz je z Brulionem: **Ustawienia → Aplikacja → Rozszerzenie przeglądarki (Web Clipper) → Połącz przeglądarki** (wiersz każdej przeglądarki pokazuje, czy jest połączona) albo w terminalu `brulion-cli clip install` (sprawdzi to `brulion-cli clip status`; na NixOS robi to moduł).
 3. Na stronie kliknij przycisk rozszerzenia (**Alt+Shift+B**): wybierz, co wyciąć, tytuł, **dokąd** — nowa strona w folderze (domyślnie `Wycinki`; do wyboru także link w dzisiejszym dzienniku), dzisiejszy [[Dziennik, kalendarz i szablony|dziennik]] albo koniec sekcji nagłówka strony („## Do przeczytania”) —, szablon, tagi i **Wytnij**. **Otwórz w Brulionie** pokaże wynik.
 

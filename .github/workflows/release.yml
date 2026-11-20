@@ -12,6 +12,9 @@
 #   brulion-web-<version>.html               the browser version in one file, opened from disk (wasm.yml)
 #   brulion-web-<version>.zip                the browser version for any web server (wasm.yml)
 #   brulion-<version>-source.tar.gz          the tagged sources (git archive)
+#   brulion-clipper-<version>-chrome.zip, brulion-clipper-<version>-firefox.xpi
+#                                            the Web Clipper for Chromium browsers and Firefox
+#                                            (scripts/clipper-pack.sh, docs/CLIPPER.md)
 #   SHA256SUMS.txt
 # and publishes the release once the tests passed and every build succeeded; then GitHub Pages get
 # the F-Droid repository with its APK, the download page with direct links to this release's files
@@ -129,7 +132,7 @@ jobs:
           echo "id=$id" >> "$GITHUB_OUTPUT"
 
   source:
-    name: Source tarball
+    name: Source tarball and the Web Clipper
     needs: draft
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -142,6 +145,13 @@ jobs:
           mkdir -p dist-source
           git archive --format=tar.gz --prefix="brulion-$FILE_VERSION/" \
             -o "dist-source/brulion-$FILE_VERSION-source.tar.gz" HEAD
+
+      # The browser extension's packages from clipper/ with CMakeLists.txt's version (= FILE_VERSION);
+      # the archives only (the script also leaves each package unpacked beside them).
+      - run: |
+          scripts/clipper-pack.sh --out "$RUNNER_TEMP/clipper"
+          cp -- "$RUNNER_TEMP/clipper/brulion-clipper-$FILE_VERSION-chrome.zip" \
+            "$RUNNER_TEMP/clipper/brulion-clipper-$FILE_VERSION-firefox.xpi" dist-source/
 
       - uses: actions/upload-artifact@v7
         with:
