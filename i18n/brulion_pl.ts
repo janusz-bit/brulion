@@ -13624,7 +13624,7 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
     <message>
         <location filename="../src/app/qml/shell/ShellAutomationDialog.qml" line="40"/>
         <source>Today&apos;s journal</source>
-        <translation type="unfinished">Dzisiejszy dziennik</translation>
+        <translation>Dzisiejszy dziennik</translation>
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellAutomationDialog.qml" line="41"/>
@@ -13684,7 +13684,7 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
     <message>
         <location filename="../src/app/qml/shell/ShellAutomationDialog.qml" line="60"/>
         <source>Run</source>
-        <translation type="unfinished">Uruchom</translation>
+        <translation>Uruchom</translation>
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellAutomationDialog.qml" line="60"/>
@@ -13715,226 +13715,226 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
 <context>
     <name>ShellAutomationSettings</name>
     <message>
-        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="35"/>
+        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="43"/>
         <source>Automation</source>
         <translation>Automatyzacja</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="45"/>
+        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="53"/>
         <source>brulion:// links open pages and add notes, tasks and reminders from other apps, launchers, scripts and automation tools. The documentation&apos;s page “Automation” lists every link.</source>
         <translation>Linki brulion:// otwierają strony i dodają notatki, zadania i przypomnienia z innych aplikacji, launcherów, skryptów i narzędzi do automatyzacji. Strona dokumentacji „Automatyzacja” opisuje wszystkie linki.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="63"/>
         <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="71"/>
+        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="79"/>
         <source>Links without the key</source>
         <translation>Linki bez klucza</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="65"/>
+        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="73"/>
         <source>Opening works at once. Before a link writes, Brulion shows what it would add and asks.</source>
         <translation>Otwieranie działa od razu. Zanim link coś zapisze, Brulion pokazuje, co doda, i pyta.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="67"/>
+        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="75"/>
         <source>Links only open pages and views. Writing needs the notebook&apos;s key.</source>
         <translation>Linki tylko otwierają strony i widoki. Zapis wymaga klucza notatnika.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="68"/>
+        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="76"/>
         <source>brulion:// links do nothing on this device.</source>
         <translation>Linki brulion:// nic nie robią na tym urządzeniu.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="72"/>
+        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="80"/>
         <source>Ask</source>
         <translation>Pytaj</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="72"/>
+        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="80"/>
         <source>Only open</source>
         <translation>Tylko otwieranie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="73"/>
+        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="81"/>
         <source>Off</source>
-        <translation type="unfinished">Wyłączone</translation>
+        <translation>Wyłączone</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="82"/>
+        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="90"/>
         <source>Automation key</source>
         <translation>Klucz automatyzacji</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="84"/>
+        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="92"/>
         <source>With the key in a link (key=…), Tasker, Shortcuts, scripts and launchers write into this notebook without asking. It stays on this device.</source>
         <translation>Z kluczem w linku (key=…) Tasker, Skróty, skrypty i launchery zapisują w tym notatniku bez pytania. Klucz zostaje na tym urządzeniu.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="86"/>
+        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="94"/>
         <source>Keep it private like a password: whoever has it can add to this notebook.</source>
         <translation>Trzymaj go w tajemnicy jak hasło: kto go ma, może dopisywać do tego notatnika.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="90"/>
+        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="98"/>
         <source>Create a key</source>
         <translation>Utwórz klucz</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="97"/>
+        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="105"/>
         <source>Hide</source>
         <translation>Ukryj</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="97"/>
+        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="105"/>
         <source>Show</source>
-        <translation type="unfinished">Pokaż</translation>
+        <translation>Pokaż</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="105"/>
+        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="113"/>
         <source>Copy</source>
         <translation>Kopiuj</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="111"/>
+        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="119"/>
         <source>Key copied</source>
         <translation>Skopiowano klucz</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="117"/>
-        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="288"/>
+        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="125"/>
+        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="307"/>
         <source>New key</source>
         <translation>Nowy klucz</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="126"/>
-        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="276"/>
+        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="134"/>
+        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="295"/>
         <source>Remove</source>
-        <translation type="unfinished">Usuń</translation>
+        <translation>Usuń</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="135"/>
+        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="143"/>
         <source>Open your notebook to make its automation key.</source>
         <translation>Otwórz swój notatnik, żeby utworzyć jego klucz automatyzacji.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="143"/>
+        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="151"/>
         <source>Links in this browser</source>
         <translation>Linki w tej przeglądarce</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="144"/>
+        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="152"/>
         <source>web+brulion: links open this Brulion. The browser asks once.</source>
         <translation>Linki web+brulion: otwierają ten Brulion. Przeglądarka zapyta raz.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="147"/>
+        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="155"/>
         <source>Allow</source>
-        <translation type="unfinished">Zezwól</translation>
+        <translation>Zezwól</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="158"/>
+        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="166"/>
         <source>Make a link</source>
         <translation>Utwórz link</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="165"/>
+        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="173"/>
         <source>For a launcher, a script, a bookmark or an automation app. Words like “jutro o 18” in a task&apos;s reminder become its date.</source>
         <translation>Do launchera, skryptu, zakładki albo aplikacji do automatyzacji. Słowa takie jak „jutro o 18” w przypomnieniu zadania stają się jego datą.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="186"/>
+        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="196"/>
         <source>What the link does</source>
         <translation>Co robi link</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="187"/>
+        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="24"/>
         <source>Quick note</source>
         <translation>Szybka notatka</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="188"/>
-        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="216"/>
+        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="25"/>
+        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="235"/>
         <source>Task</source>
-        <translation type="unfinished">Zadanie</translation>
+        <translation>Zadanie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="189"/>
+        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="26"/>
         <source>Add to a page</source>
         <translation>Dopisz do strony</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="190"/>
+        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="27"/>
         <source>Open</source>
         <translation>Otwórz</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="191"/>
+        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="28"/>
         <source>New page</source>
-        <translation type="unfinished">Nowa strona</translation>
+        <translation>Nowa strona</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="200"/>
+        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="219"/>
         <source>Title of the new page</source>
         <translation>Tytuł nowej strony</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="200"/>
+        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="219"/>
         <source>Page (a name, a path or a date)</source>
         <translation>Strona (nazwa, ścieżka albo data)</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="208"/>
+        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="227"/>
         <source>Under the heading (optional)</source>
         <translation>Pod nagłówkiem (opcjonalnie)</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="216"/>
+        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="235"/>
         <source>Text</source>
-        <translation type="unfinished">Tekst</translation>
+        <translation>Tekst</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="223"/>
+        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="242"/>
         <source>Reminder (optional): jutro o 18, tomorrow 6pm</source>
         <translation>Przypomnienie (opcjonalnie): jutro o 18, tomorrow 6pm</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="230"/>
+        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="249"/>
         <source>With the key (writes without asking)</source>
         <translation>Z kluczem (zapisuje bez pytania)</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="251"/>
+        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="270"/>
         <source>Copy link</source>
         <translation>Kopiuj link</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="256"/>
+        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="275"/>
         <source>Link copied</source>
         <translation>Skopiowano link</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="261"/>
+        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="280"/>
         <source>Try it</source>
-        <translation type="unfinished">Wypróbuj</translation>
+        <translation>Wypróbuj</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="274"/>
+        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="293"/>
         <source>Remove the key?</source>
         <translation>Usunąć klucz?</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="275"/>
+        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="294"/>
         <source>Links and automations with it stop writing. Links without a key still ask first.</source>
         <translation>Linki i automatyzacje z tym kluczem przestaną zapisywać. Linki bez klucza nadal najpierw pytają.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="286"/>
+        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="305"/>
         <source>Make a new key?</source>
         <translation>Utworzyć nowy klucz?</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="287"/>
+        <location filename="../src/app/qml/shell/ShellAutomationSettings.qml" line="306"/>
         <source>Links and automations with the old key stop writing until they get the new one.</source>
         <translation>Linki i automatyzacje ze starym kluczem przestaną zapisywać, dopóki nie dostaną nowego.</translation>
     </message>
@@ -23552,7 +23552,7 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
     <message>
         <location filename="../src/app/shell/appshare.cpp" line="388"/>
         <location filename="../src/app/shell/appshare.cpp" line="408"/>
-        <location filename="../src/app/shell/appautomation.cpp" line="548"/>
+        <location filename="../src/app/shell/appautomation.cpp" line="558"/>
         <source>A page with this name already exists: %1</source>
         <translation>Strona o tej nazwie już istnieje: %1</translation>
     </message>
@@ -23586,234 +23586,234 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         <translation>Otwartych jest zbyt wiele kart: najpierw zamknij część z nich.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appautomation.cpp" line="191"/>
-        <location filename="../src/app/shell/appautomation.cpp" line="204"/>
-        <location filename="../src/app/shell/appautomation.cpp" line="218"/>
+        <location filename="../src/app/shell/appautomation.cpp" line="193"/>
+        <location filename="../src/app/shell/appautomation.cpp" line="206"/>
+        <location filename="../src/app/shell/appautomation.cpp" line="220"/>
         <source>Could not save the automation key: %1</source>
         <translation>Nie udało się zapisać klucza automatyzacji: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appautomation.cpp" line="206"/>
+        <location filename="../src/app/shell/appautomation.cpp" line="208"/>
         <source>New automation key: links and automations with the old one no longer write.</source>
         <translation>Nowy klucz automatyzacji: linki i automatyzacje ze starym już nie zapisują.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appautomation.cpp" line="265"/>
+        <location filename="../src/app/shell/appautomation.cpp" line="275"/>
         <source>This Brulion link cannot be used: %1</source>
         <translation>Nie można użyć tego linku Brulionu: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appautomation.cpp" line="289"/>
+        <location filename="../src/app/shell/appautomation.cpp" line="299"/>
         <source>Open or create a notebook first: the Brulion link runs once one is open.</source>
         <translation>Najpierw otwórz albo utwórz notatnik: link Brulionu zadziała, gdy jakiś będzie otwarty.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appautomation.cpp" line="306"/>
+        <location filename="../src/app/shell/appautomation.cpp" line="316"/>
         <source>Brulion links write into your own notebook. Open or create one first.</source>
         <translation>Linki Brulionu zapisują w Twoim notatniku. Najpierw go otwórz albo utwórz.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appautomation.cpp" line="418"/>
+        <location filename="../src/app/shell/appautomation.cpp" line="428"/>
         <source>New page “%1”</source>
         <translation>Nowa strona „%1”</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appautomation.cpp" line="420"/>
+        <location filename="../src/app/shell/appautomation.cpp" line="430"/>
         <source>Reminder added to today&apos;s journal</source>
         <translation>Dodano przypomnienie do dzisiejszego dziennika</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appautomation.cpp" line="421"/>
+        <location filename="../src/app/shell/appautomation.cpp" line="431"/>
         <source>Task added to today&apos;s journal</source>
-        <translation type="unfinished">Dodano zadanie do dzisiejszego dziennika</translation>
+        <translation>Dodano zadanie do dzisiejszego dziennika</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appautomation.cpp" line="422"/>
+        <location filename="../src/app/shell/appautomation.cpp" line="432"/>
         <source>Added to today&apos;s journal</source>
-        <translation type="unfinished">Dodano do dzisiejszego dziennika</translation>
+        <translation>Dodano do dzisiejszego dziennika</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appautomation.cpp" line="424"/>
+        <location filename="../src/app/shell/appautomation.cpp" line="434"/>
         <source>Reminder added to the journal of %1</source>
         <translation>Dodano przypomnienie do dziennika z dnia %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appautomation.cpp" line="425"/>
+        <location filename="../src/app/shell/appautomation.cpp" line="435"/>
         <source>Task added to the journal of %1</source>
-        <translation type="unfinished">Dodano zadanie do dziennika (%1)</translation>
+        <translation>Dodano zadanie do dziennika z dnia %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appautomation.cpp" line="426"/>
+        <location filename="../src/app/shell/appautomation.cpp" line="436"/>
         <source>Added to the journal of %1</source>
         <translation>Dodano do dziennika z dnia %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appautomation.cpp" line="428"/>
+        <location filename="../src/app/shell/appautomation.cpp" line="438"/>
         <source>Reminder added to “%1”</source>
         <translation>Dodano przypomnienie do strony „%1”</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appautomation.cpp" line="429"/>
+        <location filename="../src/app/shell/appautomation.cpp" line="439"/>
         <source>Task added to “%1”</source>
         <translation>Dodano zadanie do strony „%1”</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appautomation.cpp" line="430"/>
+        <location filename="../src/app/shell/appautomation.cpp" line="440"/>
         <source>Added to “%1”</source>
         <translation>Dodano do strony „%1”</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appautomation.cpp" line="437"/>
+        <location filename="../src/app/shell/appautomation.cpp" line="447"/>
         <source>Open</source>
         <translation>Otwórz</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appautomation.cpp" line="488"/>
+        <location filename="../src/app/shell/appautomation.cpp" line="498"/>
         <source>Nothing to write.</source>
         <translation>Nie ma czego zapisać.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appautomation.cpp" line="492"/>
+        <location filename="../src/app/shell/appautomation.cpp" line="502"/>
         <source>Open or create a notebook first.</source>
-        <translation type="unfinished">Najpierw otwórz albo utwórz notatnik.</translation>
+        <translation>Najpierw otwórz albo utwórz notatnik.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appautomation.cpp" line="524"/>
+        <location filename="../src/app/shell/appautomation.cpp" line="534"/>
         <source>the link is too long</source>
         <translation>link jest za długi</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appautomation.cpp" line="526"/>
+        <location filename="../src/app/shell/appautomation.cpp" line="536"/>
         <source>Brulion does not know what it asks for (%1)</source>
         <translation>Brulion nie wie, o co prosi link (%1)</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appautomation.cpp" line="528"/>
+        <location filename="../src/app/shell/appautomation.cpp" line="538"/>
         <source>it is not encoded correctly</source>
         <translation>link jest źle zakodowany</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appautomation.cpp" line="530"/>
+        <location filename="../src/app/shell/appautomation.cpp" line="540"/>
         <source>it gives “%1” twice</source>
         <translation>link podaje „%1” dwa razy</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appautomation.cpp" line="532"/>
+        <location filename="../src/app/shell/appautomation.cpp" line="542"/>
         <source>The Brulion link has a part Brulion does not know: %1</source>
         <translation>Link Brulionu ma część, której Brulion nie zna: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appautomation.cpp" line="534"/>
+        <location filename="../src/app/shell/appautomation.cpp" line="544"/>
         <source>The Brulion link misses “%1”.</source>
         <translation>W linku Brulionu brakuje „%1”.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appautomation.cpp" line="536"/>
+        <location filename="../src/app/shell/appautomation.cpp" line="546"/>
         <source>The Brulion link has no text to write.</source>
         <translation>Link Brulionu nie ma tekstu do zapisania.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appautomation.cpp" line="538"/>
+        <location filename="../src/app/shell/appautomation.cpp" line="548"/>
         <source>The Brulion link gives no title for the new page.</source>
         <translation>Link Brulionu nie podaje tytułu nowej strony.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appautomation.cpp" line="540"/>
+        <location filename="../src/app/shell/appautomation.cpp" line="550"/>
         <source>No page “%1” in this notebook.</source>
         <translation>W tym notatniku nie ma strony „%1”.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appautomation.cpp" line="542"/>
+        <location filename="../src/app/shell/appautomation.cpp" line="552"/>
         <source>“%1” is not a page.</source>
         <translation>„%1” nie jest stroną.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appautomation.cpp" line="544"/>
+        <location filename="../src/app/shell/appautomation.cpp" line="554"/>
         <source>The page has no such heading.</source>
         <translation>Strona nie ma takiego nagłówka.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appautomation.cpp" line="546"/>
+        <location filename="../src/app/shell/appautomation.cpp" line="556"/>
         <source>The page has no such block.</source>
         <translation>Strona nie ma takiego bloku.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appautomation.cpp" line="550"/>
+        <location filename="../src/app/shell/appautomation.cpp" line="560"/>
         <source>No template “%1”.</source>
         <translation>Nie ma szablonu „%1”.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appautomation.cpp" line="552"/>
+        <location filename="../src/app/shell/appautomation.cpp" line="562"/>
         <source>Brulion does not understand the date in the link (%1).</source>
         <translation>Brulion nie rozumie daty w linku (%1).</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appautomation.cpp" line="554"/>
+        <location filename="../src/app/shell/appautomation.cpp" line="564"/>
         <source>Brulion does not understand the repetition “%1”.</source>
         <translation>Brulion nie rozumie powtarzania „%1”.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appautomation.cpp" line="556"/>
+        <location filename="../src/app/shell/appautomation.cpp" line="566"/>
         <source>Unknown priority “%1”.</source>
         <translation>Nieznany priorytet „%1”.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appautomation.cpp" line="558"/>
+        <location filename="../src/app/shell/appautomation.cpp" line="568"/>
         <source>The command&apos;s arguments in the link are not a JSON object.</source>
         <translation>Argumenty polecenia w linku nie są obiektem JSON.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appautomation.cpp" line="560"/>
+        <location filename="../src/app/shell/appautomation.cpp" line="570"/>
         <source>Brulion has no view “%1”.</source>
         <translation>Brulion nie ma widoku „%1”.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appautomation.cpp" line="562"/>
+        <location filename="../src/app/shell/appautomation.cpp" line="572"/>
         <source>The page is not UTF-8 text: Brulion does not change it.</source>
         <translation>Strona nie jest tekstem UTF-8: Brulion jej nie zmienia.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appautomation.cpp" line="564"/>
+        <location filename="../src/app/shell/appautomation.cpp" line="574"/>
         <source>The page kept changing: nothing was written.</source>
         <translation>Strona ciągle się zmieniała: nic nie zapisano.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appautomation.cpp" line="566"/>
+        <location filename="../src/app/shell/appautomation.cpp" line="576"/>
         <source>Brulion links are turned off on this device (Settings → Automation).</source>
         <translation>Linki Brulionu są wyłączone na tym urządzeniu (Ustawienia → Automatyzacja).</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appautomation.cpp" line="568"/>
+        <location filename="../src/app/shell/appautomation.cpp" line="578"/>
         <source>Writing through Brulion links needs the notebook&apos;s automation key (Settings → Automation).</source>
         <translation>Zapis przez linki Brulionu wymaga klucza automatyzacji notatnika (Ustawienia → Automatyzacja).</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appautomation.cpp" line="570"/>
+        <location filename="../src/app/shell/appautomation.cpp" line="580"/>
         <source>The Brulion link&apos;s automation key is not this notebook&apos;s: nothing was done.</source>
         <translation>Klucz automatyzacji w linku Brulionu nie należy do tego notatnika: nic nie zrobiono.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appautomation.cpp" line="572"/>
+        <location filename="../src/app/shell/appautomation.cpp" line="582"/>
         <source>No notebook “%1” on this device.</source>
         <translation>Na tym urządzeniu nie ma notatnika „%1”.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appautomation.cpp" line="574"/>
+        <location filename="../src/app/shell/appautomation.cpp" line="584"/>
         <source>Several notebooks are called “%1”: the link should name its folder.</source>
         <translation>Kilka notatników nazywa się „%1”: link powinien podawać jego folder.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appautomation.cpp" line="576"/>
+        <location filename="../src/app/shell/appautomation.cpp" line="586"/>
         <source>The extension&apos;s command %1 is not available: the extension is not approved on this device, or has no such command.</source>
         <translation>Polecenie rozszerzenia %1 jest niedostępne: rozszerzenie nie jest zatwierdzone na tym urządzeniu albo nie ma takiego polecenia.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appautomation.cpp" line="579"/>
+        <location filename="../src/app/shell/appautomation.cpp" line="589"/>
         <source>Could not write: %1</source>
-        <translation type="unfinished">Nie udało się zapisać: %1</translation>
+        <translation>Nie udało się zapisać: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appautomation.cpp" line="586"/>
+        <location filename="../src/app/shell/appautomation.cpp" line="596"/>
         <source>This browser cannot open web+brulion: links with Brulion.</source>
         <translation>Ta przeglądarka nie potrafi otwierać linków web+brulion: w Brulionie.</translation>
     </message>
