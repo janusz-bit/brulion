@@ -49,6 +49,12 @@ class LocalAi : public QObject, public ai::LocalBackend {
     Q_PROPERTY(QString modelSize READ modelSize NOTIFY modelChanged FINAL)
     /// It sees pictures (b.ai's `images`).
     Q_PROPERTY(bool modelSees READ modelSees NOTIFY modelChanged FINAL)
+    /// Of a model that does not see: the model that looks at pictures in its place, by name
+    /// ("LFM3-VL 2B"; "": the chosen one sees, or no model does) — a request with a picture goes to
+    /// that one when it is downloaded too (`pictureModelHere`), loaded for it in the chosen one's
+    /// place (send()).
+    Q_PROPERTY(QString pictureModel READ pictureModel NOTIFY modelChanged FINAL)
+    Q_PROPERTY(bool pictureModelHere READ pictureModelHere NOTIFY modelsChanged FINAL)
     /// It is another model adapted to the app (ai::LocalModel::adapter): `modelBase` by
     /// `modelBaseMaker` ("LFM3 1.7B", "Liquid AI"; "" for a model as its maker gives it), trained
     /// further by `modelMaker`.
@@ -112,6 +118,8 @@ public:
     QString modelMaker() const;
     QString modelSize() const;
     bool modelSees() const;
+    QString pictureModel() const;
+    bool pictureModelHere() const;
     bool modelAdapted() const;
     QString modelBase() const;
     QString modelBaseMaker() const;
@@ -155,7 +163,11 @@ public:
     /// Answers `request` with the model `settings.model` names ("": the default). `done` is called
     /// once, from the event loop: the answer, or why there is none (not downloaded, no plugin,
     /// "stopped" …); `partial` gets the answer while it is written (from the event loop, the
-    /// latest only when they come faster than it is read); `stopped` set stops it.
+    /// latest only when they come faster than it is read); `stopped` set stops it. A request with
+    /// a picture for a model that does not see goes, whole, to the first model that does and is
+    /// downloaded (seer()): it takes the other's place in memory for it — one model is in memory
+    /// at a time — and the next request without a picture opens the chosen one again. None
+    /// downloaded: refused, with the name of the one to download.
     void send(const ai::Settings &settings, const ai::Request &request, std::function<void(const ai::Reply &)> done,
               ai::PartialCallback partial = {}, std::shared_ptr<std::atomic<bool>> stopped = {}) override;
 
@@ -177,6 +189,8 @@ Q_SIGNALS:
 
 private:
     const ai::LocalModel *model(const QString &id) const;
+    /// The first model that sees pictures (`here`: of those downloaded); nullptr: none.
+    const ai::LocalModel *seer(bool here) const;
     void finished(std::function<void(const ai::Reply &)> done, const ai::Reply &reply);
     /// Stops every request not answered yet.
     void stopAll();

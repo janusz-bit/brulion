@@ -823,6 +823,16 @@ end, { label = "Ask my notes (AI)" })
     shared file, a download that stopped —, how much is left to download of the whole
     (`modelLeft`). A model trained to answer at once (`LocalModel::thinks` false: Brulion
     Assistant 1.7B) never thinks: every request it gets is taken as one of `effort = "low"`.
+  * A picture for a model that reads text only (the assistant's `look_at_picture` with Brulion
+    Assistant 1.7B or LFM3 1.7B, an extension's `b.ai` with `images`) goes, the whole request, to
+    the first model that sees and is downloaded — LFM3-VL 2B (`LocalAi::send`; the log says
+    `brulion-assistant-1.7b does not see pictures: lfm3-vl-2b looks at them`, the reply's `model`
+    is its id). One model is in memory at a time, so it takes the chosen one's place for that
+    request (some seconds to load) and the next request without a picture loads the chosen one
+    again: its system text and tools come back from the state on disk, the rest of a conversation
+    is read anew. With no such model downloaded the request is refused with the one to download
+    ("… does not see pictures: download LFM3-VL 2B too …"). Settings says which model looks at
+    pictures for the chosen one and whether it is here (`pictureModel`, `pictureModelHere`).
   * The model is loaded the first time it is asked (some seconds) and leaves memory after ten
     minutes without a request. While loaded it takes some 1.3 GB of the app's own memory, and
     its file's 1 GB stays mapped until the system wants that memory back (docs/PERFORMANCE.md
@@ -1067,7 +1077,7 @@ Word count:9: b.replaceBlock: stale: the block changed since it was read (Home.m
 | `b.read: argument 1 must be a string, not nil` | a wrong argument, by its position |
 | `b.ask: cannot wait for an answer here (inside a coroutine or a library callback)` | a question or `b.ai` where the call cannot be suspended |
 | `…: an extension cannot ask a question while it loads` | `b.ask`, `b.choose`, `b.form` or `b.ai` at the top level |
-| `b.ai: …` | the model's or the provider's: no key, no connection, HTTP errors in words, "the request is too long", a picture the notebook does not have; on the device: "the model … is not on this device yet: download it in Settings → Extensions → AI", "… does not see pictures", "this device's processor is too old to run a model" |
+| `b.ai: …` | the model's or the provider's: no key, no connection, HTTP errors in words, "the request is too long", a picture the notebook does not have; on the device: "the model … is not on this device yet: download it in Settings → Extensions → AI", "… does not see pictures" (with the model that sees to download too, when there is one), "this device's processor is too old to run a model" |
 | `value nested too deeply (a cycle?)`, `cannot pass a value of type function` | a table that cannot cross to the app (a control's `args`, a returned value) |
 | `timeout: the extension ran too long` | more than 2 s in one call |
 | `not enough memory` | more than 64 MB |

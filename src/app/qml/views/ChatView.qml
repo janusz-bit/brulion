@@ -379,6 +379,7 @@ FocusScope {
 
                         BRichText {
                             id: body
+                            measured: true // (the bubble is as wide as its text)
                             x: Theme.space3
                             y: Theme.space2 + 1
                             width: bubble.width - 2 * Theme.space3
@@ -469,6 +470,7 @@ FocusScope {
                                 spacing: liveSettled.html !== "" ? 10 : 0 // (a paragraph's gap, as renderMessage's)
                                 BRichText {
                                     id: liveSettled
+                                    measured: true // (the bubble is as wide as its text)
                                     objectName: "chatPartialSettled"
                                     width: parent.width
                                     visible: liveSettled.html !== ""
@@ -479,6 +481,7 @@ FocusScope {
                                 }
                                 BRichText {
                                     id: liveTail
+                                    measured: true // (the bubble is as wide as its text)
                                     objectName: "chatPartialTail"
                                     width: parent.width
                                     html: live.writing ? messages.render(root.chats.partialTail) : ""

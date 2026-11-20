@@ -1452,12 +1452,21 @@ Item {
                     objectName: "aiLocalModelRow"
                     visible: aiGroup.local
                     title: qsTr("Model")
-                    // (An adapted model: the model under it and its maker, who trained it further.)
-                    description: AppController.localAi.modelAdapted
-                                 ? qsTr("%1 is %2 by %3, trained further for Brulion's assistant: the best one at working through the notebook with the assistant. It answers at once, without thinking, and reads text only. It uses %2's file, with a small one of its own on top.").arg(AppController.localAi.modelName).arg(AppController.localAi.modelBase).arg(AppController.localAi.modelBaseMaker)
-                                 : AppController.localAi.modelSees
-                                   ? qsTr("%1 by %2 sees pictures — photos, scans, screenshots — and reads the text on them. It is the weakest of these models at working through a notebook step by step.").arg(AppController.localAi.modelName).arg(AppController.localAi.modelMaker)
-                                   : qsTr("%1 by %2 reads text only. It searches the notebook and changes notes better than a model that sees pictures, not as well as the one trained for Brulion's assistant.").arg(AppController.localAi.modelName).arg(AppController.localAi.modelMaker)
+                    // (An adapted model: the model under it and its maker, who trained it further.
+                    // A model that reads text only: which one looks at pictures in its place.)
+                    description: {
+                        const about = AppController.localAi.modelAdapted
+                                    ? qsTr("%1 is %2 by %3, trained further for Brulion's assistant: the best one at working through the notebook with the assistant. It answers at once, without thinking, and reads text only. It uses %2's file, with a small one of its own on top.").arg(AppController.localAi.modelName).arg(AppController.localAi.modelBase).arg(AppController.localAi.modelBaseMaker)
+                                    : AppController.localAi.modelSees
+                                      ? qsTr("%1 by %2 sees pictures — photos, scans, screenshots — and reads the text on them. It is the weakest of these models at working through a notebook step by step.").arg(AppController.localAi.modelName).arg(AppController.localAi.modelMaker)
+                                      : qsTr("%1 by %2 reads text only. It searches the notebook and changes notes better than a model that sees pictures, not as well as the one trained for Brulion's assistant.").arg(AppController.localAi.modelName).arg(AppController.localAi.modelMaker)
+                        const seer = AppController.localAi.pictureModel
+                        if (seer === "")
+                            return about
+                        return about + "\n" + (AppController.localAi.pictureModelHere
+                                               ? qsTr("Pictures in notes are looked at by %1, which is on this device too: Brulion loads it for them in this one's place, which takes a few seconds more.").arg(seer)
+                                               : qsTr("To have pictures in notes looked at, download %1 too (choose it above): Brulion then loads it for them in this one's place.").arg(seer))
+                    }
                     BSegmented {
                         objectName: "aiLocalModelSetting"
                         accessibleName: qsTr("Model")

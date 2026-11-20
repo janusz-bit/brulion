@@ -528,6 +528,73 @@ private Q_SLOTS:
         QCOMPARE(f.record.open.load(), 1);
     }
 
+    void aPictureForAModelThatDoesNotSee()
+    {
+        Fixture f;
+        LocalAi local(f.options());
+        local.setChosen(u"reads"_s);
+        // The settings name the model that would look at pictures in its place, not downloaded yet.
+        QVERIFY(!local.modelSees());
+        QCOMPARE(local.pictureModel(), u"Widzący 2B"_s);
+        QVERIFY(!local.pictureModelHere());
+
+        ai::Request picture = question(u"Co jest na paragonie ze sklepu „Żabka”?"_s);
+        picture.messages[0].images << ai::Image{QByteArray("jpeg: paragon"), u"image/jpeg"_s};
+        const auto send = [&](const ai::Request &request) {
+            ai::Reply got;
+            bool done = false;
+            local.send(settingsFor(u"reads"_s), request, [&](const ai::Reply &reply) {
+                got = reply;
+                done = true;
+            });
+            if (!QTest::qWaitFor([&] { return done; }, 20000))
+                got.error = u"no answer"_s;
+            return got;
+        };
+
+        // Only the model that reads is here: refused, with the name of the one to download.
+        QVERIFY(download(local, u"reads"_s));
+        ai::Reply reply = send(picture);
+        QVERIFY(!reply.ok);
+        QVERIFY2(reply.error.contains(u"Czytający 1.7B") && reply.error.contains(u"does not see pictures")
+                         && reply.error.contains(u"download Widzący 2B too"),
+                 qPrintable(reply.error));
+        QCOMPARE(f.openedCount(), 0);
+        QVERIFY(ask(local, u"reads"_s).ok);
+        QCOMPARE(f.openedCount(), 1);
+
+        // The model that sees downloaded too: it takes the other's place for the picture …
+        QSignalSpy models(&local, &LocalAi::modelsChanged);
+        QVERIFY(download(local, u"sees"_s));
+        QVERIFY(!models.isEmpty());
+        QVERIFY(local.pictureModelHere());
+        QTest::ignoreMessage(QtInfoMsg, "reads does not see pictures: sees looks at them");
+        reply = send(picture);
+        QVERIFY2(reply.ok, qPrintable(reply.error));
+        QCOMPARE(reply.model, u"sees"_s);
+        QCOMPARE(f.openedCount(), 2);
+        QCOMPARE(f.record.open.load(), 1); // (one in memory at a time)
+        {
+            const std::lock_guard lock(f.record.mutex);
+            QCOMPARE(f.record.opened[1].modelPath, f.dir.path() + u"/models/sees.gguf"_s);
+            QCOMPARE(f.record.opened[1].projectorPath, f.dir.path() + u"/models/sees-projector.gguf"_s);
+            QVERIFY(std::ranges::any_of(f.record.prompts.last().pieces,
+                                        [](const ai::local::Piece &p) { return p.image == "jpeg: paragon"; }));
+        }
+        // … and the next question without one opens the chosen model again.
+        reply = ask(local, u"reads"_s);
+        QVERIFY2(reply.ok, qPrintable(reply.error));
+        QCOMPARE(reply.model, u"reads"_s);
+        QCOMPARE(f.openedCount(), 3);
+        QCOMPARE(f.record.open.load(), 1);
+
+        // A model that sees looks at its pictures itself; none to name in its place.
+        local.setChosen(u"sees"_s);
+        QVERIFY(local.modelSees());
+        QCOMPARE(local.pictureModel(), QString());
+        QVERIFY(!local.pictureModelHere());
+    }
+
     void anAdaptedModel()
     {
         // The text model with an adapter over it, trained to answer at once.
