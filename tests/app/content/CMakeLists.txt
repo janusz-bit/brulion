@@ -27,7 +27,7 @@ if(TARGET brulion AND NOT ANDROID AND NOT EMSCRIPTEN AND EXISTS "${_brulion_qt_q
         add_test(NAME tst_content_qml
             COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/qml-smoke.sh $<TARGET_FILE:brulion> ${CMAKE_CURRENT_BINARY_DIR}/qml-smoke)
         set_tests_properties(tst_content_qml PROPERTIES
-            ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_FORCE_STDERR_LOGGING=1;QML_IMPORT_PATH=${_brulion_qt_qml_root};BRULION_SMOKE_RUN_TIMEOUT=${_content_qml_run_timeout}"
+            ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_FORCE_STDERR_LOGGING=1;QML_IMPORT_PATH=${BRULION_TEST_QML_IMPORT_PATH};BRULION_SMOKE_RUN_TIMEOUT=${_content_qml_run_timeout}"
             TIMEOUT ${_content_qml_timeout})
     endif()
 
@@ -44,7 +44,7 @@ if(TARGET brulion AND NOT ANDROID AND NOT EMSCRIPTEN AND EXISTS "${_brulion_qt_q
             COMMAND brulion --demo --route journals --editor-script journals-selftest --no-single-instance
                 --size 412x915 --touch --now "2026-10-14 10:00" --locale pl)
         set_tests_properties(tst_content_journals_qml PROPERTIES
-            ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_FORCE_STDERR_LOGGING=1;QML_IMPORT_PATH=${_brulion_qt_qml_root};XDG_DATA_HOME=${_journals_home}/data;XDG_CONFIG_HOME=${_journals_home}/config;XDG_CACHE_HOME=${_journals_home}/cache;XDG_STATE_HOME=${_journals_home}/state${_profile}"
+            ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_FORCE_STDERR_LOGGING=1;QML_IMPORT_PATH=${BRULION_TEST_QML_IMPORT_PATH};XDG_DATA_HOME=${_journals_home}/data;XDG_CONFIG_HOME=${_journals_home}/config;XDG_CACHE_HOME=${_journals_home}/cache;XDG_STATE_HOME=${_journals_home}/state${_profile}"
             FIXTURES_REQUIRED content_journals_home TIMEOUT 300 PROCESSORS 2
             FAIL_REGULAR_EXPRESSION "SELFTEST FAIL;TypeError;ReferenceError;Binding loop detected")
         # The same with the days that are not edited drawn as one item each (BRULION_JOURNAL_DAY_ITEM=1,
@@ -59,7 +59,7 @@ if(TARGET brulion AND NOT ANDROID AND NOT EMSCRIPTEN AND EXISTS "${_brulion_qt_q
             COMMAND brulion --demo --route journals --editor-script journals-selftest --no-single-instance
                 --size 412x915 --touch --now "2026-10-14 10:00" --locale pl)
         set_tests_properties(tst_content_journals_qml_dayitem PROPERTIES
-            ENVIRONMENT "BRULION_JOURNAL_DAY_ITEM=1;QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_FORCE_STDERR_LOGGING=1;QML_IMPORT_PATH=${_brulion_qt_qml_root};XDG_DATA_HOME=${_journals_item_home}/data;XDG_CONFIG_HOME=${_journals_item_home}/config;XDG_CACHE_HOME=${_journals_item_home}/cache;XDG_STATE_HOME=${_journals_item_home}/state${_item_profile}"
+            ENVIRONMENT "BRULION_JOURNAL_DAY_ITEM=1;QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_FORCE_STDERR_LOGGING=1;QML_IMPORT_PATH=${BRULION_TEST_QML_IMPORT_PATH};XDG_DATA_HOME=${_journals_item_home}/data;XDG_CONFIG_HOME=${_journals_item_home}/config;XDG_CACHE_HOME=${_journals_item_home}/cache;XDG_STATE_HOME=${_journals_item_home}/state${_item_profile}"
             FIXTURES_REQUIRED content_journals_dayitem_home TIMEOUT 300 PROCESSORS 2
             FAIL_REGULAR_EXPRESSION "SELFTEST FAIL;TypeError;ReferenceError;Binding loop detected")
 
@@ -89,7 +89,7 @@ if(TARGET brulion AND NOT ANDROID AND NOT EMSCRIPTEN AND EXISTS "${_brulion_qt_q
                     COMMAND brulion --demo --route journals --editor-script journals-span-selftest --no-single-instance
                         --size ${_span_size} ${_span_touch} --now "2026-10-14 10:00" --locale pl)
                 set_tests_properties(${_span_test} PROPERTIES
-                    ENVIRONMENT "${_span_env}QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_FORCE_STDERR_LOGGING=1;QML_IMPORT_PATH=${_brulion_qt_qml_root};XDG_DATA_HOME=${_span_home}/data;XDG_CONFIG_HOME=${_span_home}/config;XDG_CACHE_HOME=${_span_home}/cache;XDG_STATE_HOME=${_span_home}/state${_span_profile}"
+                    ENVIRONMENT "${_span_env}QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_FORCE_STDERR_LOGGING=1;QML_IMPORT_PATH=${BRULION_TEST_QML_IMPORT_PATH};XDG_DATA_HOME=${_span_home}/data;XDG_CONFIG_HOME=${_span_home}/config;XDG_CACHE_HOME=${_span_home}/cache;XDG_STATE_HOME=${_span_home}/state${_span_profile}"
                     FIXTURES_REQUIRED ${_span_test}_home TIMEOUT 300 PROCESSORS 2
                     FAIL_REGULAR_EXPRESSION "SELFTEST FAIL;TypeError;ReferenceError;Binding loop detected")
             endforeach()

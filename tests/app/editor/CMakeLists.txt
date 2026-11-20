@@ -129,12 +129,12 @@ get_filename_component(_brulion_qt_qml_root "${Qt6Qml_DIR}/../../../${QT6_INSTAL
 # that it does not depend on the caller's environment (it skips when QtQuick cannot be imported).
 if(EXISTS "${_brulion_qt_qml_root}/QtQuick")
     set_tests_properties(tst_editor_suggestions PROPERTIES
-        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QML_IMPORT_PATH=${_brulion_qt_qml_root}")
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QML_IMPORT_PATH=${BRULION_TEST_QML_IMPORT_PATH}")
 endif()
 if(TARGET brulion AND BRULION_DEV_QML_ENABLED AND EXISTS "${_brulion_qt_qml_root}/QtQuick/Controls")
     # The playground's waits for something asynchronous last BRULION_TEST_SLOWDOWN times longer
     # (DevTools.testSlowdown; 25 in sanitizer builds), and so may a run whose waits fail.
-    set(_playground_env "BRULION_TEST_SLOWDOWN=${BRULION_TEST_SLOWDOWN};QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_FORCE_STDERR_LOGGING=1;QML_IMPORT_PATH=${_brulion_qt_qml_root}")
+    set(_playground_env "BRULION_TEST_SLOWDOWN=${BRULION_TEST_SLOWDOWN};QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_FORCE_STDERR_LOGGING=1;QML_IMPORT_PATH=${BRULION_TEST_QML_IMPORT_PATH}")
     math(EXPR _playground_timeout "90 + 10 * ${BRULION_TEST_SLOWDOWN}")
     math(EXPR _playground_timeout_long "120 + 10 * ${BRULION_TEST_SLOWDOWN}")
     add_test(NAME tst_editor_qml
@@ -385,7 +385,7 @@ brulion_add_test(tst_editor_pageitem
     SOURCES tst_editor_pageitem.cpp
     LIBS brulion_editor brulion_core_markdown Qt6::Qml Qt6::Quick)
 set_tests_properties(tst_editor_pageitem PROPERTIES
-    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QML_IMPORT_PATH=${_brulion_editor_qml_root}")
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QML_IMPORT_PATH=${BRULION_TEST_QML_IMPORT_PATH}")
 # JournalDayItem (journaldayitem.h): a journal day drawn by one item — which days it draws, the
 # rows' geometry by BlockDelegate's formulas, what is under a point, links, hover, the model
 # followed without laying unchanged texts out again, the sprites, a frame drawn offscreen.

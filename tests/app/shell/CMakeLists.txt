@@ -147,7 +147,7 @@ if(TARGET brulion AND NOT ANDROID AND NOT EMSCRIPTEN AND EXISTS "${_brulion_qt_q
         set(_home ${CMAKE_CURRENT_BINARY_DIR}/selftest-home-${_kind})
         brulion_test_profile(_profile shell-${_kind})
         set_tests_properties(${_test} PROPERTIES
-            ENVIRONMENT "BRULION_TEST_SLOWDOWN=${BRULION_TEST_SLOWDOWN};QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_FORCE_STDERR_LOGGING=1;QML_IMPORT_PATH=${_brulion_qt_qml_root};XDG_DATA_HOME=${_home}/data;XDG_CONFIG_HOME=${_home}/config;XDG_CACHE_HOME=${_home}/cache;XDG_STATE_HOME=${_home}/state;BRULION_SELFTEST_PDF_DIR=${PROJECT_SOURCE_DIR}/tests/data/pdf${_profile}"
+            ENVIRONMENT "BRULION_TEST_SLOWDOWN=${BRULION_TEST_SLOWDOWN};QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_FORCE_STDERR_LOGGING=1;QML_IMPORT_PATH=${BRULION_TEST_QML_IMPORT_PATH};XDG_DATA_HOME=${_home}/data;XDG_CONFIG_HOME=${_home}/config;XDG_CACHE_HOME=${_home}/cache;XDG_STATE_HOME=${_home}/state;BRULION_SELFTEST_PDF_DIR=${PROJECT_SOURCE_DIR}/tests/data/pdf${_profile}"
             FIXTURES_REQUIRED shell_qml_homes TIMEOUT ${_shell_qml_timeout} PROCESSORS 2
             # QML that ran on something already gone fails too, as in tst_editor_qml (a side
             # panel created from the context of the view the shell had just left did).
@@ -181,7 +181,7 @@ if(TARGET brulion AND NOT ANDROID AND NOT EMSCRIPTEN AND EXISTS "${_brulion_qt_q
         set(_home ${CMAKE_CURRENT_BINARY_DIR}/journey-home-${_kind})
         brulion_test_profile(_profile journey-${_kind})
         set_tests_properties(${_test} PROPERTIES
-            ENVIRONMENT "BRULION_TEST_SLOWDOWN=${BRULION_TEST_SLOWDOWN};QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_FORCE_STDERR_LOGGING=1;QML_IMPORT_PATH=${_brulion_qt_qml_root};HOME=${_home};XDG_DATA_HOME=${_home}/data;XDG_CONFIG_HOME=${_home}/config;XDG_CACHE_HOME=${_home}/cache;XDG_STATE_HOME=${_home}/state${_profile}"
+            ENVIRONMENT "BRULION_TEST_SLOWDOWN=${BRULION_TEST_SLOWDOWN};QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_FORCE_STDERR_LOGGING=1;QML_IMPORT_PATH=${BRULION_TEST_QML_IMPORT_PATH};HOME=${_home};XDG_DATA_HOME=${_home}/data;XDG_CONFIG_HOME=${_home}/config;XDG_CACHE_HOME=${_home}/cache;XDG_STATE_HOME=${_home}/state${_profile}"
             FIXTURES_REQUIRED shell_journey_homes TIMEOUT ${_journey_timeout} PROCESSORS 2 LABELS slow
             FAIL_REGULAR_EXPRESSION "Binding loop detected")
     endforeach()
@@ -211,7 +211,7 @@ if(TARGET brulion AND NOT ANDROID AND NOT EMSCRIPTEN AND EXISTS "${_brulion_qt_q
         set(_home ${CMAKE_CURRENT_BINARY_DIR}/onboarding-home-${_kind})
         brulion_test_profile(_profile onboarding-${_kind})
         set_tests_properties(${_test} PROPERTIES
-            ENVIRONMENT "BRULION_TEST_SLOWDOWN=${BRULION_TEST_SLOWDOWN};QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_FORCE_STDERR_LOGGING=1;QML_IMPORT_PATH=${_brulion_qt_qml_root};XDG_DATA_HOME=${_home}/data;XDG_CONFIG_HOME=${_home}/config;XDG_CACHE_HOME=${_home}/cache;XDG_STATE_HOME=${_home}/state${_profile}"
+            ENVIRONMENT "BRULION_TEST_SLOWDOWN=${BRULION_TEST_SLOWDOWN};QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_FORCE_STDERR_LOGGING=1;QML_IMPORT_PATH=${BRULION_TEST_QML_IMPORT_PATH};XDG_DATA_HOME=${_home}/data;XDG_CONFIG_HOME=${_home}/config;XDG_CACHE_HOME=${_home}/cache;XDG_STATE_HOME=${_home}/state${_profile}"
             FIXTURES_REQUIRED shell_onboarding_homes TIMEOUT ${_onboarding_timeout} PROCESSORS 2
             FAIL_REGULAR_EXPRESSION "Binding loop detected;TypeError;ReferenceError")
     endforeach()
@@ -239,7 +239,7 @@ endif()
 if(TARGET brulion_uidriver AND EXISTS "${_brulion_qt_qml_root}/QtQuick")
     brulion_add_test(tst_uidriver SOURCES tst_uidriver.cpp LIBS brulion_uidriver Qt6::Qml Qt6::Quick)
     set_tests_properties(tst_uidriver PROPERTIES
-        ENVIRONMENT "BRULION_TEST_SLOWDOWN=${BRULION_TEST_SLOWDOWN};QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QML_IMPORT_PATH=${_brulion_qt_qml_root}"
+        ENVIRONMENT "BRULION_TEST_SLOWDOWN=${BRULION_TEST_SLOWDOWN};QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QML_IMPORT_PATH=${BRULION_TEST_QML_IMPORT_PATH}"
         TIMEOUT 120)
 endif()
 

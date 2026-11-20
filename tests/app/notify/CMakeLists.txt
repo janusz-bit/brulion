@@ -44,7 +44,7 @@ if(TARGET brulion AND BRULION_DESKTOP
         brulion_test_profile(_profile sounds-${_kind})
         # No session bus: "Play sample" must not reach the desktop of whoever runs the tests.
         set_tests_properties(${_test} PROPERTIES
-            ENVIRONMENT "BRULION_TEST_SLOWDOWN=${BRULION_TEST_SLOWDOWN};QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_FORCE_STDERR_LOGGING=1;QML_IMPORT_PATH=${_brulion_qt_qml_root};XDG_DATA_HOME=${_home}/data;XDG_CONFIG_HOME=${_home}/config;XDG_CACHE_HOME=${_home}/cache;XDG_STATE_HOME=${_home}/state;DBUS_SESSION_BUS_ADDRESS=unix:path=/nonexistent/brulion-test-bus;BRULION_TEST_SLOWDOWN=${BRULION_TEST_SLOWDOWN}${_profile}"
+            ENVIRONMENT "BRULION_TEST_SLOWDOWN=${BRULION_TEST_SLOWDOWN};QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_FORCE_STDERR_LOGGING=1;QML_IMPORT_PATH=${BRULION_TEST_QML_IMPORT_PATH};XDG_DATA_HOME=${_home}/data;XDG_CONFIG_HOME=${_home}/config;XDG_CACHE_HOME=${_home}/cache;XDG_STATE_HOME=${_home}/state;DBUS_SESSION_BUS_ADDRESS=unix:path=/nonexistent/brulion-test-bus;BRULION_TEST_SLOWDOWN=${BRULION_TEST_SLOWDOWN}${_profile}"
             FIXTURES_REQUIRED notify_sounds_homes TIMEOUT ${_sounds_timeout} PROCESSORS 2
             FAIL_REGULAR_EXPRESSION "selftest: FAIL;TypeError;ReferenceError")
     endforeach()

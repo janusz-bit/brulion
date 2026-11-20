@@ -32,6 +32,6 @@ if(TARGET brulion AND NOT ANDROID AND NOT EMSCRIPTEN AND NOT WIN32 AND EXISTS "$
     add_test(NAME tst_planning_qml
         COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/qml-smoke.sh $<TARGET_FILE:brulion> ${CMAKE_CURRENT_BINARY_DIR}/qml-smoke)
     set_tests_properties(tst_planning_qml PROPERTIES
-        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_FORCE_STDERR_LOGGING=1;QML_IMPORT_PATH=${_brulion_qt_qml_root}"
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_FORCE_STDERR_LOGGING=1;QML_IMPORT_PATH=${BRULION_TEST_QML_IMPORT_PATH}"
         TIMEOUT ${_planning_qml_timeout})
 endif()

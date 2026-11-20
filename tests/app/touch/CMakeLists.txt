@@ -14,10 +14,10 @@ if(TARGET Qt6::GuiPrivate AND TARGET brulion_ui_touch AND EXISTS "${_brulion_qt_
         SOURCES tst_touch_flick.cpp
         LIBS brulion_ui_touch Qt6::Qml Qt6::GuiPrivate)
     set_tests_properties(tst_touch_flick PROPERTIES
-        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QML_NO_TOUCH_COMPRESSION=1;QML_IMPORT_PATH=${_brulion_qt_qml_root}"
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QML_NO_TOUCH_COMPRESSION=1;QML_IMPORT_PATH=${BRULION_TEST_QML_IMPORT_PATH}"
         TIMEOUT 120)
     add_test(NAME tst_touch_flick_compressed COMMAND tst_touch_flick chainedDragCompressed)
     set_tests_properties(tst_touch_flick_compressed PROPERTIES
-        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QML_IMPORT_PATH=${_brulion_qt_qml_root}"
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QML_IMPORT_PATH=${BRULION_TEST_QML_IMPORT_PATH}"
         TIMEOUT 120)
 endif()

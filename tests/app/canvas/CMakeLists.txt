@@ -10,6 +10,6 @@ if(TARGET brulion_canvasview AND EXISTS "${_brulion_qt_qml_root}/QtQuick")
         LIBS brulion_canvasview Qt6::Quick)
     target_include_directories(tst_canvas_editor PRIVATE ${PROJECT_SOURCE_DIR}/tests/core/canvas)
     set_tests_properties(tst_canvas_editor PROPERTIES
-        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QML_IMPORT_PATH=${_brulion_qt_qml_root}"
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QML_IMPORT_PATH=${BRULION_TEST_QML_IMPORT_PATH}"
         TIMEOUT 120)
 endif()

@@ -12,7 +12,7 @@ if(TARGET brulion_drawing AND TARGET Qt6::GuiPrivate AND TARGET Qt6::Svg AND EXI
         SOURCES tst_drawingcanvas.cpp
         LIBS brulion_drawing brulion_platform Qt6::Qml Qt6::Svg Qt6::GuiPrivate)
     set_tests_properties(tst_drawingcanvas PROPERTIES
-        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QML_NO_TOUCH_COMPRESSION=1;QML_IMPORT_PATH=${_brulion_qt_qml_root}"
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QML_NO_TOUCH_COMPRESSION=1;QML_IMPORT_PATH=${BRULION_TEST_QML_IMPORT_PATH}"
         TIMEOUT 120)
 endif()
 
@@ -27,6 +27,6 @@ if(TARGET brulion AND NOT ANDROID AND NOT EMSCRIPTEN AND NOT WIN32 AND EXISTS "$
         COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/qml-smoke.sh $<TARGET_FILE:brulion> ${CMAKE_CURRENT_BINARY_DIR}/qml-smoke
                 ${PROJECT_SOURCE_DIR}/tests/data/drawing)
     set_tests_properties(tst_drawing_qml PROPERTIES
-        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_FORCE_STDERR_LOGGING=1;QML_IMPORT_PATH=${_brulion_qt_qml_root}"
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_FORCE_STDERR_LOGGING=1;QML_IMPORT_PATH=${BRULION_TEST_QML_IMPORT_PATH}"
         TIMEOUT ${_drawing_qml_timeout})
 endif()

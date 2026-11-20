@@ -9,6 +9,6 @@ if(TARGET brulion_ui_smoothscroll AND EXISTS "${_brulion_qt_qml_root}/QtQuick")
         SOURCES tst_smooth_scroll.cpp
         LIBS brulion_ui_smoothscroll Qt6::Qml)
     set_tests_properties(tst_smooth_scroll PROPERTIES
-        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QML_IMPORT_PATH=${_brulion_qt_qml_root}"
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QML_IMPORT_PATH=${BRULION_TEST_QML_IMPORT_PATH}"
         TIMEOUT 120)
 endif()

@@ -73,6 +73,18 @@ if(TARGET brulion_platform)
 endif()
 
 add_subdirectory(core)
+# The QML modules of the uninstalled app's tests (their ENVIRONMENT sets QML_IMPORT_PATH to it, so
+# the environment's own paths never reach them): Qt's folder of QML modules (qtdeclarative's) and,
+# where Qt Multimedia lives in a folder of its own (Nix: a store path per Qt module), its
+# QtMultimedia module too — else an app with players in its QML loads nothing in the Nix sandbox.
+get_filename_component(BRULION_TEST_QML_IMPORT_PATH "${Qt6Qml_DIR}/../../../${QT6_INSTALL_QML}" ABSOLUTE)
+if(Qt6Multimedia_DIR)
+    get_filename_component(_brulion_multimedia_qml "${Qt6Multimedia_DIR}/../../../${QT6_INSTALL_QML}" ABSOLUTE)
+    if(NOT WIN32 AND EXISTS "${_brulion_multimedia_qml}/QtMultimedia"
+       AND NOT _brulion_multimedia_qml STREQUAL BRULION_TEST_QML_IMPORT_PATH)
+        string(APPEND BRULION_TEST_QML_IMPORT_PATH ":${_brulion_multimedia_qml}")
+    endif()
+endif()
 # The app's areas (src/app): design system helpers, the editor, the shell, the views, the QML.
 if(BRULION_BUILD_APP)
     add_subdirectory(app)

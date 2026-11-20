@@ -7,5 +7,5 @@ if(TARGET brulion_ui_network AND EXISTS "${_brulion_qt_qml_root}/QtQuick")
         SOURCES tst_local_network.cpp
         LIBS brulion_ui_network Qt6::Quick)
     set_tests_properties(tst_local_network PROPERTIES
-        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QML_IMPORT_PATH=${_brulion_qt_qml_root}")
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QML_IMPORT_PATH=${BRULION_TEST_QML_IMPORT_PATH}")
 endif()

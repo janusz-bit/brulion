@@ -9,10 +9,10 @@ if(TARGET brulion_ui_icons AND EXISTS "${_brulion_qt_qml_root}/QtQuick/Controls/
         LIBS brulion_ui_icons Qt6::Qml Qt6::Quick)
     target_compile_definitions(tst_icons PRIVATE BRULION_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
     set_tests_properties(tst_icons PROPERTIES
-        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QML_IMPORT_PATH=${_brulion_qt_qml_root}"
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QML_IMPORT_PATH=${BRULION_TEST_QML_IMPORT_PATH}"
         TIMEOUT 120)
     add_test(NAME tst_icons_dpr2 COMMAND tst_icons)
     set_tests_properties(tst_icons_dpr2 PROPERTIES
-        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_SCALE_FACTOR=2;QML_IMPORT_PATH=${_brulion_qt_qml_root}"
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_SCALE_FACTOR=2;QML_IMPORT_PATH=${BRULION_TEST_QML_IMPORT_PATH}"
         TIMEOUT 120)
 endif()

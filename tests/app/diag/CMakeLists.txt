@@ -16,6 +16,6 @@ if(TARGET brulion_webselftest AND EXISTS "${_brulion_qt_qml_root}/QtQuick")
     brulion_add_test(tst_webselftest SOURCES tst_webselftest.cpp ../minihttpserver.h
         LIBS brulion_webselftest brulion_shell brulion_drawing brulion_core_drawing Qt6::Quick Qt6::Qml Qt6::Network)
     set_tests_properties(tst_webselftest PROPERTIES
-        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QML_IMPORT_PATH=${_brulion_qt_qml_root}"
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QML_IMPORT_PATH=${BRULION_TEST_QML_IMPORT_PATH}"
         TIMEOUT 120)
 endif()

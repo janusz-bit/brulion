@@ -23,7 +23,7 @@ if(TARGET brulion_ui_layoutdump AND EXISTS "${_brulion_qt_qml_root}/QtQuick/Temp
     brulion_add_test(tst_uibench_layoutdump SOURCES tst_uibench_layoutdump.cpp
         LIBS brulion_ui_layoutdump Qt6::Qml Qt6::Quick)
     set_tests_properties(tst_uibench_layoutdump PROPERTIES
-        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_SCALE_FACTOR=2;QML_IMPORT_PATH=${_brulion_qt_qml_root}"
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_SCALE_FACTOR=2;QML_IMPORT_PATH=${BRULION_TEST_QML_IMPORT_PATH}"
         TIMEOUT 120)
 endif()
 
@@ -41,7 +41,7 @@ if(NOT WIN32)
             $<TARGET_FILE:brulion> $<TARGET_FILE:brulion-uimetrics> ${CMAKE_CURRENT_BINARY_DIR}/lint)
         math(EXPR _uibench_lint_timeout "240 + 10 * ${BRULION_TEST_SLOWDOWN}")
         set_tests_properties(tst_uibench_lint_qml PROPERTIES
-            ENVIRONMENT "BRULION_TEST_SLOWDOWN=${BRULION_TEST_SLOWDOWN};QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_FORCE_STDERR_LOGGING=1;QML_IMPORT_PATH=${_brulion_qt_qml_root}"
+            ENVIRONMENT "BRULION_TEST_SLOWDOWN=${BRULION_TEST_SLOWDOWN};QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_FORCE_STDERR_LOGGING=1;QML_IMPORT_PATH=${BRULION_TEST_QML_IMPORT_PATH}"
             TIMEOUT ${_uibench_lint_timeout} PROCESSORS 2 LABELS slow SKIP_RETURN_CODE 77
             FAIL_REGULAR_EXPRESSION "Binding loop detected")
     endif()

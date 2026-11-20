@@ -10,7 +10,7 @@ if(TARGET brulion_ui_scroll AND EXISTS "${_brulion_qt_qml_root}/QtQuick/Template
         SOURCES tst_row_scroll.cpp
         LIBS brulion_ui_scroll Qt6::Qml Qt6::Quick)
     set_tests_properties(tst_row_scroll PROPERTIES
-        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QML_IMPORT_PATH=${_brulion_qt_qml_root}"
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QML_IMPORT_PATH=${BRULION_TEST_QML_IMPORT_PATH}"
         TIMEOUT 120)
 endif()
 
@@ -22,6 +22,6 @@ if(TARGET brulion_ui_scroll)
         SOURCES tst_view_rows.cpp
         LIBS brulion_ui_scroll Qt6::Qml Qt6::Quick)
     set_tests_properties(tst_view_rows PROPERTIES
-        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QML_IMPORT_PATH=${_brulion_qt_qml_root}"
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QML_IMPORT_PATH=${BRULION_TEST_QML_IMPORT_PATH}"
         TIMEOUT 120)
 endif()
