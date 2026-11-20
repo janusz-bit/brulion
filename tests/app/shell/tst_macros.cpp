@@ -70,6 +70,7 @@ const QString kExtension = u"---\ntags: [rozszerzenie]\nuprawnienia: [zapis]\n--
         "    ocena = function(args) table.insert(got, \"ocena=\" .. args.value) end,\n"
         "}, { label = \"Kontrolki\", icon = \"sliders-horizontal\", panel = \"journal\" })\n"
         "b.view(\"bok\", function(params) return b.ui.text(params.path or \"-\") end, nil, { panel = true })\n"
+        "b.view(\"lewy\", function(params) return b.ui.text(\"po lewej\") end, nil, { panel = \"sidebar\" })\n"
         "```\n"_s;
 
 QString readFile(const QString &path)
@@ -344,6 +345,11 @@ private Q_SLOTS:
             page << v.toMap().value(u"view"_s).toString();
         QCOMPARE(journal, (QStringList{u"kontrolki:Kontrolki"_s, u"bok:Pomiary"_s}));
         QCOMPARE(page, QStringList{u"bok"_s});
+        // The pages panel at the left: only what asks for it.
+        QStringList left;
+        for (const QVariant &v : m_ext->panels(u"sidebar"_s))
+            left << v.toMap().value(u"view"_s).toString();
+        QCOMPARE(left, QStringList{u"lewy"_s});
         // A block can show the views with a label.
         QStringList sources;
         for (const QVariant &v : m_ext->embeddableViews())

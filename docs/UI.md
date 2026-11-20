@@ -394,7 +394,10 @@ no setting: every panel starts with the defaults below, a drawer opened again is
   screen (its `page`, `path` and `date` among the params) and `live` while the section is shown;
   `Workspace.extensions.panels(kind)` lists them (followed through `revision`: an approval or a
   reload adds or takes sections). The habits' `dzien` (the day's checks) is one beside days. On a
-  phone they are in the drawer like every section.
+  phone they are in the drawer like every section. A view with `panel = "sidebar"` is a section of
+  the pages panel instead (`ShellSidebar`'s footer, after Favorites and Recent: a collapsible
+  `BSectionHeader` — its fold in `ui/sidebar/extension/<extension>/<view>` — over the embedded
+  view, drawn for `currentPath`), on a phone in the left drawer.
 
 **The drawer of narrow windows** (`ShellContextDrawer`, phones and windows under 900 px): about
 85 % of the width (at most 420 px), sliding in from the right over the page, which the scrim

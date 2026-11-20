@@ -493,7 +493,8 @@ would look up again: a line that changed meanwhile is then refused (`stale:`), n
 For that case the app says "The line changed in the meantime" and draws the view again.
 
 `meta.panel` — `true`, `"page"` or `"journal"` — also makes the view a section of the side panel
-beside every page and day, pages only or days of the journal only ("View blocks and panels").
+beside every page and day, pages only or days of the journal only; `"sidebar"` a section of the
+pages panel at the left ("View blocks and panels").
 
 **When it is drawn.** `render` runs when the view opens, after every command and action — at
 once after an action of its controls —, and whenever a note changes anywhere (the editor, a sync).
@@ -650,7 +651,9 @@ with the view's label (else the extension's title) and drawn for the note on scr
 `path`, `date` among its params). On the desktop that is the panel docked beside the text; on a
 phone and in narrow windows the drawer from the right edge (docs/UI.md "Side panel"). The habits
 show the day's checks there (`nawyki`'s view `dzien`); the "Mood" view above is a panel beside
-every day.
+every day. `panel = "sidebar"` puts the view into the **pages panel** instead — the left sidebar
+on the desktop, the left drawer on a phone —, a folding section after Favorites and Recent (its
+fold kept per device), drawn for the page or day on screen.
 
 ## Macros
 

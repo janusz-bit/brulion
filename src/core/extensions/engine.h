@@ -105,8 +105,8 @@ struct ViewInfo
     QStringList actions;
     QString label; ///< b.view's meta.label: a view the palette offers; "" = none
     QString icon; ///< meta.icon, an icon name of the app ("" = the extensions' own)
-    /// meta.panel: a section of the side panel beside "page"s, "journal" days or "all" of them;
-    /// "" = none (docs/EXTENSIONS.md "Panels").
+    /// meta.panel: a section of the side panel beside "page"s, "journal" days or "all" of them, or
+    /// of the pages panel ("sidebar"); "" = none (docs/EXTENSIONS.md "View blocks and panels").
     QString panel;
 };
 

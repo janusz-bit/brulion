@@ -310,7 +310,7 @@ docs/mood
 ```
 ````
 
-`panel = true` in a view's last argument makes it a section of the **side panel** beside every page and day; `panel = "page"` beside pages only, `panel = "journal"` beside days of the journal only. On a phone the side panel is the drawer from the right edge.
+`panel = true` in a view's last argument makes it a section of the **side panel** beside every page and day; `panel = "page"` beside pages only, `panel = "journal"` beside days of the journal only. On a phone the side panel is the drawer from the right edge. `panel = "sidebar"` puts it into the **pages panel** on the left instead, under Favorites and Recent.
 
 ## Macros
 `b.macro(name, function(ctx) … end, { description = "…", args = { "…" }, example = "…" })` gives your notes a **macro**: writing `{{ext:<extension>/<name> arguments}}` anywhere in a note shows what the function returns, in the text, always up to date. The extension is named by its id (its page's title in small letters, without Polish letters, with `-` for spaces: "Word count" is `word-count`). Typing `{{` in a note offers the macros with their descriptions.

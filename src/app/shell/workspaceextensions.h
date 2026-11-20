@@ -310,7 +310,8 @@ public:
     /// {page, path, date (a daily note's)}.
     Q_INVOKABLE QVariantMap noteParams(const QString &path) const;
     /// The views the extensions offer as sections of the side panel (b.view's meta.panel) beside
-    /// a `kind` of note ("page" | "journal"): rows {extension, view, title, icon}, by title.
+    /// a `kind` of note ("page" | "journal"), or of the pages panel ("sidebar"): rows {extension,
+    /// view, title, icon}, by title.
     Q_INVOKABLE QVariantList panels(const QString &kind) const;
     /// The views an extension offers by `extension/name` for a ```view block (the editor's slash
     /// command): rows {extension, view, title, icon, source}, labelled views only, by title.

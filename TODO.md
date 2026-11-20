@@ -51,14 +51,16 @@ done in the repository simply disappears from the list.
   * stores: F-Droid's and Google Play's rules for an app that downloads model weights under a
     licence that is not free software (a store build without it: `BRULION_LOCAL_AI=OFF`).
 * **Extensibility as in Emacs and TiddlyWiki: what is still missing** — extension pages, approval
-  per device, live reload, hooks (`save`, `change`) and the Luau console are there
-  (docs/EXTENSIONS.md); missing: Luau's type checker on save (`b` as a definition file; the
-  Analysis library is not vendored), syntax colours for ```` ```luau ```` blocks in the editor,
-  macros in the text (`{{ext:silownia/rekord Przysiad}}`, rendered through `InlineRenderer`) and
-  template variables from extensions, more events (a task done, a daily note created, the app
-  opened), extension views in the sidebar and inside pages (a ```` ```view ```` block), more
-  components for views (text fields), an extension's own settings, sharing extensions
-  between notebooks, the browser build checked against hostile extensions. Smaller gaps the
+  per device, live reload, hooks (`save`, `change`), the Luau console, Luau's syntax colours,
+  macros in the text (`{{ext:…}}`), template variables, ```` ```view ```` blocks, side panel
+  sections and the views' input controls are there (docs/EXTENSIONS.md); missing: Luau's type
+  checker on save (`b` as a definition file; the Analysis library is not vendored), more events
+  (a task done, a daily note created, the app opened), an extension's own settings, sharing
+  extensions between notebooks, the browser build checked against hostile extensions. Macros show
+  their source in the rows of the Tasks view, the linked references, query results and the
+  clipboard's HTML (only the editor and the document exports compute them); a view block in a page
+  drawn by `PageItem` (`BRULION_PAGE_ITEM=1`) and the new view controls (date dialog, slider,
+  text area) are not yet checked on a real phone. Smaller gaps the
   documentation has to mention (docs/EXTENSIONS.md): the editor's selection for a command
   (`ctx.selection` is always empty), keyboard shortcuts for extension commands (the list of
   Settings → Keyboard shortcuts is made when the app starts, before extensions load), a timer of

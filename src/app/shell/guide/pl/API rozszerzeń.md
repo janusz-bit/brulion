@@ -310,7 +310,7 @@ docs/nastroj
 ```
 ````
 
-`panel = true` w ostatnim argumencie widoku robi z niego sekcję **panelu bocznego** przy każdej stronie i każdym dniu; `panel = "page"` tylko przy stronach, `panel = "journal"` tylko przy dniach dziennika. Na telefonie panel boczny to szuflada wysuwana z prawej krawędzi.
+`panel = true` w ostatnim argumencie widoku robi z niego sekcję **panelu bocznego** przy każdej stronie i każdym dniu; `panel = "page"` tylko przy stronach, `panel = "journal"` tylko przy dniach dziennika. Na telefonie panel boczny to szuflada wysuwana z prawej krawędzi. `panel = "sidebar"` umieszcza go zamiast tego w **panelu stron** po lewej, pod Ulubionymi i Ostatnimi.
 
 ## Makra
 `b.macro(nazwa, function(ctx) … end, { description = "…", args = { "…" }, example = "…" })` daje notatkom **makro**: wpisanie `{{ext:<rozszerzenie>/<nazwa> argumenty}}` w dowolnym miejscu notatki pokazuje w tekście to, co zwraca funkcja, zawsze aktualne. Rozszerzenie wskazuje jego identyfikator (tytuł strony małymi literami, bez polskich znaków, z `-` zamiast spacji: „Licznik słów” to `licznik-slow`). Wpisanie `{{` w notatce podsuwa makra z ich opisami.

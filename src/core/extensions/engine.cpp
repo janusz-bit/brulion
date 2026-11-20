@@ -1307,9 +1307,9 @@ int Engine::viewImpl(lua_State *L)
             h.panel = u"all"_s;
         } else if (lua_type(L, -1) == LUA_TSTRING) {
             const QString where = toQString(L, -1);
-            if (where != u"page" && where != u"journal" && where != u"all") {
+            if (where != u"page" && where != u"journal" && where != u"all" && where != u"sidebar") {
                 lua_pop(L, 1);
-                return failWith(L, u"b.view: panel is true, \"page\" or \"journal\""_s);
+                return failWith(L, u"b.view: panel is true, \"page\", \"journal\" or \"sidebar\""_s);
             }
             h.panel = where;
         }

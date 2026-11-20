@@ -354,7 +354,8 @@ QVariantList WorkspaceExtensions::panels(const QString &kind) const
     QList<std::pair<QString, QVariantMap>> found;
     if (m_engine) {
         for (const extensions::ViewInfo &v : m_engine->views()) {
-            if (v.panel.isEmpty() || (v.panel != u"all" && v.panel != kind))
+            // "all": beside pages and days (the side panel), never the pages panel ("sidebar").
+            if (v.panel.isEmpty() || (v.panel != kind && (v.panel != u"all" || kind == u"sidebar")))
                 continue;
             const QString shown = v.label.isEmpty() ? title(v.extension) : v.label;
             found.append({shown.toLower(), QVariantMap{{u"extension"_s, v.extension},

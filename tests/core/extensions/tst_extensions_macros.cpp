@@ -146,7 +146,7 @@ private Q_SLOTS:
         QTest::newRow("no function") << u"b.macro(\"x\", 3)"_s << u"argument 2 must be a function"_s;
         QTest::newRow("bad meta") << u"b.macro(\"x\", function() end, \"opis\")"_s << u"argument 3 must be a table"_s;
         QTest::newRow("bad panel") << u"b.view(\"v\", function() end, nil, { panel = \"left\" })"_s
-                                   << u"panel is true, \"page\" or \"journal\""_s;
+                                   << u"panel is true, \"page\", \"journal\" or \"sidebar\""_s;
         QTest::newRow("spec of input") << u"return b.ui.input(\"x\")"_s << u"b.ui.input: argument 1 must be a table"_s;
         QTest::newRow("too many") << u"for i = 1, 300 do b.macro(\"m\" .. i, function() end) end"_s << u"at most 256"_s;
     }
