@@ -10,6 +10,8 @@
 #include <QStringList>
 #include <QStringView>
 
+#include <optional>
+
 namespace brulion::io {
 
 struct ZipReadOptions {
@@ -50,6 +52,11 @@ struct ZipWriteOptions {
 /// sanitizeArchivePath(); entries whose path is empty after that are skipped. Later entries with
 /// the same path are skipped too (an archive never contains duplicates).
 QByteArray writeZip(const QList<FileEntry> &entries, const ZipWriteOptions &options = {});
+
+/// The data of a gzip member (RFC 1952: Apple Notes' note data, `.gz` files) or a zlib stream
+/// (RFC 1950); nullopt when it is neither, is damaged, or unpacks to more than `maxSize` bytes
+/// (a "zip bomb").
+std::optional<QByteArray> gunzip(QByteArrayView data, qint64 maxSize = qint64(256) << 20);
 
 /// A relative, safe path from an archive entry name: "\\" -> "/", drive letters and leading "/"
 /// removed, "." and empty segments dropped, ".." resolved inside the archive (never above it),

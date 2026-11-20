@@ -23,6 +23,8 @@ namespace brulion::mstodo {
 inline constexpr QStringView DefaultAuthority = u"consumers";
 /// What the sign-in asks for: reading the user's To Do lists and tasks.
 inline constexpr QStringView Scope = u"Tasks.Read";
+/// The OneNote import's (cloudimport module): reading the user's notebooks.
+inline constexpr QStringView NotesScope = u"Notes.Read";
 /// The Microsoft identity platform.
 inline constexpr QStringView LoginHost = u"login.microsoftonline.com";
 
@@ -49,7 +51,9 @@ struct AuthError {
 /// An error answer of the identity platform explained: `error` ("authorization_declined",
 /// "invalid_client", …), `description` (its error_description, with "AADSTS7000218: …") and the
 /// AADSTS numbers of `error_codes`.
-AuthError describeAuthError(const QString &error, const QString &description, const QList<int> &codes = {});
+/// `scope`: what was asked for (the consent message names it).
+AuthError describeAuthError(const QString &error, const QString &description, const QList<int> &codes = {},
+                            QStringView scope = Scope);
 
 /// One sign-in: asks for a device code, shows it (codeReady), polls the token endpoint until the
 /// user has signed in at the verification address (signedIn) or the code expires, the user
@@ -73,6 +77,9 @@ public:
     void setTimeUnitMs(int ms) { m_unitMs = std::max(1, ms); }
     /// Request time limit in ms (default 30 s).
     void setTimeoutMs(int ms) { m_timeoutMs = ms; }
+    /// The delegated permission asked for (default Scope, "Tasks.Read"; OneNote: NotesScope).
+    void setScope(const QString &scope) { m_scope = scope; }
+    QString scope() const { return m_scope; }
 
 Q_SIGNALS:
     /// Show `userCode` and `verificationUri` (https://microsoft.com/devicelogin): the user opens
@@ -95,6 +102,7 @@ private:
     QString m_clientId;
     QString m_authority;
     QString m_deviceCode;
+    QString m_scope = Scope.toString();
     qint64 m_expiresMs = 0;
     int m_interval = 5;
     int m_unitMs = 1000;

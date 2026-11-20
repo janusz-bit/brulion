@@ -194,6 +194,11 @@ VaultPath ImportContext::claimPage(const QString &relative)
     return m_claims.claim(pagePath(relative));
 }
 
+VaultPath ImportContext::claimFile(const QString &relative)
+{
+    return m_claims.claim(paths::join(m_options.targetFolder, safeRelativePath(relative, true)));
+}
+
 VaultPath ImportContext::claimAttachment(const QString &relative)
 {
     return m_claims.claim(paths::join(m_attachmentFolder, safeRelativePath(relative, true)));

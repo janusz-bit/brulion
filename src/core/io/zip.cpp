@@ -215,6 +215,69 @@ QByteArray writeZip(const QList<FileEntry> &entries, const ZipWriteOptions &opti
     return QByteArray(static_cast<const char *>(buffer), qsizetype(size));
 }
 
+std::optional<QByteArray> gunzip(QByteArrayView data, qint64 maxSize)
+{
+    const auto byte = [&data](qsizetype i) { return static_cast<unsigned char>(data[i]); };
+    qsizetype start = 0;
+    int flags = TINFL_FLAG_USING_NON_WRAPPING_OUTPUT_BUF;
+    if (data.size() >= 18 && byte(0) == 0x1F && byte(1) == 0x8B && byte(2) == 8) {
+        // gzip: a 10-byte header, optional extra field, name, comment and header CRC.
+        const int flg = byte(3);
+        start = 10;
+        if (flg & 0x04) {
+            if (start + 2 > data.size())
+                return std::nullopt;
+            start += 2 + (byte(start) | (byte(start + 1) << 8));
+        }
+        for (const int bit : {0x08, 0x10}) {
+            if (!(flg & bit))
+                continue;
+            while (start < data.size() && data[start] != 0)
+                ++start;
+            ++start;
+        }
+        if (flg & 0x02)
+            start += 2;
+        if (start >= data.size())
+            return std::nullopt;
+    } else if (data.size() >= 2 && (byte(0) & 0x0F) == 8 && ((byte(0) << 8) | byte(1)) % 31 == 0) {
+        flags |= TINFL_FLAG_PARSE_ZLIB_HEADER;
+    } else {
+        return std::nullopt;
+    }
+    QByteArray out;
+    if (maxSize <= 0)
+        return std::nullopt;
+    const qsizetype capacity =
+            qsizetype(std::min<qint64>(maxSize, std::clamp<qint64>(qint64(data.size()) * 4, 4096, 1 << 20)));
+    tinfl_decompressor decompressor;
+    tinfl_init(&decompressor);
+    size_t inPos = size_t(start);
+    out.resize(capacity);
+    size_t outPos = 0;
+    for (;;) {
+        size_t inBytes = size_t(data.size()) - inPos;
+        size_t outBytes = size_t(out.size()) - outPos;
+        const tinfl_status status = tinfl_decompress(
+                &decompressor, reinterpret_cast<const mz_uint8 *>(data.data()) + inPos, &inBytes,
+                reinterpret_cast<mz_uint8 *>(out.data()), reinterpret_cast<mz_uint8 *>(out.data()) + outPos, &outBytes,
+                flags | (inPos + inBytes < size_t(data.size()) ? TINFL_FLAG_HAS_MORE_INPUT : 0));
+        inPos += inBytes;
+        outPos += outBytes;
+        if (status == TINFL_STATUS_DONE) {
+            out.resize(qsizetype(outPos));
+            return out;
+        }
+        if (status == TINFL_STATUS_HAS_MORE_OUTPUT) {
+            if (out.size() >= maxSize)
+                return std::nullopt;
+            out.resize(qsizetype(std::min<qint64>(qint64(out.size()) * 2, maxSize)));
+            continue;
+        }
+        return std::nullopt; // damaged, or the input ended
+    }
+}
+
 QString sanitizeArchivePath(QStringView name)
 {
     QString s = unicode::nfc(name);

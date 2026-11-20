@@ -66,6 +66,9 @@ public:
     VaultPath claimPage(const QString &relative);
     /// `<attachmentsFolder>/<subfolder>/<relative>` made safe, unique and claimed.
     VaultPath claimAttachment(const QString &relative);
+    /// A file that is no page ("Books.base") at `relative` under the target folder: segments made
+    /// safe (the last one keeps its extension), unique and claimed.
+    VaultPath claimFile(const QString &relative);
     /// Mark a vault path as taken (a daily note the import writes): later claims avoid it.
     void reservePath(const VaultPath &path) { m_claims.reserve(path); }
     /// The folder receiving attachments.

@@ -9,11 +9,13 @@
 // gives warnings, never a failure.
 #pragma once
 
+#include "io/csvimport.h"
 #include "io/files.h"
 #include "io/zip.h"
 #include "types.h"
 
 #include <QByteArray>
+#include <QDateTime>
 #include <QList>
 #include <QString>
 #include <QStringList>
@@ -55,6 +57,11 @@ struct ImportOptions {
     /// Does a vault path exist already (compare case-insensitively)? New pages and attachments
     /// then get a unique name ("Page 2.md"). Unset: the vault is treated as empty.
     std::function<bool(const VaultPath &)> exists;
+    /// The mapping of spreadsheet columns ("csv" and "airtable" importers, csvimport.h).
+    CsvImportOptions csv;
+    /// "Now" for relative dates in the source ("tomorrow" in a Todoist template), wall-clock time;
+    /// invalid: such dates are left out (the io module never reads the clock).
+    QDateTime now;
 };
 
 /// One supported source app or format. Implementations are stateless and thread-safe.
@@ -64,8 +71,9 @@ public:
     virtual ~Importer() = default;
     Q_DISABLE_COPY_MOVE(Importer)
 
-    /// Stable identifier: "obsidian", "logseq", "notion", "evernote", "keep", "mstodo",
-    /// "joplin", "simplenote", "roam", "trilium", "bear", "markdown", "html", "ics".
+    /// Stable identifier: "obsidian", "logseq", "notion", "evernote", "keep", "onenote",
+    /// "applenotes", "mstodo", "todoist", "joplin", "simplenote", "roam", "trilium", "bear",
+    /// "airtable", "markdown", "html", "csv", "ics".
     virtual QString id() const = 0;
     /// Display name of the app or format ("Obsidian", "Google Keep", "iCalendar").
     virtual QString name() const = 0;

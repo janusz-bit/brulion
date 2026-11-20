@@ -25,6 +25,8 @@ public:
     QString clientId = QStringLiteral("3f2504e0-4f89-41d3-9a0c-0305e82c3301");
     QString accessToken = QStringLiteral("EwBwA8l6BAAUfakeAccessTokenZażółć1234567890");
     QString userCode = QStringLiteral("F7GH2K9QX");
+    /// The scope the device-code request must ask for (OneNote: "Notes.Read").
+    QString scope = QStringLiteral("Tasks.Read");
     int interval = 5;
     int expiresIn = 900;
     /// Answers of the polls in order: "authorization_pending", "slow_down", "authorization_declined",
