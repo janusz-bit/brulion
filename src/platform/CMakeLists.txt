@@ -6,7 +6,10 @@
 #                everywhere), pdfpages (PDF pages as pictures: a drawing's backdrop — one backend per
 #                build, below; PdfReader: an open PDF drawing parts of pages and finding text for the
 #                PDF viewer), pdfsearch (its matcher: pure, tested everywhere), pdftext (its text
-#                selection by points, outline titles, links' addresses: pure, tested everywhere), openexternal (a file
+#                selection by points, outline titles, links' addresses: pure, tested everywhere), ocr (text
+#                recognition of pictures and scanned pages for the search: one backend per build,
+#                below), ocrdata (where its engine and models are looked for, its languages: pure,
+#                tested everywhere), openexternal (a file
 #                handed to the system's app: desktop, Android, a browser tab — one per build, below),
 #                externalfiles (which attachments may be handed over: an allow-list by name and first
 #                bytes; pure, tested everywhere),
@@ -25,6 +28,8 @@ qt_add_library(brulion_platform STATIC
     pdfpages.h pdfpages.cpp
     pdfsearch.h pdfsearch.cpp
     pdftext.h pdftext.cpp
+    ocr.h
+    ocrdata.h ocrdata.cpp
     openexternal.h openexternal.cpp
     externalfiles.h externalfiles.cpp
     documentpaths.h documentpaths.cpp
@@ -95,6 +100,45 @@ else()
     message(FATAL_ERROR "BRULION_PDF_BACKEND: unknown backend '${BRULION_PDF_BACKEND}'")
 endif()
 message(STATUS "Brulion: PDF pages through ${_pdf_backend} (src/platform/pdfpages.h)")
+
+# Text recognition (OCR) of pictures and scanned PDF pages for the search (ocr.h; docs/UI.md
+# "Searching attachments"): on the desktop Tesseract, loaded at run time through its C API
+# (ocr_tesseract.cpp — no headers or library at build time); none on Android (docs/ANDROID.md: the
+# NDK build of Tesseract and its models would add ~25 MB per ABI) and in the browser.
+# BRULION_TESSERACT_LIBRARY names the library to load first (the Nix package's store path; the
+# environment variable of the same name wins at run time), BRULION_TESSDATA_DIRS folders with its
+# models (*.traineddata). -DBRULION_OCR_BACKEND=<tesseract|none> chooses by hand.
+set(BRULION_OCR_BACKEND "auto" CACHE STRING "OCR of pictures and scanned pages: auto, tesseract or none")
+set(BRULION_TESSERACT_LIBRARY "" CACHE STRING "The Tesseract library the app loads first (a path)")
+set(BRULION_TESSDATA_DIRS "" CACHE STRING "Folders (;-separated) with Tesseract's models (*.traineddata)")
+set(_ocr_backend "${BRULION_OCR_BACKEND}")
+if(_ocr_backend STREQUAL "auto")
+    if(ANDROID OR EMSCRIPTEN)
+        set(_ocr_backend none)
+    else()
+        set(_ocr_backend tesseract)
+    endif()
+endif()
+if(_ocr_backend STREQUAL "tesseract")
+    target_sources(brulion_platform PRIVATE ocr_tesseract.cpp)
+    if(BRULION_TESSERACT_LIBRARY)
+        set_property(SOURCE ocr_tesseract.cpp APPEND PROPERTY COMPILE_DEFINITIONS
+            "BRULION_TESSERACT_LIBRARY=\"${BRULION_TESSERACT_LIBRARY}\"")
+    endif()
+    if(BRULION_TESSDATA_DIRS)
+        # '|' between the folders: a ';' would split the definition (a CMake list).
+        string(REPLACE "\"" "" _tessdata_dirs "${BRULION_TESSDATA_DIRS}")
+        string(REPLACE ";" "|" _tessdata_dirs "${_tessdata_dirs}")
+        set_property(SOURCE ocr_tesseract.cpp APPEND PROPERTY COMPILE_DEFINITIONS
+            "BRULION_TESSDATA_DIRS=\"${_tessdata_dirs}\"")
+    endif()
+elseif(_ocr_backend STREQUAL "none")
+    target_sources(brulion_platform PRIVATE ocr_none.cpp)
+else()
+    message(FATAL_ERROR "BRULION_OCR_BACKEND: unknown backend '${BRULION_OCR_BACKEND}'")
+endif()
+set(BRULION_OCR_BACKEND_USED "${_ocr_backend}" CACHE INTERNAL "The OCR backend of this build")
+message(STATUS "Brulion: OCR through ${_ocr_backend} (src/platform/ocr.h)")
 
 # Spell checking of the editor (spellbackends.h; docs/UI.md "Spell checking"): Android — the
 # system's spell checker through JNI (nothing in the APK); the browser — none; elsewhere Hunspell

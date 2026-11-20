@@ -44,3 +44,15 @@ target_compile_definitions(tst_spellbackends PRIVATE BRULION_TEST_SPELL_BACKEND=
 # a stack, and each still dies of its signal. Linux with glibc only (skipped elsewhere and in
 # sanitizer builds).
 brulion_add_test(tst_crashreport SOURCES tst_crashreport.cpp LIBS brulion_platform)
+# Where OCR's engine and models are looked for and which languages it reads (ocrdata.h) — pure, so
+# tested on every platform.
+brulion_add_test(tst_ocrdata SOURCES tst_ocrdata.cpp LIBS brulion_platform)
+# OCR with this build's backend (ocr.h: Tesseract loaded at run time — the Nix dev shell's and
+# package's, with their Polish and English models; skipped where there is none): the pictures of
+# tests/data/attachments (a whiteboard, a photo stored sideways with its EXIF orientation, a scanned
+# PDF page) read with their words in place, a picture without text, a cancelled read, the switch
+# that turns it off (a child process).
+brulion_add_test(tst_ocr SOURCES tst_ocr.cpp LIBS brulion_platform brulion_core_text)
+target_compile_definitions(tst_ocr PRIVATE BRULION_FONTS_DIR="${PROJECT_SOURCE_DIR}/assets/fonts")
+# Tesseract reads a page in seconds; under the sanitizers much longer.
+set_tests_properties(tst_ocr PROPERTIES TIMEOUT 600)
