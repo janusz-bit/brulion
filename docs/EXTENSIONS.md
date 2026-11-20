@@ -1493,6 +1493,8 @@ and numbers that are none).
 (`WorkspaceExtensions`, wired as the Workspace wires it): approval per device, the questions the
 app shows, an extension's own writes that are no "change" and the user's edits that always are,
 code an extension writes waiting for approval, the editor's saves of an approved page;
+`tests/app/shell/tst_flashcards.cpp` (`tst_shell_flashcards`) the Flashcards view as the app draws
+it (decks, a session by its keys with Undo, Markdown as rich text, the due count);
 `tests/app/shell/tst_habits.cpp` (`tst_shell_habits`) the Habits view as the app draws it — an
 `ExtensionView` over the real `nawyki` (cards in the notebook's order with their menus, problems,
 another month, a tick through the view and its toast's Undo, a tick in the journal drawn again in
@@ -1503,7 +1505,9 @@ failure and Try again). The app's
 self-test: `checkGym` switches the gym on, writes a plan into today's note through the dialog and
 adds a set in the view; `checkHabits` opens Habits from the palette, adds a habit through the form's
 text fields (a schedule not understood asked again), ticks today's check and opens it again with
-real taps, presses the toast's Undo and ticks a past day of the grid; `checkExtensionPages` writes an extension page as a sync would (it waits),
+real taps, presses the toast's Undo and ticks a past day of the grid; `checkFlashcards` writes a deck,
+opens Flashcards from the palette, studies it with Space, 3 and U (taps on a phone) and checks the
+card's line and the review log written and put back; `checkExtensionPages` writes an extension page as a sync would (it waits),
 approves it, opens its view from the palette, saves a change in the editor (it runs at once, still
 approved), saves a broken one (the error on its line, the previous version runs) and evaluates in
 the console.

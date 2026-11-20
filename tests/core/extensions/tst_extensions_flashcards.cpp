@@ -16,7 +16,7 @@
 //   * the queue: learning steps due, reviews due, the day's new-card limit counted from the log,
 //     studying ahead and more new cards; the decks, review and statistics views' nodes, the
 //     review session (reveal, grade, undo) through the view's actions;
-//   * 4000 cards counted and drawn within the time limit.
+//   * 5000 cards counted and drawn within the time limit, and again after another note changed.
 
 #include "extensions/builtin.h"
 #include "extensions/engine.h"
@@ -25,6 +25,7 @@
 #include "vault/vault.h"
 
 #include <QDir>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QTemporaryDir>
 #include <QTest>
@@ -716,11 +717,12 @@ private Q_SLOTS:
         QCOMPARE(firstOfType(render(u"review"_s), u"button"_s, u"reveal"_s).value(u"label"_s).toString(), u"Show answer"_s);
     }
 
-    // Many cards: counted and drawn within the time limit (the decks of 4000 cards on 80 pages).
+    // Many cards: counted and drawn within the time limit (the decks of 5000 cards on 100 pages),
+    // drawn again after another note changed (the deck pages not parsed again).
     void manyCards()
     {
         QHash<QString, QString> files;
-        for (int p = 0; p < 80; ++p) {
+        for (int p = 0; p < 100; ++p) {
             QString note = u"#fiszki/talia%1\n\n"_s.arg(p % 8);
             for (int i = 0; i < 50; ++i)
                 note += i % 3 == 0 ? u"pytanie %1 %2::odpowiedź <!--SR:!2026-11-%3,4,250-->\n"_s.arg(p).arg(i).arg(10 + i % 15)
@@ -728,10 +730,20 @@ private Q_SLOTS:
             files.insert(u"Talie/%1.md"_s.arg(p), note);
         }
         QVERIFY(open(files));
+        QElapsedTimer timer;
+        timer.start();
         const QVariantMap n = command(u"count"_s);
-        QCOMPARE(n.value(u"total"_s).toInt(), 4000);
+        const qint64 first = timer.elapsed();
+        QCOMPARE(n.value(u"total"_s).toInt(), 5000);
         QVERIFY(!firstOfType(render(u"decks"_s), u"stats"_s).isEmpty());
         QVERIFY(!firstOfType(render(u"review"_s), u"markdown"_s).isEmpty());
+        QVERIFY(writeFile(u"Inna.md"_s, u"- zmiana\n"_s));
+        m_index->update(u"Inna.md"_s, u"- zmiana\n"_s);
+        timer.restart();
+        QCOMPARE(command(u"count"_s).value(u"total"_s).toInt(), 5000);
+        const qint64 again = timer.elapsed();
+        QVERIFY(!firstOfType(render(u"decks"_s), u"stats"_s).isEmpty());
+        qInfo("5000 cards counted in %lld ms, again after another note changed in %lld ms", first, again);
     }
 };
 

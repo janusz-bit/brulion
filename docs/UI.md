@@ -871,7 +871,8 @@ names from the notebook's first day (`DatesHelper.weekStart`); done in `successB
 `dangerBg`, skipped in `chipDoneBg` with its number struck out, future and outside faint, a due
 day with a 1-px ring and today with a 2-px one; a tap is the day's action (`activateDay`), a
 right-click or a long press its menu. **Markdown** lines (`lineHtml`: the text's blocks rendered by
-`InlineRenderer` with the view's `palette`, links opened through `PageTools`; `lineTitle` its plain
+`InlineRenderer` with the model's `palette`, which ShellExtensionView binds to the theme's colours,
+links opened through `PageTools`; `lineTitle` its plain
 text for screen readers) in `BRichText`, larger or smaller by `lineSize`; **progress** a
 `BProgressBar` with its caption; **stats** tiles (`lineItems`: label, value, tone; four to a line,
 two on a phone); a **divider** a hairline. **Buttons** with a key, a tone, a second line (`hint`)

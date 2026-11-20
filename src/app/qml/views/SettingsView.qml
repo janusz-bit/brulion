@@ -1423,7 +1423,7 @@ Item {
                 ShellSettingRow {
                     visible: AppSettings.flashcardsEnabled
                     title: qsTr("New cards a day")
-                    description: qsTr("How many cards never studied a session brings each day (“Study more” adds more).")
+                    description: qsTr("How many cards never studied a session brings each day (at the end of a session you can learn more).")
                     BSegmented {
                         objectName: "flashcardsNewSetting"
                         accessibleName: qsTr("New cards a day")

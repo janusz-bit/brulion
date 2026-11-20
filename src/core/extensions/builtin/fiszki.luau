@@ -50,6 +50,7 @@ type Settings = {
 }
 type Card = {
     id: string,
+    baseId: string, -- the id before two copies of one card were told apart
     key: string, -- what the id is the hash of
     kind: string, -- "basic" | "reversed" | "multiline" | "multireversed" | "cloze" | "logseq"
     sibling: number, -- 1-based: the segment of the scheduling comment
@@ -431,11 +432,13 @@ local function imul(a: number, c: number): number
     return (al * cl + ((ah * cl + al * ch) % 65536) * 65536) % U32
 end
 
--- FNV-1a over the UTF-8 bytes of `s`, as ts-fsrs's fnv1a32.
+-- FNV-1a over the UTF-8 bytes of `s`, as ts-fsrs's fnv1a32. (Its prime is 2^24 + 403: a shift and
+-- a product below 2^53, exact in a double, instead of a general 32-bit multiply.)
 local function fnv1a32(s: string): number
     local h = 2166136261
     for i = 1, #s do
-        h = imul(bit32.bxor(h, string.byte(s, i)), 16777619)
+        h = bit32.bxor(h, string.byte(s, i))
+        h = (bit32.lshift(h, 24) + h * 403) % U32
     end
     return h
 end
@@ -791,6 +794,9 @@ type Found = { kind: string, first: number, last: number }
 -- or a block's), never a card — `Stolica:: Warszawa` is one, `Stolica :: Warszawa` and
 -- `- Stolica:: Warszawa` are cards.
 local function isProperty(line: string): boolean
+    if not string.find(line, "::", 1, true) then
+        return false
+    end
     local key = string.match(line, "^%s*([^%s:]+)::%s") or string.match(line, "^%s*([^%s:]+)::$")
     if key == nil then
         return false
@@ -801,6 +807,9 @@ end
 -- Is position `at` of `line` inside inline code (an odd number of backticks before it and after it,
 -- as the plugin counts)?
 local function inCode(line: string, at: number): boolean
+    if not string.find(line, "`", 1, true) then
+        return false
+    end
     local before = select(2, line:sub(1, at - 1):gsub("`", ""))
     local after = select(2, line:sub(at):gsub("`", ""))
     return before % 2 == 1 and after % 2 == 1
@@ -1025,6 +1034,14 @@ end
 
 -- The lines' common indentation removed, and the first line's list marker or checkbox.
 local function dedent(texts: { string }): { string }
+    if #texts == 1 then
+        local line = texts[1]
+        local first = string.byte(line, 1)
+        -- (Most cards: one line that starts with a letter.)
+        if first == nil or not (first == 32 or first == 9 or first == 45 or first == 42 or first == 43 or (first >= 48 and first <= 57)) then
+            return texts
+        end
+    end
     local indent: number? = nil
     for _, t in texts do
         if trim(t) ~= "" then
@@ -1059,16 +1076,26 @@ local function cleanSide(st: Settings, texts: { string }): string
         if isProperty(t) then
             continue -- a block's properties (Logseq's card-*:: too)
         end
-        local line = withoutComment(t)
-        line = line:gsub("%s+%^[%w%-]+%s*$", "")
-        line = line:gsub("(%s?)#([^%s#%[%]%(%),;!?\"']+)", function(space: string, tag: string)
-            local t2 = b.lower(tag)
-            if isCardTag(st, t2) or t2 == "card" then
-                return ""
-            end
-            return nil :: any
-        end)
-        table.insert(out, (line:gsub("%s+$", "")))
+        local line = t
+        if string.find(line, "<!--SR:", 1, true) then
+            line = withoutComment(line)
+        end
+        if string.find(line, "^", 1, true) then
+            line = line:gsub("%s+%^[%w%-]+%s*$", "")
+        end
+        if string.find(line, "#", 1, true) then
+            line = line:gsub("(%s?)#([^%s#%[%]%(%),;!?\"']+)", function(space: string, tag: string)
+                local t2 = b.lower(tag)
+                if isCardTag(st, t2) or t2 == "card" then
+                    return ""
+                end
+                return nil :: any
+            end)
+        end
+        if string.find(line, "%s$") then
+            line = line:gsub("%s+$", "")
+        end
+        table.insert(out, line)
     end
     while #out > 0 and trim(out[#out]) == "" do
         table.remove(out)
@@ -1255,7 +1282,7 @@ local function cardsOfFound(st: Settings, page: string, path: string, lines: { L
             end
         end
     end
-    local key = path .. "\n" .. cleanSide(st, body)
+    local key = path .. "\n" .. withoutComment(table.concat(body, "\n"))
     for k, side in sides do
         if #out >= MAX_CARDS then
             return
@@ -1265,8 +1292,10 @@ local function cardsOfFound(st: Settings, page: string, path: string, lines: { L
         end
         local segment = segments[k]
         local memory = if segment ~= nil then parseSegment(segment :: string) else nil
+        local id = hex(fnv1a32(key .. "\n" .. tostring(k)))
         table.insert(out, {
-            id = hex(fnv1a32(key .. "\n" .. tostring(k))),
+            id = id,
+            baseId = id,
             key = key,
             kind = f.kind,
             sibling = k,
@@ -1480,8 +1509,10 @@ local function logseqCards(st: Settings, out: { Card }, skipByPage: { [string]: 
         end
         local key = path .. "\n" .. question
         local props: { [string]: string } = block.props or {}
+        local id = hex(fnv1a32(key .. "\n1"))
         table.insert(out, {
-            id = hex(fnv1a32(key .. "\n1")),
+            id = id,
+            baseId = id,
             key = key,
             kind = "logseq",
             sibling = 1,
@@ -1511,6 +1542,9 @@ end
 -- Every card of the notebook, in the order of their pages (by path) and lines; kept while
 -- b.revision() and the tags are the same.
 local cache = { revision = -1, tags = "", cards = {} :: { Card }, byId = {} :: { [string]: Card } }
+-- Each deck page's cards as its text was when they were read: a page whose text is the same is not
+-- parsed again (a note changed elsewhere changes the revision, not this page's cards).
+local pageCache: { [string]: { text: string, tags: string, cards: { Card } } } = {}
 
 local function collect(st: Settings): { Card }
     local tagsKey = table.concat(st.tags, ",")
@@ -1547,12 +1581,29 @@ local function collect(st: Settings): { Card }
         return x.path < y.path
     end)
     local pageCardsOut: { Card } = {}
+    local kept: { [string]: { text: string, tags: string, cards: { Card } } } = {}
     for _, p in byPath do
         if #pageCardsOut + #out >= MAX_CARDS then
             break
         end
-        pageCards(st, p.name, skip[p.path] or {}, pageCardsOut)
+        local skipped = skip[p.path]
+        local text = b.read(p.name)
+        local hit = pageCache[p.path]
+        local cardsOfPage: { Card }
+        if skipped == nil and text ~= nil and hit ~= nil and hit.text == text and hit.tags == tagsKey then
+            cardsOfPage = hit.cards
+        else
+            cardsOfPage = {}
+            pageCards(st, p.name, skipped or {}, cardsOfPage)
+        end
+        if skipped == nil and text ~= nil then
+            kept[p.path] = { text = text :: string, tags = tagsKey, cards = cardsOfPage }
+        end
+        for _, c in cardsOfPage do
+            table.insert(pageCardsOut, c)
+        end
     end
+    pageCache = kept
     -- Notes' cards first, then Logseq's, each by path and line.
     for _, c in out do
         table.insert(pageCardsOut, c)
@@ -1569,7 +1620,7 @@ local function collect(st: Settings): { Card }
     local byId: { [string]: Card } = {}
     for _, c in pageCardsOut do
         -- The same card twice (two copies of a line): the second gets an id of its own.
-        local id = c.id
+        local id = c.baseId
         local n = 1
         while byId[id] do
             n += 1
@@ -2263,6 +2314,69 @@ local function decksOf(cards: { Card }, group: string): { { deck: string, title:
     return sorted
 end
 
+-- The keys of the decks a card is in, as decksOf() lists them (each parent of a tag or a folder).
+local function deckKeysOf(c: Card, group: string): { string }
+    local keys: { string } = {}
+    local seen: { [string]: boolean } = {}
+    local function add(key: string)
+        if not seen[key] then
+            seen[key] = true
+            table.insert(keys, key)
+        end
+    end
+    if group == "page" then
+        add("page:" .. c.page)
+    elseif group == "folder" then
+        if c.folder == "" then
+            add("folder:")
+        else
+            local path = ""
+            for _, part in split(c.folder, "/") do
+                path = if path == "" then part else path .. "/" .. part
+                add("folder:" .. path)
+            end
+        end
+    else
+        for _, d in c.decks do
+            local path = ""
+            for _, part in split(d, "/") do
+                path = if path == "" then part else path .. "/" .. part
+                add("tag:" .. path)
+            end
+        end
+    end
+    return keys
+end
+
+-- Every deck's counts in one pass over the cards (countsOf() for each deck would be one per deck):
+-- due now, new left today (the day's limit shared, as a session of the deck would offer), all.
+local function deckCounts(st: Settings, cards: { Card }, group: string, now: number)
+    local today = now // 1440
+    local newLeft = math.max(0, st.newPerDay - newToday(today))
+    local out: { [string]: { due: number, new: number, total: number } } = {}
+    for _, c in cards do
+        local m = c.memory
+        local due = (isLearning(m) and m.due <= now) or (m.state == 2 and m.due // 1440 <= today)
+        for _, key in deckKeysOf(c, group) do
+            local n = out[key]
+            if n == nil then
+                n = { due = 0, new = 0, total = 0 }
+                out[key] = n
+            end
+            n.total += 1
+            if m.state == 0 then
+                n.new += 1
+            elseif due then
+                n.due += 1
+            end
+        end
+    end
+    for _, n in out do
+        n.new = math.min(n.new, newLeft)
+    end
+    return out
+end
+
 local function decksView(params: { [string]: any }): Node
     local group = if params.group == "page" or params.group == "folder" then params.group else "tag"
     local st = settingsOf(params)
@@ -2293,8 +2407,9 @@ local function decksView(params: { [string]: any }): Node
         }),
     }
     table.insert(nodes, b.ui.heading(if group == "page" then i.byPage elseif group == "folder" then i.byFolder else i.byTag))
+    local counts = deckCounts(st, cards, group, now)
     for _, d in decksOf(cards, group) do
-        local n = countsOf(st, cards, d.deck, now)
+        local n = counts[d.deck] or { due = 0, new = 0, total = 0 }
         local title = string.rep("    ", d.depth) .. d.title
         local items = {
             { label = i.study, view = "review", params = { deck = d.deck, group = group }, icon = "play" },
@@ -2304,10 +2419,12 @@ local function decksView(params: { [string]: any }): Node
         if group == "page" then
             table.insert(items, { label = i.openPage, page = d.title })
         end
-        table.insert(nodes, b.ui.row({
-            b.ui.open(title, "review", { deck = d.deck, group = group }),
-            b.ui.text(string.format(i.deckCounts, n.due, n.new, n.total), { muted = n.due == 0 and n.new == 0, tone = if n.due > 0 then "accent" else nil }),
-            b.ui.menu(items, i.more),
+        -- A card per deck: its name (a tap studies it) with its menu, its counts under them.
+        table.insert(nodes, b.ui.card({
+            b.ui.row({ b.ui.open(title, "review", { deck = d.deck, group = group }), b.ui.menu(items, i.more) }),
+            b.ui.text(string.format(i.deckCounts, n.due, n.new, n.total), {
+                muted = n.due == 0, tone = if n.due > 0 then "accent" else nil, icon = "layers",
+            }),
         }))
     end
     return b.ui.column(nodes)

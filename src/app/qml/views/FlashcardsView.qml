@@ -31,9 +31,9 @@ FocusScope {
         { value: "stats", text: qsTr("Statistics"), icon: "chart-column" }
     ]
     readonly property list<var> groups: [
-        { value: "tag", text: qsTr("By tag"), icon: "tags" },
-        { value: "page", text: qsTr("By page"), icon: "file-text" },
-        { value: "folder", text: qsTr("By folder"), icon: "folder" }
+        { value: "tag", text: qsTr("Tags"), icon: "tags" },
+        { value: "page", text: qsTr("Pages"), icon: "file-text" },
+        { value: "folder", text: qsTr("Folders"), icon: "folder" }
     ]
 
     function applyRoute(): void {
@@ -63,7 +63,12 @@ FocusScope {
         return deck
     }
 
-    onRouteChanged: applyRoute()
+    // (Another tab or deck: the keys — Space, 1–4, U — go to the view's buttons again, also after
+    // a tap on the header's tabs took the focus.)
+    onRouteChanged: {
+        applyRoute()
+        lines.forceActiveFocus()
+    }
     Component.onCompleted: {
         applyRoute()
         lines.forceActiveFocus()
@@ -85,19 +90,6 @@ FocusScope {
         extensions: root.extensions
         extension: "fiszki"
         view: root.tab
-        palette: ({
-            link: Theme.link, unresolved: Theme.linkMissing, muted: Theme.fgMuted,
-            codeBackground: Theme.bgSunken, highlightBackground: Theme.mark,
-            tagFg: Theme.tagFg, tagBg: Theme.tagBg,
-            dueFg: Theme.chipDueFg, dueBg: Theme.chipDueBg,
-            overdueFg: Theme.chipOverdueFg, overdueBg: Theme.chipOverdueBg,
-            scheduledFg: Theme.chipScheduledFg, scheduledBg: Theme.chipScheduledBg,
-            reminderFg: Theme.chipReminderFg, reminderBg: Theme.chipReminderBg,
-            alarmFg: Theme.chipAlarmFg, alarmBg: Theme.chipAlarmBg,
-            recurrenceFg: Theme.chipRecurrenceFg, recurrenceBg: Theme.chipRecurrenceBg,
-            doneFg: Theme.chipDoneFg, doneBg: Theme.chipDoneBg,
-            neutralFg: Theme.chipNeutralFg, neutralBg: Theme.chipNeutralBg
-        })
         // A card's page ("Edit"), opened at the card's line.
         onPageRequested: (page, line) => AppController.openNamedPage(page, line)
         onJournalRequested: (date) => AppController.openJournal(date)

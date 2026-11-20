@@ -157,10 +157,28 @@ ListView {
             event.accepted = true
     }
 
-    // Links of rendered Markdown open their pages (and journals) as the notes' do.
+    // Links of rendered Markdown open their pages (and journals) as the notes' do; its colours are
+    // the theme's (b.ui.markdown in every extension's view).
     PageTools {
         id: linkTools
         workspace: Workspace
+    }
+    Binding {
+        target: list.lines
+        property: "palette"
+        value: ({
+            link: Theme.link, unresolved: Theme.linkMissing, muted: Theme.fgMuted,
+            codeBackground: Theme.bgSunken, highlightBackground: Theme.mark,
+            tagFg: Theme.tagFg, tagBg: Theme.tagBg,
+            dueFg: Theme.chipDueFg, dueBg: Theme.chipDueBg,
+            overdueFg: Theme.chipOverdueFg, overdueBg: Theme.chipOverdueBg,
+            scheduledFg: Theme.chipScheduledFg, scheduledBg: Theme.chipScheduledBg,
+            reminderFg: Theme.chipReminderFg, reminderBg: Theme.chipReminderBg,
+            alarmFg: Theme.chipAlarmFg, alarmBg: Theme.chipAlarmBg,
+            recurrenceFg: Theme.chipRecurrenceFg, recurrenceBg: Theme.chipRecurrenceBg,
+            doneFg: Theme.chipDoneFg, doneBg: Theme.chipDoneBg,
+            neutralFg: Theme.chipNeutralFg, neutralBg: Theme.chipNeutralBg
+        })
     }
 
     model: lines

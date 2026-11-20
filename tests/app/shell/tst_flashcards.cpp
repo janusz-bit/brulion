@@ -176,9 +176,9 @@ private Q_SLOTS:
         // The menu of a deck offers its review and its statistics as other views.
         const int deckRow = rowOf(model, u"row"_s, rowOf(model, u"heading"_s));
         QVERIFY(deckRow > 0);
-        const QStringList menu = model.menuLabels(deckRow, 2, QString());
+        const QStringList menu = model.menuLabels(deckRow, 1, QString());
         QCOMPARE(menu, (QStringList{u"Ucz się"_s, u"Ucz się z wyprzedzeniem"_s, u"Statystyki"_s}));
-        model.activateMenuItem(deckRow, 2, QString(), 2);
+        model.activateMenuItem(deckRow, 1, QString(), 2);
         QCOMPARE(views.size(), 2);
         QCOMPARE(views[1][0].toString(), u"stats"_s);
     }

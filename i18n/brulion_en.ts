@@ -424,7 +424,7 @@
     <name>ContentPdfView</name>
     <message numerus="yes">
         <location filename="../src/app/qml/content/ContentPdfView.qml" line="1513"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="3825"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="3863"/>
         <source>%n page(s)</source>
         <translation>
             <numerusform>%n page</numerusform>
@@ -603,6 +603,17 @@
         <translation>
             <numerusform>Searched the latest %n day. Older ones: In the whole notebook…</numerusform>
             <numerusform>Searched the latest %n days. Older ones: In the whole notebook…</numerusform>
+        </translation>
+    </message>
+</context>
+<context>
+    <name>FlashcardsView</name>
+    <message numerus="yes">
+        <location filename="../src/app/qml/views/FlashcardsView.qml" line="147"/>
+        <source>%n card(s) to study now</source>
+        <translation>
+            <numerusform>%n card to study now</numerusform>
+            <numerusform>%n cards to study now</numerusform>
         </translation>
     </message>
 </context>
@@ -1111,7 +1122,7 @@
 <context>
     <name>SettingsView</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1087"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1089"/>
         <source>%n word(s), kept on this device for all notebooks.</source>
         <translation>
             <numerusform>%n word, kept on this device for all notebooks.</numerusform>
@@ -1119,7 +1130,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1939"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1998"/>
         <source>%n warning(s) or error(s)</source>
         <translation>
             <numerusform>%n warning or error</numerusform>
@@ -1127,7 +1138,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1824"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1883"/>
         <source>Last check %1: %n reminder(s), the sync failed.</source>
         <translation>
             <numerusform>Last check %1: %n reminder, the sync failed.</numerusform>
@@ -1135,7 +1146,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="346"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="348"/>
         <source>%n command(s)</source>
         <translation>
             <numerusform>%n command</numerusform>
@@ -1143,7 +1154,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="346"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="348"/>
         <source>%n view(s)</source>
         <translation>
             <numerusform>%n view</numerusform>
@@ -1151,7 +1162,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="347"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="349"/>
         <source>%n reaction(s)</source>
         <translation>
             <numerusform>%n reaction</numerusform>
@@ -1159,7 +1170,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1826"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1885"/>
         <source>Last check %1: %n reminder(s).</source>
         <translation>
             <numerusform>Last check %1: %n reminder.</numerusform>
@@ -1199,6 +1210,17 @@
         <translation>
             <numerusform>%n file is too large to restore and stays as it is.</numerusform>
             <numerusform>%n files are too large to restore and stay as they are.</numerusform>
+        </translation>
+    </message>
+</context>
+<context>
+    <name>ShellBottomNav</name>
+    <message numerus="yes">
+        <location filename="../src/app/qml/shell/ShellBottomNav.qml" line="173"/>
+        <source>%n to study now</source>
+        <translation>
+            <numerusform>%n to study now</numerusform>
+            <numerusform>%n to study now</numerusform>
         </translation>
     </message>
 </context>
@@ -1294,6 +1316,17 @@
     </message>
 </context>
 <context>
+    <name>ShellRail</name>
+    <message numerus="yes">
+        <location filename="../src/app/qml/shell/ShellRail.qml" line="90"/>
+        <source>%n to study now</source>
+        <translation>
+            <numerusform>%n to study now</numerusform>
+            <numerusform>%n to study now</numerusform>
+        </translation>
+    </message>
+</context>
+<context>
     <name>ShellRenameDialog</name>
     <message numerus="yes">
         <location filename="../src/app/qml/shell/ShellRenameDialog.qml" line="81"/>
@@ -1340,7 +1373,7 @@
     <name>ShellShareDialog</name>
     <message numerus="yes">
         <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="32"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="6834"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="7001"/>
         <source>%n file(s) to save in the notebook</source>
         <translation>
             <numerusform>%n file to save in the notebook</numerusform>
@@ -1913,6 +1946,17 @@
         <translation>
             <numerusform>Saved %n page</numerusform>
             <numerusform>Saved %n pages</numerusform>
+        </translation>
+    </message>
+</context>
+<context>
+    <name>brulion::shell::CommandModel</name>
+    <message numerus="yes">
+        <location filename="../src/app/shell/commandmodel.cpp" line="526"/>
+        <source>%n card(s) to study now</source>
+        <translation>
+            <numerusform>%n card to study now</numerusform>
+            <numerusform>%n cards to study now</numerusform>
         </translation>
     </message>
 </context>
