@@ -361,12 +361,12 @@ ColumnLayout {
             CanvasTile {
                 label: qsTr("This device")
                 path: view.original
-                detail: qsTr("%n card(s) and connection(s)", "", resolverObject.canvasCounts.ours || 0)
+                detail: qsTr("Cards and connections: %1").arg(resolverObject.canvasCounts.ours || 0)
             }
             CanvasTile {
                 label: view.otherLabel
                 path: view.copyPath
-                detail: qsTr("%n card(s) and connection(s)", "", resolverObject.canvasCounts.theirs || 0)
+                detail: qsTr("Cards and connections: %1").arg(resolverObject.canvasCounts.theirs || 0)
             }
         }
         BText {
@@ -374,7 +374,7 @@ ColumnLayout {
             variant: "small"
             color: Theme.fgMuted
             wrapMode: Text.Wrap
-            text: qsTr("After merging: %n card(s) and connection(s)", "", resolverObject.canvasCounts.merged || 0) + " · "
+            text: qsTr("After merging, cards and connections: %1").arg(resolverObject.canvasCounts.merged || 0) + " · "
                   + qsTr("%1 in both (%2 changed), %3 only here, %4 only in the copy")
                         .arg(resolverObject.canvasCounts.common || 0).arg(resolverObject.canvasCounts.changed || 0)
                         .arg(resolverObject.canvasCounts.onlyOurs || 0).arg(resolverObject.canvasCounts.onlyTheirs || 0)

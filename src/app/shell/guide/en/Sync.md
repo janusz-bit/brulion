@@ -9,12 +9,12 @@ Brulion has no server of its own. Your notes are an ordinary folder, so you sync
 ## Syncthing (recommended for working offline)
 1. Share the notebook folder in Syncthing (on Android: Syncthing-Fork).
 2. On every device, point Brulion to the same folder (on Android e.g. `/storage/emulated/0/Brulion` and the “All files access” permission).
-3. When the same note changes on two devices, Syncthing leaves a `*.sync-conflict-*` copy. Brulion doesn't show it as a page, but in the Sync center as a **conflict to merge** — also a copy of a drawing, which you merge with the **Merge drawings** button.
+3. When the same note changes on two devices, Syncthing leaves a `*.sync-conflict-*` copy. Brulion doesn't show it as a page, but in the Sync center as a **conflict to merge** — also a copy of a drawing, which you merge with the **Merge drawings** button, or of a canvas (**Merge canvases**).
 
 Optionally Brulion shows the status from Syncthing's API.
 
 ## Nextcloud (WebDAV)
-*Settings → Sync* (or the Sync center): the server address, the user name and an **app password** generated in Nextcloud. Changes from several devices are merged three-way (drawings element by element, never line by line), so usually nothing gets lost and you don't have to do anything. When merging is impossible, both versions are kept and you get the merge view.
+*Settings → Sync* (or the Sync center): the server address, the user name and an **app password** generated in Nextcloud. Changes from several devices are merged three-way (drawings element by element and canvases card by card, never line by line), so usually nothing gets lost and you don't have to do anything. When merging is impossible, both versions are kept and you get the merge view.
 
 The server and the account are shared, but **turning sync on and the folder on the server belong to the notebook**: another notebook (this documentation too) starts without sync. That way notes from one notebook never end up in another.
 
@@ -44,7 +44,7 @@ Notes kept in a **GitHub repository** — the whole repository or one of its fol
 
 - **A new notebook from GitHub:** on the start screen (*Switch notebook → Open another notebook…*) choose **Open from GitHub…** and paste the address: `owner/name`, or the address of the repository's page or of one of its folders on github.com (for example `https://github.com/janusz-bit/brulion/tree/main/src/app/shell/guide/en`). The branch and the folder are taken from the address. The notebook opens on the **GitHub** tab of the Sync center, and its notes arrive in a moment.
 - **This notebook on GitHub:** *Sync center → GitHub → Keep this notebook on GitHub*. Notes that are only here stay here until you commit them; notes that differ get GitHub's version beside them, as a conflict to merge.
-- **New versions** arrive when the notebook opens, every 15 minutes while Brulion is in front, and with **Get the newest version**. A note changed both here and on GitHub is merged line by line (a drawing by its elements); when that is impossible, your version stays and GitHub's is kept beside it as `Note.conflict-GitHub-….md` in **Conflicts**. A note removed on GitHub goes to the trash here; one renamed or moved there is renamed here too.
+- **New versions** arrive when the notebook opens, every 15 minutes while Brulion is in front, and with **Get the newest version**. A note changed both here and on GitHub is merged line by line (a drawing by its elements, a canvas by its cards); when that is impossible, your version stays and GitHub's is kept beside it as `Note.conflict-GitHub-….md` in **Conflicts**. A note removed on GitHub goes to the trash here; one renamed or moved there is renamed here too.
 - **Your changes** wait in the list *Not on GitHub yet*. **Commit…** sends the ticked notes as one commit to the branch; **Propose changes…** sends them as a **pull request** — from your own copy of the repository (a fork) when you may not write to it. Proposing again while the pull request is open adds the new changes to it. Notes with a conflict waiting are sent only after you merge them.
 - **The token:** a public repository opens without an account, only for reading. A private one, commits and pull requests need a *personal access token* from your GitHub settings (*Settings → Developer settings → Personal access tokens*; a classic one with the `repo` scope, `public_repo` for public repositories). Paste it in the **GitHub account** card; it stays only on this device and goes only to GitHub.
 - Hidden files of the repository (`.gitignore`, `.github/…`) are never touched; files larger than 50 MB and files kept in Git LFS stay on GitHub. Only GitHub works this way — not GitLab or other Git servers.
@@ -60,6 +60,7 @@ The **More** menu → **Notebook** → *Sync center*, or a click on the sync sta
 - After an error you see a countdown to the next attempt and a “Try now” button.
 - The history of recent runs shows the result, the reason and the time; a click opens the details.
 - **Conflicts** of drawings show both versions and the merged result as drawings, never as text. **Merge drawings** combines the lines and shapes of both versions (lines erased on just one device come back), saves the previous version in the history and moves the copy to the trash. A copy of an Obsidian drawing that has different notes than your drawing stays after merging until you move its notes over and delete it. See [[Drawings#Saving and sync|Saving and syncing drawings]].
+- **Conflicts** of canvases show both versions as pictures with the number of cards and connections in each. **Merge canvases** combines the cards and connections of both versions — what was added, moved or edited in either one stays (a card moved in one and edited in the other keeps both changes) —, saves the previous version in the history and moves the copy to the trash. See [[Canvas#Saving, sync and export|Saving and syncing canvases]].
 
 ## Event log
 When something doesn't work, look into the **Event log** (*Settings → Application*, or “log” in the command palette). You can filter and search it, and then copy or save it to send. The log contains no passwords, tokens or note content; it stays on the device until you share it yourself. For sync problems, first turn on “Detailed log”, repeat the sync, and only then send the log.

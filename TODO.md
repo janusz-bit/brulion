@@ -193,13 +193,11 @@ done in the repository simply disappears from the list.
   Obsidian has Bases (table, list, map, kanban), Logseq a table and a gallery, Anytype and AFFiNE
   boards and galleries. `query` blocks today show only a list and do not filter by page properties
   (`status:: in progress`, `cost > 100`).
-* **Obsidian compatibility: `.base`, `.canvas`** — `.base` and `.canvas` files from a shared vault
-  are today a file in Brulion (docs/IMPORT.md); to be decided what to read and what to edit as
-  well. Dataview's `CALENDAR` views, inline `= …` queries and `dataviewjs` stay code
+* **Obsidian compatibility: `.base`** — `.base` files from a shared vault are today a file in
+  Brulion (docs/IMPORT.md); to be decided what to read and what to edit as well. Canvases keep the
+  Advanced Canvas plugin's shapes, borders and portals in the file but draw plain cards.
+  Dataview's `CALENDAR` views, inline `= …` queries and `dataviewjs` stay code
   (docs/SYNTAX.md §10 "Dataview queries").
-* **Whiteboard (infinite canvas)** — notes, pictures, PDFs and drawings laid out on a canvas, with
-  connections; preferably in the JSON Canvas format (Obsidian Canvas, AFFiNE). The drawing editor
-  covers sketches, but does not embed notes in them.
 * **Flashcards with spaced repetition** — cards from blocks (`question :: answer`, hidden parts),
   spaced repetition (e.g. FSRS), cards due for review today, state saved in files and merged by
   sync (Logseq, SiYuan).

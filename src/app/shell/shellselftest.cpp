@@ -5808,6 +5808,10 @@ void checkCanvas(QQuickWindow *window, AppController *app, const Check &check)
 {
     const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
     Workspace *ws = app->workspace();
+    // The keyboard focus is left where it was found: typing into a card and Ctrl+Z put it in the
+    // canvas view, and the view shown after it would take it over (the checks that follow find it
+    // where the checks before left it).
+    const QPointer<QQuickItem> focusBefore = window->activeFocusItem();
     // "New canvas": an empty canvas, as Obsidian makes them.
     const QString fresh = ws->createCanvas(QString());
     check(fresh.endsWith(u".canvas"_s) && ws->readFile(fresh).contains(u"\"nodes\":[]"_s),
@@ -5921,6 +5925,9 @@ void checkCanvas(QQuickWindow *window, AppController *app, const Check &check)
     check(std::ranges::any_of(hits, [&](const QVariant &h) { return h.toMap().value(u"path"_s).toString() == path; }),
           "search finds the canvas by its cards' text");
 
+    // Before the canvas view goes: the view shown next would take the focus from it.
+    if (focusBefore)
+        focusBefore->forceActiveFocus();
     app->goHome();
     settle(300);
     ws->deletePage(path);
@@ -9682,6 +9689,9 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
     // 3h-ext. Extensions written in the notebook: approval, live reload, an error on its line, the console.
     checkExtensionPages(window, app, check);
     closeMenus(window);
+    // 3h-canvas. A canvas: made, opened, moved, zoomed, a card added and typed, connected, undone, saved.
+    checkCanvas(window, app, check);
+    closeMenus(window);
     // 3h-ai. The AI assistant's ✨ on the top bar: its menu, the assistant's question, its settings.
     checkAiButton(window, app, check);
     closeMenus(window);
@@ -9690,9 +9700,6 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
     closeMenus(window);
     // 3h-qr. A note as QR codes: one code, the formats, a long note walked code by code.
     checkQrCode(window, app, check);
-    closeMenus(window);
-    // 3h-canvas. A canvas: made, opened, moved, zoomed, a card added and typed, connected, undone, saved.
-    checkCanvas(window, app, check);
     closeMenus(window);
     // 3i. Focus mode, the word count, typewriter scrolling and a custom shortcut.
     checkFocusAndShortcuts(window, app, check);
