@@ -109,7 +109,7 @@ summary:cost=sum
 ```
 
 ## Obsidian Bases
-A `.base` file from Obsidian opens in Brulion as a page with its views (table, cards, list, Kanban board; a map is shown as a table). Its filters (`file.hasTag("book")`, `file.inFolder("Books")`, `status != "done"`), formulas (`price.toFixed(2)`, `if(…)`), display names, sorting, groups, limits and summaries work as in Obsidian. A code block with the language `base` shows a base's YAML right in a note. Editing a cell or dragging a card writes the note's property, and changing the sort or the columns writes them back into the base — only those lines change. Regular expressions and plugins' functions say they are not supported instead of failing.
+A `.base` file from Obsidian opens in Brulion as a page with its views (table, cards, list, Kanban board; a map is shown as a table). Its filters (`file.hasTag("book")`, `file.inFolder("Books")`, `status != "done"`), formulas (`price.toFixed(2)`, `if(…)`), display names, sorting, groups, limits and summaries work as in Obsidian. A note shows a base's view where it embeds it — `![[Books.base]]`, or `![[Books.base#Reading]]` for the view of that name — and a code block with the language `base` shows a base's YAML right in a note. Editing a cell or dragging a card writes the note's property, and changing the sort or the columns writes them back into the base — only those lines change. Regular expressions and plugins' functions say they are not supported instead of failing.
 
 ## Dataview queries from Obsidian
 A vault shared with Obsidian often has queries of the Dataview plugin. Brulion shows their results too: a code block with the language `dataview` lists pages, a table or tasks, read-only — only the tasks can be checked off.

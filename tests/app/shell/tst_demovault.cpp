@@ -458,7 +458,11 @@ private Q_SLOTS:
                 QVERIFY2(std::holds_alternative<Query>(parsed),
                          qPrintable(m.captured(1) + u" → "_s
                                     + (std::holds_alternative<QString>(parsed) ? std::get<QString>(parsed) : QString())));
-                const QueryResult result = brulion::runQuery(std::get<Query>(parsed), index, kNow.date());
+                // (Run in its page, as the app does: `page:this` is that page.)
+                QueryOptions options;
+                options.currentPath = it.key();
+                const QueryResult result =
+                        brulion::runQuery(std::get<Query>(parsed), index, kNow.date(), Qt::Monday, options);
                 QVERIFY2(result.total > 0, qPrintable(it.key() + u": "_s + m.captured(1)));
                 ++queries;
             }
@@ -472,7 +476,7 @@ private Q_SLOTS:
         }
         QVERIFY(calcLines >= 20);
         QVERIFY(formulas >= 10);
-        QCOMPARE(queries, 2);
+        QCOMPARE(queries, 3); // (the week's tasks, the projects' tasks, the books' board)
         QVERIFY(rules >= 2);
     }
 
@@ -600,7 +604,10 @@ private Q_SLOTS:
             for (const auto &m : queryBlock.globalMatch(content)) {
                 const auto parsed = brulion::parseQuery(m.captured(1));
                 QVERIFY2(std::holds_alternative<Query>(parsed), qPrintable(f.path));
-                QVERIFY(brulion::runQuery(std::get<Query>(parsed), index, kNow.date()).total > 0);
+                QueryOptions options;
+                options.currentPath = f.path; // (`page:this`: the page of the example)
+                QVERIFY2(brulion::runQuery(std::get<Query>(parsed), index, kNow.date(), Qt::Monday, options).total > 0,
+                         qPrintable(f.path + u": "_s + m.captured(1)));
                 ++queries;
             }
         }

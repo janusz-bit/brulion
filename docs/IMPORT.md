@@ -112,8 +112,8 @@ instead of a path) is skipped with a warning, and Brulion keeps its own.
   `.canvas` files are not pages.
 * **Bases** (Obsidian's core plugin): a `.base` file opens in Brulion as a page of its views — a
   table, cards (a gallery), a list or a Kanban board — with its filters, formulas, display names,
-  sort, groups, limits and summaries, and a ```` ```base ```` block shows its views in the note
-  (docs/SYNTAX.md §10 "Obsidian Bases"). Editing a cell writes the note's property as Obsidian
+  sort, groups, limits and summaries; a note embedding it (`![[Books.base]]`, `![[Books.base#View]]`)
+  and a ```` ```base ```` block show its views in the note (docs/SYNTAX.md §10 "Obsidian Bases"). Editing a cell writes the note's property as Obsidian
   would; dragging a card on a board writes the property it groups by; sorting by a column and
   hiding, adding or moving columns write the view's `sort:` / `order:` into the YAML — those lines
   only, the rest of the file (comments, other views, a plugin's keys) as it was. A map view and a

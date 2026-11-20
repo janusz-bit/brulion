@@ -190,8 +190,7 @@ done in the repository simply disappears from the list.
 
 * **Database views: what remains** — dragging cards on a board and a calendar was tested with the
   mouse and the offscreen self-test, not yet with a finger on a real phone nor in the browser
-  build; a base embedded in a note (`![[Books.base]]`, `![[Books.base#View]]`) still shows as a
-  file link (a ```` ```base ```` block shows it); Bases' map view (Obsidian's Maps plugin) is a table;
+  build; Bases' map view (Obsidian's Maps plugin) is a table;
   a table's cells have no keyboard navigation (Tab / arrows between cells) and no multi-cell
   selection or paste, as Obsidian's tables have.
 * **Obsidian compatibility: `.canvas`** — `.canvas` files from a shared vault are today a file in

@@ -27,6 +27,8 @@ Item {
     property string source
     property string language: "query"
     property string basePath
+    /// A base embedded in a note: the note (`this` in its expressions).
+    property string thisPath
     property int blockRow: -1
     property string viewName
     /// The block editor showing the view (link menus, revealing a row of this page); null on a base page.
@@ -54,6 +56,7 @@ Item {
         source: root.source
         language: root.language
         basePath: root.basePath
+        thisPath: root.thisPath
         blockRow: root.blockRow
         viewName: root.viewName
     }
@@ -161,6 +164,36 @@ Item {
         root.adding = true
         addField.text = ""
         addField.forceActiveFocus()
+    }
+    /// Enter / Escape in the cell's field: written (or not), the field hidden, the keyboard back
+    /// where it belongs (returnFocus()) — never left on the hidden field.
+    function closeCellEditor(commit: bool): void {
+        const focused = editField.activeFocus
+        cellEditor.visible = false
+        root.finishEdit(commit, commit ? editField.text : "")
+        if (focused)
+            root.returnFocus(editField)
+    }
+    function closeAddField(commit: bool): void {
+        const focused = addField.activeFocus
+        root.finishAdding(commit)
+        if (focused)
+            root.returnFocus(addField)
+    }
+    /// A field of the view closed with the keyboard: the page's editor takes the keys again (as after
+    /// a table block's field), on a base's own page the view. The field and the focus scopes up to
+    /// the editor's list (the Loaders holding the view, which its forceActiveFocus() gave the focus)
+    /// give it up first: a hidden item keeps it, and the list would hand it back down to them.
+    function returnFocus(field: Item): void {
+        if (root.editor === null) {
+            field.focus = false
+            root.forceActiveFocus()
+            return
+        }
+        const list = root.editor.listView
+        for (let item = field; item !== null && item !== list; item = item.parent)
+            item.focus = false
+        list.forceActiveFocus()
     }
     function finishAdding(commit: bool): void {
         if (commit && Js.trim(addField.text) !== "")
@@ -333,8 +366,8 @@ Item {
                 size: "small"
                 placeholderText: results.type === "tasks" ? qsTr("New task") : qsTr("Title of the new page")
                 accessibleName: placeholderText
-                onAccepted: root.finishAdding(true)
-                onEscapePressed: root.finishAdding(false)
+                onAccepted: root.closeAddField(true)
+                onEscapePressed: root.closeAddField(false)
                 onActiveFocusChanged: if (!activeFocus && root.adding) root.finishAdding(Js.trim(addField.text) !== "")
             }
         }
@@ -492,8 +525,8 @@ Item {
             placeholderText: root.editType === "date" || root.editType === "taskdate" ? "2026-10-15"
                              : root.editType === "list" || root.editType === "tags" ? qsTr("a, b, [[Page]]") : ""
             accessibleName: results.columnLabel(root.editColumn)
-            onAccepted: { cellEditor.visible = false; root.finishEdit(true, editField.text) }
-            onEscapePressed: { cellEditor.visible = false; root.finishEdit(false, "") }
+            onAccepted: root.closeCellEditor(true)
+            onEscapePressed: root.closeCellEditor(false)
             onActiveFocusChanged: {
                 if (!activeFocus && cellEditor.visible && !cellEditor.opening) {
                     cellEditor.visible = false

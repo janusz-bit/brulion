@@ -35,7 +35,7 @@ class EditorHost;
 namespace views {
 struct ViewResult;
 }
-}
+} // namespace brulion
 
 namespace brulion::editor {
 
@@ -59,13 +59,18 @@ private:
 class ViewResultModel : public QAbstractListModel, public QQmlParserStatus {
     Q_OBJECT
     Q_INTERFACES(QQmlParserStatus)
-    Q_PROPERTY(brulion::editor::PageController *controller READ controller WRITE setController NOTIFY controllerChanged FINAL)
+    Q_PROPERTY(brulion::editor::PageController *controller READ controller WRITE setController NOTIFY controllerChanged
+                       FINAL)
     /// The view's text: a query (with `view:`) or a base's YAML.
     Q_PROPERTY(QString source READ source WRITE setSource NOTIFY sourceChanged FINAL)
     /// "query" or "base".
     Q_PROPERTY(QString language READ language WRITE setLanguage NOTIFY languageChanged FINAL)
     /// A .base file shown on its own page: its text is read from it, columns and sort written into it.
     Q_PROPERTY(QString basePath READ basePath WRITE setBasePath NOTIFY basePathChanged FINAL)
+    /// The page `this` means in a base's expressions when it is not the page with the view's text:
+    /// the note embedding a .base file (`![[Books.base]]`); "" the controller's page, or the .base
+    /// file shown on its own page.
+    Q_PROPERTY(QString thisPath READ thisPath WRITE setThisPath NOTIFY thisPathChanged FINAL)
     /// The block holding the view (its query or YAML changes with the columns and sort); -1 none.
     Q_PROPERTY(int blockRow READ blockRow WRITE setBlockRow NOTIFY blockRowChanged FINAL)
     /// A base's view shown (0-based).
@@ -126,7 +131,7 @@ public:
         TextsRole, ///< the cells' plain text
         StatusRole,
         IsTaskRole,
-        CoverRole,     ///< a picture's URL ("" none)
+        CoverRole,      ///< a picture's URL ("" none)
         CoverColorRole, ///< a colour cover ("#rrggbb", "" none)
         GroupRole,
         DateRole,
@@ -153,6 +158,8 @@ public:
     void setLanguage(const QString &language);
     QString basePath() const { return m_basePath; }
     void setBasePath(const QString &path);
+    QString thisPath() const { return m_thisPath; }
+    void setThisPath(const QString &path);
     int blockRow() const { return m_blockRow; }
     void setBlockRow(int row);
     int viewIndex() const { return m_viewIndex; }
@@ -284,6 +291,7 @@ Q_SIGNALS:
     void languageChanged();
     void basePathChanged();
     void blockRowChanged();
+    void thisPathChanged();
     void viewIndexChanged();
     void viewNameChanged();
     void availableChanged();
@@ -314,6 +322,7 @@ private:
     QString m_source;
     QString m_language = QStringLiteral("query");
     QString m_basePath;
+    QString m_thisPath;
     int m_blockRow = -1;
     int m_viewIndex = 0;
     QString m_viewName;

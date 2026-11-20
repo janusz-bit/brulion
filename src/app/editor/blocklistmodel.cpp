@@ -1933,6 +1933,7 @@ void BlockListModel::ensureEmbeds(int row) const
         bool drawing = false;
         if (m_host) {
             path = m_host->resolveLink(em.target, m_path);
+            const bool found = !path.isEmpty();
             if (path.isEmpty()) {
                 const QString decoded = QUrl::fromPercentEncoding(em.target.toUtf8());
                 path = decoded.contains(u'/') ? paths::normalize(decoded) : paths::join(attachments, decoded);
@@ -1941,6 +1942,20 @@ void BlockListModel::ensureEmbeds(int row) const
             // its bytes (assetUrl(): a data: URL of the whole file in the browser).
             if (paths::isPdfPath(path) && !em.image) {
                 st.embeds.append(pdfEmbed(em, path));
+                continue;
+            }
+            // An Obsidian base (`![[Książki.base]]`, `#View`: docs/SYNTAX.md §10 "Obsidian Bases"):
+            // its view, live (EmbedView's DatabaseView). One not in the notebook stays a chip (an
+            // empty base would list every file).
+            if (found && path.endsWith(u".base"_s, Qt::CaseInsensitive) && !em.image) {
+                st.embeds.append(QVariantMap{{u"target"_s, em.target},
+                                             {u"alt"_s, em.alt},
+                                             {u"image"_s, false},
+                                             {u"base"_s, true},
+                                             {u"view"_s, em.fragment},
+                                             {u"name"_s, paths::basename(path)},
+                                             {u"path"_s, path},
+                                             {u"drawing"_s, false}});
                 continue;
             }
             drawing = (em.image || isDrawingTarget(em.target) || pageDrawings.contains(k)) && m_host->isDrawing(path);

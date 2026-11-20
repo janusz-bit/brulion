@@ -1675,7 +1675,8 @@ query as written) — one undo step.
 ### Obsidian Bases
 
 A `.base` file — Obsidian's Bases, YAML that shares a vault's notes as views — opens in Brulion as
-a page of its views, and a ```` ```base ```` block shows its YAML's views in place (docs/UI.md
+a page of its views, a ```` ```base ```` block shows its YAML's views in place, and a note embedding
+the file (`![[Books.base]]`, `![[Books.base#Reading]]` that view) shows its view there (docs/UI.md
 "Database views"). Brulion reads it with its own YAML subset (§4) and its own parser of the Bases
 expression language: nothing runs as a script.
 
@@ -1752,7 +1753,8 @@ views:
   `summaries` (property → `Average`, `Min`, `Max`, `Sum`, `Range`, `Median`, `Stddev`, `Earliest`,
   `Latest`, `Checked`, `Unchecked`, `Empty`, `Filled`, `Unique`, or a name of the top-level
   `summaries` — a formula over `values`). Other keys of a view (a plugin's state) are kept as
-  written. `![[Books.base#Reading]]` / `[[Books.base#Reading]]` opens the view of that name.
+  written. `[[Books.base#Reading]]` opens the view of that name, `![[Books.base#Reading]]` shows it
+  in the note (without a name: the first view).
 * **Editing**: a note property's cell writes the note as a query view's cell does; a card dropped
   on another column writes the `groupBy` property. Sorting by a column and hiding, adding or moving
   columns in the app write that view's `sort:` / `order:` back — a block list at the view's

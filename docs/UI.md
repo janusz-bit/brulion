@@ -2953,8 +2953,10 @@ Screenshots: `tests/app/drawing/screenshots.sh` (the `theme` shot: the backgroun
 
 ## Database views (`qml/editor/DatabaseView.qml`, `src/app/editor/viewresultmodel.h`, core `views`)
 
-A ```` ```query ```` block with `view:` (docs/SYNTAX.md §10 "Views"), a ```` ```base ```` block and a
-`.base` file opened as a page (§10 "Obsidian Bases"; `ContentBaseView`, PageView's `baseRoute`) draw
+A ```` ```query ```` block with `view:` (docs/SYNTAX.md §10 "Views"), a ```` ```base ```` block, a
+`.base` file opened as a page (§10 "Obsidian Bases"; `ContentBaseView`, PageView's `baseRoute`) and
+one embedded in a note (`![[Books.base#Reading]]`: BlockListModel's `base` embed, EmbedView —
+`thisPath` the note, `this` in the base's expressions; edits and toasts as in a block) draw
 a `DatabaseView`: `ViewResultModel` runs the view through the host (`QueryHost::runView` —
 `Workspace` keeps a `QueryCache` per query view like query blocks, and a base's last result per
 index version and minute; `notebook::runView` gives the JSON, the command line prints the same),
@@ -2981,8 +2983,9 @@ final height ("Scrolling performance").
   (one undo step), a .base file through the host (a toast's Undo). A grouped table has each group's
   heading line ("ŁAZIENKA · 3"), summaries a line under the columns ("Sum: 1599.5"). A tap on a
   link in a cell follows it, on the first column opens the row, on an editable cell edits it: a
-  field over the cell (`BTextField`: Enter or leaving it writes, Escape drops; a list as "a,
-  [[B]]"), a checkbox toggles at once, a task's status or priority comes from a menu. While a cell
+  field over the cell (`BTextField`: Enter or leaving it writes, Escape drops — both give the keys
+  back to the page's editor list, on a base's page to the view; a list as "a, [[B]]"), a checkbox
+  toggles at once, a task's status or priority comes from a menu. While a cell
   is edited the rows wait for it (`ViewResultModel.hold`).
 * **Board**: a column per group (260 px, 232 on touch; the board scrolls sideways), its heading
   with the count, the group's first summary and "+" (a new row with the column's value); cards with

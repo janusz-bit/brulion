@@ -5805,6 +5805,9 @@ void checkIgnoreTasks(QQuickWindow *window, AppController *app, const Check &che
 /// first) gives the task that status in the page.
 void checkDatabaseViews(QQuickWindow *window, AppController *app, const Check &check)
 {
+    // The keys go back where they were at the end: the taps below give them to a page removed
+    // again, and the checks after this one start from what they had found.
+    const QPointer<QQuickItem> focusBefore = window->activeFocusItem();
     Workspace *ws = app->workspace();
     const bool touch = QCoreApplication::arguments().contains(u"--touch"_s); // (touchRun(), defined below)
     const QString folder = u"Samotest widoków"_s;
@@ -5855,7 +5858,7 @@ void checkDatabaseViews(QQuickWindow *window, AppController *app, const Check &c
     check(cell != nullptr, "the table shows its cells");
     if (cell) {
         tapOrClick(window, at, touch);
-        QQuickItem *field = nullptr;
+        QPointer<QQuickItem> field;
         check(waitFor([&] {
                   field = shownNamed(window->contentItem(), u"viewCellEditor"_s);
                   return field && field->hasActiveFocus();
@@ -5870,6 +5873,15 @@ void checkDatabaseViews(QQuickWindow *window, AppController *app, const Check &c
             check(ws->readFile(pageA) == u"---\nstatus: gotowy\nkoszt: 10\n---\nTreść alfy.\n"_s,
                   "only that property's line changed");
             check(ws->readFile(pageB).contains(u"status: zrobione"_s), "the other row's page is as it was");
+            // (The editor's list: the page's BlockEditor is its parent.)
+            const QQuickItem *focused = window->activeFocusItem();
+            const bool back = field && !field->hasActiveFocus() && focused && focused->parentItem()
+                              && focused->parentItem()->objectName() == u"pageEditor"_s;
+            if (!back)
+                std::fprintf(stderr, "selftest: the keys are on %s \"%s\"\n",
+                             focused ? focused->metaObject()->className() : "nothing",
+                             focused ? qPrintable(focused->objectName()) : "");
+            check(back, "Enter gives the keys back to the page's editor, not to the hidden field");
         }
     }
     // The board: the card from "To do" (column 0) to "In progress" (column 1, on screen also on a
@@ -5895,6 +5907,8 @@ void checkDatabaseViews(QQuickWindow *window, AppController *app, const Check &c
     ws->deletePage(pageB);
     app->goHome();
     settle(300);
+    if (focusBefore)
+        focusBefore->forceActiveFocus();
 }
 
 /// "QR code…" (docs/UI.md "QR code"): the top bar's More and the palette (uiAction "qrCode") open

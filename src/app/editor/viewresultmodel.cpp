@@ -222,6 +222,15 @@ void ViewResultModel::setBasePath(const QString &path)
     schedule();
 }
 
+void ViewResultModel::setThisPath(const QString &path)
+{
+    if (m_thisPath == path)
+        return;
+    m_thisPath = path;
+    Q_EMIT thisPathChanged();
+    schedule();
+}
+
 void ViewResultModel::setBlockRow(int row)
 {
     if (m_blockRow == row)
@@ -455,7 +464,9 @@ void ViewResultModel::refresh()
         QVariantMap state{{u"view"_s, m_viewIndex}, {u"viewName"_s, m_viewName}};
         if (m_month.isValid())
             state.insert(u"month"_s, m_month.toString(Qt::ISODate));
-        const QString current = m_basePath.isEmpty() ? m_controller->path() : m_basePath;
+        const QString current = !m_thisPath.isEmpty()  ? m_thisPath
+                                : m_basePath.isEmpty() ? m_controller->path()
+                                                       : m_basePath;
         result = queries->runView(m_language, text, current, state);
     } else if (queries && m_controller && m_language == u"base") {
         // An empty base: one table of every file (as Obsidian shows a new base).

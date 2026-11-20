@@ -562,6 +562,8 @@ Item {
         y: block.embedsY
         width: Math.max(40, block.contentRight - x)
         embeds: block.hasEmbeds ? block.embeds : block.noItems
+        controller: block.controller
+        editor: block.editor
         readOnly: block.editor.readOnly
         onClicked: (target) => block.controller.activateLink(block.index, "page:" + Js.encodeURIComponent(target), false)
         onDrawingClicked: (path) => block.controller.openDrawing(path)
@@ -572,6 +574,7 @@ Item {
         onDownloadWeb: (url) => block.editor.downloadWebPictures(url)
         onWebMenu: (url, host, item, x, y) => block.editor.openWebPictureMenu(block.index, url, host, item, x, y)
         onWebOpen: (picture) => block.editor.openWebPictureViewer(block.index, picture)
+        onViewToast: (text, kind, undo, model) => block.editor.notice(text, kind, undo ? block.editor.viewUndoAction(model) : null)
     }
 
     TransclusionView {
