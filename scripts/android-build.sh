@@ -538,7 +538,7 @@ label=Brulion
 [[ -z $ID_SUFFIX ]] || label="Brulion (${ID_SUFFIX#.})"
 grep -qxF "application-label:'$label'" <<<"$badging" || die "wrong app name (not \"$label\")"
 for permission in MANAGE_EXTERNAL_STORAGE POST_NOTIFICATIONS SCHEDULE_EXACT_ALARM USE_EXACT_ALARM \
-  RECEIVE_BOOT_COMPLETED VIBRATE WAKE_LOCK USE_FULL_SCREEN_INTENT INTERNET ACCESS_NETWORK_STATE RECORD_AUDIO; do
+  RECEIVE_BOOT_COMPLETED VIBRATE WAKE_LOCK USE_FULL_SCREEN_INTENT USE_BIOMETRIC INTERNET ACCESS_NETWORK_STATE RECORD_AUDIO; do
   grep -q "uses-permission: name='android.permission.$permission'" <<<"$badging" ||
     die "permission $permission missing from the merged manifest"
 done

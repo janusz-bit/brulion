@@ -2,6 +2,7 @@
 
 #include "index/suggest_p.h"
 #include "index/textutil_p.h"
+#include "markdown/encrypted.h"
 #include "text/text.h"
 
 #include <algorithm>
@@ -69,7 +70,12 @@ SearchIndex::Document SearchIndex::prepare(QStringView title, const QStringList 
     };
     addField(title, Title);
     addField(aliases.join(u'\n'), Aliases);
-    addField(content, Content);
+    // Encrypted fragments (Meld Encrypt's markers, docs/SYNTAX.md §11 "Encrypted text") make no
+    // words: their Base64 would only fill the dictionary with noise.
+    if (markdown::mayContainEncrypted(content))
+        addField(markdown::maskEncryptedFragments(content), Content);
+    else
+        addField(content, Content);
     out.terms.reserve(counts.size());
     for (auto [term, tf] : std::as_const(counts).asKeyValueRange())
         out.terms.append({term, tf});

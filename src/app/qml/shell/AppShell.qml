@@ -349,6 +349,7 @@ FocusScope {
         case "share": shell.openShare(); break
         case "automation": shell.openAutomation(); break
         case "newPage": shell.openNewPage(""); break
+        case "newEncryptedPage": shell.openNewEncryptedPage(""); break
         case "newFolder": shell.openNewFolder(""); break
         case "movePage": if (shell.currentView === "page") shell.openMove(shell.routePath, false); break
         case "revealInTree": shell.revealInTree(shell.currentFile); break
@@ -1197,9 +1198,25 @@ FocusScope {
             case "rename": shell.openRename(path, shell.isFolder(path)); break
             case "delete": shell.confirmDelete(path); break
             case "newPage": shell.openNewPage(path); break
+            case "newEncryptedPage": shell.openNewEncryptedPage(path); break
             case "newFolder": shell.openNewFolder(path); break
             case "reveal": shell.revealInTree(path); break
             }
+        }
+    }
+
+    // "New encrypted page…" (docs/UI.md "Encrypted notes"): the palette, a folder's menu in the
+    // sidebar. Made when first opened; the new page opens unlocked.
+    property ContentEncryptionDialog newEncryptedDialog: null
+    function openNewEncryptedPage(folder: string): void {
+        if (!newEncryptedDialog)
+            newEncryptedDialog = newEncryptedComponent.createObject(T.Overlay.overlay) as ContentEncryptionDialog
+        newEncryptedDialog.openFor("new", folder)
+    }
+    Component {
+        id: newEncryptedComponent
+        ContentEncryptionDialog {
+            onDone: (path) => AppController.openPage(path)
         }
     }
 

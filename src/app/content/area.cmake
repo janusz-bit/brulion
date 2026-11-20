@@ -30,6 +30,8 @@ qt_target_qml_sources(brulion
         qml/content/ContentJournalDay.qml
         qml/content/ContentMissedBanner.qml
         qml/content/ContentRenameDialog.qml
+        qml/content/ContentEncryptedPage.qml
+        qml/content/ContentEncryptionDialog.qml
         qml/content/ContentExportDialog.qml
         qml/content/ContentNewPageDialog.qml
         qml/content/ContentNoteModeChoice.qml

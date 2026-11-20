@@ -292,14 +292,24 @@ FocusScope {
     /// A sound or a video opens in the player view (ContentMediaView; its bytes never reach the
     /// editor).
     readonly property bool mediaRoute: root.routePath !== "" && Workspace.isMedia(root.routePath)
+    /// An encrypted page (`.mdenc`, Obsidian's Meld Encrypt; docs/UI.md "Encrypted notes"): its lock
+    /// (ContentEncryptedPage) until it is unlocked, then its Markdown in the block editor through
+    /// encryptedHost — never its file's JSON.
+    readonly property bool encryptedRoute: root.routePath !== "" && Workspace.encryption.isEncryptedPath(root.routePath)
+    /// The encrypted page is unlocked (Workspace.encryption keeps its key; refreshEncrypted()).
+    property bool encryptedUnlocked: false
+    /// "Encrypt page" / "Decrypt permanently" runs: the editor is unloaded meanwhile.
+    property bool converting: false
     /// Any other file that is no note (DOCX, ZIP…): read-only as text — a typed character
     /// would have been saved over its bytes.
     readonly property bool fileRoute: root.routePath !== "" && !root.pictureRoute && !root.pdfRoute && !root.mediaRoute
-                                      && (!root.baseRoute || root.pictureAsText)
+                                      && !root.encryptedRoute && (!root.baseRoute || root.pictureAsText)
                                       && !Js.test(root.routePath, "\\.(md|markdown)$", "i")
-    /// A note (Markdown) in the block editor: not a picture, a PDF, a sound or video, a base or another file.
+    /// A note (Markdown) in the block editor: not a picture, a PDF, a sound or video, a base or another
+    /// file; an encrypted page once unlocked.
     readonly property bool noteRoute: !root.pictureRoute && !root.pdfRoute && !root.mediaRoute && !root.fileRoute
-                                      && !root.baseRoute
+                                      && !root.baseRoute && (!root.encryptedRoute || root.encryptedUnlocked)
+                                      && !root.converting
     /// The view swipes sideways from the left edge itself: a PDF zoomed past the view's width pans
     /// (the drawer's edge strip yields to it, ShellRouteView.viewEdgeSwipe).
     readonly property bool edgeSwipe: root.pdfRoute && pdfLoader.item !== null && (pdfLoader.item as ContentPdfView).pannedSideways
@@ -349,8 +359,111 @@ FocusScope {
     }
     property bool _routeQueued: false
     // A new path: a picture opens as a picture again (before applyRoute, called later).
-    onRoutePathChanged: root.pictureAsText = false
-    Component.onCompleted: applyRoute()
+    onRoutePathChanged: {
+        root.pictureAsText = false
+        root.refreshEncrypted()
+    }
+    function refreshEncrypted(): void {
+        root.encryptedUnlocked = root.encryptedRoute && Workspace.encryption.isPageUnlocked(root.routePath)
+    }
+    // Unlocked or locked: the editor loads the page or lets it go (applyRoute: page.path ""), one
+    // turn later — the bindings that read the new state (noteRoute) are evaluated by then.
+    onEncryptedUnlockedChanged: routeLater.restart()
+    onConvertingChanged: routeLater.restart()
+    Connections {
+        target: Workspace.encryption
+        function onPageLocked(path: string, reason: string) {
+            if (path !== root.routePath)
+                return
+            root.refreshEncrypted()
+            if (reason !== "")
+                AppController.toast(reason, "warning")
+        }
+        function onPageUnlocked(id: int, ok: bool, error: string) {
+            if (ok)
+                root.refreshEncrypted()
+        }
+    }
+    // Reading or editing an unlocked page counts as its use (Workspace.encryption's lock time).
+    Connections {
+        target: page
+        enabled: root.encryptedRoute && root.encryptedUnlocked
+        function onEditingRowChanged() { Workspace.encryption.touch() }
+        function onCursorPositionChanged() { Workspace.encryption.touch() }
+        function onSelectionChanged() { Workspace.encryption.touch() }
+    }
+
+    /// "Encrypt page…" / "Change password…" (ContentEncryptionDialog), "Decrypt permanently…".
+    property ContentEncryptionDialog encryptionDialog: null
+    function openEncryptionDialog(kind: string): void {
+        if (!page.exists || editor.readOnlyRefuses())
+            return
+        page.save()
+        if (!encryptionDialog)
+            encryptionDialog = encryptionDialogComponent.createObject(T.Overlay.overlay) as ContentEncryptionDialog
+        encryptionDialog.openFor(kind, page.path)
+    }
+    Component {
+        id: encryptionDialogComponent
+        ContentEncryptionDialog {
+            // The editor lets the page go while it is encrypted (written over, renamed).
+            onStarting: (mode) => {
+                if (mode !== "encrypt")
+                    return
+                // At once, before the file is written over: the editor must not take the encrypted
+                // file in as an outside change of its page.
+                root.converting = true
+                root._revealed = ""
+                root._foldsFor = ""
+                page.path = ""
+            }
+            onFailed: root.converting = false
+            onDone: (path) => {
+                // The new route first: the editor then loads the encrypted page, not the old name.
+                if (path !== root.routePath)
+                    AppController.replaceRoute({ view: "page", path: path })
+                root.converting = false
+                AppController.toast(qsTr("“%1” is encrypted").arg(Workspace.encryption.pageName(path)), "success")
+            }
+            onClosed: root.converting = false
+        }
+    }
+    function decryptPermanently(): void {
+        if (!root.encryptedRoute || !root.encryptedUnlocked || editor.readOnlyRefuses())
+            return
+        decryptConfirm.open()
+    }
+    property int decryptRequest: -1
+    BConfirmDialog {
+        id: decryptConfirm
+        title: qsTr("Decrypt permanently?")
+        subject: Workspace.encryption.pageName(root.routePath)
+        message: qsTr("The page becomes an ordinary Markdown page that everyone who can read the notebook can read — other devices, sync servers, backups.")
+        confirmText: qsTr("Decrypt")
+        destructive: true
+        onAccepted: {
+            page.save()
+            root.decryptRequest = Workspace.encryption.decryptPage(root.routePath)
+        }
+    }
+    Connections {
+        target: Workspace.encryption
+        function onPageConverted(id: int, path: string, error: string) {
+            if (id !== root.decryptRequest)
+                return
+            root.decryptRequest = -1
+            if (path === "") {
+                AppController.toast(error, "error")
+                return
+            }
+            AppController.replaceRoute({ view: "page", path: path })
+            AppController.toast(qsTr("“%1” is no longer encrypted").arg(Workspace.pageTitle(path)), "success")
+        }
+    }
+    Component.onCompleted: {
+        root.refreshEncrypted()
+        root.applyRoute()
+    }
     // The editor's delegates go first, while the editor still exists (they read its geometry).
     Component.onDestruction: {
         alive = false
@@ -729,10 +842,19 @@ FocusScope {
             AppController.toast(qsTr("Copied %1").arg(link), "success")
     }
 
+    // Every page goes through it unchanged but an unlocked encrypted one, whose file it reads and
+    // writes encrypted (encryptedpagehost.h). Never swapped for Workspace: a route from an
+    // encrypted page to another one must not save the one through the other's host.
+    EncryptedPageHost {
+        id: encryptedHost
+        inner: Workspace
+        encryption: Workspace.encryption
+    }
+
     PageController {
         id: page
         objectName: "pageController" // the shell's self-test finds the editor by it
-        host: Workspace
+        host: encryptedHost
         // Hidden (a view ShellRouteView keeps, a closed side panel): index changes wait until shown.
         active: root.visible
         // The documentation's pages stay as shipped (they are brought up to date on every open).
@@ -1060,6 +1182,17 @@ FocusScope {
         }
     }
 
+    // An encrypted page while locked: its lock (the editor behind it stays unloaded and hidden).
+    Loader {
+        objectName: "encryptedPageLoader"
+        anchors.fill: parent
+        active: root.encryptedRoute && !root.encryptedUnlocked && !root.converting
+        sourceComponent: ContentEncryptedPage {
+            path: root.routePath
+            onUnlocked: root.refreshEncrypted()
+        }
+    }
+
     // A picture attachment: the picture itself or its text, read-only (the editor behind it
     // stays unloaded — page.path "" — and hidden). Created for pictures only.
     Loader {
@@ -1204,6 +1337,9 @@ FocusScope {
         BMenuItem {
             text: qsTr("Version history")
             iconName: "history"
+            // (An encrypted page's versions are its encrypted files.)
+            visible: !root.encryptedRoute
+            height: visible ? implicitHeight : 0
             enabled: page.exists
             onTriggered: AppController.navigate({ view: "history", path: page.path })
         }
@@ -1214,6 +1350,9 @@ FocusScope {
         }
         BMenuItem {
             objectName: "pageMenuExport"
+            // An encrypted page is never exported decrypted (decrypt it permanently first).
+            visible: !root.encryptedRoute
+            height: visible ? implicitHeight : 0
             text: qsTr("Export page…")
             iconName: "share"
             enabled: page.exists
@@ -1231,7 +1370,7 @@ FocusScope {
         }
         BMenuItem {
             objectName: "pageMenuPrint"
-            visible: root.printable
+            visible: root.printable && !root.encryptedRoute
             height: visible ? implicitHeight : 0
             text: qsTr("Print…")
             iconName: "printer"
@@ -1242,7 +1381,7 @@ FocusScope {
         BMenuItem {
             // The note as QR codes another phone's camera reads (docs/UI.md "QR code").
             objectName: "pageMenuQrCode"
-            visible: root.noteRoute
+            visible: root.noteRoute && !root.encryptedRoute
             height: visible ? implicitHeight : 0
             text: qsTr("QR code…")
             iconName: "qr-code"
@@ -1340,6 +1479,44 @@ FocusScope {
             shortcut: root.inSidePanel ? "" : ShortcutMap.sequences["page.source"] || ""
             unavailable: page.readOnly ? editor.readOnlyReason : ""
             onTriggered: editor.toggleSourceMode()
+        }
+        BMenuSeparator {}
+        // Encryption (docs/UI.md "Encrypted notes"): a Markdown page encrypted, an encrypted one
+        // under a new password, decrypted for good or locked now.
+        BMenuItem {
+            objectName: "pageMenuEncrypt"
+            visible: root.noteRoute && !root.encryptedRoute && page.exists && root.journalDate === ""
+            height: visible ? implicitHeight : 0
+            text: qsTr("Encrypt page…")
+            iconName: "lock"
+            unavailable: page.readOnly ? editor.readOnlyReason : ""
+            onTriggered: root.openEncryptionDialog("encrypt")
+        }
+        BMenuItem {
+            objectName: "pageMenuChangePassword"
+            visible: root.encryptedRoute && root.encryptedUnlocked
+            height: visible ? implicitHeight : 0
+            text: qsTr("Change password…")
+            iconName: "key-round"
+            unavailable: page.readOnly ? editor.readOnlyReason : ""
+            onTriggered: root.openEncryptionDialog("password")
+        }
+        BMenuItem {
+            objectName: "pageMenuDecrypt"
+            visible: root.encryptedRoute && root.encryptedUnlocked
+            height: visible ? implicitHeight : 0
+            text: qsTr("Decrypt permanently…")
+            iconName: "lock-open"
+            unavailable: page.readOnly ? editor.readOnlyReason : ""
+            onTriggered: root.decryptPermanently()
+        }
+        BMenuItem {
+            objectName: "pageMenuLock"
+            visible: root.encryptedRoute && root.encryptedUnlocked
+            height: visible ? implicitHeight : 0
+            text: qsTr("Lock page")
+            iconName: "lock"
+            onTriggered: Workspace.encryption.lockPage(root.routePath)
         }
         BMenuSeparator {}
         BMenuItem {
@@ -1471,10 +1648,18 @@ FocusScope {
                 editor.toggleCurrentTaskClock()
             else if (action === "taskDependency" && editor.visible)
                 editor.openCurrentDependencyPicker()
-            else if ((action === "exportPage" || action === "printPage") && page.exists && root.noteRoute)
+            else if ((action === "exportPage" || action === "printPage") && page.exists && root.noteRoute && !root.encryptedRoute)
                 exportDialog.openFor(page.path, action === "printPage")
-            else if (action === "qrCode" && root.noteRoute && page.loaded)
+            else if (action === "qrCode" && root.noteRoute && page.loaded && !root.encryptedRoute)
                 root.showQrCode()
+            else if (action === "encryptSelection" && editor.visible)
+                editor.encryptAtCursor()
+            else if (action === "encryptPage" && root.noteRoute && !root.encryptedRoute)
+                root.openEncryptionDialog("encrypt")
+            else if (action === "changePagePassword" && root.encryptedRoute && root.encryptedUnlocked)
+                root.openEncryptionDialog("password")
+            else if (action === "decryptPage" && root.encryptedRoute && root.encryptedUnlocked)
+                root.decryptPermanently()
         }
     }
     /// "QR code…" (the page menu, the top bar's More, the palette): the note as it is now, under

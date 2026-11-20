@@ -1,0 +1,1 @@
+brulion_add_test(tst_applock SOURCES tst_applock.cpp LIBS brulion_core_applock)

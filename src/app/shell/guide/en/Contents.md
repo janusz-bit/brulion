@@ -40,6 +40,7 @@ Brulion updates the documentation together with the app: new pages are added, an
 - [[Sync|Sync]] — Syncthing, Nextcloud, notebooks from GitHub, conflicts, version history.
 - [[Import and export|Import and export]] — moving notes from and to other apps.
 - [[Backups|Backups]] — scheduled notebook backups and restoring them.
+- [[Privacy and encryption|Privacy and encryption]] — pages and text under a password (compatible with Obsidian's Meld Encrypt), the app lock with a PIN or the phone's lock.
 - [[File format|File format]] — what your notes look like on disk.
 - [[Command line and AI agents|Command line and AI agents]] — `brulion-cli`, scripts and AI agents (MCP).
 - [[Automation|Automation]] — brulion:// links, Tasker and other automation apps, the phone's Quick Settings tiles and app shortcuts.

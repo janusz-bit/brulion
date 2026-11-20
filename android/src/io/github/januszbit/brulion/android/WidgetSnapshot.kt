@@ -280,6 +280,9 @@ internal class WidgetSnapshot private constructor(val json: JSONObject) {
 
   val hasVault: Boolean get() = vault != null
 
+  /** The app lock hides the notebook (docs/UI.md "App lock"): "Brulion is locked" instead of its lists. */
+  val locked: Boolean = json.optBoolean("locked", false)
+
   /**
    * The tasks of [sections] on [day], in TasksView's order (the snapshot's order within a section):
    * filed again by [TaskSections] for a day other than the snapshot's.

@@ -38,7 +38,6 @@ ApplicationWindow {
     minimumWidth: 320
     minimumHeight: 320
     transientParent: null
-    title: pageTitle + " — Brulion"
     color: Theme.bg
     font.family: Theme.fontUi
     font.pixelSize: Theme.textBase
@@ -67,9 +66,24 @@ ApplicationWindow {
         }
     }
 
+    // The app lock (docs/UI.md "App lock"): the page hidden here too; it is unlocked in the main
+    // window (raised by the button).
+    title: AppLock.locked ? "Brulion" : window.pageTitle + " — Brulion"
+    BEmptyState {
+        anchors.centerIn: parent
+        visible: AppLock.locked
+        maximumWidth: 360
+        iconName: "lock-keyhole"
+        title: qsTr("Brulion is locked")
+        description: qsTr("Unlock it in the main window.")
+        actionText: qsTr("Show the main window")
+        onActionTriggered: AppController.requestUiAction("toggleWindow")
+    }
+
     ColumnLayout {
         anchors.fill: parent
         spacing: 0
+        visible: !AppLock.locked
 
         Item {
             Layout.fillWidth: true

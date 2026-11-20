@@ -10,6 +10,7 @@
 
 #include "log/categories.h"
 
+#include "applockcontroller.h"
 #include "appsettings.h"
 #include "commandmodel.h"
 #include "demovault.h"
@@ -237,6 +238,20 @@ AppController::AppController(const Options &options, QObject *parent)
     m_workspace->attachments()->setUiLanguage(m_settings->language());
     applyAttachmentSettings();
     connect(m_settings.get(), &AppSettings::attachmentSearchChanged, this, applyAttachmentSettings);
+    // Encrypted notes and the app lock (docs/UI.md "Encrypted notes", "App lock"): their settings
+    // are this device's; the lock starts closed before the first window shows when it should, and
+    // every time it closes the encrypted notes lock too.
+    m_workspace->encryption()->setSettings(m_settings.get());
+    m_appLock = std::make_unique<AppLockController>();
+    m_appLock->setSettings(m_settings.get());
+    connect(m_appLock.get(), &AppLockController::lockedChanged, this, [this] {
+        if (m_appLock->locked())
+            m_workspace->encryption()->lockAll();
+    });
+    // Notifications without the note's text while the lock is on and asks for it.
+    const auto hideNoteText = [this] { m_workspace->reminders()->setHideNoteText(m_appLock->hidesNotificationText()); };
+    hideNoteText();
+    connect(m_appLock.get(), &AppLockController::changed, this, hideNoteText);
     m_shortcuts = std::make_unique<ShortcutMap>(m_settings.get());
     m_commands = std::make_unique<CommandModel>(this);
     m_tabsSaveTimer = new QTimer(this);

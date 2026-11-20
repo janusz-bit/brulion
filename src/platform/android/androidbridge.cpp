@@ -278,6 +278,14 @@ void JNICALL nativeGestureInsetsChanged(JNIEnv *, jclass, jint left, jint right)
     postToBridge([l, r](AndroidBridge *bridge) { Q_EMIT bridge->systemGesturesChanged(l, r); });
 }
 
+/// BiometricPrompt answered (AppLock.kt): queued to Qt's thread like the other callbacks.
+void JNICALL nativeDeviceAuth(JNIEnv *env, jclass, jboolean ok, jstring error)
+{
+    postToBridge([passed = ok != JNI_FALSE, message = fromJString(env, error)](AndroidBridge *bridge) {
+        Q_EMIT bridge->deviceAuthFinished(passed, message);
+    });
+}
+
 } // namespace
 
 AndroidBridge *AndroidBridge::instance()
@@ -307,6 +315,7 @@ AndroidBridge::AndroidBridge(QObject *parent)
             {"nativeWidgetWrote", "(Ljava/lang/String;)V", reinterpret_cast<void *>(&nativeWidgetWrote)},
             {"nativeImeChanged", "(IZZ)V", reinterpret_cast<void *>(&nativeImeChanged)},
             {"nativeGestureInsetsChanged", "(II)V", reinterpret_cast<void *>(&nativeGestureInsetsChanged)},
+            {"nativeDeviceAuth", "(ZLjava/lang/String;)V", reinterpret_cast<void *>(&nativeDeviceAuth)},
     };
     QJniEnvironment env;
     if (env.registerNativeMethods(kClass, methods, int(std::size(methods))))
@@ -796,6 +805,41 @@ void AndroidBridge::setKeepScreenOn(bool on)
 {
     QJniObject::callStaticMethod<void>(kClass, "setKeepScreenOn", "(Z)V", jboolean(on));
     failed("setKeepScreenOn");
+}
+
+void AndroidBridge::setSecureWindow(bool secure, bool hideRecents)
+{
+    QJniObject::callStaticMethod<void>(kClass, "setSecureWindow", "(ZZ)V", jboolean(secure), jboolean(hideRecents));
+    failed("setSecureWindow");
+}
+
+bool AndroidBridge::deviceAuthAvailable()
+{
+    return callBool("deviceAuthAvailable");
+}
+
+bool AndroidBridge::requestDeviceAuth(const QString &title, const QString &subtitle, const QString &cancel)
+{
+    const QJniObject context = appContext();
+    if (!context.isValid())
+        return false;
+    const jboolean asked = QJniObject::callStaticMethod<jboolean>(
+            kClass, "requestDeviceAuth",
+            "(Landroid/content/Context;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Z", context.object(),
+            QJniObject::fromString(title).object<jstring>(), QJniObject::fromString(subtitle).object<jstring>(),
+            QJniObject::fromString(cancel).object<jstring>());
+    return !failed("requestDeviceAuth") && asked != JNI_FALSE;
+}
+
+bool AndroidBridge::copySensitiveText(const QString &text)
+{
+    const QJniObject context = appContext();
+    if (!context.isValid())
+        return false;
+    const jboolean copied = QJniObject::callStaticMethod<jboolean>(
+            kClass, "copySensitive", "(Landroid/content/Context;Ljava/lang/String;)Z", context.object(),
+            QJniObject::fromString(text).object<jstring>());
+    return !failed("copySensitive") && copied != JNI_FALSE;
 }
 
 void AndroidBridge::deliverPendingActivation()

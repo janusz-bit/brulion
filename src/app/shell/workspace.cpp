@@ -11,6 +11,7 @@
 #include "canvas/canvas.h"
 #include "dates/dates.h"
 #include "drawing/excalidrawmd.h"
+#include "encryption/meld.h"
 #include "index/vaultindex.h"
 #include "log/categories.h"
 #include "log/slowscope.h"
@@ -174,6 +175,7 @@ Workspace::Workspace(QObject *parent) : EditorHost(parent)
     m_chats = new WorkspaceChats(this, m_extensions, this);
     connect(m_extensions, &WorkspaceExtensions::macrosChanged, this, &EditorHost::macrosChanged);
     m_replacing = new ReplaceSession(this);
+    m_encryption = new WorkspaceEncryption(this);
     m_sync = new WorkspaceSync(this);
     m_sync->setClock([this] { return now(); });
     m_github = new WorkspaceGitHub(this);
@@ -749,12 +751,24 @@ QString Workspace::read(const QString &path, bool *ok)
     return m_vault->readText(path, ok);
 }
 
+bool Workspace::refusesPlaintext(const QString &path, const QString &content)
+{
+    // An encrypted page (docs/UI.md "Encrypted notes") holds Meld Encrypt's JSON only: what an editor
+    // that does not decrypt it would write — the journal stream, a view, an extension — never goes
+    // in (EncryptedPageHost writes the JSON).
+    if (!markdown::isEncryptedNotePath(path) || content.isEmpty() || encryption::readNoteFile(content))
+        return false;
+    Q_EMIT errorOccurred(
+            tr("“%1” is an encrypted page: it is changed only while it is unlocked.").arg(paths::basename(path)));
+    return true;
+}
+
 bool Workspace::write(const QString &path, const QString &content)
 {
     // fileChanged(path) follows, also for the editor that saved: the same page may be open in a
     // second pane (side panel) that has to reload. The saving editor recognises its own text
     // (PageController compares with what it wrote).
-    if (!m_vault)
+    if (!m_vault || refusesPlaintext(path, content))
         return false;
     // This device's own edit ("save" hooks). Over what text is not known here: an extension
     // page whose code this changes waits for approval.
@@ -768,7 +782,7 @@ bool Workspace::write(const QString &path, const QString &content)
 EditorHost::WriteResult Workspace::writeIfUnchanged(const QString &path, const QString &content,
                                                     const QString &expected)
 {
-    if (!m_vault)
+    if (!m_vault || refusesPlaintext(path, content))
         return WriteResult::Failed;
     // This device's own edit ("save" hooks) of the text it expects there (an extension's trust).
     m_extensions->savedByEditor(path, content, expected);
@@ -786,7 +800,7 @@ EditorHost::WriteResult Workspace::writeIfUnchanged(const QString &path, const Q
 void Workspace::writeIfUnchangedAsync(const QString &path, const QString &content, const QString &expected,
                                       WriteDone done)
 {
-    if (!m_vault) {
+    if (!m_vault || refusesPlaintext(path, content)) {
         done(WriteResult::Failed);
         return;
     }
@@ -2091,10 +2105,12 @@ QVariantList Workspace::switcherPages(const QString &query, int limit) const
         const bool journal = !journalDate(path).isEmpty();
         // The page's own icon (docs/UI.md "Page icon and cover") in place of the file's.
         const markdown::PageIcon icon = pageIcon(path);
-        out.append(QVariantMap{{u"title"_s, paths::pageTitle(path)},
+        const bool encrypted = markdown::isEncryptedNotePath(path);
+        out.append(QVariantMap{{u"title"_s, encrypted ? m_encryption->pageName(path) : paths::pageTitle(path)},
                                {u"subtitle"_s, subtitle},
                                {u"icon"_s, icon.kind == markdown::PageIcon::Kind::App ? icon.name
                                            : journal                                  ? u"calendar"_s
+                                           : encrypted                                ? u"lock"_s
                                                                                       : u"file-text"_s},
                                {u"emoji"_s, icon.kind == markdown::PageIcon::Kind::Emoji ? icon.name : QString()},
                                {u"path"_s, path}});
@@ -2109,6 +2125,17 @@ QVariantList Workspace::switcherPages(const QString &query, int limit) const
     if (m_index) {
         for (const PageSuggestion &s : m_index->suggestPages(q, limit))
             add(s.path, s.alias);
+        // Encrypted pages (attachments to the index: their names only, docs/UI.md "Encrypted notes").
+        if (!q.isEmpty() && out.size() < limit) {
+            const QString key = text::foldKey(q);
+            const QList<VaultPath> files = m_index->attachments();
+            for (const VaultPath &path : files) {
+                if (out.size() >= limit)
+                    break;
+                if (markdown::isEncryptedNotePath(path) && text::foldKey(paths::basename(path)).contains(key))
+                    add(path, {});
+            }
+        }
     }
     return out;
 }

@@ -48,6 +48,7 @@ qt_add_library(brulion_shell STATIC
     ${_brulion_shell_dir}/appshare.cpp
     ${_brulion_shell_dir}/appautomation.cpp
     ${_brulion_shell_dir}/appsettings.h ${_brulion_shell_dir}/appsettings.cpp
+    ${_brulion_shell_dir}/applockcontroller.h ${_brulion_shell_dir}/applockcontroller.cpp
     ${_brulion_shell_dir}/appupdates.h ${_brulion_shell_dir}/appupdates.cpp
     ${_brulion_shell_dir}/localai.h ${_brulion_shell_dir}/localai.cpp
     ${_brulion_shell_dir}/webclippersetup.h ${_brulion_shell_dir}/webclippersetup.cpp
@@ -76,6 +77,8 @@ qt_add_library(brulion_shell STATIC
     ${_brulion_shell_dir}/workspacemacros.cpp
     ${_brulion_shell_dir}/workspacechats.h ${_brulion_shell_dir}/workspacechats.cpp
     ${_brulion_shell_dir}/writingsession.h ${_brulion_shell_dir}/writingsession.cpp
+    ${_brulion_shell_dir}/workspaceencryption.h ${_brulion_shell_dir}/workspaceencryption.cpp
+    ${_brulion_shell_dir}/encryptedpagehost.h ${_brulion_shell_dir}/encryptedpagehost.cpp
     ${_brulion_shell_dir}/extensionviewmodel.h ${_brulion_shell_dir}/extensionviewmodel.cpp
     ${_brulion_shell_dir}/extensionmodels.h ${_brulion_shell_dir}/extensionmodels.cpp
     ${_brulion_shell_dir}/workspacesync.h ${_brulion_shell_dir}/workspacesync.cpp
@@ -104,6 +107,7 @@ target_link_libraries(brulion_shell
            brulion_core_reminders brulion_core_dates brulion_core_log brulion_core_notebook brulion_core_backup
            brulion_core_extensions brulion_core_ai brulion_core_chat brulion_core_automation brulion_planning
            brulion_core_writing
+           brulion_core_encryption brulion_core_applock
     PRIVATE Qt6::Network brulion_core_appupdate brulion_core_util brulion_core_text brulion_core_sync brulion_core_io brulion_core_webpicture
             brulion_core_github brulion_core_caldav brulion_core_clipper
             brulion_core_drawing brulion_notify brulion_background
@@ -175,11 +179,13 @@ qt_target_qml_sources(brulion QML_FILES
     qml/shell/ShellExtensionQuestion.qml
     qml/shell/ShellExtensionSettings.qml
     qml/shell/ShellExtensionView.qml
+    qml/shell/ShellLockScreen.qml
     qml/shell/ShellMacroDialog.qml
     qml/shell/ShellMoveDialog.qml
     qml/shell/ShellMoveWords.qml
     qml/shell/ShellNewPageDialog.qml
     qml/shell/ShellPageWindow.qml
+    qml/shell/ShellPrivacySettings.qml
     qml/shell/ShellQuickCapture.qml
     qml/shell/ShellRail.qml
     qml/shell/ShellRenameDialog.qml

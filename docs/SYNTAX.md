@@ -20,6 +20,7 @@ cache (docs/ARCHITECTURE.md); `tst_markdown_model`'s golden digest fails until y
   journals/2026-W45.md       weekly notes (ISO week; own folder, format, template)
   journals/2026-11.md        monthly notes (likewise)
   <any>/<folders>/Page.md    pages; folders act as namespaces ("Projekty/Dom")
+  <any>/Secret.mdenc         a page encrypted with a password (§11 "Encrypted text")
   assets/                    attachments (images, pdf, ...)
   templates/                 templates (journal.md / weekly.md / monthly.md = templates for new
                              daily / weekly / monthly notes)
@@ -2115,7 +2116,8 @@ dates as `2026-10-15` (`2026-10-15 09:30` with a time), durations in words, a mi
 
 ## 11. Other rendering extensions (Obsidian compatible)
 
-`==highlight==`, coloured highlights (below), `%%hidden comment%%`, callouts `> [!note] Title`
+`==highlight==`, coloured highlights (below), `%%hidden comment%%`, encrypted text (below: Meld
+Encrypt's `%%🔐γ … 🔐%%`), callouts `> [!note] Title`
 (`note`, `tip`, `warning`, `danger`, `info`, `todo`, `quote`), footnotes `[^1]`, GFM tables, task
 lists, strikethrough, autolinks, math formulas and Mermaid diagrams (below). Raw HTML in notes is
 rendered as escaped text (never executed) — apart from the `<mark>` tags of coloured highlights,
@@ -2324,6 +2326,80 @@ under it (`<details>`); a diagram Brulion cannot draw stays a code block. The cl
 the Markdown, Obsidian, Logseq and Pandoc exports keep the source (pandoc filters such as
 `mermaid-filter` can draw it). Embedded pages and blocks (`![[Page]]`, `!((id))`) show a
 diagram's source.
+
+### Encrypted text
+
+Text under a password, in the format of Obsidian's **Meld Encrypt** plugin, so one notebook opens
+in both apps with the same passwords (`markdown/encrypted.h` finds the markers; the core modules
+`encryption` and `crypto` read and write the formats; docs/UI.md "Encrypted notes"):
+
+```markdown
+- Bank: %%🔐γ 💡dog's name💡AQNbYAWeS1Nspelbi7JOIG57XRSQf2Bct+v9VEmf…== 🔐%%
+- Gate: 🔐γ AQNbYMvZAzQYxzMUrFbx/ceXQJ4WLfzjtoGrwD22RnZA9Jvry… 🔐
+```
+
+* **A fragment** is a prefix, an optional public hint between two `💡`, a payload of standard
+  Base64 and a suffix, all on one line, with no `🔐` between them. Hidden (`%%🔐γ ` … ` 🔐%%`): an
+  Obsidian comment, which Obsidian's reading view does not show; visible (`🔐γ ` … ` 🔐`): Obsidian
+  shows a 🔐 to click. A hidden prefix needs the hidden suffix, a visible one the visible suffix. The
+  prefix names the version: `γ` (v3, the current one), `β` (v2), `α` (v1), a bare `🔐 ` (the first,
+  "obsolete" one); read in that order (`%%🔐γ ` before `🔐γ `). A payload shorter than its version's
+  smallest ciphertext is no fragment (`🔐 hello 🔐` is text), nor is one with a character outside
+  Base64 or a hint without its closing `💡`. A hint never holds `🔐`, `💡` or a line break.
+* **Payloads** (the GCM tag of 16 bytes always ends the ciphertext): v3 — suite `1`, the PBKDF2
+  rounds (3 bytes big-endian, 220 000 … 2 000 000), a 16-byte salt, a 12-byte IV, the ciphertext;
+  AES-256-GCM with the key from PBKDF2-HMAC-SHA512 and, as associated data, the compact JSON
+  `{"version":"3.0","kdf":{"name":"PBKDF2","hash":"SHA-512","iterations":…,"salt":"…"},
+  "cipher":{"name":"AES-GCM","keyLength":256,"iv":"…","tagLength":128}}` (so the parameters are
+  authenticated; strict, canonical Base64). v2 — a 16-byte IV, a 16-byte salt, the ciphertext;
+  PBKDF2-SHA512, 210 000 rounds. v1 — a 16-byte IV, the ciphertext; PBKDF2-SHA256, 1000 rounds of
+  the fixed salt `XHWnDAT6ehMVY2zD`. v0 — the ciphertext; the key SHA-256(password), the plugin's
+  fixed 12-byte IV. Passwords and text are UTF-8 (the browser's TextEncoder / TextDecoder: a
+  leading BOM of the text is dropped, invalid bytes become U+FFFD).
+* **Writing**: always v3 (220 000 rounds, fresh salt and IV each time). An older fragment is read
+  and becomes v3 when its text is saved again; its hint and look (hidden / visible) are kept.
+  v0 and v1 are never written: a fixed IV or salt is too weak.
+* **What the rest of Brulion sees**: the renderer shows a fragment as a locked chip — 🔒 with its
+  hint, else "Encrypted" — an `encrypted:<from>-<to>` link at the top level, a plain chip in a
+  link's label; plain text (copied plain text, notifications, link previews) shows `🔒`; the HTML,
+  Pandoc and PDF exports show `🔒` for a visible fragment and nothing for a hidden one (a comment);
+  the Markdown, Obsidian and Logseq exports keep it as written. The full-text index leaves
+  fragments out (no word of their Base64; `SearchIndex::FormatVersion` 2). A fragment inside a
+  code span stays code. **Links, tags, tasks and reminders inside encrypted text are never
+  indexed** — the index never sees the plaintext: they are no backlinks, no tags, no tasks of
+  Tasks and never ring.
+
+**Encrypted pages** — a whole note as `Name.mdenc` (also Meld Encrypt's older `.encrypted`), JSON
+as the plugin writes it (`JSON.stringify(…, null, 2)`, no final line break):
+
+```json
+{
+  "version": "3.0",
+  "hint": "public hint",
+  "encodedData": "<ciphertext and tag, Base64>",
+  "kdf": { "name": "PBKDF2", "hash": "SHA-512", "iterations": 220000, "salt": "<16 bytes>" },
+  "cipher": { "name": "AES-GCM", "keyLength": 256, "iv": "<12 bytes>", "tagLength": 128 }
+}
+```
+
+(the plugin writes `kdf` and `cipher` indented like the rest). Version `3.0` is read as the plugin's
+validateEnvelopeV3 reads it — no other keys, exactly these names and lengths, rounds 220 000 …
+2 000 000, the associated data rebuilt from the values in that order (a reordered file reads the
+same) —; `2.0` and `1.0` (`{"version", "hint", "encodedData"}` with a v2 / v1 payload) are read;
+`hint` is required; an empty file is a blank encrypted page (its password chosen on first unlock).
+The hint is not authenticated (the plugin's design): changing it keeps the page readable. Saves
+write `3.0`; an open page keeps its salt and rounds (only the IV is new each time), so a save costs
+AES-GCM only. To the index an encrypted page is a file of its path only (an attachment): `[[Name.mdenc]]`
+links to it, the sidebar and the quick switcher list it with a lock, nothing of its text is indexed.
+The Workspace never writes anything but such JSON into a `.mdenc` file (an editor that does not
+decrypt it cannot save plaintext there).
+
+**Sync** merges encrypted text like any other text: a fragment is one line, so edits elsewhere on
+the page merge and two devices that changed the same fragment get a conflict copy (both versions
+kept). An encrypted page syncs as a binary file (`sync::isSyncTextPath`: `.mdenc` is no text
+extension): changed on both sides, both versions are kept as a conflict copy — never merged line
+by line, which could mix one save's IV with another's ciphertext. Syncthing makes its own conflict
+copies the same way.
 
 ## 12. Templates
 

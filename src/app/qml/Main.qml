@@ -114,6 +114,9 @@ ApplicationWindow {
         id: stage
         anchors.fill: parent
         focus: true
+        // The app lock (docs/UI.md "App lock"): nothing of the notebook is drawn, read by a screen
+        // reader or reached with the keyboard while it is locked.
+        visible: !AppLock.locked
         sourceComponent: {
             switch (AppController.status) {
             case "ready": return shellComponent
@@ -166,6 +169,11 @@ ApplicationWindow {
     /// click took its activation (AppController.trayPopupShouldReopen, asked on every tray action
     /// so that an old hide never swallows a later click).
     function showTrayCalendar(toggle: bool): void {
+        // Locked: the window with its lock screen instead (the calendar shows the notes' tasks).
+        if (AppLock.locked) {
+            window.showAndRaise()
+            return
+        }
         trayCalendar.active = true
         const popup = window.trayCalendarWindow
         if (!popup)
@@ -175,6 +183,15 @@ ApplicationWindow {
             popup.hide()
         else if (popup.visible || !toggle || reopen)
             popup.open()
+    }
+
+    // The app lock's screen (ShellLockScreen: a modal popup above every other one and the toasts),
+    // made once the lock is on.
+    Loader {
+        active: AppLock.enabled || AppLock.locked
+        sourceComponent: ShellLockScreen {
+            visible: AppLock.locked
+        }
     }
 
     // The focused form field (settings, onboarding, dialogs) above the on-screen keyboard.

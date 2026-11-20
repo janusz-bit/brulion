@@ -52,7 +52,8 @@ QString blocksPlainText(const BlockDocument &doc, const QList<int> &tops, const 
 /// Inline Markdown as the text it shows: `[[a|b]]` -> b, `[[a]]` -> a, `[label](url)` and
 /// `![alt](url)` -> label / alt, emphasis marks in pairs (`**` `__` `~~` `==` around text, single
 /// `*` and `_` around words) removed, and so are the tags of a coloured highlight's `<mark>` pair
-/// (markdown/highlight.h); a code span is its code verbatim (`` `x == 0` `` -> x == 0).
+/// (markdown/highlight.h); a code span is its code verbatim (`` `x == 0` `` -> x == 0); an encrypted
+/// fragment (markdown/encrypted.h) is a lock, "🔒", never its ciphertext.
 /// Unpaired marks ("2**3", "a == b"), tags, dates and everything else stay. Lines are kept.
 QString stripInlineMarkup(const QString &text);
 

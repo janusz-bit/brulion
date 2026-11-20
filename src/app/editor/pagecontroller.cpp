@@ -17,6 +17,7 @@
 #include "drawing/svgwrite.h"
 #include "index/vaultindex.h"
 #include "io/tablecsv.h"
+#include "markdown/encrypted.h"
 #include "markdown/highlight.h"
 #include "markdown/inline.h"
 #include "markdown/inlinerenderer.h"
@@ -2687,6 +2688,21 @@ int PageController::insertToken(int row, int cursor, const QString &token)
     return newCursor;
 }
 
+bool PageController::replaceEncryptedFragment(int row, int from, int to, const QString &fragment, const QString &text)
+{
+    if (refusesEdit() || !validRow(row) || fragment.isEmpty())
+        return false;
+    const QString body = m_model->data(m_model->index(row), BlockListModel::BodyRole).toString();
+    qsizetype at = from;
+    if (from < 0 || to > body.size() || from > to || QStringView(body).sliced(from, to - from) != fragment) {
+        at = body.indexOf(fragment); // typed around meanwhile: where it is now
+        if (at < 0)
+            return false;
+    }
+    editBody(row, body.left(at) + text + body.mid(at + fragment.size()));
+    return true;
+}
+
 int PageController::replaceRange(int row, int from, int to, const QString &replacement)
 {
     if (refusesEdit())
@@ -3637,7 +3653,8 @@ QVariantMap PageController::applySlashCommand(int row, int from, int to, const Q
         focus = {r, r >= 0 ? caretThroughEdit(before, m_model->editTextAt(r), cursor) : -1};
     } else if (cmd == u"reminder" || cmd == u"alarm" || cmd == u"due" || cmd == u"scheduled" || cmd == u"recurrence"
                || cmd == u"date" || cmd == u"template" || cmd == u"image" || cmd == u"fileLink" || cmd == u"webImage"
-               || cmd == u"drawing" || cmd == u"drawingOn" || cmd == u"csvTable" || cmd == u"voiceNote") {
+               || cmd == u"drawing" || cmd == u"drawingOn" || cmd == u"csvTable" || cmd == u"voiceNote"
+               || cmd == u"encrypt") {
         action = cmd;
     } else if (cmd == u"today" || cmd == u"tomorrow") {
         insertAt(journalLink(today().addDays(cmd == u"tomorrow" ? 1 : 0).toString(u"yyyy-MM-dd"_s)));
@@ -4055,6 +4072,26 @@ QVariantMap PageController::activateLink(int row, const QString &url, bool newPa
         out[u"extension"_s] = found[0].extension;
         out[u"name"_s] = found[0].name;
         out[u"arguments"_s] = found[0].arguments;
+        return out;
+    }
+    if (scheme == u"encrypted") {
+        // An encrypted fragment's chip: the fragment, for the editor's unlock dialog.
+        static const QRegularExpression range(u"^(\\d+)-(\\d+)$"_s);
+        const auto m = range.match(rest);
+        if (!m.hasMatch() || !validRow(row))
+            return out;
+        const QString body = m_model->data(m_model->index(row), BlockListModel::BodyRole).toString();
+        const int offset = m_model->renderOffsetAt(row); // the range is the rendered text's
+        const qsizetype from = m.captured(1).toLongLong() + offset;
+        const qsizetype to = m.captured(2).toLongLong() + offset;
+        const auto span = markdown::encryptedFragmentAt(body, from, to);
+        if (!span)
+            return out;
+        out[u"action"_s] = u"encrypted"_s;
+        out[u"from"_s] = int(from);
+        out[u"to"_s] = int(to);
+        out[u"fragment"_s] = body.sliced(from, to - from);
+        out[u"hint"_s] = span->hint;
         return out;
     }
     if (scheme == u"day") {

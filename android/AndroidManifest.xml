@@ -56,6 +56,8 @@
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+    <!-- The app lock's "Use the phone's lock": BiometricPrompt (a normal permission: no prompt). -->
+    <uses-permission android:name="android.permission.USE_BIOMETRIC" />
 
     <!-- Voice notes (docs/UI.md "Voice notes"): the microphone, asked for when a recording starts
          (QMicrophonePermission); a device without one still installs the app. -->

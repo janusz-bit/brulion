@@ -1,5 +1,6 @@
 #include "markdown/blockclipboard.h"
 
+#include "markdown/encrypted.h"
 #include "markdown/highlight.h"
 
 #include "markdown/lines_p.h"
@@ -312,8 +313,10 @@ QString blocksPlainText(const BlockDocument &doc, const QList<int> &tops, const 
     return out;
 }
 
-QString stripInlineMarkup(const QString &text)
+QString stripInlineMarkup(const QString &rawText)
 {
+    // Encrypted fragments (docs/SYNTAX.md §11 "Encrypted text") as the lock a reader sees.
+    const QString text = mayContainEncrypted(rawText) ? replaceEncryptedFragments(rawText, u"\U0001F512"_s) : rawText;
     static const QRegularExpression wikiAlias(u"!?\\[\\[(?:[^\\]|\\n]*\\|)?([^\\]\\n]*)\\]\\]"_s);
     static const QRegularExpression mdLink(u"!?\\[([^\\]\\n]*)\\]\\([^)\\n]*\\)"_s);
     // Marks in pairs around text that starts and ends with a non-space (`**b**`, `==h==`); a lone

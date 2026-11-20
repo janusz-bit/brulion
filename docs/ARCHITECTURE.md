@@ -49,6 +49,8 @@ claude.ai and ChatGPT: `brulion-cli mcp serve`) — see "Command line" below and
 │ · publish (a site on GitHub Pages, WebDAV, Nextcloud with a public link, a folder)         │
 │ · extensions (Luau: 3rdparty/luau; built in: gym, habits, flashcards, the AI assistant)    │
 │ · automation (brulion:// addresses: read, checked, carried out)                            │
+│ · crypto (BearSSL's AES-GCM, SHA-2, HMAC; PBKDF2) · encryption (Meld Encrypt)              │
+│ · applock (the app lock's state machine, the PIN's hash)                                   │
 └────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -144,6 +146,9 @@ those of before —, `relocate.cpp`; `RelocationPlanner` makes the same plan a f
 | `caldav` (util, text, dates, markdown, index, vault, notebook, log, sync, io; QtNetwork) | calendars of other programs (docs/UI.md "Calendars", docs/SYNTAX.md §5 "Tasks synced with CalDAV"): `rrule.h` — RFC 5545 recurrence in full (`RRule`, `parseRRule` / `formatRRule`, `expandRRule` in the series' own wall clock: COUNT counted from DTSTART, UNTIL, every BYxxx with RFC 5545's expand / limit rules, BYSETPOS, WKST; bounded by `ExpandLimits` — a rule that never matches or never ends stops —, windows far from DTSTART skip the periods before them); `zones.h` — a TZID through the system's database (IANA ids, `/mozilla.org/…` prefixes, Windows names) else the file's own VTIMEZONE (`ZoneDefinition`: observances with DTSTART, RRULE, RDATE; gaps taken in the offset before, repeated hours the first time — WebAssembly has no database), `ZoneTable`; `events.h` — `CalendarData` (VEVENTs parsed within `ParseLimits`: bytes, events, text lengths), `occurrences()` into the device's wall clock (RDATE incl. PERIOD, EXDATE incl. a DATE on a timed series, RECURRENCE-ID overrides and cancelled instances, all-day and multi-day events, spans capped at a year); `feed.h` — `feedUrl` (webcal://), `FeedFetcher` (conditional GET, redirects by hand never down to http, 16 MB, an HTML page refused, CORS told apart in the browser), `FeedHttpTransport` (QNAM following redirects to other servers: no credentials travel); `client.h` — `CalDavClient` (discovery, `sync-collection` with the ETag listing as fallback, `calendar-multiget` with GET as fallback, If-Match / If-None-Match writes, Basic and Digest, `mayCarryCredentials`: the account's server or its site over https); `taskmap.h` — `TaskFields` (a task line ↔ a VTODO, normalised: priority classes, waiting as to do, trailing tags as categories), `applyFieldsToBody` (only the tokens that change), `patchTodo` / `newTodo` (the server's VTODO patched: what Brulion does not know stays; VTIMEZONE of the device's zone), `blockIdForUid` / `uidForBlockId`; `eventedit.h` — events written by the event dialog (a series, an override, an EXDATE); `store.h` — `CalendarStore` (`<device state>/calendars/`: settings, feed caches with validators, per calendar the sync token, members, tracked tasks with both sides' last fields and the outbox of events, the log); `calendarsync.h` — `CalendarSync`, a `sync::SyncRunner` (due subscriptions, every calendar: outbox, changes, the task reconciliation of `tasksync_p.h` — merged field by field, conflicts by the account's policy, deletions behind a guard, a recurring task completed in Brulion advancing the server's series —, a device lock so that the app and Android's background check never run together). The app's side: `shell/workspacecalendars.h` (an `planning::EventSource` for `CalendarModel`) |
 | `media` (util, markdown) | audio and video in notes, the part without a player (docs/SYNTAX.md §2 "Audio and video"): `kindOf` (a file's player by its name, over `paths::isAudioPath` / `isVideoPath`), `parseTimeFragment` / `timeFragment` (W3C Media Fragments' `t=` — seconds, `[hh:]mm:ss`, `npt:`, spans, YouTube's `1m23s` — and back), `formatTime` (the player's "1:23" / "1:02:03"), `recordingName` (a voice note's "Nagranie 2026-11-20 18.30.m4a"); `transcript.h` — `transcriptText` (what a recognizer heard as one plain paragraph: joined, collapsed, Markdown at its start and links, embeds, templates and tags inside escaped), `placeTranscript` (the transcript under the block that embeds the recording: a list item's first child, a paragraph's next paragraph — a `BlockDocument` edit, every other byte kept); `pcm.h` — WAV files (`wavHeader`, `wavFile`, `readWav`: integer and float PCM, WAVE_FORMAT_EXTENSIBLE, RF64, cut-off files), `toMono`, `resample` (a windowed sinc from a table: 16 kHz for Whisper), `meterLevel` (the recorder's meter: the peak from −60 to 0 dB) |
 | `speech` (ai, media) | speech recognition on the device (docs/UI.md "Voice notes"): `speechModels()` (Whisper Small / Base / Large v3 Turbo by OpenAI, MIT — whisper.cpp's conversions on Hugging Face, one revision, SHA-256, as `ai::LocalModel`s of the format "whisper", downloaded by `ai::LocalModelFiles`), `speechLanguages()` (auto, pl, en), `spokenTexts()` (Whisper's notes for no speech and subtitle credits left out); `speechrunner.h` — `SpeechRunner` (16 kHz mono in, segments out; progress, cancel) and `loadSpeechRunner()` (the plugin `brulion_speech`, loaded on first use). The recognizer, `whisperrunner.h` over whisper.cpp (`3rdparty/whisper`) and llama.cpp's ggml — the processor plugin the language models loaded, or the first this processor runs; beam search of 3, at most 4 threads —, is the library `brulion_speech_whisper` (and that plugin), built only with `BRULION_SPEECH` |
+| `crypto` (—; 3rdparty/bearssl) | the cryptographic primitives, GUI-free and pure, for any module (docs: `crypto/crypto.h` and "Security" below): `SecureBytes` (a byte buffer zeroed when destroyed, resized or cleared; deep copies; `fromUtf8` straight into it), `wipe()` (volatile stores and a fence; QByteArray / QString only when unshared), `constantTimeEquals()`; `RandomSource` / `systemRandom()` (QRandomGenerator::system) / `randomBytes()`; `encodeBase64` / `decodeBase64` (Strict: canonical, padded; Forgiving: as the browser's atob); `digest` / `Hasher` (SHA-256, SHA-512), `hmac`, `pbkdf2` (RFC 8018 over BearSSL's HMAC with the key's pads hashed once: two compressions a round); `aesgcm::seal` / `open` (AES-128/192/256-GCM, any IV length, the 16-byte tag after the ciphertext as WebCrypto lays it out; the tag checked in constant time before any plaintext is handed out); `hashSecret` / `verifySecret` (`pbkdf2-sha512$<rounds>$<salt>$<hash>`, rounds bounded). BearSSL (MIT) vendored unmodified — aes_ct64 (bitsliced, no secret-indexed tables), ghash_ctmul64, GCM, SHA-2, HMAC; compiled as C, `-O2` in every build type. Tests: the FIPS 180-4, RFC 4231, RFC 7914 and GCM specification vectors |
+| `encryption` (util, markdown, crypto) | encrypted notes in Obsidian's Meld Encrypt formats (docs/SYNTAX.md §11 "Encrypted text"): `decryptPayload` (inline fragments v0, α, β, γ), `encryptPayload` (γ: suite 1, PBKDF2-SHA512 220 000 rounds, the JSON header as AAD), `readNoteFile` / `decryptNote` / `openNote` / `openNoteWithKey` / `writeNoteFile` (`.mdenc` 1.0 / 2.0 read, 3.0 read as the plugin validates it and written byte for byte as its `JSON.stringify(…, null, 2)`; `NoteKey`: an open page's key, saves without a derivation), `Failure` (WrongPassword, Malformed, Unsupported, TooLarge) and `failureMessage`; the edits of fragments (`fragments.h`: `encryptFragment`, `decryptFragment`, `reencryptFragment` — hint and look kept, an old version made γ —, `changeFragmentPassword`, `decryptInPlace`); `Keyring` (the session's passwords per page in `SecureBytes`, at most two candidates a try, all forgotten after an inactivity timeout or `clear()`). The syntax of fragments is the markdown module's (`markdown/encrypted.h`). Tests: fixtures made by the plugin's own code, its deterministic output reproduced byte for byte, wrong passwords, malformed and tampered payloads and files |
+| `applock` (crypto) | the app lock (docs/UI.md "App lock"): `Policy`, `LockState` (locked on start, after the background, after idle time, on lockNow(); waits after wrong PINs — `retryDelayMs`: none for four, then 30 s … 15 min — kept across restarts by the app, a clock set back ends a wait), `isValidPin` (4–16 ASCII digits), `hashPin` / `verifyPin` (crypto's salted PBKDF2-SHA512, 210 000 rounds). No clock, no platform: the app feeds it (`AppLockController`) |
 | `semantic` (—) | search by meaning, a prototype (docs/SEMANTIC.md): `chunkNote` (notes cut into ~120-word chunks), `Calibration` (gradient-free edit of the embeddings: means and the Polish–English direction), `VectorIndex` (brute-force cosine, a note scores as its best chunk), `fuseConvex` (with the full-text hits). The model runner `Embedder` (llama.cpp, GPU through Vulkan) is the separate library `brulion_semantic_llama`, built only when CMake finds llama.cpp and linked by no app target yet |
 
 ## Platform layer (`src/platform/`, library `brulion_platform`)
@@ -154,7 +159,11 @@ Only what needs OS APIs; compiled per target (no `#ifdef`s in core). `platform.h
 * **Everywhere** (`platform.h`): `logDirectory()` (Linux `$XDG_STATE_HOME/Brulion/Brulion/logs`,
   Android the app's files dir + `/logs`, the browser none: memory only) and `deviceDescription()`
   for the event log; `keepScreenOn(on)` — Android: the activity's window keeps the screen on while
-  a model on the device is downloaded or answers (`LocalAi::working()`; nothing elsewhere);
+  a model on the device is downloaded or answers (`LocalAi::working()`; nothing elsewhere); the app
+  lock's (docs/UI.md "App lock"): `setSecureWindow(secure, hideRecents)` (Android: FLAG_SECURE, the
+  recent apps' preview on Android 13+), `deviceAuthAvailable()` / `requestDeviceAuth()` (Android
+  10+: BiometricPrompt, the answer as `AndroidBridge::deviceAuthFinished`), `copySensitiveText()`
+  (Android 13+: a clip marked sensitive) — nothing elsewhere;
   `allowForegroundActivation()` — Windows: `AllowSetForegroundWindow` before a
   second launch hands its files or request to the running Brulion, so its window comes to the
   front (nothing elsewhere); `endStartupNotification(id)` — X11: such a launch ends the
@@ -775,6 +784,57 @@ but never from this device or its private network, which a note alone must not m
 most 256 MB of copies in all, the rest keep their addresses). In the browser the
 fetches are CORS "simple" requests the browser itself sends (and redirects itself: the manual
 redirect check does not apply there); a failed one is told as CORS or mixed content.
+
+## Security (encrypted notes and the app lock)
+
+What protects what (docs/UI.md "Encrypted notes", "App lock"; docs/SYNTAX.md §11 "Encrypted text"):
+
+* **Encrypted notes** protect text at rest and in transit — the notebook's folder, other devices,
+  sync servers, backups, GitHub — with a password: AES-256-GCM, the key from PBKDF2-HMAC-SHA512
+  (220 000 rounds, a 16-byte random salt per fragment or page, a 12-byte random IV per save; the
+  parameters authenticated as AAD), in Obsidian's Meld Encrypt format so one notebook opens in both
+  apps. The primitives are BearSSL's constant-time code (core `crypto`); comparisons of tags and
+  hashes are constant-time; keys, passwords and decrypted bytes live in `crypto::SecureBytes`,
+  zeroed when they go. A QString that came from QML (a password field, the dialog's text) cannot be
+  wiped reliably — Qt may hold copies —: the fields are emptied after use and the dialog's text when
+  it closes or the notes lock; that is the extent of "wiped where practical".
+* **Plaintext never reaches the disk or any other copy.** A fragment is decrypted in its dialog only
+  (`WorkspaceEncryption::openFragment`); an encrypted page is decrypted by PageView's
+  `EncryptedPageHost`, so the block editor holds Markdown in memory while the Vault writes (and
+  History snapshots, the index cache, the sync, backups and exports read) only Meld Encrypt's JSON.
+  The Workspace refuses to write anything else into a `.mdenc` file (`refusesPlaintext`: an editor
+  or a view that does not decrypt it). The index sees an encrypted page as a file of its path, and
+  of fragments only that they are there: their Base64 makes no words (`SearchIndex`), links, tags,
+  tasks and reminders inside encrypted text are never indexed (no backlinks, no Tasks, no alarms).
+  The AI assistant and extensions read notes through the index and the vault: they get ciphertext
+  only. Exports show `🔒` (or keep the markers in Markdown); an encrypted page is not exported,
+  printed or turned into a QR code. Logs never carry a password or decrypted text (nothing logs
+  them; the crash report holds only a stack). The clipboard: "Copy" marks the copy sensitive where
+  the platform knows how (Android 13+'s `EXTRA_IS_SENSITIVE`, KDE's `x-kde-passwordManagerHint`,
+  Windows' clipboard-history exclusion) — the copy itself is plain text, as the dialog says. The
+  decrypted text's field asks the keyboard for no predictions (`Qt.ImhNoPredictiveText`).
+* **Text that was plain before.** "Encrypt selection" / "Encrypt page" cannot reach copies made
+  before: earlier backups, other devices' histories, a sync server's versions, the sync's merge
+  base (until the next sync). "Encrypt page" writes the encrypted JSON over the page in place (never
+  a plaintext file under the encrypted name), renames it with every link following, deletes its
+  version history when asked (on by default) and writes the index cache again. New secrets go best
+  straight into `/encrypt` or "New encrypted page", which never put plaintext on disk.
+* **The session**: passwords typed are kept per page (`encryption::Keyring`) and every unlocked
+  thing locks after a time without use (5 minutes by default), on the app lock and with the
+  notebook; nothing decrypts by itself — only a user's action tries remembered passwords, at most
+  two (each try costs a key derivation of up to two million rounds, which a hostile synced note
+  could ask for). A page changed elsewhere under another password locks and is never written over.
+* **The app lock** protects the running app on this device from someone holding it unlocked — not
+  the files. The PIN is stored as `pbkdf2-sha512$210000$…` in this device's settings (never synced);
+  a 4-digit PIN cannot resist an offline attack on that hash, which is not what it is for: wrong
+  PINs on the lock screen wait, up to 15 minutes, across restarts. While locked the stage and page
+  windows are hidden (also from screen readers), the encrypted notes lock, notifications leave the
+  note's text out (also those Android's background check arms), Android's window is kept out of the
+  recent apps (Android 13+) or FLAG_SECURE, and the widgets show a placeholder. The phone's own
+  check is the framework's BiometricPrompt (Android 10+; biometrics or the screen lock).
+* **Not protected**: someone with access to the running, unlocked app (or its process memory);
+  file names, folders, hints and the size of encrypted text; a weak password (PBKDF2 slows guessing,
+  it does not stop it). Meld Encrypt's implementation and Brulion's have not been audited.
 
 ## Build, test, packaging
 

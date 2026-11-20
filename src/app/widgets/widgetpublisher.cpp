@@ -62,6 +62,8 @@ WidgetPublisher::WidgetPublisher(shell::AppController *app) : QObject(app), m_ap
     connect(ws, &shell::Workspace::recentPagesChanged, this, &WidgetPublisher::schedule);
     connect(ws, &shell::Workspace::configChanged, this, &WidgetPublisher::schedule);
     connect(app->settings(), &shell::AppSettings::languageChanged, this, &WidgetPublisher::schedule);
+    // The app lock switched on or off, or its "Hide notes in widgets": published again.
+    connect(app->appLock(), &shell::AppLockController::changed, this, &WidgetPublisher::schedule);
     // Reminders turned off: quick add must not arm one any more (the snapshot says so).
     connect(ws->reminders(), &shell::WorkspaceReminders::settingsChanged, this, &WidgetPublisher::schedule);
     connect(ws->reminders(), &shell::WorkspaceReminders::doneTargetChanged, this, [this] {
@@ -134,7 +136,10 @@ void WidgetPublisher::publish()
     options.caches = m_caches;
     options.captureDays =
             captureDays(*vault, options.now.date(), CaptureDays, options.now, notebook::contentLocale(language));
-    const int placed = platform::AndroidBridge::instance()->updateWidgets(buildSnapshot(*index, options));
+    // The app lock hides the notebook from the home screen (docs/UI.md "App lock").
+    const QJsonObject snapshot = buildSnapshot(*index, options);
+    const int placed = platform::AndroidBridge::instance()->updateWidgets(
+            m_app->appLock()->hidesWidgets() ? lockedSnapshot(snapshot) : snapshot);
     qCInfo(lcWidgets) << "Snapshot published," << placed << "widget(s) placed";
 }
 

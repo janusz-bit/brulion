@@ -2156,6 +2156,96 @@ guide: the page "Backups" of the documentation notebook.
 Tests: `tst_backup*`, `tst_shell_workspace_backups` (+ `_inline`), `--selftest-shell` (`checkBackups`: real
 taps through a backup, a restore's confirmation, a delete), `tst_content_qml` (the route).
 
+## Encrypted notes (`qml/editor/EncryptedTextDialog.qml`, `qml/content/ContentEncryptedPage.qml`, `qml/content/ContentEncryptionDialog.qml`)
+
+Text and whole pages under a password, in the format of Obsidian's Meld Encrypt plugin (docs/SYNTAX.md
+§11 "Encrypted text"; C++: `Workspace.encryption` — `src/app/shell/workspaceencryption.h` — and
+`EncryptedPageHost`, `src/app/shell/encryptedpagehost.h`; core `encryption` and `crypto`).
+
+* **Fragments.** The renderer shows a fragment as a locked chip (🔒 with its hint, else
+  "Encrypted"/"Zaszyfrowane"; an `encrypted:<from>-<to>` link); a click
+  (`PageController.activateLink` → `{action: "encrypted", from, to, fragment, hint}`) opens
+  `EncryptedTextDialog` on it. The dialog first tries the passwords remembered in this session
+  (`openFragment(path, fragment, "", true)`: nothing asked when one fits, no error when none
+  does), else asks — the hint shown as plain text. Unlocked, its text is in a `BTextArea`
+  (`Qt.ImhNoPredictiveText`: no learned words from the keyboard) with **Save** (enabled once the text
+  changed, or for an old format: `sealFragment`, the same password, hint and look, written as v3),
+  **Copy** (`copySecret`: Android 13+ marks the clip sensitive; elsewhere the `x-kde-passwordManagerHint`
+  and Windows' clipboard-history exclusion formats), and under **…** **Change password…** (the
+  password twice and the hint) and **Decrypt permanently…** (after a confirmation: the plaintext
+  where the fragment was). The block editor writes the result (`PageController.replaceEncryptedFragment`:
+  only while the block still holds that fragment — at its range or, typed around meanwhile,
+  wherever it is; one undo step). **Encrypt selection…** (the edited text's menu, the palette's
+  `encrypt.selection`, uiAction `encryptSelection`: the selection, else the caret) and the slash
+  command `/encrypt` ("Encrypted text…", uiAction `encrypt` of PageController) open the dialog in its
+  "new" mode: the text, the password twice, a public hint (no 🔐, 💡 or line break) and **Show a
+  lock in Obsidian's reading view** (a visible `🔐γ … 🔐`; off by default: a hidden `%%🔐γ … 🔐%%`).
+  The dialog closes and empties its fields when the encrypted notes lock (`allLocked`).
+* **Pages.** A `.mdenc` (or `.encrypted`) route shows `ContentEncryptedPage` in PageView — the
+  page's name, its hint, the password field (a blank page: a new password twice); the remembered
+  passwords are tried first. Unlocked (`Workspace.encryption.unlockPage` → `pageUnlocked`), the
+  page opens in the block editor through PageView's `EncryptedPageHost`: every page goes through it
+  unchanged but an unlocked encrypted one, whose file it reads decrypted with the page's key and
+  writes encrypted (the same salt and rounds, a fresh IV: AES-GCM only on each autosave); the
+  host is never swapped for `Workspace`, so a route from an encrypted page to another never saves
+  one through the other's host. The page menu offers **Encrypt page…** (a Markdown page, not a
+  daily note: `ContentEncryptionDialog` — the password twice, a hint, "Delete the page's version
+  history"; the editor lets the page go before its file is written over: `converting`),
+  **Change password…** ("Delete the page's older versions": they open with the old password),
+  **Decrypt permanently…** and **Lock page**; Export, Print, QR code and Version history are not
+  offered for an encrypted page (nor the palette's export and QR code). **New encrypted page…**:
+  the palette (`encrypt.newPage`), the sidebar's pages menu and a folder's menu
+  (`AppController.requestItemAction("newEncryptedPage", folder)`). The sidebar's tree and the quick
+  switcher list encrypted pages by their name with the `lock` icon. A page changed elsewhere is
+  read again with the key (another salt: with the password); one no longer readable with them
+  locks with a toast and is never written over (`pageLocked` with a reason).
+* **The session.** Passwords typed are kept per page in wiped memory (`encryption::Keyring`) and
+  tried — at most two — on the notebook's other fragments and pages; Settings → Privacy: **Lock
+  encrypted notes after** 1 / 5 (default) / 15 / 60 minutes without use (an unlock, a save, typing
+  in the dialog or moving in an unlocked page; also checked on every use, as a paused app's timer
+  fires late), **Remember passwords between pages** (off: every fragment and page asks), **Lock
+  encrypted notes now**; the palette's `encrypt.lockAll`. The app lock, closing or opening a
+  notebook lock everything too. A page about to lock saves first (`pageLocking`).
+* Tests: `tst_shell_workspace_encryption` (a Meld Encrypt note opened, edited and saved through the
+  host and the editor; locks; conversions; fragments; the plaintext looked for in every file of the
+  notebook and the device state), `tst_encryption`, `tst_crypto`, the shell's self-test
+  (`checkEncryption`).
+
+## App lock (`qml/shell/ShellLockScreen.qml`, `qml/shell/ShellPrivacySettings.qml`)
+
+A PIN — or on Android the phone's own lock — in front of the whole app on this device (C++: the
+singleton `AppLock`, `src/app/shell/applockcontroller.h`, over core `applock`).
+
+* **Settings → Privacy** (`ShellPrivacySettings`, its own section of SettingsView): **Set a PIN…** /
+  **Change PIN…** / **Turn off** (a dialog: the current PIN, the new one twice — 4 to 16 digits),
+  on Android **Use the phone's lock** (Android 10+ with a screen lock: `BiometricPrompt` with
+  biometrics or the screen lock's credential; no PIN of Brulion's then) / **Use a PIN instead…**,
+  **Lock when Brulion starts**, **Lock after leaving Brulion** (at once, 1 — Android's default —,
+  5, 15 — the desktop's default — or 60 minutes in the background: Qt's application state;
+  the desktop counts an inactive window too), **Lock after no activity** (the desktop: 5 … 60
+  minutes without a key, click, wheel or touch while in front; never by default), on Android
+  **Hide Brulion's screen** ("While locked": FLAG_SECURE while the lock screen is up and while Brulion
+  is not in front, and, Android 13+, the recent apps' preview left out while the lock is on;
+  "Always": FLAG_SECURE while the lock is on — no screenshots or recordings), **Hide the note's text in notifications** (on by default:
+  reminders say "Reminder"/"Alarm" and the time — also those the background check arms), on
+  Android **Hide notes in widgets** (on by default: the widgets say "Brulion is locked", quick add
+  still writes), **Lock now**. All of it is this device's setting (AppSettings `privacy/lock/…`).
+* **The lock screen** (`ShellLockScreen`, a modal `T.Popup` at z 3000 over the window's overlay,
+  above every popup and the toasts): while `AppLock.locked`, Main.qml hides the stage (nothing is
+  drawn, reachable with the keyboard or read by a screen reader) and page windows show "Brulion is
+  locked" instead of their page; the tray calendar opens the main window instead. A keypad of
+  64 px round keys on touch screens (digits from a keyboard too), a password field on the desktop
+  and in the browser; dots count the digits typed. Wrong PINs: after the fifth a wait of 30 s,
+  then 1, 2, 5 and 15 minutes (`applock::retryDelayMs`), counted down on the screen and kept across
+  restarts (a clock set back before the last failure ends the wait). The PIN is checked off the GUI
+  thread (PBKDF2-SHA512, 210 000 rounds; `AppLock.checking`). The phone's lock is asked when the
+  screen opens and with its button; a phone whose screen lock was removed meanwhile unlocks with a
+  warning (there is nothing left to ask). Back on Android sends the app to the background, never
+  past the lock. Locking locks the encrypted notes (`Workspace.encryption.lockAll()`).
+* The palette's **Lock Brulion** (`app.lock`) while the lock is on.
+* Tests: `tst_applock` (the state machine, waits, the PIN's hash), the shell's self-test
+  (`checkAppLock`: a PIN set, the lock after the background, a wrong and a right PIN).
+
 ## Find and replace
 
 **In the open note** (`qml/editor/FindBar.qml`, `src/app/editor/notefind.h`). Ctrl+F, the page menu's

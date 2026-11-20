@@ -268,10 +268,15 @@ done in the repository simply disappears from the list.
 * **End-to-end encryption of sync** — files on the Nextcloud or WebDAV server unreadable without
   the user's password (Joplin, SiYuan, Logseq, Anytype, Obsidian Sync); to be decided: fitting the
   "plain files" principle, the key on devices, recovery and merging conflicts.
-* **App lock** — PIN or biometrics on the phone, hiding the content on the recent apps screen and
-  in widgets.
-* **Encrypted notes** — single pages or fragments behind a password, compatible with sync
-  (Trilium: protected notes).
+* **App lock and encrypted notes — check on real devices.** Checked automatically: the crypto
+  against NIST/RFC vectors, Meld Encrypt's formats against fixtures made with the plugin's code
+  (and Brulion's output decrypted by it), no plaintext on disk, the lock's state machine, the
+  shell's self-test, the emulator (`scripts/android-emulator-test.sh --lock`: the lock screen,
+  FLAG_SECURE, the widgets' snapshot, the phone's PIN through BiometricPrompt). By hand remain: a
+  fingerprint and face unlock on a real phone (the emulator types the screen lock's PIN only), the
+  recent apps' preview and the widgets' placeholder in a real launcher, the sensitive copy in
+  Gboard's clipboard, an encrypted page edited on two devices over Syncthing and Nextcloud, and the
+  same notes opened in Obsidian with Meld Encrypt itself.
 * **Backups: next steps** — restoring a ZIP that is not on the list and files over 1 GB (Vault
   keeps the file being written in memory), an Android folder chosen through a cloud document,
   splitting the compression of a large file into chunks in the browser (today a file over 4 MB is

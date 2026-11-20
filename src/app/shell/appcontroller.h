@@ -63,6 +63,7 @@
 // file of the open notebook opens as its page.
 #pragma once
 
+#include "applockcontroller.h"
 #include "appsettings.h"
 #include "appupdates.h"
 #include "localai.h"
@@ -125,6 +126,8 @@ class AppController : public QObject {
     /// Speech recognition on the device for recordings in notes: the Whisper models, the queue
     /// (media/transcriber.h; docs/UI.md "Voice notes").
     Q_PROPERTY(brulion::media::Transcriber *speech READ speech CONSTANT FINAL)
+    /// The app lock (applockcontroller.h; QML: the singleton AppLock).
+    Q_PROPERTY(brulion::shell::AppLockController *appLock READ appLock CONSTANT FINAL)
 
     // ---- Navigation ---------------------------------------------------------------------
     Q_PROPERTY(QVariantMap currentRoute READ currentRoute NOTIFY currentRouteChanged FINAL)
@@ -285,6 +288,7 @@ public:
     AppUpdates *updates() const { return m_updates.get(); }
     LocalAi *localAi() const { return m_localAi.get(); }
     media::Transcriber *speech() const { return m_speech.get(); }
+    AppLockController *appLock() const { return m_appLock.get(); }
     CommandModel *commands() const { return m_commands.get(); }
     /// The commands' keyboard shortcuts, custom ones included (Settings → Keyboard shortcuts).
     ShortcutMap *shortcuts() const { return m_shortcuts.get(); }
@@ -844,6 +848,7 @@ private:
     std::unique_ptr<Workspace> m_workspace;
     /// After the workspace (it writes transcripts there): destroyed before it.
     std::unique_ptr<media::Transcriber> m_speech;
+    std::unique_ptr<AppLockController> m_appLock;
     std::unique_ptr<AppUpdates> m_updates;
     std::unique_ptr<ShortcutMap> m_shortcuts;
     std::unique_ptr<CommandModel> m_commands;

@@ -2,6 +2,7 @@
 #include "reminders/reminders_p.h"
 
 #include "dates/local.h"
+#include "markdown/encrypted.h"
 #include "markdown/inline.h"
 #include "reminders/notifications.h"
 
@@ -265,8 +266,14 @@ QString linkText(const Link &link, QStringView source, const VaultIndex *index)
 
 } // namespace
 
-QString plainText(QStringView markdown, const VaultIndex *index)
+QString plainText(QStringView rawMarkdown, const VaultIndex *index)
 {
+    // An encrypted fragment (docs/SYNTAX.md §11 "Encrypted text") is a lock in a notification, never
+    // its ciphertext.
+    const QString unlocked = markdown::mayContainEncrypted(rawMarkdown)
+                                     ? markdown::replaceEncryptedFragments(rawMarkdown, u"\U0001F512"_s)
+                                     : QString();
+    const QStringView markdown = unlocked.isNull() ? rawMarkdown : QStringView(unlocked);
     const markdown::InlineScan scan = markdown::extractInline(markdown);
     QString out;
     out.reserve(markdown.size());

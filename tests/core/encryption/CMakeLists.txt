@@ -1,0 +1,1 @@
+brulion_add_test(tst_encryption SOURCES tst_encryption.cpp meldfixtures.h LIBS brulion_core_encryption)

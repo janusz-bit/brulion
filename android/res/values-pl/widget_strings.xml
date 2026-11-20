@@ -15,6 +15,7 @@
     <string name="brulion_widget_overdue_count">zaległe: %1$d</string>
     <string name="brulion_widget_empty_today">Na dziś nic — dodaj zadanie przyciskiem +</string>
     <string name="brulion_widget_open_app">Otwórz Brulion, aby pokazać tu swój notatnik</string>
+    <string name="brulion_widget_locked">Brulion jest zablokowany. Otwórz go, aby zobaczyć notatnik.</string>
     <string name="brulion_widget_add_task">Dodaj zadanie</string>
     <string name="brulion_widget_quick_note">Szybka notatka</string>
     <string name="brulion_widget_journal_today">Dziennik dziś</string>

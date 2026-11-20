@@ -1044,6 +1044,13 @@ Rectangle {
                 onTriggered: sidebar.openNewCanvas(contextMenu.path)
             }
             HidingItem {
+                objectName: "treeMenuNewEncrypted"
+                visible: contextMenu.isDir
+                text: qsTr("New encrypted page here…")
+                iconName: "lock"
+                onTriggered: AppController.requestItemAction("newEncryptedPage", contextMenu.path)
+            }
+            HidingItem {
                 objectName: "treeMenuNewFolder"
                 visible: contextMenu.isDir
                 text: qsTr("New folder…")
@@ -1172,6 +1179,12 @@ Rectangle {
                 text: qsTr("New canvas")
                 iconName: "layout-dashboard"
                 onTriggered: sidebar.openNewCanvas("")
+            }
+            BMenuItem {
+                objectName: "pagesMenuNewEncrypted"
+                text: qsTr("New encrypted page…")
+                iconName: "lock"
+                onTriggered: AppController.requestUiAction("newEncryptedPage")
             }
             BMenuItem {
                 objectName: "pagesMenuNewFolder"

@@ -120,6 +120,12 @@
 //   cloze.h        cloze deletions of flashcards (SYNTAX "Flashcards"): findClozes(text) ->
 //                  ClozeSpan{from, to, textFrom, textTo, number, hintFrom, hintTo} (`{{c1::a}}`,
 //                  `{{c1::a::hint}}`, Logseq's `{{cloze a}}`), shown tinted by the renderer
+//   encrypted.h    encrypted text of Meld Encrypt (SYNTAX §11 "Encrypted text"), syntax only:
+//                  findEncryptedFragments(text) -> EncryptedSpan{from, to, payloadFrom, payloadTo,
+//                  version Obsolete | Alpha | Beta | Gamma, hidden, hint} (`%%🔐γ 💡hint💡… 🔐%%`,
+//                  `🔐γ … 🔐`), encryptedFragmentText (what is written), maskEncryptedFragments
+//                  (what the search index reads), isEncryptedNotePath (`.mdenc`); decrypting is
+//                  the encryption module's
 //   math.h         LaTeX formulas (SYNTAX §11): findMathSpans(text) -> MathSpan{from, to,
 //                  contentFrom, contentTo, display} (`$…$`, `$$…$$`), renderMath(latex, display) ->
 //                  escaped Qt rich text (Unicode symbols, <sup> / <sub>, fractions, radicals)
@@ -151,6 +157,7 @@
 #include "markdown/blockprops.h"
 #include "markdown/cloze.h"
 #include "markdown/edit.h"
+#include "markdown/encrypted.h"
 #include "markdown/frontmatter.h"
 #include "markdown/highlight.h"
 #include "markdown/inline.h"

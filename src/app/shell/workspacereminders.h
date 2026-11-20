@@ -114,6 +114,9 @@ public:
     void setNotifyMissed(bool on);
     /// "pl" | "en": language of notification bodies and of `when`.
     void setLanguage(const QString &language);
+    /// Notifications say only "Reminder" / "Alarm", never the note's text (the app lock's setting,
+    /// docs/UI.md "App lock"); the armed set is handed over again.
+    void setHideNoteText(bool hide);
     /// In-app timer settings for tests (heartbeat, debounce in ms; 0 = scheduler defaults).
     void setTestIntervals(int heartbeatMs, int debounceMs);
 

@@ -882,7 +882,15 @@ public:
     /// A path part of a link (part:, docs/SYNTAX.md §2 "Path parts") navigates to
     /// {view: "page", target: the part's prefix, linkTarget, linkPart, from: this page} — the host
     /// resolves it to the page, the folder's pages or a new page; a malformed one does nothing.
+    /// An encrypted fragment's chip (`encrypted:<from>-<to>`, docs/UI.md "Encrypted notes") gives
+    /// {action: "encrypted", from, to (the fragment's range in the block's body), fragment (its
+    /// text), hint}: the editor's unlock dialog takes it from there.
     Q_INVOKABLE QVariantMap activateLink(int row, const QString &url, bool newPane = false);
+    /// The encrypted fragment `fragment` of row `row` — at [from, to) of its body, else wherever the
+    /// block now holds it (typed around meanwhile) — replaced by `text` (the fragment saved again,
+    /// with a new password, or its plaintext: "Decrypt permanently"), one undo step. False when the
+    /// block no longer holds that fragment or refuses edits (reading mode).
+    Q_INVOKABLE bool replaceEncryptedFragment(int row, int from, int to, const QString &fragment, const QString &text);
     /// The URL Alt+Enter follows at `position` of block `row`'s edit text (InlineEditor positions,
     /// mapped onto the body past the hidden task marker): InlineRenderer::linkUrlAt() with the
     /// row's render context — part: on a path part of a link, page: elsewhere in it, tag:, block:,
