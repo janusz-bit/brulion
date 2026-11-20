@@ -400,6 +400,27 @@ zsync=$(basename -- "$appimage").zsync
 rm -f -- "$appimage" "$appimage.zsync" "$zsync"
 
 info "Bundling Qt and packing $appimage"
+# Qt Multimedia's GStreamer backend (in Qt's aarch64 packages, not in the x86_64 ones) is set aside
+# while linuxdeploy deploys Qt and put back afterwards: linuxdeploy-plugin-qt deploys every plugin of
+# plugins/multimedia, and this one links GStreamer's libraries (gst-plugins-bad's libgstplay too),
+# which the build container lacks ("Could not find dependency: libgstpbutils-1.0.so.0") and an
+# AppImage cannot count on; the FFmpeg backend plays and records everything (it is removed below
+# all the same, for a Qt whose folder cannot be changed).
+gst_plugin=$QT_DIR/plugins/multimedia/libgstreamermediaplugin.so
+gst_aside=$BUILD_DIR/qt-gstreamer-plugin-aside
+restore_gst_plugin() {
+  if [[ -f $gst_aside/libgstreamermediaplugin.so ]]; then
+    mv -f -- "$gst_aside/libgstreamermediaplugin.so" "$gst_plugin"
+  fi
+}
+if [[ -f $gst_plugin ]]; then
+  mkdir -p -- "$gst_aside"
+  if mv -- "$gst_plugin" "$gst_aside/"; then
+    trap restore_gst_plugin EXIT
+  else
+    printf 'warning: cannot set %s aside: linuxdeploy needs GStreamer'"'"'s libraries to deploy it\n' "$gst_plugin" >&2
+  fi
+fi
 (
   export QMAKE=$QT_DIR/bin/qmake
   export LD_LIBRARY_PATH=$QT_DIR/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
@@ -451,6 +472,8 @@ info "Bundling Qt and packing $appimage"
   fi
   "$TOOLS_DIR/linuxdeploy-$ARCH.AppImage" --appdir "$APPDIR" --output appimage
 )
+restore_gst_plugin
+trap - EXIT
 [[ -f $appimage ]] || die "linuxdeploy produced no $appimage"
 chmod +x "$appimage"
 # The update file belongs next to the AppImage: the release publishes the two together, and the
