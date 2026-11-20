@@ -43,7 +43,8 @@ if [[ ! -f "${build_dir}/build.ninja" ]]; then
     # The dev shell's own Clang (it links with lld: flake.nix brulionStdenv), else the flake's.
     shell_cxx=$(command -v c++ || true)
     if [[ -n $shell_cxx && -x $(dirname "$shell_cxx")/clang++ ]] && "$shell_cxx" --version 2>/dev/null | grep -q clang; then
-      export CC="$(dirname "$shell_cxx")/clang" CXX="$(dirname "$shell_cxx")/clang++"
+      shell_bin=$(dirname "$shell_cxx")
+      export CC="${shell_bin}/clang" CXX="${shell_bin}/clang++"
     else
       clang_dir=$(nix build --no-link --print-out-paths --inputs-from . nixpkgs#clang)
       export CC="${clang_dir}/bin/clang" CXX="${clang_dir}/bin/clang++"
