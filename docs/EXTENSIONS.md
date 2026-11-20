@@ -1,8 +1,10 @@
 # Extensions (Luau)
 
 Brulion is scripted in [Luau](https://luau.org), a small, fast Lua with optional types. An
-**extension** is a script that adds commands to the palette, views of its own and reactions to
-saves and changes, and that reads and writes the open notebook through one API, the table `b`.
+**extension** is a script that adds commands to the palette, views of its own — shown on their
+own, inside a page (a ```` ```view ```` block) or in the side panel —, macros that show a value in
+the text of any note (`{{ext:silownia/rekord Przysiad}}`), variables for templates and reactions
+to saves and changes, and that reads and writes the open notebook through one API, the table `b`.
 Extensions come from two places:
 
 * **the notebook itself** — pages tagged `#extension` (`#rozszerzenie`) whose ```` ```luau ````
@@ -34,7 +36,8 @@ pages name every function of `b`.
 | To … | read |
 |---|---|
 | write a first extension | [Quick start](#quick-start), [How the code runs](#how-the-code-runs) |
-| look a function up | [The API (`b`)](#the-api-b), [Commands](#commands), [Views](#views), [Hooks](#hooks), [Questions](#questions), [AI](#ai-bai) |
+| look a function up | [The API (`b`)](#the-api-b), [Commands](#commands), [Views](#views), [Macros](#macros), [Hooks](#hooks), [Questions](#questions), [AI](#ai-bai) |
+| show a value in a note, a view in a page or the side panel | [Macros](#macros), [Template variables](#template-variables), [View blocks and panels](#view-blocks-and-panels) |
 | copy something that works | [Recipes](#recipes) |
 | find out why it does not work | [Errors](#errors), [Troubleshooting](#troubleshooting), [The Luau console](#the-luau-console) |
 | know what a page may do and when it runs | [Extensions in the notebook](#extensions-in-the-notebook), [Sandbox and limits](#sandbox-and-limits) |
@@ -109,6 +112,12 @@ annotations (`local n: number = 0`).
 * **Types are not checked.** Brulion ships Luau's compiler and virtual machine only: annotations
   and `--!strict` are accepted and ignored (a type checker on save is in TODO.md). Mistakes show
   when the line runs.
+* **Colours.** A ```` ```luau ```` (or ```` ```lua ````) block of any page — an extension page's
+  code — is shown in Luau's colours, as edited and as read, and so is such a fence in the source
+  mode: keywords, `nil` / `true` / `false`, the library's globals and `b` with its fields, the name
+  a `function` statement defines, numbers, strings (an interpolation's braces apart) and comments
+  (the core module `syntax`, `syntax/luau.h`: a lexer of one line that carries long strings and
+  comments to the next).
 * **The library**: `string`, `table`, `math`, `utf8`, `bit32`, `buffer`, `vector`, `coroutine`,
   `os.date` / `os.time` / `os.clock` / `os.difftime`, `debug.traceback` / `debug.info`, and the
   base functions (`pcall`, `error`, `assert`, `tonumber`, `tostring`, `type`, `select`, `next`,
@@ -182,7 +191,7 @@ Reading needs no permission.
 | `b.lines(name)` | the page's lines as written — indentation, markers, comments and all, without line endings (a BOM is no part of the first) —, each `{ text, ref }`: `ref` names that line as a block's `ref` names its first, for `b.replaceLine`, `b.insertLine` and `b.removeLine` (and the block functions when the line is a block's first). `nil` for a page that does not exist. What the flashcards write their scheduling comments with: a card's lines are no blocks of their own |
 | `b.attachments()` | the notebook's files that are no notes — pictures, PDFs, any other file —, as paths in the notebook (`"assets/receipt.jpg"`), sorted; nothing of the hidden and ignored folders |
 | `b.revision()` | a number that changes whenever a note changes — the editor, a sync, any extension's write: what a script computed from the notebook stays true while it is the same (the habits keep their statistics so) |
-| `b.checkExtension(name, text)` | loads `text` as the extension page `name` would load (a new page: where new pages go), in an engine of its own — its top-level code runs with 1 s and 32 MB, writes only computed, nothing stays registered, no approval needed: `{ ok, id, title, path, permissions, problems, commands = { { name, label, block } }, views = { { name, label, icon, actions } }, hooks = { events… }, printed, writes? }`, or `ok = false` with `error`, `line` (the page's line, from 1) and `status` (`"timeout"` …). Text that is no extension page (no tag, no code) has `ok = false` too. Inside such a check it reports an error instead of checking again |
+| `b.checkExtension(name, text)` | loads `text` as the extension page `name` would load (a new page: where new pages go), in an engine of its own — its top-level code runs with 1 s and 32 MB, writes only computed, nothing stays registered, no approval needed: `{ ok, id, title, path, permissions, problems, commands = { { name, label, block } }, views = { { name, label, icon, actions } }, hooks = { events… }, macros = { { name, description, args, example } }, variables = { { name, description } }, printed, writes? }`, or `ok = false` with `error`, `line` (the page's line, from 1) and `status` (`"timeout"` …). Text that is no extension page (no tag, no code) has `ok = false` too. Inside such a check it reports an error instead of checking again |
 
 `b.blocks({ tag = … })` and `tag:` in `b.query` differ: the first finds the blocks that carry the
 tag themselves, the query also those under a tagged block or on a tagged page, and `tag:project`
@@ -467,7 +476,6 @@ of one of the app's icons (`assets/icons/`: `folder`, `calendar-check`, `chart-c
 | `b.ui.link(page, label?, line?)` | a link that opens the page (and makes it when it does not exist) — at its `line`, counted from 1 as a block's `line` |
 | `b.ui.button(label, action, args?, { key?, primary?, tone?, hint?, icon? })` | a button that calls the view's action `action` with `args`. `key` is its keyboard shortcut while the view has the focus — `"space"`, `"enter"`, `"escape"`, `"backspace"`, a digit, a letter, `"ctrl+z"`, shown beside its label where there is a keyboard (the flashcards' Space and 1–4); `primary = true` fills it with the accent (the one thing to do — alone in a row it takes the row); `tone` (`"success"`, `"danger"`, `"warning"`, `"info"`, `"accent"`) tints it; `hint` is a second line under its label (a grade's next interval: buttons with one share their row, four to a line); `icon` one of the app's icons |
 | `b.ui.markdown(text, { size?, align?, muted? })` | Markdown as a note shows it — emphasis, links that open their pages, tags, highlights and clozes, lists, code —, rendered by the app (escaped: never the text's own HTML). `size` `"large"` (a flashcard's question) or `"small"`, `align = "center"`, `muted = true` |
-| `b.ui.progress(value, max, label?)` | a progress bar, `value` of `max`, with a caption above it |
 | `b.ui.stats({ { label, value, tone? }, … })` | numbers side by side, each a tile with its label under it (at most 8; four to a line, two on a phone) |
 | `b.ui.divider()` | a thin line across (between a card's question and its answer) |
 | `b.ui.menu(items, label?)` | a "⋯" button whose menu lists `items` (below); `label` is its name for a screen reader and its tooltip ("More" without one). On a line of its own or in a row |
@@ -480,6 +488,12 @@ of one of the app's icons (`assets/icons/`: `folder`, `calendar-check`, `chart-c
 | `b.ui.empty(title, text, icon?)` | an empty state: an icon (`icon`, one of the app's; else the gym's dumbbell), a title and a sentence |
 | `b.ui.open(label, view, params?, options?)` | opens another view of the extension (`""`: this one) with `params` — a link in a row, a "back"-like button on its own; with `options` as `b.ui.button`'s (`{ primary = true, icon = "play", key = "enter" }`) a button |
 | `b.ui.run(label, command)` | a button that runs one of the extension's commands (`ctx.page` is `""` there) |
+| `b.ui.input({ value?, placeholder?, label?, action, args?, multiline?, submit?, keep? })` | a text field and its button (`submit`: its label, "Add" by default): Enter — Ctrl+Enter when `multiline` —, the touch keyboard's Done or the button give the action `args` with `value`, the text (at most 20 000 characters; nothing for blank text); the field is emptied then, unless `keep`. `value` is what it holds at first: drawn again while being typed into, the field keeps what is typed |
+| `b.ui.select({ options, value?, label?, action, args? })` | the chosen option on a button whose menu lists `options` — texts, or `{ label, value }` —, the chosen one ticked; a choice gives the action `args` with `value`, the option's value |
+| `b.ui.slider({ value, min?, max?, step?, unit?, label?, action, args? })` | a number on a line (0 … 10, step 1 by default), shown beside it with its unit; arrows step, Page Up / Page Down ten steps, Home / End the ends; the action gets `value` once the change is over (the finger lifted, the key pressed), on the step's grid and within min and max |
+| `b.ui.date({ value?, label?, action, args? })` | a day on a button (`"2026-11-21"`, shown as "Sat, Nov 21"; none: "No date") whose calendar picks another — or "No date": `value` is `""` then |
+| `b.ui.toggle(on, action, args?, { label? })` | a switch with its label; a tap gives the action `value`, the state asked for (`true` / `false`) — it shows what the next drawing says, not what was tapped |
+| `b.ui.progress(value, max?, label?)`, `b.ui.progress({ value, max?, label?, tone? })` | a progress bar filled to `value` of `max` (1 by default; a value beyond either end is drawn at it), its label above it — muted, or in the colour of `tone` (`"success"`, `"danger"`, `"warning"`, `"accent"`, `"info"`); the bar is the accent's, or the tone's for success, danger and warning. Both forms make the same node: the flashcards' session writes `b.ui.progress(done, total, "3 reviewed …")` |
 
 **Menus** — of `b.ui.menu`, of a check, of a month's day — are lists of items, each `{ label,
 action, args?, icon? }` (the view's action), `{ label, page, line? }` (opens the page, at its line
@@ -491,9 +505,15 @@ those is left out, and the app gives a page and a journal item its icon when it 
 line, a row's button, an `open` with options) taps the first such button — unless a field of the
 view takes the key first (a stepper's number). Keys no button names go on as usual.
 
+The controls of the last six may stand in a row, beside checks and buttons (a text field 260 px
+wide there, a slider 240, a progress bar 200), or on a line of their own — a column's child —,
+which they then fill, without a row's card.
+
 A view shows at most 2000 lines; nodes it does not know are left out. `params` are the route's
 other keys — what an `open` node passed, `{}` from the palette; `view`, `extension`, `name` and
-`title` are the route's own and never reach `render`.
+`title` are the route's own and never reach `render`. A view drawn beside a note or in it (a
+panel, a ```` ```view ```` block: below) gets that note's `page`, `path` and `date` (a daily
+note's) too.
 
 `render` returns one node; a list of nodes is taken as a column of them, and anything else —
 nothing, a text — is an error ("The view could not be drawn: … returned nothing"), never an empty
@@ -505,6 +525,10 @@ the drawn view and given back to the action when it is tapped, so they must be p
 carry what the action needs — a block's `ref` and `text` — instead of something the function
 would look up again: a line that changed meanwhile is then refused (`stale:`), not overwritten.
 For that case the app says "The line changed in the meantime" and draws the view again.
+
+`meta.panel` — `true`, `"page"` or `"journal"` — also makes the view a section of the side panel
+beside every page and day, pages only or days of the journal only; `"sidebar"` a section of the
+pages panel at the left ("View blocks and panels").
 
 **When it is drawn.** `render` runs when the view opens, after every command and action — at
 once after an action of its controls —, and whenever a note changes anywhere (the editor, a sync).
@@ -624,6 +648,173 @@ end, {
         return if open.total > 0 then open.items[1].plain else "Nothing left to read"
     end,
 }, { label = "Reading", icon = "book-open" })
+```
+
+```luau
+-- How the day is: a slider, a choice, a note, a day and a switch — beside every day of the
+-- journal in the side panel too (panel = "journal").
+local mood = { level = 3, weather = "sun", walked = false }
+
+b.view("mood", function(params)
+    return b.ui.column({
+        b.ui.heading(`How is {params.date or b.today()}?`),
+        b.ui.slider({ value = mood.level, min = 1, max = 5, step = 1, label = "Mood", action = "level" }),
+        b.ui.select({
+            options = { { label = "Sun", value = "sun" }, { label = "Rain", value = "rain" }, "Snow" },
+            value = mood.weather, label = "Weather", action = "weather",
+        }),
+        b.ui.input({ placeholder = "What made it so?", action = "note", submit = "Write it down" }),
+        b.ui.row({
+            b.ui.date({ value = params.date or b.today(), label = "Day", action = "day" }),
+            b.ui.toggle(mood.walked, "walked", nil, { label = "A walk" }),
+        }),
+        b.ui.progress({ value = mood.level, max = 5, label = `{mood.level} of 5`, tone = "accent" }),
+    })
+end, {
+    level = function(args) mood.level = args.value end,
+    weather = function(args) mood.weather = args.value end,
+    walked = function(args) mood.walked = args.value end,
+    day = function(args) mood.day = args.value end,
+    note = function(args)
+        local walk = if mood.walked then ", a walk" else ""
+        b.appendToJournal(mood.day or b.today(), `- Mood {mood.level}/5, {mood.weather}{walk}: {args.value}`)
+        return "Noted"
+    end,
+}, { label = "Mood", icon = "heart", panel = "journal" })
+```
+
+## View blocks and panels
+
+**A ```` ```view ```` block** draws an extension's view inside a page (docs/SYNTAX.md §13 "View
+blocks"): its first line names the view, `<extension>/<view>`, the lines after it are its params,
+`key: value`:
+
+````markdown
+```view
+silownia/progress
+exercise: Przysiad
+```
+````
+
+The view is the extension's own — the same nodes, controls and actions as when it is opened on
+its own, interactive (a tap on a check writes the note, a text field takes what is typed) —,
+drawn by the same component (`ShellExtensionView`, `embedded`: as tall as its lines, no scrolling
+of its own); its params get the page's `page`, `path` and `date` (a daily note's) unless the block
+sets them. A click beside the controls — or Enter on the selected block — edits the source in
+place, the view under it drawn again as it is typed. Several blocks on one page are several views;
+each is drawn again after its extension's commands and actions and when a note changes, but only
+while it is on screen and its page shown (`ExtensionView.live`): a block scrolled out of the
+editor has no view at all, a page in a hidden tab or side panel draws its blocks when it is shown
+again. A block whose view cannot be drawn shows its source with the reason ("The view could not
+be drawn: …"); one of an extension that waits for approval on this device, is off or is unknown
+says so, with a button to run it, switch it on or see why. The slash menu offers every view with a
+label ("View: Mood"), which inserts such a block.
+
+**A panel**: a view with `meta.panel` is a section of the side panel — `"page"` beside pages,
+`"journal"` beside days of the journal, `true` beside both —, after the app's own sections, titled
+with the view's label (else the extension's title) and drawn for the note on screen (`page`,
+`path`, `date` among its params). On the desktop that is the panel docked beside the text; on a
+phone and in narrow windows the drawer from the right edge (docs/UI.md "Side panel"). The habits
+show the day's checks there (`nawyki`'s view `dzien`); the "Mood" view above is a panel beside
+every day. A panel whose view shows nothing for the note (an empty column: the habits' without
+habits) is left out. `panel = "sidebar"` puts the view into the **pages panel** instead — the left sidebar
+on the desktop, the left drawer on a phone —, a folding section after Favorites and Recent (its
+fold kept per device), drawn for the page or day on screen.
+
+## Macros
+
+`b.macro(name, fn, { description, args, example })` offers a **macro**: a note's
+`{{ext:<extension>/<name> arguments}}` shows what `fn(ctx)` returns, in the text where it stands —
+the note keeps the macro as written (docs/SYNTAX.md §13 "Macros"). `name` is letters (of any
+script), digits, `-`, `_` and `.`, the first a letter or a digit; the extension is named by its id
+(a page's title folded: "Licznik słów" → `licznik-slow`). The meta is for the editor: typing `{{`
+offers the extensions' macros with their `description`, the names of their `args` and their
+`example` arguments, which the completion writes in (`{{ext:silownia/rekord Przysiad}}`).
+
+| `ctx` | |
+|---|---|
+| `ctx.args` | the arguments, split at commas outside double quotes and trimmed: `{{ext:a/b Wyciskanie leżąc}}` → `{ "Wyciskanie leżąc" }`, `{{ext:a/b x, "y, z"}}` → `{ "x", "y, z" }` |
+| `ctx.text` | the arguments as written |
+| `ctx.page`, `ctx.path` | the note the macro is in: its name and its file |
+| `ctx.date` | its day, when the note is a daily note |
+
+It returns a text or a number (shown as `b.formatNumber` writes it), `b.ui.text` (muted, a
+tone), `b.ui.link` (a link to a page), `b.ui.heading` (bold) — or a list or `b.ui.row` of those,
+side by side; `nil` shows a dash. Anything else is an error. What it shows is always text of
+Brulion's own rendering, escaped — never HTML —, at most 32 pieces and 400 characters (more is cut
+with "…"), line breaks as blanks.
+
+```luau
+-- {{ext:docs/words Dom}}: the words of a page; {{ext:docs/open projekt}}: open tasks of a tag.
+b.macro("words", function(ctx)
+    local name = ctx.args[1] or ctx.page
+    local n = 0
+    for _ in (b.read(name) or ""):gmatch("%S+") do
+        n += 1
+    end
+    return { b.ui.heading(tostring(n)), " words in ", b.ui.link(name) }
+end, { description = "How many words a page has", args = { "page" }, example = "Dom" })
+
+b.macro("open", function(ctx)
+    local tag = ctx.args[1]
+    local query = if tag then `type:tasks status:open tag:{tag}` else "type:tasks status:open"
+    local total = b.query(query, 1).total
+    return b.ui.text(`{total} open`, { tone = if total == 0 then "success" else "danger" })
+end, { description = "Open tasks, of a tag or all of them", args = { "tag" }, example = "projekt" })
+```
+
+* **Never waiting.** Drawing a page never runs Luau: the app keeps every macro's value
+  (`extensions/macros.h`, `MacroCache`) and shows it — "…" until the first one is there — while it
+  computes the macros asked for after the frame that asked, a slice of 25 ms at a time.
+* **Kept current.** A call is recorded with what it read of the notebook (`Reads`: the notes it
+  read by name with `b.read`, `b.page`, `b.lines`, `b.blocks({ page = … })`; a query, a search, a list of pages
+  or blocks, `b.revision()` read everything): when one of those notes changes (or a note of a name
+  it looked for is made), its extension loads again, is approved, switched on or off, the macro is
+  computed again and the text shows its new value — the old one meanwhile. Only the rows whose
+  macro shows something else are drawn again.
+* **Bounded.** A call has 250 ms (a command's 2 s); one that runs out twice in a row is not run
+  again until its extension loads again. The macros of one note have 2 s together in a round of
+  changes (the rest show "the page's macros took too long" until the next change) and at most 200
+  of them are computed ("more than 200 macros on this page"). A macro cannot ask (`b.ask`,
+  `b.choose`, `b.form`, `b.ai` are errors) nor write (`b.write` … are refused: what it shows must
+  not change the notes it is drawn from).
+* **Placeholders.** A macro of an extension that waits for approval on this device shows
+  `🔒 extension/name · run?`; off, unknown or failed, a chip saying so. Clicking one asks to run
+  the extension (with "Read the code", which opens its page first), to switch it on, opens the code
+  at its error, or says that no running extension offers it (ShellMacroDialog). An error is in the
+  Luau console and the event log too.
+* **Exports** decide per format: HTML (a page, a site), PDF, DOCX and Pandoc show what the macro
+  showed in the app (computed then when it was not yet, a few seconds for the whole export), as
+  text; the Markdown, Obsidian and Logseq exports and the data ones keep `{{ext:…}}` as written,
+  and so do the clipboard's HTML, query results, the rows of the Tasks view and of the linked
+  references and `brulion-cli` (no extension runs there); a page or block embedded in a page
+  (`![[…]]`) shows its macros as its own page does. A macro inside code (a code span, a fenced block) or a
+  comment is text everywhere.
+
+## Template variables
+
+`b.variable(name, fn, { description, args })` offers templates a **variable**: a template's
+`{{<extension>/<name> arguments}}` is filled with what `fn(ctx)` returns — Markdown, any number of
+lines — when the editor inserts the template or starts a page or a day from it (docs/TEMPLATES.md
+"Variables of extensions"). `ctx` is a macro's (`args`, `text`, `page` and `path` of the note being
+filled) and `date`, the day the template is filled for (a daily note's own, a weekly or monthly
+note's first day), and `template`, the template's path. It returns a text, a number or nothing
+(`""`); anything else, an error or 1 s spent leaves the variable as written, with a message. It
+cannot ask nor write. Unlike a macro the value is written into the note once: a template that
+should show a value that stays current holds a macro, `{{ext:…}}`, which a template leaves as it is.
+
+```luau
+-- {{docs/agenda}} in a journal template: the open tasks due by that day.
+b.variable("agenda", function(ctx)
+    local day = ctx.date or b.today()
+    local lines = {}
+    for _, task in b.query("type:tasks status:open sort:due", 50).items do
+        if task.due and task.due <= day then
+            table.insert(lines, `- [ ] {task.plain} ([[{task.page}]])`)
+        end
+    end
+    return if #lines > 0 then table.concat(lines, "\n") else "- Nothing due"
+end, { description = "Open tasks due by the note's day" })
 ```
 
 ## Hooks
@@ -1386,6 +1577,8 @@ Home:7
 | Time | 2 s per call, per load and per continuation after an answer |
 | Memory | 64 MB for all extensions of the notebook together |
 | A view | 2000 lines, 24 controls in a row, 32 levels of columns |
+| A macro | 250 ms a call (two timeouts in a row: not run again until the extension loads again), 32 pieces and 400 characters; 200 macros and 2 s of calls per note and round of changes; 256 macros (and as many template variables) per extension |
+| A template variable | 1 s a call, 20 000 characters |
 | `b.blocks` | 20 000 blocks |
 | `b.search` / `b.query` | 200 hits / 1000 items |
 | `b.sorted` | 100 000 texts |
@@ -1444,10 +1637,18 @@ Home:7
 | `src/app/shell/workspacechats.h` | `WorkspaceChats` (QML `Workspace.chats`): the AI chat's conversations as pages (core `chat`), one turn at a time, Stop, Try again (docs/UI.md "AI chat") |
 | `src/cli/commands_extensions.cpp` | `brulion-cli extension …` (docs/CLI.md "Extensions"): this reference (bundled), the extension pages and their state on the device, a sandbox for checks and runs, writing a page |
 | `src/app/shell/extensionmodels.h` | `ExtensionListModel` (Settings → Extensions), `ExtensionConsoleModel` (the console's lines) |
-| `src/app/shell/extensionviewmodel.h` | `ExtensionView` (QML): a view's node tree as a list; `qml/shell/ShellExtensionView.qml` draws it |
+| `src/app/shell/extensionviewmodel.h` | `ExtensionView` (QML): a view's node tree as a list (a ```` ```view ```` block's source, a note's params, `live`); `qml/shell/ShellExtensionView.qml` draws it — on its own or `embedded` in a page (`qml/editor/ViewBlockView.qml`) and in the side panel (`ContentSidePanel`) |
+| `src/core/markdown/macros.h` | the syntax: `findMacros` (`{{ext:…}}`), `macroArguments`, `findMacrosInNote` / `replaceMacros` (outside code), `parseViewBlock`, `MacroView` — what the renderer shows (`RenderContext::macro`) |
+| `src/core/extensions/macros.h` | `macroViewFrom` (a value as pieces, bounded), `variableTextFrom`, `MacroCache` (values with what their calls read, stale when that changes) |
+| `src/app/shell/workspacemacros.cpp` | `WorkspaceExtensions`' macros (the cache, the calls after the frame, the budgets, `macrosChanged`), template variables, panels, the views a block can show, what an export's documents show |
+| `src/core/syntax/luau.h` | Luau's syntax colours: `lexLuauLine` (the editor's `MarkdownHighlighter`) |
+| `qml/shell/ShellMacroDialog.qml` | what a macro's (or a view block's) placeholder offers: run, switch on, the code, why |
 | `qml/views/ConsoleView.qml`, `qml/views/ExtensionRouteView.qml` | the Luau console (route `console`), an extension page's view (route `extension`) |
 | `qml/views/GymView.qml`, `qml/views/HabitsView.qml`, `qml/views/FlashcardsView.qml` | the built-ins' own views (routes `gym`, `habits`, `flashcards`): a header of QML — tabs, a month row, buttons — over `ShellExtensionView` |
 | `qml/shell/ShellExtensionQuestion.qml` | the dialog of `b.ask` / `b.choose` / `b.form` (number and text fields) |
+
+A call is **recorded** while `Engine::startRecording()` is on: the read functions of `b` note
+what they read (`noteRead`, `noteReadAll`) into `Reads` — what makes a macro computed again.
 
 A new function of `b`: its implementation in `engine.cpp` (a thin `api…` wrapper around an `…Impl`
 that returns before anything is raised), what it needs of the app in `Host` (`host.h`,
@@ -1470,6 +1671,16 @@ the Spaced Repetition plugin and of Logseq with Polish text and malformed lines,
 and read back (FSRS and SM-2 segments, siblings, a comment on its own line, Logseq's properties,
 every other byte kept), the queue and its limits, the views' nodes, a grade and its undo, the
 review log; `tst_sync_cardmerge` the merge of two devices' reviews (`sync/cardmerge.h`).
+
+`tests/core/extensions/tst_extensions_macros.cpp`: macros and template variables on a real
+notebook — their meta, the context, what a value shows (escaped, bounded), the time limit, writes
+and questions refused, what a call read, the cache going stale with a note read, a name made, the
+extension loaded again, giving up after timeouts, the per-page bound —, the new nodes of `b.ui`,
+panels, hostile extensions; `tests/core/markdown/tst_markdown_macros.cpp` the syntax (what is a
+macro and what stays text: Logseq's macros, template variables, code, comments, escapes, hostile
+input), the renderer's pieces and placeholders, view blocks, macros in a whole note and as
+Markdown; `tests/core/syntax/tst_syntax_luau.cpp` the Luau colours; the documentation's examples
+run their macros and variables too (`tst_extensions_docs`).
 
 `tests/core/extensions`: the engine (sandbox escapes, limits that cannot be caught, questions,
 views, hooks, evaluation, the locale), block edits, the API added for the habits on a real notebook
@@ -1521,4 +1732,10 @@ opens Flashcards from the palette, studies it with Space, 3 and U (taps on a pho
 card's line and the review log written and put back; `checkExtensionPages` writes an extension page as a sync would (it waits),
 approves it, opens its view from the palette, saves a change in the editor (it runs at once, still
 approved), saves a broken one (the error on its line, the previous version runs) and evaluates in
-the console.
+the console; `checkExtensionMacros` opens a note with a macro and a ```` ```view ```` block of an
+extension that arrived as a sync would (the macro a placeholder), runs it from the block's button
+and the dialog with real taps, sees the macro's value, types into the view's text field and sees
+the macro follow the note the view's action wrote. `tests/app/shell/tst_macros.cpp`
+(`tst_shell_macros`) runs macros, template variables, view blocks, panels and the new controls in
+the app's classes, `tst_editor_controller` the editor's side (rendering, the rows drawn again, the
+`{{` completion, "View: …", a template's variables).

@@ -1,5 +1,7 @@
 #include "markdown/templates.h"
 
+#include "markdown/macros.h"
+
 #include <QLocale>
 #include <QRegularExpression>
 
@@ -42,7 +44,9 @@ QString resolveVar(const QString &name, const QString &arg, const TemplateVars &
 
 TemplateResult applyTemplate(QStringView tpl, const TemplateVars &vars)
 {
-    static const QRegularExpression re(u"\\{\\{[ \\t]*([A-Za-z]+)[ \\t]*(?::([^}\\r\\n]*))?\\}\\}"_s);
+    // {{name}} / {{name:argument}}, or an extension's {{extension/name arguments}}.
+    static const QRegularExpression re(
+            u"\\{\\{[ \\t]*(?:([A-Za-z]+)[ \\t]*(?::([^}\\r\\n]*))?|([A-Za-z0-9_-]+)/([^\\s{}/]+)(?:[ \\t]+([^}\\r\\n]*))?)\\}\\}"_s);
     TemplateResult out;
     qsizetype last = 0;
     auto it = re.globalMatchView(tpl);
@@ -50,6 +54,15 @@ TemplateResult applyTemplate(QStringView tpl, const TemplateVars &vars)
         const auto m = it.next();
         out.text += tpl.sliced(last, m.capturedStart(0) - last);
         last = m.capturedEnd(0);
+        if (m.capturedLength(3) > 0) {
+            // A variable of an extension: what it gives, else as written.
+            const QString name = m.captured(4).trimmed();
+            const std::optional<QString> value = vars.variable && isMacroName(name)
+                                                         ? vars.variable(m.captured(3).toLower(), name, m.captured(5).trimmed())
+                                                         : std::nullopt;
+            out.text += value ? *value : m.captured(0);
+            continue;
+        }
         const QString name = m.captured(1).toLower();
         if (name == u"cursor") {
             if (out.cursor < 0)

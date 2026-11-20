@@ -421,6 +421,11 @@ private Q_SLOTS:
         // (A fence's language is read in lower case: ```Mermaid is a diagram too.)
         QTest::newRow("Mermaid case") << u"```Mermaid\ngraph TD\n```\n"_s << 0 << u"mermaid"_s << u"graph TD"_s << 11
                                       << QString();
+        // ```view: an extension's view in the page (docs/SYNTAX.md §13 "View blocks").
+        QTest::newRow("view") << u"```view\nsilownia/today\nexercise: Przysiad\n```\n"_s << 0 << u"view"_s
+                              << u"silownia/today\nexercise: Przysiad"_s << 8 << QString();
+        QTest::newRow("list view") << u"- ```view\n  nawyki/month\n  ```\n"_s << 0 << u"view"_s << u"nawyki/month"_s
+                                   << 8 << QString();
         QTest::newRow("list math") << u"- ```math\n  a^2 + b^2 = c^2\n  ```\n"_s << 0 << u"math"_s
                                    << u"a^2 + b^2 = c^2"_s << 8 << QString();
         QTest::newRow("code with id") << u"```js\nlet a = 1\n```\n^kod123\n"_s << 0 << u"code"_s << u"let a = 1"_s << 6
@@ -1040,6 +1045,20 @@ private Q_SLOTS:
         QTest::newRow("inside code") << u"`[[x`"_s << 4 << QString() << QString() << -1 << -1 << QString() << QString();
         QTest::newRow("second line") << u"pierwsza\n[[dru"_s << 14 << u"pages"_s << u"dru"_s << 11 << 14 << u"[["_s << QString();
         QTest::newRow("bad cursor") << u"[[x"_s << 99 << QString() << QString() << -1 << -1 << QString() << QString();
+        // {{ completes the extensions' macros (docs/SYNTAX.md §13 "Macros"): what follows `ext:`.
+        QTest::newRow("macros") << u"Rekord {{ext:sil"_s << 16 << u"macros"_s << u"sil"_s << 9 << 16 << u"{{"_s << QString();
+        QTest::newRow("macros bare") << u"{{"_s << 2 << u"macros"_s << QString() << 2 << 2 << u"{{"_s << QString();
+        QTest::newRow("macros without ext") << u"x {{ nawyk"_s << 10 << u"macros"_s << u"nawyk"_s << 5 << 10 << u"{{"_s
+                                            << QString();
+        QTest::newRow("macros polish") << u"{{ext:nawyki/ś"_s << 14 << u"macros"_s << u"nawyki/ś"_s << 2 << 14 << u"{{"_s
+                                       << QString();
+        QTest::newRow("macros closed") << u"{{ext:si}} dalej"_s << 8 << u"macros"_s << u"si"_s << 2 << 8 << u"{{"_s
+                                       << u"}}"_s;
+        QTest::newRow("macros with arguments") << u"{{ext:a/b Przysiad"_s << 18 << QString() << QString() << -1 << -1
+                                               << QString() << QString();
+        QTest::newRow("macros escaped") << u"\\{{ext:a"_s << 8 << QString() << QString() << -1 << -1 << QString()
+                                        << QString();
+        QTest::newRow("macros in code") << u"`{{ext:a"_s << 8 << QString() << QString() << -1 << -1 << QString() << QString();
     }
 
     void triggers()

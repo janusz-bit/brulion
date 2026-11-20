@@ -266,6 +266,23 @@ b.command("podsumowanie", function(ctx)
 end, { label = "Podsumuj mój tydzień (AI)" })
 ```
 
+## Postęp projektu w jego własnym tekście
+Napisz `{{ext:przepisy/postep}}` na stronie projektu (albo `{{ext:przepisy/postep Ogród}}` gdziekolwiek): pokazuje, ile jego zadań jest zrobionych, i nadąża za nimi, gdy je odhaczasz. Zamiast `przepisy` wpisz identyfikator swojego rozszerzenia — tytuł jego strony małymi literami.
+
+```luau
+b.macro("postep", function(ctx)
+    local strona = ctx.args[1] or ctx.page
+    local otwarte = b.query(`type:tasks status:open page:"{strona}"`, 1).total
+    local zrobione = b.query(`type:tasks status:done page:"{strona}"`, 1).total
+    local wszystkie = otwarte + zrobione
+    if wszystkie == 0 then
+        return b.ui.text("bez zadań", { muted = true })
+    end
+    local udzial = math.floor(zrobione / wszystkie * 100 + 0.5)
+    return b.ui.text(`{zrobione} z {wszystkie} zrobione ({udzial} %)`, { tone = if otwarte == 0 then "success" else "accent" })
+end, { description = "Ile zadań strony jest zrobionych", args = { "strona" }, example = "Dom" })
+```
+
 ## Dobre nawyki
 - Sprawdzaj, czego może nie być: `b.read` i `b.page` dają `nil` dla strony, której nie ma, `ctx.block` nie ma poza blokiem, a `ctx.page` jest pustym tekstem poza stroną.
 - W widoku daj kontrolce to, czego potrzebuje jej akcja (`ref`, `text`), zamiast szukać tego od nowa: wiersz, który się zmienił, zostanie wtedy odrzucony, a nie nadpisany.

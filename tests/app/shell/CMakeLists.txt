@@ -64,6 +64,11 @@ brulion_add_test(tst_shell_habits SOURCES tst_habits.cpp
 # the app's settings and the sidebar's due count.
 brulion_add_test(tst_shell_flashcards SOURCES tst_flashcards.cpp
     LIBS brulion_shell brulion_core_extensions brulion_core_index brulion_core_vault)
+# Macros, template variables, view blocks and panels as the app runs them (workspacemacros.cpp,
+# docs/EXTENSIONS.md "Macros", "View blocks and panels"): placeholders, values computed after the
+# frame and again when what they read changes, the new controls of extension views.
+brulion_add_test(tst_shell_macros SOURCES tst_macros.cpp
+    LIBS brulion_shell brulion_core_extensions brulion_core_index brulion_core_vault)
 brulion_add_test(tst_shell_demovault SOURCES tst_demovault.cpp
     LIBS brulion_shell brulion_core_vault brulion_core_markdown brulion_core_index brulion_core_calc
          brulion_core_dates brulion_core_diagram brulion_core_chart)

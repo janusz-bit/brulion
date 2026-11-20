@@ -190,7 +190,18 @@ private Q_SLOTS:
         open({{kDeck, kDeckText}});
         ExtensionViewModel model;
         draw(model, u"review"_s);
-        QCOMPARE(types(model).first(), u"progress"_s);
+        // The session's progress first: b.ui.progress(done, total, label) on a line of its own — a
+        // row of that one control without a card, as a lone progress bar of any view.
+        QCOMPARE(types(model).first(), u"row"_s);
+        QVERIFY(role(model, 0, ExtensionViewModel::BareRole).toBool());
+        const ExtensionControlsModel *progress = controlsOf(model, 0);
+        QVERIFY(progress);
+        QCOMPARE(progress->rowCount(), 1);
+        QCOMPARE(progress->data(progress->index(0), ExtensionControlsModel::TypeRole).toString(), u"progress"_s);
+        QCOMPARE(progress->data(progress->index(0), ExtensionControlsModel::ValueRole).toDouble(), 0.0);
+        QVERIFY(progress->data(progress->index(0), ExtensionControlsModel::MaxRole).toDouble() >= 1.0);
+        QVERIFY2(progress->data(progress->index(0), ExtensionControlsModel::LabelRole).toString().startsWith(u"0 ocenione · "_s),
+                 qPrintable(progress->data(progress->index(0), ExtensionControlsModel::LabelRole).toString()));
         const int question = rowOf(model, u"markdown"_s);
         QVERIFY(question > 0);
         QCOMPARE(role(model, question, ExtensionViewModel::SizeRole).toString(), u"large"_s);
@@ -204,7 +215,7 @@ private Q_SLOTS:
         QCOMPARE(buttons(model), (QStringList{u"Znowu [1]"_s, u"Trudne [2]"_s, u"Dobrze [3]"_s, u"Łatwe [4]"_s}));
         QVERIFY(rowOf(model, u"divider"_s) > 0);
         // The grades' second lines: their next intervals.
-        const ExtensionControlsModel *grades = controlsOf(model, rowOf(model, u"row"_s));
+        const ExtensionControlsModel *grades = controlsOf(model, rowOf(model, u"row"_s, 1));
         QCOMPARE(grades->data(grades->index(2), ExtensionControlsModel::HintRole).toString(), u"10 min"_s);
         QCOMPARE(grades->data(grades->index(0), ExtensionControlsModel::ToneRole).toString(), u"danger"_s);
         QVERIFY(model.activateKey(u"3"_s));

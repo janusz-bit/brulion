@@ -158,6 +158,60 @@ QString muted(const Palette &p, const QString &html)
     return u"<span style=\"color:"_s + safeColor(p.muted) + u"\">"_s + html + u"</span>"_s;
 }
 
+/// What a macro shows (RenderContext::macro): its pieces, or a placeholder. `href` ("" none): the
+/// macro: link of a placeholder.
+QString macroHtml(const MacroView &view, const MacroSpan &span, const Palette &pal, dates::UiLocale locale,
+                  const QString &href, const std::function<std::optional<QString>(const QString &)> &resolvePage)
+{
+    const bool english = locale == dates::UiLocale::English;
+    // (A word joiner after the slash: a line never breaks inside "extension/name".)
+    const QString name = span.extension + u"/\u2060"_s + span.name;
+    const auto placeholder = [&](const ChipColors &c, const QString &text) {
+        return href.isEmpty() ? chip(c, text) : linkChip(href, c, text);
+    };
+    switch (view.state) {
+    case MacroView::State::Ok: break;
+    case MacroView::State::Pending: return muted(pal, u"…"_s);
+    case MacroView::State::Unapproved:
+        return placeholder(pal.reminder, u"🔒 "_s + name + u" · "_s + (english ? u"run?"_s : u"uruchomić?"_s));
+    case MacroView::State::Off:
+        return placeholder(pal.neutral, name + u" · "_s + (english ? u"off"_s : u"wyłączone"_s));
+    case MacroView::State::Unknown: return placeholder(pal.neutral, name + u'?');
+    case MacroView::State::Error:
+        return placeholder(pal.overdue, name + u": "_s + elided(view.message.simplified(), 60));
+    case MacroView::State::TooMany: return placeholder(pal.neutral, u"… "_s + view.message);
+    }
+    QString html;
+    for (const MacroPiece &p : view.pieces) {
+        QString piece;
+        switch (p.kind) {
+        case MacroPiece::Kind::Text: {
+            piece = esc(p.text).replace(u'\n', u' ');
+            const QString color = p.tone == u"muted"     ? pal.muted
+                                  : p.tone == u"success" ? pal.recurrence.foreground
+                                  : p.tone == u"danger"  ? pal.overdue.foreground
+                                  : p.tone == u"accent"  ? pal.link
+                                                         : QString();
+            if (!color.isEmpty())
+                piece = u"<span style=\"color:"_s + safeColor(color) + u"\">"_s + piece + u"</span>"_s;
+            break;
+        }
+        case MacroPiece::Kind::Link: {
+            const bool resolved = p.page.isEmpty() || !resolvePage || resolvePage(p.page).has_value();
+            piece = link(u"page:"_s + percentEncoded(p.page), resolved ? pal.link : pal.unresolved,
+                         esc(p.text.isEmpty() ? p.page : p.text));
+            break;
+        }
+        case MacroPiece::Kind::Code:
+            piece = u"<code style=\"background-color:"_s + safeColor(pal.codeBackground) + u"\">"_s + esc(p.text)
+                    + u"</code>"_s;
+            break;
+        }
+        html += p.bold ? u"<b>"_s + piece + u"</b>"_s : piece;
+    }
+    return html.isEmpty() ? muted(pal, u"—"_s) : html;
+}
+
 /// Text outside atoms: escaped, line breaks as <br/>.
 QString escapeText(QStringView s)
 {
@@ -859,6 +913,19 @@ QString InlineRenderer::renderInline(QStringView text, bool topLevel, int depth,
     for (const MathSpan &span : findMathSpans(masked)) {
         atoms.append({span.from, span.to,
                       renderMath(text.sliced(span.contentFrom, span.contentTo - span.contentFrom), span.display)});
+    }
+
+    // Macros of extensions: {{ext:silownia/rekord Przysiad}} (docs/SYNTAX.md §13 "Macros",
+    // markdown/macros.h) — what the app says they show, escaped; unset, the macro as written. Found
+    // in the masked text: never in code or comments; in a link's label too.
+    if (m_ctx.macro) {
+        for (const MacroSpan &span : findMacros(masked)) {
+            const QString href = topLevel ? u"macro:"_s + QString::number(toBody(runs, span.from)) + u'-'
+                                                    + QString::number(toBody(runs, span.to))
+                                          : QString();
+            atoms.append({span.from, span.to,
+                          macroHtml(m_ctx.macro(span), span, pal, m_ctx.locale, href, m_ctx.resolvePage)});
+        }
     }
 
     std::optional<TaskStatus> taskStatus;

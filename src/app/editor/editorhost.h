@@ -321,6 +321,35 @@ public:
     /// clipboard's plain text is pasted then).
     virtual QString htmlToMarkdown(const QString & /*html*/) const { return {}; }
 
+    // --- Macros and template variables of extensions (docs/SYNTAX.md §13 "Macros") -------------
+    /// The host computes macros (`{{ext:silownia/rekord Przysiad}}`): the renderer asks macroView().
+    /// False (the default): a macro shows as written.
+    virtual bool rendersMacros() const { return false; }
+    /// What the macro `macro` written in the note `path` shows now — a value computed before, or a
+    /// placeholder (being computed, its extension not approved, off, unknown): it never waits, and
+    /// macrosChanged() follows when a value arrives.
+    virtual markdown::MacroView macroView(const markdown::MacroSpan & /*macro*/, const QString & /*path*/) const
+    {
+        markdown::MacroView view;
+        view.state = markdown::MacroView::State::Unknown;
+        return view;
+    }
+    /// The macros the extensions offer for the `{{` completion whose names (or extensions,
+    /// descriptions) match `prefix`: rows {title (`ext/name`), subtitle (the description, the
+    /// extension's title), insertText (`ext:ext/name example`), hint (its arguments' names)}.
+    virtual QVariantList suggestMacros(const QString & /*prefix*/, int /*limit*/ = 20) const { return {}; }
+    /// The views of extensions a ```view block can show (the slash menu's "View: …"): rows
+    /// {source (`extension/view`), title, icon}.
+    virtual QVariantList embeddableViews() const { return {}; }
+    /// A template's variable `{{<extension>/<name> arguments}}` (docs/TEMPLATES.md "Variables of
+    /// extensions") filled for `context` ({page, path, date, template}): its text, or nullopt to
+    /// leave it as written (no such variable, it failed).
+    virtual std::optional<QString> templateVariable(const QString & /*extension*/, const QString & /*name*/,
+                                                    const QString & /*arguments*/, const QVariantMap & /*context*/)
+    {
+        return std::nullopt;
+    }
+
     // --- Navigation --------------------------------------------------------------------------
     /// Open a route ({view: "page", path, line?, blockId?} / {view: "tag", tag} — the page the
     /// tag names / {view: "journal", date: "YYYY-MM-DD"}, see docs/UI.md); newPane = side
@@ -345,6 +374,9 @@ Q_SIGNALS:
     void webPictureChanged(const QString &url);
     /// The thumbnails of the PDF at `path` (a vault path) changed (pdfThumbnail()): drawn, failed.
     void pdfThumbnailChanged(const QString &path);
+    /// What macros show changed (a value computed, an extension approved, switched off or loaded
+    /// again): editors ask macroView() again for the rows that show one.
+    void macrosChanged();
 };
 
 /// What a path part of a link opens (markdown::LinkPartTarget) as EditorHost::linkPart() gives

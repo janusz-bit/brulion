@@ -11,23 +11,33 @@ import Brulion
 // menu on a right-click or a long press —, a link, a text, steppers — − number +, the number typed
 // in as well —, buttons, menus), month grids (a cell per day, tinted by its state; a tap is the
 // day's action, a right-click or a long press its menu), a chart (ChartView), tables, Markdown
-// rendered as a note shows it (links open their pages), a progress bar, numbers side by side
-// (stats) and dividers. A button may have a keyboard shortcut (`key`: a key pressed while the view
-// has the focus taps it — the flashcards' Space and 1–4), be the primary one, have a tone and a
-// second line (`hint`: a grade's next interval). The lines
+// rendered as a note shows it (links open their pages), progress bars, numbers side by side
+// (stats), dividers, and the controls that take what is typed or chosen — a text field (one line,
+// or several: Ctrl+Enter or its button gives the text), a select (a button whose menu lists the
+// options), a slider, a date (a button that opens a calendar), a switch —, in rows or on a line of
+// their own (`lineBare`: a row without a card; so is a progress bar alone). A button may have a
+// keyboard shortcut (`key`: a key pressed while the view has the focus taps it — the flashcards'
+// Space and 1–4), be the primary one, have a tone and a second line (`hint`: a grade's next
+// interval). The lines
 // of a card stay lines of the list: each draws its part of the card (LineFrame). Nothing of the
 // extension is QML: it returns data (b.ui nodes), this file draws it. The model changes lines in
 // place when the view is drawn again with lines of the same kinds, so a field keeps its focus (and
 // the touch keyboard) across a write.
 //
 //   ShellExtensionView { lines: gymModel; maximumWidth: 720; header: Item { … } }
+//   ShellExtensionView { lines: blockModel; embedded: true }   // a ```view block, a side panel's section
+//
+// `embedded`: the list is part of a page or a panel — as tall as its lines (no scrolling of its own,
+// no scroll bar, no margins: the wheel and flicks go to what holds it), every line made at once.
 ListView {
     id: list
 
     required property ExtensionView lines
     property int maximumWidth: 720
+    property bool embedded: false
     /// The side margin of the lines (the column is centred up to maximumWidth).
-    readonly property real inset: Math.max(Theme.narrow ? Theme.space3 : Theme.space6, (width - maximumWidth) / 2)
+    readonly property real inset: list.embedded ? 0
+                                                : Math.max(Theme.narrow ? Theme.space3 : Theme.space6, (width - maximumWidth) / 2)
     readonly property real lineWidth: width - 2 * inset
     /// The height of a row's controls (each centred in it): the touch target on touch UIs.
     readonly property int controlHeight: Theme.touchUi ? Theme.touchTarget : Theme.controlHeight
@@ -181,13 +191,70 @@ ListView {
         })
     }
 
+    // ---- The date picker of a date control (one, made the first time it opens) ---------------
+    property int dateRow: -1
+    property int dateControl: -1
+    property BDialog datePopup: null
+    property string dateValue: ""
+    /// Opens the calendar of the date control `control` of line `row` on `date` ("" today).
+    function openDate(row: int, control: int, date: string): void {
+        list.dateRow = row
+        list.dateControl = control
+        list.dateValue = date !== "" ? date : DatesHelper.today
+        if (!list.datePopup)
+            list.datePopup = dateComponent.createObject(list) as BDialog
+        if (list.datePopup)
+            list.datePopup.open()
+    }
+    /// The calendar's day (or "" for none) goes to the date control's action.
+    function pickDate(date: string): void {
+        const row = list.dateRow
+        const control = list.dateControl
+        list.lines.submitText(row, control, date)
+    }
+    Component {
+        id: dateComponent
+        BDialog {
+            id: dateDialog
+            objectName: "extensionDateDialog"
+            title: qsTr("Pick a day")
+            preferredWidth: Theme.dialogWidthSm
+            acceptText: qsTr("Choose")
+            onAccepted: {
+                picker.commitPending()
+                list.pickDate(list.dateValue)
+            }
+            footerLeading: BButton {
+                text: qsTr("No date")
+                variant: "ghost"
+                onClicked: {
+                    dateDialog.close()
+                    list.pickDate("")
+                }
+            }
+            BDatePicker {
+                id: picker
+                objectName: "extensionDatePicker"
+                Layout.fillWidth: true
+                selectedDate: list.dateValue
+                onPicked: (value) => { list.dateValue = DatesHelper.specDate(value) }
+            }
+        }
+    }
+
     model: lines
-    TouchFlick.enabled: true
-    clip: true
+    TouchFlick.enabled: !list.embedded
+    clip: !list.embedded
     spacing: Theme.space2
     boundsBehavior: Flickable.StopAtBounds
-    bottomMargin: Theme.space8
-    BRowScrollBar { list: list }
+    bottomMargin: list.embedded ? 0 : Theme.space8
+    interactive: !list.embedded
+    // Embedded: as tall as its lines (a view on its own is sized by what holds it).
+    Binding on height {
+        when: list.embedded
+        value: list.contentHeight
+    }
+    BRowScrollBar { list: list; visible: !list.embedded }
     Accessible.role: Accessible.List
 
     /// A link-like text (an exercise's page, another view).
@@ -589,39 +656,6 @@ ListView {
             }
         }
         DelegateChoice {
-            roleValue: "progress"
-            LineFrame {
-                id: progressLine
-                required property string lineText
-                required property real lineValue
-                required property real lineMax
-                contentHeight: (progressLine.lineText !== "" ? progressLabel.implicitHeight + Theme.space1 : 0) + progressBar.height
-                BText {
-                    id: progressLabel
-                    visible: progressLine.lineText !== ""
-                    x: progressLine.contentX
-                    y: progressLine.topPad
-                    width: progressLine.contentWidth
-                    text: progressLine.lineText
-                    variant: "caption"
-                    elide: Text.ElideRight
-                }
-                BProgressBar {
-                    id: progressBar
-                    objectName: "extensionProgress"
-                    x: progressLine.contentX
-                    y: progressLine.topPad + (progressLine.lineText !== "" ? progressLabel.implicitHeight + Theme.space1 : 0)
-                    width: progressLine.contentWidth
-                    thickness: 6
-                    from: 0
-                    to: progressLine.lineMax
-                    value: progressLine.lineValue
-                    tone: "accent"
-                    Accessible.name: progressLine.lineText
-                }
-            }
-        }
-        DelegateChoice {
             roleValue: "stats"
             LineFrame {
                 id: statsLine
@@ -867,12 +901,14 @@ ListView {
                 objectName: "extensionRow"
                 required property int index
                 required property ExtensionControlsModel lineControls
-                // Inside a card the controls are part of it; on their own they make a card of their own.
-                readonly property real rowPad: row.inCard ? 0 : Theme.space3
+                required property bool lineBare
+                // Inside a card the controls are part of it; on their own they make a card of their
+                // own — unless it is one control on a line of its own (a text field, a slider).
+                readonly property real rowPad: row.inCard || row.lineBare ? 0 : Theme.space3
                 contentHeight: flow.implicitHeight + 2 * row.rowPad
                 Rectangle {
                     id: card
-                    visible: !row.inCard
+                    visible: !row.inCard && !row.lineBare
                     x: row.contentX
                     y: row.topPad
                     width: row.contentWidth
@@ -1160,6 +1196,301 @@ ListView {
                                         }
                                     }
                                   }
+                                }
+                            }
+                            // A text field: Enter (Ctrl+Enter in one of several lines) or its button
+                            // gives the text to the action; it is emptied then, unless `keep`.
+                            DelegateChoice {
+                                roleValue: "input"
+                                Item {
+                                    id: inputControl
+                                    required property int controlIndex
+                                    required property string controlText
+                                    required property string controlPlaceholder
+                                    required property string controlLabel
+                                    required property string controlSubmit
+                                    required property bool controlMultiline
+                                    required property bool controlKeep
+                                    objectName: "extensionInput"
+                                    // Alone on its line: the line's width; beside other controls 260 px at most.
+                                    width: row.lineBare ? flow.width : Math.min(flow.width, 260)
+                                    height: Math.max(inputColumn.implicitHeight, list.controlHeight)
+
+                                    function typed(): string {
+                                        return inputControl.controlMultiline ? inputArea.typedText : inputField.typedText
+                                    }
+                                    function showValue(): void {
+                                        inputField.text = inputControl.controlText
+                                        inputArea.text = inputControl.controlText
+                                    }
+                                    function submit(): void {
+                                        const rowIndex = row.index
+                                        const controlIndex = inputControl.controlIndex
+                                        const text = inputControl.typed()
+                                        if (Js.trim(text) === "")
+                                            return
+                                        if (list.lines.submitText(rowIndex, controlIndex, text) && !inputControl.controlKeep) {
+                                            inputField.text = ""
+                                            inputArea.text = ""
+                                        }
+                                    }
+                                    // The script's value when it changes (not while typing: a view drawn
+                                    // again in place keeps what is being typed).
+                                    onControlTextChanged: if (!inputField.activeFocus && !inputArea.activeFocus) inputControl.showValue()
+                                    Component.onCompleted: inputControl.showValue()
+
+                                    Column {
+                                        id: inputColumn
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        width: parent.width
+                                        spacing: Theme.space1
+                                        BText {
+                                            visible: inputControl.controlLabel !== ""
+                                            width: parent.width
+                                            text: inputControl.controlLabel
+                                            variant: "caption"
+                                            color: Theme.fgMuted
+                                            elide: Text.ElideRight
+                                        }
+                                        Item {
+                                            width: parent.width
+                                            height: inputControl.controlMultiline ? inputArea.implicitHeight : inputField.implicitHeight
+                                            BTextField {
+                                                id: inputField
+                                                objectName: "extensionInputField"
+                                                visible: !inputControl.controlMultiline
+                                                width: parent.width - submitButton.width - Theme.space2
+                                                placeholderText: inputControl.controlPlaceholder
+                                                accessibleName: inputControl.controlLabel !== "" ? inputControl.controlLabel
+                                                                                                 : inputControl.controlPlaceholder
+                                                onAccepted: inputControl.submit()
+                                            }
+                                            BTextArea {
+                                                id: inputArea
+                                                objectName: "extensionInputArea"
+                                                visible: inputControl.controlMultiline
+                                                width: parent.width - submitButton.width - Theme.space2
+                                                height: Math.max(implicitHeight, 3 * Theme.controlHeight / 2)
+                                                placeholderText: inputControl.controlPlaceholder
+                                                accessibleName: inputControl.controlLabel !== "" ? inputControl.controlLabel
+                                                                                                 : inputControl.controlPlaceholder
+                                                Keys.onReturnPressed: (event) => {
+                                                    if (event.modifiers & Qt.ControlModifier) {
+                                                        event.accepted = true
+                                                        inputControl.submit()
+                                                    } else {
+                                                        event.accepted = false
+                                                    }
+                                                }
+                                            }
+                                            BButton {
+                                                id: submitButton
+                                                objectName: "extensionInputSubmit"
+                                                x: parent.width - width
+                                                y: inputControl.controlMultiline ? parent.height - height : (parent.height - height) / 2
+                                                text: inputControl.controlSubmit !== "" ? inputControl.controlSubmit : qsTr("Add")
+                                                size: "small"
+                                                variant: "primary"
+                                                onClicked: inputControl.submit()
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            // A select: the chosen option on a button whose menu lists them all.
+                            DelegateChoice {
+                                roleValue: "select"
+                                Item {
+                                    id: selectControl
+                                    required property int controlIndex
+                                    required property string controlText
+                                    required property string controlLabel
+                                    required property bool controlHasMenu
+                                    objectName: "extensionSelect"
+                                    width: Math.min(selectColumn.implicitWidth, flow.width)
+                                    height: Math.max(selectColumn.implicitHeight, list.controlHeight)
+                                    Column {
+                                        id: selectColumn
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        spacing: Theme.space1
+                                        BText {
+                                            visible: selectControl.controlLabel !== ""
+                                            text: selectControl.controlLabel
+                                            variant: "caption"
+                                            color: Theme.fgMuted
+                                        }
+                                        BButton {
+                                            id: selectButton
+                                            objectName: "extensionSelectButton"
+                                            text: selectControl.controlText !== "" ? selectControl.controlText : qsTr("Choose…")
+                                            size: "small"
+                                            iconName: "chevron-down"
+                                            enabled: selectControl.controlHasMenu
+                                            Accessible.name: selectControl.controlLabel !== ""
+                                                             ? qsTr("%1: %2").arg(selectControl.controlLabel).arg(selectButton.text)
+                                                             : selectButton.text
+                                            onClicked: list.openMenu(row.index, selectControl.controlIndex, "", selectButton, 0, selectButton.height)
+                                        }
+                                    }
+                                }
+                            }
+                            // A slider: its value beside it, the action when a change is over.
+                            DelegateChoice {
+                                roleValue: "slider"
+                                Item {
+                                    id: sliderControl
+                                    required property int controlIndex
+                                    required property real controlValue
+                                    required property real controlMin
+                                    required property real controlMax
+                                    required property real controlStep
+                                    required property string controlUnit
+                                    required property string controlLabel
+                                    objectName: "extensionSlider"
+                                    width: row.lineBare ? flow.width : Math.min(flow.width, 240)
+                                    height: sliderColumn.implicitHeight
+                                    function shown(value: real): string {
+                                        const number = list.lines.formatNumber(value)
+                                        return sliderControl.controlUnit !== "" ? number + " " + sliderControl.controlUnit : number
+                                    }
+                                    function commit(value: real): void {
+                                        const rowIndex = row.index
+                                        const controlIndex = sliderControl.controlIndex
+                                        const snappedValue = list.lines.snapped(rowIndex, controlIndex, value)
+                                        if (snappedValue !== sliderControl.controlValue)
+                                            list.lines.activateControl(rowIndex, controlIndex, snappedValue)
+                                    }
+                                    Column {
+                                        id: sliderColumn
+                                        width: parent.width
+                                        spacing: 0
+                                        BText {
+                                            visible: sliderControl.controlLabel !== ""
+                                            width: parent.width
+                                            text: sliderControl.controlLabel
+                                            variant: "caption"
+                                            color: Theme.fgMuted
+                                            elide: Text.ElideRight
+                                        }
+                                        BSlider {
+                                            id: slider
+                                            objectName: "extensionSliderControl"
+                                            width: parent.width
+                                            from: sliderControl.controlMin
+                                            to: sliderControl.controlMax
+                                            stepSize: sliderControl.controlStep
+                                            value: sliderControl.controlValue
+                                            valueText: sliderControl.shown(slider.value)
+                                            accessibleName: sliderControl.controlLabel
+                                            onCommitted: (value) => sliderControl.commit(value)
+                                        }
+                                    }
+                                }
+                            }
+                            // A date: a button with the day; its calendar picks another or none.
+                            DelegateChoice {
+                                roleValue: "date"
+                                Item {
+                                    id: dateControl
+                                    required property int controlIndex
+                                    required property string controlText
+                                    required property string controlLabel
+                                    objectName: "extensionDate"
+                                    width: Math.min(dateColumn.implicitWidth, flow.width)
+                                    height: Math.max(dateColumn.implicitHeight, list.controlHeight)
+                                    Column {
+                                        id: dateColumn
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        spacing: Theme.space1
+                                        BText {
+                                            visible: dateControl.controlLabel !== ""
+                                            text: dateControl.controlLabel
+                                            variant: "caption"
+                                            color: Theme.fgMuted
+                                        }
+                                        BButton {
+                                            id: dateButton
+                                            objectName: "extensionDateButton"
+                                            text: dateControl.controlText !== "" ? DatesHelper.formatShort(dateControl.controlText) : qsTr("No date")
+                                            size: "small"
+                                            iconName: "calendar"
+                                            Accessible.name: dateControl.controlLabel !== ""
+                                                             ? qsTr("%1: %2").arg(dateControl.controlLabel).arg(dateButton.text)
+                                                             : dateButton.text
+                                            onClicked: list.openDate(row.index, dateControl.controlIndex, dateControl.controlText)
+                                        }
+                                    }
+                                }
+                            }
+                            DelegateChoice {
+                                roleValue: "toggle"
+                                Item {
+                                    id: toggleControl
+                                    required property int controlIndex
+                                    required property bool controlChecked
+                                    required property string controlLabel
+                                    objectName: "extensionToggle"
+                                    width: row.lineBare ? flow.width : Math.min(toggle.implicitWidth, flow.width)
+                                    height: Math.max(toggle.implicitHeight, list.controlHeight)
+                                    BSwitch {
+                                        id: toggle
+                                        objectName: "extensionToggleSwitch"
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        width: parent.width
+                                        text: toggleControl.controlLabel
+                                        // The switch shows what the script says: a tap (Space) asks it to
+                                        // change, and the view drawn again shows the answer.
+                                        checkable: false
+                                        checked: toggleControl.controlChecked
+                                        onClicked: {
+                                            const rowIndex = row.index
+                                            const controlIndex = toggleControl.controlIndex
+                                            const on = !toggleControl.controlChecked
+                                            list.lines.activateControl(rowIndex, controlIndex, on ? 1 : 0)
+                                        }
+                                    }
+                                }
+                            }
+                            DelegateChoice {
+                                roleValue: "progress"
+                                // b.ui.progress: its label above a bar in the accent (or its tone's
+                                // colour). In a row as tall as the controls beside it; on a line of
+                                // its own (a review session's progress) just the label and the bar.
+                                Item {
+                                    id: progressControl
+                                    required property real controlValue
+                                    required property real controlMax
+                                    required property string controlLabel
+                                    required property string controlTone
+                                    objectName: "extensionProgress"
+                                    width: row.lineBare ? flow.width : Math.min(flow.width, 200)
+                                    height: row.lineBare ? progressColumn.implicitHeight
+                                                         : Math.max(progressColumn.implicitHeight, list.controlHeight)
+                                    Accessible.role: Accessible.ProgressBar
+                                    Accessible.name: progressControl.controlLabel
+                                    Column {
+                                        id: progressColumn
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        width: parent.width
+                                        spacing: Theme.space1
+                                        BText {
+                                            visible: progressControl.controlLabel !== ""
+                                            width: parent.width
+                                            text: progressControl.controlLabel
+                                            variant: "caption"
+                                            color: list.toneColor(progressControl.controlTone, true)
+                                            elide: Text.ElideRight
+                                        }
+                                        BProgressBar {
+                                            width: parent.width
+                                            from: 0
+                                            to: progressControl.controlMax
+                                            value: progressControl.controlValue
+                                            tone: progressControl.controlTone === "success" || progressControl.controlTone === "danger"
+                                                  || progressControl.controlTone === "warning" ? progressControl.controlTone : "accent"
+                                            thickness: 6
+                                        }
+                                    }
                                 }
                             }
                             DelegateChoice {

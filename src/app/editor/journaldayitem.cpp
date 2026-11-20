@@ -29,13 +29,13 @@ bool isTextView(const QString &view)
 {
     return view != u"code" && view != u"calc" && view != u"query" && view != u"math" && view != u"mermaid"
            && view != u"chart" && view != u"table" && view != u"quote" && view != u"callout" && view != u"rule"
-           && view != u"frontmatter";
+           && view != u"frontmatter" && view != u"view";
 }
 
 bool isFramed(const QString &view)
 {
     return view == u"code" || view == u"calc" || view == u"query" || view == u"math" || view == u"mermaid"
-           || view == u"chart" || view == u"table" || view == u"callout" || view == u"frontmatter";
+           || view == u"chart" || view == u"table" || view == u"callout" || view == u"frontmatter" || view == u"view";
 }
 
 /// The views the item draws: a paragraph's, a list item's or a heading's text, a quote, a rule.

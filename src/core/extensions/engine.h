@@ -13,6 +13,10 @@
 //   engine.act(u"silownia"_s, u"today"_s, u"addSet"_s, args)  // one of the view's actions
 //   for (const HookInfo &h : engine.hooks(u"save"_s)) engine.runHook(h.id, {{u"page"_s, title}});
 //   engine.evaluate(u"*console*"_s, u"1 + 1"_s, u"console"_s) // the console: r.value = 2
+//   engine.startRecording();                                         // what a macro reads …
+//   engine.runMacro(u"silownia"_s, u"rekord"_s, {{u"args"_s, …}}, 250); // {{ext:silownia/rekord …}}
+//   Reads reads = engine.stopRecording();                            // … to refresh it after
+//   engine.runVariable(u"silownia"_s, u"plan"_s, ctx, 250)           // {{silownia/plan}} in a template
 //
 // Limits (Limits): a time limit per call (also per resume and load) enforced on the engine's own
 // thread by the VM's interrupt callback — safepoints at loops, calls, returns, the pattern matcher
@@ -38,6 +42,7 @@
 #include <QHash>
 #include <QList>
 #include <QMap>
+#include <QSet>
 #include <QString>
 #include <QStringList>
 #include <QVariant>
@@ -100,6 +105,39 @@ struct ViewInfo
     QStringList actions;
     QString label; ///< b.view's meta.label: a view the palette offers; "" = none
     QString icon; ///< meta.icon, an icon name of the app ("" = the extensions' own)
+    /// meta.panel: a section of the side panel beside "page"s, "journal" days or "all" of them, or
+    /// of the pages panel ("sidebar"); "" = none (docs/EXTENSIONS.md "View blocks and panels").
+    QString panel;
+};
+
+/// A macro an extension offers (b.macro, docs/EXTENSIONS.md "Macros"): `{{ext:<extension>/<name> …}}`
+/// in a note shows what it returns.
+struct MacroInfo
+{
+    QString extension;
+    QString name;
+    QString description; ///< meta.description: what it shows (the editor's suggestions)
+    QStringList arguments; ///< meta.args: its arguments' names ("exercise"), for the suggestions
+    QString example; ///< meta.example: arguments to suggest ("Przysiad")
+};
+
+/// A variable an extension offers to templates (b.variable, docs/TEMPLATES.md "Variables of
+/// extensions"): `{{<extension>/<name> …}}` in a template is filled with what it returns.
+struct VariableInfo
+{
+    QString extension;
+    QString name;
+    QString description;
+    QStringList arguments;
+};
+
+/// What calls read of the notebook while a recording is on (Engine::startRecording): a macro is
+/// computed again when one of these changes.
+struct Reads
+{
+    QSet<QString> paths; ///< the notes it read by name (b.read, b.page, b.lines, b.blocks({page}))
+    QSet<QString> names; ///< names it read that are no note (b.read gave nil), folded (text::foldKey)
+    bool everything = false; ///< a query, a search, a list of pages or blocks, the revision: any note
 };
 
 /// A function an extension registered with b.on(event, fn) (docs/EXTENSIONS.md "Hooks").
@@ -163,6 +201,19 @@ public:
     qint64 memoryUsed() const { return qint64(m_used); }
     static QString version(); ///< "Luau 0.743"
 
+    // ---- Macros and template variables (engine_macros.cpp; docs/EXTENSIONS.md "Macros") ---------
+    QList<MacroInfo> macros() const; ///< sorted by extension, then name
+    QList<VariableInfo> variables() const;
+    /// Runs the macro `extension`/`name` with `ctx` ({args, text, page, path, date?}) within
+    /// `timeoutMs` (≤ the engine's own limit): its value as returned (extensions/macros.h shapes
+    /// it). It cannot wait (a question or b.ai is an error) nor write (b.write … are refused).
+    Result runMacro(const QString &extension, const QString &name, const QVariantMap &ctx, int timeoutMs);
+    /// The same for a template variable ({args, text, page, path, date, template}).
+    Result runVariable(const QString &extension, const QString &name, const QVariantMap &ctx, int timeoutMs);
+    /// Notes what the calls from now on read (Reads), until stopRecording() gives it.
+    void startRecording();
+    Reads stopRecording();
+
 private:
     struct Handler
     {
@@ -173,6 +224,16 @@ private:
         bool needsBlock = false;
         QString icon;
         bool palette = true;
+        QString panel; // a view's meta.panel
+    };
+    /// A macro or a template variable (b.macro, b.variable).
+    struct Contribution
+    {
+        QString extension;
+        int ref = 0;
+        QString description;
+        QStringList arguments;
+        QString example;
     };
     struct Hook
     {
@@ -250,6 +311,8 @@ private:
     static int apiReplaceLine(lua_State *L);
     static int apiInsertLine(lua_State *L);
     static int apiRemoveLine(lua_State *L);
+    static int apiMacro(lua_State *L);
+    static int apiVariable(lua_State *L);
 
     int commandImpl(lua_State *L);
     int viewImpl(lua_State *L);
@@ -296,6 +359,20 @@ private:
     int replaceLineImpl(lua_State *L);
     int insertLineImpl(lua_State *L);
     int removeLineImpl(lua_State *L);
+    /// b.macro / b.variable (`variable`): registers fn with its meta.
+    int contributionImpl(lua_State *L, bool variable);
+    /// A macro's or a variable's call: no waiting, no writes, `timeoutMs` at most.
+    Result runContribution(bool variable, const QString &extension, const QString &name, const QVariantMap &ctx,
+                           int timeoutMs);
+    void dropContributions(const QString &extension);
+    /// While recording: a note read by its name (b.read, b.page, b.lines, b.blocks({page})).
+    void noteRead(const QString &page);
+    /// While recording: a read that any note may change (a query, a search, the list of pages).
+    void noteReadAll()
+    {
+        if (m_reads)
+            m_reads->everything = true;
+    }
 
     bool mayWrite(lua_State *L, const QString &extension, const char *function);
     void pushEnvironment(const QString &extension);
@@ -341,6 +418,11 @@ private:
     QMap<int, Waiting> m_waiting; // by call id
     int m_nextCall = 1;
     int m_aiFactoryRef = 0; // the b.ai wrapper's factory (a prelude)
+    QHash<QString, Contribution> m_macros; // "extension/name"
+    QHash<QString, Contribution> m_variables;
+    Reads *m_reads = nullptr; // a recording is on (startRecording)
+    Reads m_recorded;
+    bool m_noWrites = false; // a macro's or a variable's call runs: writes are refused
 };
 
 } // namespace brulion::extensions

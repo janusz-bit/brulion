@@ -1,8 +1,8 @@
 #pragma once
 // ExtensionViewModel — an extension's view as a list for QML (QML type `ExtensionView`, docs/UI.md
 // "Extension views"): the node tree of b.view's render function (b.ui: column, row, card, heading,
-// text, link, button, check, stepper, menu, month, chart, table, empty, open, run) flattened into
-// lines, a row's controls in a model of their own. A card's lines stay lines of the flat list, each
+// text, markdown, link, button, check, stepper, input, select, slider, date, toggle, progress,
+// stats, divider, menu, month, chart, table, empty, open, run) flattened into lines, a row's controls in a model of their own. A card's lines stay lines of the flat list, each
 // with its part of the card (lineCard: "first", "middle", "last", "only"; "" outside cards). It renders again when its extension, view or params change,
 // after Workspace.extensions.changed() (a command or an action finished) and when the index
 // changed (a note written anywhere: coalesced) — and at once after an action of its own controls.
@@ -15,10 +15,10 @@
 //
 // Lines (role lineType): heading, text (lineIcon, lineTone), empty (lineTitle + lineText, lineIcon),
 // markdown (lineHtml: the text rendered as a note's blocks — InlineRenderer's escaped rich text —,
-// lineSize "large" | "small" | "", lineAlign "center" | "", lineMuted), progress (lineValue of
-// lineMax, lineText its label), stats (lineItems: { label, value, tone } each), divider,
-// link, open, run, button (lineKey, linePrimary, lineTone, lineHint, lineIcon), menu (a "⋯":
-// menuLabels() / activateMenuItem()), row (controls), month
+// lineSize "large" | "small" | "", lineAlign "center" | "", lineMuted), stats (lineItems: { label,
+// value, tone } each), divider, link, open, run, button (lineKey, linePrimary, lineTone, lineHint,
+// lineIcon), menu (a "⋯": menuLabels() / activateMenuItem()), row (controls — a lone input, select,
+// slider, date, toggle or progress bar is a row of its own, `lineBare`: no card), month
 // (lineMonth "2026-11", lineDays — a map per day of the month { date, day, state, tappable, menu } —
 // and lineTitle its label; activateDay(), a day's menu), chart (chartData + chartSource for
 // ChartView), tableHead / tableRow (cells).
@@ -49,9 +49,15 @@ class ExtensionViewModel;
 /// controlValue, controlStep, controlUnit, controlIndex, controlMuted, controlDisplay — a stepper's
 /// number with its unit, "82,5 kg" —, controlNumber — the number alone, "82,5" —, controlState — a
 /// check's "done" | "open" | "skipped" —, controlLabel — a check's or a menu's name —, controlIcon,
-/// controlTone — a text's or a button's —, controlHasMenu — a check with a menu, a menu with items —,
-/// controlKey — a button's keyboard shortcut ("1", "space") —, controlPrimary, controlHint — a
-/// button's second line) —, controlStyled — an "open" drawn as a button.
+/// controlTone — a text's, a button's, a progress bar's —, controlHasMenu — a check with a menu, a
+/// menu with items —, controlKey — a button's keyboard shortcut ("1", "space") —, controlPrimary,
+/// controlHint — a button's second line —, controlStyled — an "open" drawn as a button; the controls
+/// that take what is typed or chosen: an input's controlText (its value), controlPlaceholder,
+/// controlMultiline, controlSubmit (its button's label), controlKeep (the text stays after a
+/// submit); a select's controlText (the chosen option's label: menuLabels() lists them); a slider's
+/// controlValue, controlMin, controlMax, controlStep; a date's controlText ("YYYY-MM-DD", "" none);
+/// a toggle's controlChecked; a progress bar's controlValue (within 0 … controlMax), controlMax (1
+/// when it has none), controlLabel, controlTone — b.ui.progress in a row, or on a line of its own).
 class ExtensionControlsModel : public QAbstractListModel {
     Q_OBJECT
 public:
@@ -76,6 +82,12 @@ public:
         PrimaryRole,
         HintRole,
         StyledRole,
+        PlaceholderRole,
+        MultilineRole,
+        SubmitRole,
+        KeepRole,
+        MinRole,
+        MaxRole,
     };
     /// `comma`: numbers shown with a decimal comma (Polish).
     ExtensionControlsModel(QList<QVariantMap> controls, bool comma, QObject *parent);
@@ -116,6 +128,21 @@ class ExtensionViewModel : public QAbstractListModel {
     /// One parameter by bindings (compiled QML builds no maps): `paramKey: "exercise"; paramValue: …`.
     Q_PROPERTY(QString paramKey READ paramKey WRITE setParamKey NOTIFY paramsChanged FINAL)
     Q_PROPERTY(QString paramValue READ paramValue WRITE setParamValue NOTIFY paramsChanged FINAL)
+    /// A ```view block's text (docs/SYNTAX.md §13 "View blocks"): its first line names the view,
+    /// `extension/view`, the lines after it are params (`key: value`). Sets extension, view, params.
+    Q_PROPERTY(QString source READ source WRITE setSource NOTIFY sourceChanged FINAL)
+    /// Why `source` names no view ("" fine).
+    Q_PROPERTY(QString sourceProblem READ sourceProblem NOTIFY sourceChanged FINAL)
+    /// The note the view is drawn beside or in (a ```view block's page, the side panel's): its
+    /// `page`, `path` and `date` (a daily note's) join the params, unless they set them.
+    Q_PROPERTY(QString notePath READ notePath WRITE setNotePath NOTIFY notePathChanged FINAL)
+    /// False: nothing is drawn again (a block off the screen, a hidden page or panel); a change
+    /// meanwhile draws it when it is live again.
+    Q_PROPERTY(bool live READ live WRITE setLive NOTIFY liveChanged FINAL)
+    /// The lines drawn (0: nothing to show — a panel whose view shows nothing is left out).
+    Q_PROPERTY(int count READ count NOTIFY renderedChanged FINAL)
+    /// The view's extension does not run: "approval" | "off" | "error" | "unknown"; "" it runs.
+    Q_PROPERTY(QString extensionState READ extensionState NOTIFY renderedChanged FINAL)
     /// The view could not be drawn: the first line of the extension's error ("" = fine).
     Q_PROPERTY(QString error READ error NOTIFY renderedChanged FINAL)
     Q_PROPERTY(int revision READ revision NOTIFY renderedChanged FINAL)
@@ -142,13 +169,12 @@ public:
         HtmlRole,
         SizeRole,
         AlignRole,
-        ValueRole,
-        MaxRole,
         ItemsRole,
         KeyRole,
         PrimaryRole,
         HintRole,
         StyledRole,
+        BareRole,
     };
 
     explicit ExtensionViewModel(QObject *parent = nullptr);
@@ -173,6 +199,15 @@ public:
     int revision() const { return m_revision; }
     QVariantMap palette() const { return m_palette; }
     void setPalette(const QVariantMap &palette);
+    QString source() const { return m_source; }
+    void setSource(const QString &source);
+    QString sourceProblem() const { return m_sourceProblem; }
+    QString notePath() const { return m_notePath; }
+    void setNotePath(const QString &path);
+    bool live() const { return m_live; }
+    void setLive(bool live);
+    QString extensionState() const { return m_extensionState; }
+    int count() const { return int(m_lines.size()); }
 
     /// Renders now (also what the model does by itself after a change).
     Q_INVOKABLE void refresh();
@@ -204,6 +239,14 @@ public:
     /// `key` says, lower case): the first line or row control with it is activated as a tap would;
     /// false when none has it (the key goes on to whatever else handles it).
     Q_INVOKABLE bool activateKey(const QString &key);
+    /// What was typed into an input (Enter, its button) or picked in a date ("YYYY-MM-DD", "" for
+    /// none): its action gets it as `value`. False when the control is neither, while the lines
+    /// change, and for a date that is none.
+    Q_INVOKABLE bool submitText(int row, int control, const QString &text);
+    /// A slider's value snapped onto its step within its min and max (what activateControl() gets).
+    Q_INVOKABLE double snapped(int row, int control, double value) const;
+    /// A number as the view shows it: at most two decimals, a decimal comma in Polish.
+    Q_INVOKABLE QString formatNumber(double value) const;
     /// A day of a month line tapped: its action with its args (nothing for a day without one).
     Q_INVOKABLE void activateDay(int row, const QString &date);
     /// The labels of a menu: of the control `control` of a row (a menu, a check's menu), else of the
@@ -222,6 +265,9 @@ Q_SIGNALS:
     void paramsChanged();
     void renderedChanged();
     void paletteChanged();
+    void sourceChanged();
+    void notePathChanged();
+    void liveChanged();
     /// A link of the view, a menu's page: the page to open (its name, a [[link]] target), at the
     /// 0-based `line` when ≥ 0 (the node's 1-based line).
     void pageRequested(const QString &page, int line);
@@ -234,11 +280,11 @@ private:
     struct Line {
         QString type, text, title, page, chartSource, icon, tone, card, month;
         QString html, size, align, key, hint;
-        double value = 0, max = 0;
         bool primary = false;
         bool styled = false; // an "open" drawn as a button (b.ui.open's options)
         QVariantList items; // a stats line's numbers
         bool muted = false;
+        bool bare = false; // a lone control's row: no card of its own
         QStringList cells;
         QVariantMap chartData;
         QVariantList days; // a month's days for QML
@@ -276,6 +322,9 @@ private:
     QVariantMap m_palette;
     QList<Line> m_lines;
     QTimer m_refreshTimer;
+    QString m_source, m_sourceProblem, m_notePath, m_extensionState;
+    bool m_live = true;
+    bool m_stale = false; // asked to draw while not live
 };
 
 } // namespace brulion::shell

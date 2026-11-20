@@ -133,6 +133,7 @@ QString viewName(BlockView view)
     case BlockView::Rule: return u"rule"_s;
     case BlockView::Frontmatter: return u"frontmatter"_s;
     case BlockView::Html: return u"html"_s;
+    case BlockView::View: return u"view"_s;
     }
     return u"text"_s;
 }
@@ -366,7 +367,7 @@ namespace {
 bool isFencedView(BlockView view)
 {
     return view == BlockView::Code || view == BlockView::Calc || view == BlockView::Query || view == BlockView::Math
-           || view == BlockView::Mermaid || view == BlockView::Chart;
+           || view == BlockView::Mermaid || view == BlockView::Chart || view == BlockView::View;
 }
 
 /// A fence line rewritten to `length` markers, keeping its indentation and info string.
@@ -434,6 +435,7 @@ BlockShape shapeOf(const markdown::BlockEntry &e)
                  : f.lang == u"query" || f.lang == u"dataview" ? BlockView::Query
                  : f.lang == u"mermaid" ? BlockView::Mermaid
                  : f.lang == u"chart"   ? BlockView::Chart
+                 : f.lang == u"view"    ? BlockView::View
                                         : BlockView::Code;
         s.editOffset = f.innerOffset;
         if (f.closed && !f.onlyMetadataAfter) {
@@ -982,6 +984,11 @@ CompletionTrigger CompletionTrigger::fromMap(const QVariantMap &map)
             .closing = map.value(u"closing"_s).toString()};
 }
 
+namespace {
+/// The `{{` at `at` of `line` opens something (no backslash before it).
+bool opensAt(QStringView line, qsizetype at) { return at == 0 || line[at - 1] != u'\\'; }
+} // namespace
+
 CompletionTrigger completionTriggerAt(QStringView text, int cursor)
 {
     if (cursor < 0 || cursor > text.size())
@@ -1021,6 +1028,20 @@ CompletionTrigger completionTriggerAt(QStringView text, int cursor)
         return t;
     };
 
+    // {{macros of extensions: `{{` or `{{ext:` and what is typed of `extension/name`
+    // (docs/SYNTAX.md §13 "Macros"); a `}}` already after the caret is kept.
+    {
+        static const QRegularExpression re = text::unicodeRegex(u"\\{\\{[ \\t]*((?:[Ee][Xx][Tt]:)?)([\\p{L}\\p{N}_\\-./]*)$"_s);
+        static const QRegularExpression rest = text::unicodeRegex(u"^([^{}\\n]*)(\\}\\})"_s);
+        if (const auto m = re.matchView(before); m.hasMatch() && opensAt(before, m.capturedStart(0))) {
+            CompletionTrigger t = result(u"macros"_s, m.capturedStart(1), m.capturedStart(2), u"{{"_s);
+            if (const auto r = rest.matchView(after); r.hasMatch()) {
+                t.to = int(cursor + r.capturedLength(1));
+                t.closing = r.captured(2);
+            }
+            return t;
+        }
+    }
     // [[pages / ![[embeds
     {
         static const QRegularExpression re(u"(!?)\\[\\[([^\\[\\]|\\n]*)$"_s);

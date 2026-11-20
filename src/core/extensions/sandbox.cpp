@@ -68,9 +68,20 @@ QVariantMap checkExtension(Vault &vault, VaultIndex &index, const Extension &ext
         for (const HookInfo &h : engine.hooks())
             if (h.extension == extension.id)
                 hooks << h.event;
+        // Macros and template variables (docs/EXTENSIONS.md "Macros", "Template variables").
+        QVariantList macros, variables;
+        for (const MacroInfo &m : engine.macros())
+            if (m.extension == extension.id)
+                macros << QVariantMap{{u"name"_s, m.name}, {u"description"_s, m.description},
+                                      {u"args"_s, m.arguments}, {u"example"_s, m.example}};
+        for (const VariableInfo &v : engine.variables())
+            if (v.extension == extension.id)
+                variables << QVariantMap{{u"name"_s, v.name}, {u"description"_s, v.description}};
         out.insert(u"commands"_s, commands);
         out.insert(u"views"_s, views);
         out.insert(u"hooks"_s, hooks);
+        out.insert(u"macros"_s, macros);
+        out.insert(u"variables"_s, variables);
     } else {
         QString message = r.error;
         if (message.isEmpty())

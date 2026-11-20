@@ -1029,4 +1029,44 @@ void FakeEditorHost::populateSample()
     Q_EMIT indexChanged();
 }
 
+markdown::MacroView FakeEditorHost::macroView(const markdown::MacroSpan &macro, const QString & /*path*/) const
+{
+    ++m_macroAsks;
+    const QString key = macro.extension + u'/' + macro.name + (macro.arguments.isEmpty() ? QString() : u' ' + macro.arguments);
+    if (const auto it = m_macroViews.constFind(key); it != m_macroViews.constEnd())
+        return *it;
+    markdown::MacroView pending;
+    pending.state = markdown::MacroView::State::Pending;
+    return pending;
+}
+
+QVariantList FakeEditorHost::suggestMacros(const QString &prefix, int limit) const
+{
+    QVariantList out;
+    for (auto it = m_macroViews.cbegin(); it != m_macroViews.cend() && out.size() < limit; ++it) {
+        const QString name = it.key().section(u' ', 0, 0);
+        if (name.startsWith(prefix, Qt::CaseInsensitive))
+            out << QVariantMap{{u"title"_s, name}, {u"subtitle"_s, u"Makro"_s}, {u"insertText"_s, QString(u"ext:"_s + it.key())},
+                               {u"hint"_s, QString()}, {u"icon"_s, u"puzzle"_s}};
+    }
+    return out;
+}
+
+std::optional<QString> FakeEditorHost::templateVariable(const QString &extension, const QString &name,
+                                                        const QString &arguments, const QVariantMap &context)
+{
+    const auto it = m_variables.constFind(extension + u'/' + name);
+    if (it == m_variables.constEnd())
+        return std::nullopt;
+    QString text = *it;
+    return text.replace(u"{args}"_s, arguments).replace(u"{date}"_s, context.value(u"date"_s).toString());
+}
+
+void FakeEditorHost::setMacroView(const QString &macro, const markdown::MacroView &view)
+{
+    m_macrosOn = true;
+    m_macroViews.insert(macro, view);
+    Q_EMIT macrosChanged();
+}
+
 } // namespace brulion::editor

@@ -1448,6 +1448,38 @@ private Q_SLOTS:
         QCOMPARE(r.code, 0);
     }
 
+    void extensionMacros()
+    {
+        // Macros and template variables tried in the sandbox (docs/EXTENSIONS.md "Macros"): the
+        // check names them, a run gives the value and what a note would show.
+        const QByteArray page = "---\ntags: [rozszerzenie]\n---\n```luau\n"
+                                "b.macro(\"otwarte\", function(ctx)\n"
+                                "    local n = b.query(\"type:tasks status:open\").total\n"
+                                "    return { b.ui.heading(tostring(n)), ` na {ctx.page} ({table.concat(ctx.args, \"/\")})` }\n"
+                                "end, { description = \"Otwarte zadania\", args = { \"x\" }, example = \"a\" })\n"
+                                "b.variable(\"plan\", function(ctx) return `- plan {ctx.date or \"-\"}` end)\n"
+                                "```\n";
+        const QString dir = vault({{u"Rozszerzenia/Makra.md"_s, page},
+                                   {u"Zakupy.md"_s, "- [ ] mleko\n- [ ] chleb\n"},
+                                   {u"journals/2026-10-14.md"_s, "- dzień\n"}});
+        Run r = run(dir, {u"extension"_s, u"check"_s, u"Makra"_s});
+        QCOMPARE(r.code, 0);
+        QCOMPARE(r.result().value(u"macros"_s).toArray().size(), 1);
+        QCOMPARE(r.result().value(u"macros"_s).toArray().first().toObject().value(u"example"_s).toString(), u"a"_s);
+        QCOMPARE(r.result().value(u"variables"_s).toArray().first().toObject().value(u"name"_s).toString(), u"plan"_s);
+        r = run(dir, {u"extension"_s, u"run"_s, u"Makra"_s, u"--macro"_s, u"otwarte"_s, u"--text"_s, u"żółw, \"a, b\""_s,
+                      u"--page"_s, u"Zakupy"_s});
+        QCOMPARE(r.code, 0);
+        QCOMPARE(r.result().value(u"shows"_s).toString(), u"2 na Zakupy (żółw/a, b)"_s);
+        r = run(dir, {u"extension"_s, u"run"_s, u"Makra"_s, u"--variable"_s, u"plan"_s, u"--page"_s, u"2026-10-14"_s});
+        QCOMPARE(r.code, 0);
+        QCOMPARE(r.result().value(u"value"_s).toString(), u"- plan 2026-10-14"_s);
+        r = run(dir, {u"extension"_s, u"run"_s, u"Makra"_s, u"--macro"_s, u"brak"_s});
+        QCOMPARE(r.code, 6);
+        r = run(dir, {u"extension"_s, u"run"_s, u"Makra"_s, u"--macro"_s, u"otwarte"_s, u"--variable"_s, u"plan"_s});
+        QCOMPARE(r.code, 2);
+    }
+
     void pageWriteCanEmptyAPage()
     {
         const QString dir = vault({{u"Dom.md"_s, "- farba\n"}});

@@ -5,7 +5,7 @@ brulion: document
 ---
 # Rozszerzenia
 
-Brulion potrafi uruchamiać kod, który mieszka w Twoim notatniku — tak jak Emacs wykonuje plik startowy, a TiddlyWiki trzyma własny kod w tiddlerach. **Rozszerzenie** to strona z tagiem `rozszerzenie` (albo `extension`): kod w jej blokach `luau` dodaje polecenia do palety, własne widoki i reakcje na zapis i zmiany. Językiem jest Luau, mały i szybki Lua z typami; kod czyta i zapisuje tylko otwarty notatnik, z limitem czasu i pamięci, i nigdy nie sięga do plików, sieci ani innych programów.
+Brulion potrafi uruchamiać kod, który mieszka w Twoim notatniku — tak jak Emacs wykonuje plik startowy, a TiddlyWiki trzyma własny kod w tiddlerach. **Rozszerzenie** to strona z tagiem `rozszerzenie` (albo `extension`): kod w jej blokach `luau` dodaje polecenia do palety, własne widoki — osobno, na stronie albo w panelu bocznym —, makra pokazujące wartość w tekście dowolnej notatki, zmienne do szablonów i reakcje na zapis i zmiany. Bloki kodu mają kolory składni Luau. Językiem jest Luau, mały i szybki Lua z typami; kod czyta i zapisuje tylko otwarty notatnik, z limitem czasu i pamięci, i nigdy nie sięga do plików, sieci ani innych programów.
 
 Wbudowane [[Nawyki]] i [[Siłownia]] to też rozszerzenia, napisane tym samym `b` (podobnie jak [[AI|Asystent AI]]): **Ustawienia → Rozszerzenia** włączają i wyłączają każde z nich, a ich kod można otworzyć i zmienić tak jak własny (niżej).
 
@@ -109,6 +109,13 @@ end, nil, { label = "Projekty" })
 ```
 
 Reakcja działa, gdy coś się dzieje: `b.on("save", function(e) … end)` po zapisaniu strony na tym urządzeniu (`e.page`), `b.on("change", function(e) … end)` po zmianach w notatkach, skądkolwiek przyszły (`e.pages`). Reakcja, która ciągle się wywraca, zostaje wyłączona do ponownego wczytania rozszerzenia.
+
+## W notatkach: makra, widoki i panele
+- **Makro** pokazuje w tekście dowolnej notatki to, co wylicza rozszerzenie, zawsze aktualne: `{{ext:silownia/rekord Przysiad}}` pokazuje najlepszy przysiad, `{{ext:nawyki/seria Czytanie}}` serię nawyku. Wpisz `{{`, żeby wybrać. Makro rozszerzenia, które jeszcze nie działało na tym urządzeniu, pokazuje kłódkę; kliknięcie pyta, czy je uruchomić.
+- **Widok na stronie**: blok kodu `view`, którego pierwszy wiersz wskazuje widok — `nawyki/month`, `silownia/today` — rysuje go na stronie i działa tak jak osobno. Menu ukośnika: **Widok: …** wpisuje taki blok.
+- **Panel**: widok może być sekcją panelu bocznego przy stronach albo dniach dziennika — [[Nawyki]] pokazują tam odhaczenia dnia.
+- **Zmienna szablonu** wypełnia szablon, gdy zostaje użyty: `{{silownia/plan Nogi}}` wpisuje trening z planu.
+[[API rozszerzeń]] pokazuje, jak je pisać.
 
 ## Napisane przez AI
 Poproś o nie [[AI|Asystenta AI]] — w nowej rozmowie czatu z AI (✨ → **Nowa rozmowa**): „polecenie, które policzy słowa dzisiejszej notatki”. Asystent przeczyta, jak się pisze rozszerzenia, wypróbuje kod na Twoich notatkach, niczego nie zmieniając, i za Twoją zgodą zapisze stronę w **Rozszerzenia/**. Agent, np. Claude Code, zrobi to samo przez [[Wiersz poleceń i agenci AI|wiersz poleceń]]: przeczyta API (`brulion-cli extension docs`), wypróbuje kod (`extension eval`, `extension run` — to, co kod by zapisał, wraca jako różnica) i zapisze stronę (`extension write`). W obu przypadkach kod czeka na Ciebie jak kod z innego urządzenia: przeczytaj stronę i naciśnij **Uruchom**, gdy zgadzasz się z tym, co robi. Każda późniejsza zmiana AI znowu czeka.

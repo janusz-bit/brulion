@@ -43,6 +43,8 @@ Rectangle {
         persistent: true
         multiline: true
         highlightMode: "code"
+        // ```luau (an extension page's code, docs/EXTENSIONS.md) in Luau's colours.
+        highlightLanguage: root.block.rowData.lang
         font.family: Theme.fontMono
         font.pixelSize: Theme.textSm
         lineHeightPx: Theme.lineHeightPx(Theme.textSm, 1.5)

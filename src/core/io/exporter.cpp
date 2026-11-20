@@ -1,5 +1,7 @@
 #include "io/exporter.h"
 
+#include "markdown/macros.h"
+
 #include "io/exporters_p.h"
 #include "io/exportutil_p.h"
 #include "io/htmlrender_p.h"
@@ -99,7 +101,23 @@ QStringList webPictureTargets(const ExportInput &input)
 
 ExportResult runExport(const Exporter &exporter, const ExportInput &input)
 {
-    return exporter.run(cleanExportInput(input));
+    ExportInput clean = cleanExportInput(input);
+    // The documents show what a macro of an extension showed in the app; the Markdown exports and
+    // the data ones keep the macro as written (docs/SYNTAX.md §13 "Macros").
+    static const QStringList documents{u"html-site"_s, u"html-single"_s, u"pdf"_s, u"docx"_s, u"pandoc"_s};
+    if (!input.macroTexts.isEmpty() && documents.contains(exporter.id())) {
+        for (FileEntry &f : clean.files) {
+            const auto texts = input.macroTexts.constFind(f.path);
+            if (texts == input.macroTexts.constEnd() || texts->isEmpty() || !paths::isMarkdown(f.path))
+                continue;
+            const QString content = QString::fromUtf8(f.data);
+            f.data = markdown::replaceMacros(content, [&](const markdown::MacroSpan &m) -> std::optional<QString> {
+                         const auto text = texts->constFind(content.sliced(m.from, m.to - m.from));
+                         return text == texts->constEnd() ? std::nullopt : std::optional<QString>(*text);
+                     }).toUtf8();
+        }
+    }
+    return exporter.run(clean);
 }
 
 } // namespace brulion::io

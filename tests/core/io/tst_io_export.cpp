@@ -148,6 +148,25 @@ private Q_SLOTS:
         QCOMPARE(runExport(*exporterById(u"json"), noName).files.first().name, u"Brulion.json"_s);
     }
 
+    void macrosPerFormat()
+    {
+        // Macros of extensions (docs/SYNTAX.md §13 "Macros"): the documents show what the app
+        // computed (ExportInput::macroTexts), escaped as Markdown; the Markdown exports keep the macro.
+        ExportInput in = fixture();
+        const QString note = u"# Trening\n\nRekord: {{ext:silownia/rekord Przysiad}} i {{ext:obce/x}}\n\n"
+                             u"`{{ext:silownia/rekord Przysiad}}` w kodzie\n"_s;
+        in.files.append(iotest::text(u"Trening.md"_s, note));
+        in.macroTexts[u"Trening.md"_s].insert(u"{{ext:silownia/rekord Przysiad}}"_s,
+                                              u"**120 kg × 3** \\<script\\>"_s);
+        const QString html = QString::fromUtf8(exportWith(u"html-single"_s, in).data);
+        QVERIFY2(html.contains(u"<strong>120 kg × 3</strong> &lt;script&gt;"_s), qPrintable(html.left(4000)));
+        QVERIFY(html.contains(u"{{ext:obce/x}}"_s)); // nothing given: as written
+        QVERIFY(html.contains(u"<code>{{ext:silownia/rekord Przysiad}}</code>"_s)); // code is code
+        QVERIFY(!html.contains(u"<script>"_s));
+        const QList<FileEntry> md = readZip(exportWith(u"markdown-zip"_s, in).data);
+        QCOMPARE(textOf(md, u"Mój skarbiec/Trening.md"_s), note);
+    }
+
     void markdownZip()
     {
         const ExportedFile f = exportWith(u"markdown-zip"_s);

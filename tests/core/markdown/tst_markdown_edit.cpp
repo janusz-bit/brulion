@@ -55,7 +55,7 @@ VaultConfig config(const QString &format, const QString &folder = u"journals"_s)
 TemplateVars vars(dates::UiLocale locale = dates::UiLocale::Polish, const QString &title = QString())
 {
     // Wednesday, 14 October 2026, 09:05 local time.
-    return TemplateVars{QDateTime(QDate(2026, 10, 14), QTime(9, 5)), title, locale, QDate()};
+    return TemplateVars{QDateTime(QDate(2026, 10, 14), QTime(9, 5)), title, locale, QDate(), {}};
 }
 
 } // namespace
@@ -1151,20 +1151,50 @@ private Q_SLOTS:
         QCOMPARE(applyTemplate(u"{{week:x}}", vars()).text, u"{{week:x}}"_s);
     }
 
+    void templateExtensionVariables()
+    {
+        // {{<extension>/<name> arguments}}: the extension's (docs/TEMPLATES.md "Variables of
+        // extensions"); a macro {{ext:…}} stays as written, so a note made from the template has it.
+        TemplateVars v = vars(dates::UiLocale::Polish, u"Trening"_s);
+        QStringList calls;
+        v.variable = [&calls](const QString &extension, const QString &name,
+                              const QString &arguments) -> std::optional<QString> {
+            calls << extension + u'/' + name + u'(' + arguments + u')';
+            if (name == u"plan")
+                return u"- Przysiad 3 × 5\n- "_s + arguments;
+            if (name == u"pusta")
+                return QString();
+            return std::nullopt; // unknown or failed: as written
+        };
+        QCOMPARE(applyTemplate(u"# {{title}}\n{{silownia/plan Wiosłowanie}}\nRekord: {{ext:silownia/rekord Przysiad}}"
+                               u"\n{{ Nawyki/pusta }}|{{silownia/nieznana x}}|{{a/b c d}}",
+                               v)
+                         .text,
+                 u"# Trening\n- Przysiad 3 × 5\n- Wiosłowanie\nRekord: {{ext:silownia/rekord Przysiad}}\n|"
+                 u"{{silownia/nieznana x}}|{{a/b c d}}"_s);
+        QCOMPARE(calls, (QStringList{u"silownia/plan(Wiosłowanie)"_s, u"nawyki/pusta()"_s, u"silownia/nieznana(x)"_s,
+                                     u"a/b(c d)"_s}));
+        // Not variables: a name no macro could have, a slash path, two lines; unset, all stay.
+        calls.clear();
+        QCOMPARE(applyTemplate(u"{{a/-x}} {{a/b/c}} {{a/b\nc}} {{/b}}"_s, v).text, u"{{a/-x}} {{a/b/c}} {{a/b\nc}} {{/b}}"_s);
+        QVERIFY(calls.isEmpty());
+        QCOMPARE(applyTemplate(u"{{silownia/plan}} {{date}}", vars()).text, u"{{silownia/plan}} 2026-10-14"_s);
+    }
+
     void templatePeriods()
     {
         // 2026-10-14 is in ISO week 42; without an end {{end}} is the day itself.
         QCOMPARE(applyTemplate(u"Tydzień {{week}}: {{date}}–{{end}}", vars()).text,
                  u"Tydzień 42: 2026-10-14–2026-10-14"_s);
         TemplateVars week{QDateTime(QDate(2026, 12, 28), QTime(9, 5)), u"2026-W53"_s, dates::UiLocale::Polish,
-                          QDate(2027, 1, 3)};
+                          QDate(2027, 1, 3), {}};
         QCOMPARE(applyTemplate(u"# Tydzień {{week}} ({{date:d MMMM}} – {{end:d MMMM yyyy}})", week).text,
                  u"# Tydzień 53 (28 grudnia – 3 stycznia 2027)"_s);
         // 2027-01-01 is in week 53 of 2026: the ISO week, not the calendar's.
         week.now = QDateTime(QDate(2027, 1, 1), QTime(8, 0));
         QCOMPARE(applyTemplate(u"{{ WEEK }}", week).text, u"53"_s);
         TemplateVars month{QDateTime(QDate(2026, 2, 1), QTime(7, 0)), u"2026-02"_s, dates::UiLocale::English,
-                           QDate(2026, 2, 28)};
+                           QDate(2026, 2, 28), {}};
         QCOMPARE(applyTemplate(u"{{date:MMMM}} {{date:d}}–{{end:d}}", month).text, u"February 1–28"_s);
         QCOMPARE(applyTemplate(u"{{month}}", month).text, u"February"_s);
         month.locale = dates::UiLocale::Polish;
@@ -1181,7 +1211,7 @@ private Q_SLOTS:
         const VaultPath path = journalPathForDate(date, def);
         const auto tpl =
                 applyTemplate(u"# {{date:dddd}}\n- [ ] {{cursor}}Przegląd [[Projekt]] ⏰ {{date}} 09:30",
-                              TemplateVars{QDateTime(date, QTime(8, 0)), u"x"_s, dates::UiLocale::Polish, QDate()});
+                              TemplateVars{QDateTime(date, QTime(8, 0)), u"x"_s, dates::UiLocale::Polish, QDate(), {}});
         QCOMPARE(tpl.text, u"# środa\n- [ ] Przegląd [[Projekt]] ⏰ 2026-10-14 09:30"_s);
         const ParsedNote note = parseNote(path, tpl.text);
         QCOMPARE(note.journalDate, date);

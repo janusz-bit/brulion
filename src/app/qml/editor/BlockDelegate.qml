@@ -100,7 +100,7 @@ Item {
     // Vertical rhythm: headings get air above them, framed blocks a little on both sides.
     readonly property bool framed: view === "code" || view === "calc" || view === "query" || view === "math"
                                    || view === "mermaid" || view === "chart" || view === "table" || view === "callout"
-                                   || view === "frontmatter"
+                                   || view === "frontmatter" || view === "view"
     // The title shown above the properties panel (see the file comment). (`controller` checked
     // too: when the editor's page goes, a row created in the background reads it before the
     // editor's titleFirst follows.)
@@ -163,7 +163,7 @@ Item {
     /// through the content Loader — the Loader's own work was a large part of creating a block.
     readonly property bool textView: view !== "code" && view !== "calc" && view !== "query" && view !== "math"
                                      && view !== "mermaid" && view !== "chart" && view !== "table" && view !== "quote"
-                                     && view !== "callout"
+                                     && view !== "callout" && view !== "view"
                                      && view !== "rule" && view !== "frontmatter"
     readonly property real contentHeight: noTextLine ? 0 : textView ? textContent.height : content.height
     readonly property real embedsY: topPad + contentHeight + (contentHeight > 0 && !onlyEmbeds ? Theme.space2 : 0)
@@ -215,6 +215,7 @@ Item {
         case "math": { const v = item as MathBlockView; return v !== null ? v.firstLineCenter : fallback }
         case "mermaid": { const v = item as MermaidBlockView; return v !== null ? v.firstLineCenter : fallback }
         case "chart": { const v = item as ChartBlockView; return v !== null ? v.firstLineCenter : fallback }
+        case "view": { const v = item as ViewBlockView; return v !== null ? v.firstLineCenter : fallback }
         case "table": { const v = item as TableBlockView; return v !== null ? v.firstLineCenter : fallback }
         case "frontmatter": { const v = item as FrontmatterView; return v !== null ? v.firstLineCenter : fallback }
         // (The quote / callout frame and the rule below are untyped components: computed here.)
@@ -545,6 +546,7 @@ Item {
             case "math": return mathComponent
             case "mermaid": return mermaidComponent
             case "chart": return chartComponent
+            case "view": return viewComponent
             case "table": return tableComponent
             case "quote":
             case "callout": return calloutComponent
@@ -648,6 +650,10 @@ Item {
     Component {
         id: chartComponent
         ChartBlockView { blockItem: block }
+    }
+    Component {
+        id: viewComponent
+        ViewBlockView { blockItem: block }
     }
     Component {
         id: tableComponent

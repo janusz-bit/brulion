@@ -9,6 +9,7 @@
 //          Polish + English) offered as canonical "YYYY-MM-DD[ HH:mm]" values; `@` also offers
 //          the journal page link and a reminder
 //   templates — EditorHost::templates (for the "Szablon…" command)
+//   macros `{{` — EditorHost::suggestMacros: the extensions' macros (`{{ext:silownia/rekord …}}`)
 //
 // Usage from QML: `detect(text, cursor)` gives the trigger at the caret ({ mode, filter, from,
 // to, token, closing }); set `mode`, `filter` and `token` from it; `get(i)` returns an item for
@@ -16,7 +17,7 @@
 // before the arrows move: the best existing match, not "create page" above it.
 //
 // Roles: title, subtitle, icon, insertText, kind ("page" | "alias" | "create" | "block" | "tag" |
-// "command" | "date" | "journal" | "reminder" | "template"), hint (syntax preview, right-aligned),
+// "command" | "date" | "journal" | "reminder" | "template" | "macro"), hint (syntax preview, right-aligned),
 // command (slash command id), path, line, blockId.
 #pragma once
 
@@ -130,6 +131,7 @@ private:
     QVariantList slashItems() const;
     QVariantList dateItems() const;
     QVariantList templateItems() const;
+    QVariantList macroItems() const;
 
     QPointer<EditorHost> m_host;
     QString m_mode;
