@@ -7,6 +7,8 @@
 #include "text/text.h"
 #include "vault/vault.h"
 
+#include <QDir>
+#include <QLockFile>
 #include <QTimer>
 #include <QUrl>
 
@@ -131,6 +133,9 @@ sync::SyncReport CalendarRunReport::toSyncReport() const
 }
 
 struct CalendarSync::Run {
+    /// One process of the device syncs a notebook's calendars at a time (the app, Android's
+    /// background check): held for the run.
+    std::unique_ptr<QLockFile> lock;
     bool manual = false;
     bool confirm = false;
     QStringList queue; ///< "s:<id>" subscriptions, "c:<id>" calendars
@@ -182,16 +187,40 @@ void CalendarSync::cancelSync()
         m_cancel = true;
 }
 
+bool CalendarSync::begin()
+{
+    m_run = std::make_unique<Run>();
+    m_run->report.started = now();
+    if (m_store->folder().isEmpty())
+        return true;
+    QDir().mkpath(m_store->folder());
+    m_run->lock = std::make_unique<QLockFile>(m_store->folder() + u"/sync.lock"_s);
+    m_run->lock->setStaleLockTime(10 * 60 * 1000);
+    if (!m_run->lock->tryLock(0)) {
+        m_run->lock.reset();
+        m_run->report.error = sync::WebDavError::make(sync::WebDavErrorCode::Cancelled,
+                                                      u"Another process of this device syncs the calendars"_s);
+        m_run->report.cancelled = true;
+        m_running = true;
+        Q_EMIT runningChanged();
+        QTimer::singleShot(0, this, [this] { finish(); });
+        return false;
+    }
+    // What another process wrote meanwhile.
+    m_store->reload();
+    return true;
+}
+
 void CalendarSync::run(bool manual, bool confirmDeletions, std::function<void(const CalendarRunReport &)> done)
 {
     if (done)
         m_waiters.append(std::move(done));
     if (m_running)
         return;
-    m_run = std::make_unique<Run>();
+    if (!begin())
+        return;
     m_run->manual = manual;
     m_run->confirm = confirmDeletions;
-    m_run->report.started = now();
     const CalendarSettings settings = m_store->settings();
     const QDateTime at = now();
     for (const Subscription &s : settings.subscriptions) {
@@ -216,9 +245,9 @@ void CalendarSync::runOne(const QString &id, std::function<void(const CalendarRu
         m_waiters.append(std::move(done));
     if (m_running)
         return; // the running run covers it (or the next one will)
-    m_run = std::make_unique<Run>();
+    if (!begin())
+        return;
     m_run->manual = true;
-    m_run->report.started = now();
     const CalendarSettings settings = m_store->settings();
     if (settings.subscription(id))
         m_run->queue.append(u"s:"_s + id);

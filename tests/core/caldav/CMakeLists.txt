@@ -6,6 +6,6 @@ target_link_libraries(brulion_caldav_testsupport PUBLIC brulion_core_caldav Qt6:
 target_include_directories(brulion_caldav_testsupport PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 brulion_set_warnings(brulion_caldav_testsupport)
 
-foreach(_t rrule events client taskmap tasks feed)
+foreach(_t rrule events client taskmap tasks feed radicale)
     brulion_add_test(tst_caldav_${_t} SOURCES tst_caldav_${_t}.cpp LIBS brulion_caldav_testsupport)
 endforeach()

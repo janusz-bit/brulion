@@ -107,6 +107,9 @@ Q_SIGNALS:
 
 private:
     struct Run;
+    /// A new run: the device's lock, the store read again; false when another process holds it
+    /// (the run ends at once, cancelled).
+    bool begin();
     void next();
     void finish();
     void refresh(const Subscription &subscription);

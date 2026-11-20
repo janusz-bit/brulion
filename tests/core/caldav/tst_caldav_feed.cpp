@@ -65,6 +65,7 @@ private Q_SLOTS:
     void redirects();
     void refused();
     void subscriptionRun();
+    void oneRunAtATime();
     void storeFiles();
 };
 
@@ -274,6 +275,47 @@ void TestCalDavFeed::subscriptionRun()
     // The events of the copy.
     const CalendarData data = parseCalendarData(store.feedData(u"s-1"_s));
     QCOMPARE(occurrences(data, QDate(2027, 11, 1), QDate(2027, 11, 30), QTimeZone::UTC).size(), 1);
+}
+
+void TestCalDavFeed::oneRunAtATime()
+{
+    // The app and Android's background check over one notebook's calendars: the second waits for
+    // the next turn (its run ends at once, cancelled), and reads what the first wrote.
+    QTemporaryDir dir;
+    CalendarStore first(dir.path() + u"/calendars"_s);
+    CalendarSettings settings;
+    Subscription s;
+    s.id = u"s-1"_s;
+    s.url = u"https://example.pl/swieta.ics"_s;
+    settings.subscriptions.append(s);
+    first.saveSettings(settings);
+    CalendarStore second(dir.path() + u"/calendars"_s);
+    Answers net;
+    net.answer = [](const sync::HttpRequest &) { return ok(Feed); };
+    CalendarSync a(&first);
+    CalendarSync b(&second);
+    a.setTransports(nullptr, &net);
+    b.setTransports(nullptr, &net);
+    std::optional<CalendarRunReport> ra;
+    std::optional<CalendarRunReport> rb;
+    a.run(true, false, [&ra](const CalendarRunReport &r) { ra = r; });
+    b.run(true, false, [&rb](const CalendarRunReport &r) { rb = r; });
+    QTRY_VERIFY(ra && rb);
+    QVERIFY(!ra->cancelled);
+    QCOMPARE(ra->refreshed, 1);
+    QVERIFY(rb->cancelled);
+    QCOMPARE(rb->refreshed, 0);
+    // The other one's next run reads the store again: the feed's name arrived meanwhile.
+    rb.reset();
+    net.answer = [](const sync::HttpRequest &) {
+        sync::HttpResponse nm;
+        nm.status = 304;
+        return nm;
+    };
+    b.run(false, false, [&rb](const CalendarRunReport &r) { rb = r; });
+    QTRY_VERIFY(rb);
+    QVERIFY(!rb->cancelled);
+    QCOMPARE(second.settings().subscription(u"s-1"_s)->name, u"Święta w Polsce"_s);
 }
 
 void TestCalDavFeed::storeFiles()

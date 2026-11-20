@@ -1,6 +1,7 @@
 #include "backgroundcheck.h"
 
 #include "androidpayload.h"
+#include "caldav/calendarsync.h"
 
 #include "index/vaultindex.h"
 #include "log/redact.h"
@@ -10,6 +11,7 @@
 #include "sync/webdavclient.h"
 #include "vault/vault.h"
 
+#include <QFileInfo>
 #include <QLoggingCategory>
 #include <QMetaObject>
 
@@ -112,6 +114,8 @@ Check::Check(Target target, QString password, sync::HttpTransport *transport, st
         qCWarning(lcBackground) << "Sync took too long: cancelled";
         if (m_engine)
             m_engine->cancel();
+        if (m_calendars)
+            m_calendars->cancelSync();
     });
 }
 
@@ -164,7 +168,7 @@ void Check::syncThenRead()
     if (!m_target.nextcloud || !m_transport || m_password.isEmpty()) {
         if (m_target.nextcloud)
             m_result.insert(u"sync"_s, u"skipped"_s); // no password on this device (any more)
-        readReminders();
+        syncCalendars();
         return;
     }
     const Target::Nextcloud &nc = *m_target.nextcloud;
@@ -199,7 +203,48 @@ void Check::syncDone(const sync::SyncReport &report)
     m_engine.reset();
     m_client.reset();
     // A failed sync changes nothing about the notes already here: their reminders still count.
-    readReminders();
+    syncCalendars();
+}
+
+void Check::syncCalendars()
+{
+    m_result.insert(u"calendars"_s, u"off"_s);
+    const QString folder = m_target.stateDir + u"/calendars"_s;
+    if (!m_calendarPasswords || !m_transport || !QFileInfo::exists(folder + u"/calendars.json"_s)) {
+        readReminders();
+        return;
+    }
+    m_calendarStore = std::make_unique<caldav::CalendarStore>(folder);
+    const caldav::CalendarSettings settings = m_calendarStore->settings();
+    const bool tasks = std::ranges::any_of(settings.calendars, [](const caldav::CalendarEntry &c) { return c.syncTasks; });
+    if (!tasks) {
+        m_calendarStore.reset();
+        readReminders();
+        return;
+    }
+    m_calendars = std::make_unique<caldav::CalendarSync>(m_calendarStore.get());
+    m_calendars->setVault(&m_notebook->vault(), &m_notebook->index());
+    m_calendars->setTransports(m_transport, nullptr); // only the calendars syncing tasks matter here
+    m_calendars->setPasswords(m_calendarPasswords);
+    if (m_clock)
+        m_calendars->setClock(m_clock);
+    m_syncTimer.start(m_syncTimeoutMs);
+    m_calendars->run(false, false, [this](const caldav::CalendarRunReport &report) {
+        QMetaObject::invokeMethod(
+                this,
+                [this, report] {
+                    m_syncTimer.stop();
+                    m_result.insert(u"calendars"_s, report.cancelled ? u"busy"_s
+                                                    : report.error.isError() ? u"failed"_s
+                                                                             : u"ok"_s);
+                    m_result.insert(u"calendarsDownloaded"_s, report.downloaded);
+                    m_result.insert(u"calendarsUploaded"_s, report.uploaded);
+                    m_calendars.reset();
+                    m_calendarStore.reset();
+                    readReminders();
+                },
+                Qt::QueuedConnection);
+    });
 }
 
 void Check::readReminders()

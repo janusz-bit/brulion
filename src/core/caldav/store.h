@@ -166,6 +166,9 @@ public:
     explicit CalendarStore(QString folder);
 
     QString folder() const { return m_folder; }
+    /// Read everything from the files again (another process — Android's background check — may
+    /// have synced meanwhile).
+    void reload();
     CalendarSettings settings() const { return m_settings; }
     bool saveSettings(const CalendarSettings &settings);
 

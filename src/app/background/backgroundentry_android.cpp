@@ -10,6 +10,7 @@
 #include "sync/http.h"
 
 #include <QCoreApplication>
+#include <QFile>
 #include <QJsonObject>
 #include <QLoggingCategory>
 #include <QStandardPaths>
@@ -66,6 +67,17 @@ int runBackgroundCheck(int argc, char *argv[])
                                                QStandardPaths::writableLocation(QStandardPaths::AppDataLocation))
                                      : QString();
     Check check(*target, password, &transport);
+    // CalDAV accounts' passwords: next to the app password (WorkspaceCalendars' files).
+    const QString secrets = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + u"/secrets"_s;
+    check.setCalendarPasswords([secrets](const QString &account) {
+        QString safe;
+        for (const QChar c : account) {
+            if (c.isLetterOrNumber() || c == u'-')
+                safe += c;
+        }
+        QFile f(secrets + u"/caldav-"_s + safe);
+        return f.open(QIODevice::ReadOnly) ? QString::fromUtf8(f.readAll()).trimmed() : QString();
+    });
     QObject::connect(&check, &Check::finished, &app, [&app](const QJsonObject &result) {
         platform::AndroidBridge::backgroundCheckFinished(result);
         app.quit();

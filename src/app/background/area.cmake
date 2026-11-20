@@ -20,7 +20,7 @@ target_include_directories(brulion_background PUBLIC ${_brulion_background_dir})
 target_link_libraries(brulion_background
     PUBLIC Qt6::Core brulion_core_reminders
     PRIVATE brulion_notify brulion_core_notebook brulion_core_index brulion_core_vault brulion_core_sync
-            brulion_core_log)
+            brulion_core_log brulion_core_caldav)
 brulion_set_warnings(brulion_background)
 
 if(ANDROID)

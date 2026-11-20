@@ -350,6 +350,10 @@ void WorkspaceCalendars::onRunFinished()
     m_lastError = report.error.isError() ? sync::errorCodeName(report.error.code) : QString();
     m_needsConfirmation = report.needsConfirmation;
     m_pending = report.pendingDeletions;
+    // The store was read again at the run's start (another process may have synced): what is
+    // shown follows it.
+    m_data.clear();
+    scheduleEventsChanged();
     refreshTracked();
     if (!report.conflicts.isEmpty())
         Q_EMIT conflictsFound(report.conflicts);

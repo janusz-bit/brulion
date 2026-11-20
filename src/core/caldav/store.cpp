@@ -298,9 +298,16 @@ LogEntry LogEntry::fromJson(const QJsonObject &o)
 
 CalendarStore::CalendarStore(QString folder) : m_folder(std::move(folder))
 {
+    reload();
+}
+
+void CalendarStore::reload()
+{
     if (m_folder.isEmpty())
         return;
+    m_states.clear();
     m_settings = CalendarSettings::fromJson(QJsonDocument::fromJson(read(u"calendars.json"_s)).object());
+    m_log.clear();
     for (const QJsonValue &v : QJsonDocument::fromJson(read(u"log.json"_s)).array())
         m_log.append(LogEntry::fromJson(v.toObject()));
 }
