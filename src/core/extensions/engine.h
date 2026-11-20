@@ -99,6 +99,9 @@ struct CommandInfo
     /// meta.key: the keyboard shortcut it suggests ("Ctrl+Alt+W"; the app takes it only while no
     /// command of its own and no other binding has it), "" = none.
     QString key;
+    /// meta.chat: a chat partner (docs/EXTENSIONS.md "Chat partners") — the AI chat may let it
+    /// answer a conversation (ctx.messages); the palette does not offer it unless meta.palette says so.
+    bool chat = false;
 };
 
 struct ViewInfo
@@ -258,6 +261,7 @@ private:
         bool palette = true;
         QString panel; // a view's meta.panel
         QString key;   // a command's meta.key
+        bool chat = false;
     };
     /// A macro or a template variable (b.macro, b.variable).
     struct Contribution {

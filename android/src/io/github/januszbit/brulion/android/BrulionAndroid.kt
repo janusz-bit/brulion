@@ -57,6 +57,10 @@ object BrulionAndroid {
   private const val REQUEST_SOUND_REMINDER = 0x4203
   private const val REQUEST_SOUND_ALARM = 0x4204
 
+  /** Request codes of the camera app and the speech recognizer (MediaCapture; [onActivityResult]). */
+  private const val REQUEST_PHOTO = 0x4205
+  private const val REQUEST_SPEECH = 0x4206
+
   /** Which runtime permissions the app asked for already (to detect "don't ask again"). */
   private const val PREFS_PERMISSIONS = "io.github.januszbit.brulion.android.permissions"
 
@@ -122,6 +126,10 @@ object BrulionAndroid {
    * choice `{mode, uri, title}`, or `{"error": "..."}` when there is no picker.
    */
   @JvmStatic external fun nativeSoundPicked(kind: Int, json: String)
+
+  /** A photo or dictation asked for with [capture] ended: `kind` 0 photo, 1 speech; `json`
+   * {file} / {text}, {cancelled: true} or {error}. */
+  @JvmStatic external fun nativeCaptured(kind: Int, json: String)
 
   /**
    * The on-screen keyboard covers [overlap] physical pixels of Qt's view ([ImeInsets]): [shown]
@@ -875,8 +883,51 @@ object BrulionAndroid {
     activationFrom(activity, intent)?.let { deliver(it) }
   }
 
+  /** Is there an app on the device to take a photo (`kind` 0) or to recognize speech (1)? */
+  @JvmStatic
+  fun canCapture(context: Context, kind: Int): Boolean = MediaCapture.available(context, kind)
+
+  /**
+   * Takes a photo with the camera app (`kind` 0) or listens with the system's speech recognizer
+   * in `language` (BCP 47, "pl-PL"; kind 1). The result comes as nativeCaptured(kind, …).
+   */
+  @JvmStatic
+  fun capture(context: Context, kind: Int, language: String): Boolean {
+    onMain {
+      val activity = currentActivity()
+      if (activity == null) {
+        captured(kind, JSONObject().put("error", "no activity"))
+        return@onMain
+      }
+      val requestCode = if (kind == MediaCapture.PHOTO) REQUEST_PHOTO else REQUEST_SPEECH
+      MediaCapture.start(activity, kind, language, requestCode)?.let { captured(kind, JSONObject().put("error", it)) }
+    }
+    return true
+  }
+
+  private fun captured(kind: Int, json: JSONObject) {
+    synchronized(lock) {
+      if (!nativeAttached) return
+      try {
+        nativeCaptured(kind, json.toString())
+      } catch (e: UnsatisfiedLinkError) {
+        Log.w(TAG, "native capture callback not registered", e)
+      }
+    }
+  }
+
   /** An activity Brulion started for a result answered ([BrulionActivity.onActivityResult]). */
   internal fun onActivityResult(activity: Activity, requestCode: Int, resultCode: Int, data: Intent?) {
+    when (requestCode) {
+      REQUEST_PHOTO -> {
+        captured(MediaCapture.PHOTO, MediaCapture.photoResult(resultCode))
+        return
+      }
+      REQUEST_SPEECH -> {
+        captured(MediaCapture.SPEECH, MediaCapture.speechResult(resultCode, data))
+        return
+      }
+    }
     val kind =
       when (requestCode) {
         REQUEST_SOUND_REMINDER -> SoundKind.REMINDER

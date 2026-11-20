@@ -3,7 +3,8 @@ import QtQuick
 import Brulion
 
 // BlockMenu — the menu of one block of the editor (docs/UI.md "The block editor"): Copy, Cut,
-// Copy as plain text, QR code… (docs/UI.md "QR code"), Select (docs/UI.md "Selecting and
+// Copy as plain text, QR code… (docs/UI.md "QR code"), the AI's Rewrite… / Continue writing /
+// Summarize (while the assistant is on: docs/UI.md "AI in the editor"), Select (docs/UI.md "Selecting and
 // copying" — a block that is part of the block selection: the whole selection; else the block
 // with its children), Zoom in,
 // Collapse / Expand (outline), Copy link ▸ (Block reference ((…)), Link to block [[…#^…]],
@@ -274,6 +275,36 @@ BMenu {
             menu.selectFor(r)
             menu.editor.showSelectionQrCode()
         }
+    }
+    // The AI in the editor (docs/UI.md "AI in the editor"): the block with its children (the
+    // selection it is part of) rewritten, continued after, summed up.
+    function writeWith(action: string): void {
+        const r = menu.row()
+        if (r < 0)
+            return
+        menu.selectFor(r)
+        menu.editor.startWritingLater(action, "")
+    }
+    OptionalItem {
+        objectName: "blockMenuRewrite"
+        shown: menu.editor !== null && menu.editor.writingAvailable && !menu.inCell
+        text: qsTr("Rewrite with AI…")
+        iconName: "sparkles"
+        onTriggered: menu.writeWith("rewrite")
+    }
+    OptionalItem {
+        objectName: "blockMenuContinue"
+        shown: menu.editor !== null && menu.editor.writingAvailable && !menu.inCell
+        text: qsTr("Continue writing with AI")
+        iconName: "pencil"
+        onTriggered: menu.writeWith("continue")
+    }
+    OptionalItem {
+        objectName: "blockMenuSummarize"
+        shown: menu.editor !== null && menu.editor.writingAvailable && !menu.inCell
+        text: qsTr("Summarize with AI")
+        iconName: "scroll-text"
+        onTriggered: menu.writeWith("summarize")
     }
     OptionalItem {
         objectName: "tableCopyCsv"

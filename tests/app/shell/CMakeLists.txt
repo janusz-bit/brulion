@@ -80,6 +80,11 @@ brulion_add_test(tst_shell_workspace_editor SOURCES tst_workspace_editor.cpp LIB
 # saved again and shown again (their versioned URL).
 brulion_add_test(tst_shell_workspace_pictures SOURCES tst_workspace_pictures.cpp ../minihttpserver.h
     LIBS brulion_shell brulion_editor brulion_core_drawing Qt6::Network)
+# The editor's AI assistant on the real Workspace (WritingSession), an OpenAI-compatible server
+# played (../fakeaiserver.h): a rewrite streamed and put into the block as one undo step, a preset
+# waited for, a summary and a continuation of blocks, source mode's paragraph, Stop, failures.
+brulion_add_test(tst_shell_writingsession SOURCES tst_writingsession.cpp ../fakeaiserver.h
+    LIBS brulion_shell brulion_editor Qt6::Network)
 # PDFs on the real Workspace (workspacepdf.cpp): "Open in another app" through a recording hook
 # (what is refused and why), "Draw on this page" (the drawing embedded after the PDF's block, or
 # in today's journal), the drawings of a page, the thumbnails with this build's renderer.

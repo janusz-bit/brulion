@@ -169,8 +169,9 @@ end, { label = "Archive the done tasks" })
 - `ctx.page` is the name of the page on screen, an empty text when there is none.
 - With `block = true` the command works on the block under the cursor, `ctx.block`, and the palette offers it only in a note. Check that `ctx.block` is there.
 - With `palette = false` the palette does not offer it: a view's button (`b.ui.run`) or the app runs it — the AI chat runs the AI assistant's `chat` this way.
-- `ctx.selection` is what you selected in the note before choosing the command: the text selected in the block you are editing, or the selected blocks as Markdown; an empty text when nothing is.
+- `ctx.selection` is what you selected in the note before choosing the command: the text selected in the block you are editing (or in the Markdown source), or the selected blocks as Markdown — what the AI in the editor works on too; an empty text when nothing is.
 - With `key = "Ctrl+Alt+W"` the command suggests a keyboard shortcut; it gets it only while none of Brulion's own commands has it. Every command of an extension is in **Settings → Keyboard shortcuts**, where you can give it any shortcut.
+- With `chat = true` it is a **chat partner**: the AI chat offers it as who answers a conversation. It gets `ctx.messages` (the conversation, the user's last; pictures as `images`) and `ctx.omitted` (how many first messages did not fit the model), and what it returns is its message in the conversation. More in [[AI]].
 - `ctx.args` is what the caller gave the command: a message's button (below), or `brulion-cli extension run … --args '{"page": "Home"}'`; `{}` when nothing was given (write `ctx.args or {}`: a turn of the AI chat has none).
 - A text the function returns is shown as a message. Returning nothing is fine. A table `{ message = "…", tone = "success", button = { label = "Open", page = "Home" } }` is a message too: `tone` is `"success"`, `"warning"` or `"error"`, and the button opens a page, runs one of the extension's commands (`command = "…"`, its `args` as `ctx.args`) or — in what a view's action returns — that view's action again (`action = "…"`, `args`): an **Undo**.
 
@@ -475,7 +476,7 @@ end, { label = "How many open tasks" })
 ```
 
 ## AI
-`b.ai("question")` asks the model chosen in **Settings → Extensions → AI** and returns its answer as text; a table adds `system`, `model`, `maxTokens`, `effort`, `images` (pictures of the notebook for a model that sees: `b.ai({ prompt = "What does it say?", images = { "receipt.jpg" } })`), `messages` for a conversation and `tools` the model may call. The page needs the permission `ai`. More in [[AI]].
+`b.ai("question")` asks the model chosen in **Settings → Extensions → AI** and returns its answer as text; a table adds `system`, `model`, `maxTokens`, `effort`, `thoughts = true` (the reply's `thoughts`: what the model thought — Claude's summary of its thinking, a server's reasoning, the model on the device's thoughts), `images` (pictures of the notebook for a model that sees: `b.ai({ prompt = "What does it say?", images = { "receipt.jpg" } })`), `messages` for a conversation and `tools` the model may call. The page needs the permission `ai`. More in [[AI]].
 
 ## Luau in short
 - Texts are joined with `..`, or written with backticks and braces: `` `{n} pages` ``. A list is `{ "a", "b" }` and counts from 1; `#list` is its length; `for i, item in list do … end` goes through it.

@@ -210,6 +210,30 @@ private Q_SLOTS:
         QCOMPARE(engine->runCommand(u"czat"_s, u"tura"_s, {{u"messages"_s, messages}}).value.toLongLong(), 1);
     }
 
+    void chatPartners()
+    {
+        // chat = true: a partner of the AI chat — not in the palette unless palette = true says so.
+        LOAD_OK(ext(u"pirat"_s, uR"lua(
+            b.command("rozmowa", function(ctx) return "Ahoj! " .. ctx.messages[#ctx.messages].content end,
+                { label = "Pirat", chat = true })
+            b.command("widoczny", function() return 1 end, { chat = true, palette = true })
+            b.command("zwykly", function() return 1 end, { chat = false })
+        )lua"_s));
+        const QList<CommandInfo> commands = engine->commands();
+        QCOMPARE(commands.size(), 3);
+        QCOMPARE(commands[0].name, u"rozmowa"_s);
+        QVERIFY(commands[0].chat);
+        QVERIFY(!commands[0].palette);
+        QCOMPARE(commands[0].label, u"Pirat"_s);
+        QVERIFY(commands[1].chat);
+        QVERIFY(commands[1].palette);
+        QVERIFY(!commands[2].chat);
+        QVERIFY(commands[2].palette);
+        const QVariantList messages{QVariantMap{{u"role"_s, u"user"_s}, {u"content"_s, u"Co słychać?"_s}}};
+        QCOMPARE(engine->runCommand(u"pirat"_s, u"rozmowa"_s, {{u"messages"_s, messages}}).value.toString(),
+                 u"Ahoj! Co słychać?"_s);
+    }
+
     void statusSaysWhatACallDoes()
     {
         LOAD_OK(ext(u"agent"_s, uR"lua(

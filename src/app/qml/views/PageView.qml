@@ -1421,6 +1421,8 @@ FocusScope {
                 editor.runExtensionCommand(Js.sliceFrom(action, 10))
             else if (action === "offerSelection" && editor.visible)
                 Workspace.extensions.offerSelection(root.routePath, editor.selectionForExtensions())
+            else if (Js.startsWith(action, "writing:") && root.noteRoute)
+                editor.startWriting(Js.sliceFrom(action, 8), "")
             else if (action === "saveWebPictures" && editor.visible)
                 editor.downloadWebPictures("")
             else if (action === "recordVoiceNote" && editor.visible)

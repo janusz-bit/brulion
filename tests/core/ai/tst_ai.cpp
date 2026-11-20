@@ -319,6 +319,84 @@ private Q_SLOTS:
         // Nothing to send without a key.
         QVERIFY(!ai::httpRequest(ai::Settings(), ask(u"x"_s), &error));
         QVERIFY2(error.contains(u"no API key"_s), qPrintable(error));
+        // No thinking asked for unless the request wants to show it.
+        QVERIFY(!bodyOf(*ai::httpRequest(claude(), ask(u"x"_s), &error)).contains(u"thinking"_s));
+    }
+
+    void thinkingShown_data()
+    {
+        QTest::addColumn<QString>("model");
+        QTest::addColumn<bool>("shown");
+        QTest::newRow("Opus 5.5") << u"claude-opus-5-5"_s << true;
+        QTest::newRow("Opus 5") << u"claude-opus-5"_s << true;
+        QTest::newRow("Sonnet 5.5") << u"claude-sonnet-5-5"_s << true;
+        QTest::newRow("Sonnet 5") << u"claude-sonnet-5"_s << true;
+        QTest::newRow("Haiku 5.5") << u"claude-haiku-5-5"_s << true;
+        QTest::newRow("Fable 5.2") << u"claude-fable-5-2"_s << true;
+        QTest::newRow("Mythos 5.1") << u"claude-mythos-5-1"_s << true;
+        // Opus 4.7 / 4.8 think only when asked (it would cost more); older models refuse `display`.
+        QTest::newRow("Opus 4.8") << u"claude-opus-4-8"_s << false;
+        QTest::newRow("Opus 4.7") << u"claude-opus-4-7"_s << false;
+        QTest::newRow("Sonnet 4.6") << u"claude-sonnet-4-6"_s << false;
+        QTest::newRow("Haiku 4.5") << u"claude-haiku-4-5"_s << false;
+        QTest::newRow("a look-alike") << u"claude-opus-50"_s << false;
+        QTest::newRow("another provider's") << u"gpt-test"_s << false;
+    }
+    void thinkingShown()
+    {
+        QFETCH(QString, model);
+        QFETCH(bool, shown);
+        QCOMPARE(ai::showsThinking(model), shown);
+        ai::Request request = ask(u"Pomyśl"_s);
+        request.thoughts = true;
+        request.model = model;
+        QString error;
+        const QJsonObject body = bodyOf(*ai::httpRequest(claude(), request, &error));
+        QCOMPARE(body.contains(u"thinking"_s), shown);
+        if (shown)
+            QCOMPARE(body.value(u"thinking"_s).toObject(),
+                     (QJsonObject{{u"type"_s, u"adaptive"_s}, {u"display"_s, u"summarized"_s}}));
+        // An OpenAI-compatible API gets nothing of it (its server sends its reasoning by itself).
+        ai::Settings s;
+        s.provider = u"openai"_s;
+        s.model = model;
+        QVERIFY(!bodyOf(*ai::httpRequest(s, request, &error)).contains(u"thinking"_s));
+    }
+
+    void thoughtsInReplies()
+    {
+        // b.ai's thoughts = true.
+        QString error;
+        std::optional<ai::Request> r = ai::requestFrom({{u"prompt"_s, u"x"_s}, {u"thoughts"_s, true}}, &error);
+        QVERIFY2(r, qPrintable(error));
+        QVERIFY(r->thoughts);
+        QVERIFY(!ai::requestFrom({{u"prompt"_s, u"x"_s}}, &error)->thoughts);
+        QVERIFY(!ai::requestFrom({{u"prompt"_s, u"x"_s}, {u"thoughts"_s, u"tak"_s}}, &error));
+        QVERIFY2(error.contains(u"thoughts"_s), qPrintable(error));
+        // Claude's summarised thinking: its blocks' text, the empty ones (display omitted) none.
+        const ai::Reply claudeReply = ai::readReply(
+                claude(), json(200, R"({"model":"claude-opus-5-5","stop_reason":"end_turn","content":[
+                    {"type":"thinking","thinking":"Najpierw zadania.","signature":"c2ln"},
+                    {"type":"thinking","thinking":"","signature":"c2ln"},
+                    {"type":"text","text":"Masz dwa."},
+                    {"type":"thinking","thinking":"  Potem daty. ","signature":"c2ln"}]})"));
+        QVERIFY(claudeReply.ok);
+        QCOMPARE(claudeReply.text, u"Masz dwa."_s);
+        QCOMPARE(claudeReply.thoughts, u"Najpierw zadania.\n\nPotem daty."_s);
+        QCOMPARE(claudeReply.toVariant().value(u"thoughts"_s).toString(), claudeReply.thoughts);
+        // A server's reasoning.
+        ai::Settings s;
+        s.provider = u"openai"_s;
+        s.model = u"qwen"_s;
+        const ai::Reply serverReply = ai::readReply(
+                s, json(200, R"({"model":"qwen","choices":[{"index":0,"finish_reason":"stop",
+                    "message":{"role":"assistant","content":"Tak.","reasoning_content":"Sprawdzam."}}]})"));
+        QCOMPARE(serverReply.thoughts, u"Sprawdzam."_s);
+        // None: no key in b.ai's answer.
+        const ai::Reply plain = ai::readReply(
+                claude(), json(200, R"({"model":"m","stop_reason":"end_turn","content":[{"type":"text","text":"x"}]})"));
+        QVERIFY(plain.thoughts.isEmpty());
+        QVERIFY(!plain.toVariant().contains(u"thoughts"_s));
     }
 
     void openAiCompatibleRequests()

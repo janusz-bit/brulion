@@ -11,16 +11,15 @@ done in the repository simply disappears from the list.
   reading, pictures, changes the user confirms (docs/EXTENSIONS.md "AI"); missing: a try of the
   remote MCP server (`brulion-cli mcp serve`, docs/CLI.md "Remote MCP server") from claude.ai and
   ChatGPT themselves (it passes the official MCP Python SDK and reads their published client
-  documents) and the desktop app starting it from Settings, an assistant in the editor (rewrite the
-  selection, continue a paragraph), Claude's thoughts in the chat (they are streamed, but the
-  current models send none unless asked with `thinking.display`, which older models refuse) and
-  search by meaning rather than words (docs/SEMANTIC.md).
-* **The AI chat: what is still missing** — conversations are pages in `AI/` (docs/UI.md "AI chat",
-  docs/SYNTAX.md §14); missing: a picture or a photo from the camera sent with a message (the
-  assistant looks only at pictures already in notes), dictation, renaming and deleting a
-  conversation from its list (the page's own menu does it), more than one turn at a time (one per app), a conversation too long for a small model cut by turns rather than by
-  characters, the time of each message, and an extension of one's own as the chat's partner
-  (`chat` is the built-in assistant's command).
+  documents) and the desktop app starting it from Settings, and search by meaning rather than
+  words (docs/SEMANTIC.md).
+* **The AI chat and the writing assistant: what is still to check** — on a real phone: a photo
+  from the camera app for a message (the activity recreated while the camera is in front loses the
+  photo's path, kept only in memory) and dictation with Google's recognizer and with none
+  (GrapheneOS: docs/ANDROID.md "Camera and dictation"); Claude's summarised thinking with a real
+  key (`thoughts = true`, `ai::showsThinking`); dictation elsewhere than Android waits for on-device
+  speech recognition (`platform::setSpeechRecognizer`); the browser picks no picture files for the
+  chat yet (its file picker is the editor's own, `platform/wasm/wasmfiles.h`).
 * **The model on the device: what is still missing** — LFM3-VL 2B, LFM3 1.7B and Brulion
   Assistant 1.7B (LFM3 1.7B with the adapter trained for the assistant: docs/FINETUNE.md) run in
   the app through llama.cpp on Linux (the Nix package) and Android (docs/EXTENSIONS.md "AI",

@@ -53,6 +53,17 @@
          (QMicrophonePermission). Qt Multimedia's Android plugin declares it too, with
          MODIFY_AUDIO_SETTINGS (and CAMERA and BLUETOOTH, never asked for: docs/ANDROID.md). -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- The camera app and the speech recognizer the AI chat asks (MediaCapture.kt): seen by the
+         app from Android 11 on only when named here. Those apps take the photo and listen: no
+         CAMERA permission, and RECORD_AUDIO above is the voice notes' own. -->
+    <queries>
+        <intent>
+            <action android:name="android.media.action.IMAGE_CAPTURE" />
+        </intent>
+        <intent>
+            <action android:name="android.speech.action.RECOGNIZE_SPEECH" />
+        </intent>
+    </queries>
 
     <!-- %%INSERT_FEATURES -->
 

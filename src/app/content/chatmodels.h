@@ -2,17 +2,24 @@
 // list of conversations — pages in AI/ read through the Workspace (core chat/chat.h), refreshed
 // when they change like every content model (WorkspaceListModel).
 //
-//   ChatMessageModel { workspace: Workspace; path: route.path; palette: …; locale: DatesHelper.locale }
+//   ChatMessageModel { workspace: Workspace; path: route.path; palette: …; locale: DatesHelper.locale;
+//                      budget: Workspace.chats.historyBudget }
 //   // roles: sender ("user" | "assistant"), messageHtml (the message as rich text: InlineRenderer's
-//   // escaped HTML, never a note's own), markdown (its text, for Copy), line (its first line in the
-//   // page)
-//   // page: the page the conversation is about ("" none), title: the page's name without the date
+//   // escaped HTML, never a note's own — its pictures left out), markdown (its text, for Copy),
+//   // line (its first line in the page), time ("09:12", "" not said), day ("Today", "15 Nov":
+//   // above the first message of a day, "" otherwise), pictures (their addresses to show; their
+//   // vault paths: picturePaths, to open), sent
+//   // (the model gets it: chat::firstSent with `budget`), firstSent (the first one it gets after
+//   // some it does not: a line above it says so)
+//   // page: the page the conversation is about ("" none), title: the page's name without the date,
+//   // omitted: the messages the model does not get
 //   // render(markdown): an answer being written as a message shows it
 //
 //   ChatListModel { workspace: Workspace; locale: DatesHelper.locale }
 //   // roles: path, title (the name without its date), date ("2026-11-15", "" without one),
 //   // dateLabel ("today 09:12": the page's last change), preview (its last message as one line),
-//   // fromAi (the last message is the AI's), messages (how many). Newest change first.
+//   // fromAi (the last message is the AI's), messages (how many), running / queued (its turn runs,
+//   // waits for the model on the device). Newest change first.
 #pragma once
 
 #include "workspacemodel.h"
@@ -20,6 +27,7 @@
 #include "markdown/inlinerenderer.h"
 
 #include <QString>
+#include <QUrl>
 #include <QVariantMap>
 
 namespace brulion::content {
@@ -38,9 +46,14 @@ class ChatMessageModel : public WorkspaceListModel {
     Q_PROPERTY(QString title READ title NOTIFY loaded FINAL)
     /// The page exists and holds a conversation.
     Q_PROPERTY(bool exists READ exists NOTIFY loaded FINAL)
+    /// The characters of the conversation the model gets at most (0: all of it).
+    Q_PROPERTY(int budget READ budget WRITE setBudget NOTIFY budgetChanged FINAL)
+    /// How many of its first messages the model does not get (they do not fit it).
+    Q_PROPERTY(int omitted READ omitted NOTIFY loaded FINAL)
 
 public:
-    enum Role { RoleRole = Qt::UserRole + 1, HtmlRole, TextRole, LineRole };
+    enum Role { RoleRole = Qt::UserRole + 1, HtmlRole, TextRole, LineRole, TimeRole, DayRole, PicturesRole, SentRole,
+                FirstSentRole, PicturePathsRole };
     explicit ChatMessageModel(QObject *parent = nullptr);
 
     QString path() const { return m_path; }
@@ -52,6 +65,9 @@ public:
     QString page() const { return m_page; }
     QString title() const { return m_title; }
     bool exists() const { return m_exists; }
+    int budget() const { return m_budget; }
+    void setBudget(int budget);
+    int omitted() const { return m_omitted; }
 
     QVariant data(const QModelIndex &index, int role) const override;
     QHash<int, QByteArray> roleNames() const override;
@@ -70,6 +86,7 @@ Q_SIGNALS:
     void pathChanged();
     void paletteChanged();
     void localeChanged();
+    void budgetChanged();
     /// The conversation was read again (page, title, exists may have changed).
     void loaded();
 
@@ -83,6 +100,12 @@ private:
         QString text;
         QString html;
         int line = 0;
+        QString time;
+        QString day;
+        QList<QUrl> pictures;
+        QStringList picturePaths;
+        bool sent = true;
+        bool firstSent = false;
     };
     QList<Row> m_rows;
     QString m_path;
@@ -91,6 +114,8 @@ private:
     QString m_page;
     QString m_title;
     bool m_exists = false;
+    int m_budget = 0;
+    int m_omitted = 0;
 };
 
 class ChatListModel : public WorkspaceListModel {
@@ -98,7 +123,8 @@ class ChatListModel : public WorkspaceListModel {
     Q_PROPERTY(QString locale READ locale WRITE setLocale NOTIFY localeChanged FINAL)
 
 public:
-    enum Role { PathRole = Qt::UserRole + 1, TitleRole, DateRole, DateLabelRole, PreviewRole, FromAiRole, MessagesRole };
+    enum Role { PathRole = Qt::UserRole + 1, TitleRole, DateRole, DateLabelRole, PreviewRole, FromAiRole, MessagesRole,
+                RunningRole, QueuedRole };
     explicit ChatListModel(QObject *parent = nullptr);
 
     QString locale() const { return m_locale; }
@@ -131,6 +157,9 @@ private:
     };
     QList<Row> m_rows;
     QString m_locale = QStringLiteral("pl");
+    QMetaObject::Connection m_turnsChanged;
+    /// The turns' state changed: the rows' running / queued again.
+    void turnsChanged();
 };
 
 } // namespace brulion::content

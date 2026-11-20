@@ -169,8 +169,9 @@ end, { label = "Przenieś zrobione zadania do archiwum" })
 - `ctx.page` to nazwa strony na ekranie; pusty tekst, gdy żadnej nie ma.
 - Z `block = true` polecenie działa na bloku pod kursorem, `ctx.block`, a paleta pokazuje je tylko w notatce. Sprawdź, czy `ctx.block` jest.
 - Z `palette = false` paleta go nie pokazuje: uruchamia je przycisk widoku (`b.ui.run`) albo sama aplikacja — tak czat z AI uruchamia polecenie `chat` asystenta AI.
-- `ctx.selection` to to, co zaznaczyłeś w notatce przed wybraniem polecenia: tekst zaznaczony w edytowanym bloku albo zaznaczone bloki jako Markdown; pusty tekst, gdy nic nie jest zaznaczone.
+- `ctx.selection` to to, co zaznaczyłeś w notatce przed wybraniem polecenia: tekst zaznaczony w edytowanym bloku (albo w źródle Markdown) albo zaznaczone bloki jako Markdown — to samo, na czym pracuje AI w edytorze; pusty tekst, gdy nic nie jest zaznaczone.
 - Z `key = "Ctrl+Alt+W"` polecenie proponuje skrót klawiszowy; dostaje go tylko wtedy, gdy nie ma go żadne polecenie samego Brulionu. Każde polecenie rozszerzenia jest w **Ustawieniach → Skróty klawiszowe**, gdzie możesz mu nadać dowolny skrót.
+- Z `chat = true` jest **rozmówcą** w czacie z AI: czat pozwala wybrać je jako tego, kto odpowiada w rozmowie. Dostaje `ctx.messages` (rozmowę, na końcu wiadomość użytkownika; obrazki jako `images`) i `ctx.omitted` (ile pierwszych wiadomości nie zmieściło się w modelu), a to, co zwraca, jest jego wiadomością w rozmowie. Więcej na stronie [[AI]].
 - `ctx.args` to to, co polecenie dostało od wywołującego: od przycisku komunikatu (niżej) albo z `brulion-cli extension run … --args '{"page": "Dom"}'`; `{}`, gdy nic nie dostało (pisz `ctx.args or {}`: tura czatu z AI nie ma go wcale).
 - Tekst, który funkcja zwróci, pojawia się jako komunikat. Można nie zwracać niczego. Tabela `{ message = "…", tone = "success", button = { label = "Otwórz", page = "Dom" } }` też jest komunikatem: `tone` to `"success"`, `"warning"` albo `"error"`, a przycisk otwiera stronę, uruchamia jedno z poleceń rozszerzenia (`command = "…"`, jego `args` jako `ctx.args`) albo — w tym, co zwraca akcja widoku — jeszcze raz akcję tego widoku (`action = "…"`, `args`): tak działa **Cofnij**.
 
@@ -475,7 +476,7 @@ end, { label = "Ile otwartych zadań" })
 ```
 
 ## AI
-`b.ai("pytanie")` pyta model wybrany w **Ustawieniach → Rozszerzenia → AI** i zwraca jego odpowiedź jako tekst; tabela dodaje `system`, `model`, `maxTokens`, `effort`, `images` (obrazki z notatnika dla modelu, który widzi: `b.ai({ prompt = "Co tu jest napisane?", images = { "paragon.jpg" } })`), `messages` dla rozmowy i `tools`, które model może wywołać. Strona potrzebuje uprawnienia `ai`. Więcej na stronie [[AI]].
+`b.ai("pytanie")` pyta model wybrany w **Ustawieniach → Rozszerzenia → AI** i zwraca jego odpowiedź jako tekst; tabela dodaje `system`, `model`, `maxTokens`, `effort`, `thoughts = true` (pole `thoughts` odpowiedzi: to, co model myślał — streszczenie myślenia Claude'a, rozumowanie serwera, myśli modelu na urządzeniu), `images` (obrazki z notatnika dla modelu, który widzi: `b.ai({ prompt = "Co tu jest napisane?", images = { "paragon.jpg" } })`), `messages` dla rozmowy i `tools`, które model może wywołać. Strona potrzebuje uprawnienia `ai`. Więcej na stronie [[AI]].
 
 ## Luau w skrócie
 - Teksty łączy `..`, można je też pisać w odwrotnych apostrofach z klamrami: `` `{n} stron` ``. Lista to `{ "a", "b" }` i liczy się od 1; `#lista` to jej długość; `for i, element in lista do … end` przechodzi po niej.
