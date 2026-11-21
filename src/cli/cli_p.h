@@ -157,6 +157,9 @@ void addMetaCommands(QList<Command> &out);
 /// `mcp serve`, `mcp password`, `mcp clients`, `mcp revoke` (mcpremote.cpp; addMetaCommands adds
 /// them after `mcp`).
 void addRemoteMcpCommands(QList<Command> &out);
+/// `acp serve`, `acp pair`, `acp clients`, `acp revoke` (acphost.cpp; addMetaCommands adds them
+/// after the MCP commands).
+void addAcpHostCommands(QList<Command> &out);
 
 /// Options for the whole run (docs/CLI.md "Global options").
 struct Globals {
@@ -344,6 +347,11 @@ QStringList mcpProtocolVersions();
 /// with `output` (the envelope) and its exit code returned.
 int serveRemoteMcp(Context &context, const Command &command, const QJsonObject &args,
                    const std::function<int(const Command *, const Result &)> &output);
+
+/// `acp serve` (acphost.cpp): the agents of this computer for other devices; serves until stopped,
+/// a problem on the way printed with `output`.
+int serveAcpHost(Context &context, const Command &command, const QJsonObject &args,
+                 const std::function<int(const Command *, const Result &)> &output);
 
 /// Shell completion script for bash, fish or zsh ("" for another shell).
 QString completionScript(const QString &shell, const QString &program);

@@ -4,12 +4,14 @@
 # only (added by the top-level CMakeLists.txt outside Android and the browser). One command
 # registry (registry.cpp) gives the argument parser, the help, the JSON Schema and the MCP tools.
 # Built on the core module notebook (the app's own logic), never on the app's shell: no reminders,
-# no sync, no settings written.
+# no settings written, and no sync but that of `acp serve --nextcloud` (hostsync.cpp: the agents'
+# copy of a notebook, kept with the app's sync engine).
 #
 # brulion_cli: the static library (the app links it for `brulion cli …`, tests/cli for in-process
 # checks); brulion-cli: the executable.
 qt_add_library(brulion_cli STATIC
     cli.h cli_p.h commands_p.h mcp_p.h
+    acphost.h acphost.cpp
     args.cpp
     authserver.h authserver.cpp
     clip_p.h
@@ -32,6 +34,7 @@ qt_add_library(brulion_cli STATIC
     commands_tools.cpp
     commands_uri.cpp
     context.cpp
+    hostsync.h hostsync.cpp
     http.h http.cpp
     mcp.cpp
     mcpremote.h mcpremote.cpp
@@ -46,7 +49,7 @@ target_link_libraries(brulion_cli
     PUBLIC Qt6::Core brulion_core_notebook brulion_core_calc brulion_core_reminders brulion_core_index
            brulion_core_markdown brulion_core_dates brulion_core_vault brulion_core_text brulion_core_util
            brulion_core_extensions
-    PRIVATE brulion_core_attachments brulion_core_sync brulion_core_automation brulion_core_clipper brulion_core_publish
+    PRIVATE brulion_core_acp brulion_core_attachments brulion_core_sync brulion_core_automation brulion_core_clipper brulion_core_publish
             brulion_core_io brulion_core_cloudimport brulion_ipc Qt6::Network)
 target_compile_definitions(brulion_cli PRIVATE BRULION_VERSION="${PROJECT_VERSION}")
 brulion_set_warnings(brulion_cli)

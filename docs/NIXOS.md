@@ -5,7 +5,7 @@ The repository is a Nix flake. It provides:
 | Output | What it is |
 |---|---|
 | `packages.<system>.brulion` (= `default`) | the desktop app (C++/Qt 6.12 from nixpkgs, built with Clang): `bin/brulion`, menu entry, icons, AppStream metadata |
-| `nixosModules.default` | NixOS module: `programs.brulion` (the app, autostart in the tray), `services.brulion-web` (the browser version through nginx) and `services.brulion-mcp` (the remote MCP server for claude.ai and ChatGPT) |
+| `nixosModules.default` | NixOS module: `programs.brulion` (the app, autostart in the tray), `services.brulion-web` (the browser version through nginx), `services.brulion-mcp` (the remote MCP server for claude.ai and ChatGPT) and `services.brulion-acp` (AI agents of this machine for the app on a phone) |
 | `overlays.default` | adds `pkgs.brulion` (built with the nixpkgs of whoever uses the overlay) |
 | `devShells.<system>.default` | developer environment (Qt 6.12, Clang, CMake, Ninja, ccache, clang-tools, gdb…) |
 | `checks.<system>.*` | package with tests, NixOS module, formatting of `.nix` files, test in a virtual machine |
@@ -325,7 +325,8 @@ format) is in the package: `share/brulion/agent-skills/brulion/SKILL.md`.
 
 **Reminders** added by the agent ring where the app runs: on the computer (in the
 tray, `autostart = true`) and on the phone, once the app sees the change. `brulion-cli` itself
-never starts reminders or sync and does not change the app's settings.
+never starts reminders and does not change the app's settings; it syncs only in `acp serve
+--nextcloud` (below, "AI agents for the phone").
 
 ## Remote MCP server (`services.brulion-mcp`)
 
@@ -410,6 +411,102 @@ call filter, only IP and local sockets, no capabilities. `brulion-mcp` (the admi
 The flake's check `checks.<system>.nixos-module` evaluates the module with the server and builds
 its unit and admin command; `checks.x86_64-linux.web-vm` runs it in a virtual machine: sign-in,
 consent, tokens, a tool call and `brulion-mcp revoke` against the hardened service.
+
+## AI agents for the phone (`services.brulion-acp`)
+
+The app's AI chat can be answered by an AI agent of your own — Claude Code, Codex, OpenCode
+(docs/UI.md "AI agents (ACP)") — with the subscription its own program signs in to. A phone starts
+no programs, so `brulion-cli acp serve` ([CLI.md](CLI.md#ai-agents-for-other-devices)) runs the agent
+on a machine of yours instead, in that machine's copy of the notebook, and the app on the phone
+talks to it: *Settings → Extensions → AI agents → Add → An agent on another computer*. The agent's
+files, commands and Brulion's MCP tools are that machine's; the phone may sleep while it works.
+
+**Reach it only in your own network.** A paired phone drives an agent that runs commands on the
+machine; the service runs as a user of its own with nothing else to lose, and its address should be
+one only your devices reach — a tailnet (Tailscale or your own headscale) or a VPN, never the open
+internet. On a tailnet with MagicDNS and an ACME certificate (as Nextcloud is served there):
+
+```nix
+{ config, lib, pkgs, ... }:
+{
+  services.brulion-acp = {
+    enable = true;
+    agents.claude = { name = "Claude Code"; command = lib.getExe pkgs.claude-agent-acp; };
+    # agents.codex = { name = "Codex"; command = lib.getExe pkgs.codex-acp; };
+    path = with pkgs; [ bashInteractive coreutils findutils gnugrep gnused git ripgrep claude-code ];
+    publicUrl = "https://agent.example.com";        # what `brulion-acp pair` shows the phone
+    # The notebook: its own copy, synced with your Nextcloud as one more device of it
+    # (or `vault = "/var/lib/syncthing/Notatki";` for a copy Syncthing keeps).
+    nextcloud = {
+      url = "https://nextcloud.example.com";
+      user = "jan";
+      folder = "Brulion";                           # as in the app's sync settings
+      passwordFile = config.age.secrets.brulion-acp-nextcloud.path;   # an app password
+    };
+  };
+
+  # HTTPS in front of 127.0.0.1:8790, on the tailnet address only.
+  services.nginx.virtualHosts."agent.example.com" = {
+    listenAddresses = [ "100.64.0.1" ];
+    forceSSL = true;
+    useACMEHost = "agent.example.com";
+    locations."/" = {
+      proxyPass = "http://127.0.0.1:8790";
+      extraConfig = ''
+        proxy_buffering off;          # a receive waits up to 30 s for the agent
+        proxy_read_timeout 90s;
+        client_max_body_size 16m;     # pictures of a prompt
+      '';
+    };
+  };
+  networking.firewall.interfaces.tailscale0.allowedTCPPorts = [ 443 ];
+}
+```
+
+Then, once:
+
+```sh
+sudo brulion-acp login claude    # the agent's own sign-in as the service's user: /login, a subscription
+sudo brulion-acp pair            # a code for the phone (10 minutes, one device)
+sudo brulion-acp clients         # the paired devices, later
+sudo brulion-acp revoke --all    # unpair (also: revoke <dev_…>): the token stops working at once
+```
+
+`brulion-acp login <program> …` runs any program of `path` as the service's user with its home
+(`/var/lib/brulion-acp`), where the agents keep their sign-in (Claude Code: `~/.claude`). The agents
+are pinned by nixpkgs rather than fetched by `npx` when they start.
+
+The service: user `brulion-acp` (or `user`), its state in `/var/lib/brulion-acp` (the state file
+`acp-remote.json` — the paired devices with hashes of their tokens, the code waiting —, the
+notebook's device state, the agents' homes, and `notebook/`, the notebook's own copy when `vault`
+is not set), the Nextcloud password as a systemd credential, `KillMode=control-group` (the agents
+and their commands end with it), and the hardening an agent leaves room for: `ProtectSystem=strict`,
+home directories hidden (`ProtectHome=tmpfs`) except a `vault` bound in, `NoNewPrivileges`,
+`PrivateTmp`, `PrivateDevices`, no capabilities — but no `MemoryDenyWriteExecute` (Node.js) and
+no system call filter or namespace restriction (the agents run programs and may sandbox them).
+
+### `services.brulion-acp` options
+
+| Option | Default | Description |
+|---|---|---|
+| `enable` | `false` | runs `brulion-cli acp serve` as `brulion-acp.service` |
+| `package` | the flake's `brulion-cli` | a package with `bin/brulion-cli` |
+| `agents` | `{ }` | `<id> = { name; command; }` — the agents a device may start, by id |
+| `path` | bash, coreutils, findutils, grep, sed, git | programs on the agents' PATH (and of `brulion-acp login`) |
+| `vault` | `null` | the notebook folder; `null`: `/var/lib/brulion-acp/notebook`, the service's own copy |
+| `nextcloud` | `null` | `{ url; user; folder ? "Brulion"; passwordFile; interval ? 300; deviceName ? null; }` — keep the notebook in sync with Nextcloud |
+| `tools` | `true` | sessions get Brulion's MCP server |
+| `listenAddress` | `"127.0.0.1"` | the address it listens on; another one needs `publicUrl` |
+| `port` | `8790` | the port |
+| `publicUrl` | `null` | the address the phone reaches (`https://…`) |
+| `tls` | `null` | `{ certFile; keyFile; }` — HTTPS without a proxy |
+| `allowedHosts` | `[ ]` | more `Host` names, for a proxy that rewrites it |
+| `user`, `group` | `"brulion-acp"` | who it runs as (the default user and group are created) |
+| `openFirewall` | `false` | open `port` |
+| `extraArgs` | `[ ]` | more options of `acp serve` |
+
+`checks.<system>.nixos-module` evaluates the module with the service and builds its unit and admin
+command.
 
 ## The browser version on your own server (`services.brulion-web`)
 

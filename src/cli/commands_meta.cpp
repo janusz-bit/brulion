@@ -196,6 +196,7 @@ void addMetaCommands(QList<Command> &out)
                                        "calls after the first are fast. Give the notebook with --vault."));
     out.append(c);
     addRemoteMcpCommands(out);
+    addAcpHostCommands(out);
 }
 
 } // namespace brulion::cli

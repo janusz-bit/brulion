@@ -266,6 +266,13 @@ struct Failure
     friend bool operator==(const Failure &, const Failure &) = default;
 };
 
+/// `text`'s lines from `line` (1-based; 0: the first) on, at most `limit` (0: all) — as
+/// fs/read_text_file asks for them.
+QString textLines(const QString &text, int line, int limit);
+/// `output` kept to its last `limit` bytes, cut at a character's start (terminal/output's
+/// outputByteLimit); `cut` says whether anything was left out.
+QByteArray keepLast(const QByteArray &output, qint64 limit, bool *cut = nullptr);
+
 /// JSON-RPC 2.0 over newline-delimited JSON: requests with their callbacks, notifications, the
 /// other side's requests answered by the owner.
 class Connection

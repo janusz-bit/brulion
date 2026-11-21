@@ -1,6 +1,7 @@
 # NixOS module: the Brulion desktop app (programs.brulion), a self-hosted browser version
-# (services.brulion-web, served by nginx) and the remote MCP server for claude.ai's and ChatGPT's
-# connectors (services.brulion-mcp, `brulion-cli mcp serve`). docs/NIXOS.md describes them.
+# (services.brulion-web, served by nginx), the remote MCP server for claude.ai's and ChatGPT's
+# connectors (services.brulion-mcp, `brulion-cli mcp serve`) and AI agents of this machine for the
+# app on a phone (services.brulion-acp, `brulion-cli acp serve`). docs/NIXOS.md describes them.
 #
 # The flake exports it as nixosModules.default = import ./nix/module.nix { inherit self; }, so
 # the package defaults to the flake's own package. Without a flake (`import ./module.nix { }`)
@@ -32,6 +33,7 @@ let
   appCfg = config.programs.brulion;
   webCfg = config.services.brulion-web;
   mcpCfg = config.services.brulion-mcp;
+  acpCfg = config.services.brulion-acp;
 
   system = pkgs.stdenv.hostPlatform.system;
   defaultPackage =
@@ -307,6 +309,114 @@ let
       cd ${mcpStateDir}
       exec runuser -u ${lib.escapeShellArg mcpCfg.user} -- env HOME=${mcpStateDir} \
         ${lib.escapeShellArgs mcpCommonArgs} mcp "$command" --auth-file ${mcpAuthFile} "$@"
+    '';
+  };
+
+  # --- services.brulion-acp -------------------------------------------------------------------
+
+  acpStateDir = "/var/lib/brulion-acp";
+  acpStateFile = "${acpStateDir}/acp-remote.json";
+  acpVault = if acpCfg.vault != null then acpCfg.vault else "${acpStateDir}/notebook";
+  acpOwnVault = acpCfg.vault == null;
+  acpLoopback = lib.elem acpCfg.listenAddress [
+    "127.0.0.1"
+    "::1"
+    "localhost"
+  ];
+  acpAgentsFile = pkgs.writeText "brulion-acp-agents.json" (
+    builtins.toJSON (
+      lib.mapAttrsToList (id: a: {
+        inherit id;
+        inherit (a) name command;
+      }) acpCfg.agents
+    )
+  );
+  acpCommonArgs = [
+    (lib.getExe' acpCfg.package "brulion-cli")
+    "--vault"
+    acpVault
+    "--state-dir"
+    "${acpStateDir}/device"
+  ];
+  acpServeArgs =
+    acpCommonArgs
+    ++ [
+      "acp"
+      "serve"
+      "--agents"
+      acpAgentsFile
+      "--listen"
+      acpCfg.listenAddress
+      "--port"
+      (toString acpCfg.port)
+      "--state-file"
+      acpStateFile
+    ]
+    ++ lib.optionals (acpCfg.publicUrl != null) [
+      "--public-url"
+      acpCfg.publicUrl
+    ]
+    ++ lib.optionals (acpCfg.tls != null) [
+      "--tls-cert"
+      acpCfg.tls.certFile
+      "--tls-key"
+      acpCfg.tls.keyFile
+    ]
+    ++ lib.optionals (acpCfg.allowedHosts != [ ]) [
+      "--allowed-host"
+      (lib.concatStringsSep "," acpCfg.allowedHosts)
+    ]
+    ++ lib.optional (!acpCfg.tools) "--no-tools"
+    ++ lib.optionals (acpCfg.nextcloud != null) [
+      "--nextcloud"
+      acpCfg.nextcloud.url
+      "--nextcloud-user"
+      acpCfg.nextcloud.user
+      "--nextcloud-folder"
+      acpCfg.nextcloud.folder
+      "--sync-interval"
+      (toString acpCfg.nextcloud.interval)
+    ]
+    ++ lib.optionals (acpCfg.nextcloud != null && acpCfg.nextcloud.deviceName != null) [
+      "--device-name"
+      acpCfg.nextcloud.deviceName
+    ]
+    ++ acpCfg.extraArgs;
+
+  # `sudo brulion-acp pair | clients | revoke …` (the server's commands as its user, on its state
+  # file) and `sudo brulion-acp login <program> …` (an agent's own sign-in, e.g. `claude`, as that
+  # user with its home: the subscription the agent then uses).
+  acpAdmin = pkgs.writeShellApplication {
+    name = "brulion-acp";
+    runtimeInputs = [ pkgs.util-linux ];
+    text = ''
+      case "''${1:-}" in
+        pair | clients | revoke | login) ;;
+        *)
+          echo "usage: brulion-acp pair | clients | revoke <device> | revoke --all | login <program> [args…]" >&2
+          echo "(the AI agents server's commands, run as its user; docs/NIXOS.md \"AI agents for the phone\")" >&2
+          exit 2
+          ;;
+      esac
+      if [ "$(id -u)" != 0 ]; then
+        echo "brulion-acp: run it as root: sudo brulion-acp $*" >&2
+        exit 1
+      fi
+      command=$1
+      shift
+      cd ${acpStateDir}
+      if [ "$command" = login ]; then
+        if [ $# -eq 0 ]; then
+          echo "usage: brulion-acp login <program> [args…] (e.g. brulion-acp login claude)" >&2
+          exit 2
+        fi
+        # (the service's own environment: an agent keeps its sign-in under HOME or XDG_*)
+        exec runuser -u ${lib.escapeShellArg acpCfg.user} -- env HOME=${acpStateDir} \
+          XDG_CONFIG_HOME=${acpStateDir}/config XDG_DATA_HOME=${acpStateDir}/data \
+          XDG_CACHE_HOME=/var/cache/brulion-acp PATH=${lib.makeBinPath acpCfg.path}:"$PATH" "$@"
+      fi
+      exec runuser -u ${lib.escapeShellArg acpCfg.user} -- env HOME=${acpStateDir} \
+        ${lib.escapeShellArgs acpCommonArgs} acp "$command" --state-file ${acpStateFile} "$@"
     '';
   };
 in
@@ -679,6 +789,218 @@ in
     };
   };
 
+  options.services.brulion-acp = {
+    enable = mkEnableOption ''
+      AI agents of this machine for Brulion on other devices (`brulion-cli acp serve`): the app on
+      a phone, which starts no programs, pairs with this server and talks to an agent here (Claude
+      Code, Codex …) over the Agent Client Protocol; the agent works in this machine's copy of the
+      notebook and runs its commands here'';
+
+    package = mkOption {
+      type = types.package;
+      default = defaultCliPackage;
+      defaultText = literalExpression "brulion.packages.\${pkgs.stdenv.hostPlatform.system}.brulion-cli";
+      description = "The package with `bin/brulion-cli`.";
+    };
+
+    agents = mkOption {
+      type = types.attrsOf (
+        types.submodule (
+          { name, ... }:
+          {
+            options = {
+              name = mkOption {
+                type = types.str;
+                default = name;
+                example = "Claude Code";
+                description = "The agent's name, as the chat shows it.";
+              };
+              command = mkOption {
+                type = types.str;
+                example = literalExpression "lib.getExe pkgs.claude-agent-acp";
+                description = ''
+                  The program and its arguments (split as a shell would). Prefer a program from
+                  nixpkgs to `npx -y …`, which fetches unpinned code when it starts.
+                '';
+              };
+            };
+          }
+        )
+      );
+      default = { };
+      example = literalExpression ''
+        {
+          claude = { name = "Claude Code"; command = lib.getExe pkgs.claude-agent-acp; };
+          codex = { name = "Codex"; command = lib.getExe pkgs.codex-acp; };
+        }
+      '';
+      description = ''
+        The agents a device may start, by id (letters, digits, `-`, `_`): a device asks for one by
+        its id, never for a program. Each signs in by itself as the service's user
+        (`sudo brulion-acp login claude`, then `/login`).
+      '';
+    };
+
+    path = mkOption {
+      type = types.listOf types.package;
+      default = with pkgs; [
+        bashInteractive
+        coreutils
+        findutils
+        gnugrep
+        gnused
+        git
+      ];
+      defaultText = literalExpression "with pkgs; [ bashInteractive coreutils findutils gnugrep gnused git ]";
+      example = literalExpression "with pkgs; [ bashInteractive coreutils git claude-code ripgrep ]";
+      description = ''
+        Programs on the PATH of the agents and of the commands they run (and of
+        `brulion-acp login`: add the agent's own program to sign in with, e.g. `pkgs.claude-code`).
+      '';
+    };
+
+    vault = mkOption {
+      type = types.nullOr types.str;
+      default = null;
+      example = "/var/lib/syncthing/Notatki";
+      description = ''
+        The notebook folder the agents work in. `null`: {file}`/var/lib/brulion-acp/notebook`, the
+        server's own copy — kept with {option}`services.brulion-acp.nextcloud`. Another folder (a
+        copy Syncthing keeps) must be readable and writable by the service user.
+      '';
+    };
+
+    nextcloud = mkOption {
+      type = types.nullOr (
+        types.submodule {
+          options = {
+            url = mkOption {
+              type = types.str;
+              example = "https://cloud.example.com";
+              description = "Nextcloud's address (as in the app's sync settings), or the notebook folder's WebDAV URL.";
+            };
+            user = mkOption {
+              type = types.str;
+              description = "The Nextcloud user.";
+            };
+            folder = mkOption {
+              type = types.str;
+              default = "Brulion";
+              description = "The notebook's folder in that user's files (as in the app's sync settings).";
+            };
+            passwordFile = mkOption {
+              type = types.str;
+              example = "/run/agenix/brulion-acp-nextcloud";
+              description = ''
+                A file with a Nextcloud app password (Settings → Security → Devices & sessions), from a
+                secret manager — not a path in the Nix store. Handed to the service as a credential.
+              '';
+            };
+            interval = mkOption {
+              type = types.ints.positive;
+              default = 300;
+              description = "Seconds between sync runs (a run also comes before and after every turn).";
+            };
+            deviceName = mkOption {
+              type = types.nullOr types.str;
+              default = null;
+              description = "This machine's name in conflict copies (`null`: its host name).";
+            };
+          };
+        }
+      );
+      default = null;
+      description = ''
+        Keep the notebook in sync with Nextcloud with Brulion's own sync engine, as one more
+        device of the notebook: the agents see the notes just written on the phone, and the phone
+        sees what they changed.
+      '';
+    };
+
+    tools = mkOption {
+      type = types.bool;
+      default = true;
+      description = "Give the agents' sessions Brulion's MCP server (`brulion-cli mcp`: search, queries, tasks, journals).";
+    };
+
+    listenAddress = mkOption {
+      type = types.str;
+      default = "127.0.0.1";
+      description = ''
+        The address to listen on: keep the default behind a reverse proxy that adds HTTPS and is
+        reachable only in your own network (a tailnet, a VPN) — the agents run commands here.
+      '';
+    };
+
+    port = mkOption {
+      type = types.port;
+      default = 8790;
+      description = "The port to listen on.";
+    };
+
+    publicUrl = mkOption {
+      type = types.nullOr (types.strMatching "https?://[^ ]+");
+      default = null;
+      example = "https://agent.example.com";
+      description = ''
+        The address the devices reach the server at (the proxy's): what `brulion-acp pair` shows
+        and what the app is given. `https://` (`http://` only for this machine).
+      '';
+    };
+
+    tls = mkOption {
+      type = types.nullOr (
+        types.submodule {
+          options = {
+            certFile = mkOption {
+              type = types.str;
+              description = "The certificate chain (PEM), reloaded when it changes.";
+            };
+            keyFile = mkOption {
+              type = types.str;
+              description = "Its private key (PEM, RSA or EC, without a passphrase).";
+            };
+          };
+        }
+      );
+      default = null;
+      description = "Serve HTTPS itself (no proxy); the service user must be able to read both files.";
+    };
+
+    allowedHosts = mkOption {
+      type = types.listOf types.str;
+      default = [ ];
+      description = "More `Host` values it answers to (a proxy that rewrites `Host`).";
+    };
+
+    user = mkOption {
+      type = types.str;
+      default = "brulion-acp";
+      description = ''
+        The user the server and its agents run as: a system user of its own by default, with no
+        groups and nothing of anyone else's to read or change.
+      '';
+    };
+
+    group = mkOption {
+      type = types.str;
+      default = "brulion-acp";
+      description = "The service's group (created when it is the default).";
+    };
+
+    openFirewall = mkOption {
+      type = types.bool;
+      default = false;
+      description = "Open the port in the firewall (only when it listens on another address than loopback).";
+    };
+
+    extraArgs = mkOption {
+      type = types.listOf types.str;
+      default = [ ];
+      description = "More options of `brulion-cli acp serve`.";
+    };
+  };
+
   config = mkMerge [
     (mkIf appCfg.enable {
       environment.systemPackages = [ appCfg.package ];
@@ -834,6 +1156,106 @@ in
       };
 
       networking.firewall.allowedTCPPorts = mkIf mcpCfg.openFirewall [ mcpCfg.port ];
+    })
+
+    (mkIf acpCfg.enable {
+      assertions = [
+        {
+          assertion = acpCfg.agents != { };
+          message = "services.brulion-acp: name at least one agent in `agents`.";
+        }
+        {
+          assertion = acpLoopback || acpCfg.publicUrl != null;
+          message = "services.brulion-acp: listening on ${acpCfg.listenAddress} needs publicUrl (the address the devices reach).";
+        }
+        {
+          assertion =
+            acpCfg.nextcloud == null || !lib.hasPrefix builtins.storeDir acpCfg.nextcloud.passwordFile;
+          message = "services.brulion-acp: nextcloud.passwordFile must not be in the Nix store (everybody can read it).";
+        }
+      ];
+
+      environment.systemPackages = [ acpAdmin ];
+
+      users.users = mkIf (acpCfg.user == "brulion-acp") {
+        brulion-acp = {
+          isSystemUser = true;
+          group = acpCfg.group;
+          home = acpStateDir;
+          # (`brulion-acp login` runs the agent's own program as this user)
+          shell = pkgs.bashInteractive;
+          description = "Brulion AI agents for other devices";
+        };
+      };
+      users.groups = mkIf (acpCfg.group == "brulion-acp") { brulion-acp = { }; };
+
+      systemd.services.brulion-acp = {
+        description = "Brulion AI agents for other devices (brulion-cli acp serve)";
+        documentation = [ "https://github.com/janusz-bit/brulion/blob/main/docs/NIXOS.md" ];
+        wantedBy = [ "multi-user.target" ];
+        # The agents talk to their providers, the sync to Nextcloud.
+        wants = [ "network-online.target" ];
+        after = [ "network-online.target" ];
+        path = acpCfg.path;
+        environment = {
+          HOME = acpStateDir;
+          XDG_CONFIG_HOME = "${acpStateDir}/config";
+          XDG_DATA_HOME = "${acpStateDir}/data";
+          XDG_CACHE_HOME = "/var/cache/brulion-acp";
+          LANG = "C.UTF-8";
+        };
+        serviceConfig = {
+          ExecStart =
+            utils.escapeSystemdExecArgs acpServeArgs
+            + optionalString (acpCfg.nextcloud != null) " --nextcloud-password-file %d/nextcloud-password";
+          LoadCredential = lib.optional (
+            acpCfg.nextcloud != null
+          ) "nextcloud-password:${acpCfg.nextcloud.passwordFile}";
+          User = acpCfg.user;
+          Group = acpCfg.group;
+          StateDirectory = [ "brulion-acp" ] ++ lib.optional acpOwnVault "brulion-acp/notebook";
+          StateDirectoryMode = "0700";
+          CacheDirectory = "brulion-acp";
+          WorkingDirectory = acpStateDir;
+          Restart = "on-failure";
+          RestartSec = 5;
+          UMask = "0077";
+          # The agents and their commands end with the server.
+          KillMode = "control-group";
+
+          # Hardening that leaves the agents able to work: they run Node.js (a JIT: no
+          # MemoryDenyWriteExecute), any program of `path`, and may sandbox their own commands
+          # (namespaces). Nothing outside their own directories and the notebook is writable.
+          ProtectSystem = "strict";
+          ProtectHome = "tmpfs";
+          BindPaths = lib.optional (!acpOwnVault) acpVault;
+          BindReadOnlyPaths = lib.optionals (acpCfg.tls != null) [
+            (dirOf acpCfg.tls.certFile)
+            (dirOf acpCfg.tls.keyFile)
+          ];
+          ReadWritePaths = lib.optional (!acpOwnVault) acpVault;
+          PrivateTmp = true;
+          PrivateDevices = true;
+          NoNewPrivileges = true;
+          ProtectKernelTunables = true;
+          ProtectKernelModules = true;
+          ProtectKernelLogs = true;
+          ProtectControlGroups = true;
+          ProtectClock = true;
+          ProtectHostname = true;
+          ProtectProc = "invisible";
+          RestrictRealtime = true;
+          RestrictSUIDSGID = true;
+          LockPersonality = true;
+          RemoveIPC = true;
+          KeyringMode = "private";
+          SystemCallArchitectures = "native";
+          CapabilityBoundingSet = if acpCfg.port < 1024 then [ "CAP_NET_BIND_SERVICE" ] else [ "" ];
+          AmbientCapabilities = lib.optional (acpCfg.port < 1024) "CAP_NET_BIND_SERVICE";
+        };
+      };
+
+      networking.firewall.allowedTCPPorts = mkIf acpCfg.openFirewall [ acpCfg.port ];
     })
   ];
 }

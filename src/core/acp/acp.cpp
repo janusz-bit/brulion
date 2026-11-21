@@ -1220,4 +1220,43 @@ void Client::onRequest(const QJsonValue &id, const QString &method, const QJsonO
         Q_EMIT permissionAsked(key, *permission);
 }
 
+QString textLines(const QString &text, int line, int limit)
+{
+    if (line <= 1 && limit <= 0)
+        return text;
+    qsizetype from = 0;
+    for (int n = 1; n < line && from >= 0; ++n) {
+        from = text.indexOf(u'\n', from);
+        if (from >= 0)
+            ++from;
+    }
+    if (from < 0)
+        return {};
+    if (limit <= 0)
+        return text.mid(from);
+    qsizetype end = from;
+    for (int n = 0; n < limit && end >= 0; ++n) {
+        end = text.indexOf(u'\n', end);
+        if (end >= 0)
+            ++end;
+    }
+    return end < 0 ? text.mid(from) : text.mid(from, end - from);
+}
+
+QByteArray keepLast(const QByteArray &output, qint64 limit, bool *cut)
+{
+    if (limit <= 0 || output.size() <= limit) {
+        if (cut)
+            *cut = false;
+        return output;
+    }
+    qsizetype from = output.size() - limit;
+    // (Not in the middle of a character: UTF-8's continuation bytes are 10xxxxxx.)
+    while (from < output.size() && (static_cast<unsigned char>(output.at(from)) & 0xC0) == 0x80)
+        ++from;
+    if (cut)
+        *cut = true;
+    return output.mid(from);
+}
+
 } // namespace brulion::acp

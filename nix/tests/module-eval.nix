@@ -9,6 +9,9 @@
 #   hardening) and the `brulion-mcp` admin command (shellcheck) build; a public address without
 #   publicUrl, a password file in the store and destructive tools on a read-only server are
 #   refused by assertions.
+# * services.brulion-acp: its unit (the agents' file, the Nextcloud password as a credential, the
+#   notebook of its own, the hardening an agent leaves room for) and the `brulion-acp` admin command
+#   build; no agent, a public address without publicUrl and a password file in the store are refused.
 {
   pkgs,
   lib,
@@ -107,7 +110,51 @@ let
     lib.assertMsg (lib.any (m: lib.hasInfix text m) (
       mcpFailed extra
     )) "services.brulion-mcp: expected '${text}'";
+
+  # The AI agents for other devices, with the same stand-in package.
+  acpSystem =
+    extra:
+    evalSystem {
+      services.brulion-web.package = fakeWebBuild;
+      services.brulion-acp = lib.mkMerge [
+        {
+          enable = true;
+          package = fakeCli;
+          agents.claude = {
+            name = "Claude Code";
+            command = "/run/current-system/sw/bin/claude-agent-acp";
+          };
+          publicUrl = "https://agent.example.com";
+          nextcloud = {
+            url = "https://cloud.example.com";
+            user = "jan";
+            folder = "Notatki";
+            passwordFile = "/run/agenix/brulion-acp-nextcloud";
+          };
+        }
+        extra
+      ];
+    };
+  acp = acpSystem { };
+  acpFailed =
+    extra: map (a: a.message) (lib.filter (a: !a.assertion) (acpSystem extra).config.assertions);
+  acpRefused =
+    extra: text:
+    lib.assertMsg (lib.any (m: lib.hasInfix text m) (
+      acpFailed extra
+    )) "services.brulion-acp: expected '${text}'";
 in
+assert acpRefused { agents = lib.mkForce { }; } "at least one agent";
+assert acpRefused {
+  listenAddress = "0.0.0.0";
+  publicUrl = lib.mkForce null;
+} "needs publicUrl";
+assert acpRefused {
+  nextcloud.passwordFile = lib.mkForce "${pkgs.writeText "password" "x"}";
+} "must not be in the Nix store";
+assert lib.assertMsg (
+  acpFailed { } == [ ]
+) "services.brulion-acp: the example must pass its assertions";
 assert mcpRefused {
   listenAddress = "0.0.0.0";
   publicUrl = lib.mkForce null;
@@ -158,6 +205,12 @@ pkgs.runCommand "brulion-nixos-module"
       p: (p.name or "") == "brulion-mcp"
     ) (throw "no brulion-mcp command") mcp.config.environment.systemPackages;
     mcpUser = lib.boolToString (mcp.config.users.users ? brulion-mcp);
+    acpToplevel = builtins.unsafeDiscardStringContext acp.config.system.build.toplevel.drvPath;
+    acpUnit = acp.config.systemd.units."brulion-acp.service".unit;
+    acpAdmin = lib.findFirst (
+      p: (p.name or "") == "brulion-acp"
+    ) (throw "no brulion-acp command") acp.config.environment.systemPackages;
+    acpUser = lib.boolToString (acp.config.users.users ? brulion-acp);
   }
   ''
     echo "system: $toplevel"
@@ -216,5 +269,29 @@ pkgs.runCommand "brulion-nixos-module"
     [ "$mcpUser" = true ] || fail "the brulion-mcp user is not created"
     test -x "$mcpAdmin/bin/brulion-mcp" || fail "no brulion-mcp admin command"
     grep -qF -- 'runuser -u brulion-mcp' "$mcpAdmin/bin/brulion-mcp" || fail "the admin command does not switch user"
+
+    echo "system with the AI agents for other devices: $acpToplevel"
+    unit="$acpUnit/brulion-acp.service"
+    expectAcp() { grep -qF -- "$1" "$unit" || fail "brulion-acp.service has no '$1'"; }
+    expectAcp '/bin/brulion-cli" "--vault" "/var/lib/brulion-acp/notebook" "--state-dir" "/var/lib/brulion-acp/device" "acp" "serve" "--agents"'
+    expectAcp '"--listen" "127.0.0.1" "--port" "8790" "--state-file" "/var/lib/brulion-acp/acp-remote.json"'
+    expectAcp '"--public-url" "https://agent.example.com"'
+    expectAcp '"--nextcloud" "https://cloud.example.com" "--nextcloud-user" "jan" "--nextcloud-folder" "Notatki" "--sync-interval" "300"'
+    expectAcp ' --nextcloud-password-file %d/nextcloud-password'
+    expectAcp 'LoadCredential=nextcloud-password:/run/agenix/brulion-acp-nextcloud'
+    expectAcp 'User=brulion-acp'
+    expectAcp 'StateDirectory=brulion-acp'
+    expectAcp 'StateDirectory=brulion-acp/notebook'
+    expectAcp 'KillMode=control-group'
+    expectAcp 'ProtectSystem=strict'
+    expectAcp 'NoNewPrivileges=true'
+    ! grep -qF -- 'MemoryDenyWriteExecute' "$unit" || fail "brulion-acp.service: Node.js agents need W+X memory"
+    agents=$(grep -oE '/nix/store/[a-z0-9]+-brulion-acp-agents.json' "$unit" | head -1)
+    [ -n "$agents" ] || fail "brulion-acp.service names no agents file"
+    grep -qF -- '{"command":"/run/current-system/sw/bin/claude-agent-acp","id":"claude","name":"Claude Code"}' "$agents" ||
+      fail "the agents file does not list claude: $(cat "$agents")"
+    [ "$acpUser" = true ] || fail "the brulion-acp user is not created"
+    test -x "$acpAdmin/bin/brulion-acp" || fail "no brulion-acp admin command"
+    grep -qF -- 'runuser -u brulion-acp' "$acpAdmin/bin/brulion-acp" || fail "the acp admin command does not switch user"
     touch $out
   ''

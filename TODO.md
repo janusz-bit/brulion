@@ -15,9 +15,18 @@ done in the repository simply disappears from the list.
   words (docs/SEMANTIC.md).
 * **AI agents (ACP): what is still missing** — an agent the user runs answers in the AI chat over
   the Agent Client Protocol (docs/UI.md "AI agents (ACP)"; tried with Claude Code, Codex and
-  OpenCode). Missing: a try with Gemini CLI (it needs a Google sign-in) and on Windows (a preset's
-  `npx.cmd` through `cmd.exe /c`) and macOS; and the other direction — Brulion's assistant as an
-  ACP agent for Zed and JetBrains (`brulion-cli acp`, which needs `b.ai` in brulion-cli).
+  OpenCode), and `brulion-cli acp serve` runs one on a computer for other devices (docs/CLI.md "AI
+  agents for other devices"; core `acp/remote.h` is the app's side of it, services.brulion-acp the
+  NixOS service). Missing: the app's side — *Settings → Extensions → AI agents → Add → An agent on
+  another computer* (the address and a pairing code, the token kept as the AI key is, the host's
+  agents offered as partners, also on Android), WorkspaceAgents over a `RemoteStream` instead of a
+  process (the host's folder as the cwd and in the context, no files or terminals of its own, a
+  sign-in in the host's terminal named, the stream's ends in words), a turn whose app was ended
+  meanwhile (the host has its answer; a new stream knows nothing of it), pairing through a
+  brulion:// link or a QR code `acp pair` prints, and a try with a real agent on a phone; a try
+  with Gemini CLI (it needs a Google sign-in) and on Windows (a preset's `npx.cmd` through
+  `cmd.exe /c`) and macOS; and the other direction — Brulion's assistant as an ACP agent for Zed
+  and JetBrains (`brulion-cli acp agent`, which needs `b.ai` in brulion-cli).
 * **The AI chat and the writing assistant: what is still to check** — on a real phone: a photo
   from the camera app for a message (the activity recreated while the camera is in front loses the
   photo's path, kept only in memory) and dictation with Google's recognizer and with none

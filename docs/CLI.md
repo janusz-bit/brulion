@@ -7,6 +7,8 @@ exit code says what went wrong. The same set of commands works as an MCP server 
 for AI agents such as Hermes or Claude Code, and over HTTPS with sign-in (`brulion-cli mcp serve`)
 for the providers' own apps — claude.ai, the Claude app on the phone, ChatGPT — which then search,
 read and (if you allow it) change the notebook on your own computer ("Remote MCP server" below).
+`brulion-cli acp serve` runs an AI agent of the computer — Claude Code, Codex — for the app on a
+phone, which cannot start one itself ("AI agents for other devices" below).
 The agent gets the notes as a plain folder (Syncthing, the Nextcloud client). The agent's changes go into the version history described as "Replaced from
 the command line (agent)", commands that delete or overwrite something need `--allow-destructive`,
 and deleted pages go to the trash. When you turn on "Allow agents to control the app" in the app
@@ -22,8 +24,9 @@ documentation follows below.
 
 `brulion-cli` reads and changes a Brulion notebook folder headless. It is built on the same core
 code as the app (`src/core/notebook`), so a capture, a journal append, a task, a rename or a move
-writes exactly what the app writes. It never starts reminders or sync and never writes the app's
-settings.
+writes exactly what the app writes. It never starts reminders and never writes the app's
+settings, and it syncs only where asked to: `acp serve --nextcloud` keeps its agents' copy of a
+notebook in sync ("AI agents for other devices").
 
 * Desktop only (Linux): `brulion-cli` in the Nix package and in `cmake --install`; `brulion cli …`
   inside the app's binary (also `Brulion.AppImage cli …`). Android and the browser have no command
@@ -343,6 +346,10 @@ Never compute a hash yourself.
 | `mcp password` | `[--stdin] [--print-hash] [--auth-file F]` | set its password (kept as a salted PBKDF2 hash) | |
 | `mcp clients` | `[--auth-file F]` | the apps connected to it: `{connections [{id, client, clientId, kind, returnsTo, scopes, write, connected, lastUsed, expires}], clients, passwordSet}` | |
 | `mcp revoke [<connection>]` | `[--all] [--auth-file F]` | end a connection (`bgr_…`) or all of a client's (`bcl_…`, an https client ID); takes effect in a running server at once | |
+| `acp serve` | `(--agent SPEC \| --agents F) [--listen A] [--port N] [--public-url U] [--tls-cert F --tls-key F] [--state-file F] [--allowed-host H] [--no-tools] [--nextcloud U --nextcloud-user N --nextcloud-folder F --nextcloud-password-file F [--sync-interval S] [--device-name N]]` | AI agents of this computer for the app on other devices (a phone), over the Agent Client Protocol ("AI agents for other devices" below) | |
+| `acp pair` | `[--state-file F]` | a pairing code for a device: `{code, expires, url}` — 10 minutes, one device, five wrong tries | |
+| `acp clients` | `[--state-file F]` | the paired devices: `{devices [{id, name, paired, lastUsed}], pairingCodeValid, url}` | |
+| `acp revoke [<device>]` | `[--all] [--state-file F]` | unpair a device (`dev_…`) or all; its token stops working and its agents stop, in a running server too | |
 <!-- /commands -->
 
 The `habit` commands are run by the app's built-in habits extension (`nawyki.luau`, its commands
@@ -760,6 +767,95 @@ The server is its own authorization server (one issuer: the public URL):
   `Transfer-Encoding`, folded or control characters in header fields …) are refused with 400.
 * Bind it to `127.0.0.1` behind a proxy or tunnel (the default). Without TLS it refuses a public
   URL that is not https.
+
+## AI agents for other devices
+
+The app runs an AI agent of the user's own — Claude Code, Codex, Gemini CLI, OpenCode, any program
+that speaks the [Agent Client Protocol](https://agentclientprotocol.com) — as a partner of the AI
+chat (docs/UI.md "AI agents (ACP)"), but only on a computer: a phone starts no programs. `brulion-cli
+acp serve` lets the phone use one anyway: it starts the agent on a computer that has a copy of the
+notebook (a home server, a laptop), and relays the protocol between the agent and the app on the
+phone. The agent signs in by itself on that computer — a Claude or ChatGPT subscription its own
+program uses works — and works there: its files, its commands and Brulion's MCP tools are that
+computer's. The app keeps the conversation as with an agent of its own (its answer as it is
+written, its plan and steps, the diffs of files, its questions, its model and mode).
+
+* **Agents**: `--agent claude` (the presets claude, codex, gemini, opencode run their `npx`
+  commands, as the app's), `--agent "claude=/run/current-system/sw/bin/claude-agent-acp"` (an id,
+  optionally `:Name`, `=` the command), several separated by `;`, or `--agents agents.json`
+  (`[{id, name, command}]`). A device asks for an agent by its id: the commands are this
+  computer's, never the device's.
+* **Pairing**: `acp pair` prints a code (`K7QM-2XRP`: 8 letters and digits none of which can be
+  mistaken for another) and the server's address; in the app *Settings → Extensions → AI agents →
+  Add → An agent on another computer*, the address and the code. The code is valid for 10 minutes,
+  for one device, and five wrong tries end it; at most 20 tries a minute reach the server at all.
+  The device gets a token (`bat_…`, 256 random bits) that the state file keeps only as its SHA-256
+  hash; `acp clients` lists the devices, `acp revoke` unpairs one — a running server reads the
+  state file again when it changes, so a device unpaired stops at once, with its agents.
+* **The state file**: `acp-remote.json` in the notebook's device state (owner-only), or
+  `--state-file`: the devices, the code waiting, the server's public address.
+* **What happens on the way to the agent**: `initialize` offers the client's files and terminals
+  (served here), whatever the device offered; `session/new`, `session/load` and `session/resume`
+  get this notebook's folder as `cwd` and, unless `--no-tools`, Brulion's MCP server
+  (`brulion-cli mcp --vault <notebook>`, the program itself or one next to it) instead of any
+  server the device names. The agent's `fs/read_text_file` and `fs/write_text_file` are answered
+  here: only files of the notebook (not `.brulion/`, `.trash/` or a link out of it), written as the
+  command line writes — the replaced text in the version history ("Replaced from the command line
+  (agent)") — and never an encrypted page. Its `terminal/*` run here: in the notebook's folder by
+  default, as this computer's user, the output kept to the agent's limit (1 MiB by default), at
+  most 32 at a time. Everything else — the agent's answers, updates, questions, the device's
+  prompts and answers — goes through as it is.
+* **A stream** is one agent's process for one device (`POST streams`), at most 8 per device and
+  16 in all; a new stream of a device for an agent ends its older one (the app keeps one process
+  per agent: it started again). What the agent says waits here until the device fetches it — a
+  phone that sleeps or loses the network for a while misses nothing — up to 32 MiB (then the
+  stream ends). A stream no device fetched from for 30 minutes, without a turn running, ends; so
+  does one the device ends (`DELETE`), or whose agent exits (its last line of standard error says
+  why — kept for the device to hear for 5 minutes).
+* **Sync**: with `--nextcloud https://cloud.example.com --nextcloud-user jan --nextcloud-folder
+  Brulion --nextcloud-password-file F` (a Nextcloud app password) the notebook here is one more
+  device of a notebook synced through Nextcloud, with the app's sync engine (three-way merges,
+  conflict copies named with `--device-name`, the mass-deletion guard: deletions it holds back
+  wait for the app). A run when the server starts, every `--sync-interval` seconds (300), a few
+  seconds after the agent wrote a file, before every turn — the turn waits for it, a minute at
+  most, so the notes just written on the phone are here — and after every turn. It is the one place
+  brulion-cli syncs; `info` says how the last run went. Without `--nextcloud` the notebook is
+  synced however the computer keeps it (Syncthing).
+* **Language**: English, as `mcp serve` — the app words the agent's ends and failures itself.
+
+The API (`<public URL>/acp/v1/`, JSON; `src/core/acp/remote.h` is the app's side):
+
+| Request | Body / query | Answer |
+|---|---|---|
+| `POST pair` | `{code, device}` (no token) | `{token, device: {id, name}}`; 403 `no_code`, `bad_code`, `too_many_devices`; 429 `too_many_tries` |
+| `GET info` | | `{protocol: 1, version, host, root, tools, agents [{id, name, command}], sync {enabled, running, last, ok, error, uploaded, downloaded}}` |
+| `POST streams` | `{agent}` | 201 `{stream, root}`; 404 `unknown_agent`, 429 `too_many_streams` |
+| `POST streams/<id>/send` | `{from, messages [...]}` | `{received}` — `from` is the number of the first message among all this stream was sent, so a batch sent again after a lost answer is not delivered twice; 409 `gap` |
+| `GET streams/<id>/receive` | `?after=N&wait=S` (S ≤ 30) | `{messages [{seq, message}], closed, why}` — the messages after `N` (those up to `N` are dropped here), at once or within S seconds; at most 4 MiB at a time |
+| `DELETE streams/<id>` | | 204: the agent's process ends |
+
+Every request but `pair` carries `Authorization: Bearer <token>` (401 `unauthorized` without a
+paired one). Errors are `{error: {code, message}}`. A stream of another device, or one that ended
+and was given up, is 404 `no_stream`.
+
+```sh
+brulion-cli --vault ~/Notatki acp pair
+brulion-cli --vault ~/Notatki acp serve --agent claude --public-url https://agent.example.com
+```
+
+### Security notes
+
+* **An agent runs commands on this computer as the server's user**, whatever the device asks it:
+  pairing a device lets it drive that agent. Run the server as a user of its own with nothing
+  else to lose (the NixOS module does: docs/NIXOS.md "AI agents for the phone"), and reach it only
+  in your own network — a tailnet (Tailscale, headscale) or a VPN — never from the open internet.
+* It listens on `127.0.0.1` by default, for a reverse proxy that adds HTTPS; without TLS it refuses
+  a public URL that is not https. `Host` is checked on every request (DNS rebinding) and a request
+  with an `Origin` — a web page's — is refused: only the app talks to it.
+* The HTTP limits are those of `mcp serve` ("Remote MCP server": connections, header fields,
+  timeouts), a body of a send at most 16 MiB (pictures of a prompt).
+* Note text is untrusted data for the agent as for any model: a note can carry instructions. What
+  an agent may do without asking is its own setting (its mode), as in the app.
 
 ## The running app
 

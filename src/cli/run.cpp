@@ -199,6 +199,11 @@ int run(int argc, char **argv)
         useLanguage(u"en"_s);
         return serveRemoteMcp(ctx, *inv.command, inv.args, output);
     }
+    if (inv.command->id == u"acp.serve") {
+        // English for its clients and its log, as `mcp serve`.
+        useLanguage(u"en"_s);
+        return serveAcpHost(ctx, *inv.command, inv.args, output);
+    }
     if (inv.command->id == u"clip.host") {
         useLanguage(u"en"_s);
         return serveClipHost(ctx);
