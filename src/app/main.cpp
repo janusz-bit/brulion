@@ -8,6 +8,7 @@
 #include "ui/gestureinsets.h" // the system's gesture zones at the window's edges (GestureInsets)
 #include "ui/keyboardinsets.h" // the on-screen keyboard's height (KeyboardInsets)
 #include "ui/keyboardsources.h"
+#include "ui/qmlshutdown.h" // the QML gone before the engine and the application object at quit
 #include "ui/smoothscroll.h" // the wheel and the scroll bars scroll like a web browser (SmoothScroll)
 #include "ui/uifonts.h" // the bundled text fonts (Inter, Literata, JetBrains Mono)
 #include "ui/uiscale.h" // the interface scale ("Interface size", "Automatic" by the screen)
@@ -38,9 +39,10 @@
 #include <QJsonObject>
 #include <QLocale>
 #include <QQmlApplicationEngine>
-#include <QScreen>
 #include <QQmlFileSelector>
 #include <QQuickStyle>
+#include <QScopeGuard>
+#include <QScreen>
 #include <QStandardPaths>
 #include <QTranslator>
 #include <QUrl>
@@ -163,6 +165,9 @@ int main(int argc, char *argv[])
 #else
     QGuiApplication app(argc, argv);
 #endif
+    // Last before the application object goes: QML items the engine's own destruction handed to it
+    // are deleted while it still exists (ui/qmlshutdown.h; its destructor crashed deleting them).
+    const auto qmlLeftovers = qScopeGuard([] { brulion::ui::deleteQmlLeftovers(); });
 #ifdef BRULION_DESKTOP_INTEGRATION
     // The profile: --profile <name>, else BRULION_PROFILE, else "test" for a test run without a
     // home of its own (--selftest-*, --journey, --screenshot: never the user's own settings and
@@ -724,6 +729,10 @@ int main(int argc, char *argv[])
     startUi();
 #endif
     const int code = QGuiApplication::exec();
+    // The windows go first, while the engine, the controller and the application object still exist,
+    // and with them what their views hand to the application object as the app quits
+    // (ui/qmlshutdown.h: a crash at quit otherwise).
+    brulion::ui::releaseQmlWindows(&engine);
     brulion::drawingview::DrawingBackdrops::setPathResolver({});
     brulion::drawingview::DrawingBackdrops::setImporter({});
     if (controller)

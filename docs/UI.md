@@ -6574,6 +6574,28 @@ A whole run took 0.3–7 ms on the desktop with the sample notebook (logging cat
 Whole runs also start more often in the middle of a long function. That is why the self-tests'
 runner holds deferred deletions while a pass runs ("The playground's self-tests" below).
 
+### Quitting: the windows before the engine
+
+`main.cpp` deletes the engine's windows right after `exec()` returns, while the engine, the
+controller and the application object still exist (`ui::releaseQmlWindows`,
+`src/app/ui/qmlshutdown.h`), and delivers the deferred deletions that this starts, round after
+round. A guard declared right after the application object deletes whatever QML items are still
+its children when everything else is gone (`ui::deleteQmlLeftovers`).
+
+Why: once the app is quitting (`aboutToQuit` has been emitted), a `ListView` or `GridView` that
+gives up a delegate makes it a child of the application object and deletes it later. It does so
+for a delegate it releases and for one it cancels while it is still being created
+(`QQmlDelegateModelItem::destroyObjectLater`, QTBUG-87228). No event loop runs after `exec()`, so
+the application object's own destructor deleted those delegates, after
+`QCoreApplication::instance()` had become null. A delegate that holds a view of its own, whose
+next delegate was still being created, cancels that creation then, and Qt reads the null instance.
+That is a journal day built ahead: the journal's `ListView` (a kept view, built asynchronously),
+a day's `ContentJournalDay`, its `BlockEditor`'s rows. The AppImage job's QML smoke test crashed
+this way once (2026-11-20, SIGSEGV in `destroyObjectLater` from `QQmlDelegateModel::cancel` in the
+inner view's destructor): it quits 1.5 s after the start, while the views are being built ahead.
+`tst_ui_qmlshutdown` quits that shape at every step of its incubation, advanced by hand. Without
+the release Qt crashes at some steps; with it no step crashes and no item is left.
+
 ## Dev tools, screenshots and UI tests
 
 Command-line options of `brulion` (`src/app/ui/devtools.h`, `src/app/shell/appcontroller.h`,

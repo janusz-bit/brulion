@@ -128,6 +128,18 @@ target_include_directories(brulion_ui_layoutdump PUBLIC ${CMAKE_CURRENT_SOURCE_D
 target_link_libraries(brulion_ui_layoutdump PUBLIC Qt6::Core Qt6::Gui Qt6::Quick)
 brulion_set_warnings(brulion_ui_layoutdump)
 
+# brulion_ui_shutdown — the app's QML gone before the engine and the application object at quit
+# (qmlshutdown.h): once the app quits, Qt's item views hand the delegates they give up to the
+# application object, whose destructor crashed deleting one with a view still creating a delegate
+# of its own. Qt Quick's public API only; a static library so that tests/app/shutdown quits scenes
+# in the middle of their incubation without the app.
+qt_add_library(brulion_ui_shutdown STATIC
+    qmlshutdown.h qmlshutdown.cpp
+)
+target_include_directories(brulion_ui_shutdown PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(brulion_ui_shutdown PUBLIC Qt6::Core Qt6::Qml Qt6::Quick)
+brulion_set_warnings(brulion_ui_shutdown)
+
 # brulion_ui_network — the QML engine's network access manager (localnetwork.h): local URLs only,
 # so rich text never fetches a remote picture. A static library so that tests/app/network checks
 # it without the app.
