@@ -26,7 +26,7 @@ brulion_add_core_module(extensions
     SOURCES
         engine.h host.h builtin.h notebookhost.h blockedit.h pageextension.h sandbox.h events.h share.h selftest.h typecheck.h
         engine.cpp builtin.cpp notebookhost.cpp blockedit.cpp pageextension.cpp sandbox.cpp events.cpp share.cpp selftest.cpp ${_brulion_typecheck}
-        macros.h macros.cpp
+        macros.h macros.cpp appapi.h appapi.cpp
     DEPS util text dates markdown vault index notebook sync)
 target_link_libraries(brulion_core_extensions PRIVATE brulion_luau)
 if(BRULION_LUAU_CHECK)

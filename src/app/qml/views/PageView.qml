@@ -1480,6 +1480,19 @@ FocusScope {
             unavailable: page.readOnly ? editor.readOnlyReason : ""
             onTriggered: editor.toggleSourceMode()
         }
+        // The extensions' items (b.app.contribute("pageMenu", …): their commands get ctx.page).
+        BMenuSeparator {
+            id: pageMenuExtensionsAt
+            visible: pageMenuExtensions.count > 0
+            height: visible ? implicitHeight : 0
+        }
+        ShellContributionItems {
+            id: pageMenuExtensions
+            menu: pageMenu
+            after: pageMenuExtensionsAt
+            slot: "pageMenu"
+            onPicked: (extension, id) => AppScripting.activate("pageMenu", extension, id, page.path, -1)
+        }
         BMenuSeparator {}
         // Encryption (docs/UI.md "Encrypted notes"): a Markdown page encrypted, an encrypted one
         // under a new password, decrypted for good or locked now.

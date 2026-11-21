@@ -88,6 +88,16 @@ QVariantMap checkExtension(Vault &vault, VaultIndex &index, const Extension &ext
         out.insert(u"hooks"_s, hooks);
         out.insert(u"macros"_s, macros);
         out.insert(u"variables"_s, variables);
+        // What it puts into the app's UI and its theme (b.app.contribute, b.app.theme).
+        QVariantList contributions;
+        for (const Contribution &c : engine.contributions())
+            if (c.extension == extension.id)
+                contributions << contributionTable(c);
+        if (!contributions.isEmpty())
+            out.insert(u"contributions"_s, contributions);
+        for (const ThemeInfo &t : engine.themes())
+            if (t.extension == extension.id)
+                out.insert(u"theme"_s, themeLayerTable(t.layer));
     } else {
         QString message = r.error;
         if (message.isEmpty())

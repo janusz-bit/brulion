@@ -432,10 +432,14 @@ QML smoke tests and screenshot scripts that run the real app headless).
   app and brulion-cli, `--profile <name>` / `BRULION_PROFILE=<name>` for a separate profile (test runs on Windows;
   a self-test, journey or screenshot run without a home of its own gets "test": `chooseProfile()`,
   docs/CLI.md "Profiles"). The remote control is off unless `--remote-control` or the device
-  setting `devtools/remoteControl`; the app's side is `src/app/shell/remotecontrol.h`, its input
+  setting `devtools/remoteControl` — or a grant: an AI agent the app started with "Let it change
+  the app" shows its token in `hello` (`ControlServer::addGrant`, `setOpen(false)`: only granted
+  connections, others `unauthorized`); the app's side is `src/app/shell/remotecontrol.h`, its input
   and item finding the UI driver `src/app/shell/uidriver.h` (library `brulion_uidriver`), shared
-  with the shell self-test and the journey. Nothing nested: gestures play from timers, waits
-  poll; see docs/CLI.md "Remote control".
+  with the shell self-test and the journey; its live methods (eval, load, theme, set, inspect,
+  setProperty, events, revert …) change the running app through `AppScripting` and
+  `WorkspaceExtensions`' live code. Nothing nested: gestures play from timers, waits and `events`
+  poll; see docs/CLI.md "Remote control", "Live changes".
 * **Concurrent writers** (the app, the command line, Syncthing, Nextcloud): every write is atomic
   and snapshots what it replaces; the editor's saves and the command line's edits are
   compare-and-swap (`Vault::writeTextIfUnchanged`): a change another program wrote a moment ago is

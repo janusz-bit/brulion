@@ -408,9 +408,39 @@ QString ThemePalette::colorText(double r, double g, double b, double a) const
 
 // ---- ThemeColors ----------------------------------------------------------------------------
 
+ThemeOverrides *ThemeOverrides::instance()
+{
+    static ThemeOverrides *overrides = new ThemeOverrides; // lives as long as the process
+    return overrides;
+}
+
+void ThemeOverrides::setTokens(const QVariantMap &light, const QVariantMap &dark)
+{
+    if (light == m_light && dark == m_dark)
+        return;
+    m_light = light;
+    m_dark = dark;
+    ++m_revision;
+    Q_EMIT changed();
+}
+
 ThemeColors::ThemeColors(QObject *parent) : QObject(parent)
 {
+    connect(ThemeOverrides::instance(), &ThemeOverrides::changed, this, &ThemeColors::update);
     update();
+}
+
+int ThemeColors::pickNumber(const QVariantMap &overrides, const QString &token, int fallback) const
+{
+    bool ok = false;
+    const double value = overrides.value(token).toDouble(&ok);
+    return ok && std::isfinite(value) ? int(std::lround(value)) : fallback;
+}
+
+QString ThemeColors::pickText(const QVariantMap &overrides, const QString &token, const QString &fallback) const
+{
+    const QString value = overrides.value(token).toString();
+    return value.isEmpty() ? fallback : value;
 }
 
 QString ThemeColors::token(QStringView name) const
@@ -421,9 +451,25 @@ QString ThemeColors::token(QStringView name) const
 void ThemeColors::update()
 {
     QVariantMap map = paletteMap(m_dark, m_lightSurface, m_darkSurface, m_accentName, m_customAccent);
-    if (map == m_map)
+    // The overrides of this mode replace the palette's own tokens (the others Theme.qml picks).
+    QVariantMap overrides = ThemeOverrides::instance()->tokens(m_dark);
+    // An overridden accent (opaque) brings its family as a custom accent would — its readable text,
+    // hover and solid shades, the text on it —, unless those are overridden too (below).
+    if (const QString accent = overrides.value(QStringLiteral("accent")).toString(); accent.size() == 7) {
+        const QVariantMap family = paletteMap(m_dark, m_lightSurface, m_darkSurface, u"custom", accent);
+        for (const char *key : {"accentHover", "accentText", "accentSolid", "accentOn"})
+            map.insert(QString::fromLatin1(key), family.value(QString::fromLatin1(key)));
+    }
+    for (auto it = overrides.cbegin(); it != overrides.cend(); ++it) {
+        if (map.contains(it.key()))
+            map.insert(it.key(), it.value());
+        else if (it.key() == u"fgOnAccent") // Theme.fgOnAccent is the palette's accentOn
+            map.insert(QStringLiteral("accentOn"), it.value());
+    }
+    if (map == m_map && overrides == m_overrides)
         return;
     m_map = std::move(map);
+    m_overrides = std::move(overrides);
     Q_EMIT colorsChanged();
 }
 

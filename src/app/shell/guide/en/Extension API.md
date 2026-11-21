@@ -376,6 +376,7 @@ end, { description = "Open tasks due by the note's day" })
 | `"open"` | the notebook was opened (once, after the extensions loaded) | `date` |
 | `"day"` | a new day began while Brulion runs | `date`, `previous` |
 | `"timer"` | the extension's own timer ended | `label`, `seconds` |
+| `"route"` | the screen shows something else: a page, a day, a view | `view`, `page`, `path`, `date`, `previous` |
 
 A reaction never hears what its own extension wrote — so it never answers itself — but it hears every other extension: a task ticked in one extension's view reaches the page another one keeps. Extensions answering each other stop after four rounds. A sync brings what another device's extensions wrote, with `source = "sync"`: a reaction that adds something for every event should skip those, or the line comes once from each device. A reaction cannot ask a question, and one that fails three times in a row is switched off until the extension is loaded again.
 
@@ -481,6 +482,66 @@ end, { label = "How many open tasks" })
 
 ## AI
 `b.ai("question")` asks the model chosen in **Settings → Extensions → AI** and returns its answer as text; a table adds `system`, `model`, `maxTokens`, `effort`, `thoughts = true` (the reply's `thoughts`: what the model thought — Claude's summary of its thinking, a server's reasoning, the model on the device's thoughts), `images` (pictures of the notebook for a model that sees: `b.ai({ prompt = "What does it say?", images = { "receipt.jpg" } })`), `messages` for a conversation and `tools` the model may call. The page needs the permission `ai`. More in [[AI]].
+
+## The app
+`b.app` is Brulion itself: what it shows, its commands, this device's settings, its colours and its toolbar, status bar and menus. Reading needs nothing; changing needs the permission `app` (`permissions: [app]`). What it changes is the app on this device — like the settings you change by hand — and what an extension put into the app goes away when it is switched off.
+
+| Function | What it does |
+|---|---|
+| `b.app.state()` | what is on screen: `view` (`"journals"`, `"page"`, `"calendar"` …), `page`, `date`, `dark`, `touch`, `narrow`, `width`, `height`, `platform`, `language` |
+| `b.app.commands()` | the command palette's commands, each `{ id, title, shortcut, enabled }` |
+| `b.app.run(id)` | runs one: `b.app.run("go.calendar")`, `b.app.run("theme.toggle")` |
+| `b.app.settings()` | the settings an extension may change, with their values and what they take |
+| `b.app.get(key)`, `b.app.set(key, value)` | one setting: `b.app.set("density", "compact")`, `b.app.set("focusMode", true)`, `b.app.set("editorFontSize", 18)` |
+| `b.app.navigate(view)` | shows a view: `"calendar"`, `"tasks"`, `{ view = "tasks", query = "status:open" }` |
+| `b.app.open(page, { line = 12, side = true })` | opens a page, at a line, in the side panel |
+| `b.app.back()` | goes back |
+| `b.app.toast(text, { tone = "success", button = { label = "Undo", command = "undo" } })` | a message, with a button that runs one of the extension's commands |
+| `b.app.theme({ … })` | Brulion's colours, corners and fonts while the extension runs (below) |
+| `b.app.contribute(place, item)` | puts a button or an entry into the app (below) |
+| `b.app.remove(place, id)`, `b.app.contributions()` | takes one away; lists every extension's |
+
+Moving around (`navigate`, `open`, `back`, `run`) and messages happen after the call — in commands, actions and reactions, not while the page loads. `"route"` among the reactions runs when the screen shows something else: `e.view`, `e.page`, `e.date`.
+
+**Colours.** `b.app.theme` takes the names of Brulion's design tokens: `bg`, `bgElevated`, `bgSunken` (the surfaces), `fg`, `fgMuted` (text), `accent`, `link`, `tagFg`, `border`, `selection`, `mark` (highlights), `danger`, `warning`, `success` and more, the corners `radius`, `radiusSm`, `radiusLg`, and the fonts `fontUi`, `fontSans`, `fontSerif`, `fontMono`. A colour is `"#rrggbb"`; colours for one mode go into `dark = { … }` or `light = { … }`. A misspelt name is an error that names the right one.
+
+```luau
+-- Sepia: paper-coloured pages in the light mode, a teal accent, rounder corners.
+b.app.theme({
+    accent = "#1f8a80",
+    radius = 9,
+    light = { bg = "#f4ecd8", bgElevated = "#fbf5e6", bgSunken = "#ebe1c8", fg = "#3b2f20" },
+    dark = { bg = "#14110c" },
+})
+```
+
+**Buttons and entries.** `b.app.contribute(place, item)` puts an item into one of six places: `"toolbar"` (a button of the top bar), `"statusbar"` (a text at the window's bottom), `"sidebar"` (an entry of the side bar), `"pageMenu"` (a page's menu), `"blockMenu"` (a block's menu) and `"slash"` (the `/` menu). An item has an `id`, a `label`, an `icon`, and says what it does: `command` (one of the extension's commands), `view`, `page`, `run` (a palette command) or, in the `/` menu, `insert` (text to write). The same `id` again replaces the item — a status bar text that counts something simply contributes itself again.
+
+```luau
+-- Today's open tasks in the status bar, always up to date, and a `/` entry for a meeting.
+local function count()
+    local due = b.query("type:tasks status:open due:<=today", 1).total
+    b.app.contribute("statusbar", {
+        id = "due",
+        label = if due == 0 then "Nothing due" else `{due} due today`,
+        icon = "calendar-check",
+        run = "go.tasks",
+    })
+end
+
+count()
+b.on("change", function(e)
+    count()
+end)
+
+b.app.contribute("slash", {
+    id = "meeting",
+    label = "Meeting notes",
+    insert = "## Meeting\n- Who:\n- Decisions:\n- [ ] Next step",
+})
+```
+
+An AI agent you work with can do all of this in the running app at once, without a page — and you can undo it in the top bar's **Live** menu. See [[Extensions]] and the developer's reference.
 
 ## Luau in short
 - Texts are joined with `..`, or written with backticks and braces: `` `{n} pages` ``. A list is `{ "a", "b" }` and counts from 1; `#list` is its length; `for i, item in list do … end` goes through it.

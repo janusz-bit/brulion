@@ -10,7 +10,9 @@ import Brulion
 // Collapse / Expand (outline), Copy link ▸ (Block reference ((…)), Link to block [[…#^…]],
 // on headings Link to heading [[…#…]], Embed — what `BlockEditor.copyLink` puts on the
 // clipboard, docs/SYNTAX.md §2 "Copied links"), Insert picture…, Indent / Outdent,
-// Move up / down, Delete block. A block that is part of a selection over several days of
+// Move up / down, Delete block — and before the moves the extensions' items (b.app.contribute
+// "blockMenu": ShellContributionItems; docs/UI.md "Extension items in the UI"). A block that is
+// part of a selection over several days of
 // the journal stream (BlockEditor.inSpan): Copy and Copy as plain text copy the whole span (its
 // count), Cut, indenting, moving and Delete are shown unavailable — a tap says that only copying
 // works there (docs/UI.md "Across journal days"). One menu per editor, made when first opened
@@ -565,6 +567,29 @@ BMenu {
             if (r >= 0)
                 menu.editor.dialogs.pickDrawingBackdrop(r, -1)
         }
+    }
+    // The extensions' items (b.app.contribute("blockMenu", …): their commands get ctx.block), not
+    // in reading mode (they may change the note).
+    OptionalSeparator {
+        id: extensionsAt
+        shown: blockExtensions.count > 0
+    }
+    ShellContributionItems {
+        id: blockExtensions
+        menu: menu
+        after: extensionsAt
+        slot: "blockMenu"
+        shown: !menu.readOnly
+        onPicked: (extension, id) => menu.runExtensionItem(extension, id)
+    }
+    /// An extension's item on the block, as saved (its command reads the line as shown).
+    function runExtensionItem(extension: string, id: string): void {
+        const r = menu.row()
+        if (r < 0)
+            return
+        const line = menu.controller.savedLineAt(r)
+        const path = menu.controller.path + ""
+        AppScripting.activate("blockMenu", extension, id, path, line)
     }
     OptionalSeparator { shown: !menu.readOnly }
     OptionalItem {

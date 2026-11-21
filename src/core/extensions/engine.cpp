@@ -811,6 +811,10 @@ void Engine::stop()
     m_requireFactoryRef = 0;
     m_moduleCode.clear();
     m_asking = false;
+    if (!m_contributions.isEmpty() || !m_themes.isEmpty())
+        ++m_appRevision;
+    m_contributions.clear();
+    m_themes.clear();
 }
 
 void Engine::arm()
@@ -916,6 +920,22 @@ void Engine::pushEnvironment(const QString &extension)
     lua_setfield(L, -2, "ai");
     lua_getref(L, m_uiRef);
     lua_setfield(L, -2, "ui");
+    // b.app: the app as extensions see and change it (appapi.h); each function knows its
+    // extension (upvalue 1) and the generic ones their operation (upvalue 2).
+    lua_createtable(L, 0, 16);
+    for (const QString &operation : appOperations()) {
+        const QByteArray op = operation.toUtf8();
+        lua_pushlstring(L, id.constData(), size_t(id.size()));
+        lua_pushlstring(L, op.constData(), size_t(op.size()));
+        lua_pushcclosure(L, &Engine::apiApp, op.constData(), 2);
+        lua_setfield(L, -2, op.constData());
+    }
+    set("theme", &Engine::apiAppTheme);
+    set("contribute", &Engine::apiAppContribute);
+    set("remove", &Engine::apiAppRemove);
+    set("contributions", &Engine::apiAppContributions);
+    lua_setreadonly(L, -1, true);
+    lua_setfield(L, -2, "app");
     lua_setreadonly(L, -1, true);
     lua_setfield(L, -2, "b");
 
@@ -953,6 +973,8 @@ void Engine::dropExtension(const QString &extension)
         }
     }
     dropContributions(extension);
+    if (dropAppState(extension) && m_host)
+        m_host->appChanged(extension);
     dropWaiting(extension);
     if (const auto it = m_loaded.constFind(extension); it != m_loaded.constEnd()) {
         lua_unref(m_L, it->envRef);
@@ -1334,6 +1356,26 @@ int Engine::apiQuery(lua_State *L)
 int Engine::apiCheckExtension(lua_State *L) { return finishApi(L, self(L)->checkImpl(L)); }
 int Engine::apiWrite(lua_State *L) { return finishApi(L, self(L)->writeImpl(L)); }
 int Engine::apiAppendToJournal(lua_State *L) { return finishApi(L, self(L)->appendImpl(L)); }
+int Engine::apiApp(lua_State *L)
+{
+    return finishApi(L, self(L)->appImpl(L));
+}
+int Engine::apiAppTheme(lua_State *L)
+{
+    return finishApi(L, self(L)->appThemeImpl(L));
+}
+int Engine::apiAppContribute(lua_State *L)
+{
+    return finishApi(L, self(L)->appContributeImpl(L));
+}
+int Engine::apiAppRemove(lua_State *L)
+{
+    return finishApi(L, self(L)->appRemoveImpl(L));
+}
+int Engine::apiAppContributions(lua_State *L)
+{
+    return finishApi(L, self(L)->appContributionsImpl(L));
+}
 int Engine::apiReplaceBlock(lua_State *L) { return finishApi(L, self(L)->replaceImpl(L)); }
 int Engine::apiDaysBetween(lua_State *L) { return finishApi(L, self(L)->daysImpl(L)); }
 int Engine::apiSorted(lua_State *L) { return finishApi(L, self(L)->sortedImpl(L)); }
@@ -1931,7 +1973,7 @@ int Engine::dataImpl(lua_State *L)
 
 QStringList Engine::hookEvents()
 {
-    return {u"save"_s, u"change"_s, u"task"_s, u"journal"_s, u"open"_s, u"day"_s, u"timer"_s};
+    return {u"save"_s, u"change"_s, u"task"_s, u"journal"_s, u"open"_s, u"day"_s, u"timer"_s, u"route"_s};
 }
 
 int Engine::onImpl(lua_State *L)
@@ -2543,7 +2585,7 @@ int Engine::contributionImpl(lua_State *L, bool variable)
         return failWith(L, fn + u": argument 2 must be a function"_s);
     if (!lua_isnoneornil(L, 3) && lua_type(L, 3) != LUA_TTABLE)
         return failWith(L, fn + u": argument 3 must be a table ({ description = …, args = … })"_s);
-    Contribution c;
+    MacroEntry c;
     c.extension = extension;
     if (lua_type(L, 3) == LUA_TTABLE) {
         Unlimited unlimited(&m_unlimited);
@@ -2570,12 +2612,12 @@ int Engine::contributionImpl(lua_State *L, bool variable)
         }
         lua_pop(L, 1);
     }
-    QHash<QString, Contribution> &map = variable ? m_variables : m_macros;
+    QHash<QString, MacroEntry> &map = variable ? m_variables : m_macros;
     const QString key = extension + u'/' + name;
     const auto it = map.constFind(key);
     if (it == map.constEnd()) {
         qsizetype own = 0;
-        for (const Contribution &other : std::as_const(map))
+        for (const MacroEntry &other : std::as_const(map))
             own += other.extension == extension ? 1 : 0;
         if (own >= kMaxContributions)
             return failWith(L, fn + u": at most %1 per extension"_s.arg(kMaxContributions));
@@ -2645,7 +2687,7 @@ Result Engine::runContribution(bool variable, const QString &extension, const QS
 {
     if (!m_L)
         return {Status::Error, {}, u"the extension engine is not started"_s};
-    const QHash<QString, Contribution> &map = variable ? m_variables : m_macros;
+    const QHash<QString, MacroEntry> &map = variable ? m_variables : m_macros;
     const auto it = map.constFind(extension + u'/' + name);
     if (it == map.constEnd())
         return {Status::NotFound,
@@ -3013,6 +3055,287 @@ int Engine::setSettingImpl(lua_State *L)
     if (!error.isEmpty())
         return failWith(L, u"b.setSetting: "_s + error);
     return 0;
+}
+
+// ---- b.app (appapi.h; docs/EXTENSIONS.md "The app (`b.app`)") --------------------------------------
+
+bool Engine::mayChangeApp(lua_State *L, const QString &extension, const QString &function, bool notWhileLoading)
+{
+    if (m_noWrites) {
+        failWith(L, function + u": a macro or a template variable cannot change the app"_s);
+        return false;
+    }
+    if (!m_loaded.value(extension).permissions.contains(u"app"_s)) {
+        failWith(L, function + u": permission denied: app (the page needs `permissions: [app]`)"_s);
+        return false;
+    }
+    if (notWhileLoading && m_loading) {
+        failWith(L, function + u" cannot run while the extension loads: call it from a command, an action or a hook"_s);
+        return false;
+    }
+    return true;
+}
+
+int Engine::appImpl(lua_State *L)
+{
+    const QString extension = extensionOf(L);
+    const QString operation = toQString(L, lua_upvalueindex(2));
+    const QString function = u"b.app."_s + operation;
+    const QByteArray fn = function.toUtf8();
+    QVariantMap args;
+    if (operation == u"get" || operation == u"set") {
+        QString key;
+        if (!argString(L, 1, fn.constData(), &key))
+            return kRaise;
+        args.insert(u"key"_s, key);
+        if (operation == u"set") {
+            if (lua_isnone(L, 2))
+                return failWith(L, function + u": argument 2 is the setting's new value"_s);
+            QVariant value;
+            if (!argValue(L, 2, fn.constData(), &value))
+                return kRaise;
+            args.insert(u"value"_s, value);
+        }
+    } else if (operation == u"navigate") {
+        const int type = lua_type(L, 1);
+        if (type != LUA_TSTRING && type != LUA_TTABLE)
+            return failWith(L, function
+                                       + u": argument 1 is a view's name (\"calendar\") or a route table "
+                                         "({ view = \"page\", page = … })"_s);
+        QVariant route;
+        if (!argValue(L, 1, fn.constData(), &route))
+            return kRaise;
+        args.insert(u"route"_s, route);
+    } else if (operation == u"open") {
+        QString page;
+        if (!argString(L, 1, fn.constData(), &page))
+            return kRaise;
+        if (page.trimmed().isEmpty())
+            return failWith(L, function + u": the page's name is empty"_s);
+        args.insert(u"page"_s, page.trimmed());
+        if (!lua_isnoneornil(L, 2)) {
+            if (lua_type(L, 2) != LUA_TTABLE)
+                return failWith(L, function + u": argument 2 is a table ({ line = 12, side = true })"_s);
+            QVariant options;
+            if (!argValue(L, 2, fn.constData(), &options))
+                return kRaise;
+            const QVariantMap o = options.toMap();
+            for (auto it = o.cbegin(); it != o.cend(); ++it) {
+                if (it.key() != u"line" && it.key() != u"side")
+                    return failWith(L, function + u": no option “%1” (line, side)"_s.arg(it.key()));
+            }
+            if (o.contains(u"line"_s)) {
+                bool ok = false;
+                const qint64 line = o.value(u"line"_s).metaType().id() == QMetaType::QString
+                                            ? 0
+                                            : o.value(u"line"_s).toLongLong(&ok);
+                if (!ok || line < 1)
+                    return failWith(L, function + u": “line” is a line of the page, counted from 1"_s);
+                args.insert(u"line"_s, line);
+            }
+            if (o.contains(u"side"_s))
+                args.insert(u"side"_s, o.value(u"side"_s).toBool());
+        }
+    } else if (operation == u"run") {
+        QString id;
+        if (!argString(L, 1, fn.constData(), &id))
+            return kRaise;
+        args.insert(u"id"_s, id.trimmed());
+    } else if (operation == u"toast") {
+        QString text;
+        if (!argString(L, 1, fn.constData(), &text))
+            return kRaise;
+        if (text.trimmed().isEmpty())
+            return failWith(L, function + u": the text is empty"_s);
+        args.insert(u"text"_s, cutText(text.simplified(), QuestionLimits::timerMessage));
+        if (!lua_isnoneornil(L, 2)) {
+            if (lua_type(L, 2) != LUA_TTABLE)
+                return failWith(L, function + u": argument 2 is a table ({ tone = \"success\", button = … })"_s);
+            QVariant options;
+            if (!argValue(L, 2, fn.constData(), &options))
+                return kRaise;
+            const QVariantMap o = options.toMap();
+            for (auto it = o.cbegin(); it != o.cend(); ++it) {
+                if (it.key() != u"tone" && it.key() != u"button")
+                    return failWith(L, function + u": no option “%1” (tone, button)"_s.arg(it.key()));
+            }
+            const QString tone = o.value(u"tone"_s).toString();
+            if (!tone.isEmpty() && tone != u"success" && tone != u"danger" && tone != u"warning" && tone != u"info"
+                && tone != u"accent")
+                return failWith(L, function + u": “tone” is success, danger, warning, info or accent"_s);
+            if (!tone.isEmpty())
+                args.insert(u"tone"_s, tone);
+            if (o.contains(u"button"_s)) {
+                const QVariantMap button = o.value(u"button"_s).toMap();
+                const QString label = button.value(u"label"_s).toString().simplified();
+                const QString command = button.value(u"command"_s).toString().trimmed();
+                if (label.isEmpty() || command.isEmpty() || button.size() != 2)
+                    return failWith(L, function
+                                               + u": a button is { label = …, command = … } (one of the "
+                                                 "extension's commands)"_s);
+                args.insert(u"button"_s,
+                            QVariantMap{{u"label"_s, cutText(label, QuestionLimits::label)}, {u"command"_s, command}});
+            }
+        }
+    }
+    if (isAppChange(operation) && !mayChangeApp(L, extension, function, true))
+        return kRaise;
+    QString error;
+    const QVariant value = m_host->app(extension, operation, args, &error);
+    if (!error.isEmpty())
+        return failWith(L, function + u": "_s + error);
+    Unlimited unlimited(&m_unlimited);
+    pushVariant(L, value);
+    return 1;
+}
+
+int Engine::appThemeImpl(lua_State *L)
+{
+    const QString extension = extensionOf(L);
+    if (!mayChangeApp(L, extension, u"b.app.theme"_s, false))
+        return kRaise;
+    ThemeLayer layer;
+    if (!lua_isnoneornil(L, 1)) {
+        if (lua_type(L, 1) != LUA_TTABLE)
+            return failWith(L, u"b.app.theme: argument 1 is a table of tokens ({ accent = \"#3a7\", dark = { … } }) "
+                               "or nil"_s);
+        QVariant table;
+        if (!argValue(L, 1, "b.app.theme", &table))
+            return kRaise;
+        QString error;
+        if (!themeLayerFrom(table.toMap(), &layer, &error))
+            return failWith(L, u"b.app.theme: "_s + error);
+    }
+    qsizetype at = -1;
+    for (qsizetype i = 0; i < m_themes.size(); ++i)
+        if (m_themes[i].extension == extension)
+            at = i;
+    if (at >= 0) {
+        if (m_themes[at].layer == layer)
+            return 0;
+        m_themes.removeAt(at);
+    } else if (layer.isEmpty()) {
+        return 0;
+    }
+    if (!layer.isEmpty())
+        m_themes.append({extension, layer}); // set last: it wins
+    ++m_appRevision;
+    m_host->appChanged(extension);
+    return 0;
+}
+
+int Engine::appContributeImpl(lua_State *L)
+{
+    const QString extension = extensionOf(L);
+    QString slot;
+    if (!argString(L, 1, "b.app.contribute", &slot))
+        return kRaise;
+    if (!mayChangeApp(L, extension, u"b.app.contribute"_s, false))
+        return kRaise;
+    if (lua_type(L, 2) != LUA_TTABLE)
+        return failWith(L, u"b.app.contribute: argument 2 is the item ({ id = …, label = …, command = … })"_s);
+    QVariant table;
+    if (!argValue(L, 2, "b.app.contribute", &table))
+        return kRaise;
+    Contribution item;
+    QString error;
+    if (!contributionFrom(slot, table.toMap(), &item, &error))
+        return failWith(L, u"b.app.contribute: "_s + error);
+    item.extension = extension;
+    if (!item.command.isEmpty() && !m_commands.contains(extension + u'/' + item.command) && !m_loading)
+        return failWith(L, u"b.app.contribute: the extension has no command “%1”"_s.arg(item.command));
+    if (!item.view.isEmpty() && !m_views.contains(extension + u'/' + item.view) && !m_loading)
+        return failWith(L, u"b.app.contribute: the extension has no view “%1”"_s.arg(item.view));
+    int own = 0, all = 0;
+    for (qsizetype i = 0; i < m_contributions.size(); ++i) {
+        Contribution &c = m_contributions[i];
+        if (c.slot != slot)
+            continue;
+        if (c.extension == extension && c.id == item.id) {
+            if (c == item)
+                return 0;
+            c = item; // the same id: replaced in its place
+            ++m_appRevision;
+            m_host->appChanged(extension);
+            return 0;
+        }
+        ++all;
+        if (c.extension == extension)
+            ++own;
+    }
+    if (own >= MaxContributionsPerSlot)
+        return failWith(L, u"b.app.contribute: at most %1 items of one extension in “%2”"_s.arg(MaxContributionsPerSlot)
+                                   .arg(slot));
+    if (all >= MaxContributionsInSlot)
+        return failWith(L, u"b.app.contribute: “%1” is full (%2 items of all extensions)"_s.arg(slot).arg(
+                                   MaxContributionsInSlot));
+    m_contributions.append(item);
+    ++m_appRevision;
+    m_host->appChanged(extension);
+    return 0;
+}
+
+int Engine::appRemoveImpl(lua_State *L)
+{
+    const QString extension = extensionOf(L);
+    QString slot, id;
+    if (!argString(L, 1, "b.app.remove", &slot) || !argOptString(L, 2, "b.app.remove", &id))
+        return kRaise;
+    if (!isContributionSlot(slot))
+        return failWith(L, u"b.app.remove: unknown slot “%1” (%2)"_s.arg(slot, contributionSlots().join(u", "_s)));
+    if (!mayChangeApp(L, extension, u"b.app.remove"_s, false))
+        return kRaise;
+    const qsizetype removed = m_contributions.removeIf([&](const Contribution &c) {
+        return c.extension == extension && c.slot == slot && (id.isEmpty() || c.id == id);
+    });
+    if (removed > 0) {
+        ++m_appRevision;
+        m_host->appChanged(extension);
+    }
+    lua_pushboolean(L, removed > 0);
+    return 1;
+}
+
+int Engine::appContributionsImpl(lua_State *L)
+{
+    QString slot;
+    if (!argOptString(L, 1, "b.app.contributions", &slot))
+        return kRaise;
+    if (!slot.isEmpty() && !isContributionSlot(slot))
+        return failWith(L,
+                        u"b.app.contributions: unknown slot “%1” (%2)"_s.arg(slot, contributionSlots().join(u", "_s)));
+    QVariantList out;
+    for (const Contribution &c : contributions(slot))
+        out << contributionTable(c);
+    Unlimited unlimited(&m_unlimited);
+    pushVariant(L, out);
+    return 1;
+}
+
+bool Engine::dropAppState(const QString &extension)
+{
+    const qsizetype items = m_contributions.removeIf([&](const Contribution &c) { return c.extension == extension; });
+    const qsizetype themes = m_themes.removeIf([&](const ThemeInfo &t) { return t.extension == extension; });
+    if (items + themes == 0)
+        return false;
+    ++m_appRevision;
+    return true;
+}
+
+QList<Contribution> Engine::contributions(const QString &slot) const
+{
+    QList<Contribution> out;
+    for (const Contribution &c : m_contributions)
+        if (slot.isEmpty() || c.slot == slot)
+            out << c;
+    std::stable_sort(out.begin(), out.end(),
+                     [](const Contribution &a, const Contribution &b) { return a.order < b.order; });
+    return out;
+}
+
+QList<ThemeInfo> Engine::themes() const
+{
+    return m_themes;
 }
 
 } // namespace brulion::extensions

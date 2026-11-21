@@ -274,6 +274,24 @@ public:
         Q_UNUSED(extension);
         Q_UNUSED(text);
     }
+
+    // The app (b.app, docs/EXTENSIONS.md "The app (`b.app`)"; appapi.h appOperations())
+    /// One of appOperations() with its arguments, asked by `extension`: its value, or `*error`
+    /// set (an unknown setting, a route that is none …). The engine checked the permission "app"
+    /// for the operations that change the app (isAppChange()); the app shows what they change
+    /// after the call returns (a navigation, a command run). A host without the app — the command
+    /// line, the tests — says it is not there, except that a dry run notes what was asked.
+    virtual QVariant app(const QString &extension, const QString &operation, const QVariantMap &args, QString *error)
+    {
+        Q_UNUSED(extension);
+        Q_UNUSED(args);
+        *error = QStringLiteral("the app is not running here (%1 needs Brulion's window)").arg(operation);
+        return {};
+    }
+    /// The theme's overrides or the UI items of `extension` changed (b.app.theme, b.app.contribute,
+    /// b.app.remove, or the extension loaded again or went): Engine::themes() and
+    /// Engine::contributions() have them now. Called after the change, inside the call.
+    virtual void appChanged(const QString &extension) { Q_UNUSED(extension); }
 };
 
 } // namespace brulion::extensions

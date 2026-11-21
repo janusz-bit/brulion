@@ -823,6 +823,9 @@ QList<AgentConfig> AppSettings::acpAgents() const
             if (!a.token.isEmpty())
                 logging::addSecret(a.token); // (masked in every log line from now on)
         }
+        // "Let it change the app": a program of this device only (one on another computer gets no
+        // grant of this app).
+        a.appAccess = a.url.isEmpty() && o.value(u"app"_s).toBool(false);
         if (!validAgentId(a.id) || std::ranges::any_of(out, [&a](const AgentConfig &b) { return b.id == a.id; }))
             continue; // (malformed, or the same id twice: the first one)
         if (!WorkspaceAgents::runs(a))
@@ -854,6 +857,8 @@ QJsonArray agentRows(const QList<AgentConfig> &agents)
             row.insert(u"options"_s, a.options);
         if (!a.known.isEmpty())
             row.insert(u"known"_s, a.known);
+        if (a.appAccess)
+            row.insert(u"app"_s, true);
         rows.append(row);
     }
     return rows;
@@ -871,6 +876,8 @@ QVariantList AppSettings::acpAgentRows() const
             command = command.left(24) + u'…' + command.right(31);
         const QString tools = a.tools ? tr("with Brulion's tools") : tr("without Brulion's tools");
         QString summary = command.isEmpty() ? tr("No command yet: Edit… sets it.") : command + u" · "_s + tools;
+        if (!command.isEmpty() && a.tools && a.appAccess)
+            summary += u" · "_s + tr("may change the app");
         if (a.isRemote())
             summary = a.token.isEmpty() ? tr("On %1 — not paired: remove it and pair again").arg(a.host)
                                         : tr("On %1 (%2) · %3").arg(a.host, a.url, tools);
@@ -878,6 +885,7 @@ QVariantList AppSettings::acpAgentRows() const
                                 {u"name"_s, a.name},
                                 {u"command"_s, a.command},
                                 {u"tools"_s, a.tools},
+                                {u"app"_s, a.appAccess},
                                 {u"remote"_s, a.isRemote()},
                                 {u"host"_s, a.host},
                                 {u"summary"_s, summary}});
@@ -992,6 +1000,16 @@ void AppSettings::setAcpAgentTools(const QString &id, bool on)
     for (AgentConfig &a : agents) {
         if (a.id == id)
             a.tools = on;
+    }
+    storeAcpAgents(agents);
+}
+
+void AppSettings::setAcpAgentApp(const QString &id, bool on)
+{
+    QList<AgentConfig> agents = acpAgents();
+    for (AgentConfig &a : agents) {
+        if (a.id == id)
+            a.appAccess = on && !a.isRemote();
     }
     storeAcpAgents(agents);
 }

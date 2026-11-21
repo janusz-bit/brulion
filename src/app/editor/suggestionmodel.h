@@ -4,7 +4,10 @@
 //   blocks `((` — EditorHost::suggestBlocks (ids are created when one is accepted)
 //   tags   `#`  — EditorHost::suggestTags: tags in use, then pages (a tag names a page)
 //   slash  `/`  — the slash commands (Polish + English names, diacritic-insensitive filter), all
-//          of them in their menu order (blocktext.cpp slashCommands()) — `limit` caps the others
+//          of them in their menu order (blocktext.cpp slashCommands()) — `limit` caps the others —,
+//          the extensions' views ("View: …") and the extensions' slash items (`extensionItems`,
+//          b.app.contribute("slash", …): command "ext:<extension>/<id>", `extension`, `itemId`,
+//          the Markdown to insert as insertText)
 //   date   after `📅 ⏳ 🛫 ⏰ ⏰!` or `@` — natural-language dates (dates::parseNaturalDate,
 //          Polish + English) offered as canonical "YYYY-MM-DD[ HH:mm]" values; `@` also offers
 //          the journal page link and a reminder
@@ -49,6 +52,11 @@ class SuggestionModel : public QAbstractListModel {
     Q_PROPERTY(QString currentPath READ currentPath WRITE setCurrentPath NOTIFY currentPathChanged FINAL)
     /// Most items of a list (pages, blocks, tags, dates, templates); a slash list is never capped.
     Q_PROPERTY(int limit READ limit WRITE setLimit NOTIFY limitChanged FINAL)
+    /// The extensions' items of the slash menu (WorkspaceExtensions::contributions("slash"): rows
+    /// {extension, title, id, label, icon, insert, key, …}), offered after the views by their labels
+    /// (or the extension's title, the subtitle).
+    Q_PROPERTY(
+            QVariantList extensionItems READ extensionItems WRITE setExtensionItems NOTIFY extensionItemsChanged FINAL)
     Q_PROPERTY(int count READ count NOTIFY countChanged FINAL)
     /// The row highlighted when the items change (Enter/Tab take it): the first existing match —
     /// row 1 when "create page" leads the list and a page follows —, else 0. Set before
@@ -92,6 +100,8 @@ public:
     void setCurrentPath(const QString &path);
     int limit() const { return m_limit; }
     void setLimit(int limit);
+    QVariantList extensionItems() const { return m_extensionItems; }
+    void setExtensionItems(const QVariantList &items);
     int count() const { return int(m_items.size()); }
     int defaultIndex() const { return m_defaultIndex; }
 
@@ -117,6 +127,7 @@ Q_SIGNALS:
     void nowChanged();
     void currentPathChanged();
     void limitChanged();
+    void extensionItemsChanged();
     void countChanged();
     void defaultIndexChanged();
 
@@ -141,6 +152,7 @@ private:
     QString m_fixedNow;
     QString m_currentPath;
     int m_limit = 12;
+    QVariantList m_extensionItems;
     QVariantList m_items;
     int m_defaultIndex = 0;
 };

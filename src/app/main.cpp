@@ -61,8 +61,11 @@
 #include "shelljourney.h"
 #include "shellselftest.h"
 #include "singleinstance.h"
+#include "workspaceagents.h"
+#include "workspacechats.h"
 #include <QApplication>
 #include <QJsonObject>
+#include <QPointer>
 #include <QThread>
 #endif
 
@@ -605,6 +608,15 @@ int main(int argc, char *argv[])
             remote.forced = args.contains(u"--remote-control"_s);
             remote.language = [&devTools] { return devTools.language(); };
             remoteControl = std::make_unique<brulion::shell::RemoteControl>(&engine, controller.get(), remote);
+            // An AI agent the user let change the app (its "Let it change the app while it runs")
+            // reaches this socket with a grant of its own while it runs (docs/CLI.md "Live changes").
+            const QPointer<brulion::shell::RemoteControl> control(remoteControl.get());
+            controller->workspace()->chats()->agents()->setAppGrants(
+                    [control](const QString &client) { return control ? control->grant(client) : QString(); },
+                    [control](const QString &token) {
+                        if (control)
+                            control->revokeGrant(token);
+                    });
         }
 #endif
 #ifdef Q_OS_WASM

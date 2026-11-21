@@ -1004,6 +1004,74 @@ those on the block under the caret (`meta.block`) are enabled in an editor and r
 `extension:<id>/<name>` → `BlockEditor.runExtensionCommand`: `PageController.savedLineAt(row)` saves
 first, so the extension reads the line as shown).
 
+### Extension items in the UI (`b.app.contribute`)
+
+An extension with the permission `app` — and live code an AI agent loads (docs/EXTENSIONS.md "Live
+code") — puts items into the app's own places (docs/EXTENSIONS.md "Items of the UI"). Every place
+reads `Workspace.extensions.contributions(slot, Workspace.extensions.appRevision)`: rows {extension,
+title, slot, id, label, icon, tooltip, tone, command, view, params, page, run, insert, key, live},
+every key always there; a change of any extension's items (or of an agent's) bumps `appRevision`,
+so an item comes, changes and goes at once, also in a menu that is open. Each place binds a string
+to `contributionsKey(slot, appRevision)` (the slot's rows as compact JSON) and its model to
+`contributions(slot, key.length)`: a QML string property notifies only when its value changes, so a
+status bar text that counts on every change of a note does not make the top bar's buttons, the
+menus' items or every editor's slash list again. A click, a tap or Space (Enter in a menu) runs
+the item through `AppScripting.activate(slot, extension, id, path, line)`: its command (on a page:
+`ctx.page`; on a block: `ctx.block`), view, page or palette command. A delegate reads
+the row's `id` and `icon` through `modelData` (`UiModels.stringField`): a delegate's property cannot
+have those names. Where each slot shows:
+
+* `toolbar` — `ShellTopBar.qml`: an icon button (`toolbar_<id>`, a `BIconButton`) before More, the
+  item's icon (else `puzzle`) tinted by its tone, its label as the accessible name and its tooltip
+  (`BIconButton.toolTip`) on hover; a click leaves the keyboard focus where it was (`Qt.TabFocus`:
+  the edited block keeps it, and a focused button that goes with the extension's next change would
+  leave the focus nowhere — a dialog closed later gave it to a hidden view's editor); on narrow
+  windows the first items of More
+  (`contribution_toolbar_<id>`), above a separator.
+* `statusbar` — `ShellStatusBar.qml` (wide windows), before the palette's key: the icon and the
+  label in the tone's text colour (`successText`, `warningText` …, else `fgMuted`), at most a quarter
+  of the bar (elided); an item that does something is a button (`statusBar_<id>`: hover, a pointing
+  hand, a focus ring inside it, Tab and Space; a click keeps the focus where it was, as the top bar's),
+  one that does not a plain text; a tooltip that says
+  more than the label on hover.
+* `sidebar` — `ShellRail.qml`: rail buttons after the app's own entries (`sidebarNav_ext_<id>`), so
+  on phones in the drawer's rail too; one that opens a view is selected while that view shows; a tap
+  in the drawer closes it.
+* `pageMenu` — the top bar's More while a page shows (after "Open in another app", before the
+  trash) and the page header's ⋯ (`PageView.qml`, its own section before encryption):
+  `ShellContributionItems`, a `BMenuItem` each (`contribution_pageMenu_<id>`), the extension's
+  title as the muted hint on the right (not on touch UIs); run with the page's path.
+* `blockMenu` — `BlockMenu.qml`: a section before Indent / Move, run on the block's line as saved
+  (`PageController.savedLineAt(row)`, as the palette's block commands); not in reading mode (a
+  command may change the note).
+* `slash` — the editor's `/` menu (`SuggestionModel.extensionItems`, bound in `BlockEditor.qml`):
+  found by its label as the commands are by their names — at its start, at a word's start,
+  anywhere; the extension's title as a keyword — and ranked among them (after the commands that
+  match as well), the extension's title as the subtitle, the icon or `puzzle`. Accepting one is
+  `PageController.applySlashContribution()` (command `ext:<extension>/<id>`): its Markdown (`insert`)
+  replaces the typed "/…" — one line at the caret, as /today writes its link; blocks in place of
+  the block when nothing else is in it, else after it at its depth (`insertMarkdown` /
+  `insertAfterBlock`), the caret at the end of the last one — in one undo step; an item that runs a
+  command removes "/…" and the editor runs it on the block (`{action: "extension"}` →
+  `BlockEditor.runSlashItem`).
+
+Menus keep BMenu's rules: the items are plain `BMenuItem`s inserted after a marker item
+(`ShellContributionItems.after`) — the arrows reach them, Enter runs them —, never `danger` (what
+deletes stays the app's own last item, after its separator).
+
+**Live changes.** While a live client — an AI agent over MCP or ACP, `brulion-cli app …`, an
+extension's `b.app.set` — has changed the running app and not been undone
+(`AppScripting.liveClients`: [{who, name, changes}]), the top bar shows a **Live** chip
+(`ShellLiveIndicator.qml`, `topBarLive`) after the title, on phones too: an accent pill (`accentBg`,
+an `accent` hairline) with a bolt (`zap`) and "Live" — on narrow windows the bolt alone —, its
+tooltip "Changed live by Claude Code (3 changes)" (a long press on touch screens), its accessible
+name "Live changes" with the same description, a focus ring, a touch target. A click, a tap or
+Space opens its menu (`liveMenu`): a row per client for reading ("Claude Code — 3 changes",
+`liveClient`), "Undo changes of …" per client when there are two or more (`liveUndoClient`,
+`AppScripting.revert(who)`), "Undo all live changes" (`liveUndoAll`, `revert("")`) and "Open the
+console" (route `console`). Undoing puts settings back, takes live themes away and unloads the live
+code; the chip goes with the last change.
+
 
 ## Extensions
 
@@ -1021,7 +1089,13 @@ this device."), what it may do, the pages of shared code it uses ("Uses the code
 checker's warnings ("Type check: 2 warnings, line 14: …") and its description; "Code" (or "Line
 14") opens the page (at the line of the error), "Read and run" opens the approval (below),
 "Settings" (`extensionSettingsButton`, when it declares some) its settings, the copy button
-(`extensionCopyButton`) "Copy to another notebook", "Switch off" / "Switch on". The built-ins' code
+(`extensionCopyButton`) "Copy to another notebook", "Switch off" / "Switch on". Live code an agent
+loaded for this run (`extKind` "live", docs/EXTENSIONS.md "Live code") is a row too
+(`extensionLiveRow`): a **Live** badge (`extensionLiveBadge`), its state, "From Claude Code — for
+this run of the app only" (its description is who sent it) and **Remove**
+(`extensionLiveRemove`: `Workspace.extensions.unloadLive(id)`); no Code, copy or switch. A page (or
+built-in) a live version shadows says "A live version runs instead (sent by an agent)." (state
+`live`). The built-ins' code
 rows have "Settings" too (`builtinSettings`: the gym's rest between sets), and the AI group has
 **The assistant's code** (`assistantSourceSetting`).
 
@@ -1294,7 +1368,9 @@ Codex 2.8 and OpenCode 1.19 (the opt-in test `tst_shell_agents realAgent`,
   gets Brulion's tools) with **Check** (`acpAgentCheck`: the agent started in the notebook's folder,
   a session made without a question — a toast says "Claude Code works (Claude Agent 0.109.0). Model:
   Sonnet 5.5 · Mode: Auto" or why not, and the chat learns its options), **Edit…** (`acpAgentEdit` →
-  `acpAgentDialog`: `acpAgentName`, `acpAgentCommand`, `acpAgentTools`) and Remove
+  `acpAgentDialog`: `acpAgentName`, `acpAgentCommand`, `acpAgentTools`, and for an agent of this
+  computer `acpAgentApp` — "Let it change the app while it runs", enabled with Brulion's tools: its
+  tools also get the live ones, below; the row then says "· may change the app") and Remove
   (`acpAgentRemove`); **Add** (`acpAgentAdd` → `acpAgentAddMenu`: the presets Claude Code, Codex,
   Gemini CLI and OpenCode started with `npx -y …`, or "Another agent…", `acpAgentOwn`, which opens the
   dialog), and **An agent on another computer…** (`acpAgentRemote`, the one entry where no
@@ -1308,7 +1384,7 @@ Codex 2.8 and OpenCode 1.19 (the opt-in test `tst_shell_agents realAgent`,
   Edit… changes only its name there. A `brulion://pair?url=…&code=…` address ("Automation" below:
   the QR code `acp pair` shows, opened by the phone's camera) opens this section with
   `acpHostDialog` filled in (the route's `pairUrl` and `pairCode`, taken once); the user pairs. Kept in the device's settings (`AppSettings::acpAgents`, key
-  `ai/agents`: rows {id, name, command, tools, options, known} and, for an agent on another
+  `ai/agents`: rows {id, name, command, tools, app, options, known} and, for an agent on another
   computer, {url, remote, host, root}; at most 20, malformed rows left out) — never in the
   notebook, which comes from anywhere: a page may only name an agent set up here. The token a
   computer gave this device is in the app's secrets (`<app data>/secrets/acp-<id>`, owner-only,
@@ -1363,7 +1439,14 @@ Codex 2.8 and OpenCode 1.19 (the opt-in test `tst_shell_agents realAgent`,
   the app's environment; on Windows a batch file — `npx` is `npx.cmd` — through `cmd.exe /c`) and
   kept while the notebook is open; several conversations answer at once, a session each. With
   Brulion's tools on, each session gets `brulion-cli mcp --vault <folder>` as an MCP server
-  (`brulion-cli` next to the app, else on PATH; none found: no tools). What it writes to its
+  (`brulion-cli` next to the app, else on PATH; none found: no tools). With "Let it change the
+  app" (`AgentConfig::appAccess`) also `--app-control`, and the process a grant of the running
+  app (`RemoteControl::grant()` through `WorkspaceAgents::setAppGrants()`, desktop builds): its
+  token and the agent's name go to the MCP server in session/new's `env` (`BRULION_APP_TOKEN`,
+  `BRULION_APP_CLIENT`; never in its arguments), so its `brulion_app_*` tools reach the app — also
+  while the remote control's setting is off — and change it live (docs/CLI.md "Live changes"); the
+  context says so, every change shows in the top bar's live indicator under the agent's name, and
+  the grant ends when the process does. What it writes to its
   standard error goes to the log; when it ends, its turns fail with its last line ("stopped: it
   ended with code 1: …") and the next turn starts it again. A changed program or a removed agent
   stops; a notebook closed stops them all.
@@ -1376,7 +1459,7 @@ Codex 2.8 and OpenCode 1.19 (the opt-in test `tst_shell_agents realAgent`,
   (1 MiB by default, cut at a character), at most 32 at once; they end with the agent.
 * **A turn**: a new session's first prompt says what the agent needs to know (English, the agent
   reads it: `WorkspaceAgents::context()` — the notebook's folder, the conversation's page it must not
-  change, the page it is about, Brulion's MCP server), then the page it is about — its text as an
+  change, the page it is about, Brulion's MCP server and, with a grant, its live tools), then the page it is about — its text as an
   embedded resource where the agent takes one, else a `resource_link` —, the conversation so far as
   one text (`transcript()`: 🧑 and 🤖 messages, from `chat::firstSent()` with the network's budget)
   and the newest message; a session that goes on gets only the newest message. Pictures go as
@@ -5901,6 +5984,20 @@ pickers (Android, Windows, GTK / KDE, the portal, the browser's) speak the syste
   `listItemHeightDense`, `sidebarWidth`), and **the main window must bind its size**:
   `Binding { target: Theme; property: "windowWidth"; value: window.width }` (same for
   `windowHeight`) — `narrow` (< 900 px), `compact` (< 600 px) and `touchUi` derive from it.
+  **Overrides** (docs/EXTENSIONS.md "Theme": an extension's `b.app.theme`, an AI agent's live
+  theme): every token of the catalog (core `extensions/appapi.cpp` `themeTokens()` — the colours,
+  `radiusXs` … `radiusXl`, `focusRingWidth`, `fontUi` / `fontSans` / `fontSerif` / `fontMono`) can
+  be replaced. `AppScripting` merges the layers into `ui::ThemeOverrides` (one per process, a map per
+  mode); `ThemeColors` puts them over its own palette tokens (`fgOnAccent` is its `accentOn`) and
+  exposes the mode's map as `palette.overrides`. Every other colour token of Theme.qml keeps its own
+  value as `_<name>Base` and reads `_pick("<name>", _<name>Base)` — the override as text through
+  `palette.pickText()`, a string bound to a `color`: a C++ method's `QColor` result cannot be stored
+  in a compiled `color` ("Compiled QML") —, the radii and `focusRingWidth`
+  `palette.pickNumber(palette.overrides, "<name>", <value>)`, the fonts `_pickFont()` (an installed
+  family only, else the token's own). With no overrides each token is exactly its own value
+  (`tst_ui_themepalette`); derived tokens follow the ones they are made of (`accentBg` an
+  overridden `accent`, `guide` an overridden `border`) unless overridden themselves. A new colour
+  token of Theme.qml goes into the catalog too (and the docs' list), or it cannot be overridden.
 * **Components** are built on `QtQuick.Templates` (no style dependency; the few files that need
   a ready control import `QtQuick.Controls.Basic`, never `QtQuick.Controls` — its run-time style
   selection packages all six styles, and configure refuses it, "File pickers"), each file documents

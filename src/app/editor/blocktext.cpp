@@ -1323,24 +1323,45 @@ void setUnavailableSlashCommands(const QStringList &ids)
     unavailableSlashCommands() = ids;
 }
 
+namespace {
+// How a name or keyword matches the folded query `q` (folded): 0 at its start, 1 at a word's
+// start, 2 anywhere, NoMatch not at all; with no query everything matches.
+constexpr int NoMatch = 100;
+int foldedRank(const QString &q, QStringView name)
+{
+    if (q.isEmpty())
+        return 0;
+    const QString f = text::foldKey(name);
+    if (f.startsWith(q))
+        return 0;
+    if (f.contains(u' ' + q) || f.contains(u'-' + q))
+        return 1;
+    return f.contains(q) ? 2 : NoMatch;
+}
+int commandRank(const SlashCommand &c, const QString &q)
+{
+    int best = std::min({foldedRank(q, c.namePl), foldedRank(q, c.nameEn), foldedRank(q, c.id)});
+    for (const QString &k : c.keywords)
+        best = std::min(best, foldedRank(q, k) + 3);
+    return best;
+}
+} // namespace
+
+int slashMatchRank(QStringView name, QStringView filter)
+{
+    const int r = foldedRank(text::foldKey(filter).trimmed(), name);
+    return r >= NoMatch ? -1 : r;
+}
+
+int slashCommandRank(const SlashCommand &c, QStringView filter)
+{
+    const int r = commandRank(c, text::foldKey(filter).trimmed());
+    return r >= NoMatch ? -1 : r;
+}
+
 QList<const SlashCommand *> filterSlashCommands(QStringView filter)
 {
     const QString q = text::foldKey(filter).trimmed();
-    const QString wordStart = u' ' + q;
-    const QString partStart = u'-' + q;
-    constexpr int NoMatch = 100;
-    // How a name or keyword matches (folded): 0 at its start, 1 at a word's start, 2 anywhere; with
-    // no filter every command matches.
-    const auto rank = [&](const QString &name) {
-        if (q.isEmpty())
-            return 0;
-        const QString f = text::foldKey(name);
-        if (f.startsWith(q))
-            return 0;
-        if (f.contains(wordStart) || f.contains(partStart))
-            return 1;
-        return f.contains(q) ? 2 : NoMatch;
-    };
     // Names before keywords, then the menu's order.
     QList<std::pair<int, const SlashCommand *>> ranked;
     int order = 0;
@@ -1348,9 +1369,7 @@ QList<const SlashCommand *> filterSlashCommands(QStringView filter)
         ++order;
         if (unavailableSlashCommands().contains(c.id))
             continue;
-        int best = std::min({rank(c.namePl), rank(c.nameEn), rank(c.id)});
-        for (const QString &k : c.keywords)
-            best = std::min(best, rank(k) + 3);
+        const int best = commandRank(c, q);
         if (best < NoMatch)
             ranked.append({best * 1000 + order, &c});
     }

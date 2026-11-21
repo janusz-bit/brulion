@@ -365,6 +365,7 @@ Item {
         case "duplicate": return qsTr("Another page has the same name: only the first one runs.")
         case "builtinOff": return qsTr("It replaces a built-in extension that is off.")
         case "problem": return qsTr("No code: add a ```luau block.")
+        case "live": return qsTr("A live version runs instead (sent by an agent).")
         default: return message
         }
     }
@@ -1777,6 +1778,7 @@ Item {
                         readonly property string agentId: AppController.routeText(agentRow.modelData, "id")
                         readonly property string command: AppController.routeText(agentRow.modelData, "command")
                         readonly property bool remote: AppController.routeFlag(agentRow.modelData, "remote")
+                        readonly property bool appAccess: AppController.routeFlag(agentRow.modelData, "app")
                         objectName: "acpAgentRow"
                         Layout.fillWidth: true
                         title: AppController.routeText(agentRow.modelData, "name")
@@ -1798,7 +1800,7 @@ Item {
                             text: qsTr("Edit…")
                             onClicked: agentDialog.edit(agentRow.agentId, agentRow.title, agentRow.command,
                                                         AppController.routeFlag(agentRow.modelData, "tools"),
-                                                        agentRow.remote)
+                                                        agentRow.remote, agentRow.appAccess)
                         }
                         BIconButton {
                             objectName: "acpAgentRemove"
@@ -1848,7 +1850,7 @@ Item {
                         onTriggered: {
                             const id = AppSettings.addAcpAgent("")
                             if (id !== "")
-                                agentDialog.edit(id, qsTr("My agent"), "", true, false)
+                                agentDialog.edit(id, qsTr("My agent"), "", true, false, false)
                         }
                     }
                     BMenuItem {
@@ -1921,12 +1923,14 @@ Item {
                     acceptText: qsTr("Save")
                     acceptEnabled: Js.trim(agentNameField.text) !== ""
                     initialFocusItem: agentDialog.remote ? agentNameField : agentCommandField
-                    function edit(id: string, name: string, command: string, tools: bool, remote: bool): void {
+                    function edit(id: string, name: string, command: string, tools: bool, remote: bool,
+                                  app: bool): void {
                         agentDialog.agentId = id
                         agentDialog.remote = remote
                         agentNameField.text = name
                         agentCommandField.text = command
                         agentToolsSwitch.checked = tools
+                        agentAppSwitch.checked = app
                         agentDialog.open()
                     }
                     onAccepted: {
@@ -1934,6 +1938,7 @@ Item {
                         if (!agentDialog.remote) {
                             AppSettings.setAcpAgentCommand(agentDialog.agentId, agentCommandField.text)
                             AppSettings.setAcpAgentTools(agentDialog.agentId, agentToolsSwitch.checked)
+                            AppSettings.setAcpAgentApp(agentDialog.agentId, agentAppSwitch.checked)
                         }
                     }
                     BText {
@@ -1977,6 +1982,16 @@ Item {
                         Layout.topMargin: Theme.space2
                         text: qsTr("Brulion's tools")
                         description: qsTr("Its sessions get Brulion's MCP server (brulion-cli mcp): search, queries, tasks and journals of this notebook.")
+                    }
+                    // Live changes (docs/CLI.md "Live changes"): its tools get --app-control and a
+                    // grant of this running app, which ends when the agent stops.
+                    SettingSwitch {
+                        id: agentAppSwitch
+                        objectName: "acpAgentApp"
+                        visible: !agentDialog.remote
+                        enabled: agentToolsSwitch.checked
+                        text: qsTr("Let it change the app while it runs")
+                        description: qsTr("With Brulion's tools it may also change this running app live (Luau, extensions for this run, the theme, settings, the window's items); the top bar shows what it changed, and you can undo all of it.")
                     }
                 }
             }
@@ -2032,8 +2047,11 @@ Item {
                         required property string extModules
                         required property int extTypes
                         required property string extTypeMessage
-                        objectName: "extensionRow"
-                        visible: extRow.extKind === "page"
+                        /// Live code an AI agent (a live client) loaded for this run of the app
+                        /// (docs/EXTENSIONS.md "Live code"): its description is who sent it.
+                        readonly property bool live: extRow.extKind === "live"
+                        objectName: extRow.live ? "extensionLiveRow" : "extensionRow"
+                        visible: extRow.extKind === "page" || extRow.live
                         Layout.fillWidth: true
                         title: extRow.extTitle
                         description: root.extensionStateText(extRow.extState, extRow.extMessage, extRow.extErrorLine,
@@ -2041,8 +2059,25 @@ Item {
                                      + (extRow.extPermissions !== "" ? "\n" + qsTr("May: %1").arg(extRow.extPermissions) : "")
                                      + (extRow.extModules !== "" ? "\n" + qsTr("Uses the code of: %1").arg(extRow.extModules) : "")
                                      + (extRow.extTypes > 0 ? "\n" + qsTr("Type check: %n warning(s), %1", "", extRow.extTypes).arg(extRow.extTypeMessage) : "")
-                                     + (extRow.extDescription !== "" ? "\n" + extRow.extDescription : "")
+                                     + (extRow.extDescription === "" ? ""
+                                        : extRow.live ? "\n" + qsTr("From %1 — for this run of the app only").arg(extRow.extDescription)
+                                        : "\n" + extRow.extDescription)
+                        BBadge {
+                            objectName: "extensionLiveBadge"
+                            visible: extRow.live
+                            text: qsTr("Live")
+                            variant: "accent"
+                        }
                         BButton {
+                            objectName: "extensionLiveRemove"
+                            visible: extRow.live
+                            size: "small"
+                            iconName: "x"
+                            text: qsTr("Remove")
+                            onClicked: Workspace.extensions.unloadLive(extRow.extId)
+                        }
+                        BButton {
+                            visible: !extRow.live
                             size: "small"
                             variant: "ghost"
                             iconName: "code"
@@ -2070,13 +2105,14 @@ Item {
                         }
                         BIconButton {
                             objectName: "extensionCopyButton"
+                            visible: !extRow.live
                             size: "small"
                             iconName: "copy"
                             label: qsTr("Copy to another notebook")
                             onClicked: AppController.requestUiAction("copyExtension:" + extRow.extPath)
                         }
                         BButton {
-                            visible: extRow.extState === "running" || extRow.extState === "error" || extRow.extState === "off"
+                            visible: !extRow.live && (extRow.extState === "running" || extRow.extState === "error" || extRow.extState === "off")
                             size: "small"
                             text: extRow.extState === "off" ? qsTr("Switch on") : qsTr("Switch off")
                             onClicked: Workspace.extensions.setPageOn(extRow.extPath, extRow.extState === "off")

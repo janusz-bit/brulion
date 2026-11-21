@@ -13,7 +13,12 @@
 // app holds none of its credentials. What the app serves it:
 //
 // * Brulion's tools: `brulion-cli mcp --vault <notebook>` (the program next to the app, else on
-//   PATH) as an MCP server of each session, when the agent's "Brulion's tools" is on.
+//   PATH) as an MCP server of each session, when the agent's "Brulion's tools" is on. With "Let it
+//   change the app" (AgentConfig::appAccess) also `--app-control`: the tools that drive and change
+//   the running app live (docs/CLI.md "Live changes"), reaching it with a grant the app makes for
+//   the agent's process (setAppGrants(): RemoteControl in the desktop app) — its token only in the
+//   tools' environment (BRULION_APP_TOKEN, with BRULION_APP_CLIENT the agent's name), revoked when
+//   the process stops.
 // * The notebook's files (`fs/read_text_file`, `fs/write_text_file`): through the Workspace, so a
 //   page the agent changes is seen at once by the editor and kept in its history — only files of
 //   the notebook's folder, never an encrypted page.
@@ -95,13 +100,16 @@ struct AgentConfig
     QString host{};
     QString root{};
     QString token{};
+    /// "Let it change the app while it runs" (settings row key `app`; a program of this device
+    /// with Brulion's tools only): its tools get `--app-control` and a grant of the app.
+    bool appAccess = false;
     friend bool operator==(const AgentConfig &, const AgentConfig &) = default;
     bool isRemote() const { return !url.isEmpty(); }
     /// The same program: what it runs is not changed (its name and remembered options may be).
     bool sameProgram(const AgentConfig &o) const
     {
         return id == o.id && command == o.command && tools == o.tools && url == o.url && remote == o.remote
-               && token == o.token;
+               && token == o.token && appAccess == o.appAccess;
     }
 };
 
@@ -139,8 +147,10 @@ public:
     static QStringList commandLine(const QString &command, bool windows,
                                    const std::function<QString(const QString &)> &find);
     /// The text a new session starts with (English: the agent reads it): the notebook's folder,
-    /// the conversation's page, the page it is about, whether Brulion's tools are there.
-    static QString context(const QString &root, const QString &conversation, const QString &page, bool tools);
+    /// the conversation's page, the page it is about, whether Brulion's tools are there and (`app`)
+    /// whether they may change the running app.
+    static QString context(const QString &root, const QString &conversation, const QString &page, bool tools,
+                           bool app = false);
     /// The conversation so far as one text for a new session ("" when there is none before the
     /// newest message): `history` as WorkspaceChats builds it ({role, content}).
     static QString transcript(const QVariantList &history);
@@ -151,6 +161,13 @@ public:
     static QByteArray keepLast(const QByteArray &output, qint64 limit, bool *cut = nullptr);
     /// What a session's usage says in the chat: "4 % of the context · 0.21 USD" ("" nothing known).
     static QString usageText(const acp::Usage &usage);
+
+    /// Grants of the running app for agents with appAccess (RemoteControl::grant / revokeGrant in
+    /// the desktop app): `grant` makes one for an agent's name and gives its token ("" none),
+    /// `revoke` ends it. Unset (Android, tests): such an agent gets no live tools.
+    using GrantFunction = std::function<QString(const QString &client)>;
+    using RevokeFunction = std::function<void(const QString &token)>;
+    void setAppGrants(GrantFunction grant, RevokeFunction revoke);
 
     void setAgents(const QList<AgentConfig> &agents);
     QList<AgentConfig> agents() const { return m_agents; }
@@ -269,7 +286,11 @@ private:
     void clearQuestion(const QString &path);
     void finish(const QString &path);
     const AgentConfig *config(const QString &id) const;
-    acp::TurnInput baseInput(const AgentConfig &config) const;
+    /// What every turn of the agent's process `p` sends: the folder, Brulion's tools (with its
+    /// grant's live tools), the options.
+    acp::TurnInput baseInput(const AgentConfig &config, const Process *p) const;
+    /// The grant of `p`'s process ends (it stopped).
+    void releaseGrant(Process *p);
     void handle(Process *p, const QString &key, const QJsonValue &id, const QString &method, const QJsonObject &params);
     void readFile(acp::Client *client, const QJsonValue &id, const QJsonObject &params);
     void writeFile(acp::Client *client, const QJsonValue &id, const QJsonObject &params);
@@ -329,6 +350,8 @@ private:
     std::shared_ptr<bool> m_alive = std::make_shared<bool>(true); // (requests on their way after reset())
     sync::HttpTransport *m_transport = nullptr;
     std::unique_ptr<sync::HttpTransport> m_ownTransport;
+    GrantFunction m_grant;
+    RevokeFunction m_revoke;
 };
 
 } // namespace brulion::shell

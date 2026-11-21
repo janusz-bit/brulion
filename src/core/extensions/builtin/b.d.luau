@@ -94,6 +94,38 @@ type Rule = {
     whenDone: boolean?,
 }
 
+type AppState = {
+    view: string,
+    route: { [string]: any },
+    page: string?,
+    path: string?,
+    date: string?,
+    sidePanel: boolean,
+    platform: string,
+    touch: boolean,
+    narrow: boolean,
+    dark: boolean,
+    width: number,
+    height: number,
+    language: string,
+    version: string,
+}
+
+type AppItem = {
+    id: string,
+    label: string,
+    icon: string?,
+    tooltip: string?,
+    tone: string?,
+    order: number?,
+    command: string?,
+    view: string?,
+    params: { [string]: any }?,
+    page: string?,
+    run: string?,
+    insert: string?,
+}
+
 type AiReply = {
     text: string,
     model: string,
@@ -176,6 +208,24 @@ declare b: {
     choose: (prompt: string, options: { any }) -> string?,
     form: (title: string, fields: { { [string]: any } }) -> { [string]: any }?,
     ai: (request: string | { [string]: any }) -> (string, AiReply),
+
+    -- the app itself (permission "app" to change it)
+    app: {
+        state: () -> AppState,
+        commands: () -> { { [string]: any } },
+        settings: () -> { { [string]: any } },
+        get: (key: string) -> any,
+        set: (key: string, value: any) -> (),
+        navigate: (route: string | { [string]: any }) -> (),
+        open: (page: string, options: { line: number?, side: boolean? }?) -> (),
+        back: () -> (),
+        run: (id: string) -> (),
+        toast: (text: string, options: { [string]: any }?) -> (),
+        theme: (tokens: { [string]: any }?) -> (),
+        contribute: (slot: string, item: AppItem) -> (),
+        remove: (slot: string, id: string?) -> boolean,
+        contributions: (slot: string?) -> { { [string]: any } },
+    },
 
     -- the views' components
     ui: {

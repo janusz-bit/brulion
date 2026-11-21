@@ -3524,8 +3524,12 @@ QVariantMap PageController::applyCompletion(int row, const QVariantMap &triggerM
     if (!validRow(row))
         return out;
     const CompletionTrigger t = CompletionTrigger::fromMap(triggerMap);
-    if (t.mode == u"slash")
-        return applySlashCommand(row, t.from, t.to, item.value(u"command"_s).toString());
+    if (t.mode == u"slash") {
+        const QString command = item.value(u"command"_s).toString();
+        if (command.startsWith(u"ext:"))
+            return applySlashContribution(row, t.from, t.to, item);
+        return applySlashCommand(row, t.from, t.to, command);
+    }
     QString edit = m_model->editTextAt(row);
     int from = snapToCharacter(edit, t.from);
     int to = std::max(from, snapToCharacter(edit, t.to));
@@ -3738,6 +3742,69 @@ QVariantMap PageController::applySlashCommand(int row, int from, int to, const Q
     out[u"row"_s] = focus.row;
     out[u"cursor"_s] = m_cursor;
     out[u"action"_s] = action;
+    return out;
+}
+
+QVariantMap PageController::applySlashContribution(int row, int from, int to, const QVariantMap &item)
+{
+    if (refusesEdit())
+        return readOnlyResult();
+    QString markdown = item.value(u"insertText"_s).toString();
+    markdown.replace(u"\r\n"_s, u"\n"_s).replace(u'\r', u'\n');
+    if (markdown.trimmed().isEmpty()) {
+        // A command (or a page, a palette command): the typed "/query" goes, the editor runs it.
+        QVariantMap out = applySlashCommand(row, from, to, item.value(u"command"_s).toString());
+        out[u"action"_s] = u"extension"_s;
+        out[u"extension"_s] = item.value(u"extension"_s).toString();
+        out[u"itemId"_s] = item.value(u"itemId"_s).toString();
+        return out;
+    }
+    QVariantMap out{{u"cursor"_s, m_cursor}, {u"action"_s, QString()}, {u"row"_s, row}};
+    if (!validRow(row))
+        return out;
+    const quint64 uid = m_model->uidAt(row);
+    QString edit = m_model->editTextAt(row);
+    from = snapToCharacter(edit, from);
+    to = std::max(from, snapToCharacter(edit, to));
+    edit.remove(from, to - from);
+    const bool oneLine = !markdown.contains(u'\n');
+    if (oneLine)
+        edit.insert(from, markdown);
+    beginCommand();
+    {
+        const int r = m_model->rowOfUid(uid);
+        applyOp([&](BlockDocument &d) { return d.setBody(r, bodyWithEditText(d.at(r), edit)); });
+    }
+    if (oneLine) {
+        // At the caret, as /today writes its link.
+        const Focus focus{m_model->rowOfUid(uid), from + int(markdown.size())};
+        endCommand(focus);
+        if (focus.row >= 0)
+            setFocus(focus, true);
+        out[u"row"_s] = focus.row;
+        out[u"cursor"_s] = m_cursor;
+        return out;
+    }
+    // Blocks: in place of the block when nothing else is in it, else after it (nested: this step),
+    // the caret at the end of the last one ("- Who: |"), as typing goes on; a table selected.
+    const int r = m_model->rowOfUid(uid);
+    const int first = edit.trimmed().isEmpty() ? insertMarkdown(r, markdown) : insertAfterBlock(r, markdown, -1);
+    const int last =
+            first < 0 ? -1 : std::min(first + BlockDocument(markdown.trimmed()).count() - 1, m_model->count() - 1);
+    if (last < 0 || m_model->shapeAt(last).view == BlockView::Table) {
+        endCommand(Focus{-1, -1});
+        stopEditing();
+        if (last >= 0)
+            setSelectedRow(last);
+        out[u"row"_s] = last;
+        out[u"cursor"_s] = 0;
+        return out;
+    }
+    const Focus focus{last, int(m_model->editTextAt(last).size())};
+    endCommand(focus);
+    setFocus(focus, true);
+    out[u"row"_s] = focus.row;
+    out[u"cursor"_s] = m_cursor;
     return out;
 }
 

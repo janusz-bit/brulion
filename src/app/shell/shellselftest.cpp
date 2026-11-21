@@ -6568,6 +6568,101 @@ void checkExtensionPages(QQuickWindow *window, AppController *app, const Check &
     settle(300);
 }
 
+void clearToasts(QQuickWindow *window);
+
+/// Extension items in the UI (b.app.contribute, docs/UI.md "Extension items in the UI"): an
+/// extension page with the permission `app`, arrived as a sync would and approved, puts a button
+/// into the top bar (on phones the first item of More) and a text into the status bar (wide
+/// windows); each, tapped with real input, runs its command; the page saved without the button takes
+/// it away at once (appRevision), deleted the text goes too.
+void checkContributions(QQuickWindow *window, AppController *app, const Check &check)
+{
+    const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
+    const bool narrow = window->width() < 900;
+    Workspace *ws = app->workspace();
+    WorkspaceExtensions *ext = ws->extensions();
+    const auto named = [&](const QString &name) { return shownNamed(window->contentItem(), name); };
+    const QString path = ws->newPagePath(u"Przyciski samotestu"_s);
+    check(!ws->exists(path), "the self-test's contributing page is new");
+    const auto page = [](const QString &items) {
+        return u"---\ntags: [rozszerzenie]\nuprawnienia: [aplikacja]\n---\n```luau\n"
+               "b.command(\"klik\", function(ctx) b.log(\"klik samotestu\") end, { label = \"Samotest: klik\" })\n"_s
+               + items + u"```\n"_s;
+    };
+    const QString statusItem = u"b.app.contribute(\"statusbar\", { id = \"licznik\", label = \"Licznik samotestu\", "
+                               "icon = \"flame\", tone = \"success\", command = \"klik\" })\n"_s;
+    const QString toolbarItem = u"b.app.contribute(\"toolbar\", { id = \"przycisk\", label = \"Przycisk samotestu\", "
+                                "icon = \"dumbbell\", command = \"klik\" })\n"_s;
+    const auto clicks = [&] { return int(ext->console()->text().count(u"klik samotestu"_s)); };
+    // (The keyboard focus handed back at the end: a tapped top bar button takes it, and goes.)
+    const QPointer<QQuickItem> focused = window->activeFocusItem();
+    check(ws->vault()->writeText(path, page(toolbarItem + statusItem), ChangeSource::Sync),
+          "an extension with items for the UI arrives");
+    check(waitFor([&] { return ext->pageState(path) == u"approval"; }, 10000), "its code waits for approval");
+    check(named(u"toolbar_przycisk"_s) == nullptr, "and puts nothing into the UI before");
+    ext->approve(path);
+    check(waitFor([&] { return ext->pageState(path) == u"running"; }, 10000), "approved, it runs");
+    app->goHome();
+    settle(300);
+    // The top bar's button (phones: the first item of More), tapped.
+    QPointF at;
+    int before = clicks();
+    if (narrow) {
+        QQuickItem *more = steadyItem(window, [&] { return named(u"topBarMore"_s); }, &at, 5000);
+        check(more != nullptr, "phones: the top bar's More");
+        if (more)
+            tapOrClick(window, at, touch);
+    }
+    const QString buttonName = narrow ? u"contribution_toolbar_przycisk"_s : u"toolbar_przycisk"_s;
+    QQuickItem *button = steadyItem(window, [&] { return named(buttonName); }, &at, 10000);
+    check(button != nullptr,
+          narrow ? "the extension's button is the first item of More" : "the extension's button is in the top bar");
+    QPointer<QQuickItem> focusBefore = window->activeFocusItem();
+    if (button)
+        tapOrClick(window, at, touch);
+    check(waitFor([&] { return clicks() == before + 1; }, 10000), "a tap runs its command");
+    if (!narrow)
+        check(window->activeFocusItem() == focusBefore.data(), "and leaves the keyboard focus where it was");
+    closeMenus(window);
+    // The status bar's text (wide windows), tapped — the pointer away from the button first (its
+    // tooltip).
+    if (!narrow && named(u"statusBarSync"_s) != nullptr) {
+        mouseMove(window, QPointF(1, 1));
+        clearToasts(window); // (toasts stand over the status bar's right end)
+        before = clicks();
+        QQuickItem *text = steadyItem(window, [&] { return named(u"statusBar_licznik"_s); }, &at, 10000);
+        check(text != nullptr, "the extension's text is in the status bar");
+        if (!text) {
+            QQuickItem *found = named(u"statusBar_licznik"_s);
+            QQuickItem *target = found ? uidriver::pressTargetAt(window, pointIn(found)) : nullptr;
+            qWarning().noquote() << "selftest: status bar text" << found << "at" << at << "press goes to" << target;
+        }
+        if (text)
+            tapOrClick(window, at, touch);
+        check(waitFor([&] { return clicks() == before + 1; }, 10000), "a click on it runs its command");
+    }
+    // Saved without the button (this device's save keeps the approval): it goes at once.
+    check(ws->writeIfUnchanged(path, page(statusItem), ws->read(path, nullptr)) == EditorHost::WriteResult::Written,
+          "the page is saved without the button");
+    const QString id = u"przyciski-samotestu"_s;
+    check(waitFor([&] { return ext->contribution(u"toolbar"_s, id, u"przycisk"_s).isEmpty(); }, 10000),
+          "the button is no item any more");
+    check(!ext->contribution(u"statusbar"_s, id, u"licznik"_s).isEmpty(), "the text stays");
+    if (!narrow)
+        check(waitFor([&] { return named(u"toolbar_przycisk"_s) == nullptr; }, 5000), "and gone from the top bar");
+    ws->deletePage(path);
+    check(waitFor([&] { return ext->contribution(u"statusbar"_s, id, u"licznik"_s).isEmpty(); }, 10000),
+          "a deleted page's items are gone");
+    if (!narrow)
+        check(waitFor([&] { return named(u"statusBar_licznik"_s) == nullptr; }, 5000), "the status bar too");
+    ext->console()->clear();
+    closeMenus(window);
+    app->goHome();
+    settle(300);
+    if (focused)
+        focused->forceActiveFocus();
+}
+
 /// The rendered HTML of row `row` of an editor's controller (its blocks' "html" role).
 QString renderedRow(QObject *controller, int row)
 {
@@ -11121,6 +11216,11 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
     // 3h-ai'. The AI in the editor (rewrite → Replace → Undo) and the chat list's rename / delete.
     // (Before the ✨'s step, as the steps that leave the keyboard focus in a view.)
     checkAiWriting(window, app, check);
+    closeMenus(window);
+    // 3h-app. Extension items in the UI (b.app.contribute): a top bar button and a status bar text,
+    // tapped. (After the AI in the editor: a click on the top bar while a journal day is edited
+    // left the rewrite dialog's focus, closed, to that hidden day's editor.)
+    checkContributions(window, app, check);
     closeMenus(window);
     // 3h-ai. The AI assistant's ✨ on the top bar: its menu, the assistant's question, its settings.
     checkAiButton(window, app, check);

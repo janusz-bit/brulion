@@ -115,6 +115,9 @@ class TestCliProcess : public QObject {
         env.insert(u"XDG_CACHE_HOME"_s, m_home + u"/cache"_s);
         env.insert(u"XDG_RUNTIME_DIR"_s, m_home + u"/run"_s);
         env.remove(u"BRULION_VAULT"_s);
+        // (A grant of an app this test does not run: never the developer's agent's.)
+        env.remove(u"BRULION_APP_TOKEN"_s);
+        env.remove(u"BRULION_APP_CLIENT"_s);
         env.insert(u"LANG"_s, u"C.UTF-8"_s);
         // Messages for people follow the system's language (docs/CLI.md "Language"): English here,
         // whatever the developer's session says.
@@ -179,14 +182,16 @@ class TestCliProcess : public QObject {
     }
 
     /// cli() while this process's event loop runs (for stand-ins of the app living here).
-    Run cliLive(const QStringList &args)
+    Run cliLive(const QStringList &args, const QByteArray &input = {}, const QProcessEnvironment &env = {})
     {
         QProcess p;
-        p.setProcessEnvironment(environment());
+        p.setProcessEnvironment(env.isEmpty() ? environment() : env);
         p.start(QStringLiteral(BRULION_CLI), args);
         Run r;
         if (!p.waitForStarted(kTimeoutMs))
             return r;
+        if (!input.isEmpty())
+            p.write(input);
         p.closeWriteChannel();
         QElapsedTimer t;
         t.start();
@@ -2183,7 +2188,13 @@ private Q_SLOTS:
         control.setHandler([&requests](const brulion::ipc::ControlRequest &request, brulion::ipc::ControlReply reply) {
             requests.append(request);
             const QString fail = request.params.value(u"text"_s).toString();
-            if (request.method == u"find" && fail.startsWith(u"fail:"_s))
+            // Luau that fails: `ok` false in the answer.
+            const QString luau = request.params.value(request.method == u"load" ? u"source"_s : u"code"_s).toString();
+            if ((request.method == u"eval" || request.method == u"load") && luau.contains(u"błąd"_s))
+                reply.ok(QJsonObject{{u"ok"_s, false}, {u"error"_s, u"live:1: błąd składni"_s}, {u"line"_s, 1}});
+            else if (request.method == u"eval" || request.method == u"load")
+                reply.ok(QJsonObject{{u"ok"_s, true}, {u"method"_s, request.method}, {u"params"_s, request.params}});
+            else if (request.method == u"find" && fail.startsWith(u"fail:"_s))
                 reply.fail(fail.mid(5), u"Nie wyszło"_s);
             else if (request.method == u"open" && request.params.value(u"ref"_s).toString() == u"today")
                 reply.fail(u"not_ready"_s, u"No notebook is open (status loading)"_s); // still opening
@@ -2279,6 +2290,196 @@ private Q_SLOTS:
             QCOMPARE(r.errorCode(), code);
             QCOMPARE(r.json.value(u"error"_s).toObject().value(u"message"_s).toString(), u"Nie wyszło"_s);
         }
+        r = cliLive({u"app"_s, u"find"_s, u"fail:unauthorized"_s});
+        QCOMPARE(r.code, 5); // (with a token of its own it would be told so: below)
+
+        // Live changes (docs/CLI.md "Live changes"): what each command asks the app.
+        const auto asked = [&requests](const QString &method, const QJsonObject &params) {
+            if (requests.isEmpty() || requests.last().method != method || requests.last().params != params) {
+                qWarning() << "asked:" << (requests.isEmpty() ? QString() : requests.last().method)
+                           << QJsonDocument(requests.isEmpty() ? QJsonObject() : requests.last().params).toJson();
+                return false;
+            }
+            return true;
+        };
+        r = cliLive({u"app"_s, u"eval"_s, u"return #b.pages()"_s, u"--extension"_s, u"nawyki"_s});
+        QCOMPARE(r.code, 0);
+        QVERIFY(asked(u"eval"_s, {{u"code"_s, u"return #b.pages()"_s}, {u"extension"_s, u"nawyki"_s}}));
+        r = cliLive({u"--stdin"_s, u"app"_s, u"eval"_s}, "return \"zażółć\"\n");
+        QCOMPARE(r.code, 0);
+        QVERIFY(asked(u"eval"_s, {{u"code"_s, u"return \"zażółć\"\n"_s}}));
+        r = cliLive({u"app"_s, u"eval"_s, u"błąd("_s});
+        QCOMPARE(r.code, 6);
+        QCOMPARE(r.errorCode(), u"extension_error"_s);
+        QCOMPARE(r.json.value(u"error"_s).toObject().value(u"details"_s).toObject().value(u"line"_s).toInt(), 1);
+        const qsizetype before = requests.size();
+        QCOMPARE(cliLive({u"app"_s, u"eval"_s, u"  "_s}).code, 2);
+        writeFile(m_tmp.filePath(u"żywy.luau"_s), "b.command(\"hej\", function() return \"Cześć\" end)\n");
+        r = cliLive({u"app"_s, u"load"_s, u"zywy"_s, u"--file"_s, m_tmp.filePath(u"żywy.luau"_s), u"--title"_s,
+                     u"Żywy"_s, u"--permissions"_s, u"write, app"_s});
+        QCOMPARE(r.code, 0);
+        QVERIFY(asked(u"load"_s, {{u"id"_s, u"zywy"_s},
+                                  {u"source"_s, u"b.command(\"hej\", function() return \"Cześć\" end)\n"_s},
+                                  {u"title"_s, u"Żywy"_s},
+                                  {u"permissions"_s, u"write, app"_s}}));
+        r = cliLive({u"app"_s, u"load"_s, u"zywy"_s, u"--code"_s, u"x = 1"_s});
+        QVERIFY(asked(u"load"_s, {{u"id"_s, u"zywy"_s}, {u"source"_s, u"x = 1"_s}}));
+        r = cliLive({u"app"_s, u"load"_s, u"zywy"_s, u"--code"_s, u"błąd"_s});
+        QCOMPARE(r.code, 6);
+        const qsizetype loads = requests.size();
+        QCOMPARE(cliLive({u"app"_s, u"load"_s, u"zywy"_s}).code, 2); // no source
+        QCOMPARE(cliLive({u"app"_s, u"load"_s, u"zywy"_s, u"--code"_s, u"x"_s, u"--file"_s, u"a.luau"_s}).code, 2);
+        QCOMPARE(cliLive({u"app"_s, u"load"_s, u"zywy"_s, u"--file"_s, m_tmp.filePath(u"brak.luau"_s)}).code, 3);
+        QCOMPARE(requests.size(), loads);
+        QVERIFY(before < loads);
+        cliLive({u"app"_s, u"unload"_s, u"zywy"_s});
+        QVERIFY(asked(u"unload"_s, {{u"id"_s, u"zywy"_s}}));
+        for (const QString &word : {u"extensions"_s, u"reload"_s, u"settings"_s, u"changes"_s}) {
+            r = cliLive({u"app"_s, word});
+            QCOMPARE(r.code, 0);
+            QVERIFY(asked(word, {}));
+        }
+        cliLive({u"app"_s, u"console"_s, u"--since"_s, u"12"_s, u"--limit"_s, u"5"_s});
+        QVERIFY(asked(u"console"_s, {{u"since"_s, 12}, {u"limit"_s, 5}}));
+        // A setting's value: JSON, else the words as a string.
+        const QList<std::pair<QStringList, QJsonValue>> values{
+                {{u"compact"_s}, u"compact"_s},
+                {{u"18"_s}, 18},
+                {{u"true"_s}, true},
+                {{uR"(["journals","tasks"])"_s}, QJsonArray{u"journals"_s, u"tasks"_s}},
+                {{u"Inter"_s, u"Display"_s}, u"Inter Display"_s},
+                {{u"\"Żółw\""_s}, u"Żółw"_s}};
+        for (const auto &[words, value] : values) {
+            r = cliLive(QStringList{u"app"_s, u"set"_s, u"klucz"_s} + words);
+            QCOMPARE(r.code, 0);
+            QVERIFY(asked(u"set"_s, {{u"key"_s, u"klucz"_s}, {u"value"_s, value}}));
+        }
+        // Theme tokens: checked here as in the app, before it is asked.
+        r = cliLive({u"app"_s, u"theme"_s, u"--tokens"_s, u"{\"accent\": \"#3a7\", \"dark\": {\"bg\": \"#0b0d10\"}}"_s,
+                     u"--catalog"_s});
+        QCOMPARE(r.code, 0);
+        QVERIFY(asked(u"theme"_s, {{u"tokens"_s, QJsonObject{{u"accent"_s, u"#3a7"_s},
+                                                             {u"dark"_s, QJsonObject{{u"bg"_s, u"#0b0d10"_s}}}}},
+                                   {u"catalog"_s, true}}));
+        cliLive({u"app"_s, u"theme"_s, u"--clear"_s});
+        QVERIFY(asked(u"theme"_s, {{u"clear"_s, true}}));
+        const qsizetype themes = requests.size();
+        r = cliLive({u"app"_s, u"theme"_s, u"--tokens"_s, u"{\"bgg\": \"#000\"}"_s});
+        QCOMPARE(r.code, 2);
+        QCOMPARE(r.errorCode(), u"bad_tokens"_s);
+        QVERIFY(r.json.value(u"error"_s).toObject().value(u"message"_s).toString().contains(u"bg"_s));
+        QCOMPARE(cliLive({u"app"_s, u"theme"_s, u"--tokens"_s, u"[1]"_s}).code, 2);
+        QCOMPARE(cliLive({u"app"_s, u"theme"_s, u"--tokens"_s, u"{\"radius\": 4}"_s, u"--clear"_s}).code, 2);
+        QCOMPARE(cliLive({u"app"_s, u"contributions"_s, u"--slot"_s, u"nigdzie"_s}).errorCode(), u"bad_slot"_s);
+        QCOMPARE(requests.size(), themes);
+        cliLive({u"app"_s, u"contributions"_s, u"--slot"_s, u"toolbar"_s});
+        QVERIFY(asked(u"contributions"_s, {{u"slot"_s, u"toolbar"_s}}));
+        cliLive({u"app"_s, u"inspect"_s, u"h5"_s, u"--depth"_s, u"2"_s, u"--properties"_s, u"--limit"_s, u"10"_s});
+        QVERIFY(asked(u"inspect"_s,
+                      {{u"handle"_s, u"h5"_s}, {u"depth"_s, 2}, {u"properties"_s, true}, {u"limit"_s, 10}}));
+        cliLive({u"app"_s, u"set-property"_s, u"h5"_s, u"opacity"_s, u"0.5"_s});
+        QVERIFY(asked(u"setProperty"_s, {{u"handle"_s, u"h5"_s}, {u"name"_s, u"opacity"_s}, {u"value"_s, 0.5}}));
+        cliLive({u"app"_s, u"set-property"_s, u"h5"_s, u"color"_s, u"\"#ff0000\""_s});
+        QVERIFY(asked(u"setProperty"_s, {{u"handle"_s, u"h5"_s}, {u"name"_s, u"color"_s}, {u"value"_s, u"#ff0000"_s}}));
+        cliLive({u"app"_s, u"events"_s, u"--since"_s, u"7"_s, u"--wait"_s, u"100"_s});
+        QVERIFY(asked(u"events"_s, {{u"since"_s, 7}, {u"wait"_s, 100}}));
+        cliLive({u"app"_s, u"revert"_s, u"--who"_s, u"Claude Code"_s});
+        QVERIFY(asked(u"revert"_s, {{u"who"_s, u"Claude Code"_s}}));
+        // What changes the app is refused read-only; what only looks is not.
+        const qsizetype looks = requests.size();
+        for (const QStringList &args :
+             {QStringList{u"eval"_s, u"return 1"_s}, QStringList{u"load"_s, u"a"_s, u"--code"_s, u"x"_s},
+              QStringList{u"unload"_s, u"a"_s}, QStringList{u"reload"_s},
+              QStringList{u"set"_s, u"density"_s, u"compact"_s}, QStringList{u"theme"_s, u"--clear"_s},
+              QStringList{u"set-property"_s, u"h1"_s, u"opacity"_s, u"1"_s}, QStringList{u"revert"_s}}) {
+            r = cliLive(QStringList{u"--read-only"_s, u"app"_s} + args);
+            QVERIFY2(r.code == 7, qPrintable(args.join(u' ')));
+        }
+        QCOMPARE(requests.size(), looks);
+        for (const QString &word : {u"inspect"_s, u"events"_s, u"console"_s, u"changes"_s, u"extensions"_s,
+                                    u"settings"_s, u"contributions"_s}) {
+            r = cliLive({u"--read-only"_s, u"app"_s, word});
+            QVERIFY2(r.code == 0, qPrintable(word));
+        }
+        const qsizetype dry = requests.size();
+        r = cliLive({u"--dry-run"_s, u"app"_s, u"set"_s, u"density"_s, u"compact"_s});
+        QCOMPARE(r.result().value(u"method"_s).toString(), u"set"_s);
+        QCOMPARE(requests.size(), dry); // (nothing asked)
+
+        // Over MCP: the code itself, never a file (its lines would come back in a syntax error).
+        {
+            QProcess mcp;
+            mcp.setProcessEnvironment(environment());
+            mcp.start(QStringLiteral(BRULION_CLI), {u"mcp"_s, u"--app-control"_s});
+            QVERIFY(mcp.waitForStarted(kTimeoutMs));
+            const auto call = [](int id, const QString &tool, const QJsonObject &arguments) {
+                return QJsonDocument(
+                               QJsonObject{{u"jsonrpc"_s, u"2.0"_s},
+                                           {u"id"_s, id},
+                                           {u"method"_s, u"tools/call"_s},
+                                           {u"params"_s, QJsonObject{{u"name"_s, tool}, {u"arguments"_s, arguments}}}})
+                               .toJson(QJsonDocument::Compact)
+                       + '\n';
+            };
+            mcp.write(R"({"jsonrpc":"2.0","id":1,"method":"initialize","params":{}})"
+                      "\n"
+                      + call(2, u"brulion_app_load"_s,
+                             {{u"id"_s, u"zywy"_s}, {u"file"_s, m_tmp.filePath(u"żywy.luau"_s)}})
+                      + call(3, u"brulion_app_eval"_s, {{u"code"_s, u"return 2"_s}}));
+            mcp.closeWriteChannel();
+            QElapsedTimer t;
+            t.start();
+            while (mcp.state() != QProcess::NotRunning && t.elapsed() < kTimeoutMs)
+                QTest::qWait(20);
+            const QList<QByteArray> lines = mcp.readAllStandardOutput().trimmed().split('\n');
+            QCOMPARE(lines.size(), 3);
+            const QJsonObject load = QJsonDocument::fromJson(lines.at(1)).object().value(u"result"_s).toObject();
+            QVERIFY(load.value(u"isError"_s).toBool());
+            QCOMPARE(load.value(u"structuredContent"_s)
+                             .toObject()
+                             .value(u"error"_s)
+                             .toObject()
+                             .value(u"code"_s)
+                             .toString(),
+                     u"bad_arguments"_s);
+            const QJsonObject eval = QJsonDocument::fromJson(lines.at(2)).object().value(u"result"_s).toObject();
+            QVERIFY(!eval.value(u"isError"_s).toBool());
+            QVERIFY(asked(u"eval"_s, {{u"code"_s, u"return 2"_s}}));
+        }
+
+        // Only grants (the remote control's setting off, an agent the app started): without a token
+        // as if it were off (the hint), `app open` by message; a grant's token in the environment is
+        // shown in a hello first and makes the request its client's; a wrong one is refused.
+        control.setOpen(false);
+        const QString token = control.addGrant(u"Claude Code"_s);
+        r = cliLive({u"app"_s, u"state"_s});
+        QCOMPARE(r.code, 5);
+        QCOMPARE(r.errorCode(), u"remote_control_off"_s);
+        QVERIFY(r.json.value(u"error"_s)
+                        .toObject()
+                        .value(u"details"_s)
+                        .toObject()
+                        .value(u"hint"_s)
+                        .toString()
+                        .contains(u"--remote-control"_s));
+        r = cliLive({u"app"_s, u"open"_s, u"today"_s});
+        QCOMPARE(r.code, 0);
+        QCOMPARE(r.result().value(u"via"_s).toString(), u"message"_s);
+        QProcessEnvironment agentEnv = environment();
+        agentEnv.insert(u"BRULION_APP_TOKEN"_s, token);
+        agentEnv.insert(u"BRULION_APP_CLIENT"_s, u"inna nazwa"_s);
+        r = cliLive({u"app"_s, u"eval"_s, u"return 1"_s}, {}, agentEnv);
+        QCOMPARE(r.code, 0);
+        QCOMPARE(requests.last().method, u"eval"_s);
+        QCOMPARE(requests.last().client, u"Claude Code"_s);
+        QVERIFY(requests.last().granted);
+        QCOMPARE(requests.at(requests.size() - 2).method, u"hello"_s);
+        agentEnv.insert(u"BRULION_APP_TOKEN"_s, QString(64, u'0'));
+        r = cliLive({u"app"_s, u"state"_s}, {}, agentEnv);
+        QCOMPARE(r.code, 5);
+        QCOMPARE(r.errorCode(), u"unauthorized"_s);
+        QVERIFY(control.revokeGrant(token));
+        control.setOpen(true);
     }
 
     // `mcp serve` as the real program (the in-process flow: tst_cli_remote_mcp): the password
@@ -2683,6 +2884,42 @@ private Q_SLOTS:
             QCOMPARE(appTools.contains(u"brulion_app_click"_s), !readOnly);
             QCOMPARE(appTools.contains(u"brulion_app_long_press"_s), !readOnly);
             QCOMPARE(appTools.contains(u"brulion_app_type"_s), !readOnly);
+            // The live changes: those that change the app only when not read-only.
+            for (const char *tool :
+                 {"brulion_app_inspect", "brulion_app_events", "brulion_app_console", "brulion_app_changes",
+                  "brulion_app_extensions", "brulion_app_settings", "brulion_app_contributions"})
+                QVERIFY2(appTools.contains(QLatin1String(tool)), tool);
+            for (const char *tool :
+                 {"brulion_app_eval", "brulion_app_load", "brulion_app_unload", "brulion_app_reload", "brulion_app_set",
+                  "brulion_app_theme", "brulion_app_set_property", "brulion_app_revert"})
+                QVERIFY2(appTools.contains(QLatin1String(tool)) == !readOnly, tool);
+            const QString instructions = QJsonDocument::fromJson(lines.first())
+                                                 .object()
+                                                 .value(u"result"_s)
+                                                 .toObject()
+                                                 .value(u"instructions"_s)
+                                                 .toString();
+            QVERIFY(instructions.contains(u"brulion_app_load"_s) && instructions.contains(u"brulion_app_revert"_s));
+            if (!readOnly) {
+                // A tool's description tells a model what it does and that the user can undo it.
+                for (const QJsonValue &t : QJsonDocument::fromJson(lines.last())
+                                                   .object()
+                                                   .value(u"result"_s)
+                                                   .toObject()
+                                                   .value(u"tools"_s)
+                                                   .toArray()) {
+                    const QJsonObject tool = t.toObject();
+                    if (tool.value(u"name"_s).toString() != u"brulion_app_load")
+                        continue;
+                    const QString description = tool.value(u"description"_s).toString();
+                    QVERIFY2(description.contains(u"replaces"_s) && description.contains(u"undo"_s),
+                             qPrintable(description));
+                    const QJsonObject properties =
+                            tool.value(u"inputSchema"_s).toObject().value(u"properties"_s).toObject();
+                    QVERIFY(properties.contains(u"code"_s) && properties.contains(u"file"_s));
+                    QVERIFY(!tool.value(u"annotations"_s).toObject().value(u"readOnlyHint"_s).toBool());
+                }
+            }
         }
 
         // --allow-destructive: page write may empty a page (content "" is a text).

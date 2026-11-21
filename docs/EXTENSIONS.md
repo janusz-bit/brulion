@@ -4,7 +4,8 @@ Brulion is scripted in [Luau](https://luau.org), a small, fast Lua with optional
 **extension** is a script that adds commands to the palette, views of its own — shown on their
 own, inside a page (a ```` ```view ```` block) or in the side panel —, macros that show a value in
 the text of any note (`{{ext:silownia/rekord Przysiad}}`), variables for templates and reactions
-to saves and changes, and that reads and writes the open notebook through one API, the table `b`.
+to saves and changes, and that reads and writes the open notebook — and changes the running app
+itself: its theme, settings, toolbar, menus and status bar (`b.app`) — through one API, the table `b`.
 Extensions come from two places:
 
 * **the notebook itself** — pages tagged `#extension` (`#rozszerzenie`) whose ```` ```luau ````
@@ -42,7 +43,9 @@ pages name every function of `b`.
 | find out why it does not work | [Errors](#errors), [Troubleshooting](#troubleshooting), [The Luau console](#the-luau-console) |
 | know what a page may do and when it runs | [Extensions in the notebook](#extensions-in-the-notebook), [Sandbox and limits](#sandbox-and-limits) |
 | use an extension in another notebook | [Sharing between notebooks](#sharing-between-notebooks) |
+| change the app itself — its theme, settings, toolbar, menus, what it shows | [The app (`b.app`)](#the-app-bapp) |
 | write one as an AI agent, from the command line | [Written by an AI agent](#written-by-an-ai-agent) |
+| let an AI agent change the running app, at once | [Live code](#live-code) |
 
 ## Quick start
 
@@ -918,6 +921,7 @@ end, { description = "Open tasks due by the note's day" })
 | `b.on("open", fn)` | the notebook was opened: once, after every extension that runs there loaded (not for one approved later) | `{ date }` |
 | `b.on("day", fn)` | a new day began while the app runs (midnight passed, the device woke up on a later day) | `{ date, previous }` |
 | `b.on("timer", fn)` | the extension's own timer ended ("Timers"); only its own hooks hear it — one that ended while the app was closed when the notebook opens next (`late`) | `{ label, seconds, late }` |
+| `b.on("route", fn)` | the main view shows something else — a page, a day, the calendar, a view of an extension — once it settled (150 ms; a burst is one event) | `{ view, page?, path?, date?, previous, extension?, name? }`: the view's name (docs/UI.md "Navigation"), the page or day on screen, the view before; an extension's view by its `extension` and `name` |
 
 **Who hears what.** A hook never hears what its own extension wrote — no echoes, no loop of one
 extension —, and every other change it hears: one extension's tick in its view reaches the page
@@ -1615,6 +1619,204 @@ b.command("pirat", function(ctx)
 end, { label = "Pirate", chat = true })
 ```
 
+## The app (`b.app`)
+
+`b.app` is the running app itself: what it shows, its commands, the device's settings, its theme
+and its UI — the Emacs idea taken to the app's window. An extension reads all of it; changing it
+needs the permission **`app`** (`permissions: [app]`, Polish `aplikacja`), which the approval shows
+as "change the app". The Luau console has it (what is typed there is the user's own), and so has
+live code an agent sends ("Live code" below).
+
+| Function | |
+|---|---|
+| `b.app.state()` | `{ view, route, page?, path?, date?, sidePanel, platform, touch, narrow, dark, width, height, language, version }`: the main view (`"journals"`, `"page"`, `"calendar"` … — docs/UI.md "Navigation"), its whole route, the page or day on screen, whether the side panel shows, `"linux"` / `"android"` / `"windows"` / `"wasm"`, a touch UI, a narrow window (< 900 px), the dark theme in force, the window's size, the interface language and the app's version |
+| `b.app.commands()` | the command palette's commands `{ id, title, subtitle, shortcut, enabled }` — the app's own (`go.calendar`, `theme.toggle`, `page.source` …) and the extensions' (`ext.<extension>.<name>`) |
+| `b.app.run(id)` | runs one of them, as the palette does, once the call has returned (an unknown id is an error with the nearest one) |
+| `b.app.settings()` | the device settings an extension may read and change: `{ key, group, kind, label, value, options?, min?, max? }` — the theme (`theme`, `accent`, `customAccent`, `lightSurface`, `darkSurface`, `density`, `fontScale`, `uiFont`, `reducedMotion`), the layout (`sidebarHidden`, `sidebarSections`, `bottomNav`, `captureButton`, `statusBar`, `sidePanel`), the editor (`editorFont`, `editorFontFamily`, `monoFont`, `editorFontSize`, `editorWidth`, `lineSpacing`, `sourceMode`, `focusMode`, `readingMode`, `typewriter`, `vim`, `spellCheck`, `wordCount` …), the built-in extensions (`gym`, `habits`, `flashcards`, `assistant`), reminders and the tray. Not there: anything secret or about trust — AI keys and providers, sync accounts, the remote control, the app lock, links out of the notebook |
+| `b.app.get(key)`, `b.app.set(key, value)` | one setting's value; a new one, checked against its kind (`"choice"` one of its `options`, `"number"` within `min` … `max`, `"toggle"` true / false, `"color"` `"#rrggbb"`, `"list"` of its options, `"text"` one line) and applied at once — the setting the user would change in Settings, kept on this device. Switching a built-in extension happens after the call |
+| `b.app.navigate(route)` | shows a view: its name (`"calendar"`, `"tasks"`, `"graph"`) or a route (`{ view = "tasks", query = "status:open" }`, `{ view = "extension", extension = "silownia", name = "today" }`); a route that lacks what it needs is an error |
+| `b.app.open(page, { line?, side? })` | opens a page (made when missing, as a link), at its line counted from 1, in the side panel with `side = true` |
+| `b.app.back()` | back, as the Back button |
+| `b.app.toast(text, { tone?, button? })` | a message: `tone` `"success"`, `"danger"`, `"warning"`, `"info"`; `button = { label = "Undo", command = "undo" }` runs one of the extension's commands when pressed |
+| `b.app.theme(tokens)` | overrides tokens of the theme ("Theme" below); `nil` takes them away |
+| `b.app.contribute(slot, item)`, `b.app.remove(slot, id?)`, `b.app.contributions(slot?)` | puts an item into the app's UI, takes one (or all of a slot) away, lists those of every extension ("Items of the UI" below) |
+
+What moves the UI — `navigate`, `open`, `back`, `run`, `toast` — happens after the call returns,
+never inside it, and is refused at an extension's top level (it would run on every save of the
+page: call it from a command, an action or a hook). `theme` and `contribute` are declarations:
+they work at the top level, and what an extension set goes away when it is loaded again, switched
+off or removed. A macro or a template variable only reads (`b.app.state()` works there; a change
+is an error). In `brulion-cli extension run` there is no app: `b.app.state()` says
+`platform = "cli"`, and the changes are listed in the result's `app` instead of being made.
+
+### Theme
+
+`b.app.theme({ … })` replaces tokens of the app's design system (`src/app/qml/theme/Theme.qml`)
+while the extension runs — Obsidian's CSS snippets, typed and checked. A token is a colour
+(`"#rgb"`, `"#rrggbb"`, `"#aarrggbb"` with alpha first), a size in pixels or a font family:
+
+* the surfaces `bg`, `bgElevated`, `bgElevated2`, `bgSunken`, `bgHover`, `bgPressed`, `bgSelected`,
+  `bgInverse`, `scrim`, `scrimModal`; text `fg`, `fgMuted`, `fgFaint`, `fgInverse`, `fgOnAccent`;
+  lines `border`, `borderSubtle`, `borderStrong`, `borderControl`, `guide`, `guideOnSunken`;
+* `accent`, `accentHover`, `accentText`, `accentBg`, `accentSolid`, `primary`, `primaryHover`,
+  `primaryPressed`, `primaryFg`, `link`, `linkHover`, `linkMissing`, `tagBg`, `tagFg`;
+* the states `danger`, `dangerHover`, `dangerFg`, `dangerText`, `dangerBg`, `warning`,
+  `warningText`, `warningBg`, `success`, `successText`, `successBg`, `info`, `infoText`, `infoBg`;
+* the chips `chipDueBg` / `chipDueFg`, `chipOverdue…`, `chipScheduled…`, `chipReminder…`,
+  `chipAlarm…`, `chipRecurrence…`, `chipDone…`, `chipNeutral…`;
+* `selection`, `selectionFg`, `mark` (highlights), `focusRing`, the diffs `diffAddBg`,
+  `diffAddStrong`, `diffAddFg`, `diffDelBg`, `diffDelStrong`, `diffDelFg`, `scrollbar`,
+  `switchThumb`, `shadow`;
+* the radii `radiusXs` (0 … 24), `radiusSm` (0 … 24), `radius` (0 … 32), `radiusLg` (0 … 40),
+  `radiusXl` (0 … 48) and `focusRingWidth` (1 … 6);
+* the fonts `fontUi`, `fontSans`, `fontSerif`, `fontMono` (a family installed on the device).
+
+Tokens of one mode go into `dark = { … }` or `light = { … }`, which win over the others in their
+mode. An unknown token is an error with the nearest name ("unknown token “bgg” (did you mean
+“bg”?)"), and so is a value of the wrong kind or out of range; nothing is kept then. Several
+extensions' themes add up in the order they were set (the last one set wins a token), and an
+agent's live theme is over all of them. The app checks no contrast here: a theme that makes text
+unreadable is the extension's choice — switch it off in Settings → Extensions, or undo an agent's
+in the top bar's **Live** menu.
+
+```luau
+-- "Sepia": paper-like surfaces in the light mode, a teal accent in both, rounder corners.
+b.app.theme({
+    accent = "#1f8a80",
+    radius = 9,
+    radiusLg = 14,
+    light = { bg = "#f4ecd8", bgElevated = "#fbf5e6", bgSunken = "#ebe1c8", fg = "#3b2f20" },
+    dark = { bg = "#14110c", bgSunken = "#0f0d09" },
+})
+```
+
+### Items of the UI
+
+`b.app.contribute(slot, item)` puts an item into one of the app's places (docs/UI.md "Extension
+items in the UI"). An item is `{ id, label, icon?, tooltip?, tone?, order?, <what it does> }`:
+`id` is the extension's own name for it — contributing the same id again replaces the item in its
+place, so a status bar text that counts something is the same call with a new label —, `label`
+one line of at most 100 characters, `icon` one of the app's icons, `tone` `"accent"`, `"success"`,
+`"danger"`, `"warning"` or `"info"`, `order` a number (smaller first), and exactly one of:
+
+* `command = "name"` — one of the extension's commands, run as from the palette (in `blockMenu`
+  and `slash` on that block: `ctx.block`; in `pageMenu` with `ctx.page`);
+* `view = "name"` (with `params = { … }`) — one of its views, opened;
+* `page = "Projects/Home"` — a page, opened (made when missing);
+* `run = "go.calendar"` — a command of the palette, the app's or another extension's;
+* `insert = "…"` — `slash` only: Markdown that replaces the typed `/…`.
+
+| Slot | Where | Needs |
+|---|---|---|
+| `"toolbar"` | a button of the top bar (desktop; at the top of the More menu on phones) | `label` (its name and tooltip), an `icon`, what it does |
+| `"statusbar"` | a text in the status bar at the window's bottom (desktop) | `label`; what it does is optional (a click) |
+| `"sidebar"` | an entry of the sidebar's navigation (the drawer on phones) | `label`, what it does |
+| `"pageMenu"` | an item of a page's menu | `label`, what it does |
+| `"blockMenu"` | an item of a block's menu (its bullet, a right-click, a long press) | `label`, what it does |
+| `"slash"` | an entry of the editor's `/` menu, found by its label as the others | `label`, `command` or `insert` |
+
+A misspelt field (`comand`) is an error, not an item that does nothing; a `command` or `view` the
+extension does not have is an error after its top level (at the top level the command may come
+further down). Each extension has at most 16 items in a slot, all of them together 64.
+`b.app.remove(slot, id)` takes one away (`true` when there was one), `b.app.remove(slot)` all of the
+extension's in that slot; `b.app.contributions(slot?)` lists every extension's items with their
+`extension`.
+
+```luau
+-- The open tasks due today in the status bar, kept up to date; a top bar button and a page
+-- menu item for the week ahead; a slash entry that writes a meeting's skeleton.
+local function dueToday()
+    local due = b.query("type:tasks status:open due:<=today", 1).total
+    b.app.contribute("statusbar", {
+        id = "due",
+        label = if due == 0 then "Nothing due" else `{due} due today`,
+        icon = "calendar-check",
+        tone = if due > 0 then "warning" else nil,
+        run = "go.tasks",
+    })
+end
+
+b.view("week", function(params)
+    local result = b.query("type:tasks status:open due:<=+7d sort:due", 50)
+    local lines = { b.ui.heading(`The week ahead: {result.total}`) }
+    for _, task in result.items do
+        table.insert(lines, b.ui.text(`{task.due} · {task.plain}`))
+    end
+    return b.ui.column(lines)
+end)
+
+b.command("copy-week", function(ctx)
+    local result = b.query("type:tasks status:open due:<=+7d sort:due", 50)
+    local lines = { "- The week ahead:" }
+    for _, task in result.items do
+        table.insert(lines, `  - [[{task.page}]]: {task.plain} ({task.due})`)
+    end
+    b.appendToJournal(b.today(), table.concat(lines, "\n"))
+    return `{result.total} tasks copied to today's journal`
+end, { label = "Copy the week ahead to the journal" })
+
+b.app.contribute("toolbar", { id = "week", label = "The week ahead", icon = "calendar-range", view = "week" })
+b.app.contribute("pageMenu", { id = "copy-week", label = "Copy the week ahead", command = "copy-week" })
+b.app.contribute("slash", {
+    id = "meeting",
+    label = "Meeting notes",
+    insert = "## Meeting\n- Who:\n- Decisions:\n- [ ] Next step",
+})
+
+dueToday()
+b.on("change", function(e)
+    dueToday()
+end)
+```
+
+### Settings and navigation
+
+```luau
+-- "Writing mode": the editor alone, a serif font and a wider column — and back. The route hook
+-- turns it on by itself on pages tagged #draft.
+local writing = false
+
+local function setWriting(on)
+    writing = on
+    b.app.set("focusMode", on)
+    b.app.set("editorFont", if on then "serif" else "sans")
+    b.app.set("editorWidth", if on then 760 else 680)
+end
+
+b.command("writing", function(ctx)
+    setWriting(not writing)
+    b.app.toast(if writing then "Writing mode" else "Back to normal", {
+        tone = "info",
+        button = { label = "Undo", command = "writing" },
+    })
+end, { label = "Writing mode", key = "Ctrl+Alt+W" })
+
+b.on("route", function(e)
+    local page = e.page and b.page(e.page)
+    local draft = page ~= nil and table.find(page.tags, "draft") ~= nil
+    if draft ~= writing then
+        setWriting(draft)
+    end
+end)
+```
+
+`b.on("route", fn)` runs when the main view shows something else (a burst — a route replaced
+while a view settles — is one event): `e` is `{ view, page?, path?, date?, previous, extension?,
+name? }` ("Hooks").
+
+```luau
+-- What is on screen and what the app can do: in the console, `b.app.state()` and
+-- `b.app.settings()` show it all.
+local state = b.app.state()
+print(`{state.view} on {state.platform}, {state.width}×{state.height}, dark: {state.dark}`)
+for _, c in b.app.commands() do
+    if c.id:sub(1, 3) == "go." then
+        print(c.id, c.title)
+    end
+end
+return b.app.get("density")
+```
+
 ## Errors
 
 An error ends the call. It names the extension — a page by its title — and the line of the page,
@@ -1788,7 +1990,7 @@ Emacs `config.org`). The page's properties (docs/SYNTAX.md §13), in English or 
 | Property | |
 |---|---|
 | `tags: [extension]` (`rozszerzenie`) | makes the page an extension |
-| `permissions: [write, ai]` (`uprawnienia: [zapis, ai]`) | what it may do beyond reading: `write` (`zapis`) changes notes, `ai` asks a model. An unknown word is reported and grants nothing |
+| `permissions: [write, ai, app]` (`uprawnienia: [zapis, ai, aplikacja]`) | what it may do beyond reading: `write` (`zapis`) changes notes, `ai` asks a model, `app` (`aplikacja`) changes the app — its settings, theme, UI items, what it shows ("The app (`b.app`)"). An unknown word is reported and grants nothing |
 | `description: …` (`opis:`) | shown in Settings → Extensions |
 | `overrides: silownia` (`zastępuje:`) | the built-in extension the page replaces |
 
@@ -1892,6 +2094,47 @@ edits and returns it as a diff; `b.ai` gets an error; `print` comes back as `pri
 `extension write` makes is code "changed elsewhere": it runs in the app only once the user approves
 it there, like code from a sync — the command line never approves anything.
 
+## Live code
+
+An AI agent working with the user — Claude Code, Codex, OpenCode in a terminal, or in Brulion's
+AI chat — can change the **running app** at once, without writing a page and waiting for its
+approval: try a theme, put a button into the top bar, change a setting, add a command, look at the
+result in a screenshot, and go on. It reaches the app through the remote control
+(docs/CLI.md "Remote control", "Live changes"): `brulion-cli app …`, the MCP tools
+`brulion_app_…` of `brulion-cli mcp --app-control`, or — for an agent of the AI chat set up with
+"Let it change the app" — the same tools with a token the app gave that agent alone.
+
+| To … | `brulion-cli` (MCP tool `brulion_app_…`) |
+|---|---|
+| run Luau in the app's engine, as the console does | `app eval 'b.app.state().view'`, `--extension <id>` in an extension's environment |
+| load an extension for this run of the app | `app load word-count --file wc.luau --title "Word count" --permissions write,app` |
+| take it out again (its page or built-in runs again) | `app unload word-count` |
+| see every extension, its state and errors | `app extensions` |
+| read what extensions print and their errors | `app console --since N` |
+| set a theme of the agent's own, over the extensions' | `app theme --tokens '{"accent":"#1f8a80","dark":{"bg":"#101418"}}'` |
+| change a device setting | `app set density '"compact"'`, `app settings` |
+| see the UI items extensions added | `app contributions --slot toolbar` |
+| read the window's items and their properties | `app inspect --depth 4 --properties` |
+| follow what happens (routes, messages, the console) | `app events --since N --wait 10000` |
+| see and undo what it changed | `app changes`, `app revert` |
+
+* **Live code** (`load`) runs at once — the client was let in to change the app — with the
+  permissions it names, and **shadows** an extension page or a built-in of the same id while it is
+  loaded: an agent improving the gym loads `silownia` with its new code, and the built-in runs again
+  when it unloads. A version that does not load is refused with its error and line, and the version
+  before it (the agent's earlier one, else the page's) keeps running. Live code lives in memory
+  only: it is gone when the app quits or the notebook closes, and it never syncs. To keep it, the
+  agent writes the page (`brulion-cli extension write`), which then waits for the user's approval
+  as any code from elsewhere.
+* **Evaluations** (`eval`) run in the console's environment (its globals stay for the next one),
+  with the console's permissions; what the code prints comes back with its value, and the line in
+  the console shows the user what the agent ran. They cannot wait: a question or `b.ai` there is an
+  error.
+* **Visible and reversible.** Every live change — a setting, a theme, live code, a property — is in
+  a journal with what was there before. While there is one, the top bar shows **Live** with the
+  agents' names; its menu undoes everything (or one agent's changes), as `app revert` does.
+  Settings → Extensions shows live code as rows of their own ("Live", who sent it, Remove).
+
 ## The Luau console
 
 The palette's "Luau console" (route `console`): a line of Luau runs in an environment of its own
@@ -1960,6 +2203,7 @@ Home:7
 | `b.ai` | 200 000 characters and 8 pictures a request, 64 tools, 5 minutes an answer; on the device also the model's context (a longer request is cut) and 2 048 tokens an answer |
 | Hooks | 256 in all; three failures in a row take one off; hooks answering hooks end after four rounds; 200 `"task"` events of one burst |
 | Values crossing | 64 levels of nesting |
+| `b.app` | an item's label 100 characters (one line), tooltip 300, `insert` 20 000; 16 items of one extension in a slot, 64 in all; 200 theme tokens per extension; a toast's text 300 characters (cut) |
 
 * One VM per notebook (made again when the language changes or on "Reload extensions"; an extension
   page that changes is loaded again alone). Every extension has an environment of its own (its
@@ -2005,7 +2249,8 @@ Home:7
 | Where | What |
 |---|---|
 | `3rdparty/luau` | Luau 0.743: the VM and the compiler, and the type checker (Analysis, Config: `brulion_luau_analysis`, with `BRULION_LUAU_CHECK`); patched (see its CMakeLists.txt): the plain `string.find` honours the time limit; numbers are read and written with `.` whatever the C locale (Qt sets it from the environment — with a Polish locale Luau's own `strtod` rejected `82.5`) |
-| `src/core/extensions/engine.h` | `Engine`: one VM; extensions, their commands and views; calls, questions, limits |
+| `src/core/extensions/engine.h` | `Engine`: one VM; extensions, their commands and views; calls, questions, limits; the UI items and themes of `b.app` (`contributions()`, `themes()`, `appRevision()`) |
+| `src/core/extensions/appapi.h` | `b.app`'s checks: the theme's tokens (`themeTokens()`, `themeLayerFrom()`, `mergedTheme()`), the slots and their items (`contributionSlots()`, `contributionFrom()`), the operations the host answers (`appOperations()`, `isAppChange()`) |
 | `src/core/extensions/host.h` | `Host`: what an extension may ask of the app (blocks and pages by tag and property, a query from an offset, attachments, the revision, writes — a page, a journal, a block's line, status and property, blocks inserted and removed —, today and now, the week's first day, languages, the timer, the log) |
 | `src/core/extensions/notebookhost.h` | `NotebookHost`: the Host over a `Vault` and its `VaultIndex` — blocks from the index, content-preserving writes (`blockedit.h`, `notebook/journals.h`, `notebook/pages.h`, `markdown::setTaskStatus`), every ref resolved the same way (`resolveRef`: a note's line, stale when changed); a dry run that only computes them (`brulion-cli extension …`, `brulion-cli habit …`) |
 | `src/core/extensions/blockedit.h` | the pure edits behind the writes: a block's line replaced, lines inserted around a block or under it, a block removed, a property set, a line replaced, inserted or removed as written (`b.replaceLine` …); `plainWords` (a block's `plain`, `b.plain`) |
@@ -2021,6 +2266,8 @@ Home:7
 | `src/core/ai/local.h`, `localfiles.h`, `localrunner.h` | the model on the device: the models the app knows, LFM3's chat format (a request as pieces of text and control tokens, the answer read back, a long request cut), the models' files (downloads), what runs a model and the plugin with it (`llamarunner.h`: llama.cpp, only in builds with `BRULION_LOCAL_AI`) |
 | `src/app/shell/localai.h` | `AppController.localAi`: the chosen model, its download and removal, requests answered on a worker thread |
 | `src/core/extensions/pageextension.h` | extension pages: which pages are extensions, their id, their code with the page's line numbers, permissions, the hash an approval covers, the diff an approval shows (`codeDiff`, over `sync::diffLines`); the new-extension page and a built-in's source as a page |
+| `src/app/shell/appscripting.h` | `AppScripting` (QML `AppScripting`): `b.app`'s operations over the app (`call()`: the state, the palette, navigation, toasts), the registry of the device settings an extension may change (`settingSpecs()`), the extensions' and live clients' themes merged into `ui::ThemeOverrides` (Theme.qml reads them through `ThemeColors.overrides`: `pickText()`, `pickNumber()`), `activate()` of a UI item, the journal of live changes and `revert()` |
+| `src/app/shell/workspaceapp.cpp` | `WorkspaceExtensions`' part of it: the items of a slot as the shell shows them (`contributions()`), the "route" hooks, live code (`loadLive()`, `unloadLive()`, `evaluateFor()`) |
 | `src/app/shell/workspaceextensions.h` | `WorkspaceExtensions` (QML `Workspace.extensions`): the engine for the open notebook, the built-ins the settings switch on, the extension pages and their approval on this device (the version read: `approvalReview`, `approveVersion`), reloading a page's code when it or a page it requires changes, hooks and their events (`notesChanging` / `notesChanged` → `ChangeBatch`, "open", "day", "timer"), the console, questions, messages, the extensions' timers, settings, the editor's selection (`offerSelection`), copies to other notebooks; a turn of the AI chat (`runChat`: the conversation's partner — the assistant's `chat` or an extension's chat command —, its answer, failure and `b.status` as signals, its question named by `questionChat`, several turns at once), the app's own requests to the model (`sendAi`: the writing assistant) |
 | `src/app/shell/workspacechats.h` | `WorkspaceChats` (QML `Workspace.chats`): the AI chat's conversations as pages (core `chat`), a turn per conversation (`ChatTurn`; the model on the device's line), the partner of each, pictures, the camera and dictation, rename and delete, Stop, Try again (docs/UI.md "AI chat") |
 | `src/app/shell/writingsession.h` | `WritingSession`: the editor's AI assistant — a rewrite, a continuation or a summary through `WorkspaceExtensions::sendAi` (core `writing`; docs/UI.md "AI in the editor") |
@@ -2054,6 +2301,14 @@ browser build — and the fastest; its type checker (Analysis, vendored for the 
 "Types") finds mistakes with line and column.
 
 ## Tests
+
+`tests/core/extensions/tst_extensions_app.cpp`: `b.app` — the theme's tokens and their checks
+(colours, sizes, fonts, both modes, the nearest name in an error, too many), layers merged in their
+order and dropped with their extension, every slot's items and their fields (a misspelt one, two
+actions, an `insert` outside the slash menu, labels made one line, the limits per extension and
+slot, the same id replaced in its place, the order), the app's operations as the host gets them,
+the permission `app`, what is refused at the top level and in macros, `b.app` read-only, the
+"route" event, a dry run's notes and a check's report, megabytes and loops of items.
 
 `tests/core/extensions/tst_extensions_flashcards.cpp`: the flashcards (`fiszki.luau`) on a real
 notebook — FSRS-6 against py-fsrs's, ts-fsrs's and fsrs-rs's vectors (intervals, stability and

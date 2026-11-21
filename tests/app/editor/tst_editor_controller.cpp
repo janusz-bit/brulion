@@ -3191,6 +3191,71 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         QVERIFY(t.text().contains(u"- {{nieznane/x}}\n"_s));
     }
 
+    void slashContributions()
+    {
+        // An extension's slash item (b.app.contribute("slash", …), SuggestionModel's "ext:" rows):
+        // one line of Markdown in place of the typed "/…" at the caret, in one undo step.
+        const auto item = [](const QString &id, const QString &insert) {
+            return QVariantMap{{u"kind"_s, u"command"_s},
+                               {u"command"_s, QString(u"ext:notatki/"_s + id)},
+                               {u"extension"_s, u"notatki"_s},
+                               {u"itemId"_s, id},
+                               {u"insertText"_s, insert}};
+        };
+        Fixture f(u"- Spotkanie /podp jutro\n"_s);
+        f.page.startEditing(0, 15);
+        QVariantMap trigger = completionTriggerAt(f.edit(0), 15).toMap();
+        QCOMPARE(trigger.value(u"mode"_s).toString(), u"slash"_s);
+        QVariantMap r = f.page.applyCompletion(0, trigger, item(u"podpis"_s, u"— Zażółć gęślą jaźń"_s));
+        QCOMPARE(f.text(), u"- Spotkanie — Zażółć gęślą jaźń jutro\n"_s);
+        QCOMPARE(r.value(u"action"_s).toString(), QString());
+        QCOMPARE(r.value(u"cursor"_s).toInt(), 29); // after the inserted text
+        f.page.undo();
+        QCOMPARE(f.text(), u"- Spotkanie /podp jutro\n"_s);
+
+        // Blocks: in place of a block holding nothing else (its children stay)…
+        Fixture blocks(u"- Dzień\n- /plan\n"_s);
+        blocks.page.startEditing(1, 5);
+        r = blocks.page.applyCompletion(1, completionTriggerAt(blocks.edit(1), 5).toMap(),
+                                        item(u"plan"_s, u"- Rano\n- Wieczór\n  - kolacja"_s));
+        QCOMPARE(blocks.text(), u"- Dzień\n- Rano\n- Wieczór\n  - kolacja\n"_s);
+        // The caret at the end of the last one: typing goes on there.
+        QCOMPARE(r.value(u"row"_s).toInt(), 3);
+        QCOMPARE(r.value(u"cursor"_s).toInt(), 7);
+        QCOMPARE(blocks.page.editingRow(), 3);
+        blocks.page.undo();
+        QCOMPARE(blocks.text(), u"- Dzień\n- /plan\n"_s);
+        // … after it when it has text of its own, at its depth.
+        Fixture after(u"- Dzień\n  - Plan /plan\n- Koniec\n"_s);
+        after.page.startEditing(1, 10);
+        after.page.applyCompletion(1, completionTriggerAt(after.edit(1), 10).toMap(),
+                                   item(u"plan"_s, u"- Rano\n- Wieczór"_s));
+        QCOMPARE(after.text(), u"- Dzień\n  - Plan \n  - Rano\n  - Wieczór\n- Koniec\n"_s);
+
+        // No Markdown: the typed text goes and the editor runs the item ({action: "extension"}).
+        Fixture command(u"- Przysiad /seria\n"_s);
+        command.page.startEditing(0, 15);
+        r = command.page.applyCompletion(0, completionTriggerAt(command.edit(0), 15).toMap(),
+                                         {{u"kind"_s, u"command"_s},
+                                          {u"command"_s, u"ext:silownia/seria"_s},
+                                          {u"extension"_s, u"silownia"_s},
+                                          {u"itemId"_s, u"seria"_s},
+                                          {u"insertText"_s, QString()}});
+        QCOMPARE(command.text(), u"- Przysiad \n"_s);
+        QCOMPARE(r.value(u"action"_s).toString(), u"extension"_s);
+        QCOMPARE(r.value(u"extension"_s).toString(), u"silownia"_s);
+        QCOMPARE(r.value(u"itemId"_s).toString(), u"seria"_s);
+
+        // Reading mode refuses it.
+        Fixture reading(u"- /podp\n"_s);
+        reading.page.startEditing(0, 5);
+        const QVariantMap readingTrigger = completionTriggerAt(reading.edit(0), 5).toMap();
+        reading.page.setReadOnly(true);
+        r = reading.page.applyCompletion(0, readingTrigger, item(u"podpis"_s, u"x"_s));
+        QCOMPARE(reading.text(), u"- /podp\n"_s);
+        QCOMPARE(r.value(u"reason"_s).toString(), u"readingMode"_s);
+    }
+
     // --- completions and slash commands ------------------------------------------------------------
 
     void completions()

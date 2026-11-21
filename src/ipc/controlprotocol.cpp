@@ -309,6 +309,9 @@ QString typeName(ParamType type)
     case ParamType::StringOrObject: return u"a string or an object"_s;
     case ParamType::Modifiers: return u"modifier names (\"ctrl+shift\" or [\"ctrl\", \"shift\"])"_s;
     case ParamType::Target: return u"a target object ({handle}, {x, y} or {text, objectName, type})"_s;
+    case ParamType::Json: return u"a JSON value"_s;
+    case ParamType::Object: return u"an object"_s;
+    case ParamType::StringList: return u"names (\"a, b\" or [\"a\", \"b\"])"_s;
     }
     return {};
 }
@@ -333,6 +336,12 @@ std::optional<ControlFailure> checkParam(const ControlRequest &request, const Pa
     case ParamType::StringOrObject: ok = v.isString() || v.isObject(); break;
     case ParamType::Modifiers: ok = parseModifiers(v).has_value(); break;
     case ParamType::Target: ok = v.isObject(); break;
+    case ParamType::Json: ok = !v.isUndefined(); break;
+    case ParamType::Object: ok = v.isObject(); break;
+    case ParamType::StringList:
+        ok = v.isString()
+             || (v.isArray() && std::ranges::all_of(v.toArray(), [](const QJsonValue &x) { return x.isString(); }));
+        break;
     }
     if (!ok)
         return badParams(request, u"%1 is %2"_s.arg(p.name, typeName(p.type)), p.name);
@@ -360,7 +369,10 @@ const QList<MethodSpec> &controlMethods()
         const QStringList devices{u"mouse"_s, u"touch"_s};
         const QStringList buttons{u"left"_s, u"right"_s, u"middle"_s};
         QList<MethodSpec> out;
-        out.append(method(u"hello"_s, u"The protocol version, the app's version and the methods"_s, {}));
+        out.append(method(u"hello"_s,
+                          u"The protocol version, the app's version and the methods; names the client, shows a "
+                          u"grant's token"_s,
+                          {param(u"client"_s, ParamType::String), param(u"token"_s, ParamType::String)}));
         out.append(method(u"state"_s,
                           u"What the app shows: status, notebook, routes, focus, the edited block, toasts, window"_s,
                           {}));
@@ -417,6 +429,50 @@ const QList<MethodSpec> &controlMethods()
                            param(u"idle"_s, ParamType::Bool), param(u"gone"_s, ParamType::Bool),
                            range(u"ms"_s, ParamType::Integer, 0, 120000)}));
         out.append(method(u"quit"_s, u"Quit the app"_s, {}));
+        // Live changes (docs/CLI.md "Live changes"): code, extensions, the theme, settings and the
+        // window's items of the running app, for this run; every change noted and undone by revert.
+        out.append(method(u"eval"_s,
+                          u"Evaluate Luau in the console's environment (or an extension's): its value and what it "
+                          u"printed"_s,
+                          {param(u"code"_s, ParamType::String, true), param(u"extension"_s, ParamType::String)}));
+        out.append(method(u"extensions"_s, u"Every extension with its state (builtin, page, live), and the live ones"_s,
+                          {}));
+        out.append(method(u"load"_s,
+                          u"Load Luau as a live extension for this run (it replaces a page or built-in of that id "
+                          u"while loaded)"_s,
+                          {param(u"id"_s, ParamType::String, true), param(u"source"_s, ParamType::String, true),
+                           param(u"title"_s, ParamType::String), param(u"permissions"_s, ParamType::StringList)}));
+        out.append(method(u"unload"_s, u"Take out a live extension (the page or built-in of its id runs again)"_s,
+                          {param(u"id"_s, ParamType::String, true)}));
+        out.append(method(u"reload"_s, u"Load every extension again (live ones stay)"_s, {}));
+        out.append(method(
+                u"console"_s, u"The Luau console's lines after a line number"_s,
+                {range(u"since"_s, ParamType::Integer, 0, 1e15), range(u"limit"_s, ParamType::Integer, 1, 1000)}));
+        out.append(method(u"settings"_s, u"The device settings a live client may read and change"_s, {}));
+        out.append(method(u"set"_s, u"Change a setting (settings lists them)"_s,
+                          {param(u"key"_s, ParamType::String, true), param(u"value"_s, ParamType::Json, true)}));
+        out.append(method(u"theme"_s,
+                          u"The theme's overrides: set this client's tokens, clear them, or the token catalog"_s,
+                          {param(u"tokens"_s, ParamType::Object), param(u"clear"_s, ParamType::Bool),
+                           param(u"catalog"_s, ParamType::Bool)}));
+        out.append(method(u"contributions"_s, u"The items extensions put into the UI (all, or one slot's)"_s,
+                          {param(u"slot"_s, ParamType::String)}));
+        out.append(method(u"inspect"_s,
+                          u"The window's item tree (or an item's) with handles, geometry and optionally properties"_s,
+                          {param(u"handle"_s, ParamType::String), range(u"depth"_s, ParamType::Integer, 0, 8),
+                           param(u"properties"_s, ParamType::Bool), range(u"limit"_s, ParamType::Integer, 1, 2000)}));
+        out.append(method(u"setProperty"_s,
+                          u"Write a property of an item (its binding is removed; revert writes the old value)"_s,
+                          {param(u"handle"_s, ParamType::String, true), param(u"name"_s, ParamType::String, true),
+                           param(u"value"_s, ParamType::Json, true)}));
+        out.append(method(
+                u"events"_s,
+                u"What happened in the app after an event id (routes, toasts, console, live changes, "
+                u"notes); waits up to wait ms for one"_s,
+                {range(u"since"_s, ParamType::Integer, 0, 1e15), range(u"wait"_s, ParamType::Integer, 0, 30000)}));
+        out.append(method(u"changes"_s, u"The live changes not reverted, oldest first"_s, {}));
+        out.append(method(u"revert"_s, u"Undo the live changes (of one client, or everyone's)"_s,
+                          {param(u"who"_s, ParamType::String)}));
         return out;
     }();
     return methods;
@@ -514,7 +570,41 @@ std::optional<ControlFailure> checkRequest(const ControlRequest &request)
         return badParams(request, u"scroll needs dx or dy: pixels, not 0 (positive: down, right)"_s, u"dy"_s);
     if (spec->name == u"type" && params.value(u"text"_s).toString().size() > 20000)
         return badParams(request, u"type takes at most 20000 characters at once"_s, u"text"_s);
+    if (spec->name == u"eval" && params.value(u"code"_s).toString().trimmed().isEmpty())
+        return badParams(request, u"eval needs Luau code"_s, u"code"_s);
+    if (spec->name == u"load" && params.value(u"source"_s).toString().trimmed().isEmpty())
+        return badParams(request, u"load needs the extension's Luau source"_s, u"source"_s);
+    if (spec->name == u"theme" && params.contains(u"tokens"_s) && params.value(u"clear"_s).toBool())
+        return badParams(request, u"theme takes tokens or clear, not both"_s, u"clear"_s);
+    if (spec->name == u"setProperty" && params.value(u"name"_s).toString().trimmed().isEmpty())
+        return badParams(request, u"name is a property's name (\"color\", \"font.pixelSize\")"_s, u"name"_s);
     return std::nullopt;
+}
+
+QString cleanClientName(const QString &name)
+{
+    QString out;
+    for (const QChar c : name)
+        out += (c.category() == QChar::Other_Control || c.category() == QChar::Other_Format) ? u' ' : c;
+    return out.simplified().left(MaxClientName).trimmed();
+}
+
+QStringList stringList(const QJsonValue &value)
+{
+    QStringList raw;
+    if (value.isString()) {
+        raw = value.toString().split(u',');
+    } else if (value.isArray()) {
+        const QJsonArray array = value.toArray();
+        for (const QJsonValue &v : array)
+            raw.append(v.toString());
+    }
+    QStringList out;
+    for (const QString &name : std::as_const(raw)) {
+        if (const QString trimmed = name.trimmed(); !trimmed.isEmpty())
+            out.append(trimmed);
+    }
+    return out;
 }
 
 std::optional<Qt::KeyboardModifiers> parseModifiers(const QJsonValue &value)
