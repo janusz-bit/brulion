@@ -15,8 +15,8 @@
 #include "acp/remote.h"
 #include "automation/uri.h"
 #include "fakewebdavserver.h"
-#include "qr/qrcode.h"
 #include "notebook/session.h"
+#include "qr/qrcode.h"
 #include "sync/http.h"
 
 #include <QDir>

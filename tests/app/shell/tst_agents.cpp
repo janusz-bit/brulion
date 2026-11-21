@@ -546,15 +546,21 @@ private Q_SLOTS:
         const QStringList common{u"--vault"_s, computer, u"--state-dir"_s, m_tmp.filePath(u"prawdziwy-urzadzenie"_s)};
         QProcess host;
         host.setProcessChannelMode(QProcess::ForwardedErrorChannel);
-        host.start(QStringLiteral(BRULION_CLI),
-                   common + QStringList{u"acp"_s, u"serve"_s, u"--agent"_s, u"real:Prawdziwy="_s + command, u"--port"_s,
-                                        u"0"_s, u"--state-file"_s, stateFile});
+        host.start(QStringLiteral(BRULION_CLI), common
+                                                        + QStringList{u"acp"_s, u"serve"_s, u"--agent"_s,
+                                                                      u"real:Prawdziwy="_s + command, u"--port"_s,
+                                                                      u"0"_s, u"--state-file"_s, stateFile});
         QVERIFY(host.waitForStarted(10000));
         QTRY_VERIFY_WITH_TIMEOUT(host.canReadLine(), 30000);
-        const QString url =
-                QJsonDocument::fromJson(host.readLine()).object().value(u"result"_s).toObject().value(u"url"_s).toString();
+        const QString url = QJsonDocument::fromJson(host.readLine())
+                                    .object()
+                                    .value(u"result"_s)
+                                    .toObject()
+                                    .value(u"url"_s)
+                                    .toString();
         QProcess pair;
-        pair.start(QStringLiteral(BRULION_CLI), common + QStringList{u"acp"_s, u"pair"_s, u"--state-file"_s, stateFile});
+        pair.start(QStringLiteral(BRULION_CLI),
+                                  common + QStringList{u"acp"_s, u"pair"_s, u"--state-file"_s, stateFile});
         QVERIFY(pair.waitForFinished(20000));
         const QString code = QJsonDocument::fromJson(pair.readAllStandardOutput())
                                      .object()
@@ -572,8 +578,9 @@ private Q_SLOTS:
         AgentConfig agent = paired.first();
         agent.id = u"komputer-real"_s;
         chats->setAgents({agent});
-        const QString path = chats->send(QString(), u"Jakie zadanie jest w notatce Dom? Odpowiedz krótko, jednym zdaniem."_s,
-                                         QString(), {}, u"acp:komputer-real"_s);
+        const QString path =
+                chats->send(QString(), u"Jakie zadanie jest w notatce Dom? Odpowiedz krótko, jednym zdaniem."_s,
+                            QString(), {}, u"acp:komputer-real"_s);
         QTRY_VERIFY_WITH_TIMEOUT(!chats->turn(path)->running(), 300000);
         qInfo().noquote() << ws->read(path);
         QCOMPARE(chats->turn(path)->failure(), QString());
@@ -724,12 +731,16 @@ private Q_SLOTS:
         const QString data = m_tmp.filePath(u"remote-data"_s);
         {
             QSettings raw(file, QSettings::IniFormat);
-            raw.setValue(u"ai/agents"_s,
-                         QString::fromUtf8(QJsonDocument(QJsonArray{
-                                 QJsonObject{{u"id"_s, u"zly-adres"_s}, {u"name"_s, u"x"_s},
-                                             {u"url"_s, u"ftp://agent.example.pl"_s}, {u"remote"_s, u"claude"_s}},
-                                 QJsonObject{{u"id"_s, u"bez-agenta"_s}, {u"name"_s, u"y"_s},
-                                             {u"url"_s, u"https://agent.example.pl"_s}}}).toJson()));
+            raw.setValue(
+                    u"ai/agents"_s,
+                    QString::fromUtf8(QJsonDocument(QJsonArray{QJsonObject{{u"id"_s, u"zly-adres"_s},
+                                                                           {u"name"_s, u"x"_s},
+                                                                           {u"url"_s, u"ftp://agent.example.pl"_s},
+                                                                           {u"remote"_s, u"claude"_s}},
+                                                               QJsonObject{{u"id"_s, u"bez-agenta"_s},
+                                                                           {u"name"_s, u"y"_s},
+                                                                           {u"url"_s, u"https://agent.example.pl"_s}}})
+                                              .toJson()));
         }
         shell::AppSettings settings(file, data);
         QCOMPARE(settings.acpAgents().size(), 0); // (malformed: left out)

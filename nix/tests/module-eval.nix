@@ -9,8 +9,9 @@
 #   hardening) and the `brulion-mcp` admin command (shellcheck) build; a public address without
 #   publicUrl, a password file in the store and destructive tools on a read-only server are
 #   refused by assertions.
-# * services.brulion-acp: its unit (the agents' file, the Nextcloud password as a credential, the
-#   notebook of its own, the hardening an agent leaves room for) and the `brulion-acp` admin command
+# * services.brulion-acp: its unit (the agents' file, the browser's origin, the Nextcloud password
+#   as a credential, the notebook of its own, the hardening an agent leaves room for) and the
+#   `brulion-acp` admin command (text: the QR code of `pair`)
 #   build; no agent, a public address without publicUrl and a password file in the store are refused.
 {
   pkgs,
@@ -125,6 +126,7 @@ let
             command = "/run/current-system/sw/bin/claude-agent-acp";
           };
           publicUrl = "https://agent.example.com";
+          allowedOrigins = [ "https://notes.example.com" ];
           nextcloud = {
             url = "https://cloud.example.com";
             user = "jan";
@@ -276,6 +278,7 @@ pkgs.runCommand "brulion-nixos-module"
     expectAcp '/bin/brulion-cli" "--vault" "/var/lib/brulion-acp/notebook" "--state-dir" "/var/lib/brulion-acp/device" "acp" "serve" "--agents"'
     expectAcp '"--listen" "127.0.0.1" "--port" "8790" "--state-file" "/var/lib/brulion-acp/acp-remote.json"'
     expectAcp '"--public-url" "https://agent.example.com"'
+    expectAcp '"--allowed-origin" "https://notes.example.com"'
     expectAcp '"--nextcloud" "https://cloud.example.com" "--nextcloud-user" "jan" "--nextcloud-folder" "Notatki" "--sync-interval" "300"'
     expectAcp ' --nextcloud-password-file %d/nextcloud-password'
     expectAcp 'LoadCredential=nextcloud-password:/run/agenix/brulion-acp-nextcloud'
@@ -293,5 +296,6 @@ pkgs.runCommand "brulion-nixos-module"
     [ "$acpUser" = true ] || fail "the brulion-acp user is not created"
     test -x "$acpAdmin/bin/brulion-acp" || fail "no brulion-acp admin command"
     grep -qF -- 'runuser -u brulion-acp' "$acpAdmin/bin/brulion-acp" || fail "the acp admin command does not switch user"
+    grep -qF -- '--format text acp' "$acpAdmin/bin/brulion-acp" || fail "the acp admin command does not print text (the QR code)"
     touch $out
   ''

@@ -94,12 +94,9 @@ QDateTime timeOf(const QJsonValue &v)
 QJsonObject HostTurn::toJson() const
 {
     const QString name = state == State::Running ? u"running"_s : state == State::Done ? u"done"_s : u"failed"_s;
-    QJsonObject o{{u"session"_s, session},
-                  {u"state"_s, name},
-                  {u"text"_s, text},
-                  {u"tools"_s, QJsonArray::fromStringList(tools)},
-                  {u"asking"_s, asking},
-                  {u"started"_s, timeText(started)}};
+    QJsonObject o{{u"session"_s, session}, {u"state"_s, name},
+                  {u"text"_s, text},       {u"tools"_s, QJsonArray::fromStringList(tools)},
+                  {u"asking"_s, asking},   {u"started"_s, timeText(started)}};
     if (state == State::Done)
         o.insert(u"stopReason"_s, stopReason);
     if (state == State::Failed)
@@ -502,11 +499,11 @@ struct AcpHost::Stream {
     http::Reply waiter;
     QTimer *waitTimer = nullptr;
     QDateTime lastSeen;
-    QSet<QString> prompts; // the ids of the device's session/prompt requests not answered yet
+    QSet<QString> prompts;            // the ids of the device's session/prompt requests not answered yet
     QHash<QString, QJsonValue> asked; // the agent's session/request_permission not answered yet
     bool retired = false;             // nobody fetches from it: it ends after its turns
     QString retiredWhy;
-    bool holding = false;  // messages wait for the sync before a turn
+    bool holding = false; // messages wait for the sync before a turn
     QList<QJsonObject> held;
     QTimer *holdTimer = nullptr;
     QHash<QString, Terminal *> terminals;

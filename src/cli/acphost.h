@@ -154,14 +154,14 @@ bool servedHere(const QJsonObject &message);
 struct HostTurn {
     enum class State { Running, Done, Failed };
     State state = State::Running;
-    QString device;  ///< "dev_…"
-    QString session; ///< the agent's session id
-    QString stream;  ///< the stream it runs in
-    QString prompt;  ///< the key of its session/prompt request's id
-    QString text;    ///< what the agent said (agent_message_chunk), at most kMaxTurnTextChars
-    QStringList tools; ///< the titles of its tool calls, at most kMaxTurnTools
-    QString stopReason; ///< Done: the agent's ("end_turn", "cancelled" …)
-    QString error;      ///< Failed: why
+    QString device;      ///< "dev_…"
+    QString session;     ///< the agent's session id
+    QString stream;      ///< the stream it runs in
+    QString prompt;      ///< the key of its session/prompt request's id
+    QString text;        ///< what the agent said (agent_message_chunk), at most kMaxTurnTextChars
+    QStringList tools;   ///< the titles of its tool calls, at most kMaxTurnTools
+    QString stopReason;  ///< Done: the agent's ("end_turn", "cancelled" …)
+    QString error;       ///< Failed: why
     bool asking = false; ///< the agent waits on a question of it to the device
     QDateTime started;
     QDateTime ended;

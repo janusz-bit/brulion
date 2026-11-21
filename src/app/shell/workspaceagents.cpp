@@ -1057,8 +1057,9 @@ void WorkspaceAgents::recovered(const QString &path, const acp::RemoteTurn &turn
                                    "meanwhile). Ask again.")
                                         .arg(name, host));
         else if (error.kind == acp::RemoteError::Kind::Unauthorized)
-            Q_EMIT failed(path, tr("The AI agent “%1” stopped: %2.")
-                                        .arg(name, remoteEndText(host, acp::RemoteStream::End::Unauthorized, QString())));
+            Q_EMIT failed(path,
+                          tr("The AI agent “%1” stopped: %2.")
+                                  .arg(name, remoteEndText(host, acp::RemoteStream::End::Unauthorized, QString())));
         else
             Q_EMIT failed(path, tr("The answer of %1 could not be fetched from %2: %3")
                                         .arg(name, host, remoteErrorText(agent ? agent->url : host, error)));
@@ -1095,8 +1096,8 @@ void WorkspaceAgents::recovered(const QString &path, const acp::RemoteTurn &turn
             did << u"- "_s + t;
         answer = did.isEmpty() ? tr("Done.") : tr("Done:") + u"\n\n"_s + did.join(u'\n');
     }
-    qCInfo(logging::lcApp, "AI agent %s: the answer of %s fetched from %s", qUtf8Printable(name),
-           qUtf8Printable(path), qUtf8Printable(host));
+    qCInfo(logging::lcApp, "AI agent %s: the answer of %s fetched from %s", qUtf8Printable(name), qUtf8Printable(path),
+           qUtf8Printable(host));
     end(done, done.pending + 1);
     Q_EMIT answered(path, answer);
 }
@@ -1646,8 +1647,8 @@ std::optional<WorkspaceAgents::Stored> WorkspaceAgents::stored(const QString &pa
     const QJsonObject entry = local->get(StoreKey).toObject().value(path).toObject();
     if (entry.value(u"session"_s).toString().isEmpty())
         return std::nullopt;
-    return Stored{entry.value(u"agent"_s).toString(), entry.value(u"session"_s).toString(), entry.value(u"seen"_s).toInt(-1),
-                  entry.value(u"pending"_s).toInt()};
+    return Stored{entry.value(u"agent"_s).toString(), entry.value(u"session"_s).toString(),
+                  entry.value(u"seen"_s).toInt(-1), entry.value(u"pending"_s).toInt()};
 }
 
 void WorkspaceAgents::store(const QString &path, const std::optional<Stored> &entry)

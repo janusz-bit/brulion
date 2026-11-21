@@ -61,8 +61,8 @@ internal object Automation {
     "page", "file", "path", "heading", "block", "line", "date", "daily", "title", "name", "folder",
     "template", "text", "content", "mode", "open", "create", "due", "scheduled", "start", "remind",
     "alarm", "every", "priority", "parse", "query", "q", "view", "section", "tab", "tag",
-    "extension", "command", "args", "vault", "notebook", "key", "id", "x-source", "x-success",
-    "x-error", "x-cancel"
+    "extension", "command", "args", "url", "address", "code", "vault", "notebook", "key", "id",
+    "x-source", "x-success", "x-error", "x-cancel"
   )
 
   /** Longer addresses are refused here already (the core's own limit: MaxUriLength). */
@@ -178,12 +178,12 @@ internal object Automation {
 
   /**
    * The request needs the app's window: it opens something (open, daily, search, view, capture
-   * without text), runs an extension's command, or has no key (only the user may say "Write").
+   * without text, pair), runs an extension's command, or has no key (only the user may say "Write").
    */
   fun needsWindow(uri: String): Boolean {
     val action = actionOf(uri)
     val text = paramOf(uri, "text") ?: paramOf(uri, "content")
-    val opens = action in setOf("open", "daily", "journal", "today", "search", "view") ||
+    val opens = action in setOf("open", "daily", "journal", "today", "search", "view", "pair") ||
       (action == "capture" && text.isNullOrBlank())
     val runs = action == "run" || action == "command"
     return opens || runs || paramOf(uri, "key").isNullOrBlank()

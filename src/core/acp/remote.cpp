@@ -228,7 +228,8 @@ void fetchRemoteTurn(sync::HttpTransport *transport, const QUrl &base, const QSt
                      int waitSeconds, std::function<void(const RemoteTurn &, const RemoteError &)> done)
 {
     // (The address encodes what a path cannot carry; the host decodes it.)
-    const QString endpoint = u"sessions/%1/turn?wait=%2"_s.arg(session, QString::number(std::clamp(waitSeconds, 0, RemoteWaitSeconds)));
+    const QString endpoint =
+            u"sessions/%1/turn?wait=%2"_s.arg(session, QString::number(std::clamp(waitSeconds, 0, RemoteWaitSeconds)));
     transport->send(apiRequest("GET", base, endpoint, token, nullptr), [done](const sync::HttpResponse &response) {
         QJsonObject o;
         RemoteError e = remoteErrorOf(response, &o);
@@ -246,7 +247,7 @@ void fetchRemoteTurn(sync::HttpTransport *transport, const QUrl &base, const QSt
 void cancelRemoteTurn(sync::HttpTransport *transport, const QUrl &base, const QString &token, const QString &session)
 {
     const QString endpoint = u"sessions/%1/turn"_s.arg(session);
-    transport->send(apiRequest("DELETE", base, endpoint, token, nullptr), [](const sync::HttpResponse &) {});
+    transport->send(apiRequest("DELETE", base, endpoint, token, nullptr), [](const sync::HttpResponse &) { });
 }
 
 // ---- RemoteStream ---------------------------------------------------------------------------------------

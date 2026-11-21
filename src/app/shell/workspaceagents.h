@@ -283,8 +283,7 @@ private:
     /// remoteWorking() again after the turns changed.
     void noteWorking();
     /// The turns recovered from another computer (recover()).
-    struct Recovery
-    {
+    struct Recovery {
         QString agent;
         QString session;
         int pending = 0;

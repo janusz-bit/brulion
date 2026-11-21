@@ -1750,8 +1750,15 @@ Item {
                     hostCodeField.text = AppController.routeText(root.route, "pairCode")
                     AppController.replaceRoute({ view: "settings", section: "extensions" })
                     hostDialog.open()
+                    pairScroll.start() // (the agents in view: the one paired appears there)
                 }
                 Component.onCompleted: agentsGroup.takePairing()
+                Timer {
+                    id: pairScroll
+                    interval: 50
+                    onTriggered: flick.contentY = Math.max(0, Math.min(agentsGroup.mapToItem(content, 0, 0).y + flick.margin,
+                                                                       flick.contentHeight - flick.height))
+                }
                 Connections {
                     target: root
                     function onRouteChanged(): void {
