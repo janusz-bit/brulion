@@ -1,0 +1,4 @@
+Nowości w 0.27.0:
+• Twój agent AI na telefonie
+
+Pełny opis: https://github.com/janusz-bit/brulion/releases/tag/v0.27.0
