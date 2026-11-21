@@ -12,7 +12,8 @@ import Brulion
 // in as well —, buttons, menus), month grids (a cell per day, tinted by its state; a tap is the
 // day's action, a right-click or a long press its menu), a chart (ChartView), tables, Markdown
 // rendered as a note shows it (links open their pages), progress bars, numbers side by side
-// (stats), dividers, and the controls that take what is typed or chosen — a text field (one line,
+// (stats), dividers, pictures side by side (the notebook's, and those from the internet from the
+// device's cache — "Show the pictures" until they may be fetched, as a note's), and the controls that take what is typed or chosen — a text field (one line,
 // or several: Ctrl+Enter or its button gives the text), a select (a button whose menu lists the
 // options), a slider, a date (a button that opens a calendar), a switch —, in rows or on a line of
 // their own (`lineBare`: a row without a card; so is a progress bar alone). A button may have a
@@ -708,6 +709,131 @@ ListView {
                                 elide: Text.ElideRight
                             }
                         }
+                    }
+                }
+            }
+        }
+        DelegateChoice {
+            roleValue: "pictures"
+            LineFrame {
+                id: picturesLine
+                objectName: "extensionPictures"
+                required property int index
+                required property list<var> lineItems
+                required property string lineTitle
+                /// "ask" while a picture from the internet waits to be allowed, "failed" when one
+                /// could not be fetched (Show / Try again), else "".
+                required property string lineHint
+                /// Side by side: two on a phone, up to four on a wider line; each a 3:2 box the
+                /// picture fits in (the line keeps its height while they load).
+                readonly property int perLine: Math.max(1, Math.min(picturesLine.lineItems.length, Theme.narrow ? 2 : 4))
+                readonly property real tileWidth: Math.floor((picturesLine.contentWidth
+                                                              - (picturesLine.perLine - 1) * Theme.space2) / picturesLine.perLine)
+                readonly property real tileHeight: Math.min(360, Math.round(picturesLine.tileWidth * 2 / 3))
+                contentHeight: picturesColumn.implicitHeight
+                Column {
+                    id: picturesColumn
+                    x: picturesLine.contentX
+                    y: picturesLine.topPad
+                    width: picturesLine.contentWidth
+                    spacing: Theme.space2
+                    BText {
+                        visible: picturesLine.lineTitle !== ""
+                        width: parent.width
+                        text: picturesLine.lineTitle
+                        variant: "caption"
+                        wrapMode: Text.Wrap
+                    }
+                    Flow {
+                        width: parent.width
+                        spacing: Theme.space2
+                        Repeater {
+                            model: picturesLine.lineItems
+                            delegate: Item {
+                                id: tile
+                                required property var modelData
+                                readonly property string pictureState: AppController.routeText(tile.modelData, "state")
+                                readonly property string caption: AppController.routeText(tile.modelData, "caption")
+                                readonly property string alt: AppController.routeText(tile.modelData, "alt")
+                                readonly property bool ready: tile.pictureState === "ready" && tileImage.status === Image.Ready
+                                objectName: "extensionPicture"
+                                width: picturesLine.tileWidth
+                                height: tileBox.height + (tile.caption !== "" ? Theme.space1 + tileCaption.implicitHeight : 0)
+                                Accessible.role: Accessible.Graphic
+                                Accessible.name: tile.alt !== "" ? tile.alt : tile.caption
+                                Rectangle {
+                                    id: tileBox
+                                    width: parent.width
+                                    height: picturesLine.tileHeight
+                                    radius: Theme.radiusLg
+                                    color: Theme.bgSunken
+                                    border.color: Theme.borderSubtle
+                                    clip: true
+                                    Image {
+                                        id: tileImage
+                                        objectName: "extensionPictureImage"
+                                        anchors.fill: parent
+                                        anchors.margins: 1
+                                        source: tile.pictureState === "ready" ? AppController.routeText(tile.modelData, "url") : ""
+                                        asynchronous: true
+                                        fillMode: Image.PreserveAspectFit
+                                        sourceSize.width: Math.ceil(Math.max(1, tileBox.width) * Screen.devicePixelRatio)
+                                    }
+                                    // Not shown (yet): why.
+                                    Column {
+                                        anchors.centerIn: parent
+                                        width: parent.width - 2 * Theme.space3
+                                        spacing: Theme.space2
+                                        visible: !tile.ready
+                                        BSpinner {
+                                            anchors.horizontalCenter: parent.horizontalCenter
+                                            visible: tile.pictureState === "loading"
+                                                     || (tile.pictureState === "ready" && tileImage.status === Image.Loading)
+                                            running: visible
+                                        }
+                                        BText {
+                                            objectName: "extensionPictureMessage"
+                                            width: parent.width
+                                            horizontalAlignment: Text.AlignHCenter
+                                            visible: text !== ""
+                                            text: tile.pictureState === "missing"
+                                                  ? qsTr("No picture “%1” in the notebook").arg(AppController.routeText(tile.modelData, "src"))
+                                                  : tile.pictureState === "ask"
+                                                    ? qsTr("Picture from %1").arg(AppController.routeText(tile.modelData, "host"))
+                                                  : tile.pictureState === "failed" && AppController.routeText(tile.modelData, "error") !== ""
+                                                    ? AppController.routeText(tile.modelData, "error")
+                                                  : tile.pictureState === "failed" || (tile.pictureState === "ready" && tileImage.status === Image.Error)
+                                                    ? qsTr("The picture could not be loaded")
+                                                  : ""
+                                            variant: "muted"
+                                            wrapMode: Text.Wrap
+                                            maximumLineCount: 3
+                                            elide: Text.ElideRight
+                                        }
+                                    }
+                                }
+                                BText {
+                                    id: tileCaption
+                                    visible: tile.caption !== ""
+                                    y: tileBox.height + Theme.space1
+                                    width: parent.width
+                                    horizontalAlignment: Text.AlignHCenter
+                                    text: tile.caption
+                                    variant: "caption"
+                                    elide: Text.ElideRight
+                                }
+                            }
+                        }
+                    }
+                    // Pictures from the internet are fetched only once allowed (as a note's):
+                    // one button for the line's.
+                    BButton {
+                        objectName: "extensionPicturesShow"
+                        visible: picturesLine.lineHint !== ""
+                        text: picturesLine.lineHint === "failed" ? qsTr("Try again") : qsTr("Show the pictures")
+                        iconName: picturesLine.lineHint === "failed" ? "refresh-cw" : "eye"
+                        size: "small"
+                        onClicked: list.lines.showPictures(picturesLine.index)
                     }
                 }
             }

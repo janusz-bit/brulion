@@ -199,6 +199,17 @@ function ui.heatmap(s)
     s = spec(s, "b.ui.heatmap")
     return { type = "heatmap", columns = s.columns, rows = present(s.rows), scale = s.scale, label = s.label }
 end
+-- Pictures side by side: each the path of a picture of the notebook ("assets/kot.jpg") or the
+-- address of one on the internet, or { src = …, alt = …, caption = … }; options { label = … }. The
+-- app shows those of the internet as notes show them: from the device's cache, fetched when the
+-- user allows it (docs/EXTENSIONS.md "Views").
+function ui.pictures(items, options)
+    local node = { type = "pictures", items = present(items) }
+    if type(options) == "table" then
+        node.label = options.label
+    end
+    return node
+end
 -- A bar filled to value / max (max 1 by default), its label above it, a tone: written
 -- b.ui.progress(3, 10, "3 of 10") or b.ui.progress({ value = 3, max = 10, label = …, tone = … }).
 function ui.progress(value, max, label)

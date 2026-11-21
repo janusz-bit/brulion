@@ -198,6 +198,8 @@ declare b: {
         chart: (spec: { [string]: any }) -> Node,
         month: (spec: { [string]: any }) -> Node,
         heatmap: (spec: { [string]: any }) -> Node,
+        -- texts (a picture of the notebook, an address on the internet) or { src, alt?, caption? }
+        pictures: (items: { any }, options: { [string]: any }?) -> Node,
         empty: (title: string, text: string, icon: string?) -> Node,
         open: (label: string, view: string, params: { [string]: any }?, options: { [string]: any }?) -> Node,
         run: (label: string, command: string) -> Node,

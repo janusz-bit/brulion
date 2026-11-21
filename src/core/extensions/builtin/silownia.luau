@@ -182,6 +182,9 @@ local INTERFACE = {
         level = "Poziom",
         instructions = "Wykonanie",
         instructionsEnglish = "Opis po angielsku, z free-exercise-db.",
+        pictureStart = "Początek ruchu",
+        pictureEnd = "Koniec ruchu",
+        picturesSource = "Zdjęcia z free-exercise-db",
         noInstructions = "Katalog nie ma opisu tego ćwiczenia.",
         unknownExercise = "Katalog nie ma takiego ćwiczenia",
         -- weekly volume
@@ -309,6 +312,9 @@ local INTERFACE = {
         level = "Level",
         instructions = "Instructions",
         instructionsEnglish = "",
+        pictureStart = "Start",
+        pictureEnd = "Finish",
+        picturesSource = "Pictures from free-exercise-db",
         noInstructions = "The catalog has no instructions for this exercise.",
         unknownExercise = "No such exercise in the catalog",
         -- weekly volume
@@ -1268,9 +1274,12 @@ type CatalogItem = {
     category: string,
     level: string?,
     source: string?,
+    pictures: number?,
 }
 type Names = { pl: string, en: string, names: { string }? }
 type Catalog = {
+    -- free-exercise-db: `pictures` the address an exercise's `<source>/0.jpg` … are under
+    source: { pictures: string? }?,
     muscles: { [string]: Names },
     equipment: { [string]: Names },
     categories: { [string]: Names },
@@ -2671,6 +2680,27 @@ b.view("catalog", catalogView, catalogActions, { label = T.catalogView, icon = "
 
 -- One exercise of the catalog: its muscles, equipment, kind and level, its instructions, its
 -- page (made from the catalog when missing) and its sessions in the journal.
+-- The exercise's pictures in free-exercise-db (usually two: where the movement starts and where it
+-- ends), as b.ui.pictures shows them — from the device's cache, fetched as a note's pictures from
+-- the internet are; none for an exercise of Brulion's own without an upstream one.
+local function exercisePictures(data: Catalog, item: CatalogItem, name: string): { { [string]: string } }
+    local base = if data.source then data.source.pictures else nil
+    local count = item.pictures or 0
+    local out: { { [string]: string } } = {}
+    if base == nil or item.source == nil or count <= 0 then
+        return out
+    end
+    for i = 1, math.min(count, 8) do
+        local caption = if count == 2 then (if i == 1 then T.pictureStart else T.pictureEnd) else ""
+        table.insert(out, {
+            src = `{base}{item.source}/{i - 1}.jpg`,
+            caption = caption,
+            alt = if caption ~= "" then `{name}: {caption}` else `{name} ({i})`,
+        })
+    end
+    return out
+end
+
 local function exerciseView(params: { [string]: any })
     local data = catalog()
     local item = catalogById[tostring(params.id or "")]
@@ -2697,6 +2727,10 @@ local function exerciseView(params: { [string]: any })
         table.insert(facts, `{T.level}: {nameIn(data.levels, item.level :: string, lang)}`)
     end
     table.insert(items, b.ui.text(table.concat(facts, " · "), true))
+    local pictures = exercisePictures(data, item, name)
+    if #pictures > 0 then
+        table.insert(items, b.ui.pictures(pictures, { label = T.picturesSource }))
+    end
     table.insert(items, b.ui.row({
         b.ui.button(T.addToToday, "addToToday", { id = item.id }, { primary = true, icon = "plus" }),
         if b.read(name) ~= nil then b.ui.link(name, T.openPage) else b.ui.button(T.createPage, "createPage", { id = item.id }, { icon = "file-text" }),

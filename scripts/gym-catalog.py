@@ -8,7 +8,9 @@ by Yuhonas and contributors, released into the public domain under the Unlicense
 commit below. An upstream exercise one of the 51 stands for gives it its instructions, muscles
 and level and is not listed twice. About 150 common upstream exercises get Polish names here
 (POLISH); the rest keep their English names in both languages. Pictures are not bundled (about
-70 MB): the catalog links none.
+70 MB): an exercise says how many it has (`pictures`, upstream's `<source>/0.jpg`, `1.jpg` …) and
+the catalog's `source.pictures` is the address they are under at that commit — the gym shows them
+from the device's cache, fetched as pictures from the internet are (docs/SYNTAX.md §2).
 
     curl -sSL -o /tmp/fedb.json \\
       https://raw.githubusercontent.com/yuhonas/free-exercise-db/<COMMIT>/dist/exercises.json
@@ -16,7 +18,7 @@ and level and is not listed twice. About 150 common upstream exercises get Polis
 
 Writes two files next to silownia.luau: exercises.json — {version, source, muscles, equipment,
 categories, levels, exercises: [{id, pl, en, aliases, primary, secondary, equipment?,
-category, level?, source?}]} — and exercise-instructions.json — {id: [step, …]} (English), which
+category, level?, source?, pictures?}]} — and exercise-instructions.json — {id: [step, …]} (English), which
 the gym reads only when it shows or writes one exercise. Deterministic: the same input gives
 byte-identical files.
 """
@@ -441,6 +443,15 @@ def muscle_id(name):
     return m
 
 
+def pictures(e):
+    """How many pictures upstream has of `e`: its images are `<id>/0.jpg`, `<id>/1.jpg` … (checked)."""
+    images = e.get("images") or []
+    expected = [f"{e['id']}/{i}.jpg" for i in range(len(images))]
+    if images != expected:
+        sys.exit(f"{e['id']}: pictures {images}, expected {expected}")
+    return len(images)
+
+
 def dumps(value):
     return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
 
@@ -486,6 +497,8 @@ def main():
             e = upstream[source]
             item.update(details(e))
             item["source"] = source
+            if pictures(e):
+                item["pictures"] = pictures(e)
             if upstream[source]["name"].lower() not in {a.lower() for a in aliases + [en]}:
                 item["aliases"] = aliases + [upstream[source]["name"]]
             steps = [s for s in e.get("instructions") or [] if s]
@@ -507,6 +520,8 @@ def main():
         item = {"id": ident, "pl": pl or e["name"], "en": e["name"], "aliases": aliases}
         item.update(details(e))
         item["source"] = e["id"]
+        if pictures(e):
+            item["pictures"] = pictures(e)
         steps = [s for s in e.get("instructions") or [] if s]
         if steps:
             instructions[ident] = steps
@@ -515,7 +530,8 @@ def main():
     catalog = {
         "version": 2,
         "source": {"name": "free-exercise-db", "url": "https://github.com/yuhonas/free-exercise-db",
-                   "commit": COMMIT, "license": "Unlicense"},
+                   "commit": COMMIT, "license": "Unlicense",
+                   "pictures": f"https://raw.githubusercontent.com/yuhonas/free-exercise-db/{COMMIT}/exercises/"},
         "muscles": {k: {"pl": v[0], "en": v[1], "names": v[2]} for k, v in MUSCLES.items()},
         "equipment": {v[0]: {"pl": v[1], "en": v[2]} for v in EQUIPMENT.values()},
         "categories": {v[0]: {"pl": v[1], "en": v[2]} for v in CATEGORIES.values()},
@@ -531,7 +547,8 @@ def main():
         f.write(steps)
     polish = sum(1 for x in exercises if x["pl"] != x["en"] or x["id"] in {b[0] for b in BUILTIN})
     print(f"{len(exercises)} exercises ({len(BUILTIN)} Brulion's, {polish} with Polish names), "
-          f"{len(instructions)} with instructions; exercises.json {len(text.encode())} bytes, "
+          f"{len(instructions)} with instructions, {sum(1 for x in exercises if x.get('pictures'))} with pictures; "
+          f"exercises.json {len(text.encode())} bytes, "
           f"exercise-instructions.json {len(steps.encode())} bytes")
 
 

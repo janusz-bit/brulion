@@ -670,6 +670,50 @@ private Q_SLOTS:
         QCOMPARE(render(u"exercise"_s, {{u"id"_s, u"nie-ma"_s}}).value(u"type"_s).toString(), u"column"_s);
     }
 
+    // The exercise view shows free-exercise-db's two pictures (start, finish) under the facts, at
+    // the pinned commit's address; an exercise upstream has none of and one of Brulion's own
+    // without an upstream exercise show none.
+    void exercisePictures()
+    {
+        QVERIFY(open({}));
+        const auto picturesOf = [this](const QString &id) {
+            for (const QVariant &child : render(u"exercise"_s, {{u"id"_s, id}}).value(u"children"_s).toList()) {
+                if (child.toMap().value(u"type"_s) == u"pictures"_s)
+                    return child.toMap();
+            }
+            return QVariantMap();
+        };
+        const QVariantMap squat = picturesOf(u"back-squat"_s);
+        QCOMPARE(squat.value(u"label"_s).toString(), u"Zdjęcia z free-exercise-db"_s);
+        const QVariantList items = squat.value(u"items"_s).toList();
+        QCOMPARE(items.size(), 2);
+        const QString base = u"https://raw.githubusercontent.com/yuhonas/free-exercise-db/"
+                             u"f00c92c7dcf1216a928a52c3706c7ce8e2f71ed5/exercises/"_s;
+        QCOMPARE(items[0].toMap().value(u"src"_s).toString(), base + u"Barbell_Squat/0.jpg"_s);
+        QCOMPARE(items[1].toMap().value(u"src"_s).toString(), base + u"Barbell_Squat/1.jpg"_s);
+        QCOMPARE(items[0].toMap().value(u"caption"_s).toString(), u"Początek ruchu"_s);
+        QCOMPARE(items[1].toMap().value(u"caption"_s).toString(), u"Koniec ruchu"_s);
+        QCOMPARE(items[1].toMap().value(u"alt"_s).toString(), u"Przysiad ze sztangą: Koniec ruchu"_s);
+        // the pictures come before the buttons, after the facts
+        const QVariantList children = render(u"exercise"_s, {{u"id"_s, u"back-squat"_s}}).value(u"children"_s).toList();
+        qsizetype pictures = -1, row = -1;
+        for (qsizetype i = 0; i < children.size(); ++i) {
+            const QString type = children[i].toMap().value(u"type"_s).toString();
+            if (type == u"pictures"_s && pictures < 0)
+                pictures = i;
+            if (type == u"row"_s && row < 0)
+                row = i;
+        }
+        QVERIFY(pictures > 0 && pictures < row);
+        // an upstream exercise of the rest of the catalog: its own id
+        QCOMPARE(picturesOf(u"alternate-heel-touchers"_s).value(u"items"_s).toList().value(0).toMap().value(u"src"_s),
+                 QVariant(base + u"Alternate_Heel_Touchers/0.jpg"_s));
+        // none upstream; none of Brulion's own without an upstream exercise (running)
+        QVERIFY(picturesOf(u"kettlebell-halo"_s).isEmpty());
+        QVERIFY(picturesOf(u"running"_s).isEmpty());
+        QVERIFY(!render(u"exercise"_s, {{u"id"_s, u"kettlebell-halo"_s}}).isEmpty());
+    }
+
     // The volume of every muscle and week with Polish names: the catalog's muscles of "Przysiad",
     // "Wyciskanie leżąc", "Podciąganie" (with the body weight of the log), a page's own muscles,
     // secondary muscles at half, planned and cancelled sets left out, pounds as kilograms.
