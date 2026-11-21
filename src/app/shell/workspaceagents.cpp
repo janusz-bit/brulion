@@ -710,8 +710,10 @@ void WorkspaceAgents::ended(const QString &id, Process *p, const QString &why)
     endTerminals(id);
     p->client->closed(why);
     p->client->deleteLater();
+#if QT_CONFIG(process)
     if (p->process)
         p->process->deleteLater();
+#endif
     if (p->remote)
         p->remote->deleteLater();
     delete p;
